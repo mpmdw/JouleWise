@@ -23,8 +23,10 @@ child invocation. This is a class A candidate with synthetic verification.
 The kit supplies each script's physical decode caps, unlogged decode cap,
 one-core CPU seconds, split gaps, and sampled recovery seconds. Caps are exact:
 an early model return records the delivered dose and leaves the leg unadmitted;
-the remaining span continues (RL-149 §2.4). CPU work uses one thread in the leg process, bounded
-by wall time; tests advance synthetic time. No worker process needs signalling.
+the remaining span continues (RL-149 §2.4). The CPU dose uses one thread's CPU
+clock. The existing child and workload deadlines bound wall time. Timed
+intervals require observed monotonic elapsed time, and CPU work also
+requires the requested thread CPU time. Tests advance synthetic time.
 
 Each leg has one G0, then its q0 history and its script, with one resident model
 and uninterrupted member sampling. The physical calls use the same step prompt
@@ -43,7 +45,13 @@ counts and monotonic intervals, each call's starting context token count,
 hidden calls, CPU work, gaps and recovery. It
 contains no generated text, rail value, fit, score or outcome word. It stays
 in the leg runtime directory, is hashed by terminal runtime custody, and is
-identified by `script_record_sha256` in the operational result. The future
+identified by `script_record_sha256` in the operational result. The record
+also binds the canonical leg spec digest. Before invoking the workload the
+scripted child checks that digest against the span's planned spec. The
+parent checks the authenticated record against the same plan and derives
+completion from the ordered calls and intervals before desk admission. A
+short dose stays on disk and is excluded. An unrelated or unbound result
+refuses the span. The future
 controls print uses the custody-bound record for physical calls. RL-186 §2.3
 allows only script kind, doses, physical call counts and durations, logged
 counts, phase values above baseline on the four channels it lists, joules per
@@ -100,12 +108,19 @@ layout span, and the nine-leg cap and 12 h launch ceiling apply.
 ## Launch authority
 
 The lead obtains the predecessor from the shared launcher's `close-proof`
-command. For ctl the same launcher requires `--attempt-ledger`,
+command. Export the current close checks using the existing RL-179 item
+variables `HOST_RESTORE_OK`, `FEEDS_STOPPED`, `GROUPS_ABSENT` and
+`FOREIGN_PROCESSES_ABSENT` as `1`, with `CLOSE_PROOF_RECEIPT` set to the latest
+attempt's exact receipt path. The CLI and ctl launch require that proof. They
+also refuse failed or contradictory shutdown evidence in the receipt, even
+when all four checks are supplied. For ctl the launcher requires `--attempt-ledger`,
 `--previous-close-receipt`, `--span-id` and `--t0-not-before-ns`. Under the
 fence lock it re-proves that the receipt belongs to the latest attempt, its
 restore succeeded, and the receipt path and exact close time match the
-supplied proof. It publishes the successor attempt before bootstrap. The
-child checks both the wall reading and the full interval projected from the
+supplied proof. It publishes the successor attempt before bootstrap, and
+passes the exact digest of the validated kit to the child. The child refuses
+substituted bytes before creating production dependencies or output. It
+checks both the wall reading and the full interval projected from the
 sleep-inclusive arm clock against the exact close time before creating its
 output. RL-179 F-2 allows start at the proven close with no timed gap. ctl
 uses free t0, with the launch deadline and any explicitly requested batch

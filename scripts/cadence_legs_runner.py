@@ -243,7 +243,7 @@ def leg_runtime_argv(inputs):
     return [argv[0], argv[1], str(ROOT / LEG_RUNTIME), *argv[3:]]
 
 
-def accepted_result(attempt_dir):
+def accepted_result(attempt_dir, *, ctl_spec=None):
     """The leg runtime's result, bound by its complete terminal custody (as ``Segment.accepted_result``)."""
     from joulewise.align.apple import r1_runtime as rt
     path = Path(attempt_dir) / rt.RESULT_NAME
@@ -258,6 +258,27 @@ def accepted_result(attempt_dir):
         raise LegRuntimeError(f"{attempt_dir}: result is not bound by complete runtime custody")
     if value.get("kind") != legsmod.LEG_KIND:
         raise LegRuntimeError(f"{attempt_dir}: result kind {value.get('kind')!r}")
+    if ctl_spec is not None:
+        try:
+            work_raw = (path.parent / ctl.WORK_NAME).read_bytes()
+            work = json.loads(work_raw)
+        except (OSError, ValueError) as error:
+            raise LegRuntimeError(f"{attempt_dir}: no readable ctl work record") from error
+        digest = hashlib.sha256(work_raw).hexdigest()
+        if (custody["files"].get(ctl.WORK_NAME) != digest or value.get("script_record_sha256") != digest
+                or not isinstance(work, dict) or work.get("schema") != ctl.WORK_SCHEMA
+                or value.get("leg_id") != ctl_spec["leg_id"] or work.get("leg_id") != ctl_spec["leg_id"]
+                or work.get("leg_spec_sha256") != ctl.leg_spec_sha256(ctl_spec)
+                or work.get("script") != ctl_spec["script"]):
+            raise LegRuntimeError(f"{attempt_dir}: ctl work record does not bind the planned leg spec")
+        steps = work.get("steps")
+        complete = ctl.work_complete(steps, ctl_spec["script"])
+        if (type(value.get("g0_released")) is not bool or (not value["g0_released"] and steps != [])
+                or work.get("complete") is not complete or value.get("script_complete") is not complete
+                or (complete and value.get("decode_tokens") != ctl_spec["decode_tokens"])):
+            raise LegRuntimeError(f"{attempt_dir}: inconsistent ctl completion or logged count")
+        if not complete and value["g0_released"]:
+            value.update(leg_status="incomplete", decode_cap_reached=False)
     return value
 
 
@@ -339,17 +360,20 @@ def production_deps(*, inputs, pmset_bin, output, scripted_ctl=False):
             raise SpanRefusal("the fresh soak wrote no soak reference")
         return reference
 
-    def run_leg(attempt_dir, spec_path, soak_reference, cap_s, feeds, work_remaining, span_reference=None):
+    def run_leg(attempt_dir, spec_path, soak_reference, cap_s, feeds, work_remaining, span_reference=None,
+                *, ctl_spec_sha256=None):
         argv = [*leg_argv, "--leg-spec", str(spec_path), "--r1-kind", legsmod.LEG_KIND,
                 "--output", str(attempt_dir), "--soak-reference", str(soak_reference),
-                *(["--span-reference", str(span_reference)] if span_reference is not None else [])]
+                *(["--span-reference", str(span_reference)] if span_reference is not None else []),
+                *(["--leg-spec-sha256", ctl_spec_sha256] if scripted_ctl else [])]
         leg_dir = Path(attempt_dir).parent
         attempt = 1 + sum(1 for p in leg_dir.iterdir() if p.name.startswith(Path(attempt_dir).name + ".rejected"))
         result = run_child(name=f"{leg_dir.name}.a{attempt}", argv=argv, cap_s=cap_s, log_dir=leg_dir,
                            feeds=feeds, work_remaining=work_remaining)
         if result["rc"]:
             raise LegRuntimeError(f"{Path(attempt_dir).parent.name}: leg runtime exit {result['rc']}")
-        return accepted_result(attempt_dir)
+        if not scripted_ctl:
+            return accepted_result(attempt_dir)
 
     def load_verdict(name, result, wall_s):
         try:
@@ -539,8 +563,8 @@ def run_span(*, kit, kit_sha256, output, deadline, windows, deps, leg_ids=None,
         leg_dir = output / "legs" / leg_id
         leg_dir.mkdir(parents=True)
         spec_path = leg_dir / "leg_spec.json"
-        spec_path.write_text(json.dumps({k: spec[k] for k in legsmod.leg_spec_keys(spec)}, indent=1,
-                                        sort_keys=True) + "\n")
+        leg_input = {k: spec[k] for k in legsmod.leg_spec_keys(spec)}
+        spec_path.write_text(json.dumps(leg_input, indent=1, sort_keys=True) + "\n")
         # A span-reference consumer reads the span's reference from the span's first leg's accepted
         # attempt (RL-150 R1 part 2; design doc section 14.5). The runtime verifies it with W1's verifier.
         span_kw = {}
@@ -555,6 +579,8 @@ def run_span(*, kit, kit_sha256, output, deadline, windows, deps, leg_ids=None,
                               "excluded": not state["summaries"][0]["admitted"]}
         else:
             leg_row_source = None
+        if scripted_ctl:
+            span_kw["ctl_spec_sha256"] = ctl.leg_spec_sha256(leg_input)
         attempts, result, first_start = [], None, None
         leg_row = {"leg_id": leg_id, "attempts": attempts, "budget_s": budget,
                    **({"span_reference": leg_row_source} if leg_row_source else {})}
@@ -568,9 +594,12 @@ def run_span(*, kit, kit_sha256, output, deadline, windows, deps, leg_ids=None,
             n = len(attempts) + 1
             started = clock.time()
             first_start = first_start if first_start is not None else started
-            result = step(f"{leg_id}.a{n}", lambda: deps.run_leg(attempt_dir, spec_path, soak_reference, cap,
-                                                                  deps.feeds, work_remaining, **span_kw),
-                          kind="leg", cap_s=cap, keep=result_keep)
+            def execute_leg():
+                produced = deps.run_leg(attempt_dir, spec_path, soak_reference, cap,
+                                        deps.feeds, work_remaining, **span_kw)
+                return accepted_result(attempt_dir, ctl_spec=leg_input) if scripted_ctl else produced
+
+            result = step(f"{leg_id}.a{n}", execute_leg, kind="leg", cap_s=cap, keep=result_keep)
             ended = clock.time()
             verdict = deps.load_verdict(leg_id, result, ended - started)
             attempt = {"attempt": n, "started_epoch_s": started, "ended_epoch_s": ended, "wall_s": ended - started,
@@ -597,7 +626,7 @@ def run_span(*, kit, kit_sha256, output, deadline, windows, deps, leg_ids=None,
         leg_row["summary"] = summary
         (leg_dir / "leg_record.json").write_text(json.dumps(
             {"schema": LEG_RECORD_SCHEMA, "spec": spec, "attempts": attempts,
-             "result": {k: result.get(k) for k in (*_RESULT_KEEP,) if k in result}},
+             "result": {k: result[k] for k in result_keep if k in result}},
             indent=1, sort_keys=True) + "\n")
         (leg_dir / "leg_summary.json").write_text(json.dumps(summary, indent=1, sort_keys=True) + "\n")
         state["summaries"].append(summary)
@@ -869,7 +898,8 @@ class FakeLegRuntime:
         path.write_text(json.dumps({"schema": "joulewise.align.r1_soak_reference.v1", "mock": True}) + "\n")
         return path
 
-    def leg(self, attempt_dir, spec_path, soak_reference, cap_s, feeds, work_remaining, span_reference=None):
+    def leg(self, attempt_dir, spec_path, soak_reference, cap_s, feeds, work_remaining, span_reference=None,
+            *, ctl_spec_sha256=None):
         from joulewise.align.apple import r1_runtime as rt
         spec = legsmod.validate_leg_spec(json.loads(Path(spec_path).read_text()))
         leg_id = spec["leg_id"]
@@ -907,7 +937,34 @@ class FakeLegRuntime:
                   "cpu_busy_cores": [busy] * seconds, "cpu_busy_t_s": [float(i) for i in range(seconds)],
                   "census": [{"mock": True}]}
         legsmod.guard_projection(result, "mock leg result", values=False)
-        (Path(attempt_dir) / rt.RESULT_NAME).write_text(json.dumps(result, sort_keys=True) + "\n")
+        result_path = Path(attempt_dir) / rt.RESULT_NAME
+        if ctl_spec_sha256 is not None:
+            if ctl.leg_spec_sha256(spec) != ctl_spec_sha256:
+                raise LegRuntimeError(f"{leg_id}: ctl leg spec differs from the span plan")
+            steps = []
+            stamp = 0
+            if not timeout:
+                for kind, dose in ctl.script_steps(spec["script"]):
+                    fields = {"requested_tokens": dose, "actual_tokens": dose} if kind in ("hidden", "turn") else {
+                        "requested_s": dose}
+                    elapsed = ctl.duration_ns(dose) if "requested_s" in fields else 1
+                    if kind == "cpu":
+                        fields["thread_cpu_ns"] = elapsed
+                    steps.append({"kind": kind, "started_ns": stamp, "ended_ns": stamp + elapsed,
+                                  "complete": True, **fields})
+                    stamp += elapsed
+            work = {"schema": ctl.WORK_SCHEMA, "leg_id": leg_id, "leg_spec_sha256": ctl_spec_sha256,
+                    "script": spec["script"], "complete": not timeout, "steps": steps}
+            work_raw = (json.dumps(work, sort_keys=True) + "\n").encode()
+            (result_path.parent / ctl.WORK_NAME).write_bytes(work_raw)
+            result.update(script_complete=not timeout, script_record_sha256=hashlib.sha256(work_raw).hexdigest())
+            result_raw = (json.dumps(result, sort_keys=True) + "\n").encode()
+            result_path.write_bytes(result_raw)
+            files = {rt.RESULT_NAME: hashlib.sha256(result_raw).hexdigest(), ctl.WORK_NAME: result["script_record_sha256"]}
+            (result_path.parent / rt.CUSTODY_NAME).write_text(
+                json.dumps({"schema": rt.CUSTODY_SCHEMA, "status": "complete", "files": files}) + "\n")
+        else:
+            result_path.write_text(json.dumps(result, sort_keys=True) + "\n")
         return result
 
 
@@ -1022,6 +1079,7 @@ def main(argv=None):
         p.add_argument("--legs", help="the queue span's roster, comma-separated kit leg ids (default: all)")
         p.add_argument("--batch-window", help="HH:MM-HH:MM local blackout (default: none, RL-171)")
         if name == "run":
+            p.add_argument("--kit-sha256", help="exact kit bytes approved by the ctl launcher")
             p.add_argument("--output", type=Path, required=True)
             p.add_argument("--deadline", type=float, required=True)
             p.add_argument("--span-id", help="span identity carried into its close receipt")
@@ -1095,8 +1153,12 @@ def main(argv=None):
     try:
         if scripted_ctl:
             ctl.require_issued(kit)
+            if args.kit_sha256 != sha:
+                raise ValueError("ctl kit hash differs from the launcher-approved kit")
             if args.span_id is None:
                 raise ValueError("ctl requires --span-id from the launch ledger")
+        elif args.kit_sha256 is not None:
+            raise ValueError("launcher-approved ctl kit was replaced by a different runner kind")
         if args.span_id is not None and not SPAN_ID_PATTERN.fullmatch(args.span_id):
             raise ValueError("invalid --span-id")
         validate_t0_authority(kit, args.authorized_t0_date, args.t0_not_before, args.t0_before, args.t0_anchor,

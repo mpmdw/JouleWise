@@ -1,8 +1,11 @@
 """SYNTHETIC ONLY. Real launch-to-close orchestration; no hardware or process signalling."""
 from contextlib import contextmanager, redirect_stderr, redirect_stdout
 from copy import deepcopy
+from dataclasses import replace
+import hashlib
 import io
 import json
+import os
 from pathlib import Path
 import subprocess
 import sys
@@ -181,17 +184,20 @@ class LaunchAuthorityTests(unittest.TestCase):
         kit.update(status="issued", frozen={"commit": "a" * 40, "paths": {kit["runner"]["entry"]: "b" * 64}})
         kit["ruling"]["authorizes_spans"] = True
         self.root = Path(self.enterContext(tempfile.TemporaryDirectory())).resolve()
-        path = self.root / "synthetic-issued.json"
-        path.write_text(json.dumps(kit))
+        self.kit_path = self.root / "synthetic-issued.json"
+        self.kit_path.write_text(json.dumps(kit))
         self.output = self.root / "out"
         self.fence_root = self.root / "fence"
         self.ledger = self.root / "ledger.json"
         self.receipt = self.root / "close.json"
+        self.enterContext(patch.dict(os.environ, {"CLOSE_PROOF_RECEIPT": str(self.receipt), "HOST_RESTORE_OK": "1",
+                                                 "FEEDS_STOPPED": "1", "GROUPS_ABSENT": "1",
+                                                 "FOREIGN_PROCESSES_ABSENT": "1"}))
         self.close_ns = self.now * self.ns
         self.prior = {"sequence": 1, "span_id": "previous", "close_receipt": str(self.receipt)}
         self.ledger.write_text(json.dumps({"attempts": [self.prior]}))
         self.write_close(self.close_ns)
-        self.argv = ["launch", "--repo", str(runner.ROOT), "--kit", str(path), "--output", str(self.output),
+        self.argv = ["launch", "--repo", str(runner.ROOT), "--kit", str(self.kit_path), "--output", str(self.output),
                      "--legs", "L001,L002,L003", "--python-bin", sys.executable, "--disk-path", str(self.root),
                      "--custody-root", str(self.fence_root), "--magistrate-pid", "234",
                      "--deadline", str(self.now + 40000), "--launchctl-bin", "synthetic-launchctl"]
@@ -213,6 +219,7 @@ class LaunchAuthorityTests(unittest.TestCase):
             for i, (flag, _) in enumerate(self.proof):
                 with self.subTest(omitted=flag):
                     self.assertIn("ledger-backed launch requires", self.launch(self.proof[:i] + self.proof[i + 1:]))
+            self.assertIn("ledger-backed launch requires", self.launch(self.proof[2:]))
             refusal = self.launch(self.proof, "--authorized-t0-date", "2026-11-19")
             self.assertIn("ctl has free t0", refusal)
         self.assertFalse(self.fence_root.exists())
@@ -258,6 +265,90 @@ class LaunchAuthorityTests(unittest.TestCase):
         self.assertEqual(child[child.index("--t0-not-before-ns") + 1], str(self.close_ns))
         self.check_child_close_bound(child[2:])
 
+    def test_ctl_refuses_kit_revision_between_launch_and_child(self):
+        approved = hashlib.sha256(self.kit_path.read_bytes()).hexdigest()
+        child = []
+
+        def bootstrap(command, **_kwargs):
+            self.assertEqual(command[:2], ["synthetic-launchctl", "bootstrap"])
+            child.extend(json.loads(Path(command[3]).with_name("runner.json").read_text())["argv"])
+            fence = launcher.base.read_fence(self.fence_root)
+            launcher.base.write_fence(self.fence_root, {**fence, "pid": 345})
+            return subprocess.CompletedProcess(command, 0)
+
+        with (patch.object(launcher.base, "pid_alive", return_value=True),
+              patch.object(launcher.time, "time", return_value=self.now),
+              patch.object(runner.RealClock, "arm_anchor_ns", return_value=(self.close_ns, self.ns, self.ns)),
+              patch.object(launcher.subprocess, "run", side_effect=bootstrap), redirect_stdout(io.StringIO())):
+            self.assertEqual(launcher.main(self.argv + [item for pair in self.proof for item in pair]), 0)
+        self.assertEqual(child[child.index("--kit-sha256") + 1], approved)
+        old = json.loads(self.kit_path.read_bytes())
+        revised = ctl.apply_instrument_read(draft(), below_gpu_floor=True, below_dc_in_floor=True,
+                                            raised_doses=(192, 384, 768), return_time_s=120,
+                                            decode_end_lag_s=2, prompt_sizes=[2000])
+        revised.update(status=old["status"], frozen=old["frozen"], ruling=old["ruling"])
+        self.assertEqual((specs(old)[1]["script"]["hidden_tokens"], specs(revised)[1]["script"]["hidden_tokens"]),
+                         (512, 768))
+        ctl.validate_kit(revised)
+        for replacement, message in ((revised, "kit hash differs"), (v11_tests.v11_kit(), "different runner kind")):
+            self.kit_path.write_text(json.dumps(replacement))
+            with (self.subTest(message=message), patch.object(runner, "production_deps") as work,
+                  redirect_stderr(io.StringIO()) as stderr, self.assertRaises(SystemExit) as error):
+                runner.main(child[2:])
+            self.assertEqual(error.exception.code, 2)
+            self.assertIn(message, stderr.getvalue())
+            work.assert_not_called()
+            self.assertFalse(self.output.exists())
+
+    def test_incomplete_close_refuses_cli_and_ctl_bootstrap(self):
+        clean = {"schema": runner.RECEIPT_SCHEMA, "span_id": "previous",
+                 "ended": {"epoch_ns": self.close_ns}, "rc": 2,
+                 "steps": [{"name": "restore", "rc": 0, "result": {"ok": True}},
+                           *[{"name": f"stop-{feed}", "rc": 0, "result": {"proven_stopped": True}}
+                             for feed in ("meter", "agents", "volumes")]],
+                 "feeds": {feed: {"stop": {"rc": 0, "proven_stopped": True}}
+                           for feed in ("meter", "agents", "volumes")}}
+        fixtures = (
+            ({"rc": 2, "result": {"proven_stopped": False}}, {"rc": 2, "proven_stopped": False}),
+            ({"rc": 0, "result": {"proven_stopped": False}}, {"rc": 0, "proven_stopped": True}),
+            ({"rc": 0, "result": {"proven_stopped": True}}, {"rc": 0, "proven_stopped": False}),
+            ({"rc": 0, "result": {"proven_stopped": True, "group": {"reaped": True, "group_census": ["fixture"]}}},
+             {"rc": 0, "proven_stopped": True}),
+        )
+        argv = ["close-proof", "--attempt-ledger", str(self.ledger)]
+        self.receipt.write_text(json.dumps(clean))
+        with redirect_stdout(io.StringIO()) as stdout:
+            self.assertEqual(launcher.main(argv), 0)
+        self.assertEqual(stdout.getvalue().splitlines(), ["previous", str(self.close_ns), str(self.receipt)])
+        with (patch.object(launcher.base, "pid_alive", return_value=True),
+              patch.object(launcher.time, "time", return_value=self.now),
+              patch.object(runner.RealClock, "arm_anchor_ns", return_value=(self.close_ns, self.ns, self.ns)),
+              patch.object(launcher.subprocess, "run") as service):
+            for step, stop in fixtures:
+                receipt = deepcopy(clean)
+                receipt["steps"][1].update(step)
+                receipt["feeds"]["meter"]["stop"] = stop
+                self.receipt.write_text(json.dumps(receipt))
+                with self.subTest(step=step, stop=stop), redirect_stderr(io.StringIO()):
+                    self.assertEqual(launcher.main(argv), 2)
+                    self.assertIn("stop", self.launch(self.proof))
+            missing = deepcopy(clean)
+            missing["steps"].pop()
+            del missing["feeds"]["volumes"]
+            self.receipt.write_text(json.dumps(missing))
+            with redirect_stderr(io.StringIO()):
+                self.assertEqual(launcher.main(argv), 2)
+                self.assertIn("every feed stopped", self.launch(self.proof))
+            self.receipt.write_text(json.dumps(clean))
+            for key in ("HOST_RESTORE_OK", "FEEDS_STOPPED", "GROUPS_ABSENT", "FOREIGN_PROCESSES_ABSENT",
+                        "CLOSE_PROOF_RECEIPT"):
+                with self.subTest(missing=key), patch.dict(os.environ, {key: ""}), redirect_stderr(io.StringIO()):
+                    self.assertEqual(launcher.main(argv), 2)
+                    self.assertIn("receipt-bound", self.launch(self.proof))
+            service.assert_not_called()
+        self.assertIsNone(launcher.base.read_fence(self.fence_root))
+        self.assertEqual(json.loads(self.ledger.read_text())["attempts"], [self.prior])
+
     def check_child_close_bound(self, argv):
         clock = runner.FakeClock(self.now)
         deps = runner.mock_deps(self.output, clock)
@@ -295,7 +386,8 @@ class LaunchAuthorityTests(unittest.TestCase):
         path = root / "non-ctl-spec.json"
         path.write_text(json.dumps(spec))
         result = subprocess.run([sys.executable, "-B", str(runner.ROOT / runner.LEG_RUNTIME), "--scripted-ctl",
-                                 "--leg-spec", str(path)], capture_output=True, text=True, timeout=30)
+                                 "--leg-spec", str(path), "--leg-spec-sha256", ctl.leg_spec_sha256(spec)],
+                                capture_output=True, text=True, timeout=30)
         self.assertEqual(result.returncode, rt.EXIT_REFUSED)
         self.assertIn("cadence-ctl-v1 needs a ctl leg spec", result.stderr)
 
@@ -310,12 +402,13 @@ class RuntimeTests(unittest.TestCase):
         self.config = rs.synthetic_config(self.root/"cfg",battery={"drain_pct_per_h":0})
         self.soak = write_soak(self.root/"soak.json")
 
-    def call(self, spec, name, source=None, backend_factory=None):
+    def call(self, spec, name, source=None, backend_factory=None, expected=None):
         path = self.root/(name+".json")
         path.write_text(json.dumps(spec))
         out = self.root/"span"/"legs"/name/"runtime"
         out.parent.mkdir(parents=True)
-        args = ["--config",str(self.config),"--leg-spec",str(path),"--r1-kind","cadence-leg",
+        args = ["--config",str(self.config),"--leg-spec",str(path),
+                "--leg-spec-sha256",ctl.leg_spec_sha256(expected or spec),"--r1-kind","cadence-leg",
                 "--output",str(out),"--soak-reference",str(self.soak)]
         if source:
             args += ["--span-reference",str(source)]
@@ -411,6 +504,48 @@ class RuntimeTests(unittest.TestCase):
         self.assertFalse(audit["steps"][-1]["complete"])
         self.assertIn("ended_ns",audit["steps"][-1])
 
+    def test_normal_early_cpu_return_stays_unadmitted(self):
+        spec = specs()[3]
+        self.assertEqual(spec["script"]["cpu_s"], 90)
+        with patch.object(cadence_ctl, "cpu_burn", return_value=None):
+            code, out, result = self.call(spec, spec["leg_id"])
+        self.assertEqual(code, 0)
+        work = json.loads((out / cadence_ctl.AUDIT_NAME).read_bytes())
+        cpu = next(row for row in work["steps"] if row["kind"] == "cpu")
+        self.assertEqual(cpu["ended_ns"] - cpu["started_ns"], 0)
+        self.assertFalse(cpu["complete"])
+        self.assertFalse(result["script_complete"])
+        self.assertFalse(legs.leg_admitted(runner.accepted_result(out, ctl_spec=spec), contaminated=False))
+
+    def test_stale_dose_spec_refused_by_child_and_by_span_evidence_check(self):
+        stale = next(spec for spec in specs() if spec["leg_id"] == "L002")
+        stale = {**stale, "g0_role": "capture"}
+        planned = deepcopy(stale)
+        planned["script"]["hidden_tokens"] = 768
+        self.assertEqual(stale["script"]["hidden_tokens"], 512)
+        code, out, _ = self.call(stale, "stale-refusal", expected=planned)
+        self.assertEqual(code, rt.EXIT_REFUSED)
+        self.assertFalse(out.exists())
+        # Reproduce an internally consistent child result from the stale spec.
+        code, out, result = self.call(stale, "stale-result")
+        self.assertEqual(code, 0)
+        self.assertTrue(result["script_complete"])
+        with self.assertRaisesRegex(runner.LegRuntimeError, "does not bind the planned leg spec"):
+            runner.accepted_result(out, ctl_spec=planned)
+
+    def test_missing_scripted_flag_refuses_a_ctl_spec_without_work(self):
+        spec = specs()[0]
+        path = self.root / "pilot-spec.json"
+        path.write_text(json.dumps(spec))
+        out = self.root / "ordinary-result"
+        argv = [sys.executable, "-B", str(runner.ROOT / runner.LEG_RUNTIME), "--leg-spec", str(path),
+                "--config", str(self.config), "--r1-kind", "cadence-leg",
+                "--output", str(out), "--soak-reference", str(self.soak)]
+        result = subprocess.run(argv, capture_output=True, text=True, timeout=30)
+        self.assertEqual(result.returncode, rt.EXIT_REFUSED)
+        self.assertIn("ctl leg spec requires the scripted runtime", result.stderr)
+        self.assertFalse(out.exists())
+
     def test_short_hidden_dose_is_unadmitted_even_with_a_complete_visible_call(self):
         original = workload.MlxEndpoint
         native_chat = original.chat
@@ -440,8 +575,12 @@ class RuntimeTests(unittest.TestCase):
         # Full 3 + 9 release-candidate rehearsal, every script, both capture and consumer references.
         from tests.align.test_r1_runtime import write_soak
         kit = draft()
+        revised = ctl.apply_instrument_read(kit, below_gpu_floor=True, below_dc_in_floor=True,
+                                            raised_doses=(192, 384, 768), return_time_s=120,
+                                            decode_end_lag_s=2, prompt_sizes=[2000])
         for name,ids in (("pilot",["L001","L002","L003"]),("rest",[f"L{i:03d}" for i in range(4,13)]),
-                         ("short",["L001","L002","L003"])):
+                         ("short",["L001","L002","L003"]),("stale",["L001","L002","L003"])):
+            planned_kit = revised if name == "stale" else kit
             out = self.root/name
             clock = runner.FakeClock(local("2026-11-17T02:40"))
             deps = runner.mock_deps(out,clock)
@@ -449,25 +588,45 @@ class RuntimeTests(unittest.TestCase):
             def soak(path,*a):
                 Path(path).mkdir(parents=True)
                 return write_soak(Path(path)/"soak_reference.json")
-            def run_leg(path,spec_path,soak_reference,cap_s,feeds,remaining,span_reference=None):
+            def run_leg(path,spec_path,soak_reference,cap_s,feeds,remaining,span_reference=None,
+                        *, ctl_spec_sha256):
+                stale_attempt = name == "stale" and path.parent.name == "L002"
+                if stale_attempt:
+                    stale = specs(kit)[1]
+                    spec_path = self.root / "stale-L002.json"
+                    spec_path.write_text(json.dumps(stale))
+                    ctl_spec_sha256 = ctl.leg_spec_sha256(stale)
                 args = ["--config",str(self.config),"--leg-spec",str(spec_path),"--r1-kind","cadence-leg",
-                        "--output",str(path),"--soak-reference",str(soak_reference)]
+                        "--leg-spec-sha256",ctl_spec_sha256,"--output",str(path),
+                        "--soak-reference",str(soak_reference)]
                 if span_reference:
                     args += ["--span-reference",str(span_reference)]
-                if cadence_ctl.main(args,stdout=io.StringIO()):
+                if name == "short" and path.parent.name == "L001":
+                    chat = workload.MlxEndpoint.chat
+
+                    def short(endpoint, *args, **kwargs):
+                        return replace(chat(endpoint, *args, **kwargs), completion_tokens=1)
+
+                    with patch.object(workload.MlxEndpoint, "chat", short):
+                        rc = cadence_ctl.main(args, stdout=io.StringIO())
+                else:
+                    rc = cadence_ctl.main(args, stdout=io.StringIO())
+                if rc:
                     raise runner.LegRuntimeError("synthetic ctl runtime refused")
-                result = runner.accepted_result(path)
-                if name=="short" and result["leg_id"]=="L001":
-                    # A scripted dose cut, like the real short-dose test above, is operationally
-                    # incomplete. It must not abort the span; consumers retain the exclusion mark.
-                    result.update(leg_status="incomplete",decode_cap_reached=False,script_complete=False)
-                return result
+                if stale_attempt:
+                    self.assertTrue(runner.accepted_result(path)["script_complete"])
             deps.run_soak,deps.run_leg = soak,run_leg
-            p = legs.plan_span(kit,t0_epoch=clock.time(),windows=NEW_WINDOW,leg_ids=ids)
+            p = legs.plan_span(planned_kit,t0_epoch=clock.time(),windows=NEW_WINDOW,leg_ids=ids)
             with patch.object(runner.signal,"signal",wraps=runner.signal.signal):
-                rc = runner.run_span(kit=kit,kit_sha256="f"*64,output=out,deadline=runner.launch_deadline(p),
+                rc = runner.run_span(kit=planned_kit,kit_sha256="f"*64,output=out,deadline=runner.launch_deadline(p),
                                      windows=NEW_WINDOW,deps=deps,leg_ids=ids)
             receipt = json.loads((out/runner.RECEIPT_NAME).read_text())
+            if name == "stale":
+                self.assertEqual(rc, 2)
+                self.assertIn("does not bind the planned leg spec", receipt["error"])
+                self.assertEqual(receipt["legs_finished"], 1)
+                self.assertFalse((out / "legs/L002/leg_summary.json").exists())
+                continue
             self.assertEqual(rc,0,receipt.get("error"))
             summary,stops = desk.build_desk(plan_id=name,input_dir=out/runner.DESK_BUNDLE,out_dir=out/"desk",
                                              adapter=kit["desk"]["adapter"],stop_rules=kit["stop_rules"],now=clock.time())

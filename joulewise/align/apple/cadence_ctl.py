@@ -18,7 +18,7 @@ from joulewise.align.apple import cadence_leg, r1_runtime as rt
 from joulewise.align.apple.sampler import monotonic_ns
 from joulewise.cadence import ctl, legs
 
-AUDIT_NAME = "script-work.json"
+AUDIT_NAME = ctl.WORK_NAME
 
 
 def cpu_burn(clock, seconds, *, synthetic):
@@ -26,9 +26,9 @@ def cpu_burn(clock, seconds, *, synthetic):
     if synthetic:
         clock.sleep(seconds)
         return
-    until = time.monotonic() + seconds
+    until = time.thread_time_ns() + ctl.duration_ns(seconds)
     value = 1
-    while time.monotonic() < until:
+    while time.thread_time_ns() < until:
         value = (value * 1664525 + 1013904223) & 0xffffffff
 
 
@@ -43,7 +43,9 @@ def endpoint_class(base, script, audit, *, synthetic):
             return monotonic_ns(self.clock.stamp())
 
         def interval(self, kind, seconds):
-            row = {"kind": kind, "started_ns": self.stamp(), "started_epoch_s": self.clock.stamp().epoch_s,
+            started = self.clock.stamp()
+            cpu_start = time.thread_time_ns() if kind == "cpu" and not synthetic else None
+            row = {"kind": kind, "started_ns": monotonic_ns(started), "started_epoch_s": started.epoch_s,
                    "requested_s": seconds, "complete": False}
             audit["steps"].append(row)
             try:
@@ -51,9 +53,13 @@ def endpoint_class(base, script, audit, *, synthetic):
                     cpu_burn(self.clock, seconds, synthetic=synthetic)
                 else:
                     self.clock.sleep(seconds)
-                row["complete"] = True
             finally:
-                row.update(ended_ns=self.stamp(), ended_epoch_s=self.clock.stamp().epoch_s)
+                ended = self.clock.stamp()
+                row.update(ended_ns=monotonic_ns(ended), ended_epoch_s=ended.epoch_s)
+                if kind == "cpu":
+                    row["thread_cpu_ns"] = (time.thread_time_ns() - cpu_start if cpu_start is not None
+                                            else row["ended_ns"] - row["started_ns"])
+            row["complete"] = ctl.completed_step(row, kind, seconds)
 
         def physical_call(self, endpoint, messages, kwargs, tokens, *, logged):
             row = {"kind": "turn" if logged else "hidden", "started_ns": self.stamp(),
@@ -74,20 +80,16 @@ def endpoint_class(base, script, audit, *, synthetic):
             if self.script_used:
                 raise rt.RuntimeFailure("one control script per member")
             self.script_used = True
-            if script["hidden_tokens"]:
-                self.physical_call(self.hidden_endpoint, messages, kwargs, script["hidden_tokens"], logged=False)
             visible = []
-            for i, tokens in enumerate(script["turn_tokens"]):
-                if i:
-                    if script["cpu_s"]:
-                        self.interval("cpu", script["cpu_s"])
-                    if script["gap_s"]:
-                        self.interval("gap", script["gap_s"])
-                # Fresh identical prompts: one scripted call is one physical turn, no growing history.
-                visible.append(self.physical_call(self, messages, kwargs, tokens, logged=True))
-            # The model and the member's rail sampler are still alive here. No new session is opened.
-            self.interval("recovery", script["recovery_s"])
-            audit["complete"] = all(row["complete"] for row in audit["steps"])
+            for kind, dose in ctl.script_steps(script):
+                if kind == "hidden":
+                    self.physical_call(self.hidden_endpoint, messages, kwargs, dose, logged=False)
+                elif kind == "turn":
+                    # Every call starts from the same prompt and seed.
+                    visible.append(self.physical_call(self, messages, kwargs, dose, logged=True))
+                else:
+                    self.interval(kind, dose)
+            audit["complete"] = ctl.work_complete(audit["steps"], script)
             first, last = visible[0], visible[-1]
             return replace(last, start_ns=first.start_ns, first_token_ns=first.first_token_ns,
                            prompt_tokens=sum(r.prompt_tokens for r in visible),
@@ -125,7 +127,8 @@ class CtlSegment(cadence_leg.CadenceLegSegment):
                 "script_record_sha256": hashlib.sha256(raw).hexdigest()}
 
     def run_member(self, config_map, hook=None):
-        audit = {"schema": "joulewise.cadence_script_work.v1", "leg_id": self.leg["leg_id"],
+        audit = {"schema": ctl.WORK_SCHEMA, "leg_id": self.leg["leg_id"],
+                 "leg_spec_sha256": ctl.leg_spec_sha256(self.leg),
                  "script": self.leg["script"], "complete": False, "steps": []}
         try:
             with scripted_endpoint(self.leg["script"], audit, synthetic=self.backend.name != "production"):
@@ -135,13 +138,19 @@ class CtlSegment(cadence_leg.CadenceLegSegment):
 
 
 def main(argv=None, *, backend_factory=None, stdout=None):
+    import argparse
     import sys
     argv = list(sys.argv[1:] if argv is None else argv)
     try:
         path, span_source, rest = cadence_leg._split_leg_spec(argv)
+        parser = argparse.ArgumentParser(add_help=False)
+        parser.add_argument("--leg-spec-sha256", required=True)
+        proof, rest = parser.parse_known_args(rest)
         leg = cadence_leg.load_leg_spec(path)
         if leg["schema"] != ctl.SPEC_SCHEMA:
             raise ValueError("cadence-ctl-v1 needs a ctl leg spec")
+        if ctl.leg_spec_sha256(leg) != proof.leg_spec_sha256:
+            raise ValueError("ctl leg spec differs from the span plan")
     except (SystemExit, OSError, ValueError) as error:
         print(f"cadence_ctl: refused: {error}", file=sys.stderr)
         return rt.EXIT_REFUSED

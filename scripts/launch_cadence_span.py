@@ -119,7 +119,51 @@ def latest_attempt(ledger, span_pattern):
     return max(candidates, key=lambda row: row["monotonic_ns"])
 
 
-def proven_close(ledger, runner):
+def verify_shutdown(receipt, path, *, require_attestation, runner):
+    """Check the receipt's shutdown evidence and the lead's RL-179 close attestation."""
+    def stopped(result):
+        if not isinstance(result, dict) or result.get("proven_stopped") is not True:
+            return False
+        group = result.get("group")
+        return ("group" not in result or (isinstance(group, dict)
+                and group.get("reaped") is True and group.get("group_census") == []))
+
+    stop_steps = {}
+    restore_steps = 0
+    for row in receipt.get("steps", []):
+        name = row["name"]
+        if name == "restore" or name.startswith(("stop-", "close-")):
+            if type(row.get("rc")) is not int or row["rc"] != 0:
+                raise ValueError(f"{name} did not pass")
+        if name == "restore":
+            restore_steps += 1
+            if restore_steps != 1 or row.get("result", {}).get("ok") is not True:
+                raise ValueError("restore lacks a unique successful readback")
+        if name.startswith("stop-"):
+            feed = name[5:]
+            result = row.get("result")
+            if (feed in stop_steps or not stopped(result)
+                    or ("rc" in result and (type(result["rc"]) is not int or result["rc"] != 0))):
+                raise ValueError(f"{name} lacks a unique successful stop proof")
+            stop_steps[feed] = {"rc": row["rc"], **result}
+    feeds = receipt.get("feeds", {})
+    if receipt.get("schema") == runner.RECEIPT_SCHEMA:
+        if restore_steps != 1 or not {"agents", "meter", "volumes"} <= stop_steps.keys() or feeds.keys() != stop_steps.keys():
+            raise ValueError("cadence receipt does not prove every feed stopped")
+    for name, feed in feeds.items():
+        stop = feed.get("stop")
+        if (not stopped(stop) or type(stop.get("rc")) is not int or stop["rc"] != 0
+                or (name in stop_steps and stop != stop_steps[name])):
+            raise ValueError(f"feed {name} has incomplete or contradictory stop evidence")
+    if "meter" in receipt and receipt["meter"].get("proven_stopped") is not True:
+        raise ValueError("meter shutdown was not proven")
+    if require_attestation:
+        proofs = ("HOST_RESTORE_OK", "FEEDS_STOPPED", "GROUPS_ABSENT", "FOREIGN_PROCESSES_ABSENT")
+        if os.environ.get("CLOSE_PROOF_RECEIPT") != path or any(os.environ.get(key) != "1" for key in proofs):
+            raise ValueError("receipt-bound restore, feed stop, group absence and foreign process proof required")
+
+
+def proven_close(ledger, runner, *, require_attestation=True):
     attempt = latest_attempt(ledger, runner.SPAN_ID_PATTERN)
     span = attempt["span_id"]
     try:
@@ -135,6 +179,7 @@ def proven_close(ledger, runner):
                         and restore[0]["result"].get("ok") is True)
         if not restored:
             raise ValueError("restore readbacks did not pass")
+        verify_shutdown(receipt, attempt["close_receipt"], require_attestation=require_attestation, runner=runner)
         ended = receipt["ended"]
         if "epoch_ns" in ended:
             epoch_ns = ended["epoch_ns"]
@@ -189,7 +234,7 @@ def append_attempt(path, ledger, previous, span_id, receipt, span_pattern):
             temp.unlink(missing_ok=True)
 
 
-def runner_argv(args) -> list[str]:
+def runner_argv(args, *, kit_sha256=None) -> list[str]:
     legs, window = getattr(args, "legs", None), getattr(args, "batch_window", None)
     t0_date = getattr(args, "authorized_t0_date", None)
     anchor = getattr(args, "t0_anchor", None)
@@ -203,19 +248,20 @@ def runner_argv(args) -> list[str]:
         t0_args += ["--t0-not-before-ns", str(args.t0_not_before_ns)]
     span_id = getattr(args, "span_id", None)
     return [str(args.python_bin), str(args.repo / RUNNER), "run", "--kit", str(args.kit), "--output", str(args.output),
+            *(["--kit-sha256", kit_sha256] if kit_sha256 is not None else []),
             *(["--legs", legs] if legs else []), *(["--batch-window", window] if window else []),
             "--deadline", str(args.deadline), "--pmset-bin", str(args.pmset_bin),
             *(["--span-id", span_id] if span_id else []), *t0_args]
 
 
-def launch(args) -> None:
+def launch(args, *, loaded_kit=None) -> None:
     """``launch_align_r0.launch`` for this runner kind: refuse, publish the fence, bootstrap once."""
     from joulewise.cadence import kit as kitmod
     from scripts import cadence_legs_runner as span_runner
 
     if args.kit is None or not args.kit.is_file():
         raise ValueError("cadence-legs-v1 requires an existing --kit")
-    kit, _ = kitmod.load_kit(args.kit)
+    kit, sha = kitmod.load_kit(args.kit) if loaded_kit is None else loaded_kit
     scripted_ctl = kit["runner"]["kind"] == ctl.RUNNER_KIND
     if scripted_ctl:
         ctl.require_issued(kit)
@@ -251,7 +297,8 @@ def launch(args) -> None:
         raise ValueError("cadence-legs-v1 deadline cannot fit the span's worst case, work reserve and cleanup grace")
     if scripted_ctl and getattr(args, "t0_anchor", None) is None:
         args.t0_anchor = span_runner.RealClock.arm_anchor_ns()
-    runner = Path(runner_argv(args)[1])
+    child_argv = runner_argv(args, kit_sha256=sha if scripted_ctl else None)
+    runner = Path(child_argv[1])
     if not runner.is_file() or not os.access(args.python_bin, os.X_OK):
         raise ValueError("measurement checkout runner and executable interpreter required")
     root = args.custody_root
@@ -265,7 +312,7 @@ def launch(args) -> None:
     plist = job / f"{label}.plist"
     wrapper = Path(base.__file__).with_name("run_align_r0_launchagent.sh").resolve()
     runner_spec = job / "runner.json"
-    runner_spec.write_text(json.dumps({"kind": RUNNER_KIND, "argv": runner_argv(args)}) + "\n")
+    runner_spec.write_text(json.dumps({"kind": RUNNER_KIND, "argv": child_argv}) + "\n")
     arguments = ["/bin/bash", str(wrapper), str(Path(__file__).resolve()),
                  str(args.python_bin), str(root), purpose, str(args.magistrate_pid),
                  str(args.deadline), str(args.exit_wait_seconds), args.pmset_bin,
@@ -287,7 +334,7 @@ def launch(args) -> None:
             raise ValueError("an active desk fence already exists")
         if ledger_path is not None:
             ledger = json.loads(ledger_path.read_text())
-            previous, close_ns = proven_close(ledger, span_runner)
+            previous, close_ns = proven_close(ledger, span_runner, require_attestation=scripted_ctl)
             if previous["close_receipt"] != previous_receipt or close_ns != close_bound:
                 raise ValueError(f"close proof changed before launch for {previous['span_id']}")
             append_attempt(ledger_path, ledger, previous, span_id, args.output / span_runner.RECEIPT_NAME,
@@ -396,9 +443,10 @@ def main(argv=None) -> int:
             print(attempt["span_id"], close_ns, attempt["close_receipt"], sep="\n")
             return 0
         if args.command == "launch":
-            kit, _ = kitmod.load_kit(args.kit)
+            loaded = kitmod.load_kit(args.kit)
+            kit, _ = loaded
             if kit["runner"]["kind"] == ctl.RUNNER_KIND:
-                launch(args)
+                launch(args, loaded_kit=loaded)
                 return 0
             try:
                 runner.validate_t0_authority(kit, args.authorized_t0_date, args.t0_not_before,

@@ -7,6 +7,8 @@ from __future__ import annotations
 
 from copy import deepcopy
 from decimal import Decimal
+import hashlib
+import json
 import math
 
 from joulewise.cadence import kit as base, kit_v11
@@ -21,6 +23,54 @@ TURN_CAPS = {"hidden": [1024], "extra-turn": [1024, 1024], "cpu": [512, 512],
              "split": [342, 341, 341], "plain": [1024]}
 KINDS = {"hidden", "extra-turn", "cpu", "split", "plain"}
 SCRIPT_KEYS = {"kind", "turn_tokens", "hidden_tokens", "cpu_s", "gap_s", "recovery_s"}
+WORK_NAME = "script-work.json"
+WORK_SCHEMA = "joulewise.cadence_script_work.v1"
+
+
+def leg_spec_sha256(spec):
+    return hashlib.sha256(json.dumps(spec, sort_keys=True, separators=(",", ":")).encode()).hexdigest()
+
+
+def duration_ns(seconds):
+    return math.ceil(Decimal(str(seconds)) * 1_000_000_000)
+
+
+def script_steps(script):
+    if script["hidden_tokens"]:
+        yield "hidden", script["hidden_tokens"]
+    for index, cap in enumerate(script["turn_tokens"]):
+        if index and script["cpu_s"]:
+            yield "cpu", script["cpu_s"]
+        if index and script["gap_s"]:
+            yield "gap", script["gap_s"]
+        yield "turn", cap
+    yield "recovery", script["recovery_s"]
+
+
+def completed_step(row, kind, dose):
+    """Derive completion from the physical count or measured interval."""
+    start, end = row.get("started_ns"), row.get("ended_ns")
+    if (row.get("kind") != kind or type(start) is not int or type(end) is not int or not 0 <= start <= end):
+        return False
+    if kind in ("hidden", "turn"):
+        return (type(row.get("requested_tokens")) is int and row["requested_tokens"] == dose
+                and type(row.get("actual_tokens")) is int and row["actual_tokens"] == dose)
+    if row.get("requested_s") != dose or end - start < duration_ns(dose):
+        return False
+    return kind != "cpu" or (type(row.get("thread_cpu_ns")) is int and row["thread_cpu_ns"] >= duration_ns(dose))
+
+
+def work_complete(steps, script):
+    expected = list(script_steps(script))
+    if not isinstance(steps, list) or len(steps) != len(expected):
+        return False
+    end = 0
+    for row, (kind, dose) in zip(steps, expected):
+        if (not isinstance(row, dict) or row.get("complete") is not True
+                or not completed_step(row, kind, dose) or row["started_ns"] < end):
+            return False
+        end = row["ended_ns"]
+    return True
 
 
 def validate_script(script):
