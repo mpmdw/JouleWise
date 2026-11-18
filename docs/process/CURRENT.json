@@ -1,7 +1,13 @@
 {
   "armed": null,
-  "next_observable": "the STANDING-F0 run 10 pre-launch record (or the no-launch record), then its Check after the fence is gone; dev-05-s01's pre-launch record at 00:00",
+  "next_observable": "the magistrate's next item recording the cap removed, and any F0 launched after dev-05-s01's close without a day cap",
   "open_items": [
+    {
+      "expires_epoch_s": null,
+      "item": 415,
+      "owner": "magistrate",
+      "status": "ISSUED"
+    },
     {
       "expires_epoch_s": null,
       "item": 414,
@@ -29,11 +35,11 @@
   ],
   "owner": "magistrate",
   "schema": "joulewise.current_pointer.v2",
-  "source_item": "413",
+  "source_item": "415",
   "source_item_heading_date": "2026-11-17",
   "wait": {
-    "deadline_epoch_s": 1794984000,
+    "deadline_epoch_s": 1795075140,
     "observable": "none",
-    "on_early_or_refused": "launch STANDING-F0 run 10 under item 346 with item 412's one-time cap waiver only if rules 5 (spacing), 6 (window to 22:40) and 7 (dev-05-s01's 00:00 arm protected) hold and every Start-and-check line passes; otherwise NOTHING launches, record why, and dev-05-s01 arms at 00:00 under item 393 as issued"
+    "on_early_or_refused": "apply the revocation at your next activation: delete the three-per-day check from item 346's script; F0 eligibility is spacing (rule 5), window (rule 6) and rule 7 only; record it in your next item"
   }
 }

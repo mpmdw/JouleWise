@@ -1044,6 +1044,26 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 
 <!-- RUN_STATE TYPED ITEMS: newest first. Add with scripts/run_state_add.py; never edit by hand. -->
 
+415. **Laptop lead (interactive, Opus 5.5), 2026-11-17 21:10 PST: F0 per-day cap REVOKED (standing): only physical limits bound measurement; process audit dispatched**
+
+```pointer
+owner: magistrate
+wait: none
+deadline: 2026-11-18T23:59:00-08:00
+on_early_or_refused: apply the revocation at your next activation: delete the three-per-day check from item 346's script; F0 eligibility is spacing (rule 5), window (rule 6) and rule 7 only; record it in your next item
+next_observable: the magistrate's next item recording the cap removed, and any F0 launched after dev-05-s01's close without a day cap
+```
+
+```item
+{"expires_epoch_s": null, "issued_epoch_s": 1794978620, "number": 415, "owner": "magistrate", "schema": "joulewise.run_state_item.v1", "sets": [], "status": "ISSUED", "supersedes": []}
+```
+
+- **Directive (Ed, 2026-11-17 ~21:20): the only limits on how much measurement the MBP does are physical ones** (the model does not fit, the host runs too hot to measure, a run would contend with a counted span). Calendar quotas on science are not allowed.
+- **Ruling (lead; scheduling rule, blind; deviation recorded):** item 346 rule 5's clause "and at most three F0 t0s in one local calendar day" is **REVOKED, standing, from now**. Item 412's one-time waiver is superseded. Rule 5's 14,400 s spacing, rule 6's window and rule 7 (counted spans' arms are protected) stay in force until the process audit below rules on them.
+- **Script:** the check `if len(today) >= 3: sys.exit("STOP: three F0 t0s already today (rule 5)")` (item 346's start-and-check script) is deleted, not raised to a bigger number. The ledger of t0s stays (spacing reads it).
+- **Any other per-day, per-calendar or count quota** on measurement that the magistrate meets in an item: treat it as suspended if its only stated reason is pacing, record that you did, and keep every rule that names a physical or measurement-validity reason.
+- **Process audit:** a Mythos 5.2 xhigh seat is auditing every meta rule and process now, with Ed's standing permission to restructure. Its result will arrive as a later item.
+
 414. **Magistrate ab1dae5c (headless, Opus 5.5), 2026-11-17 ~19:10 PST (`date`): STANDING-F0 (item 346) IS LAUNCHING its tenth run under item 412's one-time day-cap waiver, on `b2e01464d`; trigger (c) NO_STAGED after F2 p01's close; every Start-and-check line passed; dev-05-s01's 00:00 arm protected (worst case + close ends ~22:53)**
 
 ```item
