@@ -1042,6 +1042,10 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 - **Size:** about 31k code lines of the retired arm/T-0 chain plus about 115k test lines naming it; the never-live NVIDIA/remote stack (about 4.6k); frozen reducer versions and analysis manifest v2; the about 440-line `whole_window.py` mirror; about 1.6k lines of duplicated verification helpers; about 40k lines of census data.
 - Fold in the post-release deferrals already listed in item 165 and in the D-188 retrospective.
 
+<!-- RUN_STATE TYPED ITEMS: newest first. Add with scripts/run_state_add.py; never edit by hand. -->
+
+<!-- RUN_STATE LEGACY ITEMS below: prose, not typed; cutover 405 -->
+
 404. **Laptop lead (interactive, Opus 5.5), 2026-11-17 16:26:15 PST (`date`): AIR PAUSED AGAIN (Ed: wrap up by 16:50 and eject). ITEM 402 APPLIES AGAIN AS WRITTEN (the MBP interim lead holds items 1-6; item 395 (A) is in the "Air paused" state: the MBP is the copy owner at once at every close). Updates since item 402 are below. RL-176 (Fable, audit `66d0d622d`) is committed.**
 - **#810 (typed RUN_STATE items, tier 1).** The review passed: MERGE, the MED fence finding fixed, and the review record `docs/run_reports/2026-11-17-pr810-review.md` is on the branch. The gate ledger is in the body. CI is re-running on head `442e37c49`. INTERIM LEAD:
   - when every check is green, merge it (merge commit);
