@@ -53,7 +53,12 @@ def completed_step(row, kind, dose):
     if (row.get("kind") != kind or type(start) is not int or type(end) is not int or not 0 <= start <= end):
         return False
     if kind in ("hidden", "turn"):
-        return (type(row.get("requested_tokens")) is int and row["requested_tokens"] == dose
+        first_token = row.get("first_token_ns")
+        context = row.get("context_tokens")
+        cached = row.get("cached_prompt_tokens")
+        return (type(first_token) is int and start <= first_token <= end
+                and type(context) is int and type(cached) is int and 0 <= cached <= context
+                and type(row.get("requested_tokens")) is int and row["requested_tokens"] == dose
                 and type(row.get("actual_tokens")) is int and row["actual_tokens"] == dose)
     if row.get("requested_s") != dose or end - start < duration_ns(dose):
         return False

@@ -447,6 +447,64 @@ class LaunchAuthorityTests(unittest.TestCase):
         self.assertIsNone(launcher.base.read_fence(self.fence_root))
         self.assertEqual(json.loads(self.ledger.read_text())["attempts"], [self.prior])
 
+    def test_close_freshly_censuses_retired_collector_group(self):
+        from scripts import run_align_r1_smoke as smoke, run_night
+
+        pgid = 43210
+        process = Mock(pid=pgid)
+        process.poll.return_value = 1
+        feed = smoke.MeterFeed(self.root)
+        feed.supervisor = smoke.driver.MonitorSupervisor(
+            ["synthetic-no-device"], night_dir=self.root, popen=Mock(return_value=process), name="synthetic")
+        with patch.object(smoke.driver.time, "monotonic", return_value=1000):
+            self.assertTrue(feed.supervisor.start())
+            feed.poll()
+        self.assertIsNone(feed.supervisor.process)
+        stop = feed.stop()
+        self.assertTrue(stop["proven_stopped"])
+        self.assertEqual(stop["supervisor"]["exits"][0]["pid"], pgid)
+        receipt = self.native_close()
+        receipt["feeds"]["meter"]["stop"] = stop
+        next(row for row in receipt["steps"] if row["name"] == "stop-meter")["result"] = stop
+        self.receipt.write_text(json.dumps(receipt))
+        proof = ["close-proof", "--attempt-ledger", str(self.ledger)]
+        with (patch.object(run_night, "_group_census") as census,
+              patch.object(launcher.base, "pid_alive", return_value=True),
+              patch.object(launcher.time, "time", return_value=self.now),
+              patch.object(runner.RealClock, "arm_anchor_ns", return_value=(self.close_ns, self.ns, self.ns)),
+              patch.object(launcher.subprocess, "run") as service,
+              redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO())):
+            census.return_value = (True, [])
+            self.assertEqual(launcher.main(proof), 0)
+            census.assert_called_once_with(pgid)
+            census.reset_mock()
+            census.return_value = (False, ["synthetic remaining member"])
+            self.assertEqual(launcher.main(proof), 2)
+            self.assertIn(f"fresh census did not prove process group {pgid} empty", self.launch(self.proof))
+            self.assertEqual(census.call_args_list, [call(pgid), call(pgid)])
+            service.assert_not_called()
+        self.assertIsNone(launcher.base.read_fence(self.fence_root))
+        self.assertEqual(json.loads(self.ledger.read_text())["attempts"], [self.prior])
+
+    def test_runner_records_final_collector_group_for_fresh_census(self):
+        predecessor = self.root / "previous-span"
+        clock = runner.FakeClock(self.now - 8000)
+        deps = runner.mock_deps(predecessor, clock)
+        meter = next(feed for feed in deps.feeds if feed.name == "meter")
+        meter.supervisor = Mock(process=Mock(pid=43211))
+        original_stop = meter.stop
+        meter.stop = lambda: {**original_stop(), "group": {"reaped": True, "group_census": []}}
+        kit = v11_tests.v11_kit()
+        roster = ["L001"]
+        plan = legs.plan_span(kit, t0_epoch=clock.time(), windows=[], leg_ids=roster)
+        self.assertEqual(runner.run_span(
+            kit=kit, kit_sha256="a" * 64, output=predecessor, deadline=runner.launch_deadline(plan),
+            windows=[], deps=deps, leg_ids=roster, span_id="previous"), 0)
+        receipt = json.loads((predecessor / runner.RECEIPT_NAME).read_bytes())
+        stop = receipt["feeds"]["meter"]["stop"]
+        self.assertEqual(stop["group"]["pgid"], 43211)
+        self.assertEqual(next(row["result"] for row in receipt["steps"] if row["name"] == "stop-meter"), stop)
+
     def test_contradictory_restore_readback_refuses_cli_and_ctl_bootstrap(self):
         clean = self.native_close()
         argv = ["close-proof", "--attempt-ledger", str(self.ledger)]
@@ -682,6 +740,69 @@ class RuntimeTests(unittest.TestCase):
         self.assertEqual(sum(tokens for tokens, _, _ in split_calls), plain_tokens)
         self.assertTrue(prompt)
         self.assertEqual([(seed, ids) for _, seed, ids in split_calls], [(physical_seed, prompt)] * 3)
+
+    def test_physical_call_boundaries_match_envelope_with_nonzero_clock_reads(self):
+        from tests.align.w1_synthetic import WorldClock
+
+        native_stamp = WorldClock.stamp
+        native_chat = workload.MlxEndpoint.chat
+        physical_calls = []
+
+        def stamp(clock):
+            clock._now += 1e-6
+            return native_stamp(clock)
+
+        def chat(endpoint, *args, **kwargs):
+            result = native_chat(endpoint, *args, **kwargs)
+            physical_calls.append(result)
+            return result
+
+        source = None
+        with patch.object(WorldClock, "stamp", stamp), patch.object(workload.MlxEndpoint, "chat", chat):
+            for spec in specs():
+                with self.subTest(leg=spec["leg_id"]):
+                    physical_calls.clear()
+                    if spec["g0_role"] == "capture":
+                        source = None
+                    code, out, _ = self.call(spec, spec["leg_id"], source=source)
+                    self.assertEqual(code, 0)
+                    if source is None:
+                        source = out
+                    work = json.loads((out / ctl.WORK_NAME).read_bytes())
+                    calls = [row for row in work["steps"] if row["kind"] in {"hidden", "turn"}]
+                    self.assertEqual(
+                        [(row["started_ns"], row["first_token_ns"], row["ended_ns"]) for row in calls],
+                        [(r.start_ns, r.first_token_ns, r.end_ns) for r in physical_calls],
+                    )
+                    self.assertEqual(
+                        [(row["context_tokens"], row["cached_prompt_tokens"]) for row in calls],
+                        [(r.prompt_tokens, r.cached_prompt_tokens) for r in physical_calls],
+                    )
+                    visible = [row for row in calls if row["kind"] == "turn"]
+                    result = runner.accepted_result(out, ctl_spec=spec)
+                    self.assertTrue(legs.leg_admitted(result, contaminated=False))
+                    self.assertEqual(result["turn_start_ns"], visible[0]["started_ns"])
+                    self.assertEqual(result["first_token_ns"], visible[0]["first_token_ns"])
+                    self.assertEqual(result["turn_end_ns"], visible[-1]["ended_ns"])
+                    self.assertEqual(result["decode_tokens"], sum(row["actual_tokens"] for row in visible))
+                    self.assertEqual(result["prefill_tokens"],
+                                     sum(row["context_tokens"] - row["cached_prompt_tokens"] for row in visible))
+
+    def test_authenticated_ctl_envelope_cannot_disagree_with_physical_work(self):
+        spec = specs()[0]
+        code, out, result = self.call(spec, spec["leg_id"])
+        self.assertEqual(code, 0)
+        custody_path = out / rt.CUSTODY_NAME
+        custody = json.loads(custody_path.read_bytes())
+        for field in ("turn_start_ns", "first_token_ns", "turn_end_ns", "prefill_tokens", "decode_tokens"):
+            with self.subTest(field=field):
+                changed = {**result, field: result[field] + 1}
+                raw = json.dumps(changed).encode()
+                (out / rt.RESULT_NAME).write_bytes(raw)
+                custody["files"][rt.RESULT_NAME] = hashlib.sha256(raw).hexdigest()
+                custody_path.write_text(json.dumps(custody))
+                with self.assertRaisesRegex(runner.LegRuntimeError, f"disagrees with physical calls on {field}"):
+                    runner.accepted_result(out, ctl_spec=spec)
 
     def test_missing_reference_fails_without_running_a_script(self):
         spec = specs()[1]

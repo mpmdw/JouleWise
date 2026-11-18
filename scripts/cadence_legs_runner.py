@@ -279,9 +279,17 @@ def accepted_result(attempt_dir, *, ctl_spec=None):
         steps = work.get("steps")
         complete = ctl.work_complete(steps, ctl_spec["script"])
         if (type(value.get("g0_released")) is not bool or (not value["g0_released"] and steps != [])
-                or work.get("complete") is not complete or value.get("script_complete") is not complete
-                or (complete and value.get("decode_tokens") != ctl_spec["decode_tokens"])):
-            raise LegRuntimeError(f"{attempt_dir}: inconsistent ctl completion or logged count")
+                or work.get("complete") is not complete or value.get("script_complete") is not complete):
+            raise LegRuntimeError(f"{attempt_dir}: inconsistent ctl completion")
+        if complete:
+            visible = [row for row in steps if row["kind"] == "turn"]
+            prefill = sum(row["context_tokens"] - row["cached_prompt_tokens"] for row in visible)
+            expected = {"turn_start_ns": visible[0]["started_ns"], "first_token_ns": visible[0]["first_token_ns"],
+                        "turn_end_ns": visible[-1]["ended_ns"], "prefill_tokens": prefill,
+                        "decode_tokens": sum(r["actual_tokens"] for r in visible)}
+            for key, observed in expected.items():
+                if type(value.get(key)) is not int or value[key] != observed:
+                    raise LegRuntimeError(f"{attempt_dir}: ctl logged envelope disagrees with physical calls on {key}")
         if not complete and value["g0_released"]:
             value.update(leg_status="incomplete", decode_cap_reached=False)
     return value
@@ -736,8 +744,17 @@ _RESULT_KEEP_CTL = _RESULT_KEEP + ("script_complete", "script_record_sha256")
 
 
 def _close(record, state, deps, output, step, kit):
+    def stop_feed(feed):
+        result = feed.stop()
+        if feed.name == "meter" and "group" in result:
+            # The supervisor starts each generation in its own session.
+            process = getattr(getattr(feed, "supervisor", None), "process", None)
+            if process is not None:
+                result = {**result, "group": {**result["group"], "pgid": process.pid}}
+        return result
+
     cleanup = [("restore", lambda: deps.host.restore_power(state["power_read"])),
-               *(("stop-" + f.name, f.stop) for f in reversed(deps.feeds))]
+               *(("stop-" + f.name, lambda feed=f: stop_feed(feed)) for f in reversed(deps.feeds))]
     for name, operation in cleanup:
         try:
             result = step(name, operation, kind="close")
@@ -953,14 +970,19 @@ class FakeLegRuntime:
             stamp = 0
             if not timeout:
                 for kind, dose in ctl.script_steps(spec["script"]):
-                    fields = {"requested_tokens": dose, "actual_tokens": dose} if kind in ("hidden", "turn") else {
-                        "requested_s": dose}
+                    fields = ({"requested_tokens": dose, "actual_tokens": dose,
+                               "context_tokens": spec["prefill_tokens"], "cached_prompt_tokens": 0,
+                               "first_token_ns": stamp}
+                              if kind in ("hidden", "turn") else {"requested_s": dose})
                     elapsed = ctl.duration_ns(dose) if "requested_s" in fields else 1
                     if kind == "cpu":
                         fields["thread_cpu_ns"] = elapsed
                     steps.append({"kind": kind, "started_ns": stamp, "ended_ns": stamp + elapsed,
                                   "complete": True, **fields})
                     stamp += elapsed
+                visible = [row for row in steps if row["kind"] == "turn"]
+                result.update(turn_start_ns=visible[0]["started_ns"], first_token_ns=visible[0]["first_token_ns"],
+                              turn_end_ns=visible[-1]["ended_ns"], prefill_tokens=sum(r["context_tokens"] for r in visible))
             work = {"schema": ctl.WORK_SCHEMA, "leg_id": leg_id, "leg_spec_sha256": ctl_spec_sha256,
                     "script": spec["script"], "complete": not timeout, "steps": steps}
             work_raw = (json.dumps(work, sort_keys=True) + "\n").encode()

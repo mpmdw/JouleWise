@@ -67,10 +67,13 @@ def endpoint_class(base, script, audit, *, synthetic):
             audit["steps"].append(row)
             try:
                 result = base.chat(endpoint, messages, **{**kwargs, "max_tokens": tokens})
-                row.update(actual_tokens=result.completion_tokens, first_token_ns=result.first_token_ns,
-                           context_tokens=result.prompt_tokens)
-            finally:
+            except BaseException:
+                # A call that raises cannot supply its own boundaries.
                 row["ended_ns"] = self.stamp()
+                raise
+            row.update(started_ns=result.start_ns, first_token_ns=result.first_token_ns, ended_ns=result.end_ns,
+                       actual_tokens=result.completion_tokens, context_tokens=result.prompt_tokens,
+                       cached_prompt_tokens=result.cached_prompt_tokens)
             if result.tool_calls:
                 raise rt.RuntimeFailure("scripted step unexpectedly returned a tool call")
             row["complete"] = result.completion_tokens == tokens

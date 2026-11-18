@@ -52,7 +52,13 @@ also binds the canonical leg spec digest. Before invoking the workload the
 scripted child checks that digest against the span's planned spec. The
 parent checks the authenticated record against the same plan and derives
 completion from the ordered calls and intervals before desk admission. A
-short dose stays on disk and is excluded. An unrelated or unbound result
+completed call's start, first-token and end stamps come from the endpoint
+result used to construct the logged envelope. Before admission the parent
+checks the first visible call's start and first-token stamps, the last visible
+call's end stamp, and the summed visible token counts against that envelope.
+The work record carries cached prompt counts alongside full context counts
+so the parent can compare the envelope's fresh prefill count.
+A short dose stays on disk and is excluded. An unrelated or unbound result
 refuses the span. The future
 controls print uses the custody-bound record for physical calls. RL-186 §2.3
 allows only script kind, doses, physical call counts and durations, logged
@@ -127,8 +133,10 @@ successful restore command and an integer AC Automatic readback of 0.
 The span receipt records the process-group ID and stop verdict of each
 spawned soak and leg attempt. The close verifier refuses any recorded
 unproven stop, including legacy receipts that carry the failure in a step
-error. It runs a fresh read-only census for every recorded process group ID
-and requires an empty result. The attestation is required independently.
+error. It runs a fresh read-only census for every recorded process group ID,
+including the last collector group and previous generations in the collector
+supervisor's exit history. It requires an empty result and the independent
+attestation.
 For ctl the launcher requires `--attempt-ledger`,
 `--previous-close-receipt`, `--span-id` and `--t0-not-before-ns`. Under the
 fence lock it re-proves that the receipt belongs to the latest attempt, its

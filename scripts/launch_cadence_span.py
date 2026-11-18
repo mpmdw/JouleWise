@@ -148,13 +148,19 @@ def verify_shutdown(receipt, path, *, require_attestation, runner):
     def stopped(result):
         if not isinstance(result, dict) or result.get("proven_stopped") is not True:
             return False
-        group = result.get("group")
-        if "group" not in result:
-            return True
-        if not isinstance(group, dict) or group.get("reaped") is not True or group.get("group_census") != []:
-            return False
-        if "pgid" in group:
-            record_pgid(group["pgid"])
+        if "group" in result:
+            group = result["group"]
+            if not isinstance(group, dict) or group.get("reaped") is not True or group.get("group_census") != []:
+                return False
+            if "pgid" in group:
+                record_pgid(group["pgid"])
+        if "supervisor" in result:
+            exits = result["supervisor"]["exits"]
+            if not isinstance(exits, list):
+                return False
+            # Each supervisor leader was started in a new session, so its PID was also its PGID.
+            for retired in exits:
+                record_pgid(retired["pid"])
         return True
 
     def check_stop_error(row):
