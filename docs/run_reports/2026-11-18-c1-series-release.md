@@ -19,8 +19,10 @@ with zero S rows.
 | RL-185 PIPELINE §3 freeze | `ca768c768b1bc9308fb4c1075a5ac81a0db82fde` (draft replay `187bf277e`) |
 | Private test head and tree | `ce2aebc838d4e0f4a606bcb1899f9dd2cce20133`, `4da685deb63d32d0231dac7a6413669055f353f0` |
 | Resolved-interface test head and tree | `3ab402d58eb4c82645db233721945f0388040d01`, `d7baf074110f80c3b978336753d32a2c1e131370` |
-| Pipeline audit fix test head and tree | `e505c3e2b6387e484a5baea4f5adc98906b0d0bf`, `a75d7766bc10b5da65673be4a46796fc2ccb314d` |
-| Caller SHA-256 for signatory | `d55b7db7257f8e96a0cc702254ac3d01868924de6efba133d206bf31ced58ded` |
+| Pipeline round-one test head and tree | `e505c3e2b6387e484a5baea4f5adc98906b0d0bf`, `a75d7766bc10b5da65673be4a46796fc2ccb314d` |
+| Pipeline round-two spec freeze | `d89235bbb7e6587e6e7a4e68689ba8d72fb2f9bb` |
+| Pipeline round-two test head and tree | `4b9ef3f5335e162c58d30e787aafba2a11539cd7`, `9041697dc498f55858b9555200a64da85cc7b8eb` |
+| Caller SHA-256 for signatory | `2fd37cb552b20aa98b55f0d8082d7f044ec677cfe08e6265e716c775e06c00d1` |
 | Draft code head and tree before report | `b7a0440a00442151c5b18a73a7b48fb5beeb72ec`, `77c7065e57a5bc17cb436adc041f6ff45bfdb175` |
 
 At the initial freeze the CLI tests failed with no script. At the RL-185
@@ -29,9 +31,11 @@ During build, an eager selection fixed the fixture's last-stratum offsets
 so both worlds have no ties, and the fixtures gained bound, named PM and
 rail projections.
 
-Handoff found PR #813 at `7498dfe3ffcbedd47262220cdb1e99113d2c9869`, a
-test and documentation delta from its initial pin. PR #787 and PR #826
-remained at the pins above. All three remain separate drafts on W1. The
+Handoff found PR #813 at `5765be0437816f0832d429ecaff34258ca30cd37`,
+an additional generation, protocol and test delta from `7498dfe3`.
+The private synthetic tests use the original pinned sources in the table.
+PR #787 and PR #826 remained at the pins above. All three remain separate
+drafts on W1. The
 public draft includes the caller, its test and report, and the audit's
 release-specific registration validator change. The staged
 integration tree is private. First public CI was queued on a W1 checkout
@@ -45,10 +49,10 @@ the dependency landings. [Draft PR #836](https://github.com/mpmdw/JouleWise/pull
 
 | Stage | File and line | Evidence |
 |---|---|---|
-| CLI and guard | Caller :444,474, PR #813 `v4_desk_seal.py:351,418` and `rl176.py:611,622,633` | Snapshot the guard's named metadata, call the real guard and use the literal freeze flag in the scorer. |
-| Registration and history | Caller :101,135,227,344, `v4_registration.py:527,581` and `scripts/align_v4_series.py:220,231,239,510` | Match committed authority, verify the executing sources against the release receipt, and replay attempt order against the frozen manifest. |
+| CLI and guard | Caller :484,515, PR #813 `v4_desk_seal.py:351,418` and `rl176.py:611,622,633` | Snapshot the guard's named metadata, call the real guard and use the literal freeze flag in the scorer. |
+| Registration and history | Caller :128,175,267,384, `v4_registration.py` `validate_receipt` and `require_registration`, and `scripts/align_v4_series.py:220,231,239,510` | Match committed authority, verify the registered Python source inventory and module provenance, and replay attempt order against the frozen manifest. |
 | Final records and A9 | PR #826 `scripts/align_v4_next_arm_packet.py:237,306,395` and `light_triage.py:79,163` | Use the shared RL-183b finality, including successor `previous_final`, and independently preserve final per-member reasons. |
-| Stored rows | Caller :80,313, PR #787 `s_rows.py:193,751,774`, PR #813 `workload.py:893` | Give the real #787 adapter its isolated rail-only projection and registered PM rows, then pass the returned tuple directly. |
+| Stored rows | Caller `named_bytes` and :353, PR #787 `s_rows.py:193,751,774`, PR #813 `workload.py:893` | Give the real #787 adapter its isolated rail-only projection and registered PM rows, then pass the returned tuple directly. |
 | DC and disclosures | Caller `benign_dc`, `load_benign_dc`, `add_disclosures`, PR #813 `rl176.py:459,468,527,550,628` | Use the loaded episode identity to request the separate manifest-keyed provider. Keep uncaptured assignments out of scorer inputs and apply the existing numeric rule. |
 
 ## Resolved interfaces under RL-185 §3
@@ -130,6 +134,39 @@ receipt. Source digests on the private test head follow.
 | `joulewise/align/apple/s_rows.py` | `f47f1e9ca1c7c1602297ba16229308fa1201ef602a3816ad12dbf019277c5ccb` |
 | `joulewise/align/apple/rl176.py` | `b72a6799aa92279af9b6ea1880ed978546d84de5017244fd5c493dd1529b348e` |
 | `joulewise/align/apple/rl176_phases.py` | `a924b1f4fe5e4e3d7dee719027e57cdb7548f4d66ec7705ad249d5d6b2ff18f8` |
+
+## Automated pipeline audit round 2
+
+**HIGH, verified, integration seam.** At `89073aac1` the four release
+file digests matched, but the CLI used `_wls` from an executing
+`joulewise/align/energy_residual.py` that differed from the validated
+receipt. The synthetic registered source at `18c4f85a…` lacked `_wls`.
+The executing source at `b287e256…` contained it. The original 102-win
+reproducer wrote `S SIGNATURE` and exited 0. The earlier scorer mismatch
+continued to refuse.
+
+The new spec freeze recorded both the fitter reproduction and a census of
+the release's static imports before implementation. The fix at
+`0f5619757` verifies the signed `joulewise/` and `scripts/` Python source
+inventory in the executing checkout before member loading. The source
+loader checks the startup import tree against the same receipt and
+enforces its digests for late imports before executing any of their code.
+A failed late binding prevents a report even if an import caller handles
+the exception. The release receipt now covers the restore manifest reader
+`joulewise/align/apple/harvest_offload.py`. Positive fixture receipts
+copy the actual signed Python sources into the synthetic input checkout.
+
+| Regression | Result |
+|---|---|
+| `test_audit_receipt_for_different_fit_source_refuses_without_report` | PASS. The valid receipt matches the four named release files and binds different fitter bytes. The CLI refuses and creates no report. |
+| `test_receipt_covers_static_release_import_closure` | PASS. The release artifact set covers the first-party static closure, including lazy imports. |
+| `test_late_release_import_checks_receipt_before_executing_source` | PASS. A matching source imports. Unbound and mismatched source bodies are never executed. |
+| W1's existing `test_every_executed_module_and_script_is_in_the_receipt_artifact_set` | PASS. The release artifact path is data, so it adds no launch edge to the W1 closure. See `4b9ef3f53`. |
+
+**MED, verified, signing-owner follow-up.** The ordinary kit still uses
+the W1 validation profile and rejects the expanded release receipt. Its
+accepted profile and the C1 arm predicate belong to the signing owner.
+Resolve this before C1 arms. This patch changes release enforcement only.
 
 ## Executed checks and Tier 2 dispositions
 
