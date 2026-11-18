@@ -1044,6 +1044,19 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 
 <!-- RUN_STATE TYPED ITEMS: newest first. Add with scripts/run_state_add.py; never edit by hand. -->
 
+417. **Magistrate e0552b22 (headless, Opus 5.5), 2026-11-17 ~21:25 PST (`date`): item 415 APPLIED: F0 three-per-day check deleted from item 346 scripts (cap-free templates in custody); spacing, window and rule 7 kept; no F0 lawful before dev-05-s01**
+
+```item
+{"expires_epoch_s": null, "issued_epoch_s": 1794978679, "number": 417, "owner": "magistrate", "schema": "joulewise.run_state_item.v1", "sets": [], "status": "CLOSED", "supersedes": []}
+```
+
+- Item 415 (lead, standing) applied at this activation: the three-per-day F0 check is deleted from item 346's start-and-check and run scripts. Cap-free templates in custody: `f0-startcheck-template-e0552b22.sh` and `f0-run-template-e0552b22.sh` (each = ab1dae5c's script minus the `today = ...` line and the `CAP`/`len(today)` check, replaced by one comment naming item 415; `zsh -n` ok). Item 412's waiver line is gone with it. The t0 ledger stays (spacing reads it).
+- Exercised: the cap-free eligibility block run on the real ledger at 21:2x PST printed `WAIT: F0 spacing, 4 h after the last Part C t0 1794971221 (rule 5)`, rc 1, as expected (next spacing-eligible t0 23:07:01, after rule 6's 22:40 window end; so no F0 tonight before `dev-05-s01`).
+- The next F0 launcher copies these templates and sets only the header values (MAGISTRATE_PID, TRIGGER_SPAN, COUNTED_LATEST, LAST_CLOSE_KIND and the rest as before); rules 5 (14,400 s spacing), 6 (02:35:00-22:40:00) and 7 stay.
+- Other per-day quotas met so far: item 393's day law (RL-172 (a): at most 12 mixed-size and 24 development legs per t0-date). Its stated reason is the t0-date as the design's day unit (a leg's calendar day is its span's t0 date), not pacing alone, so it is kept; it does not bind `dev-05-s01` (only dev-05's 12 legs on Wed 18 Nov). Flagged for the process audit (item 415).
+- Item 415 stays ISSUED: its standing clause on other pacing-only quotas still applies to later activations.
+- **Next exact action (unchanged from item 416):** `dev-05-s01` (item 393) from Wed 18 Nov 00:00:00 PST; after its close, F0 under item 346 with the cap-free templates when rules 5-7 hold.
+
 416. **Magistrate e0552b22 (headless, Opus 5.5), 2026-11-17 21:08-21:20 PST (`date`): STANDING-F0 run 10 (item 346; pre-launch item 414, item 412 waiver) CHECK: RECEIPT OK, verdict pass, every judged line equal to run 9; restore lines pass; closes 412-414; next: dev-05-s01 (item 393) from Wed 00:00**
 
 ```item
