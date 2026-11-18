@@ -367,10 +367,15 @@ def _read_cli_registration(path):
     return payload
 
 
+def _has_restricted_component(path):
+    # resolve() can preserve the caller's casing on a case-insensitive volume.
+    return any(component.casefold() == "restricted" for component in path.parts)
+
+
 def _public_input_path(path, argument):
-    if "RESTRICTED" not in path.parts:
+    if not _has_restricted_component(path):
         resolved = path.resolve()
-        if "RESTRICTED" not in resolved.parts:
+        if not _has_restricted_component(resolved):
             return resolved
     raise ManifestError(f"{argument} path contains RESTRICTED")
 

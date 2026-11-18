@@ -655,9 +655,13 @@ raise SystemExit(97)
             direct = restricted / "synthetic.json"
             alias = root / "alias.json"
             alias.symlink_to(direct)
+            case_alias = root / "ReStRiCtEd" / direct.name
+            linked_case_alias = root / "case-alias.json"
+            linked_case_alias.symlink_to(case_alias)
             public = root / "public.json"
+            paths = (direct, alias, case_alias, linked_case_alias, restricted / ".." / public.name, restricted)
 
-            for path in (direct, alias, restricted / ".." / public.name, restricted):
+            for path in paths:
                 for argument, argv in (
                     ("manifest", [str(path)]),
                     ("--registration", [str(public), "--final", "--registration", str(path)]),
