@@ -1044,6 +1044,21 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 
 <!-- RUN_STATE TYPED ITEMS: newest first. Add with scripts/run_state_add.py; never edit by hand. -->
 
+433. **RL-183: no F0/Part C on #809's renewal candidates (5434cb49d, e26b04b53, b3b88c696); R1 as issued at b2e01464d; R1 post-close follows the kit's word**
+
+```item
+{"expires_epoch_s": null, "issued_epoch_s": 1794995517, "number": 433, "owner": "magistrate", "schema": "joulewise.run_state_item.v1", "sets": [], "status": "ISSUED", "supersedes": []}
+```
+
+- **RL-183 Q1** (audit branch d7c436930): no F0 or Part C is issued on `5434cb49d`, `e26b04b53` or `b3b88c696`. These are PR #809's renewal candidates. Each one changes frozen R1 blobs.
+  - STANDING-F0 continues only at the pin it already runs on (item 346), until R1's post-close Check retires F0 (RL-179 F-4).
+  - The lead's earlier mention of a 5434cb49d renewal is withdrawn.
+- **R1 runs as issued at `b2e01464d`** (items 397 and 398). All ten R1 blobs stay unchanged. No second slot session is ordered.
+- **R1's post-close disposition follows the kit's printed word** (RL-183 2.6):
+  - `TYPICAL-CASE` proceeds.
+  - `R1-RERUN` re-arms at `b2e01464d` on a new READY record from the lead. No new Part C is needed, because the pin is the same.
+  - `RESEARCH-LEAD`, any gated-D H record, an incomplete G1 count, thermometry not `ok`, or a redo flag set at close: report to the research lead with the printed lines. Install no slots.
+
 432. **One-leg filler queues ready to issue (expires_at filled): use fillers-ready/queues at audit 61377dc45 for f2-stab and f2-inst**
 
 ```item
