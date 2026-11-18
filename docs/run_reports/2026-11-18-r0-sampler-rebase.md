@@ -59,3 +59,14 @@ Round 2 reviewed `71e6122a83090181e0de5806765ff9c57d62c28a`. It verified one HIG
 | MED, a failed host check could omit the final sampler refusal and queued contention. | Finalize the sampler for any admitted run and retain its evidence alongside the host error. | `test_execute_retains_sampler_refusal_and_contention_when_host_check_fails` | PASS |
 
 The original synthetic probes also passed with the repaired expectations. Three threaded regressions passed 20 consecutive fixture runs. The earlier late-census and queued-contention repairs remain covered. Hosted CI and the spec-v2 reviews are tracked on draft PR #824. The shard 8 blocker remains with the CI owner. [CI-owner issue #834](https://github.com/mpmdw/JouleWise/issues/834)
+
+## Delta audit round 3 and spec v3
+
+Round 3 reviewed `687170eb2adcecbbbacc037f8a3c40407c35ad2c`, whose hosted CI passed all 21 jobs. It verified one HIGH and one MED. The HIGH triggered the Tier 2 return-to-spec rule. Spec v3 was frozen at `452ccdf88dd952ccdaa84b9691adcc9b1b48a5cb` before patching. The new regressions produced three expected failures on the reviewed code. [Reviewed-head CI](https://github.com/mpmdw/JouleWise/actions/runs/44342344950) · [Pipeline §3](https://github.com/mpmdw/JouleWise/blob/211ff5033/docs/process/PIPELINE.md#3-tier-2-only-spec-freeze-and-convergence)
+
+| Verified finding | Repair in `889c172384dec7c65a32670479b9f56bec9f914d` | Regression | Final |
+| --- | --- | --- | --- |
+| HIGH, a required census root could disappear between preflight and enumeration and the shared scanner would return a clear census. | Declared R0 roots carry their required policy into the shared scanner. A missing root refuses at the enumeration itself, even if restored before the caller can recheck it. Ordinary child paths keep the shared scanner's reconciliation policy. | `test_cli_refuses_when_required_background_census_root_cannot_be_enumerated` | PASS |
+| MED, a process observed between overlapping window endpoints could be omitted from one window. | For a contender whose birth is established inside the interval, count the largest observed cumulative CPU as a lower bound over the full window. Earlier births and below-threshold lower bounds remain outside this flag. | `test_window_flags_proven_cpu_from_worker_seen_only_at_an_interior_snapshot` | PASS |
+
+Both auditor probes passed with the repaired expectations. The exit-2 CLI reproduction and overlap regression passed 20 consecutive synthetic runs. Exact-candidate CI and the two-family spec-v3 review are tracked in draft PR #824. Issue #834 remains with the CI owner. [CI-owner issue #834](https://github.com/mpmdw/JouleWise/issues/834)
