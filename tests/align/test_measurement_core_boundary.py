@@ -49,12 +49,27 @@ class MeasurementCoreBoundaryTests(unittest.TestCase):
             with self.subTest(name=name):
                 self.assertEqual(hashlib.sha256((root/name).read_bytes()).hexdigest(), digest)
 
-    def test_mlx_core_is_byte_identical_to_pilot10(self):
-        # Complete file at 83e2dac59, before #657/0ba413d40. Earlier ALIGN
-        # extensions predate this package; no new rebind of file@c27485347.
+    def test_mlx_core_matches_pilot10_outside_rl182a_boundary(self):
+        # Remove only the cached first-token arm and undo the corresponding
+        # indentation and token stamp selection. The prior pin still governs
+        # every remaining byte, including the non-cached event calls.
         root = Path(__file__).resolve().parents[2]
-        self.assertEqual(hashlib.sha256((root/'joulewise/adapters/mlx_runtime.py').read_bytes()).hexdigest(),
-                         '953e6fec990c1d7e0702a8abb199a55f179e50d28854f4b62d0e95302dde0c45')
+        source = (root / "joulewise/adapters/mlx_runtime.py").read_text()
+        before, first_arm, rest = source.partition(
+            "                    if cache_accounting:\n"
+            "                        # RL-182a: record both boundaries before constructing the events.\n"
+        )
+        self.assertTrue(first_arm)
+        _, legacy_arm, rest = rest.partition("                    else:\n")
+        self.assertTrue(legacy_arm)
+        legacy_events, stamp_choice, after = rest.partition(
+            "                timestamp_s = first_token_s if index == 0 and cache_accounting else self._clock.now()\n"
+        )
+        self.assertTrue(stamp_choice)
+        undented = "".join(line[4:] for line in legacy_events.splitlines(keepends=True))
+        pilot10 = before + undented + "                timestamp_s = self._clock.now()\n" + after
+        self.assertEqual(hashlib.sha256(pilot10.encode()).hexdigest(),
+                         "953e6fec990c1d7e0702a8abb199a55f179e50d28854f4b62d0e95302dde0c45")
 
     def test_disabled_checkpoint_anchor_runtime_bytes_match_pilot10_path(self):
         def pilot10_generate(runtime, stream, *args, **kwargs):

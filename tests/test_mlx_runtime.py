@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ast
 import importlib
 import importlib.machinery
 import inspect
@@ -10,7 +11,6 @@ import subprocess
 import sys
 import tempfile
 import textwrap
-import time
 import unittest
 from dataclasses import asdict
 from pathlib import Path
@@ -564,71 +564,43 @@ class MlxRuntimeTests(unittest.TestCase):
             "requested_tokens_emitted",
         )
 
+    def _assert_first_token_stamp_statements(self, source: str) -> None:
+        locations = {"prefill_end_s": [], "first_token_s": []}
+        for parent in ast.walk(ast.parse(textwrap.dedent(source))):
+            for _, block in ast.iter_fields(parent):
+                if not isinstance(block, list):
+                    continue
+                for index, statement in enumerate(block):
+                    match statement:
+                        case ast.Assign(targets=[ast.Name(id=name)]) if name in locations:
+                            locations[name].append((block, index, statement))
+
+        clock_read = ast.dump(ast.parse("self._clock.now()", mode="eval").body)
+        for name, matches in locations.items():
+            self.assertEqual(len(matches), 1, f"expected one {name} assignment")
+            self.assertEqual(ast.dump(matches[0][2].value), clock_read, f"{name} must be a direct clock read")
+        (prefill_block, prefill_index, _), = locations["prefill_end_s"]
+        (token_block, token_index, _), = locations["first_token_s"]
+        self.assertIs(prefill_block, token_block, "stamp assignments must be in the same block")
+        self.assertEqual(token_index, prefill_index + 1, "stamp assignments must be consecutive")
+
     def _assert_episode_prefix_first_stamp_boundary(self) -> None:
-        from joulewise.align.apple import endpoint as apple_endpoint
-        from tests.align.test_pilot3_cache import CacheAPI, chat, fake_endpoint
+        from tests.align import test_pilot3_cache
 
-        api = CacheAPI()
-        endpoint, _ = fake_endpoint(api, cache=True)
-        clock = endpoint.clock
-        now, sleep = clock.now, clock.sleep
-        encode = endpoint.runtime._tokenizer.encode
-        native = endpoint.runtime._mlx_lm
-        stream_generate = native.stream_generate
-        generate_turn = apple_endpoint.generate_turn
-        trace = []
+        tick = 1 / 1024
 
-        class ObservedStamp(float):
-            pass
+        class TickingClock(FakeClock):
+            def now(self) -> float:
+                self.sleep(tick)
+                return super().now()
 
-        class ObservedResponse:
-            def __init__(self, response):
-                self._response = response
-
-            def __getattr__(self, name):
-                trace.append(f"response.{name}")
-                return getattr(self._response, name)
-
-        def observe_stamp():
-            stamp = ObservedStamp(now())
-            stamp.trace_index = len(trace)
-            trace.append("clock read")
-            return stamp
-
-        def observe_sleep(seconds):
-            trace.append("clock advance")
-            sleep(seconds)
-
-        def observe_turn(runtime, stream, *args, **kwargs):
-            stream_request = stream.stream_generate
-
-            def observed_request(*request_args, **request_kwargs):
-                trace.append("stream request")
-                return stream_request(*request_args, **request_kwargs)
-
-            with patch.object(stream, "stream_generate", observed_request):
-                return generate_turn(runtime, stream, *args, **kwargs)
-
-        def timed_encode(*args, **kwargs):
-            trace.append("tokenizer encode")
-            clock.sleep(.010)
-            return encode(*args, **kwargs)
-
-        def native_stream(*args, sampler=None, **kwargs):
-            trace.append("native model call")
-            return (ObservedResponse(response)
-                    for response in stream_generate(*args, sampler=sampler, **kwargs))
-
+        api = test_pilot3_cache.CacheAPI()
         with (
+            patch.object(test_pilot3_cache, "FakeClock", TickingClock),
             patch("joulewise.align.apple.prompt_cache.native_cache_api", return_value=api),
-            patch.object(apple_endpoint, "generate_turn", observe_turn),
-            patch.object(clock, "now", observe_stamp),
-            patch.object(clock, "sleep", observe_sleep),
-            patch.object(native, "stream_generate", native_stream),
-            patch.object(endpoint.runtime._tokenizer, "encode", timed_encode),
-            patch("time.sleep", observe_sleep),
         ):
-            chat(endpoint, [1, 2, 3])
+            endpoint, native_calls = test_pilot3_cache.fake_endpoint(api, cache=True)
+            test_pilot3_cache.chat(endpoint, [1, 2, 3])
 
         self.assertFalse(any(flag.startswith("endpoint_error:") for flag in endpoint.flags), endpoint.flags)
         events = endpoint.events
@@ -636,52 +608,50 @@ class MlxRuntimeTests(unittest.TestCase):
         decode = next(e for e in events if (e.event_type, e.phase) == ("phase_start", "decode"))
         first = next(e for e in events if e.event_type == "token")
         self.assertEqual(first.metadata["index"], 0)
-        start, end = prefill.timestamp_s, first.timestamp_s
-        between = trace[start.trace_index + 1:end.trace_index]
-        self.assertEqual(end.trace_index, start.trace_index + 1,
-                         f"prefill end and token 0 are not adjacent: {between}")
-        self.assertEqual(end - start, 0, "stub clock advanced between stamps")
-        self.assertIs(decode.timestamp_s, start)
-        self.assertEqual(trace[:start.trace_index].count("native model call"), 1)
-        self.assertIn("response.token", trace[end.trace_index + 1:])
+        self.assertEqual(first.timestamp_s - prefill.timestamp_s, tick, "stamp gap must be exactly one tick")
+        self.assertEqual(decode.timestamp_s, prefill.timestamp_s)
+        self.assertEqual(len(native_calls), 1)
 
     def test_first_yield_stamp_gap_is_two_clock_reads_without_model_work(self) -> None:
-        # RL-182a check 1 on the registered episode-prefix path.
+        # RL-182a check 1: guard the source and the emitted episode-prefix stamps.
+        self._assert_first_token_stamp_statements(inspect.getsource(MlxRuntimeAdapter._generate))
         self._assert_episode_prefix_first_stamp_boundary()
 
     def test_first_yield_boundary_rejects_the_episode_prefix_audit_mutations(self) -> None:
         original = MlxRuntimeAdapter._generate
-        source = textwrap.dedent(inspect.getsource(original))
-        stamp = "            timestamp_s = self._clock.now()"
-        extract = "            token_id = _response_token_id(response)"
+        source = inspect.getsource(original)
+        stamp = "                        first_token_s = self._clock.now()"
+        extract = "                token_id = _response_token_id(response)"
         self.assertEqual(source.count(stamp), 1)
         self.assertEqual(source.count(extract), 1)
-        self.assertLess(source.index(stamp), source.index(extract))
 
-        def inserted(statement):
-            return source.replace(stamp, f"            if index == 0 and cache_accounting:\n"
-                                         f"                {statement}\n" + stamp)
+        def inserted(*statements):
+            prefix = "".join(f"                        {statement}\n" for statement in statements)
+            return source.replace(stamp, prefix + stamp)
 
-        def encode_first_response(tokenizer, text):
-            tokenizer.encode(text, add_special_tokens=False)
-            time.sleep(.025)  # plus the fixture's 10 ms encode
-
-        mutations = (
-            ("extra clock read", inserted("self._clock.now()"), "clock read"),
-            ("extra model call",
-             inserted("next(iter(self._mlx_lm.stream_generate(self._model, self._tokenizer, prompt, max_tokens=1)))"),
-             "native model call"),
-            ("35 ms of work", inserted("encode_first_response(self._tokenizer, response.text)"), "tokenizer encode"),
-            ("moved token ID extraction", source.replace(extract + "\n", "").replace(stamp, extract + "\n" + stamp),
-             r"response\.token"),
+        extra_read = inserted("self._clock.now()")
+        moved_extract = inserted(extract.strip()).replace(
+            f"\n{extract}\n", f"\n                if index != 0 or not cache_accounting:\n    {extract}\n",
         )
-        for label, altered, observed in mutations:
-            with self.subTest(mutation=label):
-                scope = dict(original.__globals__, encode_first_response=encode_first_response)
-                exec(compile(altered, f"<synthetic {label}>", "exec"), scope)
-                with patch.object(MlxRuntimeAdapter, "_generate", scope["_generate"]):
-                    with self.assertRaisesRegex(AssertionError, f"not adjacent.*{observed}"):
-                        self._assert_episode_prefix_first_stamp_boundary()
+        for label, altered in (
+            ("extra clock read", extra_read),
+            ("extra stream request",
+             inserted("self._mlx_lm.stream_generate(self._model, self._tokenizer, prompt, max_tokens=1)")),
+            ("extra model call",
+             inserted("next(iter(self._mlx_lm.stream_generate(self._model, self._tokenizer, prompt, max_tokens=1)))")),
+            ("35 ms of work",
+             inserted("self._tokenizer.encode(response.text, add_special_tokens=False)", "self._clock.sleep(.035)")),
+            ("moved token ID extraction", moved_extract),
+            ("prompt provenance", inserted("prompt_provenance(prompt)")),
+        ):
+            with self.subTest(mutation=label), self.assertRaisesRegex(AssertionError, "must be consecutive"):
+                self._assert_first_token_stamp_statements(altered)
+
+        scope = dict(original.__globals__)
+        exec(compile(textwrap.dedent(extra_read), "<synthetic extra clock read>", "exec"), scope)
+        with patch.object(MlxRuntimeAdapter, "_generate", scope["_generate"]):
+            with self.assertRaisesRegex(AssertionError, "gap must be exactly one tick"):
+                self._assert_episode_prefix_first_stamp_boundary()
 
     def test_run_workload_event_shape_and_token_timeline(self) -> None:
         adapter, _ = self.prepared_adapter(["A", "B", "C"])
