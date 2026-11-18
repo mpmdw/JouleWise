@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import argparse
+import errno
+import fcntl
 import json
 import os
 from pathlib import Path
@@ -45,12 +47,34 @@ TRANSFER_PRINTS = (
 )
 
 
+def save_public_stderr():
+    """Fill vacant standard descriptors before reserving private redirections."""
+    for fd, name, mode in ((0, "stdin", "r"), (1, "stdout", "w"), (2, "stderr", "w")):
+        try:
+            fcntl.fcntl(fd, fcntl.F_GETFD)
+        except OSError as error:
+            if error.errno != errno.EBADF:
+                raise
+            replacement = os.open(os.devnull, os.O_RDWR)
+            if replacement == fd:
+                os.set_inheritable(fd, True)
+            else:
+                try:
+                    os.dup2(replacement, fd)
+                finally:
+                    os.close(replacement)
+        # Python can leave its stream unset when the descriptor was closed at exec.
+        if getattr(sys, name) is None:
+            setattr(sys, name, os.fdopen(fd, mode, closefd=False))
+    return fcntl.fcntl(2, fcntl.F_DUPFD_CLOEXEC, 10)
+
+
 def finish_notice(status, *, stdout=None, stderr=None, stderr_fd=None, flush_streams=False):
     """Attempt delivery and report stream failure on a success path."""
     failed = False
-    if stderr_fd is not None:
+    if stderr_fd is not None and stderr is not None:
         try:
-            with os.fdopen(stderr_fd, "w", encoding="ascii", closefd=False) as stream:
+            with os.fdopen(stderr_fd, "w", encoding="utf-8", errors="backslashreplace", closefd=False) as stream:
                 stream.write(stderr)
                 stream.flush()
         except BaseException:
@@ -88,12 +112,16 @@ class _ParserExit(SystemExit):
 
 
 class _NoticeArgumentParser(argparse.ArgumentParser):
+    def __init__(self, *args, stderr_fd=None, **kwargs):
+        super().__init__(*args, **kwargs)
+        self._stderr_fd = stderr_fd
+
     def _print_message(self, message, file=None):
         if message:
             if file is sys.stdout:
                 status = finish_notice(0, stdout=message)
             else:
-                status = finish_notice(0, stderr=message)
+                status = finish_notice(0, stderr=message, stderr_fd=self._stderr_fd)
             if status:
                 raise _ParserExit(status)
 
@@ -226,7 +254,7 @@ def _reject_final_placeholders(document):
         raise ManifestError(f"final manifest contains {marker.group()}")
 
 
-def _validate_legacy(tool, payload, final):
+def _validate_legacy(tool, payload, final, *, stderr_fd=None):
     if not tool.is_file():
         raise ManifestError("pinned v1 entry point unavailable, supply --v1-tool")
     # Keep the delegated check on the exact bytes used for dispatch.
@@ -239,7 +267,8 @@ def _validate_legacy(tool, payload, final):
         result = subprocess.run(command, check=False, capture_output=True, text=True,
                                 encoding="utf-8", errors="replace")
         status = PRE_READ_REFUSAL if result.returncode else 0
-        return finish_notice(status, stdout=result.stdout or None, stderr=result.stderr or None)
+        return finish_notice(status, stdout=result.stdout or None, stderr=result.stderr or None,
+                             stderr_fd=stderr_fd)
 
 
 def _check_registration_use(document, kind, final):
@@ -309,10 +338,10 @@ def validate_v2(payload: bytes, *, final=False, registration: bytes | None = Non
     return _validate_v2_document(payload, document, kind, final, read_registration)
 
 
-def _dispatch(argv):
-    parser = _NoticeArgumentParser(description=__doc__)
+def _dispatch(argv, *, stderr_fd=None):
+    parser = _NoticeArgumentParser(description=__doc__, stderr_fd=stderr_fd)
     commands = parser.add_subparsers(dest="command", required=True)
-    validate = commands.add_parser("validate")
+    validate = commands.add_parser("validate", stderr_fd=stderr_fd)
     validate.add_argument("manifest", type=Path)
     validate.add_argument("--final", action="store_true")
     validate.add_argument("--registration", type=Path, help="exact trusted v2 scientific registration bytes")
@@ -332,22 +361,24 @@ def _dispatch(argv):
                 raise ManifestError("--registration applies to v2 manifests")
             if args.final:
                 _reject_final_placeholders(document)
-            return _validate_legacy(args.v1_tool, payload, args.final)
+            return _validate_legacy(args.v1_tool, payload, args.final, stderr_fd=stderr_fd)
         read_registration = args.registration.read_bytes if args.registration is not None else None
         doc = _validate_v2_document(payload, document, kind, args.final, read_registration)
     except (ManifestError, OSError) as error:
-        return finish_notice(PRE_READ_REFUSAL, stderr=f"REFUSE {error}\n")
+        return finish_notice(PRE_READ_REFUSAL, stderr=f"REFUSE {error}\n", stderr_fd=stderr_fd)
     return finish_notice(0, stdout=f"ok {doc['look_id']} ({doc['status']})\n")
 
 
 def main(argv=None) -> NoReturn:
+    stderr_fd = None
     try:
-        if _dispatch(argv):
+        stderr_fd = save_public_stderr()
+        if _dispatch(argv, stderr_fd=stderr_fd):
             os._exit(PRE_READ_REFUSAL)
         if finish_notice(0, flush_streams=True):
             raise OSError("validation output could not be flushed")
     except BaseException as error:
-        exit_with_failure(PRE_READ_REFUSAL, lambda: f"REFUSE {error}\n")
+        exit_with_failure(PRE_READ_REFUSAL, lambda: f"REFUSE {error}\n", stderr_fd=stderr_fd)
     os._exit(0)
 
 

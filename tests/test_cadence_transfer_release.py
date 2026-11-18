@@ -149,7 +149,7 @@ def fault_context():
 
     fault = {
         "startup-flush": (release, "finish_notice", fail),
-        "save-stderr": (os, "dup", fail),
+        "save-stderr": (release, "save_public_stderr", fail),
         "spent-check": (os.path, "lexists", fail),
         "filesystem": (Path, "stat", fail),
         "preflight-hashes": (release, "_public_record", fail),

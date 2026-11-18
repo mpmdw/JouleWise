@@ -275,7 +275,9 @@ with patch.object(dispatch, "_dispatch", check_startup):
     def test_dispatch_exits_two_with_descriptor_exhaustion(self):
         script = """
 from contextlib import redirect_stdout
+import errno
 from io import StringIO
+import os
 import resource
 import sys
 from joulewise.cadence_looks import manifest_dispatch
@@ -284,19 +286,30 @@ prime = getattr(manifest_dispatch, "_dispatch", manifest_dispatch.main)
 with redirect_stdout(StringIO()):
     assert prime(["validate", sys.argv[1]]) == 0
 _, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
-resource.setrlimit(resource.RLIMIT_NOFILE, (3, hard))
+limit = int(sys.argv[2])
+resource.setrlimit(resource.RLIMIT_NOFILE, (limit, hard))
+while True:
+    try:
+        os.open(os.devnull, os.O_RDONLY)
+    except OSError as error:
+        assert error.errno == errno.EMFILE
+        break
 manifest_dispatch.main(["validate", "--final", sys.argv[1]])
 raise SystemExit(97)
 """
-        command = [sys.executable, "-B", "-c", script, str(DRAFT)]
-        for unbuffered in (False, True):
-            with self.subTest(unbuffered=unbuffered):
-                connected = subprocess.run(command, cwd=ROOT, env=_buffering_environment(unbuffered),
-                                           capture_output=True, check=False)
-                self.assertEqual((connected.returncode, connected.stdout), (2, b""))
-                self.assertIn(b"Too many open files", connected.stderr)
-                disconnected = run_with_closed_consumer(command, channel="stderr", unbuffered=unbuffered)
-                self.assertEqual((disconnected.returncode, disconnected.stdout), (2, b""))
+        # A limit of 3 excludes the reserved range. At 11 the range exists but is full.
+        for limit in (3, 11):
+            command = [sys.executable, "-B", "-c", script, str(DRAFT), str(limit)]
+            for unbuffered in (False, True):
+                with self.subTest(limit=limit, unbuffered=unbuffered):
+                    connected = subprocess.run(command, cwd=ROOT, env=_buffering_environment(unbuffered),
+                                               capture_output=True, check=False)
+                    self.assertEqual((connected.returncode, connected.stdout), (2, b""))
+                    self.assertTrue(connected.stderr.startswith(b"REFUSE "))
+                    if limit == 11:
+                        self.assertIn(b"Too many open files", connected.stderr)
+                    disconnected = run_with_closed_consumer(command, channel="stderr", unbuffered=unbuffered)
+                    self.assertEqual((disconnected.returncode, disconnected.stdout), (2, b""))
 
     def test_oversized_json_integer_refuses_before_read(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -341,6 +354,7 @@ def fail_registration(path):
     return read_bytes(path)
 
 target, name, inject = {
+    "save-stderr": (dispatch, "save_public_stderr", fail),
     "parser": (dispatch, "_NoticeArgumentParser", fail),
     "parser-system-exit": (dispatch._NoticeArgumentParser, "parse_args", exit_during_parse),
     "candidate-open": (Path, "read_bytes", fail),
@@ -368,7 +382,8 @@ raise SystemExit(97)
             interim = root / "interim.json"
             interim.write_bytes(encode({"schema": dispatch.V1, "look_kind": "interim", "look_id": "lm-interim-01"}))
             for step, source in (
-                ("parser", DRAFT), ("parser-system-exit", DRAFT), ("candidate-open", DRAFT), ("decode", DRAFT),
+                ("save-stderr", DRAFT), ("parser", DRAFT), ("parser-system-exit", DRAFT),
+                ("candidate-open", DRAFT), ("decode", DRAFT),
                 ("validate", DRAFT), ("registration-open", final),
                 ("legacy-delegation", interim), ("success-notice", DRAFT),
             ):

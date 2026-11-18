@@ -16,7 +16,7 @@ import sys
 import traceback
 from typing import NoReturn
 
-from .manifest_dispatch import PRE_READ_REFUSAL, exit_with_failure, finish_notice
+from .manifest_dispatch import PRE_READ_REFUSAL, exit_with_failure, finish_notice, save_public_stderr
 
 CUSTODY_NAMES = frozenset(("scores.json", "stdout", "stderr"))
 HASHES = ("manifest_sha256", "stage1_roster_sha256", "freeze2_sha256")
@@ -115,9 +115,9 @@ def run_transfer_worker(*, restricted: Path, public: Path, execution_host: str, 
     redirected = False
 
     try:
+        original_stderr = save_public_stderr()
         if finish_notice(0, flush_streams=True):
             raise OSError("worker streams could not be flushed")
-        original_stderr = os.dup(2)
 
         def mark_read():
             nonlocal read_started
