@@ -10,8 +10,8 @@ import re
 import sys
 
 _ROOT = Path(__file__).resolve().parents[2]
-_SCHEMA = _ROOT / "docs/process/cadence/looks/look_manifest.v2.schema.json"
-_KIT_COMMITMENTS = _SCHEMA.with_name("qualification-kit-commitments.json")
+V2_SCHEMA = _ROOT / "docs/process/cadence/looks/look_manifest.v2.schema.json"
+_KIT_COMMITMENTS = V2_SCHEMA.with_name("qualification-kit-commitments.json")
 _V2 = "joulewise.cadence_look_manifest.v2"
 _PENDING = "PENDING:CODE"
 _OPEN = re.compile(r"\bOPEN-[0-9]+\b")
@@ -34,7 +34,8 @@ def _reject_constant(value):
     raise ManifestError(f"{value} is not valid JSON")
 
 
-def _decode(payload):
+def decode_json(payload):
+    """Decode UTF-8 JSON with the shared manifest input guards."""
     try:
         return json.loads(
             payload.decode("utf-8"),
@@ -110,21 +111,28 @@ def _check(value, rule, definitions, pins, path=()):
             _check(item, properties[key], definitions, pins, (*path, key))
 
 
+def check_variant(document, definitions, kind):
+    """Validate one closed schema variant and record its code hash slots."""
+    if kind not in definitions:
+        raise ManifestError(f"v2 schema does not define the {kind} variant")
+    pins = {}
+    _check(document, definitions[kind], definitions, pins)
+    return pins
+
+
 def _parse(payload):
-    document = _decode(payload)
+    document = decode_json(payload)
     if not isinstance(document, dict) or document.get("schema") != _V2:
         raise ManifestError("expected the v2 qualification manifest schema ID")
-    definitions = json.loads(_SCHEMA.read_bytes())["$defs"]
-    pins = {}
-    _check(document, definitions["qualification"], definitions, pins)
-    return document, pins
+    definitions = json.loads(V2_SCHEMA.read_bytes())["$defs"]
+    return document, check_variant(document, definitions, "qualification")
 
 
 def _check_registered_kits(document):
     # This roster comes from the reviewed kit source for the look. Reading it
     # independently prevents a well-formed manifest from authenticating itself.
     look_id = document["look_id"]
-    record = _decode(_KIT_COMMITMENTS.read_bytes()).get(look_id)
+    record = decode_json(_KIT_COMMITMENTS.read_bytes()).get(look_id)
     if record is None:
         raise ManifestError(f"{look_id}: no independent qualification kit commitments")
     expected = record["kit_sha256_by_block"]

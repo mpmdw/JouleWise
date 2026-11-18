@@ -12,6 +12,7 @@
   "_hosted_observation_2026_10_22_align_moe": "SUPERSEDED 2026-11-06 for scheduling: tests.align.test_moe_calibration now weighs 1376.959 s, its hosted median from _hosted_observations_2026_11_06_cross_lane, which replaces the earlier hint recorded below (carried verbatim from lane/2026-11-05-align-pilot10-benign so this map is a key superset of every open lane's map and a merge can keep this file's values whole). Earlier hint: ADDED for tests.align.test_moe_calibration: single hosted observation from CI run 39715696032, shard 9, MODULE PASS seconds=1451.183. This is a scheduling hint, not evidence; replace with hosted medians at the next timing harvest.",
   "_local_observation_2026_11_11_b6_analysis": "ADDED for the Block 6 analysis lane: tests.independent_recompute.test_block6 (26 tests, 10.372 s process wall) and tests.independent_recompute.test_b6_production (15 tests, 20.055 s process wall), each run separately with JW_B5_SYNTHETIC_ONLY=1, TMPDIR unset and Python 3.13. Local observations under current load, not hosted medians or production speed evidence. See docs/run_reports/2026-11-11-p1-seat7-r2.md; replace with hosted observations when available.",
   "_local_observation_2026_11_18_flashnext_stream": "tests.test_align_stream_qwen4_exp took 0.139 s in one local Python 3.13 unittest run on the engineering MacBook Air. Eleven synthetic tests passed and native parity was skipped. This is a shard scheduling hint.",
+  "_local_observation_2026_11_18_transfer_release": "Python 3.13 unittest observations for the synthetic transfer modules. Manifest dispatch used the audited v2 schema candidate in seat-local scratch. The release tests took 2.772 s. These are shard scheduling hints.",
   "exclusive_modules": {
     "tests.test_calibration_exits": {
       "seconds": 820.019,
@@ -470,6 +471,8 @@
     "tests.test_bytes_roster_drop": 62.761,
     "tests.test_bytes_twin": 145.061,
     "tests.test_calibration_bracketing": 10.571,
+    "tests.test_cadence_manifest_dispatch": 0.031,
+    "tests.test_cadence_transfer_release": 2.772,
     "tests.test_calibration_cadence_report": 0.623,
     "tests.test_calibration_custody_store": 0.097,
     "tests.test_calibration_custody_worker": 1.128,
