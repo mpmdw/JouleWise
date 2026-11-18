@@ -29,7 +29,8 @@ from joulewise.align.apple.smc_enumeration import rank as classify_smc
 
 R0_AGENT_CENSUS_ARGV = (
     "/usr/bin/pgrep", "-a", "-lf", "-i",
-    r"/(Claude|Codex)[.]app/Contents/MacOS/|" + AGENT_CENSUS_PATTERN,
+    # The literal pattern must not match a simultaneous census's command line.
+    r"/([c]laude|[c]odex)[.]app/Contents/MacOS/|" + AGENT_CENSUS_PATTERN,
 )
 
 

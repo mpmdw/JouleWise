@@ -1395,7 +1395,9 @@ class R0SamplerAdmissionSpec(unittest.TestCase):
                     if argv[0] == "/usr/bin/pgrep":
                         flags = "".join(argv[1:-1])
                         self.assertTrue(set("alf") <= set(flags))
-                        hits = active and re.search(argv[-1], command_line, re.I if "i" in flags else 0)
+                        pattern = re.compile(argv[-1], re.I if "i" in flags else 0)
+                        self.assertIsNone(pattern.search(" ".join(argv)))
+                        hits = active and pattern.search(command_line)
                         if hits:
                             candidate_times.append(clock.now)
                         return subprocess.CompletedProcess(argv, 0 if hits else 1,
