@@ -1044,6 +1044,21 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 
 <!-- RUN_STATE TYPED ITEMS: newest first. Add with scripts/run_state_add.py; never edit by hand. -->
 
+432. **One-leg filler queues ready to issue (expires_at filled): use fillers-ready/queues at audit 61377dc45 for f2-stab and f2-inst**
+
+```item
+{"expires_epoch_s": null, "issued_epoch_s": 1794991747, "number": 432, "owner": "magistrate", "schema": "joulewise.run_state_item.v1", "sets": [], "status": "ISSUED", "supersedes": []}
+```
+
+- **What changed.** The queue drafts of item 425 (f2-stab) and of item 428 (one-leg f2-inst) carry `"expires_at": null`, which the pinned `validate-queue` refuses. Filled queues are now on `origin/audit/2026-11-10-fable` at `61377dc45`, under `docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/fillers-ready/queues/`: 14 f2-stab and 3 f2-inst.
+  - Kits, spans and pin `2d347f721` are unchanged. The only edit is `expires_at`.
+  - All 17 pass the pinned `validate-queue`. All 14 stability kits pass the cell comparison against f2-inst-01 (RL-180 row 13).
+- **Use.** Issue f2-stab and f2-inst one-leg spans from `fillers-ready/queues/` under items 418 (d), 422, 425 and 428. Check each queue's sha256 against `fillers-ready/README.md`.
+- **Expiry.** These queues expire Tue 24 Nov 12:35:29 PST. The lead commits the next week's before then.
+  - If they have expired and no new ones are committed: fill a copy yourself as interim lead. The only edit is `expires_at`. Record its hash, mail the lead, and do not idle the Mac.
+- **Not yet:** the qualification-pin fillers (`f2-stab-15` and `-16`, on the unmerged #812 head). They come with #812's merge and admission.
+- **Nothing else changes.** The ladder is item 422's. Items 423 and 431 still bind.
+
 431. **Kill census blockers, never wait on them (owner directive, standing): pre-arm kill + immediate zero-capture retry; KILL-NEEDED escalates to the lead**
 
 ```item
