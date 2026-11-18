@@ -36,8 +36,8 @@ row 9 is implemented by the description registration in RL-181 §2.1.
 
 All three candidates are drafts beside `lm-qual-01.manifest.json`. The
 transfer draft carries two relocated paths and the new deferred commitment
-pin described below. The transfer output schema and release worker match
-the bytes at `4e5c2ad1d`.
+pin described below. The transfer output schema matches `4e5c2ad1d`.
+Audit round two updated the ported transfer worker's exception handling.
 The qualification manifest remains
 `d6fde6918023ea69051da45a6b0e3c06ffcfdafd8975a1773989324fa7c9bdab`
 and its validator remains Git blob `35bbd6b2f5`.
@@ -88,7 +88,7 @@ and the unused-registration MED finding.
 | HIGH | `impl-bug` | A fixed independent record binds transfer kit ID, path and digest to each date place, plus the roster path and digest. The description records bind every named filler ID to its published digest. Candidate and transfer registration are checked against the same record. `test_kit_commitments_refuse_relabelling_and_substituted_paths` passed. The audit's cross-family substitutions, path-only, digest-only and same-family substitutions now refuse. |
 | MED | `impl-bug` | The dispatcher refuses an inapplicable `--registration` before reading its path. Only a registered qualification or transfer candidate in final mode can use it. `test_rejects_unused_registration_before_open` passed. |
 | MED | `integration-seam` | The historical date-map and arm-bound distinction remains a follow-up for the transfer stage-1 owner. Check each observed start against the authorized bounds before using the date map in stage 1. |
-| LOW | — | The qualification registration and validator, v1 and its pinned step-3 module, transfer worker, and output schema retain their pinned bytes. The relevant preservation checks passed. |
+| LOW | — | At the round-one head, the qualification registration and validator, v1 and its pinned step-3 module, transfer worker, and output schema retained their pinned bytes. The relevant preservation checks passed. |
 | LOW | — | The ported transfer exit-status regressions passed. A relabelled v2 look now exits 2 at the dispatcher before delegation. |
 
 `docs/process/cadence/looks/look-kit-commitments.v2.json` records the
@@ -103,6 +103,34 @@ The niced synthetic shard ran 49 tests with zero failures and one expected
 v1 skip. Independently, Draft 2020-12 validated the updated schema and all
 four manifests, and the pinned v1 CLI replay and original kit-substitution
 replays passed through the dispatcher.
+
+## Audit round 2 dispositions
+
+The review at `7531efa36` counted one verified HIGH, three MED and one
+LOW. It refuted the earlier dispatch and kit-identity failures. The HIGH
+plus MED count was four against a decay ceiling of two. The failing
+regressions froze the revised contract at `8b4a953bc`, with 23 failed
+subcases on the audited implementation. Commit `cc2b94bef` addresses
+the HIGH and both in-scope MED findings.
+
+| Severity | Root cause | Disposition and regression |
+| --- | --- | --- |
+| HIGH | `impl-bug` | The worker now catches Python exceptions at the boundary, including interpreter exits raised by the caller. Failures before a read return 2. After a read they return 1 with the fixed two-line notice, approved class identity and preserved reservation. OS termination by signal is the interrupted case under RL-183. `test_transfer_python_exits_follow_first_read` passed. |
+| MED | `impl-bug` | The dispatcher binds each qualification block's exact spans against the published queues at `6f32db2a`. This uses the same independent record as the other variants, with the qualification registration and validator preserved. `test_qualification_span_commitments_refuse_altered_registration` passed with the audit's filler spans, a wrong qualification block's spans and a repeated span. |
+| MED | `impl-bug` | V2 checks the final candidate's markers, shape and independent commitments before calling the registration reader. `test_rejects_invalid_final_candidate_before_registration_open` passed for qualification and transfer with the audit's pending marker and other invalid candidates. |
+| MED | `integration-seam` | The transfer stage-1 owner still owes the check of every observed start against its authorized arm bounds before using the date map. The audit confirmed the structural date map and admission check give their expected separate results. |
+| LOW | — | The qualification registration, test, validator and commitments, plus the ledger, v2 schema, pinned interim files and transfer output schema are preserved. The worker changes are confined to its exception handling. |
+
+The auditor's synthetic worker probe now gives exit 2 and the fixed
+pre-read refusal for preflight `sys.exit(1)`. Both post-read
+`sys.exit(2)` and the `argparse` error give exit 1 and the two-line
+`SystemExit` notice, with the result directory unpublished. The ordinary
+error controls also passed. The niced synthetic shard reported 52 tests,
+zero failures, zero errors and one expected v1 skip.
+
+The candidate manifest digests above still apply. The independent
+commitments file now hashes to
+`7256966afa8c0a1dcd9fd0b3e8517bbc28d1a4c5678a181616d9949e7e2ec27d`.
 
 ## RL-185 and lead handoff
 
