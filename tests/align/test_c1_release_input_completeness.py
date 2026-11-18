@@ -111,7 +111,7 @@ class Input:
     donor: Path
 
 
-def populate(window):
+def populate(window, fixture_scratch):
     """Extend the stock C8 fixture before it is finalized, including both token sources."""
     plan = fx.series.selected(fx.series.candidate(), "C8")
     ordinals = [plan["sabotage_ordinals"][pair] for pair in fx.series.PAIRS]
@@ -142,9 +142,9 @@ def populate(window):
     for kind, relative in CLASSES.items():
         owner = owners.get(kind, instructed)
         primary = owner / relative
-        reference = refs / kind
+        reference = (fixture_scratch if kind == "benign_dc" else refs) / kind
         # Independent inodes and equal bytes: link cases cannot pass merely by
-        # detecting a size/digest mismatch. These ancillary files are themselves listed.
+        # detecting a size/digest mismatch.
         reference.write_bytes(primary.read_bytes())
         inputs[kind] = Input(owner, primary, reference)
     inputs["benign_events"] = Input(benign_member, benign_member / CLASSES["events"], refs / "events")
@@ -211,7 +211,7 @@ def build_world(root, kind, mutation):
     def finalize(directory):
         if directory.name != "C8":
             return finalizer(directory)
-        item = populate(directory)[kind]
+        item = populate(directory, root.parent)[kind]
         listed = before_inventory("events" if kind == "benign_events" else kind, mutation, item.path)
         inventory = finalizer(directory)
         key = listed.relative_to(directory).as_posix()
