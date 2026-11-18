@@ -6,9 +6,10 @@ read to get back here. Session records live in `docs/run_reports/` and
 policy lives in `docs/decision_log.md`. Do not create a dated restart doc;
 update this file instead.
 
-The 2026-11-18 independent interim-fit twin seat verified the synthetic
-arithmetic and child boundary. Parent integration awaits a synthetic input
-spec. See the [run report](docs/run_reports/2026-11-18-interim-fit-twin.md).
+The 2026-11-18 independent interim-fit twin seat verified the RL-181 child
+protocol on synthetic inputs. Raw-bundle acceptance awaits the registered
+clock, identity and Step 3 sampling details. See the
+[interface run report](docs/run_reports/2026-11-18-interim-fit-twin-interface.md).
 
 **Current pointer: read the top numbered item first.** That is the
 highest-numbered item; from item 168 on, items run newest first and start
