@@ -353,6 +353,20 @@ def validate_v2(payload: bytes, *, final=False, registration: bytes | None = Non
     return _validate_v2_document(payload, document, kind, final, read_registration)
 
 
+def _decode_cli_manifest(payload):
+    try:
+        return schema_check._decode(payload)
+    except (ValueError, RecursionError):
+        raise ManifestError("invalid UTF-8 JSON manifest") from None
+
+
+def _read_cli_registration(path):
+    payload = path.read_bytes()
+    # Final validators parse the same bytes again for their exact-byte checks.
+    _decode_cli_manifest(payload)
+    return payload
+
+
 def _dispatch(argv, *, stderr_fd=None):
     parser = _NoticeArgumentParser(description=__doc__, stderr_fd=stderr_fd)
     commands = parser.add_subparsers(dest="command", required=True)
@@ -368,7 +382,7 @@ def _dispatch(argv, *, stderr_fd=None):
         return completion.code
     try:
         payload = args.manifest.read_bytes()
-        document = schema_check._decode(payload)
+        document = _decode_cli_manifest(payload)
         schema, kind, _ = _manifest_route(document)
         if schema == V1:
             _reject_filler_kits(document, kind)
@@ -377,7 +391,7 @@ def _dispatch(argv, *, stderr_fd=None):
             if args.final:
                 _reject_final_placeholders(document)
             return _validate_legacy(args.v1_tool, payload, args.final, stderr_fd=stderr_fd)
-        read_registration = args.registration.read_bytes if args.registration is not None else None
+        read_registration = None if args.registration is None else lambda: _read_cli_registration(args.registration)
         doc = _validate_v2_document(payload, document, kind, args.final, read_registration)
     except (ManifestError, OSError) as error:
         return finish_notice(PRE_READ_REFUSAL, stderr=f"REFUSE {error}\n", stderr_fd=stderr_fd)

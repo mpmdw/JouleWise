@@ -36,6 +36,12 @@ V1_SCHEMA_PINS = {
     "5c0724bd39cb41d2a0e155de31b9930a850286d395213e658be3e0e0e231b723",  # 9a7defbb
     "78f312feb24e3ee95ac8bdd386cdb38f56fc0ab6846d27edc66f522f3a7acd3d",  # f09469894
 }
+MALFORMED_JSON = (
+    b'{"synthetic": "\xff"}',
+    b'{"synthetic": }',
+    b'{"synthetic_duplicate": 1, "synthetic_duplicate": 2}',
+    b'{"synthetic": NaN}',
+)
 
 
 def encode(document):
@@ -330,6 +336,31 @@ raise SystemExit(97)
                     result = subprocess.run(command, env=environment, cwd=ROOT, capture_output=True, check=False)
                     self.assertEqual((result.returncode, result.stdout), (2, b""))
                     self.assertTrue(result.stderr.startswith(b"REFUSE "))
+
+    def test_cli_candidate_decode_refusal_is_fixed(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            candidate = Path(tmp) / "candidate.json"
+            for payload in MALFORMED_JSON:
+                with self.subTest(payload=payload):
+                    candidate.write_bytes(payload)
+                    result = cli(candidate)
+                    self.assertEqual((result.returncode, result.stdout, result.stderr),
+                                     (2, b"", b"REFUSE invalid UTF-8 JSON manifest\n"))
+
+    def test_cli_registration_decode_refusal_is_fixed(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            candidate = Path(tmp) / "candidate.json"
+            registration = Path(tmp) / "registration.json"
+            for registered in (registered_fixture(), QUALIFICATION.read_bytes()):
+                candidate.write_bytes(registered.replace(
+                    dispatch.REGISTRATION_PLACEHOLDER, json.dumps(H).encode()
+                ))
+                for payload in MALFORMED_JSON:
+                    with self.subTest(look=json.loads(registered)["look_id"], payload=payload):
+                        registration.write_bytes(payload)
+                        result = cli(candidate, "--final", "--registration", registration)
+                        self.assertEqual((result.returncode, result.stdout, result.stderr),
+                                         (2, b"", b"REFUSE invalid UTF-8 JSON manifest\n"))
 
     def test_dispatch_boundary_contains_arbitrary_pre_read_exceptions(self):
         script = """
