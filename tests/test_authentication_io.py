@@ -6,6 +6,7 @@ import hashlib
 import io
 import inspect
 import shutil
+import sys
 import tempfile
 import unittest
 from pathlib import Path
@@ -13,6 +14,7 @@ from unittest import mock
 
 from joulewise.authentication_io import (
     CompressedBundleRequiresRestore,
+    GRAMMAR_VERDICT_MEMO,
     V2_AUTHENTICATION_INPUT_CHANGED,
     V2_AUTHENTICATION_INPUT_DIGEST_MISMATCH,
     V2AuthenticationInputError,
@@ -112,6 +114,24 @@ ISSUED_REDUCE_DIRECT_READS = (
 
 
 class V2AuthenticationReadSessionTests(unittest.TestCase):
+    def test_grammar_memo_belongs_to_the_analysis_driver(self):
+        from joulewise import analysis_run_cache
+
+        module_name = analysis_run_cache.__name__
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "input.json"
+            raw = b'{"value":1}\n'
+            path.write_bytes(raw)
+            with mock.patch.dict(sys.modules):
+                del sys.modules[module_name]
+                with V2AuthenticationReadSession():
+                    self.assertEqual(read_authentication_input(path, grammar="json", label="generated"), raw)
+                self.assertNotIn(module_name, sys.modules)
+            with analysis_run_cache.analysis_run_caches() as run, V2AuthenticationReadSession():
+                self.assertEqual(read_authentication_input(path, grammar="json", label="generated"), raw)
+                self.assertEqual(run.memos[GRAMMAR_VERDICT_MEMO], {(hashlib.sha256(raw).hexdigest(), "json", False): True})
+            self.assertIsNone(analysis_run_cache.memo(GRAMMAR_VERDICT_MEMO))
+
     def test_explicit_compressed_input_preserves_main_read_recording(self):
         with tempfile.TemporaryDirectory() as temporary:
             path = Path(temporary) / "input.json"

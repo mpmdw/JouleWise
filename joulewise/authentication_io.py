@@ -38,7 +38,6 @@ from pathlib import Path
 from types import MappingProxyType
 from typing import Any, BinaryIO, Iterator, Literal, Mapping, TextIO
 
-from joulewise import analysis_run_cache as _run_cache
 from joulewise import desk_compress
 from joulewise.desk_restore import RestoreRefused
 
@@ -847,6 +846,13 @@ def _parse_strict_below(
     )
 
 
+def _grammar_verdict_memo() -> dict | None:
+    """Use the analysis driver's cache without loading it on other read paths."""
+    cache = sys.modules.get("joulewise.analysis_run_cache")
+    memo = getattr(cache, "memo", None)
+    return memo(GRAMMAR_VERDICT_MEMO) if memo is not None else None
+
+
 def _parse_strict_memoized(
     raw: bytes,
     digest: str,
@@ -891,7 +897,7 @@ def _parse_strict_memoized(
             allow_governed_spec_vocabulary=allow_governed_spec_vocabulary,
         )
         return
-    table = _run_cache.memo(GRAMMAR_VERDICT_MEMO)
+    table = _grammar_verdict_memo()
     headroom = _python_stack_headroom() if table is not None else 0
     if table is None or headroom < _VERDICT_STACK_RESERVE + _VERDICT_STACK_SLACK:
         _parse_strict(
@@ -1002,7 +1008,7 @@ def bridged_grammar_verdict(
     floor = _VERDICT_STACK_RESERVE + _VERDICT_STACK_SLACK
     if read_headroom is not None and read_headroom < floor:
         return False
-    table = _run_cache.memo(GRAMMAR_VERDICT_MEMO)
+    table = _grammar_verdict_memo()
     key = (sha256, grammar, bool(vocabulary_flag))
     verdict = None if table is None else table.get(key)
     if verdict is True:

@@ -828,7 +828,7 @@
       },
       {
         "path": "joulewise/authentication_io.py",
-        "sha256": "80d2a7be065e5d4416cdc2657a26a37fac60680b38e5f7b48d34e285f6528699"
+        "sha256": "4243e316be84aaa6fd50a1594f0ca5a47a06bd0ab1571ccaa03f790e304446b1"
       },
       {
         "path": "joulewise/axi_decode_config.py",
@@ -844,7 +844,7 @@
       },
       {
         "path": "joulewise/cadence_looks/manifest.py",
-        "sha256": "4b0505f8c31fc461803d520fd088a1d6fe89b909c1b85134398eda273bdbaec6"
+        "sha256": "1b5de65b8c7bf66fac452ece13c0c36a98459251cd8834e9e03c05bf4299141f"
       },
       {
         "path": "joulewise/desk_compress.py",
