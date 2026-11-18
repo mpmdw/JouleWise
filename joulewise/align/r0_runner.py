@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import argparse
 from contextlib import contextmanager
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 import fcntl
 import hashlib
 import json
@@ -16,7 +16,7 @@ import time
 from joulewise.align import r0
 from joulewise.align.r0_host import (
     QuietGuard, Refused, command, disk_census, display_census, host_snapshot, host_identity, inventory,
-    smc_enumeration,
+    smc_enumeration, softwareupdate_scan_forecast,
     ProfileRefused, profile_config, step_budget,
 )
 
@@ -161,6 +161,12 @@ def execute(config, output, checks, models, *, guard, backend_factory, per_check
               "limitations": ["Selection data, not R1 thermal or arm validation.",
                               "R1 must freeze token budgets, intercepts and thermal slots.",
                               "Local inventories do not independently authenticate the remote revision."]}
+    # Forecast softwareupdated scans through one per-check timeout per
+    # selected check. The result is advisory.
+    forecast_start = datetime.now()
+    report["softwareupdate_scan_forecast"] = softwareupdate_scan_forecast(
+        forecast_start, forecast_start + timedelta(seconds=per_check_timeout * max(1, len(checks))))
+
     def contention_summary():
         # R0-L3: contention is recorded, never fatal. Guard flags (every check)
         # and the SMC capture's ruling-8 flag are collected for report.md.
@@ -174,6 +180,7 @@ def execute(config, output, checks, models, *, guard, backend_factory, per_check
             "smc_contended": any(r.get("contended") for r in smc),
             "smc_redo": sum(len(r.get("contention_redo") or ()) for r in smc),
             "smc_flagged_intervals": sum(len((r.get("contention") or {}).get("flags", ())) for r in smc)}
+
     def receipt(name, model, fn, *, incremental=False):
         started = time.monotonic()
         row = {"check": name, **({"model": model} if model else {}), "status": "running"}
@@ -322,6 +329,9 @@ def execute(config, output, checks, models, *, guard, backend_factory, per_check
     except Exception as exc:
         report.update(status="fail", error=f"{type(exc).__name__}: {exc}")
     finally:
+        close_guard = getattr(guard, "close", None)
+        if close_guard is not None:
+            close_guard()
         report["decisions_pending_lead_action"] = [
             {"check": row["check"], "model": row.get("model"), "outcome": row["status"]}
             for row in report["checks"] if row["status"] in {"required", "fallback"}]
@@ -369,8 +379,14 @@ def main(argv=None, *, backend_factory=None, guard_factory=QuietGuard, lock_path
         except BlockingIOError:
             parser.exit(2, "Another R0 runner owns the machine lock\n")
         if args.inventory:
-            guard.check(force=True)
-            rows = inventory(_path(str(args.inventory)), guard.check)
+            try:
+                guard.check(force=True)
+                rows = inventory(_path(str(args.inventory)), guard.check)
+            finally:
+                # The one caller outside execute(): stop the guard's daemon.
+                close_guard = getattr(guard, "close", None)
+                if close_guard is not None:
+                    close_guard()
             with args.output.open("x") as handle:
                 json.dump(rows, handle, indent=2, sort_keys=True)
                 handle.write("\n")
