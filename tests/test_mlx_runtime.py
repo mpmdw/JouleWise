@@ -596,32 +596,60 @@ class MlxRuntimeTests(unittest.TestCase):
         self.assertIsInstance(empty_stream, ast.If)
         self.assertEqual(ast.dump(empty_stream.test), ast.dump(ast.parse("not token_records", mode="eval").body))
 
+        exact_form = "stamp statement must match the exact clock-write form"
+
+        def plain_reference(expression, context):
+            match expression:
+                case ast.Name(id=name):
+                    return ast.Name(id=name, ctx=context)
+                case ast.Attribute(value=base, attr=attribute):
+                    return ast.Attribute(value=plain_reference(base, ast.Load()), attr=attribute, ctx=context)
+            self.fail(exact_form)
+
         def writers(expression):
-            self.assertIsInstance(expression, ast.Name, "event stamp must come from a named write")
-            found = [parents[node] for node in nodes if isinstance(node, ast.Name)
-                     and isinstance(node.ctx, ast.Store) and node.id == expression.id]
-            self.assertTrue(found, f"no writes found for {expression.id}")
-            for writer in found:
+            target = plain_reference(expression, ast.Store())
+            target_dump = ast.dump(target)
+            found = []
+            for node in nodes:
+                if not (isinstance(node, (ast.Name, ast.Attribute)) and isinstance(node.ctx, ast.Store)
+                        and ast.dump(node) == target_dump):
+                    continue
+                # A wrapped target still belongs to its containing statement.
+                writer = parents[node]
+                while writer not in positions and writer in parents:
+                    writer = parents[writer]
                 self.assertIn(writer, positions, "stamp must be written as a standalone statement")
-                self.assertIsNone(getattr(writer, "op", None), "stamp write must not be augmented")
-            return found
+                found.append(writer)
+            self.assertTrue(found, f"no writes found for {ast.unparse(target)}")
+            return target, found
 
         for event, expressions in stamps.items():
             self.assertEqual(len(expressions), 1, f"stamp event count changed for {event}")
-        prefill = writers(stamps["phase_end", "prefill"][0])
-        token_selectors = writers(stamps["token", "decode"][0])
+        prefill_target, prefill = writers(stamps["phase_end", "prefill"][0])
+        _, token_selectors = writers(stamps["token", "decode"][0])
         self.assertEqual(len(token_selectors), 1, "token stamp selector count changed")
-        token_choice = getattr(token_selectors[0], "value", None)
+        selector = token_selectors[0]
+        self.assertIsNone(getattr(selector, "op", None), "token stamp selector must not be augmented")
+        token_choice = getattr(selector, "value", None)
         self.assertIsInstance(token_choice, ast.IfExp)
         self.assertEqual(ast.dump(token_choice.test), ast.dump(ast.parse("index == 0", mode="eval").body))
-        token = writers(token_choice.body)
+        token_target, token = writers(token_choice.body)
 
-        clock_read = ast.dump(ast.parse("self._clock.now()", mode="eval").body)
-        self.assertEqual(ast.dump(token_choice.orelse), clock_read)
-        for writer in (*prefill, *token):
-            read = getattr(writer, "value", None)
-            self.assertIsInstance(read, ast.Call, "stamp must be a direct clock read")
-            self.assertEqual(ast.dump(read), clock_read, "stamp must be a direct clock read")
+        clock_read = ast.parse("self._clock.now()", mode="eval").body
+        self.assertEqual(ast.dump(token_choice.orelse), ast.dump(clock_read))
+        for target, statements in ((prefill_target, prefill), (token_target, token)):
+            for statement in statements:
+                if isinstance(statement, ast.AnnAssign):
+                    annotation = statement.annotation
+                    if isinstance(annotation, ast.Constant):
+                        annotation = ast.Constant(value=annotation.value)
+                    else:
+                        annotation = plain_reference(annotation, ast.Load())
+                    allowed = ast.AnnAssign(target=target, annotation=annotation,
+                                            value=clock_read, simple=statement.simple)
+                else:
+                    allowed = ast.Assign(targets=[target], value=clock_read, type_comment=None)
+                self.assertEqual(ast.dump(statement), ast.dump(allowed), exact_form)
 
         # Pair each stamp write with the next statement in its complete AST body.
         # The body positions count every node, regardless of statement type.
@@ -748,6 +776,37 @@ class MlxRuntimeTests(unittest.TestCase):
         with patch.object(MlxRuntimeAdapter, "_generate", scope["_generate"]):
             with self.assertRaisesRegex(AssertionError, "cache hit stamp gap must be exactly one tick"):
                 self._assert_episode_prefix_first_stamp_boundary()
+
+    def test_first_yield_stamp_requires_the_exact_clock_write_form(self) -> None:
+        source = textwrap.dedent(inspect.getsource(MlxRuntimeAdapter._generate))
+        prefill, token = self._assert_first_token_stamp_statements(source)
+        prefill_read = ast.get_source_segment(source, prefill)
+        token_read = ast.get_source_segment(source, token)
+        self.assertEqual(source.count(prefill_read), 1)
+        self.assertEqual(source.count(token_read), 1)
+
+        # Plain annotations and dotted attribute targets still have the allowed shape.
+        self._assert_first_token_stamp_statements(source.replace(prefill_read,
+                                                                  "prefill_end_s: float = self._clock.now()"))
+        self._assert_first_token_stamp_statements(source.replace("prefill_end_s", "stamps.prefill_end_s")
+                                                 .replace("first_token_s", "stamps.first_token_s"))
+
+        digest_key = 'prefill_end_metadata[prompt_provenance(prompt)["token_ids_sha256"]]'
+        for label, mutation in (
+            ("chained assignment", f"prefill_end_s = {digest_key} = self._clock.now()"),
+            ("compact chained assignment", f"prefill_end_s={digest_key}=self._clock.now()"),
+            ("walrus", "prefill_end_s = ((stamp := self._clock.now()), prompt_provenance(prompt))[0]"),
+            ("tuple target", f"(prefill_end_s, {digest_key}) = self._clock.now(), None"),
+            ("function argument", "prefill_end_s = self._clock.now(prompt_provenance(prompt))"),
+            ("default parameter",
+             "prefill_end_s = (lambda stamp=self._clock.now(), ignored=prompt_provenance(prompt): stamp)()"),
+        ):
+            with self.subTest(mutation=label), self.assertRaisesRegex(AssertionError, "exact clock-write form"):
+                self._assert_first_token_stamp_statements(source.replace(prefill_read, mutation, 1))
+
+        with self.assertRaisesRegex(AssertionError, "exact clock-write form"):
+            self._assert_first_token_stamp_statements(source.replace(token_read,
+                                                                      "first_token_s = self._clock.now() + 0", 1))
 
     def test_run_workload_event_shape_and_token_timeline(self) -> None:
         adapter, _ = self.prepared_adapter(["A", "B", "C"])
