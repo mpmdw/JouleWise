@@ -14,7 +14,7 @@ import re
 import sys
 import traceback
 
-from .manifest_dispatch import PRE_READ_REFUSAL
+from .manifest_dispatch import PRE_READ_REFUSAL, save_public_stderr
 
 CUSTODY_NAMES = frozenset(("scores.json", "stdout", "stderr"))
 HASHES = ("manifest_sha256", "stage1_roster_sha256", "freeze2_sha256")
@@ -100,11 +100,14 @@ def run_transfer_worker(*, restricted: Path, public: Path, execution_host: str, 
     including when the shared coefficient reader opens that input. Nothing else may open
     scoring inputs. Once reserved, the worker keeps its streams confined through shutdown.
     """
+    original_stderr = None
     try:
+        original_stderr = save_public_stderr()
         sys.stdout.flush()
         sys.stderr.flush()
-        original_stderr = os.dup(2)
     except OSError:
+        if original_stderr is not None:
+            os.close(original_stderr)
         return PRE_READ_REFUSAL
     read_started = False
     redirected = False

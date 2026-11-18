@@ -3,7 +3,10 @@
 from __future__ import annotations
 
 import argparse
+import errno
+import fcntl
 import json
+import os
 from pathlib import Path
 import subprocess
 import sys
@@ -27,6 +30,28 @@ TRANSFER_PRINTS = (
     "pooled_signed_error",
     "date_map",
 )
+
+
+def save_public_stderr():
+    """Fill vacant standard descriptors before reserving private redirections."""
+    for fd, name, mode in ((0, "stdin", "r"), (1, "stdout", "w"), (2, "stderr", "w")):
+        try:
+            fcntl.fcntl(fd, fcntl.F_GETFD)
+        except OSError as error:
+            if error.errno != errno.EBADF:
+                raise
+            replacement = os.open(os.devnull, os.O_RDWR)
+            if replacement == fd:
+                os.set_inheritable(fd, True)
+            else:
+                try:
+                    os.dup2(replacement, fd)
+                finally:
+                    os.close(replacement)
+        # Python can leave its stream unset when the descriptor was closed at exec.
+        if getattr(sys, name) is None:
+            setattr(sys, name, os.fdopen(fd, mode, closefd=False))
+    return fcntl.fcntl(2, fcntl.F_DUPFD_CLOEXEC, 10)
 
 
 def _validate_transfer(document):
