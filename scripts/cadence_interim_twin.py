@@ -28,6 +28,7 @@ import plistlib
 import re
 from statistics import median
 from types import ModuleType, SimpleNamespace
+from xml.parsers.expat import ExpatError
 
 
 CHANNELS = {"gpu_rail", "dc_in"}
@@ -1034,6 +1035,7 @@ def responses_for_leg(record, gpu, dc_segment_reader):
 
 SOAK_KINDS = ("slope", "load", "kind not recorded")
 SOAK_RETRIES = 1  # 6e9d42f1d:scripts/cadence_legs_runner.py:84
+SOAK_REFUSAL_STEP_RC = 2  # The runner records the exception's code, not the soak child's exit status.
 SOAK_ATTEMPT_FIELDS = {"attempt", "started_epoch_s", "refused", "output_dir"}
 
 
@@ -1064,9 +1066,9 @@ def span_soak(receipt):
         if name == "soak" or name.startswith("soak.a"):
             if rc is not None and type(rc) is not int:
                 raise ValueError("invalid soak step return code")
-            soak_steps.append((name, rc))
+            soak_steps.append((name, rc, step.get("error")))
 
-    step_names = [name for name, _ in soak_steps]
+    step_names = [name for name, _, _ in soak_steps]
     if "soak_attempts" not in receipt:
         if "soak.a2-blackout-wait" in waits or step_names not in ([], ["soak"]):
             raise ValueError("invalid legacy soak history")
@@ -1086,7 +1088,7 @@ def span_soak(receipt):
     interrupted = bool(attempts) and step_names == expected_names[:-1]
     if step_names != expected_names and not interrupted:
         raise ValueError("invalid soak step order")
-    codes = [rc for _, rc in soak_steps]
+    codes = [rc for _, rc, _ in soak_steps]
     if interrupted:
         codes.append(None)
     for number, (row, rc) in enumerate(zip(attempts, codes, strict=True), 1):
@@ -1099,15 +1101,15 @@ def span_soak(receipt):
         reason = row["refused"]
         if reason is not None and (not isinstance(reason, str) or not reason or rc == 0):
             raise ValueError("invalid refused soak attempt")
-        if number < len(attempts) and (reason is None or rc is None):
-            raise ValueError("retry without a failed soak step")
+        retry_started = number < len(attempts) or (number == 1 and "soak.a2-blackout-wait" in waits)
+        if retry_started and (reason is None or rc != SOAK_REFUSAL_STEP_RC
+                              or soak_steps[number - 1][2] != f"SoakRefusal: {reason}"):
+            raise ValueError("retry without a recorded soak refusal")
         if row["output_dir"] != "soak" and (number != 1 or reason is None or row["output_dir"] != "soak.rejected1"):
             raise ValueError("invalid soak attempt directory")
 
     if interrupted and attempts[-1]["refused"] is not None:
         raise ValueError("refused soak attempt without a step")
-    if "soak.a2-blackout-wait" in waits and (attempts[0]["refused"] is None or soak_steps[0][1] is None):
-        raise ValueError("retry wait without a failed soak step")
     retried = [{"attempt": number, "kind": "kind not recorded", "read_from": None}
                for number in range(1, len(attempts))]
     accepted = bool(attempts and attempts[-1]["refused"] is None and codes[-1] == 0)
@@ -1238,7 +1240,7 @@ def step3_records(events_data, turns_data, journal_data, rich_data, native_data)
         if event_type != "token":
             # The hold diagnostic still requires the times of its phase events.
             if event_type in ("phase_start", "phase_end") and row.get("phase") == "align_thermal_hold":
-                finite(row["timestamp_s"])
+                float(row["timestamp_s"])
             continue
         metadata = row["metadata"]
         if not isinstance(metadata, dict):
@@ -1259,7 +1261,11 @@ def step3_records(events_data, turns_data, journal_data, rich_data, native_data)
             continue
         values = row.get("values") or {}
         status = values.get("status") or {}
-        started = row["started"]["monotonic_ns"] if type(status.get("pm_observed_ns")) is int else None
+        started = None
+        if type(status.get("pm_observed_ns")) is int:
+            started = row["started"]["monotonic_ns"]
+            if not isinstance(started, (int, float)):
+                raise ValueError("invalid Step 3 journal freshness clock")
         journal.append((row["finished"]["wall_ns"] / 1e9, started,
                         (values.get("sensors") or {}).get("TV0h"), status))
     rich = json_lines(rich_data)
@@ -1268,22 +1274,33 @@ def step3_records(events_data, turns_data, journal_data, rich_data, native_data)
         raise ValueError("invalid Step 3 native frame count")
     power_state = []
     for frame, raw_bytes in zip(rich, native):
-        stamp, elapsed = float(frame["timestamp_s"]), int(frame["elapsed_ns"])
+        stamp, elapsed = float(frame["timestamp_s"]), frame["elapsed_ns"]
+        if not math.isfinite(elapsed):
+            raise ValueError("non-finite Step 3 elapsed count")
         state = None
         if start - 5 <= stamp <= token_times[-1] + 5:
             raw = plistlib.loads(raw_bytes)
+            if not isinstance(raw, dict):
+                raise ValueError("invalid Step 3 native frame")
             if elapsed != int(raw.get("elapsed_ns", -1)):
                 raise ValueError("Step 3 telemetry intervals disagree")
             value = raw.get("thermal_pressure")
             state = value if isinstance(value, str) else None
         gpu = frame.get("gpu") or {}
-        if gpu.get("gpu_energy") is not None:
-            finite(gpu["gpu_energy"])
+        gpu_energy = gpu.get("gpu_energy")
+        if gpu_energy is not None and elapsed > 0:
+            left = max(stamp - elapsed / 1e9, token_times[0])
+            right = min(stamp, token_times[-1])
+            if left < right and not math.isfinite(gpu_energy):
+                raise ValueError("non-finite Step 3 GPU energy")
+        used_states = [(item, item.get("used_ns", 0)) for item in gpu.get("dvfm_states") or []]
         states = []
-        for item in gpu.get("dvfm_states") or []:
-            used = int(item.get("used_ns", 0))
-            if used > 0:
-                states.append((finite(item["freq"]), used))
+        if sum(used for _, used in used_states) > 0:
+            for item, used in used_states:
+                frequency = item["freq"]
+                if not math.isfinite(frequency):
+                    raise ValueError("non-finite Step 3 GPU frequency")
+                states.append((frequency, used))
         power_state.append((stamp, elapsed, state, states))
     return start, end, token_times, sorted(journal, key=lambda row: row[0]), power_state
 
@@ -1315,7 +1332,7 @@ def step3_cut(start, token_times, journal, power_state):
         cuts.append(gap)
     off_time = min((*(row[0] for row in journal if start < row[0] <= end and off(row[3])),
                     *(row[0] for row in power_state if start < row[0] <= end
-                      and row[2] not in (None, "Nominal", "Unknown"))), default=None)
+                      and row[2] not in (None, "Nominal", "Unknown", "not_read"))), default=None)
     if off_time is not None:
         last_nominal = max((row[0] for row in journal if row[0] < off_time and nominal(row[3])),
                            default=start)
@@ -1324,23 +1341,26 @@ def step3_cut(start, token_times, journal, power_state):
     # Apply the e20 rule only to windows beginning at least 10 s into decode.
     # Scale active time by each row's overlap with the window.
     reference = max((freq for _, _, _, states in power_state for freq, used in states if used > 0), default=0)
-    clock_rows = [row for row in power_state if row[0] <= end + 30]
-    intervals = [(right - elapsed / 1e9, right, math.fsum(used for _, used in states),
-                  math.fsum(freq * used for freq, used in states))
-                 for right, elapsed, _, states in clock_rows if elapsed > 0]
-    for right in sorted({row[0] for row in clock_rows}):
+    clock_rows = sorted((row for row in power_state if start - 30 <= row[0] <= end + 30), key=lambda row: row[0])
+    intervals = []
+    for right, elapsed, _, states in clock_rows:
+        active = sum(used for _, used in states)
+        if active > 0 and elapsed > 0:
+            clock = sum(freq * used for freq, used in states) / active
+            intervals.append((right - elapsed / 1e9, right, active, clock))
+    for right, _, _, _ in clock_rows:
         begin = right - 10
         if not token_times[0] + 10 <= begin < right <= end:
             continue
-        weights, numerators = [], []
-        for lo, hi, used, frequency_time in intervals:
+        weight_sum = clock_sum = 0.0
+        for lo, hi, active, clock in intervals:
             overlap = min(hi, right) - max(lo, begin)
             if overlap > 0 and hi > lo:
-                scale = overlap / (hi - lo)
-                weights.append(scale * used)
-                numerators.append(scale * frequency_time)
-        total = math.fsum(weights)
-        if total and math.fsum(numerators) < 0.97 * reference * total:
+                weight = active * (overlap / (hi - lo))
+                weight_sum += weight
+                clock_sum += clock * weight
+        # The registered cutoff uses the ordered floating-point window mean.
+        if weight_sum and clock_sum / weight_sum < 0.97 * reference:
             cuts.append(begin)
             break
     return min(cuts)
@@ -1356,12 +1376,17 @@ def step3_observations(start, tokens, journal, power, gpu):
     for block in range(len(tokens) // 256):
         left, right = tokens[max(0, 256 * block - 1)], tokens[256 * block + 255]
         joules, _ = power_intervals(gpu, left, right)
-        blocks.append((left, right, joules))
+        readings = [temperature for stamp, _, temperature, _ in journal
+                    if left < stamp <= right and temperature is not None]
+        temperature = math.fsum(readings) / len(readings) if readings else step3_temperature(journal, (left + right) / 2)
+        if temperature is not None and not math.isfinite(temperature):
+            raise ValueError("non-finite Step 3 block temperature")
+        blocks.append((temperature, joules))
     if len(blocks) < 4:
         raise ValueError("missing Step 3 reference blocks")
     # Validate the whole diagnostic, including the per-leg ratio reference.
-    reference = median([joules for _, _, joules in blocks[1:4]])
-    if reference <= 0 or any(joules <= 0 for _, _, joules in blocks):
+    reference = median([joules for _, joules in blocks[1:4]])
+    if reference <= 0 or any(joules <= 0 for _, joules in blocks):
         raise ValueError("nonpositive Step 3 block response")
     cut = step3_cut(start, tokens, journal, power)
     if cut is None:
@@ -1371,13 +1396,7 @@ def step3_observations(start, tokens, journal, power, gpu):
         raise ValueError("nonpositive Step 3 pre-cut diagnostic response")
     first, last = step3_temperature(journal, tokens[0]), step3_temperature(journal, cut)
     rise = last - first if first is not None and last is not None else None
-    observations = []
-    for block in range(1, prefix // 256):
-        left, right, joules = blocks[block]
-        readings = [temperature for stamp, _, temperature, _ in journal
-                    if left < stamp <= right and temperature is not None]
-        temperature = math.fsum(readings) / len(readings) if readings else step3_temperature(journal, (left + right) / 2)
-        observations.append((block, temperature, joules))
+    observations = [(block, *blocks[block]) for block in range(1, prefix // 256)]
     # All admitted development legs in the interim adapter are Automatic.
     return False, rise, observations
 
@@ -1396,7 +1415,7 @@ def step3_measurements(bundle):
     start, _, tokens, journal, power = step3_records(*(child_path(bundle, name).read_bytes() for name in sources))
     gpu = gpu_rows(child_path(bundle, "power_trace.csv").read_bytes())
     observations = step3_observations(start, tokens, journal, power, gpu)
-    if any(state not in STEP3_PRESSURE_STATES for stamp, _, state, _ in power if start <= stamp <= tokens[-1]):
+    if any(state not in STEP3_PRESSURE_STATES for stamp, _, state, _ in power if start < stamp <= tokens[-1]):
         raise Step3CellFailure("unregistered Step 3 pressure state")
     return observations
 
@@ -1411,7 +1430,7 @@ def step3_cells(entrants, threshold):
         except Step3CellFailure:
             invalid_cells.add(size)
         except (OSError, KeyError, TypeError, IndexError, ValueError, ArithmeticError,
-                plistlib.InvalidFileException):
+                plistlib.InvalidFileException, ExpatError):
             cells[size] = (failures + 1, legs)
     for size in invalid_cells:
         cells[size] = (1, [])

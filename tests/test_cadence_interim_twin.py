@@ -62,6 +62,11 @@ def soak_attempt(number, refused=None, output_dir="soak"):
     return {"attempt": number, "started_epoch_s": 100.0 + number, "refused": refused, "output_dir": output_dir}
 
 
+def soak_refused_step(number, reason):
+    name = "soak" if number == 1 else f"soak.a{number}"
+    return {"name": name, "rc": 2, "error": f"SoakRefusal: {reason}"}
+
+
 class ComparisonTests(unittest.TestCase):
     def test_rl184_f06_f07_near_zero_still_returns_no(self):
         from copy import deepcopy
@@ -723,10 +728,10 @@ def parse(path):
         from scripts.cadence_interim_twin import soak_summary
 
         receipts = {"a": {"steps": [{"name": "soak", "rc": 0}]}, "b": {
-            "steps": [{"name": "soak", "rc": 1}, {"name": "soak.a2-blackout-wait", "rc": 0},
+            "steps": [soak_refused_step(1, "refused"), {"name": "soak.a2-blackout-wait", "rc": 0},
                       {"name": "soak.a2", "rc": 0}],
             "soak_attempts": [soak_attempt(1, "refused", "soak.rejected1"), soak_attempt(2)],
-        }, "c": {"steps": [{"name": "soak", "rc": 1}, {"name": "soak.a2", "rc": 1}],
+        }, "c": {"steps": [soak_refused_step(1, "refused"), soak_refused_step(2, "refused")],
                    "soak_attempts": [soak_attempt(1, "refused"), soak_attempt(2, "refused")]}}
         summary = soak_summary(receipts)
         self.assertEqual(summary["spans"]["a"], {"attempts": 1, "field_present": False,
@@ -763,7 +768,7 @@ def parse(path):
         self.assertFalse(span_soak({**base, "steps": [{"name": "soak", "rc": None}]})["accepted"])
         self.assertFalse(span_soak({**base, "steps": [{"name": "soak", "rc": 130}]})["accepted"])
         interrupted = {"soak_attempts": [soak_attempt(1, "refused", "soak.rejected1")],
-                       "steps": [{"name": "soak", "rc": 1}, {"name": "soak.a2-blackout-wait", "rc": 130}]}
+                       "steps": [soak_refused_step(1, "refused"), {"name": "soak.a2-blackout-wait", "rc": 130}]}
         self.assertEqual(span_soak(interrupted), {"attempts": 1, "field_present": True,
                                                  "accepted": False, "retried": []})
         del no_rc["soak_attempts"][0]["refused"]
@@ -776,13 +781,14 @@ def parse(path):
         from scripts.cadence_interim_twin import span_soak
 
         base = {"soak_attempts": [soak_attempt(1, "synthetic"), soak_attempt(2)],
-                "steps": [{"name": "soak", "rc": 1}, {"name": "soak.a2", "rc": 0}]}
+                "steps": [soak_refused_step(1, "synthetic"), {"name": "soak.a2", "rc": 0}]}
         histories = [
             {"soak_attempts": [soak_attempt(1), soak_attempt(2)]},
             {"soak_attempts": [soak_attempt(True, "synthetic"), soak_attempt(2)]},
             {"soak_attempts": [soak_attempt(1, "synthetic"), soak_attempt(2, output_dir="soak.rejected2")]},
             {"soak_attempts": [soak_attempt(1, "synthetic"), soak_attempt(2, "synthetic"), soak_attempt(3)],
-             "steps": [{"name": "soak", "rc": 1}, {"name": "soak.a2", "rc": 1}, {"name": "soak.a3", "rc": 0}]},
+             "steps": [soak_refused_step(1, "synthetic"), soak_refused_step(2, "synthetic"),
+                       {"name": "soak.a3", "rc": 0}]},
             {"steps": [{"name": "soak", "rc": 0}, {"name": "soak.a2", "rc": 0}]},
             {"steps": [{"name": "soak"}, {"name": "soak.a2", "rc": 0}]},
             {"steps": [{"name": "soak.a2", "rc": 0}]},
@@ -819,14 +825,14 @@ def parse(path):
         self.assertEqual(span_soak(interrupted), {"attempts": 1, "field_present": True,
                                                  "accepted": False, "retried": []})
         retry_interrupted = {"soak_attempts": [soak_attempt(1, "refused"), soak_attempt(2)],
-                             "steps": [{"name": "soak", "rc": 1}]}
+                             "steps": [soak_refused_step(1, "refused")]}
         self.assertEqual(span_soak(retry_interrupted), {"attempts": 2, "field_present": True,
                          "accepted": False, "retried": [{"attempt": 1, "kind": "kind not recorded",
                                                          "read_from": None}]})
         for wait_rc in (130, None):
             wait = {"name": "soak-blackout-wait", "rc": wait_rc}
             legacy = {"steps": [wait, {"name": "soak", "rc": 0}]}
-            retry = {"steps": [{"name": "soak", "rc": 1}, {"name": "soak.a2-blackout-wait", "rc": wait_rc},
+            retry = {"steps": [soak_refused_step(1, "refused"), {"name": "soak.a2-blackout-wait", "rc": wait_rc},
                                {"name": "soak.a2", "rc": 0}],
                      "soak_attempts": retry_interrupted["soak_attempts"]}
             for receipt in (legacy, {**interrupted, **legacy}, {**interrupted, "steps": [wait]}, retry):
@@ -834,6 +840,26 @@ def parse(path):
                     span_soak(receipt)
         with self.assertRaises(ValueError):
             span_soak({**interrupted, "soak_attempts": [soak_attempt(1, "refused")]})
+
+    def test_round_two_f04_only_a_soak_refusal_can_retry(self):
+        from scripts.cadence_interim_twin import span_soak
+
+        reason = "idle check refused"
+        first, second = soak_attempt(1, reason), soak_attempt(2)
+        refused_step = soak_refused_step(1, reason)
+        retry_step = {"name": "soak.a2", "rc": 0}
+        aborted = {"name": "soak", "rc": 130, "error": "SystemExit: 130"}
+        self.assertTrue(span_soak({"soak_attempts": [first, second],
+                                  "steps": [refused_step, retry_step]})["accepted"])
+        self.assertFalse(span_soak({"soak_attempts": [soak_attempt(1)], "steps": [aborted]})["accepted"])
+        for invalid_step in (aborted,
+                             dict(refused_step, error="SpanRefusal: unrelated failure"),
+                             dict(refused_step, error="SoakRefusal: different reason"),
+                             dict(refused_step, rc=5)):
+            with self.subTest(step=invalid_step), self.assertRaises(ValueError):
+                span_soak({"soak_attempts": [first, second], "steps": [invalid_step, retry_step]})
+        with self.assertRaises(ValueError):
+            span_soak({"soak_attempts": [first], "steps": [aborted, {"name": "soak.a2-blackout-wait", "rc": 0}]})
 
     def test_step3_fixed_effect_and_tripwire_against_hand_fit(self):
         from scripts.cadence_interim_twin import mean_centered_slope, step3_projection
@@ -871,6 +897,16 @@ def parse(path):
 
 
 class Step3CutTests(unittest.TestCase):
+    def test_round_two_clock_rounding_fires_at_first_eligible_window(self):
+        from scripts.cadence_interim_twin import step3_cut
+
+        tokens = [8 + i / 32 for i in range(1281)]
+        journal = [(t, t * 10**9, 34, {"os_level": 0, "pm_state": "Nominal", "pm_observed_ns": t * 10**9})
+                   for t in range(49)]
+        states = [(1000, 7000), (900, 3000)]
+        power = [(t, 1_100_000_000, None, states) for t in range(1, 49)]
+        self.assertEqual(step3_cut(0, tokens, journal, power), 18)
+
     def test_step3_temperature_at_unsnapped_cut_and_block_mean(self):
         from scripts.cadence_interim_twin import step3_observations
 
@@ -939,6 +975,8 @@ class CensusStep3Tests(unittest.TestCase):
             tokens = tokens[:512]
         if name == "before_start":
             tokens = [time - 9 for time in tokens]
+        if name == "clock_left_boundary":
+            tokens[-1] = 80
         if name == "ties":
             tokens[2] = tokens[1]
         events = [{"event_type": "token", "timestamp_s": str(t) if name == "stampstr" else t,
@@ -963,6 +1001,8 @@ class CensusStep3Tests(unittest.TestCase):
                               "metadata": option})
         if name == "hold_missing_stamp":
             events.append({"event_type": option, "phase": "align_thermal_hold"})
+        if name == "hold_nan":
+            events.append({"event_type": "phase_start", "phase": "align_thermal_hold", "timestamp_s": "NaN"})
         if name == "token_null_metadata":
             events[0]["metadata"] = None
 
@@ -970,8 +1010,10 @@ class CensusStep3Tests(unittest.TestCase):
                   "generation": {"output_token_ids": [1] * len(tokens)}}]
         if name == "multi":
             turns *= 2
+        if name == "clock_left_boundary":
+            turns[0]["start_stamp"]["epoch_s"], turns[0]["end_stamp"]["epoch_s"] = 65, 80
         readings = []
-        for t in range(49):
+        for t in range(81 if name == "clock_left_boundary" else 49):
             observed = t * 10**9
             if name == "future":
                 observed += 10**7
@@ -1002,8 +1044,17 @@ class CensusStep3Tests(unittest.TestCase):
                 status["os_level"] = 1.0
             if name == "zero_before_cut" and t == 12:
                 status["os_level"] = 1
+            if name == "bad_temperature_after_cut":
+                if t == 12:
+                    status["os_level"] = 1
+                if t == 28:
+                    sensors["TV0h"] = "bad"
             if name == "all_error":
                 reading["error"] = "synthetic"
+            readings.append(reading)
+        if name in ("freshness_bad_before_start", "freshness_bad_after_turn"):
+            stamp = -1 if name == "freshness_bad_before_start" else 49
+            reading = dict(readings[-1], finished={"wall_ns": stamp * 10**9}, started={"monotonic_ns": None})
             readings.append(reading)
 
         rich, native = [], []
@@ -1021,11 +1072,26 @@ class CensusStep3Tests(unittest.TestCase):
                 gpu = {"dvfm_states": [state]}
                 if name == "clock_state_without_use":
                     gpu["dvfm_states"] = [{}]
+                if name == "clock_mixed_empty_state" and t == 20:
+                    gpu["dvfm_states"].append({})
+                if name == "clock_used_string" and t == 20:
+                    state["used_ns"] = "1000"
+                if name == "clock_left_boundary" and t == 28:
+                    state.update(freq=100, used_ns=100000)
+                if name == "clock_exact_boundary":
+                    elapsed = 1_100_000_000
+                    gpu["dvfm_states"] = [{"freq": 1000, "used_ns": 7000}, {"freq": 900, "used_ns": 3000}]
                 if name == "bad_gpu_energy" and t == 20:
                     gpu["gpu_energy"] = "bad"
+                if name == "gpu_energy_before_decode" and t == 1:
+                    gpu["gpu_energy"] = "bad"
+                if name == "gpu_energy_string_in_decode" and t == 20:
+                    gpu["gpu_energy"] = "2"
                 if name == "native_default_elapsed" and t == 1:
                     elapsed = option
                 frame = {"timestamp_s": t, "elapsed_ns": elapsed, "gpu": gpu}
+                if name == "rich_elapsed_string" and t == 20:
+                    frame["elapsed_ns"] = str(elapsed)
                 if name == "dvfm_states":
                     alter(gpu, name)
                 if name == "gpu":
@@ -1036,7 +1102,14 @@ class CensusStep3Tests(unittest.TestCase):
                     raw.clear()
                 if name == "pressure" and (option != "UnregisteredState" or leg == 0):
                     raw["thermal_pressure"] = option
+                if name == "pressure_sentinel" and t == 9:
+                    raw["thermal_pressure"] = "not_read"
                 native.append(plistlib.dumps(raw))
+        if name == "native_truncated" and leg == 0:
+            native[19] = b'<?xml version="1.0"?><plist><dict>'
+        if name == "pressure_at_start":
+            rich.insert(0, dict(rich[0], timestamp_s=0))
+            native.insert(0, plistlib.dumps({"elapsed_ns": 10**9, "thermal_pressure": "UnregisteredState"}))
         if name == "native_count":
             native = native[:len(native) + option] if option < 0 else native + [b"unused suffix"] * option
         if name == "native_outside":
@@ -1097,6 +1170,37 @@ class CensusStep3Tests(unittest.TestCase):
             with self.subTest(clause=clause, case=name, option=option), tempfile.TemporaryDirectory() as tmp:
                 entrants = [(2000, lambda i=i: self.measurements(Path(tmp) / str(i), i, (name, option)))
                             for i in range(count)]
+                result = step3_cells(entrants, 0.08)
+                cell, = result["cells"]
+                self.assertEqual((result["tripwire"]["decision"], result["tripwire"]["trips"],
+                                  cell["status"], cell["gamma_estimable"]), expected)
+
+    def test_round_two_step3_witnesses(self):
+        from scripts.cadence_interim_twin import step3_cells
+
+        within = ("within", False, "ok", True)
+        not_run = ("not_evaluable", None, "not_run", None)
+        unestimable = ("not_evaluable", None, "ok", False)
+        cases = [
+            ("T05", "hold_nan", within),
+            ("T07", "freshness_bad_after_turn", not_run),
+            ("T07", "freshness_bad_before_start", not_run),
+            ("T08", "pressure_sentinel", within),
+            ("T10", "clock_mixed_empty_state", not_run),
+            ("T10", "clock_used_string", not_run),
+            ("T11", "native_truncated", within),
+            ("T11", "rich_elapsed_string", not_run),
+            ("T12", "pressure_at_start", within),
+            ("T13", "clock_exact_boundary", unestimable),
+            ("T13", "clock_left_boundary", within),
+            ("T14", "gpu_energy_before_decode", within),
+            ("T14", "gpu_energy_string_in_decode", not_run),
+            ("T14", "bad_temperature_after_cut", not_run),
+        ]
+        for clause, name, expected in cases:
+            with self.subTest(clause=clause, case=name), tempfile.TemporaryDirectory() as tmp:
+                entrants = [(2000, lambda i=i: self.measurements(Path(tmp) / str(i), i, (name, None)))
+                            for i in range(3)]
                 result = step3_cells(entrants, 0.08)
                 cell, = result["cells"]
                 self.assertEqual((result["tripwire"]["decision"], result["tripwire"]["trips"],
@@ -1430,17 +1534,51 @@ class RawBundleTests(unittest.TestCase):
                     "--span-dir", f"{days[0]}={staged_span}", "--coefficients", str(c),
                     "--coefficients-sha256", ch, "--fit", str(f), "--step3", str(d)]
 
+            def bind_modified_inputs():
+                stage1_hash = write(s1, json_bytes(stage1))
+                primary_c["stage1_sha256"] = stage1_hash
+                argv[argv.index("--stage1-sha256") + 1] = stage1_hash
+                argv[argv.index("--coefficients-sha256") + 1] = write(c, json_bytes(primary_c))
+                write(f, json_bytes(primary_fit))
+                write(d, json_bytes(step3))
+
+            original_empty_receipt = empty_receipt.read_bytes()
+            empty_inventory = fixture_files[-1]
+            empty_operational = spans[-1]["custody"]["files_sha256"]
+
+            def bind_soak_receipt(receipt_bytes, span_soak, retries):
+                receipt_hash = write(empty_receipt, receipt_bytes)
+                empty_inventory["sha256"] = empty_operational["runner_receipt.json"] = receipt_hash
+                soak["spans"][empty_span] = span_soak
+                soak["spans_with_retry"] = soak["accepted_after_retry"] = retries
+                soak["retried_by_kind"]["kind not recorded"] = retries
+
+            empty_soak = soak["spans"][empty_span]
             stream = staged_span / "hazards/meter/stream-a.jsonl"
             original_stream = stream.read_bytes()
             for mode, expected, error in (("match", "yes", None), ("import audit", "yes", None),
+                    ("retry after interruption", "not_evaluable", "ValueError"),
+                    ("hold with NaN timestamp", "yes", None),
                     ("hold without timestamp", "yes", None),
                     ("perturbation", "no", None), ("missing stream", "not_evaluable", "FileNotFoundError"),
                     ("stage1 meter identity", "not_evaluable", "ValueError"),
                     ("decoder pin", "not_evaluable", "ValueError"), ("package pin", "not_evaluable", "ValueError"),
                     ("missing coefficient", "not_evaluable", "FileNotFoundError")):
                 with self.subTest(mode=mode):
-                    if mode == "hold without timestamp":
-                        hold = lines([{"event_type": "phase_start", "phase": "align_thermal_hold"}])
+                    if mode == "retry after interruption":
+                        receipt = {"roster": [], "soak_attempts": [soak_attempt(1, "refused"), soak_attempt(2)],
+                                   "steps": [{"name": "soak", "rc": 130, "error": "SystemExit: 130"},
+                                             {"name": "soak.a2", "rc": 0}]}
+                        impossible = {"attempts": 2, "field_present": True, "accepted": True,
+                                      "retried": [{"attempt": 1, "kind": "kind not recorded", "read_from": None}]}
+                        bind_soak_receipt(json_bytes(receipt), impossible, 1)
+                        bind_modified_inputs()
+                    elif mode.startswith("hold "):
+                        event = {"event_type": "phase_start", "phase": "align_thermal_hold"}
+                        if mode == "hold with NaN timestamp":
+                            bind_soak_receipt(original_empty_receipt, empty_soak, 0)
+                            event["timestamp_s"] = "NaN"
+                        hold = lines([event])
                         file_entries = {file["path"]: file for file in fixture_files}
                         for span in spans[:len(days)]:
                             day = span["span_id"]
@@ -1454,15 +1592,11 @@ class RawBundleTests(unittest.TestCase):
                                 inventory_key = Path(day) / name if day == days[0] else path
                                 operational[name] = updated
                                 file_entries[str(inventory_key)]["sha256"] = updated
-                        sh = write(s1, json_bytes(stage1))
-                        primary_c["stage1_sha256"] = sh
-                        argv[argv.index("--stage1-sha256") + 1] = sh
-                        argv[argv.index("--coefficients-sha256") + 1] = write(c, json_bytes(primary_c))
-                        step3["cells"] = [dict(cell, status="not_run", gamma_estimable=None)
-                                          for cell in step3["cells"]]
-                        step3["tripwire"].update(decision="not_evaluable", trips=None)
-                        write(f, json_bytes(primary_fit))
-                        write(d, json_bytes(step3))
+                        if mode == "hold without timestamp":
+                            step3["cells"] = [dict(cell, status="not_run", gamma_estimable=None)
+                                              for cell in step3["cells"]]
+                            step3["tripwire"].update(decision="not_evaluable", trips=None)
+                        bind_modified_inputs()
                     elif mode == "perturbation":
                         primary_c["channels"]["dc_in"]["coefficients"]["p1"] *= 1.001
                         argv[argv.index("--coefficients-sha256") + 1] = write(c, json_bytes(primary_c))
