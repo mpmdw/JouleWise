@@ -9,11 +9,11 @@ P1 [AGENT], user-selected draft build on the audit branch. One span per
 eligible date place, with up to 20 places and 120 legs in its own budget.
 The draft entries are held for effective freeze 2, scientific registration
 and dated lead issue. The final-window midnight substitution and closed
-v2 transfer variant now have RL-183's rules. Synthetic execution checked
-the closed output and failure paths. The lead owns registration, scorer
-integration, final pins and Fable's cold pass. No live queue or phase exit
-gate changed.
-[Run report](docs/run_reports/2026-11-18-rl183-transfer-execution.md).
+v2 transfer variant have RL-183's rules. Both NEEDS_SPEC items closed on
+remote implementation head `224cb92d3` after synthetic execution checks.
+The lead owns registration, scorer integration, final pins and Fable's
+cold pass. No live queue or phase exit gate changed.
+[Closure record](docs/run_reports/2026-11-18-rl183-transfer-closure.md).
 
 ## 2026-11-17 qualification t0 guard successor
 
