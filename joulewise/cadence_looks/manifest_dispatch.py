@@ -92,8 +92,6 @@ def _validate_shape(document, definitions, commitments):
 
 
 def _transfer_final(registration, candidate, pins, definitions, commitments):
-    if registration is None:
-        raise ManifestError("transfer final validation requires the exact registered manifest bytes")
     registered = schema_check._decode(registration)
     if not isinstance(registered, dict) or (
         registered.get("schema"), registered.get("look_kind"), registered.get("status")
@@ -153,25 +151,43 @@ def _check_registration_use(document, final):
         raise ManifestError("--registration requires a registered qualification or transfer final")
 
 
-def validate_v2(payload: bytes, *, final=False, registration: bytes | None = None) -> dict:
-    """Check the closed v2 variant and, for final transfer or qualification, its registration."""
-    document = schema_check._decode(payload)
+def _validate_qualification(payload, final, read_registration, commitments):
+    if final:
+        document, _ = schema_check._parse(payload)
+        schema_check._check_registered_kits(document)
+    else:
+        document = schema_check.validate_registration(payload)
+
+    look_id = document["look_id"]
+    record = commitments.get(look_id)
+    if record is None:
+        raise ManifestError(f"{look_id}: no independent qualification span commitments")
+    expected = record["span_ids_by_block"]
+    for block in document["reads"]["blocks"]:
+        block_id = block["block_id"]
+        if block["spans"] != expected.get(block_id):
+            raise ManifestError(f"{block_id}: span commitment differs from the published qualification queue")
+
+    if final:
+        if read_registration is None:
+            raise ManifestError("qualification final validation requires the exact registered manifest bytes")
+        return schema_check.validate_final(read_registration(), payload)
+    return document
+
+
+def _validate_v2_document(payload, document, final, read_registration):
     if not isinstance(document, dict) or document.get("schema") != V2:
         raise ManifestError("expected the v2 cadence manifest schema ID")
     kind = document.get("look_kind")
-    if registration is not None:
+    if read_registration is not None:
         _check_registration_use(document, final)
     if final and document.get("status") != "draft":
         _reject_final_placeholders(document)
+    commitments = schema_check._decode(KIT_COMMITMENTS.read_bytes())
     if kind == "qualification":
-        if not final:
-            return schema_check.validate_registration(payload)
-        if registration is None:
-            raise ManifestError("qualification final validation requires the exact registered manifest bytes")
-        return schema_check.validate_final(registration, payload)
+        return _validate_qualification(payload, final, read_registration, commitments)
 
     definitions = json.loads(V2_SCHEMA.read_bytes())["$defs"]
-    commitments = json.loads(KIT_COMMITMENTS.read_bytes())
     pins = _validate_shape(document, definitions, commitments)
     if not final:
         return document
@@ -179,10 +195,19 @@ def validate_v2(payload: bytes, *, final=False, registration: bytes | None = Non
     if document["status"] == "draft":
         raise ManifestError("a draft cannot pass final validation")
     if kind == "transfer":
-        _transfer_final(registration, payload, pins, definitions, commitments)
+        if read_registration is None:
+            raise ManifestError("transfer final validation requires the exact registered manifest bytes")
+        _transfer_final(read_registration(), payload, pins, definitions, commitments)
     elif document["look_id"] == "lm-stab-02" and "kit_index_path" not in document:
         raise ManifestError("final lm-stab-02 must name the f2-stab/KITS.json index")
     return document
+
+
+def validate_v2(payload: bytes, *, final=False, registration: bytes | None = None) -> dict:
+    """Check the closed v2 variant and, for final transfer or qualification, its registration."""
+    document = schema_check._decode(payload)
+    read_registration = None if registration is None else lambda: registration
+    return _validate_v2_document(payload, document, final, read_registration)
 
 
 def main(argv=None):
@@ -208,11 +233,8 @@ def main(argv=None):
             return _validate_legacy(args.v1_tool, payload, args.final)
         if schema != V2:
             raise ManifestError("unknown cadence manifest schema ID")
-        registration = None
-        if args.registration is not None:
-            _check_registration_use(document, args.final)
-            registration = args.registration.read_bytes()
-        doc = validate_v2(payload, final=args.final, registration=registration)
+        read_registration = args.registration.read_bytes if args.registration is not None else None
+        doc = _validate_v2_document(payload, document, args.final, read_registration)
     except (ManifestError, OSError) as error:
         print(f"REFUSE {error}", file=sys.stderr)
         return PRE_READ_REFUSAL

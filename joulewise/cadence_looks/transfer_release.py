@@ -97,7 +97,7 @@ def run_transfer_worker(*, restricted: Path, public: Path, execution_host: str, 
         sys.stdout.flush()
         sys.stderr.flush()
         original_stderr = os.dup(2)
-    except OSError:
+    except BaseException:
         return PRE_READ_REFUSAL
     read_started = False
     redirected = False
@@ -137,11 +137,13 @@ def run_transfer_worker(*, restricted: Path, public: Path, execution_host: str, 
         # the private staging name while exposing one complete public record.
         pending.rename(public)
         return 0
-    except Exception as error:
+    except BaseException as error:
+        # Interpreter exits raised by callbacks use the same read boundary as
+        # other Python failures. OS termination may bypass this handler.
         if redirected:
             try:
                 traceback.print_exc()
-            except Exception:
+            except BaseException:
                 pass
         if read_started:
             notice = f"stage2_error\n{_failure_type(error)}\n".encode("ascii")
