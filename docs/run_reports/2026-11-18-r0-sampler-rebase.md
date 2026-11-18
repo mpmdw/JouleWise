@@ -48,3 +48,14 @@ Round 1 reviewed `cde215aff2def5b80b0f76bc26a5730279d8664c`. It verified one HIG
 | MED, a failed census or stale sampler could discard a queued contention flag. | Drain completed windows in order before applying the later failure or freshness refusal. Publish each background snapshot with its census evidence. | `test_queued_contention_survives_census_failure_or_stall` | PASS |
 
 Both threaded regressions passed 20 consecutive synthetic fixture runs. The existing sharded CI blocker in `tests/test_agent_identity.py` remains with the CI owner. The draft records hosted CI for the repaired candidate and requests the follow-up delta review. [CI-owner issue #834](https://github.com/mpmdw/JouleWise/issues/834)
+
+## Delta audit round 2 and spec v2
+
+Round 2 reviewed `71e6122a83090181e0de5806765ff9c57d62c28a`. It verified one HIGH and one MED, both implementation bugs. Both rounds had two HIGH-plus-MED findings, so round 2 exceeded the convergence limit of one. Spec v2 was frozen at `1b2582d4dbc7bca50c9fe1f1005ef61813eb9b9c` before the repair. It adds the audit reproductions and retains the admitted sampler timing, contention flags, and hard-refusal rules. The new cases produced six expected failures on the reviewed code. [Pipeline §3](https://github.com/mpmdw/JouleWise/blob/211ff5033/docs/process/PIPELINE.md#3-tier-2-only-spec-freeze-and-convergence)
+
+| Verified finding | Repair in `9fd95fbd0903fd65adb90ec699003195886a44af` | Regression | Final |
+| --- | --- | --- | --- |
+| HIGH, denied or incomplete LaunchAgents enumeration could clear the census. | Treat confirmed directory absence as empty. Require complete enumeration once the directory is observed and refuse on any error. The same census runs at startup and in the background. | `test_execute_refuses_when_background_launchagent_directory_is_unreadable`, `test_launchagent_enumeration_errors_after_presence_is_observed_refuse_at_admission` | PASS |
+| MED, a failed host check could omit the final sampler refusal and queued contention. | Finalize the sampler for any admitted run and retain its evidence alongside the host error. | `test_execute_retains_sampler_refusal_and_contention_when_host_check_fails` | PASS |
+
+The original synthetic probes also passed with the repaired expectations. Three threaded regressions passed 20 consecutive fixture runs. The earlier late-census and queued-contention repairs remain covered. Hosted CI and the spec-v2 reviews are tracked on draft PR #824. The shard 8 blocker remains with the CI owner. [CI-owner issue #834](https://github.com/mpmdw/JouleWise/issues/834)
