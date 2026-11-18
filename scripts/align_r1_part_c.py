@@ -46,8 +46,15 @@ from collections import defaultdict
 import hashlib
 import json
 import math
+import os
 from pathlib import Path
 from stat import S_ISDIR, S_ISREG
+import time
+
+from scripts.align_r1_part_c_evidence import (
+    BoundMember, EvidenceFailure, EvidenceLedger, KINDS, MANIFEST_NAME, canonical, digest,
+    parse_json as parse_evidence_json, read_regular, stdout_payload,
+)
 
 MAX_TOKENS = 4096                  # frozen turn cap (D-17a); no hold fires at or above it
 G0_LIMIT_S = 1200.0
@@ -403,32 +410,6 @@ def _check_line(run):
         return _check(False, evidence_error=f"{type(error).__name__}: {error}")
 
 
-def _unique_members(pairs):
-    value = dict(pairs)
-    if len(value) != len(pairs):
-        raise ValueError("duplicate JSON field")
-    return value
-
-
-def _reject_constant(value):
-    raise ValueError(f"non-finite JSON constant {value}")
-
-
-def _finite_float(value):
-    number = float(value)
-    if not math.isfinite(number):
-        raise ValueError("JSON number overflows")
-    return number
-
-
-def parse_evidence_json(text):
-    """Decode a wire record without collapsing conflicting JSON members."""
-    if isinstance(text, bytes):
-        text = text.decode("utf-8", errors="strict")
-    return json.loads(text, object_pairs_hook=_unique_members, parse_constant=_reject_constant,
-                      parse_float=_finite_float)
-
-
 class RuntimeEvidenceError(ValueError):
     def __init__(self, kind, reason, detail, receipt=None):
         super().__init__(f"runtime.{kind}.{reason}: {detail}")
@@ -442,7 +423,7 @@ class RuntimeAdmissionRefusal(ValueError):
 
 
 def judged_invoke(runtime, kind, output, duration=None, *, soak_reference=None, quiet=False,
-                  contract_key=None, watch=None):
+                  contract_key=None, watch=None, ledger=None):
     """Part C's evidence transport around the byte-frozen R1 process driver."""
     from scripts import align_r1_rehearsal as r1
     from subprocess import TimeoutExpired
@@ -458,30 +439,57 @@ def judged_invoke(runtime, kind, output, duration=None, *, soak_reference=None, 
     if soak_reference is not None:
         argv += ["--soak-reference", str(soak_reference)]
     elif (contract_key or kind) in r1.contract.NEEDS_SOAK_REFERENCE:
-        raise RuntimeAdmissionRefusal(kind, "no soak reference before launch")
+        refusal = RuntimeAdmissionRefusal(kind, "no soak reference before launch")
+        if ledger is not None:
+            ledger.member_return(kind, output, argv, error=refusal, spawned=False)
+        raise refusal
     try:
         process = r1._run(argv)
-    except (OSError, TimeoutExpired, UnicodeError) as error:
-        raise RuntimeEvidenceError(kind, "process_exit", type(error).__name__) from error
+    except Exception as error:
+        if ledger is not None:
+            ledger.member_return(kind, output, argv, error=error)
+        if not isinstance(error, (OSError, TimeoutExpired, UnicodeError)):
+            raise
+        raise RuntimeEvidenceError(kind, "process_exit", type(error).__name__) from None
+    if ledger is not None:
+        ledger.member_return(kind, output, argv, process=process)
     code, stdout = process.returncode, process.stdout
     if type(code) is not int:
         raise RuntimeEvidenceError(kind, "process_exit", "invalid exit status")
     if code == 2:
-        if stdout not in ("", b""):
+        if stdout != "":
             reason = "x_g_launch_conflict" if kind == "x-g" else "stdout_receipt"
             raise RuntimeEvidenceError(kind, reason, "admission refusal with nonempty or missing stdout")
         raise RuntimeAdmissionRefusal(kind, "native exit 2")
     if code:
         raise RuntimeEvidenceError(kind, "process_exit", f"exit {code}")
     try:
-        value = parse_evidence_json(stdout)
-    except (ValueError, TypeError) as error:
-        raise RuntimeEvidenceError(kind, "stdout_receipt", str(error)) from error
-    if not isinstance(value, dict):
-        raise RuntimeEvidenceError(kind, "stdout_receipt", "expected an object")
+        value = stdout_payload(stdout, kind)
+    except EvidenceFailure as error:
+        # RuntimeEvidenceError also serves the older injected kit callers.
+        raise RuntimeEvidenceError(kind, error.reason, "invalid") from None
+    if value is None:
+        raise RuntimeEvidenceError(kind, "stdout_receipt", "missing")
     missing = r1.contract.missing_fields(kind, value, quiet=quiet, contract_key=contract_key)
     if missing:
         raise RuntimeEvidenceError(kind, "receipt_contract", "contract fields missing: " + ", ".join(missing), value)
+    if ledger is None:
+        return value
+    bound = ledger.member(kind)
+    try:
+        saved = parse_evidence_json(bound.read(RECEIPT_NAME, RECEIPT_NAME))
+    except EvidenceFailure:
+        raise
+    except (ValueError, TypeError, RecursionError) as error:
+        raise EvidenceFailure("saved_receipt", kind, RECEIPT_NAME, field="invalid") from error
+    if not isinstance(saved, dict):
+        raise EvidenceFailure("saved_receipt", kind, RECEIPT_NAME, field="invalid")
+    if canonical(saved) != canonical(value):
+        raise EvidenceFailure("receipt_pair", kind, RECEIPT_NAME, field="disagrees", peer="stdout")
+    if (value.get("schema") != "joulewise.align.r1_runtime_result.v1" or value.get("kind") != kind
+            or value.get("backend") != "production" or value.get("config_sha256") != ledger.config_sha):
+        raise EvidenceFailure("receipt_contract", kind, RECEIPT_NAME)
+    bound.verify_reads()
     return value
 
 
@@ -1019,3 +1027,157 @@ def step_d_facts(bundle, fields):
             "g0_interval": {key: g0.get(key) for key in ("outcome", "duration_s", "start_ns", "end_ns")},
             "release": g0.get("release"), "reference": g0.get("reference"),
             "slope_c_per_min": g0.get("slope_c_per_min")}
+
+
+# These inventories precede parsing. The frozen episode reader additionally
+# opens the bundle trace, so it must have an entry even though its values do
+# not decide the Part C verdict.
+BUNDLE_SOURCES = ("config.json", "metadata.json", "summary_metrics.json", "events.jsonl",
+                  "outputs/align_episode.json", "outputs/align_turns.jsonl", "power_trace.csv")
+THERMAL_SOURCE = "outputs/align_thermal.jsonl"
+REFERENCE_SOURCE = "outputs/align_window_reference.json"
+STEP_SOURCES = ("recovery/align_thermal.jsonl", "inventory/r1_classification.json")
+RELEASE_COPIES = ("smoke_part_c.json", "smoke.json")
+RELEASE_LINES = ("step_d", "d_bank_mechanics", "d_bank_start_state", "x_g")
+
+
+def _object_from_bytes(raw, role, source, reason):
+    try:
+        value = parse_evidence_json(raw)
+    except (ValueError, TypeError, RecursionError) as error:
+        raise EvidenceFailure(reason, role, source, field="invalid") from error
+    if not isinstance(value, dict):
+        raise EvidenceFailure(reason, role, source, field="invalid")
+    return value
+
+
+def _bound_member_files(bound, receipt):
+    role = bound.kind
+    try:
+        relative = _relative_bundle(receipt["bundle"])
+    except (KeyError, TypeError, ValueError) as error:
+        raise EvidenceFailure("bundle_binding", role, RECEIPT_NAME, field="bundle") from error
+    sources = BUNDLE_SOURCES
+    if role != "capture-predecessor-30b":
+        sources += (THERMAL_SOURCE,)
+    if role == "step-d":
+        sources += (REFERENCE_SOURCE,)
+    data = {source: bound.read(f"{relative}/{source}", source) for source in sources}
+    if role == "step-d":
+        data.update({source: bound.read(source, source) for source in STEP_SOURCES})
+    return bound.root / relative, data
+
+
+def _release_table(table=None, *, failures=()):
+    """Project the existing record schema onto structural identifiers."""
+    verdict = table["verdict"] if table is not None and not failures else "other_failure"
+    findings = [failure.finding(verdict) for failure in failures]
+    lines = dict.fromkeys(RELEASE_LINES)
+    log = []
+    if table is not None:
+        for key in RELEASE_LINES:
+            line = table["lines"][key]
+            if line is not None:
+                lines[key] = {"pass": line["pass"] is True}
+        if table["lines"]["d_bank_mechanics"] is not None:
+            log.append(THREE_TURN_CLAUSE_LINE)
+        reason_by_line = {"step_d": "step_release", "d_bank_mechanics": "gate_time",
+                          "d_bank_start_state": "start_state", "x_g": "x_g_evidence"}
+        for key, line in lines.items():
+            if line is not None and not line["pass"]:
+                findings.append(EvidenceFailure(reason_by_line[key], key, "evaluation").finding(verdict))
+        for key in table["evidence_failures"]:
+            findings.append(EvidenceFailure(key, "attempt", "evaluation").finding(verdict))
+    if verdict == "pass" and findings:
+        verdict = "other_failure"
+        for finding in findings:
+            finding["verdict"] = verdict
+    return {"schema": "joulewise.align.r1_part_c.v1",
+            "authority": "RL-145 step 3; RL-145 addendum section 6; RL-149 sections 1.2 and 1.5",
+            "verdict": verdict, "pass": verdict == "pass" and not findings, "disposition": DISPOSITION[verdict],
+            "lines": lines, "evidence_failures": {f["reason"]: f["reason"] for f in findings},
+            "printed_not_judged": {"predicted": PREDICTED_NOT_JUDGED},
+            "log": log, "slots_entered": False}, findings
+
+
+def _emit_part_c(output, started, table=None, *, failures=(), ledger=None):
+    result = {"part": "C", "authority": "RL-145 step 3; RL-145 addendum section 6",
+              "slots_entered": False, "members": {}, "elapsed_s": time.monotonic() - started}
+    def write(table, failures, *, replace=False):
+        evaluation, finds = _release_table(table, failures=failures)
+        result["evaluation"] = evaluation
+        if finds:
+            result["error"] = " ".join(sorted(evaluation["evidence_failures"]))
+        raw = canonical(result) + b"\n"
+        for name in RELEASE_COPIES:
+            flags = os.O_WRONLY | os.O_NOFOLLOW | os.O_NONBLOCK | os.O_CREAT
+            fd = os.open(output / name, flags | (0 if replace else os.O_EXCL), 0o600)
+            with os.fdopen(fd, "wb") as stream:
+                if not S_ISREG(os.fstat(stream.fileno()).st_mode):
+                    raise OSError("verdict output must be regular")
+                stream.truncate(0)
+                stream.write(raw)
+                stream.flush()
+                os.fsync(stream.fileno())
+        copies = {name: digest(read_regular(output, name)) for name in RELEASE_COPIES}
+        if set(copies.values()) != {digest(raw)}:
+            raise EvidenceFailure("verdict_binding", "attempt", "smoke.json")
+        return evaluation, finds, copies
+
+    try:
+        evaluation, findings, copies = write(table, failures)
+        if ledger is not None:
+            if evaluation["pass"]:
+                ledger.verify_final_sources()
+            ledger.finish(evaluation["verdict"], copies)
+    except (OSError, ValueError) as error:
+        failure = error if isinstance(error, EvidenceFailure) else EvidenceFailure(
+            "verdict_binding", "attempt", "smoke.json")
+        # No passing publication survives an unavailable final binding.
+        evaluation, findings, _ = write(None, (*failures, failure), replace=True)
+    for finding in findings:
+        print(canonical(finding).decode("ascii"))
+    for line in evaluation["log"]:
+        print(line)
+    print(f"Part C verdict: {evaluation['verdict']} (pass: {evaluation['pass']})")
+    if not evaluation["pass"]:
+        reasons = ", ".join(sorted(evaluation["evidence_failures"]))
+        raise ValueError(f"Part C failed ({evaluation['verdict']}) {reasons}") from None
+    return result
+
+
+def run_bound_part_c(output, runtime, *, soak_reference):
+    """Refuse native measurement when required soak evidence has no witness."""
+    from scripts import align_r1_rehearsal as r1
+
+    output = Path(output)
+    output.mkdir(mode=0o700, parents=True, exist_ok=False)
+    started = time.monotonic()
+    ledger = None
+    try:
+        ledger = EvidenceLedger(output, r1.executed_commit(Path(__file__).resolve().parents[1]),
+                                r1.runtime_config_path(runtime), soak_reference)
+    except EvidenceFailure as error:
+        failures = (error,)
+    except (OSError, ValueError, TypeError):
+        failures = (EvidenceFailure("evidence_unverifiable", "attempt", "issued_inputs"),)
+    else:
+        # The launcher has returned from a different process by the time
+        # this kit starts. The soak manifest is below idle_soak and no
+        # ledger field witnesses it, that process, or its parent's row.
+        failures = tuple(EvidenceFailure("evidence_unverifiable", "idle", source) for source in (
+            "soak/soak_row.json", "soak/idle_soak/runtime_custody.json", "soak/stdout",
+        ))
+    return _emit_part_c(output, started, failures=failures, ledger=ledger)
+
+
+def archived_custody_member(output, runtime_config, kind):
+    """Open exactly one archived member under RL-183 1.4, with no native ledger."""
+    segment = Path(output) / KINDS[kind]
+    config_sha = digest(read_regular(Path(runtime_config).parent, Path(runtime_config).name))
+    raw = read_regular(segment, MANIFEST_NAME, compressed=True)
+    member = BoundMember(segment, kind, config_sha, manifest_sha=digest(raw), archived=True)
+    receipt = _object_from_bytes(member.read(RECEIPT_NAME, RECEIPT_NAME), kind, RECEIPT_NAME, "saved_receipt")
+    _bound_member_files(member, receipt)
+    member.verify_reads()
+    return {"binding": "archived_custody"}

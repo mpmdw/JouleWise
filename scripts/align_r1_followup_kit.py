@@ -470,6 +470,10 @@ def smoke_part_c(output, runtime, config, *, soak_reference, invoke=None,
     is ``align_r1_part_c.evaluate``'s; a failure raises after the table is written.
     """
     from scripts import align_r1_part_c as part_c
+    if facts is None and step_facts is None:
+        return part_c.run_bound_part_c(output, runtime, soak_reference=soak_reference)
+    if facts is None or step_facts is None:
+        raise ValueError("synthetic Part C requires both fact readers")
     invoke = invoke or part_c.judged_invoke
     output = Path(output)
     output.mkdir(parents=True, exist_ok=False)
@@ -492,13 +496,6 @@ def smoke_part_c(output, runtime, config, *, soak_reference, invoke=None,
                 print(f"Part C log: {line}")
     def run_member(kind, directory):
         return invoke(runtime, kind, directory, soak_reference=soak_reference)
-
-    if facts is None or step_facts is None:
-        # The native CLI does not yet carry the authorized, independently
-        # bound verifier projection required by the evidence inventory.
-        error = "evidence_unverifiable: authorized Part C projection is unavailable"
-        finish(part_c.evaluate(runtime_error=error), error)
-        raise ValueError(error)
 
     try:
         predecessor = run_member("capture-predecessor-30b", output / "capture_predecessor_30b")
@@ -623,6 +620,11 @@ def main(argv=None):
     p.add_argument("--part", choices=("A", "B", "C"), required=True)
     p.add_argument("--soak-reference", type=Path, required=True)
     p.add_argument("--inputs", type=Path, default=ROOT / reg.REGISTRATION / "inputs.json")
+    p = sub.add_parser("replay-archived", help="verify an authorized archived member binding")
+    p.add_argument("--output", type=Path, required=True)
+    p.add_argument("--runtime-config", type=Path, required=True)
+    p.add_argument("--kind", choices=("capture-predecessor-30b", "step-d", "d-bank-benign-s1", "x-g"),
+                   required=True)
     p = sub.add_parser("desk")
     p.add_argument("--run-dir", type=Path, required=True)
     p = sub.add_parser("regenerate-table", help="RL-122: re-derive (not re-measure) the Part B selection")
@@ -642,6 +644,19 @@ def main(argv=None):
         print(hashlib.sha256(raw).hexdigest())
     elif args.command == "smoke":
         smoke(args.output, args.part, r1.runtime_argv_from_inputs(args.inputs), soak_reference=args.soak_reference)
+    elif args.command == "replay-archived":
+        from scripts import align_r1_part_c as part_c
+
+        try:
+            result = part_c.archived_custody_member(args.output, args.runtime_config, args.kind)
+        except part_c.EvidenceFailure as error:
+            print(json.dumps(error.finding(), sort_keys=True))
+            return 1
+        except (OSError, ValueError, TypeError):
+            print(json.dumps(part_c.EvidenceFailure(
+                "evidence_unverifiable", args.kind, "runtime_custody.json").finding(), sort_keys=True))
+            return 1
+        print(json.dumps(result, sort_keys=True))
     else:
         print(json.dumps(replay.night_desk(args.run_dir), indent=2, sort_keys=True))
     return 0

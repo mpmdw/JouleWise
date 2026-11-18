@@ -676,7 +676,7 @@ class KitSequenceTests(unittest.TestCase):
                           reference_source='step-d', inter_member_idle_s=300)
             write_receipt(output, fields)
             raw = '{"episode_flags":["episode.deadman:2"],' + json.dumps(fields)[1:]
-            with patch.object(kit.r1, '_run', return_value=SimpleNamespace(returncode=0, stdout=raw, stderr='')):
+            with patch.object(kit.r1, '_run', return_value=SimpleNamespace(returncode=0, stdout=raw + '\n', stderr='')):
                 return pc.judged_invoke(runtime, kind, output, **kwargs)
 
         self.invoke = invoke
@@ -684,7 +684,7 @@ class KitSequenceTests(unittest.TestCase):
             self.run_c()
         result = json.loads((self.tmp / 'c/smoke_part_c.json').read_text())['evaluation']
         self.assertEqual(result['verdict'], 'other_failure')
-        self.assertIn('duplicate JSON field', result['evidence_failures']['runtime_receipt'])
+        self.assertIn('stdout_receipt: invalid', result['evidence_failures']['runtime_receipt'])
 
     def test_exit_two_cannot_hide_an_x_g_bundle_without_a_receipt(self):
         original = self.invoke
@@ -753,7 +753,7 @@ class KitSequenceTests(unittest.TestCase):
             if kind != 'x-g':
                 return original(runtime, kind, output, **kwargs)
             receipt = {'bundle': 'synthetic', 'admitted_turns': 2, 'episode_flags': []}
-            process = SimpleNamespace(returncode=0, stdout=json.dumps(receipt), stderr='')
+            process = SimpleNamespace(returncode=0, stdout=json.dumps(receipt) + '\n', stderr='')
             with patch.object(kit.r1, '_run', return_value=process):
                 return pc.judged_invoke(runtime, kind, output, **kwargs)
 
@@ -838,7 +838,7 @@ class FrozenBoundaryTests(unittest.TestCase):
                 for parent in parents:
                     node = node.setdefault(parent, {})
                 node.setdefault(key, {})
-            process = SimpleNamespace(returncode=0, stdout=json.dumps(fields), stderr='')
+            process = SimpleNamespace(returncode=0, stdout=json.dumps(fields) + '\n', stderr='')
             for held in (False, True):
                 lock = SimpleNamespace(held=held, pass_fds=lambda: (17,))
                 with self.subTest(kind=kind, held=held), patch.object(r1, '_CHILD_HOST_LOCK', lock), \
