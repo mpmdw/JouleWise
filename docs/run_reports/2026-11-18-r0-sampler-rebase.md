@@ -131,3 +131,20 @@ CPU judgement retains the highest counter observed for each PID and start identi
 | MED, an inventory input error could mask a latched census refusal. | `test_inventory_census_refusal_takes_precedence_over_input_read_error` injects EIO during the required root read, with and without an inventory read error. | PASS |
 
 All three auditor probes passed synthetic replays. The late agent refused before the first host check, the zeroed counter retained one contention flag, and the simultaneous inventory and census EIO returned exit 2 with the census path and errno and no output. Exact-candidate CI and the requested two-family delta reviews are tracked on draft PR #824. NEEDS_SPEC has no entries.
+
+## Frozen differential against admitted R0-L3
+
+The 341-case acceptance module was copied byte for byte in test-first commit `548336c79`. Its SHA-256 is `e113501601e3cae09b1fc1a131dcf8ef55361493ae7a353135a5c5c83c7438b3`. The unmodified module reproduced 96 failures on `60390d55d` against admitted tree `9c40e4e5d`. It reported 67 missed or late refusals, six missing worker flags, 22 flagged passes, and one additional args-only zombie case. The three clean controls passed both lanes.
+
+Each admission and publication check now runs the full custody, LaunchAgent, agent and process census. The guard applies the admitted CPU interval decision to caller samples and maintains its separate background windows. Each sequence retains its own previous over-limit evidence. Shared process history preserves the highest CPU counter and the contaminant matches for a PID and start identity. A worker with lost arguments therefore retains its first observed classification. A reused PID with a different start identity begins a new history.
+
+The runner drains completed windows before the terminal verdict. Any guard contention flag blocks publication in both check and inventory modes. The check CLI retains the private refused receipt. The forecast and SMC still carry their independent diagnostics.
+
+| Differential requirement | Result |
+| --- | --- |
+| Match admitted refusal decisions at the same boundaries | PASS, 0 missed or late refusals |
+| Retain admitted CPU evidence | PASS, all six previously missing 30–60 s intervals were recorded |
+| Withhold publication on any guard flag | PASS, all 80 flagged scenarios returned exit 2 and left the requested path absent |
+| Track the args-only zombie after its arguments disappear | PASS, the 0–30 s flag was recorded |
+
+The frozen comparison reports **341 scenarios and 0 failures**, with zero invalid oracle controls. The oracle was staged from pinned local Git objects and both lanes ran on synthetic inputs. Exact-candidate CI and the two-family delta review are tracked on draft PR #824. NEEDS_SPEC has no entries.
