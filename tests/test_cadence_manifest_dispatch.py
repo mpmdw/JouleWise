@@ -119,6 +119,8 @@ class VariantContractTests(unittest.TestCase):
                     result = cli(candidate)
                     self.assertEqual((result.returncode, result.stdout), (2, b""))
                     self.assertIn(b"unknown cadence manifest schema ID", result.stderr)
+                    if document["look_kind"] == "description":
+                        document["kits"] = [{"kit_id": "dev-01", "sha256": H}]
                     candidate.write_bytes(encode(dict(document, schema=dispatch.V1, look_id="lm-interim-01")))
                     # A v1 delegation receives the original payload. It cannot
                     # be overridden via its v2 look_kind or filename.

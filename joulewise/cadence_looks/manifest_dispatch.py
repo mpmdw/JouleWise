@@ -22,6 +22,7 @@ FINAL_PLACEHOLDER = re.compile(r"PENDING:CODE|OPEN-[0-9]+")
 V2_SCHEMA = schema_check._SCHEMA
 V1_TOOL = V2_SCHEMA.parents[4] / "scripts/cadence_look_manifest.py"
 KIT_COMMITMENTS = V2_SCHEMA.with_name("look-kit-commitments.v2.json")
+FILLER_KIT_REGISTRY = V2_SCHEMA.with_name("filler-kit-registry.json")
 ManifestError = schema_check.ManifestError
 
 TRANSFER_PRINTS = (
@@ -92,6 +93,39 @@ class _NoticeArgumentParser(argparse.ArgumentParser):
         raise _ParserExit(status)
 
 
+def _reject_filler_kits(document):
+    if document.get("schema") == V2 and document.get("look_kind") == "description":
+        return
+
+    registry = schema_check._decode(FILLER_KIT_REGISTRY.read_bytes())
+    registered = registry["kit_sha256_by_id"]
+    filler_ids = {kit_id.casefold() for kit_id in (*registered, *registry["other_ids"])}
+    filler_digests = frozenset(registered.values())
+    filler_prefixes = ("f2-inst-", "f2-stab-", "r1-partc-f0-")
+    pending = [(document, False)]
+    while pending:
+        value, in_kit = pending.pop()
+        if isinstance(value, list):
+            pending.extend((item, in_kit) for item in value)
+        elif isinstance(value, dict):
+            identifiers = [value.get("block_id"), value.get("kit_id")]
+            digests = [value.get("kit_sha256")]
+            # Unqualified sha256 fields elsewhere bind files such as schemas, not kits.
+            if in_kit or "kit_id" in value:
+                identifiers.append(value.get("id"))
+                digests.append(value.get("sha256"))
+            matched_id = any(
+                kit_id in filler_ids or kit_id.startswith(filler_prefixes)
+                for kit_id in (item.casefold() for item in identifiers if isinstance(item, str))
+            )
+            matched_digest = any(
+                digest.lower() in filler_digests for digest in digests if isinstance(digest, str)
+            )
+            if matched_id or matched_digest or value.get("queue_class") == "filler":
+                raise ManifestError("counted roster references a filler kit")
+            pending.extend((item, key in ("kit", "kits")) for key, item in value.items())
+
+
 def _validate_transfer(document, commitments):
     record = commitments[document["look_id"]]
     reads = document["reads"]
@@ -156,6 +190,7 @@ def _transfer_final(registration, candidate, pins, definitions, commitments):
         registered.get("schema"), registered.get("look_kind"), registered.get("status")
     ) != (V2, "transfer", "registered"):
         raise ManifestError("expected a registered transfer manifest")
+    _reject_filler_kits(registered)
     pending = _validate_shape(registered, definitions, commitments)
     if pending.keys() != pins.keys() or any(value != "PENDING:CODE" for value in pending.values()):
         raise ManifestError("registration must leave every code hash slot pending")
@@ -240,6 +275,7 @@ def _validate_qualification(payload, final, read_registration, commitments):
 def _validate_v2_document(payload, document, final, read_registration):
     if not isinstance(document, dict) or document.get("schema") != V2:
         raise ManifestError("expected the v2 cadence manifest schema ID")
+    _reject_filler_kits(document)
     kind = document.get("look_kind")
     if read_registration is not None:
         _check_registration_use(document, final)
@@ -290,6 +326,7 @@ def _dispatch(argv):
         document = schema_check._decode(payload)
         schema = document.get("schema") if isinstance(document, dict) else None
         if schema == V1:
+            _reject_filler_kits(document)
             if args.registration is not None:
                 raise ManifestError("--registration applies to v2 manifests")
             _reject_reserved_v1_look(document)
