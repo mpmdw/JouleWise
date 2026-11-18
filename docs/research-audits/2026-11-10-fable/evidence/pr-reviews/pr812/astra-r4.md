@@ -1,0 +1,7 @@
+BLOCK
+
+**[HIGH] [VERIFIED] A qualification launch can leave the latest attempt unrecorded.** At PR head `df261f6a2`, omitting both `--attempt-ledger` and `--previous-close-receipt` let span B reach synthetic bootstrap. Bootstrap failed before B wrote a start plan or receipt. The ledger still named A, and all six patched drafts admitted the next child on A’s receipt in both Bash and Zsh. With the ledger arguments present, the same failure recorded B and every draft refused, naming B. Require both arguments for qualification kits before bootstrap. [Exact reproduction](/tmp/jw812-final.GEC15m0u/no_plan.py) · [Draft and child results](/tmp/jw812-final.GEC15m0u/before_next_draft.log)
+
+**[HIGH] [REFUTED] With a complete ledger,** the drafts refused a missing receipt, a mismatched span ID, and stale proof after wall-clock rollback. The later attempt’s own proof admitted. Without sequence numbers, recorded boot order handled a clock reset, and equal monotonic timestamps on the same boot refused as ambiguous. [Replay results](/tmp/jw812-final.GEC15m0u/replay.log)
+
+**[LOW] [REFUTED] Fractional-close rounding.** For a close at `T+0.125`, starts at equality and `T+0.750` admitted. One nanosecond before close refused. [Boundary results](/tmp/jw812-final.GEC15m0u/replay.log)

@@ -1,0 +1,9 @@
+**BLOCK** PR #812 at `ab32a6c91` with drafts `03e0f7abe`. Both previous HIGHs are fixed. Two close-proof failures reproduced on all six drafts in Bash and Zsh. All starts were synthetic. [Replay results](/tmp/jw812-r3.BRXlPG7O/close-release.log)
+
+- **[HIGH] [VERIFIED] Missing latest receipt.** At `T=1795118400`, span A had a proven close at `T−1200`. Span B had a start plan at `T−600` and no close receipt. Even with `PRIOR_CLOSE_EPOCH=T−60`, the gate selected A’s proof and the child admitted `T`. [Reproduction](/tmp/jw812-r3.BRXlPG7O/close_review.py:71)
+- **[HIGH] [VERIFIED] Wrong-span proof after rollback.** On one boot, A closed at wall `T−1200`, monotonic `3600 s`. B closed later at wall `T−1300`, monotonic `4200 s`. The gate selected the largest wall timestamp. A’s stale proof admitted the child. B’s correct proof was refused. [Reproduction](/tmp/jw812-r3.BRXlPG7O/close_review.py:75)
+- **[HIGH] [REFUTED] Rollback before the lower bound.** With issue and observation at `1795111200`, the shell refused anchor `1795111198`. The child independently refused `1795111199` and admitted `1795111200`. [Reproduction](/tmp/jw812-r3.BRXlPG7O/timing.py:37)
+- **[HIGH] [REFUTED] Sleep hiding elapsed time.** With 60 seconds left, 60 asleep, five awake and a ten-second wall rollback, the child returned `3`. On Darwin, both arm reads and the child read called `clock_gettime_ns(CLOCK_MONOTONIC_RAW)`. Apple maps that clock to `mach_continuous_time`. [Replay](/tmp/jw812-r3.BRXlPG7O/timing.log) · [Apple libc](https://github.com/apple-oss-distributions/Libc/blob/main/gen/clock_gettime.c)
+- **[LOW] [VERIFIED] Additional false refusal.** A proven close at `T+0.125` rounded up to `T+1`. A valid start at `T+0.750` was refused as preceding the close. `T+1` passed. [Reproduction](/tmp/jw812-r3.BRXlPG7O/close_review.py:89)
+
+Before merge, identify the latest attempted span independently of wall-clock order and require its own close proof.

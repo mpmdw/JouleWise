@@ -1,0 +1,8 @@
+MERGE
+
+Replayed pushed PR head `0d03cb783` with the builder’s patch on `61377dc45`. All 216 synthetic checks across six drafts in Bash and Zsh returned the expected result.
+
+- **[HIGH] [REFUTED] Unrecorded qualification attempt.** Omitting either proof argument refused before bootstrap. With both supplied, a failed bootstrap recorded the attempt and blocked its successor even though it never wrote a start plan. [Launcher results](/tmp/jw812-final-replay.UBNrMov8/ledger-edges.log) · [Draft replay](/tmp/jw812-final-replay.UBNrMov8/before-next.log)
+- **[HIGH] [REFUTED] Stale close proof.** With a complete ledger, missing, wrong-ID and pre-rollback receipts all refused. The latest attempt’s own receipt admitted. Without sequence numbers, recorded boot order handled a clock reset and unresolved monotonic ties refused. An external attempt omitted from the supplied ledger remained invisible. [Close-proof replay](/tmp/jw812-final-replay.UBNrMov8/replay.log) · [Omitted-plan control](/tmp/jw812-final-replay.UBNrMov8/external-plan.log)
+- **[LOW] [REFUTED] Fractional rounding.** For a close at `T+0.125`, equality and `T+0.750` admitted. One nanosecond early refused. [Boundary replay](/tmp/jw812-final-replay.UBNrMov8/replay.log)
+- **[MED] [VERIFIED] Same-boot false refusal.** An unsequenced ledger permits the newest boot’s sole attempt to omit `monotonic_ns`. Its receipt passed `close-proof`, but appending the successor on that boot returned `2` before bootstrap with `ambiguous attempt order`. [Exact reproduction](/tmp/jw812-final-replay.UBNrMov8/ledger_edges.py:95) · [Result](/tmp/jw812-final-replay.UBNrMov8/ledger-edges.log:14)
