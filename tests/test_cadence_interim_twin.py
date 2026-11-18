@@ -12,6 +12,17 @@ import unittest
 SCRIPT = Path(__file__).resolve().parents[1] / "scripts" / "cadence_interim_twin.py"
 HAS_NUMPY = importlib.util.find_spec("numpy") is not None
 
+MALFORMED_PHASE_EVENTS = {
+    "duplicate phase member": b'{"event_type":"phase_start","phase":"other","unused":0,"unused":0}\n',
+    "unknown phase": b'{"event_type":"phase_start","phase":"other","timestamp_s":12}\n',
+    "unknown phase marker": b'{"event_type":"phase_pause","phase":"decode","timestamp_s":12}\n',
+    "hold with overflowing JSON number":
+        b'{"event_type":"phase_start","phase":"align_thermal_hold","timestamp_s":1e309}\n',
+    "hold with NaN timestamp": b'{"event_type":"phase_start","phase":"align_thermal_hold","timestamp_s":"NaN"}\n',
+    "hold without timestamp": b'{"event_type":"phase_start","phase":"align_thermal_hold"}\n',
+    "hold end without timestamp": b'{"event_type":"phase_end","phase":"align_thermal_hold"}\n',
+}
+
 
 def example_outputs():
     channels = {}
@@ -875,6 +886,28 @@ def parse(path):
             with self.subTest(step=step), self.assertRaises(ValueError):
                 span_soak({"soak_attempts": [soak_attempt(1, reason)], "steps": [step]})
 
+    def test_f04_return_code_matches_writer_exit_at_step_and_receipt(self):
+        from scripts.cadence_interim_twin import span_soak
+
+        attempt = soak_attempt(1)
+        cases = [(130, "SystemExit: 130"), (143, "SystemExit: 143"), (2, "RuntimeError: interrupted"),
+                 (3, "SpanRefusal: work deadline reached; cleanup reserve retained"),
+                 (17, "SpanRefusal: soak: rc 17")]
+        for rc, error in cases:
+            with self.subTest(error=error):
+                receipt = {"soak_attempts": [attempt], "steps": [{"name": "soak", "rc": rc, "error": error}],
+                           "rc": rc, "error": error}
+                self.assertFalse(span_soak(receipt)["accepted"])
+                for wrong_code in (0, 3 if rc == 2 else 2, rc + 1, None):
+                    with self.subTest(wrong=wrong_code):
+                        bad_step = dict(receipt["steps"][0], rc=wrong_code)
+                        with self.assertRaisesRegex(ValueError, "return code contradicts"):
+                            span_soak(dict(receipt, steps=[bad_step]))
+                        with self.assertRaisesRegex(ValueError, "return code contradicts"):
+                            span_soak(dict(receipt, rc=wrong_code))
+        with self.assertRaisesRegex(ValueError, "return code contradicts its result"):
+            span_soak({"steps": [{"name": "soak", "rc": 0, "result": {"rc": 2}}]})
+
     def test_step3_fixed_effect_and_tripwire_against_hand_fit(self):
         from scripts.cadence_interim_twin import mean_centered_slope, step3_projection
 
@@ -911,17 +944,18 @@ def parse(path):
 
 
 class Step3CutTests(unittest.TestCase):
-    def test_round_two_clock_rounding_fires_at_first_eligible_window(self):
+    def test_clock_rounding_uses_file_order_with_sorted_candidate_ends(self):
         from scripts.cadence_interim_twin import step3_cut
 
         tokens = [8 + i / 32 for i in range(1281)]
         journal = [(t, t * 10**9, 34, {"os_level": 0, "pm_state": "Nominal", "pm_observed_ns": t * 10**9})
                    for t in range(49)]
-        for elapsed, unit in ((1_100_000_000, 1000), (7_000_000_001, 3)):
+        for elapsed, unit, reversed_cut in ((1_100_000_000, 1000, 48), (7_000_000_001, 3, 35)):
             with self.subTest(elapsed=elapsed, unit=unit):
                 states = [(1000, 7 * unit), (900, 3 * unit)]
                 power = [(t, elapsed, None, states) for t in range(1, 49)]
                 self.assertEqual(step3_cut(0, tokens, journal, power), 18)
+                self.assertEqual(step3_cut(0, tokens, journal, power[::-1]), reversed_cut)
 
     def test_step3_temperature_at_unsnapped_cut_and_block_mean(self):
         from scripts.cadence_interim_twin import step3_observations
@@ -951,6 +985,11 @@ class Step3CutTests(unittest.TestCase):
         tokens = list(range(1, 31))
         events = [{"event_type": "token", "metadata": {"index": i, "align_turn_index": 0},
                    "timestamp_s": stamp} for i, stamp in enumerate(tokens)]
+        for phase in ("tokenize", "generation_setup", "prefill", "decode", "align_thermal_gate", "align_thermal_hold",
+                      "align_context_check", "align_context_stop_observation", "align_g0_unreleased_stop_observation",
+                      "align_tool_0_0"):
+            events.extend({"event_type": kind, "phase": phase, "timestamp_s": stamp}
+                          for kind, stamp in (("phase_start", 1), ("phase_end", 2)))
         turns = [{"start_stamp": {"epoch_s": 0}, "end_stamp": {"epoch_s": 30},
                   "generation": {"output_token_ids": [1] * len(tokens)}}]
         fresh = [{"kind": "reading", "error": None, "started": {"monotonic_ns": i * 10**9},
@@ -1015,10 +1054,6 @@ class CensusStep3Tests(unittest.TestCase):
         if name == "phase":
             events.insert(0, {"event_type": "phase_start", "timestamp_s": 12, "phase": "align_thermal_hold",
                               "metadata": option})
-        if name == "hold_missing_stamp":
-            events.append({"event_type": option, "phase": "align_thermal_hold"})
-        if name == "hold_nan":
-            events.append({"event_type": "phase_start", "phase": "align_thermal_hold", "timestamp_s": "NaN"})
         if name == "token_null_metadata":
             events[0]["metadata"] = None
 
@@ -1039,7 +1074,8 @@ class CensusStep3Tests(unittest.TestCase):
                      int((name == "guard" and t >= 26) or (name == "zero_last" and t >= 28)))
             unknown = (name == "unknown_mid" and 9 <= t < 29) or (name == "guard" and t == 25)
             status = {"os_level": level, "pm_state": "Unknown" if unknown else "Nominal", "pm_observed_ns": observed}
-            sensors = {"TV0h": 30 + leg * 3 + t / 50}
+            temperature = 30 + t / 50 + leg / 10_000 if name == "drift_exponential_overflow" else 30 + leg * 3 + t / 50
+            sensors = {"TV0h": temperature}
             values = {"sensors": sensors, "status": status}
             reading = {"kind": "reading", "started": {"monotonic_ns": t * 10**9},
                        "finished": {"wall_ns": t * 10**9}, "values": values}
@@ -1076,6 +1112,10 @@ class CensusStep3Tests(unittest.TestCase):
             last = readings[-1]
             readings.append(dict(last, finished={"wall_ns": last["finished"]["wall_ns"] + 10**12},
                                  values=dict(last["values"], sensors=[5])))
+        if name == "empty_journal_sensors":
+            last = readings[-1]
+            readings.append(dict(last, finished={"wall_ns": last["finished"]["wall_ns"] + 10**12},
+                                 values=dict(last["values"], sensors=[])))
 
         rich, native = [], []
         if name != "native_empty":
@@ -1100,7 +1140,7 @@ class CensusStep3Tests(unittest.TestCase):
                     state["used_ns"] = "1000"
                 if name == "clock_left_boundary" and t == 28:
                     state.update(freq=100, used_ns=100000)
-                if name == "clock_exact_boundary":
+                if name in ("clock_exact_boundary", "clock_reversed"):
                     elapsed, unit = option or (1_100_000_000, 1000)
                     gpu["dvfm_states"] = [{"freq": 1000, "used_ns": 7 * unit}, {"freq": 900, "used_ns": 3 * unit}]
                 if name == "bad_gpu_energy" and t == 20:
@@ -1112,6 +1152,8 @@ class CensusStep3Tests(unittest.TestCase):
                 if name == "native_default_elapsed" and t == 1:
                     elapsed = option
                 frame = {"timestamp_s": t, "elapsed_ns": elapsed, "gpu": gpu}
+                if name == "empty_rich_gpu" and t == 1:
+                    frame["gpu"] = []
                 if name == "rich_elapsed_string" and t == 20:
                     frame["elapsed_ns"] = str(elapsed)
                 if name == "rich_elapsed_fraction" and t == 20:
@@ -1140,6 +1182,8 @@ class CensusStep3Tests(unittest.TestCase):
             native.insert(0, plistlib.dumps({"elapsed_ns": 10**9, "thermal_pressure": "UnregisteredState"}))
         if name == "native_count":
             native = native[:len(native) + option] if option < 0 else native + [b"unused suffix"] * option
+        if name == "clock_reversed":
+            rich.reverse()
         if name == "native_outside":
             rich.append(dict(rich[-1], timestamp_s=1000))
             native.append(b"invalid plist outside the load window")
@@ -1157,7 +1201,8 @@ class CensusStep3Tests(unittest.TestCase):
             rich.append({"timestamp_s": stamp, "elapsed_ns": elapsed, "gpu": {"gpu_energy": "bad"}})
             native.append(plistlib.dumps({"elapsed_ns": elapsed}))
 
-        gpu = [(t, t + 8, 2 if t < 32 or name != "zero_last" else 0) for t in range(0, 48, 8)]
+        watts = 2 + leg if name == "drift_exponential_overflow" else 2
+        gpu = [(t, t + 8, watts if t < 32 or name != "zero_last" else 0) for t in range(0, 48, 8)]
         if name == "gap_part":
             gpu[2:3] = [(16, 19, 2), (22, 24, 2)]
         if name == "nonpositive_width":
@@ -1171,9 +1216,9 @@ class CensusStep3Tests(unittest.TestCase):
             target = directory / path
             target.parent.mkdir(parents=True, exist_ok=True)
             target.write_text("".join(json.dumps(row) + "\n" for row in rows))
-            if path == "events.jsonl" and name == "hold_overflow":
+            if path == "events.jsonl" and name == "malformed_phase":
                 with target.open("ab") as stream:
-                    stream.write(b'{"event_type":"phase_start","phase":"align_thermal_hold","timestamp_s":1e309}\n')
+                    stream.write(MALFORMED_PHASE_EVENTS[option])
         (directory / "raw").mkdir()
         (directory / "raw/powermetrics.plist").write_bytes(b"\0".join(native))
         (directory / "power_trace.csv").write_text(trace)
@@ -1186,8 +1231,6 @@ class CensusStep3Tests(unittest.TestCase):
         not_run = ("not_evaluable", None, "not_run", None)
         unestimable = ("not_evaluable", None, "ok", False)
         cases = [
-            ("T05", "hold_missing_stamp", "phase_start", 3, not_run),
-            ("T05", "hold_missing_stamp", "phase_end", 3, not_run),
             ("T05", "token_null_metadata", None, 3, not_run),
             ("T07", "missing_freshness_sources", None, 3, unestimable),
             ("T07", "started_without_clock", None, 3, not_run),
@@ -1218,7 +1261,6 @@ class CensusStep3Tests(unittest.TestCase):
         not_run = ("not_evaluable", None, "not_run", None)
         unestimable = ("not_evaluable", None, "ok", False)
         cases = [
-            ("T05", "hold_nan", within),
             ("T07", "freshness_bad_after_turn", not_run),
             ("T07", "freshness_bad_before_start", not_run),
             ("T08", "pressure_sentinel", within),
@@ -1249,7 +1291,6 @@ class CensusStep3Tests(unittest.TestCase):
         not_run = ("not_evaluable", None, "not_run", None)
         unestimable = ("not_evaluable", None, "ok", False)
         cases = [
-            ("T05", "hold_overflow", None, within),
             ("T07", "malformed_journal_sensors", None, within),
             ("T10", "clock_null_state", None, within),
             ("T11", "native_bad_date", None, within),
@@ -1320,7 +1361,7 @@ class CensusStep3Tests(unittest.TestCase):
 
     def test_t12_registered_histogram_key_table(self):
         import hashlib
-        from scripts.cadence_interim_twin import STEP3_FIXED_OUTPUT_KEYS, step3_histogram_key_allowed
+        from scripts.cadence_interim_twin import STEP3_FIXED_OUTPUT_KEYS, step3_output_key_allowed
 
         ordered = sorted(key.encode("ascii") for key in STEP3_FIXED_OUTPUT_KEYS)
         self.assertEqual(len(ordered), 91)
@@ -1329,11 +1370,11 @@ class CensusStep3Tests(unittest.TestCase):
         states = ("Nominal", "Moderate", "Heavy", "Trapping", "Sleeping", "Unknown", "None", "not_read")
         for key in (*sorted(STEP3_FIXED_OUTPUT_KEYS), *states):
             with self.subTest(key=key):
-                self.assertTrue(step3_histogram_key_allowed(key, set()))
+                self.assertTrue(step3_output_key_allowed(key, set()))
         for key in ("title-Joule", "Watt-total", "tag_POWER_W_x", "tag_GPU_POWER_x", "tag_ENERGY_J_x",
                     "tag_MJ_x", "tag_WH_x", "leg_J", "leg_W", "E"):
             with self.subTest(key=key):
-                self.assertFalse(step3_histogram_key_allowed(key, {key}))
+                self.assertFalse(step3_output_key_allowed(key, {key}))
 
         with tempfile.TemporaryDirectory() as tmp:
             directory = Path(tmp)
@@ -1355,13 +1396,65 @@ class CensusStep3Tests(unittest.TestCase):
                 entrants = [
                     entrant(2000, "fixture/leg-a", 30, key),
                     entrant(2000, "fixture/leg-b", 33, "Nominal"),
-                    entrant(2000, "fixture/leg_W", 36, "Nominal"),
+                    entrant(2000, "fixture/leg_W" if key == "fixture/leg_W" else "fixture/leg-e", 36, "Nominal"),
                     entrant(10000, "fixture/leg-c", 30, "Nominal"),
                     entrant(10000, "fixture/leg-d", 33, "Nominal"),
                 ]
                 result = step3_cells(entrants, 0.08)
                 self.assertEqual(result["cells"], [
                     {"prompt_tokens": 10000, "status": "ok", "gamma_estimable": True}, expected,
+                ])
+                self.assertEqual(result["tripwire"], {"decision": "within", "trips": False})
+
+    def test_t05_malformed_shapes_raise_out_of_the_cell(self):
+        from scripts.cadence_interim_twin import json_lines, step3_cells
+
+        for name in MALFORMED_PHASE_EVENTS:
+            with self.subTest(case=name), tempfile.TemporaryDirectory() as tmp:
+                entrants = [(2000, "fixture/a", lambda: self.measurements(Path(tmp), 0, ("malformed_phase", name)))]
+                with self.assertRaises(ValueError):
+                    step3_cells(entrants, 0.08)
+        for content in (b'{"unused":{"x":0,"x":0}}', b'{"unused":NaN}', b'{"unused":Infinity}',
+                        b'{"unused":-Infinity}', b'{"unused":1e309}'):
+            with self.subTest(content=content), self.assertRaises(ValueError):
+                json_lines(content)
+
+    def test_final_pass_step3_witnesses(self):
+        from scripts.cadence_interim_twin import step3_cells
+
+        cases = [
+            ("T07", "empty_journal_sensors", None, ("ok", True, "within")),
+            ("T10", "empty_rich_gpu", None, ("ok", True, "within")),
+            ("T13", "clock_reversed", (7_000_000_001, 3), ("ok", True, "within")),
+            ("T13", "clock_reversed", (1_100_000_000, 1000), ("ok", True, "within")),
+            ("T14", "drift_exponential_overflow", None, ("not_run", None, "not_evaluable")),
+        ]
+        for clause, name, option, expected in cases:
+            with self.subTest(clause=clause, case=name, option=option), tempfile.TemporaryDirectory() as tmp:
+                entrants = [(2000, f"fixture/leg-{i}", lambda i=i: self.measurements(Path(tmp) / str(i), i, (name, option)))
+                            for i in range(3)]
+                result = step3_cells(entrants, 0.08)
+                cell, = result["cells"]
+                self.assertEqual((cell["status"], cell["gamma_estimable"], result["tripwire"]["decision"]), expected)
+
+    def test_t14_rejects_forbidden_leave_one_out_map_key_without_rejecting_other_cells(self):
+        from scripts.cadence_interim_twin import step3_cells
+
+        def entrant(size, leg_id, temperature, pressure):
+            return size, leg_id, lambda: ((False, 0, [(1, temperature, 1)]), {pressure})
+
+        for pressure in ("Nominal", "fixture/leg-b"):
+            with self.subTest(pressure=pressure):
+                result = step3_cells([
+                    entrant(2000, "fixture/leg-a", 30, pressure),
+                    entrant(2000, "fixture/leg-b", 33, "Nominal"),
+                    entrant(2000, "fixture/leg_W", 36, "Nominal"),
+                    entrant(10000, "fixture/leg-c", 30, "Nominal"),
+                    entrant(10000, "fixture/leg-d", 33, "Nominal"),
+                ], 0.08)
+                self.assertEqual(result["cells"], [
+                    {"prompt_tokens": 10000, "status": "ok", "gamma_estimable": True},
+                    {"prompt_tokens": 2000, "status": "not_run", "gamma_estimable": None},
                 ])
                 self.assertEqual(result["tripwire"], {"decision": "within", "trips": False})
 
@@ -1675,14 +1768,30 @@ class RawBundleTests(unittest.TestCase):
                 soak["stopped_by_soak"] = int(span_soak["attempts"] > 0 and not span_soak["accepted"])
 
             empty_soak = soak["spans"][empty_span]
+            file_entries = {file["path"]: file for file in fixture_files}
+            event_bindings = []
+            for span in spans[:len(days)]:
+                day = span["span_id"]
+                directory = staged_span if day == days[0] else custody / day
+                operational = span["custody"]["files_sha256"]
+                for name in operational:
+                    if name.endswith("/events.jsonl"):
+                        path = directory / name
+                        inventory_key = Path(day) / name if day == days[0] else path
+                        event_bindings.append((path, operational, name, file_entries[str(inventory_key)],
+                                               path.read_bytes()))
+
+            def bind_event_suffix(suffix):
+                for path, operational, name, file, original in event_bindings:
+                    operational[name] = file["sha256"] = write(path, original + suffix)
+
             stream = staged_span / "hazards/meter/stream-a.jsonl"
             original_stream = stream.read_bytes()
             for mode, expected, error in (("match", "yes", None), ("import audit", "yes", None),
                     ("retry after interruption", "not_evaluable", "ValueError"),
                     ("terminal refusal after interruption", "not_evaluable", "ValueError"),
-                    ("hold with overflowing JSON number", "yes", None),
-                    ("hold with NaN timestamp", "yes", None),
-                    ("hold without timestamp", "yes", None),
+                    ("zero code after interruption", "not_evaluable", "ValueError"),
+                    *((name, "not_evaluable", "ValueError") for name in MALFORMED_PHASE_EVENTS),
                     ("perturbation", "no", None), ("missing stream", "not_evaluable", "FileNotFoundError"),
                     ("stage1 meter identity", "not_evaluable", "ValueError"),
                     ("decoder pin", "not_evaluable", "ValueError"), ("package pin", "not_evaluable", "ValueError"),
@@ -1703,36 +1812,20 @@ class RawBundleTests(unittest.TestCase):
                         impossible = {"attempts": 1, "field_present": True, "accepted": False, "retried": []}
                         bind_soak_receipt(json_bytes(receipt), impossible, 0)
                         bind_modified_inputs()
-                    elif mode.startswith("hold "):
-                        event = {"event_type": "phase_start", "phase": "align_thermal_hold"}
-                        if mode == "hold with overflowing JSON number":
-                            bind_soak_receipt(original_empty_receipt, empty_soak, 0)
-                            hold = b'{"event_type":"phase_start","phase":"align_thermal_hold","timestamp_s":1e309}\n'
-                        elif mode == "hold with NaN timestamp":
-                            hold = lines([dict(event, timestamp_s="NaN")])
-                        else:
-                            hold = lines([event])
-                        file_entries = {file["path"]: file for file in fixture_files}
-                        for span in spans[:len(days)]:
-                            day = span["span_id"]
-                            directory = staged_span if day == days[0] else custody / day
-                            operational = span["custody"]["files_sha256"]
-                            for name in operational:
-                                if not name.endswith("/events.jsonl"):
-                                    continue
-                                path = directory / name
-                                updated = write(path, path.read_bytes() + hold)
-                                inventory_key = Path(day) / name if day == days[0] else path
-                                operational[name] = updated
-                                file_entries[str(inventory_key)]["sha256"] = updated
-                        if mode == "hold without timestamp":
-                            step3["cells"] = [dict(cell, status="not_run", gamma_estimable=None)
-                                              for cell in step3["cells"]]
-                            step3["tripwire"].update(decision="not_evaluable", trips=None)
+                    elif mode == "zero code after interruption":
+                        receipt = {"roster": [], "soak_attempts": [soak_attempt(1)],
+                                   "steps": [{"name": "soak", "rc": 0, "error": "SystemExit: 130"}]}
+                        impossible = {"attempts": 1, "field_present": True, "accepted": True, "retried": []}
+                        bind_soak_receipt(json_bytes(receipt), impossible, 0)
+                        bind_modified_inputs()
+                    elif mode in MALFORMED_PHASE_EVENTS:
+                        bind_soak_receipt(original_empty_receipt, empty_soak, 0)
+                        bind_event_suffix(MALFORMED_PHASE_EVENTS[mode])
                         bind_modified_inputs()
                     elif mode == "perturbation":
+                        bind_event_suffix(b"")
                         primary_c["channels"]["dc_in"]["coefficients"]["p1"] *= 1.001
-                        argv[argv.index("--coefficients-sha256") + 1] = write(c, json_bytes(primary_c))
+                        bind_modified_inputs()
                     elif mode == "missing stream":
                         stream.unlink()
                     elif mode == "stage1 meter identity":
