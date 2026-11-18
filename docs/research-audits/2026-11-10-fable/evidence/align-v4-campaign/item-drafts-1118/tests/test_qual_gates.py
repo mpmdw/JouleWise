@@ -15,6 +15,10 @@ import subprocess
 import sys
 from zoneinfo import ZoneInfo
 HERE=Path(__file__).resolve().parents[1]; META=json.loads((HERE/'items.json').read_text()); BASE=Path(sys.argv[1]).resolve(); TZ=ZoneInfo('America/Los_Angeles')
+sys.path.insert(0, str(HERE/'tools'))
+from pinned import pinned
+
+NS=1_000_000_000
 checks=failures=0
 
 def quote(s): return "'"+str(s).replace("'","'\"'\"'")+"'"
@@ -22,7 +26,7 @@ def dump(p,obj): p.parent.mkdir(parents=True,exist_ok=True); p.write_text(json.d
 def git(repo,*args,**kw): return subprocess.check_output(['git','-C',str(repo),*args],stderr=subprocess.DEVNULL,**kw).decode().strip()
 def epoch(day): return int(dt.datetime.fromisoformat(day+'T12:00:00').replace(tzinfo=TZ).timestamp())
 
-def run_item(item,shell):
+def run_item(item,shell,source_tree):
     global checks,failures
     text=(HERE/f"ITEM-{item['item']}.md").read_text(); blocks=re.findall(r'```sh\n(.*?)```',text,re.S)
     config=re.search(r'SPAN=.*?\nQUAL_DATES=.*?\n',blocks[0],re.S).group()
@@ -44,13 +48,17 @@ def run_item(item,shell):
     empty=git(auth,'mktree',input=b''); orphan=git(auth,'commit-tree',empty,'-m','Synthetic unrelated history',env=env)
     now=epoch(item['date']); predout=root/item['predecessor_camp']/f"cq-{item['predecessor']}-a1-20261119T090000Z"
     latest=wt/'partc'/'.desk'/'f0-synthetic-20261119T100000Z'
+    latest_receipt=latest/'runner_receipt.json'
+    ledger=home/'synthetic-attempts.json'
+    previous={'sequence':1,'span_id':item['predecessor'],'close_receipt':str(predout/'runner_receipt.json')}
+    recent={'sequence':2,'span_id':'f0-synthetic','close_receipt':str(latest_receipt)}
     debt=home/'synthetic-debt.json'
     staged=home/'staged'; staged.mkdir()
     gates=gates.replace('/Users/edr/campaign-out',str(root)).replace('/Users/edr/code/jw-wt',str(wt)).replace('/Users/Shared/JouleWise/desk-copy',str(markers))
-    defaults=dict(AUTH_REPO=str(auth),PIN=META['pin'],KIT_SHA=item['kit_sha'],QUEUE_PATH=item['queue_path'],QUEUE_SHA=item['queue_sha'],
-        NONCAMPAIGN_COPY_OK='yes',NONCAMPAIGN_COPY_CLOSE_EPOCH=now-1200,NONCAMPAIGN_COPY_RECEIPT=str(latest/'runner_receipt.json'),NONCAMPAIGN_COPY_RECORD='synthetic latest Check/copy proof',PRIOR_CLOSE_EPOCH=now-4000,OTHER_CLOSE_EPOCH=0,HOST_RESTORE_OK=1,GROUPS_ABSENT=1,LAST_CLOSE_KIND='other',
+    defaults=dict(REPO=str(source_tree),AUTH_REPO=str(auth),PIN=META['pin'],KIT_SHA=item['kit_sha'],QUEUE_PATH=item['queue_path'],QUEUE_SHA=item['queue_sha'],
+        ATTEMPT_LEDGER=str(ledger),NONCAMPAIGN_COPY_OK='yes',NONCAMPAIGN_COPY_CLOSE_NS=(now-1200)*NS,NONCAMPAIGN_COPY_RECEIPT=str(latest_receipt),NONCAMPAIGN_COPY_RECORD='synthetic latest Check/copy proof',HOST_RESTORE_OK=1,GROUPS_ABSENT=1,LAST_CLOSE_KIND='other',
         FEEDS_STOPPED=1,FOREIGN_PROCESSES_ABSENT=1,CLOSE_PROOF_RECEIPT=str(latest/'runner_receipt.json'),
-        QUEUE_COMMIT_EPOCH=now-300,PRED_CLOSE_EPOCH=now-4000,EFF_EPOCH=now-1200,ARM_NOT_BEFORE_EPOCH=now-1200,
+        QUEUE_COMMIT_EPOCH=now-300,EFF_CLOSE_NS=(now-1200)*NS,ARM_NOT_BEFORE_EPOCH=now-1200,
         QUAL_COLD_SEAT='ADMIT',LINE2_EQUAL='yes',LINE2_PIN=META['pin'],LINE2_BASE=META['merged_w1'],COLD_SEAT_KIT_SHA=item['kit_sha'],FIRST_CAPTURE_CONFIRMED='yes',
         HOST_EVENT_DISPOSITION='done',CURRENT_HOST_STATE_ID='synthetic-host',FREEZE2_HOST_STATE_ID='synthetic-host',HOST_EVENT_BEFORE_FREEZE2='yes',QUAL_INCLUSION_UNCHANGED='yes',
         S02_ISSUED_EPOCH='unissued',SESSION_READY='no',SESSION_RECORD='synthetic fresh READY census',STOPS_CLEAR='yes',VETO_CLEAR='yes',CHECKLIST_OK='yes',PILOT_PASSED='yes',SAMPLE_HAND_CLEAR='yes',COPY_KEY_SAFE='yes',OFFLOAD_CLEAR='yes',
@@ -66,7 +74,8 @@ def run_item(item,shell):
             target.parent.mkdir(parents=True,exist_ok=True)
             shutil.copyfile(source/name,target)
         p=predout/'runner_receipt.json'; r=json.loads(p.read_text()); r['mock']=False; r['synthetic_fixture']=True; r['ended']={'epoch_s':now-4000}; dump(p,r); os.utime(p,(now-4000,now-4000))
-        dump(latest/'runner_receipt.json',{'synthetic_fixture':True,'ended':{'epoch_s':now-1200}}); os.utime(latest/'runner_receipt.json',(now-1200,now-1200))
+        write_close(latest_receipt,recent['span_id'],now-1200)
+        dump(ledger,{'attempts':[previous,recent]})
         (markers/'f0-synthetic.ok').write_text('SYNTHETIC verified hashes, size, provider upload completion\n')
         # Minimal but typed k+2 proof: prior two entries only stand for the full census in this test.
         dump(debt,{'next_span':item['span'],'authenticated_roster_identity_checks':'RL-172 (c)','machine_order':[
@@ -74,13 +83,22 @@ def run_item(item,shell):
             {'span_id':item['predecessor'],'runner_kind':'cadence-legs-v1.1'}]})
     def close_stamp(path, epoch):
         r=json.loads(path.read_text()); r['ended']={'epoch_s':epoch}; dump(path,r)
+    def write_close(path, span, epoch):
+        dump(path,{'synthetic_fixture':True,'span_id':span,'ended':{'epoch_s':epoch},
+                   'restore_readbacks':{'automatic':True}})
+    def next_attempt(span, receipt):
+        dump(ledger,{'attempts':[{'sequence':3,'span_id':span,'close_receipt':str(receipt)},previous,recent]})
+    def other_proof(path, epoch_ns):
+        return dict(CLOSE_PROOF_RECEIPT=str(path),NONCAMPAIGN_COPY_RECEIPT=str(path),
+                    NONCAMPAIGN_COPY_CLOSE_NS=epoch_ns)
     def mutate(**kw):
         p=predout/'runner_receipt.json'; r=json.loads(p.read_text()); r.update(kw); dump(p,r); os.utime(p,(now-4000,now-4000))
     def summary(leg,**kw):
         p=predout/'desk-bundle'/'legs'/leg/'leg_summary.json'; r=json.loads(p.read_text()); r.update(kw); dump(p,r)
     def debt_change(key,value):
         r=json.loads(debt.read_text()); r['machine_order'][0][key]=value; dump(debt,r)
-    def run(name,setup=lambda:None,overrides=None,fill_changes=None,want=True,command='all_gates',stamp=None,contains=None,full_start=False,run_boot=None,run_anchor=None):
+    def run(name,setup=lambda:None,overrides=None,fill_changes=None,want=True,command='all_gates',stamp=None,
+            contains=None,full_start=False,run_boot=None,run_anchor=None,anchor_ns=None,run_anchor_ns=None):
         global checks,failures
         fixture(); setup(); vals={**defaults,**(overrides or {})}; ff={**fills,**(fill_changes or {})}; program=gates
         for key,value in ff.items():
@@ -89,8 +107,9 @@ def run_item(item,shell):
             if value is not None: program=re.sub(pattern,key+'='+quote(value),program,flags=re.M)
         assignments='\n'.join('unset '+key if value is None else key+'='+quote(value) for key,value in vals.items())
         default_boot=quote(f'{{ sec = {now-21600}, usec = 0 }}')
+        sample_ns=anchor_ns if anchor_ns is not None else (now if stamp is None else stamp)*NS
         clock=f'''date() {{ echo {now if stamp is None else stamp}; }}
-synthetic_t0_clock_anchor() {{ printf '%s000000000:1000000000000:1000000000000\n' "${{SYNTHETIC_ANCHOR_EPOCH:-{now if stamp is None else stamp}}}"; }}
+synthetic_t0_clock_anchor() {{ printf '%s:1000000000000:1000000000000\n' "${{SYNTHETIC_ANCHOR_NS:-{sample_ns}}}"; }}
 t0_clock_anchor() {{ synthetic_t0_clock_anchor; }}
 BATCH_DEFAULT_BOOT={default_boot}
 sysctl() {{
@@ -120,6 +139,7 @@ sysctl() {{
     "-B scripts/cadence_legs_runner.py plan "*) echo MOCK_PLAN;;
     "-B scripts/launch_cadence_span.py launch "*) echo MOCK_LAUNCH "$@";;
     "-I -B "*"/scripts/cadence_legs_runner.py t0-anchor") synthetic_t0_clock_anchor;;
+    "-I -B "*"/scripts/launch_cadence_span.py close-proof "*) shift 3; {quote(sys.executable)} -I -B {quote(source_tree/'scripts/launch_cadence_span.py')} "$@";;
     *) {quote(sys.executable)} "$@";;
   esac
 }}
@@ -146,7 +166,9 @@ unset MAGISTRATE_WATCHDOG_CUSTODY_ROOT
             if run_boot is not None:
                 script+='\nBATCH_SYSCTL='+quote(run_boot)+'\n'
                 if run_anchor is not None:
-                    script+='SYNTHETIC_ANCHOR_EPOCH='+quote(run_anchor)+'\n'
+                    run_anchor_ns=run_anchor*NS
+                if run_anchor_ns is not None:
+                    script+='SYNTHETIC_ANCHOR_NS='+quote(run_anchor_ns)+'\n'
                 script+=blocks[1]
         else:
             script=f'PY={quote(sys.executable)}\n'+config+program+clock+assignments+'\n'+command+'\n'
@@ -171,7 +193,8 @@ unset MAGISTRATE_WATCHDOG_CUSTODY_ROOT
     cutoff=min(now+10000,int(re.search(r'WINDOW_END=(\d+)',config)[1])+1)
     run('C.4 Run forwards 27-minute release and clock anchor',overrides={'NATIVE_RC':0},full_start=True,
         run_boot=boot_at(now-1620),
-        contains=f'--t0-not-before {now} --t0-before {cutoff} --t0-anchor {now}000000000:1000000000000:1000000000000')
+        contains=f'--t0-not-before {now} --t0-not-before-ns {(now-1200)*NS} '
+                 f'--t0-before {cutoff} --t0-anchor {now*NS}:1000000000000:1000000000000')
     run('Watch expiry one second away bounds the Run handoff',overrides={'NATIVE_RC':0},full_start=True,
         run_boot=boot_at(now+expected+60),fill_changes={'WATCH_UNTIL_EPOCH':now+1},
         contains=f'--t0-before {now+1} --t0-anchor')
@@ -179,7 +202,7 @@ unset MAGISTRATE_WATCHDOG_CUSTODY_ROOT
         stamp=now+1,fill_changes={'WATCH_UNTIL_EPOCH':now+1},
         command=f'EXPIRES_EPOCH={now+86400}; QUEUE_EXPIRES_EPOCH={now+86400}; arm_bound_gate',
         want=False,contains=f'effective t0 cutoff {now+1}')
-    proven_now={'NATIVE_RC':0,'NONCAMPAIGN_COPY_CLOSE_EPOCH':now}
+    proven_now={'NATIVE_RC':0,'NONCAMPAIGN_COPY_CLOSE_NS':now*NS}
     issue_now={'ISSUED_EPOCH':now,'WATCH_UNTIL_EPOCH':now+86400}
     run('Delta audit: rollback after Run gates refuses before issue, watch and proven close',
         setup=lambda:close_stamp(latest/'runner_receipt.json',now),overrides=proven_now,fill_changes=issue_now,
@@ -187,8 +210,8 @@ unset MAGISTRATE_WATCHDOG_CUSTODY_ROOT
         want=False,contains=f'arm clock before earliest authorized t0 {now}')
     run('Run forwards the exact latest close, issue and observation bound',
         setup=lambda:close_stamp(latest/'runner_receipt.json',now),overrides=proven_now,fill_changes=issue_now,
-        full_start=True,run_boot=boot_at(now+expected+60),contains=f'--t0-not-before {now}')
-    for lower in ('ISSUED_EPOCH','WATCH_UNTIL_EPOCH','QUEUE_COMMIT_EPOCH','PRED_CLOSE_EPOCH','PRIOR_CLOSE_EPOCH','EFF_EPOCH'):
+        full_start=True,run_boot=boot_at(now+expected+60),contains=f'--t0-not-before-ns {now*NS}')
+    for lower in ('ISSUED_EPOCH','WATCH_UNTIL_EPOCH','QUEUE_COMMIT_EPOCH'):
         opening=now+86400 if lower=='WATCH_UNTIL_EPOCH' else now
         run('inclusive start from '+lower,command=f'EXPIRES_EPOCH={now+86400}; QUEUE_EXPIRES_EPOCH={now+86400}; '
             f'{lower}={opening}; arm_bound_gate && echo "LOWER $ARM_NOT_BEFORE_EPOCH"',contains=f'LOWER {now}')
@@ -251,7 +274,6 @@ unset MAGISTRATE_WATCHDOG_CUSTODY_ROOT
     run('two overtime STOP',setup=lambda:[summary(leg,wall_s=99999) for leg in item['predecessor_legs'][:2]],want=False,contains='LEG_OVERTIME')
     run('one overtime allowed',setup=lambda:summary(item['predecessor_legs'][0],wall_s=99999))
     run('three contaminated STOP',setup=lambda:summary(item['predecessor_legs'][0],contaminated_redos=3),want=False,contains='CONTAMINATED_REDOS')
-    run('prior before predecessor STOP',overrides={'PRIOR_CLOSE_EPOCH':1},want=False,contains='STOP')
     run('issue unfilled WAIT',fill_changes={'ISSUED_EPOCH':None},want=False,contains='WAIT')
     run('issue future VOID',fill_changes={'ISSUED_EPOCH':now+1},want=False,contains='VOID')
     run('24h expired VOID',fill_changes={'ISSUED_EPOCH':now-86400},want=False,contains='VOID')
@@ -260,9 +282,9 @@ unset MAGISTRATE_WATCHDOG_CUSTODY_ROOT
     run('watch stale STOP',fill_changes={'WATCH_UNTIL_EPOCH':now},want=False,contains='STOP')
     run('watch future STOP',fill_changes={'WATCH_UNTIL_EPOCH':now+86401},want=False,contains='STOP')
     run('noncampaign copy missing WAIT',overrides={'NONCAMPAIGN_COPY_OK':'no'},want=False,contains='WAIT')
-    run('stale noncampaign close copy proof WAIT',overrides={'NONCAMPAIGN_COPY_CLOSE_EPOCH':now-5000},want=False,contains='WAIT')
+    run('stale noncampaign close copy proof WAIT',overrides={'NONCAMPAIGN_COPY_CLOSE_NS':(now-5000)*NS},want=False,contains='WAIT')
     run('other noncampaign receipt copy proof WAIT',overrides={'NONCAMPAIGN_COPY_RECEIPT':'old-F0-receipt'},want=False,contains='WAIT')
-    run('missing receipt root STOP',setup=lambda:shutil.rmtree(wt),want=False,contains='missing receipt root')
+    run('missing attempt ledger STOP',setup=ledger.unlink,want=False,contains='synthetic-attempts.json')
     run('restore unproven STOP',overrides={'HOST_RESTORE_OK':0},want=False,contains='STOP')
     run('feed stop unproven STOP',overrides={'FEEDS_STOPPED':0},want=False,contains='feed stop')
     run('process group unproven STOP',overrides={'GROUPS_ABSENT':0},want=False,contains='STOP')
@@ -271,26 +293,67 @@ unset MAGISTRATE_WATCHDOG_CUSTODY_ROOT
         want=False,contains='proof must bind the latest close receipt')
     run('RL-179 noncampaign close proof permits start immediately',
         setup=lambda:close_stamp(latest/'runner_receipt.json',now),
-        overrides={'NONCAMPAIGN_COPY_CLOSE_EPOCH':now},contains=f'CLOSE PROVEN latest {now}')
-    run('fractional close rounded up to the next whole second',
-        setup=lambda:close_stamp(latest/'runner_receipt.json',now-0.1),
-        overrides={'NONCAMPAIGN_COPY_CLOSE_EPOCH':now},contains=f'CLOSE PROVEN latest {now}')
+        overrides={'NONCAMPAIGN_COPY_CLOSE_NS':now*NS},contains=f'CLOSE PROVEN f0-synthetic at {now*NS} ns')
     run('future close refused even with matching proof',
-        setup=lambda:close_stamp(latest/'runner_receipt.json',now+0.1),
-        overrides={'NONCAMPAIGN_COPY_CLOSE_EPOCH':now+1},want=False,contains='close stamp is in the future')
+        setup=lambda:close_stamp(latest_receipt,now+0.125),
+        overrides={'NONCAMPAIGN_COPY_CLOSE_NS':now*NS+125_000_000},want=False,contains='before the proven close')
+    run('own receipt with failing restore readback refuses',
+        setup=lambda:dump(latest_receipt,{'span_id':recent['span_id'],'ended':{'epoch_s':now},
+                                         'restore_readbacks':{'automatic':False}}),
+        want=False,contains='restore readbacks did not pass')
     outside=home/'external-runner_receipt.json'
-    run('declared external close without a receipt STOP',
-        overrides={'OTHER_CLOSE_EPOCH':now,'OTHER_CLOSE_RECEIPT':str(outside)},
-        want=False,contains='unreadable receipt close stamp')
-    run('proven external close can be the latest receipt',
-        setup=lambda:dump(outside,{'synthetic_fixture':True,'ended':{'epoch_s':now}}),
-        overrides={'OTHER_CLOSE_EPOCH':now,'OTHER_CLOSE_RECEIPT':str(outside),'CLOSE_PROOF_RECEIPT':str(outside),
-                   'NONCAMPAIGN_COPY_RECEIPT':str(outside),'NONCAMPAIGN_COPY_CLOSE_EPOCH':now},
-        contains=f'CLOSE PROVEN latest {now}')
+    def pending_attempt():
+        out=root/'cl-hp-01'/'cq-hp-01-s04-a1-20261119T103000Z'
+        dump(out/'span_plan.json',{'synthetic_fixture':True,'span_id':'hp-01-s04','t0_epoch_s':now-600})
+        next_attempt('hp-01-s04',out/'runner_receipt.json')
+    run('R3 missing latest receipt refuses and names the span despite valid older proof',
+        setup=pending_attempt,overrides={'NATIVE_RC':0},full_start=True,want=False,
+        contains='latest attempt hp-01-s04 has no close receipt')
+
+    def rolled_back_close():
+        write_close(outside,'f0-after-rollback',now-1300)
+        earlier={k:v for k,v in recent.items() if k!='sequence'}
+        newer={'span_id':'f0-after-rollback','close_receipt':str(outside),'boot_id':'same-boot',
+               'monotonic_ns':4200*NS}
+        dump(ledger,{'attempts':[newer,{**earlier,'boot_id':'same-boot','monotonic_ns':3600*NS}]})
+    run('R3 rollback refuses proof for the earlier attempt with the higher wall close',
+        setup=rolled_back_close,overrides={'NATIVE_RC':0},full_start=True,want=False,
+        contains='proof must bind the latest close receipt for f0-after-rollback')
+    run('R3 rollback accepts the later monotonic attempt despite its earlier wall close',
+        setup=rolled_back_close,overrides={'NATIVE_RC':0,**other_proof(outside,(now-1300)*NS)},
+        full_start=True,run_boot=boot_at(now+expected+60),contains='CLOSE PROVEN f0-after-rollback')
+
+    def wrong_span_receipt():
+        write_close(outside,recent['span_id'],now-10)
+        next_attempt('external-later',outside)
+    run('R3 latest attempt id differs from the newest receipt id',
+        setup=wrong_span_receipt,overrides={'NATIVE_RC':0,**other_proof(outside,(now-10)*NS)},
+        full_start=True,want=False,contains='latest attempt external-later: close receipt span id differs')
+
+    def cross_boot():
+        write_close(outside,'boot-fallback',now-1300)
+        older={k:v for k,v in recent.items() if k!='sequence'}
+        dump(ledger,{'boot_order':['older-z','newer-a'],'attempts':[
+            {**older,'boot_id':'older-z','monotonic_ns':9000*NS},
+            {'span_id':'boot-fallback','close_receipt':str(outside),'boot_id':'newer-a'}]})
+    run('R3 boot order chooses the newer boot even with reset monotonic time',
+        setup=cross_boot,overrides=other_proof(outside,(now-1300)*NS),contains='CLOSE PROVEN boot-fallback')
+    close_ns=now*NS+125_000_000
+    for label, sample, ok, message in (
+        ('R3 start T+.750 follows proven close at T+.125',now*NS+750_000_000,True,
+         f'--t0-not-before-ns {close_ns}'),
+        ('R3 start one nanosecond before close refuses',close_ns-1,False,'before the proven close'),
+    ):
+        run(label,setup=lambda:close_stamp(latest_receipt,now+.125),
+            overrides={'NATIVE_RC':0,'NONCAMPAIGN_COPY_CLOSE_NS':close_ns},full_start=True,
+            anchor_ns=now*NS+750_000_000,run_anchor_ns=sample,run_boot=boot_at(now+expected+60),
+            want=ok,contains=message)
+
     campaign_receipt=root/'cl-hp-01'/'cq-hp-01-s03-a1-20261119T110000Z'/'runner_receipt.json'
     campaign_proof={'LAST_CLOSE_KIND':'campaign','CLOSE_PROOF_RECEIPT':str(campaign_receipt)}
     def campaign_close(age):
-        dest=campaign_receipt.parent; dest.parent.mkdir(parents=True); latest.rename(dest); close_stamp(campaign_receipt,now-age)
+        write_close(campaign_receipt,'hp-01-s03',now-age)
+        next_attempt('hp-01-s03',campaign_receipt)
         (markers/'cq-hp-01-s03-a1.ok').write_text('SYNTHETIC verified offload')
     def campaign_no_copy():
         campaign_close(300); (markers/'cq-hp-01-s03-a1.ok').unlink()
@@ -299,7 +362,7 @@ unset MAGISTRATE_WATCHDOG_CUSTODY_ROOT
     run('campaign marker missing WAIT',setup=campaign_no_copy,overrides=campaign_proof,want=False,contains='WAIT')
     run('Air campaign marker accepted',setup=air_copy,overrides=campaign_proof)
     run('RL-179 campaign close proof permits start immediately',
-        setup=lambda:campaign_close(0),overrides=campaign_proof,contains=f'CLOSE PROVEN latest {now}')
+        setup=lambda:campaign_close(0),overrides=campaign_proof,contains=f'CLOSE PROVEN hp-01-s03 at {now*NS} ns')
     def date_receipt(camp,span,day,roster,attempt=1):
         out=root/camp/f'cq-{span}-a{attempt}-20261119T000000Z'
         dump(out/'runner_receipt.json',{'synthetic_fixture':True,'started':{'epoch_s':epoch(day)},'roster':roster})
@@ -378,8 +441,9 @@ unset MAGISTRATE_WATCHDOG_CUSTODY_ROOT
     run('one second before date REFUSE',stamp=epoch(item['date'])-43201,command='window_gate',want=False,contains='REFUSE')
     run('D8/window one second past LIMIT REFUSE',stamp=limit+1,command='window_gate',want=False,contains='REFUSE')
 
-for shell in ('bash','zsh'):
-    assert shutil.which(shell),shell
-    for item in META['items']: run_item(item,shell)
+with pinned() as source_tree:
+    for shell in ('bash','zsh'):
+        assert shutil.which(shell),shell
+        for item in META['items']: run_item(item,shell,source_tree)
 print(checks,'synthetic gate checks;',failures,'failures; exact item functions under bash and zsh')
 sys.exit(bool(failures))

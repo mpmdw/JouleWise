@@ -11,7 +11,7 @@ import tempfile
 HERE = Path(__file__).resolve().parents[1]
 ROOT = Path(subprocess.check_output(['git', 'rev-parse', '--show-toplevel'], cwd=HERE, text=True).strip())
 SOURCE = '6010985a3312c77bb8e4bb4bf5c920c4d49b8512'
-PIN = 'ab32a6c915a9a78f92554a89c5d0eb93333b7a39'
+PIN = '0d03cb7833bb8b15bc391127a7fe5519b7d98602'
 W1 = 'c3f4bacd8013ca98c19cf8d41f830c701930cd41'
 
 def git(*args):

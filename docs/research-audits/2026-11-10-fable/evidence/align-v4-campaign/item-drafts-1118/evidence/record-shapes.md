@@ -21,9 +21,31 @@ These are builder-defined inputs to the draft's executable checks, implementing 
 | PILOT_PASSED=yes | Lead: development pilot gate already passed under RL-149 §2.8 line 8; class B qualification has no class A smoke. |
 | SAMPLE_HAND_RECORD; SAMPLE_HAND_CLEAR=yes | Lead: RL-172 (c)/RL-173 E sampled hand table completed where due; disagreement holds the next arm. |
 | COPY_KEY_SAFE=yes; OFFLOAD_CLEAR=yes | Lead: encryption key in a second off-MBP place; no failed/unverified offload. Gate requires the campaign marker or an exact latest non-campaign Check/copy proof. RL-173 A. |
-| CLOSE_PROOF_RECEIPT; HOST_RESTORE_OK=1; FEEDS_STOPPED=1; GROUPS_ABSENT=1; FOREIGN_PROCESSES_ABSENT=1 | The magistrate binds verified restore, feed shutdown and process absence to the exact latest close receipt (RL-179 F-2). |
-| PRIOR_CLOSE_EPOCH; OTHER_CLOSE_EPOCH; OTHER_CLOSE_RECEIPT; LAST_CLOSE_KIND | Round close epochs up. PRIOR ≥ named predecessor close. Use OTHER=0 if there is no close outside the census roots. Otherwise give its receipt path and exact rounded epoch. LAST_CLOSE_KIND is campaign or other. |
-| NONCAMPAIGN_COPY_OK=yes; NONCAMPAIGN_COPY_RECEIPT; NONCAMPAIGN_COPY_CLOSE_EPOCH; NONCAMPAIGN_COPY_RECORD | The latest non-campaign Check binds copy proof to EFF_PATH and EFF_EPOCH. RL-173 A. |
+| ATTEMPT_LEDGER | Lead supplies the complete host launch/start-plan ledger described below. Include launches outside these items and attempts without a receipt. |
+| CLOSE_PROOF_RECEIPT; HOST_RESTORE_OK=1; FEEDS_STOPPED=1; GROUPS_ABSENT=1; FOREIGN_PROCESSES_ABSENT=1 | The magistrate binds the Check's shutdown evidence to the selected attempt's own receipt. The gate also checks the restore result in that receipt. |
+| LAST_CLOSE_KIND | Campaign or other, according to the selected receipt. |
+| NONCAMPAIGN_COPY_OK=yes; NONCAMPAIGN_COPY_RECEIPT; NONCAMPAIGN_COPY_CLOSE_NS; NONCAMPAIGN_COPY_RECORD | The non-campaign Check binds copy proof to the exact selected receipt path and close epoch in nanoseconds. RL-173 A. |
+
+The operational attempt ledger is a JSON object with an `attempts` list.
+Every row carries `span_id` and the absolute `close_receipt` path reserved
+for that attempt. Either every row has a unique positive integer `sequence`,
+or the rows use `boot_id` and integer `monotonic_ns`. For multiple boots,
+`boot_order` lists boot ids from oldest to newest. A single attempt in
+the latest boot needs no monotonic tie-break. Multiple attempts in that boot
+need distinct monotonic readings. Include all starts, using the shared desk
+fence lock for writers to this ledger. The launcher requires a ledger path,
+previous close receipt, span id and exact close bound for every qualification
+kit. It preserves prior rows and publishes its own row before bootstrap,
+even if bootstrap fails.
+
+The selected receipt must carry the row's exact `span_id` and
+`ended.epoch_ns`, or an exact nanosecond-representable `ended.epoch_s`.
+New qualification runner receipts carry the id, nanoseconds and their
+successful restore step with affirmative readback. For earlier or other
+producers, the lead supplies the attempt's identity-bound close Check with
+the exact end stamp and a nonempty `restore_readbacks` object of named
+boolean results. Every readback must be true. Preserve the source receipts.
+Use the reserved path for each attempt, including retries.
 | SESSION_READY; SESSION_RECORD | Lead's current READY census record pointer and yes/no. yes immediately cedes; unknown holds. RL-172 (f). |
 | QUAL01_SOAK_HAND_READ=SAME; QUAL01_SOAK_RECORD | Lead: first qualification soak's fields/reference schema hand-compared to dev-05; required before any later span in these conservative drafts. Difference goes to research lead. RL-172a F1. |
 | LINE9_RECORD | Lead: path to the typed debt record below, updated in actual machine order, across every campaign queue; F0/F2/Part C/v4 excluded. RL-165 §6; RL-172 (c); RL-173 E Q1. |

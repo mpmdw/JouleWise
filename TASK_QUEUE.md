@@ -5,14 +5,14 @@ triage it here instead of assuming it should happen immediately.
 
 ## 2026-11-17 qualification t0 guard successor
 
-P1 [AGENT], user-selected Tier 2 to clear the PR #812 delta-audit blockers
-before qualification issue. The six unissued items bind the sleep-inclusive
-runner, apply RL-179 F-2 close proof and carry the RL-175 C.3 span-date
-and C.4 batch gates. The lead owns exact-pin
+P1 [AGENT], user-selected Tier 2 to clear the PR #812 launch blockers
+before qualification issue. The six unissued items use the pin that
+requires ledger authority at the qualification launch entry point.
+The lead stages the complete host attempt ledger and owns exact-pin
 admission, review of the successor and the queue commit. The named cold-seat
 confirmation, retry-reader disposition and freeze 2 remain issue
 prerequisites. No phase exit-checklist row closes.
-[Delta-audit repair report](docs/run_reports/2026-11-17-pr812-delta-repair.md)
+[Ledger authority report](docs/run_reports/2026-11-18-pr812-ledger-required.md)
 
 ## 2026-11-17 user-directed Builder C draft repairs
 

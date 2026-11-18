@@ -55,63 +55,29 @@ try:
 except (OSError, ValueError, KeyError, TypeError, AttributeError) as e:
     stop('VOID: unreadable predecessor operational evidence: ' + str(e))
 if bad: stop('VOID: predecessor did not close clean: ' + ', '.join(bad) + '; never skip (RL-173 D.2)')
-print(math.ceil(ended))
+print(ended)
 PY
 )" || return 1
-  PRED_CLOSE_EPOCH=$PRED_LINE
-  case "${PRIOR_CLOSE_EPOCH:-}" in ''|*[!0-9]*) echo 'STOP: PRIOR_CLOSE_EPOCH must be an epoch'; return 1;; esac
-  test "$PRIOR_CLOSE_EPOCH" -ge "$PRED_CLOSE_EPOCH" || { echo 'STOP: PRIOR before predecessor close'; return 1; }
-  echo "PRED CLEAN $PRED_SPAN close_epoch $PRED_CLOSE_EPOCH"
+  echo "PRED CLEAN $PRED_SPAN close_epoch $PRED_LINE"
 }
 effective_close() {
-  case "${OTHER_CLOSE_EPOCH:-}" in ''|*[!0-9]*) echo 'STOP: OTHER_CLOSE_EPOCH required, explicit 0 if none'; return 1;; esac
-  CENSUS="$("$PY" -I -B - "$OTHER_CLOSE_EPOCH" "${OTHER_CLOSE_RECEIPT:-}" /Users/edr/campaign-out /Users/edr/code/jw-wt <<'PY'
-import json, math, os, sys
-from decimal import Decimal
-def fail(e): raise e
-def close_stamp(p):
-    if '\n' in p: sys.exit('STOP: bad receipt path')
-    try:
-        with open(p) as handle: ended = json.load(handle,parse_float=Decimal)['ended']['epoch_s']
-        if (type(ended) is not int and (not isinstance(ended,Decimal) or not ended.is_finite())) or ended<=0:
-            raise ValueError('invalid ended.epoch_s')
-        return ended
-    except (OSError, ValueError, KeyError, TypeError) as e:
-        sys.exit('STOP: unreadable receipt close stamp: ' + p + ': ' + str(e))
-other_epoch, other_receipt, *roots = sys.argv[1:]
-found = []
-for root in roots:
-    if not os.path.isdir(root): sys.exit('STOP: missing receipt root: ' + root)
-    base = root.rstrip('/').count('/')
-    for d, dirs, files in os.walk(root, onerror=fail):
-        if d.count('/') - base >= 3: dirs[:] = []
-        if 'runner_receipt.json' in files:
-            p = os.path.join(d, 'runner_receipt.json')
-            found.append((close_stamp(p), p))
-if int(other_epoch):
-    ended = close_stamp(other_receipt)
-    if math.ceil(ended)!=int(other_epoch): sys.exit('STOP: OTHER_CLOSE_EPOCH disagrees with its close receipt')
-    found.append((ended,other_receipt))
-if not found: sys.exit('STOP: empty receipt census')
-latest = max(t for t, p in found)
-newest = [p for t, p in found if t == latest]
-if len(newest) != 1: sys.exit('STOP: ambiguous newest receipt close epoch')
-print(math.ceil(latest)); print(newest[0])
-PY
-)" || return 1
-  EFF_EPOCH="$(printf '%s\n' "$CENSUS" | sed -n 1p)"
-  EFF_PATH="$(printf '%s\n' "$CENSUS" | sed -n 2p)"
+  local proof
+  filled "${ATTEMPT_LEDGER:-}" || { echo 'WAIT: complete launch/start-plan attempt ledger required'; return 1; }
+  proof="$("$PY" -I -B "$REPO/scripts/launch_cadence_span.py" close-proof --attempt-ledger "$ATTEMPT_LEDGER")" || return 1
+  EFF_SPAN="$(printf '%s\n' "$proof" | sed -n 1p)"
+  EFF_CLOSE_NS="$(printf '%s\n' "$proof" | sed -n 2p)"
+  EFF_PATH="$(printf '%s\n' "$proof" | sed -n 3p)"
 }
 copy_gate() (
   # RL-171 §6.1/RL-173 A: campaign marker, or exact latest non-campaign Check's copy proof.
   case "$EFF_PATH" in
-    /Users/edr/campaign-out/cl-*/cq-*/runner_receipt.json)
+    /Users/edr/campaign-out/cl-*/cq-*/runner_receipt.json|/Users/edr/campaign-out/cl-*/cq-*/close_proof.json)
       id="$(basename "$(dirname "$EFF_PATH")" | sed -E 's/-[0-9]{8}T[0-9]{6}Z$//')";;
     *)
-      test "${NONCAMPAIGN_COPY_OK:-}" = yes && test "${NONCAMPAIGN_COPY_CLOSE_EPOCH:-}" = "$EFF_EPOCH" \
+      test "${NONCAMPAIGN_COPY_OK:-}" = yes && test "${NONCAMPAIGN_COPY_CLOSE_NS:-}" = "$EFF_CLOSE_NS" \
         && test "${NONCAMPAIGN_COPY_RECEIPT:-}" = "$EFF_PATH" && filled "${NONCAMPAIGN_COPY_RECORD:-}" \
         || { echo 'WAIT: exact latest non-campaign Check/copy proof missing (RL-171 §6.1; RL-173 A)'; exit 1; }
-      echo "COPY CHECK VERIFIED receipt $EFF_PATH close $EFF_EPOCH: $NONCAMPAIGN_COPY_RECORD"; exit 0;;
+      echo "COPY CHECK VERIFIED receipt $EFF_PATH close $EFF_CLOSE_NS ns: $NONCAMPAIGN_COPY_RECORD"; exit 0;;
   esac
   case "$id" in ''|*[!a-zA-Z0-9_.-]*) echo 'STOP: missing/invalid copy plan id'; exit 1;; esac
   for marker in "/Users/Shared/JouleWise/desk-copy/$id.ok" "/Users/Shared/JouleWise/desk-copy/$id.air.ok"; do
@@ -120,23 +86,21 @@ copy_gate() (
   echo "WAIT: no verified cloud .ok or Air .air.ok copy marker for $id (RL-173 A)"; exit 1
 )
 close_gate() {
-  local actual now
+  local actual
+  effective_close || return 1
   test "${HOST_RESTORE_OK:-}" = 1 && test "${FEEDS_STOPPED:-}" = 1 \
     && test "${GROUPS_ABSENT:-}" = 1 && test "${FOREIGN_PROCESSES_ABSENT:-}" = 1 \
     || { echo 'STOP: restore, feed stop or process absence unproven (RL-179 F-2)'; return 1; }
-  effective_close || return 1
   test "${CLOSE_PROOF_RECEIPT:-}" = "$EFF_PATH" \
-    || { echo 'STOP: restore and shutdown proof must bind the latest close receipt (RL-179 F-2)'; return 1; }
+    || { echo "STOP: restore and shutdown proof must bind the latest close receipt for $EFF_SPAN"; return 1; }
   copy_gate || return 1
   case "$EFF_PATH" in
-    /Users/edr/campaign-out/cl-*/cq-*/runner_receipt.json) actual=campaign;;
+    /Users/edr/campaign-out/cl-*/cq-*/runner_receipt.json|/Users/edr/campaign-out/cl-*/cq-*/close_proof.json)
+      actual=campaign;;
     *) actual=other;;
   esac
   test "${LAST_CLOSE_KIND:-}" = "$actual" || { echo 'STOP: contradictory LAST_CLOSE_KIND'; return 1; }
-  now=$(date +%s)
-  test "$now" -ge "$EFF_EPOCH" && test "$now" -ge "$PRIOR_CLOSE_EPOCH" \
-    || { echo 'STOP: close stamp is in the future (RL-179 F-2)'; return 1; }
-  echo "CLOSE PROVEN latest $EFF_EPOCH kind $actual"
+  echo "CLOSE PROVEN $EFF_SPAN at $EFF_CLOSE_NS ns kind $actual"
 }
 # RL-165 §8.1; RL-172 (i) row 9; RL-173 E: freeze 2 is the committed coefficient hash.
 FREEZE2_COMMIT="<LEAD FILLS: FREEZE2_COMMIT>"
@@ -349,8 +313,7 @@ window_gate() {
 arm_bound_gate() {
   local opens expires now
   ARM_NOT_BEFORE_EPOCH=$WINDOW_START
-  for opens in "$ISSUED_EPOCH" "$((WATCH_UNTIL_EPOCH - 86400))" "$QUEUE_COMMIT_EPOCH" \
-    "$PRED_CLOSE_EPOCH" "$PRIOR_CLOSE_EPOCH" "$EFF_EPOCH"; do
+  for opens in "$ISSUED_EPOCH" "$((WATCH_UNTIL_EPOCH - 86400))" "$QUEUE_COMMIT_EPOCH"; do
     case "$opens" in ''|*[!0-9]*) echo 'STOP: start bound missing or invalid'; return 1;; esac
     if test "$opens" -gt "$ARM_NOT_BEFORE_EPOCH"; then ARM_NOT_BEFORE_EPOCH=$opens; fi
   done
@@ -390,18 +353,21 @@ batch_gate() {
   local anchor bounds
   BATCH_BOOT="$(sysctl -n kern.boottime)" || { echo 'STOP: boot time unavailable (RL-175 C.4)'; return 1; }
   anchor="$(t0_clock_anchor)" || return 1
-  bounds="$("$PY" -I -B - "$BATCH_BOOT" "$anchor" "$EXPECTED_SPAN_S" "$ARM_NOT_BEFORE_EPOCH" "$ARM_BEFORE_EPOCH" <<'PY'
+  bounds="$("$PY" -I -B - "$BATCH_BOOT" "$anchor" "$EXPECTED_SPAN_S" "$ARM_NOT_BEFORE_EPOCH" "$ARM_BEFORE_EPOCH" "$EFF_CLOSE_NS" <<'PY'
 import re, sys
-raw, anchor, expected, start, cutoff = sys.argv[1:]
+raw, anchor, expected, start, cutoff, close = sys.argv[1:]
 boot = re.fullmatch(r'\{\s*sec\s*=\s*([0-9]+),\s*usec\s*=\s*[0-9]+\s*\}.*',raw)
 stamp = re.fullmatch(r'([0-9]+):([0-9]+):([0-9]+)',anchor)
-if not boot or not stamp or not all(v.isascii() and v.isdecimal() for v in (expected,start,cutoff)):
+if not boot or not stamp or not all(v.isascii() and v.isdecimal() for v in (expected,start,cutoff,close)):
     sys.exit('STOP: unreadable boot time or qualification plan (RL-175 C.4)')
 boot, expected, start, cutoff = int(boot[1]), int(expected), int(start), int(cutoff)
-now = int(stamp[1])//1_000_000_000
+now_ns = int(stamp[1])
+now = now_ns//1_000_000_000
 soak_s, cooldown_s, day_s = 1950, 27*60, 86400
 if now<start:
     sys.exit(f'REFUSE: arm clock before earliest authorized t0 {start}')
+if now_ns<int(close):
+    sys.exit(f'REFUSE: arm clock before the proven close at {close} ns')
 if int(stamp[2])>int(stamp[3]) or not 0<boot<=now or not soak_s<=expected<day_s-cooldown_s or now>=cutoff:
     sys.exit('STOP: invalid boot time, span duration or t0 cutoff (RL-175 C.4)')
 # The existing prediction is anchored to boot, with the observed 48 s offset.
@@ -428,7 +394,7 @@ EOF
 }
 all_gates() {
   expiry_gate && watch_gate && freeze2_gate && qual_pin_gate && host_event_gate && v4_gate \
-    && admission_gate && queue_gate && debt_gate && pred_gate && close_gate && day_gate && window_gate \
+    && admission_gate && queue_gate && debt_gate && close_gate && pred_gate && day_gate && window_gate \
     && arm_bound_gate && batch_gate
 }
 # END TESTABLE GATES

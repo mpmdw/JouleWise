@@ -1,6 +1,6 @@
 # Qualification and STANDING-F0 r2 drafts — 2026-11-16 PST
 
-**DRAFT / HOLD_FOR_FIT_FREEZE. Nothing issued.** These six items carry the PR #812 delta-audit pin and the RL-179 F-2 close-proof rule. The [original admission record](../qual-lines-794/LINES.md) and [earlier successor report](../../../../../run_reports/2026-11-17-qual-pin-t0guard.md) document their respective pins. The [delta-audit repair report](../../../../../run_reports/2026-11-17-pr812-delta-repair.md) records the checks on this pin.
+**DRAFT / HOLD_FOR_FIT_FREEZE. Nothing issued.** These six items carry the PR #812 pipeline repair pin and the frozen attempt-order close-proof rule. The [original admission record](../qual-lines-794/LINES.md) and [earlier successor report](../../../../../run_reports/2026-11-17-qual-pin-t0guard.md) document their respective pins. The [ledger authority report](../../../../../run_reports/2026-11-18-pr812-ledger-required.md) records the checks on this pin.
 
 The forecast below predates C.4. Recompute arm and close times at issue using the fresh boot prediction. With a 02:08:39 batch, the forecast midnight arm holds until 02:35:39.
 
@@ -22,11 +22,11 @@ Planner expected sums: 24,572 s per block, 73,716 s (20:28:36) over six spans, p
 
 | Block | Exact kit SHA-256 | Law spans / short leg | Expected s, s01 / s02 |
 |---|---|---|---|
-| qual-01 | fe5b692a39b8646b81fc4e7b738a1802ba00ab51bd09158d1525e2bec0ccbac4 | L001–L006 / L007–L012; L004=3151, L010=3724 | 12262 / 12310 |
-| qual-02 | a1b964faec281cf351e6387759a84178097ad6f8c94011a0856647a3197e2742 | L001–L006 / L007–L012; L003=3151, L011=3724 | 12262 / 12310 |
-| qual-03 | f977eff89859d3111b9dee7afee7e9ac0c5232463dd7f980b2dfa7015b4ba4b1 | L001–L006 / L007–L012; L003=3724, L010=3151 | 12310 / 12262 |
+| qual-01 | 35ded7c83290f24306a646a503647a2af6e3f725708507f27e7502fa4d06fdd2 | L001–L006 / L007–L012; L004=3151, L010=3724 | 12262 / 12310 |
+| qual-02 | 69ba7cfe616f3d273f34dcd98a2ab7ce8b3c73609256b441cc73ea362eaa32c5 | L001–L006 / L007–L012; L003=3151, L011=3724 | 12262 / 12310 |
+| qual-03 | d7e6fda18d3213678931b29fc7fa12b0710204c627ea07d3cf456d8e4150e021 | L001–L006 / L007–L012; L003=3724, L010=3151 | 12310 / 12262 |
 
-The three kit documents in this folder derive from #794's kit source `6010985a3312c77bb8e4bb4bf5c920c4d49b8512` using the successor's `pin-kit`. Frozen checkout **`ab32a6c915a9a78f92554a89c5d0eb93333b7a39`**, runner `cadence-legs-v1.1`. W1-line baseline **`c3f4bacd8013ca98c19cf8d41f830c701930cd41`**. Seeds 2026111422/23/28. Every span captures at its first own-shaped leg (L001/L007), with five span-shaped consumers, one A cell at 2k, one at 10k, two at 19458 and an adjacent 19458 L pair. The items omit `--batch-window`. Plan and launcher-plan probes include the retired midday and night boundaries.
+The three kit documents in this folder derive from #794's kit source `6010985a3312c77bb8e4bb4bf5c920c4d49b8512` using the successor's `pin-kit`. Frozen checkout **`0d03cb7833bb8b15bc391127a7fe5519b7d98602`**, runner `cadence-legs-v1.1`. W1-line baseline **`c3f4bacd8013ca98c19cf8d41f830c701930cd41`**. Seeds 2026111422/23/28. Every span captures at its first own-shaped leg (L001/L007), with five span-shaped consumers, one A cell at 2k, one at 10k, two at 19458 and an adjacent 19458 L pair. The items omit `--batch-window`. Plan and launcher-plan probes include the retired midday and night boundaries.
 
 No qualification span queues are on #794's source branch; `BLOCK-QUEUE.json` is a block ledger, not a span queue. Three finite queues are drafted **only here** and validated against the pinned law. Their expiry is Nov23 00:00 PST, ≤7 days after a Nov16 commit, checked against the authenticated queue commit at arm (RL-149 §2.8 line3). They grant no authority. No builder writes a READY/cold-seat/CI admission stamp; those record pointers remain lead fills. Full placeholder and observation shapes: [record-shapes.md](evidence/record-shapes.md).
 
@@ -97,3 +97,7 @@ If recovery needs a later expiry, pass `--queue-expiry` with an explicit UTC off
 **RL-175 C.4.** All six items read boot time independently in Start and Run. The predicted OS batch uses boot + 12 h + 48 s, recurring every 24 hours. The hold starts when the pinned expected close reaches the predicted batch and lasts until batch start plus 27 minutes. Run forwards the authorized Los Angeles date, earliest start, exclusive cutoff and its bracketed clock anchor. The cutoff includes watcher expiry. The child checks the projected start interval and its wall sample before creating output and records the admitted t0 and authority. C.3 reads nanoseconds when present and floors legacy decimal epoch seconds before looking up the local date.
 
 **PR #812 delta audit.** Run forwards the maximum of window start, issue, watcher observation, queue commit, predecessor and latest proven closes, and batch release. The pinned sampler and child both read a sleep-inclusive monotonic clock. RL-179 F-2 replaces timed waits with proof bound to the actual latest receipt. The relevant close epochs still establish the earliest permissible start. [Delta-audit repair report](../../../../../run_reports/2026-11-17-pr812-delta-repair.md)
+
+**PR #812 round 3.** Start and Run select the latest attempted span from the launch/start-plan ledger. Its own receipt must match the span id and show passing restore readbacks. The launcher rechecks the proof and records its new attempt before bootstrap. Run and the child compare the selected close stamp at nanosecond resolution. [Attempt ledger and close receipt shapes](evidence/record-shapes.md) · [Round-3 report](../../../../../run_reports/2026-11-18-pr812-close-proof.md)
+
+**PR #812 pipeline round 1.** Every qualification launch must supply the attempt ledger and prior close receipt before bootstrap. A bootstrap failure with valid authority leaves a pending attempt that blocks its successor. [Ledger authority report](../../../../../run_reports/2026-11-18-pr812-ledger-required.md)
