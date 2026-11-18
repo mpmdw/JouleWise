@@ -156,6 +156,38 @@ checks status 1, the exact connected notice and a retained reservation.
 The niced synthetic shard reported 54 tests, zero failures, zero errors
 and one expected v1 skip.
 
+## Lead-directed shared notice contract
+
+The lead reopened the notice failure class after the fourth audit at
+`e2451dcc5`. The audit verified one HIGH, two MED and one LOW. It
+reproduced dispatcher exit 120 with default buffering and exit 1 with
+unbuffered stderr when its reader was already gone. The lead directed
+one notice implementation for the PR's CLI and worker paths. Commit
+`ada8c8bce` freezes the new tests, which showed 19 failing subcases.
+Commit `0c4946d3c` implements the shared contract.
+
+`finish_notice` in `manifest_dispatch.py` writes and flushes under the
+same error guard. If an endpoint fails, it uses `os.dup2` to send fd 2
+and any used fd 1 to `/dev/null` before returning the status. The
+dispatcher uses it for parsing, validation refusals, success notices and
+captured legacy output. Pre-read refusals from the pinned legacy
+validator are normalized to 2 on the dispatcher path. The pinned CLI
+retains its own exit conventions when called directly. The transfer
+worker uses the same helper for startup flushing and both failure paths.
+Its post-read notice goes to the saved public stderr descriptor.
+
+| Finding | Disposition and regression |
+| --- | --- |
+| HIGH, `impl-bug` | `test_dispatch_refusals_survive_disconnected_stderr` and `test_dispatch_stdout_notices_survive_disconnected_reader` passed for ordinary validation, all v2 final variants, v1 delegation, parser errors and stdout notices. `test_transfer_status_survives_lost_notice_consumer` and `test_transfer_status_survives_initial_buffered_stream_failure` passed in both buffering modes. The original dispatcher probe exited 2 with a connected, disconnected or read-only stderr descriptor in both modes. |
+| MED, `integration-seam` | Transfer stage-1 owner follow-up. Check each observed start against its authorized arm bounds before using the date map. |
+| MED, `integration-seam` | Admission integration follow-up. Define and enforce the authoritative public registration source before production opens it. |
+| LOW | Preservation checks passed for #821's registration and validator, pinned interim paths, candidate manifests, and both state files. |
+
+The niced synthetic shard reported 56 tests, zero failures, zero errors
+and one expected v1 skip. The pinned #795 CLI also passed an independent
+control through the dispatcher, with exit 0 for a valid v1 final and
+exit 2 for a delegated refusal.
+
 ## RL-185 and lead handoff
 
 RL-185 §4 resolves the previous NEEDS_SPEC. Both description drafts carry
