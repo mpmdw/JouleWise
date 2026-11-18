@@ -26,7 +26,7 @@ import time
 if __package__ in (None, ""):
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from joulewise.cadence import blocks, kit as kitmod, kit_v11, queue as q  # noqa: E402
+from joulewise.cadence import blocks, ctl, kit as kitmod, kit_v11, queue as q  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -58,7 +58,34 @@ def cmd_validate_kit(args):
     return 0
 
 
+def _pairs(text):
+    """``"19458:3724:4096,19458:3151:4096"`` -> sha256-qual-v1's ``pairs`` (prefill:cap:cap per pair)."""
+    out = []
+    for item in text.split(","):
+        tokens, *caps = (int(x) for x in item.split(":"))
+        out.append({"prefill_tokens": tokens, "decode_tokens": caps})
+    return out
+
+
 def cmd_gen_legs(args):
+    if args.law == kit_v11.QUAL_LAW:
+        if not (args.spans and args.span_a_tokens and args.pairs and args.g0_shapes):
+            print("REFUSE gen-legs --law sha256-qual-v1 needs --spans, --span-a-tokens, --pairs and --g0-shapes")
+            return 2
+        law = {"method": kit_v11.QUAL_LAW, "master_seed": args.master_seed, "n_legs": args.n_legs,
+               "bands": args.bands.split(","), "spans": args.spans,
+               "span_a_tokens": [int(x) for x in args.span_a_tokens.split(",")], "pairs": _pairs(args.pairs),
+               "g0_shapes": args.g0_shapes.split(",")}
+        problems = []
+        kit_v11._check_law(law, problems)
+        try:
+            if problems:
+                raise kitmod.KitError(problems)
+            legs = kit_v11.generate_legs(args.campaign_id, law, {"decode_tokens": args.decode_tokens})
+        except kitmod.KitError as error:
+            return _fail(error.problems)
+        print(json.dumps({"seed_law": law, "legs": legs}, indent=1))
+        return 0
     if args.law == kit_v11.LAW:
         if not (args.prompt_tokens and args.g0_shapes):
             print("REFUSE gen-legs --law sha256-cells-v1 needs --prompt-tokens and --g0-shapes")
@@ -83,13 +110,53 @@ def cmd_gen_legs(args):
     return 0
 
 
+def qual_roster_problems(doc, kits_root):
+    """RL-165 section 8.1 on a ``sha256-qual-v1`` kit's queued rosters (#794 cold seat F2): a span lies inside
+    one of the law's spans, does not split a type-L pair, and does not start on a pair member (which would make
+    that leg the span's capture). A re-run that needs any of these goes to the research lead, not to a queue."""
+    problems = []
+    for span in doc.get("spans", []):
+        path = (span.get("kit") or {}).get("path")
+        if not isinstance(path, str) or not (Path(kits_root) / path).is_file():
+            continue
+        kit, _ = kitmod.load_kit(Path(kits_root) / path)
+        law = kit.get("seed_law") or {}
+        if law.get("method") != kit_v11.QUAL_LAW:
+            continue
+        per = len(kit["legs"]) // law["spans"]
+        index = {leg["leg_id"]: i for i, leg in enumerate(kit["legs"])}
+        roster = [index.get(leg_id) for leg_id in span.get("legs", [])]
+        sid = span.get("span_id")
+        if not roster or None in roster:
+            continue   # validate_queue names unknown legs
+        if len({i // per for i in roster}) != 1:
+            problems.append(f"{sid}: roster crosses the law's spans of {per} (sha256-qual-v1; RL-165 section 8.1)")
+        pairs = {}
+        for leg in kit["legs"]:
+            if leg.get("pair"):
+                pairs.setdefault(leg["pair"], set()).add(leg["leg_id"])
+        names = set(span.get("legs", []))
+        for pair, members in sorted(pairs.items()):
+            if 0 < len(members & names) < len(members):
+                problems.append(f"{sid}: roster splits type-L pair {pair} ({', '.join(sorted(members))}); "
+                                "the research lead rules a re-run that splits a pair")
+        first = kit["legs"][roster[0]]
+        if first.get("leg_type") != "A" or first.get("pair") is not None:
+            problems.append(f"{sid}: roster starts on {first['leg_id']}, a type-L pair member; a span's first leg "
+                            "is type A (RL-165 section 8.1)")
+    return problems
+
+
 def cmd_validate_queue(args):
     try:
         doc = q.load_queue(args.queue, args.kits_root)
+        problems = qual_roster_problems(doc, args.kits_root)
     except q.QueueError as error:
         return _fail(error.problems)
     except (OSError, ValueError, kitmod.KitError) as error:
         return _fail([str(error)])
+    if problems:
+        return _fail(problems)
     print(json.dumps({"ok": True, "queue_id": doc["queue_id"], "spans": len(doc["spans"]),
                       "plan_ids": [q.plan_id(s) for s in doc["spans"]]}, sort_keys=True))
     return 0
@@ -109,17 +176,17 @@ def cmd_next(args):
 
 
 def cmd_checklist(args):
-    window = _window(args.batch_window)
-    kit, _ = kitmod.load_kit(args.kit, batch_window=window)
+    kit, _ = kitmod.load_kit(args.kit, batch_window=_window(args.batch_window))
     obs = json.loads(Path(args.observations).read_text())
-    if kit["schema"] in (kit_v11.SCHEMA, "joulewise.cadence_campaign_kit.ctl.v1"):
-        if not args.batch_window:
-            print("REFUSE a v1.1 kit's checklist needs --batch-window (RL-149 section 2.9 item 4: 02:00-02:35)")
-            return 2
-        rows = kit_v11.evaluate_checklist(kit, obs, expected_kit_sha256=args.kit_sha256, batch_window=window)
-        if kit.get("status") == "draft":
-            rows.append({"id": "kit_issued", "kind": "kit_issued", "ok": False,
-                         "detail": "DRAFT / UNFROZEN ctl kit: nothing arms"})
+    if kit["schema"] in (kit_v11.SCHEMA, ctl.SCHEMA):
+        rows = kit_v11.evaluate_checklist(kit, obs, expected_kit_sha256=args.kit_sha256,
+                                          batch_window=_window(args.batch_window) if args.batch_window else None)
+        if kit["schema"] == ctl.SCHEMA:
+            try:
+                ctl.require_launch_authority(kit)
+            except kitmod.KitError as error:
+                rows.append({"id": "ctl_authority", "kind": "ctl_authority", "ok": False,
+                             "detail": str(error)})
     else:
         rows = kitmod.evaluate_checklist(kit, obs, expected_kit_sha256=args.kit_sha256)
     for r in rows:
@@ -145,12 +212,15 @@ def main(argv=None):
     s.add_argument("--batch-window", help="HH:MM-HH:MM local blackout for the template check "
                                           "(default 11:45-13:15; RL-149 section 2.9 item 4 rules 02:00-02:35)")
     s = sub.add_parser("gen-legs")
-    s.add_argument("--law", choices=("sha256-v1", kit_v11.LAW), default="sha256-v1")
+    s.add_argument("--law", choices=("sha256-v1", *kit_v11.LAWS), default="sha256-v1")
     s.add_argument("--campaign-id", required=True); s.add_argument("--master-seed", type=int, required=True)
     s.add_argument("--n-legs", type=int, required=True); s.add_argument("--bands", required=True)
     s.add_argument("--prefill-tokens", type=int, help="sha256-v1: every leg's prompt size")
     s.add_argument("--prompt-tokens", help="sha256-cells-v1: the sizes, comma-separated")
-    s.add_argument("--g0-shapes", help="sha256-cells-v1: own (v1.1a) or own,span (v1.1)")
+    s.add_argument("--g0-shapes", help="sha256-cells-v1 and sha256-qual-v1: own (own-shaped) or own,span")
+    s.add_argument("--spans", type=int, help="sha256-qual-v1: the number of spans of equal length")
+    s.add_argument("--span-a-tokens", help="sha256-qual-v1: each span's type-A sizes, comma-separated")
+    s.add_argument("--pairs", help="sha256-qual-v1: one type-L pair per span, prefill:cap:cap, comma-separated")
     s.add_argument("--decode-tokens", type=int, required=True)
     s = sub.add_parser("validate-queue"); s.add_argument("queue", nargs="?", default=str(ROOT / q.QUEUE_PATH))
     s.add_argument("--kits-root", default=str(ROOT))
@@ -158,7 +228,7 @@ def main(argv=None):
     s.add_argument("--evidence"); s.add_argument("--issues"); s.add_argument("--now", type=float)
     s = sub.add_parser("checklist"); s.add_argument("--kit", required=True)
     s.add_argument("--kit-sha256", required=True); s.add_argument("--observations", required=True)
-    s.add_argument("--batch-window", help="HH:MM-HH:MM local blackout (v1.1 span_window line; default 11:45-13:15)")
+    s.add_argument("--batch-window", help="HH:MM-HH:MM local blackout (v1.1 span_window line; default none, RL-171)")
     s = sub.add_parser("blocks"); s.add_argument("ledger", nargs="?", default=str(ROOT / blocks.LEDGER_PATH))
     s.add_argument("--kits-root", default=str(ROOT))
     args = p.parse_args(argv)

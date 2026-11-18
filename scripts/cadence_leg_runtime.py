@@ -18,17 +18,10 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-def main(argv=None):
-    from joulewise.align.apple import cadence_leg, cadence_ctl
-    args = list(sys.argv[1:] if argv is None else argv)
-    try:
-        path, _, _ = cadence_leg._split_leg_spec(args)
-        spec = cadence_leg.load_leg_spec(path)
-    except (SystemExit, OSError, ValueError):
-        return cadence_leg.main(args)
-    if spec["schema"] == "joulewise.cadence_leg_spec.ctl.v1":
-        return cadence_ctl.main(args)
-    return cadence_leg.main(args)
+from joulewise.align.apple.cadence_leg import main  # noqa: E402
 
 if __name__ == "__main__":
+    if sys.argv[1:2] == ["--scripted-ctl"]:
+        from joulewise.align.apple import cadence_ctl
+        raise SystemExit(cadence_ctl.main(sys.argv[2:]))
     raise SystemExit(main())

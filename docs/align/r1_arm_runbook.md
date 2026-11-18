@@ -60,8 +60,9 @@ owed restore; the existing admission/driver handles it with the host lock.
 ## 2. Select t0, prepare and review
 
 Prefer starting just after a known maintenance episode has ended, with the
-opening soak quiet. Quiet segments already avoid the programmed 11:45–13:15
-Pacific batch interval. A roughly 29-hour ceiling cannot avoid every scan.
+opening soak quiet. Quiet segments already avoid the programmed 02:00–02:35
+Pacific batch interval (RL-149 §2.9 item 4; it was 11:45–13:15 under RL-72 E2).
+A roughly 29-hour ceiling cannot avoid every scan.
 See the scheduling answer below: repeated contamination can refuse the night.
 If quiet segments cannot avoid the listed jobs, notify the lead **before
 arming**, as RUN_STATE item 202(4) requires. This is a scheduling notification,
@@ -87,20 +88,22 @@ plutil -p "$S/rendered/com.joulewise.night.plist"
 plutil -p "$S/rendered/com.joulewise.night.deadman.plist"
 ```
 
-`window_max_s` is RL-72 E2's 126,480 s for every t0. `size` prints the terms,
-the local 11:45 crossings (disclosed) and the final seconds; `arm.json` keeps the
-same derivation. It is a ceiling, not a reservation.
+`window_max_s` is 119,880 s for every t0 (RL-72 E2's construction at the RL-149
+blackout; it was 126,480 s). `size` prints the terms, the local 02:00 crossings
+(disclosed) and the final seconds; `arm.json` keeps the same derivation. It is a
+ceiling, not a reservation.
 
 **What is inside the driver's span, and what is outside it (from the code).**
 
 - The driver's span is `align_r1_rehearsal.night_worst_case_s()["programmed_span_s"]`
-  = 108,768 s: the no-redo phase subtotal (58,711.9616 s), two whole-unit load
-  redos and two batch encounters (largest unit 7,563.9952 s + 5,400 s blackout),
-  rounded up to 99,768 s, plus 9,000 s overhead. That overhead is the driver's
+  = 102,168 s: the no-redo phase subtotal (58,711.9616 s), two whole-unit load
+  redos and two batch encounters (largest unit 7,563.9952 s + 2,100 s blackout,
+  RL-149 §2.9 item 4; RL-72 E2 had 5,400 s and 108,768 s), rounded up to
+  93,168 s, plus 9,000 s overhead. That overhead is the driver's
   OWN segments: `pre_calibration_bracket` and `post_calibration_bracket`
   (`r1_phase_table.py`, kinds `calibration-pre`/`-post`, 1,800 s each in
   `phase_bound` and `_run`), close 900 and harvest 4,500.
-- The driver's work deadline is its own start + 108,768 − 900 s
+- The driver's work deadline is its own start + 102,168 − 900 s
   (`_R1_WORK_DEADLINE`), and every runtime child's cap is clipped to it.
 - This route's wrapper (`r1_arm.wrapper_bytes`) runs OUTSIDE the driver, before
   and after the chain: the hazard arm (inside run_night's t0 deadline), the 300 s
@@ -111,20 +114,20 @@ same derivation. It is a ceiling, not a reservation.
 
 | Term | Seconds | Source |
 |---|---:|---|
-| R1 follow-up driver span | 108,768 | RL-72 E2; `night_worst_case_s` on the measurement checkout (refuses any other value) |
+| R1 follow-up driver span | 102,168 | RL-72 E2 at the RL-149 blackout; `night_worst_case_s` on the measurement checkout (refuses any other value) |
 | Hazard admission, inside the t0 deadline | 3,300 | `b5.plan.T0_STAGE_CAP_S` |
 | Two diagnostic bookends | 3,600 | twice `b5.chain.STAGE_WALL_BUDGET_S.pre_calibration_capture` (1,800 each) |
 | Bookend teardown/close allowances | 1,200 | twice the existing 600-second session-status budget; covers the budget helper's 30-second TERM grace |
 | Final R1 harvest/result writes | 600 | one existing session-status wall allowance |
 | Display sleep dwell before the pre bookend | 300 | R0-L3 / RUN_STATE items 206, 209 |
-| **Route base** | **117,768** | sum |
-| **`window_max_s`** | **126,480** | max(plan writer `b6.plan_inputs.window_max_s(108,768)` = 126,480, RL-72 E2 126,480, base) |
+| **Route base** | **111,168** | sum |
+| **`window_max_s`** | **119,880** | max(plan writer `b6.plan_inputs.window_max_s(102,168)` = 119,880, `r1_arm.R1_FOLLOWUP_WINDOW_S` 119,880, base) |
 
 No batch allowance is added on top: the driver's span already holds two
-encounters, and the driver refuses a third. A 126,480 s window holds at most two
-local 11:45 starts; `size` refuses more. The latest driver end after t0 is
-3,300 + 300 + 1,830 + 108,768 = 114,198 s; with the post bookend (1,830) and the
-final writes (600) that is 116,628 s, inside 126,480 s. The outer driver keeps
+encounters, and the driver refuses a third. A 119,880 s window holds at most two
+local 02:00 starts; `size` refuses more. The latest driver end after t0 is
+3,300 + 300 + 1,830 + 102,168 = 107,598 s; with the post bookend (1,830) and the
+final writes (600) that is 110,028 s, inside 119,880 s. The outer driver keeps
 its existing 300-second shutdown grace after `window_max_s`.
 
 **D-7 at arm time.** `prepare` records in `arm.json` the path and SHA-256 of
@@ -252,7 +255,7 @@ At this activation also check for stray `km003c_monitor.py` and
 The scheduler's job name/time is not a trigger. Software Update (about
 23:09/05:09/11:09/17:09), the midnight `/tmp` cleanup, trustkit's four-hourly
 xx:31 task, XProtect around 05:40 and the 12:53 maintenance all have the same
-load handling. Outside the explicit 11:45–13:15 start exclusion, R1 does not
+load handling. Outside the explicit 02:00–02:35 start exclusion (RL-149), R1 does not
 pause a running quiet segment and wait for those jobs. It finishes that
 attempt, then redoes it if background load exceeded 0.5 core for 60 consecutive
 1 Hz samples. Heavy redos first release against the soak. Two redos are allowed;

@@ -1,7 +1,9 @@
 # ctl-01 runner (draft kit, no collection authority)
 
-Built from `2d347f721552fe03bdd19f113e7bad7a7c24908e`, the
-`cadence-legs-v1.1` line. Authority: RL-174 **B.4**, read in full on
+Originally built from `2d347f721552fe03bdd19f113e7bad7a7c24908e` and integrated
+with the admitted qualification pin `6e9d42f1dd3d308bc9239143d0d634ab965e50e1`.
+The resulting ctl runner is a new pin under RL-179 F-11.
+Authority: RL-174 **B.4**, read in full on
 `origin/audit/2026-11-10-fable` at `ebff15ad27e831499dd65796b3727d8c5d451e21`;
 RL-155 §5.3; RL-172 (b), (i); RL-149 §2.5–2.6; RL-151 §3.3;
 RL-169a §1 (sampled recovery if the instrument look requires it).
@@ -11,10 +13,10 @@ on the audit branch, not an outcome file.
 The new runner kind is **`cadence-ctl-v1`**, kit schema
 `joulewise.cadence_campaign_kit.ctl.v1`. It uses the existing
 `scripts/cadence_legs_runner.py` / `scripts/launch_cadence_span.py` route.
-`scripts/cadence_leg_runtime.py` dispatches ctl specs to
-`joulewise/align/apple/cadence_ctl.py`. Other leg schemas retain the original
-runtime. The gate, R1 runtime, controller and workload files are unchanged.
-This is class A, not evidence of native hardware validation.
+The span runner selects the scripted child through `--scripted-ctl`, and
+`scripts/cadence_leg_runtime.py` dispatches it to
+`joulewise/align/apple/cadence_ctl.py`. Ordinary legs retain the original
+child invocation. This is a class A candidate with synthetic verification.
 
 ## Script and evidence contract
 
@@ -56,9 +58,11 @@ Neither doses nor ground-truth records are added to the desk's allowlist.
 
 `docs/process/cadence/kits/cl-ctl-01.draft.json` is **UNFROZEN**, with
 `status: draft`, `authorizes_spans: false`, and zero pin/hash placeholders.
-Production preflight refuses it before Git or host commands; launch refuses
-before publishing a fence. The checklist also refuses it. `pin-kit` alone
-cannot issue a draft. No queue, arm record, release or measurement is produced.
+Production preflight refuses it before Git or host commands. Launch and
+checklist also refuse the draft. The launcher rejects even an issued-shaped
+ctl kit with `NEEDS_SPEC` before sampling an arm clock, reading the attempt
+ledger, publishing a fence or bootstrapping. The production runner's frozen
+preflight uses the same check.
 
 The 12 scripts are the ruled six hidden doses (128, 256, 512, two each), one
 extra-turn script, CPU doses 10/30/90 s, and one split/plain pair. The proposed
@@ -76,10 +80,12 @@ partial, crossing and arbitrary subset rosters refuse. The nine-leg cap and
 it is not frozen by this draft. New laws/layouts require a schema change, not
 editing the leg order after observing a result.
 
-This branch inherits the v1.1 pin's explicit `--batch-window` and older soak
-fence behavior. RL-171's newer qualification runner removes those bounds.
-Integration onto the lead's single runner pin is a pre-issue engineering step;
-this draft must not be used to authorize an old fence rule as current policy.
+The merged checklist uses an explicit `--batch-window` when supplied. The
+qualification launcher retains its required ledger authority, close reproof
+under the fence lock, attempt publication before bootstrap, and exact t0
+guard. RL-179 F-2 requires a proven predecessor close without a timed gap.
+The lead still owes the ctl-specific ledger, close-proof and t0 authority
+inputs before a ctl kit can use the launcher.
 
 Safe local rehearsal (output must be a fresh directory):
 

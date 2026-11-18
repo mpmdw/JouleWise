@@ -164,6 +164,11 @@ def require_issued(kit):
         raise base.KitError(["ctl kit is DRAFT / UNFROZEN: research-lead lm-inst-01 read and lead issue required"])
 
 
+def require_launch_authority(kit):
+    require_issued(kit)
+    raise base.KitError(["NEEDS_SPEC: ctl launch authority is unresolved (attempt ledger, close proof and t0 bounds)"])
+
+
 def script_seconds(script, model):
     calls = len(script["turn_tokens"]) + bool(script["hidden_tokens"])
     return ((sum(script["turn_tokens"]) + script["hidden_tokens"]) / model["decode_tokens_per_s"]

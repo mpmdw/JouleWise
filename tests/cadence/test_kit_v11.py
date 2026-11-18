@@ -284,97 +284,104 @@ class RunnerConsumesTheCell(unittest.TestCase):
         self.assertEqual(json.loads(buffer.getvalue())["legs"], v11_kit()["legs"])
 
 
-class LaunchBounds(unittest.TestCase):
-    """#788 F4: RL-155a section 3's two bounds in code, for every kit; the free t0 does not remove them."""
-    SOAK = [OLD_WINDOW]          # the R1 driver's soak window on this base
+class NoClockWindows(unittest.TestCase):
+    """RL-171: quiet is a rule about processes, never a clock window. RL-155a section 3's fence (worst case +
+    1,460 s by 01:50) and its 10:50-13:15 no-launch interval are gone from the launcher, the plan CLI and the
+    checklist; with no window named there is no blackout. A named --batch-window keeps working."""
 
-    def plan(self, n_legs, t0):
-        kit = v11_kit()
-        ids = [leg["leg_id"] for leg in kit["legs"]][:n_legs]
-        return legsmod.plan_span(kit, t0_epoch=local(t0), windows=[NEW_WINDOW], leg_ids=ids)
+    def path(self, td):
+        path = Path(td) / "kit.json"
+        path.write_text(json.dumps(v11_kit(), indent=1))
+        return path
 
-    def test_latest_t0_by_the_fence(self):
-        # RL-158 section 3 and RL-155a: 20:48:10 for 3 legs, 18:33:10 for 6, 16:18:10 for 9, 14:03:10 for 12.
-        for n, latest in ((3, "20:48:10"), (6, "18:33:10"), (9, "16:18:10"), (12, "14:03:10")):
-            self.assertEqual(legsmod.fence_problems(self.plan(n, f"2026-11-17T{latest}"), [NEW_WINDOW], self.SOAK), [])
-            later = datetime.fromisoformat(f"2026-11-17T{latest}") .replace(tzinfo=ZONE).timestamp() + 1
-            plan = legsmod.plan_span(v11_kit(), t0_epoch=later, windows=[NEW_WINDOW],
-                                     leg_ids=[leg["leg_id"] for leg in v11_kit()["legs"]][:n])
-            problems = legsmod.fence_problems(plan, [NEW_WINDOW], self.SOAK)
-            self.assertEqual(len(problems), 1, (n, problems))
-            self.assertIn("passes 01:50:00", problems[0])
-
-    def test_no_launch_between_1050_and_1315(self):
-        for t0, ok in (("10:50:00", True), ("10:50:01", False), ("12:00:00", False), ("13:14:59", False),
-                       ("13:15:00", True)):
-            problems = legsmod.fence_problems(self.plan(3, f"2026-11-17T{t0}"), [NEW_WINDOW], self.SOAK)
-            self.assertEqual(problems == [], ok, (t0, problems))
-            if not ok:
-                self.assertIn("no launch between 10:50 and 13:15", problems[0])
-
-    def test_the_plan_alone_does_not_hold_the_fence(self):
-        # 21:00 with three legs: the worst case ends 01:37:30, clear of 02:00, but the fence ends 02:01:50.
-        plan = self.plan(3, "2026-11-17T21:00")
-        self.assertTrue(plan["blackout_clear"])
-        self.assertTrue(legsmod.fence_problems(plan, [NEW_WINDOW], self.SOAK))
-
-    def test_launcher_and_plan_cli_refuse(self):
+    def test_launcher_admits_a_worst_case_through_0200_and_a_1100_t0(self):
         with tempfile.TemporaryDirectory(dir=TMP) as td:
-            path = Path(td) / "kit.json"
-            path.write_text(json.dumps(v11_kit(), indent=1))
-            ok = cadence_launch.cadence_plan(path, "L001,L002,L003", "02:00-02:35", t0=local("2026-11-17T02:40"))
-            self.assertEqual(ok["worst_case_s"], 16650)
-            for t0, fragment in (("2026-11-17T21:00", "passes 01:50"), ("2026-11-17T11:00", "no launch between")):
-                with self.assertRaises(ValueError) as ctx:
-                    cadence_launch.cadence_plan(path, "L001,L002,L003", "02:00-02:35", t0=local(t0))
-                self.assertIn(fragment, str(ctx.exception))
-            with self.assertRaises(ValueError) as ctx:      # a v1.1 kit names its blackout
-                cadence_launch.cadence_plan(path, "L001,L002,L003", None, t0=local("2026-11-17T02:40"))
-            self.assertIn("needs --batch-window", str(ctx.exception))
-            err = io.StringIO()
-            from contextlib import redirect_stderr
+            path = self.path(td)
+            for t0 in ("2026-11-17T00:30", "2026-11-17T11:00", "2026-11-17T21:00", "2026-11-17T12:00"):
+                plan = cadence_launch.cadence_plan(path, "L001,L002,L003", None, t0=local(t0))
+                self.assertEqual((plan["worst_case_s"], plan["batch_windows"]), (16650, []), t0)
+            # 00:30 + 16,650 s runs to 05:07:30, through 02:00-02:35.
+            self.assertTrue(kit_v11.meets_window(local("2026-11-17T00:30"), local("2026-11-17T00:30") + 16650,
+                                                 NEW_WINDOW))
+            # A named window: 11:00 and 21:00 (the old fence and no-launch refusals) plan; 00:30 meets it.
+            for t0 in ("2026-11-17T11:00", "2026-11-17T21:00"):
+                plan = cadence_launch.cadence_plan(path, "L001,L002,L003", "02:00-02:35", t0=local(t0))
+                self.assertEqual(plan["batch_windows"], ["02:00-02:35"])
+            with self.assertRaisesRegex(legsmod.PlanError, "meets a batch blackout"):
+                cadence_launch.cadence_plan(path, "L001,L002,L003", "02:00-02:35", t0=local("2026-11-17T00:30"))
+
+    def test_the_launcher_reads_no_driver_window_and_calls_no_fence(self):
+        source = (runner.ROOT / "scripts/launch_cadence_span.py").read_text()
+        for name in ("fence_problems", "OS_BATCH_WINDOW", "align_r1_rehearsal"):
+            self.assertNotIn(name, source)
+        source = (runner.ROOT / "scripts/cadence_legs_runner.py").read_text()
+        for name in ("fence_problems", "OS_BATCH_WINDOW", "FENCE_TAIL_S", "wait_outside_os_batch"):
+            self.assertNotIn(name, source)
+        self.assertEqual(runner.default_windows(), [])
+
+    def test_plan_cli_admits_a_worst_case_through_0200(self):
+        from contextlib import redirect_stderr
+        with tempfile.TemporaryDirectory(dir=TMP) as td:
+            path = self.path(td)
+            for t0 in ("2026-11-17T00:30", "2026-11-17T11:00"):
+                buffer = io.StringIO()
+                with redirect_stderr(io.StringIO()), redirect_stdout(buffer):
+                    code = runner.main(["plan", "--kit", str(path), "--legs", "L001,L002,L003", "--t0", str(local(t0))])
+                self.assertEqual(code, 0, t0)
+                printed = json.loads(buffer.getvalue())
+                self.assertNotIn("fence_end_epoch_s", printed)
+                self.assertEqual(printed["soak_retry_budget_s"], 1950)
+                self.assertEqual(printed["launch_deadline_epoch_s"],
+                                 local(t0) + 16650 + 1950 + runner.LAUNCH_RESERVE_S)
+            err = io.StringIO()       # a named window still refuses a worst case that meets it
             with redirect_stderr(err), redirect_stdout(io.StringIO()):
+                code = runner.main(["plan", "--kit", str(path), "--legs", "L001,L002,L003", "--batch-window",
+                                    "02:00-02:35", "--t0", str(local("2026-11-17T00:30"))])
+            self.assertEqual(code, 1)
+            self.assertIn("meets a batch blackout", err.getvalue())
+            with redirect_stdout(io.StringIO()):   # 21:00 with a named window: the old fence refusal is gone
                 code = runner.main(["plan", "--kit", str(path), "--legs", "L001,L002,L003", "--batch-window",
                                     "02:00-02:35", "--t0", str(local("2026-11-17T21:00"))])
-            self.assertEqual(code, 1)
-            self.assertIn("passes 01:50", err.getvalue())
-            buffer = io.StringIO()
-            with redirect_stderr(io.StringIO()), redirect_stdout(buffer):
-                code = runner.main(["plan", "--kit", str(path), "--legs", "L001,L002,L003", "--batch-window",
-                                    "02:00-02:35", "--t0", str(local("2026-11-17T02:40"))])
             self.assertEqual(code, 0)
-            printed = json.loads(buffer.getvalue())
-            self.assertEqual(printed["fence_end_epoch_s"], local("2026-11-17T02:40") + 16650 + 1460)
-            err = io.StringIO()
-            with redirect_stderr(err), redirect_stdout(io.StringIO()):
-                code = runner.main(["mock", "--kit", str(path), "--output", str(Path(td) / "m"),
-                                    "--t0-local", "2026-11-17T02:40"])
-            self.assertEqual(code, 1)
-            self.assertIn("needs --batch-window", err.getvalue())
 
-    def test_constants_agree(self):
-        self.assertEqual((kit_v11.FENCE_QUIET_LEAD_S, kit_v11.SOAK_LAUNCH_LEAD_S),
-                         (legsmod.FENCE_QUIET_LEAD_S, legsmod.SOAK_LAUNCH_LEAD_S))
+    def test_mock_cli_needs_no_window(self):
+        with tempfile.TemporaryDirectory(dir=TMP) as td:
+            path = self.path(td)
+            with redirect_stdout(io.StringIO()):
+                code = runner.main(["mock", "--kit", str(path), "--output", str(Path(td) / "m"), "--legs",
+                                    "L001,L002,L003", "--t0-local", "2026-11-17T00:30"])
+            self.assertEqual(code, 0)
+            receipt = json.loads((Path(td) / "m" / runner.RECEIPT_NAME).read_text())
+            self.assertEqual(receipt["batch_windows"], [])
+            self.assertEqual([s for s in receipt["steps"] if s["name"].endswith("blackout-wait")], [])
 
-    def test_v11_checklist_holds_the_quiet_and_the_soak_bound(self):
+    def test_v11_checklist_has_no_clock_rule_by_default(self):
         good = FreeT0Checklist.GOOD
-        def ok(t0, end):
+        def ok(t0, end, window=None):
             obs = {**good, "t0_epoch_s": local(t0), "end_by_epoch_s": local(end)}
-            rows = kit_v11.evaluate_checklist(v11_kit(), obs, expected_kit_sha256="f" * 64, batch_window=NEW_WINDOW,
-                                              soak_window=OLD_WINDOW)
+            rows = kit_v11.evaluate_checklist(v11_kit(), obs, expected_kit_sha256="f" * 64, batch_window=window)
             return next(r for r in rows if r["kind"] == "span_window")["ok"]
-        self.assertTrue(ok("2026-11-17T20:00", "2026-11-18T01:50"))
-        self.assertFalse(ok("2026-11-17T20:00", "2026-11-18T01:55"))
-        self.assertFalse(ok("2026-11-17T11:00", "2026-11-17T16:00"))
-        self.assertTrue(ok("2026-11-17T13:15", "2026-11-17T18:00"))
-        with tempfile.TemporaryDirectory(dir=TMP) as td:     # the CLI refuses a v1.1 checklist with no window
+        self.assertTrue(ok("2026-11-17T20:00", "2026-11-18T04:00"))      # through 01:50 and 02:00-02:35
+        self.assertTrue(ok("2026-11-17T11:00", "2026-11-17T16:00"))      # inside the old 10:50-13:15
+        self.assertTrue(ok("2026-11-17T00:30", "2026-11-17T05:08"))
+        self.assertFalse(ok("2026-11-17T11:00", "2026-11-17T11:00"))
+        self.assertFalse(ok("2026-11-17T11:00", "2026-11-18T11:01"))
+        # A named window: the interval must not meet it; the ten-minute fence lead is gone.
+        self.assertTrue(ok("2026-11-17T20:00", "2026-11-18T01:55", NEW_WINDOW))
+        self.assertFalse(ok("2026-11-17T20:00", "2026-11-18T02:10", NEW_WINDOW))
+        self.assertTrue(ok("2026-11-17T11:00", "2026-11-17T16:00", NEW_WINDOW))
+        for gone in ("FENCE_QUIET_LEAD_S", "SOAK_LAUNCH_LEAD_S", "launch_in_soak_bound"):
+            self.assertFalse(hasattr(kit_v11, gone), gone)
+        with tempfile.TemporaryDirectory(dir=TMP) as td:     # the CLI judges a v1.1 checklist with no window
             kit_path, obs_path = Path(td) / "kit.json", Path(td) / "obs.json"
             kit_path.write_text(json.dumps(v11_kit(), indent=1))
-            obs_path.write_text(json.dumps(good))
-            with redirect_stdout(io.StringIO()):
+            t0 = local("2026-11-17T00:30")
+            obs_path.write_text(json.dumps({**good, "t0_epoch_s": t0, "end_by_epoch_s": t0 + 19160}))
+            buffer = io.StringIO()
+            with redirect_stdout(buffer):
                 code = cadence_queue.main(["checklist", "--kit", str(kit_path), "--kit-sha256", "f" * 64,
                                            "--observations", str(obs_path)])
-            self.assertEqual(code, 2)
+            self.assertEqual(code, 0, buffer.getvalue())
 
 
 class DeskAdmittedColumn(unittest.TestCase):
@@ -429,6 +436,8 @@ class V1Untouched(unittest.TestCase):
         """At the v1.1a kit's frozen commit, what a leg executes from legs.py and kit.py (spec validation
         and the projection guard) is the pilot commit's, byte for byte: the cell law is class B (RL-150 R5).
         The span-reference leg (a later commit) changes these bytes and is class A."""
+        if not (KITS / "cl-dev-03.v1.1a.json").is_file():
+            self.skipTest("the kit drafts live on the PR #788 line")
         pin = json.loads((KITS / "cl-dev-03.v1.1a.json").read_text())["frozen"]["commit"]
         names = {"joulewise/cadence/legs.py": {"validate_leg_spec", "_int", "prefill_chars", "guard_projection",
                                                "_walk", "LEG_SPEC_KEYS", "LEG_SPEC_SCHEMA", "BAND_RECIPES",
@@ -449,6 +458,7 @@ class V1Untouched(unittest.TestCase):
             self.assertEqual(self.at_commit(pin, path), self.at_commit(PILOT_COMMIT, path), path)
 
 
+@unittest.skipUnless((KITS / "cl-dev-03.v1.1a.json").is_file(), "the kit drafts live on the PR #788 line")
 class CommittedDev03Kit(unittest.TestCase):
     """The dev-03 draft on kit v1.1a (the cell law only; RL-155 section 5.1), the fallback if the
     span-reference leg misses the cut-off. The lead pins and commits the final bytes; this checks the

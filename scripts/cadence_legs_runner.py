@@ -17,11 +17,13 @@ LaunchAgent, the desk fence, Spotlight paused). One span, agent-free:
    AC powermode 0 read back; display sleep and dwell;
 2. the plan adapter sizes the span from the kit and the roster (``joulewise.cadence.legs.plan_span``)
    and must fit before ``--deadline``;
-3. ONE fresh soak (the night's idle_soak path, verbatim, via ``run_align_r1_smoke.soak_child``);
+3. ONE fresh soak (the night's idle_soak path via ``soak_child``: ``run_align_r1_smoke.soak_child``'s steps
+   without its OS batch window check, RL-171). A soak that fails its settle or quiet check is retried
+   once (``SOAK_RETRIES``; the launch deadline budgets it) before the span stops;
 4. the roster's legs in the kit's seeded order. Each leg is one ``cadence-leg`` runtime
    invocation (``scripts/cadence_leg_runtime.py``) that runs its own G0 and is admitted by it.
-   Batch admission: no soak overlaps a blackout and no leg starts in one (RL-149 section 2.9
-   item 4); a leg in flight finishes. Per-leg redo: RL-72 E2's load rule (above 0.5 core for 60 s,
+   Batch admission applies only when ``--batch-window`` names a blackout: then no soak overlaps it
+   and no leg starts in it; a leg in flight finishes. Per-leg redo: RL-72 E2's load rule (above 0.5 core for 60 s,
    ``align_r1_rehearsal.os_load_verdict``) redoes the leg, up to the kit's ``redo_quota`` per span;
    a rejected attempt is kept as ``runtime.rejected<N>``. A G0 timeout or a cut turn is recorded
    and the span goes on (the leg is not admitted). A leg runtime that refuses or fails stops the span;
@@ -31,9 +33,11 @@ LaunchAgent, the desk fence, Spotlight paused). One span, agent-free:
 
 Stage stamps go to ``DIR/chain-stages.jsonl`` (start and end of every stage) for the RL-128 probe.
 
-The blackout defaults to the R1 driver's ``OS_BATCH_WINDOW_LOCAL`` (ruling 8; moved to 02:00-02:35 by
-RL-149 section 2.9 item 4 in the W1-line PR), so that PR's change flows through; ``--batch-window``
-overrides it. The soak also avoids the driver's window, because the night's soak path refuses it.
+RL-171: quiet is a rule about processes, not clock times. With no ``--batch-window`` there is no
+blackout, no hold and no launch fence; the per-leg agent census, process census and rule 5's load
+journal with redo are the quiet checks. ``--batch-window HH:MM-HH:MM`` still works (backward
+compatibility): the plan then refuses a worst case that meets it, and the soak and leg starts hold
+outside it.
 
 ``mock`` executes a whole span on this machine with a fake clock, fake feeds and a fake leg runtime
 (no model, no sensor, no host command), then builds the Air desk table on its bundle.
@@ -41,13 +45,15 @@ overrides it. The soak also avoids the driver's window, because the night's soak
 from __future__ import annotations
 
 import argparse
-from dataclasses import dataclass, field
-from datetime import datetime
+from dataclasses import dataclass
+from datetime import UTC, date, datetime, timedelta
+from decimal import Decimal
 import hashlib
 import json
 import math
 import os
 from pathlib import Path
+import re
 import signal
 import subprocess
 import sys
@@ -59,6 +65,7 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from joulewise.cadence import kit as kitmod, legs as legsmod  # noqa: E402
+from joulewise.cadence.kit_v11 import QUAL_LAW  # noqa: E402
 
 RECEIPT_SCHEMA = "joulewise.cadence_span_receipt.v1"
 LEG_RECORD_SCHEMA = "joulewise.cadence_leg_record.v1"
@@ -71,6 +78,14 @@ POLL_S = 0.25
 # The parent launcher's reserves (run_align_r1_smoke.WORK_RESERVE_S; launch_align_r0's cleanup grace).
 WORK_RESERVE_S = 2 * 180 + 10
 LAUNCH_RESERVE_S = WORK_RESERVE_S + 180 + 10
+# RL-171: a soak that fails its settle or quiet check is retried once before the span stops. The launch
+# deadline budgets one more soak per retry (``launch_deadline``), so a retry never spends a leg's or a
+# redo's time. The soak child exits SOAK_REFUSED_RC on exactly those two refusals.
+SOAK_RETRIES = 1
+SOAK_REFUSED_RC = 5
+NS_PER_SECOND = 1_000_000_000
+UNIX_EPOCH = datetime(1970, 1, 1, tzinfo=UTC)
+SPAN_ID_PATTERN = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.:-]*")
 
 
 class SpanRefusal(RuntimeError):
@@ -85,14 +100,21 @@ class LegRuntimeError(SpanRefusal):
     pass
 
 
+class SoakRefusal(SpanRefusal):
+    """The fresh soak failed its settle or quiet check (retried up to SOAK_RETRIES times)."""
+
+
+class SoakQuietRefusal(ValueError):
+    """Inside the soak child: the idle soak is unsettled or loaded."""
+
+
 def _stamp(clock):
     return {"epoch_s": clock.time(), "monotonic_ns": int(clock.monotonic() * 1e9)}
 
 
 def default_windows():
-    """The R1 driver's blackout constant, read at run time (the W1-line PR moves it)."""
-    from scripts import align_r1_rehearsal as r1
-    return [r1.OS_BATCH_WINDOW_LOCAL]
+    """No blackout (RL-171: quiet is enforced per leg, never by a clock window)."""
+    return []
 
 
 def max_span_s():
@@ -100,10 +122,15 @@ def max_span_s():
     return launcher.MAX_DESK_SECONDS - LAUNCH_RESERVE_S
 
 
+def soak_retry_budget_s(plan):
+    """The time the soak retries may take: one kit soak each (RL-171)."""
+    return SOAK_RETRIES * plan["soak_s"]
+
+
 def launch_deadline(plan):
-    """The ``--deadline`` the launcher passes: the plan's work deadline plus the runner's and the
-    launcher's cleanup reserves."""
-    return plan["deadline_epoch_s"] + LAUNCH_RESERVE_S
+    """The ``--deadline`` the launcher passes: the plan's work deadline, the soak retry's budget, and
+    the runner's and the launcher's cleanup reserves."""
+    return plan["deadline_epoch_s"] + soak_retry_budget_s(plan) + LAUNCH_RESERVE_S
 
 
 # --------------------------------------------------------------------------
@@ -119,6 +146,25 @@ class RealClock:
         return time.monotonic()
 
     @staticmethod
+    def continuous_ns():
+        # Darwin CLOCK_MONOTONIC_RAW uses mach_continuous_time, including sleep.
+        # CLOCK_MONOTONIC is realtime minus boot time in Apple's libc.
+        # https://developer.apple.com/documentation/driverkit/mach_continuous_time
+        # https://github.com/apple-oss-distributions/Libc/blob/main/gen/clock_gettime.c
+        clock_id = time.CLOCK_MONOTONIC_RAW if sys.platform == "darwin" else time.CLOCK_BOOTTIME
+        return time.clock_gettime_ns(clock_id)
+
+    @staticmethod
+    def epoch_and_monotonic_ns():
+        return time.time_ns(), RealClock.continuous_ns()
+
+    @staticmethod
+    def arm_anchor_ns():
+        before_ns = RealClock.continuous_ns()
+        epoch_ns, after_ns = RealClock.epoch_and_monotonic_ns()
+        return epoch_ns, before_ns, after_ns
+
+    @staticmethod
     def sleep(seconds):
         time.sleep(seconds)
 
@@ -128,13 +174,13 @@ class Deps:
     clock: object
     feeds: list
     host: object
-    run_soak: Callable          # (soak_dir, cap_s, feeds, work_remaining) -> soak_reference Path
+    run_soak: Callable          # (soak_dir, cap_s, feeds, work_remaining) -> soak_reference Path;
+                                #  raises SoakRefusal on a settle or quiet refusal
     run_leg: Callable           # (attempt_dir, spec_path, soak_reference, cap_s, feeds, work_remaining
                                 #  [, span_reference=DIR for a span-reference consumer]) -> result
     verify_frozen: Callable     # (kit) -> {"rc": 0, ...}; raises SpanRefusal on a mismatch
     load_verdict: Callable      # (name, result, wall_s) -> {"redo": bool, ...}; raises on a bad journal
     soak_cap_s: float
-    soak_windows: list = field(default_factory=list)   # extra windows the soak path itself refuses
     mock: bool = False
     max_span_s: float | None = None                     # None: the launcher's ceiling less its reserves
 
@@ -252,7 +298,7 @@ def verify_frozen_production(kit):
     if kit.get("runner", {}).get("kind") == "cadence-ctl-v1":
         from joulewise.cadence import ctl
         try:
-            ctl.require_issued(kit)
+            ctl.require_launch_authority(kit)
         except kitmod.KitError as error:
             raise SpanRefusal(str(error)) from error
     head = subprocess.run(["git", "-C", str(ROOT), "rev-parse", "HEAD"], capture_output=True, text=True,
@@ -272,15 +318,21 @@ def verify_frozen_production(kit):
     return {"rc": 0, "head": head, "paths": len(kit["frozen"]["paths"])}
 
 
-def production_deps(*, inputs, pmset_bin, output):
+def production_deps(*, inputs, pmset_bin, output, scripted_ctl=False):
     from scripts import align_r1_rehearsal as r1, launch_align_r0 as launcher, run_align_r1_smoke as smoke
     leg_argv = leg_runtime_argv(inputs)
+    if scripted_ctl:
+        leg_argv.insert(3, "--scripted-ctl")
 
     def run_soak(soak_dir, cap_s, feeds, work_remaining):
         argv = [sys.executable, "-B", str(ROOT / "scripts/cadence_legs_runner.py"), "soak-child",
                 "--output", str(soak_dir), "--inputs", str(inputs)]
-        result = run_child(name="soak", argv=argv, cap_s=cap_s, log_dir=output, feeds=feeds,
-                           work_remaining=work_remaining)
+        soak_dir = Path(soak_dir)
+        attempt = 1 + sum(1 for p in soak_dir.parent.iterdir() if p.name.startswith(soak_dir.name + ".rejected"))
+        result = run_child(name="soak" if attempt == 1 else f"soak.a{attempt}", argv=argv, cap_s=cap_s,
+                           log_dir=output, feeds=feeds, work_remaining=work_remaining)
+        if result["rc"] == SOAK_REFUSED_RC:
+            raise SoakRefusal(f"soak exit {result['rc']}: the idle soak failed its settle or quiet check")
         if result["rc"]:
             raise SpanRefusal(f"soak exit {result['rc']}")
         reference = Path(soak_dir) / "soak_reference.json"
@@ -309,26 +361,109 @@ def production_deps(*, inputs, pmset_bin, output):
     feeds = [smoke.AgentFeed(output), smoke.MeterFeed(output), smoke.VolumeFeed(output)]
     return Deps(clock=RealClock(), feeds=feeds, host=ProductionHost(pmset_bin), run_soak=run_soak,
                 run_leg=run_leg, verify_frozen=verify_frozen_production, load_verdict=load_verdict,
-                soak_cap_s=launcher.r1_soak_cap_s(), soak_windows=[r1.OS_BATCH_WINDOW_LOCAL])
+                soak_cap_s=launcher.r1_soak_cap_s())
 
 
 # --------------------------------------------------------------------------
 # The span
 # --------------------------------------------------------------------------
-def run_span(*, kit, kit_sha256, output, deadline, windows, deps, leg_ids=None):
+def _parse_t0_anchor(raw):
+    fields = raw.split(":")
+    if len(fields) != 3 or not all(field.isascii() and field.isdecimal() for field in fields):
+        raise argparse.ArgumentTypeError("expected epoch_ns:monotonic_before_ns:monotonic_after_ns")
+    epoch_ns, before_ns, after_ns = map(int, fields)
+    if epoch_ns <= 0 or before_ns > after_ns:
+        raise argparse.ArgumentTypeError("t0 anchor needs a positive epoch and ordered monotonic readings")
+    return epoch_ns, before_ns, after_ns
+
+
+def add_t0_authority_arguments(parser):
+    parser.add_argument("--authorized-t0-date", help="authorized America/Los_Angeles calendar date")
+    parser.add_argument("--t0-not-before", type=int, help="inclusive earliest start in whole epoch seconds")
+    parser.add_argument("--t0-not-before-ns", type=int, help="additional inclusive close bound in epoch nanoseconds")
+    parser.add_argument("--t0-before", type=int, help="exclusive start cutoff in whole epoch seconds")
+    parser.add_argument("--t0-anchor", type=_parse_t0_anchor,
+                        help="arm clock sample as epoch_ns:monotonic_before_ns:monotonic_after_ns")
+
+
+def validate_t0_authority(kit, authorized_date, t0_not_before, t0_before, t0_anchor, *, require_anchor,
+                          t0_not_before_ns=None):
+    qualification = kit["seed_law"]["method"] == QUAL_LAW
+    if not qualification and all(value is None for value in
+                                 (authorized_date, t0_not_before, t0_before, t0_anchor, t0_not_before_ns)):
+        return
+    if authorized_date is None or t0_not_before is None or t0_before is None:
+        raise ValueError("authorized t0 date, earliest start and exclusive cutoff are required together")
+    if date.fromisoformat(authorized_date).isoformat() != authorized_date:
+        raise ValueError("authorized t0 date must use YYYY-MM-DD")
+    if not 0 < t0_not_before < t0_before:
+        raise ValueError("t0 bounds must satisfy 0 < earliest start < exclusive cutoff")
+    if t0_not_before_ns is not None and not 0 < t0_not_before_ns < t0_before * NS_PER_SECOND:
+        raise ValueError("exact close bound must be positive and below the exclusive cutoff")
+    if require_anchor and t0_anchor is None:
+        raise ValueError("authorized t0 requires the arm clock anchor from the launcher")
+
+
+def _authorized_start(clock, authorized_date, t0_not_before, t0_before, anchor, t0_not_before_ns=None):
+    wall_ns, continuous_ns = clock.epoch_and_monotonic_ns()
+    anchor_epoch_ns, before_ns, after_ns = anchor
+    if continuous_ns < after_ns:
+        return None
+    # The arm wall read occurred somewhere between the two monotonic reads.
+    # Require the full projected interval to fit even if the sampler was preempted.
+    earliest_ns = anchor_epoch_ns + continuous_ns - after_ns
+    latest_ns = anchor_epoch_ns + continuous_ns - before_ns
+    lower_ns = max(t0_not_before * NS_PER_SECOND, t0_not_before_ns or 0)
+    cutoff_ns = t0_before * NS_PER_SECOND
+    for epoch_ns in (earliest_ns, latest_ns, wall_ns):
+        if not lower_ns <= epoch_ns < cutoff_ns:
+            return None
+        second = epoch_ns // NS_PER_SECOND
+        day = (UNIX_EPOCH + timedelta(seconds=second)).astimezone(legsmod.LOCAL_ZONE).date()
+        if day.isoformat() != authorized_date:
+            return None
+    t0_ns = (earliest_ns + latest_ns) // 2
+    epoch_s = t0_ns / NS_PER_SECOND
+    # Keep the legacy numeric seconds in the same whole second as the exact stamp.
+    if math.floor(epoch_s) > t0_ns // NS_PER_SECOND:
+        epoch_s = math.nextafter(epoch_s, -math.inf)
+    return {"epoch_s": epoch_s, "epoch_ns": t0_ns, "continuous_ns": continuous_ns,
+            "monotonic_ns": int(clock.monotonic() * NS_PER_SECOND)}
+
+
+def run_span(*, kit, kit_sha256, output, deadline, windows, deps, leg_ids=None,
+             authorized_t0_date=None, t0_not_before=None, t0_before=None, t0_anchor=None,
+             t0_not_before_ns=None, span_id=None):
     """Run one span. Returns the receipt's rc (0 = every roster leg attempted, cleanup proven)."""
+    clock = deps.clock
+    authority = {}
+    if authorized_t0_date is not None:
+        started = _authorized_start(clock, authorized_t0_date, t0_not_before, t0_before, t0_anchor,
+                                    t0_not_before_ns)
+        if started is None:
+            print(f"REFUSE: t0 clocks must agree on authority for {authorized_t0_date} "
+                  f"within [{t0_not_before}, {t0_before}) with exact close bound {t0_not_before_ns}", file=sys.stderr)
+            return 3
+        authority = {"t0_authority": {"authorized_t0_date": authorized_t0_date,
+                                      "t0_not_before": t0_not_before, "t0_before": t0_before}}
+        if t0_not_before_ns is not None:
+            authority["t0_authority"]["t0_not_before_ns"] = t0_not_before_ns
+    else:
+        started = _stamp(clock)
     output = Path(output)
     output.mkdir(parents=True, exist_ok=False)   # create-once: a retry cannot overwrite a span
-    clock = deps.clock
     stages = legsmod.StageJournal(output / legsmod.STAGE_JOURNAL, clock)
     record = {"schema": RECEIPT_SCHEMA, "runner_kind": kit["runner"]["kind"], "mock": deps.mock,
-              "started": _stamp(clock), "deadline": deadline, "work_reserve_s": WORK_RESERVE_S,
+              "started": started, "deadline": deadline, "work_reserve_s": WORK_RESERVE_S,
               "kit": {"campaign_id": kit["campaign_id"], "sha256": kit_sha256, "frozen_commit": kit["frozen"]["commit"]},
               "roster": list(leg_ids) if leg_ids is not None else [leg["leg_id"] for leg in kit["legs"]],
               "batch_windows": [legsmod.format_window(w) for w in windows], "steps": [], "legs": [],
-              "feeds": {}, "rc": 0}
+              "soak_attempts": [], "feeds": {}, "rc": 0, **authority}
+    if span_id is not None:
+        record["span_id"] = span_id
     state = {"power_read": False, "plan": None, "summaries": [], "finished": 0, "fault": False, "redos": 0}
     kit_legs = {leg["leg_id"]: leg for leg in kit["legs"]}
+    result_keep = _RESULT_KEEP_CTL if kit["runner"]["kind"] == "cadence-ctl-v1" else _RESULT_KEEP
 
     def work_remaining():
         remaining = deadline - WORK_RESERVE_S - clock.time()
@@ -413,7 +548,7 @@ def run_span(*, kit, kit_sha256, output, deadline, windows, deps, leg_ids=None):
             first_start = first_start if first_start is not None else started
             result = step(f"{leg_id}.a{n}", lambda: deps.run_leg(attempt_dir, spec_path, soak_reference, cap,
                                                                   deps.feeds, work_remaining, **span_kw),
-                          kind="leg", cap_s=cap, keep=_RESULT_KEEP)
+                          kind="leg", cap_s=cap, keep=result_keep)
             ended = clock.time()
             verdict = deps.load_verdict(leg_id, result, ended - started)
             attempt = {"attempt": n, "started_epoch_s": started, "ended_epoch_s": ended, "wall_s": ended - started,
@@ -445,6 +580,37 @@ def run_span(*, kit, kit_sha256, output, deadline, windows, deps, leg_ids=None):
         (leg_dir / "leg_summary.json").write_text(json.dumps(summary, indent=1, sort_keys=True) + "\n")
         state["summaries"].append(summary)
         state["finished"] += 1
+
+    def run_soak():
+        # RL-171: one retry of a soak that failed its settle or quiet check. The retry starts only if it and
+        # every roster leg plus the redo quota at the leg cap still fit (the launch deadline budgets it).
+        attempts = record["soak_attempts"]
+        while True:
+            n = len(attempts) + 1
+            name = "soak" if n == 1 else f"soak.a{n}"
+            delay = legsmod.interval_delay(clock.time(), deps.soak_cap_s, windows)
+            if delay:
+                step(f"{name}-blackout-wait", lambda: {"rc": 0, "waited_s": wait(delay)}, kind="wait", cap_s=delay)
+            before_part(name)
+            attempt = {"attempt": n, "started_epoch_s": clock.time(), "refused": None, "output_dir": "soak"}
+            attempts.append(attempt)
+            try:
+                return step(name, lambda: {"rc": 0, "path": str(deps.run_soak(
+                    output / "soak", deps.soak_cap_s, deps.feeds, work_remaining))}, kind="soak",
+                    cap_s=deps.soak_cap_s)["path"]
+            except SoakRefusal as refusal:
+                attempt["refused"] = str(refusal)
+                if n > SOAK_RETRIES:
+                    raise
+                plan = state["plan"]
+                need = deps.soak_cap_s + (len(plan["legs"]) + plan["redo_quota"]) * plan["leg_cap_s"]
+                if clock.time() + need > deadline - WORK_RESERVE_S:
+                    raise SoakRefusal(f"{refusal}; no retry: it needs {need:.0f} s and the work deadline leaves "
+                                      f"{deadline - WORK_RESERVE_S - clock.time():.0f} s") from refusal
+                if (output / "soak").exists():
+                    rejected = output / f"soak.rejected{n}"
+                    (output / "soak").rename(rejected)
+                    attempt["output_dir"] = rejected.name
 
     handlers = {s: signal.signal(s, interrupted) for s in SIGNALS}
     try:
@@ -483,12 +649,7 @@ def run_span(*, kit, kit_sha256, output, deadline, windows, deps, leg_ids=None):
                     "expected_s": value["expected_s"], "legs": [leg["leg_id"] for leg in value["legs"]]}
         step("plan", plan)
 
-        soak_delay = legsmod.interval_delay(clock.time(), deps.soak_cap_s, [*windows, *deps.soak_windows])
-        if soak_delay:
-            step("soak-blackout-wait", lambda: {"rc": 0, "waited_s": wait(soak_delay)}, kind="wait", cap_s=soak_delay)
-        before_part("soak")
-        soak_reference = step("soak", lambda: {"rc": 0, "path": str(deps.run_soak(
-            output / "soak", deps.soak_cap_s, deps.feeds, work_remaining))}, kind="soak", cap_s=deps.soak_cap_s)["path"]
+        soak_reference = run_soak()
         record["soak_reference"] = soak_reference
         for spec in state["plan"]["legs"]:
             run_leg(spec, soak_reference)
@@ -511,8 +672,8 @@ _RESULT_KEEP = ("leg_id", "leg_status", "bundle", "member_status", "g0_outcome",
                 "g0_timeout_s", "quiet_s", "prefill_chars", "prefill_tokens", "decode_cap", "decode_tokens",
                 "decode_cap_reached", "os_level_max", "pm_nominal", "incomplete_reasons", "ac_powermode",
                 "turn_start_ns", "turn_end_ns", "first_token_ns", "quiet_spans_ns", "config_sha256",
-                "g0_shape", "g0_role", "g0_reference_source", "g0_reference_record_sha256",
-                "script_complete", "script_record_sha256")
+                "g0_shape", "g0_role", "g0_reference_source", "g0_reference_record_sha256")
+_RESULT_KEEP_CTL = _RESULT_KEEP + ("script_complete", "script_record_sha256")
 
 
 def _close(record, state, deps, output, step, kit):
@@ -564,6 +725,9 @@ def _close(record, state, deps, output, step, kit):
         record["rc"] = record["rc"] or 2
         record["desk_bundle_error"] = f"{type(exc).__name__}: {exc}"
     record["ended"] = _stamp(deps.clock)
+    if "span_id" in record:
+        epoch_ns, _ = deps.clock.epoch_and_monotonic_ns()
+        record["ended"].update(epoch_ns=epoch_ns, epoch_s=epoch_ns / NS_PER_SECOND)
     with (output / RECEIPT_NAME).open("x") as handle:
         json.dump(record, handle, indent=2, sort_keys=True)
         handle.write("\n")
@@ -584,6 +748,9 @@ class FakeClock:
 
     def monotonic(self):
         return self.m
+
+    def epoch_and_monotonic_ns(self):
+        return int(Decimal(str(self.t)) * NS_PER_SECOND), round(self.m * NS_PER_SECOND)
 
     def sleep(self, seconds):
         self.t += seconds
@@ -661,16 +828,21 @@ class FakeLegRuntime:
     """A deterministic stand-in for the leg runtime: advances the fake clock by the time model with a
     seed-derived G0 and writes a result with the real result's operational fields and journals."""
 
-    def __init__(self, clock, *, contaminate=(), g0_timeout=(), contaminate_attempts=1):
+    def __init__(self, clock, *, contaminate=(), g0_timeout=(), contaminate_attempts=1, soak_refusals=0):
         self.clock = clock
         self.contaminate, self.g0_timeout = set(contaminate), set(g0_timeout)
         self.contaminate_attempts = contaminate_attempts
+        self.soak_refusals = soak_refusals     # how many soaks, from the first, fail their settle or quiet check
         self.calls = []
+        self.soaks = 0
         self.span_references = []
 
     def soak(self, soak_dir, cap_s, feeds, work_remaining):
         Path(soak_dir).mkdir(parents=True)
         self.clock.sleep(1800 + 30)
+        self.soaks += 1
+        if self.soaks <= self.soak_refusals:
+            raise SoakRefusal(f"soak exit {SOAK_REFUSED_RC}: the idle soak failed its settle or quiet check (mock)")
         path = Path(soak_dir) / "soak_reference.json"
         path.write_text(json.dumps({"schema": "joulewise.align.r1_soak_reference.v1", "mock": True}) + "\n")
         return path
@@ -722,8 +894,8 @@ def mock_load_verdict(name, result, wall_s):
     return r1.os_load_verdict(name, result, wall_s=wall_s)
 
 
-def mock_deps(output, clock, *, contaminate=(), g0_timeout=()):
-    fake = FakeLegRuntime(clock, contaminate=contaminate, g0_timeout=g0_timeout)
+def mock_deps(output, clock, *, contaminate=(), g0_timeout=(), soak_refusals=0):
+    fake = FakeLegRuntime(clock, contaminate=contaminate, g0_timeout=g0_timeout, soak_refusals=soak_refusals)
     feeds = [FakeFeed("agents", output, clock), FakeFeed("meter", output, clock, meter=True),
              FakeFeed("volumes", output, clock)]
     deps = Deps(clock=clock, feeds=feeds, host=FakeHost(), run_soak=fake.soak, run_leg=fake.leg,
@@ -733,12 +905,13 @@ def mock_deps(output, clock, *, contaminate=(), g0_timeout=()):
     return deps
 
 
-def run_mock(*, kit, kit_sha256, output, t0_epoch, windows, leg_ids=None, contaminate=(), g0_timeout=()):
+def run_mock(*, kit, kit_sha256, output, t0_epoch, windows, leg_ids=None, contaminate=(), g0_timeout=(),
+             soak_refusals=0):
     """A whole span with the fake clock, feeds and leg runtime, then the Air desk on its bundle."""
     from joulewise.cadence import desk
     output = Path(output)
     clock = FakeClock(t0_epoch)
-    deps = mock_deps(output, clock, contaminate=contaminate, g0_timeout=g0_timeout)
+    deps = mock_deps(output, clock, contaminate=contaminate, g0_timeout=g0_timeout, soak_refusals=soak_refusals)
     deps.max_span_s = max_span_s()
     plan = legsmod.plan_span(kit, t0_epoch=t0_epoch, windows=windows, leg_ids=leg_ids, max_span_s=deps.max_span_s)
     rc = run_span(kit=kit, kit_sha256=kit_sha256, output=output, deadline=launch_deadline(plan), windows=windows,
@@ -752,13 +925,10 @@ def run_mock(*, kit, kit_sha256, output, t0_epoch, windows, leg_ids=None, contam
 # --------------------------------------------------------------------------
 # CLI
 # --------------------------------------------------------------------------
-def _windows(args, kit=None):
+def _windows(args):
+    """``--batch-window`` if given (backward compatibility), else none (RL-171)."""
     if args.batch_window:
         return [legsmod.parse_window(args.batch_window)]
-    if kit is not None and kit["runner"]["kind"] != legsmod.RUNNER_KIND:
-        # Kit v1.1 has a free t0: the ruled blackout must be named, never the driver's old constant (#788 F4).
-        raise legsmod.PlanError([f"runner kind {kit['runner']['kind']} needs --batch-window "
-                                 "(RL-149 section 2.9 item 4: 02:00-02:35)"])
     return default_windows()
 
 
@@ -776,8 +946,31 @@ def _load(path):
 
 
 def soak_child(output, inputs):
-    from scripts import run_align_r1_smoke as smoke
-    return smoke.soak_child(output, inputs)
+    """The span's fresh soak: ``run_align_r1_smoke.soak_child`` (parts A and B) step for step, by import of the
+    same functions, without its OS batch window check (RL-171; that file is on the Part C path and keeps it).
+
+    Same condition-13 check, idle-soak invocation and contract, load verdict, settled-slope check and
+    reference writer. An unsettled or loaded soak raises ``SoakQuietRefusal`` (exit SOAK_REFUSED_RC), the
+    one refusal the span retries."""
+    from joulewise.align.apple import v4_registration as reg
+    from scripts import align_r1_rehearsal as r1, run_align_r1_smoke as smoke
+    reg.verify_r1_executed_sources(ROOT, {"executed_commit": r1.executed_commit(ROOT)})
+    output = Path(output)
+    output.mkdir(parents=True, exist_ok=False)
+    started = time.time_ns()
+    result = r1._invoke(r1.runtime_argv_from_inputs(inputs), "idle", output / "idle_soak", smoke.soak_seconds(),
+                        quiet=True, contract_key="idle_soak")
+    row = {"name": "idle_soak", "class": "light", "started_ns": started, "ended_ns": time.time_ns(),
+           "attempt": 0, "output_dir": str(output / "idle_soak"), "result": result}
+    row["os_load"] = r1.os_load_verdict("idle_soak", result, wall_s=(row["ended_ns"] - started) / 1e9)
+    row["soak_detrended"] = r1.soak_detrended(result.get("sensor_series_c"), result.get("sensor_series_t_s"),
+                                              result.get("sensor_series_end_t_s"))
+    (output / "soak_row.json").write_text(json.dumps(row, indent=2, sort_keys=True) + "\n")
+    if not all(v["settled"] for v in row["soak_detrended"].values()):
+        raise SoakQuietRefusal("idle soak has unresolved slope")
+    if row["os_load"]["redo"]:
+        raise SoakQuietRefusal("idle soak: sustained CPU load")
+    return r1.write_soak_reference(output, row)
 
 
 def pin_kit(path, commit, write=False):
@@ -805,10 +998,12 @@ def main(argv=None):
         p = sub.add_parser(name)
         p.add_argument("--kit", type=Path, required=True)
         p.add_argument("--legs", help="the queue span's roster, comma-separated kit leg ids (default: all)")
-        p.add_argument("--batch-window", help="HH:MM-HH:MM local blackout (default: the R1 driver's constant)")
+        p.add_argument("--batch-window", help="HH:MM-HH:MM local blackout (default: none, RL-171)")
         if name == "run":
             p.add_argument("--output", type=Path, required=True)
             p.add_argument("--deadline", type=float, required=True)
+            p.add_argument("--span-id", help="span identity carried into its close receipt")
+            add_t0_authority_arguments(p)
             p.add_argument("--pmset-bin", default="/usr/bin/pmset")
             p.add_argument("--inputs", type=Path,
                            default=ROOT / "configs/campaigns/align_v4/registration/inputs.json")
@@ -819,6 +1014,8 @@ def main(argv=None):
             p.add_argument("--t0-local", help="local start, e.g. 2026-11-15T13:20 (default: now)")
             p.add_argument("--contaminate", default="", help="legs whose first attempt carries load")
             p.add_argument("--g0-timeout", default="", help="legs whose G0 times out")
+            p.add_argument("--soak-refusals", type=int, default=0,
+                           help="soaks, from the first, that fail their settle or quiet check")
     p = sub.add_parser("soak-child")
     p.add_argument("--output", type=Path, required=True)
     p.add_argument("--inputs", type=Path, default=ROOT / "configs/campaigns/align_v4/registration/inputs.json")
@@ -826,10 +1023,19 @@ def main(argv=None):
     p.add_argument("kit", type=Path)
     p.add_argument("--commit", required=True)
     p.add_argument("--write", action="store_true")
+    sub.add_parser("t0-anchor", help="sample the wall epoch bracketed by sleep-inclusive monotonic readings")
     args = parser.parse_args(argv)
 
+    if args.command == "t0-anchor":
+        print(":".join(map(str, RealClock.arm_anchor_ns())))
+        return 0
+
     if args.command == "soak-child":
-        soak_child(args.output.resolve(), args.inputs)
+        try:
+            soak_child(args.output.resolve(), args.inputs)
+        except SoakQuietRefusal as refusal:
+            print(f"soak refused: {refusal}", file=sys.stderr)
+            return SOAK_REFUSED_RC
         return 0
     if args.command == "pin-kit":
         _, text = pin_kit(args.kit, args.commit, write=args.write)
@@ -838,16 +1044,12 @@ def main(argv=None):
         return 0
     kit, sha = _load(args.kit)
     try:
-        windows = _windows(args, kit)
+        windows = _windows(args)
         if args.command == "plan":
             plan = legsmod.plan_span(kit, t0_epoch=args.t0 if args.t0 is not None else time.time(), windows=windows,
                                      leg_ids=_roster(args), max_span_s=max_span_s())
-            fence = legsmod.fence_problems(plan, windows, default_windows())
-            if fence:
-                raise legsmod.PlanError(fence)
-            print(json.dumps({**plan, "kit_sha256": sha, "launch_deadline_epoch_s": launch_deadline(plan),
-                              "fence_end_epoch_s": plan["t0_epoch_s"] + plan["worst_case_s"] + legsmod.FENCE_TAIL_S},
-                             indent=1, sort_keys=True))
+            print(json.dumps({**plan, "kit_sha256": sha, "soak_retry_budget_s": soak_retry_budget_s(plan),
+                              "launch_deadline_epoch_s": launch_deadline(plan)}, indent=1, sort_keys=True))
             return 0
         if args.command == "mock":
             t0 = (datetime.fromisoformat(args.t0_local).replace(tzinfo=legsmod.LOCAL_ZONE).timestamp()
@@ -855,7 +1057,8 @@ def main(argv=None):
             rc, summary, stops, _ = run_mock(kit=kit, kit_sha256=sha, output=args.output, t0_epoch=t0, windows=windows,
                                              leg_ids=_roster(args),
                                              contaminate=[x for x in args.contaminate.split(",") if x],
-                                             g0_timeout=[x for x in args.g0_timeout.split(",") if x])
+                                             g0_timeout=[x for x in args.g0_timeout.split(",") if x],
+                                             soak_refusals=args.soak_refusals)
             print(json.dumps({"rc": rc, "legs": len(summary["legs"]), "stops": stops,
                               "receipt": str(args.output / RECEIPT_NAME),
                               "table": str(args.output / "desk" / "JOURNAL-TABLE.md")}, indent=1))
@@ -866,10 +1069,20 @@ def main(argv=None):
         return 1
     if not math.isfinite(args.deadline):
         parser.error("deadline must be finite")
+    try:
+        if args.span_id is not None and not SPAN_ID_PATTERN.fullmatch(args.span_id):
+            raise ValueError("invalid --span-id")
+        validate_t0_authority(kit, args.authorized_t0_date, args.t0_not_before, args.t0_before, args.t0_anchor,
+                              require_anchor=True, t0_not_before_ns=args.t0_not_before_ns)
+    except ValueError as error:
+        parser.error(str(error))
     output = args.output.resolve()
-    deps = production_deps(inputs=args.inputs, pmset_bin=args.pmset_bin, output=output)
+    deps = production_deps(inputs=args.inputs, pmset_bin=args.pmset_bin, output=output,
+                           scripted_ctl=kit["runner"]["kind"] == "cadence-ctl-v1")
     return run_span(kit=kit, kit_sha256=sha, output=output, deadline=args.deadline, windows=windows, deps=deps,
-                    leg_ids=_roster(args))
+                    leg_ids=_roster(args), authorized_t0_date=args.authorized_t0_date,
+                    t0_not_before=args.t0_not_before, t0_before=args.t0_before, t0_anchor=args.t0_anchor,
+                    t0_not_before_ns=args.t0_not_before_ns, span_id=args.span_id)
 
 
 if __name__ == "__main__":

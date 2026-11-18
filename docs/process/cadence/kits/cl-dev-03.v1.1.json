@@ -1,13 +1,13 @@
 {
  "schema": "joulewise.cadence_campaign_kit.v1.1",
  "campaign_id": "cl-dev-03",
- "title": "Conditionless calibration campaign, development block dev-03 (RL-149 section 2; RL-155 sections 3.3 and 5.1): kit schema v1.1, cell law sha256-cells-v1. Twelve type-A legs over three prompt sizes, about 2,000, 10,000 and 19,458 tokens (4,111, 20,557 and 40,000 characters of the step task), four of each, in permuted blocks of three so that every three consecutive legs hold each size once; decode cap 4,096; band q0; Automatic. Six of the eleven warm legs (two per size) are span-reference legs: their G0 is judged against the span's reference, the capture of the span's first leg, as a series member's is (RL-150 R1 part 2); the others judge their G0 against their own capture. Kit v1.1 with the span-reference leg, change class A under RL-150 R5: its first three legs (L001-L003), run as their own span, are its counted smoke.",
+ "title": "Conditionless calibration campaign, development block dev-03 (RL-149 section 2; RL-155 sections 3.3 and 5.1): kit schema v1.1, cell law sha256-cells-v1. Twelve type-A legs over three prompt sizes, about 2,000, 10,000 and 19,458 tokens (4,111, 20,557 and 40,000 characters of the step task), four of each, in permuted blocks of three: each block of three in kit order (L001-L003, L004-L006, L007-L009, L010-L012) holds each size once; decode cap 4,096; band q0; Automatic. The law makes six legs span-shaped, two per size (L002, L004, L008, L009, L010, L012). A span-shaped leg that is not first in its span consumes the span's reference, the capture of the span's first leg, as a series member's is (RL-150 R1 part 2); one that is first in its span captures it. How many legs consume therefore depends on the queued layout (RL-158 Q6; RL-161 section 1): on the 3 + 9 layout, 5 of the 10 warm legs (L002, L008, L009, L010, L012). Every other leg judges its G0 against its own capture. Kit v1.1 with the span-reference leg, change class A under RL-150 R5: its first three legs (L001-L003), run as their own span, are its counted smoke.",
  "ruling": {
   "id": "RL-149 §2",
   "authorizes_spans": true
  },
  "frozen": {
-  "commit": "e82e2a1b9b4d845f1bba9cbe2efe2596f2ac6bf9",
+  "commit": "2d347f721552fe03bdd19f113e7bad7a7c24908e",
   "paths": {
    "configs/align/v4/qwen38-27b-8bit-hf-pins.json": "3a1835342b4576b53fb715eb18e53877b54de8e9d04b1f71854d302c9d3635b8",
    "configs/align/v4/r1_runtime.json": "bf2cb2e6503c46373b52b10f32642d95a66a6636a3d7caaad0ce8b2b756781df",
@@ -15,7 +15,7 @@
    "configs/campaigns/align_v4/stages/episodes-a/align-v4-episodes-a-e05.json": "d73cc748aa3732573370cbd44cbb54a992dd8d1b20a92cdf92295c7b320d1507",
    "joulewise/adapters/mlx_runtime.py": "953e6fec990c1d7e0702a8abb199a55f179e50d28854f4b62d0e95302dde0c45",
    "joulewise/adapters/powermetrics.py": "70f47086b2445e88d0cb25ed2d47751dfd99843d0cf1e149f2fe630c5116e5e4",
-   "joulewise/align/apple/cadence_leg.py": "c56471746f400a9d4620ad092223438cfe23f306aca86eb1a37d031702f9ca65",
+   "joulewise/align/apple/cadence_leg.py": "ae19bcdc66af8ca8e55d9c0a5586015fa52fc1d87c50545a5ff831225a452b81",
    "joulewise/align/apple/endpoint.py": "65b02aea0e02b5484811e2021445213b2d2645e334b93461b593f23e0a4d0deb",
    "joulewise/align/apple/powermode.py": "a5cb6efe7707b95277cfb85ddb4453dbcb02fe87ada5177ec3947d48ce64e84b",
    "joulewise/align/apple/prompt_cache.py": "48cf0d5453b96fadfb58168e0c55a90d92066af7469f2ee1151fb61821c83999",
@@ -30,20 +30,20 @@
    "joulewise/align/apple/workload.py": "837b74be97616c48c26b0c1277fe2a605b575d5cfc4396dc05e1139079daf1ba",
    "joulewise/b5/driver.py": "88068b64d09d3e335810e3b4718246cb3164223b87f96b56c5a098349882f90b",
    "joulewise/cadence/__init__.py": "f4b0e5a58ba794f75fc831965b4a840bcd07340807c66b42b3efad66bd787630",
-   "joulewise/cadence/desk.py": "c577a548f2426863eefc11a42f5e4ef83f748f18932ebd38e6c5bc7e5457f58a",
+   "joulewise/cadence/desk.py": "502ec84face40f5396c1f51943350f21030885cf3e054ca9aef4a7d353e6ea08",
    "joulewise/cadence/kit.py": "5baa8e1c7800b5e4edeb7439f6f17e2c04953589e225470faac1a8e12d47e857",
-   "joulewise/cadence/kit_v11.py": "61585a8c53e89304b7d47df5c97297ad4c323b6dfeaa67fa0be18bf09a1f0f17",
-   "joulewise/cadence/legs.py": "d66251215e706d64be689503417dccb5ca87ff486a92ee96711826a372590a72",
+   "joulewise/cadence/kit_v11.py": "bd8daee41e0c1303872a45dea94f3f71c70f7caa874f4b1b296371e1b5fd56b1",
+   "joulewise/cadence/legs.py": "b2c767cfc7c10cbb9c266c11a894ce5f7d74e736f38886f3bd9b9e8bc19ae217",
    "joulewise/cadence/queue.py": "4f926974f23c627d6d245199adf4f979d3397df4b0f6c5ed5eb22177690bc80e",
    "joulewise/cadence/stops.py": "80d640fc6519c8c35def61f086ae255a15bbebac43900bdcd183d772bec020fb",
    "joulewise/controller.py": "3f0535c976463da1ae99718cfcde2b0ef92241cda36973baaf4b1a6ebe1b12db",
    "scripts/align_r1_rehearsal.py": "2ba005b14bd687a87e749c2ec6f162a603b7e76674924bb282a766164070a710",
    "scripts/align_r1_runtime.py": "7403e69d9aedb54887bfc4218a45db84faa653329ca977bcf97edf20af88f923",
    "scripts/cadence_leg_runtime.py": "345e9064015536f7e1454f42535d7a44d39acdc17494d26fc4200a25b31662f1",
-   "scripts/cadence_legs_runner.py": "e8a92d24b60c329e6c2a45bc9fc21ce772012e3f82f455959754c0370089383f",
+   "scripts/cadence_legs_runner.py": "907859a89f5960dd40aeb23831c9693f88714d382d059a15c2a15961a582351f",
    "scripts/km003c_monitor.py": "211a807f152e18b28b622f1d914fca115f308e5938c979269842e2df91601ef9",
    "scripts/launch_align_r0.py": "242cd7aa0bf5788786ca8630e6931abcaaa3e01dc3bf014255a6191b50c6e799",
-   "scripts/launch_cadence_span.py": "c48044515b26861a354735dec75b6710e0b6763549dd19273d19a57318d0977c",
+   "scripts/launch_cadence_span.py": "9d68c8f5382bfe9d81a2d537193bb3963ef37126cd18ec7d86f38b6ae97fed8b",
    "scripts/run_align_r0_launchagent.sh": "ac1dc2a223754cfc3295dd1352a838a3077671da140ffeeba484400e1bd249c6",
    "scripts/run_align_r1_smoke.py": "5513d616231acf66209a29310df12214304a293042ddc020887b26369a87c34c",
    "scripts/run_night.py": "b3c58c91125b8355a5269928cda3b30e26f362b9927b03cbebf71d71f1fb28c0"
@@ -204,7 +204,7 @@
   },
   {
    "id": "bands_by_history",
-   "text": "RL-149 section 2.2: bands are by history and no designed start state is waited for. Band q0 means the turn starts at the leg's own G0 release (a warm start directly after a heavy leg's G0). The first leg of each span follows that span's fresh soak of at least 30 min idle, which is the block's cold start. Every model reads the measured start reading. The cell law balances prompt size against span position: every three consecutive legs hold each size once."
+   "text": "RL-149 section 2.2: bands are by history and no designed start state is waited for. Band q0 means the turn starts at the leg's own G0 release (a warm start directly after a heavy leg's G0). The first leg of each span follows that span's fresh soak of at least 30 min idle, which is the block's cold start. Every model reads the measured start reading. The cell law balances prompt size against span position: each block of three in kit order (L001-L003, L004-L006, L007-L009, L010-L012) holds each size once."
   },
   {
    "id": "reserve_rule",
@@ -227,7 +227,7 @@
   "band_unreachable_max": 2,
   "band_unreachable_scope": "span",
   "leg_time_factor": 1.5,
-  "notes": "RL-149 section 2.4: REFUSAL, restore unproven, disk or watcher down (span; the lead clears); INSTRUMENT_FAULT (span; the research lead clears); CONTAMINATED_REDOS, 3 in a span (the lead once, then the research lead); LEG_OVERTIME, two legs over 1.5 x their budget in a span (the lead). BAND_UNREACHABLE is dropped; the band_unreachable keys are schema v1 fields that no stop reads. A stop stops the next arm, never a running span. Leg budgets come from the runner's time model by prompt size: 1,076 s (2,000 tokens), 1,156 s (10,000) and 1,251 s (19,458) for a leg that judges its G0 against its own capture (G0 at Part C's 209 s); a span-reference leg's G0 is modeled at 600 s (1,467 s, 1,547 s and 1,642 s), so a span-reference G0 that runs to its 1,200 s cap alone never trips LEG_OVERTIME. leg_budget_s is their ceiling and leg_worst_case_s (a G0 at its 1,200 s cap, with margin) is each leg's process cap."
+  "notes": "RL-149 section 2.4: REFUSAL, restore unproven, disk or watcher down (span; the lead clears); INSTRUMENT_FAULT (span; the research lead clears); CONTAMINATED_REDOS, 3 in a span (the lead once, then the research lead); LEG_OVERTIME, two legs over 1.5 x their budget in a span (the lead). BAND_UNREACHABLE is dropped; the band_unreachable keys are schema v1 fields that no stop reads. A stop stops the next arm, never a running span. Campaign scope (RL-149 section 2.4; dev-01 kit check F5; RL-161 section 3): any change to a frozen kit path, or to host state outside measurement_mode as applied on 11-13 at 23:47, stops the campaign, not only the span; the research lead clears it. Every arm record states measurement_mode and network time off. Leg budgets come from the runner's time model by prompt size: 1,076 s (2,000 tokens), 1,156 s (10,000) and 1,251 s (19,458) for a leg that judges its G0 against its own capture (G0 at Part C's 209 s); a span-reference leg's G0 is modeled at 600 s (1,467 s, 1,547 s and 1,642 s), so a span-reference G0 that runs to its 1,200 s cap alone never trips LEG_OVERTIME. leg_budget_s is their ceiling and leg_worst_case_s (a G0 at its 1,200 s cap, with margin) is each leg's process cap."
  },
  "span_template": {
   "timezone": "America/Los_Angeles",

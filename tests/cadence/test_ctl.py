@@ -1,15 +1,19 @@
 """SYNTHETIC ONLY. Real launch-to-close orchestration; no hardware or process signalling."""
+from contextlib import redirect_stderr, redirect_stdout
 from copy import deepcopy
 import io
 import json
 from pathlib import Path
+import subprocess
+import sys
 import tempfile
 import unittest
 from unittest.mock import patch
 
 from joulewise.cadence import ctl, kit as kits, legs, desk
 from joulewise.align.apple import cadence_ctl, r1_runtime as rt, workload
-from scripts import cadence_legs_runner as runner, launch_cadence_span as launcher
+from scripts import cadence_legs_runner as runner, cadence_queue, launch_cadence_span as launcher
+from tests.cadence import test_kit_v11 as v11_tests
 from tests.cadence.test_legs_runner import local, NEW_WINDOW
 
 KIT = runner.ROOT / "docs/process/cadence/kits/cl-ctl-01.draft.json"
@@ -110,11 +114,58 @@ class KitTests(unittest.TestCase):
         import time
         args = SimpleNamespace(magistrate_pid=999,deadline=time.time()+40000,output=Path("/nonexistent/ctl-out"),
                                kit=KIT,legs="L001,L002,L003",batch_window="02:00-02:35")
-        with patch.object(launcher.base,"pid_alive",return_value=True), \
-             patch.object(launcher,"cadence_plan",return_value={}), \
+        with patch.object(launcher.base,"pid_alive",side_effect=AssertionError("host probe")), \
+             patch.object(launcher,"cadence_plan",side_effect=AssertionError("plan")), \
              patch.object(launcher.base,"write_fence",side_effect=AssertionError("fence")):
             with self.assertRaisesRegex(kits.KitError,"DRAFT"):
                 launcher.launch(args)
+
+    def test_issued_ctl_refuses_before_clock_anchor_fence_and_bootstrap(self):
+        # An issued-shaped fixture exercises the unresolved authority independently of the draft gate.
+        kit = draft()
+        kit.update(status="issued", frozen={"commit": "a" * 40, "paths": {kit["runner"]["entry"]: "b" * 64}})
+        kit["ruling"]["authorizes_spans"] = True
+        root = Path(self.enterContext(tempfile.TemporaryDirectory()))
+        path = root / "synthetic-issued.json"
+        path.write_text(json.dumps(kit))
+        argv = ["launch", "--repo", str(root), "--kit", str(path), "--output", str(root / "out"),
+                "--python-bin", sys.executable, "--disk-path", str(root), "--custody-root", str(root / "fence"),
+                "--magistrate-pid", "234", "--deadline", "2000"]
+        self.assertEqual(kits.load_kit(path)[0]["status"], "issued")
+        authority = ["--attempt-ledger", str(root / "ledger.json"), "--previous-close-receipt",
+                     str(root / "close.json"), "--span-id", "ctl-01-s01", "--authorized-t0-date", "2026-11-19",
+                     "--t0-not-before", "1000", "--t0-before", "2000", "--t0-not-before-ns", "1000000000000"]
+        with (patch.object(runner.RealClock, "arm_anchor_ns", side_effect=AssertionError("clock anchor")),
+              patch.object(launcher.base, "pid_alive", side_effect=AssertionError("host probe")),
+              patch.object(launcher.subprocess, "run", side_effect=AssertionError("host command"))):
+            for extra in ([], authority):
+                with self.subTest(extra=extra), redirect_stderr(io.StringIO()) as stderr:
+                    self.assertEqual(launcher.main(argv + extra), 2)
+                    self.assertIn("NEEDS_SPEC: ctl launch authority", stderr.getvalue())
+        self.assertFalse((root / "fence").exists())
+        with self.assertRaisesRegex(runner.SpanRefusal, "NEEDS_SPEC"):
+            runner.verify_frozen_production(kit)
+
+    def test_ctl_checklist_refuses_draft_without_requiring_batch_window(self):
+        root = Path(self.enterContext(tempfile.TemporaryDirectory()))
+        observations = root / "observations.json"
+        observations.write_text(json.dumps({**v11_tests.FreeT0Checklist.GOOD,
+                                             "t0_epoch_s": local("2026-11-19T00:30")}))
+        with redirect_stdout(io.StringIO()) as stdout:
+            self.assertEqual(cadence_queue.main(["checklist", "--kit", str(KIT), "--observations", str(observations),
+                                                "--kit-sha256", "f" * 64]), 1)
+        self.assertIn("DRAFT / UNFROZEN", stdout.getvalue())
+
+    def test_scripted_child_dispatch_refuses_non_ctl_leg_spec(self):
+        spec = {k: v for k, v in specs()[0].items() if k != "script"}
+        spec["schema"] = legs.LEG_SPEC_SCHEMA_V11
+        root = Path(self.enterContext(tempfile.TemporaryDirectory()))
+        path = root / "non-ctl-spec.json"
+        path.write_text(json.dumps(spec))
+        result = subprocess.run([sys.executable, "-B", str(runner.ROOT / runner.LEG_RUNTIME), "--scripted-ctl",
+                                 "--leg-spec", str(path)], capture_output=True, text=True, timeout=30)
+        self.assertEqual(result.returncode, rt.EXIT_REFUSED)
+        self.assertIn("cadence-ctl-v1 needs a ctl leg spec", result.stderr)
 
 
 class RuntimeTests(unittest.TestCase):
