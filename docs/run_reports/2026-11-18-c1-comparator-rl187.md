@@ -35,6 +35,13 @@ index](2026-11-18-c1-comparator-synthetic-index.jsonl) binds the revised compara
 and the RL-187 bars digest. The engine wire and the ten frozen sources are
 outside this changeset.
 
+The first hosted quick job flagged missing timing weights for the two test
+modules. The follow-up records their measured focused-sharder durations in
+`scripts/test_timings.json`. The local partition test's discovery hit denied
+metadata probes in unrelated archive test imports. The source-only timing
+census passed for every discovered module. The full partition guard runs in
+hosted CI. [Initial CI](https://github.com/mpmdw/JouleWise/actions/runs/44417598737/job/135202082163)
+
 ```sh
 PYTHONPATH=tests:. python3.13 -B -m unittest \
   v4_release.test_claim_output_mutations v4_release.test_rl187_comparator -v
