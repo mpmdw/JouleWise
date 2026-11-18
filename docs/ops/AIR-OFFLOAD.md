@@ -90,6 +90,8 @@ no raw or payload hashing on the MBP:
 5. The custody objects (payload, `MANIFEST.json`, both manifests) are second-copied, rechecked fresh at release
    and, after two copies, deleted from the pack directory together with the session's files (the directory goes if
    empty). The closure's external inputs (the calibration ledger) are never moved here and never deleted.
+   For v4 windows, retain the offload pack and MBP originals until the desk is final and its record is pushed
+   (RL-168 finding 3). Both verified copies are still required before deletion.
 
 **The harvest restore reads the verified copy in place.** The store keeps the harvest names, so on the Air:
 `$RUN unpack --offload /Volumes/JW-EXT/jw-offload/inbox/$K --finalized-manifest

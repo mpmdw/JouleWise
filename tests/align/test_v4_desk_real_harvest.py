@@ -38,7 +38,9 @@ def tearDownModule():  # noqa: N802 (unittest hook)
 
 def build(root, scope):
     """A synthetic v4 session for ``scope`` (W1, C3 or T2) whose harvest is the real one (exec seat's build)."""
-    window = w.Window(root / 'window')
+    start, end = w.member_span_ns('b5t-cmp-b01-b1')
+    excursion = ((start + end) // 2, {'instant_amperage_ma': 447, 'amperage_ma': 380})
+    window = w.Window(root / 'window', journals={'extra_publications': [excursion]})
     plan = json.loads(window.plan_path.read_bytes())
     plan['hazard_window']['bindings']['capture_screen'] = {}
     support.write_json(window.plan_path, plan)
@@ -152,18 +154,40 @@ class RealHarvestDeskTests(unittest.TestCase):
             rebuilt = (json.dumps(guess, indent=2, sort_keys=True) + '\n').encode()
             if rebuilt == raw:
                 self.assertNotIn(hashlib.sha256(rebuilt).hexdigest(), committed_text)
-        # The exec seat's subtraction attack (exec_subtract.py) on the committed source recovers nothing.
+        # Attack the committed view and a positive control with the true all-member totals restored.
         run = self.runs['W1']
         committed = json.loads((run['sroot'] / 'exclusions.json').read_text())
-        all_counts = (committed.get('flag_counts') or {}).get('by_code') or {}
-        benign, session = Counter(), Counter()
+        full = json.loads((run['sroot'] / 'archive/derived/exclusions.json').read_text())
+        benign, window_codes = Counter(), set()
         for line in run['printed'].splitlines():
             rid, sep, rest = line.partition(' harvest_flags: ')
-            if sep and rid != 'session':
-                for f in json.loads(rest).get('flags') or []:
-                    benign[f['code']] += 1
-        recovered = {c: n - benign[c] - session[c] for c, n in all_counts.items() if n - benign[c] - session[c]}
-        self.assertEqual(recovered, {})
+            if sep and rid == 'session':
+                window_codes.update(json.loads(rest)['flag_codes'])
+            elif sep:
+                benign.update(f['code'] for f in json.loads(rest).get('flags') or [])
+
+        def recover(view):
+            # Skip codes with an unknown window component. The remainder is measurable by subtraction.
+            totals = {code: n for code, n in view['flag_counts'].get('by_code', {}).items()
+                      if code not in window_codes}
+            return Counter(totals) - benign
+
+        self.assertTrue(benign)
+        recovered = recover({**committed, 'flag_counts': full['flag_counts']})
+        original = json.loads((run['sroot'] / 'archive/withheld/PILOT.full.json').read_text())
+        hidden = Counter(flag['code'] for member in original['members'] if member['run_id'] in run['fx'].nonbenign
+                         for flag in member['harvest_flags'] if flag['code'] not in window_codes)
+        self.assertTrue(hidden)
+        self.assertEqual(recovered, hidden)
+        self.assertEqual(recover(committed), {})
+
+    def test_rl163_synthetic_exclusion_rows_carry_only_roster_and_code_fields(self):
+        for scope, run in self.runs.items():
+            committed = json.loads((run['sroot'] / 'exclusions.json').read_text())
+            rows = committed['members_excluded']
+            self.assertTrue(rows, scope)
+            for row in rows:
+                self.assertEqual(set(row), {'run_id', 'position', 'codes', 'families'}, scope)
 
     def test_e5_w1_benign_harvest_lines_carry_no_timing(self):
         run = self.runs['W1']

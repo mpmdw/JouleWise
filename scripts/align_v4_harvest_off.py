@@ -18,6 +18,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 from pathlib import Path
 import subprocess
 import sys
@@ -150,18 +151,41 @@ def _require(args, *names):
                                              + ' (R17 review F2: no unbound transfer on the production route)')
 
 
+DESK_ARTIFACTS = frozenset({'archive', 'PILOT.json', 'desk.json'})
+
+
+def _require_pre_desk_tree(session):
+    if any(os.path.lexists(session / name) for name in DESK_ARTIFACTS):
+        raise harvest_offload.OffloadRefused('offload requires a pre-desk tree (archive/, PILOT.json, desk.json)')
+
+
+def _pack_inputs(finalized):
+    harvest_offload._validate_finalized(finalized)
+    external = tuple(harvest_offload.byte_bound_inputs(finalized))
+    directories = harvest_offload.bound_directories(finalized)
+    resolved_inputs = (harvest_offload._bound_real(finalized, path) for path in external)
+    obsolete_names = {name.casefold() for name in DESK_ARTIFACTS}
+    if any(part.casefold() in obsolete_names
+           for path in (*finalized['entries'], *external, *resolved_inputs, *directories)
+           for part in Path(path).parts):
+        raise harvest_offload.OffloadRefused('offload cannot carry archive/, PILOT.json or desk.json (RL-168)')
+    return external
+
+
 def cmd_pack(args, run=subprocess.run):
     _require(args, 'finalized-manifest')
     session, state, plan = _session(args.session_root)
+    _require_pre_desk_tree(session)
     if not (Path(plan['custody_root']) / 'night/result.json').is_file():
         raise harvest_offload.OffloadRefused('terminal record absent; pack only a finalized window')
     finalized = _read(args.finalized_manifest)
+    external = _pack_inputs(finalized)
     identity = checkout_identity(_mirror_root(state), run=run)
     started = time.time()
     # Air-offload S1-04 (lead ruling): carry EVERY byte-bound closure input (the ledger, external terminal
     # evidence, any byte-bound link target), so the Air copy restores without the MBP.
     manifest = harvest_offload.pack(session.absolute(), args.out, level=args.level, threads=args.threads,
-                                    external=tuple(harvest_offload.byte_bound_inputs(finalized)),
+                                    external=external,
                                     finalized=finalized, mirror_identity=identity)
     return {'packed': manifest['source_root'], 'files': manifest['files'], 'bytes': manifest['bytes'],
             'payload_bytes': manifest['payload']['size'], 'payload_sha256': manifest['payload']['sha256'],
@@ -173,7 +197,13 @@ def cmd_pack(args, run=subprocess.run):
 def cmd_unpack(args, run=subprocess.run):
     _require(args, 'finalized-manifest', 'finalized-sha256')
     offload = Path(args.offload)
-    finalized = _read(args.finalized_manifest)
+    raw = Path(args.finalized_manifest).read_bytes()
+    finalized = json.loads(raw)
+    if raw != harvest_offload._canonical_bytes(finalized):
+        raise harvest_offload.OffloadRefused('finalized record manifest is not canonical JSON')
+    if hashlib.sha256(raw).hexdigest() != args.finalized_sha256:
+        raise harvest_offload.OffloadRefused('finalized record manifest does not match the committed digest')
+    _pack_inputs(finalized)
     mirror = ((finalized.get('closure') or {}).get('mirror') if isinstance(finalized, dict) else None)
     if not isinstance(mirror, dict) or not isinstance(mirror.get('root'), str):
         raise harvest_offload.OffloadRefused('finalized record manifest binds no measurement checkout mirror')
@@ -449,7 +479,10 @@ def cmd_sweep(args, run=subprocess.run):
 
 
 def cmd_finalize_manifest(args, run=subprocess.run):
+    from joulewise.align.apple import v4_desk_seal
+
     session, state, plan = _session(args.session_root)
+    _require_pre_desk_tree(session)
     if not (Path(plan['custody_root']) / 'night/result.json').is_file():
         raise harvest_offload.OffloadRefused('terminal record absent; finalize only a terminal window')
     # The external closure (R17 review F1): links into the measurement checkout are bound by its
@@ -473,12 +506,15 @@ def cmd_finalize_manifest(args, run=subprocess.run):
         inputs += [path for path in consumed if path not in inputs]
     manifest = harvest_offload.finalized_manifest(session.absolute(), mirror={'root': mirror, 'identity': identity},
                                                   inputs=tuple(inputs), ignored_policy=policy)
+    _pack_inputs(manifest)
     # Canonical bytes, so the file's own SHA-256 (the record's raw_evidence descriptor) IS the
     # digest unpack checks (manifest_sha256): one number in the record, not two.
     with Path(args.out).open('xb') as sink:
         sink.write(json.dumps(manifest, sort_keys=True, separators=(',', ':')).encode())
-    return {'finalized_manifest': str(args.out), 'sha256': harvest_offload.manifest_sha256(manifest),
-            'entries': len(manifest)}
+    digest = {'sha256': harvest_offload.manifest_sha256(manifest)}
+    if v4_desk_seal.is_v4_session(state):
+        return digest
+    return {'finalized_manifest': str(args.out), **digest, 'entries': len(manifest)}
 
 
 def reduce_target_check(session, state, out, *, command='reduce'):

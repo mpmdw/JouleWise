@@ -651,6 +651,49 @@ class RunnerTests(unittest.TestCase):
             return subprocess.CompletedProcess(argv, 0, stdout=out, stderr='')
         return run
 
+    def test_rl168_offload_refuses_desk_artifacts_in_the_tree_or_external_inputs(self):
+        import io
+        from scripts import align_v4_harvest_off as runner
+
+        for artifact in ('archive', 'PILOT.json', 'desk.json'):
+            with self.subTest(artifact=artifact), tempfile.TemporaryDirectory(dir=REAL_TMP) as tmp:
+                root = Path(tmp)
+                session = root / 'session'
+                (session / 'night').mkdir(parents=True)
+                (session / 'night/result.json').write_text('{}')
+                (session / 'plan.json').write_text(json.dumps({'custody_root': str(session)}))
+                (session / 'session.json').write_text(json.dumps({'plan_path': str(session / 'plan.json')}))
+                manifest = root / 'finalized.json'
+                out = root / 'pack'
+                target = session / artifact
+                if artifact == 'archive':
+                    target.mkdir()
+                else:
+                    target.write_text('{}')
+                landed = runner.harvest_offload.finalized_manifest(session)
+                manifest.write_bytes(runner.harvest_offload._canonical_bytes(landed))
+                pack = ['pack', '--session-root', str(session), '--out', str(out),
+                        '--finalized-manifest', str(manifest)]
+                unpack = ['unpack', '--offload', str(out), '--finalized-manifest', str(manifest),
+                          '--finalized-sha256', runner.harvest_offload.manifest_sha256(landed)]
+                with contextlib.redirect_stderr(io.StringIO()) as err:
+                    self.assertEqual(runner.main(pack), 1)
+                self.assertIn('requires a pre-desk tree', err.getvalue())
+                external = root / artifact
+                target.rename(external)
+                # The inventory is checked independently of the current contents of the session root.
+                for argv in (pack, unpack):
+                    with contextlib.redirect_stderr(io.StringIO()) as err:
+                        self.assertEqual(runner.main(argv), 1)
+                    self.assertIn('offload cannot carry', err.getvalue())
+                (session / 'linked-input').symlink_to(external)
+                linked = runner.harvest_offload.finalized_manifest(session)
+                manifest.write_bytes(runner.harvest_offload._canonical_bytes(linked))
+                with contextlib.redirect_stderr(io.StringIO()) as err:
+                    self.assertEqual(runner.main(pack), 1)
+                self.assertIn('offload cannot carry', err.getvalue())
+                self.assertFalse(out.exists())
+
     def test_pack_then_unpack_only_onto_an_identical_mirror(self):
         import io
         from scripts import align_v4_harvest_off as runner
@@ -667,12 +710,14 @@ class RunnerTests(unittest.TestCase):
         (session / 'plan.json').write_text(json.dumps({'custody_root': str(session / 'custody'),
                                                        'hazard_window': {'bindings': {'ledger_path': str(ledger)}}}))
         (session / 'session.json').write_text(json.dumps({'plan_path': str(session / 'plan.json'),
+                                                          'session_id': 'align-v4-synthetic',
                                                           'measurement_root': str(session / 'measurement'),
                                                           'source_measurement_root': str(checkout)}))
         with contextlib.redirect_stdout(io.StringIO()) as out:
             self.assertEqual(runner.main(['finalize-manifest', '--session-root', str(session),
                                           '--out', str(root / 'M.json')], run=self.fake_run('a' * 40)), 0)
         finalized = json.loads(out.getvalue())
+        self.assertEqual(set(finalized), {'sha256'})
         self.assertEqual(hashlib.sha256((root / 'M.json').read_bytes()).hexdigest(), finalized['sha256'])
         with contextlib.redirect_stdout(io.StringIO()) as out:
             self.assertEqual(runner.main(['pack', '--session-root', str(session), '--out', str(root / 'o'),
@@ -695,6 +740,14 @@ class RunnerTests(unittest.TestCase):
                                           str(root / 'M.json'), '--finalized-sha256', '0' * 64],
                                          run=self.fake_run('a' * 40)), 1)
         self.assertIn('committed digest', err.getvalue())
+        noncanonical = root / 'noncanonical.json'
+        noncanonical.write_bytes((root / 'M.json').read_bytes() + b'\n')
+        with contextlib.redirect_stderr(io.StringIO()) as err:
+            self.assertEqual(runner.main(['unpack', '--offload', str(root / 'o'), '--finalized-manifest',
+                                          str(noncanonical), '--finalized-sha256', finalized['sha256']],
+                                         run=self.fake_run('a' * 40)), 1)
+        self.assertIn('not canonical JSON', err.getvalue())
+        self.assertFalse(session.exists())
         with contextlib.redirect_stdout(io.StringIO()):
             self.assertEqual(runner.main(['unpack', '--offload', str(root / 'o'), '--finalized-manifest',
                                           str(root / 'M.json'), '--finalized-sha256', finalized['sha256']],

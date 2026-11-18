@@ -36,7 +36,7 @@ may deliberately leave it OFF, recorded as `left_off` with a reason and read-bac
 
 ```sh
 $RUN finalize-manifest --session-root "$S" --out "$OUT/finalized_manifest.json"
-# prints {"finalized_manifest": ..., "sha256": H, "entries": n}
+# v4 prints {"sha256": H}
 shasum -a 256 "$OUT/finalized_manifest.json"     # == H: the file is canonical bytes
 ```
 
@@ -74,6 +74,7 @@ $RUN pack --session-root "$S" --out "$OUT/offload" --finalized-manifest "$OUT/fi
 - Measured: about 69 s for a 26.4 GB D window (`docs/ops/AIR-OFFLOAD.md` §8).
 - If cool-down lengthens measurably, drop to `--level 1 --threads 2`.
 - Do not copy anything else into `$OUT/offload/`: the offload tool sends the finalized manifest itself.
+- **Pack before any harvest or desk** (RL-168 finding 3). The transport walks every entry under `$S`, including directories and literal links. It also carries every byte-bound external file and directory. The v4 CLI refuses an `archive`, `PILOT.json` or `desk.json` entry in either inventory. Pack and unpack enforce the same rule. Preserve the original tree if the check refuses.
 - **The pack carries every byte-bound closure input** as an external (Air-offload S1-04): the ledger, external terminal evidence, byte-bound link targets and byte-bound ignored content. The Air copy therefore restores on its own, before the MBP copy is released.
   - Unpack refuses a pack that omits one.
   - Unpack places each carried input append-only at its finalized real path, then verifies the whole closure before publishing.
@@ -98,7 +99,7 @@ offload_window.py run --state-root "$OFFLOAD_STATE" --window-id "$K" --record-ro
 - The tool checks the pack against the committed digest `H` before sending anything. It pushes the payload, `MANIFEST.json` and the finalized manifest (as `record-manifest.bin`) into `/Volumes/JW-EXT/jw-offload/inbox/$K` on the Air, and the Air verifies every member there.
 - Commit the span (`$OFFLOAD_STATE/$K/timing/offload-span.json`) into the record branch, as its §4 says.
 - The transfer must finish before the dwell starts. Before the arm, run its `triage --dwell-start-epoch` check.
-- The MBP originals and the custody objects stay until the tool's two verified copies exist. Its release step deletes them; nothing here does.
+- Keep the offload pack and MBP originals until the window's desk is final and its record is pushed (RL-168 finding 3). The offload tool's two-verified-copy requirement also applies before its deletion step.
 
 ## 2. Air, during the MBP cool-down
 
@@ -131,7 +132,7 @@ $RUN triage --session-root "$S" --window-id "$K" --out "$OUT/light_triage.json"
 
 Record k is the index `records/$K/record.json` (schema `joulewise.align_v4.window_record.v1`), committed and pushed as today. The full field list is in `next_arm_packet.md` (Committed inputs). R17 changes only the following.
 
-**Every record after R1 (R17 review F2):** the record carries the top-level field `finalized_manifest` → `{"path": "records/$K/evidence/finalized_manifest.json", "sha256": H}`, the file from 1b byte for byte. The packet builder refuses a record without it, or with a non-canonical one.
+**Every record after R1 (RL-163 §1):** the record must carry only the manifest digest. Keep the canonical body out of Git until release, with one copy on the MBP and one beside the restored tree on the Air. The packet builder still expects R17's descriptor and body. The digest-only cutover waits for Fable's unpack-receipt ruling because the Air can reach `final` without a verified unpack. Hold series-record commits until the successor lands with that gate. At release, commit each body at `records/$K/evidence/finalized_manifest.json` and check its SHA-256 against that window's record.
 
 **Full desk NOT due** (the previous window is not W1, and the arm's artifact-set digest equals the last desk-passed one):
 - `sources.light_triage` → `records/$K/evidence/light_triage.json`, the file from 2b, byte for byte.
@@ -199,11 +200,11 @@ When the Air's full desk for k has finished (§5), record **k+1** gets `previous
 - **One guarded harvest desk at a time per session.** The desk holds an exclusive lock on the session directory from its rerun check to its last write. A second desk started meanwhile refuses at once and writes nothing (Sol audit #5).
 - **A guarded v4 desk refuses a rerun** on a session that already holds `desk.json`, `PILOT.json`, `exclusions.json`, `archive/withheld/PILOT.full.json` or `archive/withheld/desk_seal_key.json`. It refuses before the harvest or any write. Re-run on a fresh session restore (PR #774 E6).
 - **`archive/derived/`** (RL-163 §2): `flags.jsonl`, `b6-flags.jsonl`, `b6-acceptance.json` and `window_flags.json` are restricted like `archive/withheld/`, where they are. `exclusions.json` is restricted too, because of its all-member `flag_counts` (E2 above). `roster.json` is not restricted.
-- **The finalized manifest** (RL-163 §1): before release its body and entry count are restricted, and the record commits its digest only. The code change is in the desk-seal follow-up PR, and no v4 series record is committed before that PR merges.
+- **The finalized manifest** (RL-163 §1): the body and entry count stay restricted until release. The finalize command prints its digest. See §3 for the outstanding packet cutover.
 
 ## 5. Air, during window k+1: restore → harvest → desk → final → reduce
 
-The Air must be otherwise quiet: no Sol seats; renice others. The desk-verdict child has a wall budget; a time-out there is a re-run, not a result.
+The Air must be otherwise quiet: no Sol seats; renice others. The desk-verdict child has a wall budget. A time-out requires a re-run on a fresh restore.
 
 ```sh
 $RUN desk  --session-root "$S" --workers auto [--sweep "$S_SWEPT/archive/withheld/sweep/SWEEP.json"]   # harvest + full v4 desk; first, on a fresh restore
@@ -251,7 +252,7 @@ $RUN reduce --session-root "$S" --out "$S/archive/withheld/reduced" --workers 2 
 | `desk` | `sweep run failed` / `nonpositive or missing peak` | The sweep receipt is not a measurement. Re-run the sweep, or drop `--sweep`. |
 | `final` | `needs a completed harvest` / `desk and PILOT.json of this session` | The desk did not finish its harvest, or the files are another session's. |
 | packet / arm | `R17: final eligibility of K must be recorded before the arm of the window after next` | k is still provisional at the arm of k+2, or its final sources record no completed, plan-bound harvest. For a test window, `member_eligibility` fails. Commit `previous_final` (§4). |
-| packet / arm | `must bind the finalized tree manifest` / `not a canonical` | Record k lacks `finalized_manifest` (§3), or the file is not the canonical bytes from 1b. |
+| finalize / pack / unpack | `requires a pre-desk tree` / `offload cannot carry` | A desk artifact is in the transport tree or its byte-bound external closure. Preserve the source and report the refusal to the lead. |
 | packet / arm | `member_eligibility` failed with no final sources | The full desk is due (after W1 or a code/config change). Wait for §5 and commit the final sources in record k. |
 | packet / arm | `previous_final must name this record ...` | `record_sha256` or the source set is wrong. |
 | packet / arm | `a finally excluded member of K is in the pool` | Correct `pool_members` in the series ledger. |
@@ -272,13 +273,14 @@ $RUN sweep --session-root "$S" --out "$S/archive/withheld/sweep" --workers 2,4,6
 Then use it for every later desk by the **swept session's own path**: `--workers auto --sweep "$S_SWEPT/archive/withheld/sweep/SWEEP.json"`. **Never copy the receipt into a later session.** The guarded desk refuses a session that already has an `archive/` before its harvest, and so does the harvest (`archive_root_exists`). That would spend the window's one desk run (PR #774 F2). The whole sweep directory is restricted like `archive/withheld/` (PR #774 E3): its `wNN/export/` holds a non-claim per-run export and full archives.
 - **Order on any session:** restore → `desk` → `final` → then, if wanted, `reduce` and `sweep`. Neither `reduce` nor `sweep` runs before that session's own desk.
 - **Recovery after a faulted or partial desk** (`program_fault`, a killed harvest, or a refused rerun): restore the window afresh from its offload pack into a new session directory (§2, `unpack` against the committed finalized-manifest digest) and run the desk there once. A guarded desk never runs twice on one restore, and it says so when it refuses.
+- Keep the pack and the MBP originals until the window's desk is final and its record is pushed. Retain the final withheld archive with its desk key until release so the committed exclusions binding can be verified.
 - `SWEEP.json` (schema `harvest_sweep.v2`) records the swept window's largest plist and the harvest code identity.
 - After a code change, re-run the sweep. Until then, the desk uses the 8× fallback.
 - Record the knee (the fastest count whose peak fits) in RUN_STATE.
 - Keep `SWEEP.json`, restricted like `withheld/` until the series release: its peaks and `largest_plist_bytes` are a maximum over the window's members, which encodes the longest member's duration (PR #774 N6). The `sweep` and `desk --workers auto` commands print worker counts and the sizing basis only.
 - The sweep's five archives are engineering copies. Delete them after; they are never record sources.
 
-**Optional native identity check (N2).** On a window whose harvest also ran on the MBP, compare the two archives:
+**Optional native identity check (N2).** Make the pre-desk pack first. Run the MBP comparison harvest outside its packed session tree and byte-bound closure, then compare the two archives:
 
 ```sh
 $PY -c 'import sys,json; from joulewise.align.apple.harvest_offload import archive_projection as p; \

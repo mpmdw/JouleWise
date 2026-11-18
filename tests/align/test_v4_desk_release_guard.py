@@ -14,6 +14,8 @@ import re
 from contextlib import ExitStack, redirect_stdout
 from pathlib import Path
 import shutil
+import subprocess
+import sys
 import tempfile
 import unittest
 from unittest.mock import patch
@@ -140,7 +142,7 @@ class Fixture:
                       {'members': {rid: {'discharge_j': plant(i)['battery']} for rid, i in self.index.items()}})
         rows = [{'code': flag, 'scope': {'run_id': self.rows[i]['run_id']}} for i, where, flag in CARVED + KEPT
                 if where == 'harvest']
-        rows.append({'code': 'thermal.hold_timeout:session', 'scope': {}})      # session-scoped: counted, not listed
+        rows.append({'code': 'thermal.hold_timeout:session', 'scope': {}})      # routine window code
         (root / 'archive/derived/flags.jsonl').write_text(''.join(json.dumps(r) + '\n' for r in rows))
         return root
 
@@ -1505,49 +1507,102 @@ class EntryPointTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             seal.refuse_rerun(tmp)                                   # a fresh restore passes
 
+    def test_rl163_window_flags_feed_tripwire_2_without_changing_member_tallies(self):
+        for scope, window in (('W1', None), ('C3', {'window_id': 'C3', 'role': 'calibration'})):
+            with self.subTest(scope=scope):
+                root = self.fx.session('window-tripwire-' + scope, window)
+                path = root / 'archive/derived/flags.jsonl'
+                _, control, _, _ = self.fx.run_desk(root)
+                added = [{'code': 'instrument.window_fault', 'scope': {}, 'observed': 'SYNTHETIC_HIDDEN_VALUE'},
+                         {'code': 'instrument.window_fault', 'scope': {}, 'observed': 'SYNTHETIC_HIDDEN_VALUE'},
+                         {'code': 'calibration.refit_cache_miss', 'scope': {}}]
+                with path.open('a') as sink:
+                    for flag in added:
+                        sink.write(json.dumps(flag) + '\n')
+                printed, report, _, _ = self.fx.run_desk(root)
+                self.assertEqual(control['extra_checks']['unlisted_flag_codes']['window_harvest_codes'], [])
+                expected = {**control['extra_checks']['unlisted_flag_codes'],
+                            'window_harvest_codes': ['instrument.window_fault']}
+                self.assertEqual(report['extra_checks']['unlisted_flag_codes'], expected)
+                line = next(line for line in printed.splitlines() if 'unlisted flag codes (' in line)
+                self.assertTrue(line.endswith('; window harvest codes: instrument.window_fault'), line)
+                self.assertNotIn('SYNTHETIC_HIDDEN_VALUE', line)
+
+    def test_rl163_dc_fit_flags_print_once_per_window_without_row_counts(self):
+        for scope, role in (('W1', 'selection'), ('C3', 'calibration'), ('T2', 'test')):
+            with self.subTest(scope=scope):
+                root = self.fx.session('dc-fit-' + scope, {'window_id': scope, 'role': role})
+                dc = self.fx.dc_report()
+                flags = ['excluded_turn_rows=7', 'rank_deficient_design']
+                dc['models'] = [{'flags': flags}, {'flags': ['excluded_turn_rows=12', flags[1]]}]
+                for row in dc['members'].values():
+                    row['flags'].extend(flags)
+                with patch.object(self.fx, 'dc_report', return_value=dc):
+                    printed, _, _, _ = self.fx.run_desk(root)
+                lines = [line for line in printed.splitlines() if km003c.LABEL in line]
+                self.assertEqual([line for line in lines if 'excluded_turn_rows' in line],
+                                 [f'{km003c.LABEL} window fit flags (RL-163 section 3): '
+                                  'excluded_turn_rows, rank_deficient_design'])
+                self.assertEqual(sum('rank_deficient_design' in line for line in lines), 1)
+
+    def test_rl168_flock_distinguishes_contention_and_lock_failure(self):
+        import errno
+        import os
+
+        root = self.fx.session('lock-errors')
+        with patch('fcntl.flock', side_effect=OSError(errno.ENOTSUP, 'operation unsupported')) as flock:
+            with self.assertRaisesRegex(ValueError, 'could not lock.*operation unsupported'):
+                seal.SessionLock(root)
+            fd = flock.call_args.args[0]
+            with self.assertRaises(OSError) as exc:
+                os.fstat(fd)
+            self.assertEqual(exc.exception.errno, errno.EBADF)
+        with patch('fcntl.flock', side_effect=OSError(errno.EWOULDBLOCK, 'would block')):
+            with self.assertRaisesRegex(ValueError, 'another desk holds this session'):
+                seal.SessionLock(root)
+
     def test_sol5_two_concurrent_desks_cannot_both_run(self):
         # Sol audit #5 (audit_concurrent_rerun.py): both desks used to pass E6's check before either wrote, and the
         # later one overwrote the completed record and key with a fault record. The session lock is held from the
         # check to the last write: the concurrent second desk refuses at once and writes nothing.
-        import threading
         root = self.fx.session('sol5-concurrent', {'window_id': 'C3', 'role': 'calibration'})
         staged = root.parent / 'sol5-concurrent-archive'
         (root / 'archive').rename(staged)
-        started, release = threading.Event(), threading.Event()
-        outcome = {}
 
         def harvest(argv, **_):
-            started.set()
-            self.assertTrue(release.wait(60))
             staged.rename(Path(argv[argv.index('--archive-root') + 1]))
-            return __import__('subprocess').CompletedProcess(argv, 0, stdout='', stderr='')
+            return subprocess.CompletedProcess(argv, 0, stdout='', stderr='')
 
-        def first():
-            try:
-                outcome['first'] = session.desk(root, harvest=True, run=harvest)
-            except Exception as exc:                                  # surfaced by the assertion below
-                outcome['first'] = exc
+        first_seal = seal.DeskSeal.__call__
+        observed_keys = []
+
+        def attempt_second_desk(policy, report, lines, *, output):
+            sealed = first_seal(policy, report, lines, output=output)
+            key_path = root / seal.WITHHELD_KEY
+            before = key_path.read_bytes()
+            self.assertFalse((root / 'desk.json').exists())
+            argv = [sys.executable, '-B', '-m', 'scripts.align_v4_session', 'desk', '--session-root', str(root)]
+            child = subprocess.run(argv, cwd=Path(__file__).resolve().parents[2], capture_output=True, text=True)
+            self.assertNotEqual(child.returncode, 0)
+            self.assertIn('another desk holds this session', child.stdout + child.stderr)
+            self.assertFalse((root / 'desk.json').exists())
+            self.assertEqual(key_path.read_bytes(), before)
+            observed_keys.append(before)
+            return sealed
+
         with ExitStack() as stack:
             self.fx.patches(stack)
             stack.enter_context(redirect_stdout(io.StringIO()))
-            thread = threading.Thread(target=first)
-            thread.start()
-            self.assertTrue(started.wait(60))                         # the first desk is inside its harvest
-            calls = []
-            with self.assertRaisesRegex(ValueError, 'another desk holds this session'):
-                session.desk(root, harvest=True, run=lambda argv, **_: calls.append(argv))
-            self.assertEqual(calls, [])
-            self.assertFalse((root / 'desk.json').exists())           # the second wrote nothing
-            release.set()
-            thread.join(60)
-        self.assertIsInstance(outcome['first'], dict, outcome)
-        self.assertEqual(outcome['first']['harvest_status'], 'ok')
+            stack.enter_context(patch.object(seal.DeskSeal, '__call__', attempt_second_desk))
+            status = session.desk(root, harvest=True, run=harvest)
+        self.assertEqual(status['harvest_status'], 'ok')
         key = (root / seal.WITHHELD_KEY).read_bytes()
+        self.assertEqual(observed_keys, [key])
         # once the first desk is done, a later desk is refused by E6 and the completed record and key stand
         with ExitStack() as stack:
             self.fx.patches(stack)
             with redirect_stdout(io.StringIO()), self.assertRaisesRegex(ValueError, 'rerun refused'):
-                session.desk(root, harvest=True, run=lambda argv, **_: calls.append(argv))
+                session.desk(root, harvest=True, run=harvest)
         self.assertEqual((root / seal.WITHHELD_KEY).read_bytes(), key)
 
     def test_sol3_c_t_fit_flags_print_no_row_count(self):
@@ -1571,7 +1626,7 @@ class EntryPointTests(unittest.TestCase):
                         return result
                     return read
                 return outer
-            printed = []
+            printed, full_counts = [], []
             for extra in (0, 7):
                 fx.summary = factory(extra)
                 root = fx.session(f'fit-{extra}', {'window_id': 'C3', 'role': 'calibration'})
@@ -1579,11 +1634,15 @@ class EntryPointTests(unittest.TestCase):
                 pool = report['residual_analysis']['pooled']['scopes']
                 flags = sorted({f for block in pool.values() for row in block.values() for f in row['fit_flags']})
                 printed.append(flags)
+                self.assertIn('excluded_turn_rows', flags)
                 self.assertFalse([f for f in flags if re.search(r'=\d', f)], flags)
                 self.assertNotRegex(out, r'excluded_turn_rows=\d')
+                full = json.loads((output / 'archive/withheld/PILOT.full.json').read_text())
+                counts = re.findall(r'excluded_turn_rows=(\d+)', json.dumps(full['residual_analysis']))
+                self.assertTrue(counts)
+                full_counts.append([int(count) for count in counts])
             self.assertEqual(printed[0], printed[1])
-            full = json.loads((output / 'archive/withheld/PILOT.full.json').read_text())
-            self.assertRegex(json.dumps(full['residual_analysis']), r'excluded_turn_rows=\d')   # kept for release
+            self.assertNotEqual(full_counts[0], full_counts[1])
 
     def test_f3_w1_printed_benign_rows_carry_no_absolute_stamps(self):
         # Mythos final seat F3 (m_w1_bracket.py): the six bundles on one night's timeline, a planted episode time on
