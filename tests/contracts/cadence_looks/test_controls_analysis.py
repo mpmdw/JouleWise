@@ -4,7 +4,9 @@ from dataclasses import dataclass, field, replace
 from hashlib import sha256
 import json
 from math import sqrt
+from types import SimpleNamespace
 import unittest
+from unittest.mock import Mock
 
 from joulewise.cadence_looks import controls_analysis as analysis
 
@@ -28,6 +30,7 @@ class Turn:
 
 @dataclass(frozen=True)
 class Episode:
+    episode_id: str = "invented"
     turns: tuple = (Turn(),)
     hardware: dict = field(default_factory=dict)
     start_ns: int = 0
@@ -55,8 +58,18 @@ def cpu_steps():
     return (call(1, 2, 3), interval("cpu", 3, 13), call(13, 14, 15), interval("recovery", 15, 135))
 
 
+def calculate(kernel, *legs):
+    supplied = {row.leg_id: row for row in legs}
+    full = [supplied.get(leg_id, analysis.LegInput(leg_id, "plain", False, False))
+            for leg_id in analysis.PILOT + analysis.REMAINDER]
+    return analysis.print_controls(full, kernel=kernel,
+                                   gap_limits_ns=dict.fromkeys(analysis.CHANNELS, 2 * NS),
+                                   pooled=analysis.pool_hold_windows([], set()),
+                                   instrument_manifest_sha256="a" * 64)
+
+
 class TestControlsConventions(unittest.TestCase):
-    def test_exact_stamp_conflict_and_other_blind_view_refusals(self):
+    def test_physical_call_view_and_work_evidence_refusals(self):
         steps = cpu_steps()
         episode = Episode()
         candidate = leg(episode, "L010", "cpu", steps)
@@ -65,14 +78,66 @@ class TestControlsConventions(unittest.TestCase):
         self.assertEqual(tuple((t.start_ns, t.end_ns) for t in view.episode.turns),
                          ((NS, 3 * NS), (13 * NS, 15 * NS)))
         self.assertEqual(tuple(t.prefill_tokens for t in view.episode.turns), (2000, 2000))
-        # The runner takes a new clock reading on entry to the endpoint.
-        different_read = replace(episode, turns=(replace(episode.turns[0], start_ns=NS + 1),))
-        with self.assertRaisesRegex(analysis.ViewError, "^envelope_stamps$"):
-            analysis.physical_call_view(replace(candidate, episode=different_read))
         with self.assertRaisesRegex(analysis.ViewError, "^script_digest$"):
             analysis.physical_call_view(replace(candidate, work_bytes=candidate.work_bytes + b"\n"))
         with self.assertRaisesRegex(analysis.ViewError, "^step_order_or_episode_bounds$"):
             analysis.physical_call_view(replace(candidate, episode=replace(episode, end_ns=134 * NS)))
+
+    def test_shared_envelope_stamps_gate_phase_code_and_qualifier(self):
+        # PR #808 at 87b9b5df places the first visible call's two endpoint
+        # stamps in both the authenticated work record and the logged envelope.
+        steps = cpu_steps()
+        first = steps[0]
+        envelope = Turn(start_ns=first["started_ns"], first_token_ns=first["first_token_ns"])
+        accepted = leg(Episode("invented-shared-stamps", (envelope,)), "L010", "cpu", steps)
+        rejected = (
+            leg(Episode("invented-start-mismatch", (replace(envelope, start_ns=envelope.start_ns + 1),)),
+                "L003", "cpu", steps),
+            leg(Episode("invented-first-token-mismatch", (replace(envelope, first_token_ns=envelope.first_token_ns + 1),)),
+                "L004", "cpu", steps),
+        )
+
+        # Use spies so the routing assertions also run before the pinned phase
+        # implementation reaches this checkout. The frozen phase tests below
+        # cover the calculations on the same CPU step sequence.
+        trace = SimpleNamespace(t_ns=tuple(seconds * NS for seconds in range(136)))
+        other = tuple(SimpleNamespace(kind="gap", start_ns=start * NS, end_ns=end * NS)
+                      for start, end in ((0, 1), (3, 13), (15, 135)))
+        phases = SimpleNamespace(
+            with_package=Mock(side_effect=lambda episode: episode),
+            selected_trace=Mock(return_value=(trace, None)),
+            phase_table=Mock(return_value={"phases": {}}),
+            ControlLeg=lambda episode, dose: (episode, dose),
+            qualify_ctl01=Mock(return_value={"qualified": "no"}),
+            TIMING_EDGE_J=1.0,
+        )
+        kernel = analysis.PhaseKernel(
+            phases, Mock(return_value=SimpleNamespace(segments=other)),
+            Mock(return_value=SimpleNamespace(joules=0, flags=())),
+        )
+
+        result = calculate(kernel, *rejected, accepted)
+        rows = {row["leg_id"]: row for row in result["legs"]}
+        for rejected_leg in rejected:
+            self.assertEqual(rows[rejected_leg.leg_id], {
+                "leg_id": rejected_leg.leg_id, "kind": "cpu", "disposition": "not_evaluable",
+                "reason": "envelope_stamps",
+            })
+        self.assertEqual(rows["L010"]["disposition"], "admitted")
+        self.assertEqual(rows["L010"]["envelope"], envelope)
+
+        phases.with_package.assert_called_once()
+        view = phases.with_package.call_args.args[0]
+        self.assertEqual(view.episode_id, accepted.episode.episode_id)
+        self.assertEqual(tuple((turn.start_ns, turn.first_token_ns, turn.end_ns) for turn in view.turns),
+                         ((NS, 2 * NS, 3 * NS), (13 * NS, 14 * NS, 15 * NS)))
+        channels = tuple(analysis.TRACE_CHANNELS.values())
+        self.assertEqual([(entry.args[0], entry.kwargs["source"], entry.kwargs["channel"])
+                          for entry in kernel.attribute_episode.call_args_list],
+                         [(view, source, channel) for source, channel in channels])
+        self.assertEqual([entry.args[:2] for entry in phases.phase_table.call_args_list],
+                         [(view, channel) for channel in channels])
+        phases.qualify_ctl01.assert_called_once_with([(view, 10)])
 
     def test_dose_fit_six_legs_and_leave_one_out(self):
         points = {"L005": (128, 5), "L012": (128, 5), "L008": (256, 9),
@@ -143,19 +208,10 @@ class TestFrozenPhaseIntegration(unittest.TestCase):
         return Episode("invented", "controls", "benign", "toy", "fake", 42, "toy", 0, end * NS,
                        (turn,), power_traces=traces)
 
-    def calculate(self, *legs):
-        supplied = {row.leg_id: row for row in legs}
-        full = [supplied.get(leg_id, analysis.LegInput(leg_id, "plain", False, False))
-                for leg_id in analysis.PILOT + analysis.REMAINDER]
-        return analysis.print_controls(full, kernel=self.kernel,
-                                       gap_limits_ns=dict.fromkeys(analysis.CHANNELS, 2 * NS),
-                                       pooled=analysis.pool_hold_windows([], set()),
-                                       instrument_manifest_sha256="a" * 64)
-
     def test_cpu_burn_moves_from_decode_to_other(self):
         episode = self.episode(Turn(), 135)
         original = self.kernel.phases.phase_table(episode, self.kernel.phases.CPU)["phases"]
-        result = self.calculate(leg(episode, "L010", "cpu", cpu_steps()))
+        result = calculate(self.kernel, leg(episode, "L010", "cpu", cpu_steps()))
         cpu = result["legs"][9]["channels"]["cpu_rail"]
         phases = cpu["absolute"]["phases"]
         self.assertEqual((original["decode"]["joules"], original["other"]["joules"]), (52, 484))
@@ -172,8 +228,8 @@ class TestFrozenPhaseIntegration(unittest.TestCase):
         visible = call(5, 6, 7, requested=1024, delivered=1024)
         full = call(1, 3, 5, kind="hidden", requested=128, delivered=128)
         short = call(1, 3, 5, kind="hidden", requested=128, delivered=64)
-        rows = self.calculate(leg(episode, "L002", "hidden", (full, visible, tail)),
-                              leg(episode, "L005", "hidden", (short, visible, tail)))
+        rows = calculate(self.kernel, leg(episode, "L002", "hidden", (full, visible, tail)),
+                         leg(episode, "L005", "hidden", (short, visible, tail)))
         self.assertEqual(len(rows["legs"]), 12)
         self.assertEqual(rows["dose_response"]["gpu_rail"]["legs"], ("L002",))
         self.assertEqual(rows["legs"][4]["delivery"], "short")
@@ -183,7 +239,7 @@ class TestFrozenPhaseIntegration(unittest.TestCase):
             self.assertEqual((gpu["baseline_w"], hidden["call_j"], hidden["prefill_j"], hidden["decode_j"],
                               hidden["j_per_token"]), (2, 12, 4, 8, 8 / divisor))
         incomplete = leg(episode, "L002", "hidden", (full, visible, {**tail, "complete": False}))
-        gpu = self.calculate(incomplete)["legs"][1]["channels"]["gpu_rail"]
+        gpu = calculate(self.kernel, incomplete)["legs"][1]["channels"]["gpu_rail"]
         self.assertEqual((gpu["baseline_w"], gpu["baseline_reason"]), (None, "incomplete_recovery"))
         self.assertTrue(gpu["absolute"]["closes"])
 
@@ -217,6 +273,6 @@ class TestFrozenPhaseIntegration(unittest.TestCase):
                 episode = self.episode(envelope, 123)
                 kind = "plain"
             legs.append(leg(replace(episode, episode_id="invented-" + name), name, kind, steps))
-        qualifier = self.calculate(*legs)["aligned_power"]
+        qualifier = calculate(self.kernel, *legs)["aligned_power"]
         # CPU other energy at 10/30/90 s is 524/151/422 J.
         self.assertEqual(qualifier, {"qualified": "no", "all_legs_close": True, "cpu_burn_order": False})
