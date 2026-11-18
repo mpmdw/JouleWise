@@ -43,6 +43,17 @@ def write(path, value):
     path.write_bytes(encoded(value) + b"\n")
 
 
+def probe_child(argv, **kwargs):
+    responses = {
+        "pmset": "Now drawing from 'AC Power'\n - 100%; charged",
+        "df": "Filesystem 1G-blocks Used Available Capacity Mounted on\nfixture 500 100 400 20% /",
+        "launchctl": "PID\tStatus\tLabel\n-\t0\tfixture",
+        "ps": "PID PPID COMM\n10 1 fixture-agent\n11 10 fixture-agent\n",
+        "sysctl": "{ sec = 1794900000, usec = 0 }",
+    }
+    return subprocess.CompletedProcess(argv, 0, responses.get(Path(argv[0]).name, ""), "")
+
+
 class History:
     """Build writer events without using the scheduler's fold."""
 
@@ -83,8 +94,9 @@ class History:
         if copy:
             self.add("COPY_VERIFIED", **bound)
 
-    def ready(self, entry, effective, route_clear=True):
-        self.add("READY", entry_id=entry, effective=effective, route_clear=route_clear)
+    def ready(self, entry, effective, route_clear=True, expected_ready_by=None):
+        self.add("READY", entry_id=entry, effective=effective, route_clear=route_clear,
+                 expected_ready_by=expected_ready_by)
 
 
 MIRRORS = {
@@ -92,6 +104,7 @@ MIRRORS = {
     "restore_proofs": {"RESTORE"}, "stops": {"STOP"}, "gates": {"GATE"},
     "ready": {"READY"}, "refusals": {"REFUSAL"},
     "copy_events": {"COPY_VERIFIED", "UPLOAD_STOPPED", "COPY_STARTED"},
+    "config_events": {"CONFIG"},
 }
 
 
@@ -114,6 +127,7 @@ def scenario(name):
                "expected_s": 2400, "worst_case_s": 3200}
     short = {**f0, "id": "short", "kind": "product_filler", "repeat": False,
              "worktree": "/fixture/short", "argv": ["fixture-short"], "plan_argv": ["fixture-short-plan"],
+             "requires": ["pin-admitted", "counted-fits", "launcher-admits", "not-refused"],
              "params": {}, "expected_s": 2900, "worst_case_s": 3800}
     queue["entries"] += [counted, short]
     if name != "counted":
@@ -137,7 +151,8 @@ def scenario(name):
         history.close(attempt, attempt["t0_epoch"] + 10)
     history.add("GATE", id="freeze-2", passed=False)
     history.add("GATE", id="freeze-2", passed=True)
-    history.ready("dev-next", False)
+    history.add("GATE", id="r1-post-close-check", passed=False)
+    history.ready("dev-next", False, expected_ready_by=counted.get("expected_ready_by"))
     if name == "counted":
         history.ready("dev-next", True)
     if name == "v4":
@@ -146,6 +161,8 @@ def scenario(name):
     history.add("REFUSAL", entry_id="other", kit_sha256=None, block=None,
                 queue_commit="fixture-commit", epoch=now - 10, reason="fixture refusal")
     facts = json.loads((FIXTURES / "facts.json").read_text())
+    history.add("CONFIG", queue_commit=facts["queue_commit"],
+                queue_digest=digest(queue), rules_digest=digest(rules))
     facts.update(now_epoch=now, ledger_head=head_for(history.rows), queue_digest=digest(queue),
                  rules_digest=digest(rules), plans={})
     for mirror, kinds in MIRRORS.items():
@@ -166,6 +183,11 @@ def set_plans(queue, facts):
 
 
 def reseal(queue, rules, facts, rows, mirrors=True):
+    revision = {"queue_commit": facts["queue_commit"],
+                "queue_digest": digest(queue), "rules_digest": digest(rules)}
+    existing = next((row for row in reversed(rows) if row["event"] == "CONFIG"), {})
+    if any(existing.get(key) != value for key, value in revision.items()):
+        rows.append({"seq": len(rows) + 1, "event": "CONFIG", "legs": 0, **revision})
     facts.update(ledger_head=head_for(rows), queue_digest=digest(queue), rules_digest=digest(rules))
     for key, events in MIRRORS.items():
         if mirrors:
@@ -286,7 +308,8 @@ class MutationProperties(unittest.TestCase):
             for changed in (None, [], *[rows[:i] for i in range(1, len(rows))]):
                 check(("ledger prefix", None if changed is None else len(changed)),
                       (queue, rules, facts, changed))
-            for key in ("receipts", "restore_proofs", "stops", "gates", "ready", "launches", "closes"):
+            for key in ("receipts", "restore_proofs", "stops", "gates", "ready", "launches",
+                        "closes", "config_events"):
                 for i, row in enumerate(facts[key]):
                     if key == "receipts":
                         substitutions = [(("receipt", "span_id"), "wrong-span")]
@@ -298,7 +321,11 @@ class MutationProperties(unittest.TestCase):
                         substitutions = [(("passed",), not row["passed"])]
                     elif key == "ready":
                         substitutions = [(("effective",), not row["effective"]),
-                                         (("route_clear",), not row["route_clear"])]
+                                         (("route_clear",), not row["route_clear"]),
+                                         (("expected_ready_by",), None if row["expected_ready_by"] is not None
+                                           else facts["now_epoch"] + 1)]
+                    elif key == "config_events":
+                        substitutions = [(("queue_commit",), "wrong-commit")]
                     else:
                         substitutions = [(("legs",), row["legs"] + 1)]
                         if key == "launches":
@@ -538,6 +565,153 @@ class Regressions(unittest.TestCase):
         receipts[-1]["receipt_id"] = receipts[0]["receipt_id"]
         self.assertEqual(self.decision(resealed=True)["rule"], "LEDGER_DUPLICATE")
 
+    def test_counted_t0_cannot_move_charged_legs_across_midnight(self):
+        midnight = epoch(hour=0)
+        history = History()
+        self.rows = history.rows
+        smoke = history.launch("instrument", "smoke", midnight - 100, pin=self.entry["pin"])
+        history.close(smoke, midnight - 90)
+        for entry in self.queue["entries"]:
+            if entry["kind"].endswith("_filler"):
+                history.add("REFUSAL", entry_id=entry["id"], kit_sha256=entry["kit_sha256"],
+                            block=None, queue_commit="fixture-commit", epoch=midnight + 1,
+                            reason="fixture refusal")
+        charged = history.launch("dev-prior", "charged", midnight + 5, kind="counted",
+                                 pin=self.entry["pin"], groups=("dev-mixed", "dev-total"), legs=12)
+        history.close(charged, midnight + 60)
+        history.add("GATE", id="freeze-2", passed=True)
+        history.ready(self.entry["id"], True)
+        self.assertEqual(self.decision(resealed=True)["decision"], "WAIT")
+        for rolled in (midnight + 4, midnight - 1):
+            with self.subTest(rolled=rolled):
+                charged["t0_epoch"] = rolled
+                result = self.decision(resealed=True)
+                self.assertEqual((result["decision"], result["rule"]), ("HALT", "CLOCK_ROLLBACK"))
+
+    def test_ready_split_qualification_moves_to_next_lawful_date(self):
+        first, second = deepcopy(self.entry), deepcopy(self.entry)
+        for entry, name in ((first, "qual-s01"), (second, "qual-s02")):
+            entry.update(id=name, block="qual-01", argv=["fixture-count", name])
+            entry["params"].update(qualification=True, groups=["qualification"], soak_end_s=900,
+                                   date_caps=[], window={"earliest_epoch": epoch(17, hour=0),
+                                                        "latest_epoch": epoch(17, 23, 59, 59)})
+        first.pop("plan_argv")
+        self.queue["entries"] = [self.queue["entries"][0], first, second]
+        history = History()
+        self.rows = history.rows
+        launch = history.launch(first["id"], "completed-half", epoch(17, hour=12), kind="counted",
+                                pin=first["pin"], groups=("qualification",), block="qual-01")
+        history.close(launch, epoch(17, hour=13))
+        history.add("GATE", id="freeze-2", passed=True)
+        history.add("GATE", id="r1-post-close-check", passed=False)
+        history.ready(second["id"], True)
+        self.facts["boot_epoch"] = epoch(16, hour=8)
+        for day in (17, 18):
+            with self.subTest(day=day):
+                self.facts["now_epoch"] = epoch(day, hour=14)
+                self.assertEqual(self.decision(resealed=True).get("entry"), second["id"])
+                self.assertEqual(launch["t0_epoch"], epoch(17, hour=12))
+        other = history.launch("qual-other", "occupied-date", epoch(18, hour=12), kind="counted",
+                               pin=second["pin"], groups=("qualification",), block="qual-other")
+        history.close(other, epoch(18, hour=13))
+        self.assertEqual(self.decision(resealed=True)["entry"], "f0-part-c")
+        self.facts["now_epoch"] = epoch(19, hour=14)
+        self.assertEqual(self.decision(resealed=True)["entry"], second["id"])
+        self.assertEqual(launch["t0_epoch"], epoch(17, hour=12))
+
+    def test_nonclean_close_holds_same_kit_without_redundant_stop(self):
+        history = History()
+        history.rows = self.rows
+        now = self.facts["now_epoch"]
+        for entry in self.queue["entries"]:
+            if entry["kind"].endswith("_filler"):
+                history.add("REFUSAL", entry_id=entry["id"], kit_sha256=entry["kit_sha256"],
+                            block=None, queue_commit="fixture-commit", epoch=now - 100,
+                            reason="fixture refusal")
+        failed = history.launch(self.entry["id"], "failed", now - 60, kind="counted",
+                                pin=self.entry["pin"], groups=self.entry["params"]["groups"])
+        history.close(failed, now - 10, clean=False)
+        receipt = next(row for row in self.rows if row["event"] == "RECEIPT" and row["span_id"] == "failed")
+        receipt["receipt"]["rc"] = 1
+        history.add("STOP", **history.bind(failed), code="NON_CLEAN_CLOSE", epoch=now - 9)
+        self.assertEqual(self.decision(resealed=True)["decision"], "QUEUE_EMPTY")
+        self.rows[:] = [row for row in self.rows if not (
+            row["event"] == "STOP" and row["span_id"] == "failed")]
+        for i, row in enumerate(self.rows, 1):
+            row["seq"] = i
+        self.assertEqual(self.decision(resealed=True)["decision"], "QUEUE_EMPTY")
+
+    def test_only_a_committed_revision_can_clear_a_refusal(self):
+        without_config = self.rows[:-1]
+        unchanged_facts = {**self.facts, "ledger_head": head_for(without_config), "config_events": []}
+        self.assertEqual(decide(self.queue, self.rules, unchanged_facts, without_config)["rule"],
+                         "CONFIG_REVISION")
+        f0 = self.queue["entries"][0]
+        self.queue["entries"] = [f0]
+        history = History()
+        history.rows = self.rows
+        history.add("GATE", id="r1-post-close-check", passed=False)
+        history.add("REFUSAL", entry_id=f0["id"], kit_sha256=f0["kit_sha256"], block=None,
+                    queue_commit=self.facts["queue_commit"], epoch=self.facts["now_epoch"],
+                    reason="fixture refusal")
+        self.assertEqual(self.decision(resealed=True)["decision"], "QUEUE_EMPTY")
+        self.facts["queue_commit"] = "fixture-next-commit"
+        result = self.decision()
+        self.assertEqual((result["decision"], result["rule"]), ("HALT", "CONFIG_REVISION"))
+        self.assertEqual(self.decision(resealed=True)["entry"], f0["id"])
+
+    def test_f0_requires_positive_evidence_of_retirement_gate_state(self):
+        self.queue["entries"] = self.queue["entries"][:1]
+        history = History()
+        history.rows = self.rows
+        history.add("GATE", id="r1-post-close-check", passed=True)
+        self.assertEqual(self.decision(resealed=True)["decision"], "QUEUE_EMPTY")
+        history.add("GATE", id="r1-post-close-check", passed=False)
+        self.assertEqual(self.decision(resealed=True)["decision"], "QUEUE_EMPTY")
+        self.rows[:] = [row for row in self.rows if not (
+            row["event"] == "GATE" and row["id"] == "r1-post-close-check")]
+        for i, row in enumerate(self.rows, 1):
+            row["seq"] = i
+        result = self.decision(resealed=True)
+        self.assertEqual((result["decision"], result["rule"]), ("HALT", "GATE_UNKNOWN"))
+        history.add("GATE", id="r1-post-close-check", passed=False)
+        self.assertEqual(self.decision(resealed=True)["entry"], "f0-part-c")
+
+    def test_removing_pending_ready_deadline_cannot_make_filler_fit(self):
+        queue, rules, facts, rows, short = scenario("short")
+        short["worst_case_s"] = 4000
+        self.assertEqual(decide(queue, rules, reseal(queue, rules, facts, rows), rows)["rule"], "READY_FIT")
+        del queue["entries"][1]["expected_ready_by"]
+        result = decide(queue, rules, reseal(queue, rules, facts, rows), rows)
+        self.assertEqual((result["decision"], result["rule"]), ("HALT", "READY_DEADLINE_CONFLICT"))
+        history = History()
+        history.rows = rows
+        history.ready("dev-next", False, expected_ready_by=None)
+        self.assertEqual(decide(queue, rules, reseal(queue, rules, facts, rows), rows)["entry"], "short")
+
+    def test_copy_stop_must_follow_latest_start_even_with_prior_verification(self):
+        history = History()
+        self.rows = history.rows
+        now = self.facts["now_epoch"]
+        smoke = history.launch("instrument", "smoke", now - 1200, pin=self.entry["pin"])
+        history.close(smoke, now - 1100)
+        history.add("GATE", id="freeze-2", passed=True)
+        history.add("GATE", id="r1-post-close-check", passed=False)
+        history.ready(self.entry["id"], True)
+        self.assertEqual(self.decision(resealed=True)["entry"], self.entry["id"])
+        history.add("COPY_STARTED", **history.bind(smoke))
+        result = self.decision(resealed=True)
+        self.assertEqual((result["decision"], result["rule"]), ("HALT", "UPLOAD_ACTIVE"))
+        history.add("UPLOAD_STOPPED", **history.bind(smoke))
+        self.assertEqual(self.decision(resealed=True)["entry"], self.entry["id"])
+        history.add("COPY_STARTED", **history.bind(smoke))
+        self.assertEqual(self.decision(resealed=True)["rule"], "UPLOAD_ACTIVE")
+        later = history.launch("instrument", "later-smoke", now - 1000, pin=self.entry["pin"])
+        history.close(later, now - 900)
+        self.assertEqual(self.decision(resealed=True)["rule"], "UPLOAD_ACTIVE")
+        history.add("COPY_VERIFIED", **history.bind(smoke))
+        self.assertEqual(self.decision(resealed=True)["entry"], self.entry["id"])
+
     def test_filler_worst_case_equal_to_ready_deadline_fails(self):
         queue, rules, facts, rows, short = scenario("short")
         self.assertEqual(decide(queue, rules, facts, rows)["entry"], short["id"])
@@ -622,6 +796,29 @@ class CLITests(unittest.TestCase):
                 _, errors = self.call("validate", *args[:4], status=2)
                 self.assertIn("NO_STANDING_FILLER", errors)
 
+    def test_probe_binds_writer_revision_and_dry_run_to_committed_head(self):
+        args = self.inputs()
+        out = self.dir / "probe.json"
+        real_lstat = Path.lstat
+        missing_marker = self.dir / "missing-marker"
+
+        def lstat(path):
+            return real_lstat(missing_marker if str(path) == sched.MAINTENANCE_PATH else path)
+
+        with patch.object(sched.subprocess, "run", side_effect=probe_child) as commands, patch.object(
+                sched.time, "time", return_value=self.facts["now_epoch"]), patch.object(Path, "lstat", lstat):
+            probe_opts = (*args[:4], "--ledger", self.ledger, "--host-facts", self.dir / "facts.json",
+                          "--out", out, "--caller-pid", 10, "--run-plans")
+            self.call("probe", *probe_opts)
+            observed = json.loads(out.read_text())
+            self.assertEqual(observed["queue_commit"], self.facts["queue_commit"])
+            self.assertEqual(observed["ledger_head"], head_for(self.rows))
+            self.assertEqual(len(commands.call_args_list), 7)
+            result, _ = self.call("next", *args[:4], "--ledger", self.ledger, "--facts", out)
+            self.assertEqual(json.loads(result)["entry"], "dev-next")
+            self.call("probe", *probe_opts, "--queue-commit", "wrong-revision", status=3)
+            self.assertIsNone(json.loads(out.read_text())["ledger_head"])
+
     def test_probe_keeps_allowlisted_receipt_fields_and_reads_registered_marker(self):
         args = self.inputs()
         out = self.dir / "probe.json"
@@ -632,18 +829,7 @@ class CLITests(unittest.TestCase):
         marker = self.dir / "active"
         marker.touch()
         real_lstat = Path.lstat
-        responses = {
-            "pmset": "Now drawing from 'AC Power'\n - 100%; charged",
-            "df": "Filesystem 1G-blocks Used Available Capacity Mounted on\nfixture 500 100 400 20% /",
-            "launchctl": "PID\tStatus\tLabel\n-\t0\tfixture",
-            "ps": "PID PPID COMM\n10 1 fixture-agent\n11 10 fixture-agent\n",
-            "sysctl": "{ sec = 1794900000, usec = 0 }",
-        }
-
-        def run(argv, **kwargs):
-            return subprocess.CompletedProcess(argv, 0, responses[Path(argv[0]).name], "")
-
-        with patch.object(sched.subprocess, "run", side_effect=run) as commands, patch.object(
+        with patch.object(sched.subprocess, "run", side_effect=probe_child) as commands, patch.object(
                 sched.time, "time", return_value=epoch()), patch.object(
                     Path, "lstat", lambda p: real_lstat(marker if str(p) == sched.MAINTENANCE_PATH else p)):
             self.call("probe", *args[:4], "--host-facts", self.dir / "facts.json",

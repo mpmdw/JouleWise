@@ -9,6 +9,9 @@ Only sequenced ledger events can open or close an attempt.
 The independently committed head is read from <ledger>.head.json. Its digest
 is SHA-256 over compact canonical JSON rows, each followed by one newline.
 Decision observations go to a separate report ledger.
+CONFIG binds the active queue commit and queue and register digests. READY
+records carry the registered expected_ready_by value, including an explicit
+null for no commitment. LAUNCH t0 matches the native receipt's exact start.
 
 Probe sources that need no native command (for example meter readiness, the
 High Power marker and queue commit) can be supplied via --host-facts. Probe
@@ -365,8 +368,11 @@ MIRRORS = {
     "launches": {"LAUNCH"}, "closes": {"CLOSE"}, "receipts": {"RECEIPT"},
     "restore_proofs": {"RESTORE"}, "stops": {"STOP"}, "gates": {"GATE"},
     "ready": {"READY"}, "refusals": {"REFUSAL"}, "copy_events": COPY_EVENTS,
+    "config_events": {"CONFIG"},
 }
 HEAD_FIELDS = {"ledger_id": identifier, "last_seq": positive_integer, "digest": hexadecimal(64)}
+REVISION_FIELDS = {"queue_commit": identifier, "queue_digest": hexadecimal(64),
+                   "rules_digest": hexadecimal(64)}
 BOUND = {"open_seq": positive_integer, "span_id": identifier,
          "entry_id": identifier, "kit_sha256": KIT}
 KINDS_CHECK = one_of(*KINDS)
@@ -382,7 +388,9 @@ EVENT_FIELDS = {
     "RESTORE": {**BOUND, "readbacks": IS_OBJECT},
     "STOP": {**BOUND, "code": one_of(CONTAMINATED, *KIT_STOPS), "epoch": epoch},
     "GATE": {"id": identifier, "passed": boolean},
-    "READY": {"entry_id": identifier, "effective": boolean, "route_clear": boolean},
+    "READY": {"entry_id": identifier, "effective": boolean, "route_clear": boolean,
+              "expected_ready_by": nullable(epoch)},
+    "CONFIG": REVISION_FIELDS,
     "REFUSAL": {"entry_id": identifier, "kit_sha256": KIT, "block": nullable(identifier),
                 "queue_commit": identifier, "epoch": epoch, "reason": string},
     **{event: BOUND for event in COPY_EVENTS},
@@ -394,7 +402,7 @@ HOST_FIELDS = {
     "runner_group_clear": boolean, "high_power_marker": boolean, "foreign_processes": array(IS_OBJECT),
     "process_census_verified": boolean, "upload_stopped": boolean, "owner_stop": boolean,
     "owner_veto": boolean, "maintenance_active": boolean, "maintenance_marker": string,
-    "queue_commit": identifier, "queue_digest": hexadecimal(64), "rules_digest": hexadecimal(64),
+    **REVISION_FIELDS,
     "ledger_head": IS_OBJECT, "plans": IS_OBJECT,
 }
 HOST_OPTIONAL = {
@@ -479,7 +487,7 @@ class Attempt:
     close: dict | None = None
     receipt: dict | None = None
     restore: dict | None = None
-    copy: set = field(default_factory=set)
+    copy: dict[str, int] = field(default_factory=dict)
 
     @property
     def span(self):
@@ -493,7 +501,7 @@ class Attempt:
         start, end = self.launch["t0_epoch"], self.close["ended_epoch"]
         received_start = self.receipt["started"]["epoch_s"]
         received_end = self.receipt["ended"]["epoch_s"]
-        require(start <= received_start <= received_end <= end,
+        require(start == received_start and received_start <= received_end <= end,
                 "CLOCK_ROLLBACK", f"{self.span} receipt and close timestamps are inconsistent")
         require(not self.close["clean"] or self.receipt["rc"] == 0,
                 "RECEIPT_CONFLICT", f"{self.span} clean close disagrees with its receipt")
@@ -501,6 +509,13 @@ class Attempt:
     def clean_load(self):
         return (self.close is not None and self.close["clean"] is True
                 and self.close["load_redos"] == 0 and self.close["load_flag"] is False)
+
+    def copy_verified(self):
+        return self.copy.get("COPY_VERIFIED", 0) > self.copy.get("COPY_STARTED", 0)
+
+    def upload_active(self):
+        return self.copy.get("COPY_STARTED", 0) > max(
+            self.copy.get("COPY_VERIFIED", 0), self.copy.get("UPLOAD_STOPPED", 0))
 
 
 class History:
@@ -524,7 +539,9 @@ class History:
         self.stops = []
         self.refusals = []
         self.gates = {}
+        self.passed_gates = set()
         self.ready = {}
+        self.revision = None
         for row in rows:
             self.fold(row)
 
@@ -556,8 +573,12 @@ class History:
             self.latest = self.attempts[seq] = Attempt(row)
         elif event == "GATE":
             self.gates[row["id"]] = row["passed"]
+            if row["passed"]:
+                self.passed_gates.add(row["id"])
         elif event == "READY":
             self.ready[row["entry_id"]] = row
+        elif event == "CONFIG":
+            self.revision = {key: row[key] for key in REVISION_FIELDS}
         elif event == "REFUSAL":
             self.refusals.append(row)
         else:
@@ -569,8 +590,13 @@ class History:
                 self.stops.append((row, attempt))
             elif event in COPY_EVENTS:
                 require(attempt.close is not None, "LEDGER_ORPHAN", f"{label} precedes the close of {attempt.span}")
-                require(event not in attempt.copy, "LEDGER_DUPLICATE", f"{label} repeats {event} for {attempt.span}")
-                attempt.copy.add(event)
+                if event == "COPY_STARTED":
+                    require(not attempt.upload_active(), "COPY_OVERLAP",
+                            f"{label} restarts an active copy for {attempt.span}")
+                else:
+                    require(attempt.copy.get(event, 0) <= attempt.copy.get("COPY_STARTED", 0),
+                            "LEDGER_DUPLICATE", f"{label} repeats {event} for the same copy of {attempt.span}")
+                attempt.copy[event] = seq
             elif event == "CLOSE":
                 require(attempt.close is None, "LEDGER_DUPLICATE", f"duplicate close for {attempt.span}")
                 require(row["legs"] == attempt.launch["legs"], "LEDGER_LEGS",
@@ -643,10 +669,16 @@ class History:
                         f"receipt_attestations disagrees at {span or 'unknown attempt'}")
                 seen.add(span)
 
+    def verify_revision(self, observed):
+        require(self.revision is not None, "CONFIG_REVISION", "ledger has no committed CONFIG event")
+        for key in REVISION_FIELDS:
+            require(observed.get(key) == self.revision[key], "CONFIG_REVISION",
+                    f"{key} disagrees with the committed CONFIG event")
+
     def copy_debts(self):
         return [{"span_id": run.span, "entry_id": run.launch["entry_id"], "kind": run.launch["kind"],
                  "ended_epoch": run.close["ended_epoch"]}
-                for run in self.attempts.values() if run.close is not None and "COPY_VERIFIED" not in run.copy]
+                for run in self.attempts.values() if run.close is not None and not run.copy_verified()]
 
     def contaminated(self):
         return any(row["code"] == CONTAMINATED and not any(
@@ -845,12 +877,12 @@ class Scheduler:
         if facts["foreign_processes"]:
             return wait(quiet["id"], "foreign processes are present", self.now + quiet["params"]["recheck_s"])
         until = latest.close["ended_epoch"] + copy["params"]["wait_s"]
-        if "COPY_VERIFIED" not in latest.copy and self.now < until:
+        if not latest.copy_verified() and self.now < until:
             return wait(copy["id"], "latest copy is awaiting verification", until)
         require(facts["upload_stopped"] is True, "UPLOAD_ACTIVE", "upload stop before soak is unproven")
-        require("COPY_STARTED" not in latest.copy
-                or bool({"COPY_VERIFIED", "UPLOAD_STOPPED"} & latest.copy), "UPLOAD_ACTIVE",
-                "the latest started copy lacks a verified stop")
+        for attempt in self.history.attempts.values():
+            require(not attempt.upload_active(), "UPLOAD_ACTIVE",
+                    f"{attempt.span} has no upload stop after its latest copy start")
         return None
 
     def check_clock(self):
@@ -869,7 +901,7 @@ class Scheduler:
         for attempt in self.history.attempts.values():
             row = attempt.launch
             entry = self.by_id.get(row["entry_id"])
-            if entry is None or row["queue_commit"] != self.facts["queue_commit"]:
+            if entry is None or row["queue_commit"] != self.history.revision["queue_commit"]:
                 continue
             params = entry["params"]
             require(pair(row) == pair(entry) and row["kind"] == entry["kind"]
@@ -879,25 +911,26 @@ class Scheduler:
                     "LEDGER_REGISTRATION", f"{attempt.span} disagrees with its current kit registration")
 
     def static_blocks(self, entry):
-        identity = self.key(entry)
-        block = entry.get("block")
-        if any(row["queue_commit"] == self.facts["queue_commit"] and (
-                (row["entry_id"], row["kit_sha256"]) == identity
-                or row["block"] is not None and row["block"] == block
+        def affects(row):
+            return row["queue_commit"] == self.history.revision["queue_commit"] and (
+                (row["entry_id"], row["kit_sha256"]) == self.key(entry)
+                or row["block"] is not None and row["block"] == entry.get("block")
                 or row["kit_sha256"] is not None and row["kit_sha256"] == entry["kit_sha256"]
-        ) for row in self.history.refusals):
+            )
+
+        if any(affects(row) for row in self.history.refusals):
             return Eligibility("not-refused", "a refusal holds the current kit or block")
         for stop, attempt in self.history.stops:
-            row = attempt.launch
-            if stop["code"] in KIT_STOPS and row["queue_commit"] == self.facts["queue_commit"] and (
-                (row["entry_id"], row["kit_sha256"]) == identity
-                or row["block"] is not None and row["block"] == block
-                or row["kit_sha256"] is not None and row["kit_sha256"] == entry["kit_sha256"]
-            ):
+            if stop["code"] in KIT_STOPS and affects(attempt.launch):
                 return Eligibility(stop["code"], "the named stop holds this kit or block")
-        if entry["id"] == "f0-part-c":
+        for attempt in self.history.attempts.values():
+            if attempt.close is not None and not attempt.close["clean"] and affects(attempt.launch):
+                return Eligibility("NON_CLEAN_CLOSE", f"{attempt.span} holds this kit or block")
+        if entry["id"] == "f0-part-c" or any(self.rules[rule]["test"] == "f0_retirement"
+                                           for rule in entry["requires"]):
             gate = self.require_rule("f0_retirement")["params"]["gate"]
-            if self.history.gates.get(gate) is True:
+            require(gate in self.history.gates, "GATE_UNKNOWN", f"{entry['id']} requires gate {gate}")
+            if gate in self.history.passed_gates:
                 return Eligibility("f0-retirement", "R1 post-close Check retires F0")
         return None
 
@@ -977,27 +1010,20 @@ class Scheduler:
         return None
 
     def dated_slot(self, entry):
-        block = entry.get("block")
-        fixed_day = None
-        if block in self.active:
-            first = self.completed[self.key(self.blocks[block][0])]
-            fixed_day = self.local(first.launch["t0_epoch"]).date()
-        day = fixed_day or max(self.local(self.period_window(member, self.today)[1]).date()
-                               for member in self.remaining(entry))
+        # Completed members retain their actual date in the ledger. Search
+        # only for the remaining starts, on the first lawful date from today.
+        day = max(self.local(self.period_window(member, self.today)[1]).date()
+                  for member in self.remaining(entry))
         while True:
             opening, latest = self.period_window(entry, day)
             day = self.local(latest).date()
             cutoff = self.cutoff(entry, day)
             start_of_day = local_candidates(day, local_time.min, self.zone)[0]
             start = max(start_of_day, opening if opening is not None else start_of_day)
-            # A finished half fixes its actual t0-date. An entirely unrun
-            # block may move to the next lawful date.
-            if fixed_day is not None and day != fixed_day:
-                return None, None, Eligibility("registered-window", "continuation lost its registered date")
             unavailable = self.date_limit(entry, day)
             if cutoff is not None and not unavailable and start <= cutoff and self.now <= cutoff:
                 return start, cutoff, None
-            if fixed_day is not None or cutoff is None or start > cutoff or (
+            if cutoff is None or start > cutoff or (
                 unavailable and not any(
                     run.launch["kind"] == "counted" and self.local(run.launch["t0_epoch"]).date() == day
                     for run in self.history.attempts.values()
@@ -1059,6 +1085,14 @@ class Scheduler:
                     "PLAN_CONFLICT", f"{name} dry run is not bound to this head, observation, t0 and argv")
             self.commands[name] = argv
 
+    def ready_state(self, entry):
+        name = entry["id"]
+        state = self.history.ready.get(name)
+        require(state is not None, "READY_UNKNOWN", f"{name} has no READY transition")
+        require(entry.get("expected_ready_by") == state["expected_ready_by"],
+                "READY_DEADLINE_CONFLICT", f"{name} queue deadline disagrees with the committed READY transition")
+        return state
+
     def checks(self, entry):
         """Return a known ineligibility. Unknown evidence raises Halt."""
         params, kind = entry["params"], entry["kind"]
@@ -1106,8 +1140,7 @@ class Scheduler:
 
         ready = True
         if kind in COUNTED_KINDS:
-            state = self.history.ready.get(entry["id"])
-            require(state is not None, "READY_UNKNOWN", f"{entry['id']} has no READY transition")
+            state = self.ready_state(entry)
             ready = state["effective"]
             if kind == "v4_session" and ready:
                 require(state["route_clear"], "SESSION_ROUTE", f"{entry['id']} notice and veto route is unproven")
@@ -1170,7 +1203,7 @@ class Scheduler:
                 for other, _, deadline, _ in future:
                     if other["kind"] not in COUNTED_KINDS:
                         continue
-                    ready_by = other.get("expected_ready_by")
+                    ready_by = self.ready_state(other)["expected_ready_by"]
                     if kind in FILLERS and ready_by is not None and ready_by <= end:
                         failure = Eligibility("READY_FIT", f"{entry['id']} occupies {other['id']}'s READY deadline")
                         break
@@ -1225,6 +1258,7 @@ def authorize_next(queue, raw_rules, facts, rows, head, *, now=None, caller_pid=
         history = History(rows, head)
         history.verify_mirrors(facts)
         validate_observation(facts)
+        history.verify_revision(facts)
         rules = checked_config(queue, raw_rules)
         when = facts["now_epoch"] if now is None else now
         require(epoch(when) and when >= facts["now_epoch"], "CLOCK_ROLLBACK", "requested t0 precedes the probe observation")
@@ -1571,11 +1605,18 @@ def probe(args, queue, raw_rules, rules, supplied):
         except (OSError, ValueError):
             failures["receipt_attestations"] = "receipt root could not be read"
     history, head = None, None
+    revisions = {"queue_digest": digest(queue), "rules_digest": digest(raw_rules)}
     if args.ledger is not None:
         try:
             head_path = args.ledger_head or default_head_path(args.ledger)
             head = read_head(head_path)
             history = History(read_events(args.ledger), head)
+            require(history.revision is not None, "CONFIG_REVISION", "ledger has no committed CONFIG event")
+            queue_commit = history.revision["queue_commit"]
+            history.verify_revision({"queue_commit": queue_commit, **revisions})
+            require(all(observed is None or observed == queue_commit
+                        for observed in (args.queue_commit, supplied.get("queue_commit"))),
+                    "CONFIG_REVISION", "supplied queue commit disagrees with the committed CONFIG event")
             require(same(read_head(head_path), head), "LEDGER_HEAD_CHANGED", "head changed during probe")
         except Halt as err:
             failures["ledger_head"] = err.decision["detail"]
@@ -1583,16 +1624,15 @@ def probe(args, queue, raw_rules, rules, supplied):
     facts = {key: supplied.get(key) for key in HOST_FIELDS}
     facts.update(now_epoch=now, boot_epoch=boot, power=power, disk_free_gib=disk,
                  foreign_processes=foreign, process_census_verified=foreign is not None,
-                 fence_clear=fence_clear, ledger_head=head, queue_digest=digest(queue),
-                 rules_digest=digest(raw_rules), maintenance_marker=MAINTENANCE_PATH,
+                 fence_clear=fence_clear, ledger_head=head, **revisions,
+                 queue_commit=history.revision["queue_commit"] if history is not None else None,
+                 maintenance_marker=MAINTENANCE_PATH,
                  maintenance_active=probe_maintenance(args, failures), plans={})
     for key in ("meter_ready", "collector_ready"):
         if key in supplied:
             facts[key] = supplied[key]
     if labels is not None:
         facts["labels_loaded"] = labels
-    if args.queue_commit is not None:
-        facts["queue_commit"] = args.queue_commit
     if args.receipt_root:
         facts["receipt_attestations"] = receipts
     if args.run_plans:
