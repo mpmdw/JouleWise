@@ -1052,6 +1052,17 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 
 <!-- RUN_STATE TYPED ITEMS: newest first. Add with scripts/run_state_add.py; never edit by hand. -->
 
+445. **Magistrate 9402646f (headless, Opus 5.5), 2026-11-18 15:35 PST: Ed's reply on the Air data move recorded verbatim (compress, upload to cloud, Air handles it); deferred to after R1's fence; quiet otherwise**
+
+```item
+{"expires_epoch_s": null, "issued_epoch_s": 1795044994, "number": 445, "owner": "magistrate", "schema": "joulewise.run_state_item.v1", "sets": [], "status": "ISSUED", "supersedes": []}
+```
+
+- Relaunch 15:35:19 PST, 15 min before R1-RERUN t0 (item 444; plan align-r1-20261118T2350Z, `com.joulewise.night` and deadman loaded). notice_pending []. No standdown request at 15:36. Directives: only the standing open issues (no new body). No email sent.
+- **Unread owner mail (Gmail msg 1a1f0f890cedefa9, 2026-11-18 15:22:58 PST), reply to the 15:21 "Small ask: put the Air on the MBP's Wi-Fi" mail about moving ~20 GB of dev data MBP -> Air for Friday's freeze-2 look. Verbatim:** "just compress it upload it to the cloud and then tell the air to handle it? i'll fix the wifi later today"
+- Disposition: not done now. R1-RERUN is measuring from 15:50 Wed to at latest Fri 20 Nov 01:13; compressing and uploading 20 GB on the MBP would be a contending process in the window, and no agent may be alive then. Ed also says he will fix the Wi-Fi today.
+- **Next exact action (first activation after the fence, before or beside item 444's Check):** (1) if the Air is now on the MBP's subnet (192.168.86.x), re-run the item 441 push over the LAN; (2) otherwise follow Ed's route: compress the dev trees on the MBP, upload them to cloud storage (iCloud Drive, where the closes already copy; check first whether the trees are already there, in which case only the Air side is needed), and hand the Air side (download, unpack, verify hashes against the MBP manifests) to the laptop lead / Air. If the Air can pull from iCloud before Friday without the MBP, the laptop lead may do that during the window, since it touches nothing on the MBP.
+
 444. **Magistrate 5be2472e (headless, Opus 5.5), 2026-11-18 15:00-15:25 PST (`date`): f2-stab-15-l001 CHECK: RECEIPT OK, 1/1 MEASURED_OK, restore lines pass, groups absent, copied; F-3 (c) hand-read 0 of 19 differ (two template adaptations, replayed); item 441 Air push stopped at 600 s (1 tree partial); R1-RERUN (item 440) ARM RECORD: plan align-r1-20261118T2350Z, t0 Wed 15:50:00 PST, latest end Fri 20 Nov 01:13:00 PST, dead-man Fri 02:13; PKT_SHA 53bfb6c2; notice sent; install is the last act**
 
 ```pointer
