@@ -1766,6 +1766,11 @@ def create_parser():
     command = commands.add_parser("report")
     command.add_argument("--ledger", type=Path, required=True)
     command.add_argument("--since", required=True)
+    if __package__:
+        from . import mbp_close
+    else:
+        import mbp_close
+    mbp_close.add_tick_parser(commands, DEFAULT_QUEUE, DEFAULT_RULES)
     return parser
 
 
@@ -1830,6 +1835,8 @@ def scheduling_command(args):
 
 def main(argv=None):
     args = create_parser().parse_args(argv)
+    if args.command == "tick":
+        return args.tick_action(args)
     if args.command in ("next", "explain"):
         return scheduling_command(args)
     errors = Errors()
