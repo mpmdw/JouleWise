@@ -1,0 +1,314 @@
+{
+ "pin": "df261f6a235e976be8859ab5314af737a08f6d7d",
+ "base_sha256": "651d1815ca87ee23640a8db1483d4ecaf42d70d029855ad03c14bfa076116f2b",
+ "expires_at": "2026-11-24T12:43:05-08:00",
+ "synthetic_t0_local": "2026-11-18T12:00",
+ "kits": [
+  {
+   "kit": "f2-stab-15",
+   "sha256": "45029d6835cac335b9648ef8ed8b8dad8229decc0c637d549d48156026c71e40",
+   "queue_sha256": "95d068dcbe20e49dc3abd0fe927762be491801d306f2dd4e40269141fe8d22cf",
+   "master_seed": 2026112669,
+   "candidates_tested": 1226,
+   "first_different_seed_index": 0,
+   "positional_cells_verified": true,
+   "only_frozen_changed_at_pin_kit": true,
+   "validate_kit": {
+    "campaign_id": "f2-stab-15",
+    "frozen_commit": "df261f6a235e976be8859ab5314af737a08f6d7d",
+    "frozen_paths_verified": true,
+    "kit_sha256": "45029d6835cac335b9648ef8ed8b8dad8229decc0c637d549d48156026c71e40",
+    "legs": 12,
+    "ok": true
+   },
+   "validate_queue": {
+    "ok": true,
+    "plan_ids": [
+     "cq-f2-stab-15-l001-a1",
+     "cq-f2-stab-15-l002-a1",
+     "cq-f2-stab-15-l003-a1",
+     "cq-f2-stab-15-l004-a1",
+     "cq-f2-stab-15-l005-a1",
+     "cq-f2-stab-15-l006-a1",
+     "cq-f2-stab-15-l007-a1",
+     "cq-f2-stab-15-l008-a1",
+     "cq-f2-stab-15-l009-a1",
+     "cq-f2-stab-15-l010-a1",
+     "cq-f2-stab-15-l011-a1",
+     "cq-f2-stab-15-l012-a1"
+    ],
+    "queue_id": "cq-f2-stab-15",
+    "spans": 12
+   },
+   "plans": [
+    {
+     "span_id": "f2-stab-15-l001",
+     "legs": [
+      "L001"
+     ],
+     "worst_case_s": 5850,
+     "launch_budget_s": 8360,
+     "soak_retry_budget_s": 1950
+    },
+    {
+     "span_id": "f2-stab-15-l002",
+     "legs": [
+      "L002"
+     ],
+     "worst_case_s": 5850,
+     "launch_budget_s": 8360,
+     "soak_retry_budget_s": 1950
+    },
+    {
+     "span_id": "f2-stab-15-l003",
+     "legs": [
+      "L003"
+     ],
+     "worst_case_s": 5850,
+     "launch_budget_s": 8360,
+     "soak_retry_budget_s": 1950
+    },
+    {
+     "span_id": "f2-stab-15-l004",
+     "legs": [
+      "L004"
+     ],
+     "worst_case_s": 5850,
+     "launch_budget_s": 8360,
+     "soak_retry_budget_s": 1950
+    },
+    {
+     "span_id": "f2-stab-15-l005",
+     "legs": [
+      "L005"
+     ],
+     "worst_case_s": 5850,
+     "launch_budget_s": 8360,
+     "soak_retry_budget_s": 1950
+    },
+    {
+     "span_id": "f2-stab-15-l006",
+     "legs": [
+      "L006"
+     ],
+     "worst_case_s": 5850,
+     "launch_budget_s": 8360,
+     "soak_retry_budget_s": 1950
+    },
+    {
+     "span_id": "f2-stab-15-l007",
+     "legs": [
+      "L007"
+     ],
+     "worst_case_s": 5850,
+     "launch_budget_s": 8360,
+     "soak_retry_budget_s": 1950
+    },
+    {
+     "span_id": "f2-stab-15-l008",
+     "legs": [
+      "L008"
+     ],
+     "worst_case_s": 5850,
+     "launch_budget_s": 8360,
+     "soak_retry_budget_s": 1950
+    },
+    {
+     "span_id": "f2-stab-15-l009",
+     "legs": [
+      "L009"
+     ],
+     "worst_case_s": 5850,
+     "launch_budget_s": 8360,
+     "soak_retry_budget_s": 1950
+    },
+    {
+     "span_id": "f2-stab-15-l010",
+     "legs": [
+      "L010"
+     ],
+     "worst_case_s": 5850,
+     "launch_budget_s": 8360,
+     "soak_retry_budget_s": 1950
+    },
+    {
+     "span_id": "f2-stab-15-l011",
+     "legs": [
+      "L011"
+     ],
+     "worst_case_s": 5850,
+     "launch_budget_s": 8360,
+     "soak_retry_budget_s": 1950
+    },
+    {
+     "span_id": "f2-stab-15-l012",
+     "legs": [
+      "L012"
+     ],
+     "worst_case_s": 5850,
+     "launch_budget_s": 8360,
+     "soak_retry_budget_s": 1950
+    }
+   ],
+   "mock": {
+    "leg_id": "L001",
+    "rc": 0,
+    "legs": 1,
+    "stops": []
+   }
+  },
+  {
+   "kit": "f2-stab-16",
+   "sha256": "eb5bf2476901825c5eba69d9e92ef8ad6506dad9c7c0f5231ce63acdc8151aec",
+   "queue_sha256": "da1aacc285c75943dd77fa24aa51981c8160cee9b542f816f6804e4b685ed49c",
+   "master_seed": 2026113603,
+   "candidates_tested": 2160,
+   "first_different_seed_index": 0,
+   "positional_cells_verified": true,
+   "only_frozen_changed_at_pin_kit": true,
+   "validate_kit": {
+    "campaign_id": "f2-stab-16",
+    "frozen_commit": "df261f6a235e976be8859ab5314af737a08f6d7d",
+    "frozen_paths_verified": true,
+    "kit_sha256": "eb5bf2476901825c5eba69d9e92ef8ad6506dad9c7c0f5231ce63acdc8151aec",
+    "legs": 12,
+    "ok": true
+   },
+   "validate_queue": {
+    "ok": true,
+    "plan_ids": [
+     "cq-f2-stab-16-l001-a1",
+     "cq-f2-stab-16-l002-a1",
+     "cq-f2-stab-16-l003-a1",
+     "cq-f2-stab-16-l004-a1",
+     "cq-f2-stab-16-l005-a1",
+     "cq-f2-stab-16-l006-a1",
+     "cq-f2-stab-16-l007-a1",
+     "cq-f2-stab-16-l008-a1",
+     "cq-f2-stab-16-l009-a1",
+     "cq-f2-stab-16-l010-a1",
+     "cq-f2-stab-16-l011-a1",
+     "cq-f2-stab-16-l012-a1"
+    ],
+    "queue_id": "cq-f2-stab-16",
+    "spans": 12
+   },
+   "plans": [
+    {
+     "span_id": "f2-stab-16-l001",
+     "legs": [
+      "L001"
+     ],
+     "worst_case_s": 5850,
+     "launch_budget_s": 8360,
+     "soak_retry_budget_s": 1950
+    },
+    {
+     "span_id": "f2-stab-16-l002",
+     "legs": [
+      "L002"
+     ],
+     "worst_case_s": 5850,
+     "launch_budget_s": 8360,
+     "soak_retry_budget_s": 1950
+    },
+    {
+     "span_id": "f2-stab-16-l003",
+     "legs": [
+      "L003"
+     ],
+     "worst_case_s": 5850,
+     "launch_budget_s": 8360,
+     "soak_retry_budget_s": 1950
+    },
+    {
+     "span_id": "f2-stab-16-l004",
+     "legs": [
+      "L004"
+     ],
+     "worst_case_s": 5850,
+     "launch_budget_s": 8360,
+     "soak_retry_budget_s": 1950
+    },
+    {
+     "span_id": "f2-stab-16-l005",
+     "legs": [
+      "L005"
+     ],
+     "worst_case_s": 5850,
+     "launch_budget_s": 8360,
+     "soak_retry_budget_s": 1950
+    },
+    {
+     "span_id": "f2-stab-16-l006",
+     "legs": [
+      "L006"
+     ],
+     "worst_case_s": 5850,
+     "launch_budget_s": 8360,
+     "soak_retry_budget_s": 1950
+    },
+    {
+     "span_id": "f2-stab-16-l007",
+     "legs": [
+      "L007"
+     ],
+     "worst_case_s": 5850,
+     "launch_budget_s": 8360,
+     "soak_retry_budget_s": 1950
+    },
+    {
+     "span_id": "f2-stab-16-l008",
+     "legs": [
+      "L008"
+     ],
+     "worst_case_s": 5850,
+     "launch_budget_s": 8360,
+     "soak_retry_budget_s": 1950
+    },
+    {
+     "span_id": "f2-stab-16-l009",
+     "legs": [
+      "L009"
+     ],
+     "worst_case_s": 5850,
+     "launch_budget_s": 8360,
+     "soak_retry_budget_s": 1950
+    },
+    {
+     "span_id": "f2-stab-16-l010",
+     "legs": [
+      "L010"
+     ],
+     "worst_case_s": 5850,
+     "launch_budget_s": 8360,
+     "soak_retry_budget_s": 1950
+    },
+    {
+     "span_id": "f2-stab-16-l011",
+     "legs": [
+      "L011"
+     ],
+     "worst_case_s": 5850,
+     "launch_budget_s": 8360,
+     "soak_retry_budget_s": 1950
+    },
+    {
+     "span_id": "f2-stab-16-l012",
+     "legs": [
+      "L012"
+     ],
+     "worst_case_s": 5850,
+     "launch_budget_s": 8360,
+     "soak_retry_budget_s": 1950
+    }
+   ],
+   "mock": {
+    "leg_id": "L001",
+    "rc": 0,
+    "legs": 1,
+    "stops": []
+   }
+  }
+ ]
+}
