@@ -32,6 +32,7 @@ corrections are in `19f3e5a47`.
 | RL-180 amendment 2, both channels' primary and fold coefficients, censored fit, exact verdicts, coverage and retries, ledger exclusion | `19f3e5a47` | `test_all_registered_fields_on_both_channels`, `test_relative_tolerances_and_missing_inputs` | PASS on normalized values |
 | F-12 and RL-180 amendment 2, isolated subprocess success, mismatch, missing file, thrown exception, attempted overwrite and byte scan | `19f3e5a47` | `test_isolated_child_byte_scan_and_write_boundary` | PASS with an injected synthetic evaluator |
 | Python `-I` alone allowed a lazy import to write a bytecode cache | `a6f21114a` | `test_isolated_child_byte_scan_and_write_boundary` | PASS; the test failed on all five cases using the preceding implementation |
+| CI quick tier requires a timing weight for the newly discovered module | `58b9a6895` | `ShardPartitionInvariantTests.test_every_discovered_module_has_timing_or_documented_exemption` | PASS for the local inventory predicate; final CI runs the complete test |
 | Manifest-to-custody reader and complete parent integration | `19f3e5a47` | `test_direct_entrypoint_refuses_unbound_inputs` | PASS for refusal, BLOCKED for end-to-end agreement |
 
 All ten tests passed on Python 3.14.6 with NumPy 2.2.6. The repo's bare-Python
@@ -43,6 +44,12 @@ The draft PR's CI runs the repository's broad check. Local verification was
 focused on synthetic arithmetic, output isolation and state fences. The
 read-only fixture census could not start `ps` and returned exit 2, so the
 census state is unknown.
+
+The timing weight is 0.23 s from the local bare-Python test run. A local
+attempt to reproduce the full shard timing test triggered legacy test
+discovery's real-path existence probes. The host denied the probes before
+any contents were read. The filesystem-only module inventory and the same
+timing predicate then passed locally.
 
 ## NEEDS_SPEC
 
