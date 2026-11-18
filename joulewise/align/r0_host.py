@@ -8,15 +8,17 @@ import hashlib
 import json
 import math
 import os
-from pathlib import Path, PosixPath
+from pathlib import Path
 import re
 import shutil
+import stat
 import subprocess
 import threading
 import time
 from types import SimpleNamespace
 
-from joulewise.measurement_liveness import census, custody_parent, ADDITIONAL_PARENTS_ENV
+from joulewise import measurement_liveness
+from joulewise.measurement_liveness import census, custody_parent, Refused, ADDITIONAL_PARENTS_ENV
 from joulewise.night_gate import ProbeResult, agent_census
 from joulewise.prewindow import PS_ARGV, busy_contaminants
 from joulewise import prewindow
@@ -54,10 +56,6 @@ def step_budget(value=None):
             "journal_estimate_note": "Measured 95,467,641 bytes /1,800 slots, rounded up; verify after enumeration."}
 
 
-class Refused(RuntimeError):
-    """A failed or indeterminate safety census; never continue this run."""
-
-
 def command(argv):
     result = subprocess.run(argv, capture_output=True, text=True, timeout=30,
                             env={**os.environ, "LC_ALL": "C"})
@@ -66,31 +64,15 @@ def command(argv):
     return result.stdout
 
 
-def _installed_night_agents(directory):
-    try:
-        try:
-            directory.lstat()
-        except FileNotFoundError:
-            # A user can have no LaunchAgents directory. Once observed, the
-            # directory must be read to completion to clear the census.
+def _installed_night_agents():
+    fs = measurement_liveness.census_fs
+    directory = fs(Path("~"), "home")
+    for name in ("Library", "LaunchAgents"):
+        if not any(entry.name == name for entry in fs(directory, "list")):
             return []
-        with os.scandir(directory) as entries:
-            return sorted(str(directory / entry.name) for entry in entries
-                          if fnmatchcase(entry.name, "com.joulewise.night*.plist"))
-    except OSError as exc:
-        raise Refused(f"LaunchAgent census indeterminate: cannot enumerate {directory}: {exc}") from exc
-
-
-class _RequiredCensusParent(PosixPath):
-    """A configured R0 root whose directory enumeration must succeed."""
-
-    def iterdir(self):
-        try:
-            # Only the declared root is required. The shared census applies
-            # its own reconciliation policy to ordinary child paths.
-            yield from Path(self).iterdir()
-        except FileNotFoundError as exc:
-            raise Refused(f"required custody parent could not be enumerated: {self}: {exc}") from exc
+        directory /= name
+    return sorted(str(entry) for entry in fs(directory, "list")
+                  if fnmatchcase(entry.name, "com.joulewise.night*.plist"))
 
 
 def _interior_exit_evidence(opening, current, intermediate, elapsed_s, limit):
@@ -254,19 +236,20 @@ class QuietGuard:
         return snapshot
 
     def _census(self, receipt):
+        fs = measurement_liveness.census_fs
         extra = json.loads(os.environ.get(ADDITIONAL_PARENTS_ENV, "[]"))
         if not isinstance(extra, list) or any(not isinstance(p, str) or not p for p in extra):
             raise Refused("additional custody parents must be a JSON array of paths")
-        parents = [custody_parent(), *(Path(p).expanduser() for p in extra), *self.parents]
+        parents = [custody_parent(), *(fs(Path(p), "expanduser") for p in extra), *self.parents]
         for parent in parents:
             if not parent.is_absolute() or "restricted" in parent.parts or ".." in parent.parts:
                 raise Refused(f"invalid custody parent: {parent}")
-        parents = list(dict.fromkeys(p.resolve() for p in parents))
+        parents = list(dict.fromkeys(fs(p, "resolve") for p in parents))
         receipt["resolved_custody_parents"] = [str(p) for p in parents]
         for parent in parents:
-            if "restricted" in parent.parts or not parent.is_dir():
+            if "restricted" in parent.parts or not stat.S_ISDIR(fs(parent, "stat").st_mode):
                 raise Refused(f"custody parent missing or not a directory: {parent}")
-        installed = _installed_night_agents(Path.home() / "Library/LaunchAgents")
+        installed = _installed_night_agents()
         receipt["installed_night_agents"] = installed
         if installed:
             raise Refused(f"measurement window armed: {installed}")
@@ -282,7 +265,7 @@ class QuietGuard:
             r = self.run(argv, capture_output=True, text=True, timeout=15)
             return ProbeResult(argv, r.returncode, r.stdout, r.stderr, time.monotonic_ns())
         agent, refusal = agent_census(SimpleNamespace(run=probe, monotonic_ns=time.monotonic_ns))
-        custody = self.inspect_custody(parents=[_RequiredCensusParent(parent) for parent in parents])
+        custody = self.inspect_custody(parents=parents, strict=True)
         table = probe(PS_ARGV)
         if table.exit_code != 0:
             raise Refused("process table unavailable")

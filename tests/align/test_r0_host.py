@@ -98,15 +98,16 @@ class R0HostTest(unittest.TestCase):
                            clock=clock, sleep=clock.sleep, host_reader=None)
         self.addCleanup(guard.close)
         guard.check(force=True)
-        self.assertEqual(calls, [{"parents": [self.default_parent, explicit]}])
+        self.assertEqual(calls, [{"parents": [self.default_parent, explicit], "strict": True}])
         self.assertEqual(len(guard.receipts), 1)
 
-    def test_missing_configured_parent_refuses_and_records_resolved_parents(self):
+    def test_missing_configured_parent_refuses_with_path_and_errno(self):
         missing = self.default_parent / "typo"
         guard = QuietGuard([missing], run=self.runner, inspect_custody=lambda **kw: Census())
         with self.assertRaises(Refused):
             guard.check(force=True)
-        self.assertIn(str(missing), guard.receipts[-1]["resolved_custody_parents"])
+        self.assertIn(str(missing), guard.receipts[-1]["refusal"])
+        self.assertIn("errno 2", guard.receipts[-1]["refusal"])
 
     def test_environment_parents_cannot_be_hidden_by_explicit_extras(self):
         extra = self.default_parent / "additional"
@@ -961,7 +962,8 @@ class R0SamplerAdmissionSpec(unittest.TestCase):
                     self.assertFalse(published["complete_r0"])
 
     def test_inventory_refuses_census_failure_at_eof(self):
-        from contextlib import contextmanager
+        from contextlib import contextmanager, redirect_stderr
+        from io import StringIO
         from joulewise.align.r0_runner import main
 
         guard, _, advance, _ = self.admission()
@@ -990,10 +992,12 @@ class R0SamplerAdmissionSpec(unittest.TestCase):
             def fixture_open(path, *args, **kwargs):
                 return inventory_input() if path == payload else open_path(path, *args, **kwargs)
 
-            with patch.object(Path, "open", fixture_open):
-                with self.assertRaisesRegex(Refused, "LaunchAgent census indeterminate"):
-                    main(["--config", str(config), "--output", str(published), "--inventory", str(inputs)],
-                         guard_factory=lambda _: guard, lock_path=work / "lock")
+            stderr = StringIO()
+            with patch.object(Path, "open", fixture_open), redirect_stderr(stderr):
+                status = main(["--config", str(config), "--output", str(published), "--inventory", str(inputs)],
+                              guard_factory=lambda _: guard, lock_path=work / "lock")
+            self.assertEqual(status, 2)
+            self.assertIn("LaunchAgent census indeterminate", stderr.getvalue())
             self.assertFalse(published.exists())
 
     def test_queued_contention_survives_census_failure_or_stall(self):
@@ -1054,8 +1058,10 @@ class R0SamplerAdmissionSpec(unittest.TestCase):
                 published = json.loads((output / "report.json").read_text())
                 self.assertEqual(published["status"], "refused")
                 self.assertEqual(published["checks"][0]["status"], "refused")
-                reason = "LaunchAgent census indeterminate" if denied else "measurement window armed"
-                self.assertIn(reason, published["refusal"])
+                if denied:
+                    self.assertIn(f"{agents} (errno {errno.EACCES})", published["refusal"])
+                else:
+                    self.assertIn("measurement window armed", published["refusal"])
                 self.assertEqual([entry for receipt in published["census"]
                                   for entry in receipt.get("background_census", ())], [])
 
@@ -1074,7 +1080,7 @@ class R0SamplerAdmissionSpec(unittest.TestCase):
                     guard, _, _, launchctl_at = self.admission()
 
                     def entries():
-                        yield SimpleNamespace(name="unrelated.plist")
+                        yield SimpleNamespace(path=str(agents / "unrelated.plist"), name="unrelated.plist")
                         raise error
 
                     @contextmanager
@@ -1089,7 +1095,7 @@ class R0SamplerAdmissionSpec(unittest.TestCase):
                         raise error
 
                     with patch("joulewise.align.r0_host.os.scandir", side_effect=fixture_scandir):
-                        with self.assertRaisesRegex(Refused, "LaunchAgent census indeterminate"):
+                        with self.assertRaisesRegex(Refused, f"errno {error.errno}"):
                             guard.check(force=True)
                     self.assertEqual(launchctl_at, [])
                     self.assertNotIn("installed_night_agents", guard.receipts[-1])
@@ -1174,7 +1180,7 @@ class R0SamplerAdmissionSpec(unittest.TestCase):
                     guard.parents = list(map(Path, parents))
                     guard._background_snapshot = guarded_cycle
                     guard.run = fake_command
-                    guard.inspect_custody = lambda *, parents: census(parents=parents, observer=unexpected_identity)
+                    guard.inspect_custody = lambda **kw: census(**kw, observer=unexpected_identity)
                     return guard
 
                 with patch.object(Path, "iterdir", fixture_iterdir), \
@@ -1186,7 +1192,12 @@ class R0SamplerAdmissionSpec(unittest.TestCase):
                         ["--config", str(config_file), "--output", str(output), "--checks", "host"],
                         guard_factory=factory, backend_factory=FakeBackend, display_probe=None,
                         lock_path=work / "lock")
-                published = json.loads((output / "report.json").read_text())
+                if mode == "quiet":
+                    record = output
+                else:
+                    self.assertFalse(output.exists())
+                    record, = work.glob(".output.r0-*")
+                published = json.loads((record / "report.json").read_text())
                 cycles = [entry for receipt in published["census"]
                           for entry in receipt.get("background_census", ())]
                 outcome = (status, published["status"], published["checks"][0]["status"])
@@ -1195,9 +1206,7 @@ class R0SamplerAdmissionSpec(unittest.TestCase):
                     self.assertEqual([entry["custody_clear"] for entry in cycles], [True])
                 else:
                     self.assertEqual(outcome, (2, "refused", "refused"))
-                    reason = ("missing or not a directory" if mode == "before"
-                              else "required custody parent could not be enumerated")
-                    self.assertIn(reason, published["refusal"])
+                    self.assertIn(f"{required} (errno 2)", published["refusal"])
                     self.assertEqual(cycles, [])
 
     def test_window_flags_proven_cpu_from_worker_seen_only_at_an_interior_snapshot(self):
@@ -1233,6 +1242,189 @@ class R0SamplerAdmissionSpec(unittest.TestCase):
                     evidence = guard.contention_flags[-1]["busy"][0]
                     self.assertAlmostEqual(evidence["cpu_s_per_s"], 0.06)
                     self.assertIn("lower bound", evidence["basis"])
+
+    def test_census_filesystem_calls_are_confined_to_the_helper(self):
+        import ast
+        from joulewise import measurement_liveness
+        from joulewise.align import r0_host
+
+        raw = {
+            "access", "exists", "expanduser", "fstat", "glob", "home", "iglob", "is_dir",
+            "is_file", "is_symlink", "isdir", "isfile", "islink", "iterdir", "lexists",
+            "listdir", "lstat", "open", "read", "read_bytes", "read_text", "readlink",
+            "realpath", "resolve", "rglob", "samefile", "scandir", "stat", "walk",
+        }
+        filesystem_errors = {"OSError", "IOError", "FileNotFoundError", "NotADirectoryError", "PermissionError"}
+        process_probes = {"observe_identity", "_pending_group_gone"}
+        for module, include, exclude in (
+                (measurement_liveness, None, {"census_fs", "publish_campaign", "remove_campaign"}),
+                (r0_host, {"QuietGuard", "_installed_night_agents"}, set())):
+            source = ast.parse(Path(module.__file__).read_text())
+            aliases = {alias.asname or alias.name for node in source.body
+                       if isinstance(node, ast.ImportFrom)
+                       for alias in node.names if alias.name in raw} | {"open"}
+            definitions = {node.name: node for node in source.body
+                           if isinstance(node, (ast.FunctionDef, ast.ClassDef))}
+            remaining = set(definitions) - exclude if include is None else set(include)
+            checked = set()
+            while remaining:
+                name = remaining.pop()
+                checked.add(name)
+                definition = definitions[name]
+                for node in ast.walk(definition):
+                    location = f"{module.__name__}:{node.lineno}" if hasattr(node, "lineno") else module.__name__
+                    if isinstance(node, ast.Attribute):
+                        self.assertNotIn(node.attr, raw, location)
+                    if isinstance(node, ast.Call) and isinstance(node.func, ast.Name):
+                        called = node.func.id
+                        self.assertNotIn(called, aliases, location)
+                        if called in definitions and called not in checked | exclude:
+                            remaining.add(called)
+                    if (isinstance(node, ast.ExceptHandler) and node.type is not None
+                            and definition.name not in process_probes):
+                        caught = {part.id for part in ast.walk(node.type) if isinstance(part, ast.Name)}
+                        caught.update(part.attr for part in ast.walk(node.type) if isinstance(part, ast.Attribute))
+                        self.assertFalse(caught & filesystem_errors, location)
+
+    def test_full_r0_refuses_every_census_filesystem_call_fault(self):
+        from contextlib import nullcontext, redirect_stderr, redirect_stdout
+        import errno
+        from io import StringIO
+        import os
+        from joulewise import measurement_liveness as live
+        from joulewise.align import r0_runner
+        from tests.align.test_r0_checks import FakeBackend, patch_references
+
+        patch_references(self)
+        (self.default_parent / "Library" / "LaunchAgents").mkdir(parents=True)
+        operations = {"expanduser": "expanduser", "home": "home", "lstat": "lstat",
+                      "list": "iterdir", "read": "read_text", "resolve": "resolve", "stat": "stat"}
+        original = live.census_fs
+        with tempfile.TemporaryDirectory() as tmp:
+            work = Path(tmp).resolve()
+            actual = work / "required"
+            root = work / "configured-root"
+            root.symlink_to(actual, target_is_directory=True)
+            night = actual / "finished-plan" / "night"
+            night.mkdir(parents=True)
+            (night / "launch.pending").write_text("{}")
+            (night / "chain.started").write_text("{}")
+            (night / "chain.exited").write_text(json.dumps({"exit_code": 0, "epoch_s": 1, "monotonic_ns": 2}))
+            open_night = actual / "dead-plan" / "night"
+            open_night.mkdir(parents=True)
+            (open_night / "chain.started").write_text(json.dumps({"pid": 41, "start_time": OLD_START}))
+            (open_night / "launch.pending").write_text(json.dumps(
+                {"pid": 43, "pgid": 43, "start_time": OLD_START}))
+            registry = actual / "active-campaigns"
+            registry.mkdir()
+            entry = registry / "worker.json"
+            entry.write_text(json.dumps({"schema": live.REGISTRY_SCHEMA, "pid": 42,
+                                         "nonce": "fixture", "runs_root": str(work), "start_time": None}))
+            os.utime(entry, (1, 1))
+            extra = work / "extra"
+            extra.mkdir()
+            for name in ("D", "anchor"):
+                model = work / name
+                model.mkdir()
+                (model / "weight").write_bytes(b"synthetic model")
+            config = config_at(work)
+            config["custody_parents"] = [str(root)]
+            config_file = work / "config.json"
+            config_file.write_text(json.dumps(config))
+
+            def observer(pid):
+                return live.Identity("LIVE", OLD_START) if pid == 42 else live.Identity("DEAD")
+
+            def run(target=None, number=None, *, inventory_mode=False, readlink=False):
+                trace = []
+                stdout, stderr = StringIO(), StringIO()
+                output = work / "output"
+                guard, _, advance, _ = self.admission(busy=False)
+                guard.parents = [root]
+                guard.inspect_custody = lambda **kw: live.census(**kw, observer=observer)
+
+                def host():
+                    advance(45)
+                    return {"status": "pass"}
+
+                def smc(repo, directory, profile):
+                    self.assertFalse(output.exists())
+                    directory.mkdir()
+                    (directory / "fixture").write_text("synthetic SMC artifact")
+                    rejected = directory.with_name("smc.rejected1")
+                    rejected.mkdir()
+                    return {"status": "pass", "contention_redo": [{"output_dir": str(rejected)}]}
+
+                def inject(path, operation):
+                    trace.append((path, operation))
+                    if len(trace) != target:
+                        return original(path, operation)
+                    error = OSError(number, "synthetic census operation failed", str(path))
+                    if readlink:
+                        # Exercise the nested syscall inside strict resolution.
+                        read = os.readlink
+                        def fail_readlink(value, *args, **kwargs):
+                            if Path(value) == root:
+                                raise error
+                            return read(value, *args, **kwargs)
+                        with patch.object(os, "readlink", fail_readlink):
+                            return original(path, operation)
+                    with patch.object(Path, operations[operation], side_effect=error):
+                        return original(path, operation)
+
+                args = ["--config", str(config_file), "--output", str(output)]
+                if inventory_mode:
+                    args += ["--inventory", str(work / "D")]
+                try:
+                    with (patch.object(live, "census_fs", inject),
+                          patch.object(r0_runner, "host_snapshot", side_effect=host),
+                          patch.object(r0_runner, "host_identity", return_value={"status": "pass"}),
+                          patch.object(r0_runner, "smc_enumeration", side_effect=smc),
+                          patch.object(r0_runner, "deadline", return_value=nullcontext()),
+                          patch.object(r0_runner, "command", return_value="synthetic-head"),
+                          patch.object(r0_runner, "softwareupdate_scan_forecast", return_value={"status": "unknown"}),
+                          patch("shutil.disk_usage", return_value=SimpleNamespace(free=66_000_000_000)),
+                          patch.object(os, "killpg", side_effect=ProcessLookupError()),
+                          redirect_stderr(stderr), redirect_stdout(stdout)):
+                        status = r0_runner.main(args, backend_factory=FakeBackend, guard_factory=lambda _: guard,
+                                                display_probe=None, lock_path=work / "lock")
+                    if target is None:
+                        self.assertEqual(status, 0, stderr.getvalue())
+                        if not inventory_mode:
+                            published = json.loads((output / "report.json").read_text())
+                            self.assertEqual(published["status"], "pass")
+                            self.assertEqual(published["selected_checks"][0], "smc")
+                            self.assertEqual(set(published["selected_checks"]), set(r0_runner.CHECKS))
+                            self.assertTrue((output / "smc" / "fixture").is_file())
+                            rejected = published["checks"][0]["contention_redo"][0]["output_dir"]
+                            self.assertEqual(Path(rejected), output / "smc.rejected1")
+                            self.assertTrue(Path(rejected).is_dir())
+                            self.assertTrue(any(row.get("background_census") for row in published["census"]))
+                    else:
+                        self.assertEqual(status, 2, stderr.getvalue())
+                        path, _ = trace[target - 1]
+                        self.assertIn(f"{path} (errno {number})", stderr.getvalue())
+                        self.assertFalse(output.exists())
+                        self.assertNotIn("pass:", stdout.getvalue())
+                    return trace
+                finally:
+                    guard.close()
+                    if target is None and output.exists():
+                        output.rename(work / ("inventory-control" if inventory_mode else "report-control"))
+
+            with patch.dict("os.environ", {live.ADDITIONAL_PARENTS_ENV: json.dumps([str(extra)])}):
+                full_trace = run()
+                self.assertEqual({op for _, op in full_trace}, set(operations))
+                for target, (path, operation) in enumerate(full_trace, 1):
+                    for number in (errno.EIO, errno.ENOENT, errno.EACCES):
+                        with self.subTest(call=target, operation=operation, error=number):
+                            run(target, number, readlink=path == root and operation == "resolve")
+                inventory_trace = run(inventory_mode=True)
+                for target, (path, operation) in enumerate(inventory_trace, 1):
+                    for number in (errno.EIO, errno.ENOENT, errno.EACCES):
+                        with self.subTest(inventory_call=target, operation=operation, error=number):
+                            run(target, number, inventory_mode=True,
+                                readlink=path == root and operation == "resolve")
 
 
 class R0QuietIntervalTest(unittest.TestCase):

@@ -1,4 +1,4 @@
-"""Unattended R0 CLI: bounded checks, exclusive output, incremental receipts."""
+"""Unattended R0 CLI: bounded checks, working receipts, exclusive publication."""
 from __future__ import annotations
 
 import argparse
@@ -11,6 +11,7 @@ import os
 from pathlib import Path
 import signal
 import sys
+import tempfile
 import time
 
 from joulewise.align import r0
@@ -370,9 +371,19 @@ MACHINE_LOCK = Path("/private/tmp/joulewise-align-r0.lock")
 
 def main(argv=None, *, backend_factory=None, guard_factory=QuietGuard, lock_path=None,
          display_probe=display_census):
+    try:
+        return _main(argv, backend_factory=backend_factory, guard_factory=guard_factory,
+                     lock_path=lock_path, display_probe=display_probe)
+    except Refused as exc:
+        print(f"refused: {exc}", file=sys.stderr)
+        return 2
+
+
+def _main(argv, *, backend_factory, guard_factory, lock_path, display_probe):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--config", type=Path, required=True)
-    parser.add_argument("--output", type=Path, required=True, help="new exclusive record directory")
+    parser.add_argument("--output", type=Path, required=True,
+                        help="exclusive report directory or inventory file, published after the final census")
     parser.add_argument("--checks", default=",".join(CHECKS), help="comma-separated: " + ",".join(CHECKS))
     parser.add_argument("--models", default="D", help="D only under Amendment 1")
     parser.add_argument("--timeout", type=int, default=7200,
@@ -411,16 +422,36 @@ def main(argv=None, *, backend_factory=None, guard_factory=QuietGuard, lock_path
                 json.dump(rows, handle, indent=2, sort_keys=True)
                 handle.write("\n")
             return 0
-        args.output.mkdir(parents=True, exist_ok=False)
+        if os.path.lexists(args.output):
+            raise FileExistsError(f"R0 output already exists: {args.output}")
+        args.output.parent.mkdir(parents=True, exist_ok=True)
+        # Receipts and any acquisition artifacts stay private until the
+        # sampler's final verdict. Refusals retain only the working copy.
+        working = Path(tempfile.mkdtemp(prefix=f".{args.output.name}.r0-", dir=args.output.parent))
         if backend_factory is None:
             # Importing this module imports no MLX; the backend loads lazily
             # after the first guard and Stage-1 readiness checks.
             from joulewise.align.r0_mlx import MlxBackend
             backend_factory = MlxBackend
-        report = execute(config, args.output, checks, models, guard=guard,
+        report = execute(config, working, checks, models, guard=guard,
                          backend_factory=backend_factory, per_check_timeout=args.timeout,
                          keep_going=args.keep_going, long_decode_attempts=args.long_decode_attempts,
                          display_probe=display_probe)
+        if "refusal" in report:
+            print(f"unpublished R0 diagnostics: {working}", file=sys.stderr)
+            raise Refused(report["refusal"])
+        # The command line is provenance. The artifact location follows the
+        # directory to its published destination.
+        for check in report["checks"]:
+            for attempt in check.get("contention_redo", ()):
+                if "output_dir" in attempt:
+                    relative = Path(attempt["output_dir"]).relative_to(working)
+                    attempt["output_dir"] = str(args.output / relative)
+        save_report(working, report)
+        # Preserve exclusive-output semantics before replacing our own empty
+        # reservation with the completed working directory.
+        args.output.mkdir(exist_ok=False)
+        working.replace(args.output)
         print(f"{report['status']}: {args.output / 'report.json'}; complete_r0={report['complete_r0']}")
         return 0 if report["status"] == "pass" else 2
 

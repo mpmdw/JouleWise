@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import errno
 import json
 import os
 from pathlib import Path
@@ -116,7 +117,7 @@ class MeasurementLivenessTests(unittest.TestCase):
                 group.assert_not_called()
             self.assertEqual(path.read_text(), raw)
         self.pending_marker()
-        with patch.object(live, "_read_marker", side_effect=PermissionError("fixture unreadable")):
+        with patch.object(Path, "read_text", side_effect=PermissionError(errno.EACCES, "fixture unreadable", path)):
             self.assertIn("indeterminate", self.census().refusals[0])
 
     def test_pending_symlinks_refuse_including_dangling_links(self):
@@ -157,32 +158,32 @@ class MeasurementLivenessTests(unittest.TestCase):
 
     def test_pending_disappearance_reconciles_once_and_instability_refuses(self):
         path = self.pending_marker()
-        record = live._read_marker(path)
+        record = path.read_text()
         with patch.object(live.os, "killpg"), patch.object(
-                live, "_read_marker", side_effect=[FileNotFoundError(), record]) as read:
+                Path, "read_text", side_effect=[FileNotFoundError(), record]) as read:
             self.assertFalse(self.census().clear)
             self.assertEqual(read.call_count, 2)
-        with patch.object(live, "_read_marker", side_effect=FileNotFoundError()) as read:
+        with patch.object(Path, "read_text", side_effect=FileNotFoundError()) as read:
             self.assertIn("indeterminate", self.census().refusals[0])
             self.assertEqual(read.call_count, 2)
-        def disappear(marker):
+        def disappear(marker, **kwargs):
             marker.unlink()
             raise FileNotFoundError()
-        with patch.object(live, "_read_marker", side_effect=disappear):
+        with patch.object(Path, "read_text", disappear):
             self.assertTrue(self.census().clear)
 
     def test_pending_diagnostics_are_not_duplicated_when_chain_read_retries(self):
         self.pending_marker()
         self.marker()
-        reader = live._read_marker
+        reader = Path.read_text
         failed = False
-        def race(path):
+        def race(path, **kwargs):
             nonlocal failed
             if path.name == "chain.started" and not failed:
                 failed = True
                 raise FileNotFoundError("fixture chain race")
-            return reader(path)
-        with patch.object(live.os, "killpg"), patch.object(live, "_read_marker", side_effect=race):
+            return reader(path, **kwargs)
+        with patch.object(live.os, "killpg"), patch.object(Path, "read_text", race):
             result = self.census()
         self.assertFalse(result.clear)
         self.assertEqual(len(result.refusals), 2)
@@ -322,7 +323,7 @@ class MeasurementLivenessTests(unittest.TestCase):
         bad.touch()
         self.assertFalse(live.census(parents=[bad], observer=self.observer).clear)
         self.marker()
-        with patch.object(live, "_read_marker", side_effect=PermissionError("fixture unreadable")):
+        with patch.object(Path, "read_text", side_effect=PermissionError("fixture unreadable")):
             self.assertFalse(self.census().clear)
         with patch.object(Path, "iterdir", side_effect=PermissionError("fixture root")):
             self.assertFalse(self.census().clear)
@@ -340,17 +341,17 @@ class MeasurementLivenessTests(unittest.TestCase):
 
     def test_disappearance_reconciles_once_and_instability_refuses(self):
         self.marker()
-        reader = live._read_marker
-        with patch.object(live, "_read_marker", side_effect=[FileNotFoundError(), reader(self.night / 'chain.started')]) as read:
+        with patch.object(Path, "read_text", side_effect=[FileNotFoundError(),
+                                                        (self.night / "chain.started").read_text()]) as read:
             self.assertFalse(self.census().clear)
             self.assertEqual(read.call_count, 2)
-        with patch.object(live, "_read_marker", side_effect=FileNotFoundError()) as read:
+        with patch.object(Path, "read_text", side_effect=FileNotFoundError()) as read:
             self.assertIn('indeterminate', self.census().refusals[0])
             self.assertEqual(read.call_count, 2)
-        def disappear(path):
+        def disappear(path, **kwargs):
             path.unlink()
             raise FileNotFoundError()
-        with patch.object(live, "_read_marker", side_effect=disappear):
+        with patch.object(Path, "read_text", disappear):
             self.assertTrue(self.census().clear)
 
     def test_successful_empty_probe_is_unknown_for_live_pid(self):
@@ -375,7 +376,7 @@ class MeasurementLivenessTests(unittest.TestCase):
             if path == entries[2].path:
                 reads += 1
                 if reads <= 2:
-                    raise FileNotFoundError("fixture registry race")
+                    raise live.Refused(path, errno.ENOENT)
             original(path, result, observer)
         def observe(pid):
             # Both warning and refusal from the prefix must survive exactly once.
