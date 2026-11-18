@@ -60,7 +60,10 @@ class DriverRuntimeTests(unittest.TestCase):
             argv = ["--output", str(root / "align-r1"), "--registration", str(root / "r1_slots.json"),
                     "--power-marker", str(root / "marker"), "--runtime-entrypoint", str(self.inputs(root, config)),
                     "--synthetic"]
-            with patch.object(r1, "_run", self.boundary(world, mode_file)):
+            # RL-156 section 2: the bar names TV0h/TV1h; the synthetic world's one thermometer under two key
+            # names stands in for that pair here.
+            with patch.object(r1, "_run", self.boundary(world, mode_file)), \
+                    patch.object(r1, "RULED_ALIAS_PAIR", (rs.syn.FAST, rs.syn.SLOW)):
                 rc = r1.main(argv)
             result = json.loads((root / "align-r1/r1_result.json").read_text())
             self.assertEqual(rc, 0, result.get("error"))
@@ -85,12 +88,13 @@ class DriverRuntimeTests(unittest.TestCase):
             b_leg = [p for p in result["phases"] if p["name"] == "high_power_B"][0]
             self.assertEqual(b_leg["result"]["ac_powermode"]["value"], 2)
             self.assertEqual(registration["slots_ac_powermode"], 0)
-            # RL-145 close: the synthetic gate pair is an alias group (the ruled shape), which the
-            # unchanged driver's R8-6 rule (align_r1_rehearsal.picks_aliased, a condition-13 path)
-            # still fails at the bar. The runtime's own confirmation passes. Reported to the lead.
+            # RL-145 close sections 5 and 10, RL-149 section 5 item 12: the synthetic gate pair is the
+            # ruled alias pair (TV0h/TV1h by name, RL-156 section 2), confirmed by the runtime's
+            # RL-145 night confirmation, so the driver's R8-6 bar keeps it (it failed it before).
             self.assertEqual(registration["thermometry"]["D"]["status"], "pass")
-            self.assertEqual(registration["thermometry"]["bar"], "fail")
-            self.assertIn("r1.picks_aliased", registration["thermometry"]["flags"])
+            self.assertEqual(registration["thermometry"]["bar"], "pass")
+            self.assertIn("r1.picks_alias_pair_rl145", registration["thermometry"]["flags"])
+            self.assertNotIn("r1.picks_aliased", registration["thermometry"]["flags"])
 
     def test_term_reaches_the_runtime_which_closes_its_custody_before_exit(self):
         with tempfile.TemporaryDirectory(dir=TMP) as td:

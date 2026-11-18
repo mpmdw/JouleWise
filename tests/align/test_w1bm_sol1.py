@@ -128,7 +128,7 @@ class ArithmeticWitnesses(unittest.TestCase):
                                 json.dumps(candidate.receipt))
                 # The complete receipt passes; refusal must come from U3.
                 registration.validate_receipt(candidate.receipt, candidate.root)
-                with self.assertRaises(ValueError) as refused:
+                with candidate.executed_sources_unchecked(), self.assertRaises(ValueError) as refused:
                     registration.require_registration(candidate.root)
                 self.assertIn('U3', str(refused.exception))
 

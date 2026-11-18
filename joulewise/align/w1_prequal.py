@@ -1169,10 +1169,14 @@ def executed_closure(root):
 
 SERIES_SCHEMA = 'joulewise.align_v4.smoke_series_plan.v1'
 BATCH_ENCOUNTER_S = 11164
-R1_BATCH_ENCOUNTER_S = 12964
-R1_FOLLOWUP_FLOOR_S = 99768
-R1_FOLLOWUP_SPAN_S = 108768
-R1_FOLLOWUP_WINDOW_S = 126480
+# R1 follow-up (RL-72 E2) at the RL-149 section 2.9 item 4 blackout, 02:00-02:35 (2,100 s; was 5,400 s):
+# encounter = largest unit 7,563.9952 + 2,100 s; floor, span and window_max_s recomputed by the same
+# construction (align_r1_rehearsal.night_worst_case_s; RL-72 E2 had 12,964 / 99,768 / 108,768 / 126,480).
+# W1, C and T never wait for the batch, so BATCH_ENCOUNTER_S above is untouched (RL-149).
+R1_BATCH_ENCOUNTER_S = 9664
+R1_FOLLOWUP_FLOOR_S = 93168
+R1_FOLLOWUP_SPAN_S = 102168
+R1_FOLLOWUP_WINDOW_S = 119880
 
 
 def _number(value, name):
@@ -1441,7 +1445,11 @@ def check_r1_w1_chain(ctx):
     data.mkdir(parents=True, exist_ok=True)
     steps, failures = [], []
     try:
-        with mock.patch.object(r1, '_run', rehearsal.FakeWorld(step_d_rate=40.0, gated_decode_tokens=28000,
+        # A pinned wall clock outside the OS-batch window (tests.align.test_r1_rehearsal.NOON_SAFE): the synthetic
+        # rehearsal otherwise waits in real time whenever the probe runs near 02:00-02:35 (RL-149 section 2.9
+        # item 4; PR #777 row-1 review, finding 11).
+        with mock.patch.object(r1, '_now_local', lambda: rehearsal.NOON_SAFE), \
+                mock.patch.object(r1, '_run', rehearsal.FakeWorld(step_d_rate=40.0, gated_decode_tokens=28000,
                                                                gated_admitted_turns=7)), \
                 contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
             if r1.run(rehearsal.R1Tests.args(None, str(data), synthetic=True)) != 0:
@@ -1549,8 +1557,8 @@ def on_signal(number, _frame):
     stop["reason"] = "signal %d" % number
 for number in (signal.SIGTERM, signal.SIGINT, signal.SIGHUP):
     signal.signal(number, on_signal)
-OFFSET = 7_000_000_000
 start = time.monotonic_ns()
+OFFSET = time.clock_gettime_ns(time.CLOCK_MONOTONIC_RAW) - start
 with open(out, "x") as handle:
     handle.write(json.dumps({"k": "h", "schema": "joulewise.km003c_stream.v1", "status": "streaming",
                              "rate_idx": 2, "start_raw_ns": start + OFFSET, "start_mono_ns": start}) + "\n")
@@ -1693,7 +1701,9 @@ def check_km003c_launch(ctx):
                 first = parsed[0]
                 second = parsed[1]
                 off2 = kp.raw_offset_ns(second) or 0
-                lo1 = first.poll_ns[0] - 7_000_000_000 if first.poll_ns else None
+                # The killed stream has no trailer: its start offset is the one the reader declared.
+                off1 = kp.raw_offset_ns(first, allow_unclosed=True) or 0
+                lo1 = first.poll_ns[0] - off1 if first.poll_ns else None
                 lo2, hi2 = second.host_ns[0] - off2, second.host_ns[-1] - off2
                 straddle = (lo1 + 100_000_000, lo2 + 500_000_000)
                 inside = (lo2 + 200_000_000, hi2 - 200_000_000)
@@ -1749,7 +1759,8 @@ def check_km003c_crash_radius(ctx):
         if code != harness.driver.EXIT_GO or len(streams) < 2:
             return result(FAIL, f'window did not run with a restarted meter (exit {code}, {len(streams)} streams)')
         first = kp.parse(harness.custody / streams[0]['path'])
-        polls = [t - 7_000_000_000 for t in first.poll_ns]
+        off1 = kp.raw_offset_ns(first, allow_unclosed=True) or 0
+        polls = [t - off1 for t in first.poll_ns]
         before = (polls[0] + 100_000_000, polls[0] + 900_000_000)
         runs = harness.root / 'synthetic-runs'
         plan = [_synthetic_member(runs, 'member-before-kill', before, (before[0], before[0] + 300_000_000))]

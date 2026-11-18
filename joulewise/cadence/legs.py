@@ -40,6 +40,8 @@ from joulewise.cadence import kit as kitmod
 from joulewise.cadence.desk import DENIED_KEY_RE, LEG_SUMMARY_KEYS, METER_KEYS, RESULT_KEYS
 
 RUNNER_KIND = "cadence-legs-v1"
+# Runner kinds this runner executes: v1 kits, and v1.1 kits (the cell law; design doc section 14).
+RUNNER_KINDS = (RUNNER_KIND, "cadence-legs-v1.1")
 LEG_KIND = "cadence-leg"
 LEG_SPEC_SCHEMA = "joulewise.cadence_leg_spec.v1"
 PLAN_SCHEMA = "joulewise.cadence_span_plan.v1"
@@ -67,8 +69,27 @@ TIME_MODEL = {"fixed_s": 500.0, "warmup_extra_s": 6.0, "prefill_s_per_token": 0.
 # The launcher's ceiling (launch_align_r0.MAX_DESK_SECONDS); a plan longer than this cannot be armed.
 MAX_SPAN_S = 12 * 3600
 
+# The launch bounds of RL-155a section 3 (restated by RL-156a section 2 and RL-158 section 3):
+# 1. the fence end, worst case + 1,460 s, lands by 01:50: ten minutes before each batch blackout starts;
+# 2. no launch between 10:50 and 13:15 while the soak path waits out the R1 driver's 11:45-13:15 window
+#    unbudgeted: no t0 from 55 min before a soak window starts until it ends.
+FENCE_TAIL_S = 1460
+FENCE_QUIET_LEAD_S = 600
+SOAK_LAUNCH_LEAD_S = 3300
+
 LEG_SPEC_KEYS = {"schema", "campaign_id", "leg_id", "seed", "start_band", "prefill_tokens", "prefill_chars",
                  "decode_tokens", "quiet_s"}
+# The span-reference leg (kit v1.1; RL-150 R1 part 2; design doc section 14.5). A leg whose kit shape is
+# ``own`` keeps the v1 spec, the contract dev-01's legs run under. A ``span`` leg's spec adds its shape and
+# its role in this span: ``capture`` when it is the span's first leg (its capture IS the span's
+# reference), ``consume`` otherwise (its G0 is judged against the first leg's authenticated capture).
+LEG_SPEC_SCHEMA_V11 = "joulewise.cadence_leg_spec.v1.1"
+LEG_SPEC_KEYS_V11 = LEG_SPEC_KEYS | {"g0_shape", "g0_role"}
+G0_ROLES = ("capture", "consume")
+# A consumer waits for the span's reference, not its own entry temperature: its G0 is modeled at 600 s,
+# so a consumer whose G0 runs to the 1,200 s cap still sits under 1.5 x its budget (LEG_OVERTIME is
+# not tripped by a long G0 alone). The process cap (leg_worst_case_s) and the worst case are unchanged.
+SPAN_G0_S = 600.0
 
 
 class PlanError(ValueError):
@@ -89,8 +110,36 @@ def prefill_chars(tokens):
     return round(tokens * ANCHOR_PREFILL_CHARS / ANCHOR_PREFILL_TOKENS)
 
 
+def leg_spec_keys(spec):
+    """The closed key set of ``spec``'s schema."""
+    return LEG_SPEC_KEYS_V11 if spec.get("schema") == LEG_SPEC_SCHEMA_V11 else LEG_SPEC_KEYS
+
+
+def _validate_leg_spec_v11(spec):
+    """A span leg's spec: its shape and role, then every v1 rule on the rest."""
+    problems = []
+    if spec.get("g0_shape") != "span":
+        problems.append(f"leg spec: {LEG_SPEC_SCHEMA_V11} is a span leg's (g0_shape 'span'); an own leg keeps "
+                        f"{LEG_SPEC_SCHEMA}")
+    if spec.get("g0_role") not in G0_ROLES:
+        problems.append(f"leg spec: g0_role one of {G0_ROLES}")
+    for key in ("g0_shape", "g0_role"):
+        if key not in spec:
+            problems.append(f"leg spec: missing key {key!r}")
+    try:
+        validate_leg_spec({**{k: v for k, v in spec.items() if k not in ("g0_shape", "g0_role")},
+                           "schema": LEG_SPEC_SCHEMA})
+    except PlanError as error:
+        problems.extend(error.problems)
+    if problems:
+        raise PlanError(problems)
+    return spec
+
+
 def validate_leg_spec(spec):
     """Return ``spec`` or raise PlanError. Closed keys; a leg runtime reads nothing else."""
+    if isinstance(spec, dict) and spec.get("schema") == LEG_SPEC_SCHEMA_V11:
+        return _validate_leg_spec_v11(spec)
     problems = []
     if not isinstance(spec, dict):
         raise PlanError(["leg spec: object"])
@@ -147,25 +196,36 @@ def leg_specs(kit, leg_ids=None):
     if problems:
         raise PlanError(problems)
     specs = []
-    for leg_id in ids:
+    for position, leg_id in enumerate(ids):
         leg = by_id[leg_id]
         band = leg["start_band"]
         if band not in BAND_RECIPES:
             raise PlanError([f"{leg_id}: band {band!r} has no recipe in {sorted(BAND_RECIPES)}"])
-        tokens = leg.get("prefill_tokens", kit["leg_defaults"]["prefill_tokens"])
+        # A v1 leg may take its size from leg_defaults; a v1.1 leg carries its cell (the cell law).
+        tokens = leg["prefill_tokens"] if "prefill_tokens" in leg else kit["leg_defaults"]["prefill_tokens"]
+        decode = leg["decode_tokens"] if "decode_tokens" in leg else kit["leg_defaults"]["decode_tokens"]
+        shape = leg.get("g0_shape", "own")
+        if shape not in ("own", "span"):
+            raise PlanError([f"{leg_id}: G0 shape {shape!r} has no leg runtime"])
         spec = {"schema": LEG_SPEC_SCHEMA, "campaign_id": kit["campaign_id"], "leg_id": leg_id,
                 "seed": leg["seed"], "start_band": band, "prefill_tokens": tokens,
                 "prefill_chars": prefill_chars(tokens) if type(tokens) is int else None,
-                "decode_tokens": leg.get("decode_tokens", kit["leg_defaults"]["decode_tokens"]),
-                "quiet_s": BAND_RECIPES[band]["quiet_s"]}
+                "decode_tokens": decode, "quiet_s": BAND_RECIPES[band]["quiet_s"]}
+        if shape == "span":   # the span's first leg captures the span's reference; later span legs consume it
+            spec.update(schema=LEG_SPEC_SCHEMA_V11, g0_shape="span", g0_role="capture" if position == 0 else "consume")
         specs.append(validate_leg_spec(spec))
     return specs
+
+
+def leg_g0_s(spec, model=TIME_MODEL):
+    """The modeled G0 of one leg: a span-reference consumer's (SPAN_G0_S), or the time model's."""
+    return SPAN_G0_S if spec.get("g0_role") == "consume" else model["g0_s"]
 
 
 def leg_expected_s(spec, model=TIME_MODEL):
     """Modeled wall seconds of one leg: fixed + warm-up (one prefill) + G0 + quiet + prefill + decode."""
     prefill = spec["prefill_tokens"] * model["prefill_s_per_token"]
-    return (model["fixed_s"] + prefill + model["warmup_extra_s"] + model["g0_s"] + spec["quiet_s"]
+    return (model["fixed_s"] + prefill + model["warmup_extra_s"] + leg_g0_s(spec, model) + spec["quiet_s"]
             + prefill + spec["decode_tokens"] / model["decode_tokens_per_s"])
 
 
@@ -238,6 +298,32 @@ def blackout_bound_s(t0, span_s, windows):
     return total
 
 
+def _hms(epoch):
+    return datetime.fromtimestamp(epoch, LOCAL_ZONE).strftime("%H:%M:%S")
+
+
+def fence_problems(plan, windows, soak_windows):
+    """RL-155a section 3's two launch bounds for a plan's t0 (empty list = the launch is legal).
+
+    The free t0 of kit v1.1 does not remove them: the launcher and ``plan`` apply them to every kit."""
+    t0 = plan["t0_epoch_s"]
+    end = t0 + plan["worst_case_s"] + FENCE_TAIL_S
+    problems = []
+    for start, stop in window_epochs(t0, windows) + window_epochs(end, windows):
+        quiet = start - FENCE_QUIET_LEAD_S
+        if t0 < stop and end > quiet:
+            problems.append(f"the fence end (worst case + {FENCE_TAIL_S} s) at {_hms(end)} passes {_hms(quiet)}, "
+                            f"{FENCE_QUIET_LEAD_S // 60} min before the {_hms(start)[:5]}-{_hms(stop)[:5]} blackout "
+                            "(RL-155a section 3)")
+            break
+    for start, stop in window_epochs(t0, soak_windows):
+        if start - SOAK_LAUNCH_LEAD_S < t0 < stop:
+            problems.append(f"no launch between {_hms(start - SOAK_LAUNCH_LEAD_S)[:5]} and {_hms(stop)[:5]}: the soak "
+                            f"path waits out {_hms(start)[:5]}-{_hms(stop)[:5]} unbudgeted (RL-155a section 3)")
+            break
+    return problems
+
+
 # --------------------------------------------------------------------------
 # The plan adapter
 # --------------------------------------------------------------------------
@@ -271,12 +357,14 @@ def plan_span(kit, *, t0_epoch, windows, leg_ids=None, max_span_s=MAX_SPAN_S):
         raise PlanError([f"the worst-case span [t0, t0 + {worst:.0f} s] meets a batch blackout "
                          f"({', '.join(format_window(w) for w in windows)}); arm after it or earlier"])
     expected = t["soak_s"] + t["fixed_overhead_s"] + sum(leg["budget_s"] for leg in legs)
-    return {"schema": PLAN_SCHEMA, "runner_kind": RUNNER_KIND, "campaign_id": kit["campaign_id"],
+    return {"schema": PLAN_SCHEMA, "runner_kind": kit["runner"]["kind"], "campaign_id": kit["campaign_id"],
             "t0_epoch_s": t0_epoch, "deadline_epoch_s": t0_epoch + worst, "worst_case_s": worst,
             "blackout_clear": True, "expected_s": expected, "soak_s": t["soak_s"],
             "fixed_overhead_s": t["fixed_overhead_s"], "leg_cap_s": t["leg_worst_case_s"],
             "redo_quota": t["redo_quota"], "batch_windows": [format_window(w) for w in windows],
-            "time_model": dict(TIME_MODEL), "legs": legs}
+            "time_model": {**TIME_MODEL, **({"span_g0_s": SPAN_G0_S} if any(leg.get("g0_role") == "consume"
+                                                                            for leg in legs) else {})},
+            "legs": legs}
 
 
 # --------------------------------------------------------------------------
@@ -345,12 +433,15 @@ def leg_admitted(result, *, contaminated):
                 and mode == 0)
 
 
-def leg_summary(*, spec, budget_s, attempts, accepted, started_epoch_s, ended_epoch_s):
+def leg_summary(*, spec, budget_s, attempts, accepted, started_epoch_s, ended_epoch_s, cell=None):
     """The ``leg-summary-v1`` projection of one leg (the desk's allowlist, nothing else).
 
     ``attempts`` are this leg's attempt records in order ({wall_s, contaminated, redo_reason}); an
     attempt is contaminated when the load-redo rule fired on it, whether or not quota remained to
-    redo it. ``accepted`` is the last attempt's runtime result (None when none returned one)."""
+    redo it. ``accepted`` is the last attempt's runtime result (None when none returned one).
+    ``cell`` (kit v1.1 legs only) adds ``prefill_tokens``, ``g0_shape``, ``g0_role`` and, for a consumer,
+    ``span_reference`` ({leg_id, attempt, redone, excluded}: which attempt of the span's first leg
+    supplied the reference; RL-158 Q2, RL-161 section 4). A v1 leg's summary is unchanged."""
     rejected = [a for a in attempts if a.get("contaminated")]
     last = attempts[-1] if attempts else {}
     contaminated = bool(last.get("contaminated"))
@@ -365,6 +456,8 @@ def leg_summary(*, spec, budget_s, attempts, accepted, started_epoch_s, ended_ep
         "started_epoch_s": started_epoch_s, "ended_epoch_s": ended_epoch_s,
         "admitted": leg_admitted(accepted, contaminated=contaminated),
     }
+    if cell is not None:
+        summary.update({k: cell.get(k) for k in ("prefill_tokens", "g0_shape", "g0_role", "span_reference")})
     assert set(summary) <= LEG_SUMMARY_KEYS
     return guard_projection(summary, f"legs/{spec['leg_id']}/leg_summary.json")
 
