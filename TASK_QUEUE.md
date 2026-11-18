@@ -604,8 +604,8 @@ At the end of substantial work:
 
 - 2026-11-17, Round 10 Astra audit Builder D. The initial work is recorded in
   the [draft PR handoff](docs/run_reports/2026-11-17-astra-small-fixes.md).
-  The [PR #809 repair report](docs/run_reports/2026-11-17-pr809-part-c-repair.md)
-  records the replacement STANDING-F0 candidate and its synthetic verification.
+  The [RL-183 handoff](docs/run_reports/2026-11-18-pr809-rl183.md) records the
+  frozen-source repair and the remaining Part C evidence contract work.
 
 ## Intake Batch Owed To The Kernel (2026-07-30/31)
 

@@ -1,5 +1,8 @@
 # PR #809 Part C repair and STANDING-F0 rebind
 
+This report records the earlier candidate. The [RL-183 handoff](2026-11-18-pr809-rl183.md)
+records the current Part C work and the issued STANDING-F0 pin.
+
 The replacement W1 renewal candidate is `5434cb49d805768f6d5b8f82d71a3bef04901aba`
 on `ops/2026-11-17-astra-small-fixes-f0-rebind`, a direct child of
 `4d7dd28cc93bb02f6f6782dacd7af04abd6eda8e`. The candidate tree is

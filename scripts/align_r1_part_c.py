@@ -43,6 +43,7 @@ D_bank line):
 from __future__ import annotations
 
 from collections import defaultdict
+import hashlib
 import json
 import math
 from pathlib import Path
@@ -61,6 +62,13 @@ TEMPERATURE_KEYS = ("fast_c", "slow_c")
 RECEIPT_NAME = "runtime_result.json"
 SEGMENTS = {"step-d": "step_D_prefill_10k_decode_4096",
             "d-bank": "D_bank_benign_s1_gated_held", "x-g": "X_G_contrast"}
+EPISODE_IDENTITIES = {
+    "predecessor": ("Qwen3-30B-A3B-4bit", "shade/spam_filter_update", "benign", 1),
+    "step-d": ("Qwen3.8-27B-8bit", "r1/planning_turn_step", "benign", 1),
+    "d-bank": ("Qwen3.8-27B-8bit", "shade/bank_transfer_2", "benign", 1),
+    "x-g": ("Qwen3-30B-A3B-4bit", "shade/spam_filter_update", "sabotage", 16),
+}
+POWERMODE_SOURCE = "pmset -g custom (AC Power block, exact powermode key)"
 CUT_FLAGS = frozenset({"episode.deadman", "episode.g0_unreleased", "episode.malformed_tool_call",
                        "episode.time_guard", "episode.context_limit", "thermal.start_gate_timeout",
                        "thermal.gate_timeout", "thermal.hold_timeout", "thermal.collector_failed",
@@ -163,7 +171,7 @@ def no_g1_timeout(member):
 def _flag_sources(member):
     return {"runtime": (member.get("runtime") or {}).get("episode_flags"),
             "episode": member.get("episode_flags"), "thermal": member.get("thermal_flags"),
-            "journal": member.get("journal_flags")}
+            "raw_episode": member.get("raw_episode_flags"), "journal": member.get("journal_flags")}
 
 
 def _all_flags(member):
@@ -406,9 +414,75 @@ def _reject_constant(value):
     raise ValueError(f"non-finite JSON constant {value}")
 
 
+def _finite_float(value):
+    number = float(value)
+    if not math.isfinite(number):
+        raise ValueError("JSON number overflows")
+    return number
+
+
 def parse_evidence_json(text):
     """Decode a wire record without collapsing conflicting JSON members."""
-    return json.loads(text, object_pairs_hook=_unique_members, parse_constant=_reject_constant)
+    if isinstance(text, bytes):
+        text = text.decode("utf-8", errors="strict")
+    return json.loads(text, object_pairs_hook=_unique_members, parse_constant=_reject_constant,
+                      parse_float=_finite_float)
+
+
+class RuntimeEvidenceError(ValueError):
+    def __init__(self, kind, reason, detail, receipt=None):
+        super().__init__(f"runtime.{kind}.{reason}: {detail}")
+        self.kind, self.reason, self.receipt = kind, reason, receipt
+
+
+class RuntimeAdmissionRefusal(ValueError):
+    def __init__(self, kind, reason):
+        super().__init__(f"runtime.{kind}: {reason}")
+        self.kind, self.reason = kind, reason
+
+
+def judged_invoke(runtime, kind, output, duration=None, *, soak_reference=None, quiet=False,
+                  contract_key=None, watch=None):
+    """Part C's evidence transport around the byte-frozen R1 process driver."""
+    from scripts import align_r1_rehearsal as r1
+    from subprocess import TimeoutExpired
+
+    if watch is not None:
+        watch.check(f"before:{kind}:{Path(output).name}")
+    argv = list(runtime) + ["--r1-kind", kind, "--output", str(output)]
+    lock = r1._CHILD_HOST_LOCK
+    if lock is not None and lock.held:
+        argv += ["--host-lock-fd", str(lock.pass_fds()[0])]
+    if duration is not None:
+        argv += ["--duration-s", str(duration)]
+    if soak_reference is not None:
+        argv += ["--soak-reference", str(soak_reference)]
+    elif (contract_key or kind) in r1.contract.NEEDS_SOAK_REFERENCE:
+        raise RuntimeAdmissionRefusal(kind, "no soak reference before launch")
+    try:
+        process = r1._run(argv)
+    except (OSError, TimeoutExpired, UnicodeError) as error:
+        raise RuntimeEvidenceError(kind, "process_exit", type(error).__name__) from error
+    code, stdout = process.returncode, process.stdout
+    if type(code) is not int:
+        raise RuntimeEvidenceError(kind, "process_exit", "invalid exit status")
+    if code == 2:
+        if stdout not in ("", b""):
+            reason = "x_g_launch_conflict" if kind == "x-g" else "stdout_receipt"
+            raise RuntimeEvidenceError(kind, reason, "admission refusal with nonempty or missing stdout")
+        raise RuntimeAdmissionRefusal(kind, "native exit 2")
+    if code:
+        raise RuntimeEvidenceError(kind, "process_exit", f"exit {code}")
+    try:
+        value = parse_evidence_json(stdout)
+    except (ValueError, TypeError) as error:
+        raise RuntimeEvidenceError(kind, "stdout_receipt", str(error)) from error
+    if not isinstance(value, dict):
+        raise RuntimeEvidenceError(kind, "stdout_receipt", "expected an object")
+    missing = r1.contract.missing_fields(kind, value, quiet=quiet, contract_key=contract_key)
+    if missing:
+        raise RuntimeEvidenceError(kind, "receipt_contract", "contract fields missing: " + ", ".join(missing), value)
+    return value
 
 
 def _canonical(value):
@@ -416,7 +490,12 @@ def _canonical(value):
 
 
 def _read_receipt(segment):
-    value = parse_evidence_json((segment / RECEIPT_NAME).read_text(encoding="utf-8"))
+    path = segment / RECEIPT_NAME
+    if not S_ISDIR(segment.lstat().st_mode) or not S_ISREG(path.lstat().st_mode):
+        raise ValueError("receipt must be a regular file in its segment")
+    if path.with_suffix(".json.zst").exists():
+        raise ValueError("ambiguous plain and compressed receipt")
+    value = parse_evidence_json(path.read_bytes())
     if not isinstance(value, dict):
         raise ValueError("receipt is not a JSON object")
     return value
@@ -426,34 +505,48 @@ def _relative_bundle(name):
     if not isinstance(name, str):
         raise ValueError("missing receipt bundle path")
     path = Path(name)
-    if not path.parts or path.is_absolute() or ".." in path.parts:
+    if path.as_posix() != name or len(path.parts) != 2 or path.parts[0] != "runs" or ".." in path.parts:
         raise ValueError("invalid receipt bundle path")
+    return path
+
+
+def bundle_directory(segment, name):
+    """Resolve a bundle beneath its own segment without following a directory link."""
+    path = segment
+    for part in ("", *_relative_bundle(name).parts):
+        path = path / part
+        if not S_ISDIR(path.lstat().st_mode):
+            raise ValueError("bundle path must contain real directories")
     return path
 
 
 def _predecessor_receipt(run_dir, stdout):
     if not isinstance(stdout, dict):
         raise ValueError("predecessor stdout receipt is missing")
-    saved = _read_receipt(run_dir / "capture_predecessor_30b")
+    segment = run_dir / "capture_predecessor_30b"
+    saved = _read_receipt(segment)
     if _canonical(saved) != _canonical(stdout):
         raise ValueError("saved predecessor receipt differs from runtime stdout")
-    _relative_bundle(saved["bundle"])
     mode = saved["ac_powermode"]
-    if isinstance(mode, dict):
-        if mode.get("observed_at") != "episode_start" or not isinstance(mode.get("source"), str) or not mode["source"].strip():
-            raise ValueError("invalid predecessor power mode observation")
-        mode = mode.get("value")
-        if type(mode) is not int or mode < 0:
-            raise ValueError("predecessor power mode was not observed")
-    elif not ((type(mode) is int and mode >= 0) or (isinstance(mode, str) and mode.strip())):
-        raise ValueError("missing or invalid predecessor ac_powermode")
-    if "admitted_turns" in saved and (type(saved["admitted_turns"]) is not int or saved["admitted_turns"] < 1):
-        raise ValueError("invalid predecessor admission count")
+    if (not isinstance(mode, dict) or type(mode.get("value")) is not int
+            or not (mode["value"] == 0 and mode.get("source") == POWERMODE_SOURCE
+                    and mode.get("observed_at") == "episode_start" and "error" not in mode)):
+        raise ValueError("mode_observation: missing or invalid predecessor Automatic observation")
+    if type(saved["admitted_turns"]) is not int or saved["admitted_turns"] < 1:
+        raise ValueError("predecessor_episode: invalid predecessor admission count")
+    try:
+        path = bundle_directory(segment, saved["bundle"])
+        episode = _read_episode_payload(path, "predecessor")[1]
+    except (OSError, ValueError) as error:
+        raise ValueError(f"predecessor_episode: {type(error).__name__}") from error
+    if (saved["admitted_turns"] != len(episode["turns"]) or not episode["turns"]
+            or _canonical(saved["ac_powermode"]) != _canonical(episode["hardware"]["ac_powermode"])):
+        raise ValueError("predecessor_episode: episode turn count or mode disagrees")
 
 
 def _receipt_pair(member, segment):
     stdout = member["runtime"]
-    expected_bundle = segment / _relative_bundle(stdout["bundle"])
+    expected_bundle = bundle_directory(segment, stdout["bundle"])
     if Path(member["bundle_path"]) != expected_bundle:
         raise ValueError("receipt identifies a different bundle")
     # Compare the complete payload, including fields which Part C only prints.
@@ -572,6 +665,9 @@ def _member_requirements(member, role):
         if _canonical(receipt["g0_reference"]) != _canonical(g0["reference"]):
             raise ValueError("runtime G0 reference differs from the interval")
     if role != "step-d":
+        idle = receipt["inter_member_idle_s"]
+        if not _finite(idle) or idle != 300:
+            raise ValueError("inter_member_schedule: runtime idle is not the issued duration")
         for key, sensor in (("reference_fast_c", "fast_c"), ("reference_c", "slow_c")):
             if not _finite(receipt[key]) or receipt[key] != g0["reference"][sensor]:
                 raise ValueError(f"runtime {key} differs from the G0 reference")
@@ -595,10 +691,23 @@ def _step_requirements(step, n_chunk, bank):
     slots = receipt["slots"]
     if type(n_chunk) is not int or n_chunk < 1 or type(slots["N_chunk"]) is not int or n_chunk != slots["N_chunk"]:
         raise ValueError("configured N_chunk differs from Step-D receipt")
-    if "T_dead" in slots and slots["T_dead"] != bank["runtime"]["deadman"]["T_dead_s"]:
-        raise ValueError("Step-D T_dead differs from the D_bank receipt")
+    if "T_dead" not in slots or not _finite(slots["T_dead"]) or slots["T_dead"] <= 0:
+        raise ValueError("step_configuration: Step-D T_dead is missing or invalid")
+    if slots["T_dead"] != bank["runtime"]["deadman"]["T_dead_s"]:
+        raise ValueError("step_configuration: Step-D T_dead differs from the D_bank receipt")
     if "B_D" in bank["runtime"] and bank["runtime"]["B_D"] != slots["B_D"]:
         raise ValueError("Step-D B_D differs from the D_bank receipt")
+
+
+def _reference_sources(step, bank, contrast):
+    # The frozen consumer copies the Step-D source member's id.
+    receipt = step["member"]["runtime"]
+    source = _relative_bundle(receipt["bundle"]).name
+    if receipt["operating_reference"].get("source_member") != source or receipt["reference_source"] != source:
+        raise ValueError("reference_source: Step-D reference is unbound")
+    for member in (bank, contrast):
+        if member is not None and member["runtime"]["reference_source"] != source:
+            raise ValueError("reference_source: consuming member names a different Step-D source")
 
 
 def _run_directory(step):
@@ -618,10 +727,12 @@ def _check_launch_refusal(segment):
         return
     if not S_ISDIR(mode):
         raise ValueError("X_G launch refusal has an invalid output directory")
-    # A pre-admission refusal may leave the runtime's terminal metadata.
-    # Any other output means the evaluator cannot establish that no member ran.
-    if any(child.name != "runtime_custody.json" or not S_ISREG(child.lstat().st_mode)
-           for child in segment.iterdir()):
+    # A terminal-only file needs independent attestation. Its name alone
+    # does not authenticate that the runtime refused before doing work.
+    entries = list(segment.iterdir())
+    if len(entries) == 1 and entries[0].name == "runtime_custody.json":
+        raise ValueError("x_g_unrun_unproven: terminal attestation is unavailable")
+    if entries:
         raise ValueError("X_G launch refusal conflicts with output in its segment")
 
 
@@ -641,6 +752,7 @@ def _adjudicate(step, bank, contrast, launcher_refusal, n_chunk, lines, predeces
     require("step_d", _member_requirements, step_member, "step-d")
     require("d_bank", _member_requirements, bank, "d-bank")
     require("step_d_release_and_configuration", _step_requirements, step, n_chunk, bank)
+    require("reference_sources", _reference_sources, step, bank, contrast)
     if contrast is not None:
         require("x_g", _member_requirements, contrast, "x-g")
         if launcher_refusal:
@@ -685,16 +797,15 @@ def evaluate(*, predecessor=None, step_d=None, d_bank=None, n_chunk=None, x_g=No
              "d_bank_mechanics": None if d_bank is None else _check_line(mechanics_line),
              "d_bank_start_state": None if d_bank is None else _check_line(lambda: d_bank_start_state(d_bank)),
              "x_g": None if x_g is None else _check_line(lambda: x_g_line(x_g))}
-    # The kit sends this argument only for the typed launch-error or admission-refusal path.
-    launcher_refusal = (isinstance(x_g_not_run_reason, str)
-                        and x_g_not_run_reason.startswith(("Refusal: ", "RuntimeLaunchError: "))
-                        and bool(x_g_not_run_reason.partition(": ")[2].strip()))
+    launcher_refusal = (isinstance(x_g_not_run_reason, RuntimeAdmissionRefusal)
+                        and x_g_not_run_reason.kind == "x-g"
+                        and x_g_not_run_reason.reason in ("no soak reference before launch", "native exit 2"))
     verdict, issues = _adjudicate(step_d if isinstance(step_d, dict) else {}, d_bank, x_g,
                                   launcher_refusal, n_chunk, lines, predecessor, runtime_error)
     # RL-152 section 1.4: the slot session's three-turn set clause is not applied here.
     log = [THREE_TURN_CLAUSE_LINE] if d_bank is not None else []
     if x_g is None and launcher_refusal and "x_g_launch" not in issues:
-        log.append("X_G was not run: " + x_g_not_run_reason)
+        log.append(f"X_G was not run: {x_g_not_run_reason}")
     elif isinstance(x_g, dict) and "evidence_error" in x_g:
         log.append(f"X_G evidence could not be evaluated: {x_g['evidence_error']}")
     log.extend(f"{name}: {reason}" for name, reason in issues.items())
@@ -710,6 +821,28 @@ def evaluate(*, predecessor=None, step_d=None, d_bank=None, n_chunk=None, x_g=No
 
 # ---- fact extraction (reads one immutable member bundle; no writes) --------------------------------
 
+def _reading_brackets(entries):
+    """Validate acquisition order before a damaged reading can be skipped."""
+    last = None
+    for row in entries:
+        if row["kind"] != "reading":
+            continue
+        started, finished = row["started"], row["finished"]
+        for clock in ("wall_ns", "monotonic_ns", "monotonic_raw_ns"):
+            if clock == "monotonic_raw_ns" and clock not in started and clock not in finished and "seq" not in row:
+                # Older synthetic fixtures record just wall and monotonic clocks.
+                continue
+            a, b = started[clock], finished[clock]
+            if type(a) is not int or type(b) is not int or not 0 <= a <= b:
+                raise ValueError("reading_clock: reversed or invalid reading bracket")
+        start, end = started["monotonic_ns"], finished["monotonic_ns"]
+        if end - start > 1_000_000_000:
+            raise ValueError("reading_clock: reading takes longer than one second")
+        if last is not None and (start <= last[0] or start < last[1]):
+            raise ValueError("reading_clock: reading brackets overlap or are out of order")
+        last = (start, end)
+
+
 def _journal(bundle):
     """Read gate samples via the gate's projection and keep finalized intervals."""
     from joulewise.align.apple.thermal_gates import sample_rows
@@ -722,6 +855,7 @@ def _journal(bundle):
     if (boundaries != ["session_start", "session_end"]
             or (entries[0]["kind"], entries[-1]["kind"]) != ("session_start", "session_end")):
         raise ValueError("thermal journal needs one complete session")
+    _reading_brackets(entries)
     # Native Sidecar rows have a sequence. Check its continuity before
     # projecting out events and readings.
     sequenced = any("seq" in row for row in entries)
@@ -759,7 +893,7 @@ def _journal(bundle):
                 raise ValueError("unrecognized thermal gate event")
     if opened:
         raise ValueError("thermal journal has unfinished gate entries")
-    samples = sorted(sample_rows(entries), key=lambda row: row["monotonic_ns"])
+    samples = sample_rows(entries)
     if sequenced:
         sensors = entries[0]["values"]["thermal"]
         keys = {"fast_c": sensors["s_fast"], "slow_c": sensors["s_slow"]}
@@ -798,17 +932,20 @@ def facts_from_bundle(bundle, *, role):
         return {"role": role, "bundle_path": str(path), "evidence_error": f"{type(error).__name__}: {error}"}
 
 
-def _episode_payload(text):
+def _episode_payload(text, role):
     value = parse_evidence_json(text)
     flags = value.get("flags") if isinstance(value, dict) else None
     if not isinstance(flags, list) or not all(isinstance(flag, str) for flag in flags):
         raise ValueError("episode must explicitly record its flags")
+    expected = EPISODE_IDENTITIES[role]
+    identity = tuple(value.get(key) for key in ("agent_model", "task_pair", "condition", "seed"))
+    if type(identity[-1]) is not int or identity != expected:
+        raise ValueError(f"{role.replace('-', '_')}_identity: raw episode role differs from the issued input")
     return value
 
 
 def _bundle_evidence(bundle, role):
-    from joulewise.align.apple.workload import read_episode_bundle
-    ep = read_episode_bundle(bundle, loads=_episode_payload)
+    ep, raw_episode = read_checked_episode(bundle, role)
     thermal = ep.hardware["thermal"]
     rows, journal_intervals, journal_flags = _journal(bundle)
     by_ns = {r["monotonic_ns"]: r for r in rows}
@@ -829,8 +966,32 @@ def _bundle_evidence(bundle, role):
     return {"role": role, "bundle_path": str(bundle), "turns": turns, "intervals": out_intervals,
             "reading_stamps": sorted(r["monotonic_ns"] for r in rows), "t_dead_s": budget.get("deadman_s"),
             "x7": any(str(f).startswith("episode.deadman:") for f in ep.flags),
-            "episode_flags": list(ep.flags), "thermal_flags": thermal["flags"],
+            "episode_flags": list(ep.flags), "raw_episode_flags": raw_episode["flags"],
+            "thermal_flags": thermal["flags"],
             "journal_intervals": [_interval_facts(row) for row in journal_intervals], "journal_flags": journal_flags}
+
+
+def _read_episode_payload(bundle, role):
+    if not S_ISDIR(bundle.lstat().st_mode) or not S_ISDIR((bundle / "outputs").lstat().st_mode):
+        raise ValueError("episode bundle must have real directories")
+    path = bundle / "outputs/align_episode.json"
+    if not S_ISREG(path.lstat().st_mode):
+        raise ValueError("episode source must be a regular file")
+    if path.with_suffix(".json.zst").exists():
+        raise ValueError("ambiguous plain and compressed episode")
+    raw = path.read_bytes()
+    return path, _episode_payload(raw, role), hashlib.sha256(raw).digest()
+
+
+def read_checked_episode(bundle, role):
+    """Pre-parse at the authorized reader boundary and call the frozen reader unchanged."""
+    from joulewise.align.apple.workload import read_episode_bundle
+
+    path, payload, before = _read_episode_payload(bundle, role)
+    episode = read_episode_bundle(bundle)
+    if hashlib.sha256(path.read_bytes()).digest() != before:
+        raise ValueError("episode source changed while reading")
+    return episode, payload
 
 
 def step_d_facts(bundle, fields):
