@@ -1,4 +1,4 @@
-"""Frozen C1 release acceptance matrix. Run with the release checkout on PYTHONPATH.
+"""Frozen C1 release acceptance matrix v2. Run with the release checkout on PYTHONPATH.
 
 All measurement roots are new temporary Git fixtures. No capture locator is
 followed. The observer runs the CLI as __main__ in a fresh interpreter and
@@ -38,6 +38,12 @@ CLASSES = {
     "window_journal": "archive/align_s_hazard.jsonl",
 }
 CODECS = ("zst", "gz", "bz2", "xz")
+# Declared external inputs exercise the two protected namespaces independently
+# of the authorized, per-benign-ordinal DC projection in the member matrix.
+DECLARED_PROTECTED = {
+    "declared_dc_in": "dc_in/calibration-reference.json",
+    "declared_km003c": "hazards/meter/stream-001.jsonl",
+}
 MUTATIONS = (
     "delete", "delete_after_finalization", "case_listed_delete_after_finalization",
     "empty", "truncate", "unreadable", "chmod_000", "symlink", "hardlink",
@@ -111,7 +117,7 @@ class Input:
     donor: Path
 
 
-def populate(window, fixture_scratch):
+def populate(window):
     """Extend the stock C8 fixture before it is finalized, including both token sources."""
     plan = fx.series.selected(fx.series.candidate(), "C8")
     ordinals = [plan["sabotage_ordinals"][pair] for pair in fx.series.PAIRS]
@@ -142,9 +148,9 @@ def populate(window, fixture_scratch):
     for kind, relative in CLASSES.items():
         owner = owners.get(kind, instructed)
         primary = owner / relative
-        reference = (fixture_scratch if kind == "benign_dc" else refs) / kind
-        # Independent inodes and equal bytes: link cases cannot pass merely by
-        # detecting a size/digest mismatch.
+        # Each DC file belongs to a distinct captured benign ordinal. Both use
+        # the real provider path, have independent inodes, and are finalized.
+        reference = donor / relative if kind == "benign_dc" else refs / kind
         reference.write_bytes(primary.read_bytes())
         inputs[kind] = Input(owner, primary, reference)
     inputs["benign_events"] = Input(benign_member, benign_member / CLASSES["events"], refs / "events")
@@ -203,21 +209,83 @@ def after_publication(kind, mutation, item, listed):
         (parent / ("unexpected-" + path.name)).write_bytes(path.read_bytes())
 
 
+def file_binding(path):
+    raw = path.read_bytes()
+    return {"size": len(raw), "sha256": hashlib.sha256(raw).hexdigest()}
+
+
+def finalize_c8(finalizer, window, calibration, declared):
+    # A byte-bound directory outside the restored window has its own recursive
+    # membership in closure.links. Keep this identical in the intact control.
+    calibration.mkdir()
+    (calibration / "curves").mkdir()
+    reference = calibration / "reference.json"
+    reference.write_bytes(b'{"synthetic_factor":1}\n')
+    alias = window / "calibration-bundle"
+    alias.symlink_to(calibration, target_is_directory=True)
+    if declared is not None:
+        declared.parent.mkdir(parents=True)
+        declared.write_bytes(b'{"synthetic_factor":1}\n')
+    inventory = finalizer(window, inputs=() if declared is None else (declared,))
+    closure = inventory["closure"]
+    link = closure["links"][alias.name]
+    if (inventory["entries"][alias.name] != {"link": str(calibration)}
+            or (link["class"], link["kind"], link["target"]) != ("bytes", "directory", str(calibration))
+            or set(link["directories"]) != {".", "curves"} or link["files"] != [reference.name]
+            or closure["files"][str(reference)] != file_binding(reference)):
+        raise AssertionError("synthetic calibration directory membership was not finalized")
+    if declared is not None and (closure["inputs"].get(str(declared)) != {"real": str(declared)}
+                                 or closure["files"].get(str(declared)) != file_binding(declared)):
+        raise AssertionError("synthetic protected input was not digest-bound")
+    return inventory
+
+
+def damage_declared_input(path, mutation):
+    if mutation == "missing":
+        path.unlink()
+    elif mutation == "gzip_only":
+        raw = path.read_bytes()
+        archive = path.with_name(path.name + ".gz")
+        archive.write_bytes(gzip.compress(raw, mtime=0))
+        path.unlink()
+    elif mutation == "unreadable_at_restore":
+        # There need not be an authorized opener for a declared native input.
+        path.chmod(0)
+    elif mutation == "digest_mismatch":
+        raw = path.read_bytes()
+        if raw.count(b"1") != 1:
+            raise AssertionError("expected one synthetic calibration value")
+        path.write_bytes(raw.replace(b"1", b"2", 1))
+    else:
+        raise ValueError(mutation)
+
+
 def build_world(root, kind, mutation):
     finalizer = fx.harvest_offload.finalized_manifest
     describe = fx.describe
     changed = []
+    calibration = root / "synthetic-calibration"
+    declared = root / DECLARED_PROTECTED[kind] if kind in DECLARED_PROTECTED else None
+    ledger_case = declared is not None or kind == "calibration_directory"
 
     def finalize(directory):
         if directory.name != "C8":
             return finalizer(directory)
-        item = populate(directory, root.parent)[kind]
-        listed = before_inventory("events" if kind == "benign_events" else kind, mutation, item.path)
-        inventory = finalizer(directory)
+        inputs = populate(directory)
+        item = inputs["events" if ledger_case else kind]
+        listed = (item.path if ledger_case else
+                  before_inventory("events" if kind == "benign_events" else kind, mutation, item.path))
+        inventory = finalize_c8(finalizer, directory, calibration, declared)
+        dc = inputs["benign_dc"]
+        if kind != "benign_dc" or mutation == "control":
+            if dc.path.samefile(dc.donor):
+                raise AssertionError("DC donor must be an independent file")
+            expected_dc = file_binding(dc.path)
+            for path in (dc.path, dc.donor):
+                if inventory["entries"].get(path.relative_to(directory).as_posix()) != expected_dc:
+                    raise AssertionError(f"missing benign-ordinal DC binding: {path.name}")
         key = listed.relative_to(directory).as_posix()
-        raw = listed.read_bytes()
-        expected = {"size": len(raw), "sha256": hashlib.sha256(raw).hexdigest()}
-        if inventory["entries"].get(key) != expected:
+        if inventory["entries"].get(key) != file_binding(listed):
             raise AssertionError(f"fixture did not bind {key}")
         if listed != item.path and item.path.relative_to(directory).as_posix() in inventory["entries"]:
             raise AssertionError("both physical representations were listed")
@@ -239,6 +307,17 @@ def build_world(root, kind, mutation):
             patch.object(fx, "describe", describe_layout):
         fx.stored_series(root, wins=101)
     (item, listed), = changed
+    if declared is not None:
+        damage_declared_input(declared, mutation)
+        return declared
+    if kind == "calibration_directory":
+        if mutation == "listed_member_removed":
+            (calibration / "curves").rmdir()
+        elif mutation == "unlisted_file_added":
+            (calibration / "second-reference.json").write_bytes(b'{"synthetic_factor":2}\n')
+        else:
+            raise ValueError(mutation)
+        return calibration
     after_publication(kind, mutation, item, listed)
     return listed
 
@@ -418,6 +497,15 @@ for _kind in CLASSES:
     for _mutation in MUTATIONS:
         _test = matrix_test(_kind, _mutation)
         setattr(C1ReleaseCompleteness, _test.__name__, _test)
+
+for _kind in DECLARED_PROTECTED:
+    for _mutation in ("missing", "gzip_only", "unreadable_at_restore", "digest_mismatch"):
+        _test = matrix_test(_kind, _mutation)
+        setattr(C1ReleaseCompleteness, _test.__name__, _test)
+
+for _mutation in ("listed_member_removed", "unlisted_file_added"):
+    _test = matrix_test("calibration_directory", _mutation)
+    setattr(C1ReleaseCompleteness, _test.__name__, _test)
 
 
 if __name__ == "__main__":
