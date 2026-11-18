@@ -34,6 +34,8 @@ from tests.git_fixture import init_git_fixture
 
 SOURCE = Path(__file__).resolve().parents[2]
 REAL_MONOTONIC = time.monotonic
+REAL_TIME = time.time
+REAL_KILL, REAL_KILLPG = os.kill, os.killpg
 REAL_SLEEP = time.sleep
 FAKE_PID = 810001
 CRASH_EXIT = 77
@@ -54,8 +56,8 @@ class Crash(BaseException):
     """Restart fixture. Bypasses application handlers for ordinary errors."""
 
 
-class ContractViolation(AssertionError):
-    """A known contract assertion may be an expected failure on main."""
+class DuplicatePointerAccepted(AssertionError):
+    """Main selected a pointer despite duplicate numbered items."""
 
 
 @dataclass(frozen=True)
@@ -134,6 +136,7 @@ class FixtureHooks:
     prepare adds synthetic input facts or changes external responses.
     observe reads production records, refs, and captured boundary calls.
     invoke adapts production entry points that have no fixed signature yet.
+    child_setup supplies platform observations inside a real CLI subprocess.
     controller constructs the imported production Controller with real
     neighbours. Its environment must route external commands into World.
     """
@@ -143,6 +146,7 @@ class FixtureHooks:
     observe: Callable[..., object] | None = None
     controller: Callable[[World, ModuleType], object] | None = None
     invoke: Callable[..., object] | None = None
+    child_setup: Callable[[Boundary], None] | None = None
 
 
 @dataclass
@@ -155,14 +159,17 @@ class World:
     boundary: Boundary = field(init=False)
 
     def __post_init__(self):
-        self.root = Path(self.stack.enter_context(tempfile.TemporaryDirectory(prefix="jw-cluster-")))
+        self.root = Path(self.stack.enter_context(
+            tempfile.TemporaryDirectory(prefix="jw-cluster-"))).resolve()
         self.host, self.state = self.root / "host", self.root / "state"
         self.stage, self.markers = self.root / "stage", self.root / "markers"
         self.cloud, self.ssd = self.root / "cloud", self.root / "ssd"
         self.outputs, self.controls = self.root / "outputs", self.root / "boundary"
         self.bin = self.root / "bin"
+        self.campaign, self.worktrees = self.root / "campaign", self.root / "worktrees"
         for directory in (self.host, self.state, self.stage, self.markers, self.cloud,
-                          self.ssd, self.outputs, self.controls, self.bin):
+                          self.ssd, self.outputs, self.controls, self.bin,
+                          self.campaign, self.worktrees):
             directory.mkdir()
         self.boundary = Boundary(self.controls)
         for key, value in (("wall", 1794950000), ("monotonic", 1000),
@@ -177,6 +184,13 @@ class World:
                         GIT_CONFIG_GLOBAL=os.devnull, GIT_CONFIG_SYSTEM=os.devnull,
                         GIT_ALLOW_PROTOCOL="file", JW_CLUSTER_BOUNDARY=str(self.controls))
         self.env["PATH"] = os.pathsep.join((str(self.bin), os.defpath, "/opt/homebrew/bin"))
+        if hook := self.hooks.child_setup:
+            # Discovery can import leaves relative to tests/. The child
+            # starts at the repository root and imports them as tests.*.
+            hook_file = Path(sys.modules[hook.__module__].__file__).resolve()
+            hook_module = ".".join(hook_file.relative_to(SOURCE).with_suffix("").parts)
+            self.env["JW_CLUSTER_CHILD_SETUP"] = f"{hook_module}:{hook.__name__}"
+        self.command("pgrep", "raise SystemExit(1)")
         self.repo.mkdir()
         self.remote.mkdir()
         with patch.dict(os.environ, self.env, clear=True):
@@ -319,12 +333,23 @@ class World:
         script = ENTRY_POINTS[port]
         if port not in self.ports:
             raise AssertionError(f"production port {port} is not bound")
+        args = [os.fspath(arg) for arg in args]
+        if port == "C" and args[:1] in (["after-check"], ["reclaim"]):
+            for flag, path in (("--campaign-root", self.campaign),
+                               ("--work-root", self.worktrees),
+                               ("--fence", self.host / fence.FENCE_NAME)):
+                supplied = []
+                for index, arg in enumerate(args):
+                    option, sep, value = arg.partition("=")
+                    if option == flag:
+                        supplied.append(value if sep else args[index + 1])
+                if supplied:
+                    self.test.assertEqual(supplied, [str(path)])
+                else:
+                    args.extend((flag, str(path)))
         work = Path(tempfile.mkdtemp(prefix="invocation-", dir=self.root))
-        argv = [sys.executable, "-B", "-c",
-                "from tests.contract.cluster import _child; _child()",
-                str(script), str(self.controls), str(work), *(os.fspath(arg) for arg in args)]
-        result = self.process(argv, work)
-        self.invocations.append((port, tuple(os.fspath(arg) for arg in args), result))
+        result = self.process(_child_argv(script, self.controls, work, args), work)
+        self.invocations.append((port, tuple(args), result))
         return result
 
     def member_argv(self, argv):
@@ -355,27 +380,41 @@ class World:
             pid_ticket = self.controls / f"owned-{proc.pid}"
             pid_ticket.touch()
             process_stack.callback(pid_ticket.unlink, missing_ok=True)
-            sequence = 0
+            sequences = {work: 0}
             while True:
-                event = work / f"event-{sequence}"
-                if event.exists():
-                    response = {}
-                    try:
-                        self.checkpoint(event.read_text(encoding="utf-8"))
-                    except Crash:
-                        response["crash"] = True
-                    except OSError as error:
-                        response["errno"] = error.errno
-                    finally:
-                        pending = work / "reply-tmp"
-                        _dump(pending, response)
-                        pending.rename(work / f"reply-{sequence}")
-                    sequence += 1
-                if proc.poll() is not None:
+                exited = proc.poll() is not None
+                for worker in work.rglob("worker-*"):
+                    sequences.setdefault(worker, 0)
+                for channel, sequence in sequences.items():
+                    event = channel / f"event-{sequence}"
+                    if event.exists():
+                        response = {}
+                        try:
+                            self.checkpoint(event.read_text(encoding="utf-8"))
+                        except Crash:
+                            response["crash"] = True
+                        except OSError as error:
+                            response["errno"] = error.errno
+                        finally:
+                            pending = channel / "reply-tmp"
+                            _dump(pending, response)
+                            pending.rename(channel / f"reply-{sequence}")
+                        sequences[channel] += 1
+                if exited:
                     break
                 if REAL_MONOTONIC() > deadline:
                     raise AssertionError(f"synthetic subprocess exceeded its deadline: {argv[4]}")
                 REAL_SLEEP(0.005)
+            for channel in sequences:
+                violation = channel / "boundary-violation"
+                self.test.assertFalse(violation.exists(),
+                                      violation.read_text() if violation.exists() else "")
+                if channel != work:
+                    if (pid := channel / "pid").exists():
+                        ticket = self.controls / f"owned-{int(pid.read_text())}"
+                        ticket.unlink(missing_ok=True)
+                    self.test.assertTrue((channel / "boundary-ready").is_file(),
+                                         "close worker did not install the synthetic boundary")
             stdout.seek(0)
             stderr.seek(0)
             return Result(proc.returncode, stdout.read(), stderr.read())
@@ -419,6 +458,44 @@ class World:
         return record
 
 
+def _child_argv(script, controls, work, args):
+    return [sys.executable, "-B", "-c", "from tests.contract.cluster import _child; _child()",
+            str(script), str(controls), str(work), *args]
+
+
+def _worker_boundary(boundary, work):
+    """Trip before an escaped native clock or process signal can run."""
+    def refuse(name):
+        (work / "boundary-violation").write_text(name, encoding="utf-8")
+        raise AssertionError(f"close worker escaped the synthetic boundary: {name}")
+
+    def audit(event, args):
+        if event in {"os.kill", "os.killpg"}:
+            refuse(event)
+
+    def profile(frame, event, target):
+        if event != "c_call":
+            return
+        if target in (REAL_KILL, REAL_KILLPG):
+            refuse(target.__name__)
+        if target in (REAL_TIME, REAL_MONOTONIC) and frame.f_globals is not globals():
+            refuse(target.__name__)
+
+    import threading
+
+    subprocess._time = threading._time = boundary.monotonic
+    sys.addaudithook(audit)
+    threading.setprofile(profile)
+    sys.setprofile(profile)
+
+    def verify():
+        if (time.time != boundary.now or time.monotonic != boundary.monotonic
+                or os.kill != boundary.kill or os.killpg != boundary.kill):
+            refuse("clock or signal implementation changed")
+
+    return verify
+
+
 def _child():
     """Enter a real CLI with a synthetic PID namespace and checkpoint IPC."""
     import runpy
@@ -432,10 +509,13 @@ def _child():
     from tests import host_command_guard
     host_command_guard.install()
     time.time, time.monotonic = boundary.now, boundary.monotonic
+    verify_worker = _worker_boundary(boundary, work) if "--_worker" in args else None
     sequence = 0
 
     def checkpoint(name):
         nonlocal sequence
+        if verify_worker:
+            verify_worker()
         pending = work / "event-tmp"
         pending.write_text(name, encoding="utf-8")
         pending.rename(work / f"event-{sequence}")
@@ -454,8 +534,43 @@ def _child():
             raise OSError(code, os.strerror(code))
 
     durable.checkpoint = checkpoint
+    popen = subprocess.Popen
+
+    def check_worker_launch(event, arguments):
+        if event == "subprocess.Popen":
+            _, argv, _, _ = arguments
+            if isinstance(argv, (list, tuple)) and "--_worker" in argv:
+                if list(argv[:4]) != _child_argv(script, controls, work, [])[:4]:
+                    (work / "boundary-violation").write_text("unwrapped close worker")
+                    raise AssertionError("close worker launch bypassed the synthetic boundary")
+
+    def supervised_worker(argv, *positional, **kwargs):
+        if not isinstance(argv, (list, tuple)) or "--_worker" not in argv:
+            return popen(argv, *positional, **kwargs)
+        executable, flag, entry, *worker_args = map(os.fspath, argv)
+        if (executable, flag, Path(entry).name) != (sys.executable, "-B", "close_offload.py"):
+            (work / "boundary-violation").write_text("unexpected close worker command")
+            raise AssertionError("unexpected close worker command")
+        channel = Path(tempfile.mkdtemp(prefix="worker-", dir=work))
+        child = popen(_child_argv(entry, controls, channel, worker_args), *positional, **kwargs)
+        (boundary.root / f"owned-{child.pid}").touch()
+        (channel / "pid").write_text(str(child.pid))
+        return child
+
+    sys.addaudithook(check_worker_launch)
+    subprocess.Popen = supervised_worker
+    if setup := os.environ.get("JW_CLUSTER_CHILD_SETUP"):
+        module, _, name = setup.partition(":")
+        getattr(importlib.import_module(module), name)(boundary)
     sys.argv = [script, *args]
-    runpy.run_path(script, run_name="__main__")
+    if verify_worker:
+        verify_worker()
+        (work / "boundary-ready").touch()
+    try:
+        runpy.run_path(script, run_name="__main__")
+    finally:
+        if verify_worker:
+            verify_worker()
 
 
 SCENARIOS = {}
@@ -494,6 +609,8 @@ class ClusterScenarios:
         for identifier, (ports, dependencies, exercise) in SCENARIOS.items():
             if cls.select_main and identifier not in MAIN_CASES:
                 continue
+            if cls.required_ports and identifier in MAIN_CASES:
+                continue
             name = f"test_{identifier.replace('-', '_')}"
             setattr(cls, name, cls._case(identifier, ports + dependencies, exercise))
 
@@ -509,7 +626,8 @@ class ClusterScenarios:
                 self.fail(f"required production ports absent: {', '.join(sorted(required))}")
             if reason:
                 self.fail(reason)
-            if identifier not in MAIN_CASES and not cls.fixture_hooks.configure                     and identifier != "X-16":
+            if (identifier not in MAIN_CASES and not cls.fixture_hooks.configure
+                    and identifier not in {"X-16", "X-18"}):
                 self.fail("present production ports require fixture_hooks.configure")
             modules = {port: importlib.import_module(PORT_MODULES[port][1]) for port in ports}
             with ExitStack() as stack:
@@ -531,12 +649,12 @@ class ClusterScenarios:
             def known_failure(self):
                 try:
                     run(self)
-                except ContractViolation:
+                except DuplicatePointerAccepted:
                     raise
-                except Exception as error:
+                except BaseException:
                     # Infrastructure failures must remain real failures.
                     self._outcome.expecting_failure = False
-                    raise error
+                    raise
             known_failure.__name__ = run.__name__
             known_failure.__doc__ = "A-12 (main accepts duplicate numbered pointer items)"
             return unittest.expectedFailure(known_failure)
@@ -784,12 +902,16 @@ def _fresh_pending(test, w):
 @scenario("X-13", "Q", "O")
 def _preflight(test, w):
     span = w.span()
-    for field, fault in (("offload_config", "missing"), ("key_second_copy_attested_sha256", "mismatch")):
+    for field, fault, diagnostic in (
+        ("offload_config", "missing", "PREFLIGHT: missing offload_config"),
+        ("key_second_copy_attested_sha256", "mismatch",
+         "PREFLIGHT: key_second_copy_attested_sha256 does not match recipient_sha256"),
+    ):
         with test.subTest(field=field):
             w.prepare(queued=span, bad_preflight=(field, fault))
             result = w.invoke("controller_startup")
             test.assertNotEqual(result.code, 0)
-            test.assertIn(field, result.stderr + result.stdout)
+            test.assertIn(diagnostic, (result.stderr + "\n" + result.stdout).splitlines())
             w.no_arm(span)
 
 
@@ -848,6 +970,21 @@ def _cycle(test, w):
         expected = ["notice", "intent", "launch_fence", "bootstrap", "arm",
                     "check", "bundle_ref", "verdict_ref", "marker", "copy_accepted"]
         test.assertEqual([point for point in points if point in expected], expected)
+
+
+@scenario("X-18", "D")
+def _desk_history_warning(test, w):
+    prefix = "refs/heads/cadence-desk-final"
+    with patch.dict(os.environ, w.env, clear=True):
+        w.git("-c", "user.name=Contract Fixture", "-c", "user.email=contract@example.invalid",
+              "commit", "--allow-empty", "-m", "Synthetic desk fixture", repo=w.repo)
+        ref = f"{prefix}/synthetic-s01"
+        w.git("update-ref", ref, "HEAD", repo=w.repo)
+        transport = w.ports["D"]
+        test.assertEqual(transport.list_history_refs(w.repo, prefix), [ref])
+        (w.repo / ".git" / prefix / "synthetic-s02").write_text("broken synthetic ref\n")
+        with test.assertRaisesRegex(transport.TransportRefusal, "history listing .* failed"):
+            transport.list_history_refs(w.repo, prefix)
 
 
 @scenario("A-01", "OQ")
@@ -1021,8 +1158,20 @@ def _intent_enospc(test, w):
     w.prepare(queued=span)
     w.fault_at("controller.intent_write", errno.ENOSPC)
     w.tick()
+    test.assertIsNone(w.record(span, "intent"))
     w.no_arm(span)
+
+    def late_failure():
+        test.assertIsNotNone(w.record(span, "intent"))
+        test.assertFalse(w.observe("bootstraps"))
+        w.at("durable.directory_synced", lambda: test.assertFalse(w.observe("bootstraps")))
+        raise OSError(errno.ENOSPC, os.strerror(errno.ENOSPC))
+
+    w.at("controller.intent_write", lambda: w.at("durable.temp_unlinked", late_failure))
     w.tick()
+    if not w.observe("bootstraps"):
+        w.tick()
+    test.assertNotIn("durable.directory_synced", w.actions, "intent was never re-synced")
     _armed(test, w, span)
     torn = w.span("synthetic-s02")
     endpoint = w.state / "spans" / torn.plan / "intent.json"
@@ -1044,8 +1193,8 @@ def _duplicate_pointer_number(test, w):
     stderr = StringIO()
     with redirect_stderr(stderr):
         code = gen_current.main(["--run-state", str(source), "--out", str(out)])
-    if code == 0 and json.loads(out.read_bytes())["next_observable"] == "first":
-        raise ContractViolation("main accepts duplicate numbered pointer items")
+    if code == 0 and out.read_bytes() == gen_current.render(first):
+        raise DuplicatePointerAccepted("main accepts duplicate numbered pointer items")
     test.assertEqual(code, 2, stderr.getvalue())
     test.assertEqual(out.read_bytes(), b"previous")
 
@@ -1366,6 +1515,22 @@ def _disk_full_marker(test, w):
     _clear(test, w, span)
     test.assertEqual(set(w.markers.glob("*.ok")), {w.marker(span)})
 
+    late = w.span("synthetic-s02")
+    marker = w.marker(late)
+
+    def late_failure():
+        published = marker.read_bytes()
+        w.at("durable.directory_synced", lambda: test.assertEqual(marker.read_bytes(), published))
+        raise OSError(errno.ENOSPC, os.strerror(errno.ENOSPC))
+
+    w.at("offload.marker_write", lambda: w.at("durable.temp_unlinked", late_failure))
+    result = w.offload(late)
+    if result.code == 5:
+        result = w.offload(late)
+    _ok(test, result)
+    _clear(test, w, late)
+    test.assertEqual(set(w.markers.glob("*.ok")), {w.marker(span), marker})
+
 
 @scenario("E-03", "OC")
 def _disk_full_reclaim(test, w):
@@ -1426,7 +1591,18 @@ def _disk_full_stage(test, w):
     test.assertNotEqual(w.evidence(span).status, "CLEAR")
 
 
-@scenario("I-01", "OCQ")
+@scenario("I-01", "O")
+def _upload_not_idle(test, w):
+    span = w.span()
+    w.prepare(provider_upload_idle=False)
+    result = w.offload(span, "--deadline-epoch", str(w.boundary.now() + 2))
+    test.assertEqual(result.code, 5, result)
+    test.assertIn("DEADLINE", result.stderr + result.stdout)
+    test.assertEqual(list(w.markers.iterdir()), [])
+    test.assertGreater(w.observe("provider_upload_polls"), 0)
+
+
+@scenario("I-07", "OCQ")
 def _unconfirmed(test, w):
     span, regular, f0 = w.span(), w.span("synthetic-s02"), w.span("synthetic-f0")
     w.prepare(closed=span, queued=(regular, f0), provider_verifies=False)
@@ -1448,8 +1624,9 @@ def _no_dataless(test, w):
     span = w.span()
     w.prepare(provider_evicts=False)
     result = w.offload(span)
-    test.assertNotEqual(result.code, 0, result)
+    test.assertEqual(result.code, 8, result)
     test.assertFalse(w.marker(span).exists())
+    test.assertTrue(w.marker(span).with_suffix(".ok.unconfirmed").is_file())
 
 
 @scenario("I-03", "OCQ")

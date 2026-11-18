@@ -142,15 +142,15 @@ Each seam has one home. Signatures are normative; names may change if all four P
 ### I0. Durable publication (home: `joulewise/durable.py`, new, merged with the contract PR)
 
 ```python
-publish_once(path: Path, data: bytes) -> None            # raises FileExistsError
-replace(path: Path, data: bytes) -> None
+publish_once(path: Path, data: bytes) -> None            # raises FileExistsError, VisibleNotDurable
+replace(path: Path, data: bytes) -> None                  # raises VisibleNotDurable
 read_published(path: Path, limit: int) -> bytes           # raises Busy, Absent, Unsafe
 finish_publication(path: Path) -> None                    # publisher only, under its own lock
 ```
-- **Pre:** the trusted parent exists and is on one filesystem. Writers serialize with recovery under the artifact's lock. The publisher invokes `finish_publication` under that lock after restart and before retrying a failed publish.
-- **Post:** after `publish_once` or `replace` returns, the path holds exactly `data`, fsynced, and the directory is synced. The hard link or atomic rename is the visibility commit point. Failure before it leaves the previous path intact or absent. Failure at a later sync can leave the complete new bytes visible. The writer reconciles the artifact before retrying. Recovery never promotes a standalone temp because it can contain partial bytes.
-- **Readers:** `read_published` is bounded and reads regular files only. A path still linked to a publisher temp is `Busy`. The reader does not unlink. The writer syncs the directory before removing a linked temp, then syncs the cleanup.
-- **Failure:** `ENOSPC` and `EIO` propagate. The caller maps them to HOLD and retries.
+- **Pre:** the trusted parent exists and is on one filesystem. Writers serialize with recovery under the artifact's lock. The publisher invokes `finish_publication` under that lock after restart. Recovery never promotes a standalone temp because it can contain partial bytes.
+- **Post:** after `publish_once` or `replace` returns, the path holds exactly `data`, fsynced, and the directory is synced. The hard link or atomic rename is the visibility commit point. Failure before it leaves the previous path intact or absent.
+- **D1, failure after visibility.** A failed sync after the visibility commit point can leave the complete new bytes on disk. Both writers raise `VisibleNotDurable` with the SHA-256 hex digest in `digest` and the underlying errno. The writer cannot durably undo the namespace change. The caller must retry with the identical bytes before proceeding. `publish_once` accepts a byte-identical existing publication and re-syncs its directory. Different bytes still raise `FileExistsError`. If the retry also fails, the caller remains in HOLD. Ordinary pre-publication `ENOSPC` and `EIO` propagate.
+- **Readers:** `read_published` is bounded and reads regular files only. A path still linked to a publisher temp is `Busy`, including when the filesystem resolves a case or Unicode spelling alias to the same inode. The reader does not unlink. The writer syncs the directory before removing a linked temp, then syncs the cleanup.
 - **Replaces:** `write_marker` and `recover_marker_link`, `exclusive_json`, `atomic_json`, the SSD receipt and retirement-record writes. `write_fence` on main already satisfies `replace` and stays where it is.
 
 ### A. Copy marker validation (home: `joulewise/span_offload.py`; owner #804)
@@ -240,7 +240,7 @@ preflight(cfg) -> list[Reason]            # startup, and a line of every arm pro
 arm_child(request) -> exit code           # request: plan_id, repo, python, kit, legs, batch_window, output, custody_root,
                                           #   standing{purpose,pid,deadline}, lease{wall_until, mono_until}
 ```
-- **`preflight` (K7):** refuses to start, and refuses every arm, unless: the offload config loads; its backend is iCloud; `key_second_copy_attested_sha256 == recipient_sha256`; the stage root and marker directory exist; `offload_argv` is set and resolves; the retention-holds file reads; the signing key and both signers files read. HALT, with the missing key named. The controller config carries one key, `offload_config`, in place of `copy_marker_dir`, `copy_stage_root` and `copy_key_second_copy_sha256`.
+- **`preflight` (K7):** refuses to start, and refuses every arm, unless: the offload config loads; its backend is iCloud; `key_second_copy_attested_sha256 == recipient_sha256`; the stage root and marker directory exist; `offload_argv` is set and resolves; the retention-holds file reads; the signing key and both signers files read. HALT, with the missing key named. The controller config carries one key, `offload_config`, in place of `copy_marker_dir`, `copy_stage_root` and `copy_key_second_copy_sha256`. X-13 requires the startup diagnostic line `PREFLIGHT: missing offload_config` or `PREFLIGHT: key_second_copy_attested_sha256 does not match recipient_sha256` for its respective configuration fault.
 - **Authority:** two full reads. The lease starts at the second and is `min(authority + 120 s, queue expiry, watcher lease, date end − 120 s)`. Everything after the second read spends it (as at `:1821-1875`).
 - **Arm proof adds one line, `icloud_pending`:** a fresh `span_offload.pending_transfers(config)` with `clear is True`, read after the second authority read. Not clear, unknown or failed: HOLD (D7).
 - **Arm notice:** its machine-readable tail carries `plan_id`, `t0` and `close_deadline_epoch`, posted before the network closes. No post, no intent. The off-host watcher alarms when no `desk-bundles/P` ref exists by that deadline plus a grace (D19; RL-173 C.1).
@@ -284,10 +284,11 @@ close_offload.py hold list
 
 ### 3.1 Where it lives and how it binds
 
-- `tests/contract/cluster.py` owns the scenario assertions. `tests/contract/test_cluster.py` collects them on main. `python3 -m unittest -v tests.contract.test_cluster` reports each scenario. On step 1, A-09 passes, A-12 executes as a strict expected failure, and 73 scenarios report `seam owner PR #N not merged`. Main accepts two pointer-bearing headings with the same number today. The main owner must fix A-12 and remove its expected-failure marker before the final cluster gate.
+- `tests/contract/cluster.py` owns the scenario assertions. `python3 -m unittest discover -v -s tests/contract` reports the main and member cases. On step 1, A-09 passes, A-12 is an expected failure only when the generator accepts the duplicate pointer, and the other scenarios report `seam owner PR #N not merged`. The main owner must fix A-12 and remove its expected-failure marker before the final cluster gate.
 - The world uses temporary directories, a local bare Git remote, a synthetic clock and PID namespace, and scoped fault injection. Keep production launch, process census, provider, GitHub and notification commands on the fixture side of the boundary. Simulated signals update fixture state. They never reach the operating system.
 - The production ports are O (`joulewise.span_offload` and `scripts/span_offload.py`), C (`joulewise.close_offload` and the real `scripts/close_offload.py` subprocess), D (`joulewise.cadence.desk_transport` and `scripts/air/cadence_desk.py`), and Q (`scripts.cadence_controller`). Use the production fence helpers for synthetic fence records. Use production writers for positive markers and verdicts.
 - Each member adds `tests/contract/test_cluster_<pr>.py`. Its `unittest.TestCase` inherits `ClusterScenarios` and specifies `required_ports` and `fixture_hooks`. Required missing ports fail. Any fully available scenario runs, so an import failure, missing fixture hook, missed checkpoint, or assertion failure from an installed seam fails the suite. Some scenarios use a real dependency beyond the §3.2 ports that own the assertions. For example, a close uses O and a full cycle uses D. When member files exist, the main collector keeps the main-only scenarios and the member collectors exercise the cluster.
+- **D3, collection.** The main collector checks the actual unittest suites against the IDs in §3.2. The union of main and member IDs must match the contract exactly. Each installed member collector must collect the complete member scenario set. A partial or empty member file fails collection.
 
 ```python
 from tests.contract.cluster import ClusterScenarios, FixtureHooks
@@ -300,6 +301,7 @@ class TestCluster804(ClusterScenarios, TestCase):
 
 - `configure(world)` builds real configs and test-only keys under `world.root` and wires external command paths. `prepare(world, **inputs)` stages scenario inputs or changes an external response. `observe(world, name, **context)` projects production artifacts and recorded boundary calls. `invoke(world, name, **inputs)` adapts production interfaces that have no fixed signature yet. The Q hook `controller(world, module)` instantiates a real `module.Controller` and wires host subprocess calls through `world.member_argv(argv)`. Reuse the earlier members' fixture hooks on later branches. In the leaf, bind only fixture inputs and instrumentation. The decision, write, verification, retry and deletion paths run from the imported production tree.
 - The scenario's `world.at`, `fault_at`, and `crash_at` name the checkpoint that the member exposes with `durable.checkpoint(name)`. Place the hook at the transition described by the scenario. Hooks that inspect or update the fence run after releasing the mutex. CLI subprocesses relay the point to the world and can exit abruptly using a controlled exit code. Provider helpers that outlive their worker are exercised through the synthetic PID namespace.
+- **D2, supervised workers.** The test-side launch hook gives each close worker the same synthetic clock, PID namespace and fault actions as the supervisor, with a separate checkpoint channel. A worker using a native clock or signal function fails the scenario. Production launch defaults stay in place. The fixture close command supplies synthetic campaign and work roots and the exact fixture fence path.
 - Record the scenario table in each PR's gate ledger. An expected failure for a missing seam is NOT-RUN evidence. Every scenario available at that merge step must pass. The final step requires zero NOT-RUN.
 
 ### 3.2 Scenarios
@@ -327,6 +329,7 @@ Format: **given**; **when**; **then**. Ports: O offload, C close, D desk, Q cont
 | X-15 | D Q | `close.json` says `published`; the local MBP ref is deleted. Then the desk step runs again; the same `verdict_sha256` continues, a different one HALTs (D10) |
 | X-16 | all | One blob: `joulewise/span_offload.py` exists once in the tree, and the controller imports it (D1). A repository check, not a runtime test |
 | X-17 | O C Q | The whole cycle twice in a row (span, F0, span) in one `World`, real code on every port, asserting section 1.3's commit points in order. This is RL-172 (i) row 5's synthetic launch-to-close run for the cluster |
+| X-18 | D | The desk lister returns the valid ref from the local fixture repository. A broken ref that makes Git warn then causes `TransportRefusal`. This runs at the desk merge gate without Q |
 
 **Astra reproductions (A)** — one per finding, named by its number.
 
@@ -342,7 +345,7 @@ Format: **given**; **when**; **then**. Ports: O offload, C close, D desk, Q cont
 | A-08 | O | Kill between link and unlink of the marker temp. Then `copy_evidence` is BUSY; the next `offload` finishes the publication under the plan lock; then CLEAR. The reader unlinked nothing |
 | A-09 | (main) | The notifier exits non-zero. Then the alarm identity stays pending and is retried. Runs against `scripts/air/night_results_watch.py`; outside the four PRs, listed so the suite owns it |
 | A-10 | C | Three campaign outputs, a hold on the middle one. Then no invocation retires it, with or without `--retire`, including a resumed retirement |
-| A-11 | Q | `ENOSPC` during the intent write. Then no `intent.json` exists; after space returns the controller arms normally. A legacy torn intent is HALT `ARM_INDETERMINATE` |
+| A-11 | Q | `ENOSPC` during intent publication. The path holds old content, is absent, or has the new bytes with `VisibleNotDurable` raised. No arm until the intent is durably published, including a byte-identical retry after the late error. A legacy torn intent is HALT `ARM_INDETERMINATE` |
 | A-12 | (main) | Two pointer-bearing items with one number. Then generation refuses. Runs against `scripts/gen_current.py`; outside the four PRs |
 
 **Cold-review reproductions (R9)**
@@ -385,7 +388,7 @@ Format: **given**; **when**; **then**. Ports: O offload, C close, D desk, Q cont
 | ID | Ports | Fault at; then |
 |---|---|---|
 | E-01 | Q | = A-11 |
-| E-02 | O | The marker write. Then no `P.ok`, exit 5, HOLD; after space returns, one valid marker |
+| E-02 | O | `ENOSPC` during marker publication. The path holds old content, is absent, or has the new bytes with `VisibleNotDurable` raised. An unresolved write yields exit 5 and HOLD. A byte-identical retry after the late error must sync before success. After recovery, one valid marker |
 | E-03 | O C | = A-07 |
 | E-04 | Q | `write_fence` during a renewal. Then the old fence is intact; the controller treats a failed renewal as a lapse only when the deadline actually passes |
 | E-05 | Q | `close.json` after a successful offload. = K-10 |
@@ -396,12 +399,13 @@ Format: **given**; **when**; **then**. Ports: O offload, C close, D desk, Q cont
 
 | ID | Ports | Given; then |
 |---|---|---|
-| I-01 | O C Q | The upload never confirms. Then exit 8, only `P.ok.unconfirmed`, HOLD on every arm including F0; retries at 5 and 15 min; then HALT |
-| I-02 | O | Eviction is never observed (no dataless flag). Then no `P.ok` |
+| I-01 | O | CloudDocs never reports the upload idle by the deadline. Exit 5 with no marker |
+| I-02 | O | CloudDocs reports the upload idle, then eviction or readback cannot be verified. Exit 8 with only `P.ok.unconfirmed`. The regression with missing eviction supplies no dataless flag |
 | I-03 | O C Q | A readback hash differs. Then exit 6, HALT at once |
 | I-04 | O Q | `brctl status` reports pending, offline, error, or nothing. Then `pending` is not clear and the arm HOLDs |
 | I-05 | C | A provider child outlives the worker. Then the supervisor kills the group, and the result is not `CLOSE_OK` until a fresh `pending` is clear |
 | I-06 | O | iCloud Drive is signed out or the container is missing. Then exit 5 with a fixed code; no marker; nothing under the span is touched |
+| I-07 | O C Q | After an I-02 result, every arm including F0 is held. Retries at 5 and 15 min precede HALT |
 
 **GitHub outage (G)**
 
@@ -473,7 +477,7 @@ A change to a function is reviewed by its seam owner, whichever PR carries the d
 1. **Contract PR → main.** `docs/ops/cluster_contract.md`, `tests/contract/cluster.py`, `joulewise/durable.py`. Tier 2. Existing production callers keep their current behavior.
 2. **#804 → main,** rebased on 1. It owns the one blob of `joulewise/span_offload.py`. It adds `copy_evidence` and the `evidence` verb, moves to I0, drops the fence from `forbid_paths`, and **removes its deleting `close` verb** (D13). Its admission at `ccfe442b6` no longer covers its head, so it needs a delta admission in any case. Suite: O-only scenarios PASS.
 3. **#807 → main,** rebased on 2, carrying **no** copy of `span_offload.py`: its backend changes (streaming readback, span-name check) are a reviewed diff on #804's file. It owns seams B and E. Suite: O and C scenarios PASS. After this step magistrate mode has the whole offload path, which is what items 388 and 395 need today.
-4. **#794 → main,** then **#799 → main,** rebased on main. #799 touches only the desk and is independent of 2 and 3; it may go in parallel with them. Suite: D scenarios PASS.
+4. **#794 → main,** then **#799 → main,** rebased on main. #799 touches only the desk and is independent of 2 and 3; it may go in parallel with them. Suite: X-18 and any other available D scenarios PASS.
 5. **#800 → main, last,** rebased linearly on main after 4 (no cherry-picks; D8). It **deletes its vendored `joulewise/span_offload.py`** and its private marker law, lister and close stub. Suite: every scenario PASS, zero NOT-RUN. Then one cold gate on the merged tree, then the watched native span (RL-172 (g), `RL:17306`).
 
 Why this order: #800 is the only consumer of every seam, so it cannot be judged until the others are fixed points. Everything before it is usable by the magistrate without it. And the offload pair is what the MBP needs while the Air is away.
