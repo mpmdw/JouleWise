@@ -20950,3 +20950,275 @@ Rows for the lead to commit to `RULES.json`. Owner is `research_lead` for all ei
 **What comes back to me.** A clean synthetic or native soak that fails 1.3 item 6. A stored bundle that keeps rails and DC-in in one file. An A9 union with no reason word for an absent capture. Two admitted records that disagree on an A9 decision. A bundle whose `rail_manifest` is not the three rails. The triggered rows 11 to 13 of 3.4. Nothing else in this ruling returns.
 
 **Blind status.** Blind. This ruling rests on rulings, five seat reports and code. No series member exists and W1 is not signed. E18 and E19 add words and one count; they change no estimator, level, threshold or inclusion rule.
+
+# RL-184. Freeze 2 and qualification. The executing host is named by the lead's ledger row as a salted hash of the machine's hardware UUID, tested locally before the reservation; it is not bound to the campaign receipts and never needed to be, and the look may run on the Air. A named freeze 2 is one canonical record on main that repeats one stanza of my ruling, checked against the audit branch. The census is ruled: the primary side is fixed completely before the look, the twin conforms to it on all sixteen classes, the receipt and path questions get one closed-shape rule, and no tolerance changes. PR #826 passes at `3dfeadc0c`
+
+Research lead (Fable 5.2), Wed Nov 18 04:57 PST 2026 (from `date`). Answers the lead's four items for freeze 2 and qualification. RL-180, RL-183, RL-183a and RL-183b stand except where "Amends" says otherwise.
+
+**Cites.** `RLD:n` is `RESEARCH-LEAD-DECISIONS.md` on the audit branch at `6c1076f25`. `DEF:n`, `REH:n` are `DEFECTS.md` and `REHEARSAL.md` in `/Volumes/JW-EXT/scratch/d-freeze2-runbook-rehearsal/`. `SPEC:n` is `/Volumes/JW-EXT/scratch/d-qual-arm-public-freeze-spec/SPEC.md`. `CEN:n` is `/Volumes/JW-EXT/scratch/astra-twin-divergence-census/CENSUS.md` as finished at 04:56 (its first line: 27 classes, 16 TWIN-WRONG, 3 PRIMARY-WRONG, 8 FOR-FABLE). `RUN:n` and `MF:n` are `scripts/cadence_look_run.py` and `joulewise/cadence_looks/manifest.py` at the #795 head `2f6720652`. `LR:n` is `scripts/cadence_legs_runner.py` at the runner pin `6e9d42f1d`. For #826, at `3dfeadc0c`: `HO` is `scripts/align_v4_harvest_off.py`, `PK` is `scripts/align_v4_next_arm_packet.py`, `LT` is `joulewise/align/apple/light_triage.py`, `U3` is `scripts/align_v4_u3_export.py`, `DS` is `joulewise/align/apple/v4_desk_seal.py`, `OW` is `scripts/offload_window.py`, `VS` is `scripts/align_v4_session.py`, `WB` is `docs/align/v4/W1-BLOCKERS-merged.md`.
+
+**Read.** DEFECTS in full and REHEARSAL's host section. SPEC in full and the resolver's escalation. CENSUS: its header, P01 to P03, F01 to F08, T01, T02, T03, T05, T16 and the three closing lists. RL-163 §§1-4, RL-168, RL-172a, RL-173 E, RL-175 B, RL-180 §1, RL-183 §§2.3-2.5, RL-183a, RL-183b. The soak writer at LR:453 and LR:575-606. For #826: every non-test source hunk of `b2e01464d..3dfeadc0c`, the changed lines of the three v4 documents, the names of the added tests, and Astra's round-4 message. No custody, energy, power, meter, transcript, slot, hazard, sealed or restricted file was opened. I ran no test.
+
+**Not checked.**
+- The census's T04 and T06 to T15 paragraphs, and its P03 reproduction. I take their classification from Astra (section 3.1).
+- #826's test bodies. I read their names and the hunks for finding 6; Astra executed them.
+- #826's CI. At 04:50 the twelve `test` shards were still running; the other checks were green.
+- What a real receipt's `bundle` string looks like. That needs custody. Section 3.3 is written so the stage-1 dry run answers it.
+- The #795 and #816 reader pair and the manifest. That is the cold pass of RL-175 B.2, and it is not this ruling.
+
+---
+
+## 0. The answers, with what changes Friday first
+
+| # | Answer | In one line |
+|---|---|---|
+| Friday | **Holds only if** the census re-run is clean on the fixed pair and the manifest packet reaches me Thursday evening | Nothing here lets qualification arm without an effective freeze 2. If the look is not `yes` on main by about Fri 15:00, qual-01 moves by a whole date and fillers run |
+| 1 | **The lead's ledger row names the host. The Air is allowed** | The literal is a salted sha256 of the hardware UUID. No receipt binding exists or is needed. The MBP keeps measuring |
+| 2 | **Option A, with B's stanza inside it** | One canonical JSON record on main at a fixed path; it repeats one line of my ruling; the verifier finds that line once in my log on the audit branch |
+| 3 | **Primary fixed completely; twin conforms on T01 to T16; F01 to F05 one closed-shape rule; F06 to F08 no change** | The look is not held for a twin class that only malformed input reaches. One twin-only re-run is allowed after `no` before anything is opened |
+| 4 | **PASS at `3dfeadc0c`** once the twelve shards are green | Two lines owed before W1's signing commit, neither a merge gate |
+
+---
+
+## 1. The execution host
+
+**RL-180 amendment 4 was written against a field that does not exist.** I wrote "using the host id the campaign receipts carry" (RLD:19070). None of the three runner pins writes a stable machine id into a span receipt (REH:105, DEF:10), so the clause cannot be implemented on either machine, and #795 is right to refuse both (RUN:978-980).
+
+**What the clause protects does not need the receipts.** It protects one execution of a look id across hosts, because each host has its own custody root (RLD:19068, row 6 at RLD:19221). That needs one named machine, a local test before the reservation, and a public row that precedes stage 2. Where the campaign was measured is a different fact, and the receipts already carry it as far as they can: kit hash, frozen commit, span id.
+
+### 1.1 The literal
+
+> `execution_host` is `hw1:` followed by the lowercase hex sha256 of the UTF-8 bytes `joulewise.execution_host.v1:` plus the machine's hardware UUID in upper case (`IOPlatformUUID`, read with `/usr/sbin/ioreg -rd1 -c IOPlatformExpertDevice`). One function in the looks package computes it and refuses unless exactly one UUID-shaped value is found. `cadence_look_run.py host-id` prints it and nothing else.
+
+| Candidate | Ruling | Why |
+|---|---|---|
+| Hardware UUID, hashed | **Yes** | One per logic board. It survives a reboot, a rename and a change of network. The hash keeps a hardware identifier out of a public repository, and the comparison is local, so nobody needs the raw value |
+| Hostname | No | It is settable, and macOS changes what `gethostname()` returns with the network. RUN:984 is replaced |
+| Boot session UUID | No | It names a boot, not a machine. A reboot between the row and stage 2 would strand the look |
+| Kit commit | No | It names source, not a machine |
+
+### 1.2 The authority
+
+**The lead names the host, in the `stage1_committed` row of `LOOKS.json` on main, by the energy-blind ledger operation.** The value is the output of `host-id` run on that machine at the admitted commit. Nobody types it from a note.
+
+- Stage 2 computes the literal itself and compares it with the row before the reservation. The refusal for non-synthetic input (RUN:979-980) goes; the same comparison serves synthetic and real runs, and tests replace the function, not the code path.
+- Changing the named host stays as RL-180 has it: a new row, only while a listing of the first host's custody root shows no `RESTRICTED/` (RLD:19070).
+- The verifier's existing equality of `execution_host` between the execution commit's row and main's row (MF:1429, SPEC:37) is unchanged. It compares opaque strings.
+
+### 1.3 The binding to the campaign receipts: there is none, and the sentence is struck
+
+The executing host is bound to the campaign by bytes, not by identity.
+1. **The copy.** Every file under the roots the look reads has the sha256 its close manifest gives. That is RL-175 B.1's condition for either host (RLD:17737-17738).
+2. **Stage 1 runs on the named host,** on the same roots stage 2 will read, and its committed output carries the input hash.
+3. **Stage 2 refuses before the reservation** if what it reads differs from stage 1's commitment, as it does today.
+
+A public reader can therefore say: the look ran once, on the machine the row names, over bytes whose hashes were committed first. It cannot say which physical machine that is, and it has no use for knowing.
+
+### 1.4 The Air: allowed
+
+RL-175 B.1 already allows any host of the lead's with a complete verified copy (RLD:17733-17738), and RL-180 kept that, bound by the row (RLD:19197). The MBP is not stopped for the look. Conditions:
+
+1. **Complete.** Every span on the committed roster is on the Air and passes 1.3 item 1. A span the Air lacks is staged from the MBP's verified cloud archive, not copied by ssh from a host that is armed.
+2. **Both stages on the Air,** at the admitted commit, started by the lead as detached deterministic commands. Not inside a seat: a seat's children die with its turn, and the seat sandbox refuses the literal `RESTRICTED` name (DEF:25).
+3. **One literal rehearsal first.** On the Air, outside a seat, on a synthetic custody root, with the real directory name and the real `host-id`: stage 1, the row, stage 2. DEF:25 leaves that path unexercised, and it is the smoke for this change.
+4. **Nothing interrupts it.** AC power, sleep prevented, the SSD mounted for both stages. An interruption spends the id (RLD:20227). Builders and seats that load the machine are paused for the two stages; the rehearsal took 83 s and 62 s (REH:65).
+5. **Custody stays put.** The custody root and the copy are on every seat's deny list. `RESTRICTED/` and the copy stay on that machine and volume until freeze 2 is in effect, because a twin-only re-run is "on the same host" (RLD:20225).
+
+---
+
+## 2. The freeze-2 naming record
+
+**Option A, carrying option B's stanza** (SPEC:9-14). The record gives the verifier exact fields; the stanza makes the record a copy of my words and not a paraphrase.
+
+### 2.1 The stanza, in my ruling
+
+One line, alone on its line, inside the ruling's own section of my log:
+
+```text
+FREEZE-2-NAMING ruling=RL-<id> look=lm-interim-01 coefficients_sha256=<64 hex> public_sha256=<64 hex> designation=freeze-2
+```
+
+`public_sha256` is the sha256 of the committed `PUBLIC.json` bytes. I cannot write it before the look has published, so the stanza cannot predate the publication.
+
+### 2.2 The record, on main
+
+Path: `docs/process/cadence/looks/lm-interim-01.freeze2.json`, beside the manifest and its output schema (SPEC:35). Canonical JSON (`sort_keys`, separators `,` and `:`), with exactly these keys:
+
+| Key | Value |
+|---|---|
+| `schema` | `joulewise.cadence_looks.freeze2_naming.v1` |
+| `look_id` | `lm-interim-01` |
+| `ruling` | the ruling id |
+| `coefficients_sha256` | 64 lowercase hex |
+| `public_sha256` | 64 lowercase hex |
+| `designation` | `freeze-2` |
+| `decisions_path` | `docs/research-audits/2026-11-10-fable/RESEARCH-LEAD-DECISIONS.md` |
+| `decisions_commit` | the 40-hex commit of the audit branch that holds the ruling |
+| `stanza` | the line of 2.1, byte for byte |
+
+The lead commits it. No field is added to the ledger row: the path is fixed by the look id, and the row's existing `ruling` field (MF:1217) carries the id.
+
+### 2.3 What the verifier checks
+
+All at one resolved `origin/main` commit M, as SPEC:34 has it, and only when `twin_agrees` is not `yes`. With `yes` the record is not read.
+
+| Binding | Check |
+|---|---|
+| Ruling id | `record.ruling` equals the row's `ruling` |
+| Look | `record.look_id` equals the row's look id and `PUBLIC.json`'s |
+| Digest | `record.coefficients_sha256` equals the row's, `PUBLIC.json`'s and the item's issued value; `record.public_sha256` equals the row's `output_sha256` and the sha256 of the `PUBLIC.json` bytes at M |
+| Designation | `record.designation` is `freeze-2`, and `record.stanza` equals the line rebuilt from the record's own five values |
+| That it is mine | `decisions_commit` is an ancestor of, or equal to, the fetched `refs/remotes/origin/audit/2026-11-10-fable`. In the blob at `decisions_commit:decisions_path` the stanza occurs exactly once as a whole line, and the nearest heading above it that begins `# RL-` names the same id |
+
+- Canonical bytes, the exact key set and every equality are required. Any miss holds. A failed fetch of either ref holds.
+- Every value of the decision comes from M. The audit branch is consulted for one containment test on bytes that M names, so an audit-only blob authorizes nothing, and neither does a record without the stanza in my log.
+- **The limit, stated as in RL-183b** (RLD:20487): this is an attestation across two branches, not a proof. A public repository holds no secret of mine. It rests on the same trust as every committed ruling and register row. It does prove that the four values on main are the four values in the log, and that the log entry was written after the publication.
+
+### 2.4 Where it lives in code
+
+In the one function of RL-183 §2.3 (RLD:20201), which gains this branch; `freeze2_commitment` has none today (MF:1389, DEF:22). The arm predicate calls the public half only (SPEC:43). The scorer's four negative tests gain the positive case with a committed record, which SPEC:58 left untested.
+
+**`lm-interim-01t`.** A twin-only `yes` takes effect through this same record: I write the stanza citing it. The arm gate then has two paths and no third.
+
+---
+
+## 3. The twin and the primary
+
+### 3.1 The five known behaviours, and the census's classes
+
+The census exists, and it covers the five. Astra's classification of them is confirmed.
+
+| Behaviour | Census | Side that follows the rulings | The rule |
+|---|---|---|---|
+| Overlap coverage becomes `not_evaluable` (DEF:13) | P01 | **Twin and primary readers both right; the parent's comparator is wrong** | GPU coverage is the sum of positive overlaps over the interval's length, by step 3's convention (RLD:15853), so it may exceed 1. The comparator requires a finite, non-negative value and exact equality (RLD:19017). The upper bound of 1 stays for DC-in only |
+| The marked-span fit restores δ (DEF:14) | T01 | **Primary** | The sensitivity fit starts from the main fit's columns (RLD:16079). A δ the main fit dropped (RLD:15849) stays dropped in it and in each of its folds |
+| Single-turn events without `align_turn_index` (DEF:15) | T05 | **Primary** | The pinned step-3 module is the definition (RLD:15882, RLD:15887). On a token event an absent or null index is turn 0 |
+| A permitted one-second GPU gap aborts the child (DEF:16) | T03 | **Primary** | The 2 s bound is tested on each connected energy-fit interval (RLD:17505). Inside a passing interval a piece with no supporting row contributes zero energy and zero coverage. It is not a refusal |
+| Empty soak-attempt arrays (DEF:24) | F02 | **Primary** | Section 3.3, rule 3 |
+
+**T02, T04 and T06 to T16, P02 and P03:** accepted as the census classifies them, with its rule paragraph as the text. I read T02, T16 and P02 against their cites and agree. A builder who thinks a class is wrong returns it to me with the ruling line; otherwise the lead disposes.
+
+- **One principle covers T05 to T15.** Where the primary side is the pinned step-3 module, that module is the registered behaviour and the twin conforms to it.
+- **The twin builder works from the census's rule paragraphs.** RL-183a condition 2 stands: it still does not read the look's readers or the fit code.
+
+### 3.2 What must be done before the look, and what need not
+
+**The primary runs once. The twin can be run again.** The order follows from that.
+
+| Before the look | Items |
+|---|---|
+| **Always** | Everything on the primary and parent side: H1 to H4, P01, P02, P03, the stage-1 refusals of 3.3, the `authors.twin` sentence (DEF:26), section 1. The twin's T01, T03, T05 and F02, which ordinary rosters reach |
+| **As far as the packet time allows** | The twin's T02, T04, T06 to T16 |
+| **Not before the look** | The naming branch of 2.4 and the `lm-interim-01t` entry point (DEF:23). Both are needed only after a word other than `yes` |
+
+- **Acceptance is one re-run of the census matrix by Astra** on the fixed pair: no difference in the five comparison families outside F06 to F08's planted cases and any twin class left open by name. That table is what I read at the cold pass. It replaces a fourth open audit of the twin.
+- **The look is not held for a twin class the census reaches only with malformed or injected input.** The lead lists the open classes in the packet.
+
+**RL-183 §2.4's `no` row gains a first step** (RLD:20224):
+
+> After `twin_agrees = no`, if a twin class was open by name at the execution commit, or a twin defect is reproduced without custody, the twin is fixed blind and `lm-interim-01t` is run once, on the same host, before any file in `RESTRICTED/` is opened. Each fix cites a census class or a synthetic reproduction. A second word other than `yes` comes to me, and I then open `twin.json` as ruled.
+
+- **Why this is safe.** The coefficient hash is public before the twin runs again, so nothing can adjust the fit. Nobody has seen the difference, so the twin is not fitted to it. One re-run, not a loop.
+
+### 3.3 F01 to F05: one rule for inputs no writer produces
+
+> A receipt or path shape is admissible if and only if a pinned writer of a rostered span can produce it. On an admissible shape both sides return the same record. On any other shape the primary refuses in stage 1, before the reservation and before any energy read, and the twin raises.
+
+A stage-1 refusal consumes nothing. On the real roster it would mean a file no pinned writer wrote, and it comes to me as a count and a shape. The builder writes the closed list from the writer code at the three pins, with file and line, including what an interrupted run leaves; the cold seat checks the list against that code. Fixed here:
+
+| # | Question | Ruling |
+|---|---|---|
+| F01 | Bundle spellings | **1.** The key is the receipt's `bundle` string, byte for byte. It is admissible when it is a relative POSIX path of one or more components, none empty, none `.` or `..`, with no trailing slash. A staged-span override binds the same string. Null on an unrun leg stays absent. Neither side normalizes. **2.** Any other spelling refuses at stage 1. The primary may enforce this in stage 1, or the lead's pre-run check may assert it over the committed stage-1 output; either satisfies. If the dry run on the real roster meets another spelling, absolute paths included, it comes to me before anything is changed |
+| F02 | `soak_attempts: []` | **3.** The key absent is the older pins' one accepted attempt, as both sides have it. Present and empty with no soak step is what LR:453 writes before the first attempt is appended (LR:578-587): zero attempts, `field_present` true, not accepted, no retries, zero stopped by soak. **The primary is right and the twin changes.** Empty with a soak step, or null, is inadmissible |
+| F03 | Absent and null members | **4.** An attempt has exactly the keys LR:586 writes: `attempt`, `started_epoch_s`, `refused`, `output_dir`. A missing `refused` is inadmissible. A soak step with a missing or null `rc` on an otherwise admissible receipt is `accepted = false` on both sides. `soak_refusals` absent means no structured kind; null is inadmissible |
+| F04 | Contradictory history | **5.** Inadmissible, so stage 1 refuses. No "unavailable" record is invented. Attempts are numbered 1..n in order, every attempt before the last is refused, each soak step belongs to one attempt in order, and a structured kind names a recorded refused attempt. **The retry limit is also an input limit:** more attempts than the pin's `SOAK_RETRIES` + 1 is inadmissible. #816's two incoherent fixtures (CEN:215) are replaced with coherent ones |
+| F05 | Unknown legacy kind | **6.** A kind is `slope` or `load`, read from a field a pinned writer writes. Any other populated value, the literal fallback string included, is inadmissible. With no kind recorded both sides print "kind not recorded" with null provenance (RLD:17489). P03 follows: provenance comes only from the receipt's own array |
+
+### 3.4 F06, F07, F08: no change to either side
+
+**`twin_agrees` keeps its registered relative tolerances and exact words** (RLD:19017). In all three cases both implementations are right and the parent's `no` is right. No absolute floor, canonical zero or tie rule is added: each would be a new tolerance chosen in a hurry, for cases that real, noisy data does not produce.
+
+**What I fix instead, blind, is my own acceptance under RL-183 §2.4** (RLD:20224). After a `no`, with `twin.json` open under its ruling:
+
+> **Near-zero leaves (F06, F07).** A coefficient or onset leaf that misses 1e-6 relative is accepted if the two sides' fitted values agree to 1e-8 relative on every fit leg and channel, and their predicted onsets to 1e-6. A script in custody prints the two largest differences and nothing else.
+>
+> **The boundary (F08).** A verdict word that differs is accepted as the primary's if the two underlying values agree to 1e-8 relative and both lie within 1e-12 of the threshold.
+
+- **Why predictions.** The coefficient file exists to predict (RLD:17491). Two files that predict alike are the same freeze, whatever a round-off zero's ratio says.
+- Everything else in that row stands: `trace_coverage`, `soak_retries` and every other word equal.
+
+---
+
+## 4. PR #826, the desk-seal successor: PASS at `3dfeadc0c`
+
+**It may merge when the twelve `test` shards are green.** The diff is the rulings and the audit's fixes. I found nothing wider that bears on a measurement, a calibration or a claim.
+
+| Ruled | In the diff |
+|---|---|
+| RL-163 §1, digest only | The record's `finalized_manifest` is a lowercase digest and the builder no longer reads the body (PK:219-228). `finalize-manifest` prints the digest alone for a v4 session (HO:552). The DEVIATIONS row is present |
+| RL-163 §2, fifth source | Window-scoped harvest codes pass through the counted rule and print as names on the tripwire line; they add to no member's tally (DS:1281-1322). The `members_excluded` key listing has its test, and WB carries the hand item |
+| RL-163 §3 | The window fit flags print once, as code names without their numbers, and leave the benign rows (VS:1003-1018). The `refit_cache_miss` all-or-none read is on WB as the lead's |
+| RL-163 §4 | The DEVIATIONS row for C1's four sentinels is present |
+| RL-168 finding 1 | A reused pilot id passes only at a resolved path the committed selection names, read at `HEAD` (U3:110-136). The fix is its own commit, `2c0c766f9`, with the e01 and e09 test |
+| RL-168 finding 3 | Retention is in the runbook and is enforced: release of a v4 window needs its final record on the pushed ref (OW:903-966, OW:1426). "On a fresh restore" is in |
+| RL-168 findings 4, 5, 6 | `EWOULDBLOCK` is told apart from other lock errors (DS:1388-1394). `RL149-DESK-SEAL` reads confirmed. The three tests gain a real subtraction, the controls and a child process |
+| RL-183b | Four keys, written only by `cmd_unpack` after the restore, exclusive create, refused under the source root (HO:198-240). One predicate (LT:163), called in `cmd_final` (HO:319-328) and in `final_evidence` (PK:237-275), where a successor's receipt is judged against the predecessor's record. R1 and zero-capture records are exempt as ruled. All five tests are present by name |
+| The ten R1 sources | All ten blobs equal `b2e01464d`'s. I compared them myself |
+| Round 4's receipt finding | `triage` returns six public fields and no size, span or free space (OW:2062-2092). No consumer reads the removed fields; the packet's quiet check reads a different source (PK:693-708) |
+
+**Finding 3's pack question is answered and I accept the answer as the pack's file rule** (RLD:16275): a pack never carries `archive/`, `PILOT.json` or `desk.json`, in the tree or in its byte-bound closure, and finalize and pack come before any harvest or desk (HO:158-174, OW:753-761). Nothing further comes to me on it.
+
+**Two lines owed before the commit W1 is signed at. Neither holds the merge.**
+1. **WB:115 compares one blob and should compare three.** The exporter now reads `selection.json` and the v4 `collection_plan.json` from `HEAD` (U3:104-113). Add both to the blob comparison beside `align_v4_u3_export.py`: if any of the three differs between step 4's checkout and the signing commit, step 4 is run again.
+2. **The MBP-only path is still untested** (RLD:20523). Pack, then move the originals aside and unpack the window's own pack at the source root, then desk. One synthetic run of it, with the result in the run report, before W1 arms. Without it the first window with the Air away has no desk.
+
+**Noted, no change.** `cmd_final` exempts R1 by the `--window-id` string (HO:319). That is the early refusal only. The binding check reads the record's own window (PK:265-275), as RL-183b placed it.
+
+---
+
+## Order of work
+
+1. **Today.** Section 1 into #795 (`host-id`, the comparison, the test seam). The primary and parent fixes of 3.2. The twin's T01, T03, T05, F02, then the rest. The stage-1 dry run on the Air's copy, which also answers F01.
+2. **Then.** Astra's census re-run. The Mythos cold seat. The packet to me (RL-175 B.2, RLD:17749), with the census table and the list of open twin classes. A packet with me Thursday evening is answered the same night.
+3. **Then, on the Air.** The literal rehearsal; stage 1; the row with `execution_host`; stage 2; `PUBLIC.json` on main.
+4. **`yes`:** freeze 2 is in effect and qual-01-s01 may arm. **Anything else:** section 3.2's step, then RL-183 §2.4. Qualification holds and fillers run.
+
+---
+
+## Amends
+
+- **RL-180 amendment 4** (RLD:19070): "using the host id the campaign receipts carry" is struck and replaced by section 1.1. Row 6 (RLD:19221) is read with it.
+- **RL-175 B.1** (RLD:17733-17738): stands. Section 1.4 adds the Air's conditions.
+- **RL-180 amendment 3 and row 3** (RLD:19026, RLD:19218): "names that hash as freeze 2 in a ruling" means the stanza of 2.1 and the record of 2.2. "A ruling id in the look's ledger row" is tested by 2.3.
+- **RL-183 §2.3** (RLD:20201): the one function gains the naming branch.
+- **RL-183 §2.4** (RLD:20224): the `no` row gains the first step of 3.2 and the two acceptance sentences of 3.4. A twin-only `yes` takes effect through the naming record.
+- **RL-183a** stands. Condition 2 is read with 3.1.
+- **RL-168 finding 3 item 2** (RLD:16275): closed by section 4.
+- **Stand unchanged:** every registered tolerance and word list; RL-166 to RL-167; RL-183b.
+
+**Blind status.** Blind. Stage 2 of the interim look has not run and no campaign energy has been read under any look. Nothing sealed, measured or restricted was opened for this ruling. Section 1 changes how a host is named; section 2 how a decision is recorded; section 3 which malformed inputs refuse and what I will accept after a `no`, fixed before any `twin.json` exists. No estimator, threshold, tolerance or inclusion rule changes.
+
+**For Ed, plainly.** "Four things. First, the results check can run on the Air, so the MacBook Pro keeps measuring. Second, if I ever have to approve the fit by hand, there is now one small file that proves it was me and which fit I meant. Third, the two independent copies of the analysis disagreed in 27 kinds of odd cases. I sorted them: the main copy gets three fixes, the second copy gets sixteen, and the rest are inputs that should simply be refused. Friday's qualification start depends on those fixes landing by Thursday evening; if they do not, it moves a day and nothing is lost. Fourth, the desk-seal follow-up passes my review and can merge when its tests finish."
+
+---
+
+## Register
+
+Rows for the lead to commit to `RULES.json`. Owner is `research_lead` for rows 1 to 8; the lead owns rows 9 and 10.
+
+| # | Clause | Class | Protects | Scope | Ends | Test |
+|---|---|---|---|---|---|---|
+| 1 | `execution_host` is `hw1:` plus the sha256 of `joulewise.execution_host.v1:` and the upper-case hardware UUID; the lead commits it in the `stage1_committed` row from `host-id`'s output; stage 2 recomputes it and refuses on a mismatch before the reservation (1.1, 1.2) | VALIDITY (blinding) | One execution of a look id across hosts | Every look | The paper's data release | Spec test 4's wrong-host case with the function replaced; a test that no hostname is read; the literal rehearsal |
+| 2 | Stage 1 and stage 2 of a look run on the named host over the same roots, every file of which has its close manifest's sha256; on a shared host the look runs detached, outside a seat, with sleep prevented, and custody stays on that host until freeze 2 is in effect (1.3, 1.4) | VALIDITY | The look reads the campaign's bytes, once, uninterrupted | Every look not run on the MBP | The paper's data release | The copy verifier's exit in the run record; stage 2's existing refusal on a stage-1 mismatch |
+| 3 | A named freeze 2 is the canonical nine-key record at `docs/process/cadence/looks/<look>.freeze2.json` on main, whose `stanza` occurs once, under the heading of the same ruling id, in my log at an ancestor of the audit branch (2.1 to 2.3) | VALIDITY (prereg) | Qualification and v4 are scored against a fit I named, and only that one | The arm predicate; every scorer | The paper's data release | The four bindings each fail one negative test; an audit-only stanza and a main-only record each refuse; one committed positive case |
+| 4 | With `twin_agrees = yes` the naming record is not read; a twin-only `yes` takes effect only through a naming record (2.3, 2.4) | VALIDITY (prereg) | Two paths to freeze 2 and no third | `lm-interim-01` and `lm-interim-01t` | The paper's data release | A predicate test for each path |
+| 5 | After `twin_agrees = no`, one `lm-interim-01t` may run before any restricted file is opened, if each twin fix cites a census class or a synthetic reproduction; a second word other than `yes` comes to me (3.2) | VALIDITY (blinding) | The twin is corrected without sight of the difference, once | `lm-interim-01` | When freeze 2 is in effect | The `01t` manifest lists each fix with its cite; the ledger shows one `01t` row |
+| 6 | My acceptance after `no`: a leaf missing 1e-6 is accepted on fitted values equal to 1e-8 and predicted onsets to 1e-6; a differing verdict word is the primary's when both values agree to 1e-8 and lie within 1e-12 of the threshold. `twin_agrees` itself is unchanged (3.4) | VALIDITY (prereg) | The acceptance rule is fixed before the difference is seen | `lm-interim-01` | When freeze 2 is in effect | The custody script prints two numbers; the naming ruling quotes them |
+| 7 | A receipt or path shape is admissible only if a pinned writer of a rostered span can produce it; otherwise stage 1 refuses before the reservation and the twin raises; rulings 1 to 6 of 3.3 | VALIDITY | No word of the look rests on a malformed receipt, and the two sides cannot differ on one | Every look on this reader | The paper's data release | The closed list with file and line; one refusal test per F class on both sides; the empty-array case equal on both |
+| 8 | GPU `trace_coverage` may exceed 1 and is compared exactly; a parseable Step 3 cell map with different keys is `no`, not `not_evaluable`; the twin conforms to the pinned step-3 module (3.1) | VALIDITY | `twin_agrees` reports the fit, not the comparator | `lm-interim-01` and later looks on this reader | The paper's data release | The census matrix re-run: no difference outside F06 to F08's planted cases and classes open by name |
+| 9 | Step 4 is run again if the blob of `align_v4_u3_export.py`, `selection.json` or the v4 `collection_plan.json` differs between its checkout and the signing commit (4) | VALIDITY (prereg) | The U3 bar is built from the registered selection | W1's signing | W1's signature | The checklist line at WB:115 names three blobs |
+| 10 | An offload pack never carries `archive/`, `PILOT.json` or `desk.json`; finalize and pack precede any harvest or desk; the MBP-only restore path has one synthetic run before W1 arms (4) | VALIDITY | Every window can be desked from a fresh restore, with or without the Air | Every v4 record after R1 | The series release | #826's refusal tests; the run report's MBP-only entry |
+
+**Rows closed or changed by this ruling.** RL-180 row 6 is read with row 1. RL-180 row 3 is read with rows 3 and 4. RL-168's hold on the pack answer closes. The hold on series-record commits and on W1's signature (RLD:15460) ends when #826 merges.
+
+**What comes back to me.** The manifest packet with the census re-run table and the list of open twin classes. A real-roster spelling or receipt shape that stage 1 refuses. A `PUBLIC.json` whose word is not `yes`. A census class a builder disputes with a ruling line. Any wish to add a key to the naming record. Nothing else in this ruling returns.
