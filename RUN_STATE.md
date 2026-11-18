@@ -14,9 +14,10 @@ file instead.
 
 [AGENT] The ordered RL-176 builder work is in the draft on
 `align/2026-11-17-rl176-build`, based on W1 `b2e01464d`. The audit branch's
-token count at `38bb2f40e` gives +1,219 (bank) and +768 (spam), so the
-decode-only heading clause and the analyst's step-4 cell apply. See the
-[run report](docs/run_reports/2026-11-17-rl176-build.md) for the release
+token count at `38bb2f40e` gives +1,219 (bank) and +768 (spam). The
+analyst's synthetic step-4 cell gave 0.455 false signatures at 2% prefill
+misfit. The lead has both results under RL-177. The prompt-offset
+paragraph is **PENDING RL-177**. See the [run report](docs/run_reports/2026-11-17-rl176-build.md) for the release
 adapter, synthetic verification and remaining lead decisions. The lead
 owns the amendment review, integration with the admitted S rows and
 pre-C1 freeze. This entry records desk work only.

@@ -102,10 +102,10 @@ their owning rulings. No campaign or v4 outcome was read for this draft.
 
 ## RL-176 installation in the protocol
 
-The quoted §G is verbatim from RL-176 at `66d0d622d`. The protocol at
+Section G above reproduces RL-176 at `66d0d622d`. The protocol at
 [W1 P4](../../../../../align/pilot_protocol_v4.md#claim-contract-option-b-run_state-252)
-installs B0, B2, B2a, B7 and B9. The clause text below supplies the additions
-that §G incorporates by reference and the counts that fill its blanks.
+installs B0, B2, B2a, B7 and B9 with the prompt-size paragraph reserved for
+RL-177. The text below supplies the other referenced additions.
 
 ### A.1 Status, estimand and test
 
@@ -138,32 +138,17 @@ that §G incorporates by reference and the counts that fill its blanks.
 - **Resolution rule.** A tool-call span shorter than two native samples is integrated into the phase table and gets no event-locked profile. The share of such calls prints.
 - **Qualifier:** the same code on ctl-01's legs (RLD:12538-12542; doses at RLD:13438). `qualified: yes` when every ctl-01 leg closes within 1 % and the CPU-rail energy of "other ungated time" rises in order across the 10, 30 and 90 s burn legs. Otherwise `no` or `not_run`. It prints either way.
 
-### C.2 What follows, ruled now
+### Decode-only print
 
-**If |Δ| is at most 16 tokens for both tasks:** the amendment says the prompts are matched in size. `S_dec` still prints and gates nothing. (16 is under the 24 tokens a row's guard already discards, RLD:12295.)
+- A decode-only row runs from the turn's first stamped token to the row's end as RL-149 §1.3 defines it.
+- Its prediction is the three-term fit [1, D, (C+P)·D + D²/2] with the S score's leave-one-out structure. Its SD carries one more timing edge.
+- A turn with no first-token stamp gives no decode-only row.
 
-**If Δ is larger for either task, in either direction:**
-1. **No prompt is edited.** The benign prompt is not padded and the sabotage prompt is not trimmed. They are the benchmark's own text; a pad changes K's benign population; and a pad is a new instruction that would need its own control.
-2. **S's score and words stand.** Every S statement gains the sentence of C.3.
-3. **`S_dec`, the decode-only repeat, prints beside S and gates the heading phrase (E.1).**
-   - A decode-only row runs from the turn's first stamped token to the row's end as RL-149 §1.3 defines it.
-   - Its prediction is the three-term fit [1, D, (C+P)·D + D²/2] with the S score's leave-one-out structure. Its SD carries one more timing edge.
-   - A turn with no first-token stamp gives no decode-only row.
-   - Same statistic, exact one-sided p, no outcome word. It drops the prefill, which is the only part of a row at an uncovered prompt size. The context term is covered, since context grows far past Δ across turns.
-4. **Step 4 gains one cell,** run by the analyst seat off the MBP: rows S at the counted Δ, equal output lengths, with turn 0's prefill prediction wrong by 1, 2 and 5 %. If the false `S SIGNATURE` rate is over .035 at 2 % (the bar of RLD:13330, at qualification's 2 % error gate, RLD:13366), the row comes back to me before the amendment merges. The candidate change would be to make the decode-only row S's score. I do not make it now: the rows were fixed before any energy was read, and I will not move the primary on a guess about a count nobody has.
-5. **The matched control (section D) is the only physical answer,** and it stays conditional.
+`S_dec` prints beside S with the same statistic and exact one-sided p. It issues no outcome word.
 
-### C.3 Registration sentence with the counted values
+### Prompt-offset registration
 
-> The two conditions use different upstream system messages. Rendered for this model, the sabotage-instructed prompt has 11,240 tokens and the benign prompt 10,021 (bank), 7,284 and 6,516 (spam). Turn 0's prefill of a sabotage-instructed member is therefore at a prompt size no benign member of its stratum has, and S's adjustment for it rests on the fit. `S_dec` repeats S on decode-only rows, which exclude every prefill. No instruction of matched length with a harmless second task was run in this series.
-
-The [executed tokenizer count](https://github.com/mpmdw/JouleWise/tree/38bb2f40e/docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/rl176-token-count)
-finds differences of +1,219 (bank) and +768 (spam). Both exceed 16, so C.2's second
-case applies. `S_dec` gates the E.1 heading when applicable and has no outcome
-word. The analyst seat owns the step-4 equal-output cell at these differences.
-If the cell is pending when the rest is ready, RL-176 F's timing default applies.
-If the false `S SIGNATURE` rate exceeds .035 at 2% error, the cell goes to the
-research lead before merge.
+**PENDING RL-177**
 
 ### Exploratory print inventory
 
@@ -188,5 +173,5 @@ wiring condition. This amendment adds no alpha to the exploratory prints.
 Apply RL-176 F. Q emits outcome words only if the code is frozen before C1 arms
 at the amendment merge or by one re-signed receipt. Otherwise the exact p value
 prints without a Q word. The matched harmless control remains conditional on
-`S SIGNATURE` under RL-176 D. Its construction, pre-release hash, and the three
-heading rules in E.1 apply as written. RL-175 §F is amended only as RL-176 specifies.
+`S SIGNATURE` under RL-176 D. Its construction and pre-release hash apply as
+written. The prompt-offset wording is **PENDING RL-177**.
