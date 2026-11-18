@@ -42,6 +42,8 @@ def required_files(kind):
     )]]
     if kind != "capture-predecessor-30b":
         files.append(f"{BUNDLE}/outputs/align_thermal.jsonl")
+    if kind in ("capture-predecessor-30b", "step-d"):
+        files.append("load_journal.json")
     if kind == "step-d":
         files.extend((f"{BUNDLE}/outputs/align_window_reference.json",
                       f"{BUNDLE}/rich_telemetry.jsonl", f"{BUNDLE}/raw/powermetrics.plist",
@@ -119,6 +121,18 @@ def rehearsal_double(attempt, transport):
 
 
 class LedgerTests(unittest.TestCase):
+    def test_unadjudicated_pass_cannot_be_published(self):
+        for has_ledger in (False, True):
+            with self.subTest(ledger=has_ledger), TemporaryDirectory() as tmp, redirect_stdout(StringIO()) as stdout:
+                attempt = Attempt(Path(tmp))
+                table = {"verdict": "pass", "lines": dict.fromkeys(pc.RELEASE_LINES), "evidence_failures": {}}
+                with self.assertRaisesRegex(ValueError, "verdict_binding"):
+                    pc._emit_part_c(attempt.output, 0, table, ledger=attempt.ledger if has_ledger else None)
+                copies = [json.loads((attempt.output / name).read_bytes()) for name in pc.RELEASE_COPIES]
+                self.assertEqual(copies[0], copies[1])
+                self.assertEqual(copies[0]["evaluation"]["verdict"], "other_failure")
+                self.assertIn("Part C verdict: other_failure", stdout.getvalue())
+
     def test_ledger_starts_records_each_invocation_and_binds_final_copies(self):
         with TemporaryDirectory() as tmp:
             attempt = Attempt(Path(tmp))
@@ -199,7 +213,7 @@ class LedgerTests(unittest.TestCase):
                         if name in (MANIFEST, RECEIPT):
                             self.assertEqual(caught.exception.source, name)
                         count += 1
-        self.assertEqual(count, 180)
+        self.assertEqual(count, 188)
 
     def test_mutation_after_last_read_fails_at_final_recheck(self):
         for kind in MEMBERS:
@@ -354,8 +368,10 @@ def write_terminal(segment, kind, receipt, config_sha):
     (segment / RECEIPT).write_bytes(json_bytes(receipt))
     captured = {path.relative_to(segment).as_posix(): hashed(path.read_bytes())
                 for path in segment.rglob("*") if path.is_file() and path.name != MANIFEST}
+    order = ("idle", *MEMBERS).index(kind)
     manifest = {"schema": "joulewise.align.r1_runtime_custody.v1", "kind": kind, "status": "complete",
-                "config_sha256": config_sha, "started_epoch_s": 1, "ended_epoch_s": 2, "files": captured}
+                "config_sha256": config_sha, "started_epoch_s": order * 2000,
+                "ended_epoch_s": order * 2000 + 1800, "files": captured}
     (segment / MANIFEST).write_bytes(json_bytes(manifest))
     # Frozen stdout uses the default separators, ASCII escapes and a single newline.
     return SimpleNamespace(returncode=0, stdout=json.dumps(receipt, sort_keys=True, allow_nan=False) + "\n",

@@ -1362,6 +1362,16 @@ class SoakLauncherBindingTests(unittest.TestCase):
                 "fast_c": 35.0, "slow_c": 35.0, "journal": "outputs/align_thermal.jsonl"}
             reference["record_sha256"] = hashed(pc.canonical(reference))
             (out / "align_window_reference.json").write_bytes(pc.canonical(reference) + b"\n")
+            warmup = [
+                {"timestamp_s": end / ns, "event_type": "stage_started", "phase": "warmup",
+                 "message": "stage warmup started", "metadata": {}},
+                {"timestamp_s": end / ns + config["sampling"]["warmup_seconds"],
+                 "event_type": "stage_completed", "phase": "warmup", "message": "stage warmup completed",
+                 "metadata": {"warmup_runs": config["workload_profile"]["warmup_runs"],
+                              "warmup_seconds": config["sampling"]["warmup_seconds"]}},
+            ]
+            (bundle / "events.jsonl").write_bytes(b"".join(map(json_bytes, [
+                *sorted(warmup + gate_events, key=lambda row: row["timestamp_s"]), final])))
             receipt["operating_reference"].update(span_ns=reference["span_ns"])
             # Preserve what the synthetic consumer observed before a test
             # edits committed Step-D bytes. The evaluator still sees the edit.
@@ -1378,12 +1388,20 @@ class SoakLauncherBindingTests(unittest.TestCase):
             inventory = segment / "inventory"
             inventory.mkdir()
             classification, confirmation = self.write_step_inventory(inventory, sensors, configured, turns[0])
-            receipt.update(e_D_j_per_token=MARKER, thermometry={
-                **classification, "status": "pass", "night_confirmation": confirmation})
+            fields = ("r0_sensors", "die_candidates", "heatsink_candidates", "record_only", "phases", "journal_rows",
+                      "alias_groups", "alias_rule", "classification_sha256")
+            thermometry = {key: classification[key] for key in fields}
+            picks = {key: sensors[key] for key in ("s_fast", "s_slow")}
+            thermometry.update(status="pass", **picks, registered_picks={key: classification[key] for key in picks},
+                               night_confirmation=confirmation, sensor_pick_changed=False, flags=[],
+                               reasons=confirmation["reasons"], for_record_only=False,
+                               classification_file="inventory/r1_classification.json",
+                               keys_inventoried=len(picks))
+            receipt.update(e_D_j_per_token=MARKER, thermometry=thermometry)
             recovery = segment / "recovery"
             recovery.mkdir()
             rec = self.journal(sensors, [("reading", end_ns + i * ns, (38.0, 38.0) if i <= 20 else (35.4, 35.4))
-                                         for i in range(1, 22)], start=end_ns)
+                                         for i in range(1, rt.RECOVERY_CAP_S + 1)], start=end_ns)
             (recovery / "align_thermal.jsonl").write_bytes(b"".join(map(json_bytes, rec)))
             rows = sample_rows + tg.sample_rows(rec)
             responses = {key: rt.step_response(rows, sensors[key], ep.start_ns, ep.end_ns)
@@ -1393,11 +1411,18 @@ class SoakLauncherBindingTests(unittest.TestCase):
                 ep=ep, turn=turns[0], wall_s=wall, responses=responses, recovery_s=20.0, recovery_censored=False,
                 bands=bands, t_decline_s=None, t_decline_status="no_decline", d_class=configured["d_class"],
                 n_chunk_config=configured["d_n_chunk"])
-            receipt["slot_detail"]["thermometry_classification_sha256"] = classification["classification_sha256"]
+            receipt["slot_detail"].update(thermometry_classification_sha256=classification["classification_sha256"],
+                                          quiet_before_prefill_s=rt.STEP_QUIET_S,
+                                          recovery_observed_s=rt.RECOVERY_CAP_S)
         if role != "predecessor":
             from joulewise.align.apple.workload import read_episode_bundle
 
             receipt["episode_flags"] = list(read_episode_bundle(bundle).flags)
+        if kind in ("capture-predecessor-30b", "step-d"):
+            load = {"cpu_busy_cores": [0.1] * 1801, "cpu_busy_t_s": list(range(1801)),
+                    "census": [{"label": "start", "t_s": 0.0, "processes": []}]}
+            receipt.update(**load, load_journal_errors=[])
+            (segment / "load_journal.json").write_bytes(json_bytes({**load, "exclude_roots": [], "errors": []}))
         return write_terminal(segment, kind, receipt, self.attempt.config_sha)
 
     @staticmethod
@@ -2374,6 +2399,118 @@ class SoakLauncherBindingTests(unittest.TestCase):
 
             with self.subTest(idle=idle):
                 self.audit_case(verify)
+
+    def test_step_reference_reconciles_warmup_events(self):
+        for operation in ("delete", "duplicate", "shift"):
+            def mutate(bundle, _):
+                def change(events):
+                    index = next(i for i, event in enumerate(events) if event["phase"] == "warmup")
+                    if operation == "delete":
+                        del events[index]
+                    elif operation == "duplicate":
+                        events.insert(index, deepcopy(events[index]))
+                    else:
+                        for row in events:
+                            if row["phase"] == "warmup":
+                                row["timestamp_s"] += 50
+                        events.sort(key=lambda row: row["timestamp_s"])
+                self.edit_events(bundle, change)
+
+            with self.subTest(operation=operation):
+                self.audit_case(lambda case: self.run_gate_regression(case, "step-d", mutate, "step_warmup"))
+
+    def test_step_recovery_and_selected_thermometry_match_sources(self):
+        def short(bundle, _):
+            path = bundle.parent.parent / "recovery/align_thermal.jsonl"
+            first = json.loads(path.read_bytes().splitlines()[0])
+            start = first["started"]["monotonic_ns"]
+            sensors = first["values"]["thermal"]
+            records = self.journal(sensors, [
+                ("reading", start + i * pc.NS, (38.0, 38.0) if i <= 20 else (35.4, 35.4))
+                for i in range(1, 22)
+            ], start=start)
+            path.write_bytes(b"".join(map(json_bytes, records)))
+
+        self.audit_case(lambda case: self.run_gate_regression(case, "step-d", short, "step_recovery"))
+        for operation in ("missing", "swapped"):
+            def picks(_bundle, receipt):
+                observed = receipt["thermometry"]
+                if operation == "missing":
+                    del observed["s_fast"]
+                else:
+                    observed["s_fast"], observed["s_slow"] = observed["s_slow"], observed["s_fast"]
+
+            with self.subTest(operation=operation):
+                self.audit_case(lambda case: self.run_gate_regression(case, "step-d", picks, "step_thermometry"))
+
+    def test_xml_malformed_flag_cannot_be_reported_as_clean_stop(self):
+        from joulewise.align.apple.xml_tool_calls import parse_xml_calls
+
+        _, flags = parse_xml_calls("</tool_call>", [])
+        self.assertTrue(any(flag.startswith("malformed_tool_call:") for flag in flags))
+
+        def mutate(bundle, _):
+            self.edit_events(bundle, lambda rows: rows[-1]["flags"].extend(flags), "outputs/align_turns.jsonl")
+
+        self.audit_case(lambda case: self.run_gate_regression(case, "d-bank-benign-s1", mutate, "stop_evidence"))
+
+    def test_bound_member_terminal_intervals_must_be_sequential(self):
+        def verify(case):
+            close = write_terminal
+
+            def publish(segment, kind, receipt, sha):
+                process = close(segment, kind, receipt, sha)
+                if kind == "d-bank-benign-s1":
+                    predecessor = segment.parent / pc.KINDS["step-d"] / pc.MANIFEST_NAME
+                    ended = json.loads(predecessor.read_bytes())["ended_epoch_s"]
+                    self.edit_json(segment / pc.MANIFEST_NAME, lambda row: row.update(started_epoch_s=ended - 1))
+                return process
+
+            with patch(__name__ + ".write_terminal", side_effect=publish):
+                self.assertEqual(case.run_launcher(), 2)
+            verdict = json.loads((case.attempt.output / "smoke.json").read_bytes())["evaluation"]
+            self.assertEqual(verdict["evidence_failures"], {"member_order": "member_order"})
+
+        self.audit_case(verify)
+
+    def test_quiet_member_load_bytes_and_frozen_redo(self):
+        for kind in ("capture-predecessor-30b", "step-d"):
+            for operation in ("missing", "truncated", "duplicate-key", "disagreement", "redo"):
+                def edit(bundle, receipt):
+                    path = bundle.parent.parent / "load_journal.json"
+                    if operation == "missing":
+                        path.unlink()
+                    elif operation == "truncated":
+                        path.write_bytes(b"{")
+                    elif operation == "duplicate-key":
+                        path.write_bytes(b'{"cpu_busy_cores":null,' + path.read_bytes()[1:])
+                    else:
+                        def busy(load):
+                            load["cpu_busy_cores"][:60] = [1.0] * 60
+                            self.assertTrue(kit.r1.os_load_verdict(kind, load, wall_s=1800)["redo"])
+                            if operation == "redo":
+                                receipt["cpu_busy_cores"] = load["cpu_busy_cores"]
+                        self.edit_json(path, busy)
+
+                with self.subTest(kind=kind, operation=operation):
+                    reason = "evidence_unverifiable" if operation == "missing" else "quiet_load"
+                    self.audit_case(lambda case: self.run_gate_regression(case, kind, edit, reason))
+
+    def test_quiet_predecessor_journal_cannot_change_after_ledger_binding(self):
+        record = pc.EvidenceLedger.member_return
+
+        def returned(ledger, kind, segment, argv, **kwargs):
+            record(ledger, kind, segment, argv, **kwargs)
+            if kind == "capture-predecessor-30b":
+                source = segment / "load_journal.json"
+                raw = source.read_bytes()
+                self.assertIn(b"0.1", raw)
+                source.write_bytes(raw.replace(b"0.1", b"0.2", 1))
+
+        with patch.object(pc.EvidenceLedger, "member_return", new=returned):
+            self.assertEqual(self.run_launcher(), 2)
+        verdict = json.loads((self.attempt.output / "smoke.json").read_bytes())["evaluation"]
+        self.assertEqual(verdict["evidence_failures"], {"source_integrity": "source_integrity"})
 
     def test_sealed_phase_receipts_must_match_frozen_reduction_on_d_and_x(self):
         operations = ("control", "missing", "empty", "null", "wrong-type", "plus", "minus")
