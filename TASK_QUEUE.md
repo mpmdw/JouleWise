@@ -3,6 +3,16 @@
 This is the live queue for JouleWise work. When the user gives a new task, first
 triage it here instead of assuming it should happen immediately.
 
+## 2026-11-18 qualification drafts at the PR #812 merge pin
+
+P1 [AGENT], user-selected Tier 0 on the Nov 20 qualification critical path.
+Draft preparation covers six Nov 20–22 qualification items, three
+qualification queues and two same-pin stability filler kits and queues.
+The lead owns RL-179 F-11, exact-pin admission, the registration on main,
+freeze 2, the attempt ledger and its latest close Check, and issue.
+No phase exit-checklist row closes.
+[Handoff and verification](docs/run_reports/2026-11-18-qual-items-merged.md)
+
 ## 2026-11-17 qualification t0 guard successor
 
 P1 [AGENT], user-selected Tier 2 to clear the PR #812 launch blockers
