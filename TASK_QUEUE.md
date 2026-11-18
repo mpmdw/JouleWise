@@ -667,7 +667,7 @@ T38c folds the six live follow-ups (including the existing bridge-baseline row) 
 
 | Work | Priority and lane | Status and next gate | Evidence |
 | --- | --- | --- | --- |
-| Desk-seal successor and U3 export repair | P1 Phase Gate [AGENT] | Draft PR #826. Audit round 2 fixes the R1-format override and preserves retry IDs. Review those changes, the pushed-record retention proof, both receipt paths and CI before merging and signing W1. Review the U3 exporter at `5a325b2ee` before step 4. | [Run report and clause map](docs/run_reports/2026-11-18-desk-seal-successor.md). Authority is RL-163, RL-168, RL-183 §2.5, RL-183b and register row 13. |
+| Desk-seal successor and U3 export repair | P1 Phase Gate [AGENT] | Draft PR #826. Audit round 3 pins the operator client, separates the v4 release request, and checks cached Air receipts. Review the mixed-version retention and pack checks with CI before merging and signing W1. Verify the Air gate installation against the signing pin before W1. Review the U3 exporter at `5a325b2ee` before step 4. | [Run report and clause map](docs/run_reports/2026-11-18-desk-seal-successor.md). Authority is RL-163, RL-168, RL-183 §2.5, RL-183b and register row 13. |
 
 ## Current Queue
 

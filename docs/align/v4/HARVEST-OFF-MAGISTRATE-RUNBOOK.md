@@ -25,6 +25,8 @@ may deliberately leave it OFF, recorded as `left_off` with a reason and read-bac
 | `M` | the measurement checkout, at the same absolute path, commit and `.venv` on both machines |
 | `PY` | `$M/.venv/bin/python -B` |
 | `RUN` | `$PY $M/scripts/align_v4_harvest_off.py` (every subcommand prints one JSON line; exit 1 = refusal) |
+| `OFFLOAD_REPO` | absolute path to a clean checkout at the reviewed desk-seal successor commit |
+| `OFFLOAD_COMMIT` | full SHA of the desk-seal successor commit approved for W1 signing |
 | `DESK_REPO` | the records repository (`records/<K>/...`, `series/state.json`), pushed to `refs/remotes/origin/records` |
 | `OUT` | an empty per-window staging directory, e.g. `~/code/CapstoneProject/jw-wt/offload/$K` |
 
@@ -83,11 +85,33 @@ $RUN pack --session-root "$S" --out "$OUT/offload" --finalized-manifest "$OUT/fi
 Pack re-verifies the closure on the MBP (checkout identity, ledger and other closure bytes) before it writes anything.
 
 **1d. Offload with the Air-offload tool** at cool-down start. This replaces the earlier separate transfer.
-- The tool is on `ops/2026-11-08-air-offload-merged`, and its runbook is `docs/ops/AIR-OFFLOAD.md`: §4 has the per-window sequence and §1a the consumed pack.
-- From the MBP, in one call:
+
+Before W1, both machines use the same reviewed successor revision. On the Air, install the gate from that
+checkout and verify its installed hash against the reviewed `scripts/offload_window.py`, following
+[AIR-OFFLOAD §3a](../../ops/AIR-OFFLOAD.md#3a-air-ed-once-sudo-about-10-min). On the MBP, set
+`OFFLOAD_REPO` and `OFFLOAD_COMMIT` as in §0. Run this block on the MBP. Use the same function for
+`triage` and `release` on every v4 attempt.
 
 ```sh
-offload_window.py run --state-root "$OFFLOAD_STATE" --window-id "$K" --record-root "$S" \
+offload() (
+    case "${OFFLOAD_REPO:-}" in
+        /*) ;;
+        *) echo 'Set OFFLOAD_REPO to the absolute reviewed checkout path' >&2; exit 2 ;;
+    esac
+    head=$(git -C "$OFFLOAD_REPO" rev-parse --verify HEAD) &&
+        [ "$head" = "${OFFLOAD_COMMIT:-}" ] || {
+        echo 'Offload checkout does not match the reviewed commit' >&2
+        exit 2
+    }
+    status=$(git -C "$OFFLOAD_REPO" status --porcelain --untracked-files=all) &&
+        [ -z "$status" ] || {
+        echo 'Offload checkout must be clean' >&2
+        exit 2
+    }
+    exec python3 -B "$OFFLOAD_REPO/scripts/offload_window.py" "$@"
+)
+
+offload run --state-root "$OFFLOAD_STATE" --window-id "$K" --record-root "$S" \
     --record-manifest "$OUT/finalized_manifest.json" --record-manifest-sha256 "$H" \
     --harvest-pack "$OUT/offload" --terminal "$TERMINAL" \
     --deadline-epoch "$PLANNED_DWELL_START_MINUS_120"

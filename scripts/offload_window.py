@@ -911,11 +911,18 @@ def requires_final_record(manifest: dict) -> bool:
 
 
 def check_offload_format(manifest: dict, window_id: str, *, kind=Mismatch):
-    require(manifest.get("window_id") == window_id, "offload_manifest_window_mismatch", Mismatch)
+    require(isinstance(manifest, dict) and manifest.get("window_id") == window_id,
+            "offload_manifest_window_mismatch", Mismatch)
     require(not requires_final_record(manifest)
             or (manifest.get("record_format") == "finalized_manifest.v2"
                 and manifest.get("pack_format") == SCHEMA_HARVEST_PACK),
             "v4_window_needs_finalized_manifest_v2:use_--harvest-pack", kind)
+
+
+def parse_harvest_record(raw: bytes, manifest: dict) -> Envelope:
+    env = parse_record_manifest(raw, Path(manifest["record_root"]))
+    require(env.fmt == "finalized_manifest.v2", "harvest_pack_needs_finalized_manifest_v2", Mismatch)
+    return env
 
 
 class PushedFinalRecords:
@@ -1394,8 +1401,7 @@ class Offload:
         if manifest.get("pack_format") != SCHEMA_HARVEST_PACK:
             return
         raw = read_record_manifest(self.dir / RECORD_MANIFEST_NAME, manifest["record_manifest_sha256"])
-        env = parse_record_manifest(raw, Path(manifest["record_root"]))
-        require(env.fmt == "finalized_manifest.v2", "harvest_pack_needs_finalized_manifest_v2", Mismatch)
+        env = parse_harvest_record(raw, manifest)
         gaps = restore_gaps(env, manifest.get("externals", []))
         require(not gaps, f"not_restorable_from_the_copy:missing_external:{gaps[:1]}")
         require(not reserved_entries(env), "not_restorable_from_the_copy:reserved_transport_name")
@@ -1415,11 +1421,13 @@ class Offload:
                 return read_json(self.dir / "released.json")
             self.check_quiet_allowed()
             self.check_restorable(manifest)
-            if requires_final_record(manifest):
+            v4 = requires_final_record(manifest)
+            if v4:
                 require(self.pushed_records is not None, "v4_release_needs_final_pushed_record")
                 self.pushed_records.check(manifest)
             nonce = secrets.token_hex(16)
-            receipts = self.call(f"receipts {self.window_id} {nonce}")
+            verb = "receipts-v4" if v4 else "receipts"
+            receipts = self.call(f"{verb} {self.window_id} {nonce}")
             air, second, fresh = receipts.get("air"), receipts.get("second"), receipts.get("fresh")
             require(air is not None, "no_air_receipt")
             air_body = self.check_air_receipt(air, manifest)
@@ -2199,7 +2207,7 @@ def init_store(store_root, binding_path, *, role="primary", min_free_gib=100.0, 
 
 class Gate:
     """Everything the MBP's restricted key can do, confined to the bound store on the Air SSD."""
-    FULL = frozenset({"hello", "stat", "verify", "receipts"})  # re-probe the volume UUID (diskutil)
+    FULL = frozenset({"hello", "stat", "verify", "receipts", "receipts-v4"})  # re-probe the volume UUID (diskutil)
     WRITE = frozenset({"put", "commit", "verify"})             # need the free floor
 
     def __init__(self, binding_path, *, extract=True, now=time.time, probe=None):
@@ -2227,7 +2235,8 @@ class Gate:
         require(argv, "empty_command")
         verb, rest = argv[0], argv[1:]
         table = {"hello": (0, self.hello), "stat": (1, self.stat), "put": (4, self.put),
-                 "commit": (4, self.commit), "verify": (1, self.verify), "receipts": (2, self.receipts)}
+                 "commit": (4, self.commit), "verify": (1, self.verify),
+                 "receipts": (2, self.receipts), "receipts-v4": (2, self.receipts_v4)}
         require(verb in table and len(rest) == table[verb][0], "verb_not_allowed")
         if rest:
             valid_window(rest[0])
@@ -2319,11 +2328,16 @@ class Gate:
             require(isinstance(manifest, dict) and manifest.get("schema") == SCHEMA_MANIFEST
                     and manifest.get("window_id") == window_id, "manifest_schema_or_window", Mismatch)
             check_offload_format(manifest, window_id)
+            record = inbox / RECORD_MANIFEST_NAME
+            harvest_env = None
+            if manifest.get("pack_format") == SCHEMA_HARVEST_PACK:
+                raw = read_record_manifest(record, manifest["record_manifest_sha256"])
+                harvest_env = parse_harvest_record(raw, manifest)
             if receipt_path.exists():
                 receipt = read_json(receipt_path)
                 require(receipt["offload_manifest_sha256"] == msha, "window_id_conflict_on_air", Mismatch)
                 return receipt
-            require(hash_file(inbox / RECORD_MANIFEST_NAME)[0] == manifest["record_manifest_sha256"],
+            require(harvest_env is not None or hash_file(record)[0] == manifest["record_manifest_sha256"],
                     "record_manifest_digest", Mismatch)
             files = {row["path"]: row for row in manifest["files"]}
             links = {row["path"]: row for row in manifest["links"]}
@@ -2335,11 +2349,10 @@ class Gate:
             for extra in manifest.get("extra_objects", []):
                 require(hash_file(inbox / self._name(extra["name"])) == (extra["sha256"], extra["bytes"]),
                         f"extra_digest:{extra['name']}", Mismatch)
-            harvest = manifest.get("pack_format") == SCHEMA_HARVEST_PACK
-            if harvest:
-                self._check_harvest_binding(inbox, manifest, files, links, dirs, externals)
+            if harvest_env is not None:
+                self._check_harvest_binding(inbox, manifest, harvest_env, files, links, dirs, externals)
             # A v4 session's raw tree is the harvest restore (at the session's own path); here it is verify-only.
-            extract = self.extract and not harvest
+            extract = self.extract and harvest_env is None
             staging = wdir / "raw.staging"
             for stale in (staging, wdir / "raw"):  # an interrupted verify leaves no receipt: redo
                 if os.path.lexists(stale):
@@ -2408,12 +2421,10 @@ class Gate:
                          canonical({"window_id": window_id, "offload_manifest_sha256": msha}))
             return receipt
 
-    def _check_harvest_binding(self, inbox, manifest, files, links, dirs, externals):
+    def _check_harvest_binding(self, inbox, manifest, env, files, links, dirs, externals):
         """Independent of the MBP's offload manifest: the pinned finalize manifest and the harvest transport
         manifest must describe exactly the rows this verify checks every member against."""
-        env = parse_record_manifest((inbox / RECORD_MANIFEST_NAME).read_bytes(), Path(manifest["record_root"]))
-        require(env.fmt == "finalized_manifest.v2"
-                and {k: (v["sha256"], v["size"]) for k, v in env.files.items()}
+        require({k: (v["sha256"], v["size"]) for k, v in env.files.items()}
                 == {k: (r["sha256"], r["size"]) for k, r in files.items()}
                 and env.links == {k: r["target"] for k, r in links.items()} and env.dirs == set(dirs),
                 "offload_manifest_differs_from_finalize", Mismatch)
@@ -2451,7 +2462,10 @@ class Gate:
                 out.close()
         require(size == row["size"] and digest.hexdigest() == row["sha256"], f"raw_digest:{row['path']}", Mismatch)
 
-    def receipts(self, window_id, nonce):
+    def receipts_v4(self, window_id, nonce):
+        return self.receipts(window_id, nonce, v4_request=True)
+
+    def receipts(self, window_id, nonce, *, v4_request=False):
         """Sealed receipts plus a FRESH recheck (agreement item 4): re-hash the custody objects (the
         compressed parts and both manifests) and re-read the sealed second-copy receipt, for this nonce.
         The raw tree is a derived convenience and is not re-hashed."""
@@ -2468,28 +2482,39 @@ class Gate:
         if second is not None:
             check_sealed(second)
         inbox = self.root / "inbox" / window_id
-        rechecked = []
+        with open_read(inbox / MANIFEST_NAME, nocache=True) as stream:
+            raw = stream.read()
+        msha = sha_bytes(raw)
+        require(msha == body["offload_manifest_sha256"], "air_manifest_decayed", Mismatch)
+        manifest = json.loads(raw)
+        check_offload_format(manifest, window_id)
+        v4 = requires_final_record(manifest)
+        rechecked = [{"name": MANIFEST_NAME, "sha256": msha, "bytes": len(raw)}]
+        record = inbox / RECORD_MANIFEST_NAME
+        if v4:
+            with open_read(record, nocache=True) as stream:
+                raw = stream.read()
+            rsha, rsize = sha_bytes(raw), len(raw)
+            require(rsha == body["record_manifest_sha256"], "air_record_manifest_decayed", Mismatch)
+            parse_harvest_record(raw, manifest)
+        else:
+            rsha, rsize = hash_file(record, nocache=True)
+            require(rsha == body["record_manifest_sha256"], "air_record_manifest_decayed", Mismatch)
+        rechecked.append({"name": RECORD_MANIFEST_NAME, "sha256": rsha, "bytes": rsize})
+        # Older clients can still transfer and verify. Their receipt request cannot authorize v4 deletion.
+        require(v4_request == v4, "v4_release_needs_v4_receipts" if v4 else "legacy_release_needs_receipts", Mismatch)
         expected = {p["name"]: (p["sha256"], p["bytes"]) for p in body["parts"]}
         expected.update({x["name"]: (x["sha256"], x["bytes"]) for x in body.get("extra_objects", [])})
-        for name in sorted([*expected, MANIFEST_NAME, RECORD_MANIFEST_NAME]):
-            if name == MANIFEST_NAME:
-                with open_read(inbox / name, nocache=True) as stream:
-                    raw = stream.read()
-                got, size = sha_bytes(raw), len(raw)
-                require(got == body["offload_manifest_sha256"], "air_manifest_decayed", Mismatch)
-                check_offload_format(json.loads(raw), window_id)
-            else:
-                got, size = hash_file(inbox / name, nocache=True)
-                if name in expected:
-                    require((got, size) == expected[name], f"air_part_decayed:{name}", Mismatch)
-                else:
-                    require(got == body["record_manifest_sha256"], "air_record_manifest_decayed", Mismatch)
+        for name, identity in sorted(expected.items()):
+            got, size = hash_file(inbox / name, nocache=True)
+            require((got, size) == identity, f"air_part_decayed:{name}", Mismatch)
             rechecked.append({"name": name, "sha256": got, "bytes": size})
         fresh = sealed({"schema": SCHEMA_FRESH, "window_id": window_id, "nonce": nonce,
                         "offload_manifest_sha256": body["offload_manifest_sha256"],
                         "air_receipt_sha256": air["receipt_sha256"],
                         "second_receipt_sha256": None if second is None else second["receipt_sha256"],
-                        "rechecked": rechecked, "checked_epoch_s": self.now(), "host": socket.gethostname()})
+                        "rechecked": sorted(rechecked, key=lambda row: row["name"]),
+                        "checked_epoch_s": self.now(), "host": socket.gethostname()})
         return {"air": air, "second": second, "fresh": fresh}
 
 

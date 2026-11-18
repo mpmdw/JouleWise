@@ -75,3 +75,14 @@ Audit base `c4351fdca` treated an R1 manifest label as an exemption even for an 
 | MED, cadence retry IDs | `test_audit_round2_retry_id_is_preserved_through_verify_and_release` verifies `C3#2` through transfer, second-copy verification, pushed finality and older-window release. `test_retry_grammar_refuses_other_hash_suffixes` pins the bounded grammar. | PASS |
 
 The seven fresh format-alias cases and the retry round-trip failed on the audit base and passed after the fix. The 212-test local suite covers the offload regressions and legacy controls, the U3 exporter, all ten frozen blobs, and documentation. The local run omitted two tests that send process signals and one test whose synthetic directory is blocked by workspace policy. The pin comparison and exporter check remain anchored to `b2e01464d` and `5a325b2ee`, respectively. Operator deployment and independent recheck remain with the lead.
+
+## Audit round 3 delta
+
+Audit base `36aadc888` allowed an obsolete client to obtain fresh v4 deletion receipts from a reviewed Air gate. The runbooks now resolve `run`, `triage` and `release` from a clean checkout at the full reviewed commit and direct the Air operator to verify the gate installed from that revision. The Air gate accepts a v4 release request only through `receipts-v4`. The MBP client uses that request after checking pushed desk finality. Legacy release keeps its existing request. The record and receipt schemas stay the same.
+
+| Finding | Regression or check | Result |
+| --- | --- | --- |
+| HIGH, obsolete runbook client | `test_magistrate_runbook_runs_only_the_reviewed_offload_checkout` executes the documented command with an obsolete executable on PATH and exercises wrong and dirty checkout refusals. `test_audit_w1_two_verified_copies_hold_until_the_final_record_is_pushed` checks refusal of the obsolete release request with both synthetic copies ready and release after pushed finality. An exact rerun with `b5af05e12` and the revised Air gate refused automatic and explicit release with all ten synthetic originals and the pack retained. | PASS |
+| MED, cached Air receipts for forbidden inventory | `test_audit_round3_air_refuses_cached_packs_that_carry_desk_artifacts` seeds verified copies under the old policy for `archive/`, `PILOT.json` and `desk.json`. Cached verification, both fresh receipt requests and MBP resume refuse each case. | PASS |
+
+The 214-test local suite passed, including the prior offload regressions, all ten frozen R1 blobs, the U3 exporter and documentation. It omitted two process-signal tests and one synthetic fixture blocked by workspace permissions. The exporter still matches `5a325b2ee`. Native deployment and independent review remain with the lead.

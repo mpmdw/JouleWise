@@ -130,6 +130,49 @@ def write_r1_format(case, plan_id, artifact=None):
     return {'record_manifest_sha256': sha(raw), 'codec': 'gzip'}
 
 
+class Runbook(unittest.TestCase):
+    def test_magistrate_runbook_runs_only_the_reviewed_offload_checkout(self):
+        runbook = (ROOT / 'docs/align/v4/HARVEST-OFF-MAGISTRATE-RUNBOOK.md').read_text()
+        section = runbook.split('**1d.', 1)[1].split('## 2.', 1)[0]
+        blocks = [block.split('\n```', 1)[0] for block in section.split('\n```sh\n')[1:]]
+        self.assertEqual(len(blocks), 1)
+        command, = blocks
+        with tempfile.TemporaryDirectory(dir=TMP_BASE) as scratch:
+            scratch = Path(scratch)
+            checkout = scratch / 'reviewed checkout'
+            script = checkout / 'scripts/offload_window.py'
+            script.parent.mkdir(parents=True)
+            script.write_text('import sys\nprint("reviewed", *sys.argv[1:3])\n')
+            path_client = scratch / 'offload_window.py'
+            path_client.write_text('#!/bin/sh\necho stale-client\n')
+            path_client.chmod(0o755)
+
+            def git(*args):
+                return subprocess.check_output(['git', '-C', str(checkout), *args], text=True).strip()
+
+            git('init', '-q')
+            git('add', 'scripts/offload_window.py')
+            git('-c', 'user.name=Synthetic', '-c', 'user.email=synthetic@example.invalid',
+                'commit', '-qm', 'synthetic reviewed checkout')
+            expected = git('rev-parse', 'HEAD')
+
+            def invoke(pin):
+                env = dict(os.environ, OFFLOAD_REPO=str(checkout), OFFLOAD_COMMIT=pin,
+                           PATH=f'{scratch}{os.pathsep}{os.environ["PATH"]}')
+                return subprocess.run(['bash', '-c', command], cwd=scratch, env=env,
+                                      text=True, capture_output=True)
+
+            good = invoke(expected)
+            self.assertEqual((good.returncode, good.stdout), (0, 'reviewed run --state-root\n'))
+            stale = invoke('0' * 40)
+            self.assertNotEqual(stale.returncode, 0)
+            self.assertEqual(stale.stdout, '')
+            script.write_text('print("dirty script")\n')
+            dirty = invoke(expected)
+            self.assertNotEqual(dirty.returncode, 0)
+            self.assertEqual(dirty.stdout, '')
+
+
 class _redirect:
     def __init__(self, sink):
         self.sink = sink
@@ -677,6 +720,15 @@ class FinalizedManifestV2(Fixture):
         self.assertTrue(self.pack_dir.exists())
         self.assert_nothing_deleted()
 
+        # The obsolete runbook client reaches this exact request in both run and release, even
+        # when the current gate has verified two copies. It cannot obtain fresh deletion proof.
+        rc, reply, _ = self.transport(f'receipts W1 {"a" * 32}')
+        self.assertEqual(rc, 3)
+        self.assertEqual(json.loads(reply)['error'], 'v4_release_needs_v4_receipts')
+        self.assert_nothing_deleted()
+        self.assertTrue(self.pack_dir.exists())
+        self.assertFalse((self.state / 'W1/deleting.json').exists())
+
         # Explicit release and the older-window sweep run through the same guard.
         with _redirect(io.StringIO()):
             rc = ow.run_release(self.args(window_id='W1'), runner=self.transport,
@@ -731,6 +783,34 @@ class FinalizedManifestV2(Fixture):
                     artifact.rmdir()
                 else:
                     artifact.unlink()
+
+    def test_audit_round3_air_refuses_cached_packs_that_carry_desk_artifacts(self):
+        for name in ('archive', 'PILOT.json', 'desk.json'):
+            with self.subTest(name=name):
+                case = FinalizedManifestV2()
+                case.setUp()
+                try:
+                    if name == 'archive':
+                        (case.record / name).mkdir()
+                    else:
+                        case.put_file(name, b'{}')
+                    options = case.packed(window_id='W1')
+                    # Seed a genuine pair of receipts through the former inventory policy.
+                    with patch.object(ow, 'check_pre_desk_inventory'):
+                        self.assertEqual(case.run_offload(**options), 0)
+                        self.assertEqual(case.confirm_second_copy(), ['W1'])
+                    nonce = 'a' * 32
+                    for command in ('verify W1', f'receipts W1 {nonce}', f'receipts-v4 W1 {nonce}'):
+                        with self.subTest(command=command):
+                            rc, reply, _ = case.transport(command)
+                            self.assertEqual(rc, 3)
+                            self.assertEqual(json.loads(reply)['error'], 'harvest_pack_contains_desk_artifact')
+                    self.assertEqual(case.run_offload(**options), 3)
+                    self.assertIn('harvest_pack_contains_desk_artifact', case.span('W1')['reason'])
+                    case.assert_nothing_deleted()
+                    self.assertTrue(case.pack_dir.exists())
+                finally:
+                    case.doCleanups()
 
     def test_pack_mode_refuses_a_v2_record(self):
         path, digest = self.v2()
