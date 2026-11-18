@@ -1020,6 +1020,12 @@
     "seam": "none"
   },
   {
+    "file": "scripts/mbp_close.py",
+    "locator": "readback:edad96b9c3d11439",
+    "command": "systemsetup",
+    "seam": "Read-only /usr/sbin/systemsetup -getusingnetworktime probe through mbp_sched.probe_command. Close tests mock subprocess.run."
+  },
+  {
     "file": "scripts/quiet_guard.py",
     "locator": "privileged_command:650aa89ad0060b30",
     "command": "sudo",
