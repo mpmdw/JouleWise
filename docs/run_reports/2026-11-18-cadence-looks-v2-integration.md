@@ -37,7 +37,8 @@ row 9 is implemented by the description registration in RL-181 §2.1.
 All three candidates are drafts beside `lm-qual-01.manifest.json`. The
 transfer draft carries two relocated paths and the new deferred commitment
 pin described below. The transfer output schema matches `4e5c2ad1d`.
-Audit round two updated the ported transfer worker's exception handling.
+Audit rounds two and three updated the ported transfer worker's exception
+handling and failure-notice delivery.
 The qualification manifest remains
 `d6fde6918023ea69051da45a6b0e3c06ffcfdafd8975a1773989324fa7c9bdab`
 and its validator remains Git blob `35bbd6b2f5`.
@@ -131,6 +132,29 @@ zero failures, zero errors and one expected v1 skip.
 The candidate manifest digests above still apply. The independent
 commitments file now hashes to
 `7256966afa8c0a1dcd9fd0b3e8517bbc28d1a4c5678a181616d9949e7e2ec27d`.
+
+## Audit round 3 dispositions
+
+The review at `7bae822c` reported one verified HIGH, two MED and one LOW.
+It refuted the earlier Python exit, schema dispatch, final marker and
+kit and span substitution findings. The HIGH triggered the pipeline's
+return to spec. Commit `690150d49` freezes the revised exit contract
+with four failing subcases on the audited worker. Commit `0389ff85b`
+implements it. This records the three-round disposition for the lead.
+
+| Severity | Root cause | Disposition and regression |
+| --- | --- | --- |
+| HIGH | `impl-bug` | A lost notice consumer could let a write exception or buffered shutdown flush replace the selected exit status. The worker now chooses its status from the read boundary, isolates notice transport failure, and detaches failed stream endpoints before shutdown. `test_transfer_status_survives_lost_notice_consumer` and `test_transfer_status_survives_initial_buffered_stream_failure` passed. |
+| MED | `integration-seam` | Transfer stage-1 owner follow-up. Check every observed start against its authorized arm bounds before using the date map. The historical roster, duplicate-start and final-window checks kept their verified results. |
+| MED | `integration-seam` | Public registration-source authorization remains an admission integration follow-up. A valid qualification or transfer final can open the explicit registration path. The CLI currently accepts caller-supplied registration files, including synthetic ones. A production restriction needs an authoritative public source and enforcement before the open. The audit intercepted its synthetic tripwire before filesystem access. |
+| LOW | — | The #821 registration and validator, pinned interim paths, current candidate manifests, ledger and transfer output schema pass preservation checks. The independent v1 schema check passed. |
+
+The auditor's original pipe probe now exits 2 for both draft-ledger and
+missing-input refusals, with either a connected or disconnected reader.
+The connected cases deliver the exact refusal. The post-read regression
+checks status 1, the exact connected notice and a retained reservation.
+The niced synthetic shard reported 54 tests, zero failures, zero errors
+and one expected v1 skip.
 
 ## RL-185 and lead handoff
 
