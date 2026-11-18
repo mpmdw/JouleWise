@@ -9,6 +9,7 @@
   "foreign_processes": [],
   "high_power_marker": false,
   "owner_stop": false,
+  "maintenance_active": false,
   "launches": [],
   "closes": [],
   "refusals": [],

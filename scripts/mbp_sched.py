@@ -10,6 +10,8 @@ Legacy inputs use entry_id, kit_sha256 and t0_epoch. Order launches by sequence
 or by boot_id, boot_order and monotonic_ns, with append order as the legacy
 fallback. A CLOSE adds kind, ended_epoch, clean and the RESTORE_READBACKS.
 A GATE carries its id. REFUSAL, STOP and READY use the respective facts fields.
+When a facts snapshot and a ledger are both supplied, the ledger must retain
+every launch and close observation in the snapshot.
 
 Probe sources that need no native command (for example meter readiness, the
 High Power marker and queue commit) can be supplied via --host-facts. Probe
@@ -80,6 +82,10 @@ def parse_json(source):
 
 def integer(value):
     return type(value) is int and value >= 0
+
+
+def positive_integer(value):
+    return integer(value) and value > 0
 
 
 def number(value):
@@ -221,7 +227,7 @@ ENTRY_OPTIONAL = {
 }
 ENTRY_PARAMS = {
     "window": IS_OBJECT, "date_caps": array(IS_OBJECT), "not_on_dates_of": array(identifier),
-    "batch_clear": boolean, "soak_end_s": integer, "group": identifier, "legs": integer,
+    "batch_clear": boolean, "soak_end_s": integer, "group": identifier, "legs": positive_integer,
     "after": array(identifier), "gates": array(identifier), "launch_window_local":
         lambda value: array(clock_time)(value) and len(value) == 2,
     "kill_margin_s": integer, "pilot": boolean, "hygiene_change": boolean,
@@ -320,6 +326,13 @@ def validate_queue(path, data, rules, errors, check_references):
                 errors.add(path, "UNBOUND_DATE_RULE", f"{entry_id}: configured dates require a LIVE window rule")
         if isinstance(params, dict):
             validate_entry_params(path, where, params, errors)
+            if entry.get("kind") == "counted":
+                if params.get("date_caps") and not identifier(params.get("group")):
+                    errors.add(path, "MISSING_COUNT_METADATA",
+                               f"{where}.params.group is required for a counted date cap")
+                if (params.get("date_caps") or params.get("group")) and "legs" not in params:
+                    errors.add(path, "MISSING_COUNT_METADATA",
+                               f"{where}.params.legs is required for grouped counted work")
     if check_references and not standing:
         errors.add(path, "NO_STANDING_FILLER", "no unfinished repeating filler free of window, dependency and session_route")
 
@@ -479,15 +492,17 @@ def latest_attempt(attempts):
     if all("boot_order" in row for row in attempts):
         order = max(row["boot_order"] for row in attempts)
         in_boot = [row for row in attempts if row["boot_order"] == order]
-        latest_boots = {row.get("boot_id") for row in in_boot}
-        if len(latest_boots) != 1:
+        latest_boots = {row["boot_id"] for row in in_boot if "boot_id" in row}
+        if len(latest_boots) > 1:
             return None, "latest boot order is ambiguous"
-        newest_boot = latest_boots.pop()
-    else:
-        newest_boot = next(reversed(dict.fromkeys(row.get("boot_id") for row in attempts)))
+    elif all("boot_id" in row for row in attempts):
+        newest_boot = next(reversed(dict.fromkeys(row["boot_id"] for row in attempts)))
         in_boot = [row for row in attempts if row.get("boot_id") == newest_boot]
-    if (newest_boot is not None or "boot_order" in in_boot[0]) and all(
-            "monotonic_ns" in row for row in in_boot):
+    else:
+        # A missing boot stamp says nothing about which boot contained the
+        # attempt. Keep every attempt in the append-ordered history.
+        return attempts[-1], None
+    if all("monotonic_ns" in row for row in in_boot):
         newest = max(in_boot, key=lambda row: row["monotonic_ns"])
         if sum(row["monotonic_ns"] == newest["monotonic_ns"] for row in in_boot) != 1:
             return None, "latest monotonic launch stamp is ambiguous"
@@ -630,6 +645,10 @@ class Scheduler:
             ready = facts.get("meter_ready")
             return missing("meter_ready") if ready is None else Check("meter or collector unavailable", ready)
         if test == "host_clean":
+            errors = facts.get("errors") or {}
+            if "attempt_history" in errors:
+                return fails(errors["attempt_history"] if string(errors["attempt_history"])
+                             else "launch and close evidence conflict")
             if self.closes is None:
                 return missing("closes")
             if self.history.order_error:
@@ -685,7 +704,7 @@ class Scheduler:
                 return fails("owner maintenance or stop is active", self.now + retry if retry else None)
             if stop is None:
                 return missing("owner_stop")
-            if maintenance is None and "maintenance_active" in facts:
+            if maintenance is None and (params.get("maintenance_marker") or "maintenance_active" in facts):
                 return missing("maintenance_active")
         if test == "copy_debt" and self.newest is not None:
             ended = self.newest["ended_epoch"]
@@ -745,31 +764,31 @@ class Scheduler:
             return None
         launched = set()
         counts = Counter()
-        unknown = False
+        unknown = set()
         for row, closes in self.history.runs():
             entry = self.by_id.get(row["entry_id"])
-            params = entry["params"] if entry is not None and kit_matches(row, entry) else {}
-            if row["t0_epoch"] is None:
-                unknown = True
+            if entry is not None and not kit_matches(row, entry):
+                entry = None
+            params = entry["params"] if entry is not None else {}
+            t0 = row["t0_epoch"]
+            if t0 is not None and self.local(t0).date() != day:
                 continue
-            if self.local(row["t0_epoch"]).date() != day:
-                continue
-            launched.add(row["entry_id"])
+            if t0 is not None:
+                launched.add(row["entry_id"])
             facts = (row, *closes)
+            kinds = {record["kind"] for record in facts if record.get("kind") is not None}
+            if not kinds and entry is not None:
+                kinds.add(entry["kind"])
+            if kinds and "counted" not in kinds:
+                continue
             groups = {record["group"] for record in facts if record.get("group") is not None}
             legs = {record["legs"] for record in facts if "legs" in record}
-            if len(groups) > 1 or len(legs) > 1:
-                unknown = True
-                continue
-            group = next(iter(groups), params.get("group"))
-            if group:
-                count = next(iter(legs), params.get("legs"))
-                if count is None:
-                    unknown = True
-                else:
-                    counts[group] += count
-            elif entry is None and not any("group" in record for record in facts) and row.get("kind") in (None, "counted"):
-                unknown = True
+            group = next(iter(groups), params.get("group")) if len(groups) <= 1 else None
+            count = next(iter(legs), params.get("legs")) if len(legs) <= 1 else None
+            if kinds != {"counted"} or t0 is None or group is None or not positive_integer(count):
+                unknown.add(group)
+            else:
+                counts[group] += count
         return counts, launched, unknown
 
     def date_caps(self, entry, day):
@@ -778,12 +797,15 @@ class Scheduler:
         if not caps and not excludes:
             return Check()
         history = self.history_for_date(day)
-        if history is None or history[2]:
-            return missing("launches or closes t0 history")
-        counts, _, _ = history
+        if history is None:
+            return missing("launches or closes date history")
+        counts, _, unknown = history
+        relevant_groups = {cap["group"] for cap in caps} | set(excludes)
+        if None in unknown or unknown.intersection(relevant_groups):
+            return missing("counted date history (kind, t0, group or legs)")
         for cap in caps:
             group = cap["group"]
-            added = params.get("legs", 1) if params.get("group") == group else 0
+            added = params["legs"] if params.get("group") == group else 0
             if counts[group] + added > cap["max"]:
                 if added > cap["max"]:
                     return fails(f"{group} entry legs exceed its date cap")
@@ -1260,6 +1282,20 @@ def ledger_rows(path, errors):
         errors.add(path, "READ_LEDGER", str(err))
 
 
+def missing_observation(observed, ledger):
+    """Find the first snapshot observation absent from the ordered ledger."""
+    events = iter(ledger)
+    for observation in observed or ():
+        # Copy verification can have been appended separately since the snapshot.
+        known = {key: value for key, value in observation.items()
+                 if value is not None and (key != "copy_verified" or value is True)}
+        if not any(identity(row) == identity(observation)
+                   and all(row.get(key) == value for key, value in known.items())
+                   for row in events):
+            return observation
+    return None
+
+
 def overlay_ledger(facts, path, errors):
     launches = []
     closes = []
@@ -1323,6 +1359,18 @@ def overlay_ledger(facts, path, errors):
         for close in closes if close.get("copy_verified") is not True
     ]
     closes.reverse()
+    observations = dict(facts.get("errors") or {})
+    for key, parsed in (("launches", launches), ("closes", closes)):
+        omitted = missing_observation(facts.get(key), parsed)
+        if omitted is not None:
+            label = "launch" if key == "launches" else "close"
+            observations["attempt_history"] = (
+                f"supplied ledger omits or contradicts the observed {label} for {attempt_name(omitted)}")
+            facts["errors"] = observations
+            return
+    observations.pop("attempt_history", None)
+    if observations or "errors" in facts:
+        facts["errors"] = observations
     facts.update(launches=launches, closes=closes, uncopied=uncopied, refusals=refusals,
                  gates=gates, ready=list(ready.values()), stops=stops)
 
@@ -1556,6 +1604,9 @@ def maintenance_active(args, rules, errors):
 
 def probe(args, queue, rules, supplied):
     failures = {}
+    supplied_errors = supplied.get("errors") or {}
+    if "attempt_history" in supplied_errors:
+        failures["attempt_history"] = supplied_errors["attempt_history"]
     power = probe_command("/usr/bin/pmset -g batt", parse_power, "power", failures)
     disk = probe_command("/bin/df -g /", parse_disk, "disk_free_gib", failures)
     labels = probe_command("/bin/launchctl list", parse_labels, "labels_loaded", failures)
@@ -1589,7 +1640,6 @@ def probe(args, queue, rules, supplied):
         except (OSError, ValueError, RecursionError) as err:
             failures["fence"] = str(err)
     else:
-        supplied_errors = supplied.get("errors") or {}
         if "fence" in supplied_errors:
             failures["fence"] = "the supplied fence fact is unreadable"
         elif "fence" in supplied:

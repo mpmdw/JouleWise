@@ -178,7 +178,7 @@
               },
               "legs": {
                 "type": "integer",
-                "minimum": 0
+                "minimum": 1
               },
               "after": {
                 "type": "array",
@@ -266,7 +266,45 @@
           "repeat",
           "product"
         ],
-        "additionalProperties": false
+        "additionalProperties": false,
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "kind": {
+                  "const": "counted"
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "params": {
+                  "dependentRequired": {
+                    "group": [
+                      "legs"
+                    ]
+                  },
+                  "if": {
+                    "required": [
+                      "date_caps"
+                    ],
+                    "properties": {
+                      "date_caps": {
+                        "minItems": 1
+                      }
+                    }
+                  },
+                  "then": {
+                    "required": [
+                      "group",
+                      "legs"
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        ]
       }
     }
   },

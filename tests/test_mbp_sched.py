@@ -595,6 +595,123 @@ class SchedulerTests(unittest.TestCase):
         result = self.next()
         self.assertEqual((result["decision"], result.get("until_epoch")), ("WAIT", opening))
 
+    def test_partial_boot_metadata_does_not_hide_an_attempt(self):
+        now = self.facts["now_epoch"]
+        a = launch("A", now - 90, span_id="span-A")
+        b = launch("B", now - 60, span_id="span-B", boot_id="boot-1", monotonic_ns=600)
+        c = launch("C", now - 30, span_id="span-C")
+        ac, bc, cc = [ledger_close(row, row["t0_epoch"] + 1) for row in (a, b, c)]
+        cc["restore_readbacks"]["feeds_stopped"] = False
+        self.facts["receipts"] = [receipt(row, row["t0_epoch"] + 1) for row in (a, b, c)]
+        self.write_events(a, ac, b, bc, c)
+        result = self.next("--ledger", self.ledger)
+        self.assertEqual(result, {"decision": "CLOSE_OWED", "entry": "span-C"})
+        self.write_events(a, ac, b, bc, c, cc)
+        result = self.next("--ledger", self.ledger)
+        self.assertEqual((result["decision"], result["rule"]), ("HALT", "host-clean"))
+        self.assertIn("span-C", result["detail"])
+
+    def test_ledger_cannot_discard_observed_attempt_or_failed_close(self):
+        now = self.facts["now_epoch"]
+        b = launch("B", now - 60, sequence=2, span_id="span-B")
+        c = launch("C", now - 30, sequence=3, span_id="span-C")
+        bc, cc = [ledger_close(row, row["t0_epoch"] + 1) for row in (b, c)]
+        cc["restore_readbacks"]["feeds_stopped"] = False
+        self.facts["launches"] = [{k: v for k, v in row.items() if k != "event"} for row in (b, c)]
+        self.facts["closes"] = [
+            {**{k: v for k, v in row.items() if k not in ("event", "restore_readbacks")},
+             "restore_proven": all(row["restore_readbacks"].values())} for row in (cc, bc)
+        ]
+        self.facts["receipts"] = [receipt(row, row["t0_epoch"] + 1) for row in (b, c)]
+        for events in ((b, bc), (b, bc, c), (b, bc, c, ledger_close(c, now - 29)), (b, bc, c, cc)):
+            with self.subTest(events=events):
+                self.write_events(*events)
+                result = self.next("--ledger", self.ledger)
+                self.assertEqual((result["decision"], result["rule"]), ("HALT", "host-clean"))
+                self.assertIn("span-C", result["detail"])
+
+        self.write_events(b, bc)
+        out = self.directory / "reconciled-probe.json"
+        with patch.object(sched.subprocess, "run", side_effect=probe_child):
+            self.call("probe", "--out", out, "--self-pid", 10, "--host-facts", self.facts_path,
+                      "--ledger", self.ledger, status=3)
+        self.assertIn("span-C", json.loads(out.read_text())["errors"]["attempt_history"])
+
+        # A later correction is usable when the append-only log retains the failed readback.
+        self.write_events(b, bc, c, cc, ledger_close(c, now - 28))
+        self.assertEqual(self.next("--ledger", self.ledger)["entry"], "f0-part-c")
+
+    def test_ledger_cannot_reorder_observed_legacy_attempts(self):
+        now = self.facts["now_epoch"]
+        a, b = launch("A", now - 60), launch("B", now - 30)
+        self.facts["launches"] = [{k: v for k, v in row.items() if k != "event"} for row in (a, b)]
+        self.facts["receipts"] = [receipt(a, now - 59)]
+        self.write_events(b, a, ledger_close(a, now - 59))
+        self.assertEqual(self.next("--ledger", self.ledger)["rule"], "host-clean")
+
+    def test_counted_date_caps_require_an_explicit_positive_candidate_leg_count(self):
+        now = self.facts["now_epoch"]
+        prior = launch("previous", now - 600, span_id="prior-span", kind="counted",
+                       group="dev-mixed", legs=11)
+        self.write_events(prior, ledger_close(prior, now - 590))
+        self.facts["receipts"] = [receipt(prior, now - 590)]
+        candidate = self.add("dev-next", "counted", ["registered-window"], {
+            "group": "dev-mixed", "legs": 6, "date_caps": [{"group": "dev-mixed", "max": 12}],
+        }, argv=["synthetic-counted", "--legs", "6"])
+        self.assertEqual(self.next("--ledger", self.ledger)["entry"], "f0-part-c")
+        prior.pop("group")
+        self.write_events(prior, ledger_close(prior, now - 590))
+        self.assertEqual(self.next("--ledger", self.ledger)["entry"], "f0-part-c")
+        for legs in (None, 0):
+            with self.subTest(legs=legs):
+                if legs is None:
+                    candidate["params"].pop("legs")
+                else:
+                    candidate["params"]["legs"] = legs
+                for command in ("validate", "next"):
+                    self.assertIn("legs", self.call(command, status=2)[1])
+        candidate["params"]["legs"] = 6
+        candidate["params"].pop("group")
+        self.assertIn("group", self.call("validate", status=2)[1])
+
+    def test_filler_group_and_legs_do_not_displace_ready_counted_work(self):
+        now = self.facts["now_epoch"] = epoch(hour=22, minute=39)
+        candidate = self.add("dev-next", "counted", ["registered-window", "launcher-admits"], {
+            "window": {"earliest_epoch": epoch(18), "latest_epoch": epoch(18, 23, 59, 59)},
+            "group": "dev-mixed", "legs": 6, "date_caps": [{"group": "dev-mixed", "max": 12}],
+            "not_on_dates_of": ["instrument"],
+        }, plan_argv=["synthetic-plan"])
+        self.facts["plans"] = {candidate["id"]: {
+            "rc": 0, "signature": sched.plan_signature(candidate, self.facts["queue_commit"]),
+        }}
+        ready = {"event": "READY", "entry_id": candidate["id"], "effective": True}
+        for kind in ("product_filler", "diagnostic_filler", "counted"):
+            for group in ("dev-mixed", "instrument"):
+                with self.subTest(kind=kind, group=group):
+                    prior = launch("previous", now - 300, span_id="prior-span",
+                                   kind=kind, group=group, legs=12)
+                    self.write_events(prior, ledger_close(prior, now - 290), ready)
+                    self.facts["receipts"] = [receipt(prior, now - 290)]
+                    expected = "f0-part-c" if kind == "counted" else "dev-next"
+                    self.assertEqual(self.next("--ledger", self.ledger)["entry"], expected)
+
+    def test_registered_maintenance_observation_must_be_explicit(self):
+        marker = self.directory / "active-maintenance"
+        rule = next(row for row in self.rules if row["test"] == "owner_stop")
+        rule["params"]["maintenance_marker"] = str(marker)
+        out = self.directory / "probe.json"
+        marker.touch()
+        with patch.object(sched.subprocess, "run", side_effect=probe_child), patch.object(
+                sched.time, "time", return_value=self.facts["now_epoch"]):
+            self.call("probe", "--out", out, "--self-pid", 10, "--host-facts", self.facts_path)
+        self.facts = json.loads(out.read_text())
+        self.assertEqual(self.next()["decision"], "WAIT")
+        self.facts["maintenance_active"] = None
+        self.assertEqual(self.next()["rule"], "owner-stop")
+        self.facts.pop("maintenance_active")
+        result = self.next()
+        self.assertEqual((result["decision"], result["rule"]), ("HALT", "owner-stop"))
+
 
 if __name__ == "__main__":
     unittest.main()
