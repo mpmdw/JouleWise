@@ -204,6 +204,7 @@ class ExportTests(unittest.TestCase):
             registered_selection = root / (
                 'configs/campaigns/align_v4/registration/u3_sources/selection.json')
             registered_selection.parent.mkdir(parents=True)
+            roster = registered_selection.parents[2] / 'collection_plan.json'
             early = root / 'pilot' / 'align-pilot-v3-episodes-a-e01'
             late = early.with_name('align-pilot-v3-episodes-a-e09')
             anchor = root / 'other' / early.name
@@ -214,8 +215,9 @@ class ExportTests(unittest.TestCase):
             selection = {'sessions': [{'session': 'p4', 'candidates': [
                 {'ordinals': [1, 9], 'early_bundle': str(early), 'late_bundle': str(late)}]}]}
             registered_selection.write_text(json.dumps(selection))
+            roster.write_text(json.dumps({'members': [{'run_id': early.name}]}))
             init_git_fixture(root, '-q')
-            for args in (['add', str(registered_selection)],
+            for args in (['add', str(registered_selection), str(roster)],
                          ['-c', 'user.name=Synthetic', '-c', 'user.email=synthetic@example.test',
                           '-c', 'commit.gpgsign=false', '-c', 'core.hooksPath=/dev/null',
                           'commit', '-qm', 'Register synthetic selection']):
@@ -237,6 +239,13 @@ class ExportTests(unittest.TestCase):
                 refused = export_cli.pilot_pairs(forged_selection)
                 self.assertEqual(refused['pairs'], [])
                 self.assertIn('refused', refused['unavailable_sessions'][0]['reasons'][0])
+                read.assert_not_called()
+                # Audit round 1: a dirty roster cannot erase the reuse restriction.
+                roster.write_text(json.dumps({'members': []}))
+                registered_selection.write_text(json.dumps(selection))
+                refused = export_cli.pilot_pairs(forged_selection)
+                self.assertEqual(refused['pairs'], [])
+                self.assertIn('outside the committed pilot selection', refused['unavailable_sessions'][0]['reasons'][0])
                 read.assert_not_called()
 
     def test_policy_template_is_the_ruled_roster_and_assemble_refuses_placeholders(self):
