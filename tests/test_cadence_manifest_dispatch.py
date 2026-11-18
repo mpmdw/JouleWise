@@ -24,6 +24,7 @@ INSTRUMENT = LOOKS / "lm-inst-01.manifest.json"
 STABILITY = LOOKS / "lm-stab-01.manifest.json"
 H = sha256(b"synthetic digest").hexdigest()
 INTERIM_REF = "2f67206528f46d227815355ce701bd738233f647"
+RAIL_SUM_COLUMNS = ["cpu_power", "gpu_power", "ane_power"]
 CUSTODY = {
     INSTRUMENT: ["hold.json", "turn.json", "gain.json", "edges.json", "stdout", "stderr"],
     STABILITY: ["hold.json", "turn.json", "date_spreads.json", "context.json", "stdout", "stderr"],
@@ -106,7 +107,7 @@ class VariantContractTests(unittest.TestCase):
                 document = json.loads(source.read_bytes())
                 options = []
                 if document["look_kind"] == "description":
-                    document.update(status="committed", rail_sum_columns=["synthetic_gpu", "synthetic_cpu"])
+                    document["status"] = "committed"
                 else:
                     document["status"] = "registered"
                     registration.write_bytes(encode(document))
@@ -174,14 +175,40 @@ class VariantContractTests(unittest.TestCase):
         later.update(look_id="lm-stab-02", status="committed")
         for pin in later["code_pins"].values():
             pin["sha256"] = H
-        with self.assertRaisesRegex(dispatch.ManifestError, "rail_sum columns"):
-            dispatch.validate_v2(encode(later), final=True)
-        later["rail_sum_columns"] = ["synthetic_gpu", "synthetic_cpu"]
         with self.assertRaisesRegex(dispatch.ManifestError, "KITS.json index"):
             dispatch.validate_v2(encode(later), final=True)
         later["kit_index_path"] = "f2-stab/KITS.json"
         self.assertEqual(dispatch.validate_v2(encode(later), final=True)["outputs"]["custody_names"],
                          CUSTODY[STABILITY])
+
+    def test_rail_sum_columns_follow_rl185(self):
+        for source in CUSTODY:
+            original = json.loads(source.read_bytes())
+            for final in (False, True):
+                document = deepcopy(original)
+                if final:
+                    document["status"] = "committed"
+                    for pin in document["code_pins"].values():
+                        pin["sha256"] = H
+                with self.subTest(source=source.name, final=final):
+                    valid = dispatch.validate_v2(encode(document), final=final)
+                    self.assertEqual(valid.get("rail_sum_columns"), RAIL_SUM_COLUMNS)
+                    for columns in (
+                        ["gpu_power"],
+                        ["cpu_power", "gpu_power", "gpu_power"],
+                        list(reversed(RAIL_SUM_COLUMNS)),
+                        ["cpu_power", "gpu_power", "other_power"],
+                    ):
+                        trial = dict(document, rail_sum_columns=columns)
+                        with self.subTest(columns=columns), self.assertRaisesRegex(
+                            dispatch.ManifestError, "rail_sum_columns"
+                        ):
+                            dispatch.validate_v2(encode(trial), final=final)
+                    del document["rail_sum_columns"]
+                    with self.assertRaisesRegex(dispatch.ManifestError, "rail_sum_columns"):
+                        dispatch.validate_v2(encode(document), final=final)
+                    document["channels"].remove("rail_sum")
+                    dispatch.validate_v2(encode(document), final=final)
 
     def test_registered_bytes_unchanged(self):
         self.assertEqual(
@@ -312,7 +339,7 @@ class DescriptionManifestTests(unittest.TestCase):
             "look_id": "lm-inst-01", "title": "Synthetic design", "rulings": ["RL-181 §2.1"],
             "kits": [{"kit_id": f"f2-inst-{i:02}", "sha256": H} for i in range(1, 4)],
             "channels": ["gpu_rail", "rail_sum", "dc_in"], "when": "after effective freeze 2",
-            "rail_sum_columns": ["synthetic_gpu", "synthetic_cpu"],
+            "rail_sum_columns": RAIL_SUM_COLUMNS,
             "stage1": "Synthetic operational roster",
             "freeze2": {"look_id": "lm-interim-01", "hash_key": "freeze2_sha256", "authority": "RL-183 §2.3"},
             "prints": [{"description": name, "destination": name} for name in names],
