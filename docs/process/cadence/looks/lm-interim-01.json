@@ -513,7 +513,7 @@
       },
       {
         "path": "joulewise/cadence_looks/inclusion_34.py",
-        "sha256": "fb774e07e7522f712e7c40d8f847799face78e2435a40d30d2f7d3d314de249c"
+        "sha256": "bc1670020c794f14f3d4e68867cf8e4e40fce477da7213579f4792b3c740e9c5"
       },
       {
         "path": "joulewise/cadence_looks/time_fields.py",
@@ -529,11 +529,11 @@
       },
       {
         "path": "scripts/cadence_look_run.py",
-        "sha256": "617ba1efd838389b6aae0f2c1b2dbdde571a9635e6968d20b8556e6822c9c9b0"
+        "sha256": "efdf3a24f078176cbac3795a68deabacf108c32ed10a71d214401d31364b697f"
       },
       {
         "path": "scripts/cadence_look_manifest.py",
-        "sha256": "797fe60a014e9300652545a51831fedb63dd2935382c7ccb856ffc001ed8a40d"
+        "sha256": "e80d1b9c2b2174a8606fcd70da32d63b85366ed451430dcf6586102872048389"
       },
       {
         "path": "joulewise/cadence_looks/schema_check.py",
@@ -541,17 +541,17 @@
       },
       {
         "path": "joulewise/cadence_looks/interim_release.py",
-        "sha256": "b8211466f22315b8e5e4136f0fab9dc9b9e54ea87811cc55cb95b065f1ed9d02"
+        "sha256": "48f529ddd2a7742c2457c112401150b36a2e3d5a82e1781878051bbf480f99eb"
       },
       {
         "path": "joulewise/cadence_looks/interim_twin.py",
-        "sha256": "e599993f3540b00d9737413bf364f5ba466f779d9008a516a7aa3a50b74c52b6"
+        "sha256": "2f3725969af20670b1199f71105a48bac036506d7478e924cc96152a2a7c6645"
       }
     ],
     "runtime": "Python standard library plus numpy, no scipy, run with -I. Stage 2 refuses, before the first energy read, unless its numpy version equals the one in the committed stage-1 output.",
     "authors": {
       "analyst_seat": "the Opus builder the lead dispatches: writes fit_interim.py and scripts/cadence_look_run.py, and is the one seat that runs the look",
-      "twin": "a Sol seat writes the same arithmetic from RL-166 and the synthetic layout, without sight of the Opus code; its pinned code runs once on campaign data, inside stage 2, and writes only in custody",
+      "twin": "a Sol seat writes the same arithmetic from RL-166 and the synthetic layout, without sight of the Opus code; its pinned code runs once on campaign data, inside stage 2, and writes only in custody. The twin calls the pinned KM003C decoder km003c_parse.parse on each stream file (RL-183a).",
       "manifest_builder": "writes inclusion_34.py and step3_roster.py; neither reads energy for a verdict",
       "cold_seat": "Mythos 5.2; writes none of it"
     },
@@ -824,7 +824,7 @@
       },
       {
         "path": "joulewise/authentication_io.py",
-        "sha256": "bd1391685ec0e1a1a96b1018c053d1d92c2dcac50c4244970835e0d663f6879b"
+        "sha256": "5a959cfe09b932bb043945b95e939cac56b23febf519cc9f08dce780f336c492"
       },
       {
         "path": "joulewise/axi_decode_config.py",
@@ -832,7 +832,7 @@
       },
       {
         "path": "joulewise/bundle_read.py",
-        "sha256": "dacba842582b2a70fecc3cb5c9502b9ebebc144d7c639657aace6c4a16cafb8d"
+        "sha256": "8eeae4f575d59447d372ac7184362365cce3b118125791465069ae1a14218403"
       },
       {
         "path": "joulewise/cadence_looks/__init__.py",
@@ -840,15 +840,15 @@
       },
       {
         "path": "joulewise/cadence_looks/manifest.py",
-        "sha256": "4587f256a52d915d10b9e542f7c0098a27211773033b3a65f9fb9dbaf83d753d"
+        "sha256": "1446f55cfe8bfa0b489b3beefbf0b275763f5bfdbbdd4984ed0f10fad8acd332"
       },
       {
         "path": "joulewise/desk_compress.py",
-        "sha256": "310dae22bec5690899fcc61652086d102a44acee68734622ff99d7df5ded0e55"
+        "sha256": "ac770c9407dad936cc742957b6f5673a1b69523156aa2be9baf7de8eb2b56777"
       },
       {
-        "path": "joulewise/desk_restore.py",
-        "sha256": "b8d5d301d59ba41cc77e201122a48781dd3f96aede94a799afa7a135864d35f9"
+        "path": "joulewise/analysis_run_cache.py",
+        "sha256": "6eb99fe2f621fc4741ebd5e8063d9444499ec315b88d74c8bc716dec2ba60de7"
       },
       {
         "path": "joulewise/external/__init__.py",
@@ -868,7 +868,7 @@
       },
       {
         "path": "joulewise/schemas.py",
-        "sha256": "344b12ce178b8acb212059097a4ade507812a4be1673a6552ec221a83055e1d1"
+        "sha256": "f47fbf68c2c4a931854995d1258425b476c4bc8a686dfccf011d9caef092cc3b"
       },
       {
         "path": "joulewise/suite.py",
@@ -888,7 +888,7 @@
     },
     "twin": {
       "path": "scripts/cadence_interim_twin.py",
-      "sha256": "a79ccaa4b15e8601500c1653aa1d5c161f4c830678500f42be7b5737dc7ef59c"
+      "sha256": "91ca54ab8747ede3d0fe8826e1b7d06ef721bce94de52969b9508a3eac890aab"
     }
   },
   "inclusion": {
@@ -922,7 +922,7 @@
         "reads_energy": false,
         "code": {
           "path": "joulewise/cadence_looks/inclusion_34.py",
-          "sha256": "fb774e07e7522f712e7c40d8f847799face78e2435a40d30d2f7d3d314de249c"
+          "sha256": "bc1670020c794f14f3d4e68867cf8e4e40fce477da7213579f4792b3c740e9c5"
         },
         "cite": [
           "RL-149 §2.4",
@@ -938,7 +938,7 @@
         "reads_energy": false,
         "code": {
           "path": "joulewise/cadence_looks/inclusion_34.py",
-          "sha256": "fb774e07e7522f712e7c40d8f847799face78e2435a40d30d2f7d3d314de249c"
+          "sha256": "bc1670020c794f14f3d4e68867cf8e4e40fce477da7213579f4792b3c740e9c5"
         },
         "cite": [
           "RL-149 §2.4",
@@ -984,7 +984,7 @@
   "outputs": {
     "schema": {
       "path": "docs/process/cadence/looks/lm-interim-01.output.schema.json",
-      "sha256": "4ad2b7aebad1df388168bdd27452ca781fb3b5cc981f1b2b57ff0a7d4addeb2b"
+      "sha256": "5ebe7fa6cd1dd2d24ef2ec6a07171d4463108fdf2beb23151f8811feec08b803"
     },
     "words": {
       "qualified_interim": [

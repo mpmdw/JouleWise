@@ -31,6 +31,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import os
 from pathlib import Path, PurePosixPath
 import re
@@ -45,6 +46,7 @@ LEDGER_SCHEMA = "joulewise.cadence_span_ledger.v1"
 LOOK_LEDGER_SCHEMA = "joulewise.cadence_look_ledger.v1"
 LOOK_LEDGER_PATH = "docs/process/cadence/looks/LOOKS.json"
 LOOK_LEDGER_STATUSES = ("draft", "committed", "stage1_committed", "run", "frozen", "superseded", "failed", "interrupted")
+_REGISTERED_QUAL_ID = re.compile(r"lm-qual-[0-9]{2}")
 # What each status needs recorded, so that "committed" is checkable (Mythos cold seat 8).
 # verdicts_sha256: inclusion_34.py's verdict file, committed with the roster's hash before stage 1 runs, so stage 1
 # can authenticate both inputs (Mythos round-3 N8).
@@ -282,6 +284,23 @@ class ManifestError(ValueError):
         super().__init__("; ".join(self.problems))
 
 
+def strict_json(raw):
+    """Decode pinned writer JSON without ambiguous keys or nonfinite numbers."""
+    def unique(pairs):
+        result = dict(pairs)
+        if len(result) != len(pairs):
+            raise ManifestError(["writer JSON has duplicate keys"])
+        return result
+
+    def number(token):
+        value = float(token)
+        if not math.isfinite(value):
+            raise ManifestError(["writer JSON has a nonfinite number"])
+        return value
+
+    return json.loads(raw, object_pairs_hook=unique, parse_float=number, parse_constant=number)
+
+
 # ---------------------------------------------------------------------------------------------- helpers
 
 def _closed(obj, keys, where, problems, optional=()):
@@ -359,6 +378,10 @@ def code_refs(doc, *, look_code_only=False):
         for i, ref in enumerate(fit.get("dependencies") or []):
             if isinstance(ref, dict):
                 out.append((f"fit.dependencies[{i}]", ref.get("path"), ref.get("sha256")))
+        for i, block in enumerate((doc.get("reads") or {}).get("blocks") or []):
+            if isinstance(block, dict) and block.get("kit_sha256") is not None and isinstance(block.get("block_id"), str):
+                out.append((f"reads.blocks[{i}].kit_sha256",
+                            f"docs/process/cadence/kits/cl-{block['block_id']}.json", block["kit_sha256"]))
     for i, ref in enumerate(fit.get("code") or []):
         if isinstance(ref, dict):
             out.append((f"fit.code[{i}]", ref.get("path"), ref.get("sha256")))
@@ -1191,6 +1214,8 @@ def validate_look_ledger(doc, repo=None):
                 if not (isinstance(row.get(k), str) and SHA_RE.fullmatch(row[k])):
                     problems.append(f"{where}: status {st} needs {k} (Mythos cold seat 8)")
         lid = row.get("look_id")
+        registered = (st == "registered" and isinstance(lid, str) and _REGISTERED_QUAL_ID.fullmatch(lid)
+                      and row.keys() == {"look_id", "manifest_path", "sha256", "status"})
         if "execution_host" in row and not _text(row["execution_host"]):
             problems.append(f"{where}.execution_host: a host id")
         if "public_root" in row and not _relative_directory(row["public_root"]):
@@ -1219,7 +1244,7 @@ def validate_look_ledger(doc, repo=None):
         if not (isinstance(lid, str) and LOOK_ID_RE.fullmatch(lid)) or lid in seen:
             problems.append(f"{where}.look_id: unique lm-<id>")
         seen.add(lid)
-        if row.get("status") not in LOOK_LEDGER_STATUSES:
+        if st not in LOOK_LEDGER_STATUSES and not registered:
             problems.append(f"{where}.status: one of {LOOK_LEDGER_STATUSES}")
         if not (isinstance(row.get("sha256"), str) and SHA_RE.fullmatch(row["sha256"])):
             problems.append(f"{where}.sha256: 64 hex")
@@ -1235,12 +1260,22 @@ def validate_look_ledger(doc, repo=None):
             continue
         if sha256_file(f) != row.get("sha256"):
             problems.append(f"{where}: {mp} sha256 differs from the ledger")
-        man = json.loads(f.read_text(encoding="utf-8"))
+        payload = f.read_bytes()
+        man = strict_json(payload)
         if man.get("look_id") != lid:
             problems.append(f"{where}: the manifest's look_id is {man.get('look_id')!r}")
         if row.get("status") == "draft" and man.get("status") != "draft":
             problems.append(f"{where}: ledger says draft, the manifest says {man.get('status')!r}")
-        if row.get("status") != "draft" and man.get("status") != "committed":
+        if registered:
+            from joulewise.cadence_looks import qualification_manifest
+
+            try:
+                qualification_manifest.validate_registration(payload)
+            except qualification_manifest.ManifestError as error:
+                problems.append(f"{where}: {error}")
+            if man.get("status") != "registered":
+                problems.append(f"{where}: ledger says registered, the qualification manifest does not")
+        elif st != "draft" and man.get("status") != "committed":
             problems.append(f"{where}: ledger says {row.get('status')}, the manifest is not committed")
     if problems:
         raise ManifestError(problems)
@@ -1386,8 +1421,45 @@ def committed_ledger(repo, *, ledger_ref=None):
     return head, ref, ledger
 
 
-def freeze2_commitment(repo):
-    """Read the public mainline decision before any scoring code opens coefficients."""
+_FREEZE2_DECISIONS_PATH = "docs/research-audits/2026-11-10-fable/RESEARCH-LEAD-DECISIONS.md"
+_FREEZE2_AUDIT_REF = "origin/audit/2026-11-10-fable"
+
+
+def _freeze2_naming(repo, row, raw):
+    record = strict_json(raw)
+    common = {"schema": "joulewise.cadence_looks.freeze2_naming.v1", "look_id": row["look_id"],
+              "ruling": row.get("ruling"), "coefficients_sha256": row["coefficients_sha256"],
+              "public_sha256": row["output_sha256"], "designation": "freeze-2",
+              "decisions_path": _FREEZE2_DECISIONS_PATH}
+    if (type(record) is not dict or record.keys() != common.keys() | {"decisions_commit", "stanza"}
+            or any(record[key] != value for key, value in common.items())
+            or not common["ruling"] or release.dump(record) != raw):
+        raise ManifestError(["freeze 2: naming record differs from the public commitments"])
+    stanza = (f'FREEZE-2-NAMING ruling={common["ruling"]} look={common["look_id"]} '
+              f'coefficients_sha256={common["coefficients_sha256"]} public_sha256={common["public_sha256"]} '
+              'designation=freeze-2')
+    commit = record["decisions_commit"]
+    if record["stanza"] != stanza or not isinstance(commit, str) or not re.fullmatch(r"[a-f0-9]{40}", commit):
+        raise ManifestError(["freeze 2: naming stanza or audit commit is invalid"])
+    _, audit = shared_ref(repo, _FREEZE2_AUDIT_REF)
+    if _git(repo, "merge-base", "--is-ancestor", commit, audit)[0]:
+        raise ManifestError(["freeze 2: naming commit is outside the research lead's audit branch"])
+    rc, log, _ = _git(repo, "show", f"{commit}:{_FREEZE2_DECISIONS_PATH}")
+    if rc:
+        raise ManifestError(["freeze 2: research lead's decisions log is absent"])
+    lines = log.split(b"\n")
+    stanza_bytes = stanza.encode("utf-8")
+    if lines.count(stanza_bytes) != 1:
+        raise ManifestError(["freeze 2: naming stanza must occur once as a whole line"])
+    heading = next((line for line in reversed(lines[:lines.index(stanza_bytes)]) if line.startswith(b"# RL-")), b"")
+    ruling = re.match(rb"# (RL-[0-9]+[a-z]?)(?:[. \t]|$)", heading)
+    if ruling is None or ruling[1].decode("ascii") != common["ruling"]:
+        raise ManifestError(["freeze 2: the stanza is outside its named ruling"])
+    return common["ruling"]
+
+
+def freeze2_authority(repo, *, expected_coefficients_sha256=None):
+    """Authenticate the public freeze against one main commit and return its public evidence."""
     _, main = shared_ref(repo, "origin/main")
 
     def main_bytes(path):
@@ -1400,6 +1472,9 @@ def freeze2_commitment(repo):
     row = _look_row(ledger, "lm-interim-01")
     if row["status"] not in ("run", "frozen") or not _relative_directory(row.get("public_root")):
         raise ManifestError(["freeze 2: the public report is not committed on origin/main"])
+    directory = "docs/process/cadence/looks"
+    if row["manifest_path"] != f"{directory}/{row['look_id']}.json":
+        raise ManifestError(["freeze 2: unexpected public manifest path"])
     manifest_raw = main_bytes(row["manifest_path"])
     if hashlib.sha256(manifest_raw).hexdigest() != row["sha256"]:
         raise ManifestError(["freeze 2: the mainline manifest differs from its ledger pin"])
@@ -1407,6 +1482,8 @@ def freeze2_commitment(repo):
     if doc.get("status") != "committed" or doc.get("look_id") != row["look_id"]:
         raise ManifestError(["freeze 2: the mainline manifest must be committed for this look"])
     pin = doc["outputs"]["schema"]
+    if pin["path"] != f"{directory}/{row['look_id']}.output.schema.json":
+        raise ManifestError(["freeze 2: unexpected public schema path"])
     schema_raw = main_bytes(pin["path"])
     if hashlib.sha256(schema_raw).hexdigest() != pin["sha256"]:
         raise ManifestError(["freeze 2: the mainline public schema differs from its pin"])
@@ -1414,11 +1491,13 @@ def freeze2_commitment(repo):
     raw = main_bytes(path)
     if hashlib.sha256(raw).hexdigest() != row["output_sha256"]:
         raise ManifestError(["freeze 2: the mainline public report differs from its ledger pin"])
-    public = release.read_public(raw, json.loads(schema_raw))
+    public = release.read_public(raw, json.loads(schema_raw), look_id=row["look_id"])
     for key, expected in (("manifest_sha256", row["sha256"]), ("stage1_sha256", row["stage1_sha256"]),
                           ("coefficients_sha256", row["coefficients_sha256"])):
         if public[key] != expected:
             raise ManifestError(["freeze 2: the public report differs from its ledger commitments"])
+    if expected_coefficients_sha256 is not None and public["coefficients_sha256"] != expected_coefficients_sha256:
+        raise ManifestError(["freeze 2: the issued coefficient commitment differs from the published one"])
     execution_commit = public["commit"]
     if _git(repo, "merge-base", "--is-ancestor", execution_commit, main)[0]:
         raise ManifestError(["freeze 2: the execution commit is not in main's history"])
@@ -1429,9 +1508,19 @@ def freeze2_commitment(repo):
     bindings = ("sha256", "stage1_sha256", "public_root", "custody_root", "execution_host")
     if executed["status"] != "stage1_committed" or any(executed.get(key) != row.get(key) for key in bindings):
         raise ManifestError(["freeze 2: the execution commit does not authenticate the published look"])
+    source = "yes"
     if public["twin_agrees"] != "yes":
-        raise ManifestError(["freeze 2: the mainline report does not record twin agreement"])
-    return row
+        if not row.get("ruling"):
+            raise ManifestError(["freeze 2: the mainline report does not record twin agreement or a naming ruling"])
+        source = _freeze2_naming(repo, row, main_bytes(f"{directory}/{row['look_id']}.freeze2.json"))
+    evidence = {"look_id": row["look_id"], "main_commit": main, "public_sha256": row["output_sha256"],
+                "coefficients_sha256": row["coefficients_sha256"], "decision_source": source}
+    return row, evidence
+
+
+def freeze2_commitment(repo):
+    """Read the public mainline decision before any scoring code opens coefficients."""
+    return freeze2_authority(repo)[0]
 
 
 def execution_host():
@@ -1622,14 +1711,18 @@ def runtime_bundle(sdir, leg_id, record):
 
 def check_runtime_bundles(sdir):
     """Check all rostered locators using only the receipt and leg records."""
-    receipt = json.loads((sdir / "runner_receipt.json").read_text(encoding="utf-8"))
+    receipt = strict_json((sdir / "runner_receipt.json").read_bytes())
+    bundles = []
     for leg_id in receipt["roster"]:
         if (not isinstance(leg_id, str) or not leg_id or "\0" in leg_id
                 or Path(leg_id).name != leg_id or leg_id in (".", "..")):
             raise ManifestError(["invalid receipt leg ID (RL-184 F01)"])
         record = sdir / "legs" / leg_id / "leg_record.json"
         if record.is_file():
-            runtime_bundle(sdir, leg_id, json.loads(record.read_text(encoding="utf-8")))
+            bundle = runtime_bundle(sdir, leg_id, strict_json(record.read_bytes()))
+            if bundle is not None:
+                bundles.append(bundle)
+    return receipt, bundles
 
 
 def nonenergy_files(sdir):
@@ -1638,14 +1731,14 @@ def nonenergy_files(sdir):
     telemetry, trace or meter file is opened here; those retain their dedicated time projections.
     """
     sdir = Path(sdir)
-    receipt = json.loads((sdir / "runner_receipt.json").read_text(encoding="utf-8"))
+    receipt = strict_json((sdir / "runner_receipt.json").read_bytes())
     paths = {"runner_receipt.json", "soak/soak_reference.json"}
     for lid in receipt["roster"]:
         base = f"legs/{lid}"
         paths.update((f"{base}/leg_record.json", f"{base}/leg_summary.json"))
         recpath = sdir / base / "leg_record.json"
         if recpath.is_file():
-            rec = json.loads(recpath.read_text(encoding="utf-8"))
+            rec = strict_json(recpath.read_bytes())
             bundle = runtime_bundle(sdir, lid, rec)
             if bundle is not None:
                 b = bundle.relative_to(sdir).as_posix()
@@ -1661,7 +1754,7 @@ def native_pm_files(sdir):
     A partial final plist frame remains outside the row pairing, as in the existing native-state reader.
     """
     sdir = Path(sdir)
-    receipt = json.loads((sdir / "runner_receipt.json").read_text(encoding="utf-8"))
+    receipt = strict_json((sdir / "runner_receipt.json").read_bytes())
     out = {}
     ts = re.compile(rb'"timestamp_s":\s*(-?[0-9][0-9.eE+-]*)')
     el = re.compile(rb'"elapsed_ns":\s*([0-9]+)')
@@ -1671,7 +1764,7 @@ def native_pm_files(sdir):
         p = sdir / "legs" / lid / "leg_record.json"
         if not p.is_file():
             continue
-        rec = json.loads(p.read_text(encoding="utf-8"))
+        rec = strict_json(p.read_bytes())
         b = runtime_bundle(sdir, lid, rec)
         if b is None:
             continue
@@ -1755,8 +1848,8 @@ _SHARED_CODE = ("joulewise/__init__.py", "joulewise/cadence_looks/__init__.py", 
                 "joulewise/idle_admission.py", "joulewise/schemas.py", "joulewise/validation.py")
 # RL-173 E.1: stage 1 reads time fields of the energy files through time_fields.py, which runs the pinned meter
 # decoder's unwrap and clock fit on the counters; its import closure joins stage 1's set
-_DECODER_CODE = ("joulewise/aggregate.py", "joulewise/authentication_io.py", "joulewise/bundle_read.py",
-                 "joulewise/desk_compress.py", "joulewise/desk_restore.py", "joulewise/external/__init__.py",
+_DECODER_CODE = ("joulewise/aggregate.py", "joulewise/analysis_run_cache.py", "joulewise/authentication_io.py",
+                 "joulewise/bundle_read.py", "joulewise/desk_compress.py", "joulewise/external/__init__.py",
                  "joulewise/external/km003c_parse.py", "joulewise/provenance.py", "joulewise/suite.py")
 STAGE1_CODE = _SHARED_CODE + ("joulewise/cadence_looks/fit_interim.py", "joulewise/cadence_looks/inclusion_34.py",
                               "joulewise/cadence_looks/time_fields.py", "scripts/cadence_look_run.py") + _DECODER_CODE

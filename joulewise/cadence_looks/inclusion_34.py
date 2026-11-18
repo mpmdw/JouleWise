@@ -473,6 +473,91 @@ def judge_span(sdir, span_id, selected_keys):
 # soak was accepted is its last soak step's rc, and no look code reads the stage journal.
 SOAK_KINDS = ("slope", "load", "kind not recorded")
 SOAK_KIND_FIELDS = ("refusal_kind",)
+_SOAK_ATTEMPTS = ("soak", "soak.a2")  # one retry at the new writer pin, 6e9d42f1d
+_SOAK_ATTEMPT_KEYS = {"attempt", "started_epoch_s", "refused", "output_dir"}
+
+
+def _writer_rc(record):
+    """Return the rc only after checking the runner's result and exception branches."""
+    rc = record.get("rc")
+    result, error = record.get("result"), record.get("error")
+    if rc is not None and type(rc) is not int:
+        raise ValueError("runner receipt: invalid return code")
+    if isinstance(result, dict) and "rc" in result and (type(result["rc"]) is not type(rc) or result["rc"] != rc):
+        raise ValueError("runner receipt: return code contradicts its result")
+    if error is None:
+        return rc
+    if not isinstance(error, str):
+        raise ValueError("runner receipt: invalid error")
+    kind, separator, detail = error.partition(": ")
+    if not separator or not kind.isidentifier():
+        raise ValueError("runner receipt: invalid error")
+    expected = 2
+    if kind == "SystemExit" and re.fullmatch(r"-?(0|[1-9][0-9]*)", detail):
+        expected = int(detail)
+    elif kind == "SpanRefusal":
+        reported = re.fullmatch(r".+: rc (-?[0-9]+)", detail)
+        if reported:
+            expected = int(reported[1])
+        elif (detail == "work deadline reached; cleanup reserve retained"
+              or detail.endswith((" s cap cannot fit before the work deadline", ": mock leg would overrun the work deadline"))
+              or re.fullmatch(r".+ exceeded its \S+ s cap", detail)):
+            expected = 3
+    if rc != expected:
+        raise ValueError("runner receipt: return code contradicts its error")
+    return rc
+
+
+def check_writer_receipt(receipt):
+    """Check the historical runner envelope and the current one-retry writer's history."""
+    if "soak_refusals" in receipt:
+        raise ValueError("runner receipt: soak_refusals is absent from the pinned writers")
+    _writer_rc(receipt)
+    steps = receipt.get("steps")
+    if not isinstance(steps, list):
+        raise ValueError("runner receipt: invalid step list")
+    soaks, waits = [], {}
+    for step in steps:
+        if not isinstance(step, dict) or not isinstance(step.get("name"), str) or not step["name"]:
+            raise ValueError("runner receipt: invalid step")
+        name, rc = step["name"], _writer_rc(step)
+        if name in ("soak-blackout-wait", "soak.a2-blackout-wait"):
+            if name in waits or len(soaks) != int(name.startswith("soak.a2")):
+                raise ValueError("runner receipt: invalid soak wait order")
+            waits[name] = rc
+        elif name == "soak" or name.startswith("soak.a"):
+            soaks.append(step)
+    names = tuple(step["name"] for step in soaks)
+    attempts = receipt.get("soak_attempts", [])
+    if not isinstance(attempts, list) or len(attempts) > len(_SOAK_ATTEMPTS):
+        raise ValueError("runner receipt: invalid soak attempt count")
+    for prior, name in enumerate(("soak-blackout-wait", "soak.a2-blackout-wait")):
+        if name in waits and waits[name] != 0 and max(len(attempts), len(soaks)) > prior:
+            raise ValueError("runner receipt: attempt after a failed soak wait")
+    if "soak_attempts" not in receipt:
+        if names not in ((), ("soak",)) or "soak.a2-blackout-wait" in waits:
+            raise ValueError("runner receipt: invalid historical soak steps")
+        return
+    expected = _SOAK_ATTEMPTS[:len(attempts)]
+    if names != expected and not (attempts and names == expected[:-1]):
+        raise ValueError("runner receipt: invalid soak step order")
+    for index, attempt in enumerate(attempts):
+        if (not isinstance(attempt, dict) or attempt.keys() != _SOAK_ATTEMPT_KEYS
+                or type(attempt["attempt"]) is not int or attempt["attempt"] != index + 1
+                or type(attempt["started_epoch_s"]) not in (int, float)
+                or not math.isfinite(attempt["started_epoch_s"])):
+            raise ValueError("runner receipt: invalid soak attempt fields")
+        step = soaks[index] if index < len(soaks) else {}
+        refused = attempt["refused"]
+        if refused is not None:
+            if (not isinstance(refused, str) or not refused or step.get("rc") != 2
+                    or step.get("error") != f"SoakRefusal: {refused}"):
+                raise ValueError("runner receipt: invalid refused soak attempt")
+        elif index + 1 < len(attempts) or (index == 0 and "soak.a2-blackout-wait" in waits):
+            raise ValueError("runner receipt: retry requires a recorded refusal")
+        dirs = ("soak", "soak.rejected1") if index == 0 and refused is not None else ("soak",)
+        if attempt["output_dir"] not in dirs:
+            raise ValueError("runner receipt: invalid soak attempt directory")
 
 
 def soak_fields(receipt):
@@ -480,9 +565,13 @@ def soak_fields(receipt):
     from level R, so the twin can): whether ``soak_attempts`` is present, its value, and the receipt's soak steps
     ({"name", "rc"} of each step named "soak" or "soak.a<n>"). The ruled soak_refusals array is normalized into
     the matching attempt's soak_refusals_kind field; old receipts keep the same projection."""
-    steps = [{"name": st.get("name"), "rc": st.get("rc")} for st in receipt.get("steps") or []
+    steps = [{"name": st.get("name"), "rc": None if st.get("error") and st.get("rc") == 0 else st.get("rc")}
+             for st in receipt.get("steps") or []
              if isinstance(st, dict) and re.fullmatch(r"soak(\.a\d+)?", str(st.get("name")))]
     attempts = receipt.get("soak_attempts")
+    if isinstance(attempts, list):
+        attempts = [{k: v for k, v in a.items() if k != "soak_refusals_kind"} if isinstance(a, dict) else a
+                    for a in attempts]
     refusals = receipt.get("soak_refusals")
     if refusals is not None:
         if (not isinstance(refusals, list) or any(
@@ -493,7 +582,6 @@ def soak_fields(receipt):
             raise ValueError("runner_receipt.json soak_refusals: unique {attempt, kind}, kind slope or load")
         if refusals and (not isinstance(attempts, list) or any(not isinstance(a, dict) for a in attempts)):
             raise ValueError("runner_receipt.json soak_refusals: soak_attempts must be recorded objects")
-        attempts = [dict(a) for a in attempts] if isinstance(attempts, list) else attempts
         for r in refusals:
             a = next((a for a in attempts or [] if isinstance(a, dict) and a.get("attempt") == r["attempt"]), None)
             if a is None or a.get("refused") is None:
@@ -506,9 +594,12 @@ def soak_attempts_of(span_id, fields):
     """(attempts, field present, accepted) from a span's soak fields. Each attempt is checked against the receipt's
     soak steps: numbered from 1, one step per attempt in order, every refused attempt's step nonzero."""
     if not fields["field_present"]:
-        return [{"attempt": 1, "refused": None}], False, True
+        steps = fields["soak_steps"]
+        return [{"attempt": 1, "refused": None}], False, not steps or steps[0]["rc"] == 0
     attempts, steps = fields["soak_attempts"], fields["soak_steps"]
     names = ["soak" if i == 0 else f"soak.a{i + 1}" for i in range(len(attempts) if isinstance(attempts, list) else 0)]
+    if names and [st["name"] for st in steps] == names[:-1]:
+        steps = [*steps, {"name": names[-1], "rc": None}]
     if (not isinstance(attempts, list) or [st["name"] for st in steps] != names or any(
             not isinstance(a, dict) or a.get("attempt") != i + 1
             or not (a.get("refused") is None or isinstance(a.get("refused"), str))

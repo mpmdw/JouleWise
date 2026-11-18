@@ -60,6 +60,23 @@ class ReceiptKinds(unittest.TestCase):
             with self.subTest(refs=refs), self.assertRaisesRegex(ValueError, "soak_refusals"):
                 I34.soak_fields(receipt)
 
+    def test_writer_provenance_and_legacy_interruption(self):
+        first = {"attempt": 1, "started_epoch_s": 1, "refused": None, "output_dir": "soak"}
+        for raw, field_present, attempts, accepted in (
+                ({"steps": [{"name": "soak", "rc": None}]}, False, 1, False),
+                ({"steps": [{"name": "soak"}]}, False, 1, False),
+                ({"steps": [], "soak_attempts": []}, True, 0, False),
+                ({"steps": [], "soak_attempts": [first]}, True, 1, False)):
+            with self.subTest(raw=raw):
+                I34.check_writer_receipt(raw)
+                result = I34.soak_retries_from({"s": I34.soak_fields(raw)})["spans"]["s"]
+                self.assertEqual(result, {"field_present": field_present, "attempts": attempts,
+                                          "accepted": accepted, "retried": []})
+        raw = self.receipt()
+        raw["soak_attempts"][0]["soak_refusals_kind"] = "slope"
+        result = I34.soak_retries_from({"s": I34.soak_fields(raw)})["spans"]["s"]
+        self.assertEqual(result["retried"], [{"attempt": 1, "kind": "kind not recorded", "read_from": None}])
+
 
 class TraceTimes(unittest.TestCase):
     def test_timestamp_s_is_validated_without_converting_power(self):

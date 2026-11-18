@@ -1,5 +1,10 @@
 # JouleWise Run State
 
+PR #795 audit round 1 repairs enforce writer admission, comparison and
+freeze-2 naming. The draft uses the final #816 pin and preserves the v2
+qualification registration in the mixed ledger. Campaign registration
+remains a lead-controlled gate. [Audit repair report](docs/run_reports/2026-11-18-pr795-audit-1.md).
+
 PR #795 RL-184 follow-up (2026-11-18) installs the hardware-derived host token
 and literal nested bundle binding. The draft pins the corrected #816 reader.
 Campaign registration awaits Astra's paired census rerun and Fable's

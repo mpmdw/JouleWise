@@ -38,6 +38,7 @@ import hashlib
 import importlib
 import importlib.util
 import json
+import math
 import os
 from pathlib import Path
 import re
@@ -103,12 +104,12 @@ def _stamp(out, a):
 
 def _jsonl(path):
     with open(path) as f:
-        return [json.loads(x) for x in f if x.strip()]
+        return [M.strict_json(x) for x in f if x.strip()]
 
 
 def _json(path):
     with open(path) as f:
-        return json.load(f)
+        return M.strict_json(f.read())
 
 
 def write_canonical(path, obj):
@@ -308,7 +309,7 @@ def token_stamps(bundle):
         for line in f:
             if not line.strip():
                 continue
-            e = json.loads(line)
+            e = M.strict_json(line)
             if e.get("event_type") == "token":
                 md = e.get("metadata") or {}
                 if md.get("align_turn_index", 0) not in (0, None):
@@ -525,6 +526,8 @@ def read_span(sdir, entry, rules34, fan_keys, ruled=None):
         if bundle is not None:
             try:
                 turn = build_turn(bundle, result, fan_keys)
+            except M.ManifestError:
+                raise
             except (OSError, ValueError, KeyError, TypeError, IndexError) as exc:
                 # A G0 timeout (cadence_leg.py: a bundle and no turn) is a ruled exclusion (rules 1 and 2), not a
                 # refusal: a leg the six verdicts already exclude carries no turn. An included leg refuses.
@@ -579,9 +582,34 @@ def read_look_input(roster, sdir_of, rules34, fan_keys=FAN_KEYS, ruled=None):
             "spans": spans, "legs": legs}
 
 
+_WRITER_PHASES = {"tokenize", "generation_setup", "prefill", "decode", "align_thermal_gate", "align_thermal_hold",
+                  "align_context_check", "align_context_stop_observation", "align_g0_unreleased_stop_observation"}
+
+
 def validate_runtime_bundles(roster, sdir_of):
     for span in roster:
-        M.check_runtime_bundles(sdir_of(span["span_id"]))
+        receipt, bundles = M.check_runtime_bundles(sdir_of(span["span_id"]))
+        try:
+            I34.check_writer_receipt(receipt)
+        except ValueError as exc:
+            raise F.LookInputError(str(exc)) from None
+        for bundle in bundles:
+            events = bundle / "events.jsonl"
+            if not events.is_file():
+                continue  # an uncompleted bundle may have no events
+            for event in _jsonl(events):
+                kind = event.get("event_type")
+                if "timestamp_s" in event or kind in ("token", "phase_start", "phase_end"):
+                    stamp = event.get("timestamp_s")
+                    if type(stamp) not in (int, float) or not math.isfinite(stamp):
+                        raise F.LookInputError("events: invalid writer timestamp")
+                if not isinstance(kind, str) or not kind.startswith("phase_"):
+                    continue
+                phase, metadata = event.get("phase"), event.get("metadata")
+                if (kind not in ("phase_start", "phase_end") or not isinstance(phase, str)
+                        or (phase not in _WRITER_PHASES and not re.fullmatch(r"align_tool_(0|[1-9]\d*)_(0|[1-9]\d*)", phase))
+                        or (metadata is not None and not isinstance(metadata, dict))):
+                    raise F.LookInputError("events: invalid writer phase")
 
 
 def stage2_preflight(stage1_out, sdir_of):
@@ -1105,6 +1133,13 @@ def finish_stage2(a, stage1, prepared, doc, commit, manifest_sha, restricted, pu
                           deadline=deadline, overrides=overrides)
     if sha256_file(coefficient_path) != coefficient_sha:
         raise F.LookInputError("the stored coefficient bytes changed during the twin comparison")
+    if comparison["agreement"] == "no":
+        from joulewise.cadence_looks import interim_twin
+
+        try:
+            comparison["post_no"] = interim_twin.post_no(stage1, fit, energy, comparison)
+        except (ArithmeticError, KeyError, TypeError, ValueError):
+            comparison["post_no"] = None
     release.write_private(restricted / "twin.json", F.dump(comparison))
     if {child.name for child in restricted.iterdir()} != release.PRIVATE_NAMES:
         raise F.LookInputError("stage 2: unexpected private artifact names")
@@ -1171,6 +1206,8 @@ def main(argv=None, *, keep_redirected=False):
     ap = argparse.ArgumentParser(description="The interim look's two stages (RL-166 Q8).")
     sub = ap.add_subparsers(dest="cmd", required=True)
     sub.add_parser("host-id", help="print this machine's RL-184 execution host token")
+    review = sub.add_parser("post-no-maxima", help="print the two private RL-184 prediction differences")
+    review.add_argument("--twin", type=Path, required=True)
     p1 = sub.add_parser("stage1")
     p1.add_argument("--out", required=True)
     g = p1.add_mutually_exclusive_group(required=True)
@@ -1208,6 +1245,20 @@ def main(argv=None, *, keep_redirected=False):
     try:
         if a.cmd == "host-id":
             print(M.execution_host())
+            return 0
+        if a.cmd == "post-no-maxima":
+            path = a.twin
+            if not path.is_absolute() or path.resolve() != path or path.name != "twin.json" or path.parent.name != "RESTRICTED":
+                raise F.LookInputError("post-no: the registered private twin.json is required")
+            comparison = _json(path)
+            diagnostic = comparison.get("post_no")
+            if comparison.get("agreement") != "no" or not isinstance(diagnostic, dict):
+                raise F.LookInputError("post-no: the private diagnostics are unavailable")
+            maxima = [diagnostic.get(key) for key in ("fitted_values_max_relative_difference",
+                                                       "predicted_onsets_max_relative_difference")]
+            if any(type(value) not in (int, float) or not math.isfinite(value) or value < 0 for value in maxima):
+                raise F.LookInputError("post-no: both private maxima must be evaluable")
+            sys.stdout.buffer.write(release.dump(maxima))
             return 0
         # FIRST, before any input is opened: the running code must be the pinned code (Mythos cold seat 3; Sol 9)
         _VERIFIED[:] = [(M.verify_pins(a.manifest, ROOT, allow_draft=a.allow_draft, running=RUNNING,

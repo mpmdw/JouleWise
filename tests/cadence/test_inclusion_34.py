@@ -672,7 +672,7 @@ class SoakRetries(CustodyVerdictFile):
             with self.assertRaises(ValueError):
                 i34.soak_retries({"dev-03-s01": sdir})
         doc = self.set_receipt(sdir, self.two())
-        doc["steps"] = [st for st in doc["steps"] if st["name"] != "soak.a2"]   # an attempt with no step
+        doc["steps"] = [st for st in doc["steps"] if st["name"] != "soak"]   # an earlier attempt cannot lack its step
         (sdir / "runner_receipt.json").write_text(json.dumps(doc))
         with self.assertRaises(ValueError):
             i34.soak_retries({"dev-03-s01": sdir})

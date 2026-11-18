@@ -218,7 +218,7 @@ def public_row(repo, row):
         raise ValueError("the registered public report must be a canonical path")
     raw = public_path.read_bytes()
     _, schema = lm.look_schemas(repo)
-    public = release.read_public(raw, schema)
+    public = release.read_public(raw, schema, look_id=row["look_id"])
     if (public["look_id"], public["manifest_sha256"], public["stage1_sha256"]) != (
             row["look_id"], row["sha256"], row["stage1_sha256"]):
         raise ValueError("the public report names different commitments from the look ledger")
@@ -236,6 +236,13 @@ def public_row(repo, row):
 def main(argv=None):
     p = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = p.add_subparsers(dest="cmd", required=True)
+    auth = sub.add_parser("authorize-freeze2", help="verify the public mainline freeze commitment")
+    auth.add_argument("--repo", required=True)
+    auth.add_argument("--look-id", required=True, choices=("lm-interim-01",))
+    auth.add_argument("--expected-coefficients-sha256", required=True)
+    port = sub.add_parser("port-files", help="list the verified dependency pins for a main-targeted port")
+    port.add_argument("manifest")
+    port.add_argument("--repo", required=True)
     v = sub.add_parser("validate")
     v.add_argument("manifest")
     v.add_argument("--final", action="store_true")
@@ -260,6 +267,29 @@ def main(argv=None):
     rw.add_argument("--verdicts")
     rw.add_argument("--write", action="store_true")
     args = p.parse_args(argv)
+    if args.cmd == "authorize-freeze2":
+        if not lm.SHA_RE.fullmatch(args.expected_coefficients_sha256):
+            p.error("--expected-coefficients-sha256 must be 64 lowercase hex digits")
+        try:
+            _, evidence = lm.freeze2_authority(args.repo, expected_coefficients_sha256=args.expected_coefficients_sha256)
+        except (OSError, ValueError, TypeError, KeyError):
+            print("REFUSE freeze 2 public authority", file=sys.stderr)
+            return 1
+        sys.stdout.buffer.write(release.dump(evidence))
+        return 0
+    if args.cmd == "port-files":
+        try:
+            doc = lm.verify_pins(args.manifest, args.repo, allow_draft=True)
+            lm.check_repo(doc, args.repo)
+        except lm.ManifestError as error:
+            for problem in error.problems:
+                print(f"REFUSE {problem}", file=sys.stderr)
+            return 1
+        paths = {path: sha for _, path, sha in lm.code_refs(doc)}
+        paths.update(lm.EVIDENCE)
+        paths[lm.Q11_EVIDENCE["path"]] = lm.Q11_EVIDENCE["sha256"]
+        sys.stdout.buffer.write(release.dump(paths))
+        return 0
     if args.cmd == "validate":
         if args.kit and not args.repo:
             p.error("--kit needs --repo")

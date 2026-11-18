@@ -1,0 +1,434 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:joulewise:cadence:look-manifest:v2",
+  "title": "Cadence look manifest v2",
+  "oneOf": [{"$ref": "#/$defs/qualification"}],
+  "$defs": {
+    "text": {"type": "string", "minLength": 1},
+    "textList": {"type": "array", "items": {"$ref": "#/$defs/text"}},
+    "unsignedInteger": {"type": "integer", "minimum": 0},
+    "path": {"type": "string", "pattern": "^(?!/|~)(?!.*(?:^|/)\\.\\.(?:/|$))[A-Za-z0-9._/-]+(?![\\s\\S])"},
+    "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}(?![\\s\\S])"},
+    "codeHash": {"type": "string", "pattern": "^(?:PENDING:CODE|[0-9a-f]{64})(?![\\s\\S])"},
+    "codePin": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "sha256"],
+      "properties": {"path": {"$ref": "#/$defs/path"}, "sha256": {"$ref": "#/$defs/codeHash"}}
+    },
+    "block": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["block_id", "phase", "role", "kit_sha256", "spans", "cite"],
+      "properties": {
+        "block_id": {"$ref": "#/$defs/text"},
+        "phase": {"const": "qualification"},
+        "role": {"const": "describe"},
+        "kit_sha256": {"$ref": "#/$defs/sha256"},
+        "spans": {"type": "array", "minItems": 2, "maxItems": 2, "items": {"$ref": "#/$defs/text"}},
+        "cite": {"$ref": "#/$defs/textList"}
+      }
+    },
+    "inclusionRule": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["rule", "id", "text", "judged_at", "reads_energy", "cite"],
+      "properties": {
+        "rule": {"$ref": "#/$defs/unsignedInteger"},
+        "id": {"$ref": "#/$defs/text"},
+        "text": {"$ref": "#/$defs/text"},
+        "judged_at": {"enum": ["runner", "look"]},
+        "reads_energy": {"const": false},
+        "code": {"$ref": "#/$defs/codePin"},
+        "cite": {"$ref": "#/$defs/textList"}
+      }
+    },
+    "tailSegment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["decode_tokens", "first_stamp", "last_stamp", "gaps"],
+      "properties": {
+        "decode_tokens": {"$ref": "#/$defs/unsignedInteger"},
+        "first_stamp": {"$ref": "#/$defs/unsignedInteger"},
+        "last_stamp": {"$ref": "#/$defs/unsignedInteger"},
+        "gaps": {"$ref": "#/$defs/unsignedInteger"}
+      }
+    },
+    "pairDesign": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["block_id", "ratio_1_10", "ratio_1_30"],
+      "properties": {
+        "block_id": {"$ref": "#/$defs/text"},
+        "ratio_1_10": {"$ref": "#/$defs/text"},
+        "ratio_1_30": {"$ref": "#/$defs/text"}
+      }
+    },
+    "publicField": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "source"],
+      "properties": {
+        "type": {"enum": ["fixed_id", "sha256", "git_commit", "nonnegative_json_integer", "word"]},
+        "source": {"$ref": "#/$defs/text"}
+      }
+    },
+    "qualification": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema",
+        "look_id",
+        "look_kind",
+        "status",
+        "title",
+        "rulings",
+        "registration",
+        "reads",
+        "inclusion",
+        "freeze2",
+        "pins",
+        "scoring",
+        "decision",
+        "pair_description",
+        "outputs",
+        "release",
+        "oracle",
+        "paper_sentences"
+      ],
+      "properties": {
+        "schema": {"const": "joulewise.cadence_look_manifest.v2"},
+        "look_id": {"type": "string", "pattern": "^lm-qual-[0-9]{2}(?![\\s\\S])"},
+        "look_kind": {"const": "qualification"},
+        "status": {"const": "registered"},
+        "title": {"$ref": "#/$defs/text"},
+        "rulings": {"$ref": "#/$defs/textList"},
+        "registration": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["ledger_path", "registration_deadline", "final_deadline", "finalization"],
+          "properties": {
+            "ledger_path": {"$ref": "#/$defs/path"},
+            "registration_deadline": {"$ref": "#/$defs/text"},
+            "final_deadline": {"$ref": "#/$defs/text"},
+            "finalization": {"$ref": "#/$defs/text"}
+          }
+        },
+        "reads": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "blocks",
+            "leg_types_read",
+            "leg_types_never",
+            "attempts",
+            "day_rule",
+            "excluded_inputs",
+            "required_per_span",
+            "first_span_hand_read"
+          ],
+          "properties": {
+            "blocks": {"type": "array", "minItems": 3, "maxItems": 3, "items": {"$ref": "#/$defs/block"}},
+            "leg_types_read": {"$ref": "#/$defs/textList"},
+            "leg_types_never": {"$ref": "#/$defs/textList"},
+            "attempts": {"$ref": "#/$defs/text"},
+            "day_rule": {"$ref": "#/$defs/text"},
+            "excluded_inputs": {"$ref": "#/$defs/textList"},
+            "required_per_span": {"$ref": "#/$defs/textList"},
+            "first_span_hand_read": {"$ref": "#/$defs/text"}
+          }
+        },
+        "inclusion": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "rules",
+            "interval",
+            "inclusion_reads_no_energy",
+            "no_drop_by_outcome",
+            "verdicts_frozen_before_energy",
+            "cite"
+          ],
+          "properties": {
+            "rules": {"type": "array", "minItems": 6, "maxItems": 6, "items": {"$ref": "#/$defs/inclusionRule"}},
+            "interval": {"$ref": "#/$defs/text"},
+            "inclusion_reads_no_energy": {"type": "boolean"},
+            "no_drop_by_outcome": {"type": "boolean"},
+            "verdicts_frozen_before_energy": {"type": "boolean"},
+            "cite": {"$ref": "#/$defs/textList"}
+          }
+        },
+        "freeze2": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "direction",
+            "look_id",
+            "commitment_ref",
+            "public_file",
+            "commitment_field",
+            "effective_if",
+            "coefficient_file",
+            "verification",
+            "required_before",
+            "refit_on_qualification"
+          ],
+          "properties": {
+            "direction": {"const": "input"},
+            "look_id": {"$ref": "#/$defs/text"},
+            "commitment_ref": {"$ref": "#/$defs/text"},
+            "public_file": {"$ref": "#/$defs/text"},
+            "commitment_field": {"$ref": "#/$defs/text"},
+            "effective_if": {"$ref": "#/$defs/text"},
+            "coefficient_file": {"$ref": "#/$defs/text"},
+            "verification": {"$ref": "#/$defs/text"},
+            "required_before": {"$ref": "#/$defs/textList"},
+            "refit_on_qualification": {"const": false}
+          }
+        },
+        "pins": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["scorer", "code", "schemas"],
+          "properties": {
+            "scorer": {"$ref": "#/$defs/codePin"},
+            "code": {"type": "array", "items": {"$ref": "#/$defs/codePin"}, "minItems": 1},
+            "schemas": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["manifest", "stage1", "public", "coefficients"],
+              "properties": {
+                "manifest": {"$ref": "#/$defs/codePin"},
+                "stage1": {"$ref": "#/$defs/codePin"},
+                "public": {"$ref": "#/$defs/codePin"},
+                "coefficients": {"$ref": "#/$defs/codePin"}
+              }
+            }
+          }
+        },
+        "scoring": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["entry_point", "channels", "equivalence", "native_short_legs", "tail_segments", "tail_rule"],
+          "properties": {
+            "entry_point": {"$ref": "#/$defs/text"},
+            "channels": {"type": "array", "minItems": 2, "maxItems": 2, "items": {"enum": ["gpu_rail", "dc_in"]}},
+            "equivalence": {"$ref": "#/$defs/text"},
+            "native_short_legs": {"$ref": "#/$defs/text"},
+            "tail_segments": {"type": "array", "minItems": 2, "maxItems": 2, "items": {"$ref": "#/$defs/tailSegment"}},
+            "tail_rule": {"$ref": "#/$defs/text"}
+          }
+        },
+        "decision": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["word", "series", "scale", "interval", "support", "containment", "mapping"],
+          "properties": {
+            "word": {"const": "qualified_qualification"},
+            "series": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "channel",
+                "decode_ratio",
+                "leg_type",
+                "included_only",
+                "long_decode_tokens",
+                "short_own_prefix_tokens",
+                "residual",
+                "independent_l_pairs_gate_word"
+              ],
+              "properties": {
+                "channel": {"$ref": "#/$defs/text"},
+                "decode_ratio": {"$ref": "#/$defs/text"},
+                "leg_type": {"$ref": "#/$defs/text"},
+                "included_only": {"const": true},
+                "long_decode_tokens": {"$ref": "#/$defs/unsignedInteger"},
+                "short_own_prefix_tokens": {"$ref": "#/$defs/unsignedInteger"},
+                "residual": {"$ref": "#/$defs/text"},
+                "independent_l_pairs_gate_word": {"const": false}
+              }
+            },
+            "scale": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["source", "ddof", "sd_floor_joules"],
+              "properties": {
+                "source": {"$ref": "#/$defs/text"},
+                "ddof": {"$ref": "#/$defs/unsignedInteger"},
+                "sd_floor_joules": {"type": "number"}
+              }
+            },
+            "interval": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["per_leg", "estimate", "day_weight", "day_source", "confidence", "formula"],
+              "properties": {
+                "per_leg": {"$ref": "#/$defs/text"},
+                "estimate": {"$ref": "#/$defs/text"},
+                "day_weight": {"$ref": "#/$defs/text"},
+                "day_source": {"$ref": "#/$defs/text"},
+                "confidence": {"type": "number"},
+                "formula": {"$ref": "#/$defs/text"}
+              }
+            },
+            "support": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["min_legs", "min_days"],
+              "properties": {
+                "min_legs": {"$ref": "#/$defs/unsignedInteger"},
+                "min_days": {"$ref": "#/$defs/unsignedInteger"}
+              }
+            },
+            "containment": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["lower", "upper", "inclusive", "round_before_comparison"],
+              "properties": {
+                "lower": {"type": "number"},
+                "upper": {"type": "number"},
+                "inclusive": {"const": true},
+                "round_before_comparison": {"const": false}
+              }
+            },
+            "mapping": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["not_evaluable", "yes", "no"],
+              "properties": {
+                "not_evaluable": {"$ref": "#/$defs/text"},
+                "yes": {"$ref": "#/$defs/text"},
+                "no": {"$ref": "#/$defs/text"}
+              }
+            }
+          }
+        },
+        "pair_description": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["population", "status", "design", "pooled"],
+          "properties": {
+            "population": {"$ref": "#/$defs/text"},
+            "status": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["not_evaluable", "pairs_only", "described"],
+              "properties": {
+                "not_evaluable": {"$ref": "#/$defs/text"},
+                "pairs_only": {"$ref": "#/$defs/text"},
+                "described": {"$ref": "#/$defs/text"}
+              }
+            },
+            "design": {"type": "array", "minItems": 3, "maxItems": 3, "items": {"$ref": "#/$defs/pairDesign"}},
+            "pooled": {"$ref": "#/$defs/text"}
+          }
+        },
+        "outputs": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["public_file", "fields", "words", "energy_dependent_words", "format", "destinations"],
+          "properties": {
+            "public_file": {"$ref": "#/$defs/text"},
+            "fields": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "look_id",
+                "manifest_sha256",
+                "commit",
+                "stage1_sha256",
+                "coefficients_sha256",
+                "development_config_sha256",
+                "qualification_config_sha256",
+                "included_legs",
+                "qualified_qualification",
+                "type_m_residual",
+                "stage2_error"
+              ],
+              "properties": {
+                "look_id": {"$ref": "#/$defs/publicField"},
+                "manifest_sha256": {"$ref": "#/$defs/publicField"},
+                "commit": {"$ref": "#/$defs/publicField"},
+                "stage1_sha256": {"$ref": "#/$defs/publicField"},
+                "coefficients_sha256": {"$ref": "#/$defs/publicField"},
+                "development_config_sha256": {"$ref": "#/$defs/publicField"},
+                "qualification_config_sha256": {"$ref": "#/$defs/publicField"},
+                "included_legs": {"$ref": "#/$defs/publicField"},
+                "qualified_qualification": {"$ref": "#/$defs/publicField"},
+                "type_m_residual": {"$ref": "#/$defs/publicField"},
+                "stage2_error": {"$ref": "#/$defs/publicField"}
+              }
+            },
+            "words": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["qualified_qualification", "type_m_residual", "stage2_error"],
+              "properties": {
+                "qualified_qualification": {"const": ["yes", "no", "not_evaluable"]},
+                "type_m_residual": {"const": ["not_run"]},
+                "stage2_error": {"const": ["no"]}
+              }
+            },
+            "energy_dependent_words": {"const": ["qualified_qualification", "stage2_error"]},
+            "format": {"$ref": "#/$defs/text"},
+            "destinations": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["public_manifest", "committed_stage1", "RESTRICTED/scores.json"],
+              "properties": {
+                "public_manifest": {"$ref": "#/$defs/textList"},
+                "committed_stage1": {"$ref": "#/$defs/textList"},
+                "RESTRICTED/scores.json": {"$ref": "#/$defs/textList"}
+              }
+            }
+          }
+        },
+        "release": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "custody_names",
+            "twin",
+            "disclosure",
+            "stage2_time_budget_s",
+            "preflight",
+            "reservation",
+            "failure"
+          ],
+          "properties": {
+            "custody_names": {"const": ["scores.json", "stdout", "stderr"]},
+            "twin": {"const": false},
+            "disclosure": {"$ref": "#/$defs/text"},
+            "stage2_time_budget_s": {"$ref": "#/$defs/unsignedInteger"},
+            "preflight": {"$ref": "#/$defs/textList"},
+            "reservation": {"$ref": "#/$defs/text"},
+            "failure": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["first_stderr_line", "second_stderr_line", "exit_status", "rule"],
+              "properties": {
+                "first_stderr_line": {"$ref": "#/$defs/text"},
+                "second_stderr_line": {"$ref": "#/$defs/text"},
+                "exit_status": {"$ref": "#/$defs/unsignedInteger"},
+                "rule": {"$ref": "#/$defs/text"}
+              }
+            }
+          }
+        },
+        "oracle": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["author_rule", "tests"],
+          "properties": {"author_rule": {"$ref": "#/$defs/text"}, "tests": {"$ref": "#/$defs/textList"}}
+        },
+        "paper_sentences": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["independent_seeds", "order_and_position"],
+          "properties": {"independent_seeds": {"$ref": "#/$defs/text"}, "order_and_position": {"$ref": "#/$defs/text"}}
+        }
+      }
+    }
+  }
+}

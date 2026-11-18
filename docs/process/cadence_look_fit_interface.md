@@ -455,6 +455,20 @@ literal nested bundle locators, including under a staged span override.
 Campaign execution awaits Astra's paired census rerun and Fable's manifest
 cold pass.
 
+Stage 1 validates the pinned writers' receipt, attempt and phase shapes
+before reading trace files. This catches duplicate JSON keys, nonfinite
+numbers and unissued retry provenance. A terminal soak attempt can be
+present while its step is still absent. A legacy soak step with null or
+missing `rc` is unaccepted.
+
+The private comparison keeps RL-184 post-`no` diagnostics for fitted values,
+predicted onsets and the held-out GPU threshold. `cadence_look_run.py
+post-no-maxima --twin /absolute/path/RESTRICTED/twin.json` prints the two maxima in the
+authorized private review. Neither these checks nor the threshold boundary
+change the published word. The public `authorize-freeze2` command accepts a
+named disposition only when main binds the canonical record and the named
+audit commit contains its exact stanza under the matching ruling heading.
+
 RL-175 B.4 weights the standardized day means equally for the prefix-bias
 estimate and its 90% t interval.
 

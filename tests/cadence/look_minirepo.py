@@ -66,7 +66,9 @@ def mini_repo(test):
     root = Path(tempfile.mkdtemp(prefix="lm-mini-"))
     test.addCleanup(lambda: shutil.rmtree(root, ignore_errors=True))
     doc = json.loads((REPO / MANIFEST).read_text(encoding="utf-8"))
-    paths = {path for _, path, _ in lm.code_refs(doc)} | set(lm.EVIDENCE) | {MANIFEST, lm.LOOK_LEDGER_PATH}
+    paths = {path for _, path, _ in lm.code_refs(doc)} | set(lm.EVIDENCE) | {MANIFEST, lm.LOOK_LEDGER_PATH,
+                                                                         lm.Q11_EVIDENCE["path"]}
+    paths |= qualification_files()
     for rel in sorted(paths):
         dst = root / rel
         dst.parent.mkdir(parents=True, exist_ok=True)
@@ -150,6 +152,13 @@ FROZEN_COPY_ENV = "JW_LOOK_FROZEN_COPY"
 FROZEN_TREES = ("joulewise", "scripts", "tests", ".github", "docs/process/cadence", "configs/align/v4")
 
 
+def qualification_files():
+    ledger = json.loads((REPO / lm.LOOK_LEDGER_PATH).read_bytes())
+    manifests = {row["manifest_path"] for row in ledger["looks"] if row["status"] == "registered"}
+    return manifests | {"joulewise/cadence_looks/qualification_manifest.py",
+                        f"{LOOKS_DIR}/look_manifest.v2.schema.json", f"{LOOKS_DIR}/qualification-kit-commitments.json"}
+
+
 def frozen_copy(test):
     """The repository's look-relevant trees (hard links where the filesystem allows) with the lead's freeze commit
     applied to the copy's manifest and LOOKS.json (status committed, Q11's note disposed, the row's hash), so the
@@ -160,6 +169,11 @@ def frozen_copy(test):
     for tree in FROZEN_TREES:
         shutil.copytree(REPO / tree, root / tree, copy_function=_link_or_copy,
                         ignore=shutil.ignore_patterns("__pycache__", "fixtures"))
+    for rel in qualification_files():
+        target = root / rel
+        if not target.exists():
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(REPO / rel, target)
     for rel in (MANIFEST, lm.LOOK_LEDGER_PATH):
         (root / rel).unlink()
         shutil.copy2(REPO / rel, root / rel)

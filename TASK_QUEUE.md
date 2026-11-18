@@ -1,5 +1,9 @@
 # JouleWise Task Queue
 
+PR #795 audit round 1 repairs (2026-11-18), [AGENT]. Review the repaired
+pair and reproduce the checked main-targeted port before the manifest cold
+pass. [Audit repair report](docs/run_reports/2026-11-18-pr795-audit-1.md).
+
 PR #795 RL-184 follow-up (2026-11-18), [AGENT]. Astra reruns the census on
 the paired primary and corrected #816 reader. Fable cold-passes the
 manifest before the lead registers a campaign look on main.

@@ -167,9 +167,9 @@ def _onset(value, days, predictors):
                  and cut["form"] == "tau_hat_minus_2rms" and _number(cut["offset_s"]) and cut["fixed_s"] is None)
 
 
-def _coverage(value):
+def _coverage(value, channel):
     _keys(value, ("min", "n_legs_under_0_99"))
-    _require(_number(value["min"]) and 0 <= value["min"] <= 1
+    _require(_number(value["min"]) and value["min"] >= 0 and (channel == "gpu_rail" or value["min"] <= 1)
              and type(value["n_legs_under_0_99"]) is int and value["n_legs_under_0_99"] >= 0)
 
 
@@ -226,7 +226,7 @@ def _validate_twin(twin, stage1, primary):
             fold_words.append((y, unmarked_days))
         _keys(coverage, [f"{prefix}/trace_coverage" for prefix in ((x, y) if marked else (x,))])
         for value in coverage.values():
-            _coverage(value)
+            _coverage(value, channel)
     _require(marked_states[0] == marked_states[1])
     _keys(words, base_words)
     for prefix, fold_days in fold_words:
@@ -238,8 +238,10 @@ def _validate_twin(twin, stage1, primary):
     _require(all(type(words[f"S1#/tripwires/{key}/trips"]) is bool for key in TRIPWIRES))
     _require(words["D#/tripwire/decision"] in ("within", "to the research lead", "not_evaluable")
              and (words["D#/tripwire/trips"] is None or type(words["D#/tripwire/trips"]) is bool))
-    _keys(words["D#/cells"], primary["verdicts"]["D#/cells"].keys())
-    for cell in words["D#/cells"].values():
+    cells = words["D#/cells"]
+    allowed_cells = {str(leg["cell_prompt_tokens"]) for leg in stage1["legs"] if leg["cell_prompt_tokens"] is not None}
+    _require(type(cells) is dict and cells.keys() <= allowed_cells)
+    for cell in cells.values():
         _keys(cell, ("status", "gamma_estimable"))
         _require(cell["status"] in ("ok", "not_run")
                  and (cell["gamma_estimable"] is None or type(cell["gamma_estimable"]) is bool))
@@ -285,6 +287,79 @@ def compare(raw, stage1, coefficients, fit, step3):
     frame["max_relative_difference"] = maxima
     frame["agreement"] = "yes" if agrees else "no"
     return frame
+
+
+def _relative(left, right):
+    _require(_number(left) and _number(right))
+    scale = max(abs(left), abs(right))
+    if not scale:
+        return 0.0
+    distance = abs(left - right)
+    return distance / scale if math.isfinite(distance) else abs(left / scale - right / scale)
+
+
+def post_no(stage1, fit, energy, frame):
+    """RL-184 §3.4 diagnostics under the private boundary. The comparison word is fixed."""
+    from joulewise.cadence_looks import fit_interim as F
+
+    _require(frame["agreement"] == "no")
+    legs = [leg for leg in stage1["legs"] if leg["in_energy_fit"]]
+    onsets = {side: frame["censored_fit"][side]["C#/onset"] for side in ("primary", "twin")}
+
+    def estimates(leg, vector, onset):
+        model = F._onset_model(onset, onsets["primary"]["predictors"])
+        timing = F._onsets((leg,), model).get(leg["leg_key"])
+        return [math.fsum(a * b for a, b in zip(F._design_row(leg, seg, seg["kind"], vector, timing), vector.values()))
+                for seg in leg["segments"]]
+
+    fits = []
+    sides = ("primary", "twin")
+    onset_differences = []
+    comparable_onsets = True
+    for leg in legs:
+        for held_out in (False, True):
+            day = leg["day"]
+            selected = {side: onsets[side]["folds"][day] if held_out else onsets[side] for side in sides}
+            models = [F._onset_model(selected[side], onsets[side]["predictors"]) for side in sides]
+            if all(value is not None for value in models):
+                onset_differences.append(_relative(*(max(0.0, F.linear_predictor(leg, model)) for model in models)))
+            else:
+                comparable_onsets &= all(value is None for value in models)
+            for channel in CHANNELS:
+                projection = frame["coefficients"][channel]
+                key = f"C#/channels/{channel}/" + ("fold_coefficients" if held_out else "coefficients")
+                vectors = [projection[side][key][day] if held_out else projection[side][key] for side in sides]
+                fits.append(_relative(*(math.fsum(estimates(leg, vector, selected[side]))
+                                        for side, vector in zip(sides, vectors))))
+    onset_max = max(onset_differences, default=0.0) if comparable_onsets else None
+    fit_max = max(fits)
+
+    primary, twin = (frame["verdicts"][side] for side in sides)
+    disagreements = {key for key in primary.keys() | twin.keys() if primary.get(key) != twin.get(key)}
+    hot_keys = {"F#/channels/gpu_rail/lodo/hot/verdict", "C#/qualified_interim_half/verdict",
+                "F#/qualified_interim_half/verdict"}
+    boundary = False
+    if disagreements and disagreements <= hot_keys and all({primary[key], twin[key]} == {"passes", "fails"}
+                                                             for key in disagreements):
+        hot = {}
+        folds = frame["coefficients"]["gpu_rail"]["twin"]["C#/channels/gpu_rail/fold_coefficients"]
+        for leg in legs:
+            indices = [i for i, seg in enumerate(leg["segments"]) if seg["hot"]]
+            if indices:
+                day = leg["day"]
+                values = estimates(leg, folds[day], onsets["twin"]["folds"][day])
+                responses = energy["legs"][leg["leg_key"]]["gpu_rail"]["segments"]
+                hot.setdefault(day, []).append((math.fsum(values[i] for i in indices),
+                                                math.fsum(responses[i] for i in indices)))
+        counted = [values for values in hot.values() if len(values) >= F.MIN_HOT_LEGS_PER_DAY]
+        a = fit["qualified_interim_half"]["value"]
+        if len(counted) >= F.MIN_COUNTED_DAYS and _number(a):
+            b = max(abs((math.fsum(p for p, _ in values) - math.fsum(y for _, y in values)) /
+                        math.fsum(y for _, y in values)) for values in counted)
+            boundary = (_relative(a, b) <= 1e-8 and all(abs(value - F.QUALIFIED_THRESHOLD) <= 1e-12 for value in (a, b)))
+    return {"fitted_values_max_relative_difference": fit_max, "predicted_onsets_max_relative_difference": onset_max,
+            "predictions_within_tolerances": fit_max <= 1e-8 and onset_max is not None and onset_max <= 1e-6,
+            "verdicts_within_boundary": boundary}
 
 
 def _retain_stdout(data):

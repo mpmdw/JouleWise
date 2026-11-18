@@ -59,11 +59,13 @@ def public_record(look_id, manifest_sha, commit, stage1, stage1_sha, coefficient
     }
 
 
-def validate_public(record, schema, *, expected=None):
+def validate_public(record, schema, *, expected=None, look_id="lm-interim-01"):
     fixed_fields = {"look_id", "manifest_sha256", "commit", "stage1_sha256", "coefficients_sha256", "in_energy_fit"}
+    if expected is not None:
+        look_id = expected["look_id"]
     if (type(record) is not dict or record.keys() != fixed_fields | PUBLIC_WORDS.keys()
             or type(record["in_energy_fit"]) is not int or record["in_energy_fit"] < 0
-            or record["look_id"] != "lm-interim-01"
+            or record["look_id"] != look_id or not isinstance(look_id, str) or not re.fullmatch(r"lm-interim-[0-9]{2}", look_id)
             or any(record[key] not in words for key, words in PUBLIC_WORDS.items())
             or any(not isinstance(record[key], str) or not re.fullmatch(r"[a-f0-9]{%d}" % length, record[key])
                    for key, length in (("commit", 40), ("manifest_sha256", 64), ("stage1_sha256", 64),
@@ -75,8 +77,8 @@ def validate_public(record, schema, *, expected=None):
     return record
 
 
-def read_public(raw, schema):
-    record = validate_public(json.loads(raw), schema)
+def read_public(raw, schema, *, look_id="lm-interim-01"):
+    record = validate_public(json.loads(raw), schema, look_id=look_id)
     if dump(record) != raw:
         raise ValueError("the interim report is not canonical")
     return record

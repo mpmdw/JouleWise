@@ -628,6 +628,8 @@ def failure_name(error):
     cls = type(error)
     if cls is json.JSONDecodeError:
         return "JSONDecodeError"
+    if cls is MalformedStep3Input:
+        return "ValueError"
     linear_algebra = sys.modules.get("numpy.linalg")
     if cls is getattr(linear_algebra, "LinAlgError", None):
         return "LinAlgError"
@@ -826,13 +828,17 @@ def span_dirs(root, overrides, spans):
     return {span: requested[span] if span in requested else child_path(root, span) for span in spans}
 
 
+class MalformedStep3Input(ValueError):
+    """A writer-shape refusal that must leave the child without a frame."""
+
+
 def json_lines(data):
-    # Step 3 converts numbers at the field boundary. A phase timestamp may
-    # overflow float representation and fall outside a finite turn.
-    rows = [json.loads(line, object_pairs_hook=unique_object, parse_constant=finite)
-            for line in data.splitlines() if line.strip()]
+    try:
+        rows = [decode_json(line) for line in data.splitlines() if line.strip()]
+    except ValueError as error:
+        raise MalformedStep3Input("invalid Step 3 JSON") from error
     if any(not isinstance(row, dict) for row in rows):
-        raise ValueError("invalid Step 3 JSON record")
+        raise MalformedStep3Input("invalid Step 3 JSON record")
     return rows
 
 
@@ -1045,12 +1051,48 @@ SOAK_REFUSAL_STEP_RC = 2  # The runner records the exception's code, not the soa
 SOAK_ATTEMPT_FIELDS = {"attempt", "started_epoch_s", "refused", "output_dir"}
 
 
+def receipt_return_code(record):
+    rc = record.get("rc")
+    if rc is not None and type(rc) is not int:
+        raise ValueError("invalid runner receipt return code")
+    result = record.get("result")
+    if isinstance(result, dict) and "rc" in result and rc != result["rc"]:
+        raise ValueError("runner receipt return code contradicts its result")
+    error = record.get("error")
+    if error is None:
+        return rc
+    if not isinstance(error, str):
+        raise ValueError("invalid runner receipt error")
+    kind, separator, detail = error.partition(": ")
+    if not separator or not kind.isidentifier():
+        raise ValueError("invalid runner receipt error")
+
+    # The writer uses an integer SystemExit or SpanRefusal code and defaults
+    # other exceptions to 2. A SpanRefusal can also carry the deadline code 3.
+    expected = 2
+    if kind == "SystemExit" and re.fullmatch(r"-?(0|[1-9][0-9]*)", detail):
+        expected = int(detail)
+    elif kind == "SpanRefusal":
+        reported = re.fullmatch(r".+: rc (-?[0-9]+)", detail)
+        if reported:
+            expected = int(reported[1])
+        elif detail == "work deadline reached; cleanup reserve retained" or (
+            detail.endswith((" s cap cannot fit before the work deadline", ": mock leg would overrun the work deadline"))
+            or re.fullmatch(r".+ exceeded its \S+ s cap", detail)
+        ):
+            expected = 3
+    if rc != expected:
+        raise ValueError("runner receipt return code contradicts its error")
+    return rc
+
+
 def span_soak(receipt):
     """Project only the soak records admitted by RL-184 §3.3."""
     # None of the three rostered writer pins emits a structured refusal array.
     if "soak_refusals" in receipt:
         raise ValueError("structured soak refusals are not emitted by the rostered writers")
 
+    receipt_return_code(receipt)
     steps = receipt.get("steps")
     if not isinstance(steps, list):
         raise ValueError("invalid runner receipt steps")
@@ -1060,18 +1102,14 @@ def span_soak(receipt):
         if not isinstance(step, dict) or not isinstance(step.get("name"), str) or not step["name"]:
             raise ValueError("invalid runner step")
         name = step["name"]
-        rc = step.get("rc")
+        rc = receipt_return_code(step)
         if name in ("soak-blackout-wait", "soak.a2-blackout-wait"):
             prior_attempts = int(name == "soak.a2-blackout-wait")
             if name in waits or len(soak_steps) != prior_attempts:
                 raise ValueError("invalid soak wait order")
-            if rc is not None and type(rc) is not int:
-                raise ValueError("invalid soak wait return code")
             waits[name] = rc
             continue
         if name == "soak" or name.startswith("soak.a"):
-            if rc is not None and type(rc) is not int:
-                raise ValueError("invalid soak step return code")
             soak_steps.append((name, rc, step.get("error")))
 
     step_names = [name for name, _, _ in soak_steps]
@@ -1086,7 +1124,7 @@ def span_soak(receipt):
         if name in waits and waits[name] != 0 and progress > prior:
             raise ValueError("attempt after a failed soak wait")
     if "soak_attempts" not in receipt:
-        accepted = not soak_steps or soak_steps[0][1] == 0
+        accepted = not soak_steps or soak_steps[0][1:] == (0, None)
         return {"attempts": 1, "field_present": False, "accepted": accepted, "retried": []}
 
     expected_names = ["soak", "soak.a2"][:len(attempts)]
@@ -1116,7 +1154,7 @@ def span_soak(receipt):
 
     retried = [{"attempt": number, "kind": "kind not recorded", "read_from": None}
                for number in range(1, len(attempts))]
-    accepted = bool(attempts and attempts[-1]["refused"] is None and results[-1][0] == 0)
+    accepted = bool(attempts and attempts[-1]["refused"] is None and results[-1] == (0, None))
     return {"attempts": len(attempts), "field_present": True, "accepted": accepted, "retried": retried}
 
 
@@ -1158,16 +1196,21 @@ def step3_drift(legs):
     """Largest absolute eligible gamma times the median Automatic TV0h rise."""
     all_rows = [rows for _, _, rows in legs]
     matched = matched_step3_blocks(all_rows)
-    if not any(round(max(t for t, _ in rows) - min(t for t, _ in rows), 3) >= 2 for rows in matched):
-        return False, None
+    estimable = any(round(max(t for t, _ in rows) - min(t for t, _ in rows), 3) >= 2 for rows in matched)
     automatic = [(rise, rows) for high_power, rise, rows in legs if not high_power]
     rises = [rise for rise, _ in automatic if rise is not None]
     if not rises:
-        return True, None
+        return estimable, None
     slopes = [mean_centered_slope(all_rows), mean_centered_slope([rows for _, rows in automatic])]
     for i in range(len(legs)):
         slopes.append(mean_centered_slope([rows for _, _, rows in (*legs[:i], *legs[i + 1:])]))
-    return True, round(max(abs(value) for value in slopes if value is not None) * median(rises), 8)
+    maximum = max((abs(value) for value in slopes if value is not None), default=None)
+    if maximum is None:
+        return estimable, None
+    drift = maximum * median(rises)
+    # The pinned diagnostic evaluates the exponential even below the spread gate.
+    math.expm1(drift)
+    return estimable, round(drift, 8)
 
 
 def step3_projection(cells, threshold):
@@ -1234,7 +1277,7 @@ def child_frame(args):
 
 
 def step3_mapping(value):
-    if value is None:
+    if not value:
         return {}
     if not isinstance(value, dict):
         raise ValueError("invalid Step 3 field map")
@@ -1245,22 +1288,58 @@ def in_step3_rich_window(stamp, start, last_token):
     return start - 30 <= stamp <= last_token + 30
 
 
+STEP3_PHASE_NAMES = frozenset({
+    "tokenize", "generation_setup", "prefill", "decode", "align_thermal_gate", "align_thermal_hold",
+    "align_context_check", "align_context_stop_observation", "align_g0_unreleased_stop_observation",
+})
+
+
+def reject_nonfinite_step3_number(value):
+    if isinstance(value, str):
+        try:
+            value = float(value)
+        except ValueError:
+            return
+    if isinstance(value, float) and not math.isfinite(value):
+        raise MalformedStep3Input("non-finite Step 3 numeric field")
+
+
+def validate_step3_phase(row, event_type):
+    phase = row.get("phase")
+    if event_type not in ("phase_start", "phase_end") or not isinstance(phase, str) or (
+        phase not in STEP3_PHASE_NAMES and not re.fullmatch(r"align_tool_(0|[1-9][0-9]*)_(0|[1-9][0-9]*)", phase)
+    ):
+        raise MalformedStep3Input("unknown Step 3 phase")
+    metadata = row.get("metadata")
+    if metadata is not None and not isinstance(metadata, dict):
+        raise MalformedStep3Input("invalid Step 3 phase metadata")
+    try:
+        finite(row["timestamp_s"])
+    except (KeyError, TypeError, ValueError, OverflowError) as error:
+        raise MalformedStep3Input("invalid Step 3 phase timestamp") from error
+
+
 def step3_records(events_data, turns_data, journal_data, rich_data, native_data):
     """Decode the independent Step 3 inputs without retaining synthetic token IDs."""
     (turn,) = json_lines(turns_data)
-    start, end = float(turn["start_stamp"]["epoch_s"]), float(turn["end_stamp"]["epoch_s"])
+    start, end = turn["start_stamp"]["epoch_s"], turn["end_stamp"]["epoch_s"]
+    reject_nonfinite_step3_number(start)
+    reject_nonfinite_step3_number(end)
+    start, end = float(start), float(end)
     count = len(turn["generation"]["output_token_ids"])
     tokens = []
     for row in json_lines(events_data):
         event_type = row.get("event_type")
+        reject_nonfinite_step3_number(row.get("timestamp_s"))
         if event_type != "token":
-            # The hold diagnostic still requires the times of its phase events.
-            if event_type in ("phase_start", "phase_end") and row.get("phase") == "align_thermal_hold":
-                float(row["timestamp_s"])
+            if isinstance(event_type, str) and event_type.startswith("phase_"):
+                validate_step3_phase(row, event_type)
             continue
         metadata = row["metadata"]
         if not isinstance(metadata, dict):
             raise ValueError("invalid Step 3 token metadata")
+        reject_nonfinite_step3_number(metadata.get("align_turn_index"))
+        reject_nonfinite_step3_number(metadata["index"])
         if metadata.get("align_turn_index") not in (None, 0):
             raise ValueError("invalid Step 3 turn index")
         tokens.append((int(metadata["index"]), float(row["timestamp_s"])))
@@ -1279,19 +1358,27 @@ def step3_records(events_data, turns_data, journal_data, rich_data, native_data)
         status = step3_mapping(values.get("status"))
         sensors = step3_mapping(values.get("sensors"))
         started = None
-        if type(status.get("pm_observed_ns")) is int:
+        observed = status.get("pm_observed_ns")
+        reject_nonfinite_step3_number(observed)
+        reject_nonfinite_step3_number(status.get("os_level"))
+        if type(observed) is int:
             started = row["started"]["monotonic_ns"]
+            reject_nonfinite_step3_number(started)
             if not isinstance(started, (int, float)):
                 raise ValueError("invalid Step 3 journal freshness clock")
-        journal.append((row["finished"]["wall_ns"] / 1e9, started,
-                        sensors.get("TV0h"), status))
+        finished, temperature = row["finished"]["wall_ns"], sensors.get("TV0h")
+        reject_nonfinite_step3_number(finished)
+        reject_nonfinite_step3_number(temperature)
+        journal.append((finished / 1e9, started, temperature, status))
     rich = json_lines(rich_data)
     native = [frame for frame in native_data.split(b"\0") if frame.strip()]
     if len(native) not in (len(rich), len(rich) + 1):
         raise ValueError("invalid Step 3 native frame count")
     power_state = []
     for frame, raw_bytes in zip(rich, native):
+        reject_nonfinite_step3_number(frame["timestamp_s"])
         stamp, elapsed = float(frame["timestamp_s"]), frame["elapsed_ns"]
+        reject_nonfinite_step3_number(elapsed)
         if not math.isfinite(elapsed):
             raise ValueError("non-finite Step 3 elapsed count")
         state = None
@@ -1302,12 +1389,15 @@ def step3_records(events_data, turns_data, journal_data, rich_data, native_data)
                 raise ValueError("invalid Step 3 native plist") from error
             if not isinstance(raw, dict):
                 raise ValueError("invalid Step 3 native frame")
-            if int(elapsed) != int(raw.get("elapsed_ns", -1)):
+            native_elapsed = raw.get("elapsed_ns", -1)
+            reject_nonfinite_step3_number(native_elapsed)
+            if int(elapsed) != int(native_elapsed):
                 raise ValueError("Step 3 telemetry intervals disagree")
             value = raw.get("thermal_pressure")
             state = value if isinstance(value, str) else None
         gpu = step3_mapping(frame.get("gpu"))
         gpu_energy = gpu.get("gpu_energy")
+        reject_nonfinite_step3_number(gpu_energy)
         if gpu_energy is not None and elapsed > 0 and in_step3_rich_window(stamp, start, token_times[-1]):
             left = max(stamp - elapsed / 1e9, token_times[0])
             right = min(stamp, token_times[-1])
@@ -1317,7 +1407,10 @@ def step3_records(events_data, turns_data, journal_data, rich_data, native_data)
         for item in gpu.get("dvfm_states") or []:
             if not isinstance(item, dict):
                 raise ValueError("invalid Step 3 GPU state")
-            used_states.append((item, item.get("used_ns", 0)))
+            used = item.get("used_ns", 0)
+            reject_nonfinite_step3_number(used)
+            reject_nonfinite_step3_number(item.get("freq"))
+            used_states.append((item, used))
         states = []
         if sum(used for _, used in used_states) > 0:
             for item, used in used_states:
@@ -1365,14 +1458,16 @@ def step3_cut(start, token_times, journal, power_state):
     # Apply the e20 rule only to windows beginning at least 10 s into decode.
     # Scale active time by each row's overlap with the window.
     reference = max((freq for _, _, _, states in power_state for freq, used in states if used > 0), default=0)
-    clock_rows = sorted((row for row in power_state if in_step3_rich_window(row[0], start, end)), key=lambda row: row[0])
+    clock_rows = [row for row in power_state if in_step3_rich_window(row[0], start, end)]
     intervals = []
     for right, elapsed, _, states in clock_rows:
         active = sum(used for _, used in states)
         if active > 0 and elapsed > 0:
             clock = sum(freq * used for freq, used in states) / active
             intervals.append((right - elapsed / 1e9, right, active, clock))
-    for right, _, _, _ in clock_rows:
+    # Candidate windows are chronological. Their interval weights are
+    # accumulated in rich-file order, including under ties and unsorted input.
+    for right in sorted({row[0] for row in clock_rows}):
         begin = right - 10
         if not token_times[0] + 10 <= begin < right <= end:
             continue
@@ -1425,15 +1520,37 @@ def step3_observations(start, tokens, journal, power, gpu):
     return False, rise, observations
 
 
-# The histogram goes through the registered Step 3 output-key check.
-STEP3_HISTOGRAM_KEYS = {
-    None, "None", "Nominal", "Moderate", "Heavy", "Trapping", "Sleeping", "Unknown", "not_read",
-    "slope", "gamma_estimable", "drift_fraction_linear",
-}
+# Code-blind key handoff for the Step 3 source pinned by RL-166 Q6.
+STEP3_FIXED_OUTPUT_KEYS = frozenset("""
+schema disclosure legs leg_id night leg class decode_tokens prefill_s decode_s start_state row_end_reason
+row_end_s_after_first_token row_end_token_index row_decode_tokens row_share_of_decode
+state_first_off_s_after_first_token state_cut_kind journal_only_state_first_off_s_after_first_token
+clock_cut_window_start_s_after_first_token clock_reference_mhz tv0h_at_first_token_c tv0h_at_row_end_c
+tv0h_rise_first_token_to_row_end_c n_precut_full_blocks_k_ge_1 thermal_holds_in_turn native_pm_states_in_turn_counts
+checks trace_rows rich_rows plist_frames trace_vs_rich_end_stamp_max_abs_s
+trace_coverage_min_over_blocks trace_coverage_max_over_blocks decode_trace_to_rich_counter_ratio
+i_block_ratio_to_median_blocks_1_3 block_tv0h_c block_clock_mhz block_load_s_at_end block_precut
+iv_jpt_after_over_before ii_gamma_per_degC all_nine_legs leave_one_leg_out without_two_high_power_legs
+original_eight_legs_record_only max_abs_over_reported slope se n_obs n_groups n_groups_with_2plus
+gamma_estimability precut_matched_block_tv0h_ranges block n_legs tv0h_range_c max_range_c threshold_c estimable
+iii_precut_drift median_tv0h_rise_c six_automatic_legs seven_automatic_legs_incl_partc drift_fraction_linear
+drift_fraction_exp_form rule_threshold_fraction per_leg automatic_median automatic_min automatic_max
+v_block_ratio_spread automatic_legs load_s_at_end_median load_s_at_end_min load_s_at_end_max ratio_min ratio_max
+ratio_range ratio_sd cum_mean_ratio_blocks_1_to_k_min cum_mean_ratio_blocks_1_to_k_max
+cum_mean_ratio_blocks_1_to_k_range vi_slope_lnE_on_lnclock all_blocks_k_ge_1_all_nine_legs
+all_blocks_leave_one_leg_out all_blocks_automatic_legs precut_blocks_all_nine_legs rule_0_5_percent applies_to pass
+""".split())
+STEP3_PRESSURE_STATE_NAMES = frozenset({
+    "Nominal", "Moderate", "Heavy", "Trapping", "Sleeping", "Unknown", "None", "not_read",
+})
+STEP3_FORBIDDEN_KEY_PARTS = ("joule", "watt", "power_w", "gpu_power", "energy_j", "_mj", "_wh")
 
 
-class Step3CellFailure(ValueError):
-    """A surviving leg's diagnostics cannot be used in the cell output."""
+def step3_output_key_allowed(key, leg_ids):
+    lower = key.lower()
+    if lower == "e" or lower.endswith(("_j", "_w")) or any(part in lower for part in STEP3_FORBIDDEN_KEY_PARTS):
+        return False
+    return key in STEP3_FIXED_OUTPUT_KEYS or key in STEP3_PRESSURE_STATE_NAMES or key in leg_ids
 
 
 def step3_measurements(bundle):
@@ -1442,25 +1559,35 @@ def step3_measurements(bundle):
     start, _, tokens, journal, power = step3_records(*(child_path(bundle, name).read_bytes() for name in sources))
     gpu = gpu_rows(child_path(bundle, "power_trace.csv").read_bytes())
     observations = step3_observations(start, tokens, journal, power, gpu)
-    if any(state not in STEP3_HISTOGRAM_KEYS for stamp, _, state, _ in power if start < stamp <= tokens[-1]):
-        raise Step3CellFailure("unregistered Step 3 pressure state")
-    return observations
+    histogram_keys = {state if isinstance(state, str) else "None"
+                      for stamp, _, state, _ in power if start < stamp <= tokens[-1]}
+    return observations, histogram_keys
 
 
 def step3_cells(entrants, threshold):
     cells = {}
-    invalid_cells = set()
-    for size, read_leg in entrants:
+    for size, leg_id, read_leg in entrants:
         failures, legs = cells.setdefault(size, (0, []))
         try:
-            legs.append(read_leg())
-        except Step3CellFailure:
-            invalid_cells.add(size)
+            observations, histogram_keys = read_leg()
+        except MalformedStep3Input:
+            raise
         except (OSError, KeyError, TypeError, IndexError, ValueError, ArithmeticError):
             cells[size] = (failures + 1, legs)
-    for size in invalid_cells:
-        cells[size] = (1, [])
-    return step3_projection(cells, threshold)
+        else:
+            legs.append((leg_id, observations, histogram_keys))
+
+    projected = {}
+    for size, (failures, legs) in cells.items():
+        leg_ids = {leg_id for leg_id, _, _ in legs}
+        # The leave-one-leg-out map contributes these IDs even when the
+        # native pressure histogram contains no dynamic keys.
+        output_keys = leg_ids.union(*(keys for _, _, keys in legs))
+        if any(not step3_output_key_allowed(key, leg_ids) for key in output_keys):
+            projected[size] = (1, [])
+        else:
+            projected[size] = (failures, [observations for _, observations, _ in legs])
+    return step3_projection(projected, threshold)
 
 
 
@@ -1649,7 +1776,7 @@ def recompute_bundle(args, stage1, fit_identity, step3_identity, decoder_pin, th
             raise ValueError("no accepted Step 3 bundle")
         return step3_measurements(child_path(directories[row["span_id"]], relative))
 
-    entrants = ((row["cell_prompt_tokens"], lambda row=row: read_step3_leg(row)) for row in step3_legs)
+    entrants = ((row["cell_prompt_tokens"], row["leg_key"], lambda row=row: read_step3_leg(row)) for row in step3_legs)
     return fit, step3_cells(entrants, threshold)
 
 

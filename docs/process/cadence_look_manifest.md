@@ -236,6 +236,12 @@ is derived from the machine's hardware UUID. Stage 2 derives it again before
 reservation. The campaign row awaits Astra's paired census rerun and Fable's
 manifest cold pass.
 
+Use `cadence_look_manifest.py port-files M --repo .` to enumerate the verified
+files for the main-targeted integration. The list includes the two historical
+kit blobs and the decoder closure, including files outside the topic delta.
+Validate the complete port before registration. Preserve the separate v2
+qualification row and its registered bytes when adding the interim row.
+
 Stage 1 checks every rostered bundle locator before reading trace data.
 `runs/cadence-leg` is a valid literal relative POSIX path beneath a leg's
 `runtime/` directory. Staged span overrides preserve the locator. A null

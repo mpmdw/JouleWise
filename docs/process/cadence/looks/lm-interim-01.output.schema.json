@@ -22,7 +22,7 @@
   "properties": {
     "look_id": {
       "type": "string",
-      "const": "lm-interim-01"
+      "pattern": "^lm-interim-[0-9]{2}$"
     },
     "manifest_sha256": {
       "$ref": "#/$defs/sha256"
