@@ -69,6 +69,30 @@ class QualificationRegistrationTests(unittest.TestCase):
             source["kit_sha256_by_block"],
         )
 
+    def test_reregistration_differs_from_cold_pass_only_in_kit_hashes_and_pin(self):
+        registered = validate_registration(self.registered)
+        source = json.loads(KIT_COMMITMENTS.read_bytes())[registered["look_id"]]
+        cold_pass = source["cold_pass"]
+        self.assertEqual(cold_pass["manifest_commit"], "0b09bee24eb4981aa6da9cb18f991eb0e676b67c")
+
+        pin = source["runner_pin"]
+        pin_text = f"on this pin ({pin})."
+        self.assertIn(pin_text, registered["reads"]["first_span_hand_read"])
+        self.assertEqual(self.registered.count(pin_text.encode()), 1)
+        restored = self.registered.replace(pin_text.encode(), b"on this pin.", 1)
+
+        for block in registered["reads"]["blocks"]:
+            old = cold_pass["kit_sha256_by_block"][block["block_id"]]
+            new = block["kit_sha256"]
+            self.assertNotEqual(old, new)
+            field = f'"kit_sha256": "{new}"'.encode()
+            self.assertEqual(restored.count(field), 1)
+            restored = restored.replace(field, f'"kit_sha256": "{old}"'.encode(), 1)
+
+        # Recreate the cold-pass bytes without relying on this PR's Git history
+        # being available in a later checkout.
+        self.assertEqual(hashlib.sha256(restored).hexdigest(), cold_pass["manifest_sha256"])
+
     def test_each_obsolete_kit_refuses_registration_and_finalization(self):
         registered = json.loads(self.registered)
         obsolete = json.loads(OBSOLETE_KIT_PINS.read_bytes())["kit_sha256_by_block"]
