@@ -420,6 +420,38 @@ def publish_fixture_receipt(root, receipt):
 
 
 class SeriesReleaseTests(unittest.TestCase):
+    def test_audit_receipt_for_different_fit_source_refuses_without_report(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            stored_series(root, wins=102)
+            receipt = registration.require_registration(root, series_release=True)
+            solver = "joulewise/align/energy_residual.py"
+            self.assertEqual(Path(rl176._wls.__code__.co_filename).resolve(), ROOT / solver)
+            other_source = b"synthetic\n"
+            if (root / solver).read_bytes() != other_source:
+                (root / solver).write_bytes(other_source)
+                commit = commit_fixture(root, [solver])
+                receipt = {**receipt, "commit": commit, "artifacts": {
+                    **receipt["artifacts"], solver: registration.digest(other_source),
+                }}
+                publish_fixture_receipt(root, receipt)
+            self.assertEqual(registration.require_registration(root, series_release=True), receipt)
+            for path in RELEASE_PATHS:
+                self.assertEqual(registration.digest((ROOT / path).read_bytes()), receipt["artifacts"][path])
+            self.assertNotEqual(registration.digest((ROOT / solver).read_bytes()), receipt["artifacts"][solver])
+            output = root / "report.json"
+            result = invoke(root, output)
+            self.assertEqual(result.returncode, 1, result.stderr)
+            self.assertFalse(output.exists())
+
+    def test_receipt_covers_static_release_import_closure(self):
+        from tests.align.test_v4_executed_closure import executed_closure
+
+        closure = executed_closure(("scripts/align_v4_series_release.py",))
+        bound = set(registration.ARTIFACTS) | set(registration.SERIES_RELEASE_ARTIFACTS)
+        self.assertIn("joulewise/align/energy_residual.py", closure)
+        self.assertEqual(sorted(closure - bound), [])
+
     def test_audit_scorer_differs_from_legacy_receipt_refuses_without_report(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
