@@ -8,7 +8,7 @@ import hashlib
 import json
 import math
 import os
-from pathlib import Path
+from pathlib import Path, PosixPath
 import re
 import shutil
 import subprocess
@@ -79,6 +79,43 @@ def _installed_night_agents(directory):
                           if fnmatchcase(entry.name, "com.joulewise.night*.plist"))
     except OSError as exc:
         raise Refused(f"LaunchAgent census indeterminate: cannot enumerate {directory}: {exc}") from exc
+
+
+class _RequiredCensusParent(PosixPath):
+    """A configured R0 root whose directory enumeration must succeed."""
+
+    def iterdir(self):
+        try:
+            # Only the declared root is required. The shared census applies
+            # its own reconciliation policy to ordinary child paths.
+            yield from Path(self).iterdir()
+        except FileNotFoundError as exc:
+            raise Refused(f"required custody parent could not be enumerated: {self}: {exc}") from exc
+
+
+def _interior_exit_evidence(opening, current, intermediate, elapsed_s, limit):
+    """CPU lower bounds for contenders sampled only inside the window."""
+    endpoints = opening.rows.keys() | current.rows.keys()
+    evidence = {}
+    for snapshot in intermediate:
+        wall_shift_ns = ((snapshot.started.wall_ns - opening.started.wall_ns)
+                         - (snapshot.started.monotonic_ns - opening.started.monotonic_ns))
+        if abs(wall_shift_ns) > 1_000_000_000:
+            continue
+        # Charge cumulative CPU only with a birth known to follow the
+        # completed opening sample. Allow for positive wall-clock skew.
+        window_start_ns = opening.finished.wall_ns + max(0, wall_shift_ns)
+        for identity in snapshot.rows.keys() - endpoints:
+            row = snapshot.rows[identity]
+            birth_ns = row["start_epoch_s"] * 1_000_000_000
+            if not row["contaminant"] or not window_start_ns <= birth_ns <= snapshot.finished.wall_ns:
+                continue
+            rate = row["cumulative_cpu_seconds"] / elapsed_s
+            if rate > evidence.get(identity, {}).get("cpu_s_per_s", limit):
+                evidence[identity] = {
+                    "pid": row["pid"], "command": row["command"], "start": row["start_identity"],
+                    "cpu_s_per_s": rate, "basis": "CPU lower bound from a process sampled inside this window"}
+    return sorted(evidence.values(), key=lambda row: (-row["cpu_s_per_s"], row["pid"], row["start"]))
 
 
 class QuietGuard:
@@ -245,7 +282,7 @@ class QuietGuard:
             r = self.run(argv, capture_output=True, text=True, timeout=15)
             return ProbeResult(argv, r.returncode, r.stdout, r.stderr, time.monotonic_ns())
         agent, refusal = agent_census(SimpleNamespace(run=probe, monotonic_ns=time.monotonic_ns))
-        custody = self.inspect_custody(parents=parents)
+        custody = self.inspect_custody(parents=[_RequiredCensusParent(parent) for parent in parents])
         table = probe(PS_ARGV)
         if table.exit_code != 0:
             raise Refused("process table unavailable")
@@ -358,7 +395,8 @@ class QuietGuard:
                 if start is None:
                     continue  # only the admission's mid-baseline snapshot
                 interval_details = {"regressed_counters": [], "regressed_noncontaminant": []}
-                interval_busy = self._judge_cpu_interval(snapshots[start], snapshots[end], interval_details)
+                interval_busy = self._judge_cpu_interval(
+                    snapshots[start], snapshots[end], interval_details, intermediate=snapshots[start + 1:end])
                 receipt["cpu_intervals"].append(interval_details)
                 details = interval_details
                 self._judged_end, opening = end, start
@@ -409,7 +447,7 @@ class QuietGuard:
                 raise Refused(f"census indeterminate: background snapshots stalled ({lag:.1f} s since the last)")
         return busy
 
-    def _judge_cpu_interval(self, opening, current, details):
+    def _judge_cpu_interval(self, opening, current, details, *, intermediate):
         limit = prewindow.CPU_LIMIT_PERCENT / 100
         measured = contention.interval(opening, current, tree_roots=(),
                                        include_kernel_task=True, limit=limit,
@@ -454,9 +492,10 @@ class QuietGuard:
                     "matched_on": sorted(matches[(row["pid"], row["start"])]),
                     "cpu_s": row["cpu_s_per_s"] * measured["elapsed_s"],
                     "cpu_s_per_s": row["cpu_s_per_s"]})
+        interior_exits = _interior_exit_evidence(opening, current, intermediate, measured["elapsed_s"], limit)
         details["exited_over_limit"] = [
-            row for row in measured["exited_over_limit"] if contaminant(row)]
-        return busy
+            row for row in measured["exited_over_limit"] if contaminant(row)] + interior_exits
+        return busy + interior_exits
 
     def _record_refusal(self, receipt, error):
         if not any(item is receipt for item in self.receipts):
