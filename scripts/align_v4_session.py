@@ -1000,7 +1000,9 @@ def powermode_desk_check(*, state, members, runs_root, kit_path, window_harvest_
     # Desk release guard (protocol B0/B2/B9/R27): before release a C or T window prints no member's DC row.
     from joulewise.align.apple import v4_desk_seal
     sealed_scope = v4_desk_seal.sealed_scope(state)
-    dc_fit_flags = {flag for model in dc.get('models', ()) for flag in model.get('flags', ())} if sealed_scope else set()
+    dc_fit_flags = set()
+    if sealed_scope and members:  # Light triage has no training members.
+        dc_fit_flags = {flag for model in dc.get('models', ()) for flag in model.get('flags', ())}
     if dc_fit_flags:
         codes = sorted({flag.partition('=')[0] for flag in dc_fit_flags})
         print(f'{km003c.LABEL} window fit flags (RL-163 section 3): ' + ', '.join(codes))

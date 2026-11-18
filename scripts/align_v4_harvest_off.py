@@ -164,8 +164,8 @@ def _pack_inputs(finalized):
     external = tuple(harvest_offload.byte_bound_inputs(finalized))
     directories = harvest_offload.bound_directories(finalized)
     resolved_inputs = (harvest_offload._bound_real(finalized, path) for path in external)
-    obsolete_names = {name.casefold() for name in DESK_ARTIFACTS}
-    if any(part.casefold() in obsolete_names
+    desk_names = {name.casefold() for name in DESK_ARTIFACTS}
+    if any(part.casefold() in desk_names
            for path in (*finalized['entries'], *external, *resolved_inputs, *directories)
            for part in Path(path).parts):
         raise harvest_offload.OffloadRefused('offload cannot carry archive/, PILOT.json or desk.json (RL-168)')

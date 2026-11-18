@@ -1539,11 +1539,13 @@ class EntryPointTests(unittest.TestCase):
                     row['flags'].extend(flags)
                 with patch.object(self.fx, 'dc_report', return_value=dc):
                     printed, _, _, _ = self.fx.run_desk(root)
+                    triage = self.fx.run_triage(root, scope)
                 lines = [line for line in printed.splitlines() if km003c.LABEL in line]
                 self.assertEqual([line for line in lines if 'excluded_turn_rows' in line],
                                  [f'{km003c.LABEL} window fit flags (RL-163 section 3): '
                                   'excluded_turn_rows, rank_deficient_design'])
                 self.assertEqual(sum('rank_deficient_design' in line for line in lines), 1)
+                self.assertNotIn('window fit flags', triage['triage_stderr'])
 
     def test_rl168_flock_distinguishes_contention_and_lock_failure(self):
         import errno
