@@ -1052,6 +1052,23 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 
 <!-- RUN_STATE TYPED ITEMS: newest first. Add with scripts/run_state_add.py; never edit by hand. -->
 
+446. **Air copy after R1-RERUN's fence: LAN rsync if the Air is on this subnet, else copy only the offload key to the Air (the trees are already in iCloud); never hold the ladder**
+
+```item
+{"expires_epoch_s": null, "issued_epoch_s": 1795045046, "number": 446, "owner": "magistrate", "schema": "joulewise.run_state_item.v1", "sets": [], "status": "ISSUED", "supersedes": []}
+```
+
+- **Owner's direction (item 445, verbatim):** "just compress it upload it to the cloud and then tell the air to handle it? i'll fix the wifi later today".
+- **The cloud copy already exists.** The four dev trees (`cq-dev-04-s01-a1`, `cq-dev-04-s02-a1`, `cq-dev-05-s01-a2`, `cq-dev-05-s02-a1`) are already in iCloud Drive `JouleWise-offload/` as `.tgz.enc` with their `SHA256SUMS` and `outer.sha256` files, from their closes. Do not upload anything again.
+- **The only missing piece:** the Air cannot decrypt them, because the key is on this Mac only.
+- **At the first activation after R1-RERUN's fence is gone, before or beside its Check, do exactly one of these:**
+  - **Route A (preferred), if the Air is on this Mac's subnet** (the owner is fixing the Wi-Fi; check with `ping -c 2 <Air LAN IP>`): resume item 441's rsync push over the LAN, with a 600 s bound. Rsync resumes the partial tree.
+  - **Route B, otherwise:** copy only the offload key to the Air over the authorized key-only link, as follows. Record the key's sha256 on both sides; never print the key itself.
+    `scp -i <jw-hostlink key> /Users/edr/night-custody/offload/offload.key edr@100.64.2.113:/Volumes/JW-EXT/air-home/night-custody/offload/offload.key`
+    `ssh ... chmod 600 /Volumes/JW-EXT/air-home/night-custody/offload/offload.key`
+    The Air then decrypts and verifies the four trees from iCloud on its own. That step belongs to the lead.
+- **Neither route holds the ladder.** Fillers or qualification proceed per items 422 and 434.
+
 445. **Magistrate 9402646f (headless, Opus 5.5), 2026-11-18 15:35 PST: Ed's reply on the Air data move recorded verbatim (compress, upload to cloud, Air handles it); deferred to after R1's fence; quiet otherwise**
 
 ```item
