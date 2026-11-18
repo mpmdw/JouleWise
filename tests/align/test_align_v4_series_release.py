@@ -244,12 +244,15 @@ def describe(root, relative, value, *, canonical=False):
     return {"path": relative, "sha256": hashlib.sha256(raw).hexdigest()}
 
 
-def registration_fixture(root, amount_field=None, artifact_overrides=None):
-    paths = dict.fromkeys((*registration.ARTIFACTS, *registration.SERIES_RELEASE_ARTIFACTS))
+def registration_fixture(root, amount_field=None, artifact_overrides=None, *, legacy_receipt=False):
+    paths = dict.fromkeys(registration.ARTIFACTS)
+    if not legacy_receipt:
+        paths.update(dict.fromkeys(registration.SERIES_RELEASE_ARTIFACTS))
+    artifact_overrides = artifact_overrides or {}
     for path in paths:
         target = root / path
         target.parent.mkdir(parents=True, exist_ok=True)
-        if path in (artifact_overrides or {}):
+        if path in artifact_overrides:
             target.write_bytes(artifact_overrides[path])
         elif path.startswith(("joulewise/", "scripts/")) and path.endswith(".py"):
             target.write_bytes((ROOT / path).read_bytes())
@@ -292,10 +295,10 @@ def registration_fixture(root, amount_field=None, artifact_overrides=None):
 
 def stored_series(root, *, wins=102, different=None, no_rows=False, spoof=False, history=False,
                   amount_fields=None, amount_field=None, artifact_overrides=None, defective_layout=False,
-                  omit_first_pm=False):
+                  omit_first_pm=False, legacy_receipt=False):
     """Synthetic committed arm history with a separate, untracked restored tree."""
     init_git_fixture(root, "-q")
-    registration_fixture(root, amount_field, artifact_overrides)
+    registration_fixture(root, amount_field, artifact_overrides, legacy_receipt=legacy_receipt)
     manifest = series.candidate()
     manifest_sha = hashlib.sha256(series.raw_json(manifest)).hexdigest()
     prior = None
@@ -519,16 +522,10 @@ class SeriesReleaseTests(unittest.TestCase):
     def test_audit_scorer_differs_from_legacy_receipt_refuses_without_report(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            stored_series(root, wins=102)
-            receipt_path = root / registration.REGISTRATION / "registration_receipt.json"
-            receipt = json.loads(receipt_path.read_bytes())
             scorer = "joulewise/align/apple/rl176.py"
             registered = (ROOT / scorer).read_bytes() + b"\n# Synthetic registration snapshot.\n"
-            (root / scorer).write_bytes(registered)
-            receipt["commit"] = commit_fixture(root, [scorer])
-            receipt["artifacts"] = {path: receipt["artifacts"][path] for path in registration.ARTIFACTS}
-            receipt["artifacts"][scorer] = registration.digest(registered)
-            publish_fixture_receipt(root, receipt)
+            stored_series(root, wins=102, artifact_overrides={scorer: registered}, legacy_receipt=True)
+            receipt = authored_receipt(root)
             self.assertEqual(registration.require_registration(root), receipt)
             output = root / "report.json"
             result = invoke(root, output)
@@ -563,8 +560,8 @@ class SeriesReleaseTests(unittest.TestCase):
             for path in RELEASE_PATHS:
                 with self.subTest(path=path, defect="missing"):
                     absent = {key: value for key, value in receipt["artifacts"].items() if key != path}
-                    publish_fixture_receipt(root, {**receipt, "artifacts": absent})
-                    assert_refusal()
+                    with self.assertRaisesRegex(ValueError, "artifact set incomplete"):
+                        registration.validate_receipt({**receipt, "artifacts": absent}, root, series_release=True)
 
             for path in RELEASE_PATHS:
                 with self.subTest(path=path, defect="registered version differs"):
@@ -574,9 +571,9 @@ class SeriesReleaseTests(unittest.TestCase):
                     commit = commit_fixture(root, [path])
                     artifacts = {**receipt["artifacts"], path: registration.digest(different)}
                     signed = {**receipt, "commit": commit, "artifacts": artifacts}
-                    publish_fixture_receipt(root, signed)
-                    self.assertEqual(registration.require_registration(root, series_release=True), signed)
-                    assert_refusal()
+                    validated = registration.validate_receipt(signed, root, series_release=True)
+                    with self.assertRaisesRegex(ValueError, "executing release source differs from the receipt"):
+                        caller.require_executing_bindings(validated)
                     (root / path).write_bytes(original)
                     commit_fixture(root, [path])
 
@@ -677,7 +674,7 @@ class SeriesReleaseTests(unittest.TestCase):
             instructed = next(m.episode for m in members if m.episode.condition == "sabotage")
             key = inputs.member_keys[instructed.episode_id][0]
             other_pair = next(pair for pair in series.PAIRS if pair != key[1])
-            with patch.object(caller.RestoredFiles, "bundle", side_effect=AssertionError("unexpected resolution")):
+            with patch.object(caller.RestoredFiles, "bind_bundle", side_effect=AssertionError("unexpected resolution")):
                 for bad in (key, (key[0], other_pair, key[2]), ("T5", key[1], key[2])):
                     with self.assertRaises((ValueError, KeyError)):
                         inputs.benign_dc(bad)
@@ -685,6 +682,7 @@ class SeriesReleaseTests(unittest.TestCase):
                     with self.assertRaises((ValueError, KeyError)):
                         inputs.load_benign_dc(bad)
             corrupted = root / "series/restored/C1/runs" / instructed.episode_id / caller.RAIL_FILE
+            rail_bytes = corrupted.read_bytes()
             with corrupted.open("ab") as stored:
                 stored.write(b"changed after finalization\n")
             partial = root / "partial.json"
@@ -692,6 +690,15 @@ class SeriesReleaseTests(unittest.TestCase):
                 caller.main(["--measurement-root", str(root), "--output", str(partial)])
             self.assertEqual(refusal.exception.code, 1)
             self.assertEqual(len(trace_opens), 1)
+            self.assertFalse(partial.exists())
+
+            corrupted.write_bytes(rail_bytes)
+            with (root / permitted).open("ab") as dc_file:
+                dc_file.write(b"changed after finalization\n")
+            with patch.object(rl176, "_series_prints", side_effect=AssertionError("scored before DC verification")), \
+                    redirect_stderr(StringIO()), self.assertRaises(SystemExit) as refusal:
+                caller.main(["--measurement-root", str(root), "--output", str(partial)])
+            self.assertEqual(refusal.exception.code, 1)
             self.assertFalse(partial.exists())
 
     def test_side_transfer_uses_only_named_frozen_numeric_evaluator_field(self):
@@ -812,7 +819,9 @@ class SeriesReleaseTests(unittest.TestCase):
                         with self.assertRaises((ValueError, OSError)):
                             files = caller.RestoredFiles(root, record,
                                                          {"trace_layout": caller.LAYOUT, "hazard_journal": None})
-                            files.read(name, optional=optional)
+                            bound = files.bind(name, optional=optional)
+                            if bound is not None:
+                                files.read_bound(bound)
 
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -822,7 +831,12 @@ class SeriesReleaseTests(unittest.TestCase):
                                 harvest_offload.finalized_manifest(restored), canonical=True)
             record = SimpleNamespace(window="C1", finalized_manifest_sha256=manifest["sha256"])
             files = caller.RestoredFiles(root, record, {"trace_layout": caller.LAYOUT, "hazard_journal": None})
-            self.assertIsNone(files.read(f"runs/{run_id}/events.jsonl", optional=True))
+            absent = f"runs/{run_id}/events.jsonl"
+            self.assertIsNone(files.bind(absent, optional=True))
+            unbound_extra = restored / (absent + ".extra")
+            unbound_extra.parent.mkdir(parents=True)
+            unbound_extra.write_bytes(b"synthetic unbound extra")
+            self.assertIsNone(files.bind(absent, optional=True))
 
     def test_stored_101_win_series_refuses_gzip_archive_and_its_mutations(self):
         window = "C8"

@@ -5,10 +5,13 @@ from __future__ import annotations
 import argparse
 from collections import defaultdict
 from contextlib import contextmanager
+import csv
 from dataclasses import dataclass, replace
 import hashlib
 from importlib.machinery import PathFinder, SourceFileLoader
+from io import StringIO
 import json
+import math
 import os
 from pathlib import Path
 from stat import S_ISREG
@@ -102,14 +105,21 @@ OPTIONAL_BUNDLE_FILES = ("events.jsonl", "outputs/align_runtime_events.jsonl",
                          "outputs/align_thermal.jsonl", "outputs/align_turns.jsonl")
 COMPANION_PRINTS = ("S_a4", "S_w", "benign_slopes")
 SOC_RAILS = frozenset(("powermetrics", name) for name in ("cpu_power", "gpu_power", "ane_power"))
+RAIL_COLUMNS = {"timestamp_s", "power_w", "source", "rail"}
+RAIL_INTERVAL_COLUMNS = {"interval_start_s", "interval_end_s"}
 
 
-def named_bytes(root, relative):
-    """Open exactly one regular file below a real root, with no symlink hops."""
+def input_parts(relative):
     parts = Path(relative).parts
     packet.require(parts and not Path(relative).is_absolute()
                    and all(part not in (".", "..") for part in parts)
                    and Path(*parts).as_posix() == relative, "unsafe release input path")
+    return parts
+
+
+def named_bytes(root, relative):
+    """Open exactly one readable, unlinked regular file below a real root."""
+    parts = input_parts(relative)
     directory_flags = os.O_RDONLY | os.O_NOFOLLOW | os.O_DIRECTORY
     directory = os.open(root, directory_flags)
     try:
@@ -119,7 +129,9 @@ def named_bytes(root, relative):
             directory = child
         file_flags = os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK
         with os.fdopen(os.open(parts[-1], file_flags, dir_fd=directory), "rb") as source:
-            packet.require(S_ISREG(os.fstat(source.fileno()).st_mode), "non-regular release input")
+            info = os.fstat(source.fileno())
+            packet.require(S_ISREG(info.st_mode) and info.st_nlink == 1 and info.st_mode & 0o444,
+                           "unreadable or linked release input")
             return source.read()
     finally:
         os.close(directory)
@@ -231,6 +243,43 @@ class Assignment:
         return self.window, self.pair, self.ordinal
 
 
+@dataclass(frozen=True)
+class BoundInput:
+    path: str
+    size: int
+    sha256: str
+
+
+def plain_input(name, raw):
+    """Accept the registered plain grammars at their canonical paths."""
+    text = raw.decode("utf-8")
+    if name.endswith(".jsonl"):
+        rows = tuple(packet.decode(line) for line in raw.splitlines() if line.strip())
+        packet.require(all(isinstance(row, dict) for row in rows), "release journal must contain objects")
+        return rows
+    if name.endswith(".json"):
+        value = packet.decode(text)
+        required = list if name.endswith("/" + PM_ROWS) else dict
+        packet.require(isinstance(value, required), "release JSON has the wrong shape")
+        return value
+
+    packet.require(name.endswith("/" + RAIL_FILE), "unexpected release input format")
+    reader = csv.DictReader(StringIO(text, newline=""), strict=True)
+    columns = reader.fieldnames or ()
+    packet.require(len(columns) == len(set(columns))
+                   and set(columns) in (RAIL_COLUMNS, RAIL_COLUMNS | RAIL_INTERVAL_COLUMNS),
+                   "unexpected rail projection header")
+    channels = set()
+    for row in reader:
+        channel = row["source"], row["rail"]
+        packet.require(None not in row and channel in SOC_RAILS, "rail projection contains an unbound channel")
+        numbers = (row["timestamp_s"], row["power_w"],
+                   *(row[name] for name in RAIL_INTERVAL_COLUMNS if row.get(name)))
+        packet.require(all(math.isfinite(float(number)) for number in numbers), "invalid rail sample")
+        channels.add(channel)
+    packet.require(rl176.GPU in channels, "rail projection is missing the GPU trace")
+
+
 class RestoredFiles:
     def __init__(self, root, record, layout):
         packet.require(layout["trace_layout"] == LAYOUT, "no admitted rail-only file layout")
@@ -242,36 +291,56 @@ class RestoredFiles:
         manifest = packet.decode(raw)
         harvest_offload._validate_finalized(manifest)
         self.entries = manifest["entries"]
-        self.hazard_journal = layout["hazard_journal"]
-        if self.hazard_journal is not None:
-            packet.require(self.hazard_journal == "archive/align_s_hazard.jsonl",
+        self.stems = defaultdict(set)
+        for name in self.entries:
+            input_parts(name)
+            self.stems[self.stem(name)].add(name)
+        journal = layout["hazard_journal"]
+        self.hazard_input = None
+        if journal is not None:
+            packet.require(journal == "archive/align_s_hazard.jsonl",
                            "unexpected supplemental cut source")
+            self.hazard_input = self.bind(journal)
         self._hazard = None
 
-    def read(self, name, *, optional=False):
+    @staticmethod
+    def stem(name):
+        parent, _, filename = name.rpartition("/")
+        return parent, filename.partition(".")[0]
+
+    def bind(self, name, *, optional=False):
+        # Only the canonical representation belongs to this input. Compare
+        # the whole namespace so an unknown encoding cannot look like absence.
+        variants = self.stems.get(self.stem(name), set())
+        packet.require(not variants.difference((name,)), "unapproved representation in the release manifest")
         if name not in self.entries:
-            # A compressed-only binding needs restoration, even for an
-            # optional input that would otherwise be absent from the projection.
-            packet.require(name + ".zst" not in self.entries, "compressed release input requires restoration")
             packet.require(optional, "required release input missing from the restored manifest")
             return None
         row = self.entries[name]
-        packet.require(set(row) == {"size", "sha256"}, "release input is not a bound regular file")
-        raw = named_bytes(self.root, f"{self.prefix}/{name}")
-        packet.require(len(raw) == row["size"] and packet.digest(raw) == row["sha256"],
-                       "restored file differs from record manifest")
-        return raw
+        packet.require(isinstance(row, dict) and set(row) == {"size", "sha256"}
+                       and type(row["size"]) is int and row["size"] >= 0
+                       and v4_registration.is_digest(row["sha256"]), "release input is not a bound regular file")
+        return BoundInput(name, row["size"], row["sha256"])
 
-    def bundle(self, run_id, name, *, optional=False):
+    def read_bound(self, bound):
+        raw = named_bytes(self.root, f"{self.prefix}/{bound.path}")
+        packet.require(len(raw) == bound.size and packet.digest(raw) == bound.sha256,
+                       "restored file differs from record manifest")
+        return raw, plain_input(bound.path, raw)
+
+    def bind_bundle(self, run_id, name, *, optional=False):
         packet.require(Path(run_id).name == run_id and run_id not in ("", ".", ".."),
                        "unsafe run identity")
-        return self.read(f"runs/{run_id}/{name}", optional=optional)
+        return self.bind(f"runs/{run_id}/{name}", optional=optional)
+
+    def member_inputs(self, run_id):
+        names = REQUIRED_BUNDLE_FILES + OPTIONAL_BUNDLE_FILES + (PM_ROWS,)
+        bindings = {name: self.bind_bundle(run_id, name, optional=name in OPTIONAL_BUNDLE_FILES) for name in names}
+        return {name: binding for name, binding in bindings.items() if binding is not None}
 
     def hazard(self):
         if self._hazard is None:
-            self._hazard = (() if self.hazard_journal is None else
-                            tuple(packet.decode(line) for line in self.read(self.hazard_journal).splitlines()
-                                  if line.strip()))
+            self._hazard = () if self.hazard_input is None else self.read_bound(self.hazard_input)[1]
         return self._hazard
 
 
@@ -361,17 +430,17 @@ def final_roster(root, manifest, completion, ledger, chain):
     return assignments.values()
 
 
-def read_member(assignment, condition):
+def read_member(assignment, condition, bindings):
     files, run_id = assignment.files, assignment.run_id
-    pm_rows = packet.decode(files.bundle(run_id, PM_ROWS))
+    _, pm_rows = files.read_bound(bindings[PM_ROWS])
     # Stage only named inputs already verified against the rail-only custody
     # layout. The row builder never sees the real bundle directory or DC file.
     with TemporaryDirectory(prefix="align-series-rows-") as tmp:
         project = Path(tmp)
         (project / "outputs").mkdir()
-        for name in REQUIRED_BUNDLE_FILES + OPTIONAL_BUNDLE_FILES:
-            raw = files.bundle(run_id, name, optional=name in OPTIONAL_BUNDLE_FILES)
-            if raw is not None:
+        for name, bound in bindings.items():
+            if name != PM_ROWS:
+                raw, _ = files.read_bound(bound)
                 local_name = "power_trace.csv" if name == RAIL_FILE else name
                 (project / local_name).write_bytes(raw)
         episode = read_episode_bundle(project)
@@ -386,6 +455,14 @@ def read_member(assignment, condition):
                              assignment.reason is None, rows.rows, assignment.reason)
 
 
+def paired_strata(dispositions):
+    conditions = defaultdict(set)
+    for window, pair, condition, eligible, _ in dispositions:
+        if eligible:
+            conditions[window, pair].add(condition)
+    return {key for key, seen in conditions.items() if seen == {"benign", "sabotage"}}
+
+
 class ReleasedInputs:
     def __init__(self, root, guarded_metadata):
         completion, ledger, chain, registered = bound_history(root, guarded_metadata)
@@ -396,8 +473,16 @@ class ReleasedInputs:
         packet.require(self.registration_receipt == packet.decode(registered), "registration receipt changed")
         require_executing_bindings(self.registration_receipt)
         self.assignments = {a.key: a for a in final_roster(root, self.manifest, completion, ledger, chain)}
+        captured = [a for a in self.assignments.values() if a.files is not None]
+        self.member_inputs = {a.key: a.files.member_inputs(a.run_id) for a in captured}
+        self.expected_members = {
+            a.run_id: (a.window, a.pair, self.condition(a.key), a.reason is None, a.reason) for a in captured
+        }
+        self.expected_strata = paired_strata(self.expected_members.values())
         self.members = None
         self.member_keys = {}
+        self.dc_inputs = None
+        self.dc_results = None
 
     def condition(self, key):
         window, pair, ordinal = key
@@ -412,32 +497,72 @@ class ReleasedInputs:
         members = []
         for key, assignment in self.assignments.items():
             if assignment.files is not None:
-                member = read_member(assignment, self.condition(key))
+                member = read_member(assignment, self.condition(key), self.member_inputs[key])
                 members.append(member)
                 self.member_keys[member.episode.episode_id] = (key, member.episode, member.eligible)
         self.members = tuple(members)
         return self.members
 
-    def benign_dc(self, key):
+    def load_for_scoring(self):
+        members = self.load_members()
+        loaded = {}
+        for member in members:
+            episode = member.episode
+            packet.require(episode.episode_id not in loaded and type(member.eligible) is bool,
+                           "duplicate or invalid loaded member")
+            loaded[episode.episode_id] = (member.window, episode.task_pair.removeprefix("shade/"),
+                                          episode.condition, member.eligible, member.exclusion_reason)
+        packet.require(paired_strata(loaded.values()) == self.expected_strata,
+                       "loaded strata differ from the bound roster")
+        packet.require(loaded == self.expected_members, "loaded members differ from the bound roster")
+
+        # The rail and row loaders finish before the separate benign provider
+        # runs. Snapshot its admitted files before the scorer gets any members.
+        benign = {self.benign_episode_key(m.episode): m.episode
+                  for m in members if m.eligible and m.episode.condition == "benign"}
+        self.dc_inputs = {key: self.bind_benign_dc(key) for key in benign}
+        self.dc_results = {episode.episode_id: self.read_benign_dc(episode, key) for key, episode in benign.items()}
+        return members
+
+    def benign_assignment(self, key):
         packet.require(self.members is not None and self.condition(key) == "benign",
                        "DC identity is not an admitted benign ordinal")
         assignment = self.assignments[key]
         packet.require(assignment.files is not None and assignment.reason is None,
                        "DC identity is not eligible and captured")
-        raw = assignment.files.bundle(assignment.run_id, DC_FILE, optional=True)
-        if raw is None:
+        return assignment
+
+    def bind_benign_dc(self, key):
+        assignment = self.benign_assignment(key)
+        return assignment.files.bind_bundle(assignment.run_id, DC_FILE, optional=True)
+
+    def benign_dc(self, key):
+        assignment = self.benign_assignment(key)
+        bound = (assignment.files.bind_bundle(assignment.run_id, DC_FILE, optional=True)
+                 if self.dc_inputs is None else self.dc_inputs[key])
+        if bound is None:
             return None
-        data = packet.decode(raw)
+        _, data = assignment.files.read_bound(bound)
         trace = from_json(PowerTrace, json.dumps(data["trace"]))
         mapping = from_json(ClockMapping, json.dumps(data["clock_mapping"])) if data.get("clock_mapping") else None
         packet.require((trace.source, trace.channel) == rl176.DC, "wrong separately bound DC channel")
         return trace, mapping
 
-    def load_benign_dc(self, episode):
+    def benign_episode_key(self, episode):
         # #813 accepts an Episode callback. Give the provider only the
         # authenticated identity of the exact eligible loaded object.
         key, bound, eligible = self.member_keys[episode.episode_id]
         packet.require(episode is bound and eligible, "unbound episode asked for DC")
+        return key
+
+    def load_benign_dc(self, episode):
+        key = self.benign_episode_key(episode)
+        if self.dc_results is not None:
+            self.benign_assignment(key)
+            return self.dc_results[episode.episode_id]
+        return self.read_benign_dc(episode, key)
+
+    def read_benign_dc(self, episode, key):
         result = self.benign_dc(key)
         if result is None:
             return None
@@ -512,7 +637,7 @@ def build_report(root):
         inputs = ReleasedInputs(root, guarded_metadata) if seal.released(state) else None
         report = rl176.series_release_prints(
             state,
-            load_members=inputs.load_members if inputs is not None else None,
+            load_members=inputs.load_for_scoring if inputs is not None else None,
             load_benign_dc=inputs.load_benign_dc if inputs is not None else None,
             registration_receipt=inputs.registration_receipt if inputs is not None else None,
             q_words_frozen=True,
@@ -530,7 +655,7 @@ def main(argv=None):
     args = parser.parse_args(argv)
     try:
         write_json_once(args.output, build_report(args.measurement_root))
-    except (OSError, ValueError, TypeError, KeyError, AttributeError, IndexError, ImportError):
+    except (OSError, ValueError, TypeError, KeyError, AttributeError, IndexError, ImportError, csv.Error):
         parser.exit(1, "series release refused: invalid or unverified release input or output\n")
     return 0
 
