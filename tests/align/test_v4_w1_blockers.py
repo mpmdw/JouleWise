@@ -195,6 +195,59 @@ class U3Tests(unittest.TestCase):
 
 
 class ExportTests(unittest.TestCase):
+    def test_registered_e01_e09_is_measured_but_another_e01_path_is_refused(self):
+        from joulewise.align.apple import thermal_desk
+        from scripts import align_v4_u3_export as export_cli
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp).resolve()
+            registered_selection = root / (
+                'configs/campaigns/align_v4/registration/u3_sources/selection.json')
+            registered_selection.parent.mkdir(parents=True)
+            roster = registered_selection.parents[2] / 'collection_plan.json'
+            early = root / 'pilot' / 'align-pilot-v3-episodes-a-e01'
+            late = early.with_name('align-pilot-v3-episodes-a-e09')
+            anchor = root / 'other' / early.name
+            for bundle in (early, late, anchor):
+                bundle.mkdir(parents=True)
+                for name in ('config.json', 'metadata.json'):
+                    (bundle / name).write_text(json.dumps({'run_id': bundle.name}))
+            selection = {'sessions': [{'session': 'p4', 'candidates': [
+                {'ordinals': [1, 9], 'early_bundle': str(early), 'late_bundle': str(late)}]}]}
+            registered_selection.write_text(json.dumps(selection))
+            roster.write_text(json.dumps({'members': [{'run_id': early.name}]}))
+            init_git_fixture(root, '-q')
+            for args in (['add', str(registered_selection), str(roster)],
+                         ['-c', 'user.name=Synthetic', '-c', 'user.email=synthetic@example.test',
+                          '-c', 'commit.gpgsign=false', '-c', 'core.hooksPath=/dev/null',
+                          'commit', '-qm', 'Register synthetic selection']):
+                subprocess.run(['git', *args], cwd=root, check=True, capture_output=True)
+
+            forged_selection = deepcopy(selection)
+            forged_selection['sessions'][0]['candidates'][0]['early_bundle'] = str(anchor)
+            registered_selection.write_text(json.dumps(forged_selection))
+            read_rows = [dict(id=bundle.name, turn_owned_j=energy, tokens=[[1]], decode_clock_mhz=1000,
+                              turn_owned_half_width_j=1, gross_episode_half_width_j=1)
+                         for bundle, energy in ((early, 10), (late, 11))]
+            with (patch.object(export_cli, 'ROOT', root),
+                  patch.object(thermal_desk, 'read_bundle_record', side_effect=read_rows) as read,
+                  patch.object(export_cli, 'configuration_sha256', return_value='a' * 64)):
+                measured = export_cli.pilot_pairs(selection)
+                self.assertEqual([pair['energies_j'] for pair in measured['pairs']], [[10, 11]])
+                self.assertEqual([call.args[0] for call in read.call_args_list], [early, late])
+                read.reset_mock()
+                refused = export_cli.pilot_pairs(forged_selection)
+                self.assertEqual(refused['pairs'], [])
+                self.assertIn('refused', refused['unavailable_sessions'][0]['reasons'][0])
+                read.assert_not_called()
+                # Audit round 1: a dirty roster cannot erase the reuse restriction.
+                roster.write_text(json.dumps({'members': []}))
+                registered_selection.write_text(json.dumps(selection))
+                refused = export_cli.pilot_pairs(forged_selection)
+                self.assertEqual(refused['pairs'], [])
+                self.assertIn('outside the committed pilot selection', refused['unavailable_sessions'][0]['reasons'][0])
+                read.assert_not_called()
+
     def test_policy_template_is_the_ruled_roster_and_assemble_refuses_placeholders(self):
         from scripts import align_v4_u3_export as export_cli
         policy = export_cli.policy_template()
