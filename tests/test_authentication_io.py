@@ -148,6 +148,13 @@ class V2AuthenticationReadSessionTests(unittest.TestCase):
             self.assertEqual(reads[0].sha256, hashlib.sha256(raw).hexdigest())
             self.assertEqual(session.records[str(path.resolve())].sha256, reads[0].sha256)
 
+    def test_default_read_refuses_a_nonfile_compressed_sibling(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            path = Path(temporary) / "input.json"
+            path.with_suffix(".json.zst").mkdir()
+            with self.assertRaises(CompressedBundleRequiresRestore):
+                read_authentication_input(path, grammar="json", label="generated")
+
     def test_registration_is_complete_before_bytes_are_returned(self) -> None:
         with tempfile.TemporaryDirectory() as temporary:
             path = Path(temporary) / "input.json"

@@ -53,13 +53,19 @@ class CompressedBundleRequiresRestore(RestoreRefused):
         return type(self), (self.path,)
 
 
+def _require_plain(path, *, allow_compressed=False):
+    path = Path(path)
+    if not allow_compressed and not path.is_file() and Path(str(path) + ".zst").exists():
+        raise CompressedBundleRequiresRestore(path)
+
+
 def _compressed_input(path, *, allow_compressed):
     """Choose an existing compressed sibling only at an explicit caller seam."""
+    _require_plain(path, allow_compressed=allow_compressed)
+    if not allow_compressed:
+        return False
     path = Path(path)
-    compressed = not path.is_file() and path.with_name(path.name + ".zst").is_file()
-    if compressed and not allow_compressed:
-        raise CompressedBundleRequiresRestore(path)
-    return compressed
+    return not path.is_file() and path.with_name(path.name + ".zst").is_file()
 
 
 AuthenticationGrammar = Literal["json", "jsonl", "raw"]
