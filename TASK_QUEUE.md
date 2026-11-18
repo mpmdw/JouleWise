@@ -585,8 +585,9 @@ now has an explicit disposition:
 ## Queue Maintenance
 
 - **lm-interim-01 twin (2026-11-18)** — Draft PR #816 passed the synthetic
-  regressions for audit round 1. The fresh audit and parent integration check
-  are the next gates. See the [round 1 disposition](docs/run_reports/2026-11-18-interim-fit-twin-audit-1.md).
+  regressions for audit round 2. The lead owns the convergence gate and the
+  parent GPU coverage follow-up. See the
+  [round 2 disposition](docs/run_reports/2026-11-18-interim-fit-twin-audit-2.md).
 
 - **[AGENT] Typed RUN_STATE cutover (2026-11-17).** The lead recorded a
   Tier 1 MERGE review. The follow-up reruns both CI workflows before merge.

@@ -7,9 +7,9 @@ policy lives in `docs/decision_log.md`. Do not create a dated restart doc;
 update this file instead.
 
 The 2026-11-18 independent interim-fit twin seat corrected the three high
-and one medium findings from audit round 1. The actual isolated child
-passed the updated raw fixture with the registered decoder and initializer.
-See the [round 1 disposition and tested pin](docs/run_reports/2026-11-18-interim-fit-twin-audit-1.md).
+and one twin-side medium findings from audit round 2. The isolated child
+passed the updated raw fixture with both registered dependency pins.
+See the [round 2 disposition and tested pin](docs/run_reports/2026-11-18-interim-fit-twin-audit-2.md).
 
 **Current pointer: read the top numbered item first.** That is the
 highest-numbered item; from item 168 on, items run newest first and start
