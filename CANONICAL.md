@@ -17,7 +17,7 @@ Last updated: 2026-11-10 (Paper rows: Paper 1 landed under `docs/paper/paper1/`,
 
 | Job | Canonical | Replaced |
 |---|---|---|
-| Typed project activity log | [`RUN_STATE.md`](RUN_STATE.md) (newest numbered item first) | [Legacy RUN_STATE and pre-item history](docs/archive/RUN_STATE-legacy-2026-11-17.md) |
+| Typed project activity log and retained legacy items | [`RUN_STATE.md`](RUN_STATE.md) (newest numbered item first) | [Archived RUN_STATE history](docs/archive/RUN_STATE-legacy-2026-11-17.md) |
 | Machine-readable head pointer and Next activation rule | [`docs/process/CURRENT.json`](docs/process/CURRENT.json) v2 includes the highest numbered item carrying a `pointer` block and the recorded open typed items. See [`docs/process/POINTER_RULE.md`](docs/process/POINTER_RULE.md). | Hand-maintained pointer JSON; `WINDOW_STATUS.md` and its publisher `scripts/window_status.sh` (superseded on `main`; retrieval in [docs/ARCHIVE.md](docs/ARCHIVE.md)) |
 | How work moves | [`docs/process/PIPELINE.md`](docs/process/PIPELINE.md) | The October 2026 gate policy |
 | Add a RUN_STATE item | [`scripts/run_state_add.py`](scripts/run_state_add.py) | Manual insertion of new items after cutover |

@@ -7,11 +7,12 @@ from hashlib import sha256
 from io import StringIO
 import json
 from pathlib import Path
+import re
 import subprocess
 import tempfile
 import unittest
 
-from scripts import gen_current, run_state_items as items
+from scripts import gen_current, gen_state, run_state_items as items
 from scripts.run_state_add import LEGACY_MARKER, TOP_MARKER, render_item
 
 
@@ -37,6 +38,7 @@ EARLY, LATE = LEGACY.split("20. **", 1)
 LATE = "20. **" + LATE
 POINTER = "owner: lead\nwait: none\nnext_observable: fixture observable"
 ARCHIVE = "docs/archive/RUN_STATE-legacy-2026-11-17.md"
+CUT_FROM = "d934178b9bd836162122db941c64d185593fa554"
 
 
 def doc(typed=(), cutover=21):
@@ -64,6 +66,10 @@ def change(target, status, at=ISSUED):
 
 def codes(text):
     return [error.code for error in items.validate(items.parse(text))]
+
+
+def cutover_source():
+    return subprocess.check_output(["git", "show", f"{CUT_FROM}:RUN_STATE.md"], cwd=gen_current.ROOT)
 
 
 class RunStateItemsTests(unittest.TestCase):
@@ -295,32 +301,92 @@ class RunStateItemsTests(unittest.TestCase):
 
     def test_archive_round_trips_cutover_snapshot(self):
         root = gen_current.ROOT
-        source = "7aa6747175d9cc2265811711e47c8dc5f055ab8d"
-        original = subprocess.check_output(["git", "show", f"{source}:RUN_STATE.md"], cwd=root)
+        full_source = cutover_source()
+        original = full_source
         title, _, original = original.partition(b"\n")
         top = (TOP_MARKER + "\n").encode()
-        old_marker = LEGACY_MARKER.format(405).encode()
+        old_marker = (LEGACY_MARKER.format(405) + "\n").encode()
         old_header, _, original_regions = original.partition(top)
         old_typed, _, old_legacy = original_regions.partition(old_marker)
+
+        plan = items.legacy_archive_plan(full_source.decode())
+        lines = full_source.splitlines(keepends=True)
+        marker = lines.index(old_marker)
+        projection_start = lines.index((gen_state.RS_BEGIN + "\n").encode())
+        projection_end = lines.index((gen_state.RS_END + "\n").encode()) + 1
+        spans = sorted((*plan.spans, (projection_start, projection_end)))
+        moved_legacy = b"".join(b"".join(lines[start:end]) for start, end in spans)
 
         archive = (root / ARCHIVE).read_bytes()
         archive_title, archive_source, archive_order, moved = archive.split(b"\n", 3)
         self.assertTrue(archive_title.startswith(b"# "))
-        self.assertIn(source.encode(), archive_source)
+        self.assertIn(CUT_FROM.encode(), archive_source)
         self.assertIn(b"pre-item text followed by the legacy marker", archive_order)
-        self.assertEqual(sha256(moved).digest(), sha256(old_header + old_marker + old_legacy).digest())
+        self.assertEqual(sha256(moved).digest(), sha256(old_header + old_marker + moved_legacy).digest())
 
         current = (root / "RUN_STATE.md").read_bytes()
         self.assertEqual(current.split(b"\n", 1)[0], title)
         _, current_top, current_regions = current.partition(top)
         new_marker = f"<!-- RUN_STATE LEGACY ITEMS: archived in {ARCHIVE}; cutover 405; legacy_max 404 -->\n".encode()
         typed, found, rest = current_regions.partition(new_marker)
-        self.assertEqual((found, rest), (new_marker, b""))
-        restored_header, restored_marker, restored_legacy = moved.partition(old_marker)
+        self.assertEqual(found, new_marker)
+        restored_header, restored_marker, archive_tail = moved.partition(old_marker)
+        retained = rest.splitlines(keepends=True)
+        archived = archive_tail.splitlines(keepends=True)
+        restored_legacy = []
+        cursor = marker + 1
+        for start, end in spans:
+            offset = start - cursor
+            count = end - start
+            restored_legacy.extend(retained[:offset] + archived[:count])
+            del retained[:offset]
+            del archived[:count]
+            cursor = end
+        self.assertEqual(archived, [])
+        restored_legacy.extend(retained)
+        self.assertEqual(sha256(b"".join(restored_legacy)).digest(), sha256(old_legacy).digest())
         # Later log entries can be prepended ahead of the cutover snapshot.
         kept = typed[-len(old_typed):]
-        restored = title + b"\n" + restored_header + current_top + kept + restored_marker + restored_legacy
+        restored = title + b"\n" + restored_header + current_top + kept + restored_marker + b"".join(restored_legacy)
         self.assertEqual(sha256(restored).digest(), sha256(title + b"\n" + original).digest())
+
+    def test_every_item_reachable_from_the_newest_remains_in_run_state(self):
+        original = cutover_source().decode()
+        newest = str(max(entry.number for entry in items.parse(original).items))
+        plan = items.legacy_archive_plan(original)
+        reachable = items.reachable_items(plan.references, {newest})
+        self.assertTrue(reachable - {str(entry.number) for entry in items.parse(original).items})
+        current = (gen_current.ROOT / "RUN_STATE.md").read_text(encoding="utf-8")
+        present = {f"{number}{suffix}" for _, number, suffix in items.heading_lines(current)}
+        self.assertEqual(reachable - present, set())
+        self.assertEqual(plan.live - present, set())
+
+    def test_archive_plan_keeps_live_and_unknown_legacy_and_moves_unreferenced_superseded(self):
+        typed = [item(24, body="Run items 19, 18 and 17 as issued.", supersedes=["19", "16", "14"]),
+                 render_item(23, "Fixture (standing), see item 15", header(23, status="CLOSED"), "", None)
+                 + "\n\n"]
+        legacy = ("19. **Fixture legacy**\n\nSee item 16.\n\n"
+                  "18. **Fixture legacy**\n\n17. **Fixture legacy**\n\n"
+                  "16. **Fixture legacy**\n\n15. **Fixture referenced by a standing order**\n\n"
+                  "13. **Fixture unknown status**\n\n"
+                  "14. **Fixture superseded**\n\n")
+        state = EARLY + TOP_MARKER + "\n\n" + "".join(typed) + LEGACY_MARKER.format(21) + "\n\n" + legacy
+        plan = items.legacy_archive_plan(state)
+        self.assertTrue({"24", "23", "19", "18", "17", "16", "15"} <= plan.live)
+        self.assertEqual(len(plan.spans), 1)
+        start, end = plan.spans[0]
+        self.assertEqual("".join(state.splitlines(keepends=True)[start:end]), "14. **Fixture superseded**\n\n")
+
+    def test_run_state_intro_paths_exist_in_tree(self):
+        root = gen_current.ROOT
+        intro = (root / "RUN_STATE.md").read_text(encoding="utf-8").split(gen_state.RS_BEGIN, 1)[0]
+        paths = re.findall(r"(?<![\w.-])(?:[\w.-]+/)*[\w-]+(?:\.[\w-]+)+(?![\w.-])", intro)
+        self.assertTrue(paths)
+        for path in paths:
+            with self.subTest(path=path):
+                self.assertTrue((root / path).is_file())
+                self.assertEqual(subprocess.run(["git", "ls-files", "--error-unmatch", "--", path],
+                                                cwd=root, capture_output=True).returncode, 0)
 
     def test_check_refuses_typed_item_hidden_by_its_own_closing_fence(self):
         hidden = doc([item(405, status="CLOSED", body="```\nunterminated"), item(404)], cutover=404)

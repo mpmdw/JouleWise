@@ -35,6 +35,11 @@ ARCHIVED_LEGACY_MARKER_RE = re.compile(
     r"^<!-- RUN_STATE LEGACY ITEMS: archived in docs/archive/[^;\s]+\.md; "
     r"cutover ([1-9][0-9]*); legacy_max ([1-9][0-9]*) -->$")
 REFERENCE = re.compile(r"[1-9][0-9]*[a-z]?")
+_PROSE_REF = r"[`#]*[1-9][0-9]*[a-z]?`?(?!\w)"
+_PROSE_REFERENCES = re.compile(
+    rf"\b(?:items?|RUN_STATE(?:\.md)?)\s+({_PROSE_REF}"
+    rf"(?:(?:\s*[,/]\s*(?:and\s+)?|\s+(?:and|or)\s+){_PROSE_REF})*)", re.IGNORECASE)
+_STANDING = re.compile(r"\bstanding\b", re.IGNORECASE)
 HEADER_KEYS = {"schema", "number", "owner", "status", "issued_epoch_s",
                "expires_epoch_s", "supersedes", "sets"}
 SET_KEYS = {"item", "status", "at_epoch_s"}
@@ -66,6 +71,13 @@ class Parsed:
     legacy_numbers: frozenset[str]
     legacy_max: int | None
     errors: tuple[ItemError, ...]
+
+
+@dataclass(frozen=True)
+class LegacyArchivePlan:
+    references: dict[str, set[str]]
+    live: set[str]
+    spans: tuple[tuple[int, int], ...]
 
 
 @dataclass(frozen=True)
@@ -156,6 +168,57 @@ def heading_lines(text: str):
         if line.kind == "heading":
             match = HEADING.match(line.text)
             yield line.number, int(match[1]), match[2]
+
+
+def reachable_items(references: dict[str, set[str]], roots: set[str]) -> set[str]:
+    """Follow references to numbered records present in the source."""
+    live = roots & references.keys()
+    pending = list(live)
+    while pending:
+        reached = (references[pending.pop()] & references.keys()) - live
+        live.update(reached)
+        pending.extend(reached)
+    return live
+
+
+def legacy_archive_plan(text: str) -> LegacyArchivePlan:
+    """Find movable legacy records in the pre-archive RUN_STATE snapshot.
+
+    Typed records stay in the log. Legacy prose has no typed status, so an
+    untyped record is eligible only with an explicit typed supersession.
+    Spans are zero-based, half-open line ranges in the original file.
+    """
+    parsed = parse(text)
+    if parsed.cutover is None or parsed.legacy_max is not None or validate(parsed):
+        raise ValueError("expected the valid pre-archive typed RUN_STATE layout")
+
+    lines = text.split("\n")
+    legacy_line = next(row.number for row in _scan(text) if row.kind == "legacy")
+    typed = [(entry.line - 1, str(entry.number)) for entry in parsed.items]
+    # Legacy records start a paragraph. Keep list headings within a record's body.
+    legacy = [(line - 1, f"{number}{suffix}") for line, number, suffix in heading_lines(text)
+              if line > legacy_line and (line == legacy_line + 1 or not lines[line - 2].strip())]
+    typed_blocks = [(start, end, ref) for (start, ref), end in
+                    zip(typed, [start for start, _ in typed[1:]] + [legacy_line - 1])]
+    legacy_blocks = [(start, end, ref) for (start, ref), end in
+                     zip(legacy, [start for start, _ in legacy[1:]] + [len(lines)])]
+
+    roots = {str(number) for number, status in replay(parsed).items() if status == "ISSUED"}
+    roots.update(ref for start, _, ref in legacy_blocks if re.search(r"\bISSUED\b", lines[start]))
+    references: dict[str, set[str]] = {}
+    for start, end, ref in typed_blocks + legacy_blocks:
+        if _STANDING.search(lines[start]):
+            roots.add(ref)
+        mentions = _PROSE_REFERENCES.findall("\n".join(lines[start:end]))
+        references.setdefault(ref, set()).update(
+            target for mention in mentions for target in REFERENCE.findall(mention.lower()))
+
+    live = reachable_items(references, roots)
+    superseded = {ref for entry in parsed.items for ref in entry.header["supersedes"]}
+    newest = {typed[0][1]} if typed else set()
+    movable = superseded - live - reachable_items(references, newest)
+    spans = tuple((start, end) for start, end, ref in legacy_blocks if ref in movable)
+    return LegacyArchivePlan(references, live, spans)
 
 
 def _markers(lines: list[_Line], errors: list[ItemError]) -> tuple[int | None, int | None, int | None, int | None]:

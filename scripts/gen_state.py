@@ -14,9 +14,8 @@ Modes:
 Exit codes: 0 exact agreement / success; 1 drift; 2 invalid input or markers.
 
 The live RUN_STATE.md and TASK_QUEUE.md marker-fenced regions are checked by
-default. At the RUN_STATE cutover, a missing live projection can be checked
-against its archive snapshot. Generation installs the projection above the
-typed log and preserves the archive. Optional paths exist for focused fixtures.
+default. Generation can restore the live RUN_STATE projection above the typed
+log using the cutover marker. Optional paths exist for focused fixtures.
 """
 
 from __future__ import annotations
@@ -38,8 +37,8 @@ RS_BEGIN = "<!-- BEGIN GENERATED: state-kernel run-state-intake -->"
 RS_END = "<!-- END GENERATED: state-kernel run-state-intake -->"
 RUN_STATE_ARCHIVE = "docs/archive/RUN_STATE-legacy-2026-11-17.md"
 RS_ARCHIVE_MARKER = re.compile(
-    rf"<!-- RUN_STATE LEGACY ITEMS: archived in {re.escape(RUN_STATE_ARCHIVE)}; "
-    r"cutover [1-9][0-9]*; legacy_max [1-9][0-9]* -->")
+    rf"^<!-- RUN_STATE LEGACY ITEMS: archived in {re.escape(RUN_STATE_ARCHIVE)}; "
+    r"cutover [1-9][0-9]*; legacy_max [1-9][0-9]* -->$", re.MULTILINE)
 RS_TYPED_MARKER = re.compile(r"^<!-- RUN_STATE TYPED ITEMS:", re.MULTILINE)
 Q_BEGIN = "<!-- BEGIN GENERATED: state-kernel current-queue -->"
 Q_END = "<!-- END GENERATED: state-kernel current-queue -->"
@@ -778,18 +777,14 @@ def replace_region(text: str, rendered: str, begin: str, end: str, path: str) ->
 
 
 def _update_run_state(text: str, rendered: str, path: str, *, check: bool) -> str:
-    footer = text.rstrip("\n").rsplit("\n", 1)[-1]
-    if RS_BEGIN in text or RS_END in text or not RS_ARCHIVE_MARKER.fullmatch(footer):
+    if check or RS_BEGIN in text or RS_END in text or not RS_ARCHIVE_MARKER.search(text):
         return replace_region(text, rendered, RS_BEGIN, RS_END, path)
 
     tops = list(RS_TYPED_MARKER.finditer(text))
     if len(tops) != 1:
         fail(f"{path}: expected exactly one typed item marker (found {len(tops)})")
     archive = os.path.join(os.path.dirname(path), RUN_STATE_ARCHIVE)
-    archived = _read(archive)
-    archived_start, archived_end = _find_region(archived, RS_BEGIN, RS_END, archive)
-    if check and archived[archived_start:archived_end] == rendered.rstrip("\n"):
-        return text
+    _find_region(_read(archive), RS_BEGIN, RS_END, archive)
 
     top = tops[0].start()
     return text[:top] + rendered + "\n" + text[top:]
