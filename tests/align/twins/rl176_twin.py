@@ -43,3 +43,57 @@ def held_decode_score(training, held):
     bound = sum(width for _, _, width in held)
     sd = sqrt(variance * (k + leverage) + bound * bound + 3 * k)
     return (sum(joules for _, joules, _ in held) - expected) / sd
+
+
+def held_prefill_score(training, held):
+    """Five predictors and two timing edges, via scaled normal equations."""
+    def features(row):
+        p, d, c = row.prefill_tokens, row.decode_tokens, row.context_tokens
+        return (1, p, d, d * (c + p + d / 2), p * (c + p / 2))
+
+    x = [features(row) for row in training]
+    scale = list(map(max, zip(*x)))
+    columns = [[value / unit for value in feature] for feature, unit in zip(zip(*x), scale)]
+    y = [row.energy_j for row in training]
+    summed = [sum(c) / unit for c, unit in zip(zip(*(features(row) for row in held)), scale)]
+
+    def dot(a, b):
+        return sum(x * y for x, y in zip(a, b))
+
+    equations = [[dot(a, b) for b in columns] + [dot(a, y), z] for a, z in zip(columns, summed)]
+    for k in range(5):
+        pivot = max(range(k, 5), key=lambda j: abs(equations[j][k]))
+        equations[k], equations[pivot] = equations[pivot], equations[k]
+        div = equations[k][k]
+        equations[k] = [v / div for v in equations[k]]
+        for i, eq in enumerate(equations):
+            if i != k:
+                equations[i] = [v - eq[k] * w for v, w in zip(eq, equations[k])]
+    coef, projection = (list(v) for v in zip(*(eq[-2:] for eq in equations)))
+    sigma2 = sum((v - dot(coef, row)) ** 2 for v, row in zip(y, zip(*columns))) / (len(y) - 5)
+    variance = (sigma2 * (len(held) + dot(projection, summed))
+                + sum(r.query_half_width_j for r in held) ** 2 + 2 * len(held))
+    return (sum(r.energy_j for r in held) - dot(coef, summed)) / sqrt(variance)
+
+
+def q_by_second(episode, watts, ns):
+    """Independent integral on constant-per-second synthetic fixtures."""
+    def charges(t):
+        turns = episode.turns
+        calls = [call for turn in turns for call in turn.tool_calls]
+        if any(row["start_ns"] <= t < row["end_ns"] for row in episode.hardware.get("thermal", {}).get("intervals", ())):
+            return 0
+        owned = any(span.start_ns <= t < span.end_ns for span in (*turns, *calls))
+        return watts[t // ns + 1] if owned else 0
+
+    times = range(episode.start_ns, episode.end_ns, ns)
+    total = sum(charges(t) for t in times)
+    first = episode.turns[0].first_token_ns
+    if first is None:
+        return 0, total, None
+    prefill_start = episode.turns[0].start_ns
+    tools = [call for turn in episode.turns for call in turn.tool_calls]
+    prefill = sum(charges(t) for t in times if prefill_start <= t < first
+                  and all(not (c.start_ns <= t < c.end_ns) for c in tools))
+    q = sum(charges(t) for t in times if t >= first)
+    return q, total, prefill

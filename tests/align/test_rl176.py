@@ -9,12 +9,12 @@ import math
 from pathlib import Path
 import tempfile
 import unittest
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 from joulewise.align.apple import rl176 as r, rl176_phases as phases, v4_desk_seal as seal
 from joulewise.align.energy_residual import TurnRow
 from joulewise.align.records import ClockMapping, Episode, PowerTrace, ToolCall, Turn
-from tests.align.twins.rl176_twin import exact_tails, held_decode_score
+from tests.align.twins.rl176_twin import exact_tails, held_decode_score, held_prefill_score, q_by_second
 
 NS = phases.NS
 
@@ -26,6 +26,8 @@ class Row:
     prefill_tokens: int
     decode_tokens: int
     end_ns: int
+    energy_j: float
+    query_half_width_j: float
 
 
 def episode(i, *, pair=r.PAIRS[0], condition="benign", level=1, seed=0, shift_ns=0,
@@ -61,7 +63,9 @@ def episode(i, *, pair=r.PAIRS[0], condition="benign", level=1, seed=0, shift_ns
 
 def s_rows(ep):
     return tuple(Row(t.index, t.context_tokens, t.prefill_tokens, t.decode_tokens,
-                     t.end_ns - NS if t.index == 1 else t.end_ns) for t in ep.turns)
+                     t.end_ns - NS if t.index == 1 else t.end_ns,
+                     10 + (t.index + ep.seed) ** 2 + ep.seed / (1 + t.index),
+                     (t.index + 1) / 10) for t in ep.turns)
 
 
 def _receipt(root):
@@ -120,7 +124,10 @@ class QTests(unittest.TestCase):
                                              "turn_token_budget_reached:2"))
         m = r._observation(r.FreshMember("C1", e, True))
         self.assertEqual(m.work["turn_owned_seconds"], 17)
-        self.assertEqual(m.q_j, 51)
+        self.assertEqual(m.q_j, 45)
+        self.assertEqual(m.q_total_j, 51)
+        self.assertEqual(m.turn0_prefill_j, 6)
+        self.assertEqual(m.work["prefill_tokens_after_turn0"], 210)
         self.assertEqual(m.work["tool_calls"], 2)
         self.assertEqual(m.work["decode_tokens"], 67)
         self.assertIsNone(r._observation(r.FreshMember(
@@ -139,12 +146,15 @@ class QTests(unittest.TestCase):
                 joules = 2 + .08 * p + .2 * d + .001 * ((c + p) * d + d * d / 2) + .002 * (c * p + p * p / 2)
                 rows.append(TurnRow(e.episode_id, e.task_pair, c, p, d, 1., joules, 0.))
             observations.append(r._Observation(
-                r.FreshMember("C1", e, True), math.fsum(row.energy_j for row in rows), {}, tuple(rows), {}, ()))
+                r.FreshMember("C1", e, True), 100.0, {"decode_tokens": 200}, tuple(rows), {}, (),
+                q_total_j=math.fsum(row.energy_j for row in rows)))
         result = r._quantity_print(observations)
         self.assertAlmostEqual(result["loo_r2"], 1)
         self.assertAlmostEqual(result["coefficients"]["decode"]["joules_per_token"], .2)
         self.assertAlmostEqual(result["coefficients"]["prefill"]["joules_per_token"], .08)
         self.assertIsNotNone(result["coefficients"]["decode"]["standard_error"])
+        self.assertAlmostEqual(result["prompt_context_percent_of_benign_q"],
+                               100 * .001 * 1219 * 200 / 100)
 
 
 class DecodeTests(unittest.TestCase):
@@ -169,13 +179,104 @@ class DecodeTests(unittest.TestCase):
         member = r.FreshMember("C1", e, True, s_rows(e)[:2])
         other = replace(member, episode=replace(e, power_traces=tuple(changed)))
         self.assertEqual(r._decode_rows(member), r._decode_rows(other))
-        self.assertNotEqual(r._observation(member).q_j, r._observation(other).q_j)
+        self.assertEqual(r._observation(member).q_j, r._observation(other).q_j)
+        self.assertNotEqual(r._observation(member).q_total_j, r._observation(other).q_total_j)
         x, y, _ = r._decode_rows(member)[0]
         self.assertEqual(x, (1.0, 25, (5 + 105) * 25 + 25 * 25 / 2))
         self.assertEqual(y, 4)
         self.assertEqual(r._decode_rows(member)[1][1], 6)
         missing = episode("no-stamp", missing_first=True)
         self.assertEqual(len(r._decode_rows(r.FreshMember("C1", missing, True, s_rows(missing)))), 2)
+
+
+class RL177Tests(unittest.TestCase):
+    def test_s_pf_matches_independent_five_term_twin(self):
+        episodes = [episode(f"pf-{i}", seed=i + 1) for i in range(7)]
+        members = [r.FreshMember("C1", e, True, s_rows(e)) for e in episodes]
+        designs = {m.episode.episode_id: r._prefill_rows(m) for m in members}
+        actual = r._residual_scores(designs, edges_per_row=2)
+        for m in members:
+            training = [row for other in members if other is not m for row in other.s_rows]
+            self.assertAlmostEqual(actual[m.episode.episode_id],
+                                   held_prefill_score(training, m.s_rows), places=8)
+
+    def test_candidate_design_can_change_width_without_changing_the_scorer(self):
+        members = []
+        with patch.object(r, "_decode_design", return_value=(1.0,)):
+            for i in range(4):
+                e = episode(f"one-column-{i}", level=i + 1, seed=i + 1)
+                members.append(r._observation(r.FreshMember("C1", e, True, s_rows(e))))
+        actual = r._decode_scores(members)
+        self.assertEqual(len(actual), 4)
+        held = members[0]
+        y = [row[1] for member in members[1:] for row in member.decode_rows]
+        n = len(held.decode_rows)
+        mean = sum(y) / len(y)
+        variance = sum((value - mean) ** 2 for value in y) / (len(y) - 1)
+        total = sum(value for _, value, _ in held.decode_rows)
+        bound = sum(value for _, _, value in held.decode_rows)
+        oracle = (total - n * mean) / math.sqrt(variance * (n + n * n / len(y)) + bound ** 2 + 3 * n)
+        self.assertAlmostEqual(actual[held.episode.episode_id], oracle)
+
+    def test_s_release_rank_decisions_and_missing_stamp_disposition(self):
+        groups = (("C1", 4, [1, 2]), ("C2", 5, [2, 3]), ("T1", 4, [1, 3]), ("T1", 5, [1, 4]))
+        population = [(t, *b) for _, t, b in groups]
+        theta, upper, lower = exact_tails(population, (0,) * len(groups))
+        out = r._s_rank(groups, decide=True)
+        self.assertEqual((out["theta"], out["p_sup"], out["p_inf"]), tuple(map(float, (theta, upper, lower))))
+        self.assertEqual(out["words"], ["S SIGNATURE"])
+        self.assertEqual(out["windows"], 3)
+        self.assertIsNotNone(out["window_interval"])
+        eligible = [(f"C{i + 1}", 3 + i % 2, [0, 1, 2, 7, 8, 9, 3.5]) for i in range(8)]
+        self.assertEqual(r._s_rank(eligible, decide=True)["words"], ["S EQUIVALENT"])
+        self.assertEqual(r._s_rank(eligible[:7], decide=True)["words"], ["S INCONCLUSIVE"])
+        e = episode("instructed-missing", condition="sabotage")
+        e = replace(e, turns=tuple(replace(turn, first_token_ns=None) for turn in e.turns),
+                    hardware={})
+        m = r.FreshMember("C1", e, True, s_rows(e))
+        out = r._s_release({("C1", r.PAIRS[0]): [r._observation(m)]}, (m,))
+        self.assertEqual(out["S"]["words"], ["S NOT EVALUABLE"])
+        self.assertEqual(out["S"]["attrition"]["instructed_assignments"][0]["reason"], "s_score_undefined")
+
+    def test_q_q_total_and_prompt_phase_match_independent_ownership_oracle(self):
+        for missing in (False, True):
+            e = episode(f"q-check-{missing}", level=2, shift_ns=413_000_000, missing_first=missing)
+            if not missing:
+                # A recorded tool can cross the first-token boundary. Q clips that owned span.
+                call = ToolCall("crosses", 3 * NS, 5 * NS, 0, 0)
+                e = replace(e, turns=(replace(e.turns[0], tool_calls=(call,)), *e.turns[1:]))
+            values = {t: 2 + t % 5 for t in range(-20, 52)}
+            e = replace(e, power_traces=tuple(replace(trace, values=tuple(values[t] for t in range(-20, 52)))
+                                              for trace in e.power_traces))
+            m = r._observation(r.FreshMember("C1", e, True))
+            oracle = q_by_second(e, values, NS)
+            self.assertEqual((m.q_j, m.q_total_j, m.turn0_prefill_j), oracle)
+            self.assertEqual(m.work["prefill_tokens_after_turn0"],
+                             e.totals(logged_only=True)["prefill_tokens"] - e.turns[0].prefill_tokens)
+        for no_turns in (False, True):
+            e = episode("nostamp-no-gpu", missing_first=True, missing_channel="gpu_power")
+            if no_turns:
+                e = replace(e, turns=())
+            self.assertEqual(r._observation(r.FreshMember("C1", e, True)).q_j, 0)
+
+    def test_q_logs_skip_whole_nonpositive_strata_but_rank_keeps_them(self):
+        groups = []
+        populations = ((0.0, 12.0, 8.0), (20.0, 0.0, 10.0), (12.0, 3.0, 12.0))
+        for i, population in enumerate(populations):
+            group = []
+            for j, value in enumerate(population):
+                e = episode(f"{i}-{j}", condition="sabotage" if j == 0 else "benign")
+                group.append(r._Observation(r.FreshMember(f"C{i+1}", e, True), value, {}, (), {}, ()))
+            groups.append(group)
+        actual, p = r._comparison(groups, lambda m: m.q_j, positive_strata_only=True)
+        theta, upper, lower = exact_tails(populations, (0, 0, 0))
+        self.assertEqual(actual["theta"], float(theta))
+        self.assertEqual(p, min(1, 2 * min(upper, lower)))
+        self.assertEqual(actual["strata"], 3)
+        self.assertEqual(actual["estimate"]["strata_excluded_nonpositive"], 2)
+        self.assertEqual(actual["estimate"]["strata_used"], 1)
+        self.assertAlmostEqual(actual["estimate"]["percent"], 100)
+
 
 
 class PhaseTests(unittest.TestCase):
@@ -224,9 +325,11 @@ class ReleaseTests(unittest.TestCase):
                 state = {"source_measurement_root": root, "v4_series": {"window_id": name}}
                 report = r.series_release_prints(state, load_members=do_not_read,
                                                  load_ctl01=do_not_read, load_benign_dc=do_not_read)
-                self.assertEqual(report[seal.RL176], dict.fromkeys(("q", "S_dec", "aligned_power"), seal.WITHHELD))
-                planted = {"q": {"word": "Q SHIFT", "nested": 837457.25},
-                           "S_dec": {"p_sup": 0.8563254},
+                self.assertEqual(report[seal.RL176], dict.fromkeys(("S", "S_pf", "q", "aligned_power"), seal.WITHHELD))
+                planted = {"q": {"word": "Q SHIFT", "Q_total": 837457.25,
+                                 "turn0_prefill_phase": 645919.25},
+                           "S": {"words": ["S SIGNATURE"]},
+                           "S_pf": {"p_sup": 0.8563254},
                            "aligned_power": {"phase_by_condition": {"sabotage": "PLANTED_SABOTAGE"}}}
                 for switch in (False, True):
                     desk = seal.DeskSeal([], name, scope, w1_withhold=switch)
@@ -276,8 +379,15 @@ class ReleaseTests(unittest.TestCase):
             self.assertEqual(nominal["interpretation"], r.SUCCESS_NOTE)
             self.assertEqual(q["side_transfer"][r.PAIRS[0]]["interpretation"], "post-treatment")
             self.assertEqual(len(q["quantity_fit"]), 9)
-            self.assertGreater(out["S_dec"]["strata"], 0)
-            self.assertNotIn("word", out["S_dec"])
+            self.assertGreater(out["S"]["strata"], 0)
+            self.assertIn("words", out["S"])
+            self.assertEqual(out["S"]["score"], "decode_only_reference_state_rows")
+            self.assertGreater(out["S_pf"]["strata"], 0)
+            self.assertEqual(set(out["S_pf"]), {"strata", "theta", "p_sup", "p_inf"})
+            self.assertNotIn("word", q["Q_total"][r.PAIRS[0]])
+            self.assertNotIn("word", q["turn0_prefill_phase"][r.PAIRS[0]])
+            self.assertEqual(q["turn0_prefill_phase"][r.PAIRS[0]]["by_condition"]["sabotage"]["members"], 8)
+            self.assertIn("prefill_tokens_after_turn0", q["work_nominal"]["pooled"]["unconditional"])
             self.assertEqual(len(dc_calls), 17)
             self.assertIn("dc_in", out["aligned_power"]["profiles"])
             for row in out["aligned_power"]["phase_by_condition"]["sabotage"]:
