@@ -134,7 +134,7 @@ class FreezeNaming(unittest.TestCase):
         published = dict(report(), look_id=successor)
         self.assertEqual(C.read_public(C.dump(published), SCHEMA, look_id=manifest["look_id"]), published)
         with self.assertRaises(ValueError):
-            C.read_public(C.dump(published), SCHEMA)
+            C.read_public(C.dump(published), SCHEMA, look_id=LOOK)
 
 
 class MainPort(unittest.TestCase):
@@ -496,6 +496,62 @@ class LookExecution(unittest.TestCase):
         self.assertFalse(self.private.exists())
         self.assertFalse(self.public.exists())
         return subprocess.CompletedProcess(args, code, stdout, stderr)
+
+    def test_successor_refuses_before_stage2_reads_or_execution(self):
+        from tests.cadence import test_look_run as cli_fixture
+
+        successor = "lm-interim-02"
+        pin = M.load_json(REPO / MR.MANIFEST)["fit"]["twin"]
+        self.assertEqual(pin, {"path": "scripts/cadence_interim_twin.py",
+                               "sha256": "91ca54ab8747ede3d0fe8826e1b7d06ef721bce94de52969b9508a3eac890aab"})
+        twin = (self.mini / pin["path"]).resolve()
+        self.assertEqual(digest(twin.read_bytes()), pin["sha256"])
+        MR.commit(self.mini, stage1_sha256=self.stage1_sha)
+        first = M.load_json(self.manifest_path)
+        manifest = dict(first, look_id=successor, supersedes=LOOK, fit=dict(first["fit"], twin=pin))
+        path = self.manifest_path.with_name(f"{successor}.json")
+        manifest_bytes = C.dump(manifest)
+        path.write_bytes(manifest_bytes)
+        stage1 = dict(self.stage1, manifest_sha256=digest(manifest_bytes))
+        successor_stage1 = self.root / f"{successor}-stage1.json"
+        successor_stage1.write_bytes(C.dump(dict(stage1, look_id=successor)))
+        successor_sha = digest(successor_stage1.read_bytes())
+        ledger_path = self.mini / M.LOOK_LEDGER_PATH
+        ledger = M.load_json(ledger_path)
+        M._look_row(ledger, LOOK).update(status="interrupted", error_type="none_recorded", ruling="RL-999")
+        ledger["looks"].append(dict(self.row, look_id=successor, manifest_path=path.relative_to(self.mini).as_posix(),
+                                    sha256=stage1["manifest_sha256"], stage1_sha256=successor_sha))
+        ledger_path.write_bytes(C.dump(ledger))
+        MR.git_commit(self.mini, "register synthetic successor")
+        self.assertEqual(M.verify_pins(path, self.mini), manifest)
+
+        # A draft caller can name the predecessor's stage-1 row and rebind its manifest hash.
+        # That route must still refuse on the successor manifest before reading generated inputs.
+        self.stage1_path.write_bytes(C.dump(stage1))
+        self.row["stage1_sha256"] = draft_sha = digest(self.stage1_path.read_bytes())
+        self.save_ledger()
+        responses = self.root / "responses.json"
+        responses.write_bytes(C.dump(self.energy))
+        root = Path(self.row["custody_root"])
+        (root / successor).mkdir()
+        (self.public.parent.parent / successor).mkdir()
+        for source, sha, args in (
+            (successor_stage1, successor_sha, ["--custody", root]),
+            (self.stage1_path, draft_sha, ["--allow-draft", "--looks", self.ledger, "--energy", responses]),
+        ):
+            with self.subTest(args=args[0]), cli_fixture.spy_opens() as opened:
+                rc, stdout, stderr = cli_fixture._cli_subprocess(
+                    ["stage2", "--manifest", path, "--stage1", source, "--stage1-sha256", sha, *args],
+                    repo=self.mini, extra={"host_probe": UUID_LINE, "twin_path": str(twin)})
+                self.assertEqual(cli_fixture.LAST_RUN["reservation_attempts"], 0)
+                reads = [item for item in opened if item in (str(source), str(responses))
+                         or Path(item).is_relative_to(root)]
+                self.assertEqual(reads, [])
+                self.assertEqual(cli_fixture.LAST_RUN["twin_launches"], 0)
+                self.assertEqual((rc, stdout), (2, ""))
+                self.assertIn("this look runner executes only lm-interim-01", stderr)
+        self.assertFalse(any(root.glob("*/RESTRICTED")))
+        self.assertFalse(any(self.public.parent.parent.glob("*/PUBLIC.json")))
 
     def test_missing_twin_and_wrong_host_refuse_before_reservation(self):
         result = self.stage2()

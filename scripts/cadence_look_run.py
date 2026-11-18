@@ -1261,12 +1261,15 @@ def main(argv=None, *, keep_redirected=False):
             sys.stdout.buffer.write(release.dump(maxima))
             return 0
         # FIRST, before any input is opened: the running code must be the pinned code (Mythos cold seat 3; Sol 9)
-        _VERIFIED[:] = [(M.verify_pins(a.manifest, ROOT, allow_draft=a.allow_draft, running=RUNNING,
-                                       ledger_ref=getattr(a, "ledger_ref", None)), a.manifest)]
+        doc = M.verify_pins(a.manifest, ROOT, allow_draft=a.allow_draft, running=RUNNING,
+                            ledger_ref=getattr(a, "ledger_ref", None))
+        if doc["look_id"] != F.LOOK_ID:
+            raise F.LookInputError(f"this look runner executes only {F.LOOK_ID}")
+        _VERIFIED[:] = [(doc, a.manifest)]
         if a.cmd == "stage2":
             return cmd_stage2(a, keep_redirected=keep_redirected)
         out = cmd_stage1(a)
-        probs = M.stage1_problems(ROOT, _VERIFIED[0][0], out, sha256_file(a.manifest), allow_draft=a.allow_draft)
+        probs = M.stage1_problems(ROOT, doc, out, sha256_file(a.manifest), allow_draft=a.allow_draft)
         if probs:
             raise F.LookInputError("stage 1's own output: " + "; ".join(probs))
         sha = write_canonical(a.out, out)

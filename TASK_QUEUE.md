@@ -1,5 +1,10 @@
 # JouleWise Task Queue
 
+PR #795 RL-187 follow-up (2026-11-18), [AGENT]. Review the
+`lm-interim-01` execution boundary with the paired census. Fable's manifest
+cold pass gates campaign admission. The successor manifest PR owns its
+execution route. [Execution boundary report](docs/run_reports/2026-11-18-pr795-rl187.md).
+
 PR #795 audit round 1 repairs (2026-11-18), [AGENT]. Review the repaired
 pair and reproduce the checked main-targeted port before the manifest cold
 pass. [Audit repair report](docs/run_reports/2026-11-18-pr795-audit-1.md).

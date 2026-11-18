@@ -437,8 +437,15 @@ opts = json.loads(sys.argv[1]); argv = sys.argv[2:]
 sys.path.insert(0, opts["repo"])
 opened = []
 frames = []
-if opts.get("spy"):
+reservation_attempts = twin_launches = 0
+if opts.get("spy") or opts.get("twin_path"):
     def _hook(event, args):
+        global reservation_attempts, twin_launches
+        if opts.get("twin_path"):
+            if event == "os.mkdir" and os.path.basename(os.fsdecode(args[0])) == "RESTRICTED":
+                reservation_attempts += 1
+            if event == "subprocess.Popen" and isinstance(args[1], (list, tuple)) and opts["twin_path"] in args[1]:
+                twin_launches += 1
         if event == "open" and args and isinstance(args[0], (str, bytes, os.PathLike)):
             path = os.fsdecode(args[0])
             opened.append(path)
@@ -547,7 +554,8 @@ finally:
     if opts.get("report"):
         with open(opts["report"], "w") as f:
             json.dump({"opened": opened, "frames": frames, "stage2_calls": len(calls),
-                       "private_stderr": private_stderr}, f)
+                       "private_stderr": private_stderr, "reservation_attempts": reservation_attempts,
+                       "twin_launches": twin_launches}, f)
 sys.exit(rc)
 '''
 

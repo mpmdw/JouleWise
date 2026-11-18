@@ -1,5 +1,10 @@
 # JouleWise Run State
 
+PR #795 applies RL-187 §1.5 at the interim runner's entry point. The
+stage-2 regression checks the draft and committed-ledger routes with the
+reviewed #816 pin. Campaign admission awaits the paired census and manifest
+cold pass. [Execution boundary report](docs/run_reports/2026-11-18-pr795-rl187.md).
+
 PR #795 audit round 1 repairs enforce writer admission, comparison and
 freeze-2 naming. The draft uses the final #816 pin and preserves the v2
 qualification registration in the mixed ledger. Campaign registration
