@@ -122,6 +122,8 @@ jobs:
         run: python scripts/gen_state.py --check
       - name: RUN_STATE typed items (uniqueness, schema, transitions, expiry, references)
         run: python scripts/run_state_items.py check
+      - name: Validate the MBP scheduler queue and rule register
+        run: python scripts/mbp_sched.py validate
       - name: Hard-coded pins that protect a number are current
         # Kind-P pins (configs/pins/registry.json) and the generators' --check
         # modes. A stale pin prints "run python scripts/repin.py --write <name>".

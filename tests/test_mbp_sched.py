@@ -33,6 +33,17 @@ def close(entry_id, kind, ended, **updates):
     }
 
 
+def probe_child(argv, **kwargs):
+    responses = {
+        "pmset": "Now drawing from 'AC Power'\n - 100%; charged",
+        "df": "Filesystem 1G-blocks Used Available Capacity  Mounted on\nfixture 500 100 400 20% /",
+        "launchctl": "PID\tStatus\tLabel\n-\t0\tfixture",
+        "ps": "PID PPID COMM\n10 1 fixture-agent\n11 10 fixture-agent\n12 1 fixture-agent\n",
+        "sysctl": "{ sec = 1794900000, usec = 0 }",
+    }
+    return subprocess.CompletedProcess(argv, 0, stdout=responses[Path(argv[0]).name], stderr="")
+
+
 class SchedulerTests(unittest.TestCase):
     def setUp(self):
         directory = tempfile.TemporaryDirectory()
@@ -72,7 +83,8 @@ class SchedulerTests(unittest.TestCase):
 
     def add(self, entry_id, kind, requires=(), params=None, **updates):
         entry = {
-            **self.f0, "id": entry_id, "kind": kind, "repeat": False,
+            **{key: value for key, value in self.f0.items() if key != "done"},
+            "id": entry_id, "kind": kind, "repeat": False,
             "requires": list(requires), "params": params or {}, **updates,
         }
         self.queue["entries"].append(entry)
@@ -145,8 +157,6 @@ class SchedulerTests(unittest.TestCase):
         self.assertEqual(self.next()["entry"], "span")
 
     def test_batch_clearance(self):
-        self.queue["entries"].clear()
-        self.queue["entries"].append(self.f0)
         self.f0["done"] = True
         now = self.facts["now_epoch"]
         self.facts["boot_epoch"] = now + 2400 - 43248
@@ -212,7 +222,7 @@ class SchedulerTests(unittest.TestCase):
         self.assertEqual(self.next()["entry"], "counted")
 
     def test_expected_ready_prefers_short_filler(self):
-        self.add("soon", "counted", ["dependency"], {"gates": ["fixture-gate"]},
+        self.add("soon", "counted", ["block-dependency"], {"gates": ["fixture-gate"]},
                  expected_ready_by=self.facts["now_epoch"] + 4000)
         self.add("short", "diagnostic_filler", expected_s=3600)
         self.assertEqual(self.next()["entry"], "short")
@@ -240,20 +250,10 @@ class SchedulerTests(unittest.TestCase):
         (root / "symlink").symlink_to(outside, target_is_directory=True)
         (outside / receipt.name).write_text("bad JSON", encoding="utf-8")
         out = self.directory / "probe.json"
-        responses = {
-            "pmset": "Now drawing from 'AC Power'\n - 100%; charged",
-            "df": "Filesystem 1G-blocks Used Available Capacity  Mounted on\nfixture 500 100 400 20% /",
-            "launchctl": "PID\tStatus\tLabel\n-\t0\tfixture",
-            "ps": "PID PPID COMM\n10 1 fixture-agent\n11 10 fixture-agent\n12 1 fixture-agent\n",
-            "sysctl": "{ sec = 1794900000, usec = 0 }",
-        }
-
-        def run(argv, **kwargs):
-            return subprocess.CompletedProcess(argv, 0, stdout=responses[Path(argv[0]).name], stderr="")
-
         rule = next(row for row in self.rules if row["id"] == "host-quiet")
         rule["params"]["patterns"] = ["fixture-agent"]
-        with patch.object(sched.subprocess, "run", side_effect=run), patch.object(sched.time, "time", return_value=epoch()):
+        with patch.object(sched.subprocess, "run", side_effect=probe_child), patch.object(
+                sched.time, "time", return_value=epoch()):
             self.call("probe", "--out", out, "--receipt-root", root, "--caller-pid", 10)
             initial = out.read_bytes()
             self.assertNotIn(b"SENTINEL", initial)
@@ -296,7 +296,92 @@ class SchedulerTests(unittest.TestCase):
                                            copy_verified=True)}
         with self.ledger.open("a", encoding="utf-8") as stream:
             stream.write(json.dumps(record) + "\n")
+        self.assertEqual(self.next("--ledger", self.ledger)["rule"], "host-clean")
+        record["restore_readbacks"] = dict.fromkeys(sched.RESTORE_READBACKS, True)
+        self.ledger.write_text("".join(json.dumps(row) + "\n" for row in (launch, record)),
+                               encoding="utf-8")
         self.assertEqual(self.next("--ledger", self.ledger)["entry"], "f0-part-c")
+
+    def test_probe_command_failure_writes_a_null_fact(self):
+        out = self.directory / "probe.json"
+
+        def run(argv, **kwargs):
+            if Path(argv[0]).name == "df":
+                return subprocess.CompletedProcess(argv, 1, stdout="", stderr="fixture")
+            return probe_child(argv, **kwargs)
+
+        with patch.object(sched.subprocess, "run", side_effect=run):
+            self.call("probe", "--out", out, "--caller-pid", 10, "--host-facts", self.facts_path,
+                      status=3)
+        result = json.loads(out.read_text())
+        self.assertIsNone(result["disk_free_gib"])
+        self.assertIn("df exited 1", result["errors"]["disk_free_gib"])
+
+    def test_probe_matches_close_to_receipt_identity(self):
+        root = self.directory / "receipts"
+        root.mkdir()
+        receipt = json.loads((FIXTURES / "runner_receipt.json").read_text())
+        now = self.facts["now_epoch"]
+        recorded = close("f0-part-c", "diagnostic_filler", now - 1)
+        recorded.update(event="CLOSE", kit_sha256=None, copy_verified=True,
+                        restore_readbacks=dict.fromkeys(sched.RESTORE_READBACKS, True))
+        self.ledger.write_text(json.dumps(recorded) + "\n", encoding="utf-8")
+        receipt.update(entry_id=recorded["entry_id"], mock=False,
+                       started={"epoch_s": recorded["t0_epoch"]},
+                       ended={"epoch_s": recorded["ended_epoch"]})
+        receipt_path = root / "runner_receipt.json"
+        write(receipt_path, receipt)
+        out = self.directory / "probe.json"
+        args = ("--out", out, "--caller-pid", 10, "--host-facts", self.facts_path,
+                "--receipt-root", root, "--ledger", self.ledger)
+        with patch.object(sched.subprocess, "run", side_effect=probe_child):
+            self.call("probe", *args)
+            self.assertIs(json.loads(out.read_text())["closes"][0]["restore_proven"], True)
+            receipt["entry_id"] = "different-entry"
+            write(receipt_path, receipt)
+            self.call("probe", *args)
+            self.assertIsNone(json.loads(out.read_text())["closes"][0]["restore_proven"])
+
+    def test_dry_run_executes_only_in_opted_in_probe_and_is_bound_to_inputs(self):
+        self.f0["plan_argv"] = ["fixture-plan", "--check"]
+        out = self.directory / "probe.json"
+
+        def run(argv, **kwargs):
+            if argv == self.f0["plan_argv"]:
+                self.assertEqual(kwargs["timeout"], 120)
+                self.assertEqual(kwargs["cwd"], self.f0["worktree"])
+                return subprocess.CompletedProcess(argv, 0)
+            return probe_child(argv, **kwargs)
+
+        with patch.object(sched.subprocess, "run", side_effect=run) as called, patch.object(
+                sched.time, "time", return_value=self.facts["now_epoch"]):
+            self.assertEqual(self.next()["entry"], "f0-part-c")
+            self.assertEqual(called.call_count, 0)
+            self.call("probe", "--out", out, "--caller-pid", 10, "--host-facts", self.facts_path)
+            self.assertEqual(called.call_count, 5)
+            self.call("probe", "--out", out, "--caller-pid", 10, "--host-facts", self.facts_path,
+                      "--run-plans")
+            self.assertEqual(called.call_count, 11)
+            self.facts = json.loads(out.read_text())
+            self.assertEqual(self.next()["entry"], "f0-part-c")
+            self.facts["queue_commit"] = "other"
+            self.assertEqual(self.explain("f0-part-c")["rule"], "launcher-admits")
+            self.assertEqual(called.call_count, 11)
+
+    def test_named_fault_scopes_and_contamination_clearance(self):
+        self.add("counted", "counted")
+        self.add("affected", "product_filler")
+        now = self.facts["now_epoch"]
+        self.facts["stops"] = [
+            {"code": "LEG_OVERTIME", "epoch": now - 100, "entry_id": "affected"},
+            {"code": "CONTAMINATED_REDOS", "epoch": now - 100},
+        ]
+        self.assertEqual(self.explain("affected")["rule"], "not-refused")
+        self.assertEqual(self.explain("counted")["rule"], "contaminated-redos")
+        self.assertEqual(self.next()["entry"], "f0-part-c")
+        self.facts["closes"] = [close("f0-part-c", "diagnostic_filler", now - 1,
+                                      load_redos=0, load_flag=False)]
+        self.assertEqual(self.next()["entry"], "counted")
 
     def test_redates_missed_counted_window_by_calendar_date(self):
         self.add("late", "counted", ["registered-window"], {

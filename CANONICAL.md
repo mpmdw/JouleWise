@@ -19,6 +19,7 @@ Last updated: 2026-11-10 (Paper rows: Paper 1 landed under `docs/paper/paper1/`,
 |---|---|---|
 | What is happening now, and what to do next | [`RUN_STATE.md`](RUN_STATE.md) (newest numbered item first; items from 150 on are current) | Dated `RESUME-*` files and session checkpoints under `docs/legacy/process_traces/` and `docs/process_traces/` (archived) |
 | Machine-readable head pointer and Next activation rule | [`docs/process/CURRENT.json`](docs/process/CURRENT.json) v2 includes the highest numbered item carrying a `pointer` block and the recorded open typed items. See [`docs/process/POINTER_RULE.md`](docs/process/POINTER_RULE.md). | Hand-maintained pointer JSON; `WINDOW_STATUS.md` and its publisher `scripts/window_status.sh` (superseded on `main`; retrieval in [docs/ARCHIVE.md](docs/ARCHIVE.md)) |
+| MBP scheduling decisions and ledger reports | [`scripts/mbp_sched.py`](scripts/mbp_sched.py) reads [`QUEUE.json`](docs/process/mbp/QUEUE.json), [`RULES.json`](docs/process/RULES.json) and structural host facts | Per-span scheduling decisions in RUN_STATE prose |
 | How work moves | [`docs/process/PIPELINE.md`](docs/process/PIPELINE.md) | The October 2026 gate policy |
 | Add a RUN_STATE item | [`scripts/run_state_add.py`](scripts/run_state_add.py) | Manual insertion of new items after cutover |
 | Work queue | [`TASK_QUEUE.md`](TASK_QUEUE.md); its marker-fenced region is generated from `docs/process/state_kernel.json` by `scripts/gen_state.py` (`--check` in CI) | Hand-kept queue lists in session traces |
