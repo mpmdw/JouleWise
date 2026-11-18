@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import argparse
-from collections import defaultdict
+from collections import Counter, defaultdict
 from contextlib import contextmanager
 import csv
 from dataclasses import dataclass, replace
@@ -117,24 +117,35 @@ def input_parts(relative):
     return parts
 
 
-def named_bytes(root, relative):
-    """Open exactly one readable, unlinked regular file below a real root."""
-    parts = input_parts(relative)
+@contextmanager
+def named_directory(root, parts):
+    """Walk real directories by their exact names, even on a case-folding filesystem."""
     directory_flags = os.O_RDONLY | os.O_NOFOLLOW | os.O_DIRECTORY
     directory = os.open(root, directory_flags)
     try:
-        for part in parts[:-1]:
+        for part in parts:
+            if part not in os.listdir(directory):
+                raise FileNotFoundError("release directory spelling differs from the requested path")
             child = os.open(part, directory_flags, dir_fd=directory)
             os.close(directory)
             directory = child
+        yield directory
+    finally:
+        os.close(directory)
+
+
+def named_bytes(root, relative):
+    """Open exactly one readable, unlinked regular file below a real root."""
+    *parents, name = input_parts(relative)
+    with named_directory(root, parents) as directory:
+        if name not in os.listdir(directory):
+            raise FileNotFoundError("release file spelling differs from the requested path")
         file_flags = os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK
-        with os.fdopen(os.open(parts[-1], file_flags, dir_fd=directory), "rb") as source:
+        with os.fdopen(os.open(name, file_flags, dir_fd=directory), "rb") as source:
             info = os.fstat(source.fileno())
             packet.require(S_ISREG(info.st_mode) and info.st_nlink == 1 and info.st_mode & 0o444,
                            "unreadable or linked release input")
             return source.read()
-    finally:
-        os.close(directory)
 
 
 def require_executing_bindings(receipt):
@@ -255,12 +266,12 @@ def plain_input(name, raw):
     text = raw.decode("utf-8")
     if name.endswith(".jsonl"):
         rows = tuple(packet.decode(line) for line in raw.splitlines() if line.strip())
-        packet.require(all(isinstance(row, dict) for row in rows), "release journal must contain objects")
+        packet.require(rows and all(isinstance(row, dict) for row in rows), "release journal needs records")
         return rows
     if name.endswith(".json"):
         value = packet.decode(text)
         required = list if name.endswith("/" + PM_ROWS) else dict
-        packet.require(isinstance(value, required), "release JSON has the wrong shape")
+        packet.require(isinstance(value, required) and value, "release JSON has no records or has the wrong shape")
         return value
 
     packet.require(name.endswith("/" + RAIL_FILE), "unexpected release input format")
@@ -295,6 +306,7 @@ class RestoredFiles:
         for name in self.entries:
             input_parts(name)
             self.stems[self.stem(name)].add(name)
+        self.verify_inventory()
         journal = layout["hazard_journal"]
         self.hazard_input = None
         if journal is not None:
@@ -306,7 +318,24 @@ class RestoredFiles:
     @staticmethod
     def stem(name):
         parent, _, filename = name.rpartition("/")
-        return parent, filename.partition(".")[0]
+        return parent.casefold(), filename.partition(".")[0].casefold()
+
+    def verify_inventory(self):
+        # Check directory entry names without opening or following any of the
+        # unprojected files. The finalizer excludes its own manifest from entries.
+        children = defaultdict(set, {"": {"finalized_manifest.json"}})
+        directories = {""}
+        for path, entry in self.entries.items():
+            parent, _, name = path.rpartition("/")
+            children[parent].add(name)
+            if entry == {"directory": True}:
+                directories.add(path)
+                children.setdefault(path, set())
+        packet.require(directories == children.keys(), "restore inventory has an unbound parent directory")
+        prefix = input_parts(self.prefix)
+        for parent, expected in children.items():
+            with named_directory(self.root, (*prefix, *Path(parent).parts)) as directory:
+                packet.require(set(os.listdir(directory)) == expected, "restored names differ from finalized inventory")
 
     def bind(self, name, *, optional=False):
         # Only the canonical representation belongs to this input. Compare
@@ -440,7 +469,9 @@ def read_member(assignment, condition, bindings):
         (project / "outputs").mkdir()
         for name, bound in bindings.items():
             if name != PM_ROWS:
-                raw, _ = files.read_bound(bound)
+                raw, parsed = files.read_bound(bound)
+                if name == "metadata.json":
+                    packet.require(parsed.get("run_id") == run_id, "bundle metadata differs from the bound member")
                 local_name = "power_trace.csv" if name == RAIL_FILE else name
                 (project / local_name).write_bytes(raw)
         episode = read_episode_bundle(project)
@@ -546,7 +577,25 @@ class ReleasedInputs:
         trace = from_json(PowerTrace, json.dumps(data["trace"]))
         mapping = from_json(ClockMapping, json.dumps(data["clock_mapping"])) if data.get("clock_mapping") else None
         packet.require((trace.source, trace.channel) == rl176.DC, "wrong separately bound DC channel")
+        packet.require(bool(trace.t_ns), "bound DC trace has no samples")
         return trace, mapping
+
+    def verify_s_coverage(self, score):
+        attrition = score["attrition"]
+        ranked = Counter((row["window"], row["pair"]) for row in attrition["instructed_assignments"]
+                         if row["included"])
+        packet.require(score["strata"] == len(self.expected_strata) and ranked == Counter(self.expected_strata),
+                       "ranked S strata differ from the bound roster")
+
+        # with_score counts scored episodes inside each condition of each pair.
+        # Only the verified eligible members can contribute a score, so equality
+        # against the roster's eligible counts entails a score for every member.
+        expected = Counter((pair, condition) for _, pair, condition, eligible, _ in self.expected_members.values()
+                           if eligible)
+        for pair, conditions in attrition["by_pair_and_condition"].items():
+            for condition, counts in conditions.items():
+                packet.require(counts["with_score"] == expected[pair, condition],
+                               "S contributors differ from the bound roster")
 
     def benign_episode_key(self, episode):
         # #813 accepts an Episode callback. Give the provider only the
@@ -643,6 +692,7 @@ def build_report(root):
             q_words_frozen=True,
         )
         if inputs is not None:
+            inputs.verify_s_coverage(report[seal.RL176]["S"])
             inputs.add_disclosures(report[seal.RL176])
         packet.require(not _release_sources.binding_refused, "release dependency verification refused")
         return report

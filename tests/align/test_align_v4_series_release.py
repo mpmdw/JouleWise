@@ -170,7 +170,9 @@ def write_bundle(bundle, window, assignment, signal, *, stored_condition=None, n
              "metadata": tag}
             for i in range(turn.decode_tokens)
         )
-    write_jsonl(bundle / "events.jsonl", [] if no_rows else events)
+    if no_rows:
+        events = [event for event in events if event["event_type"] != "token"]
+    write_jsonl(bundle / "events.jsonl", events)
     write_jsonl(outputs / "align_turns.jsonl", (
         {"turn": turn.index, "generation": {"finish_reason": (
             "episode.deadman" if truncate and turn is turns[-1] else "stop"
@@ -605,16 +607,21 @@ class SeriesReleaseTests(unittest.TestCase):
             root = Path(tmp)
             stored_series(root, history=True)
             originals = []
+            reports = []
             real = rl176.series_release_prints
 
             def observe(state, *, load_members, **kwargs):
                 def load():
                     originals.extend(load_members())
                     return originals
-                return real(state, load_members=load, **kwargs)
+                report = real(state, load_members=load, **kwargs)
+                reports.append(report)
+                return report
 
-            with patch.object(rl176, "series_release_prints", side_effect=observe):
-                report = caller.build_report(root)[seal.RL176]
+            with patch.object(rl176, "series_release_prints", side_effect=observe), \
+                    self.assertRaisesRegex(ValueError, "S contributors differ from the bound roster"):
+                caller.build_report(root)
+            report = reports[0][seal.RL176]
             self.assertEqual(len(originals), 176)
             self.assertEqual(len({m.episode.episode_id for m in originals}), 176)
             self.assertNotIn("C3", {m.window for m in originals})
@@ -836,7 +843,8 @@ class SeriesReleaseTests(unittest.TestCase):
             unbound_extra = restored / (absent + ".extra")
             unbound_extra.parent.mkdir(parents=True)
             unbound_extra.write_bytes(b"synthetic unbound extra")
-            self.assertIsNone(files.bind(absent, optional=True))
+            with self.assertRaisesRegex(ValueError, "restored names differ from finalized inventory"):
+                caller.RestoredFiles(root, record, {"trace_layout": caller.LAYOUT, "hazard_journal": None})
 
     def test_stored_101_win_series_refuses_gzip_archive_and_its_mutations(self):
         window = "C8"
@@ -1075,36 +1083,24 @@ class SeriesReleaseTests(unittest.TestCase):
             changed = next(m for m in candidate["members"] if m["pair"] == pair
                            and m["condition"] == condition and m["ordinal"] in series.FRESH_ORDINALS)
             ordinal = changed["ordinal"]
-            worlds = {}
             for no_rows in (False, True):
                 with self.subTest(condition=condition, captured=no_rows), tempfile.TemporaryDirectory() as tmp:
                     root = Path(tmp)
                     stored_series(root, different=("T3", pair, condition, ordinal), no_rows=no_rows)
                     output = root / "report.json"
                     result = invoke(root, output)
+                    if no_rows:
+                        self.assertEqual(result.returncode, 1, result.stderr)
+                        self.assertFalse(output.exists())
+                        continue
                     self.assertEqual(result.returncode, 0, result.stderr)
-                    worlds[no_rows] = json.loads(output.read_bytes())[seal.RL176]
-            absent, captured = worlds[False], worlds[True]
-            self.assertEqual(absent["S"]["strata"], captured["S"]["strata"])
-            self.assertEqual(absent["S"]["attrition"]["uncaptured_assignments"], [{
-                "window": "T3", "pair": pair, "ordinal": ordinal,
-                "decision": "excluded", "reason": "member.not_captured",
-            }])
-            self.assertEqual(captured["S"]["attrition"]["uncaptured_assignments"], [])
-            tallies = captured["S"]["attrition"]["by_pair_and_condition"][pair][condition]
-            self.assertEqual(tallies["eligible"] - tallies["with_score"], 1)
-            absent_q, captured_q = (world["q"]["per_pair"][pair] for world in (absent, captured))
-            absent_count, captured_count = (
-                world["q"]["entering_members_by_stratum"].get("T3", {}).get(pair, 0)
-                for world in (absent, captured)
-            )
-            self.assertNotEqual(absent_q["p_two_sided"], captured_q["p_two_sided"])
-            if condition == "benign":
-                self.assertEqual((absent_count, captured_count), (7, 8))
-                self.assertEqual(absent_q["strata"], captured_q["strata"])
-            else:
-                self.assertEqual((absent_count, captured_count), (0, 8))
-                self.assertEqual(captured_q["strata"] - absent_q["strata"], 1)
+                    absent = json.loads(output.read_bytes())[seal.RL176]
+                    self.assertEqual(absent["S"]["attrition"]["uncaptured_assignments"], [{
+                        "window": "T3", "pair": pair, "ordinal": ordinal,
+                        "decision": "excluded", "reason": "member.not_captured",
+                    }])
+                    absent_count = absent["q"]["entering_members_by_stratum"].get("T3", {}).get(pair, 0)
+                    self.assertEqual(absent_count, 7 if condition == "benign" else 0)
 
     def test_released_unbound_companion_prints_are_not_computed(self):
         with tempfile.TemporaryDirectory() as tmp:
