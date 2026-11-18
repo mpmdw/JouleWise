@@ -25,6 +25,7 @@ agent-free run of ``launch_align_r0.run_until_deadline`` for this runner kind.
 from __future__ import annotations
 
 import argparse
+from decimal import Decimal
 import json
 import math
 import os
@@ -34,6 +35,7 @@ import re
 import signal
 import subprocess
 import sys
+import tempfile
 import time
 import uuid
 
@@ -77,6 +79,115 @@ def cadence_minimum_seconds(plan: dict) -> float:
     return runner.launch_deadline(plan) - plan["t0_epoch_s"]
 
 
+def latest_attempt(ledger, span_pattern):
+    """Select an attempt using the recorded sequence or host boot order."""
+    if not isinstance(ledger, dict) or not isinstance(ledger.get("attempts"), list) or not ledger["attempts"]:
+        raise ValueError("attempt ledger needs a nonempty attempts list")
+    attempts = ledger["attempts"]
+    receipts = set()
+    for row in attempts:
+        if not isinstance(row, dict) or not isinstance(row.get("span_id"), str) or not span_pattern.fullmatch(row["span_id"]):
+            raise ValueError("attempt ledger has an invalid span id")
+        receipt = row.get("close_receipt")
+        if not isinstance(receipt, str) or not Path(receipt).is_absolute() or any(c in receipt for c in "\r\n"):
+            raise ValueError(f"invalid close receipt path for {row['span_id']}")
+        path = Path(receipt).resolve()
+        if path in receipts:
+            raise ValueError(f"duplicate attempt receipt path for {row['span_id']}")
+        receipts.add(path)
+    if any("sequence" in row for row in attempts):
+        sequences = [row.get("sequence") for row in attempts]
+        if any(type(seq) is not int or seq <= 0 for seq in sequences) or len(set(sequences)) != len(sequences):
+            raise ValueError("attempt sequences must be present, positive and unique")
+        return max(attempts, key=lambda row: row["sequence"])
+
+    boots = [row.get("boot_id") for row in attempts]
+    if any(not isinstance(boot, str) or not boot for boot in boots):
+        raise ValueError("unsequenced attempts need a boot id")
+    order = ledger.get("boot_order", list(dict.fromkeys(boots)) if len(set(boots)) == 1 else None)
+    if (not isinstance(order, list) or any(not isinstance(boot, str) or not boot for boot in order)
+            or len(set(order)) != len(order) or not set(boots).issubset(order)):
+        raise ValueError("unsequenced attempts across boots need an explicit boot order")
+    boot = next(boot for boot in reversed(order) if boot in boots)
+    candidates = [row for row in attempts if row["boot_id"] == boot]
+    if len(candidates) == 1:
+        return candidates[0]
+    times = [row.get("monotonic_ns") for row in candidates]
+    if any(type(t) is not int or t < 0 for t in times) or len(set(times)) != len(times):
+        raise ValueError("latest boot has ambiguous attempt order")
+    return max(candidates, key=lambda row: row["monotonic_ns"])
+
+
+def proven_close(ledger, runner):
+    attempt = latest_attempt(ledger, runner.SPAN_ID_PATTERN)
+    span = attempt["span_id"]
+    try:
+        receipt = json.loads(Path(attempt["close_receipt"]).read_text(), parse_float=Decimal)
+        if receipt.get("span_id") != span:
+            raise ValueError("close receipt span id differs from the latest attempt")
+        if "restore_readbacks" in receipt:
+            readbacks = receipt["restore_readbacks"]
+            restored = isinstance(readbacks, dict) and bool(readbacks) and all(v is True for v in readbacks.values())
+        else:
+            restore = [step for step in receipt.get("steps", []) if step["name"] == "restore"]
+            restored = (len(restore) == 1 and type(restore[0]["rc"]) is int and restore[0]["rc"] == 0
+                        and restore[0]["result"].get("ok") is True)
+        if not restored:
+            raise ValueError("restore readbacks did not pass")
+        ended = receipt["ended"]
+        if "epoch_ns" in ended:
+            epoch_ns = ended["epoch_ns"]
+        else:
+            epoch = ended["epoch_s"]
+            if type(epoch) is not int and (not isinstance(epoch, Decimal) or not epoch.is_finite()):
+                raise ValueError("invalid close epoch")
+            numerator, denominator = epoch.as_integer_ratio()
+            epoch_ns, fraction = divmod(numerator * runner.NS_PER_SECOND, denominator)
+            if fraction:
+                raise ValueError("close epoch exceeds nanosecond precision")
+        if type(epoch_ns) is not int or epoch_ns <= 0:
+            raise ValueError("invalid close epoch")
+    except FileNotFoundError as error:
+        raise ValueError(f"latest attempt {span} has no close receipt") from error
+    except (OSError, ValueError, KeyError, TypeError, AttributeError) as error:
+        raise ValueError(f"latest attempt {span}: {error}") from error
+    return attempt, epoch_ns
+
+
+def append_attempt(path, ledger, previous, span_id, receipt, span_pattern):
+    """Publish the start plan under the desk fence lock before bootstrap."""
+    row = {"span_id": span_id, "close_receipt": str(receipt)}
+    if "sequence" in previous:
+        row["sequence"] = previous["sequence"] + 1
+    else:
+        if sys.platform == "darwin":
+            boot = subprocess.check_output(["/usr/sbin/sysctl", "-n", "kern.bootsessionuuid"], text=True).strip()
+        else:
+            boot = Path("/proc/sys/kernel/random/boot_id").read_text().strip()
+        order = ledger.setdefault("boot_order", [previous["boot_id"]])
+        if boot not in order:
+            order.append(boot)
+        row.update(boot_id=boot, monotonic_ns=time.monotonic_ns())
+    ledger["attempts"].append(row)
+    if latest_attempt(ledger, span_pattern) is not row:
+        raise ValueError("the new attempt does not follow the recorded attempt order")
+    with tempfile.NamedTemporaryFile(mode="w", dir=path.parent, delete=False) as handle:
+        temp = Path(handle.name)
+        try:
+            json.dump(ledger, handle)
+            handle.write("\n")
+            handle.flush()
+            os.fsync(handle.fileno())
+            os.replace(temp, path)
+            parent = os.open(path.parent, os.O_RDONLY | os.O_DIRECTORY)
+            try:
+                os.fsync(parent)
+            finally:
+                os.close(parent)
+        finally:
+            temp.unlink(missing_ok=True)
+
+
 def runner_argv(args) -> list[str]:
     legs, window = getattr(args, "legs", None), getattr(args, "batch_window", None)
     t0_date = getattr(args, "authorized_t0_date", None)
@@ -84,9 +195,13 @@ def runner_argv(args) -> list[str]:
     if t0_date is not None:
         t0_args = ["--authorized-t0-date", t0_date, "--t0-not-before", str(args.t0_not_before),
                    "--t0-before", str(args.t0_before), "--t0-anchor", ":".join(map(str, args.t0_anchor))]
+    if getattr(args, "t0_not_before_ns", None) is not None:
+        t0_args += ["--t0-not-before-ns", str(args.t0_not_before_ns)]
+    span_id = getattr(args, "span_id", None)
     return [str(args.python_bin), str(args.repo / RUNNER), "run", "--kit", str(args.kit), "--output", str(args.output),
             *(["--legs", legs] if legs else []), *(["--batch-window", window] if window else []),
-            "--deadline", str(args.deadline), "--pmset-bin", str(args.pmset_bin), *t0_args]
+            "--deadline", str(args.deadline), "--pmset-bin", str(args.pmset_bin),
+            *(["--span-id", span_id] if span_id else []), *t0_args]
 
 
 def launch(args) -> None:
@@ -141,6 +256,15 @@ def launch(args) -> None:
         current = base.read_fence(root)
         if current and current["deadline"] > time.time() and base.pid_alive(current["pid"]):
             raise ValueError("an active desk fence already exists")
+        ledger_path = getattr(args, "attempt_ledger", None)
+        if ledger_path is not None:
+            from scripts import cadence_legs_runner as span_runner
+            ledger = json.loads(ledger_path.read_text())
+            previous, close_ns = proven_close(ledger, span_runner)
+            if previous["close_receipt"] != args.previous_close_receipt or close_ns != args.t0_not_before_ns:
+                raise ValueError(f"close proof changed before launch for {previous['span_id']}")
+            append_attempt(ledger_path, ledger, previous, args.span_id, args.output / span_runner.RECEIPT_NAME,
+                           span_runner.SPAN_ID_PATTERN)
         base.write_fence(root, {"purpose": purpose, "pid": args.magistrate_pid, "deadline": args.deadline})
     try:
         subprocess.run([args.launchctl_bin, "bootstrap", domain, str(plist)], check=True, timeout=30)
@@ -217,6 +341,9 @@ def main(argv=None) -> int:
     start.add_argument("--custody-root", type=Path, required=True)
     start.add_argument("--magistrate-pid", type=int, required=True)
     start.add_argument("--deadline", type=float, required=True)
+    start.add_argument("--span-id", help="span identity carried into its close receipt")
+    start.add_argument("--attempt-ledger", type=Path, help="shared launch/start-plan ledger")
+    start.add_argument("--previous-close-receipt", help="receipt proved by the item before launch")
     runner.add_t0_authority_arguments(start)
     start.add_argument("--launchctl-bin", default="/bin/launchctl")
     start.add_argument("--pmset-bin", default="/usr/bin/pmset")
@@ -228,18 +355,31 @@ def main(argv=None) -> int:
     run.add_argument("--deadline", type=float, required=True)
     run.add_argument("--runner-spec", type=Path, required=True)
     run.add_argument("--pmset-bin", default="/usr/bin/pmset")
+    close = sub.add_parser("close-proof", help="read the latest attempt and verify its own close receipt")
+    close.add_argument("--attempt-ledger", type=Path, required=True)
     args = parser.parse_args(argv)
-    for name in ("repo", "kit", "output", "disk_path", "custody_root"):
+    for name in ("repo", "kit", "output", "disk_path", "custody_root", "attempt_ledger"):
         if getattr(args, name, None) is not None:
             setattr(args, name, getattr(args, name).expanduser().resolve())
     if hasattr(args, "python_bin"):
         args.python_bin = Path(os.path.abspath(args.python_bin.expanduser()))   # not symlink-resolved (venv)
     try:
+        if args.command == "close-proof":
+            attempt, close_ns = proven_close(json.loads(args.attempt_ledger.read_text()), runner)
+            print(attempt["span_id"], close_ns, attempt["close_receipt"], sep="\n")
+            return 0
         if args.command == "launch":
             kit, _ = kitmod.load_kit(args.kit)
             try:
+                if args.span_id is not None and not runner.SPAN_ID_PATTERN.fullmatch(args.span_id):
+                    raise ValueError("invalid --span-id")
+                if args.attempt_ledger is not None or args.previous_close_receipt is not None:
+                    if any(value is None for value in (args.attempt_ledger, args.previous_close_receipt,
+                                                       args.span_id, args.t0_not_before_ns)):
+                        raise ValueError("ledger launch requires span id, previous close receipt and exact close bound")
                 runner.validate_t0_authority(kit, args.authorized_t0_date, args.t0_not_before,
-                                             args.t0_before, args.t0_anchor, require_anchor=False)
+                                             args.t0_before, args.t0_anchor, require_anchor=False,
+                                             t0_not_before_ns=args.t0_not_before_ns)
             except ValueError as error:
                 parser.error(str(error))
             if args.authorized_t0_date is not None and args.t0_anchor is None:

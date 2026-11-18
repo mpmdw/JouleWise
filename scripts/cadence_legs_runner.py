@@ -53,6 +53,7 @@ import json
 import math
 import os
 from pathlib import Path
+import re
 import signal
 import subprocess
 import sys
@@ -84,6 +85,7 @@ SOAK_RETRIES = 1
 SOAK_REFUSED_RC = 5
 NS_PER_SECOND = 1_000_000_000
 UNIX_EPOCH = datetime(1970, 1, 1, tzinfo=UTC)
+SPAN_ID_PATTERN = re.compile(r"[A-Za-z0-9][A-Za-z0-9_.:-]*")
 
 
 class SpanRefusal(RuntimeError):
@@ -370,14 +372,17 @@ def _parse_t0_anchor(raw):
 def add_t0_authority_arguments(parser):
     parser.add_argument("--authorized-t0-date", help="authorized America/Los_Angeles calendar date")
     parser.add_argument("--t0-not-before", type=int, help="inclusive earliest start in whole epoch seconds")
+    parser.add_argument("--t0-not-before-ns", type=int, help="additional inclusive close bound in epoch nanoseconds")
     parser.add_argument("--t0-before", type=int, help="exclusive start cutoff in whole epoch seconds")
     parser.add_argument("--t0-anchor", type=_parse_t0_anchor,
                         help="arm clock sample as epoch_ns:monotonic_before_ns:monotonic_after_ns")
 
 
-def validate_t0_authority(kit, authorized_date, t0_not_before, t0_before, t0_anchor, *, require_anchor):
+def validate_t0_authority(kit, authorized_date, t0_not_before, t0_before, t0_anchor, *, require_anchor,
+                          t0_not_before_ns=None):
     qualification = kit["seed_law"]["method"] == QUAL_LAW
-    if not qualification and all(value is None for value in (authorized_date, t0_not_before, t0_before, t0_anchor)):
+    if not qualification and all(value is None for value in
+                                 (authorized_date, t0_not_before, t0_before, t0_anchor, t0_not_before_ns)):
         return
     if authorized_date is None or t0_not_before is None or t0_before is None:
         raise ValueError("authorized t0 date, earliest start and exclusive cutoff are required together")
@@ -385,11 +390,13 @@ def validate_t0_authority(kit, authorized_date, t0_not_before, t0_before, t0_anc
         raise ValueError("authorized t0 date must use YYYY-MM-DD")
     if not 0 < t0_not_before < t0_before:
         raise ValueError("t0 bounds must satisfy 0 < earliest start < exclusive cutoff")
+    if t0_not_before_ns is not None and not 0 < t0_not_before_ns < t0_before * NS_PER_SECOND:
+        raise ValueError("exact close bound must be positive and below the exclusive cutoff")
     if require_anchor and t0_anchor is None:
         raise ValueError("authorized t0 requires the arm clock anchor from the launcher")
 
 
-def _authorized_start(clock, authorized_date, t0_not_before, t0_before, anchor):
+def _authorized_start(clock, authorized_date, t0_not_before, t0_before, anchor, t0_not_before_ns=None):
     wall_ns, continuous_ns = clock.epoch_and_monotonic_ns()
     anchor_epoch_ns, before_ns, after_ns = anchor
     if continuous_ns < after_ns:
@@ -398,10 +405,12 @@ def _authorized_start(clock, authorized_date, t0_not_before, t0_before, anchor):
     # Require the full projected interval to fit even if the sampler was preempted.
     earliest_ns = anchor_epoch_ns + continuous_ns - after_ns
     latest_ns = anchor_epoch_ns + continuous_ns - before_ns
+    lower_ns = max(t0_not_before * NS_PER_SECOND, t0_not_before_ns or 0)
+    cutoff_ns = t0_before * NS_PER_SECOND
     for epoch_ns in (earliest_ns, latest_ns, wall_ns):
-        second = epoch_ns // NS_PER_SECOND
-        if not t0_not_before <= second < t0_before:
+        if not lower_ns <= epoch_ns < cutoff_ns:
             return None
+        second = epoch_ns // NS_PER_SECOND
         day = (UNIX_EPOCH + timedelta(seconds=second)).astimezone(legsmod.LOCAL_ZONE).date()
         if day.isoformat() != authorized_date:
             return None
@@ -415,18 +424,22 @@ def _authorized_start(clock, authorized_date, t0_not_before, t0_before, anchor):
 
 
 def run_span(*, kit, kit_sha256, output, deadline, windows, deps, leg_ids=None,
-             authorized_t0_date=None, t0_not_before=None, t0_before=None, t0_anchor=None):
+             authorized_t0_date=None, t0_not_before=None, t0_before=None, t0_anchor=None,
+             t0_not_before_ns=None, span_id=None):
     """Run one span. Returns the receipt's rc (0 = every roster leg attempted, cleanup proven)."""
     clock = deps.clock
     authority = {}
     if authorized_t0_date is not None:
-        started = _authorized_start(clock, authorized_t0_date, t0_not_before, t0_before, t0_anchor)
+        started = _authorized_start(clock, authorized_t0_date, t0_not_before, t0_before, t0_anchor,
+                                    t0_not_before_ns)
         if started is None:
             print(f"REFUSE: t0 clocks must agree on authority for {authorized_t0_date} "
-                  f"within [{t0_not_before}, {t0_before})", file=sys.stderr)
+                  f"within [{t0_not_before}, {t0_before}) with exact close bound {t0_not_before_ns}", file=sys.stderr)
             return 3
         authority = {"t0_authority": {"authorized_t0_date": authorized_t0_date,
                                       "t0_not_before": t0_not_before, "t0_before": t0_before}}
+        if t0_not_before_ns is not None:
+            authority["t0_authority"]["t0_not_before_ns"] = t0_not_before_ns
     else:
         started = _stamp(clock)
     output = Path(output)
@@ -438,6 +451,8 @@ def run_span(*, kit, kit_sha256, output, deadline, windows, deps, leg_ids=None,
               "roster": list(leg_ids) if leg_ids is not None else [leg["leg_id"] for leg in kit["legs"]],
               "batch_windows": [legsmod.format_window(w) for w in windows], "steps": [], "legs": [],
               "soak_attempts": [], "feeds": {}, "rc": 0, **authority}
+    if span_id is not None:
+        record["span_id"] = span_id
     state = {"power_read": False, "plan": None, "summaries": [], "finished": 0, "fault": False, "redos": 0}
     kit_legs = {leg["leg_id"]: leg for leg in kit["legs"]}
 
@@ -700,6 +715,9 @@ def _close(record, state, deps, output, step, kit):
         record["rc"] = record["rc"] or 2
         record["desk_bundle_error"] = f"{type(exc).__name__}: {exc}"
     record["ended"] = _stamp(deps.clock)
+    if "span_id" in record:
+        epoch_ns, _ = deps.clock.epoch_and_monotonic_ns()
+        record["ended"].update(epoch_ns=epoch_ns, epoch_s=epoch_ns / NS_PER_SECOND)
     with (output / RECEIPT_NAME).open("x") as handle:
         json.dump(record, handle, indent=2, sort_keys=True)
         handle.write("\n")
@@ -974,6 +992,7 @@ def main(argv=None):
         if name == "run":
             p.add_argument("--output", type=Path, required=True)
             p.add_argument("--deadline", type=float, required=True)
+            p.add_argument("--span-id", help="span identity carried into its close receipt")
             add_t0_authority_arguments(p)
             p.add_argument("--pmset-bin", default="/usr/bin/pmset")
             p.add_argument("--inputs", type=Path,
@@ -1041,15 +1060,18 @@ def main(argv=None):
     if not math.isfinite(args.deadline):
         parser.error("deadline must be finite")
     try:
+        if args.span_id is not None and not SPAN_ID_PATTERN.fullmatch(args.span_id):
+            raise ValueError("invalid --span-id")
         validate_t0_authority(kit, args.authorized_t0_date, args.t0_not_before, args.t0_before, args.t0_anchor,
-                              require_anchor=True)
+                              require_anchor=True, t0_not_before_ns=args.t0_not_before_ns)
     except ValueError as error:
         parser.error(str(error))
     output = args.output.resolve()
     deps = production_deps(inputs=args.inputs, pmset_bin=args.pmset_bin, output=output)
     return run_span(kit=kit, kit_sha256=sha, output=output, deadline=args.deadline, windows=windows, deps=deps,
                     leg_ids=_roster(args), authorized_t0_date=args.authorized_t0_date,
-                    t0_not_before=args.t0_not_before, t0_before=args.t0_before, t0_anchor=args.t0_anchor)
+                    t0_not_before=args.t0_not_before, t0_before=args.t0_before, t0_anchor=args.t0_anchor,
+                    t0_not_before_ns=args.t0_not_before_ns, span_id=args.span_id)
 
 
 if __name__ == "__main__":

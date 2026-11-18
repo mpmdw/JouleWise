@@ -70,13 +70,16 @@ class T0AuthorityTests(unittest.TestCase):
                        "--magistrate-pid", "123", *self.spec]
 
     def handoff(self, *, day="2026-11-19", earliest=None, cutoff=None, projected_ns, wall_ns, allowed,
-                anchor_width_ns=0):
+                anchor_width_ns=0, exact_close_ns=None, span_id=None):
         earliest = self.midnight - 3600 if earliest is None else earliest
         cutoff = self.midnight if cutoff is None else cutoff
         authority = ["--authorized-t0-date", day, "--t0-not-before", str(earliest), "--t0-before", str(cutoff),
                      "--t0-anchor", f"{projected_ns - self.ns}:{999 * self.ns - anchor_width_ns}:{999 * self.ns}"]
+        if exact_close_ns is not None:
+            authority += ["--t0-not-before-ns", str(exact_close_ns)]
         with patch.object(cadence_launch, "launch") as launch:
-            self.assertEqual(cadence_launch.main(self.launch + authority), 0)
+            identity = ["--span-id", span_id] if span_id else []
+            self.assertEqual(cadence_launch.main(self.launch + identity + authority), 0)
             child_argv = cadence_launch.runner_argv(launch.call_args.args[0])
         self.assertEqual(child_argv[-len(authority):], authority)
 
@@ -119,6 +122,19 @@ class T0AuthorityTests(unittest.TestCase):
         self.handoff(earliest=earliest, projected_ns=rolled_back_ns, wall_ns=rolled_back_ns, allowed=False)
         at_release_ns = earliest * self.ns
         self.handoff(earliest=earliest, projected_ns=at_release_ns, wall_ns=at_release_ns, allowed=True)
+
+    def test_handoff_compares_fractional_close_at_nanosecond_resolution(self):
+        now_ns = 1795118400 * self.ns
+        close_ns = now_ns + 125_000_000
+        for projected_ns, wall_ns in ((close_ns - 1, close_ns), (close_ns, close_ns - 1)):
+            self.handoff(earliest=1795118400, exact_close_ns=close_ns, projected_ns=projected_ns,
+                         wall_ns=wall_ns, allowed=False)
+        start_ns = now_ns + 750_000_000
+        receipt = self.handoff(earliest=1795118400, exact_close_ns=close_ns, projected_ns=start_ns,
+                               wall_ns=start_ns, span_id="qual-01-s01", allowed=True)
+        self.assertEqual(receipt["t0_authority"]["t0_not_before_ns"], close_ns)
+        self.assertEqual(receipt["span_id"], "qual-01-s01")
+        self.assertIn("epoch_ns", receipt["ended"])
 
     def test_handoff_clock_counts_suspend_at_both_ends(self):
         now = 1795111200
@@ -859,6 +875,29 @@ class LauncherTests(unittest.TestCase):
             "/synthetic/python", "/synthetic/repo/scripts/cadence_legs_runner.py", "run", "--kit",
             "/synthetic/kit.json", "--output", "/synthetic/new", "--legs", "L001,L002,L003", "--batch-window",
             "02:00-02:35", "--deadline", "1234", "--pmset-bin", "fake-pmset"])
+
+    def test_launch_ledger_records_attempt_even_if_bootstrap_fails(self):
+        with tempfile.TemporaryDirectory(dir=TMP) as td:
+            root = Path(td)
+            receipt = root / "previous.json"
+            receipt.write_text(json.dumps({"span_id": "prior", "ended": {"epoch_ns": 100_125_000_000},
+                                           "steps": [{"name": "restore", "rc": 0, "result": {"ok": True}}]}))
+            ledger = root / "attempts.json"
+            previous = {"sequence": 3, "span_id": "prior", "close_receipt": str(receipt)}
+            ledger.write_text(json.dumps({"attempts": [previous]}))
+            kit = self.kit_file(root)
+            legs = "L001,L002,L003"
+            plan = cadence_launch.cadence_plan(kit, legs, t0=local("2026-11-15T13:20"))
+            with patch.object(cadence_launch, "cadence_plan", return_value=plan):
+                spec, _ = launch_files(root, seconds=cadence_launch.cadence_minimum_seconds(plan), kit=kit, legs=legs,
+                                       attempt_ledger=ledger, previous_close_receipt=str(receipt),
+                                       span_id="qual-01-s01", t0_not_before_ns=100_125_000_000)
+            attempts = json.loads(ledger.read_text())["attempts"]
+            self.assertEqual(attempts, [previous, {"sequence": 4, "span_id": "qual-01-s01",
+                                                  "close_receipt": str(root / "out" / runner.RECEIPT_NAME)}])
+            self.assertIn("--span-id", json.loads(spec)["argv"])
+            with self.assertRaisesRegex(ValueError, "latest attempt qual-01-s01 has no close receipt"):
+                cadence_launch.proven_close({"attempts": attempts}, runner)
 
     def test_launch_writes_an_agent_free_interactive_job_on_the_desk_wrapper(self):
         import plistlib
