@@ -6,10 +6,10 @@ read to get back here. Session records live in `docs/run_reports/` and
 policy lives in `docs/decision_log.md`. Do not create a dated restart doc;
 update this file instead.
 
-The 2026-11-18 independent interim-fit twin seat ran the actual child command
-on a bound raw synthetic bundle with a fixture decoder. The exact registered
-decoder imports other JouleWise modules, so its isolated run awaits an
-import-boundary ruling. See the [raw-bundle run report](docs/run_reports/2026-11-18-interim-fit-twin-raw.md).
+The 2026-11-18 independent interim-fit twin seat passed the actual isolated
+child run on a bound raw synthetic bundle using the registered decoder and
+initializer. The tested script pin and clause-to-test record are in the
+[acceptance run report](docs/run_reports/2026-11-18-interim-fit-twin-acceptance.md).
 
 **Current pointer: read the top numbered item first.** That is the
 highest-numbered item; from item 168 on, items run newest first and start

@@ -584,10 +584,10 @@ now has an explicit disposition:
 
 ## Queue Maintenance
 
-- **lm-interim-01 twin (2026-11-18)** — RL-183a raw-bundle fixture passes
-  above the decoder. NEEDS_SPEC for two imports in the exact pinned decoder.
-  The [raw-bundle run report](docs/run_reports/2026-11-18-interim-fit-twin-raw.md)
-  records the executing evidence and the remaining acceptance work.
+- **lm-interim-01 twin (2026-11-18)** — RL-183a synthetic raw-bundle
+  acceptance passed with the registered decoder and the approved import
+  shim. Draft PR #816 awaits the lead's manifest pin and parent adoption.
+  See the [acceptance run report](docs/run_reports/2026-11-18-interim-fit-twin-acceptance.md).
 
 - **[AGENT] Typed RUN_STATE cutover (2026-11-17).** The lead recorded a
   Tier 1 MERGE review. The follow-up reruns both CI workflows before merge.
