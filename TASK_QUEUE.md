@@ -599,7 +599,7 @@ At the end of substantial work:
 
 | Item | Priority and lane | Disposition |
 |---|---|---|
-| RL-176 through RL-182 builder work | P1 [AGENT], directly ordered for the blind W1 amendment and pre-C1 freeze | Token evidence at `38bb2f40e` and `27cc1338b`. Draft PR #813 carries the 17 cold-review edits. W1 signing requires green CI, the lead's exact-text check and Astra's audit disposition. C1 retains the separate row-builder, release script, signed receipt and first-token coverage gate. [Builder report](docs/run_reports/2026-11-18-rl182-build.md) |
+| RL-176 through RL-182a builder work | P1 [AGENT], directly ordered for the blind W1 amendment and pre-C1 freeze | Token evidence at `38bb2f40e` and `27cc1338b`. Draft PR #813 carries all 17 edits and the four audit repairs. W1 signing needs the refreshed hashes, final CI and audit disposition. C1 retains the separate row-builder, release script, signed receipt and first-token coverage and gap checks. [Builder report](docs/run_reports/2026-11-18-rl182a-audit-fix.md) |
 
 ## Intake Batch Owed To The Kernel (2026-07-30/31)
 

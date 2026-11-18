@@ -561,6 +561,47 @@ class MlxRuntimeTests(unittest.TestCase):
             "requested_tokens_emitted",
         )
 
+    def test_first_yield_stamp_gap_is_two_clock_reads_without_model_work(self) -> None:
+        # RL-182a check 1 supersedes the timing replay that injected a gap
+        # between the recorded prefill boundary and the first token event.
+        timeline = []
+
+        class TickingClock(FakeClock):
+            def now(self) -> float:
+                self.sleep(1.0)
+                value = super().now()
+                timeline.append(("clock", value))
+                return value
+
+        adapter, fake_mlx = self.prepared_adapter(["A", "B", "C"])
+        adapter._clock = TickingClock(start=1000.0)
+        generate = fake_mlx.stream_generate
+
+        def recorded_generate(*args, **kwargs):
+            timeline.append(("stream_generate", None))
+
+            def recorded_responses():
+                for index, response in enumerate(generate(*args, **kwargs)):
+                    timeline.append(("yield", index))
+                    yield response
+
+            return recorded_responses()
+
+        with patch.object(fake_mlx, "stream_generate", recorded_generate):
+            events = adapter.run_workload(make_config()).events
+        prefill = next(e for e in events if (e.event_type, e.phase) == ("phase_end", "prefill"))
+        decode = next(e for e in events if (e.event_type, e.phase) == ("phase_start", "decode"))
+        first = next(e for e in events if e.event_type == "token")
+        self.assertEqual(first.metadata["index"], 0)
+        self.assertEqual(first.timestamp_s - prefill.timestamp_s, 2)
+        self.assertEqual(decode.timestamp_s - prefill.timestamp_s, 1)
+        start = timeline.index(("clock", prefill.timestamp_s))
+        end = timeline.index(("clock", first.timestamp_s))
+        self.assertEqual(timeline[start - 1:end + 1], [
+            ("yield", 0), ("clock", prefill.timestamp_s), ("clock", decode.timestamp_s),
+            ("clock", first.timestamp_s),
+        ])
+
     def test_run_workload_event_shape_and_token_timeline(self) -> None:
         adapter, _ = self.prepared_adapter(["A", "B", "C"])
         result = adapter.run_workload(make_config())

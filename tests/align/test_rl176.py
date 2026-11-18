@@ -14,7 +14,7 @@ from types import ModuleType
 import unittest
 from unittest.mock import Mock, patch
 
-from joulewise.align.apple import rl176 as r, rl176_phases as phases, v4_desk_seal as seal
+from joulewise.align.apple import rl145_prints, rl176 as r, rl176_phases as phases, v4_desk_seal as seal
 from joulewise.align.energy_residual import TurnRow
 from joulewise.align.records import ClockMapping, Episode, PowerTrace, ToolCall, Turn
 from tests.align.twins.rl176_twin import (
@@ -196,6 +196,64 @@ class DecodeTests(unittest.TestCase):
         self.assertEqual(r._decode_rows(member)[1][1], 6)
         missing = episode("no-stamp", missing_first=True)
         self.assertEqual(len(r._decode_rows(r.FreshMember("C1", missing, True, s_rows(missing)))), 2)
+
+
+    def test_clamped_turn_gives_no_s_row_at_either_edge_of_turn(self):
+        flag = "first_token_clock_outside_turn"
+        original = episode("clamped", no_tools=True, level=2)
+        for flags in ((flag,), (flag, f"{flag}:0")):
+            for edge in (original.turns[0].start_ns, original.turns[0].end_ns):
+                with self.subTest(flags=flags, edge=edge):
+                    turn = replace(original.turns[0], first_token_ns=edge)
+                    ep = replace(original, turns=(turn,), hardware={}, flags=flags)
+                    member = r.FreshMember("C1", ep, True, s_rows(ep))
+                    self.assertEqual(r._decode_rows(member), ())
+                    self.assertEqual(r._observation(member).q_j, (turn.end_ns - edge) * 2 / NS)
+
+    def test_indexed_clamp_drops_only_that_turn_and_keeps_a_valid_boundary_stamp(self):
+        flag = "first_token_clock_outside_turn"
+        ep = episode("scoped-clamp", no_tools=True, level=2, flags=(flag, f"{flag}:1"))
+        first, second, third = ep.turns
+        ep = replace(ep, hardware={}, turns=(
+            replace(first, first_token_ns=first.start_ns),
+            replace(second, first_token_ns=second.start_ns),
+            third,
+        ))
+        rows = s_rows(ep)
+        actual = r._decode_rows(r.FreshMember("C1", ep, True, rows))
+        expected = r._decode_rows(r.FreshMember("C1", replace(ep, flags=()), True, (rows[0], rows[2])))
+        self.assertEqual(len(actual), 2)
+        self.assertEqual(actual, expected)
+
+    def test_s_and_q_use_record_stamp_when_first_token_event_differs(self):
+        ep = episode("stamp", no_tools=True, level=2)
+        turn = ep.turns[0]
+        ep = replace(ep, turns=(turn,), hardware={})
+        for event_time in (3.5, 4.5):
+            with self.subTest(event_time=event_time):
+                events = [
+                    {"event_type": "phase_end", "phase": "prefill", "timestamp_s": 4,
+                     "metadata": {"align_turn_index": 0}},
+                    {"event_type": "token", "timestamp_s": event_time, "metadata": {"align_turn_index": 0}},
+                ]
+                self.assertNotEqual(rl145_prints.token_stamps_from_events(events, turn)[0], turn.first_token_ns)
+                recorded = replace(ep, hardware={"runtime_events": events})
+                member = r.FreshMember("C1", recorded, True, s_rows(recorded))
+                self.assertEqual(r._decode_rows(member)[0][1], 6)
+                self.assertEqual(r._observation(member).q_j, 6)
+
+    def test_relative_zero_variance_rejects_unequal_energy_fits(self):
+        design = [(1.0, d, cp * d + d * d / 2) for d, cp in
+                  ((2, 5), (3, 7), (4, 4), (2, 6), (5, 2), (3, 9), (4, 7))]
+        for scale in (1.0, 1000.0):
+            for perturbation, scored in ((0.0, False), (1e-8, False), (1e-6, True)):
+                with self.subTest(scale=scale, perturbation=perturbation):
+                    energies = [scale * (1 + d + z) for _, d, z in design]
+                    energies[-1] += scale * perturbation
+                    self.assertGreater(len(set(energies)), 1)
+                    rows = {"held": [(design[0], energies[0], 0.0)],
+                            "train": list(zip(design, energies, [0.0] * len(design)))}
+                    self.assertEqual("held" in r._residual_scores(rows, edges_per_row=3), scored)
 
 
 class RL177Tests(unittest.TestCase):
@@ -433,6 +491,36 @@ class ReleaseTests(unittest.TestCase):
                         self.assertEqual(row[seal.RL176]["status"], seal.WITHHELD)
                         self.assertEqual(set(row[seal.RL176]), {"status", "nonce", "hmac_sha256"})
             do_not_read.assert_not_called()
+
+    def test_flat_energy_across_22_full_rank_strata_is_not_evaluable(self):
+        members = []
+        for i in range(11):
+            window = f"C{i + 1}" if i < 8 else f"T{i - 7}"
+            for pair in r.PAIRS:
+                for j, tokens in enumerate((300, 200, 300, 400, 200, 300, 400, 500)):
+                    condition = "benign" if j else "sabotage"
+                    ep = episode(f"flat-{window}-{pair}-{j}", pair=pair, condition=condition,
+                                 level=2, no_tools=True)
+                    prefill = 10_021 if pair == r.PAIRS[0] else 6516
+                    t = replace(ep.turns[0], first_token_ns=5_875_000_000, decode_tokens=tokens,
+                                prefill_tokens=prefill + (r.PROMPT_DELTA[pair] if j == 0 else 0))
+                    ep = replace(ep, turns=(t,), hardware={})
+                    member = r.FreshMember(window, ep, True, s_rows(ep))
+                    self.assertEqual(r._decode_rows(member)[0][1], 2.25)
+                    members.append(member)
+        training = [r._decode_rows(member)[0] for member in members[1:8]]
+        x, y, _ = zip(*training)
+        self.assertIsNotNone(r._ols(x, y))
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _receipt(root)
+            result = r.series_release_prints({"source_measurement_root": root},
+                                             load_members=lambda: members)[seal.RL176]["S"]
+        self.assertEqual(result["strata"], 0)
+        self.assertEqual(result["words"], ["S NOT EVALUABLE"])
+        dispositions = result["attrition"]["instructed_assignments"]
+        self.assertEqual([entry["reason"] for entry in dispositions], ["s_score_undefined"] * 22)
 
     def test_release_q_dec_phase_and_benign_only_dc(self):
         with tempfile.TemporaryDirectory() as tmp:

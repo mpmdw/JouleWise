@@ -10,16 +10,17 @@ carries a superseded banner, and everything still current in them is
 folded in below. Do not create another dated restart doc; update this
 file instead.
 
-## 2026-11-18 W1 desk handoff — RL-182 edits
+## 2026-11-18 W1 desk handoff — RL-182a audit repairs
 
-[AGENT] Draft PR #813 on `align/2026-11-17-rl176-build` carries the RL-182
-cold-review edits on W1 base `b2e01464d`. S's exact .0125 level and the Q
-arithmetic are covered by a byte-for-byte synthetic comparison to
-`a36b28b73`. The registered prompt counts show both Pydantic renders. W1
-signing requires green CI, the lead's exact-text diff and Astra's audit
-disposition. C1's arm follows the separate row-builder, caller, receipt
-and first-token coverage gates of RL-182 §1.5.
-[Run report](docs/run_reports/2026-11-18-rl182-build.md)
+[AGENT] Draft PR #813 on `align/2026-11-17-rl176-build` carries the 17
+RL-182 edits and the RL-182a repairs on W1 base `b2e01464d`. The four
+verified audit findings have synthetic regressions for clamped S rows,
+the runtime's two-clock-read boundary, zero-variance folds and the exact
+registration text. W1 signing needs the refreshed hashes and final audit
+disposition. C1 retains its separate caller, row-builder and receipt gates.
+W1's close supplies both the first-token coverage count and the maximum gap
+between prefill end and the first token event.
+[Run report](docs/run_reports/2026-11-18-rl182a-audit-fix.md)
 
 **▶▶▶ HANDOFF 2026-10-10 08:40 PDT (magistrate activation cbe4230e, Opus 5.5, headless): BETA ATTEMPT 1 WAS COLLECTED AND IS NOT CLAIM-USABLE, AND STAYS SO. ERRATUM 2 IS ADMITTED. BETA ATTEMPT 2 IS NEXT. THIS BLOCK IS THE MAGISTRATE'S CURRENT STEP LIST. The block of 2026-10-09 15:45 below still gives the sealed objects, the fixed values and its eight numbered differences from the brief, all of which hold; where this block and that one differ, this block wins. The step-by-step authority is still the brief `docs/process_traces/2026-10-07-block5-seal/40-magistrate-brief.md`.**
 

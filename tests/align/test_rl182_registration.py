@@ -84,6 +84,21 @@ class RegistrationEditsTests(unittest.TestCase):
         self.assertNotIn("awaits the research lead's cold review", am.replace("\n", " "))
         self.assertEqual(row.strip("| ").split(" | ")[2], block(15))
 
+    def test_rl182a_first_token_stamp_text_matches_in_protocol_and_amendment(self):
+        source = (FIXTURES / "addendum.md").read_text()
+        self.assertEqual(re.findall(r"(?m)^- \*\*([^*]+)\*\*", source), [
+            "E2, first bullet (P4:1188).", "E10 (P4:1283).", "AM:47.",
+        ])
+        score, outcome, old_am, wording = re.findall(r'"([^"]+)"', source)
+        p4 = (ROOT / "docs/align/pilot_protocol_v4.md").read_text()
+        am = (EVIDENCE / "r1-ready-1116/AMENDMENT-R1-DRAFT.md").read_text()
+        for doc in (p4, am):
+            self.assertEqual(doc.count("- " + score), 1)
+            self.assertEqual(doc.count(outcome.lstrip("…")), 1)
+            self.assertNotIn("first stamped token", doc)
+        self.assertEqual(am.count(wording), 1)
+        self.assertNotIn(old_am, am)
+
     def test_named_power_script_reproduces_both_columns(self):
         output = subprocess.check_output([sys.executable, "-B", POWER_SCRIPT], text=True)
         rows = {}

@@ -33,6 +33,7 @@ WORK = ("decode_tokens", "prefill_tokens", "prefill_tokens_after_turn0",
         "turns", "tool_calls", "turn_owned_seconds")
 RELEASE_LEAVES = ("S", "S_pf", "q", "aligned_power")
 S_SUPERIORITY_ALPHA = Fraction(".0125")
+S_ZERO_VARIANCE_RELATIVE_RSS = 1e-18
 S_EQ_UPPER = NormalDist().cdf(.75 / math.sqrt(2))
 S_EQ_LOWER = 1 - S_EQ_UPPER
 PHASE_SCALARS = ("decode_energy", "prefill_energy", "tool_plus_other_energy",
@@ -202,13 +203,21 @@ def _decode_rows(member):
     if trace is None:
         return ()
     intervals = episode.hardware.get("thermal", {}).get("intervals", ())
+    clamp_flag = "first_token_clock_outside_turn"
+    prefix = f"{clamp_flag}:"
+    indexed_clamps = {flag for flag in episode.flags if flag.startswith(prefix)}
+    legacy_clamp = clamp_flag in episode.flags and not indexed_clamps
     rows = []
     for row in member.s_rows:
         if not 0 <= row.turn < len(episode.turns):
             return ()
         turn = episode.turns[row.turn]
         start = turn.first_token_ns
-        if start is None or row.end_ns < start:
+        # Older records include only the episode flag. A clamped stamp in
+        # that format can land only on one of the affected turn's edges.
+        clamped = (f"{prefix}{turn.index}" in indexed_clamps
+                   or (legacy_clamp and start in (turn.start_ns, turn.end_ns)))
+        if start is None or clamped or row.end_ns < start:
             continue
         if not turn.start_ns <= start <= row.end_ns <= turn.end_ns:
             return ()
@@ -232,14 +241,17 @@ def _decode_rows(member):
     return tuple(rows)
 
 
-def _ols(x, y):
+def _ols(x, y, *, min_relative_rss=None):
     if not x or len(x) <= len(x[0]):
         return None
     fit = _wls(x, y, [1.0] * len(x))
     if fit is None:
         return None
     coef, covariance_shape, residuals = fit
-    sigma2 = math.fsum(r * r for r in residuals) / (len(x) - len(coef))
+    rss = math.fsum(r * r for r in residuals)
+    if min_relative_rss is not None and rss <= min_relative_rss * math.fsum(value * value for value in y):
+        return None
+    sigma2 = rss / (len(x) - len(coef))
     return coef, covariance_shape, sigma2
 
 
@@ -254,7 +266,7 @@ def _residual_scores(members_rows, *, edges_per_row):
         if len(training) < 6:
             continue
         x, y, _ = zip(*training)
-        fit = _ols(x, y)
+        fit = _ols(x, y, min_relative_rss=S_ZERO_VARIANCE_RELATIVE_RSS)
         if fit is None:
             continue
         coef, cov_shape, s2 = fit
