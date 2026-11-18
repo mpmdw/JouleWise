@@ -458,101 +458,11 @@ PART_C_GATED_D = "D_bank_benign_s1_gated_held"      # r1_phase_table.GATED_D_RUN
 PART_C_X_G = "X_G_contrast"
 
 
-def smoke_part_c(output, runtime, config, *, soak_reference, soak_ledger_sha256=None, invoke=None,
-                 facts=None, step_facts=None, prints=None):
-    """RL-145 step 3 / addendum section 6, Part C: a gated smoke on the final bytes.
-
-    The 30B predecessor, then step-D as the night runs it (Part A on the final bytes, with the
-    slots it needs), then the gated D_bank member seed 1 (the runtime applies W1's
-    inter-member schedule: the member's own configured idle), then X_G, which the existing
-    runtime kind runs with no further condition-13 code. It produces no slots and enters
-    nothing: the slots the gated runs read stay in this smoke's own step-D result. The verdict
-    is ``align_r1_part_c.evaluate``'s; a failure raises after the table is written.
-    """
+def smoke_part_c(output, runtime, _config, *, soak_reference, soak_ledger_sha256=None, invoke=None):
     from scripts import align_r1_part_c as part_c
-    if facts is None and step_facts is None:
-        return part_c.run_bound_part_c(output, runtime, soak_reference=soak_reference,
-                                       soak_ledger_sha256=soak_ledger_sha256, invoke=invoke)
-    if facts is None or step_facts is None:
-        raise ValueError("synthetic Part C requires both fact readers")
-    invoke = invoke or part_c.judged_invoke
-    output = Path(output)
-    output.mkdir(parents=True, exist_ok=False)
-    started = time.monotonic()
-    result = {"part": "C", "authority": "RL-145 step 3; RL-145 addendum section 6", "slots_entered": False, "members": {}}
 
-    def finish(verdict_doc=None, error=None):
-        if verdict_doc is not None:
-            result["evaluation"] = verdict_doc
-        if error is not None:
-            result["error"] = error
-        result["elapsed_s"] = time.monotonic() - started
-        (output / "smoke_part_c.json").write_text(json.dumps(result, indent=2, sort_keys=True) + "\n")
-        (output / "smoke.json").write_text(json.dumps(result, indent=2, sort_keys=True) + "\n")
-        # RL-153 section 1.2 note 6, RL-156 section 3.2: the verdict and the evaluation's log (RL-152 section
-        # 1.4's line among them) go to the terminal as well as the record; the record is unchanged.
-        if verdict_doc is not None:
-            print(f"Part C verdict: {verdict_doc.get('verdict')} (pass: {verdict_doc.get('pass')})")
-            for line in verdict_doc.get("log") or ():
-                print(f"Part C log: {line}")
-    def run_member(kind, directory):
-        return invoke(runtime, kind, directory, soak_reference=soak_reference)
-
-    try:
-        predecessor = run_member("capture-predecessor-30b", output / "capture_predecessor_30b")
-        result["members"]["predecessor"] = predecessor
-        step_dir = output / rt.STEP_D_SEGMENT
-        step = run_member("step-d", step_dir)
-        result["members"]["step_d"] = step
-        slots = step.get("slots")
-        n_chunk = (slots or {}).get("N_chunk")
-        step_line = (step_facts(part_c.bundle_directory(step_dir, step["bundle"]), step)
-                     if step.get("bundle") else {"g0_outcome": step.get("g0_outcome")})
-        if not isinstance(slots, dict) or not isinstance(n_chunk, int):
-            doc = part_c.evaluate(predecessor=predecessor, step_d=step_line,
-                                  n_chunk=n_chunk if isinstance(n_chunk, int) else 1)
-            finish(doc, "step-D produced no slots: the gated members cannot run")
-            raise ValueError("Part C: step-D produced no slots; see smoke_part_c.json")
-        bank_dir = output / PART_C_GATED_D
-        bank = run_member("d-bank-benign-s1", bank_dir)
-        result["members"]["d_bank"] = bank
-        bank_bundle = part_c.bundle_directory(bank_dir, bank["bundle"])
-        bank_facts = {**facts(bank_bundle, role="d-bank"), "runtime": bank}
-        printed = prints(bank_bundle) if prints is not None and "evidence_error" not in bank_facts else None
-        x_g_facts, why = None, None
-        x_g_dir = output / PART_C_X_G
-        try:
-            x_g = run_member("x-g", x_g_dir)
-        except part_c.RuntimeEvidenceError as exc:
-            if exc.receipt is not None:
-                result["members"]["x_g"] = exc.receipt
-            x_g_facts = {"evidence_error": str(exc)}
-        except (subprocess.TimeoutExpired, UnicodeError, OSError) as exc:
-            x_g_facts = {"evidence_error": f"{type(exc).__name__}: {exc}"}
-        except part_c.RuntimeAdmissionRefusal as exc:
-            why = exc
-        else:
-            result["members"]["x_g"] = x_g
-            try:
-                bundle = part_c.bundle_directory(x_g_dir, x_g["bundle"])
-                x_g_facts = {**facts(bundle, role="x-g"), "runtime": x_g}
-            except Exception as exc:
-                # Once the runtime returns, any failure to read its evidence is judged.
-                x_g_facts = {"evidence_error": f"{type(exc).__name__}: {exc}"}
-        doc = part_c.evaluate(predecessor=predecessor, step_d=step_line, d_bank=bank_facts, n_chunk=n_chunk, x_g=x_g_facts,
-                              x_g_not_run_reason=why, printed=printed)
-        result["n_chunk_formula_recorded"] = (step.get("slot_detail") or {}).get("N_chunk_formula")
-        finish(doc)
-    except (part_c.RuntimeEvidenceError, part_c.RuntimeAdmissionRefusal) as exc:
-        finish(part_c.evaluate(runtime_error=str(exc)), error=str(exc))
-        raise ValueError("Part C: runtime receipt is invalid; see smoke_part_c.json") from exc
-    except BaseException as exc:
-        if "evaluation" not in result and "error" not in result:
-            finish(error=f"{type(exc).__name__}: {exc}")
-        raise
-    if not doc["pass"]:
-        raise ValueError(f"Part C failed ({doc['verdict']}): {doc['disposition']}")
-    return result
+    return part_c.run_bound_part_c(output, runtime, soak_reference=soak_reference,
+                                   soak_ledger_sha256=soak_ledger_sha256, invoke=invoke)
 
 
 def smoke(output, part, runtime, *, soak_reference, soak_ledger_sha256=None, invoke=None):

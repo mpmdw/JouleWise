@@ -321,6 +321,9 @@ class EvidenceLedger:
         self.verify_inputs()
         for bound in self._bound_members.values():
             bound.verify_reads()
+        contrast = self._members.get("x-g")
+        if contrast is not None and "x-g" not in self._bound_members:
+            self.refusal("x-g")
 
 
 class BoundMember:
@@ -505,3 +508,86 @@ class BoundSoak:
         self._read(SOAK_ROW, self.row_sha)
         self._read(SOAK_REFERENCE, self.reference_sha)
         self.member.verify_reads()
+
+
+def verify_part_c_publication(run_root, soak_ledger_sha256, soak_reference_sha256):
+    """Verify a zero-exit kit's two verdict copies, terminal ledger row and stdout."""
+    root = Path(run_root)
+    output = root / "part-c"
+    role = "attempt"
+
+    def require(condition, source):
+        if not condition:
+            raise EvidenceFailure("verdict_binding", role, source)
+
+    def read(directory, source):
+        try:
+            return read_regular(directory, source)
+        except (OSError, ValueError) as error:
+            raise EvidenceFailure("verdict_binding", role, source) from error
+
+    def obj(raw, source):
+        try:
+            value = parse_json(raw)
+        except (ValueError, TypeError, RecursionError) as error:
+            raise EvidenceFailure("verdict_binding", role, source, field="invalid") from error
+        require(isinstance(value, dict), source)
+        return value
+
+    physical = read(output, LEDGER_NAME).split(b"\n")
+    require(len(physical) == len(KINDS) + 3 and physical[-1] == b"", LEDGER_NAME)
+    previous = None
+    rows = []
+    for line in physical[:-1]:
+        row = obj(line, LEDGER_NAME)
+        require("previous_sha256" in row and row["previous_sha256"] == previous, LEDGER_NAME)
+        rows.append(row)
+        previous = digest(line + b"\n")
+
+    start, *members, final = rows
+    attempt = start.get("attempt")
+    require(isinstance(attempt, dict) and attempt.get("run") == root.name
+            and isinstance(attempt.get("nonce"), str) and re.fullmatch(r"[0-9a-f]{32}", attempt["nonce"])
+            and start.get("mode") == "native", LEDGER_NAME)
+    require(_is_digest(soak_ledger_sha256) and _is_digest(soak_reference_sha256)
+            and start.get("soak_ledger") == {"path": str(root / SOAK_DIRECTORY / LEDGER_NAME),
+                                              "sha256": soak_ledger_sha256}
+            and start.get("soak_reference") == {"path": str(root / SOAK_DIRECTORY / SOAK_REFERENCE),
+                                                 "sha256": soak_reference_sha256}, LEDGER_NAME)
+    soak = root / SOAK_DIRECTORY
+    require(digest(read(soak, LEDGER_NAME)) == soak_ledger_sha256, LEDGER_NAME)
+    require(digest(read(soak, SOAK_REFERENCE)) == soak_reference_sha256, SOAK_REFERENCE)
+    for row, (kind, path) in zip(members, KINDS.items(), strict=True):
+        require(row.get("attempt") == attempt and row.get("kind") == kind and row.get("segment") == path,
+                LEDGER_NAME)
+        require(_is_digest(row.get("argv_sha256")), LEDGER_NAME)
+        code, manifest = row.get("exit_status"), row.get("manifest")
+        completed = (type(code) is int and code == 0 and row.get("spawned") is True
+                     and isinstance(manifest, dict) and manifest.get("path") == f"{path}/{MANIFEST_NAME}"
+                     and _is_digest(manifest.get("sha256")) and _is_digest(row.get("stdout_sha256"))
+                     and _is_digest(row.get("stderr_sha256")))
+        refused = (kind == "x-g" and (
+            type(code) is int and code == 2 and row.get("spawned") is True
+            and row.get("stdout_sha256") == _hash_text("") and _is_digest(row.get("stderr_sha256"))
+            or row.get("spawned") is False and row.get("exception") == "RuntimeAdmissionRefusal"
+            and manifest == "absent"
+        ))
+        require(completed or refused, LEDGER_NAME)
+
+    names = ("smoke_part_c.json", "smoke.json")
+    copies = {name: read(output, name) for name in names}
+    require(copies[names[0]] == copies[names[1]], "smoke.json")
+    require(final.get("verdict") == "pass" and final.get("emitted_sha256") == {
+        name: digest(raw) for name, raw in copies.items()}, LEDGER_NAME)
+    published = obj(copies[names[0]], names[0])
+    judged = published.get("evaluation")
+    require(published.get("part") == "C" and published.get("slots_entered") is False
+            and isinstance(judged, dict) and judged.get("schema") == "joulewise.align.r1_part_c.v1"
+            and judged.get("verdict") == "pass" and judged.get("pass") is True
+            and judged.get("evidence_failures") == {} and judged.get("slots_entered") is False, names[0])
+    stream = "part-c.stdout.log"
+    stdout = read(root, stream)
+    lines = stdout.splitlines(keepends=True)
+    announcement = b"Part C verdict: pass (pass: True)\n"
+    require(lines and lines[-1] == announcement
+            and sum(line.startswith(b"Part C verdict:") for line in lines) == 1, stream)

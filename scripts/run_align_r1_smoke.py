@@ -490,6 +490,7 @@ def run(args, *, feeds=None):
         raise SystemExit(128 + signum)
 
     handlers = {s: signal.signal(s, interrupted) for s in SIGNALS}
+    soak_result = None
     try:
         step("deadline", lambda: {"remaining_s": work_remaining(args)})
         step("night_agents", night_agents)
@@ -541,13 +542,26 @@ def run(args, *, feeds=None):
                         raise EvidenceFailure("source_integrity", "idle", LEDGER_NAME) from None
                     result["soak_ledger_sha256"] = args.soak_ledger_sha256
                 return result
-            step("soak", run_soak)
+            soak_result = step("soak", run_soak)
         for which in parts:
             for feed in feeds:
                 if hasattr(feed, "before_part"):
                     step("before-part-" + which + "-" + feed.name, feed.before_part)
             def run_part():
-                result = part(args, which, feeds, on_start=lambda: record["parts"].__setitem__(which, True))
+                if which == "C":
+                    from scripts.align_r1_part_c_evidence import EvidenceFailure, verify_part_c_publication
+
+                    if soak_result is None:
+                        raise EvidenceFailure("verdict_binding", "attempt", "soak")
+                    result = part(args, which, feeds)
+                    if not isinstance(result, dict) or type(result.get("rc")) is not int:
+                        raise EvidenceFailure("verdict_binding", "attempt", "process_exit")
+                    if result["rc"]:
+                        return result
+                    verify_part_c_publication(args.output, soak_result.get("soak_ledger_sha256"),
+                                              soak_result.get("soak_reference_sha256"))
+                else:
+                    result = part(args, which, feeds, on_start=lambda: record["parts"].__setitem__(which, True))
                 record["parts"][which] = True
                 return result
             step("part-" + which, run_part)
@@ -623,7 +637,8 @@ def main(argv=None):
             print(json.dumps(error.finding(), sort_keys=True))
             return 2
         except part_c.RuntimeEvidenceError as error:
-            print(json.dumps(part_c.EvidenceFailure(error.reason, "idle", "stdout").finding(), sort_keys=True))
+            print(json.dumps(part_c.EvidenceFailure(error.reason, "idle", "stdout", field=error.field).finding(),
+                             sort_keys=True))
             return 2
         except Exception:
             print(json.dumps(part_c.EvidenceFailure("fresh_soak", "idle", "soak_row.json").finding(), sort_keys=True))

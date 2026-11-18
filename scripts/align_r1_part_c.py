@@ -414,9 +414,10 @@ def _check_line(run):
 
 
 class RuntimeEvidenceError(ValueError):
-    def __init__(self, kind, reason, detail, receipt=None):
+    def __init__(self, kind, reason, detail, receipt=None, *, field=None):
         super().__init__(f"runtime.{kind}.{reason}: {detail}")
         self.kind, self.reason, self.receipt = kind, reason, receipt
+        self.field = field
 
 
 class RuntimeAdmissionRefusal(ValueError):
@@ -456,7 +457,9 @@ def judged_invoke(runtime, kind, output, duration=None, *, soak_reference=None, 
     except BaseException as error:
         if ledger is not None:
             ledger.member_return(kind, output, argv, error=error)
-        if not isinstance(error, (OSError, TimeoutExpired, UnicodeError)):
+        if isinstance(error, UnicodeError):
+            raise RuntimeEvidenceError(kind, "stdout_receipt", "invalid", field="invalid") from None
+        if not isinstance(error, (OSError, TimeoutExpired)):
             raise
         raise RuntimeEvidenceError(kind, "process_exit", type(error).__name__) from None
     if ledger is not None:
@@ -475,9 +478,9 @@ def judged_invoke(runtime, kind, output, duration=None, *, soak_reference=None, 
         value = stdout_payload(stdout, kind)
     except EvidenceFailure as error:
         # RuntimeEvidenceError also serves the older injected kit callers.
-        raise RuntimeEvidenceError(kind, error.reason, "invalid") from None
+        raise RuntimeEvidenceError(kind, error.reason, "invalid", field="invalid") from None
     if value is None:
-        raise RuntimeEvidenceError(kind, "stdout_receipt", "missing")
+        raise RuntimeEvidenceError(kind, "stdout_receipt", "missing", field="missing")
     missing = r1.contract.missing_fields(kind, value, quiet=quiet, contract_key=contract_key)
     if missing:
         raise RuntimeEvidenceError(kind, "receipt_contract", "contract fields missing: " + ", ".join(missing), value)
@@ -805,9 +808,9 @@ def _adjudicate(step, bank, contrast, launcher_refusal, n_chunk, lines, predeces
     return "other_failure", issues
 
 
-def evaluate(*, predecessor=None, step_d=None, d_bank=None, n_chunk=None, x_g=None, x_g_not_run_reason=None,
-             printed=None, runtime_error=None, ledger=None):
-    """Return the Part C table with the verdict from the complete evidence check."""
+def _judge_observations(*, predecessor=None, step_d=None, d_bank=None, n_chunk=None, x_g=None,
+                        x_g_not_run_reason=None, printed=None, runtime_error=None, ledger=None):
+    """Judge observations after the native verifier establishes their binding."""
     def mechanics_line():
         checks = d_bank_mechanics(d_bank, n_chunk)
         return _check(all(v["pass"] is True for v in _judged(checks).values()), checks=checks)
@@ -836,6 +839,12 @@ def evaluate(*, predecessor=None, step_d=None, d_bank=None, n_chunk=None, x_g=No
             "lines": lines, "evidence_failures": issues,
             "printed_not_judged": {**_printed_rows(printed), "predicted": PREDICTED_NOT_JUDGED},
             "log": log, "slots_entered": False, "n_chunk_configured": n_chunk}
+
+
+def evaluate(**_observations):
+    """Refuse a Part C verdict from supplied facts. Native runs use run_bound_part_c."""
+    failure = EvidenceFailure("evidence_unverifiable", "attempt", "evidence_ledger.jsonl")
+    return _release_table(failures=(failure,))[0]
 
 
 # ---- fact extraction (reads one immutable member bundle; no writes) --------------------------------
@@ -926,13 +935,18 @@ def _journal(bundle):
     return samples, intervals, flags
 
 
-def _status_with_age(row):
+def _status_with_age(row, *, native=False):
     """The row's status plus the age (s) of its power-management stamp at the row's own time."""
     status = row.get("status")
     status = dict(status) if isinstance(status, dict) else {}
     pm_ns = status.get("pm_observed_ns")
     status["sample_ns"] = row["monotonic_ns"]
     status["pm_age_s"] = None if type(pm_ns) is not int else (row["monotonic_ns"] - pm_ns) / 1e9
+    if native:
+        status_ns = status.get("monotonic_ns")
+        if (not _uint(status_ns) or not _uint(pm_ns) or pm_ns > status_ns
+                or status_ns < row["finished"]["monotonic_after_ns"]):
+            status["error"] = "start_status_error"
     return status
 
 
@@ -940,12 +954,12 @@ def _interval_facts(row):
     return {key: row[key] for key in INTERVAL_FIELDS if key in row}
 
 
-def facts_from_bundle(bundle, *, role):
+def facts_from_bundle(bundle, *, role, native=False):
     """The evaluator's facts for one member bundle: intervals (with the status at each release sample),
     turns (with the first status reading after each start), the deadman flag and the budget."""
     path = Path(bundle)
     try:
-        return _bundle_evidence(path, role)
+        return _bundle_evidence(path, role, native=native)
     except Exception as error:
         # The runner can include unreadable members in its named verdict.
         return {"role": role, "bundle_path": str(path), "evidence_error": f"{type(error).__name__}: {error}"}
@@ -963,7 +977,7 @@ def _episode_payload(text, role):
     return value
 
 
-def _bundle_evidence(bundle, role):
+def _bundle_evidence(bundle, role, *, native=False):
     ep, raw_episode = read_checked_episode(bundle, role)
     thermal = ep.hardware["thermal"]
     rows, journal_intervals, journal_flags = _journal(bundle)
@@ -971,7 +985,8 @@ def _bundle_evidence(bundle, role):
     out_intervals = []
     for r in thermal["intervals"]:
         sample = by_ns.get(r.get("exit_sample_ns")) if r.get("exit_sample_ns") is not None else None
-        out_intervals.append({**_interval_facts(r), "release_status": None if sample is None else _status_with_age(sample)})
+        out_intervals.append({**_interval_facts(r), "release_status": None if sample is None else _status_with_age(
+            sample, native=native)})
     turns = []
     for t in ep.turns:
         # PR #777 row-2 finding 8: the first reading after the start counts only within 2 s of it; a later one
@@ -980,7 +995,7 @@ def _bundle_evidence(bundle, role):
         first = by_ns.get(first_ns)
         turns.append({"index": t.index, "start_ns": t.start_ns, "end_ns": t.end_ns, "decode_tokens": t.decode_tokens,
                       "prefill_tokens": t.prefill_tokens,
-                      "first_reading_after_start": None if first is None else _status_with_age(first)})
+                      "first_reading_after_start": None if first is None else _status_with_age(first, native=native)})
     budget = ep.hardware.get("token_budget") or {}
     return {"role": role, "bundle_path": str(bundle), "turns": turns, "intervals": out_intervals,
             "reading_stamps": sorted(r["monotonic_ns"] for r in rows), "t_dead_s": budget.get("deadman_s"),
@@ -1163,17 +1178,360 @@ def _emit_part_c(output, started, table=None, *, failures=(), ledger=None):
     return result
 
 
-def _native_bundle(ledger, kind, receipt):
+def _required(condition, reason, kind, source, *, field=None, index=None, peer=None):
+    if not condition:
+        raise EvidenceFailure(reason, kind, source, field=field, index=index, peer=peer)
+
+
+def _uint(value):
+    return type(value) is int and value >= 0
+
+
+def _strings(value):
+    return isinstance(value, list) and all(isinstance(item, str) and item for item in value)
+
+
+def _jsonl_objects(raw, kind, source, reason):
+    rows = [_object_from_bytes(line, kind, source, reason) for line in raw.splitlines()]
+    _required(bool(rows), reason, kind, source, field="missing")
+    return rows
+
+
+def _validate_sidecar(rows, sensors, kind, source, *, gated=False):
+    """Validate the physical records before projecting selectable readings."""
+    from joulewise.align.apple.thermal import Coverage, keys, valid_value
+
+    def check(ok, field, index=None):
+        _required(ok, "journal_coverage" if field == "coverage" else "reading_record",
+                  kind, source, field=field, index=index)
+
+    selected = keys(sensors)
+    units = {key: "degC" if key.startswith("T") else "rpm" for key in selected}
+    start, end = rows[0], rows[-1]
+    begin_ns = start.get("started", {}).get("monotonic_ns")
+    terminal_ns = end.get("started", {}).get("monotonic_ns")
+    check(start.get("kind") == "session_start" and end.get("kind") == "session_end"
+          and len(rows) >= 3 and _uint(begin_ns) and _uint(terminal_ns), "session")
+    check(start.get("values", {}).get("thermal") == sensors, "thermal")
+    session = start.get("session")
+    check(isinstance(session, str) and bool(session), "session")
+    counter = Coverage(begin_ns, selected)
+    boundary_kinds = {"align_thermal_gate", "align_thermal_hold"} if gated else set()
+    for i, row in enumerate(rows):
+        check(row.get("schema") == "joulewise.align_thermal.v1" and row.get("module") == "temperature"
+              and row.get("session") == session and type(row.get("seq")) is int and row["seq"] == i + 1
+              and isinstance(row.get("raw"), list) and "error" in row
+              and (row["error"] is None or isinstance(row["error"], str))
+              and isinstance(row.get("values"), dict), "row", i)
+        a, b = row.get("started"), row.get("finished")
+        check(isinstance(a, dict) and isinstance(b, dict) and all(
+            _uint(a.get(clock)) and _uint(b.get(clock)) and a[clock] <= b[clock]
+            for clock in ("wall_ns", "monotonic_ns", "monotonic_raw_ns")), "stamp", i)
+        check(begin_ns <= a["monotonic_ns"] <= b["monotonic_ns"] <= end["finished"]["monotonic_ns"],
+              "stamp", i)
+        if i in (0, len(rows) - 1):
+            continue
+        check(row["kind"] == "reading" or row["kind"] in boundary_kinds, "kind", i)
+        if row["kind"] in boundary_kinds:
+            continue
+        values = row["values"]
+        temps, errors, readings = (values.get(key) for key in ("sensors", "errors", "readings"))
+        check(values.get("source") == "smc" and values.get("units") == units
+              and isinstance(temps, dict) and set(temps) == set(selected)
+              and isinstance(readings, dict) and set(readings) == set(selected)
+              and isinstance(errors, dict) and set(errors) <= set(selected)
+              and all(isinstance(reason, str) and reason for reason in errors.values()), "reading", i)
+        for key in selected:
+            sample = readings[key]
+            check(isinstance(sample, dict) and "value" in sample and "error" in sample
+                  and canonical(sample["value"]) == canonical(temps[key]) and sample["error"] == errors.get(key)
+                  and (temps[key] is None if key in errors else valid_value(key, temps[key])),
+                  "readings", i)
+        check(bool(row["error"]) == bool(errors), "error", i)
+        counter.observe(a["monotonic_ns"], b["monotonic_ns"], values)
+    _reading_brackets(rows)
+    closing = end["values"]
+    check("collector_error" in closing and closing["collector_error"] is None, "collector_error")
+    coverage = closing.get("coverage")
+    span = coverage.get("span_ns") if isinstance(coverage, dict) else None
+    check(isinstance(span, list) and len(span) == 2 and span[0] == begin_ns and _uint(span[1])
+          and rows[-2]["finished"]["monotonic_ns"] <= span[1] <= terminal_ns, "coverage")
+    check(canonical(counter.report(span[1])) == canonical(coverage), "coverage")
+
+
+def _check_member_records(kind, bundle, receipt, data, configured):
+    from joulewise.align.apple import r1_runtime as rt
+    from joulewise.align.apple.stop_precedence import primary_stop
+
+    role = {"capture-predecessor-30b": "predecessor", "step-d": "step-d",
+            "d-bank-benign-s1": "d-bank", "x-g": "x-g"}[kind]
+    episode_name = "outputs/align_episode.json"
+    turns_name = "outputs/align_turns.jsonl"
+    config_name, metadata_name, summary_name, events_name = (
+        "config.json", "metadata.json", "summary_metrics.json", "events.jsonl")
+
+    def require(ok, reason, source, **detail):
+        _required(ok, reason, kind, source, **detail)
+
+    def doc(source, reason="bundle_binding"):
+        return _object_from_bytes(data[source], kind, source, reason)
+
+    def rows(source, reason):
+        return _jsonl_objects(data[source], kind, source, reason)
+
+    summary = doc(summary_name, "member_status")
+    require(summary.get("status") == "succeeded" and "failure_reason" in summary
+            and summary["failure_reason"] is None
+            and (role == "predecessor" or receipt.get("member_status") == "succeeded")
+            and ("failure_reason" in receipt if role == "d-bank" else True)
+            and receipt.get("failure_reason") is None, "member_status", summary_name, peer=RECEIPT_NAME)
+
+    events = rows(events_name, "bundle_binding")
+    for index, event in enumerate(events):
+        require(_finite(event.get("timestamp_s")) and isinstance(event.get("event_type"), str)
+                and isinstance(event.get("phase"), str) and isinstance(event.get("message"), str)
+                and isinstance(event.get("metadata"), dict), "bundle_binding", events_name, index=index)
+    require(events[-1]["event_type"] == "run_finalized"
+            and sum(row["event_type"] == "run_finalized" for row in events) == 1,
+            "bundle_binding", events_name, field="run_finalized")
+
+    episode = doc(episode_name, "episode_identity")
+    config, meta = doc(config_name), doc(metadata_name)
+    hardware = episode["hardware"]
+    config_sha = digest(data[config_name])
+    require(config["run_id"] == meta["run_id"] == hardware["run_bundle_id"] == episode["episode_id"] == bundle.name
+            and meta["config_sha256"] == config_sha, "bundle_binding", metadata_name, peer=config_name)
+    require(episode["clock_domain"] == "joulewise.monotonic:" + episode["episode_id"],
+            "episode_time", episode_name, field="clock_domain")
+    mode = hardware.get("ac_powermode")
+    require(isinstance(mode, dict) and type(mode.get("value")) is int and mode["value"] == 0
+            and mode.get("source") == POWERMODE_SOURCE and mode.get("observed_at") == "episode_start"
+            and "error" not in mode and canonical(mode) == canonical(receipt.get("ac_powermode")),
+            "mode_observation", episode_name, peer=RECEIPT_NAME)
+    expected = EPISODE_IDENTITIES[role]
+    prompt = config["workload_profile"]["prompt_text"]
+    spec = _object_from_bytes(prompt, kind, config_name, "episode_identity")
+    require((episode["agent_model"], episode["task_pair"], episode["condition"], episode["seed"]) == expected
+            and config["model"]["name"] == expected[0]
+            and spec.get("condition") == expected[2] and type(episode["seed"]) is int
+            and type(spec.get("seed")) is int and spec["seed"] == expected[3]
+            and _strings(config["run_metadata"]["tags"])
+            and _finite(config["sampling"]["idle_seconds"]),
+            "episode_identity", episode_name, peer=config_name)
+    if role in ("d-bank", "x-g"):
+        require(config["sampling"]["idle_seconds"] == receipt.get("inter_member_idle_s") == 300
+                and spec.get("warmup_condition") == "benign",
+                "inter_member_schedule", config_name, peer=RECEIPT_NAME)
+    if role == "predecessor":
+        from joulewise.schemas import BenchmarkConfig
+
+        template = rt.resolve(configured["templates"]["model_30b"])
+        source = read_regular(template.parent, template.name)
+        template_config = _object_from_bytes(source, kind, config_name, "predecessor_template")
+        tags = template_config["run_metadata"]["tags"]
+        template_config["run_metadata"]["tags"] = [tag for tag in tags if tag != "launch_lineage_required"]
+        require(receipt.get("template_sha256") == digest(source)
+                and receipt.get("template_derivation") == {"removed_run_metadata_tags": ["launch_lineage_required"]}
+                and canonical(BenchmarkConfig.from_mapping(template_config).to_dict()) == canonical(config),
+                "predecessor_template", config_name, peer=RECEIPT_NAME)
+
+    provenance = meta["workload_provenance"]
+    require(bool(episode["endpoint"]) and provenance["endpoint_identity"] == episode["endpoint"]
+            and provenance["episode_spec_sha256"] == digest(prompt.encode("utf-8"))
+            and _strings(episode["flags"]) and provenance["flags"] == episode["flags"],
+            "episode_binding", metadata_name, peer=episode_name)
+
+    start, end = episode["start_ns"], episode["end_ns"]
+    stamps = hardware["paired_clock_stamps_ns"]
+    require(_uint(start) and _uint(end) and start <= end
+            and isinstance(stamps, list) and len(stamps) == 2, "episode_time", episode_name)
+    for stamp, target in zip(stamps, (start, end), strict=True):
+        require(isinstance(stamp, dict) and all(_uint(stamp.get(key)) for key in (
+                    "epoch_ns", "monotonic_before_ns", "monotonic_after_ns", "wall_resolution_ns",
+                    "monotonic_resolution_ns"))
+                and stamp["monotonic_before_ns"] <= target <= stamp["monotonic_after_ns"],
+                "episode_time", episode_name, field="paired_clock_stamps_ns")
+    turns, witnessed = episode["turns"], rows(turns_name, "turn_record")
+    require(isinstance(turns, list) and len(turns) == len(witnessed)
+            and (len(turns) == 1 if role == "step-d" else len(turns) > 0)
+            and (role == "step-d" and "admitted_turns" not in receipt or
+                 type(receipt.get("admitted_turns")) is int and receipt["admitted_turns"] == len(turns)),
+            "admission_count", turns_name, peer=episode_name)
+    previous_begin, previous_end = -1, start
+    decode = prefill = context = 0
+    cut = CUT_FLAGS | {"runner.error", "r1.g0_timeout_run", "thermal.episode_reference_unobserved"}
+    if role in ("step-d", "d-bank"):
+        cut |= {"episode.decode_budget"}
+    if role == "step-d":
+        cut |= {"thermal.state_unobserved", "thermal.custody_invalid"}
+    for index, (turn, record) in enumerate(zip(turns, witnessed, strict=True)):
+        require(type(turn.get("index")) is int and turn["index"] == index and
+                type(record.get("turn")) is int and record["turn"] == index,
+                "turn_identity", turns_name, index=index, peer=episode_name)
+        a, b, first = turn["start_ns"], turn["end_ns"], turn["first_token_ns"]
+        require(_uint(a) and _uint(b) and previous_begin < a and previous_end <= a <= b <= end
+                and (first is None or _uint(first) and a <= first <= b),
+                "turn_time", episode_name, index=index)
+        previous_begin, previous_end = a, b
+        for key, target in (("start_stamp", a), ("end_stamp", b)):
+            stamp = record[key]
+            nums = ("epoch_s", "monotonic_before_s", "monotonic_after_s",
+                    "wall_resolution_s", "monotonic_resolution_s")
+            require(isinstance(stamp, dict) and all(_finite(stamp.get(name)) and stamp[name] >= 0 for name in nums),
+                    "turn_time", turns_name, field=key, index=index)
+            before, after = stamp["monotonic_before_s"], stamp["monotonic_after_s"]
+            require(before <= after and round((before + (after - before) / 2) * 1e9) == target,
+                    "turn_time", turns_name, field=key, index=index, peer=episode_name)
+        counts = tuple(turn[key] for key in ("decode_tokens", "prefill_tokens", "context_tokens", "hidden_tokens"))
+        require(all(_uint(count) for count in counts) and counts[3] <= counts[0]
+                and type(turn["logged"]) is bool and isinstance(turn["tool_calls"], list)
+                and all(isinstance(call, dict) for call in turn["tool_calls"]),
+                "turn_record", episode_name, index=index)
+        generation = record["generation"]
+        for key, count in (("output_token_ids", counts[0]), ("prompt_token_ids", counts[1] + counts[2])):
+            ids = generation[key]
+            require(isinstance(ids, list) and len(ids) == count and all(map(_uint, ids)),
+                    "token_accounting", turns_name, field=key, index=index, peer=episode_name)
+        require(_strings(record.get("flags")), "flag_source", turns_name, index=index)
+        require(not any(flag.partition(":")[0] in cut for flag in record["flags"]),
+                "member_cut", turns_name, index=index)
+        decode += counts[0]
+        prefill += counts[1]
+        context += counts[2]
+
+    outcome, policy, observed = provenance["episode_outcome"], provenance["output_policy"], meta["workload_observed"]
+    for source, claim, expected_total in (
+        (metadata_name, observed.get("output_token_count"), decode),
+        (metadata_name, observed.get("token_count"), decode + prefill + context),
+        (metadata_name, outcome.get("emitted_tokens"), decode), (metadata_name, policy.get("emitted_tokens"), decode),
+        (RECEIPT_NAME, receipt.get("decode_tokens", decode if role not in ("step-d", "d-bank") else None), decode),
+        (RECEIPT_NAME, receipt.get("prefill_tokens", prefill if role != "step-d" else None), prefill),
+    ):
+        require(type(claim) is int and claim == expected_total, "token_accounting", source, peer=turns_name)
+
+    thermal = None if role == "predecessor" else hardware["thermal"]
+    all_flags = [episode["flags"]]
+    if thermal is not None:
+        all_flags.extend((thermal["flags"], receipt["episode_flags"]))
+    require(all(_strings(flags) for flags in all_flags), "flag_source", episode_name)
+    require(not any(flag.partition(":")[0] in cut for flags in all_flags for flag in flags),
+            "member_cut", episode_name)
+    intervals = () if thermal is None else thermal["intervals"]
+    stop = primary_stop(episode["flags"], thermal_intervals=intervals)
+    require(outcome.get("stop_condition") == stop, "stop_evidence", metadata_name, peer=episode_name)
+    if role != "predecessor" or "token_budget" in hardware or "token_budget" in outcome:
+        budget = hardware.get("token_budget")
+        require(isinstance(budget, dict) and canonical(budget) == canonical(outcome.get("token_budget"))
+                and budget.get("incomplete") is False
+                and isinstance(budget.get("stop_reason"), str)
+                and budget["stop_reason"].partition(":")[0] == stop,
+                "stop_evidence", episode_name, peer=metadata_name)
+        for key, total in (("decode_tokens_used", decode), ("prefill_tokens_used", prefill),
+                           ("cached_context_tokens_used", context)):
+            require(type(budget.get(key)) is int and budget[key] == total,
+                    "token_accounting", episode_name, field=key)
+
+    if role == "predecessor":
+        return
+    require(receipt.get("g0_timeout_s") == configured["g0_timeout_s"] == G0_LIMIT_S, "gate_summary", RECEIPT_NAME)
+    sensors = rt.sensors_policy(configured)
+    journal = rows(THERMAL_SOURCE, "journal_session")
+    _validate_sidecar(journal, sensors, kind, THERMAL_SOURCE, gated=True)
+    require(isinstance(intervals, list) and intervals and canonical(intervals) == canonical(
+        [item["values"]["gate"] for item in journal if item["kind"] in
+         ("align_thermal_gate", "align_thermal_hold") and item["values"].get("state") == "end"]),
+        "gate_journal_disagreement", THERMAL_SOURCE, peer=episode_name)
+    readings = {record["started"]["monotonic_ns"]: record for record in journal if record["kind"] == "reading"}
+    for interval in intervals:
+        if interval["outcome"] != "released":
+            continue
+        timestamp = interval["exit_sample_ns"]
+        reading = readings.get(timestamp)
+        require(_uint(timestamp) and reading is not None and
+                interval["start_ns"] <= timestamp <= reading["finished"]["monotonic_ns"] <= interval["end_ns"],
+                "release_sample", THERMAL_SOURCE, peer=episode_name)
+        values = reading["values"]
+        keys = sensors["s_fast"], sensors["s_slow"]
+        released = dict(zip(TEMPERATURE_KEYS, (values["sensors"][key] for key in keys), strict=True))
+        require(not any(key in values["errors"] for key in keys) and _temperatures(released)
+                and canonical(released) == canonical(interval["release"]),
+                "release_sample", THERMAL_SOURCE, peer=episode_name)
+    if role == "step-d":
+        _check_step_sources(receipt, doc, rows, require, sensors, journal, bundle, config_sha, configured)
+
+
+def _check_step_sources(receipt, doc, rows, require, sensors, journal, bundle, config_sha, configured):
+    from statistics import median
+    from joulewise.align.apple import r1_runtime as rt, thermal_gates as gates
+
+    slots, detail = receipt["slots"], receipt["slot_detail"]
+    require(receipt.get("candidate_only") is False and receipt.get("g0_released") is True
+            and type(slots.get("N_chunk")) is int and slots["N_chunk"] == configured["d_n_chunk"] == 4096
+            and _finite(slots.get("S8")) and slots["S8"] == slots["N_chunk"]
+            and _finite(slots.get("S7")) and 0 <= slots["S7"] <= 300
+            and type(slots.get("B_D")) is int and 1024 <= slots["B_D"] <= 40960 and slots["B_D"] % 1024 == 0
+            and _uint(detail.get("N_chunk_formula")) and detail["N_chunk_formula"] >= 256
+            and detail["N_chunk_formula"] % 256 == 0 and detail.get("N_chunk_source") == "config.d_n_chunk",
+            "step_configuration", RECEIPT_NAME)
+    reference = doc(REFERENCE_SOURCE, "step_reference")
+    expected_source = {"run_id": bundle.name, "config_sha256": config_sha}
+    require(reference.get("schema") == gates.REFERENCE_SCHEMA and reference.get("status") == "captured"
+            and reference.get("source") == expected_source and reference.get("sensors") == sensors
+            and reference.get("sensors_policy_sha256") == gates._policy_digest(sensors)
+            and reference.get("rule") == {"anchor": "warmup_entry", "window_s": 60, "statistic": "median",
+                                           "min_coverage": .9}
+            and reference.get("journal") == THERMAL_SOURCE
+            and reference.get("record_sha256") == digest(canonical({key: spec for key, spec in reference.items()
+                                                                   if key != "record_sha256"})),
+            "step_reference", REFERENCE_SOURCE)
+    for clock in ("span_ns", "span_epoch_ns"):
+        span = reference[clock]
+        require(isinstance(span, list) and len(span) == 2 and all(map(_uint, span)) and span[1] - span[0] == 60_000_000_000,
+                "step_reference", REFERENCE_SOURCE, field=clock)
+    end = reference["span_ns"][1]
+    samples = gates.sample_rows(journal)
+    keys = sensors["s_fast"], sensors["s_slow"]
+    good = gates._good_window_rows(samples, end, keys)
+    coverage = gates._window_coverage(samples, end, keys)["sample_fraction"]
+    expected = [[row["monotonic_ns"], *(row["sensors"][key] for key in keys)] for row in good]
+    require(expected and coverage is not None and coverage >= .9 and coverage == reference.get("coverage_fraction")
+            and canonical(expected) == canonical(reference.get("samples"))
+            and median(row[1] for row in expected) == reference.get("fast_c")
+            and median(row[2] for row in expected) == reference.get("slow_c"),
+            "step_reference", REFERENCE_SOURCE, peer=THERMAL_SOURCE)
+    require(canonical(receipt.get("operating_reference")) == canonical({
+        "source_member": bundle.name, **{key: reference[key] for key in ("fast_c", "slow_c", "span_ns")}}),
+        "reference_values", RECEIPT_NAME, peer=REFERENCE_SOURCE)
+
+    recovery_file, classification_file = STEP_SOURCES
+    _validate_sidecar(rows(recovery_file, "step_configuration"), sensors, "step-d", recovery_file)
+    inventory = doc(classification_file, "step_configuration")
+    classification, thermometry = inventory["classification"], receipt["thermometry"]
+    stated = classification.get("classification_sha256")
+    require(set(inventory) == {"classification", "label", "for_record_only", "inventory", "night_confirmation"}
+            and inventory.get("label") == "step-d" and inventory.get("for_record_only") is False
+            and isinstance(inventory.get("night_confirmation"), dict)
+            and inventory["night_confirmation"] == thermometry.get("night_confirmation")
+            and stated == digest(rt.canonical({key: value for key, value in classification.items()
+                                               if key != "classification_sha256"}).encode("utf-8"))
+            and stated == thermometry.get("classification_sha256") == detail.get("thermometry_classification_sha256")
+            and isinstance(classification.get("alias_groups"), list)
+            and all(_strings(group) for group in classification["alias_groups"])
+            and classification["alias_groups"] == thermometry.get("alias_groups"),
+            "step_configuration", classification_file, peer=RECEIPT_NAME)
+
+
+def _native_bundle(ledger, kind, receipt, configured):
     bound = ledger.member(kind)
     bundle, data = _bound_member_files(bound, receipt)
-    for source, raw in data.items():
-        if source.endswith(".json"):
-            _object_from_bytes(raw, kind, source, "bundle_binding")
-        elif source.endswith(".jsonl"):
-            if not raw:
-                raise EvidenceFailure("bundle_binding", kind, source, field="missing")
-            for line in raw.splitlines():
-                _object_from_bytes(line, kind, source, "bundle_binding")
+    try:
+        _required({item.name for item in bundle.parent.iterdir()} == {bundle.name},
+                  "bundle_binding", kind, "runs")
+        _check_member_records(kind, bundle, receipt, data, configured)
+    except EvidenceFailure:
+        raise
+    except (OSError, ArithmeticError, LookupError, TypeError, ValueError, AttributeError) as error:
+        raise EvidenceFailure("bundle_binding", kind, "runs") from error
     return bundle
 
 
@@ -1190,8 +1548,9 @@ def _check_native_soak(soak, config_path):
             or r1.contract.missing_fields("idle", receipt, quiet=True, contract_key="idle_soak")):
         raise EvidenceFailure("receipt_contract", "idle", RECEIPT_NAME)
     started, ended = row.get("started_ns"), row.get("ended_ns")
-    configured = _object_from_bytes(read_regular(config_path.parent, config_path.name),
-                                    "idle", "issued_inputs", "fresh_soak")
+    configured_raw = read_regular(config_path.parent, config_path.name)
+    _required(digest(configured_raw) == soak.config_sha, "source_integrity", "idle", "issued_inputs")
+    configured = _object_from_bytes(configured_raw, "idle", "issued_inputs", "fresh_soak")
     sensors = rt.sensors_policy(configured)
     duration = next(seconds for name, _kind, seconds, _size in r1.phase_plan() if name == SOAK_SEGMENT)
     if (row.get("class") != "light" or type(started) is not int or type(ended) is not int
@@ -1201,19 +1560,8 @@ def _check_native_soak(soak, config_path):
         raise EvidenceFailure("fresh_soak", "idle", "soak_row.json")
     journal = "sensors/align_thermal.jsonl"
     try:
-        entries = [_object_from_bytes(line, "idle", journal, "soak_readings")
-                   for line in soak.sources[journal].splitlines()]
-        if (len(entries) < 3 or entries[0]["kind"] != "session_start" or entries[-1]["kind"] != "session_end"
-                or canonical(entries[0]["values"]["thermal"]) != canonical(sensors)
-                or entries[-1]["values"]["collector_error"] is not None):
-            raise ValueError("invalid soak session boundaries")
-        session = entries[0]["session"]
-        if (not isinstance(session, str) or not session or any(
-                item["schema"] != "joulewise.align_thermal.v1" or item["module"] != "temperature"
-                or item["session"] != session or type(item["seq"]) is not int or item["seq"] != index
-                for index, item in enumerate(entries, 1)) or any(item["kind"] != "reading" for item in entries[1:-1])):
-            raise ValueError("invalid soak session order")
-        _reading_brackets(entries)
+        entries = _jsonl_objects(soak.sources[journal], "idle", journal, "soak_readings")
+        _validate_sidecar(entries, sensors, "idle", journal)
         readings = sample_rows(entries)
         first_ns = readings[0]["monotonic_ns"]
         series, times, failed = {}, {}, {}
@@ -1228,7 +1576,9 @@ def _check_native_soak(soak, config_path):
             if canonical(receipt[key]) != canonical(expected):
                 raise ValueError("soak readings disagree with their receipt")
         derived = r1.soak_detrended(series, times, end_time)
-    except (ValueError, ArithmeticError, LookupError, TypeError) as error:
+    except EvidenceFailure:
+        raise
+    except (ValueError, ArithmeticError, LookupError, TypeError, AttributeError) as error:
         raise EvidenceFailure("soak_readings", "idle", journal, peer=RECEIPT_NAME) from error
     if any(stat["settled"] is not True for stat in derived.values()):
         raise EvidenceFailure("soak_unsettled", "idle", journal)
@@ -1246,15 +1596,26 @@ def _check_native_soak(soak, config_path):
                 or any(canonical(load[key]) != canonical(receipt[key])
                        for key in ("cpu_busy_cores", "cpu_busy_t_s", "census"))):
             raise ValueError("soak load disagrees with its receipt")
+        census = load["census"]
+        if not isinstance(census, list) or not census:
+            raise ValueError("missing soak census")
+        for snapshot in census:
+            if (not isinstance(snapshot, dict) or not isinstance(snapshot.get("label"), str) or not snapshot["label"]
+                    or not _finite(snapshot.get("t_s")) or not isinstance(snapshot.get("processes"), list)
+                    or not all(isinstance(process, dict) and type(process.get("pid")) is int
+                               and type(process.get("ppid")) is int and _finite(process.get("pcpu"))
+                               and isinstance(process.get("comm"), str) for process in snapshot["processes"])):
+                raise ValueError("invalid soak census")
         load_verdict = r1.os_load_verdict(SOAK_SEGMENT, receipt, wall_s=(ended - started) / 1e9)
         if load_verdict["redo"] is not False or canonical(load_verdict) != canonical(row["os_load"]):
             raise ValueError("soak load is not clean")
     except (ValueError, ArithmeticError, LookupError, TypeError) as error:
         raise EvidenceFailure("soak_load", "idle", load_source, peer=RECEIPT_NAME) from error
     soak.verify_reads()
+    return configured
 
 
-def _native_verdict(ledger, runtime, invoke):
+def _native_verdict(ledger, runtime, invoke, configured):
     receipts = {}
     refusal = None
     for kind, segment in KINDS.items():
@@ -1268,19 +1629,19 @@ def _native_verdict(ledger, runtime, invoke):
             refusal = error
             break
         except RuntimeEvidenceError as error:
-            raise EvidenceFailure(error.reason, kind, "stdout") from error
+            raise EvidenceFailure(error.reason, kind, "stdout", field=error.field) from error
         if kind == "step-d":
             slots = receipts[kind].get("slots")
             if not isinstance(slots, dict) or type(slots.get("N_chunk")) is not int or slots["N_chunk"] <= 0:
                 raise EvidenceFailure("step_configuration", kind, RECEIPT_NAME, field="slots")
-    bundles = {kind: _native_bundle(ledger, kind, receipt) for kind, receipt in receipts.items()}
+    bundles = {kind: _native_bundle(ledger, kind, receipt, configured) for kind, receipt in receipts.items()}
     step_receipt = receipts["step-d"]
     step = step_d_facts(bundles["step-d"], step_receipt)
-    bank = {**facts_from_bundle(bundles["d-bank-benign-s1"], role="d-bank"),
+    bank = {**facts_from_bundle(bundles["d-bank-benign-s1"], role="d-bank", native=True),
             "runtime": receipts["d-bank-benign-s1"]}
     contrast = ({**facts_from_bundle(bundles["x-g"], role="x-g"), "runtime": receipts["x-g"]}
                 if refusal is None else None)
-    verdict = evaluate(predecessor=receipts["capture-predecessor-30b"], step_d=step, d_bank=bank,
+    verdict = _judge_observations(predecessor=receipts["capture-predecessor-30b"], step_d=step, d_bank=bank,
                        n_chunk=step_receipt["slots"]["N_chunk"], x_g=contrast,
                        x_g_not_run_reason=refusal, ledger=ledger)
     ledger.verify_final_sources()
@@ -1302,8 +1663,8 @@ def run_bound_part_c(output, runtime, *, soak_reference, soak_ledger_sha256=None
         soak = BoundSoak(output, soak_reference, soak_ledger_sha256, revision, config)
         ledger = EvidenceLedger(output, revision, config, soak_reference, soak=soak)
         with redirect_stdout(StringIO()), redirect_stderr(StringIO()):
-            _check_native_soak(soak, config)
-            table = _native_verdict(ledger, runtime, invoke or judged_invoke)
+            configured = _check_native_soak(soak, config)
+            table = _native_verdict(ledger, runtime, invoke or judged_invoke, configured)
     except EvidenceFailure as error:
         failures = (error,)
     except Exception:

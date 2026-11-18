@@ -59,7 +59,7 @@ def run(step=STEP, d_bank=None, n_chunk=4096, x_g=XG, **kw):
     with tempfile.TemporaryDirectory() as tmp:
         inputs = evaluation_inputs(Path(tmp), step_d=step, d_bank=bank() if d_bank is None else d_bank,
                                    n_chunk=n_chunk, x_g=x_g)
-        return pc.evaluate(**inputs, **kw)
+        return pc._judge_observations(**inputs, **kw)
 
 
 class ExpectedHoldsTests(unittest.TestCase):
@@ -245,7 +245,7 @@ class EvaluatorFailureTests(unittest.TestCase):
         self.assertEqual(result['verdict'], 'other_failure')
 
     def test_a_missing_d_bank_is_not_judged_as_a_pass(self):
-        result = pc.evaluate(step_d=STEP, d_bank=None, n_chunk=4096, x_g=None)
+        result = pc._judge_observations(step_d=STEP, d_bank=None, n_chunk=4096, x_g=None)
         self.assertFalse(result['pass'])
         self.assertTrue(any('D_bank did not run' in line for line in result['log']))
 
@@ -547,6 +547,87 @@ class SidecarJournalTests(unittest.TestCase):
                     self.assertIn(journal_turn, timeout['g1_timeout_turns'])
 
 
+def synthetic_smoke_part_c(output, runtime, _config, *, soak_reference, facts, step_facts, invoke=None, prints=None):
+    invoke = invoke or pc.judged_invoke
+    output = Path(output)
+    output.mkdir(parents=True, exist_ok=False)
+    started = time.monotonic()
+    result = {"part": "C", "authority": "RL-145 step 3; RL-145 addendum section 6", "slots_entered": False, "members": {}}
+
+    def finish(verdict_doc=None, error=None):
+        if verdict_doc is not None:
+            result["evaluation"] = verdict_doc
+        if error is not None:
+            result["error"] = error
+        result["elapsed_s"] = time.monotonic() - started
+        (output / "smoke_part_c.json").write_text(json.dumps(result, indent=2, sort_keys=True) + "\n")
+        (output / "smoke.json").write_text(json.dumps(result, indent=2, sort_keys=True) + "\n")
+        # RL-153 section 1.2 note 6, RL-156 section 3.2: the verdict and the evaluation's log (RL-152 section
+        # 1.4's line among them) go to the terminal as well as the record; the record is unchanged.
+        if verdict_doc is not None:
+            print(f"Part C verdict: {verdict_doc.get('verdict')} (pass: {verdict_doc.get('pass')})")
+            for line in verdict_doc.get("log") or ():
+                print(f"Part C log: {line}")
+    def run_member(kind, directory):
+        return invoke(runtime, kind, directory, soak_reference=soak_reference)
+
+    try:
+        predecessor = run_member("capture-predecessor-30b", output / "capture_predecessor_30b")
+        result["members"]["predecessor"] = predecessor
+        step_dir = output / rt.STEP_D_SEGMENT
+        step = run_member("step-d", step_dir)
+        result["members"]["step_d"] = step
+        slots = step.get("slots")
+        n_chunk = (slots or {}).get("N_chunk")
+        step_line = (step_facts(pc.bundle_directory(step_dir, step["bundle"]), step)
+                     if step.get("bundle") else {"g0_outcome": step.get("g0_outcome")})
+        if not isinstance(slots, dict) or not isinstance(n_chunk, int):
+            doc = pc._judge_observations(predecessor=predecessor, step_d=step_line,
+                                  n_chunk=n_chunk if isinstance(n_chunk, int) else 1)
+            finish(doc, "step-D produced no slots: the gated members cannot run")
+            raise ValueError("Part C: step-D produced no slots; see smoke_part_c.json")
+        bank_dir = output / kit.PART_C_GATED_D
+        bank = run_member("d-bank-benign-s1", bank_dir)
+        result["members"]["d_bank"] = bank
+        bank_bundle = pc.bundle_directory(bank_dir, bank["bundle"])
+        bank_facts = {**facts(bank_bundle, role="d-bank"), "runtime": bank}
+        printed = prints(bank_bundle) if prints is not None and "evidence_error" not in bank_facts else None
+        x_g_facts, why = None, None
+        x_g_dir = output / kit.PART_C_X_G
+        try:
+            x_g = run_member("x-g", x_g_dir)
+        except pc.RuntimeEvidenceError as exc:
+            if exc.receipt is not None:
+                result["members"]["x_g"] = exc.receipt
+            x_g_facts = {"evidence_error": str(exc)}
+        except (subprocess.TimeoutExpired, UnicodeError, OSError) as exc:
+            x_g_facts = {"evidence_error": f"{type(exc).__name__}: {exc}"}
+        except pc.RuntimeAdmissionRefusal as exc:
+            why = exc
+        else:
+            result["members"]["x_g"] = x_g
+            try:
+                bundle = pc.bundle_directory(x_g_dir, x_g["bundle"])
+                x_g_facts = {**facts(bundle, role="x-g"), "runtime": x_g}
+            except Exception as exc:
+                # Once the runtime returns, any failure to read its evidence is judged.
+                x_g_facts = {"evidence_error": f"{type(exc).__name__}: {exc}"}
+        doc = pc._judge_observations(predecessor=predecessor, step_d=step_line, d_bank=bank_facts, n_chunk=n_chunk, x_g=x_g_facts,
+                              x_g_not_run_reason=why, printed=printed)
+        result["n_chunk_formula_recorded"] = (step.get("slot_detail") or {}).get("N_chunk_formula")
+        finish(doc)
+    except (pc.RuntimeEvidenceError, pc.RuntimeAdmissionRefusal) as exc:
+        finish(pc._judge_observations(runtime_error=str(exc)), error=str(exc))
+        raise ValueError("Part C: runtime receipt is invalid; see smoke_part_c.json") from exc
+    except BaseException as exc:
+        if "evaluation" not in result and "error" not in result:
+            finish(error=f"{type(exc).__name__}: {exc}")
+        raise
+    if not doc["pass"]:
+        raise ValueError(f"Part C failed ({doc['verdict']}): {doc['disposition']}")
+    return result
+
+
 class KitSequenceTests(unittest.TestCase):
     """smoke --part C: the runtime kinds in order, no slots entered, a failure raises after the table."""
 
@@ -585,7 +666,7 @@ class KitSequenceTests(unittest.TestCase):
             return step_record(root, step_facts or STEP, 4096, receipt=fields, save=False)
 
         config = SimpleNamespace()
-        return kit.smoke_part_c(root, ['runtime'], config, soak_reference='soak.json', invoke=self.invoke,
+        return synthetic_smoke_part_c(root, ['runtime'], config, soak_reference='soak.json', invoke=self.invoke,
                                 facts=facts, step_facts=step_inputs,
                                 prints=lambda bundle: {'turns': [{'turn': 0, 'token_basis': 'uniform_estimate'}],
                                                      'desk_verdict': {'exclusion_reasons': ['r']}})
@@ -866,17 +947,105 @@ class FrozenBoundaryTests(unittest.TestCase):
 
 
 class RunnerPartCTests(unittest.TestCase):
-    def test_runner_runs_only_part_c_and_records_it(self):
+    def test_runner_c_requires_a_fresh_soak_even_through_python(self):
         from tests.align.test_r1_smoke_launcher import RunnerTests
         case = RunnerTests('test_order_and_receipt')
         case.setUp()
         self.addCleanup(case.doCleanups)
         case.args.parts = 'C'
-        self.assertEqual(case.run_runner(), 0)
-        self.assertEqual([e for e in case.events if e.startswith('part-')], ['part-C'])
+        self.assertEqual(case.run_runner(), 2)
+        self.assertEqual([e for e in case.events if e.startswith('part-')], [])
         receipt = case.receipt()
-        self.assertEqual((receipt['parts'], receipt['parts_requested'], receipt['rc']), ({'C': True}, 'C', 0))
+        self.assertEqual((receipt['parts'], receipt['parts_requested'], receipt['rc']), ({'C': False}, 'C', 2))
         self.assertFalse(case.live)
+
+
+AUDIT_ROLES = {"P":"capture-predecessor-30b","S":"step-d","D":"d-bank-benign-s1","X":"x-g"}
+AUDIT_CASES = {}
+for role in AUDIT_ROLES:
+    for op in ("summary-failed","summary-empty","summary-null","summary-wrong-type","summary-truncate",
+               "summary-missing-file","summary-other-role","summary-dup-key","metadata-run-id",
+               "events-duplicate","events-remove-final","turn-index-plus-one","turn-row-duplicate",
+               "turn-row-cut","episode-paired-clock","mode-receipt-two-copies"):
+        AUDIT_CASES[role+"-"+op] = (role,op,None)
+    for op in ("per-turn-deadman","budget-stop-reason","clock-domain","template-seed","metadata-token-count"):
+        AUDIT_CASES[role+"-"+op] = (role,op,None)
+for op in ("turn-order","turn-missing","receipt-cap-minus-one","metadata-config-digest","failure-reason","episode-first-token","thermal-end-missing","thermal-outside-gate","thermal-reading-unit"):
+    AUDIT_CASES["D-"+op] = ("D",op,None)
+for op in ("reference-wrong","classification-wrong","recovery-record-wrong","slot-formula","receipt-slots-chunk","candidate-only"):
+    AUDIT_CASES["S-"+op] = ("S",op,None)
+
+def mutate_member(segment, receipt, op):
+    bundle = segment / receipt["bundle"]
+    summary = bundle / "summary_metrics.json"
+    metadata = bundle / "metadata.json"
+    events = bundle / "events.jsonl"
+    ep = bundle / "outputs/align_episode.json"
+    turns = bundle / "outputs/align_turns.jsonl"
+    def edit(path, func):
+        obj = json.loads(path.read_bytes())
+        func(obj)
+        path.write_bytes(json_bytes(obj))
+    def rows(path):
+        return [json.loads(line) for line in path.read_bytes().splitlines()]
+    def save_rows(path, values):
+        path.write_bytes(b"".join(json_bytes(v) for v in values))
+    if op == "summary-failed": edit(summary,lambda v:v.update(status="failed"))
+    elif op == "summary-empty": edit(summary,lambda v:v.pop("status"))
+    elif op == "summary-null": edit(summary,lambda v:v.update(status=None))
+    elif op == "summary-wrong-type": edit(summary,lambda v:v.update(status=17))
+    elif op == "summary-dup-key": summary.write_bytes(b'{"status":"failed",'+summary.read_bytes()[1:])
+    elif op == "summary-truncate": summary.write_bytes(b"{")
+    elif op == "summary-missing-file": summary.unlink()
+    elif op == "summary-other-role": summary.write_bytes(json_bytes({"role":"idle","status":"refused"}))
+    elif op == "metadata-run-id": edit(metadata,lambda v:v.update(run_id="other-attempt"))
+    elif op == "metadata-config-digest": edit(metadata,lambda v:v.update(config_sha256="0"*64))
+    elif op == "events-duplicate": events.write_bytes(events.read_bytes()*2)
+    elif op == "events-remove-final": save_rows(events,[{**rows(events)[0],"event_type":"run_started"}])
+    elif op == "turn-index-plus-one":
+        values=rows(turns); values[0]["turn"]+=1; save_rows(turns,values)
+    elif op == "turn-row-duplicate": save_rows(turns,[rows(turns)[0],*rows(turns)])
+    elif op == "turn-row-cut": turns.write_bytes(turns.read_bytes()[:-3])
+    elif op == "turn-order": save_rows(turns,rows(turns)[::-1])
+    elif op == "turn-missing": save_rows(turns,rows(turns)[:-1])
+    elif op == "per-turn-deadman":
+        values=rows(turns); values[0]["flags"]=["episode.deadman:0"]; save_rows(turns,values)
+    elif op == "metadata-token-count":
+        total=sum(t["decode_tokens"] for t in json.loads(ep.read_bytes())["turns"])
+        edit(metadata,lambda v:v.update(workload_observed={"output_token_count":total+1}))
+    elif op == "budget-stop-reason": edit(ep,lambda v:v["hardware"].setdefault("token_budget",{}).update(stop_reason="episode.deadman:0"))
+    elif op == "clock-domain": edit(ep,lambda v:v.update(clock_domain="other-attempt"))
+    elif op == "episode-paired-clock": edit(ep,lambda v:v["hardware"]["paired_clock_stamps_ns"][0].update(monotonic_after_ns=0))
+    elif op == "episode-first-token": edit(ep,lambda v:v["turns"][0].update(first_token_ns=v["turns"][0]["end_ns"]+1))
+    elif op == "mode-receipt-two-copies": receipt["ac_powermode"]={**receipt["ac_powermode"],"value":1}
+    elif op == "template-seed":
+        config=bundle/"config.json"
+        obj=json.loads(config.read_bytes())
+        spec=json.loads(obj["workload_profile"]["prompt_text"])
+        spec["seed"]+=1
+        obj["workload_profile"]["prompt_text"]=json.dumps(spec)
+        config.write_bytes(json_bytes(obj))
+    elif op == "receipt-cap-minus-one": receipt["g0_timeout_s"]-=1
+    elif op == "failure-reason": receipt["failure_reason"]="synthetic_failure"
+    elif op == "candidate-only": receipt["candidate_only"]=True
+    elif op == "receipt-slots-chunk": receipt["slots"]["N_chunk"]+=1
+    elif op == "slot-formula": receipt.setdefault("slot_detail",{})["N_chunk_formula"]="wrong formula"
+    elif op == "reference-wrong": edit(bundle/"outputs/align_window_reference.json",lambda v:v.update(status="failed"))
+    elif op == "recovery-record-wrong": save_rows(segment/"recovery/align_thermal.jsonl",[{"kind":"foreign"}])
+    elif op == "classification-wrong": edit(segment/"inventory/r1_classification.json",lambda v:v.update(classification_sha256="0"*64))
+    elif op in ("thermal-end-missing","thermal-outside-gate","thermal-reading-unit"):
+        journal=bundle/"outputs/align_thermal.jsonl"; values=rows(journal)
+        if op=="thermal-end-missing": del values[-1]["values"]["collector_error"]
+        elif op=="thermal-reading-unit": next(v for v in values if v["kind"]=="reading")["values"]["units"]={"TV0h":"rpm"}
+        else:
+            gate = next(v["values"]["gate"] for v in values if v["kind"] == "align_thermal_gate"
+                        and v["values"]["state"] == "end")
+            exit_ns = next(v["started"]["monotonic_ns"] for v in values if v["kind"] == "reading"
+                           and v["started"]["monotonic_ns"] > gate["end_ns"])
+            gate["exit_sample_ns"] = exit_ns
+            edit(ep,lambda v:v["hardware"]["thermal"]["intervals"][0].update(exit_sample_ns=exit_ns))
+        save_rows(journal,values)
+    else: raise ValueError(op)
 
 
 class SoakLauncherBindingTests(unittest.TestCase):
@@ -889,10 +1058,43 @@ class SoakLauncherBindingTests(unittest.TestCase):
         self.attempt.revision = kit.r1.executed_commit(kit.ROOT)
         self.runtime = ["synthetic-runtime", "--config", str(self.attempt.config)]
 
+    @staticmethod
+    def journal(sensors, events, *, start=0, finish=None):
+        """Serialize native sidecar rows and the frozen Coverage report."""
+        from joulewise.align.apple.thermal import Coverage, keys
+        selected = keys(sensors)
+        coverage = Coverage(start, selected)
+
+        def sample(fast, slow, ns):
+            temps = {key: 34.0 if key.startswith("T") else 1200 for key in selected}
+            temps.update({sensors["s_fast"]: fast, sensors["s_slow"]: slow})
+            return {"source": "smc", "sensors": temps, "errors": {},
+                    "units": {key: "degC" if key.startswith("T") else "rpm" for key in selected},
+                    "readings": {key: {"value": value, "error": None} for key, value in temps.items()},
+                    "status": {"os_level": 0, "pm_state": "Nominal",
+                               "pm_observed_ns": ns, "monotonic_ns": ns}}
+
+        def record(kind, index, ns, values):
+            stamp = {"wall_ns": ns, "monotonic_ns": ns, "monotonic_raw_ns": ns}
+            return {"kind": kind, "schema": "joulewise.align_thermal.v1", "module": "temperature",
+                    "session": "synthetic-thermal", "seq": index, "started": stamp, "finished": stamp,
+                    "values": values, "raw": [], "error": None}
+
+        rows = [record("session_start", 1, start, {"thermal": sensors})]
+        for kind, ns, data in events:
+            values = sample(*data, ns) if kind == "reading" else data
+            if kind == "reading":
+                coverage.observe(ns, ns, values)
+            rows.append(record(kind, len(rows) + 1, ns, values))
+        end = events[-1][1] if finish is None else finish
+        rows.append(record("session_end", len(rows) + 1, end,
+                           {"collector_error": None, "coverage": coverage.report(end)}))
+        return rows
+
     def make_idle(self):
         n = 1800
         times = [float(i) for i in range(n + 1)]
-        sensors = rt.load_config(self.attempt.config)[0]["sensors"]
+        sensors = rt.sensors_policy(rt.load_config(self.attempt.config)[0])
         fast, slow = sensors["s_fast"], sensors["s_slow"]
         degrees = float(f"35.{MARKER}")
         readings = {fast: degrees, slow: degrees}
@@ -907,110 +1109,175 @@ class SoakLauncherBindingTests(unittest.TestCase):
             sensor_series_t_s={key: times for key in readings}, sensor_series_end_t_s=float(n),
             sensor_series_failed_reads={key: 0 for key in readings}, load_journal_errors=[],
             battery={"private": MARKER}, **load)
-
-        def journal_row(kind, sequence, seconds, values):
-            ns = seconds * 1_000_000_000
-            stamps = {"wall_ns": ns, "monotonic_ns": ns, "monotonic_raw_ns": ns}
-            return {"kind": kind, "schema": "joulewise.align_thermal.v1", "module": "temperature",
-                    "session": "synthetic-soak", "seq": sequence, "started": stamps, "finished": stamps,
-                    "values": values, "raw": [], "error": None}
-
-        sample = {"source": "smc", "sensors": readings, "errors": {},
-                  "units": dict.fromkeys(readings, "C"),
-                  "readings": {key: {"value": value, "error": None} for key, value in readings.items()}}
-        rows = [journal_row("session_start", 1, 0, {"thermal": sensors})]
-        rows.extend(journal_row("reading", i + 2, i, sample) for i in range(n + 1))
-        rows.append(journal_row("session_end", n + 3, n, {"collector_error": None}))
+        readings = [("reading", i * 1_000_000_000, (degrees, degrees)) for i in range(n + 1)]
+        rows = self.journal(sensors, readings)
         return self.attempt.produce(receipt, **{
             "sensors/align_thermal.jsonl": b"".join(map(json_bytes, rows)),
             "load_journal.json": json_bytes({"exclude_roots": [MARKER], "errors": [], **load}),
         })
 
     def make_model_member(self, kind, segment):
+        from joulewise.align.apple import thermal_gates as tg
         from joulewise.align.records import Episode, Turn, to_jsonable
+        from joulewise.schemas import BenchmarkConfig
 
+        ns = 1_000_000_000
         roles = {"capture-predecessor-30b": "predecessor", "step-d": "step-d",
                  "d-bank-benign-s1": "d-bank", "x-g": "x-g"}
+        templates = {"predecessor": "model_30b", "step-d": "d_spam", "d-bank": "d_bank", "x-g": "x_g"}
         role = roles[kind]
+        configured = rt.load_config(self.attempt.config)[0]
+        sensors = rt.sensors_policy(configured)
+        template = rt.resolve(configured["templates"][templates[role]])
+        config, spec = rt.read_template(template)
         native_mode = {"value": 0, "source": pc.POWERMODE_SOURCE, "observed_at": "episode_start"}
+        hardware = {"ac_powermode": native_mode}
         if role == "predecessor":
-            receipt = write_predecessor(segment)
-        elif role == "step-d":
-            member = step_record(segment.parent, STEP, 4096)["member"]
-            receipt = member["runtime"]
-            receipt.update(e_D_j_per_token=MARKER, thermometry={
-                "status": "captured", "classification_sha256": "a" * 64, "alias_groups": []})
+            receipt = write_predecessor(segment, {"bundle": f"runs/{config['run_id']}", "ac_powermode": native_mode,
+                                                   "admitted_turns": 1})
+            config["run_metadata"]["tags"] = [tag for tag in config["run_metadata"]["tags"]
+                                                  if tag != "launch_lineage_required"]
+            receipt.update(template_sha256=hashed(template.read_bytes()),
+                           template_derivation={"removed_run_metadata_tags": ["launch_lineage_required"]})
+            turns = [Turn(index=0, start_ns=ns, first_token_ns=2*ns, end_ns=3*ns, prefill_tokens=50,
+                          context_tokens=0, decode_tokens=1)]
         else:
-            member = member_record(segment.parent, role, bank() if role == "d-bank" else XG)
+            member = (step_record(segment.parent, STEP, 4096)["member"] if role == "step-d"
+                      else member_record(segment.parent, role, bank() if role == "d-bank" else XG))
             receipt = member["runtime"]
-            receipt["deadman"]["phases_s"] = dict.fromkeys(rt.contract.DEADMAN_PHASES, 0.0)
+            spec.update(warmup_condition="benign")
+            if role == "step-d":
+                spec.update(condition="benign", seed=1)
+                receipt["candidate_only"] = False
+                receipt["slots"].update(S7=60.0, S8=4096.0)
+                receipt["slot_detail"] = {"N_chunk_formula": 2048, "N_chunk_source": "config.d_n_chunk"}
+            if role == "d-bank":
+                receipt["failure_reason"] = None
+            if role in ("d-bank", "x-g"):
+                receipt["deadman"]["phases_s"] = dict.fromkeys(rt.contract.DEADMAN_PHASES, 0.0)
+            config["workload_profile"]["prompt_text"] = json.dumps(spec, sort_keys=True)
+            shift = 120 * ns
+            turns = []
+            for row in member["turns"]:
+                turns.append(Turn(index=row["index"], start_ns=row["start_ns"] + shift,
+                                  first_token_ns=row["start_ns"] + shift + 2 * ns,
+                                  end_ns=row["end_ns"] + shift, prefill_tokens=row["prefill_tokens"],
+                                  context_tokens=0, decode_tokens=row["decode_tokens"]))
+            gates = member["journal_intervals"]
+            events = [("reading", i * ns, (35.0, 35.0)) for i in range(60)] if role == "step-d" else []
+            for gate, turn in zip(gates, turns, strict=True):
+                for key in ("start_ns", "end_ns", "exit_sample_ns"):
+                    gate[key] += shift
+                gate["entry_stamp"] = self.paired_stamp(gate["start_ns"])
+                events.append(("align_thermal_gate", gate["start_ns"],
+                               {"state": "begin", "gate_kind": gate["kind"], "turn": gate["turn"],
+                                "token_count": gate["token_count"], "entry_stamp": gate["entry_stamp"]}))
+                events.append(("reading", gate["exit_sample_ns"],
+                               tuple(gate["release"][key] for key in ("fast_c", "slow_c"))))
+                events.append(("align_thermal_gate", gate["end_ns"], {"state": "end", "gate": gate}))
+                events.append(("reading", turn.start_ns + ns, (35.4, 35.4)))
+            journal = self.journal(sensors, events)
+            hardware.update(thermal={"intervals": gates, "flags": []}, token_budget={
+                "deadman_s": receipt["deadman"]["T_dead_s"], "stop_reason": "episode_returned", "incomplete": False,
+                "decode_tokens_used": sum(turn.decode_tokens for turn in turns),
+                "prefill_tokens_used": sum(turn.prefill_tokens for turn in turns), "cached_context_tokens_used": 0,
+            })
         receipt.update(schema=rt.RESULT_SCHEMA, kind=kind, backend="production", config_sha256=self.attempt.config_sha,
                        ac_powermode=native_mode, energy_j=MARKER, battery_drain_pct_per_h=MARKER)
         bundle = segment / receipt["bundle"]
         out = bundle / "outputs"
         out.mkdir(exist_ok=True)
-        template_name = ("align-pilot-v3-episodes-a-e01.json" if role in ("predecessor", "x-g")
-                         else "align-v4-episodes-a-e08.json")
-        template = kit.ROOT / "configs/campaigns/align_v4/stages/episodes-a" / template_name
-        config = json.loads(template.read_bytes())
         config["run_id"] = bundle.name
-        (bundle / "config.json").write_bytes(json_bytes(config))
-        metadata = {"run_id": bundle.name, "config_sha256": hashed((bundle / "config.json").read_bytes()),
+        config = BenchmarkConfig.from_mapping(config).to_dict()
+        config_raw = json_bytes(config)
+        (bundle / "config.json").write_bytes(config_raw)
+        end_ns = turns[-1].end_ns
+        hardware.update(run_bundle_id=bundle.name,
+                        paired_clock_stamps_ns=[self.paired_stamp(1), self.paired_stamp(end_ns)])
+        identity = synthetic_episode(role)
+        identity.pop("flags")
+        ep = Episode(**identity, episode_id=bundle.name, endpoint="test",
+                     clock_domain=f"joulewise.monotonic:{bundle.name}", start_ns=1,
+                     end_ns=end_ns, hardware=hardware, turns=tuple(turns))
+        (out / "align_episode.json").write_bytes(json_bytes(to_jsonable(ep)))
+
+        def clock(ns):
+            seconds = ns / 1_000_000_000
+            return {"epoch_s": seconds, "monotonic_before_s": seconds, "monotonic_after_s": seconds,
+                    "wall_resolution_s": 1e-9, "monotonic_resolution_s": 1e-9}
+
+        (out / "align_turns.jsonl").write_bytes(b"".join(json_bytes({
+            "turn": t.index, "flags": [], "start_stamp": clock(t.start_ns), "end_stamp": clock(t.end_ns),
+            "generation": {"output_token_ids": [20] * t.decode_tokens,
+                           "prompt_token_ids": [30] * (t.prefill_tokens + t.context_tokens)},
+        }) for t in turns))
+        decode, prefill = sum(t.decode_tokens for t in turns), sum(t.prefill_tokens for t in turns)
+        metadata = {"run_id": bundle.name, "config_sha256": hashed(config_raw),
                     "uncertainty_evidence": {"clock_anchor": {
                         "status": "bounded", "wall_minus_monotonic_lower_s": 0, "wall_minus_monotonic_upper_s": 0,
                         "effective_clock_anchor_bound_s": 0, "method": "synthetic"}},
+                    "workload_observed": {"token_count": decode + prefill, "output_token_count": decode},
+                    "workload_provenance": {"episode_spec_sha256": hashed(config["workload_profile"]["prompt_text"].encode()),
+                                            "endpoint_identity": "test", "flags": [], "output_policy": {"emitted_tokens": decode},
+                                            "episode_outcome": {"stop_condition": "episode_returned", "emitted_tokens": decode,
+                                                                **({"token_budget": hardware["token_budget"]} if role != "predecessor" else {})}},
                     "synthetic_private": MARKER}
         (bundle / "metadata.json").write_bytes(json_bytes(metadata))
         (bundle / "summary_metrics.json").write_bytes(json_bytes({"status": "succeeded", "failure_reason": None}))
-        (bundle / "events.jsonl").write_bytes(json_bytes({"event_type": "run_finalized", "phase": "reduce",
-                                                        "timestamp_s": 1, "message": "", "metadata": {}}))
+        (bundle / "events.jsonl").write_bytes(json_bytes({"event_type": "run_finalized", "phase": "run",
+                                                        "timestamp_s": 1, "message": "bundle finalized", "metadata": {}}))
         (bundle / "power_trace.csv").write_text("timestamp_s,power_w,source\n")
-        turns = [Turn(index=0, start_ns=1, end_ns=2, prefill_tokens=50, context_tokens=0, decode_tokens=1)]
-        hardware = {"ac_powermode": native_mode}
         if role != "predecessor":
-            turns = [Turn(context_tokens=0, **{key: row[key] for key in
-                                                ("index", "start_ns", "end_ns", "prefill_tokens", "decode_tokens")})
-                     for row in member["turns"]]
-            gates = member["journal_intervals"]
-            hardware.update(thermal={"intervals": gates, "flags": []}, token_budget={"deadman_s": receipt["deadman"]["T_dead_s"]})
-            rows = [{"module": "temperature", "kind": "session_start", "values": {}}]
-            for gate, turn in zip(gates, turns, strict=True):
-                for timestamp in (gate["exit_sample_ns"], turn.start_ns + 1_000_000_000):
-                    stamp = {"wall_ns": timestamp, "monotonic_ns": timestamp}
-                    rows.append({"module": "temperature", "kind": "reading", "started": stamp, "finished": stamp,
-                                 "values": {"status": {"os_level": 0, "pm_state": "Nominal",
-                                                       "pm_observed_ns": timestamp}}})
-                rows.append({"module": "temperature", "kind": "align_thermal_gate",
-                             "values": {"state": "end", "gate": gate}})
-            rows.append({"module": "temperature", "kind": "session_end", "values": {"collector_error": None}})
-            (out / "align_thermal.jsonl").write_bytes(b"".join(map(json_bytes, rows)))
-        identity = synthetic_episode(role)
-        identity.pop("flags")
-        ep = Episode(**identity, episode_id="synthetic-member", endpoint="test",
-                     clock_domain="joulewise.monotonic:synthetic-member", start_ns=0,
-                     end_ns=turns[-1].end_ns, hardware={**hardware, "paired_clock_stamps_ns": [
-                         {"epoch_ns": 1, "monotonic_before_ns": 1, "monotonic_after_ns": 1,
-                          "wall_resolution_ns": 1, "monotonic_resolution_ns": 1}]}, turns=tuple(turns))
-        (out / "align_episode.json").write_bytes(json_bytes(to_jsonable(ep)))
-        (out / "align_turns.jsonl").write_bytes(b"".join(json_bytes({"turn": t.index}) for t in turns))
-        if role == "step-d":
-            (out / "align_window_reference.json").write_bytes(json_bytes({"status": "captured"}))
-            for relative in ("recovery/align_thermal.jsonl", "inventory/r1_classification.json"):
-                path = segment / relative
-                path.parent.mkdir()
-                path.write_bytes(json_bytes({"synthetic": True}))
-        if role != "predecessor":
+            (out / "align_thermal.jsonl").write_bytes(b"".join(map(json_bytes, journal)))
             from joulewise.align.apple.workload import read_episode_bundle
             receipt["episode_flags"] = list(read_episode_bundle(bundle).flags)
+        if role == "step-d":
+            end = 60 * ns
+            sample_rows = tg.sample_rows(journal)
+            keys = sensors["s_fast"], sensors["s_slow"]
+            window = tg._good_window_rows(sample_rows, end, keys)
+            reference = {"schema": tg.REFERENCE_SCHEMA, "status": "captured", "source": {
+                "run_id": bundle.name, "config_sha256": hashed(config_raw)}, "sensors": sensors,
+                "sensors_policy_sha256": tg._policy_digest(sensors),
+                "rule": {"anchor": "warmup_entry", "window_s": 60, "statistic": "median", "min_coverage": .9},
+                "span_ns": [0, end], "span_epoch_ns": [0, end],
+                "coverage_fraction": tg._window_coverage(sample_rows, end, keys)["sample_fraction"],
+                "samples": [[row["monotonic_ns"], 35.0, 35.0] for row in window],
+                "fast_c": 35.0, "slow_c": 35.0, "journal": "outputs/align_thermal.jsonl"}
+            reference["record_sha256"] = hashed(pc.canonical(reference))
+            (out / "align_window_reference.json").write_bytes(pc.canonical(reference) + b"\n")
+            receipt["operating_reference"].update(span_ns=reference["span_ns"])
+            classification = {"status": "pass", "alias_groups": []}
+            classification["classification_sha256"] = hashed(rt.canonical(classification).encode())
+            confirmation = {"ok": True}
+            inventory = segment / "inventory"
+            inventory.mkdir()
+            (inventory / "r1_classification.json").write_bytes(json_bytes({
+                "classification": classification, "label": "step-d", "for_record_only": False,
+                "night_confirmation": confirmation, "inventory": {},
+            }))
+            receipt.update(e_D_j_per_token=MARKER, thermometry={**classification, "night_confirmation": confirmation})
+            receipt["slot_detail"]["thermometry_classification_sha256"] = classification["classification_sha256"]
+            recovery = segment / "recovery"
+            recovery.mkdir()
+            rec = self.journal(sensors, [("reading", end_ns + ns, (35.4, 35.4))], start=end_ns)
+            (recovery / "align_thermal.jsonl").write_bytes(b"".join(map(json_bytes, rec)))
         return write_terminal(segment, kind, receipt, self.attempt.config_sha)
 
-    def run_launcher(self, *, idle_error=None, before_kit=None):
+    @staticmethod
+    def paired_stamp(ns):
+        return {"epoch_ns": ns, "monotonic_before_ns": ns, "monotonic_after_ns": ns,
+                "wall_resolution_ns": 1, "monotonic_resolution_ns": 1}
+
+    def run_launcher(self, *, idle_error=None, before_kit=None, model_transport=None):
         def transport(argv):
             kind = argv[argv.index("--r1-kind") + 1]
             output = Path(argv[argv.index("--output") + 1])
             if kind == "idle" and idle_error is not None:
                 raise idle_error
-            return self.make_idle() if kind == "idle" else self.make_model_member(kind, output)
+            if kind == "idle":
+                return self.make_idle()
+            return (model_transport or self.make_model_member)(kind, output)
 
         real_popen = subprocess.Popen
 
@@ -1145,6 +1412,209 @@ class SoakLauncherBindingTests(unittest.TestCase):
                                        "--runtime-config", str(self.attempt.config), "--kind", "idle"]), 0)
         self.assertEqual(json.loads(out.getvalue()), {"binding": "archived_custody"})
         self.assertFalse(self.attempt.output.exists())
+
+    def audit_case(self, body):
+        case = SoakLauncherBindingTests("test_native_launcher_passes_through_the_soak_and_member_ledgers")
+        case.setUp()
+        try:
+            body(case)
+        finally:
+            case.doCleanups()
+
+    def test_preclose_member_mutations_with_valid_bindings_are_refused(self):
+        def verify(test, role, operation):
+            original = write_terminal
+            applied = []
+
+            def close(segment, kind, receipt, config_sha):
+                if kind == AUDIT_ROLES[role]:
+                    mutate_member(segment, receipt, operation)
+                    applied.append(kind)
+                return original(segment, kind, receipt, config_sha)
+
+            with patch(__name__ + ".write_terminal", side_effect=close):
+                self.assertEqual(test.run_launcher(), 2)
+            self.assertEqual(applied, [AUDIT_ROLES[role]])
+            verdict = json.loads((test.attempt.output / "smoke.json").read_bytes())["evaluation"]
+            self.assertEqual((verdict["pass"], verdict["verdict"]), (False, "other_failure"))
+            self.assertTrue(verdict["evidence_failures"])
+            if operation != "summary-missing-file":
+                self.assertNotIn("source_integrity", verdict["evidence_failures"])
+                self.assertNotIn("evidence_unverifiable", verdict["evidence_failures"])
+
+        self.assertEqual(len(AUDIT_CASES), 99)
+        for label, (role, operation, _) in AUDIT_CASES.items():
+            with self.subTest(case=label):
+                self.audit_case(lambda test: verify(test, role, operation))
+
+    def test_same_summary_failure_before_and_after_member_return(self):
+        def verify(test, *, before):
+            original_close, original_return = write_terminal, pc.EvidenceLedger.member_return
+
+            def close(segment, kind, receipt, config_sha):
+                if before and kind == "d-bank-benign-s1":
+                    mutate_member(segment, receipt, "summary-failed")
+                return original_close(segment, kind, receipt, config_sha)
+
+            def record(ledger, kind, segment, argv, **kw):
+                original_return(ledger, kind, segment, argv, **kw)
+                if not before and kind == "d-bank-benign-s1":
+                    mutate_member(segment, {"bundle": "runs/member"}, "summary-failed")
+
+            with patch(__name__ + ".write_terminal", side_effect=close), patch.object(
+                    pc.EvidenceLedger, "member_return", new=record):
+                self.assertEqual(test.run_launcher(), 2)
+            verdict = json.loads((test.attempt.output / "smoke.json").read_bytes())["evaluation"]
+            expected = "member_status" if before else "source_integrity"
+            self.assertEqual(verdict["evidence_failures"], {expected: expected})
+
+        for before in (True, False):
+            with self.subTest(before_return=before):
+                self.audit_case(lambda case: verify(case, before=before))
+
+    def test_zero_exit_requires_all_four_public_verdict_witnesses(self):
+        def verify(test, mutation):
+            original = kit.main
+
+            def after(args):
+                rc = original(args)
+                self.assertEqual(rc, 0)
+                sys.stdout.flush()
+                output = test.attempt.output
+                copies = (output / "smoke.json", output / "smoke_part_c.json")
+                ledger = output / "evidence_ledger.jsonl"
+                stdout = test.attempt.root / "part-c.stdout.log"
+                if mutation == "missing_copy":
+                    copies[0].unlink()
+                elif mutation in ("one_opposite_copy", "two_opposite_copies", "two_reformatted_copies"):
+                    chosen = copies[:1] if mutation == "one_opposite_copy" else copies
+                    for copy in chosen:
+                        verdict = json.loads(copy.read_bytes())
+                        if mutation != "two_reformatted_copies":
+                            verdict["evaluation"].update(verdict="other_failure", **{"pass": False})
+                        copy.write_bytes(json_bytes(verdict))
+                elif mutation == "missing_ledger_row":
+                    ledger.write_bytes(b"".join(ledger.read_bytes().splitlines(keepends=True)[:-1]))
+                else:
+                    stdout.write_bytes(b"")
+                return rc
+
+            with patch.object(kit, "main", side_effect=after):
+                self.assertEqual(test.run_launcher(), 2)
+            runner = json.loads((test.attempt.root / "runner_receipt.json").read_bytes())
+            self.assertEqual((runner["rc"], runner["parts"]), (2, {"C": False}))
+            self.assertIn("verdict_binding", runner["error"])
+
+        for operation in ("missing_copy", "one_opposite_copy", "two_opposite_copies", "two_reformatted_copies",
+                          "missing_ledger_row", "missing_stdout"):
+            with self.subTest(operation=operation):
+                self.audit_case(lambda test: verify(test, operation))
+
+    def test_stdout_shape_and_invalid_utf8_keep_the_public_invalid_qualifier(self):
+        def verify(test, *, decode_error):
+            def transport(kind, output):
+                if kind == "capture-predecessor-30b":
+                    if decode_error:
+                        raise UnicodeDecodeError("utf-8", b"\xff", 0, 1, "synthetic")
+                    return SimpleNamespace(returncode=0, stdout="{}", stderr="")
+                self.fail("malformed stdout must stop the sequence")
+
+            self.assertEqual(test.run_launcher(model_transport=transport), 2)
+            release = (test.attempt.root / "part-c.stdout.log").read_text().splitlines()
+            finding = next(json.loads(line) for line in release if line.startswith("{"))
+            self.assertEqual((finding["reason"], finding["field"], finding["file_or_stream"]),
+                             ("stdout_receipt", "invalid", "stdout"))
+
+        for decode_error in (False, True):
+            with self.subTest(decode_error=decode_error):
+                self.audit_case(lambda test: verify(test, decode_error=decode_error))
+
+
+    def test_preclose_soak_mutations_with_valid_bindings_are_refused(self):
+        def verify(test, operation):
+            original = test.attempt.produce
+            changed = []
+
+            def produce(receipt, **files):
+                load, sidecar = "load_journal.json", "sensors/align_thermal.jsonl"
+                rows = [json.loads(line) for line in files[sidecar].splitlines()]
+                first, last = rows[1], rows[-1]
+                key = receipt["sensor_roles"]["s_fast"]
+                if operation == "sensor_copy":
+                    first["values"]["readings"][key]["value"] += 1
+                elif operation == "sensor_unit":
+                    first["values"]["units"][key] = "rpm"
+                elif operation == "reading_missing":
+                    del first["values"]["readings"]
+                elif operation == "coverage":
+                    last["values"]["coverage"]["all_keys"]["valid_samples"] -= 1
+                elif operation == "begin_clock":
+                    rows[0]["started"]["wall_ns"] = rows[0]["finished"]["wall_ns"] + 1
+                elif operation in ("census_type", "census_null"):
+                    journal = json.loads(files[load])
+                    journal["census"] = receipt["census"] = [{"label": 19}] if operation == "census_type" else [None]
+                    files[load] = json_bytes(journal)
+                elif operation == "census_truncated":
+                    files[load] = b"{"
+                elif operation == "seq_gap":
+                    first["seq"] += 1
+                elif operation == "source_order":
+                    rows[1], rows[2] = rows[2], rows[1]
+                elif operation == "clock_duration":
+                    for row in rows[2:]:
+                        for stamp in ("started", "finished"):
+                            for clock in row[stamp]:
+                                row[stamp][clock] += 20_000_000_000
+                    for k, times in receipt["sensor_series_t_s"].items():
+                        receipt["sensor_series_t_s"][k] = [times[0], *(value + 20 for value in times[1:])]
+                    receipt["sensor_series_end_t_s"] += 20
+                files[sidecar] = b"".join(map(json_bytes, rows))
+                if operation == "duplicate_key":
+                    files[sidecar] = files[sidecar].replace(b'"kind": "reading"',
+                                                          b'"kind": "foreign","kind": "reading"', 1)
+                changed.append(True)
+                return original(receipt, **files)
+
+            with patch.object(test.attempt, "produce", side_effect=produce):
+                self.assertEqual(test.run_launcher(), 2)
+            self.assertEqual(changed, [True])
+            verdict = json.loads((test.attempt.output / "smoke.json").read_bytes())["evaluation"]
+            self.assertEqual((verdict["pass"], verdict["verdict"]), (False, "other_failure"))
+            self.assertTrue(verdict["evidence_failures"])
+            self.assertNotIn("source_integrity", verdict["evidence_failures"])
+            self.assertNotIn("evidence_unverifiable", verdict["evidence_failures"])
+
+        for operation in ("sensor_copy", "sensor_unit", "reading_missing", "coverage", "begin_clock",
+                          "duplicate_key", "census_type", "census_null", "seq_gap", "census_truncated",
+                          "source_order", "clock_duration"):
+            with self.subTest(operation=operation):
+                self.audit_case(lambda case: verify(case, operation))
+
+    def test_clean_own_stop_and_proven_x_refusal_still_pass(self):
+        original_bank = bank
+
+        def verify(test, *, short, unrun):
+            def selected_bank():
+                data = original_bank()
+                if short:
+                    data["turns"].pop()
+                    data["intervals"].pop()
+                return data
+
+            def transport(kind, output):
+                if kind == "x-g" and unrun:
+                    return SimpleNamespace(returncode=2, stdout="", stderr="synthetic pre-admission refusal")
+                return test.make_model_member(kind, output)
+
+            with patch(__name__ + ".bank", side_effect=selected_bank):
+                self.assertEqual(test.run_launcher(model_transport=transport), 0)
+            verdict = json.loads((test.attempt.output / "smoke.json").read_bytes())["evaluation"]
+            self.assertIs(verdict["pass"], True)
+            self.assertIs(verdict["lines"]["x_g"] is None, unrun)
+
+        for short, unrun in ((True, False), (False, True), (True, True)):
+            with self.subTest(short=short, unrun=unrun):
+                self.audit_case(lambda test: verify(test, short=short, unrun=unrun))
 
 
 if __name__ == '__main__':

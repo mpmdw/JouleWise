@@ -506,3 +506,38 @@ class SoakLedgerTests(unittest.TestCase):
                 attempt.binding(handoff)
             with self.assertRaisesRegex(evidence.EvidenceFailure, "evidence_unverifiable"):
                 attempt.binding(None)
+
+
+class PublicationTests(unittest.TestCase):
+    def test_successful_exit_is_tied_to_the_chain_both_copies_and_stdout(self):
+        with TemporaryDirectory() as tmp:
+            attempt = SoakAttempt(Path(tmp))
+            soak_sha = attempt.close()
+            soak = attempt.binding(soak_sha)
+            reference_sha = hashed(attempt.reference.read_bytes())
+            attempt.output.mkdir()
+            writer = evidence.EvidenceLedger(attempt.output, attempt.revision, attempt.config,
+                                             attempt.reference, soak=soak)
+            for kind, name in MEMBERS.items():
+                segment = attempt.output / name
+                segment.mkdir()
+                process = write_terminal(segment, kind, {"kind": kind}, attempt.config_sha)
+                writer.member_return(kind, segment, ["runtime"], process=process)
+            table = {"part": "C", "slots_entered": False,
+                     "evaluation": {"schema": "joulewise.align.r1_part_c.v1", "verdict": "pass", "pass": True,
+                                    "evidence_failures": {}, "slots_entered": False}}
+            files = [attempt.output / name for name in ("smoke_part_c.json", "smoke.json")]
+            published = json_bytes(table)
+            for path in files:
+                path.write_bytes(published)
+            writer.finish("pass", {path.name: hashed(published) for path in files})
+            stdout = attempt.root / "part-c.stdout.log"
+            stdout.write_text("Part C verdict: pass (pass: True)\n")
+            evidence.verify_part_c_publication(attempt.root, soak_sha, reference_sha)
+            for path in [*files, writer.path, stdout, attempt.ledger, attempt.reference]:
+                with self.subTest(source=path.name):
+                    original = path.read_bytes()
+                    path.write_bytes(b"{")
+                    with self.assertRaisesRegex(evidence.EvidenceFailure, "verdict_binding"):
+                        evidence.verify_part_c_publication(attempt.root, soak_sha, reference_sha)
+                    path.write_bytes(original)
