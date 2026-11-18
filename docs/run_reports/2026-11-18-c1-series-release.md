@@ -30,7 +30,9 @@ eligible captured member contributes no S score.
 | Exact completeness test head and tree | `64b36cd64d154b15d4765c4c0d39f0892c195940`, `31f9a6cb2008beda1bc7707bff4a01264a675dfa` |
 | Round-six test freeze | `ecf0352fd` |
 | Round-six test head and tree | `0ddc13c8e18f28e42832fd85a6b63c1e5a039096`, `c726d8e53af26a9bad95c0dbd32d896df8e7668d` |
-| Caller SHA-256 for signatory | `1b8b8b8474afd40def8bd59403a09721c35329bb044005ca1bf3b2ee8365696d` |
+| Round-seven test freeze | `afcea7090` |
+| Round-seven test head and tree | `56de7b49165633240a900d17158f69b5d8bed49d`, `2d45ad1d9dcb9f2d6fbe74fffe08f7b2c44553d7` |
+| Caller SHA-256 for signatory | `106b7cf4f6252f6254e3c1c19d1caadd6f0aea42623eb37a5eb48c363478ef32` |
 | Draft code head and tree before report | `b7a0440a00442151c5b18a73a7b48fb5beeb72ec`, `77c7065e57a5bc17cb436adc041f6ff45bfdb175` |
 
 At the initial freeze the CLI tests failed with no script. At the RL-185
@@ -39,9 +41,8 @@ During build, an eager selection fixed the fixture's last-stratum offsets
 so both worlds have no ties, and the fixtures gained bound, named PM and
 rail projections.
 
-Handoff found PR #813 at `2fe705e73f55cbe0d62177eb2123f512e80a8b90`,
-which extends the first-token AST checks since
-`6093a7454d181c87ae6fcb2e3d30c25fb1e97cce`.
+Handoff found PR #813 at `cd4d786846b7310d8673f5deb961f373e7970ccc`.
+The private code pins remain the ones in the table.
 The private synthetic tests use the original pinned sources in the table.
 PR #787 remains at its pin. PR #826 advanced to
 `1fc28324d51f8057fa6228e6e7d42b5ea331d52c` with test changes only since the
@@ -62,8 +63,8 @@ the dependency landings. [Draft PR #836](https://github.com/mpmdw/JouleWise/pull
 | CLI and guard | Caller `build_report`, `main`, PR #813 `v4_desk_seal.py:351,418` and `rl176.py:611,622,633` | Snapshot the guard's named metadata, call the real guard and use the literal freeze flag in the scorer. |
 | Registration and history | Caller `require_executing_bindings`, `bound_history`, `final_roster`, `ReleasedInputs`, `v4_registration.py` `validate_receipt` and `require_registration`, and `scripts/align_v4_series.py:220,231,239,510` | Verify the C1 predecessor's receipt digest, verify the executing source inventory, and join the authorized history to the frozen manifest. |
 | Final records and A9 | PR #826 `scripts/align_v4_next_arm_packet.py:237,306,395` and `light_triage.py:79,163` | Use the shared RL-183b finality, including successor `previous_final`, and independently preserve final per-member reasons. |
-| Stored rows and complete manifest | Caller :265,315,322,436,545, PR #787 `s_rows.py:193,751,774`, PR #813 `workload.py:893` | Verify keyed and explicit path/digest bindings, including inputs outside the selected projection. Pass #787's row tuple directly. |
-| Roster, DC and coverage | Caller :621,645,691, PR #813 `rl176.py:200,291,352,379,527,550,628` | Verify authorized benign DC bytes and check registered S decode and fit contributor identities before running any comparisons. Check the report's counts again before publishing. |
+| Stored rows and complete manifest | Caller `manifest_inputs`, :341,452,518,538, `read_member`, PR #787 `s_rows.py:193,751,774`, PR #813 `workload.py:893` | Classify protected sources and aliases from the manifest. Verify unprotected byte bindings and Git-mirror targets. Pass #787's row tuple directly. |
+| Roster, DC and coverage | Caller :735,792, `verify_score_inputs`, `verify_s_coverage`, PR #813 `rl176.py:200,291,352,379,527,550,628` | The eligible benign provider verifies its own DC bytes. Check registered S decode and fit contributor identities before any comparison, then check the report's counts before publishing. |
 
 ## Resolved interfaces under RL-185 §3
 
@@ -350,6 +351,43 @@ The frozen 244-case module is unchanged at SHA-256
 Exact suite totals and the CI run are recorded in the draft. W1's
 standalone missing scorer and the signing kit's release-profile
 acceptance remain owner dependencies. [Draft checks](https://github.com/mpmdw/JouleWise/pull/836/checks)
+
+## Round-seven audit and disposition
+
+The audit found two verified HIGHs at `5051eda9a0c2`. The finalized
+Git-mirror reference could be missing, compressed-only, unreadable or
+byte-changed and still yield `S SIGNATURE` with 22 strata. A synthetic
+marker at the native KM003C stream path also reached the generic byte
+verifier after authorization. The frozen red tests at `afcea7090`
+reproduced the five invalid mirror/ledger worlds and the prohibited
+meter-directory open before implementation.
+
+`56de7b491` classifies native meter paths, DC inputs and listed closure
+aliases before opening any input bytes. Protected entries require a
+manifest digest. The release verifier leaves those bytes untouched,
+including when a mirror alias refers to a protected target. Direct
+requests to the generic reader for protected paths refuse before open.
+The only protected byte read remains the provider's exact canonical
+file for an authenticated eligible benign ordinal after member loading.
+Signed Python source attestation continues through its separate checkout
+reader.
+
+For unprotected Git-mirror targets, the caller validates the recorded
+literal link hops, exact mirror-relative path and commit identity. It
+obtains the SHA-256 from the pinned regular Git blob and compares the
+regular, plain file at that exact working path. The named mirror must
+be under the authenticated measurement root. An explicit manifest hash
+for the same file must agree with the Git binding. A replaced ledger
+link also fails the hop check.
+
+| Regression | Evidence |
+|---|---|
+| `test_release_verifier_never_opens_protected_meter_or_dc` | Instruments `os.open`, `open` and Git reads. It covers a native marker, an instructed DC marker and a protected mirror alias, plus the single authorized benign provider read after member loading. |
+| `test_manifest_mirror_target_matches_its_pinned_git_blob` | The intact linked target releases. Missing, compressed-only, unreadable and byte-changed targets and a replaced ledger link refuse without reports. |
+
+The frozen Astra module SHA-256 remains
+`4d20a378775680182baf7679305fcdafb9434974f258b9445398add15cb0e02e`.
+Exact suite totals and CI are recorded on the draft. [Draft checks](https://github.com/mpmdw/JouleWise/pull/836/checks)
 
 ## Executed checks and Tier 2 dispositions
 
