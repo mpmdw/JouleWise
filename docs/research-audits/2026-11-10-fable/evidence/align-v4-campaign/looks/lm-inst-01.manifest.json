@@ -1,0 +1,122 @@
+{
+  "schema": "joulewise.cadence_look_manifest.v2",
+  "look_id": "lm-inst-01",
+  "look_kind": "description",
+  "status": "draft",
+  "title": "Finite instrument characterization, one read",
+  "rulings": [
+    "RL-169 section 3, RLD:16408-16421",
+    "RL-169a section 1, RLD:16683-16696",
+    "RL-174 B rows 2 and 4, RLD:17575-17584",
+    "RL-179 F-12, rows 26-28",
+    "RL-180 section 1 and rows 1-7,9",
+    "RL-181 sections 1.5 and 2",
+    "RL-185 section 4"
+  ],
+  "kits": [
+    {
+      "kit_id": "f2-inst-01",
+      "sha256": "651d1815ca87ee23640a8db1483d4ecaf42d70d029855ad03c14bfa076116f2b"
+    },
+    {
+      "kit_id": "f2-inst-02",
+      "sha256": "cfd03677e3629b34a8bcd794a623ee3eaae1033408492eb1d1ddb3229273ed65"
+    },
+    {
+      "kit_id": "f2-inst-03",
+      "sha256": "286842217313e13ac5f8f25917b3325e3e512cd621b90b78b6201d331e9dcf25"
+    }
+  ],
+  "channels": [
+    "gpu_rail",
+    "rail_sum",
+    "dc_in"
+  ],
+  "rail_sum_columns": [
+    "cpu_power",
+    "gpu_power",
+    "ane_power"
+  ],
+  "when": "One read after all 36 planned positions have receipt-backed closes or documented terminal dispositions. Require effective freeze 2 on main, the research lead's cold pass and a prior commit naming all three kits before their first energy read. The research lead's reading of the output precedes the ctl-01 kit freeze.",
+  "stage1": "Commit the receipt-bound roster, each planned position's disposition and exact public counts before reservation. Authenticate kit IDs and digests, the closed receipt and the applicable hand table, Q1 and desk-final. Use only leg_record.json and runner_receipt.json to decide leg disposition: leg_status, g0_outcome, quiet span of at least 600 s, decode_tokens against the kit cap, decode_cap_reached, power mode and loaded flag. Carry loaded flags and keep short, unreleased-G0 and other failed legs in the accounting. n_legs counts qualified legs. This is a 12-position-per-kit, one-attempt census by authenticated named kit.",
+  "stage2": "Use the authenticated committed stage-1 roster. On each print's interval, check sidecar coverage, rail gaps against U1 and clean DC-in from timestamps and sample counts before reading any values on that interval. A failed check makes that print null with its reason and preserves the roster and public counts. Keep the RL-180 once-per-ID reservation and failure channel. Take rail_sum_columns from RAIL_MANIFEST in joulewise/adapters/powermetrics.py. Before reading any value on an interval, compare the bundle's recorded rail_manifest with that list in order. A mismatch gives null rail-sum prints with that reason and goes to the research lead.",
+  "prints": [
+    {
+      "description": "hold_mean, hold_sd_window_means_10s, hold_sd_window_means_40s, hold_sd_window_means_128s, hold_drift. Use the recorded quiet span from its start for 600 s. Hold mean is energy divided by duration. Take contiguous 10, 40 and 128 s windows from the start (60, 15 and 4 full windows), discarding an incomplete final window. Drop and count windows with a gap over U1. Use sample SD (ddof 1) of window means, with null and reason under two windows. Use the pinned step-3 load_gpu_trace and Trace for GPU rail. The rail sum uses a separate description reader with the same file and row parsing: select source powermetrics and the named rails, and sum rows with identical interval_start_s and interval_end_s. A missing named rail is a gap. On the synthetic hand table, the reader's gpu_power rows must equal load_gpu_trace's rows exactly. Use the trapezoid between consecutive KM003C samples clipped to the interval for DC-in. Use the interim clock mapping. Use the least-squares slope of the 10 s window means at their midpoints, in W per 600 s.",
+      "destination": "hold.json"
+    },
+    {
+      "description": "turn_energy_above_own_hold_through_decode_end_plus_1s, dc_in_to_rail_turn_energy_ratio, tail_cut_mark. Integrate P minus the leg's hold mean from turn_start_s through last_token_s plus 1.000 s. Label the DC-in tail cut. Divide DC-in above-hold energy by rail sum above hold and by GPU rail above hold on equal limits. A nonpositive denominator gives null and both operands.",
+      "destination": "turn.json"
+    },
+    {
+      "description": "above_hold_decode_mean, above_hold_long_prefill_mean, plateau_gain, idle_channel_gap_with_fan_and_temperature, window_floor_in_tokens_from_own_decode. Use mean power above hold from first_token_s to last_token_s for decode and from turn_start_s to first_token_s for the 19,458 prefill, without trimming. Divide DC-in by rail sum and by GPU rail over equal limits for plateau gain, with null and both operands for a nonpositive denominator. Print the DC-in minus rail sum hold means with mean fan speed (R-7) and each mean start sensor. For each window duration w, divide its window-means SD times w by the leg's decode energy above hold per token, for the one-SD floor in tokens.",
+      "destination": "gain.json"
+    },
+    {
+      "description": "prefill_onset_lag, prefill_10_to_90_pct_rise, decode_end_lag_within_1s_or_over_1s, rail_return_censor_bound, warmup_return_to_hold, sampling_start_gap, completion_log_to_stage_event_gap, fallback_legs, outside_gap_legs, censored_values_with_bounds. For 2,000 and 19,458 prompts, use the prefill's second-half mean above hold as level. Rise is first 10% to first 90% crossing. Onset lag is DC-in's first 50% crossing minus the rail's. Print each channel's sampling period as resolution. For 256 print null with reason prefill shorter than the level window. Decode-end lag compares the first falls through 50% of the respective decode plateaus within the 1 s tail. Otherwise print over 1 s. Use the RL-175 D.4 warm-up origin: the mapped completion-log stamp, or stage event minus 5.000 s if absent. List fallback legs and observed gaps outside [4.5, 5.5] s. Report the unobserved interval to first sampling. Return time is the first 10 s window start at or below hold mean plus twice the hold's 10 s SD, minus the origin. If the first observed window qualifies, censor as under the unobserved interval. Preserve censoring bounds.",
+      "destination": "edges.json"
+    }
+  ],
+  "code_pins": {
+    "kit_commitments": {
+      "path": "docs/process/cadence/looks/look-kit-commitments.v2.json",
+      "sha256": "PENDING:CODE"
+    },
+    "reader": {
+      "path": "joulewise/cadence_looks/description.py",
+      "sha256": "PENDING:CODE"
+    },
+    "manifest_schema": {
+      "path": "docs/process/cadence/looks/look_manifest.v2.schema.json",
+      "sha256": "PENDING:CODE"
+    },
+    "stage1_schema": {
+      "path": "docs/process/cadence/looks/lm-inst-01.stage1.schema.json",
+      "sha256": "PENDING:CODE"
+    },
+    "output_schema": {
+      "path": "docs/process/cadence/looks/lm-inst-01.output.schema.json",
+      "sha256": "PENDING:CODE"
+    },
+    "restricted_schema": {
+      "path": "docs/process/cadence/looks/lm-inst-01.restricted.schema.json",
+      "sha256": "PENDING:CODE"
+    },
+    "validator": {
+      "path": "joulewise/cadence_looks/manifest_dispatch.py",
+      "sha256": "PENDING:CODE"
+    },
+    "schema_validator": {
+      "path": "joulewise/cadence_looks/qualification_manifest.py",
+      "sha256": "PENDING:CODE"
+    }
+  },
+  "outputs": {
+    "public_file": "PUBLIC.json",
+    "hashes": [
+      "manifest_sha256",
+      "stage1_sha256"
+    ],
+    "identifiers": [
+      "look_id",
+      "commit"
+    ],
+    "counts": [
+      "n_legs"
+    ],
+    "custody_names": [
+      "hold.json",
+      "turn.json",
+      "gain.json",
+      "edges.json",
+      "stdout",
+      "stderr"
+    ]
+  },
+  "freeze2": {
+    "look_id": "lm-interim-01",
+    "hash_key": "freeze2_sha256",
+    "authority": "Authenticate the effective freeze-2 commitment on main under RL-180 row 3 and RL-183 section 2.3."
+  }
+}
