@@ -181,9 +181,6 @@ def bound_history(root, guarded_metadata):
     for path in RELEASE_METADATA:
         packet.require(guarded_metadata[path] == evidence.read(tip, path),
                        "release metadata differs from committed authority")
-    registration_bytes = evidence.read(tip, REGISTRATION_RECEIPT)
-    packet.require(named_bytes(root, REGISTRATION_RECEIPT) == registration_bytes,
-                   "registration receipt differs from committed authority")
     completion = packet.decode(evidence.read(tip, seal.SERIES_COMPLETE))
     ledger = packet.decode(evidence.read(tip, packet.SERIES_PATH))
     packet.require(ledger["schema"] == packet.SERIES_SCHEMA, "unexpected release ledger")
@@ -206,6 +203,16 @@ def bound_history(root, guarded_metadata):
         chain.append(record)
         link = record.previous_link
     packet.require(chain[-1].window in ("R1", "W1"), "incomplete series history")
+    first_c1, = (record for record in chain if record.window == "C1")
+    packet.require(first_c1.previous_link is not None, "C1 has no bound predecessor")
+    predecessor = first_c1.previous_link["commit"]
+    registration_bytes = evidence.read(predecessor, REGISTRATION_RECEIPT)
+    receipt_digest = packet.digest(registration_bytes)
+    evidence.read(tip, REGISTRATION_RECEIPT, receipt_digest)
+    packet.require(packet.digest(named_bytes(root, REGISTRATION_RECEIPT)) == receipt_digest,
+                   "registration receipt differs from C1 predecessor")
+    registered_commit = evidence.commit(packet.decode(registration_bytes)["commit"])
+    evidence.git("merge-base", "--is-ancestor", registered_commit, predecessor)
     return completion, ledger, reversed(chain), registration_bytes
 
 
