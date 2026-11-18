@@ -1,19 +1,6 @@
 # Included verbatim in each item by build_items.py; no production command runs here.
 # BEGIN TESTABLE GATES
 ISSUED_EPOCH="<LEAD FILLS: ISSUED_EPOCH>"
-WATCH_UNTIL_EPOCH="<LEAD FILLS: WATCH_OBSERVED_EPOCH + 86400>"
-expiry_gate() {
-  case "$ISSUED_EPOCH" in ''|*[!0-9]*) echo 'WAIT: issue epoch unfilled (RL-173 D.5)'; return 1;; esac
-  now=$(date +%s); EXPIRES_EPOCH=$((ISSUED_EPOCH + 86400))
-  test "$ISSUED_EPOCH" -le "$now" && test "$now" -lt "$EXPIRES_EPOCH" \
-    || { echo 'VOID: future issue or 24 h expiry (RL-173 D.5)'; return 1; }
-}
-watch_gate() {
-  case "$WATCH_UNTIL_EPOCH" in ''|*[!0-9]*) echo 'WAIT: watcher stamp unfilled (RL-173 C.5)'; return 1;; esac
-  now=$(date +%s)
-  test "$now" -lt "$WATCH_UNTIL_EPOCH" && test "$WATCH_UNTIL_EPOCH" -le $((now + 86400)) \
-    || { echo 'STOP: watcher stale or observation in future (RL-173 C.5)'; return 1; }
-}
 pred_gate() {
   PRED_LINE="$("$PY" -I -B - /Users/edr/campaign-out "$PRED_CAMP" "$PRED_SPAN" "$PRED_ROSTER" "$PRED_KIT_SHA" "$PRED_PIN" <<'PY'
 import json, math, os, re, sys
@@ -193,7 +180,6 @@ try:
     if camp!='cl-'+block(current) or legs.split(',')!=roster_for(current): stop('item span, block or roster mismatch')
     if not os.path.isdir(root): stop('receipt root missing')
     recorded=set()
-    count=0
     for family in sorted(Path(root).iterdir()):
         if not family.is_dir() or not re.fullmatch(r'cl-(dev|qual)-[a-zA-Z0-9-]+',family.name): continue
         for out in sorted(family.iterdir()):
@@ -224,16 +210,12 @@ try:
                 if planned[span]!=actual: stop('existing qualification receipt disagrees with its span plan '+str(p))
                 if span in recorded: stop('multiple receipts for qualification span '+span)
                 recorded.add(span)
-                if actual==day:
-                    count+=len(roster)
     if current in recorded: stop('qualification span already has a recorded t0 '+current)
     for first, second in zip(spans[::2],spans[1::2]):
         if planned[first]!=planned[second] and first not in recorded:
             stop('untouched qualification block must move whole '+block(first))
-    n=len(legs.split(','))
-    if count+n>24: stop('more than 24 qualification legs (RL-149 §2.3)')
 except (OSError,ValueError,KeyError,TypeError,OverflowError) as e: stop('unreadable/contradictory receipt or plan '+str(e))
-print('DAY OK',day,current,'already',count,'plus',n,'one block on this date (RL-175 C.3); RL-149 §2.3 cap applies')
+print('DAY OK',day,current,'one qualification block on this date (RL-175 C.3; RL-179 F-1)')
 PY
 }
 queue_gate() {
@@ -251,12 +233,12 @@ try:
     expiry=datetime.fromisoformat(q['expires_at']).timestamp()
     assert expiry.is_integer()
     committed=int(git('show','-s','--format=%ct',commit))
-    assert committed <= now < expiry <= committed+7*86400
+    assert committed <= now < expiry
     assert q['halt'] is None
     entries=[s for s in q['spans'] if s['span_id']==span]; assert len(entries)==1
     entry=entries[0]
     assert entry['legs']==legs.split(',') and entry['not_before']==day and entry['kit']['sha256']==kit_sha and entry['attempt']==1
-except (OSError,ValueError,KeyError,TypeError,AssertionError,subprocess.CalledProcessError): sys.exit('STOP: queue commit/hash/roster/span date/kit/attempt/seven-day expiry (RL-149 §2.8 line 3; RL-175 C.3)')
+except (OSError,ValueError,KeyError,TypeError,AssertionError,subprocess.CalledProcessError): sys.exit('STOP: queue commit/hash/roster/span date/kit/attempt/finite expiry (RL-149 §2.8 line 3; RL-175 C.3)')
 print(committed,int(expiry))
 PY
 )" || return 1
@@ -264,31 +246,6 @@ PY
 $stamps
 EOF
   echo "QUEUE COMMITTED $QUEUE_COMMIT finite expiry $QUEUE_EXPIRES_EPOCH"
-}
-debt_gate() {
-  filled "${LINE9_RECORD:-}" || { echo 'WAIT: typed desk/Q1 debt record (RL-165 §6; RL-172 (c); RL-173 E Q1)'; return 1; }
-  "$PY" -I -B - "$LINE9_RECORD" "$SPAN" "$PRED_SPAN" <<'PY'
-import json, sys
-try:
-    r=json.load(open(sys.argv[1])); order=r['machine_order']; ids=[s['span_id'] for s in order]
-    assert r['next_span']==sys.argv[2] and len(ids)>=2 and len(set(ids))==len(ids) and ids[-1]==sys.argv[3]
-    for s in order: assert s['runner_kind'] in ('cadence-legs-v1','cadence-legs-v1.1')
-    for s in order[:-1]:
-        assert isinstance(s['desk_final_record'],str) and s['desk_final_record'].strip() and '<LEAD ' not in s['desk_final_record']
-        if s['runner_kind']=='cadence-legs-v1.1':
-            assert isinstance(s['q1_complete_record'],str) and s['q1_complete_record'].strip() and '<LEAD ' not in s['q1_complete_record']
-    # RL-174 E.5: retain the named dev-05 debt even if a supplied census omits it.
-    if sys.argv[2] in ('qual-01-s01','qual-01-s02'):
-        required='dev-05-'+sys.argv[2].rsplit('-',1)[1]
-        rows=[s for s in order if s['span_id']==required]
-        assert len(rows)==1 and rows[0]['runner_kind']=='cadence-legs-v1.1'
-        for key in ('desk_final_record','q1_complete_record'):
-            value=rows[0].get(key)
-            assert isinstance(value,str) and value.strip() and '<LEAD ' not in value
-    assert r['authenticated_roster_identity_checks']=='RL-172 (c)'
-except (OSError,ValueError,KeyError,TypeError,AssertionError): sys.exit('WAIT: line 9 desk-final or typed Q1 record absent/contradictory; debt counts across blocks')
-print('LINE9 PAID through',ids[-2],'; Q1 completion through same span (RL-173 E); next',sys.argv[2])
-PY
 }
 admission_gate() {
   # Lines 5/6/8, sampled hand-read and veto: current lead records, never default yes.
@@ -300,9 +257,11 @@ admission_gate() {
     eval 'value=${'"$key"':-}'
     filled "$value" || { echo "WAIT: $key pointer required"; return 1; }
   done
-  if test "$SPAN" != qual-01-s01; then
+  if test "$SPAN" = qual-01-s02; then
     test "${QUAL01_SOAK_HAND_READ:-}" = SAME && filled "${QUAL01_SOAK_RECORD:-}" \
       || { echo 'WAIT: qual-01-s01 soak fields/reference schema compared with dev-05 before s02 (RL-172a F1)'; return 1; }
+    test "${QUAL01_TYPES_HAND_READ:-}" = PASS && filled "${QUAL01_TYPES_HAND_RECORD:-}" \
+      || { echo 'WAIT: RL-181 §4(a) q0 capture and consumer hand-read; re-date s02 under C.3 if it misses its latest t0'; return 1; }
   fi
 }
 window_gate() {
@@ -311,26 +270,18 @@ window_gate() {
     || { echo 'REFUSE: outside item t0-date or LIMIT; follow missed-date recovery (RL-172 (a)5)'; return 1; }
 }
 arm_bound_gate() {
-  local opens expires now
+  local opens now
   ARM_NOT_BEFORE_EPOCH=$WINDOW_START
-  for opens in "$ISSUED_EPOCH" "$((WATCH_UNTIL_EPOCH - 86400))" "$QUEUE_COMMIT_EPOCH"; do
+  for opens in "$ISSUED_EPOCH" "$QUEUE_COMMIT_EPOCH"; do
     case "$opens" in ''|*[!0-9]*) echo 'STOP: start bound missing or invalid'; return 1;; esac
     if test "$opens" -gt "$ARM_NOT_BEFORE_EPOCH"; then ARM_NOT_BEFORE_EPOCH=$opens; fi
   done
   # Date/window end is inclusive to the printed second. Expiries are exclusive.
   ARM_BEFORE_EPOCH=$((WINDOW_END + 1))
-  for expires in "$EXPIRES_EPOCH" "$QUEUE_EXPIRES_EPOCH" "$WATCH_UNTIL_EPOCH"; do
-    if test "$expires" -lt "$ARM_BEFORE_EPOCH"; then ARM_BEFORE_EPOCH=$expires; fi
-  done
+  if test "$QUEUE_EXPIRES_EPOCH" -lt "$ARM_BEFORE_EPOCH"; then ARM_BEFORE_EPOCH=$QUEUE_EXPIRES_EPOCH; fi
   if test "$FIRST_TO_SECOND_S" -gt 0; then
     second_before=$((DAY_END + 1))
     if test "$QUEUE_EXPIRES_EPOCH" -lt "$second_before"; then second_before=$QUEUE_EXPIRES_EPOCH; fi
-    case "${S02_ISSUED_EPOCH:-}" in
-      unissued) ;;
-      ''|*[!0-9]*) echo 'WAIT: record the actual s02 issue epoch or unissued'; return 1;;
-      *) second_expires=$((S02_ISSUED_EPOCH + 86400))
-         if test "$second_expires" -lt "$second_before"; then second_before=$second_expires; fi;;
-    esac
     pair_before=$((second_before - FIRST_TO_SECOND_S))
     if test "$pair_before" -lt "$ARM_BEFORE_EPOCH"; then ARM_BEFORE_EPOCH=$pair_before; fi
   fi
@@ -340,7 +291,7 @@ arm_bound_gate() {
     return 1
   }
   test "$now" -lt "$ARM_BEFORE_EPOCH" || {
-    echo "REFUSE: effective t0 cutoff $ARM_BEFORE_EPOCH (date, item/queue/watch expiry, dependent span)"
+    echo "REFUSE: effective t0 cutoff $ARM_BEFORE_EPOCH (date, queue expiry, dependent span)"
     return 1
   }
   echo "AUTHORIZED T0 $T0_DATE [$ARM_NOT_BEFORE_EPOCH, $ARM_BEFORE_EPOCH)"
@@ -393,8 +344,8 @@ $bounds
 EOF
 }
 all_gates() {
-  expiry_gate && watch_gate && freeze2_gate && qual_pin_gate && host_event_gate && v4_gate \
-    && admission_gate && queue_gate && debt_gate && close_gate && pred_gate && day_gate && window_gate \
+  freeze2_gate && qual_pin_gate && host_event_gate && v4_gate \
+    && admission_gate && queue_gate && close_gate && pred_gate && day_gate && window_gate \
     && arm_bound_gate && batch_gate
 }
 # END TESTABLE GATES

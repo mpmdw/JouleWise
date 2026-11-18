@@ -11,7 +11,7 @@
       "block_id": "qual-01",
       "kit": {
         "path": "docs/process/cadence/kits/cl-qual-01.v1.1.json",
-        "sha256": "35ded7c83290f24306a646a503647a2af6e3f725708507f27e7502fa4d06fdd2"
+        "sha256": "ce5c16d221f838ca8f06af68aa7380a4cb0d6fb4b5b5825444db6c7433fd40c7"
       },
       "legs": [
         "L001",
@@ -22,7 +22,7 @@
         "L006"
       ],
       "attempt": 1,
-      "not_before": "2026-11-19"
+      "not_before": "2026-11-20"
     },
     {
       "seq": 2,
@@ -30,7 +30,7 @@
       "block_id": "qual-01",
       "kit": {
         "path": "docs/process/cadence/kits/cl-qual-01.v1.1.json",
-        "sha256": "35ded7c83290f24306a646a503647a2af6e3f725708507f27e7502fa4d06fdd2"
+        "sha256": "ce5c16d221f838ca8f06af68aa7380a4cb0d6fb4b5b5825444db6c7433fd40c7"
       },
       "legs": [
         "L007",
@@ -41,7 +41,7 @@
         "L012"
       ],
       "attempt": 1,
-      "not_before": "2026-11-19"
+      "not_before": "2026-11-20"
     }
   ]
 }

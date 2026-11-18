@@ -21,9 +21,28 @@ from standing_round10 import repair_standing
 sys.path.insert(0,str(HERE.parent/'item-drafts-1115/tools'))
 from close_census import repair_census
 TZ=ZoneInfo('America/Los_Angeles')
-DEFAULTS={'qual-01':'2026-11-19','qual-02':'2026-11-20','qual-03':'2026-11-21'}
-QUEUE_EXPIRY='2026-11-23T00:00:00-08:00'  # <7 days after this Nov16 draft commit; gate verifies authenticated commit.
+DEFAULTS={'qual-01':'2026-11-20','qual-02':'2026-11-21','qual-03':'2026-11-22'}
+QUEUE_EXPIRY='2026-11-23T00:00:00-08:00'
 PREFIX=HERE.relative_to(ROOT).as_posix()
+HAND_NOTES = {
+    'qual-01-s01': (
+        " **Before first arm (RL-181 §1.0).** The lead confirms the registered "
+        "`lm-qual-01` manifest with these kit hashes and its `registered` ledger row "
+        "are committed on main before qual-01-s01 arms. "
+        "Before s02, record the RL-172a F1 soak comparison and the RL-181 §4(a) q0 leg-type hand-read."
+    ),
+    'qual-01-s02': (
+        " **Admission (RL-172a F1 and RL-181 §4(a)).** Both the soak comparison with dev-05 "
+        "and the q0 leg-type hand-read must pass. In s01's close interval, the magistrate "
+        "uses the hand template to check the capture leg's G0 record, every consumer's release "
+        "against the span reference and its wait, and each decode count against its own cap "
+        "(4,096, 3,724 or 3,151). The lead can discharge the leg-type read in advance with a "
+        "passing hand-read from a prior filler or pilot that ran both qualification leg types "
+        "(q0 capture and q0 consumer in Automatic) on this exact pin. A q600-only filler "
+        "discharges the pin-level read and can discharge the soak comparison. If either admission "
+        "condition is unmet by s02's latest t0, re-date s02 under RL-175 C.3 and retain s01's date and receipts."
+    ),
+}
 
 def write_json(path,obj): path.write_text(json.dumps(obj,indent=2)+'\n')
 def epoch(date, hms='00:00:00'): return int(dt.datetime.fromisoformat(date+'T'+hms).replace(tzinfo=TZ).timestamp())
@@ -152,7 +171,7 @@ T0_DATE={day}; WINDOW_START={epoch(day)}; WINDOW_END={limit}
 DAY_END={day_end}; FIRST_TO_SECOND_S={first_to_second}
 EXPECTED_SPAN_S={plan['expected_s']}
 QUAL_DATES={','.join(k+'='+v for k,v in dates.items())}'''
-                values=dict(PRED_NOTE=('<LEAD FILLS: confirm dev-05-s02 is latest counted campaign span, or update the complete PRED_* identity and machine-order record>.' if n==s==1 else 'The qualification predecessor chain is fixed; no automatic skip or override.'),ORDINAL='FIRST' if s==1 else 'SECOND',BLOCK=block,SPAN=span,CAMP=camp,LEGS=legs,KIT_SHA=sha,PIN=PIN,FIRST=ids[0],SHORT=f"{short[0]['leg_id']} cap {short[0]['decode_tokens']:,}",EXPECTED=plan['expected_s'],WORST=plan['worst_case_s'],DATE=day,START=epoch(day),END=limit,LIMIT_HMS=limit_hms,POINTER_DEADLINE=dt.datetime.fromtimestamp(limit+extra+900+3600,TZ).isoformat(),PRED=previous[0],PRED_CAMP=previous[1],PRED_LEGS=','.join(previous[2]),DATES=', '.join(k+'='+v for k,v in dates.items()),QUEUE_PATH=PREFIX+'/queues/'+qp.name,QUEUE_SHA=qsha,CONFIG=config,GATES=gates,MAINTENANCE=maintenance,Q1=q1,DEADLINE_SECONDS=int(extra+900),NEXT=f'Next: `{block}-s02` after its own gates.' if s==1 else ('Next block under its own dated item.' if n<3 else 'All 36 qualification legs collected; the lead owns look readiness.'),HAND_NOTE='After the first span only, RL-172a F1 requires the soak comparison before s02; this draft conservatively waits to issue later spans until that record exists.' if n==s==1 else 'Not issuable before qual-01-s01\'s soak hand-read record (RL-172a F1; conservative issue ordering).')
+                values=dict(PRED_NOTE=('<LEAD FILLS: confirm dev-05-s02 is latest counted campaign span, or update the complete PRED_* identity and machine-order record>.' if n==s==1 else 'The qualification predecessor chain is fixed; no automatic skip or override.'),ORDINAL='FIRST' if s==1 else 'SECOND',BLOCK=block,SPAN=span,CAMP=camp,LEGS=legs,KIT_SHA=sha,PIN=PIN,FIRST=ids[0],SHORT=f"{short[0]['leg_id']} cap {short[0]['decode_tokens']:,}",EXPECTED=plan['expected_s'],WORST=plan['worst_case_s'],DATE=day,START=epoch(day),END=limit,LIMIT_HMS=limit_hms,POINTER_DEADLINE=dt.datetime.fromtimestamp(limit+extra+900+3600,TZ).isoformat(),PRED=previous[0],PRED_CAMP=previous[1],PRED_LEGS=','.join(previous[2]),DATES=', '.join(k+'='+v for k,v in dates.items()),QUEUE_PATH=PREFIX+'/queues/'+qp.name,QUEUE_SHA=qsha,CONFIG=config,GATES=gates,MAINTENANCE=maintenance,Q1=q1,DEADLINE_SECONDS=int(extra+900),NEXT=f'Next: `{block}-s02` after its own gates.' if s==1 else ('Next block under its own dated item.' if n<3 else 'All 36 qualification legs collected; the lead owns look readiness.'),HAND_NOTE=HAND_NOTES.get(span, ''))
                 values['PIN_SHORT']=PIN[:9]
                 values['QUEUE_EXPIRY']=queue_expiry
                 text=template
