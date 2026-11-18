@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import argparse
-from contextlib import suppress
 import json
 import os
 from pathlib import Path
@@ -11,6 +10,7 @@ import re
 import subprocess
 import sys
 from tempfile import TemporaryDirectory
+from typing import NoReturn
 
 from . import qualification_manifest as schema_check
 
@@ -35,25 +35,15 @@ TRANSFER_PRINTS = (
 )
 
 
-def _discard_output(fd):
-    with suppress(OSError):
-        sink = os.open(os.devnull, os.O_WRONLY)
-        if sink != fd:
-            try:
-                os.dup2(sink, fd)
-            finally:
-                os.close(sink)
-
-
 def finish_notice(status, *, stdout=None, stderr=None, stderr_fd=None, flush_streams=False):
-    """Deliver CLI output without letting stream failures replace the selected status."""
+    """Attempt delivery and report stream failure on a success path."""
     failed = False
     if stderr_fd is not None:
         try:
             with os.fdopen(stderr_fd, "w", encoding="ascii", closefd=False) as stream:
                 stream.write(stderr)
                 stream.flush()
-        except (OSError, ValueError):
+        except BaseException:
             failed = True
         stderr = None
 
@@ -67,17 +57,24 @@ def finish_notice(status, *, stdout=None, stderr=None, stderr_fd=None, flush_str
             if message is not None:
                 stream.write(message)
             stream.flush()
-        except (OSError, ValueError):
+        except BaseException:
             failed = True
 
-    if failed:
-        # BrokenPipeError is an OSError. Replace the endpoints so a later
-        # Python shutdown flush cannot turn the chosen exit into status 120.
-        _discard_output(2)
-        if stdout is not None or flush_streams:
-            _discard_output(1)
-        return status or PRE_READ_REFUSAL
-    return status
+    return PRE_READ_REFUSAL if failed and status == 0 else status
+
+
+def exit_with_failure(status, notice, *, stderr_fd=None, flush_streams=False) -> NoReturn:
+    try:
+        finish_notice(status, stderr=notice(), stderr_fd=stderr_fd, flush_streams=flush_streams)
+    except BaseException:
+        pass
+    # This is the process boundary. A Python shutdown flush cannot choose
+    # a different status, even if the process has no available descriptor.
+    os._exit(status)
+
+
+class _ParserExit(SystemExit):
+    """A normal exit selected by this argparse frontend."""
 
 
 class _NoticeArgumentParser(argparse.ArgumentParser):
@@ -88,7 +85,11 @@ class _NoticeArgumentParser(argparse.ArgumentParser):
             else:
                 status = finish_notice(0, stderr=message)
             if status:
-                raise SystemExit(status)
+                raise _ParserExit(status)
+
+    def exit(self, status=0, message=None):
+        self._print_message(message, sys.stderr)
+        raise _ParserExit(status)
 
 
 def _validate_transfer(document, commitments):
@@ -271,7 +272,7 @@ def validate_v2(payload: bytes, *, final=False, registration: bytes | None = Non
     return _validate_v2_document(payload, document, final, read_registration)
 
 
-def main(argv=None):
+def _dispatch(argv):
     parser = _NoticeArgumentParser(description=__doc__)
     commands = parser.add_subparsers(dest="command", required=True)
     validate = commands.add_parser("validate")
@@ -280,7 +281,10 @@ def main(argv=None):
     validate.add_argument("--registration", type=Path, help="exact trusted v2 scientific registration bytes")
     validate.add_argument("--v1-tool", type=Path, default=V1_TOOL,
                           help="pinned v1 cadence_look_manifest.py when it lives on a separate checkout")
-    args = parser.parse_args(argv)
+    try:
+        args = parser.parse_args(argv)
+    except _ParserExit as completion:
+        return completion.code
     try:
         payload = args.manifest.read_bytes()
         document = schema_check._decode(payload)
@@ -301,5 +305,16 @@ def main(argv=None):
     return finish_notice(0, stdout=f"ok {doc['look_id']} ({doc['status']})\n")
 
 
+def main(argv=None) -> NoReturn:
+    try:
+        if _dispatch(argv):
+            os._exit(PRE_READ_REFUSAL)
+        if finish_notice(0, flush_streams=True):
+            raise OSError("validation output could not be flushed")
+    except BaseException as error:
+        exit_with_failure(PRE_READ_REFUSAL, lambda: f"REFUSE {error}\n")
+    os._exit(0)
+
+
 if __name__ == "__main__":
-    raise SystemExit(main())
+    main()

@@ -14,8 +14,9 @@ from pathlib import Path
 import re
 import sys
 import traceback
+from typing import NoReturn
 
-from .manifest_dispatch import PRE_READ_REFUSAL, finish_notice
+from .manifest_dispatch import PRE_READ_REFUSAL, exit_with_failure, finish_notice
 
 CUSTODY_NAMES = frozenset(("scores.json", "stdout", "stderr"))
 HASHES = ("manifest_sha256", "stage1_roster_sha256", "freeze2_sha256")
@@ -83,32 +84,38 @@ def _redirect(restricted):
             os.close(stream)
 
 
+def _failure_notice(error, read_started, redirected):
+    if redirected:
+        with suppress(BaseException):
+            traceback.print_exception(error)
+    return f"stage2_error\n{_failure_type(error)}\n" if read_started else _REFUSAL
+
+
 def run_transfer_worker(*, restricted: Path, public: Path, execution_host: str, local_host: str,
-                        ledger_status: str, preflight, score) -> int:
-    """Run one look boundary in a worker whose process exits with the returned status.
+                        ledger_status: str, preflight, score) -> NoReturn:
+    """Run one look boundary and terminate the dedicated worker directly.
 
     The caller binds the per-ID RESTRICTED and PUBLIC.json destinations and host from the admitted ledger.
     The blind preflight must prove all other gates and return exactly the three authenticated
     public hashes. Score returns (private result, primary interval status). It must call
     mark_read immediately upon opening its first scoring input, before consuming bytes,
     including when the shared coefficient reader opens that input. Nothing else may open
-    scoring inputs. Once reserved, the worker keeps its streams confined through shutdown.
+    scoring inputs. Once reserved, the worker keeps its streams confined through exit.
+    The caller completes any required cleanup before returning from its callbacks.
     """
-    try:
-        status = finish_notice(0, flush_streams=True)
-        if status:
-            return status
-        original_stderr = os.dup(2)
-    except BaseException:
-        return PRE_READ_REFUSAL
+    original_stderr = None
     read_started = False
     redirected = False
 
-    def mark_read():
-        nonlocal read_started
-        read_started = True
-
     try:
+        if finish_notice(0, flush_streams=True):
+            raise OSError("worker streams could not be flushed")
+        original_stderr = os.dup(2)
+
+        def mark_read():
+            nonlocal read_started
+            read_started = True
+
         if not execution_host or execution_host != local_host or ledger_status != "stage1_committed":
             raise ValueError("host or ledger state refuses execution")
         if os.path.lexists(restricted) or os.path.lexists(public):
@@ -135,21 +142,15 @@ def run_transfer_worker(*, restricted: Path, public: Path, execution_host: str, 
         _write_json(pending, record)
         if os.path.lexists(public):
             raise FileExistsError("look ID already has a public result")
+        if finish_notice(0, flush_streams=True):
+            raise OSError("worker streams could not be flushed")
         # The exclusive reservation admits only this publisher. Rename removes
         # the private staging name while exposing one complete public record.
         pending.rename(public)
-        return 0
     except BaseException as error:
         # Interpreter exits raised by callbacks use the same read boundary as
         # other Python failures. OS termination may bypass this handler.
-        if redirected:
-            try:
-                traceback.print_exc()
-            except BaseException:
-                pass
         status = POST_READ_FAILURE if read_started else PRE_READ_REFUSAL
-        notice = f"stage2_error\n{_failure_type(error)}\n" if read_started else _REFUSAL
-        return finish_notice(status, stderr=notice, stderr_fd=original_stderr, flush_streams=True)
-    finally:
-        with suppress(OSError):
-            os.close(original_stderr)
+        exit_with_failure(status, lambda: _failure_notice(error, read_started, redirected),
+                          stderr_fd=original_stderr, flush_streams=redirected)
+    os._exit(0)

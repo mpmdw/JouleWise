@@ -176,7 +176,8 @@ with redirect_stdout(StringIO()):
     assert prime(["validate", sys.argv[1]]) == 0
 _, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
 resource.setrlimit(resource.RLIMIT_NOFILE, (3, hard))
-raise SystemExit(manifest_dispatch.main(["validate", "--final", sys.argv[1]]))
+manifest_dispatch.main(["validate", "--final", sys.argv[1]])
+raise SystemExit(97)
 """
         command = [sys.executable, "-B", "-c", script, str(DRAFT)]
         for unbuffered in (False, True):
@@ -219,6 +220,9 @@ class InjectedFailure(BaseException):
 def fail(*args, **kwargs):
     raise InjectedFailure("synthetic injected failure")
 
+def exit_during_parse(*args, **kwargs):
+    raise SystemExit(0)
+
 step, candidate, registration = sys.argv[1:]
 read_bytes = Path.read_bytes
 
@@ -229,6 +233,7 @@ def fail_registration(path):
 
 target, name, inject = {
     "parser": (dispatch, "_NoticeArgumentParser", fail),
+    "parser-system-exit": (dispatch._NoticeArgumentParser, "parse_args", exit_during_parse),
     "candidate-open": (Path, "read_bytes", fail),
     "decode": (dispatch.schema_check, "_decode", fail),
     "validate": (dispatch, "_validate_v2_document", fail),
@@ -240,7 +245,8 @@ argv = ["validate", candidate]
 if step == "registration-open":
     argv += ["--final", "--registration", registration]
 with patch.object(target, name, inject):
-    raise SystemExit(dispatch.main(argv))
+    dispatch.main(argv)
+raise SystemExit(97)
 """
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -253,7 +259,7 @@ with patch.object(target, name, inject):
             interim = root / "interim.json"
             interim.write_bytes(encode({"schema": dispatch.V1, "look_id": "lm-interim-01"}))
             for step, source in (
-                ("parser", DRAFT), ("candidate-open", DRAFT), ("decode", DRAFT),
+                ("parser", DRAFT), ("parser-system-exit", DRAFT), ("candidate-open", DRAFT), ("decode", DRAFT),
                 ("validate", DRAFT), ("registration-open", final),
                 ("legacy-delegation", interim), ("success-notice", DRAFT),
             ):
@@ -286,7 +292,7 @@ with patch.object(target, name, inject):
                     for flags in ([], ["--final"]):
                         candidate.write_bytes(encode(dict(interim, look_id=look_id)))
                         with self.subTest(look_id=look_id, flags=flags), redirect_stderr(StringIO()) as stderr:
-                            self.assertEqual(dispatch.main([*args, *flags]), 2)
+                            self.assertEqual(dispatch._dispatch([*args, *flags]), 2)
                             self.assertIn("reserved for v2", stderr.getvalue())
                 for variant in (
                     dict(interim, title="OPEN-19"),
@@ -295,7 +301,7 @@ with patch.object(target, name, inject):
                 ):
                     candidate.write_bytes(encode(variant))
                     with self.subTest(variant=variant), redirect_stderr(StringIO()) as stderr:
-                        self.assertEqual(dispatch.main([*args, "--final"]), 2)
+                        self.assertEqual(dispatch._dispatch([*args, "--final"]), 2)
                         self.assertIn("final manifest contains", stderr.getvalue())
                 delegate.assert_not_called()
 
@@ -315,7 +321,7 @@ with patch.object(target, name, inject):
                 return subprocess.CompletedProcess(command, 0)
 
             with patch.object(dispatch.subprocess, "run", side_effect=delegate):
-                self.assertEqual(dispatch.main(["validate", str(candidate), "--v1-tool", str(tool)]), 0)
+                self.assertEqual(dispatch._dispatch(["validate", str(candidate), "--v1-tool", str(tool)]), 0)
 
     def test_final_refuses_pending_and_open(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -443,7 +449,7 @@ with patch.object(target, name, inject):
             ):
                 with self.subTest(candidate=candidate.name), patch.object(Path, "read_bytes", guard):
                     with redirect_stderr(StringIO()) as stderr:
-                        status = dispatch.main(["validate", str(candidate), *flags, "--registration", str(registration)])
+                        status = dispatch._dispatch(["validate", str(candidate), *flags, "--registration", str(registration)])
                     self.assertEqual(status, 2)
                     self.assertIn("--registration", stderr.getvalue())
 
@@ -500,7 +506,7 @@ with patch.object(target, name, inject):
                     candidate.write_bytes(payload)
                     with self.subTest(source=source.name, defect=defect), patch.object(Path, "read_bytes", guard):
                         with redirect_stderr(StringIO()) as stderr:
-                            status = dispatch.main(["validate", str(candidate), "--final",
+                            status = dispatch._dispatch(["validate", str(candidate), "--final",
                                                     "--registration", str(registration)])
                         self.assertEqual(status, 2)
                         self.assertIn("REFUSE", stderr.getvalue())
@@ -679,11 +685,11 @@ class TransferManifestTests(unittest.TestCase):
     def test_entrypoint_draft_and_pre_read_refusal(self):
         stdout, stderr = StringIO(), StringIO()
         with redirect_stdout(stdout), redirect_stderr(stderr):
-            status = dispatch.main(["validate", str(DRAFT)])
+            status = dispatch._dispatch(["validate", str(DRAFT)])
         self.assertEqual((status, stdout.getvalue(), stderr.getvalue()), (0, "ok lm-transfer-01 (draft)\n", ""))
         stdout, stderr = StringIO(), StringIO()
         with redirect_stdout(stdout), redirect_stderr(stderr):
-            status = dispatch.main(["validate", "--final", str(DRAFT)])
+            status = dispatch._dispatch(["validate", "--final", str(DRAFT)])
         self.assertEqual((status, stdout.getvalue()), (2, ""))
         self.assertIn("draft cannot pass final validation", stderr.getvalue())
 
