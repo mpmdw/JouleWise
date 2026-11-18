@@ -6,6 +6,8 @@ Mission M0 found no active stop card. The assigned lane was the manifest
 integration, with the magistrate's measurement pointer owned by its existing
 lane. The spec freeze is `4d740d77c`. The two ported test modules failed to
 import the missing implementation on that commit. The build is `f9d41ea3e`.
+The RL-185 delta froze at `8608e0dcc` and landed on the draft branch at
+`d0a1e7c21`.
 
 ## Schema and manifest bytes
 
@@ -29,8 +31,8 @@ row 9 is implemented by the description registration in RL-181 §2.1.
 | Look | Candidate manifest SHA-256 |
 | --- | --- |
 | `lm-transfer-01` | `e5777535e5c330010a5266cc7b4a444b6b05f37c8adf6d489da58753763999c7` |
-| `lm-inst-01` | `d23cc01ea197ce310838e66bbf0e565ac23ca68f7a312449cc66bf449f8c5f56` |
-| `lm-stab-01` | `d43a05f5d713ed5cb6a31eb2f68e3a086ca5c35487e1e4cc2d6e2b07d34685b5` |
+| `lm-inst-01` | `53ce885331db6ff5d17de6f050d44fcc4081957cadf655467924b682da27cb51` |
+| `lm-stab-01` | `597abc793ea42fe82378cbaee6b80d024380ea270271ff6df9af8e2eeee6173d` |
 
 All three candidates are drafts beside `lm-qual-01.manifest.json`. The
 transfer draft changes two path references for the new layout. The transfer
@@ -55,6 +57,7 @@ dependency for the descriptions.
 | Preserve the transfer draft, hash-slot finalization and release boundary | `f9d41ea3e` | `test_transfer_candidate_validates`, `test_transfer_exit_statuses`, ported release and dispatch modules | PASS |
 | Preserve registered qualification and interim bytes | `f9d41ea3e` | `test_registered_bytes_unchanged`, unchanged `tests.test_qualification_manifest`, pinned v1 schema digest | PASS |
 | Preserve both transfer audit repairs | `4e5c2ad1d` plus integration `f9d41ea3e` | Retired stop phrase 20 old matches and zero repaired, all 20 committed kit hashes and replacement clauses, all eight pinned synthetic `DateTests` | PASS |
+| Bind the exact RL-185 rail list in description drafts and finals | `d0a1e7c21` | `test_rail_sum_columns_follow_rl185`, independent Draft 2020-12 validation and static match against the adapter constant | PASS |
 
 Audit round 2's arm-bound distinction still reproduces. With a synthetic
 00:05 transfer start, 00:10 freeze and 01:00 W1 start, the date map reports
@@ -71,12 +74,18 @@ unfiltered local shard suite includes a test that can open the real
 measurement ledger and archive. The hosted PR records repository CI on the
 integration head.
 
-## NEEDS_SPEC and lead handoff
+## RL-185 and lead handoff
 
-The final description manifests must list the exact rail-sum column names
-returned by the pinned step-3 loader for the bound host, as RL-181 §2.4
-requires. The drafts defer those names to the research lead and reader owner
-before finalization.
+RL-185 §4 resolves the previous NEEDS_SPEC. Both description drafts carry
+`["cpu_power", "gpu_power", "ane_power"]` from `RAIL_MANIFEST` in
+`joulewise/adapters/powermetrics.py`. The v2 validator requires the exact
+ordered list whenever a description selects `rail_sum`, including in drafts.
+The future description reader waits for PR #795. Stage 2 will compare the
+bundle's recorded `rail_manifest` before reading interval values and return
+null rail-sum prints with the reason on mismatch. The reader will group the
+three named `powermetrics` rows by interval and treat a missing rail as a
+gap. Its synthetic hand table must agree with the pinned step-3 loader on
+the GPU rows. [RL-185 §4](https://github.com/mpmdw/JouleWise/blob/b9e46ef52c3c87bf16fdeac96fcf4b2e767b7fe7/docs/research-audits/2026-11-10-fable/RESEARCH-LEAD-DECISIONS.md#L20909)
 
 After the research lead's cold approval, the lead must put the reviewed
 transfer registration and matching `LOOKS.json` row on main before the
