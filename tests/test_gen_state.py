@@ -1,6 +1,7 @@
 """DOC-008 state-kernel validity, work-selection fidelity, and drift tests."""
 
 import copy
+from io import StringIO
 import json
 import os
 import shutil
@@ -16,6 +17,7 @@ sys.path.insert(0, os.path.join(ROOT, "scripts"))
 import gen_state  # noqa: E402
 
 KERNEL_PATH = os.path.join(ROOT, "docs", "process", "state_kernel.json")
+RUN_STATE_ARCHIVE = "docs/archive/RUN_STATE-legacy-2026-11-17.md"
 SCHEMA_PATH = os.path.join(ROOT, "docs", "process", "state_kernel.schema.json")
 GEN = os.path.join(ROOT, "scripts", "gen_state.py")
 FIXTURE_DIR = os.path.join(ROOT, "tests", "fixtures", "state_kernel")
@@ -1047,7 +1049,7 @@ class TestRefreshedStateFidelity(unittest.TestCase):
             self.tasks["LINEAGE-RELOCATABLE-01"]["status_note"],
         )
 
-        with open(os.path.join(ROOT, "RUN_STATE.md"), encoding="utf-8") as fh:
+        with open(os.path.join(ROOT, RUN_STATE_ARCHIVE), encoding="utf-8") as fh:
             run_state = fh.read()
         self.assertIn("**T33 (2026-09-05)", run_state)
         self.assertIn("PR #286 is Paper-J with its row-9 full replay pending", run_state)
@@ -1406,25 +1408,30 @@ class TestRefreshedStateFidelity(unittest.TestCase):
     def test_phase_c_has_one_generated_work_selection_region_per_surface(self):
         with open(os.path.join(ROOT, "RUN_STATE.md"), encoding="utf-8") as fh:
             run_state = fh.read()
+        with open(os.path.join(ROOT, RUN_STATE_ARCHIVE), encoding="utf-8") as fh:
+            archive = fh.read()
         with open(os.path.join(ROOT, "TASK_QUEUE.md"), encoding="utf-8") as fh:
             queue = fh.read()
 
         self.assertEqual(run_state.count(gen_state.RS_BEGIN), 1)
         self.assertEqual(run_state.count(gen_state.RS_END), 1)
+        self.assertLess(run_state.index(gen_state.RS_END), run_state.index("<!-- RUN_STATE TYPED ITEMS:"))
         self.assertEqual(queue.count(gen_state.Q_BEGIN), 1)
         self.assertEqual(queue.count(gen_state.Q_END), 1)
 
         run_outside = run_state.split(gen_state.RS_BEGIN, 1)[0]
         run_outside += run_state.split(gen_state.RS_END, 1)[1]
+        archive_outside = archive.split(gen_state.RS_BEGIN, 1)[0]
+        archive_outside += archive.split(gen_state.RS_END, 1)[1]
         queue_outside = queue.split(gen_state.Q_BEGIN, 1)[0]
         queue_outside += queue.split(gen_state.Q_END, 1)[1]
 
         self.assertNotIn("RESTART HERE (next session)", run_outside)
         self.assertNotIn("## What Is Next", run_outside)
         self.assertNotIn("explicitly non-authoritative", run_outside)
-        self.assertIn("authoritative for work selection", run_outside)
-        self.assertIn("Historical restart snapshot", run_outside)
-        self.assertIn("Historical Next-Work Snapshot", run_outside)
+        self.assertIn("authoritative for work selection", archive_outside)
+        self.assertIn("Historical restart snapshot", archive_outside)
+        self.assertIn("Historical Next-Work Snapshot", archive_outside)
 
         self.assertNotIn("SOFTWARE-READY", queue_outside)
         self.assertNotIn(
@@ -1749,6 +1756,40 @@ class TestGeneratorSelfConsistency(unittest.TestCase):
         # Hand-authored text outside markers preserved.
         self.assertIn(b"## Hand-authored facts", first_rs)
         self.assertIn(b"## Completed Queue Items", first_q)
+
+    def test_archived_run_state_can_seed_a_live_projection(self):
+        self.assertEqual(run_gen(*self.paths).returncode, 0)
+        projection = gen_state.render_run_state(load_kernel())
+        archive = os.path.join(self.tmp, RUN_STATE_ARCHIVE)
+        os.makedirs(os.path.dirname(archive))
+        archive_bytes = ("# Fixture archive\n\n" + projection + "\nFixture history.\n").encode()
+        with open(archive, "wb") as fh:
+            fh.write(archive_bytes)
+        intro = "# Fixture RUN_STATE\n\n"
+        log = ("<!-- RUN_STATE TYPED ITEMS: newest first. -->\n\n"
+               f"<!-- RUN_STATE LEGACY ITEMS: archived in {RUN_STATE_ARCHIVE}; cutover 405; legacy_max 404 -->\n")
+        with open(self.run_state, "wb") as fh:
+            fh.write((intro + log).encode())
+
+        check = run_gen("--check", *self.paths)
+        self.assertEqual(check.returncode, 0, check.stderr)
+        self.assertEqual(self.read(self.run_state), (intro + log).encode())
+
+        kernel = load_kernel()
+        card = load_fixture("selection_semantics.json")["stop_card_precedence"]["active_stop_card"]
+        kernel["active_stop_card"] = card
+        kernel["tasks"]["P2-024"]["stop_card"] = card
+        with mock.patch.object(gen_state, "load_kernel", return_value=(kernel, gen_state.canonical_bytes(kernel))):
+            with mock.patch("sys.stderr", new_callable=StringIO) as stderr:
+                self.assertEqual(gen_state.main(["--check", *self.paths]), 1)
+            self.assertIn(f"DRIFT: {self.run_state} generated region differs", stderr.getvalue())
+            self.assertEqual(gen_state.main(self.paths), 0)
+            self.assertEqual(gen_state.main(["--check", *self.paths]), 0)
+
+        live = self.read(self.run_state)
+        self.assertEqual(live, (intro + gen_state.render_run_state(kernel) + "\n" + log).encode())
+        self.assertIn(b"## ACTIVE_STOP_CARD\n\nStatus: ACTIVE", live)
+        self.assertEqual(self.read(archive), archive_bytes)
 
     def test_stdout_render_is_deterministic(self):
         a = run_gen("--stdout", "queue")
