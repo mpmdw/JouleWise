@@ -191,9 +191,11 @@ _DESCRIPTOR_WORKER = r"""
 from pathlib import Path
 import os
 import sys
+import warnings
 from joulewise.cadence_looks.transfer_release import HASHES, run_transfer_worker
 
 root, layout = Path(sys.argv[1]), sys.argv[2]
+warning_case = sys.argv[3] if len(sys.argv) > 3 else None
 if layout == "stdout-consumer-gone":
     try:
         os.write(1, b"fixture launcher")
@@ -208,6 +210,10 @@ def preflight():
     if layout != "ordinary":
         fd = 1 if layout == "stdout-consumer-gone" else int(layout)
         assert os.path.samestat(os.fstat(fd), os.stat(os.devnull))
+    if warning_case is not None:
+        warnings.warn("synthetic preflight warning", RuntimeWarning)
+        os.write(2, b"synthetic unstructured diagnostic\n")
+        assert sys.warnoptions == []
     (root / "checked-stdio").touch()
     return {key: "0" * 64 for key in HASHES}
 
@@ -216,7 +222,8 @@ def score(mark_read):
         mark_read()
         assert source.read() == b"fixture"
     (root / "completed-read").touch()
-    (root / "public").rename(root / "moved")
+    if warning_case != "success":
+        (root / "public").rename(root / "moved")
     return {}, "estimated"
 
 raise SystemExit(run_transfer_worker(
@@ -463,6 +470,75 @@ class TransferReleaseTests(unittest.TestCase):
                         self.assertEqual((root / "completed-read").exists(), post_read)
                         self.assertFalse((root / "public" / "PUBLIC.json").exists())
                         self.assertFalse((root / "moved" / "PUBLIC.json").exists())
+
+    def warning_layouts(self):
+        env = {key: value for key, value in os.environ.items()
+               if key not in ("PYTHONWARNDEFAULTENCODING", "PYTHONWARNINGS")}
+        for label, flags, settings in (
+            ("default-encoding", (), {"PYTHONWARNDEFAULTENCODING": "1"}),
+            ("warnings-error", (), {"PYTHONWARNINGS": "error"}),
+            ("warn-default", ("-W", "default"), {}),
+        ):
+            for mask in range(8):
+                closed = tuple(fd for fd in range(3) if mask & (1 << fd))
+                yield label, flags, {**env, **settings}, closed
+
+    def run_with_warning_layout(self, args, flags, env, closed):
+        command = [sys.executable, "-B", *flags, *args]
+        if closed:
+            close_fds = (
+                "import os, sys\n"
+                "for fd in sys.argv[1]: os.close(int(fd))\n"
+                "os.execv(sys.argv[2], sys.argv[2:])\n"
+            )
+            command = [sys.executable, "-B", "-c", close_fds, "".join(map(str, closed)), *command]
+        return subprocess.run(command, cwd=ROOT, env=env, capture_output=True, check=False)
+
+    def test_transfer_warning_matrix_has_exact_public_stderr(self):
+        for label, flags, env, closed in self.warning_layouts():
+            for case, status, notice in (
+                ("pre", 2, REFUSAL),
+                ("post", 1, b"stage2_error\nFileNotFoundError\n"),
+                ("success", 0, b""),
+            ):
+                with self.subTest(warnings=label, closed=closed, case=case):
+                    root = self.fixture(f"{label}-{closed}-{case}", value=None)
+                    if case != "pre":
+                        (root / "synthetic-input.json").write_bytes(b"fixture")
+                    result = self.run_with_warning_layout(
+                        ["-c", _DESCRIPTOR_WORKER, str(root), "ordinary", case], flags, env, closed,
+                    )
+                    self.assertEqual((result.returncode, result.stdout, result.stderr),
+                                     (status, b"", b"" if 2 in closed else notice))
+                    self.assertTrue((root / "checked-stdio").exists())
+                    self.assertEqual((root / "completed-read").exists(), case != "pre")
+                    self.assertEqual((root / "public" / "PUBLIC.json").exists(), case == "success")
+
+    def test_dispatch_warning_matrix_has_exact_public_stderr(self):
+        invalid = self.scratch / "unknown.json"
+        invalid.write_bytes(b'{"schema":"unknown"}')
+        interim = self.scratch / "interim.json"
+        interim.write_bytes(b'{"schema":"joulewise.cadence_look_manifest.v1",'
+                            b'"look_kind":"interim","look_id":"lm-interim-01"}')
+        tool = self.scratch / "legacy.py"
+        tool.write_bytes(
+            b"import sys, warnings\n"
+            b"warnings.warn('synthetic legacy diagnostic', RuntimeWarning)\n"
+            b"if '--final' in sys.argv:\n"
+            b"    print('synthetic legacy refusal', file=sys.stderr)\n"
+            b"    raise SystemExit(2)\n"
+        )
+        for label, flags, env, closed in self.warning_layouts():
+            for candidate, options, status, notice in (
+                (DRAFT, [], 0, b""),
+                (invalid, ["--final"], 2, b"REFUSE unknown cadence manifest schema ID\n"),
+                (interim, ["--v1-tool", str(tool)], 0, b""),
+                (interim, ["--v1-tool", str(tool), "--final"], 2, b"synthetic legacy refusal\n"),
+            ):
+                with self.subTest(warnings=label, closed=closed, candidate=candidate.name, options=options):
+                    args = ["-m", "joulewise.cadence_looks.manifest_dispatch", "validate", str(candidate), *options]
+                    result = self.run_with_warning_layout(args, flags, env, closed)
+                    self.assertEqual((result.returncode, result.stderr), (status, b"" if 2 in closed else notice))
 
     def test_existing_public_result_refuses_and_preserves_bytes(self):
         root = self.fixture("published")
