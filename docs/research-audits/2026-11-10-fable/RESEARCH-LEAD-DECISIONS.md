@@ -18938,3 +18938,296 @@ Rows for the lead to commit to `RULES.json`. Owner is `research_lead` for every 
 **Rows retired by this ruling.** The 300 s and 1,200 s close gaps and every restatement of them. The k+2 desk debt. The three-ahead cap, the 24 h item expiry and the seven-day queue expiry. The copy as an arm gate and the 90-minute poll. The watcher as an arm gate. hp "worst case by 00:30". The pre-notice hold. hp-02's ordering clause. Qualification's two-block allowance. F0 as a standing filler, after R1. RL-175 B.3's public and restricted table and its reconstruction test.
 
 **What comes back to me.** The ported list of earlier protected rows (row 29). `lm-stab-01` before any read. The transfer block's page and the Flash-Next page. A consumer-gate failure. A hand-table disagreement before a look. PR #795's new spec, once, before its build starts.
+
+# RL-180. PR #795's spec is approved with five amendments: the twin runs inside the single look and freeze 2 takes effect only on `twin_agrees = yes`; the failure notice takes its type name from a closed list; the custody side is a directory, not an archive; the look is bound to one host; a failed look gets a new id only by my line. The register port is accepted: all 33 retired groups stay retired, three sentences inside them are restored as rows, RL-171's pin rollback becomes a process predicate, RL-97 is the lead's and gets no row, and row 29 closes when the port is on main. The three lead actions are ratified, each with one sentence added
+
+Research lead (Fable 5.2), Tue Nov 17 23:47 PST 2026 (from `date`). Answers the lead's three items: Astra's spec for PR #795 (my F-12), Astra's port of RL-1 to RL-178 (my row 29), and three lead actions. RL-179 stands except where "Amends" says otherwise.
+
+**Cites.** `RLD:n` is `RESEARCH-LEAD-DECISIONS.md` on the audit branch at `163fa6194`, the commit Astra's port pins; I confirmed the branch head is that commit. `SPEC:n` is `/Volumes/JW-EXT/scratch/astra-spec-795/SPEC-795.md`. `PR:n` is `/Volumes/JW-EXT/scratch/astra-register-port/PORT-REVIEW.md`, and a row id such as `RL-174-L17649` is a row of `RULES-PORT.json` beside it. `MAN:n` is `docs/process/cadence/looks/lm-interim-01.json` at `087ae10db`. `RS:n` is `RUN_STATE.md` on `origin/main` at `0ee8f78a2`. `RSA:n` is `/Volumes/JW-EXT/jw-wt/astra-main/RUN_STATE.md`, the copy Astra cites for RL-97.
+
+**Read.**
+- SPEC-795.md and its final message in full. The look manifest's tripwire list, its `authors` block and its `pre_run_check` (MAN:144-175, 537, 1461). The names of the subcommands in `scripts/cadence_look_run.py` at `087ae10db`.
+- PORT-REVIEW.md lines 1 to 87 in full (counts, the 33 groups, the retained amendments, the exceptions). For groups 6 and 11 to 33, every cited decision line. Groups 1 to 5 and 7 to 10 I checked against RL-179's own retirement list, which they restate.
+- `RULES-PORT.json` by program: 1,296 rows, unique ids, the eight fields on every row, the class counts as Astra gives them. The rows of RL-127, RL-143, RL-144, RL-155 and RL-171 in full, and those of RL-169, RL-172, RL-173 and RL-175 in the sections the retired groups cite.
+- RL-171 §1, §3, §4 and its stop rule (RLD:17060-17192). RL-175 B.2, B.3 and C.4. RL-176 E.2 and E.3, RL-177 G and I, RL-178 G.
+- RUN_STATE items 422 and 423 (RS:1062-1103) and items 291 and 292 for RL-97 (RSA:10230-10300).
+
+**Checked myself.**
+- Every ruling heading from RL-1 to RL-178 has at least one row, direct or sourced from a later ruling, except RL-97. Eleven rulings have no direct row; the port's index gives each a later-sourced row (PR:88 onward).
+- 68 decision lines cited by the retired groups, looked up one by one for a ported row. The gaps that matter are in section 2 (a).
+- All five tripwires in the schema are stage-1 quantities: the manifest says hp-01 "is counted in stage 1 only" with the `hp01_below_9` tripwire (MAN:144-175 and its `when` block). So five of the nine word fields hold no energy.
+- The prompt differences the lead reports, +1,219 and +768, are the ones RL-177 was written on (RLD:18177).
+
+**Not checked.**
+- I did not read the 1,296 rows against their source clause by clause. Section 2 (d) says what the acceptance rests on.
+- Whether a twin implementation of the cadence fit exists that can read the custody layout. No such script is in the #795 worktree. Section 1 (a) says what happens if there is none.
+- The kit validator, the cell law and the `f2-stab` builder's output. I take the lead's account of the refusal as written.
+- #813's count files. I take the two differences and the two Pydantic versions as the lead reports them.
+- Which host id the campaign receipts carry (section 1 (c)).
+- I ran no test and no look. No SSH. No custody, energy, power, meter, transcript, slot, hazard, sealed or restricted file was opened.
+
+**Not done.** No commit, push, comment or run. The only file written is this one.
+
+---
+
+## 0. The answers
+
+| # | Answer | In one line |
+|---|---|---|
+| 1 (a) | **AMEND** | The 15 fields stand. `twin_agrees` gains `not_evaluable`. The twin runs on the campaign data inside the one execution, after the coefficient bytes are final. Freeze 2 takes effect only on `yes` |
+| 1 (b) | **AMEND** | The two stderr lines stand, with no failure JSON. The type name comes from a closed list, the exit status is one fixed value, and the lead records the notice in the look ledger |
+| 1 (c) | **AMEND** | A custody directory with six fixed names replaces the archive. Creating it is the reservation. An interrupted reservation consumes the id. The look is bound to one host. A new id needs my line |
+| 2 (a) | **All 33 retired.** Three sentences restored | "No filler is counted", "a watcher signals no process", "no timing marker in a measured window" |
+| 2 (b) | **AMEND** | The pin rollback and its clock window go. After two batch-hit stops, F-7's predicate extends to counted spans |
+| 2 (c) | **No row** | RL-97 was the lead's disposition for one PR and ended with it |
+| 2 (d) | **Row 29 closes** when the port and this ruling's rows are on main | Signed registrations, frozen kits and committed manifests still bind by their own text |
+| 3 | **All three ratified** | One sentence added to each |
+
+After this ruling the Sol builder builds #795 once and one Astra audit follows. Nothing here needs an MBP minute.
+
+---
+
+## 1. PR #795, the interim look
+
+**The spec is what I asked for.** Its release boundary, its four tests, its keep and delete tables, the census repair and the builder's acceptance list are approved as written (SPEC:5-58). The amendments below are to the three open items only, and each is given as text for the builder.
+
+### 1 (a) The schema, the word lists and the twin
+
+**The 15 fields, their types and their sources are approved** (SPEC:64-105), with one enum changed.
+- Four fields depend on energy: `qualified_interim`, `drift_tripwire`, `twin_agrees` and `stage2_error`. F-12 allows sixteen.
+- The five tripwire fields are copies of committed stage-1 results mapped to `yes` and `no`. They hold no energy and stay.
+- `stage2_error` with the single value `no` stays. It makes a completed report say that it completed.
+
+**Amendment 1, the enum.** In the schema, replace
+
+```json
+"twin_agrees": {"$ref": "#/$defs/yes_no"},
+```
+
+with
+
+```json
+"twin_agrees": {"type": "string", "enum": ["yes", "no", "not_evaluable"]},
+```
+
+**Amendment 2, how the twin gets its inputs.** Astra's objection is right: a pass on synthetic bundles cannot attest to agreement on campaign data (SPEC:107). Under F-12 nobody can inspect the coefficients before the data release, so the twin on the real roster is the only independent check of the fit that freeze 2 commits. RL-175 B.3 already had the twin's process write in custody (RLD:17760). The text for the spec's "One run per manifest ID" section:
+
+> The twin runs inside the one stage-2 execution, under the same reservation. The entry point first completes the primary fit and Step 3, writes `coefficients.json` and computes its sha256. Only then does it start the twin, as a child process run with `-I`, from the path and sha256 the manifest pins. The twin is given the committed stage-1 output and read access to the same campaign files, and it reads them with its own reader. It writes nothing but its standard output and error, which the parent captures into `RESTRICTED/twin.json`, `RESTRICTED/stdout` and `RESTRICTED/stderr`. No twin output can change `coefficients.json`.
+>
+> `twin_agrees` is `yes` when, on both channels, every coefficient agrees to 1e-8 relative, the censored fit agrees to 1e-6, every verdict word is equal, and `trace_coverage` and `soak_retries` are equal. `ledger_gate` is not compared. It is `no` when the twin completed and any of these fails. It is `not_evaluable` when the twin raised, timed out or wrote output the comparison cannot parse. A twin failure is never a `stage2_error`: the primary result is published with `twin_agrees = not_evaluable`. No difference of any size leaves custody.
+
+- The tolerances are the registered ones (MAN:1461). The twin fields are RL-173 E's (RLD:17490, RLD:17494).
+- **The manifest changes with it.** `authors.twin` reads "its code never touches custody" (MAN:537). It becomes: "a Sol seat writes the same arithmetic from RL-166 and the synthetic layout, without sight of the Opus code; its pinned code runs once on campaign data, inside stage 2, and writes only in custody". The manifest is still `draft`, so this is an edit before commitment and not a deviation.
+- **The twin's path and hash are required pins.** `validate --final` refuses a manifest without them. If no twin exists that reads the custody layout, the builder says so in its final message and the lead has one written. The look does not run without it.
+- **The manifest's sentence "the numpy version prints in both stages' outputs"** (MAN:534) cannot hold under the closed schema. It becomes: "stage 2 refuses, before the first energy read, unless its numpy version equals the one in the committed stage-1 output".
+
+**Amendment 3, what the word does.** A hash nobody may inspect must not become the freeze on a disputed fit.
+
+> Freeze 2 takes effect when `PUBLIC.json` is on main with `twin_agrees = yes`. With `no` or `not_evaluable` the file is still committed, the look is still consumed and the coefficient hash is still on main, but it is not freeze 2: no qualification span arms and no scorer accepts it until the research lead names that hash as freeze 2 in a ruling, or rules a new look.
+
+- **Why this is safe for me to settle afterwards.** The coefficient hash is public before I open `RESTRICTED/twin.json`, so I can accept or reject the fit but cannot adjust it.
+- **A cost I accept.** Two independent implementations can differ past 1e-8 on real data where they agree on planted truth. That gives a `no` that costs one ruling. Fillers run meanwhile. I do not loosen a registered tolerance blind to avoid it.
+
+### 1 (b) The failure format
+
+**Approved: after the first energy read a failure writes two lines to standard error, nothing to standard output, and no JSON** (SPEC:109). No coefficient hash is invented for an incomplete look. Three additions:
+
+> The second line is `type(exc).__name__` when the exception's class is defined in Python's `builtins` module, or is `numpy.linalg.LinAlgError` or `json.JSONDecodeError`. For any other class the line is `OtherError`. The process then exits with one fixed nonzero status, the same for every post-read failure, which the manifest names. The lead copies the two lines into the look's row in `LOOKS.json` as `status: failed` and `error_type`, by the energy-blind ledger operation.
+
+- **Why the list.** A class can be created at run time with any name, so an open type name is free text. The list is finite and fixed by the pinned interpreter.
+- **Why the exit status.** It is an output channel like any other.
+- **Why the ledger row.** The reservation sits in custody on one host. The committed row is what tells every other checkout that the id is spent.
+- **Test 3 gains one case:** the injected exception is an instance of a class created in the test and named `Leak_123_456`. The second line must be `OtherError`.
+
+### 1 (c) The layout and the crash rule
+
+**The archive is replaced by a directory, and this amends my own F-12.** I wrote "stage 2 writes two files and nothing else" (RLD:18862). What that sentence protects is the boundary: one public file, and everything else in custody. A single archive protects nothing more and costs three things.
+- Standard output and error cannot be redirected into an archive member at the file-descriptor level, so library and child writes would have to be buffered in memory and are lost on a hard kill. That is the output I most need after a failure.
+- Every scorer that authenticates the coefficient file (the predict path, `lm-qual-01`, v4 scoring) would need extraction code on a path the paper rests on. A plain file is checked with one hash call.
+- The archive's own bytes differ between two writes of the same content, which invites hashing the wrong thing.
+
+The text:
+
+> F-12's "two files" reads: one public file and one custody directory with a closed list of names.
+>
+> ```text
+> <registered public root>/lm-interim-01/PUBLIC.json
+> <registered custody root>/lm-interim-01/RESTRICTED/
+>     coefficients.json    the exact bytes freeze 2 hashes
+>     fit.json             the full fit and every restricted diagnostic
+>     step3.json           the full Step 3 results
+>     twin.json            the twin's output and the comparison
+>     stdout               the process tree's standard output
+>     stderr               the process tree's standard error
+> ```
+>
+> The reservation is the exclusive creation of `RESTRICTED/` (a `mkdir` that fails if the directory exists), made after every pre-read check has passed and before the first energy open. Immediately after it, and still before the first energy open, file descriptors 1 and 2 of the process are redirected to `RESTRICTED/stdout` and `RESTRICTED/stderr`; children inherit them. The fixed failure notice is written through a saved copy of the original descriptor 2. On success the directory holds exactly these six names. Stage 2 creates no other file, temporary files included, outside `RESTRICTED/`, except `PUBLIC.json`.
+
+**The crash rule is approved** (SPEC:124): an existing `RESTRICTED/` or `PUBLIC.json` for the id blocks every entry point, the directory stays in place after a failure or an interruption, a crash of uncertain read status counts as a read, and there is no retry. Two additions.
+
+**Amendment 4, one host.** A different checkout or `--out` cannot start a second look (SPEC:26), but a second host can: RL-175 B.1 lets the look run on whichever host is ready first, and each host has its own custody root.
+
+> The look's committed ledger row names one `execution_host` before stage 2 runs, using the host id the campaign receipts carry. Stage 2 compares it with the local host before the reservation and refuses on a mismatch. The lead may change the named host by a new ledger row only while a listing of the first host's custody root shows no `RESTRICTED/` for the id.
+
+**Amendment 5, after a failed or interrupted look.**
+
+> A spent id is never reused. The lead first tries to reproduce the failure without custody: the pinned code on the `noisy` synthetic world, and stage 2's pre-read path on the real roster. If the same type name is reproduced, the fix is made blind and reviewed, and the research lead admits `lm-interim-02` by one line; the new manifest differs from the old only in its id, a `supersedes` field and the fixed code hashes. If it is not reproduced within the lead's time bound, it comes to the research lead, who may open `RESTRICTED/stderr` of the spent look under a ruling that names that file.
+
+- **Why a second id does not weaken "once".** Row 28 of RL-179 protects against a repeated query narrowing a word into a number. A failed look published no word. Every id, spent or completed, is listed in `LOOKS.json`, so the count of attempts is public.
+- This follows RL-143 item 3: a named stop gets a minimal synthetic reproduction first (RLD:10170).
+
+**For the builder's acceptance list** (SPEC:54-58): the first box is now done, by this ruling. Test 4 gains the wrong-host refusal. The success check lists the six names.
+
+---
+
+## 2. The register port
+
+### 2 (a) The 33 retired groups
+
+**All 33 stay retired.** Each is pacing, staffing, a dated plan or a rule RL-179 already withdrew, and for each the port keeps the protected clause that sat beside it. I list only where I looked hardest or changed something.
+
+| Group (PR line) | Ruling | Note |
+|---|---|---|
+| 1 to 5, 7 to 10, 12, 14, 25, 27 | Retired | These restate RL-179's own retirements (F-1 to F-6, F-9, F-10) |
+| 6 (PR:36) | Retired | The counted pilot (RLD:12676) is not retired with it: F-11 uses it. The consumer gate survives as RL-179 rows 6 and 8 |
+| 11 (PR:41) | Retired | RLD:17222 describes what the campaign pins' bytes do with `--batch-window`. The argument is the lead's choice at each launch. R1's registered window is kept as `RL-171-L17124` |
+| 15 (PR:45) | Retired | The copy's hash check is kept as `RL-173-L17451` |
+| 16 (PR:46) | Retired, **one sentence restored** | Below |
+| 17, 22 (PR:47, PR:52) | Retired | Ed owns dates. "Never over an armed span" (RLD:626) is kept as `RL-172-L17330` |
+| 19, 30 (PR:49, PR:60) | Retired, **two sentences restored** | Below |
+| 20 (PR:50) | Retired | The event gate is kept as `RL-144-L10236`. Change classes, merge routing and the selector's audit (RLD:10228-10237) are the lead's engineering process. I release my "until I have read the cause" |
+| 21 (PR:51) | Retired | The 45 and 15 minutes go; the drained account and the armed-span rule are kept as `RL-144-L10240` and `RL-172-L17330` |
+| 23 (PR:53) | Retired | The transfer block's condition is ported, and I amend that row below |
+| 24 (PR:54) | Retired | The hygiene lock is RL-179 row 25 |
+| 13, 18, 26, 28, 29, 31, 32, 33 | Retired | Read; nothing protected is lost |
+
+**Restored, three rows.** Each sentence sat inside a retired group and has no row.
+
+| Sentence | Class | Test | Scope |
+|---|---|---|---|
+| "None of these is counted, none feeds a claim, and none has a registration" (RLD:14254), generalised: a leg run from the filler ladder enters no registered roster, fit, cap or count unless a look manifest committed before its energy is read names its kit | VALIDITY | `validate --final` on any look manifest refuses a roster kit whose queue class is filler unless the manifest names that kit; the 132 cap's counter reads counted kits only | Every filler kit: `f2-inst-*`, `f2-stab-*`, `hp-02`, F0 |
+| "It signals no process" (RLD:7598) | SAFETY | A static test over every watcher and timing tool: no call that sends a signal or unloads a job it did not start | Watchers, alarms and the timing wrapper, on every host |
+| "No marker is added inside a measured window" (RLD:7597) | PHYSICS | The timing wrapper is not imported by any frozen path of a runner pin, and no ledger marker carries a time between a span's arm and its close on the measurement host | The timing ledger |
+
+**Amended, one ported row.** `RL-174-L17649` says the transfer block's page is due before stage 2 runs, "otherwise drop the block". RL-179 F-4 said "before freeze 2". The earlier event binds, and the cliff goes:
+
+> The transfer block's design page is ruled before stage 2 of `lm-interim-01` runs. A page ruled later must state that its population, its leg cap and its estimand were fixed without reference to any word in `PUBLIC.json`, and the research lead confirms that in the ruling. The block is dropped only if the research lead refuses that statement.
+
+- **Why.** The condition existed so that the design was fixed before anyone saw the development fit (RLD:17649). Under F-12 at most four words that depend on energy can be seen, so a stated and checked independence protects the same thing without losing a counted, dated block to a late page.
+
+### 2 (b) RL-171's pin rollback: amend
+
+**The clause** (RLD:17189): if CONTAMINATED_REDOS fires on a span that crossed 02:00 to 02:35 on two nights in one week, the lead puts the default batch hold back for that pin.
+
+**What it still protects.** RL-179 F-6 clears a contaminated stop when one later span closes clean, and a filler may be the probe (RLD:18786). That clearance does not test the cause when the cause arrives once a day, 12 h after boot: a filler at another hour closes clean, and the next counted span that crosses the batch can exhaust its redos again. F-7 guards against this for qualification spans only and ends at qual-03's close (RLD:18798). So ctl-01, reserve-01 and the transfer block are exposed, and the old clause was the only rule that noticed a repeat.
+
+**What is wrong with its form.** It names a clock window, a week, and a launch argument that RL-171 ordered removed from the qualification pin (RLD:17103; I did not check that it was). Quiet is a matter of processes (RL-171), and the batch is found from the boot time (RLD:17318).
+
+**The clause becomes:**
+
+> If CONTAMINATED_REDOS fires on two counted spans in one campaign, and in each the arm record's predicted batch start lay between the span's soak end and its close, then from the second stop on no counted span arms while its predicted batch start lies between its soak end and its expected close. RL-179 F-6 still clears each stop. The lead applies this from the receipts and tells me. Fillers and v4 sessions are not affected.
+
+- **Class:** VALIDITY, the same protection as RL-179 row 20: the finite registered legs and the reserve of twelve.
+- **It adds nothing until it triggers.** After that it costs what F-7 costs, about 2 h 35 min on a date, which a stability leg fills.
+- **Retired:** "puts the hold back for that pin (the default argument only)", "02:00 to 02:35" and "in one week". On the v1 and v1.1 pins the `--batch-window` argument remains the lead's choice at each launch.
+
+### 2 (c) RL-97
+
+**RL-97 was never mine and gets no row.** RUN_STATE item 291 records it as a "lead ruling" for PR #741 only: three named failing test ids were treated as baseline because a pre-existing test leak caused them, and any other new id still stopped the merge (RSA:10277 onward). Item 292 corrected one detail (RSA:10230 onward).
+- It was an engineering disposition for one merge. It ended when #741 merged and PR #743 fixed the leak.
+- **It is no precedent.** No failing test id is baseline for any other PR on the strength of RL-97.
+- **The number stays unused in my log.** The lead does not number its decisions in the RL series from now on. A RUN_STATE item number is enough.
+
+### 2 (d) Row 29
+
+**Row 29 closes when the lead has committed to `RULES.json` the 1,296 ported rows, the rows of this ruling, and the amendment to `RL-174-L17649`.** From that commit the register is the only executed source of operational rules that come from rulings. A paragraph of RL-1 to RL-178 with no row is then history.
+
+**What my acceptance rests on.**
+- Three inventories made independently agree: Astra's port, the Mythos process audit's rule list, and Astra's earlier drift register, of whose 490 decision-file entries 489 are accounted for and the last is the clause of section 2 (b) (PR:21).
+- Astra verified every row's citation against the pinned file (PR:1586 onward), and I confirmed the file is the branch head.
+- My own pass: every retired group against its source, 68 cited lines looked up for a row, every ruling covered, the rows of nine rulings read in whole or in the cited part. That found three missing sentences, all inside the retired groups, and none elsewhere.
+- **It is a sampled check and not a proof.** I did not compare 1,296 rows with their clauses one by one, and I will not hold the register open for a check that size.
+
+**So one clause guards the residue.**
+
+> A protected clause of RL-1 to RL-178 later found to have no row is a defect of the port. Whoever finds it tells the lead, the lead adds the row with its decision line, and it binds from that commit. Until then it holds only the entry it concerns. It is reported to the research lead in the next batch and needs no ruling unless its class is disputed.
+
+**Three things the register does not replace.** A signed registration, a kit's frozen bytes and a committed look manifest each bind by their own text, whether or not a row restates them. Most of the 1,219 VALIDITY rows restate one of the three, which is why a missed row there cannot change a result.
+
+**For the import.**
+- Rows whose `ends` names an event already on record are imported as closed, each with a cite to the event. They stay as history and nothing evaluates them. Marking them is the lead's.
+- A row with no machine test still binds whoever writes a spec, a kit, a manifest or a paper sentence in its scope. Which rows get a predicate on the arm path is the lead's choice.
+- The ported classes stand as Astra gave them. A class is argued only when a row's scope is disputed.
+
+---
+
+## 3. The lead's three actions
+
+### `f2-stab-NN`: ratified
+
+**The lead read my clause as I meant it.** I allowed a new seed for each kit "with no word from me" (RLD:18718 onward, F-4 (b)). Keeping the master seed and letting only the name-derived leg identities differ changes less than that. No runner change, and the builder stops on any other difference.
+
+**One sentence added, because it reaches the paper.** The series is now the same cells with different draws. It is not one fixed workload.
+- **The kit rule:** at every leg position the prompt size, decode cap, G0 shape, band and power mode equal `f2-inst-01`'s, and the leg count is equal. `validate-kit` checks this against `f2-inst-01`. The manifest lists the fields that differ.
+- **For `lm-stab-01`:** every spread is taken within a prompt-size cell. The estimate F-1 needs, the between-date part, is still unbiased, because the draw-to-draw spread enters within and between dates alike.
+- **For the validation section:** the sentence says "the same cell of work", not "the same work", unless `lm-stab-01`'s manifest shows that the differing fields change no token count. I rule on that at its cold pass.
+
+### Prompt size: no sentence changes
+
+**The counts from #813 are the counts RL-177 was written on:** +1,219 and +768, the same under both Pydantic versions (RLD:18177). The case RL-176 anticipated is the case we have, and RL-177 and RL-178 already answered it.
+- Every row of the permitted-claims tables stands as written (RLD:18084-18095, RLD:18305-18319, RLD:18540-18548).
+- The methods sentence stands: "1,219 tokens longer on the bank task and 768 on the spam task, about 12 % in each" (RLD:18321). I recomputed the shares: 12.2 % and 11.8 %.
+- **The one fill:** the absolute bank counts in P4 B2's *Prompt size* paragraph (RLD:18352) are those of W1's installed Pydantic version, as RL-177 I row 6 ordered (RLD:18338). Under the upstream pin both bank counts are 6 lower. "Under both schema-library versions checked" stays true and stays in.
+
+### The maintenance marker: ratified
+
+**RUN_STATE 423 is a sound SAFETY predicate** (RS:1062-1077). An owner updating tools is an unpredictable process on the host, the file is the owner's alone, and it blocks only arming.
+
+**One sentence added.** A forgotten marker would stop the instrument without limit and with no alarm, which is the fault RL-179 removed everywhere else.
+
+> While the marker exists the watcher pages the owner when it is 2 h old and daily after that. Nothing removes it but the owner. The marker never replaces the agent census or the process census, which run as before once it is gone.
+
+The 2 h is the lead's number to change.
+
+---
+
+## Amends and retirements
+
+- **RL-179 F-12:** "two files" reads as section 1 (c). `twin_agrees` has three values and conditions freeze 2 (section 1 (a)). The failure line's type name comes from a closed list (section 1 (b)). RL-179 rows 26 to 28 stand, read with these.
+- **RL-175 B.1:** "whichever host is ready first" stands, bound by the ledger's `execution_host`.
+- **RL-171:** the stop rule (RLD:17189) is replaced by section 2 (b).
+- **RL-174 C row 3** (RLD:17649): replaced by section 2 (a)'s text.
+- **RL-144 items 1, 2 and 4:** released to the lead. Items 3, 5, 6, 7 (less its minutes), 8 and 9 stand as ported.
+- **RL-127 terms 7 and 8:** the two restored sentences stand. The rest of both terms is the lead's.
+- **Stand unchanged:** every inclusion rule; every row of RL-176 E, RL-177 G and I, and RL-178 G; RL-179 F-1 to F-11.
+
+**Blind status.** Blind. No v4 outcome exists. Stage 2 of the interim look has not run, and no campaign, F2 or stability energy has been read under any look. Nothing sealed or measured was opened for this ruling. Section 1 changes where a look writes and what one word means; it changes no estimator, threshold or inclusion rule. Section 2 (b) is a prospective arming predicate and reclassifies no leg already run.
+
+**For Ed, plainly.** "Three things. First, the results check for the development data is ready to build. It will publish only a handful of yes or no answers and file fingerprints. I added one safeguard: a second, independently written copy of the analysis runs on the real data at the same time, and the fit only counts as frozen if the two agree, because nobody is allowed to look at the fitted numbers until the paper. Second, the old rulings are now all in one rule list. Astra copied 1,296 rules across, I checked what it left out, put three small ones back, and from the next commit that list is the only rulebook. Third, your maintenance flag on the MacBook is fine as it is; I only asked that it remind you if it is still there after two hours."
+
+---
+
+## Register
+
+Rows for the lead to commit to `RULES.json`. Owner is `research_lead` for rows 1 to 10 and 13; the lead owns rows 11, 12 and 14.
+
+| # | Clause | Class | Protects | Scope | Ends | Test |
+|---|---|---|---|---|---|---|
+| 1 | `PUBLIC.json` has exactly the 15 fields of SPEC-795 with `twin_agrees` in `yes`, `no`, `not_evaluable` (1 (a)) | VALIDITY (blinding) | "No number computed from energy is public before the data release" | `lm-interim-01`; later looks take the same form with their own word lists | The paper's data release | Spec tests 1 and 2 |
+| 2 | The twin runs once on campaign data inside stage 2, after the coefficient bytes are final, and writes only in custody (1 (a)) | VALIDITY | The frozen fit is checked by independent code although nobody may inspect it | Every look that freezes coefficients | The paper's data release | Spec test 2 with the twin wired; the success check's six names |
+| 3 | Freeze 2 takes effect only with `twin_agrees = yes` on main, or when I name the hash in a ruling (1 (a)) | VALIDITY (prereg) | Qualification and v4 are scored against a fit that passed its check | Qualification's arm predicate; every scorer | The paper's data release | The predicate reads the word in `PUBLIC.json` on main, or a ruling id in the look's ledger row |
+| 4 | After the first energy read a failure writes `stage2_error` and a type name from the closed list to standard error, exits with the manifest's one status, and writes nothing else outside custody; the lead records it in `LOOKS.json` (1 (b)) | VALIDITY (blinding) | No free text or number leaves custody through a failure | Every look | The paper's data release | Spec test 3, with the `Leak_123_456` case |
+| 5 | The custody side is `RESTRICTED/` with six fixed names; its exclusive creation is the reservation; an existing directory or `PUBLIC.json` spends the id (1 (c)) | VALIDITY (blinding) | One execution for a manifest id | Every look | The paper's data release | Spec test 4 |
+| 6 | The look's ledger row names one `execution_host`; stage 2 refuses elsewhere (1 (c)) | VALIDITY (blinding) | Row 5 across hosts | Every look | The paper's data release | Spec test 4, wrong-host case |
+| 7 | A spent id is never reused; a new id needs my line, after a blind reproduction or my named reading of `RESTRICTED/stderr` (1 (c)) | VALIDITY (blinding) | No repeated query narrows a word into a number | Every look | The paper's data release | `validate --final` refuses a manifest whose `supersedes` id has no `failed` row and no ruling id |
+| 8 | After two CONTAMINATED_REDOS stops on counted spans that each ran through the predicted batch, no counted span arms across the predicted batch (2 (b)) | VALIDITY | The finite registered legs and the reserve of twelve | Counted spans on the host. Not fillers, not v4 | End of the campaign | Computed from receipts: the stop code and the arm record's predicted batch start |
+| 9 | A leg run from the filler ladder enters no registered roster, fit, cap or count unless a manifest committed before its energy is read names its kit (2 (a)) | VALIDITY | The registered roster and the 132 cap | Every filler kit | End of the campaign | 2 (a)'s table |
+| 10 | The transfer block's page is ruled before stage 2 runs, or states and has confirmed that its design used no word of `PUBLIC.json` (2 (a)) | VALIDITY | The design is fixed without sight of the development fit | The transfer block | When the page is ruled or refused | The page's ruling commit precedes `PUBLIC.json`'s, or the ruling carries the confirmation |
+| 11 | A watcher or timing tool signals no process; the timing wrapper writes no marker inside a measured span (2 (a)) | SAFETY and PHYSICS | Live runs are not killed or loaded by tooling | Every host | Standing | 2 (a)'s table |
+| 12 | While `/Users/Shared/JouleWise/MAINTENANCE` exists nothing arms; only the owner creates or removes it; the watcher pages at 2 h and daily (3) | SAFETY | No tool update runs beside a measured span | The MBP | Standing | The arm predicate tests the path; the watcher's alarm test |
+| 13 | An `f2-stab` kit equals `f2-inst-01` at every leg position in prompt size, decode cap, G0 shape, band and power mode, and in leg count (3) | VALIDITY | The stability series compares like cells across dates | `f2-stab-*` | When `lm-stab-01`'s last named read has run | `validate-kit` against `f2-inst-01` |
+| 14 | A protected clause of RL-1 to RL-178 found without a row is added by the lead with its decision line and binds from that commit (2 (d)) | VALIDITY | No registered rule is lost by the port | The register | Standing | None; it is a repair rule |
+
+**Rows closed or changed by this ruling.** RL-179 row 29 closes at the import commit. `RL-174-L17649` is replaced by row 10. RL-171's stop rule is replaced by row 8. RL-97 has no row.
+
+**What comes back to me.** A `PUBLIC.json` with `twin_agrees` other than `yes`. A failed or interrupted look that the lead cannot reproduce blind. The transfer block's page. `lm-stab-01` before any read, with the list of fields that differ between stability kits. A disputed class on a restored row. Nothing else in this ruling returns.
