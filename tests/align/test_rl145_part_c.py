@@ -1052,6 +1052,9 @@ class SoakLauncherBindingTests(unittest.TestCase):
     def setUp(self):
         temp = tempfile.TemporaryDirectory()
         self.addCleanup(temp.cleanup)
+        tuning = patch.object(rt, "registered_s6", return_value={"slots": {"S6": 1.0}, "s6_tuning": {}})
+        tuning.start()
+        self.addCleanup(tuning.stop)
         self.attempt = SoakAttempt(Path(temp.name))
         self.attempt.config = kit.ROOT / kit.r1.DEFAULT_RUNTIME_CONFIG
         self.attempt.config_sha = hashed(self.attempt.config.read_bytes())
@@ -1117,11 +1120,13 @@ class SoakLauncherBindingTests(unittest.TestCase):
         })
 
     def make_model_member(self, kind, segment):
+        from dataclasses import replace
+
         from joulewise.align.apple import thermal_gates as tg
         from joulewise.align.apple.budget import budget_record
         from joulewise.align.apple.sampler import stamp_mapping
         from joulewise.align.apple.workload import EpisodeSpec
-        from joulewise.align.records import Episode, Turn, to_jsonable
+        from joulewise.align.records import Episode, ToolCall, Turn, to_jsonable
         from joulewise.clock import ClockStamp
         from joulewise.schemas import BenchmarkConfig
 
@@ -1225,6 +1230,11 @@ class SoakLauncherBindingTests(unittest.TestCase):
                 gate_events.extend({"timestamp_s": gate[f"{clock}_epoch_s"], "event_type": f"phase_{direction}",
                                     "phase": gate_phase, "message": gate["kind"], "metadata": gate}
                                    for clock, direction in (("entry", "start"), ("exit", "end")))
+            if role != "step-d":
+                episode_start = gates[0]["end_ns"]
+                turns[:-1] = [replace(turn, tool_calls=(ToolCall(
+                    name="list_messages", start_ns=turn.end_ns, end_ns=turn.end_ns, args_bytes=2, result_bytes=2),))
+                    for turn in turns[:-1]]
             # Journal sequence follows acquisition order, including a read
             # completed at the same stamp as its gate closes.
             order = {"begin": 0, "reading": 1, "end": 2}
@@ -1250,12 +1260,22 @@ class SoakLauncherBindingTests(unittest.TestCase):
                                           "planned_g0_allowance_s": 0})
             if role == "d-bank":
                 receipt["deadman"]["deadline_ns"] = deadline
+            if role != "step-d":
+                sibling = segment.parent / pc.KINDS["step-d"] / "runs/member"
+                source_policy = {"sensors": sensors, "window_reference": {
+                    "role": "consume", "source_run_id": sibling.name,
+                    "source_config_sha256": hashed((sibling / "config.json").read_bytes())}}
+                _, hardware["thermal"]["custody"] = tg.load_window_reference(
+                    source_policy, SimpleNamespace(run_id="fixture-consumer", bundle_path=sibling.parent / "consumer"))
         receipt.update(schema=rt.RESULT_SCHEMA, kind=kind, backend="production", config_sha256=self.attempt.config_sha,
-                       ac_powermode=native_mode, energy_j=MARKER, battery_drain_pct_per_h=MARKER)
+                       ac_powermode=native_mode, energy_j=MARKER, battery_drain_pct_per_h=MARKER,
+                       battery={"drain_pct_per_h": MARKER, "drain_unavailable_reason": None})
         bundle = segment / receipt["bundle"]
         out = bundle / "outputs"
         out.mkdir(exist_ok=True)
         config["run_id"] = bundle.name
+        if role != "predecessor":
+            config = rt.member_config(config, spec, run_id=bundle.name, kind=kind)
         config = BenchmarkConfig.from_mapping(config).to_dict()
         config_raw = json_bytes(config)
         (bundle / "config.json").write_bytes(config_raw)
@@ -1288,8 +1308,14 @@ class SoakLauncherBindingTests(unittest.TestCase):
                 "turn": turn.index, "flags": [], "start_stamp": start_stamp, "end_stamp": end_stamp,
                 "clock_mapping": mapping.__dict__,
                 "generation": {"output_token_ids": [20] * turn.decode_tokens,
-                               "prompt_token_ids": [30] * (turn.prefill_tokens + turn.context_tokens)},
+                               "prompt_token_ids": [30] * (turn.prefill_tokens + turn.context_tokens),
+                               "finish_reason": "stop"},
             })
+            guard_ns = (episode_start + turn.start_ns) // 2 if turn.index == 0 else (
+                gates[turn.index]["start_ns"] - ns // 10)
+            gate_events.extend({"timestamp_s": (guard_ns + offset) / ns, "event_type": f"phase_{which}",
+                                "phase": "align_context_check", "message": "render prompt", "metadata": {}}
+                               for offset, which in enumerate(("start", "end")))
             for phase, event, when, detail in (
                 ("prefill", "phase_start", turn.start_ns, {}),
                 ("prefill", "phase_end", turn.first_token_ns, {}),
@@ -1300,6 +1326,11 @@ class SoakLauncherBindingTests(unittest.TestCase):
             ):
                 gate_events.append({"timestamp_s": when / ns, "event_type": event, "phase": phase,
                                     "message": "synthetic", "metadata": {"align_turn_index": turn.index, **detail}})
+            for call_index, call in enumerate(turn.tool_calls):
+                gate_events.extend({"timestamp_s": at / ns, "event_type": f"phase_{which}",
+                                    "phase": f"align_tool_{turn.index}_{call_index}", "message": call.name,
+                                    "metadata": {"align_turn_index": turn.index, "tool_call_id": str(turn.index)}}
+                                   for at, which in ((call.start_ns, "start"), (call.end_ns, "end")))
         (out / "align_turns.jsonl").write_bytes(b"".join(map(json_bytes, turn_records)))
         decode, prefill = sum(t.decode_tokens for t in turns), sum(t.prefill_tokens for t in turns)
         metadata = {"run_id": bundle.name, "config_sha256": hashed(config_raw),
@@ -1321,8 +1352,6 @@ class SoakLauncherBindingTests(unittest.TestCase):
         (bundle / "power_trace.csv").write_text("timestamp_s,power_w,source\n")
         if role != "predecessor":
             (out / "align_thermal.jsonl").write_bytes(b"".join(map(json_bytes, journal)))
-            from joulewise.align.apple.workload import read_episode_bundle
-            receipt["episode_flags"] = list(read_episode_bundle(bundle).flags)
         if role == "step-d":
             end = 60 * ns
             sample_rows = tg.sample_rows(journal)
@@ -1339,16 +1368,17 @@ class SoakLauncherBindingTests(unittest.TestCase):
             reference["record_sha256"] = hashed(pc.canonical(reference))
             (out / "align_window_reference.json").write_bytes(pc.canonical(reference) + b"\n")
             receipt["operating_reference"].update(span_ns=reference["span_ns"])
-            classification = {"status": "pass", "alias_groups": []}
-            classification["classification_sha256"] = hashed(rt.canonical(classification).encode())
-            confirmation = {"ok": True}
+            hardware["thermal"]["custody"] = {"record_sha256": reference["record_sha256"],
+                                               "source_run_id": bundle.name,
+                                               "source_config_sha256": hashed(config_raw),
+                                               "source_journal_sha256": None}
+            (out / "align_episode.json").write_bytes(json_bytes(to_jsonable(ep)))
+            self.write_step_pm(bundle, turns[0])
             inventory = segment / "inventory"
             inventory.mkdir()
-            (inventory / "r1_classification.json").write_bytes(json_bytes({
-                "classification": classification, "label": "step-d", "for_record_only": False,
-                "night_confirmation": confirmation, "inventory": {},
-            }))
-            receipt.update(e_D_j_per_token=MARKER, thermometry={**classification, "night_confirmation": confirmation})
+            classification, confirmation = self.write_step_inventory(inventory, sensors, configured, turns[0])
+            receipt.update(e_D_j_per_token=MARKER, thermometry={
+                **classification, "status": "pass", "night_confirmation": confirmation})
             recovery = segment / "recovery"
             recovery.mkdir()
             rec = self.journal(sensors, [("reading", end_ns + i * ns, (38.0, 38.0) if i <= 20 else (35.4, 35.4))
@@ -1363,7 +1393,63 @@ class SoakLauncherBindingTests(unittest.TestCase):
                 bands=bands, t_decline_s=None, t_decline_status="no_decline", d_class=configured["d_class"],
                 n_chunk_config=configured["d_n_chunk"])
             receipt["slot_detail"]["thermometry_classification_sha256"] = classification["classification_sha256"]
+        if role != "predecessor":
+            from joulewise.align.apple.workload import read_episode_bundle
+
+            receipt["episode_flags"] = list(read_episode_bundle(bundle).flags)
         return write_terminal(segment, kind, receipt, self.attempt.config_sha)
+
+    @staticmethod
+    def write_step_pm(bundle, turn):
+        from datetime import datetime
+        from plistlib import dumps
+
+        from joulewise.adapters.powermetrics import rich_telemetry_jsonl
+
+        raw = b"\0".join(dumps({
+            "timestamp": datetime(2026, 1, 1), "elapsed_ns": pc.NS,
+            "processor": {"cpu_power": 1, "gpu_power": 2, "ane_power": 3,
+                          "cpu_energy": 1, "gpu_energy": 2, "ane_energy": 3},
+            "gpu": {"dvfm_states": [{"freq": 1000, "used_ns": pc.NS, "used_ratio": 1.0}]},
+        }) for _ in range(3))
+        directory = bundle / "raw"
+        directory.mkdir()
+        (directory / "powermetrics.plist").write_bytes(raw)
+        anchor = turn.first_token_ns / pc.NS + 1
+        (bundle / "rich_telemetry.jsonl").write_text(rich_telemetry_jsonl(raw, first_record_endpoint_s=anchor))
+        (bundle / "power_trace.csv").write_text(
+            "timestamp_s,power_w,source,rail,interval_start_s,interval_end_s\n" +
+            "".join(f"{anchor + i},0.002,powermetrics,gpu_power,{anchor + i - 1},{anchor + i}\n" for i in range(3)))
+
+    @staticmethod
+    def write_step_inventory(path, sensors, configured, turn):
+        from math import exp
+
+        picks = {key: sensors[key] for key in ("s_fast", "s_slow")}
+        inventory = {"keys": [{"key": key, "unit": "degC", "data_type": "sp78"} for key in picks.values()]}
+        start = turn.start_ns - rt.STEP_QUIET_S * pc.NS
+        finish = turn.end_ns + rt.RECOVERY_CAP_S * pc.NS
+        rows = []
+        for i, t in enumerate(range(start, finish + pc.NS, pc.NS), 1):
+            if t < turn.start_ns:
+                value = 35 + (i % 5) / 100
+            elif t <= turn.end_ns:
+                value = 35 + 4 * (1 - exp(-(t - turn.start_ns) / pc.NS / 4))
+            else:
+                value = 35 + 4 * exp(-(t - turn.end_ns) / pc.NS / 20)
+            rows.append({"seq": i, "phase": None, "started": {"monotonic_ns": t},
+                         "finished": {"monotonic_ns": t},
+                         "values": {"sensors": dict.fromkeys(picks.values(), value), "errors": {}}})
+        classification = rt.classify_step(inventory, rows, prefill_ns=turn.start_ns, last_decode_ns=turn.end_ns,
+                                          r0_sensors=sensors)
+        confirmation = rt.night_confirmation(classification, picks, configured["r0_classified_keys"],
+                                               r0_classes=configured.get("r0_classes"))
+        (path / "inventory_journal.jsonl").write_bytes(b"".join(map(json_bytes, rows)))
+        (path / "r1_classification.json").write_bytes(json_bytes({
+            "classification": classification, "label": "step-d", "for_record_only": False,
+            "night_confirmation": confirmation, "inventory": inventory,
+        }))
+        return classification, confirmation
 
     @staticmethod
     def paired_stamp(ns):
@@ -2064,6 +2150,230 @@ class SoakLauncherBindingTests(unittest.TestCase):
 
         self.audit_case(damaged)
 
+    @staticmethod
+    def edit_json(path, update):
+        record = json.loads(path.read_bytes())
+        update(record)
+        path.write_bytes(json_bytes(record))
+
+    @staticmethod
+    def edit_events(bundle, update, name="events.jsonl"):
+        path = bundle / name
+        events = [json.loads(line) for line in path.read_bytes().splitlines()]
+        update(events)
+        path.write_bytes(b"".join(map(json_bytes, events)))
+
+    def test_audit4_executed_template_parameters(self):
+        for operation in ("wrong", "missing", "null", "factory"):
+            def edit(bundle, _):
+                path = bundle / "config.json"
+                config = json.loads(path.read_bytes())
+                spec = json.loads(config["workload_profile"]["prompt_text"])
+                if operation == "missing":
+                    del spec["task_kwargs"]["task_pair"]
+                elif operation == "factory":
+                    spec["task_factory"] = "synthetic_module:wrong_task"
+                else:
+                    spec["task_kwargs"]["task_pair"] = "spam_filter_update" if operation == "wrong" else None
+                prompt = json.dumps(spec, sort_keys=True)
+                config["workload_profile"]["prompt_text"] = prompt
+                path.write_bytes(json_bytes(config))
+
+                def bind(meta):
+                    meta["config_sha256"] = hashed(path.read_bytes())
+                    meta["workload_provenance"]["episode_spec_sha256"] = hashed(prompt.encode())
+                self.edit_json(bundle / "metadata.json", bind)
+
+            with self.subTest(operation=operation):
+                self.audit_case(lambda case: self.run_gate_regression(
+                    case, "d-bank-benign-s1", edit, "execution_config"))
+
+    def test_audit4_tool_intervals_and_terminal_tool(self):
+        for operation in ("delete", "duplicate", "reorder", "cross-phase-order", "identity", "one-ns", "end-task"):
+            def edit(bundle, _):
+                if operation == "end-task":
+                    self.edit_json(bundle / "outputs/align_episode.json", lambda ep:
+                                   ep["turns"][0]["tool_calls"][0].update(name="end_task"))
+
+                def changed(rows):
+                    idx = next(i for i, row in enumerate(rows) if row["phase"] == "align_tool_0_0"
+                               and row["event_type"] == "phase_end")
+                    if operation == "delete":
+                        del rows[idx]
+                    elif operation == "duplicate":
+                        rows.insert(idx, deepcopy(rows[idx]))
+                    elif operation == "reorder":
+                        rows[idx - 1:idx + 1] = reversed(rows[idx - 1:idx + 1])
+                    elif operation == "cross-phase-order":
+                        rows[idx - 2:idx + 1] = rows[idx - 1:idx + 1] + [rows[idx - 2]]
+                    elif operation == "identity":
+                        rows[idx]["message"] = "other_tool"
+                    elif operation == "one-ns":
+                        rows[idx]["timestamp_s"] += 1e-9
+                    else:
+                        rows[idx - 1]["message"] = rows[idx]["message"] = "end_task"
+                self.edit_events(bundle, changed)
+
+            with self.subTest(operation=operation):
+                self.audit_case(lambda case: self.run_gate_regression(
+                    case, "d-bank-benign-s1", edit,
+                    "stop_evidence" if operation == "end-task" else "tool_boundaries"))
+
+    def test_audit4_endpoint_and_context_guards(self):
+        for finish, reason in ((None, "stop_evidence"), ("length", "stop_evidence"),
+                               ("episode.deadman", "member_cut")):
+            def edit(bundle, _):
+                def changed(rows):
+                    if finish is None:
+                        del rows[0]["generation"]["finish_reason"]
+                    else:
+                        rows[0]["generation"]["finish_reason"] = finish
+                self.edit_events(bundle, changed, "outputs/align_turns.jsonl")
+
+            with self.subTest(finish=finish):
+                self.audit_case(lambda case: self.run_gate_regression(case, "d-bank-benign-s1", edit, reason))
+
+        for operation in ("missing", "after-deadline"):
+            def edit(bundle, _):
+                episode = json.loads((bundle / "outputs/align_episode.json").read_bytes())
+                deadline = episode["hardware"]["token_budget"]["deadline_ns"]
+
+                def changed(rows):
+                    indices = [i for i, row in enumerate(rows) if row["phase"] == "align_context_check"]
+                    if operation == "missing":
+                        del rows[indices[3]]
+                    else:
+                        rows[indices[2]]["timestamp_s"] = deadline / pc.NS + 1
+                        rows[indices[3]]["timestamp_s"] = deadline / pc.NS + 1.001
+                        final = rows.pop()
+                        final["timestamp_s"] = deadline / pc.NS + 2
+                        rows.sort(key=lambda row: row["timestamp_s"])
+                        rows.append(final)
+                self.edit_events(bundle, changed)
+
+            with self.subTest(operation=operation):
+                self.audit_case(lambda case: self.run_gate_regression(
+                    case, "d-bank-benign-s1", edit, "context_checks"))
+
+    def test_audit4_decline_requires_raw_observations(self):
+        def empty(bundle, _):
+            # The frozen reducer returns unobserved with this bound rich stream.
+            from joulewise.align.apple.thermal_desk import native_pm_samples
+            from joulewise.align.apple.workload import read_episode_bundle
+
+            (bundle / "rich_telemetry.jsonl").write_bytes(b"")
+            episode = read_episode_bundle(bundle)
+            self.assertEqual(rt.t_decline(native_pm_samples(bundle, episode), episode.turns[0]), (None, "unobserved"))
+
+        def disagree(bundle, _):
+            def changed(rows):
+                rows[0]["gpu"]["dvfm_states"][0]["freq"] += 1
+            self.edit_events(bundle, changed, "rich_telemetry.jsonl")
+
+        for edit in (empty, disagree):
+            with self.subTest(edit=edit.__name__):
+                self.audit_case(lambda case: self.run_gate_regression(case, "step-d", edit, "step_decline"))
+
+    def test_audit4_thermometry_confirmation_recomputed(self):
+        for operation in ("false-claim", "confirmed-false"):
+            def verify(case):
+                configured = rt.load_config(case.attempt.config)[0]
+                sensors = rt.sensors_policy(configured)
+                picks = {key: sensors[key] for key in ("s_fast", "s_slow")}
+
+                def edit(bundle, receipt):
+                    root = bundle.parent.parent / "inventory"
+                    path = root / "r1_classification.json"
+                    sample_path = root / "inventory_journal.jsonl"
+                    inventory = json.loads(path.read_bytes())
+                    rows = [json.loads(line) for line in sample_path.read_bytes().splitlines()]
+                    rows[0]["values"]["sensors"][picks["s_slow"]] += 1
+                    sample_path.write_bytes(b"".join(map(json_bytes, rows)))
+                    turn, = json.loads((bundle / "outputs/align_episode.json").read_bytes())["turns"]
+                    result = rt.classify_step(inventory["inventory"], rows, prefill_ns=turn["start_ns"],
+                                              last_decode_ns=turn["end_ns"], r0_sensors=sensors)
+                    confirmation = rt.night_confirmation(result, picks, configured["r0_classified_keys"])
+                    self.assertIs(confirmation["ok"], False)
+                    inventory["classification"] = result
+                    if operation == "confirmed-false":
+                        inventory["night_confirmation"] = confirmation
+                    path.write_bytes(json_bytes(inventory))
+                    receipt["thermometry"].update(alias_groups=result["alias_groups"],
+                                                  classification_sha256=result["classification_sha256"],
+                                                  night_confirmation=inventory["night_confirmation"])
+                    receipt["slot_detail"]["thermometry_classification_sha256"] = result["classification_sha256"]
+
+                self.run_gate_regression(case, "step-d", edit, "step_thermometry")
+
+            with self.subTest(operation=operation):
+                self.audit_case(verify)
+
+    def test_audit4_source_binding_and_nullable_types(self):
+        for kind, operation in (("d-bank-benign-s1", "journal"), ("d-bank-benign-s1", "run-id"),
+                                ("d-bank-benign-s1", "absent"), ("x-g", "journal"), ("step-d", "journal")):
+            def edit(bundle, _):
+                def changed(ep):
+                    thermal = ep["hardware"]["thermal"]
+                    if operation == "absent":
+                        del thermal["custody"]
+                    elif operation == "run-id":
+                        thermal["custody"]["source_run_id"] = "other"
+                    else:
+                        thermal["custody"]["source_journal_sha256"] = "0" * 64
+                self.edit_json(bundle / "outputs/align_episode.json", changed)
+
+            with self.subTest(kind=kind, operation=operation):
+                self.audit_case(lambda case: self.run_gate_regression(case, kind, edit, "reference_binding"))
+
+        for value, reason in (("not numeric", None), (None, None), (None, "too_few_samples")):
+            def edit(_, receipt):
+                receipt.update(battery_drain_pct_per_h=value,
+                               battery={"drain_pct_per_h": value, "drain_unavailable_reason": reason})
+            with self.subTest(value=value, reason=reason):
+                self.audit_case(lambda case: self.run_gate_regression(
+                    case, "d-bank-benign-s1", edit, None if reason else "receipt_contract"))
+
+    def test_audit4_unselected_reading_and_finalization(self):
+        def missing_status(bundle, _):
+            def changed(rows):
+                first = next(row for row in rows if row["kind"] == "reading")
+                del first["values"]["status"]
+            self.edit_events(bundle, changed, pc.THERMAL_SOURCE)
+
+        def premature_final(bundle, _):
+            self.edit_events(bundle, lambda rows: rows[-1].update(timestamp_s=0))
+
+        for edit, reason in ((missing_status, "reading_record"), (premature_final, "bundle_binding")):
+            with self.subTest(edit=edit.__name__):
+                self.audit_case(lambda case: self.run_gate_regression(case, "d-bank-benign-s1", edit, reason))
+
+    def test_audit4_w1_roster_is_required_and_agrees_with_templates(self):
+        for idle in (300, None, 301):
+            def verify(case):
+                root = Path(case.attempt.root).parent / "roster"
+                root.mkdir()
+                plan = root / kit.r1.W1_PLAN_TEMPLATE
+                plan.parent.mkdir(parents=True)
+                if idle is not None:
+                    (root / "synthetic-d.json").write_bytes(json_bytes({"sampling": {"idle_seconds": idle}}))
+                    (root / "synthetic-x.json").write_bytes(json_bytes({"sampling": {"idle_seconds": 300}}))
+                    plan.write_bytes(json_bytes({"align_v4": {"members": [
+                        {"role": "D", "config_path": "synthetic-d.json"},
+                        {"role": "X-G", "config_path": "synthetic-x.json"},
+                    ]}}))
+                # Keep the launch paths and the frozen checker intact. Its
+                # roster reader sees only this case's synthetic directory.
+                read_roster = kit.r1.w1_inter_member_idle_s
+                with patch.object(kit.r1, "w1_inter_member_idle_s", side_effect=lambda _: read_roster(root)):
+                    rc = case.run_launcher()
+                verdict = json.loads((case.attempt.output / "smoke.json").read_bytes())["evaluation"]
+                self.assertEqual((verdict["pass"], rc), (idle == 300, 0 if idle == 300 else 2))
+                if idle != 300:
+                    self.assertIn("inter_member_schedule", verdict["evidence_failures"])
+
+            with self.subTest(idle=idle):
+                self.audit_case(verify)
+
     def test_sealed_phase_receipts_must_match_frozen_reduction_on_d_and_x(self):
         operations = ("control", "missing", "empty", "null", "wrong-type", "plus", "minus")
         for kind in ("d-bank-benign-s1", "x-g"):
@@ -2088,6 +2398,7 @@ class SoakLauncherBindingTests(unittest.TestCase):
                     self.audit_case(lambda test: self.run_gate_regression(test, kind, edit, reason))
 
     def test_every_phase_rejects_absence_wrong_type_and_a_one_unit_difference(self):
+        self.make_model_member("step-d", self.attempt.output / pc.KINDS["step-d"])
         for kind, directory in (("d-bank-benign-s1", kit.PART_C_GATED_D), ("x-g", kit.PART_C_X_G)):
             with self.subTest(member=kind):
                 process = self.make_model_member(kind, self.attempt.output / directory)

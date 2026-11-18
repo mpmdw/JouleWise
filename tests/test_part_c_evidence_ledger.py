@@ -44,7 +44,9 @@ def required_files(kind):
         files.append(f"{BUNDLE}/outputs/align_thermal.jsonl")
     if kind == "step-d":
         files.extend((f"{BUNDLE}/outputs/align_window_reference.json",
-                      "recovery/align_thermal.jsonl", "inventory/r1_classification.json"))
+                      f"{BUNDLE}/rich_telemetry.jsonl", f"{BUNDLE}/raw/powermetrics.plist",
+                      "recovery/align_thermal.jsonl", "inventory/r1_classification.json",
+                      "inventory/inventory_journal.jsonl"))
     return files
 
 
@@ -197,7 +199,7 @@ class LedgerTests(unittest.TestCase):
                         if name in (MANIFEST, RECEIPT):
                             self.assertEqual(caught.exception.source, name)
                         count += 1
-        self.assertEqual(count, 168)
+        self.assertEqual(count, 180)
 
     def test_mutation_after_last_read_fails_at_final_recheck(self):
         for kind in MEMBERS:
