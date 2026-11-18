@@ -306,8 +306,8 @@ class LedgerTests(unittest.TestCase):
                 with redirect_stdout(out), redirect_stderr(err), self.assertRaisesRegex(ValueError, "other_failure"):
                     pc.run_bound_part_c(attempt.output.parent / "native-attempt", [], soak_reference=attempt.soak)
                 self.assertIn("evidence_unverifiable", out.getvalue())
-                self.assertIn("soak/soak_row.json", out.getvalue())
-                self.assertIn("soak/idle_soak/runtime_custody.json", out.getvalue())
+                self.assertIn("evidence_ledger.jsonl", out.getvalue())
+                self.assertFalse((attempt.output.parent / "native-attempt" / evidence.LEDGER_NAME).exists())
                 self.assertEqual(err.getvalue(), "")
 
 
@@ -343,3 +343,166 @@ class StdoutTests(unittest.TestCase):
                     self.assertEqual((caught.exception.reason, caught.exception.field), ("stdout_receipt", "invalid"))
                 else:
                     self.assertEqual(evidence.stdout_payload(process.stdout, "step-d"), expected)
+
+
+SOAK_FILES = ("runtime_result.json", "sensors/align_thermal.jsonl", "load_journal.json")
+
+
+def write_terminal(segment, kind, receipt, config_sha):
+    (segment / RECEIPT).write_bytes(json_bytes(receipt))
+    captured = {path.relative_to(segment).as_posix(): hashed(path.read_bytes())
+                for path in segment.rglob("*") if path.is_file() and path.name != MANIFEST}
+    manifest = {"schema": "joulewise.align.r1_runtime_custody.v1", "kind": kind, "status": "complete",
+                "config_sha256": config_sha, "started_epoch_s": 1, "ended_epoch_s": 2, "files": captured}
+    (segment / MANIFEST).write_bytes(json_bytes(manifest))
+    # Frozen stdout uses the default separators, ASCII escapes and a single newline.
+    return SimpleNamespace(returncode=0, stdout=json.dumps(receipt, sort_keys=True, allow_nan=False) + "\n",
+                           stderr=f"synthetic private {MARKER}")
+
+
+class SoakAttempt:
+    def __init__(self, directory):
+        self.root = directory / "synthetic-run"
+        self.output = self.root / "part-c"
+        self.directory = self.root / "soak"
+        self.segment = self.directory / "idle_soak"
+        self.reference = self.directory / "soak_reference.json"
+        self.ledger = self.directory / "evidence_ledger.jsonl"
+        self.row = self.directory / "soak_row.json"
+        self.revision = "b2e01464d"
+        self.config = directory / "runtime.json"
+        self.config.write_bytes(b'{"synthetic":"config"}')
+        self.config_sha = hashed(self.config.read_bytes())
+
+    def receipt(self, **extra):
+        return {"schema": "joulewise.align.r1_runtime_result.v1", "backend": "production", "kind": "idle",
+                "config_sha256": self.config_sha, "synthetic_private": MARKER, **extra}
+
+    def produce(self, receipt, **files):
+        self.segment.mkdir(parents=True, exist_ok=True)
+        for source in SOAK_FILES[1:]:
+            path = self.segment / source
+            path.parent.mkdir(exist_ok=True)
+            path.write_bytes(files.get(source, json_bytes({"synthetic_private": MARKER})))
+        return write_terminal(self.segment, "idle", receipt, self.config_sha)
+
+    def close(self, *, process=None, outer_receipt=None, stdout=None):
+        self.directory.mkdir(parents=True, exist_ok=True)
+        writer = evidence.EvidenceLedger(self.directory, self.revision, self.config, mode="soak")
+        receipt = self.receipt()
+        process = self.produce(receipt) if process is None else process
+        if stdout is not None:
+            process.stdout = stdout
+        writer.member_return("idle", self.segment, ["runtime", "--r1-kind", "idle"], process=process)
+        path = str(self.segment)
+        self.row.write_bytes(json_bytes({"name": "idle_soak", "attempt": 0, "output_dir": path,
+                                        "result": receipt if outer_receipt is None else outer_receipt}))
+        self.reference.write_bytes(json_bytes({"source_segment": "idle_soak", "source_output": path, "attempt": 0}))
+        writer.finish_soak("accepted")
+        return hashed(self.ledger.read_bytes())
+
+    def binding(self, handoff, *, reference=None, revision=None, config=None, output=None):
+        return evidence.BoundSoak(output or self.output, reference or self.reference, handoff,
+                                  revision or self.revision, config or self.config)
+
+    def reseal(self, change):
+        rows = [json.loads(line) for line in self.ledger.read_bytes().splitlines()]
+        change(rows)
+        previous = None
+        with self.ledger.open("wb") as sink:
+            for row in rows:
+                raw = json_bytes({**row, "previous_sha256": previous})
+                sink.write(raw)
+                previous = hashed(raw)
+        return hashed(self.ledger.read_bytes())
+
+
+class SoakLedgerTests(unittest.TestCase):
+    def test_post_child_soak_files_and_ledger_rows_cannot_be_edited(self):
+        with TemporaryDirectory() as tmp:
+            attempt = SoakAttempt(Path(tmp))
+            handoff = attempt.close()
+            attempt.binding(handoff)
+            paths = [attempt.row, attempt.reference, attempt.ledger, attempt.segment / MANIFEST,
+                     *[attempt.segment / name for name in SOAK_FILES]]
+            for path in paths:
+                with self.subTest(source=path.name):
+                    good = path.read_bytes()
+                    path.write_bytes(b" " + good[1:])
+                    with self.assertRaises(evidence.EvidenceFailure) as caught:
+                        attempt.binding(handoff)
+                    self.assertEqual((caught.exception.reason, caught.exception.role), ("source_integrity", "idle"))
+                    path.write_bytes(good)
+            rows = attempt.ledger.read_bytes().splitlines(keepends=True)
+            for index in range(3):
+                reordered = rows.copy()
+                peer = (index + 1) % 3
+                reordered[peer], reordered[index] = reordered[index], reordered[peer]
+                for operation, raw in {
+                    "drop": b"".join(rows[:index] + rows[index + 1:]),
+                    "reorder": b"".join(reordered),
+                    "edit": b"".join([*rows[:index], b" " + rows[index][1:], *rows[index + 1:]]),
+                }.items():
+                    with self.subTest(index=index, operation=operation):
+                        attempt.ledger.write_bytes(raw)
+                        with self.assertRaisesRegex(evidence.EvidenceFailure, "source_integrity"):
+                            attempt.binding(handoff)
+                        if operation != "edit" or index != 2:
+                            with self.assertRaises(evidence.EvidenceFailure):
+                                attempt.binding(hashed(raw))
+            dropped = b"".join(rows[:2])
+            attempt.ledger.write_bytes(dropped)
+            with self.assertRaisesRegex(evidence.EvidenceFailure, "evidence_unverifiable"):
+                attempt.binding(hashed(dropped))
+
+    def test_same_attempt_configuration_revision_and_reference_are_required(self):
+        for version in ("run", "runtime_config", "producer_revision", "reference"):
+            with self.subTest(version=version), TemporaryDirectory() as tmp:
+                attempt = SoakAttempt(Path(tmp))
+                handoff = attempt.close()
+
+                def change(rows):
+                    if version == "run":
+                        for row in rows[:2]:
+                            row["attempt"]["run"] = "another-attempt"
+                    elif version == "runtime_config":
+                        rows[0]["runtime_config"]["sha256"] = "a" * 64
+                    else:
+                        rows[0]["producer_revision"] = "another-revision"
+
+                kwargs = {}
+                if version == "reference":
+                    alternate = attempt.directory / "other.json"
+                    alternate.write_bytes(attempt.reference.read_bytes())
+                    kwargs["reference"] = alternate
+                else:
+                    handoff = attempt.reseal(change)
+                with self.assertRaises(evidence.EvidenceFailure) as caught:
+                    attempt.binding(handoff, **kwargs)
+                self.assertEqual((caught.exception.reason, caught.exception.role), ("fresh_soak", "idle"))
+
+    def test_outer_receipt_and_native_stdout_line_are_reconciled_independently(self):
+        for peer in ("runtime_result.json", "stdout"):
+            with self.subTest(peer=peer), TemporaryDirectory() as tmp:
+                attempt = SoakAttempt(Path(tmp))
+                changed = attempt.receipt(synthetic_private=MARKER + 1)
+                if peer == "stdout":
+                    handoff = attempt.close(stdout=json.dumps(changed, sort_keys=True) + "\n")
+                else:
+                    handoff = attempt.close(outer_receipt=changed)
+                with self.assertRaises(evidence.EvidenceFailure) as caught:
+                    attempt.binding(handoff)
+                self.assertEqual((caught.exception.reason, caught.exception.peer), ("receipt_pair", peer))
+
+    def test_archive_idle_binding_and_native_missing_handoff(self):
+        with TemporaryDirectory() as tmp:
+            attempt = SoakAttempt(Path(tmp))
+            handoff = attempt.close()
+            attempt.ledger.unlink()
+            self.assertEqual(pc.archived_custody_member(attempt.output, attempt.config, "idle"),
+                             {"binding": "archived_custody"})
+            self.assertFalse(attempt.ledger.exists())
+            with self.assertRaisesRegex(evidence.EvidenceFailure, "evidence_unverifiable"):
+                attempt.binding(handoff)
+            with self.assertRaisesRegex(evidence.EvidenceFailure, "evidence_unverifiable"):
+                attempt.binding(None)
