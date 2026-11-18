@@ -453,6 +453,148 @@ def authored_receipt(root, window="C1"):
 
 
 class SeriesReleaseTests(unittest.TestCase):
+    def test_declared_protected_inputs_without_a_provider_refuse_release(self):
+        from joulewise.align.apple.km003c import REQUIREMENT
+        from scripts import align_v4_series_release as caller
+
+        original = b'{"synthetic_factor":1}\n'
+        finalize = harvest_offload.finalized_manifest
+        for namespace in ("dc_in", REQUIREMENT["custody_directory"]):
+            with self.subTest(namespace=namespace), tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp).resolve()
+                source = root / namespace / "calibration-reference.json"
+
+                def with_declared_input(window):
+                    if window.name != "C8":
+                        return finalize(window)
+                    source.parent.mkdir(parents=True)
+                    source.write_bytes(original)
+                    return finalize(window, inputs=(source,))
+
+                with patch.object(harvest_offload, "finalized_manifest", with_declared_input):
+                    stored_series(root)
+                raw = (root / "series/restored/C8/finalized_manifest.json").read_bytes()
+                record = json.loads((root / "records/C8/record.json").read_bytes())
+                self.assertEqual(packet.digest(raw), record["finalized_manifest"])
+                closure = json.loads(raw)["closure"]
+                self.assertIn(str(source), closure["inputs"])
+                self.assertEqual(closure["files"][str(source)]["sha256"], packet.digest(original))
+                archive = source.with_suffix(".json.gz")
+                for defect in ("intact", "missing", "compressed-only", "unreadable", "digest-mismatch"):
+                    with self.subTest(defect=defect):
+                        if defect == "missing":
+                            source.unlink()
+                        elif defect == "compressed-only":
+                            archive.write_bytes(gzip.compress(original))
+                            source.unlink()
+                        elif defect == "unreadable":
+                            source.chmod(0)
+                        elif defect == "digest-mismatch":
+                            source.write_bytes(original.replace(b"1", b"2"))
+                        output = root / f"{defect}.json"
+                        try:
+                            self.assert_release_refused(caller, root, output)
+                        finally:
+                            if archive.exists():
+                                archive.unlink()
+                            if source.exists():
+                                source.chmod(0o600)
+                            source.write_bytes(original)
+
+    def test_internal_link_and_its_finalized_target_are_verified(self):
+        from scripts import align_v4_series_release as caller
+
+        original = b'{"synthetic_factor":1}\n'
+        alias, target = "calibration-reference.json", "calibration-v1.json"
+        finalize = harvest_offload.finalized_manifest
+
+        def with_internal_link(window):
+            if window.name == "C8":
+                (window / target).write_bytes(original)
+                (window / alias).symlink_to(target)
+                (window / "references").mkdir()
+                (window / "references/chain.json").symlink_to(f"../{alias}")
+            return finalize(window)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp).resolve()
+            with patch.object(harvest_offload, "finalized_manifest", with_internal_link):
+                stored_series(root)
+            store = root / "series/restored/C8"
+            raw = (store / "finalized_manifest.json").read_bytes()
+            record = json.loads((root / "records/C8/record.json").read_bytes())
+            self.assertEqual(packet.digest(raw), record["finalized_manifest"])
+            manifest = json.loads(raw)
+            self.assertEqual(manifest["entries"][alias], {"link": target})
+            self.assertNotIn(alias, manifest["closure"]["links"])
+            output = root / "control.json"
+            result = invoke(root, output)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(json.loads(output.read_bytes())[seal.RL176]["S"]["words"], ["S SIGNATURE"])
+            for defect in ("replaced-by-identical-file", "dangling", "changed-target"):
+                with self.subTest(defect=defect):
+                    if defect == "changed-target":
+                        (store / target).write_bytes(original.replace(b"1", b"2"))
+                    else:
+                        (store / alias).unlink()
+                        if defect == "dangling":
+                            (store / alias).symlink_to("missing-calibration.json")
+                        else:
+                            (store / alias).write_bytes(original)
+                    try:
+                        self.assert_release_refused(caller, root, root / f"{defect}.json")
+                    finally:
+                        (store / target).write_bytes(original)
+                        (store / alias).unlink()
+                        (store / alias).symlink_to(target)
+
+    def test_benign_dc_requires_provider_verification_to_publish(self):
+        from scripts import align_v4_series_release as caller
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp).resolve()
+            manifest = stored_series(root, spoof=True)
+            window = series.selected(manifest, "C1")
+            ordinal = next(member["ordinal"] for member in window["members"]
+                           if member["ordinal"] in series.FRESH_ORDINALS and member["condition"] == "benign")
+            source = root / "series/restored/C1/runs" / f"synthetic-C1-{ordinal:02d}" / caller.DC_FILE
+            original = source.read_bytes()
+            archive = source.with_suffix(".json.gz")
+            for defect in ("missing", "compressed-only", "unreadable", "digest-mismatch", "provider-skipped"):
+                with self.subTest(defect=defect):
+                    if defect == "missing":
+                        source.unlink()
+                    elif defect == "compressed-only":
+                        archive.write_bytes(gzip.compress(original))
+                        source.unlink()
+                    elif defect == "unreadable":
+                        source.chmod(0)
+                    elif defect == "digest-mismatch":
+                        changed = original.replace(b'"wall_meter"', b'"fault_test"')
+                        self.assertNotEqual(original, changed)
+                        self.assertEqual(len(original), len(changed))
+                        source.write_bytes(changed)
+                    output = root / f"{defect}.json"
+                    try:
+                        if defect == "provider-skipped":
+                            with patch.object(caller.ReleasedInputs, "read_benign_dc", return_value=None):
+                                self.assert_release_refused(caller, root, output)
+                        else:
+                            self.assert_release_refused(caller, root, output)
+                    finally:
+                        if archive.exists():
+                            archive.unlink()
+                        if source.exists():
+                            source.chmod(0o600)
+                        source.write_bytes(original)
+
+    def assert_release_refused(self, caller, root, output):
+        with patch.object(rl176, "_series_prints", side_effect=AssertionError("scored unverified inputs")), \
+                redirect_stderr(StringIO()), self.assertRaises(SystemExit) as refusal:
+            caller.main(["--measurement-root", str(root), "--output", str(output)])
+        self.assertEqual(refusal.exception.code, 1)
+        self.assertFalse(output.exists())
+
     def test_manifest_mirror_target_matches_its_pinned_git_blob(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp).resolve()
@@ -558,7 +700,9 @@ class SeriesReleaseTests(unittest.TestCase):
             loaded = False
             real_open, real_close, real_builtin_open = os.open, os.close, builtins.open
             real_verify, real_load = caller.RestoredFiles.verify_listed_inputs, caller.ReleasedInputs.load_members
+            real_provider = caller.ReleasedInputs.read_benign_dc
             real_git = caller.SeriesEvidence.git
+            providing = False
 
             def observe(path):
                 if path == blocked or path.is_relative_to(native) or path.is_relative_to(external.parent):
@@ -566,6 +710,7 @@ class SeriesReleaseTests(unittest.TestCase):
                 if path.is_relative_to(root) and path.as_posix().endswith("/" + caller.DC_FILE):
                     (verification_opens if verifying else provider_opens).append(path)
                     self.assertTrue(loaded, "provider opened DC before member loading")
+                    self.assertTrue(providing, "opened benign DC outside the provider")
 
             def open_at(path, flags, mode=0o777, *, dir_fd=None):
                 target = Path(os.fsdecode(path))
@@ -600,6 +745,14 @@ class SeriesReleaseTests(unittest.TestCase):
                 loaded = True
                 return result
 
+            def provide(inputs, episode, key):
+                nonlocal providing
+                providing = True
+                try:
+                    return real_provider(inputs, episode, key)
+                finally:
+                    providing = False
+
             def observe_git(evidence, *args):
                 self.assertNotEqual(evidence.repo, mirror, "read a Git mirror for a protected target")
                 return real_git(evidence, *args)
@@ -609,13 +762,14 @@ class SeriesReleaseTests(unittest.TestCase):
                     patch.object(builtins, "open", builtin_open), \
                     patch.object(caller.RestoredFiles, "verify_listed_inputs", verify), \
                     patch.object(caller.ReleasedInputs, "load_members", load), \
+                    patch.object(caller.ReleasedInputs, "read_benign_dc", provide), \
                     patch.object(caller.SeriesEvidence, "git", observe_git):
-                self.assertEqual(caller.main(["--measurement-root", str(root), "--output", str(output)]), 0)
+                self.assert_release_refused(caller, root, output)
                 with self.assertRaisesRegex(ValueError, "protected"):
                     caller.named_bytes(root, blocked.relative_to(root).as_posix())
             self.assertEqual(verification_opens, [])
             self.assertEqual(len(provider_opens), 1)
-            self.assertTrue(output.is_file())
+            self.assertFalse(output.exists())
 
     def test_every_nested_manifest_file_binding_is_verified(self):
         from scripts import align_v4_series_release as caller
