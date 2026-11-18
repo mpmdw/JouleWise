@@ -818,7 +818,7 @@ raise SystemExit(97)
                     document["channels"].remove("rail_sum")
                     dispatch.validate_v2(encode(document), final=final)
 
-    def test_registered_bytes_unchanged(self):
+    def test_qualification_bytes_unchanged(self):
         self.assertEqual(
             sha256(QUALIFICATION.read_bytes()).hexdigest(),
             "d6fde6918023ea69051da45a6b0e3c06ffcfdafd8975a1773989324fa7c9bdab",
@@ -830,28 +830,49 @@ raise SystemExit(97)
             b"35bbd6b2f5f2db62e401038afa4290491c5fc282",
         )
 
+    def test_registered_bytes_unchanged(self):
+        ref = subprocess.run(
+            ["git", "rev-parse", "--quiet", "--verify", f"{INTERIM_REF}^{{commit}}"],
+            cwd=ROOT, capture_output=True, check=False,
+        )
+        if ref.returncode == 1:
+            self.skipTest(f"interim comparison commit {INTERIM_REF} is absent from this checkout")
+        self.assertEqual(ref.returncode, 0, ref.stderr)
+
         def tree(ref):
             result = subprocess.run(
                 ["git", "ls-tree", "-r", ref, "--", "docs/process/cadence/looks", "joulewise/cadence_looks"],
                 cwd=ROOT, capture_output=True, check=False,
             )
-            return result, dict(line.split(b"\t")[::-1] for line in result.stdout.splitlines())
+            self.assertEqual(result.returncode, 0, result.stderr)
+            return dict(line.split(b"\t")[::-1] for line in result.stdout.splitlines())
 
-        result, interim = tree(INTERIM_REF)
-        if result.returncode:
-            # Hosted CI may fetch only the PR head.
-            return
-        result, current = tree("HEAD")
-        self.assertEqual(result.returncode, 0, result.stderr)
+        interim = tree(INTERIM_REF)
+        current = tree("HEAD")
         for path in (interim.keys() & current.keys()) - {b"docs/process/cadence/looks/LOOKS.json"}:
             self.assertEqual(current[path], interim[path], path)
 
 
 class TransferManifestTests(unittest.TestCase):
+    def test_missing_interim_inputs_are_reported_as_skips(self):
+        checks = (
+            (VariantContractTests("test_registered_bytes_unchanged"), "interim comparison commit"),
+            (type(self)("test_integrated_v1_schema_retains_interim_pin"), "v1 schema for lm-interim-01"),
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            with patch(f"{__name__}.INTERIM_REF", "0" * 40), patch.object(
+                dispatch, "V2_SCHEMA", Path(tmp) / "look_manifest.v2.schema.json"
+            ):
+                for test, reason in checks:
+                    with self.subTest(test=test.id()):
+                        result = test.run()
+                        self.assertEqual(len(result.skipped), 1, result.errors + result.failures)
+                        self.assertIn(reason, result.skipped[0][1])
+
     def test_integrated_v1_schema_retains_interim_pin(self):
         legacy = dispatch.V2_SCHEMA.with_name("look_manifest.schema.json")
         if not legacy.exists():
-            self.skipTest("v1 schema lives on the separate interim line")
+            self.skipTest("v1 schema for lm-interim-01 is absent from this checkout")
         self.assertIn(sha256(legacy.read_bytes()).hexdigest(), V1_SCHEMA_PINS)
 
     def test_transfer_candidate_validates(self):
