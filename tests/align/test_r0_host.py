@@ -1000,6 +1000,61 @@ class R0SamplerAdmissionSpec(unittest.TestCase):
             self.assertIn("LaunchAgent census indeterminate", stderr.getvalue())
             self.assertFalse(published.exists())
 
+    def test_inventory_census_refusal_takes_precedence_over_input_read_error(self):
+        from contextlib import contextmanager, redirect_stderr
+        import errno
+        from io import StringIO
+        import os
+        from joulewise.align.r0_runner import main
+        from joulewise.measurement_liveness import census
+
+        for input_error in (False, True):
+            with self.subTest(input_error=input_error), tempfile.TemporaryDirectory() as tmp:
+                work = Path(tmp).resolve()
+                required, inputs = work / "required", work / "inputs"
+                required.mkdir()
+                inputs.mkdir()
+                payload = inputs / "blob"
+                payload.write_bytes(b"fixture")
+                config = work / "config.json"
+                config.write_text(json.dumps({**config_at(work), "custody_parents": [str(required)]}))
+                output = work / "inventory.json"
+                guard, clock, advance, _ = self.admission(busy=False)
+                guard.parents = [required]
+                guard.inspect_custody = census
+                open_path, scandir = Path.open, os.scandir
+                root_stat = required.stat()
+
+                def scan(value):
+                    if clock.now == 45 and isinstance(value, int) and os.path.samestat(root_stat, os.fstat(value)):
+                        raise OSError(errno.EIO, "synthetic census failure", str(required))
+                    return scandir(value)
+
+                @contextmanager
+                def opened(path, *args, **kwargs):
+                    with open_path(path, *args, **kwargs) as handle:
+                        if path != payload:
+                            yield handle
+                            return
+
+                        class Input:
+                            def read(self, size):
+                                if clock.now < 45:
+                                    advance(45)
+                                    if input_error:
+                                        raise OSError(errno.EIO, "synthetic inventory failure", str(payload))
+                                return handle.read(size)
+
+                        yield Input()
+
+                stderr = StringIO()
+                with patch.object(Path, "open", opened), patch.object(os, "scandir", scan), redirect_stderr(stderr):
+                    status = main(["--config", str(config), "--output", str(output), "--inventory", str(inputs)],
+                                  guard_factory=lambda _: guard, lock_path=work / "lock")
+                self.assertEqual(status, 2)
+                self.assertIn(f"{required} (errno {errno.EIO})", stderr.getvalue())
+                self.assertFalse(output.exists())
+
     def test_queued_contention_survives_census_failure_or_stall(self):
         for reason, message in (("census", "LaunchAgent census indeterminate"),
                                 ("stall", "background snapshots stalled")):
@@ -1329,12 +1384,74 @@ class R0SamplerAdmissionSpec(unittest.TestCase):
                 else:
                     self.assertEqual(candidate_times, [45, 60, 75] if args else [])
 
+    def test_r0_rechecks_agents_at_baseline_close_later_admission_and_publication(self):
+        import re
+        from joulewise import agent_identity
+        from joulewise.align import r0_runner
+        from joulewise.measurement_liveness import census
+
+        executable = "/Applications/Claude.app/Contents/MacOS/Claude"
+        for mode in ("quiet", "baseline-close", "later-admission", "publication"):
+            with self.subTest(mode=mode), tempfile.TemporaryDirectory() as tmp:
+                required = Path(tmp).resolve() / "required"
+                required.mkdir()
+                guard, clock, _, _ = self.admission(busy=False)
+                guard.inspect_custody = census
+                normal = guard.run
+                arrival = {"baseline-close": 10, "later-admission": 35, "publication": 40}.get(mode, float("inf"))
+                queries, host_times, pass_saves = [], [], []
+
+                def run(argv, **kwargs):
+                    present = clock.now >= arrival
+                    if argv[0] == "/usr/bin/pgrep":
+                        flags = "".join(argv[1:-1])
+                        hit = present and re.search(argv[-1], executable, re.I if "i" in flags else 0)
+                        queries.append((clock.now, bool(hit)))
+                        return subprocess.CompletedProcess(argv, 0 if hit else 1, f"42 {executable}\n" if hit else "", "")
+                    if argv == prewindow.PS_ARGV:
+                        table = "1 0.0 /sbin/launchd\n" + (f"42 0.0 {executable}\n" if present else "")
+                        return subprocess.CompletedProcess(argv, 0, table, "")
+                    return normal(argv, **kwargs)
+
+                def host():
+                    host_times.append(clock.now)
+                    if mode == "later-admission":
+                        clock.now = 40
+                    return {"status": "pass"}
+
+                save_report = r0_runner.save_report
+
+                def save(output, report):
+                    save_report(output, report)
+                    if report["status"] == "pass":
+                        pass_saves.append(clock.now)
+                        if mode == "publication" and len(pass_saves) == 2:
+                            clock.now = 40
+
+                filter_census = agent_identity.filter_census
+                info = agent_identity.ProcessInfo(42, 1, 42, executable, (executable,))
+                guard.run = run
+                with (patch.object(agent_identity, "filter_census", lambda stdout: filter_census(stdout, inspector=lambda _: info)),
+                      patch.object(r0_runner, "save_report", side_effect=save)):
+                    status, output, diagnostic = self.run_synthetic_host_cli(required, guard, host)
+                if mode == "quiet":
+                    self.assertEqual((status, output.exists()), (0, True))
+                    self.assertTrue(all(not hit for _, hit in queries))
+                else:
+                    self.assertEqual((status, output.exists()), (2, False), diagnostic)
+                    self.assertIn(executable, diagnostic)
+                    self.assertEqual([at for at, hit in queries if hit], [30 if mode == "baseline-close" else 40])
+                    self.assertEqual(host_times, [] if mode == "baseline-close" else [30])
+                    private, = output.parent.glob(".output.r0-*")
+                    self.assertEqual(json.loads((private / "report.json").read_text())["status"], "refused")
+
     def test_r0_baseline_flags_cpu_delta_of_worker_that_exits_mid_window(self):
         from joulewise.measurement_liveness import census
 
         for first, midpoint, last, flagged in (
                 ("0:00.00", "0:01.80", None, True), ("0:05.00", "0:06.80", None, True),
                 ("0:05.00", "0:06.20", None, False), ("0:05.00", "0:00.00", None, False),
+                ("0:00.00", "0:01.80", "0:00.00", True), ("0:05.00", "0:06.80", "0:05.20", True),
                 ("0:00.00", "0:01.80", "0:01.80", True)):
             with self.subTest(first=first, midpoint=midpoint, last=last), tempfile.TemporaryDirectory() as tmp:
                 required = Path(tmp).resolve() / "required"
@@ -1364,6 +1481,7 @@ class R0SamplerAdmissionSpec(unittest.TestCase):
                     self.assertAlmostEqual(evidence["cpu_s_per_s"], 0.06)
                     if last is None:
                         self.assertIn("lower bound", evidence["basis"])
+
 
     def run_background_census(self, configured, prepare, *, just_before_census=lambda: None):
         from joulewise import measurement_liveness as live
@@ -2040,6 +2158,16 @@ class R0QuietIntervalTest(unittest.TestCase):
         self.assertIn("opening counter", evidence["basis"])
         self.assertAlmostEqual(evidence["cpu_s_per_s"], 0.07)
         self.assertEqual(guard.contention_flags[-1]["busy"], [evidence])
+
+    def test_lower_opening_counter_cannot_recount_cpu_in_a_later_window(self):
+        snapshots = [cpu_table((42, OLD_START, cpu, "mdworker_shared"))
+                     for cpu in ("0:05.00", "0:06.80", "0:00.00", "0:01.80", "0:01.80")]
+        guard, clock, _ = self.guard(snapshots, driven=False)
+        guard.check(force=True)
+        self.tick(guard, clock, 45, 60, 75)
+        guard.check(force=True)
+        self.assertEqual(guard.receipts[-1]["cpu_interval"]["start_monotonic_s"], 45)
+        self.assertFalse(any(flag["interval"]["end_monotonic_s"] == 75 for flag in guard.contention_flags))
 
     def test_report_floor_filters_only_the_receipt(self):
         # 0.005 * 30 = 0.15 CPU-s; 0.14 / 0.16 are one TIME quantum
