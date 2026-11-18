@@ -13,7 +13,7 @@ if __name__ == "__main__":
     sys.dont_write_bytecode = True
 
 import argparse
-from bisect import bisect_right
+from bisect import bisect_left, bisect_right
 import builtins
 from collections import Counter
 import csv
@@ -26,7 +26,7 @@ import os
 from pathlib import Path
 import plistlib
 import re
-import struct
+from types import ModuleType
 
 
 CHANNELS = {"gpu_rail", "dc_in"}
@@ -43,6 +43,9 @@ COEFFICIENT_KEYS = {
 }
 BUILTIN_ERRORS = {value: name for name, value in vars(builtins).items()
                   if isinstance(value, type) and issubclass(value, BaseException) and name == value.__name__}
+DECODER_PATH = "joulewise/external/km003c_parse.py"
+DECODER_PACKAGE_PATH = "joulewise/external/__init__.py"
+METER_PERIODS = {0: 0.5, 1: 0.1, 2: 0.02, 3: 0.001}
 SQRT_TWO = math.sqrt(2)
 LOG_SQRT_TWO_PI = math.log(2 * math.pi) / 2
 
@@ -327,17 +330,25 @@ def dc_segment(timestamps, samples, start, end):
     """RL-166 Q2, with endpoints interpolated and RL-173 E.1's hole bound."""
     if (len(timestamps) != len(samples) or len(timestamps) < 2
             or not all(map(math.isfinite, timestamps)) or not all(map(math.isfinite, samples))
-            or not timestamps[0] <= start < end <= timestamps[-1]
-            or any(a >= b for a, b in zip(timestamps, timestamps[1:]))):
+            or any(a > b for a, b in zip(timestamps, timestamps[1:]))):
         raise ValueError("invalid DC-in samples or segment")
+    return dc_trapezoids(timestamps, samples, start, end)
+
+
+def dc_trapezoids(timestamps, samples, start, end):
+    if not timestamps or not timestamps[0] <= start <= end <= timestamps[-1]:
+        raise ValueError("DC-in samples do not bracket the segment")
+    if start == end:
+        return 0.0
+    lo, hi = bisect_right(timestamps, start) - 1, bisect_left(timestamps, end)
     pieces = []
-    for i in range(bisect_right(timestamps, start) - 1, len(timestamps) - 1):
+    for i in range(lo, hi):
         left_time, right_time = timestamps[i:i + 2]
-        if left_time >= end:
-            break
         duration = right_time - left_time
         if duration > 2:
             raise ValueError("DC-in segment intersects a trace hole")
+        if duration == 0:
+            continue
         left, right = max(start, left_time), min(end, right_time)
         slope = (samples[i + 1] - samples[i]) / duration
         left_value = samples[i] + slope * (left - left_time)
@@ -412,6 +423,11 @@ def digest(data):
     return hashlib.sha256(data).hexdigest()
 
 
+def file_digest(path):
+    with path.open("rb") as stream:
+        return hashlib.file_digest(stream, "sha256").hexdigest()
+
+
 def read_bound(path, sha256):
     data = path.read_bytes()
     if digest(data) != sha256:
@@ -436,8 +452,30 @@ def verify_pins(manifest, code_path):
             manifest["freeze2"]["schema"], manifest["outputs"]["schema"]]
     if child_path(repository, fit["twin"]["path"]) != code_path:
         raise ValueError("manifest names another twin")
+    if not {DECODER_PATH, DECODER_PACKAGE_PATH} <= {pin["path"] for pin in fit["dependencies"]}:
+        raise ValueError("meter decoder pins absent")
+    decoder = None
     for pin in pins:
-        read_bound(child_path(repository, pin["path"]), pin["sha256"])
+        path = child_path(repository, pin["path"])
+        data = read_bound(path, pin["sha256"])
+        if pin["path"] == DECODER_PATH:
+            decoder = (path, data)
+    return decoder
+
+
+def meter_decoder(verified):
+    path, data = verified
+    module = ModuleType("_cadence_twin_km003c")
+    module.__file__ = str(path)
+    def import_decoder_dependency(name, globals=None, locals=None, fromlist=(), level=0):
+        if level or name.partition(".")[0] not in sys.stdlib_module_names:
+            raise ImportError("meter decoder dependency is outside the allowed standard library")
+        return builtins.__import__(name, globals, locals, fromlist)
+
+    module.__dict__["__builtins__"] = {**vars(builtins), "__import__": import_decoder_dependency}
+    sys.modules[module.__name__] = module
+    exec(compile(data, str(path), "exec", dont_inherit=True), module.__dict__)
+    return module.parse
 
 
 def select_paths(view, prefix, fields):
@@ -711,23 +749,27 @@ def json_lines(data):
     return [decode_json(line) for line in data.splitlines() if line.strip()]
 
 
-def bundle_directory(span_dir, leg_id, read):
-    if not leg_id or Path(leg_id).name != leg_id or leg_id in (".", ".."):
-        raise ValueError("invalid leg identity")
-    leg = child_path(span_dir, Path("legs") / leg_id)
-    result = decode_json(read(child_path(leg, "leg_record.json")))["result"]
-    return child_path(child_path(leg, "runtime"), result["bundle"])
+def gpu_fields(data):
+    rows = csv.DictReader(io.StringIO(data.decode("utf-8")))
+    return (row for row in rows if row["source"] == "powermetrics" and row["rail"] == "gpu_power")
+
+
+def gpu_time_digest(data):
+    pairs = []
+    for row in gpu_fields(data):
+        left, right, _ = (finite(row[k]) for k in ("interval_start_s", "interval_end_s", "timestamp_s"))
+        pairs.append([left, right])
+    return digest(json.dumps(sorted(pairs)).encode("utf-8"))
 
 
 def gpu_rows(data):
     rows = []
-    for row in csv.DictReader(io.StringIO(data.decode("utf-8"))):
-        if row["source"] == "powermetrics" and row["rail"] == "gpu_power":
-            left, right, stamp, power = (finite(row[k]) for k in
-                                        ("interval_start_s", "interval_end_s", "timestamp_s", "power_w"))
-            if left >= right:
-                raise ValueError("invalid GPU support interval")
-            rows.append((left, right, stamp, power))
+    for row in gpu_fields(data):
+        left, right, stamp, power = (finite(row[k]) for k in
+                                    ("interval_start_s", "interval_end_s", "timestamp_s", "power_w"))
+        if left >= right:
+            raise ValueError("invalid GPU support interval")
+        rows.append((left, right, stamp, power))
     if not rows:
         raise ValueError("GPU trace is empty")
     return sorted(rows)
@@ -735,8 +777,10 @@ def gpu_rows(data):
 
 def power_intervals(rows, start, end):
     """Cut recorded GPU intervals at the segment's wall-clock bounds."""
-    if start >= end:
+    if start > end:
         raise ValueError("invalid wall-clock segment")
+    if start == end:
+        return 0.0, None
     pieces = []
     width, rightmost = 0.0, start
     for left, right, _, power in rows:
@@ -758,27 +802,117 @@ def power_intervals(rows, start, end):
     return math.fsum(pieces), min(1.0, width / (end - start))
 
 
-METER_SAMPLE = struct.Struct("<HHiiHHHH")
+METER_HEADER_KEYS = frozenset("k schema status reason rate_idx sps poll_s start_raw_ns start_real_ns start_mono_ns".split())
+METER_TRAILER_KEYS = frozenset("k polls empties bad usb_errors elapsed_s end_raw_ns end_mono_ns stop_reason".split())
 
 
-def meter_records(data):
-    rows = json_lines(data)
-    if len(rows) < 3 or rows[0]["k"] != "h" or rows[-1]["k"] != "t":
-        raise ValueError("meter header or trailer absent")
-    header, trailer = rows[0], rows[-1]
-    if header["status"] != "streaming" or finite(header["sps"]) <= 0:
-        raise ValueError("invalid meter header")
-    polls = []
-    for row in rows[1:-1]:
-        if row["k"] != "b" or type(row["n"]) is not int or row["n"] < 0:
-            raise ValueError("invalid meter poll")
-        payload = bytes.fromhex(row["p"])
-        if len(payload) != row["n"] * METER_SAMPLE.size:
-            raise ValueError("meter poll count differs from payload")
-        samples = [(tick, microvolts * microamps * 1e-12)
-                   for tick, _, microvolts, microamps, *_ in METER_SAMPLE.iter_unpack(payload)]
-        polls.append((row, samples))
-    return header, polls, trailer
+def meter_stream_paths(span):
+    directory = span / "hazards" / "meter"
+    if any(directory.glob("stream-*.jsonl.zst")):
+        raise ValueError("compressed meter input")
+    streams = sorted(directory.glob("stream-*.jsonl"))
+    for path in streams:
+        child_path(span, path.relative_to(span))
+    return streams
+
+
+def meter_time_digest(streams):
+    """Stage-1 time identity. Project raw counters without decoding watts or clocks."""
+    combined = hashlib.sha256()
+    for name, data in streams:
+        header = trailer = None
+        polls, errors = [], 0
+        lines = data.decode("utf-8").split("\n")
+        for index, line in enumerate(lines):
+            if not line.strip():
+                continue
+            try:
+                row = json.loads(line)
+                if not isinstance(row, dict):
+                    raise ValueError("meter row is not an object")
+            except ValueError:
+                errors += index < len(lines) - 1
+                continue
+            kind = row.get("k")
+            if kind == "h":
+                header = {key: row[key] for key in row.keys() & METER_HEADER_KEYS}
+            elif kind == "t":
+                trailer = {key: row[key] for key in row.keys() & METER_TRAILER_KEYS}
+            elif kind == "e":
+                errors += 1
+            elif kind == "b":
+                try:
+                    payload = bytes.fromhex(row.get("p") or "")
+                except (TypeError, ValueError):
+                    payload = b""
+                counters = [int.from_bytes(payload[i:i + 2], "little") for i in range(0, len(payload) - 19, 20)]
+                polls.append([row.get(key) for key in ("tx", "rx", "rt", "n")] + [counters])
+        combined.update(json.dumps([name, header, trailer, errors], sort_keys=True).encode("utf-8"))
+        for poll in polls:
+            combined.update(json.dumps(poll).encode("utf-8"))
+    return combined.hexdigest()
+
+
+def native_time_digest(rich, native):
+    rich_fields = (rb'"timestamp_s":\s*(-?[0-9][0-9.eE+-]*)', rb'"elapsed_ns":\s*([0-9]+)')
+    native_fields = (rb'<key>elapsed_ns</key>\s*<integer>([0-9]+)</integer>',
+                     rb'<key>thermal_pressure</key>\s*<string>([^<]*)</string>')
+
+    def capture(pattern, content, convert):
+        found = re.search(pattern, content)
+        return convert(found[1]) if found else None
+
+    rows = [[capture(pattern, line, bytes.decode) for pattern in rich_fields]
+            for line in rich.split(b"\n") if line.strip()]
+    frames = [frame for frame in native.split(b"\0") if frame.strip()]
+    states = [[capture(native_fields[0], frame, bytes.decode), capture(native_fields[1], frame, bytes.hex)]
+              for frame in frames[:len(rows)]]
+    return digest(json.dumps([rows, states, len(frames)], sort_keys=True, separators=(",", ":"),
+                             allow_nan=False).encode("utf-8"))
+
+
+def coverage_intervals(intervals, start, end):
+    if end <= start:
+        return None
+    rightmost, covered = start, 0.0
+    for left, right in intervals:
+        if left >= end:
+            break
+        edge = min(right, end)
+        length = edge - max(left, rightmost)
+        if length > 0:
+            covered += length
+            rightmost = edge
+    return covered / (end - start)
+
+
+def sample_coverage(timestamps, period, start, end):
+    half = period / 2
+    first = bisect_left(timestamps, start - half)
+    support = ((timestamps[i] - half, timestamps[i] + half) for i in range(first, len(timestamps)))
+    return coverage_intervals(support, start, end)
+
+
+def pooled_meter(streams, parse):
+    samples, period = [], 0.0
+    for path in streams:
+        stream = parse(path)
+        if not stream.present or not stream.aligned:
+            continue
+        header = stream.header
+        if type(header["start_real_ns"]) is not int or type(header["start_raw_ns"]) is not int:
+            raise ValueError("meter epoch anchor is invalid")
+        offset = header["start_real_ns"] - header["start_raw_ns"]
+        period = max(period, METER_PERIODS[header["rate_idx"]])
+        samples.extend(((raw + offset) / 1e9, finite(watts)) for raw, watts in
+                       zip(stream.host_ns, stream.watts, strict=True))
+    samples.sort(key=lambda row: row[0])
+    times, watts = map(tuple, zip(*samples, strict=True)) if samples else ((), ())
+
+    def measure(start, end):
+        return dc_trapezoids(times, watts, start, end), sample_coverage(times, period, start, end)
+
+    return measure
 
 
 def responses_for_leg(record, gpu, dc_segment_reader):
@@ -789,7 +923,7 @@ def responses_for_leg(record, gpu, dc_segment_reader):
         tails = {str(tail["prefix_len"]): measure(tail["wall_start_s"], tail["wall_end_s"])[0]
                  for tail in record["prefix_tails"]}
         output[channel] = {"segments": [energy for energy, _ in samples], "prefix_tails": tails,
-                           "coverage_min": min(coverage for _, coverage in samples)}
+                           "coverage_min": min((value for _, value in samples if value is not None), default=1.0)}
     return output
 
 
@@ -841,45 +975,51 @@ def soak_summary(receipts):
     }
 
 
-def mean_centered_slope(legs):
-    """Step 3(ii), eliminate the block-index fixed effects before fitting gamma."""
+def matched_step3_blocks(legs):
     by_block = {}
     for leg in legs:
         for block, temperature, joules in leg:
             by_block.setdefault(block, []).append((temperature, math.log(joules)))
-    matched = [rows for rows in by_block.values() if len(rows) > 1]
-    if not any(max(t for t, _ in rows) - min(t for t, _ in rows) >= 2 for rows in matched):
-        return None
+    return [rows for rows in by_block.values() if len(rows) > 1]
+
+
+def mean_centered_slope(legs):
+    """Step 3(ii), eliminate the block-index fixed effects before fitting gamma."""
     numerators, denominators = [], []
-    for rows in matched:
+    for rows in matched_step3_blocks(legs):
         mean_temp, mean_log = (math.fsum(values) / len(rows) for values in zip(*rows, strict=True))
         for temp, log_joules in rows:
             numerators.append((temp - mean_temp) * (log_joules - mean_log))
             denominators.append((temp - mean_temp)**2)
-    return math.fsum(numerators) / math.fsum(denominators)
+    denominator = math.fsum(denominators)
+    return math.fsum(numerators) / denominator if denominator > 0 else None
 
 
 def step3_drift(legs):
     """Largest absolute eligible gamma times the median Automatic TV0h rise."""
     from statistics import median
 
-    main = mean_centered_slope([rows for _, _, rows in legs])
-    if main is None:
+    all_rows = [rows for _, _, rows in legs]
+    matched = matched_step3_blocks(all_rows)
+    if not any(round(max(t for t, _ in rows) - min(t for t, _ in rows), 3) >= 2 for rows in matched):
         return False, None
     automatic = [(rise, rows) for high_power, rise, rows in legs if not high_power]
-    if not automatic:
+    rises = [rise for rise, _ in automatic if rise is not None]
+    if not rises:
         return True, None
-    slopes = [main, mean_centered_slope([rows for _, rows in automatic])]
+    slopes = [mean_centered_slope(all_rows), mean_centered_slope([rows for _, rows in automatic])]
     for i in range(len(legs)):
         slopes.append(mean_centered_slope([rows for _, _, rows in (*legs[:i], *legs[i + 1:])]))
-    return True, max(abs(value) for value in slopes if value is not None) * median(rise for rise, _ in automatic)
+    return True, round(max(abs(value) for value in slopes if value is not None) * median(rises), 8)
 
 
 def step3_projection(cells, threshold):
     rows, drifts = [], []
-    for cell, measurements in sorted(cells.items()):
+    for cell, measurements in sorted(cells.items(), key=lambda item: (item[0] != 10000, item[0])):
         failures, legs = measurements
-        if failures > 2:
+        if not failures and not legs:
+            continue
+        if failures > 2 or not legs:
             rows.append({"prompt_tokens": cell, "status": "not_run", "gamma_estimable": None})
             continue
         estimable, drift = step3_drift(legs)
@@ -907,12 +1047,12 @@ def primary_identity(c, args, stage1):
         raise ValueError("coefficient onset error does not match committed stage 1")
 
 
-def child_frame(args, recompute):
+def child_frame(args):
     import numpy as np
 
     manifest = decode_json(read_bound(args.manifest, args.manifest_sha256))
     stage1 = decode_json(read_bound(args.stage1, args.stage1_sha256))
-    verify_pins(manifest, Path(__file__).resolve())
+    decoder_pin = verify_pins(manifest, Path(__file__).resolve())
     if manifest["look_id"] != "lm-interim-01" or stage1["look_id"] != manifest["look_id"]:
         raise ValueError("wrong look identity")
     if stage1["manifest_sha256"] != args.manifest_sha256 or stage1["numpy_version"] != np.__version__:
@@ -920,7 +1060,10 @@ def child_frame(args, recompute):
     coefficient_bytes = read_bound(args.coefficients, args.coefficients_sha256)
     fit = decode_json(args.fit.read_bytes())
     step3 = decode_json(args.step3.read_bytes())
-    own_fit, own_step3 = recompute(args, manifest, stage1, fit["custody"], step3["custody"])
+    threshold, = (row["threshold"] for row in manifest["decisions"] if row["id"] == "drift_tripwire")
+    if step3["tripwire"]["threshold_applied"] != threshold:
+        raise ValueError("primary Step 3 threshold differs from the manifest")
+    own_fit, own_step3 = recompute_bundle(args, stage1, fit["custody"], step3["custody"], decoder_pin, threshold)
     coefficients = decode_json(coefficient_bytes)
     primary_identity(coefficients, args, stage1)
     primary_projection = projections(stage1, coefficients, fit, step3)
@@ -951,13 +1094,14 @@ def step3_records(events_data, turns_data, journal_data, rich_data, native_data)
 
     journal = []
     for row in json_lines(journal_data):
-        if row.get("error") is not None or not row.get("values"):
+        if row.get("kind") != "reading" or row.get("error") or not row.get("values"):
             continue
         journal.append((row["finished"]["wall_ns"] / 1e9, row["started"]["monotonic_ns"],
                         row["values"]["sensors"].get("TV0h"), row["values"]["status"]))
-    native = [plistlib.loads(frame) for frame in native_data.split(b"\0") if frame.strip()]
+    native = (frame for frame in native_data.split(b"\0") if frame.strip())
     power_state = []
-    for frame, raw in zip(json_lines(rich_data), native, strict=True):
+    for frame, raw_bytes in zip(json_lines(rich_data), native):
+        raw = plistlib.loads(raw_bytes)
         if frame["elapsed_ns"] != raw["elapsed_ns"]:
             raise ValueError("Step 3 telemetry intervals disagree")
         states = [(state["freq"], state["used_ns"]) for state in frame["gpu"]["dvfm_states"]]
@@ -968,7 +1112,7 @@ def step3_records(events_data, turns_data, journal_data, rich_data, native_data)
 
 
 def step3_cut(start, token_times, journal, power_state):
-    """RL-150 §1.3 guard, with the endpoint snapped to a stamped token."""
+    """RL-150 §1.3 guarded wall time before applying the token-index cut."""
     end = token_times[-1]
 
     def fresh(row):
@@ -993,7 +1137,8 @@ def step3_cut(start, token_times, journal, power_state):
                     *(row[0] for row in power_state if start < row[0] <= end
                       and row[2] not in (None, "Nominal", "Unknown"))), default=None)
     if off_time is not None:
-        last_nominal = max(row[0] for row in journal if row[0] < off_time and fresh(row) and not off(row[3]))
+        last_nominal = max((row[0] for row in journal if row[0] < off_time and fresh(row) and not off(row[3])),
+                           default=start)
         cuts.append(min(last_nominal, off_time - 2))
 
     # Apply the e20 rule only to windows beginning at least 10 s into decode.
@@ -1020,16 +1165,199 @@ def step3_cut(start, token_times, journal, power_state):
         if total and math.fsum(numerators) < 0.97 * reference * total:
             cuts.append(begin)
             break
-    index = bisect_right(token_times, min(cuts)) - 1
-    return token_times[index] if index >= 0 else None
+    return min(cuts)
 
 
-def recompute_bundle(args, manifest, stage1, fit_identity, step3_identity):
-    # A layout using the right field names can still produce different energies
-    # when poll timestamps are aligned differently. Stop before opening any raw
-    # stream until the registered clock and identity definitions are supplied.
-    raise NotImplementedError("raw stream clock and identity contract required")
+def step3_temperature(journal, time):
+    return next((temperature for stamp, _, temperature, _ in reversed(journal)
+                 if stamp <= time and temperature is not None), None)
+
+
+def step3_observations(start, tokens, journal, power, gpu):
+    cut = step3_cut(start, tokens, journal, power)
+    if cut is None:
+        return False, None, []
+    prefix = bisect_right(tokens, cut)
+    first, last = step3_temperature(journal, tokens[0]), step3_temperature(journal, cut)
+    rise = last - first if first is not None and last is not None else None
+    observations = []
+    for block in range(1, prefix // 256):
+        left, right = tokens[256 * block - 1], tokens[256 * block + 255]
+        readings = [temperature for stamp, _, temperature, _ in journal
+                    if left < stamp <= right and temperature is not None]
+        temperature = math.fsum(readings) / len(readings) if readings else step3_temperature(journal, (left + right) / 2)
+        if temperature is not None:
+            joules, _ = power_intervals(gpu, left, right)
+            if joules <= 0:
+                raise ValueError("nonpositive Step 3 block response")
+            observations.append((block, temperature, joules))
+    # All admitted development legs in the interim adapter are Automatic.
+    return False, rise, observations
+
+
+def step3_measurements(bundle):
+    sources = ("events.jsonl", "outputs/align_turns.jsonl", "outputs/align_thermal.jsonl",
+               "rich_telemetry.jsonl", "raw/powermetrics.plist")
+    start, _, tokens, journal, power = step3_records(*(child_path(bundle, name).read_bytes() for name in sources))
+    gpu = gpu_rows(child_path(bundle, "power_trace.csv").read_bytes())
+    return step3_observations(start, tokens, journal, power, gpu)
+
+
+
+OPERATIONAL_BUNDLE_FILES = (
+    "events.jsonl", "outputs/align_turns.jsonl", "outputs/align_thermal.jsonl", "config.json",
+    "outputs/align_runtime_events.jsonl", "align_runtime_events.jsonl",
+)
+
+
+def present_file(span, name):
+    path = span / name
+    if path.with_name(path.name + ".zst").is_file():
+        raise ValueError("compressed custody input")
+    if path.is_file():
+        return child_path(span, name)
+    return None
+
+
+def span_identities(span):
+    receipt_path = child_path(span, "runner_receipt.json")
+    receipt = decode_json(receipt_path.read_bytes())
+    roster = receipt["roster"]
+    if not isinstance(roster, list) or len(set(roster)) != len(roster):
+        raise ValueError("invalid runner receipt roster")
+    names = {"runner_receipt.json", "soak/soak_reference.json"}
+    bundles = {}
+    for leg in roster:
+        if not leg or Path(leg).name != leg or leg in (".", ".."):
+            raise ValueError("invalid receipt leg ID")
+        prefix = f"legs/{leg}"
+        record_name = f"{prefix}/leg_record.json"
+        names.update((record_name, f"{prefix}/leg_summary.json"))
+        record_path = present_file(span, record_name)
+        if record_path is None:
+            continue
+        record = decode_json(record_path.read_bytes())
+        bundle = (record.get("result") or {}).get("bundle")
+        if not bundle or record.get("spec", {}).get("leg_type") == "T":
+            continue
+        if Path(bundle).name != bundle or bundle in (".", ".."):
+            raise ValueError("invalid runtime bundle name")
+        relative = f"{prefix}/runtime/{bundle}"
+        bundles[leg] = relative
+        names.update(f"{relative}/{suffix}" for suffix in OPERATIONAL_BUNDLE_FILES)
+
+    raw_files = {}
+    for name in sorted(names):
+        path = present_file(span, name)
+        if path is not None:
+            raw_files[name] = file_digest(path)
+    native_time = {}
+    for relative in bundles.values():
+        rich = present_file(span, f"{relative}/rich_telemetry.jsonl")
+        native = present_file(span, f"{relative}/raw/powermetrics.plist")
+        if rich is not None and native is not None:
+            native_time[relative] = native_time_digest(rich.read_bytes(), native.read_bytes())
+    return receipt, bundles, raw_files, native_time
+
+
+def verified_span_inputs(span, identity):
+    receipt, bundles, operational, native = span_identities(span)
+    if identity["files_sha256"] != operational or identity["native_pm_sha256"] != native:
+        raise ValueError("stage-1 span identities differ from custody")
+    streams = meter_stream_paths(span)
+    expected = identity["meter_time_sha256"]
+    if expected is not None and expected != meter_time_digest((path.name, path.read_bytes()) for path in streams):
+        raise ValueError("stage-1 meter time identity differs from custody")
+    return receipt, bundles, streams
+
+
+def check_custody_inventory(root, spans, *inventories):
+    seen = {}
+    for inventory in inventories:
+        for file in inventory["files"]:
+            path = Path(file["path"])
+            resolved = (root / path).resolve(strict=True)
+            if not any(resolved.is_relative_to(span) for span in spans):
+                raise ValueError("comparison input outside named spans")
+            if resolved.suffix == ".zst" or resolved.with_name(resolved.name + ".zst").is_file():
+                raise ValueError("compressed comparison input")
+            sha256 = file["sha256"]
+            if resolved in seen and seen[resolved] != sha256:
+                raise ValueError("inconsistent comparison input identities")
+            if resolved not in seen:
+                if file_digest(resolved) != sha256:
+                    raise ValueError("comparison input digest mismatch")
+                seen[resolved] = sha256
+
+
+def gpu_input(span, bundle):
+    name = f"{bundle}/power_trace.csv"
+    path = present_file(span, name)
+    if path is None:
+        raise FileNotFoundError("missing GPU trace")
+    return path
+
+
+def recompute_bundle(args, stage1, fit_identity, step3_identity, decoder_pin, threshold):
+    roster = stage1["roster"]["spans"]
+    span_records = {row["span_id"]: row for row in roster}
+    if len(span_records) != len(roster):
+        raise ValueError("duplicate span ID")
+    directories = span_dirs(args.custody, args.span_dir, span_records)
+    parse = meter_decoder(decoder_pin)
+    check_custody_inventory(args.custody.resolve(), directories.values(), fit_identity, step3_identity)
+    receipts, bundle_paths, streams = {}, {}, {}
+    for key, row in span_records.items():
+        receipts[key], bundle_paths[key], streams[key] = verified_span_inputs(directories[key], row["custody"])
+    fit_legs = [row for row in stage1["legs"] if row["in_energy_fit"]]
+    step3_legs = [row for row in stage1["legs"] if row["included"] and row["role"] == "fit" and row["leg_type"] == "A"]
+    known_bundles = {}
+    for row in stage1["legs"]:
+        if row["leg_type"] == "T":
+            if row["in_energy_fit"]:
+                raise ValueError("type-T leg in response roster")
+            continue
+        key, slash, tag = row["leg_key"].partition("/")
+        if not slash or key != row["span_id"] or row["leg_key"] in known_bundles:
+            raise ValueError("invalid stage-1 leg identity")
+        relative = bundle_paths[key].get(tag)
+        known_bundles[row["leg_key"]] = relative
+        gpu_identity = (row.get("trace_holes") or {}).get("gpu_rail", {}).get("rows_sha256")
+        if gpu_identity is not None:
+            if relative is None or gpu_identity != gpu_time_digest(gpu_input(directories[key], relative).read_bytes()):
+                raise ValueError("stage-1 GPU time identity differs from custody")
+        elif row["in_energy_fit"]:
+            raise ValueError("GPU time identity required for fit")
+
+    dc_readers = {}
+    responses = []
+    for row in fit_legs:
+        key = row["span_id"]
+        if span_records[key]["custody"]["meter_time_sha256"] is None:
+            raise ValueError("meter time identity required for fit")
+        if key not in dc_readers:
+            dc_readers[key] = pooled_meter(streams[key], parse)
+        bundle = known_bundles[row["leg_key"]]
+        gpu = gpu_rows(gpu_input(directories[key], bundle).read_bytes())
+        responses.append(responses_for_leg(row, gpu, dc_readers[key]))
+    marked = {key for key, row in span_records.items() if row["marks"]}
+    fit = recompute_fit(stage1, fit_legs, responses, marked)
+    fit["soak_retries"] = soak_summary(receipts)
+    cells = {}
+    for row in step3_legs:
+        size = row["cell_prompt_tokens"]
+        failures, legs = cells.setdefault(size, (0, []))
+        try:
+            relative = known_bundles[row["leg_key"]]
+            if relative is None:
+                raise ValueError("no accepted Step 3 bundle")
+            span = directories[row["span_id"]]
+            bundle = child_path(span, relative)
+            legs.append(step3_measurements(bundle))
+        except (OSError, KeyError, TypeError, IndexError, ValueError, plistlib.InvalidFileException):
+            cells[size] = (failures + 1, legs)
+    return fit, step3_projection(cells, threshold)
 
 
 if __name__ == "__main__":
-    run_child(lambda: child_frame(child_arguments(sys.argv[1:]), recompute_bundle))
+    run_child(lambda: child_frame(child_arguments(sys.argv[1:])))
