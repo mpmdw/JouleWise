@@ -100,6 +100,26 @@ def score(mark_read):
         raise type("FixturePrivateExit", (BaseException,), {})("fixture private exit")
     if mode == "builtin":
         raise RuntimeError("fixture canary 123.456")
+    if mode in ("unhashable-type", "classification-failure"):
+        (root / "completed-read").touch()
+        if mode == "unhashable-type":
+            class UnhashableType(type):
+                __hash__ = None
+
+            class UnhashableFixtureError(Exception, metaclass=UnhashableType):
+                pass
+
+            raise UnhashableFixtureError("fixture")
+
+        class FixtureLookupFailure(BaseException):
+            pass
+
+        class UnavailableLinalg:
+            def __getattr__(self, name):
+                raise FixtureLookupFailure("fixture lookup failure")
+
+        sys.modules["numpy.linalg"] = UnavailableLinalg()
+        raise RuntimeError("fixture")
     if mode in ("unlisted", "impostor"):
         cls = (
             type("RuntimeError", (Exception,), {"__module__": "builtins"})
@@ -344,6 +364,19 @@ class TransferReleaseTests(unittest.TestCase):
                 prior = (restricted / "stderr").read_bytes()
                 self.assertEqual(self.worker(root, mode).returncode, 2)
                 self.assertEqual((restricted / "stderr").read_bytes(), prior)
+
+    def test_post_read_notice_survives_exception_classification(self):
+        for mode in ("unhashable-type", "classification-failure"):
+            for unbuffered in (False, True):
+                with self.subTest(mode=mode, unbuffered=unbuffered):
+                    root = self.fixture(f"{mode}-{unbuffered}")
+                    env = {**os.environ, "PYTHONUNBUFFERED": "1" if unbuffered else ""}
+                    result = subprocess.run(self.command(root, mode), cwd=ROOT, env=env,
+                                            capture_output=True, check=False)
+                    self.assertTrue((root / "completed-read").exists())
+                    self.assertEqual((result.returncode, result.stdout, result.stderr),
+                                     (1, b"", b"stage2_error\nOtherError\n"))
+                    self.assertEqual(list((root / "public").iterdir()), [])
 
     def test_public_result_is_invariant_when_private_values_change_without_word_flip(self):
         roots = (self.fixture("world1", value=12.5), self.fixture("world2", value=-4.1))
