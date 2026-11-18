@@ -14,9 +14,11 @@ import os
 from pathlib import Path
 import plistlib
 import py_compile
+import shutil
 import subprocess
 import sys
 import tempfile
+from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
@@ -709,6 +711,86 @@ class SeriesReleaseTests(unittest.TestCase):
                     redirect_stderr(StringIO()), self.assertRaises(SystemExit) as refusal:
                 caller.main(argv)
             self.assertEqual(refusal.exception.code, 1)
+            self.assertFalse(output.exists())
+
+    def test_bound_compressed_only_inputs_require_restore_before_reading(self):
+        from scripts import align_v4_series_release as caller
+
+        # Every named input goes through the same manifest lookup. The bytes
+        # of a compressed sibling must never be opened at this boundary.
+        run_id = "synthetic-C1-01"
+        names = {
+            **dict.fromkeys((*caller.REQUIRED_BUNDLE_FILES, caller.PM_ROWS), False),
+            **dict.fromkeys((*caller.OPTIONAL_BUNDLE_FILES, caller.DC_FILE), True),
+        }
+        checks = {f"runs/{run_id}/{name}": optional for name, optional in names.items()}
+        journal = "archive/align_s_hazard.jsonl"
+        checks[journal] = False
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            restored = root / "series/restored/C1"
+            for name in checks:
+                sibling = restored / (name + ".zst")
+                sibling.parent.mkdir(parents=True, exist_ok=True)
+                sibling.write_bytes(b"synthetic compressed entry")
+            manifest = describe(restored, "finalized_manifest.json",
+                                harvest_offload.finalized_manifest(restored), canonical=True)
+            record = SimpleNamespace(window="C1", finalized_manifest_sha256=manifest["sha256"])
+            files = caller.RestoredFiles(root, record, {"trace_layout": caller.LAYOUT, "hazard_journal": journal})
+            with patch.object(caller, "named_bytes", side_effect=AssertionError("unexpected input read")):
+                self.assertIsNone(files.read("runs/synthetic-absent/events.jsonl", optional=True))
+                for name, optional in checks.items():
+                    with self.subTest(name=name), self.assertRaisesRegex(ValueError, "requires restoration"):
+                        files.read(name, optional=optional)
+
+            # The frozen reader prefers the bound plain file if both exist.
+            name = f"runs/{run_id}/events.jsonl"
+            plain = b"synthetic plain entry\n"
+            (restored / name).write_bytes(plain)
+            manifest = describe(restored, "finalized_manifest.json",
+                                harvest_offload.finalized_manifest(restored), canonical=True)
+            record.finalized_manifest_sha256 = manifest["sha256"]
+            files = caller.RestoredFiles(root, record, {"trace_layout": caller.LAYOUT, "hazard_journal": journal})
+            self.assertEqual(files.bundle(run_id, "events.jsonl", optional=True), plain)
+
+    @unittest.skipUnless(shutil.which("zstd") or Path("/opt/homebrew/bin/zstd").is_file(), "zstd CLI required")
+    def test_stored_101_win_series_refuses_bound_compressed_only_events_without_report(self):
+        from joulewise.authentication_io import CompressedBundleRequiresRestore
+        from joulewise.desk_compress import zstd_path
+
+        window = "C8"
+        selected = series.selected(series.candidate(), window)
+        ordinal = selected["sabotage_ordinals"][series.PAIRS[0]]
+        run_id = f"synthetic-{window}-{ordinal:02d}"
+        finalized_manifest = harvest_offload.finalized_manifest
+
+        def finalize(directory):
+            if directory.name == window:
+                bundle = directory / "runs" / run_id
+                events = bundle / "events.jsonl"
+                raw = events.read_bytes()
+                rows, _ = s_rows.read_member_rows(bundle, s_rows.REGISTERED)
+                self.assertTrue(rows.rows)
+                encoded = events.with_suffix(".jsonl.zst")
+                subprocess.run([zstd_path(), "-q", "--rm", "-o", str(encoded), str(events)], check=True)
+                self.assertEqual(subprocess.check_output([zstd_path(), "-qdc", str(encoded)]), raw)
+                with self.assertRaises(CompressedBundleRequiresRestore) as refusal:
+                    s_rows.read_member_rows(bundle, s_rows.REGISTERED)
+                self.assertEqual(refusal.exception.path, str(events))
+                manifest = finalized_manifest(directory)
+                self.assertIn(f"runs/{run_id}/events.jsonl.zst", manifest["entries"])
+                self.assertNotIn(f"runs/{run_id}/events.jsonl", manifest["entries"])
+                return manifest
+            return finalized_manifest(directory)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            with patch.object(harvest_offload, "finalized_manifest", side_effect=finalize):
+                stored_series(root, wins=101)
+            output = root / "report.json"
+            result = invoke(root, output)
+            written = json.loads(output.read_bytes())[seal.RL176]["S"] if output.exists() else None
+            self.assertEqual(result.returncode, 1, (result.stderr, written))
             self.assertFalse(output.exists())
 
     def test_post_release_terminal_authority_refuses_before_member_loading(self):
