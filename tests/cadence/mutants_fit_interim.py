@@ -210,11 +210,14 @@ MUTANTS = [
 
 
 def _copy_tree(tmp):
+    from tests.cadence import look_minirepo as mr
+
     for d in ("joulewise", "scripts"):
         shutil.copytree(ROOT / d, tmp / d, ignore=shutil.ignore_patterns("__pycache__"))
     (tmp / "configs/align/v4").mkdir(parents=True)      # the runtime sensor policy the rules-3/4 test reads
     shutil.copy(ROOT / "configs/align/v4/r1_runtime.json", tmp / "configs/align/v4/r1_runtime.json")
     shutil.copytree(ROOT / "docs/process/cadence/looks", tmp / "docs/process/cadence/looks")   # the schemas
+    mr.copy_missing_fixture_sources(tmp)
     (tmp / "tests").mkdir()
     for f in (ROOT / "tests").iterdir():          # tests/__init__.py installs the host-command guard
         if f.is_file() and f.suffix == ".py":

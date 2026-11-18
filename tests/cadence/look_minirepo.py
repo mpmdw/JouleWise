@@ -62,14 +62,24 @@ def _draft_ledger(ledger, doc_sha):
     return ledger
 
 
+def fixture_sources(doc):
+    return ({path for _, path, _ in lm.code_refs(doc)} | set(lm.EVIDENCE)
+            | {MANIFEST, lm.LOOK_LEDGER_PATH, lm.Q11_EVIDENCE["path"]} | qualification_files())
+
+
+def copy_missing_fixture_sources(root):
+    for rel in fixture_sources(json.loads((REPO / MANIFEST).read_bytes())):
+        target = root / rel
+        if not target.exists():
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(REPO / rel, target)
+
+
 def mini_repo(test):
     root = Path(tempfile.mkdtemp(prefix="lm-mini-"))
     test.addCleanup(lambda: shutil.rmtree(root, ignore_errors=True))
     doc = json.loads((REPO / MANIFEST).read_text(encoding="utf-8"))
-    paths = {path for _, path, _ in lm.code_refs(doc)} | set(lm.EVIDENCE) | {MANIFEST, lm.LOOK_LEDGER_PATH,
-                                                                         lm.Q11_EVIDENCE["path"]}
-    paths |= qualification_files()
-    for rel in sorted(paths):
+    for rel in sorted(fixture_sources(doc)):
         dst = root / rel
         dst.parent.mkdir(parents=True, exist_ok=True)
         if (REPO / rel).is_file():

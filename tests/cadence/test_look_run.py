@@ -402,6 +402,15 @@ def looks_file(stage1_sha256, status="stage1_committed", verdicts_sha256="3" * 6
 _DEFAULT_MANIFEST = []
 
 
+def copy_bytecode_fixture(root):
+    from tests.cadence import look_minirepo as mr
+
+    for directory in ("joulewise", "scripts", "configs/align/v4", "docs/process/cadence/looks", "docs/research"):
+        if (REPO / directory).is_dir():
+            shutil.copytree(REPO / directory, root / directory, ignore=shutil.ignore_patterns("__pycache__"))
+    mr.copy_missing_fixture_sources(root)
+
+
 def run_cli(argv, trap=False, mock_stage2=False, extra=None):
     """The CLI with a draft manifest whose pins match this tree, and, for stage 2, a LOOKS.json that names the
     stage-1 hash, unless the test passes its own."""
@@ -1565,9 +1574,7 @@ class RoundThree(unittest.TestCase):
         import sys
         with tempfile.TemporaryDirectory() as d:
             root = Path(d)
-            for sub in ("joulewise", "scripts", "configs/align/v4", "docs/process/cadence/looks", "docs/research"):
-                if (REPO / sub).is_dir():
-                    shutil.copytree(REPO / sub, root / sub, ignore=shutil.ignore_patterns("__pycache__"))
+            copy_bytecode_fixture(root)
             src = root / "joulewise/cadence_looks/fit_interim.py"
             bad = root / "bad_fit.py"
             bad.write_text(src.read_text().replace("QUALIFIED_THRESHOLD = 0.02", "QUALIFIED_THRESHOLD = 0.92"))
@@ -1728,9 +1735,7 @@ class RoundFour(unittest.TestCase):
         import sys
         with tempfile.TemporaryDirectory() as d:
             root = Path(d) / "tree"
-            for sub in ("joulewise", "scripts", "configs/align/v4", "docs/process/cadence/looks", "docs/research"):
-                if (REPO / sub).is_dir():
-                    shutil.copytree(REPO / sub, root / sub, ignore=shutil.ignore_patterns("__pycache__"))
+            copy_bytecode_fixture(root)
             py_compile.compile(str(root / "joulewise/cadence_looks/fit_interim.py"), doraise=True)
             ip = Path(d) / "li.json"
             wb(ip, synth.dump(self.c.li))
