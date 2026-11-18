@@ -59,6 +59,10 @@
     }
   ],
   "code_pins": {
+    "kit_commitments": {
+      "path": "docs/process/cadence/looks/look-kit-commitments.v2.json",
+      "sha256": "PENDING:CODE"
+    },
     "reader": {
       "path": "joulewise/cadence_looks/description.py",
       "sha256": "PENDING:CODE"

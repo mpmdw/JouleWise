@@ -20,6 +20,15 @@
       "required": ["path", "sha256"],
       "properties": {"path": {"$ref": "#/$defs/path"}, "sha256": {"$ref": "#/$defs/codeHash"}}
     },
+    "lookKitCommitmentsPin": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "sha256"],
+      "properties": {
+        "path": {"const": "docs/process/cadence/looks/look-kit-commitments.v2.json"},
+        "sha256": {"$ref": "#/$defs/codeHash"}
+      }
+    },
     "block": {
       "type": "object",
       "additionalProperties": false,
@@ -518,8 +527,9 @@
         "code_pins": {
           "type": "object",
           "additionalProperties": false,
-          "required": ["reader", "manifest_schema", "stage1_schema", "output_schema"],
+          "required": ["kit_commitments", "reader", "manifest_schema", "stage1_schema", "output_schema"],
           "properties": {
+            "kit_commitments": {"$ref": "#/$defs/lookKitCommitmentsPin"},
             "reader": {"$ref": "#/$defs/codePin"},
             "manifest_schema": {"$ref": "#/$defs/codePin"},
             "stage1_schema": {"$ref": "#/$defs/codePin"},
@@ -723,6 +733,7 @@
           "type": "object",
           "additionalProperties": false,
           "required": [
+            "kit_commitments",
             "predictor",
             "inclusion",
             "scorer",
@@ -735,6 +746,7 @@
             "release_boundary"
           ],
           "properties": {
+            "kit_commitments": {"$ref": "#/$defs/lookKitCommitmentsPin"},
             "predictor": {"$ref": "#/$defs/codePin"},
             "inclusion": {"$ref": "#/$defs/codePin"},
             "scorer": {"$ref": "#/$defs/codePin"},

@@ -10,6 +10,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch
 
 from joulewise.cadence_looks import manifest_dispatch as dispatch
 
@@ -92,12 +93,64 @@ class VariantContractTests(unittest.TestCase):
                     result = cli(candidate)
                     self.assertEqual((result.returncode, result.stdout), (2, b""))
                     self.assertIn(b"unknown cadence manifest schema ID", result.stderr)
-                    candidate.write_bytes(encode(dict(document, schema=dispatch.V1)))
+                    candidate.write_bytes(encode(dict(document, schema=dispatch.V1, look_id="lm-interim-01")))
                     # A v1 delegation receives the original payload. It cannot
                     # be overridden via its v2 look_kind or filename.
                     v1_tool = Path(tmp) / "synthetic_v1.py"
                     v1_tool.write_text("raise SystemExit(17)\n", encoding="utf-8")
                     self.assertEqual(cli(candidate, "--v1-tool", v1_tool).returncode, 17)
+
+    def test_v1_refuses_v2_look_ids_and_final_markers_before_delegating(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            candidate = Path(tmp) / "interim.json"
+            tool = Path(tmp) / "legacy.py"
+            tool.write_text("raise SystemExit(0)\n", encoding="utf-8")
+            interim = {
+                "schema": dispatch.V1,
+                "look_kind": "interim",
+                "look_id": "lm-interim-01",
+                "status": "committed",
+                "title": "Synthetic interim final",
+            }
+            args = ["validate", str(candidate), "--v1-tool", str(tool)]
+            candidate.write_bytes(encode(interim))
+            self.assertEqual(cli(candidate, "--v1-tool", tool, "--final").returncode, 0)
+
+            with patch.object(dispatch.subprocess, "run") as delegate:
+                for look_id in ("lm-transfer-01", "lm-qual-01", "lm-qual-42",
+                                "lm-inst-01", "lm-stab-01", "lm-stab-02"):
+                    for flags in ([], ["--final"]):
+                        candidate.write_bytes(encode(dict(interim, look_id=look_id)))
+                        with self.subTest(look_id=look_id, flags=flags), redirect_stderr(StringIO()) as stderr:
+                            self.assertEqual(dispatch.main([*args, *flags]), 2)
+                            self.assertIn("reserved for v2", stderr.getvalue())
+                for variant in (
+                    dict(interim, title="OPEN-19"),
+                    dict(interim, rulings=[["PENDING:CODE"]]),
+                    dict(interim, review={"OPEN-19": "synthetic"}),
+                ):
+                    candidate.write_bytes(encode(variant))
+                    with self.subTest(variant=variant), redirect_stderr(StringIO()) as stderr:
+                        self.assertEqual(dispatch.main([*args, "--final"]), 2)
+                        self.assertIn("final manifest contains", stderr.getvalue())
+                delegate.assert_not_called()
+
+    def test_v1_delegate_receives_checked_bytes(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            candidate = Path(tmp) / "interim.json"
+            tool = Path(tmp) / "legacy.py"
+            tool.touch()
+            interim = {"schema": dispatch.V1, "look_kind": "interim", "look_id": "lm-interim-01"}
+            payload = encode(interim)
+            candidate.write_bytes(payload)
+
+            def delegate(command, *, check):
+                candidate.write_bytes(encode(dict(interim, look_id="lm-transfer-01")))
+                self.assertEqual(Path(command[4]).read_bytes(), payload)
+                return subprocess.CompletedProcess(command, 0)
+
+            with patch.object(dispatch.subprocess, "run", side_effect=delegate):
+                self.assertEqual(dispatch.main(["validate", str(candidate), "--v1-tool", str(tool)]), 0)
 
     def test_final_refuses_pending_and_open(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -146,6 +199,88 @@ class VariantContractTests(unittest.TestCase):
                 mutate(document)
                 with self.assertRaises(dispatch.ManifestError):
                     dispatch.validate_v2(encode(document))
+
+    def test_kit_commitments_refuse_relabelling_and_substituted_paths(self):
+        transfer = json.loads(DRAFT.read_bytes())
+        filler = json.loads(INSTRUMENT.read_bytes())["kits"][0]
+        true_kit = transfer["reads"]["kits"][0]
+        filler_path = str(
+            LOOKS.relative_to(ROOT).parent / "item-drafts-f2/f2-inst-01.v1.1.json"
+        )
+        for substitute in (
+            {"path": filler_path, "sha256": filler["sha256"]},
+            {"path": filler_path},
+            {"sha256": filler["sha256"]},
+            {"sha256": transfer["reads"]["kits"][1]["sha256"]},
+        ):
+            trial = deepcopy(transfer)
+            trial["reads"]["kits"][0].update(substitute)
+            with self.subTest(substitute=substitute, status="draft"), self.assertRaisesRegex(
+                dispatch.ManifestError, "cl-transfer-01.*commitment"
+            ):
+                dispatch.validate_v2(encode(trial))
+            trial["status"] = "registered"
+            registration = encode(trial)
+            final = registration.replace(dispatch.REGISTRATION_PLACEHOLDER, json.dumps(H).encode())
+            with self.subTest(substitute=substitute, status="registered"), self.assertRaises(dispatch.ManifestError):
+                dispatch.validate_v2(registration)
+            with self.subTest(substitute=substitute, status="final"), self.assertRaises(dispatch.ManifestError):
+                dispatch.validate_v2(final, final=True, registration=registration)
+            valid_final = registered_fixture().replace(dispatch.REGISTRATION_PLACEHOLDER, json.dumps(H).encode())
+            with self.subTest(substitute=substitute, status="registration only"), self.assertRaisesRegex(
+                dispatch.ManifestError, "cl-transfer-01.*commitment"
+            ):
+                dispatch.validate_v2(valid_final, final=True, registration=registration)
+
+        for source in (INSTRUMENT, STABILITY):
+            original = json.loads(source.read_bytes())
+            for digest in (true_kit["sha256"], original["kits"][1]["sha256"]):
+                trial = deepcopy(original)
+                kit = trial["kits"][0]
+                kit["sha256"] = digest
+                with self.subTest(source=source.name, status="draft"), self.assertRaisesRegex(
+                    dispatch.ManifestError, f"{kit['kit_id']}.*commitment"
+                ):
+                    dispatch.validate_v2(encode(trial))
+                trial["status"] = "committed"
+                final = encode(trial).replace(dispatch.REGISTRATION_PLACEHOLDER, json.dumps(H).encode())
+                with self.subTest(source=source.name, status="final"), self.assertRaises(dispatch.ManifestError):
+                    dispatch.validate_v2(final, final=True)
+
+        transfer["reads"]["planned_date_places"]["sha256"] = H
+        with self.assertRaisesRegex(dispatch.ManifestError, "date-place roster commitment"):
+            dispatch.validate_v2(encode(transfer))
+        qualification = json.loads(QUALIFICATION.read_bytes())
+        qualification["reads"]["blocks"][0]["kit_sha256"] = filler["sha256"]
+        with self.assertRaisesRegex(dispatch.ManifestError, "kit SHA-256 differs"):
+            dispatch.validate_v2(encode(qualification))
+
+    def test_rejects_unused_registration_before_open(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            registration = Path(tmp) / "RESTRICTED" / "coefficients.json"
+            description = Path(tmp) / "description.json"
+            payload = json.loads(INSTRUMENT.read_bytes())
+            payload["status"] = "committed"
+            for pin in payload["code_pins"].values():
+                pin["sha256"] = H
+            description.write_bytes(encode(payload))
+            read_bytes = Path.read_bytes
+
+            def guard(path):
+                if path == registration:
+                    raise AssertionError("unneeded registration reached open")
+                return read_bytes(path)
+
+            for candidate, flags in (
+                (description, ["--final"]),
+                (DRAFT, ["--final"]),
+                (QUALIFICATION, []),
+            ):
+                with self.subTest(candidate=candidate.name), patch.object(Path, "read_bytes", guard):
+                    with redirect_stderr(StringIO()) as stderr:
+                        status = dispatch.main(["validate", str(candidate), *flags, "--registration", str(registration)])
+                    self.assertEqual(status, 2)
+                    self.assertIn("--registration", stderr.getvalue())
 
     def test_description_shape(self):
         for source, custody in CUSTODY.items():
@@ -337,13 +472,16 @@ class DescriptionManifestTests(unittest.TestCase):
         fixture = {
             "schema": dispatch.V2, "look_kind": "description", "status": "committed",
             "look_id": "lm-inst-01", "title": "Synthetic design", "rulings": ["RL-181 §2.1"],
-            "kits": [{"kit_id": f"f2-inst-{i:02}", "sha256": H} for i in range(1, 4)],
+            "kits": json.loads(INSTRUMENT.read_bytes())["kits"],
             "channels": ["gpu_rail", "rail_sum", "dc_in"], "when": "after effective freeze 2",
             "rail_sum_columns": RAIL_SUM_COLUMNS,
             "stage1": "Synthetic operational roster",
             "freeze2": {"look_id": "lm-interim-01", "hash_key": "freeze2_sha256", "authority": "RL-183 §2.3"},
             "prints": [{"description": name, "destination": name} for name in names],
-            "code_pins": dict.fromkeys(("reader", "manifest_schema", "stage1_schema", "output_schema"), pin),
+            "code_pins": {
+                **dict.fromkeys(("reader", "manifest_schema", "stage1_schema", "output_schema"), pin),
+                "kit_commitments": {"path": str(dispatch.KIT_COMMITMENTS.relative_to(ROOT)), "sha256": H},
+            },
             "outputs": {
                 "public_file": "PUBLIC.json", "hashes": ["manifest_sha256", "stage1_sha256"],
                 "identifiers": ["look_id", "commit"], "counts": ["n_legs"],

@@ -8,6 +8,7 @@ from pathlib import Path
 import re
 import subprocess
 import sys
+from tempfile import TemporaryDirectory
 
 from . import qualification_manifest as schema_check
 
@@ -18,6 +19,7 @@ REGISTRATION_PLACEHOLDER = b'"PENDING:CODE"'
 FINAL_PLACEHOLDER = re.compile(r"PENDING:CODE|OPEN-[0-9]+")
 V2_SCHEMA = schema_check._SCHEMA
 V1_TOOL = V2_SCHEMA.parents[4] / "scripts/cadence_look_manifest.py"
+KIT_COMMITMENTS = V2_SCHEMA.with_name("look-kit-commitments.v2.json")
 ManifestError = schema_check.ManifestError
 
 TRANSFER_PRINTS = (
@@ -31,22 +33,31 @@ TRANSFER_PRINTS = (
 )
 
 
-def _validate_transfer(document):
-    kits = document["reads"]["kits"]
-    if [kit["kit_id"] for kit in kits] != [f"cl-transfer-{place:02}" for place in range(1, 21)]:
-        raise ManifestError("the transfer kit family must follow the twenty original date places")
+def _validate_transfer(document, commitments):
+    record = commitments[document["look_id"]]
+    reads = document["reads"]
+    if reads["planned_date_places"] != record["planned_date_places"]:
+        raise ManifestError("transfer date-place roster commitment differs from the published roster")
+    if len(reads["kits"]) != len(record["kits"]):
+        raise ManifestError("transfer kit commitment count differs from the published roster")
+    for actual, expected in zip(reads["kits"], record["kits"], strict=True):
+        if actual != expected:
+            raise ManifestError(f"{expected['kit_id']}: kit commitment differs from the published date place")
     prints = document["estimate"]["restricted_prints"]
     if tuple(row["id"] for row in prints) != TRANSFER_PRINTS:
         raise ManifestError("the transfer print inventory must name each ruled print once")
 
 
-def _validate_description(document):
+def _validate_description(document, commitments):
     instrument = document["look_id"] == "lm-inst-01"
-    kit_ids = [kit["kit_id"] for kit in document["kits"]]
-    family, count = ("inst", 3) if instrument else ("stab", 14)
-    expected_kits = {f"f2-{family}-{number:02}" for number in range(1, count + 1)}
-    if len(kit_ids) != count or set(kit_ids) != expected_kits:
+    source_look = "lm-inst-01" if instrument else "lm-stab-01"
+    expected = commitments[source_look]["kit_sha256_by_id"]
+    actual = {kit["kit_id"]: kit["sha256"] for kit in document["kits"]}
+    if len(actual) != len(document["kits"]) or actual.keys() != expected.keys():
         raise ManifestError("the description must name every kit from its own filler series once")
+    for kit_id, digest in actual.items():
+        if digest != expected[kit_id]:
+            raise ManifestError(f"{kit_id}: kit commitment differs from the published filler kit")
     channels = document["channels"]
     if len(set(channels)) != len(channels):
         raise ManifestError("description channels must be distinct")
@@ -67,20 +78,20 @@ def _validate_description(document):
         raise ManifestError("description prints must cover exactly the selected look's destinations")
 
 
-def _validate_shape(document, definitions):
+def _validate_shape(document, definitions, commitments):
     kind = document.get("look_kind")
     if kind not in ("qualification", "description", "transfer"):
         raise ManifestError("expected v2 look_kind qualification, description or transfer")
     pins = {}
     schema_check._check(document, definitions[kind], definitions, pins)
     if kind == "transfer":
-        _validate_transfer(document)
-    if kind == "description":
-        _validate_description(document)
+        _validate_transfer(document, commitments)
+    elif kind == "description":
+        _validate_description(document, commitments)
     return pins
 
 
-def _transfer_final(registration, candidate, pins, definitions):
+def _transfer_final(registration, candidate, pins, definitions, commitments):
     if registration is None:
         raise ManifestError("transfer final validation requires the exact registered manifest bytes")
     registered = schema_check._decode(registration)
@@ -88,7 +99,7 @@ def _transfer_final(registration, candidate, pins, definitions):
         registered.get("schema"), registered.get("look_kind"), registered.get("status")
     ) != (V2, "transfer", "registered"):
         raise ManifestError("expected a registered transfer manifest")
-    pending = _validate_shape(registered, definitions)
+    pending = _validate_shape(registered, definitions, commitments)
     if pending.keys() != pins.keys() or any(value != "PENDING:CODE" for value in pending.values()):
         raise ManifestError("registration must leave every code hash slot pending")
     sections = registration.split(REGISTRATION_PLACEHOLDER)
@@ -102,17 +113,56 @@ def _transfer_final(registration, candidate, pins, definitions):
         raise ManifestError("final manifest differs outside the registered hash slots")
 
 
+def _reject_final_placeholders(document):
+    # Search decoded strings, including object keys and strings in arrays.
+    marker = FINAL_PLACEHOLDER.search(json.dumps(document))
+    if marker:
+        raise ManifestError(f"final manifest contains {marker.group()}")
+
+
+def _reject_reserved_v1_look(document):
+    schema = json.loads(V2_SCHEMA.read_bytes())
+    definitions = schema["$defs"]
+    for variant in schema["oneOf"]:
+        name = variant["$ref"].removeprefix("#/$defs/")
+        rule = definitions[name]["properties"]["look_id"]
+        try:
+            schema_check._check(document.get("look_id"), rule, definitions, {})
+        except ManifestError:
+            continue
+        raise ManifestError("look_id is reserved for v2 cadence validation")
+
+
+def _validate_legacy(tool, payload, final):
+    if not tool.is_file():
+        raise ManifestError("pinned v1 entry point unavailable, supply --v1-tool")
+    # Keep the delegated check on the exact bytes used for dispatch.
+    with TemporaryDirectory(prefix="cadence-v1-manifest-") as directory:
+        manifest = Path(directory) / "manifest.json"
+        manifest.write_bytes(payload)
+        command = [sys.executable, "-B", str(tool), "validate", str(manifest)]
+        if final:
+            command.append("--final")
+        return subprocess.run(command, check=False).returncode
+
+
+def _check_registration_use(document, final):
+    if not final:
+        raise ManifestError("--registration requires --final")
+    if document.get("look_kind") not in ("qualification", "transfer") or document.get("status") != "registered":
+        raise ManifestError("--registration requires a registered qualification or transfer final")
+
+
 def validate_v2(payload: bytes, *, final=False, registration: bytes | None = None) -> dict:
     """Check the closed v2 variant and, for final transfer or qualification, its registration."""
     document = schema_check._decode(payload)
     if not isinstance(document, dict) or document.get("schema") != V2:
         raise ManifestError("expected the v2 cadence manifest schema ID")
     kind = document.get("look_kind")
+    if registration is not None:
+        _check_registration_use(document, final)
     if final and document.get("status") != "draft":
-        # Search decoded strings, including object keys and strings in arrays.
-        marker = FINAL_PLACEHOLDER.search(json.dumps(document))
-        if marker:
-            raise ManifestError(f"final manifest contains {marker.group()}")
+        _reject_final_placeholders(document)
     if kind == "qualification":
         if not final:
             return schema_check.validate_registration(payload)
@@ -121,14 +171,15 @@ def validate_v2(payload: bytes, *, final=False, registration: bytes | None = Non
         return schema_check.validate_final(registration, payload)
 
     definitions = json.loads(V2_SCHEMA.read_bytes())["$defs"]
-    pins = _validate_shape(document, definitions)
+    commitments = json.loads(KIT_COMMITMENTS.read_bytes())
+    pins = _validate_shape(document, definitions, commitments)
     if not final:
         return document
 
     if document["status"] == "draft":
         raise ManifestError("a draft cannot pass final validation")
     if kind == "transfer":
-        _transfer_final(registration, payload, pins, definitions)
+        _transfer_final(registration, payload, pins, definitions, commitments)
     elif document["look_id"] == "lm-stab-02" and "kit_index_path" not in document:
         raise ManifestError("final lm-stab-02 must name the f2-stab/KITS.json index")
     return document
@@ -151,17 +202,16 @@ def main(argv=None):
         if schema == V1:
             if args.registration is not None:
                 raise ManifestError("--registration applies to v2 manifests")
-            if not args.v1_tool.is_file():
-                raise ManifestError("pinned v1 entry point unavailable, supply --v1-tool")
-            command = [sys.executable, "-B", str(args.v1_tool), "validate", str(args.manifest)]
+            _reject_reserved_v1_look(document)
             if args.final:
-                command.append("--final")
-            return subprocess.run(command, check=False).returncode
+                _reject_final_placeholders(document)
+            return _validate_legacy(args.v1_tool, payload, args.final)
         if schema != V2:
             raise ManifestError("unknown cadence manifest schema ID")
-        if args.registration is not None and not args.final:
-            raise ManifestError("--registration requires --final")
-        registration = args.registration.read_bytes() if args.registration else None
+        registration = None
+        if args.registration is not None:
+            _check_registration_use(document, args.final)
+            registration = args.registration.read_bytes()
         doc = validate_v2(payload, final=args.final, registration=registration)
     except (ManifestError, OSError) as error:
         print(f"REFUSE {error}", file=sys.stderr)

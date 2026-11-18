@@ -221,6 +221,10 @@
     "pair_description": "Pair contrasts are descriptive. Span position was constant."
   },
   "code_pins": {
+    "kit_commitments": {
+      "path": "docs/process/cadence/looks/look-kit-commitments.v2.json",
+      "sha256": "PENDING:CODE"
+    },
     "predictor": {
       "path": "joulewise/cadence_looks/fit_interim.py",
       "sha256": "PENDING:CODE"
