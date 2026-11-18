@@ -190,6 +190,9 @@
             },
             "hold_record": {
               "$ref": "#/$defs/text"
+            },
+            "failure_exit_status": {
+              "const": 1
             }
           }
         },
@@ -900,6 +903,16 @@
               ]
             }
           ]
+        },
+        "twin": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/code_ref"
+            }
+          ]
         }
       }
     },
@@ -989,77 +1002,84 @@
       "additionalProperties": false,
       "required": [
         "schema",
-        "prints",
-        "every_print_carries",
-        "forbidden_content",
+        "words",
         "cite"
       ],
       "properties": {
         "schema": {
           "$ref": "#/$defs/code_ref"
         },
-        "prints": {
-          "type": "array",
-          "minItems": 1,
-          "items": {
-            "type": "object",
-            "additionalProperties": false,
-            "required": [
-              "id",
-              "what",
-              "cite"
-            ],
-            "properties": {
-              "id": {
-                "type": "string"
-              },
-              "what": {
-                "$ref": "#/$defs/text"
-              },
-              "channels": {
-                "type": "array",
-                "items": {
-                  "$ref": "#/$defs/channel"
-                }
-              },
-              "ratios": {
-                "type": "array",
-                "items": {
-                  "type": "number"
-                }
-              },
-              "caption": {
-                "type": "string"
-              },
-              "cite": {
-                "$ref": "#/$defs/cites"
-              }
-            }
-          }
-        },
-        "every_print_carries": {
-          "type": "array",
-          "items": {
-            "type": "string"
-          },
-          "allOf": [
-            {
-              "contains": {
-                "const": "model_sha256"
-              }
+        "words": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "qualified_interim",
+            "dev_included_below_45",
+            "days_below_4",
+            "cell_below_10",
+            "start_reading_invalid_over_10pct",
+            "hp01_below_9",
+            "drift_tripwire",
+            "twin_agrees",
+            "stage2_error"
+          ],
+          "properties": {
+            "qualified_interim": {
+              "const": [
+                "yes",
+                "no",
+                "not_evaluable"
+              ]
             },
-            {
-              "contains": {
-                "const": "qualified"
-              }
+            "dev_included_below_45": {
+              "const": [
+                "yes",
+                "no"
+              ]
+            },
+            "days_below_4": {
+              "const": [
+                "yes",
+                "no"
+              ]
+            },
+            "cell_below_10": {
+              "const": [
+                "yes",
+                "no"
+              ]
+            },
+            "start_reading_invalid_over_10pct": {
+              "const": [
+                "yes",
+                "no"
+              ]
+            },
+            "hp01_below_9": {
+              "const": [
+                "yes",
+                "no"
+              ]
+            },
+            "drift_tripwire": {
+              "const": [
+                "within",
+                "to_research_lead",
+                "not_evaluable"
+              ]
+            },
+            "twin_agrees": {
+              "const": [
+                "yes",
+                "no",
+                "not_evaluable"
+              ]
+            },
+            "stage2_error": {
+              "const": [
+                "no"
+              ]
             }
-          ]
-        },
-        "forbidden_content": {
-          "type": "array",
-          "minItems": 1,
-          "items": {
-            "type": "string"
           }
         },
         "cite": {
@@ -1414,6 +1434,10 @@
           }
         }
       }
+    },
+    "supersedes": {
+      "type": "string",
+      "pattern": "^lm-[a-z0-9][a-z0-9-]{2,40}$"
     }
   },
   "$defs": {

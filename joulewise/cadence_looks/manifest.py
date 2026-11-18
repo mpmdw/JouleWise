@@ -38,25 +38,24 @@ import subprocess
 import sys
 from datetime import date
 
-from joulewise.cadence_looks import schema_check
+from joulewise.cadence_looks import interim_release as release, schema_check
 
 SCHEMA = "joulewise.cadence_look_manifest.v1"
 LEDGER_SCHEMA = "joulewise.cadence_span_ledger.v1"
 LOOK_LEDGER_SCHEMA = "joulewise.cadence_look_ledger.v1"
 LOOK_LEDGER_PATH = "docs/process/cadence/looks/LOOKS.json"
-LOOK_LEDGER_STATUSES = ("draft", "committed", "stage1_committed", "run", "frozen", "superseded")
+LOOK_LEDGER_STATUSES = ("draft", "committed", "stage1_committed", "run", "frozen", "superseded", "failed")
 # What each status needs recorded, so that "committed" is checkable (Mythos cold seat 8).
 # verdicts_sha256: inclusion_34.py's verdict file, committed with the roster's hash before stage 1 runs, so stage 1
 # can authenticate both inputs (Mythos round-3 N8).
-LOOK_ROW_HASHES = ("roster_sha256", "verdicts_sha256", "stage1_sha256", "output_sha256", "coefficients_sha256",
-                   "restricted_sha256")
-PUBLIC_RELEASE_STATEMENT = "The public outputs do not determine any single leg's energy. Day totals can be recovered from them."
-MIN_PUBLIC_FIT_LEGS_PER_DAY = 3
+LOOK_ROW_HASHES = ("roster_sha256", "verdicts_sha256", "stage1_sha256", "output_sha256", "coefficients_sha256")
+PUBLIC_RELEASE_STATEMENT = ("No number computed from energy is public before the data release. "
+                            "The public outputs are at most sixteen words, counts that hold no energy, and hashes.")
 INTERIM_PREFIX_STATISTIC = "the mean of the day means; its 90 % t interval uses the same equal-day weights"
-LOOK_ROW_REQUIRES = {"stage1_committed": ("roster_sha256", "verdicts_sha256", "stage1_sha256"),
-                     "run": ("roster_sha256", "verdicts_sha256", "stage1_sha256", "output_sha256"),
-                     "frozen": ("roster_sha256", "verdicts_sha256", "stage1_sha256", "output_sha256",
-                                "coefficients_sha256")}
+_STAGE1_HASHES = ("roster_sha256", "verdicts_sha256", "stage1_sha256")
+LOOK_ROW_REQUIRES = {"stage1_committed": _STAGE1_HASHES, "failed": _STAGE1_HASHES,
+                     "run": (*_STAGE1_HASHES, "output_sha256", "coefficients_sha256"),
+                     "frozen": (*_STAGE1_HASHES, "output_sha256", "coefficients_sha256")}
 
 TOP_KEYS = {"schema", "look_id", "look_kind", "status", "title", "rulings", "when", "stages", "reads", "energy",
             "fit", "inclusion", "outputs", "decisions", "later_looks", "freeze1", "freeze2", "custody", "review",
@@ -79,6 +78,7 @@ STEP3_SHA256 = "84a1a5530ab06e688b000c84f248b2c4e561e8330f37d3132ec47aa2572eb173
 STEP3_ADAPTER_PATH = "joulewise/cadence_looks/step3_roster.py"
 REQUIRED_CODE_PATHS = {"interim": {"joulewise/cadence_looks/fit_interim.py", "joulewise/cadence_looks/inclusion_34.py",
                                    STEP3_PATH, STEP3_ADAPTER_PATH, "scripts/cadence_look_run.py",
+                                   "joulewise/cadence_looks/interim_release.py",
                                    "scripts/cadence_look_manifest.py",
                                    "joulewise/cadence_looks/schema_check.py",
                                    "joulewise/cadence_looks/time_fields.py"}}   # RL-166 Q1; Sol N3; RL-173 E.1
@@ -123,17 +123,7 @@ INCLUSION_RULE_IDS = {1: "ran_to_cap", 2: "g0_released", 3: "sidecar_coverage", 
                       5: "not_a_contaminated_attempt", 6: "block_power_mode"}
 LOOK_JUDGED_RULES = {3, 4}                        # RL-150 R9: "Rules 3 and 4 are judged at a look"
 
-REQUIRED_PRINTS = {
-    "interim": {"inclusion_table", "rates", "onset_fit", "onset_lodo_error", "heat_term_fit",
-                "lodo_rel_error_hot_stretch", "lodo_rel_error_leg", "holdout_rms_rel_error", "without_heat_columns",
-                "restricted_sha256", "prefix_length_bias", "step3_statistic_iii",
-                "qualified_interim_half", "marked_span_sensitivity", "realized_prompt_tokens", "disclosure",
-                "active_readings", "onsets_before_116_s", "fold_coefficients", "day_detail",
-                "onset_offset_residuals",                                              # RL-166b B-2, P-1 to P-4
-                "soak_retries"},                                                       # RL-172a
-}
-PREFIX_RATIOS = [1.10, 1.30, 1.374]                # RL-150 section 3.2 ("the looks print ... 1.10, 1.30 and 1.374")
-REQUIRED_CARRIES = {"model_sha256", "qualified"}   # RL-149 section 4
+PREFIX_RATIOS = [1.10, 1.30, 1.374]                # RL-150 section 3.2
 # The thresholds RL-166 fixed, by decision id. None: the decision carries no threshold.
 REQUIRED_DECISIONS = {"interim": {"drift_tripwire": None, "qualified_interim_half": 0.02, "hp01_included_below_9": 9,
                                   "stage1_tripwires": None, "step3_cell_not_run": 2, "extension_rule": None,
@@ -148,7 +138,6 @@ STAGE2_HOLD_FLAGS = {"interim": {"onsets_before_116_s.to_research_lead", "meter_
 WITHDRAWN_FORM_RE = re.compile(r"(?i)H is zero for a turn")                           # RL-166b Amends
 DRIFT_FALLBACK = 0.04                              # RL-166 Q11
 DRIFT_RULED = 0.08
-REMOVED_PRINTS = {"high_power_table": "RL-167 §3: the High Power table is look lm-hp-01"}
 REQUIRED_NEVER_READ_IDS = {"interim": {"qualification", "ctl01", "fillers", "v4", "type_T", "rejected_attempts", "step3_legs",
                                        "reserve_qualification", "hp01_energy"}}
 # The import closure the look's entry points execute that reads or decodes custody, pinned beside the look code
@@ -373,6 +362,9 @@ def code_refs(doc, *, look_code_only=False):
     for i, ref in enumerate(fit.get("code") or []):
         if isinstance(ref, dict):
             out.append((f"fit.code[{i}]", ref.get("path"), ref.get("sha256")))
+    twin = fit.get("twin")
+    if isinstance(twin, dict):
+        out.append(("fit.twin", twin.get("path"), twin.get("sha256")))
     s3 = fit.get("step3") or {}
     for key in ("code", "adapter"):
         if isinstance(s3.get(key), dict):
@@ -405,7 +397,11 @@ def validate_manifest(doc, *, final=None):
     problems = []
     if not isinstance(doc, dict):
         raise ManifestError(["manifest: object"])
-    _closed(doc, TOP_KEYS, "manifest", problems)
+    _closed(doc, TOP_KEYS, "manifest", problems, optional={"supersedes"})
+    if "supersedes" in doc and (not isinstance(doc["supersedes"], str)
+                               or not LOOK_ID_RE.fullmatch(doc["supersedes"])
+                               or doc["supersedes"] == doc.get("look_id")):
+        problems.append("supersedes: a different look id")
     if final is None:
         final = doc.get("status") == "committed"
     if doc.get("schema") != SCHEMA:
@@ -443,6 +439,13 @@ def validate_manifest(doc, *, final=None):
     _custody(doc.get("custody"), problems)
     _review(doc.get("review"), problems)
     _verbatim(doc, kind, problems)
+    if kind == "interim":
+        schema_root = Path(LOOK_LEDGER_PATH).parent
+        for node, filename in (((doc.get("outputs") or {}).get("schema"), "output"),
+                               (((doc.get("stages") or {}).get("stage1") or {}).get("schema"), "stage1"),
+                               ((doc.get("freeze2") or {}).get("schema"), "coefficients")):
+            if isinstance(node, dict) and node.get("path") != str(schema_root / f"lm-interim-01.{filename}.schema.json"):
+                problems.append(f"the interim {filename} schema pin must name its registered path")
     for path, shas in _pinned_paths(doc).items():
         if len(shas) > 1:
             problems.append(f"{path}: pinned with different sha256 values {sorted(shas)}")
@@ -525,7 +528,11 @@ def _stages(st, kind, problems, final):
             problems.append("stages.stage1.dry_run: text")
         _need_cite(s1, "stages.stage1", problems)
     s2 = st.get("stage2")
-    if _closed(s2, {"opens", "roster_source", "time_budget_s", "holds", "hold_record", "cite"}, "stages.stage2", problems):
+    if _closed(s2, {"opens", "roster_source", "time_budget_s", "holds", "hold_record", "cite"},
+               "stages.stage2", problems, optional={"failure_exit_status"}):
+        if kind == "interim" and (type(s2.get("failure_exit_status")) is not int
+                                  or s2["failure_exit_status"] != release.FAILURE_STATUS):
+            problems.append("stages.stage2.failure_exit_status: the fixed RL-180 exit status")
         flags = set()
         for i, h in enumerate(s2.get("holds") if isinstance(s2.get("holds"), list) else []):
             if _closed(h, {"flag", "rule", "cite"}, f"stages.stage2.holds[{i}]", problems):
@@ -696,8 +703,17 @@ def _energy(e, kind, problems):
 def _fit(f, kind, problems, final):
     keys = {"code", "dependencies", "runtime", "authors", "heat_term", "rates", "onset", "validation", "prefix_bias",
             "step3", "sensitivity", "reads_from_leg_record", "reads_never", "stated_limits", "cite"}
-    if not _closed(f, keys, "fit", problems, optional={"gpu_trace_hole_refusal"}):
+    if not _closed(f, keys, "fit", problems, optional={"gpu_trace_hole_refusal", "twin"}):
         return
+    twin = f.get("twin")
+    if final and kind == "interim" and twin is None:
+        problems.append("fit.twin: RL-180 requires the independent twin path and sha256")
+    if "twin" in f and twin is not None:
+        _code_ref(twin, "fit.twin", problems, final)
+        if isinstance(twin, dict) and (not str(twin.get("path")).endswith(".py") or
+                twin.get("path") in {ref.get("path") for key in ("code", "dependencies")
+                                     for ref in (f.get(key) or []) if isinstance(ref, dict)}):
+            problems.append("fit.twin.path: a separate Python script")
     # Mythos round-3 N7 / round-4 N5: the GPU-rail hole refusal, off unless the research lead rules it on. The
     # stage-2 CLI reads it (cadence_look_run.gpu_gap_rule); its shape is checked here so the switch can be set.
     sw = f.get("gpu_trace_hole_refusal")
@@ -738,7 +754,7 @@ def _fit(f, kind, problems, final):
     for p in sorted(REQUIRED_CODE_PATHS.get(kind, set()) - paths):
         problems.append(f"fit.code: pins {p} (RL-166 Q1)")
     if not (_text(f.get("runtime")) and "numpy" in f["runtime"] and "scipy" in f["runtime"] and "-I" in f["runtime"]):
-        problems.append("fit.runtime: stdlib plus numpy, no scipy, run with -I, numpy version printed (RL-166 Q1)")
+        problems.append("fit.runtime: stdlib plus numpy, no scipy, run with -I, numpy version bound to stage 1 (RL-180)")
     if not (isinstance(f.get("authors"), dict) and f["authors"]):
         problems.append("fit.authors: object")
     ht = f.get("heat_term")
@@ -886,36 +902,12 @@ def _inclusion(inc, problems, final):
 
 
 def _outputs(o, kind, problems, final):
-    if not _closed(o, {"schema", "prints", "every_print_carries", "forbidden_content", "cite"}, "outputs", problems):
+    if not _closed(o, {"schema", "words", "cite"}, "outputs", problems):
         return
     _need_cite(o, "outputs", problems)
     _code_ref(o.get("schema"), "outputs.schema", problems, final)
-    ids = set()
-    for i, p in enumerate(o.get("prints") or []):
-        where = f"outputs.prints[{i}]"
-        if not _closed(p, {"id", "what", "cite"}, where, problems, optional={"channels", "ratios", "caption"}):
-            continue
-        if p.get("id") in ids:
-            problems.append(f"{where}.id: duplicate")
-        ids.add(p.get("id"))
-        if not _text(p.get("what")):
-            problems.append(f"{where}.what: text")
-        for ch in p.get("channels") or []:
-            if ch not in ENERGY_CHANNELS:
-                problems.append(f"{where}.channels: unknown channel {ch!r}")
-        if p.get("id") == "prefix_length_bias" and p.get("ratios") != PREFIX_RATIOS:
-            problems.append(f"{where}.ratios: {PREFIX_RATIOS} (RL-150 §3.2)")
-        _need_cite(p, where, problems)
-    for gone, why in REMOVED_PRINTS.items():
-        if gone in ids:
-            problems.append(f"outputs.prints: {gone} is not printed by this look ({why})")
-    for need in sorted(REQUIRED_PRINTS.get(kind, set()) - ids):
-        problems.append(f"outputs.prints: the {kind} look prints {need}")
-    carries = o.get("every_print_carries")
-    if not isinstance(carries, list) or REQUIRED_CARRIES - set(carries):
-        problems.append(f"outputs.every_print_carries: must include {sorted(REQUIRED_CARRIES)} (RL-149 §4)")
-    if not (isinstance(o.get("forbidden_content"), list) and o["forbidden_content"]):
-        problems.append("outputs.forbidden_content: non-empty list")
+    if kind == "interim" and o.get("words") != {k: list(v) for k, v in release.PUBLIC_WORDS.items()}:
+        problems.append("outputs.words: the closed RL-180 interim word lists")
 
 
 def _decisions(ds, kind, problems, final=False):
@@ -1161,6 +1153,18 @@ def check_repo(doc, repo, kit_paths=(), *, final=None):
 
 # ---------------------------------------------------------------------------------------------- look ledger
 
+def _relative_directory(path):
+    return (isinstance(path, str) and bool(path) and not Path(path).is_absolute()
+            and all(piece not in ("", ".", "..") for piece in path.split("/")) and "\\" not in path)
+
+
+def require_successor_ruling(doc, ledger):
+    if "supersedes" in doc:
+        failed = _look_row(ledger, doc["supersedes"])
+        if failed.get("status") != "failed" or not failed.get("ruling"):
+            raise ManifestError(["supersedes: the prior look needs a failed row and a research-lead ruling id"])
+
+
 def validate_look_ledger(doc, repo=None):
     """``LOOKS.json`` (RL-166 Q18): look id, manifest path, sha256 and status per look. With ``repo``, each
     manifest exists, hashes to its pin, carries its look id, and a draft or committed manifest's status
@@ -1174,7 +1178,8 @@ def validate_look_ledger(doc, repo=None):
     for i, row in enumerate(doc.get("looks") or []):
         where = f"looks[{i}]"
         if not _closed(row, {"look_id", "manifest_path", "sha256", "status"}, where, problems,
-                       optional=LOOK_ROW_HASHES + ("stage1_superseded",)):
+                       optional=LOOK_ROW_HASHES + ("stage1_superseded", "execution_host", "public_root",
+                                                  "custody_root", "holds_cleared", "error_type", "ruling")):
             continue
         problems += superseded_problems(row.get("stage1_superseded"), where)
         for k in LOOK_ROW_HASHES:
@@ -1186,9 +1191,28 @@ def validate_look_ledger(doc, repo=None):
                 if not (isinstance(row.get(k), str) and SHA_RE.fullmatch(row[k])):
                     problems.append(f"{where}: status {st} needs {k} (Mythos cold seat 8)")
         lid = row.get("look_id")
-        if lid == "lm-interim-01" and st in ("run", "frozen") and not (
-                isinstance(row.get("restricted_sha256"), str) and SHA_RE.fullmatch(row["restricted_sha256"])):
-            problems.append(f"{where}: status {st} needs restricted_sha256 (RL-175 B.3)")
+        if "execution_host" in row and not _text(row["execution_host"]):
+            problems.append(f"{where}.execution_host: a host id")
+        if "public_root" in row and not _relative_directory(row["public_root"]):
+            problems.append(f"{where}.public_root: a canonical repository-relative directory")
+        if "custody_root" in row and not (
+                _text(row["custody_root"]) and Path(row["custody_root"]).is_absolute()):
+            problems.append(f"{where}.custody_root: an absolute directory")
+        if "holds_cleared" in row:
+            cleared = row["holds_cleared"]
+            if not isinstance(cleared, dict) or any(
+                    flag not in STAGE2_HOLD_FLAGS["interim"] or not isinstance(ruling, str)
+                    or not RULING_ID_RE.fullmatch(ruling) for flag, ruling in cleared.items()):
+                problems.append(f"{where}.holds_cleared: stage-1 flags and their ruling ids")
+        if st == "failed":
+            if not isinstance(row.get("error_type"), str) or row["error_type"] not in release.ERROR_TYPES:
+                problems.append(f"{where}.error_type: the fixed RL-180 exception vocabulary")
+            if row.get("output_sha256") or row.get("coefficients_sha256"):
+                problems.append(f"{where}: a failed look has no output or coefficient commitment")
+        elif "error_type" in row:
+            problems.append(f"{where}.error_type: only on a failed row")
+        if "ruling" in row and (not isinstance(row["ruling"], str) or not RULING_ID_RE.fullmatch(row["ruling"])):
+            problems.append(f"{where}.ruling: a ruling id")
         if not (isinstance(lid, str) and LOOK_ID_RE.fullmatch(lid)) or lid in seen:
             problems.append(f"{where}.look_id: unique lm-<id>")
         seen.add(lid)
@@ -1274,6 +1298,7 @@ def _git(repo, *args):
     another repository (Mythos round-3 N5)."""
     env = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
     env["GIT_NO_REPLACE_OBJECTS"] = "1"
+    env["GIT_OPTIONAL_LOCKS"] = "0"
     r = subprocess.run(["git", "-C", str(repo), *args], capture_output=True, timeout=60, env=env)
     return r.returncode, r.stdout, r.stderr.decode("utf-8", "replace").strip()
 
@@ -1358,6 +1383,54 @@ def committed_ledger(repo, *, ledger_ref=None):
     return head, ref, ledger
 
 
+def freeze2_commitment(repo):
+    """Read the public mainline decision before any scoring code opens coefficients."""
+    _, main = shared_ref(repo, "origin/main")
+
+    def main_bytes(path):
+        rc, raw, _ = _git(repo, "show", f"{main}:{path}")
+        if rc:
+            raise ManifestError(["freeze 2: a required public artifact is missing on origin/main"])
+        return raw
+
+    ledger = validate_look_ledger(json.loads(main_bytes(LOOK_LEDGER_PATH)))
+    row = _look_row(ledger, "lm-interim-01")
+    if row["status"] not in ("run", "frozen") or not _relative_directory(row.get("public_root")):
+        raise ManifestError(["freeze 2: the public report is not committed on origin/main"])
+    manifest_raw = main_bytes(row["manifest_path"])
+    if hashlib.sha256(manifest_raw).hexdigest() != row["sha256"]:
+        raise ManifestError(["freeze 2: the mainline manifest differs from its ledger pin"])
+    doc = json.loads(manifest_raw)
+    if doc.get("status") != "committed" or doc.get("look_id") != row["look_id"]:
+        raise ManifestError(["freeze 2: the mainline manifest must be committed for this look"])
+    pin = doc["outputs"]["schema"]
+    schema_raw = main_bytes(pin["path"])
+    if hashlib.sha256(schema_raw).hexdigest() != pin["sha256"]:
+        raise ManifestError(["freeze 2: the mainline public schema differs from its pin"])
+    path = f'{row["public_root"]}/{row["look_id"]}/PUBLIC.json'
+    raw = main_bytes(path)
+    if hashlib.sha256(raw).hexdigest() != row["output_sha256"]:
+        raise ManifestError(["freeze 2: the mainline public report differs from its ledger pin"])
+    public = release.read_public(raw, json.loads(schema_raw))
+    for key, expected in (("manifest_sha256", row["sha256"]), ("stage1_sha256", row["stage1_sha256"]),
+                          ("coefficients_sha256", row["coefficients_sha256"])):
+        if public[key] != expected:
+            raise ManifestError(["freeze 2: the public report differs from its ledger commitments"])
+    execution_commit = public["commit"]
+    if _git(repo, "merge-base", "--is-ancestor", execution_commit, main)[0]:
+        raise ManifestError(["freeze 2: the execution commit is not in main's history"])
+    rc, ledger_raw, _ = _git(repo, "show", f"{execution_commit}:{LOOK_LEDGER_PATH}")
+    if rc:
+        raise ManifestError(["freeze 2: the execution commit does not carry the look ledger"])
+    executed = _look_row(validate_look_ledger(json.loads(ledger_raw)), row["look_id"])
+    bindings = ("sha256", "stage1_sha256", "public_root", "custody_root", "execution_host")
+    if executed["status"] != "stage1_committed" or any(executed.get(key) != row.get(key) for key in bindings):
+        raise ManifestError(["freeze 2: the execution commit does not authenticate the published look"])
+    if public["twin_agrees"] != "yes":
+        raise ManifestError(["freeze 2: the mainline report does not record twin agreement"])
+    return row
+
+
 def _ledger_history_rows(repo, look_id, head):
     """Every preserved row of this look on HEAD or any remote-tracking history, newest first."""
     rc, out, err = _git(repo, "log", "--full-history", "--format=%H", head, "--remotes", "--", LOOK_LEDGER_PATH)
@@ -1375,6 +1448,11 @@ def _ledger_history_rows(repo, look_id, head):
     return rows_out
 
 
+def look_spent(repo, look_id, head):
+    return any(row.get("status") in release.SPENT_STATUSES or row.get("output_sha256")
+               for row in _ledger_history_rows(repo, look_id, head))
+
+
 def stage1_history(repo, look_id, head):
     """The distinct stage-1/roster/verdict commitments on HEAD and every remote-tracking history."""
     seen = []
@@ -1384,7 +1462,7 @@ def stage1_history(repo, look_id, head):
     return seen
 
 
-def require_stage1_committed(repo, look_id, stage1_sha256, *, stage1_doc, ledger_ref=None):
+def require_stage1_committed(repo, look_id, stage1_sha256, *, stage1_doc, ledger_ref=None, for_execution=False):
     """Refuse unless the committed LOOKS.json (``committed_ledger``) names, for this look: the manifest as committed
     at HEAD, at status stage1_committed or later; this stage-1 file's sha256; and as roster_sha256 the roster hash
     the stage-1 file recorded (``code_sha256["input:roster_sha256"]``; Mythos N7). Stage 2, step3_roster.py and
@@ -1392,6 +1470,12 @@ def require_stage1_committed(repo, look_id, stage1_sha256, *, stage1_doc, ledger
     head, ref, ledger = committed_ledger(repo, ledger_ref=ledger_ref)
     row = _look_row(ledger, look_id)
     problems = []
+    if for_execution:
+        if look_spent(repo, look_id, head):
+            raise ManifestError(["this manifest id is already spent"])
+        rc, raw, _ = _git(repo, "show", f"{ref}:{LOOK_LEDGER_PATH}")
+        if rc or _look_row(json.loads(raw), look_id) != row:
+            raise ManifestError(["the shared ledger no longer carries this stage-2 row"])
     history = stage1_history(repo, look_id, head)
     # Mythos round-4 N3: stage 1 is fixed once, before energy; RL-173 E.1 item 4: a replaced commitment is listed in
     # the row's stage1_superseded with the research lead's ruling, and nothing else replaces one
@@ -1431,7 +1515,7 @@ def require_stage1_committed(repo, look_id, stage1_sha256, *, stage1_doc, ledger
                             f"file records ({recorded.get(key)})")
     if problems:
         raise ManifestError(problems)
-    return row
+    return (head, row) if for_execution else row
 
 
 def require_inputs_committed(repo, look_id, manifest_sha256, *, roster_sha256, verdicts_sha256, ledger_ref=None,
@@ -1448,8 +1532,8 @@ def require_inputs_committed(repo, look_id, manifest_sha256, *, roster_sha256, v
     entries = row.get("stage1_superseded") or []
     if history:
         prior_rows = _ledger_history_rows(repo, look_id, head)
-        if any(r.get("status") in ("run", "frozen") or r.get("output_sha256") for r in prior_rows):
-            problems.append("stage 1 cannot run once more after this look has run, frozen, or named an output hash")
+        if any(r.get("status") in release.SPENT_STATUSES or r.get("output_sha256") for r in prior_rows):
+            problems.append("stage 1 cannot run once more after this manifest id is spent")
         if any(r.get("stage1_sha256") and r.get("sha256") != manifest_sha256 for r in prior_rows):
             problems.append("a stage 1 run once more takes the replaced commitment's manifest unchanged")
         # Mythos round-4 N3: stage 1 runs once. RL-173 E.1 item 4: once more only when the research lead has excluded
@@ -1563,7 +1647,7 @@ def native_pm_files(sdir):
     return out
 
 
-def nonenergy_problems(stage1, sdir_of, span_ids):
+def nonenergy_problems(stage1, sdir_of, span_ids, *, include_native_pm=True):
     spans = {sp["span_id"]: sp for sp in stage1["roster"]["spans"]}
     out = []
     for sid in sorted(set(span_ids)):
@@ -1580,6 +1664,8 @@ def nonenergy_problems(stage1, sdir_of, span_ids):
         for rel in sorted(set(files) | set(got)):
             if files.get(rel) != got.get(rel):
                 out.append(f"custody: {sid}/{rel} is not the file stage 1 read")
+        if not include_native_pm:
+            continue
         try:
             got_pm = native_pm_files(sdir_of(sid))
         except (OSError, ValueError, TypeError, KeyError):
@@ -1612,7 +1698,8 @@ def loaded_repo_files(repo):
 # stage records exactly its set, at the pins (Sol round-2 N2, round-3 NEW-3). The stage-2 set also takes every
 # fit.dependencies file but the stage-1-only sensor policy.
 _SHARED_CODE = ("joulewise/__init__.py", "joulewise/cadence_looks/__init__.py", "joulewise/cadence_looks/manifest.py",
-                "joulewise/cadence_looks/schema_check.py", "joulewise/axi_decode_config.py",
+                "joulewise/cadence_looks/schema_check.py", "joulewise/cadence_looks/interim_release.py",
+                "joulewise/axi_decode_config.py",
                 "joulewise/idle_admission.py", "joulewise/schemas.py", "joulewise/validation.py")
 # RL-173 E.1: stage 1 reads time fields of the energy files through time_fields.py, which runs the pinned meter
 # decoder's unwrap and clock fit on the counters; its import closure joins stage 1's set
@@ -1621,14 +1708,6 @@ _DECODER_CODE = ("joulewise/aggregate.py", "joulewise/authentication_io.py", "jo
                  "joulewise/external/km003c_parse.py", "joulewise/provenance.py", "joulewise/suite.py")
 STAGE1_CODE = _SHARED_CODE + ("joulewise/cadence_looks/fit_interim.py", "joulewise/cadence_looks/inclusion_34.py",
                               "joulewise/cadence_looks/time_fields.py", "scripts/cadence_look_run.py") + _DECODER_CODE
-STEP3_CODE = _SHARED_CODE + ("joulewise/cadence_looks/step3_roster.py", "joulewise/cadence_looks/step3_energy_ratios.py",
-                            "joulewise/cadence_looks/time_fields.py")
-STAGE2_CODE = ("joulewise/cadence_looks/fit_interim.py", "scripts/cadence_look_run.py",
-               "joulewise/cadence_looks/inclusion_34.py", "joulewise/cadence_looks/step3_energy_ratios.py",
-               "joulewise/cadence_looks/schema_check.py", "joulewise/cadence_looks/time_fields.py")
-STAGE_ONLY_DEPENDENCIES = {"configs/align/v4/r1_runtime.json"}     # read by inclusion and the stage-1 rule replay
-
-
 def coefficients_schema(repo):
     """The coefficient file's schema (freeze 2; RL-173 E) as it stands in ``repo`` (verify_pins has checked its pin)."""
     return json.loads((Path(repo) / "docs/process/cadence/looks/lm-interim-01.coefficients.schema.json")
@@ -1738,6 +1817,7 @@ def verify_pins(manifest_path, repo, *, allow_draft=False, running=(), ledger_re
         try:
             _, _, ledger = committed_ledger(repo, ledger_ref=ledger_ref)
             row = _look_row(ledger, doc.get("look_id"))
+            require_successor_ruling(doc, ledger)
             if row.get("sha256") != hashlib.sha256(raw).hexdigest():
                 problems.append("LOOKS.json does not name this manifest's sha256")
             if row.get("status") not in COMMITTED_STATUSES:                 # Mythos N5

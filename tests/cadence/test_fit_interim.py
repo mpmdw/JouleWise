@@ -98,25 +98,17 @@ class AstraDesign(unittest.TestCase):
         for leg in legs[1:]:
             leg["in_energy_fit"] = False
             del en["legs"][leg["leg_key"]]
-        restricted = {}
-        fit = F.stage2(s1, rehash(s1), en, restricted_out=restricted)
-        self.assertEqual(fit["restricted_sha256"], rehash(restricted))
+        fit = F.stage2(s1, rehash(s1), en)
         daily_measured = {}
         for leg in s1["legs"]:
             if leg["in_energy_fit"]:
                 value = sum(en["legs"][leg["leg_key"]]["gpu_rail"]["segments"])
                 daily_measured[leg["day"]] = daily_measured.get(leg["day"], 0) + value
-        for model, public in (("with_heat", fit["channels"]["gpu_rail"]["lodo"]),
-                              ("no_heat", fit["channels"]["gpu_rail"]["lodo"]["no_heat"])):
-            for lines in (public["hot"]["per_day"], public["hot"]["n_hot_legs_per_day"], public["leg"]["per_day"]):
-                self.assertNotIn(day, lines)
-            withheld = restricted["channels"]["gpu_rail"]["day_diagnostics"][model]
-            self.assertIn(day, withheld["per_day"])
-            self.assertNotEqual(public["leg"]["pooled"], withheld["pooled"]["leg"])
-            published = public["leg"]["per_day"]
-            self.assertAlmostEqual(public["leg"]["pooled"],
-                                   sum(published[d] * daily_measured[d] for d in published)
-                                   / sum(daily_measured[d] for d in published))
+        for lodo in (fit["channels"]["gpu_rail"]["lodo"], fit["channels"]["gpu_rail"]["lodo"]["no_heat"]):
+            per_day = lodo["leg"]["per_day"]
+            self.assertIn(day, per_day)
+            self.assertAlmostEqual(lodo["leg"]["pooled"], sum(per_day[d] * daily_measured[d] for d in per_day)
+                                   / sum(daily_measured.values()))
 
     def test_level_r_rejects_false_or_impossible_date_before_folding(self):
         li, _, _, _ = dataset("noisy")
@@ -281,13 +273,14 @@ class Noisy(unittest.TestCase):
         self.assertEqual(sorted(g["hot"]["counted_days"]),
                          sorted(d for d, n in g["hot"]["n_hot_legs_per_day"].items() if n >= 3))
 
-    def test_output_has_no_per_leg_energy(self):
-        F.output_check(self.out)
+    def test_residuals_are_unkeyed(self):
         text = json.dumps(self.out).lower().replace("joulewise", "")
         for word in ("joule", "watt", "power", "energy"):
             self.assertFalse(word in text, word)
         for ch in F.CHANNELS:
-            self.assertNotIn("residuals", self.out["channels"][ch])
+            for model in self.out["channels"][ch]["residuals"].values():
+                self.assertIsInstance(model["leg"], list)
+                self.assertIsInstance(model["hot_stretch"], list)
 
     def test_prefix_bias_has_three_lengths_and_intervals(self):
         for ch in F.CHANNELS:
@@ -553,17 +546,6 @@ class Refusals(unittest.TestCase):
         with self.assertRaises(F.LookInputError):
             F.stage2(s1, h, e2)
 
-    def test_output_check_refuses_energy(self):
-        with self.assertRaises(ValueError):
-            F.output_check({"channels": {"gpu_rail": {"leg_energy": 1.0}}})
-        with self.assertRaises(ValueError):
-            F.output_check({"x": {"dev-01-s01/L001": 0.01}})
-        with self.assertRaisesRegex(ValueError, "leg-keyed"):
-            F.output_check({"channels": {"gpu_rail": {"residuals": {"leg": {"dev-01-s01/L001": 5.12}}}}})
-
-
-if __name__ == "__main__":
-    unittest.main()
 
 
 class Pins(unittest.TestCase):
@@ -585,11 +567,6 @@ class Stage2Internals(unittest.TestCase):
     def setUpClass(cls):
         _, cls.en, cls.tr, _ = dataset("noisy")
         cls.s1 = stage1_of("noisy")
-
-    def test_stage2_runs_the_output_check(self):
-        with unittest.mock.patch.object(F, "output_check", side_effect=ValueError("checked")):
-            with self.assertRaises(ValueError):
-                F.stage2(self.s1, rehash(self.s1), self.en)
 
     def test_covariance_is_cr1_clustered_by_leg(self):
         """An independent sandwich, clustered by leg, on the full-data design."""
@@ -1100,19 +1077,18 @@ class RL166b(unittest.TestCase):
     def test_p1_p2_p3_prints(self):
         _, en, _, _ = dataset("noisy")
         s1 = stage1_of("noisy")
-        restricted = {}
-        out = F.stage2(s1, rehash(s1), en, restricted_out=restricted)
+        out = F.stage2(s1, rehash(s1), en)
         c = out["channels"]["gpu_rail"]
         fit_days = sorted({L["day"] for L in s1["legs"] if L["in_energy_fit"]})
         self.assertEqual(sorted(c["fold_coefficients"]), fit_days)
         for v in c["fold_coefficients"].values():
             self.assertEqual(list(v), c["columns"])
         # P-2: s pooled within counted days, from the restricted per-leg hot-stretch errors
-        res = restricted["channels"]["gpu_rail"]["residuals"]["hot_stretch"]
-        day_of = {L["leg_key"]: L["day"] for L in s1["legs"]}
+        res = c["residuals"]["with_heat"]["hot_stretch"]
+        days = [leg["day"] for leg in s1["legs"] if leg["in_energy_fit"]]
         ss = df = 0.0
         for D in c["lodo"]["hot"]["counted_days"]:
-            e = [v for k, v in res.items() if v is not None and day_of[k] == D]
+            e = [v for day, v in zip(days, res) if v is not None and day == D]
             mu = sum(e) / len(e)
             ss += sum((x - mu) ** 2 for x in e)
             df += len(e) - 1
@@ -1166,38 +1142,17 @@ class RL166b(unittest.TestCase):
         self.assertTrue(p4["to_research_lead"])
 
 
-PENDING_O_CHANNEL_FIELDS = ("trace_coverage",)
-
-
 class Schemas(unittest.TestCase):
-    """Level D and level O validate against the manifest builder's schemas (#793), on every planted scenario."""
+    """Level D keeps its public schema across planted scenarios."""
 
-    LOOKS = Path(__file__).resolve().parents[2] / "docs/process/cadence/looks"
-
-    def test_outputs_validate(self):
+    def test_stage1_outputs_validate(self):
         from tests.cadence import schema_lite as V
-        s1_schema = json.loads((self.LOOKS / "lm-interim-01.stage1.schema.json").read_text())
-        out_schema = json.loads((self.LOOKS / "lm-interim-01.output.schema.json").read_text())
-        fit_schema = {"$ref": "#/$defs/fit_output", "$defs": out_schema["$defs"]}
-        for sc in ("exact", "noisy", "onset_not_estimable", "few_hot_days", "inactive_fan", "onsets_one_cell"):
-            _, en, _, _ = dataset(sc)
-            s1 = stage1_of(sc)
-            stamp = {"allow_draft": True, "manifest_sha256": "0" * 64, "ledger_gate": None}   # the CLI stamps these
-            d1 = dict(json.loads(json.dumps(s1)), **stamp)        # RL-172a: stage 1 computes soak_retries itself
-            self.assertIn("soak_retries", s1)
-            self.assertEqual(V.errors(d1, s1_schema), [], sc)
-            # the CLI stamps custody: null for a level-E (--energy) run, the record of what it read otherwise
-            out = dict(json.loads(json.dumps(F.stage2(s1, rehash(s1), en))), **stamp, custody=None)
-            for ch in F.CHANNELS:                  # PENDING in #793's schema (Mythos cold seat 9's print)
-                for k in PENDING_O_CHANNEL_FIELDS:
-                    if k not in out_schema["$defs"]["channel_fit"]["properties"]:
-                        out["channels"][ch].pop(k)
-            self.assertEqual(V.errors(out, fit_schema), [], sc)
-            out["custody"] = {"root": "/c", "span_dirs": [{"span_id": "dev-01-s01", "path": "/x/dev-01-s01"}],
-                              "files": [{"path": "dev-01-s01/legs/L001/runtime/b/power_trace.csv", "sha256": "a" * 64}]}
-            self.assertEqual(V.errors(out, fit_schema), [], sc)
-            del out["custody"]
-            self.assertTrue(V.errors(out, fit_schema), sc)          # custody is required (null or the record)
+        looks = Path(__file__).resolve().parents[2] / "docs/process/cadence/looks"
+        schema = json.loads((looks / "lm-interim-01.stage1.schema.json").read_text())
+        for scenario in ("exact", "noisy", "onset_not_estimable", "few_hot_days", "inactive_fan", "onsets_one_cell"):
+            stage1 = stage1_of(scenario)
+            stage1.update(allow_draft=True, manifest_sha256="0" * 64, ledger_gate=None)
+            self.assertEqual(V.errors(stage1, schema), [], scenario)
 
 
 class RL166c(unittest.TestCase):

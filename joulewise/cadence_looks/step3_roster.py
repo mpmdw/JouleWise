@@ -36,7 +36,6 @@ from __future__ import annotations
 import hashlib
 import importlib.util
 from pathlib import Path
-import sys
 import uuid
 
 STEP3_PATH = Path(__file__).resolve().with_name("step3_energy_ratios.py")
@@ -126,7 +125,7 @@ def run_cell(prompt_tokens, legs, loader=load_step3):
                 return cell
             tuples = [t for t in tuples if t[0] != key]
             continue
-        cell.update(status="ok", n_legs=len(tuples), **_project(out, {t[0] for t in tuples}))
+        cell.update(status="ok", n_legs=len(tuples), details=out, **_project(out, {t[0] for t in tuples}))
         return cell
     return cell
 
@@ -162,24 +161,6 @@ def run_roster(entries, *, threshold=DRIFT_THRESHOLD, loader=load_step3):
     return {"cells": results, "tripwire": tripwire}
 
 
-# ------------------------------------------------------------------------------------------------------------
-# Custody mode, stage 2 (the stage-2 CLI does not compute statistic (iii); this file supplies it):
-#
-#     python3 -I -B joulewise/cadence_looks/step3_roster.py --manifest MANIFEST.json --stage1 STAGE1.json
-#         --stage1-sha256 HEX --custody ROOT [--span-dir SPAN_ID=PATH ...] [--allow-draft] --out STEP3.json
-#
-# Before anything is opened: the manifest's pins verify (manifest.verify_pins) and the committed LOOKS.json names
-# this stage-1 hash and its roster (manifest.require_stage1_committed). --allow-draft waives both for a synthetic
-# stage-1 file only. The output records manifest_sha256, the loaded code's hashes and allow_draft. The drift threshold is
-# the committed manifest's decision drift_tripwire (RL-166 Q11), never a command-line value.
-#
-# The roster is stage 1's committed output (level D, docs/process/cadence_look_fit_interface.md section 3),
-# taken by its sha256: its included type-A legs of role fit. A leg's bundle is
-# <span dir>/legs/<leg_id>/runtime/<leg_record.json result.bundle>, as the stage-1 CLI reads it.
-
-SCHEMA = "joulewise.cadence_look_step3.v1"
-
-
 def entries_from_stage1(stage1, sdir_of):
     import json
     out = []
@@ -194,7 +175,7 @@ def entries_from_stage1(stage1, sdir_of):
     return out
 
 
-def custody_problems(stage1, entries, sdir_of):
+def custody_problems(stage1, sdir_of):
     """Bind operational sources and every selected trace's time projection before any value reader runs.
 
     Step 3 includes legs with missing start readings, which are outside the energy fit. Their trace timing
@@ -250,121 +231,3 @@ def custody_record(custody, overrides, entries, sdir_of, stage1=None):
             "span_dirs": [{"span_id": k, "path": str(Path(v).resolve())}
                           for k, v in sorted(dict(o.split("=", 1) for o in overrides).items())],
             "files": sorted(files, key=lambda f: f["path"])}
-
-
-def span_dirs(custody, overrides=()):
-    """span_id -> directory: <custody>/<span_id> unless SPAN_ID=PATH overrides it (as the stage-1 CLI). The same
-    rule as inclusion_34.span_dirs; repeated so that this file runs on the standard library alone under -I."""
-    extra = dict(o.split("=", 1) for o in overrides)
-    return lambda span_id: Path(extra[span_id]) if span_id in extra else Path(custody) / span_id
-
-
-def _fresh_bytecode_cache():
-    """Mythos round-4 N4, Sol round-4 NEW-2: -B stops Python writing bytecode, not reading it. A fresh, empty
-    pycache prefix (removed at exit) means no repository module can run from a stale __pycache__ entry beside its
-    pinned source: each compiles from the bytes verify_pins hashes. Called before the first repository import when
-    the file runs as a program; manifest.cached_bytecode() confirms it before custody opens."""
-    import atexit
-    import shutil
-    import tempfile
-    sys.dont_write_bytecode = True
-    prefix = tempfile.mkdtemp(prefix="jw-look-pyc-")
-    sys.pycache_prefix = prefix
-    atexit.register(shutil.rmtree, prefix, True)
-
-
-def main(argv=None):
-    import argparse
-    import json
-    p = argparse.ArgumentParser(description="Step 3's statistic (iii) per prompt-size cell (RL-166 Q6).")
-    p.add_argument("--stage1", required=True)
-    p.add_argument("--stage1-sha256", required=True)
-    p.add_argument("--custody", required=True)
-    p.add_argument("--span-dir", action="append", default=[])
-    p.add_argument("--manifest", required=True)
-    p.add_argument("--ledger-ref", help="the remote-tracking branch the committed LOOKS.json must be on (default: the "
-                                        "upstream, else origin/main; never HEAD or a local ref: manifest.shared_ref)")
-    p.add_argument("--allow-draft", action="store_true",
-                   help="synthetic runs only: a draft manifest and no committed stage-1 row; refused unless stage 1 is synthetic")
-    p.add_argument("--out", required=True)
-    a = p.parse_args(argv)
-    repo = Path(__file__).resolve().parents[2]
-    if str(repo) not in sys.path:                 # -I drops the repository from sys.path
-        sys.path.insert(0, str(repo))
-    from joulewise.cadence_looks import manifest as lm
-    raw = Path(a.stage1).read_bytes()
-    if hashlib.sha256(raw).hexdigest() != a.stage1_sha256:
-        print("REFUSE the stage-1 file is not the committed bytes")
-        return 1
-    stage1 = json.loads(raw)
-    try:
-        doc = lm.verify_pins(a.manifest, repo, allow_draft=a.allow_draft, running=[Path(__file__).resolve(), STEP3_PATH],
-                             ledger_ref=a.ledger_ref)
-        stale = lm.cached_bytecode(repo)
-        if stale:
-            raise lm.ManifestError([f"a repository module may have run from cached bytecode: {', '.join(stale[:4])}"])
-        # before any energy: the stage-1 file's schema, manifest, run mode and exact code (Mythos round-3 N2;
-        # Sol round-4 NEW-3), the same checks assemble makes
-        problems = lm.stage1_problems(repo, doc, stage1, lm.sha256_file(a.manifest), allow_draft=a.allow_draft)
-        if problems:
-            raise lm.ManifestError(problems)
-        if a.allow_draft:
-            if stage1.get("synthetic") is not True:                      # Mythos N2
-                raise lm.ManifestError(["--allow-draft on a stage-1 file that is not synthetic"])
-            # Mythos round-3 N1: and on custody whose every span's receipt says so, checked before any bundle opens
-            sdir_of = span_dirs(a.custody, a.span_dir)
-            spans = sorted(({leg["leg_key"].split("/", 1)[0] for leg in stage1.get("legs") or []}
-                            | {sp.get("span_id") for sp in (stage1.get("roster") or {}).get("spans") or []}) - {None})
-            real = []
-            for span_id in spans:
-                rec = Path(sdir_of(span_id)) / "runner_receipt.json"
-                if not rec.is_file() or json.loads(rec.read_text(encoding="utf-8")).get("synthetic") is not True:
-                    real.append(span_id)
-            if real:
-                raise lm.ManifestError([f"--allow-draft on custody that is not synthetic: {', '.join(real[:5])}"])
-            gate = None
-        else:
-            lm.require_stage1_committed(repo, doc["look_id"], a.stage1_sha256, stage1_doc=stage1,
-                                        ledger_ref=a.ledger_ref)
-            gate = lm.ledger_gate(repo, a.ledger_ref)                    # what satisfied the gate, recorded
-    except lm.ManifestError as error:
-        for problem in error.problems:
-            print(f"REFUSE {problem}")
-        return 1
-    threshold = next(d for d in doc["decisions"] if d["id"] == "drift_tripwire")["threshold"]
-    try:
-        sdir_of = span_dirs(a.custody, a.span_dir)
-        problems = custody_problems(stage1, None, sdir_of)
-        if problems:
-            raise Step3Refused("; ".join(problems))
-        entries = entries_from_stage1(stage1, sdir_of)
-        result = run_roster(entries, threshold=threshold)
-        custody = custody_record(a.custody, a.span_dir, entries, sdir_of, stage1)
-    except Step3Refused as error:
-        print(f"REFUSE {error}")
-        return 1
-    except Exception as exc:                      # type and line only: a message could carry a value
-        tb = exc.__traceback__
-        while tb.tb_next:
-            tb = tb.tb_next
-        print(f"FAILED {type(exc).__name__} at line {tb.tb_lineno}")
-        return 2
-    unpinned = lm.unpinned_loaded_modules(doc, repo)                    # Mythos N6
-    if unpinned:
-        print("REFUSE loaded repository modules the manifest does not pin: " + ", ".join(unpinned[:6]))
-        return 1
-    out = {"schema": SCHEMA, "stage1_sha256": a.stage1_sha256, "step3_sha256": STEP3_SHA256,
-           "manifest_sha256": lm.sha256_file(a.manifest),
-           # the step 3 module runs from its verified bytes under a fresh name, outside sys.modules: named here
-           "code_sha256": {**lm.loaded_repo_files(repo), lm.STEP3_PATH: STEP3_SHA256},
-           "allow_draft": bool(a.allow_draft), "synthetic": stage1.get("synthetic") is True, "ledger_gate": gate,
-           "custody": custody, **result}
-    text = json.dumps(out, indent=1, allow_nan=False) + "\n"
-    Path(a.out).write_text(text, encoding="utf-8")
-    print(f"wrote {a.out} sha256={hashlib.sha256(text.encode('utf-8')).hexdigest()}")
-    return 0
-
-
-if __name__ == "__main__":
-    _fresh_bytecode_cache()
-    raise SystemExit(main())

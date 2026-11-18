@@ -174,7 +174,7 @@ class ScanLineEqualsJsonLoads(unittest.TestCase):
     @staticmethod
     def text(rng):
         alphabet = ['a', 'k', 'b', 'h', '"', '\\', '/', '\b', '\f', '\n', '\r', '\t', '\x00', '\x1f', ' ', 'é',
-                    ' ', '\U0001F600', '￿', 'p', 'smc']
+                    '\u2028', '\U0001F600', '￿', 'p', 'smc']
         return "".join(rng.choice(alphabet) for _ in range(rng.randrange(6)))
 
     def mutate(self, rng, line):
@@ -839,10 +839,11 @@ class StageTwoBackstops(unittest.TestCase):
         rc, stdout, err = TLR.run_cli(["stage2", "--stage1", str(s1p), "--stage1-sha256", R.sha256_file(s1p),
                                        "--custody", str(self.c.root), "--span-dir", f"{L['span_id']}={sdir}",
                                        "--out", str(out)])
-        self.assertEqual(rc, 2, err)
+        self.assertEqual(rc, 1, err)
         self.assertFalse(out.exists())
         self.assertEqual(stdout, "")
-        return err.strip()
+        self.assertEqual(err, "stage2_error\nOtherError\n")
+        return TLR.LAST_RUN["private_stderr"].strip().splitlines()[-1]
 
     def test_gpu_rail_backstop_names_the_leg_and_the_gap(self):
         d = tmpdir(self)
@@ -852,8 +853,8 @@ class StageTwoBackstops(unittest.TestCase):
             gpu_hole(bundle_of(sdir, L["leg_key"]) / "power_trace.csv", float(math.floor(seg["wall_start_s"]) + 3), 3.0)
         s1p, sdir, L = self.hand_built(d, hole)
         err = self.stage2(d, s1p, sdir, L)
-        self.assertEqual(err, f"REFUSED GPU rail: {L['leg_key']}: 3.000 s with no power_trace row inside an "
-                              "energy-fit interval")
+        self.assertTrue(err.endswith(f"GPU rail: {L['leg_key']}: 3.000 s with no power_trace row inside an "
+                              "energy-fit interval"))
 
     def test_dc_in_backstop_names_the_leg_and_the_gap(self):
         d = tmpdir(self)
@@ -864,8 +865,8 @@ class StageTwoBackstops(unittest.TestCase):
                        lambda first, doc: None if x + 0.25 <= first < x + 2.25 else doc)
         s1p, sdir, L = self.hand_built(d, gap)
         err = self.stage2(d, s1p, sdir, L)
-        self.assertEqual(err, f"REFUSED DC-in: {L['leg_key']}: a gap of 2.500 s between meter samples inside an "
-                              "energy-fit interval")
+        self.assertTrue(err.endswith(f"DC-in: {L['leg_key']}: a gap of 2.500 s between meter samples inside an "
+                              "energy-fit interval"))
 
     def test_meter_span_refuses_times_other_than_the_readers(self):
         sdir = self.c.root / "dev-01-s02"
@@ -941,7 +942,12 @@ class CustodyBinding(unittest.TestCase):
             shutil.copytree(self.c.root / "dev-01-s02", sdir)
             change(sdir)
             rc, err, run = self.stage2(sdir, d / "fit.json")
-            self.assertEqual(rc, 2, name)
+            if name in ("meter", "trace"):
+                self.assertEqual(rc, 1, name)
+                self.assertEqual(err, "stage2_error\nOtherError\n")
+                err = run["private_stderr"]
+            else:
+                self.assertEqual(rc, 2, name)
             self.assertIn(fragment, err, name)
             self.assertFalse((d / "fit.json").exists(), name)
             energy = [(p, who) for p, who in run["frames"] if p.endswith(("power_trace.csv", ".jsonl"))
@@ -994,7 +1000,7 @@ class CustodyBinding(unittest.TestCase):
                 self.assertFalse(energy, energy)
                 from joulewise.cadence_looks import step3_roster as s3
                 with unittest.mock.patch.object(s3, "entries_from_stage1", side_effect=AssertionError("late read")):
-                    self.assertTrue(s3.custody_problems(self.s1, None,
+                    self.assertTrue(s3.custody_problems(self.s1,
                                     R.span_dirs(self.c.root, [f"dev-01-s02={sdir}"])))
 
     def test_native_pm_state_swap_refuses_without_hashing_energy_values(self):
@@ -1009,35 +1015,11 @@ class CustodyBinding(unittest.TestCase):
         self.assertGreater(hits, 0)
         p.write_bytes(raw)
         rc, err, run = self.stage2(sdir, d / "fit.json")
-        self.assertEqual(rc, 2, err)
-        self.assertIn("native PM time/state projection", err)
+        self.assertEqual(rc, 1, err)
+        self.assertIn("native PM time/state projection", run["private_stderr"])
         from joulewise.cadence_looks import step3_roster as s3
-        self.assertTrue(s3.custody_problems(self.s1, None,
+        self.assertTrue(s3.custody_problems(self.s1,
                         R.span_dirs(self.c.root, [f"dev-01-s02={sdir}"])))
-
-    def test_step3_refuses_a_changed_leg_record_and_records_its_custody(self):
-        d = tmpdir(self)
-        run = lambda *extra: subprocess.run(
-            [sys.executable, "-I", "-B", str(REPO / "joulewise/cadence_looks/step3_roster.py"), "--manifest",
-             TLR.pinned_manifest(), "--allow-draft", "--stage1", str(self.s1p), "--stage1-sha256",
-             R.sha256_file(self.s1p), "--custody", str(self.c.root), "--out", str(d / "s3.json"), *extra],
-            capture_output=True, text=True, timeout=900)
-        r = run()
-        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
-        cust = rj(d / "s3.json")["custody"]
-        self.assertEqual(cust["root"], str(self.c.root.resolve()))
-        self.assertTrue([f for f in cust["files"] if f["path"].endswith("/power_trace.csv")])
-        (d / "s3.json").unlink()
-        lid = self.L["leg_key"].split("/")[1]
-        sdir = d / "dev-01-s02"
-        shutil.copytree(self.c.root / "dev-01-s02", sdir)
-        p = sdir / "legs" / lid / "leg_record.json"
-        p.write_text(p.read_text() + "\n")
-        r = run("--span-dir", f"dev-01-s02={sdir}")
-        self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
-        self.assertIn(f"REFUSE custody: dev-01-s02/legs/{lid}/leg_record.json is not the file stage 1 read", r.stdout)
-        self.assertFalse((d / "s3.json").exists())
-
 
 # ============================================================================================ 6. the ledger
 @NEEDS_NUMPY
@@ -1078,10 +1060,10 @@ class SupersededStage1(unittest.TestCase):
 
     def stage2(self, s1p):
         out = self.d / "fit.json"
-        r = self.mr.py(self.mini, "scripts/cadence_look_run.py", "stage2", "--stage1", s1p, "--stage1-sha256",
-                       R.sha256_file(s1p), "--custody", self.c.root, "--out", out,
-                       "--manifest", self.mini / self.mr.MANIFEST)
-        return r, out
+        rc, so, err = TLR._cli_subprocess(["stage2", "--stage1", s1p, "--stage1-sha256", R.sha256_file(s1p),
+                                           "--custody", self.c.root, "--out", out,
+                                           "--manifest", self.mini / self.mr.MANIFEST], repo=self.mini)
+        return subprocess.CompletedProcess([], rc, so, err), out
 
     def entry(self, stage1_sha, rx=(), ruling="RL-999", roster=None, verdicts=None):
         return {"stage1_sha256": stage1_sha, "roster_sha256": roster or self.roster_sha,
@@ -1224,7 +1206,7 @@ class SupersededStage1(unittest.TestCase):
         self.set_row(status="committed", stage1_sha256=None, output_sha256=None)
         with self.assertRaises(M.ManifestError) as ctx:
             req()
-        self.assertTrue(any("after this look has run" in p for p in ctx.exception.problems))
+        self.assertTrue(any("manifest id is spent" in p for p in ctx.exception.problems))
 
     def test_hash_correction_keeps_cumulative_exclusions(self):
         old, leg = self.rerun_setup()
@@ -1340,46 +1322,6 @@ class LedgerGateAgreesWithTheRunMode(unittest.TestCase):
             self.assertEqual(rc, 2, err)
             self.assertIn(fragment, err)
             self.assertEqual(TLR.energy_opens(opened), [])
-
-    def test_step_3_refuses_before_energy(self):
-        harness = self.d / "spy_step3.py"
-        harness.write_text(SPY_HARNESS)
-        for i, (change, fragment) in enumerate(self.CASES):
-            p = self.write(change, f"s3-{i}")
-            report = self.d / f"report-{i}.json"
-            r = subprocess.run([sys.executable, "-I", "-B", str(harness), str(report),
-                                str(REPO / "joulewise/cadence_looks/step3_roster.py"), "--manifest",
-                                TLR.pinned_manifest(), "--allow-draft", "--stage1", str(p), "--stage1-sha256",
-                                R.sha256_file(p), "--custody", str(self.c.root), "--out", str(self.d / "s3.json")],
-                               capture_output=True, text=True, timeout=600)
-            self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
-            self.assertIn(fragment, r.stdout)
-            opened = rj(report)["opened"]
-            self.assertTrue([x for x in opened if x.endswith("s3-%d.json" % i)])       # the spy saw the stage-1 read
-            self.assertFalse([x for x in opened if "/runtime/" in x.replace(os.sep, "/")
-                              or x.endswith(("power_trace.csv", ".plist", "rich_telemetry.jsonl"))])
-
-
-SPY_HARNESS = r'''
-import json, os, runpy, sys
-report, target = sys.argv[1], sys.argv[2]
-sys.argv = [target] + sys.argv[3:]
-opened = []
-def _hook(event, args):
-    if event == "open" and args and isinstance(args[0], (str, bytes, os.PathLike)):
-        opened.append(os.fsdecode(args[0]))
-sys.addaudithook(_hook)
-code = 0
-try:
-    runpy.run_path(target, run_name="__main__")
-except SystemExit as exc:
-    code = exc.code
-finally:
-    with open(report, "w") as f:
-        json.dump({"opened": opened}, f)
-sys.exit(code)
-'''
-
 
 @NEEDS_NUMPY
 class StageOneChecksItsOwnFile(unittest.TestCase):
@@ -1523,7 +1465,7 @@ class N9Survivors(unittest.TestCase):
         return cfile
 
     def test_each_tool_refuses_a_module_loaded_from_cached_bytecode(self):
-        """inclusion, standalone step 3 and assemble each refuse when a repository module they loaded was loaded
+        """Inclusion refuses when a repository module it loaded came
         from a cache file: here a wrapper imports the manifest module from a valid __pycache__ entry (no fresh
         prefix can undo that import) and then runs the tool's main()."""
         from tests.cadence import look_minirepo as mr
@@ -1534,15 +1476,7 @@ class N9Survivors(unittest.TestCase):
         (d / "roster.json").write_text("[]")
         tools = {"inclusion": ("joulewise.cadence_looks.inclusion_34", ["--roster", d / "roster.json", "--custody", d,
                                                                          "--manifest", mini / mr.MANIFEST,
-                                                                         "--allow-draft", "--out", d / "v.json"]),
-                 "step3": ("joulewise.cadence_looks.step3_roster", ["--manifest", mini / mr.MANIFEST, "--allow-draft",
-                                                                     "--stage1", d / "s1.json", "--stage1-sha256",
-                                                                     M.sha256_file(d / "s1.json"), "--custody", d,
-                                                                     "--out", d / "s3.json"]),
-                 "assemble": ("scripts.cadence_look_manifest", ["assemble", "--manifest", mini / mr.MANIFEST,
-                                                                "--stage1", d / "s1.json", "--fit", d / "s1.json",
-                                                                "--step3", d / "s1.json", "--analyst-seat", "t",
-                                                                "--allow-draft", "--out", d / "o.json"])}
+                                                                         "--allow-draft", "--out", d / "v.json"])}
         for name, (module, args) in tools.items():
             wrapper = d / f"wrap_{name}.py"
             wrapper.write_text("import sys\nsys.path.insert(0, %r)\n"
@@ -1574,9 +1508,8 @@ class N9Survivors(unittest.TestCase):
         self.assertEqual(r.stdout.strip(), "FRESH", r.stderr)
 
     @unittest.skipIf(R is None, "numpy is not installed")
-    def test_the_two_stage_cli_removes_its_prefix_at_exit(self):
-        """Every look tool removes its fresh pycache prefix at exit; asserted on a private TMPDIR the child
-        processes are given, so no other process's prefix can make the test pass or fail (Mythos r5 N9)."""
+    def test_the_two_stage_cli_never_creates_its_cache_prefix(self):
+        """The CLI isolates its bytecode search without creating a temporary directory."""
         d = tmpdir(self)
         private = d / "tmp"
         private.mkdir()
@@ -1594,15 +1527,14 @@ class N9Survivors(unittest.TestCase):
                            env=env)
         self.assertEqual(r.returncode, 2)                       # a failing run cleans up too
         self.assertEqual(sorted(p.name for p in private.iterdir()), [])
-        # the control: the prefix is made in the private directory (so the empty listing above means something)
         r = subprocess.run([sys.executable, "-I", "-B", "-c",
-                            "import sys, os; sys.path.insert(0, sys.argv[1]); sys.argv = ['x']\n"
-                            "import atexit; atexit.register = lambda *a, **k: None\n"
-                            "from scripts import cadence_look_run as R; print(R._PYC_PREFIX)", str(REPO)],
+                            "import sys; sys.path.insert(0, sys.argv[1]); "
+                            "from scripts import cadence_look_run; print(sys.pycache_prefix)", str(REPO)],
                            capture_output=True, text=True, timeout=120, env=env)
         self.assertEqual(r.returncode, 0, r.stderr)
-        self.assertTrue(r.stdout.strip().startswith(str(private)), r.stdout)
-        self.assertTrue([p for p in private.iterdir() if p.name.startswith("jw-look-pyc-")])
+        prefix = Path(r.stdout.strip())
+        self.assertTrue(prefix.name.startswith(".jw-look-pyc-"), r.stdout)
+        self.assertFalse(prefix.exists())
 
 
 if __name__ == "__main__":

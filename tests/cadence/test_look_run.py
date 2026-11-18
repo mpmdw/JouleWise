@@ -100,30 +100,6 @@ class AstraPreResponse(unittest.TestCase):
             self.assertNotIn(str(ep), opened)
             self.assertFalse(op.exists())
 
-    def test_restricted_comparison_prints_only_the_maximum_difference(self):
-        left = {"schema": F.RESTRICTED_SCHEMA, "look_id": F.LOOK_ID,
-                "channels": {"gpu_rail": {"residuals": {"leg": {"a/L001": 0.5, "a/L002": 0.25}}}}}
-        right = copy.deepcopy(left)
-        right["channels"]["gpu_rail"]["residuals"]["leg"]["a/L001"] = 0.625
-        argv = ["compare-restricted", "--custody", "/synthetic-only", "--left", "/synthetic-only/a.json",
-                "--right", "/synthetic-only/b.json"]
-        with unittest.mock.patch.object(R, "_json", side_effect=[left, right]), \
-             contextlib.redirect_stdout(io.StringIO()) as out, contextlib.redirect_stderr(io.StringIO()) as err:
-            self.assertEqual(R.main(argv), 0)
-        self.assertEqual(out.getvalue(), "0.125\n")
-        self.assertEqual(err.getvalue(), "")
-
-    def test_restricted_destination_keeps_existing_bytes_and_owner_only_mode(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            path = Path(tmp) / "private.json"
-            R.write_restricted(path, b"synthetic test, no payload\n")
-            info = path.stat()
-            self.assertEqual(info.st_mode & 0o777, 0o600)
-            with self.assertRaises(FileExistsError):
-                R.write_restricted(path, b"attempted replacement")
-            self.assertEqual(path.stat().st_ino, info.st_ino)
-            self.assertEqual(path.stat().st_size, info.st_size)
-
     def test_receipt_epoch_overrules_the_roster_date_at_the_la_boundary(self):
         # 05:00 UTC on Nov 15 is still Nov 14 in Los Angeles.
         entry = {"span_id": "dev-01-s01", "block_id": "dev-01", "role": "fit"}
@@ -174,7 +150,8 @@ class AstraPreResponse(unittest.TestCase):
         sha = hashlib.sha256(F.dump(stage1)).hexdigest()
         args = R.argparse.Namespace(stage1="frozen-stage1", stage1_sha256=sha, allow_draft=True,
                                     energy="unopened-responses", looks=None)
-        with unittest.mock.patch.object(builtins, "open", return_value=io.BytesIO(F.dump(stage1))), \
+        with unittest.mock.patch.object(R, "_VERIFIED", [({}, None)]), \
+             unittest.mock.patch.object(builtins, "open", return_value=io.BytesIO(F.dump(stage1))), \
              unittest.mock.patch.object(R, "_json", side_effect=[{}, AssertionError("opened responses")]) as read, \
              unittest.mock.patch.object(R, "draft_ledger_check"), \
              unittest.mock.patch.object(R, "stage2_energy_preflight"):
@@ -182,48 +159,8 @@ class AstraPreResponse(unittest.TestCase):
                 R.cmd_stage2(args)
             read.assert_called_once()
 
-    def test_cli_reuses_the_blind_design_for_fit_and_freeze(self):
-        li, responses, _ = synth.build("noisy")
-        s1 = F.stage1(li, responses["input_sha256"])
-        raw = F.dump(s1)
-        sha = hashlib.sha256(raw).hexdigest()
-        opened_after = []
-
-        def read(path):
-            if path == "memory-responses":
-                opened_after.append((preflight.call_count, folds.call_count))
-                return responses
-            return {}
-
-        with unittest.mock.patch.object(builtins, "open", return_value=io.BytesIO(raw)), \
-             unittest.mock.patch.object(R, "_json", side_effect=read), \
-             unittest.mock.patch.object(R, "draft_ledger_check"), \
-             unittest.mock.patch.object(R, "stage2_energy_preflight"), \
-             unittest.mock.patch.object(R, "restricted_path", return_value=Path("synthetic-private")), \
-             unittest.mock.patch.object(R, "write_restricted") as write_restricted, \
-             unittest.mock.patch.object(R, "_stamp", side_effect=lambda out, _: out), \
-             unittest.mock.patch.object(R, "_VERIFIED", []), \
-             unittest.mock.patch.object(R.M, "verify_pins", return_value={}), \
-             unittest.mock.patch.object(R, "code_hashes", return_value={}), \
-             unittest.mock.patch.object(R, "sha256_file", return_value="a" * 64), \
-             unittest.mock.patch.object(R, "write_canonical", return_value="b" * 64) as write, \
-             unittest.mock.patch.object(F, "stage2_preflight", wraps=F.stage2_preflight) as preflight, \
-             unittest.mock.patch.object(F, "fit_onset_fold", wraps=F.fit_onset_fold) as folds, \
-             contextlib.redirect_stdout(io.StringIO()):
-            rc = R.main(["stage2", "--stage1", "memory-stage1", "--stage1-sha256", sha, "--energy",
-                         "memory-responses", "--out", "memory-fit", "--coefficients-out", "memory-coefficients",
-                         "--manifest", "memory-manifest", "--allow-draft"])
-        self.assertEqual(rc, 0)
-        self.assertEqual(opened_after, [(1, folds.call_count)])
-        self.assertEqual(preflight.call_count, 1)
-        self.assertEqual(write.call_count, 2)
-        private_bytes = write_restricted.call_args.args[1]
-        public = write.call_args_list[0].args[1]
-        self.assertEqual(hashlib.sha256(private_bytes).hexdigest(), public["restricted_sha256"])
-
-
-class RL175Cli(unittest.TestCase):
-    """RL-175 B.3/B.4 on generated noisy custody through both real CLI subprocesses."""
+class PrefixPublication(unittest.TestCase):
+    """Equal-day prefix arithmetic through the synthetic private writer."""
 
     @classmethod
     def setUpClass(cls):
@@ -252,9 +189,9 @@ class RL175Cli(unittest.TestCase):
                 h = R.sha256_file(cls.s1p)
                 argv[argv.index("--stage1-sha256") + 1] = h
                 mr.commit(mini, stage1_sha256=h, roster_sha256=roster_sha, verdicts_sha256=verdicts_sha)
-            result = mr.py(mini, "scripts/cadence_look_run.py", *argv, "--manifest", mini / mr.MANIFEST)
-            if result.returncode:
-                raise AssertionError(f"{argv[0]} failed: {result.stderr}")
+            rc, _, err = _cli_subprocess([*argv, "--manifest", mini / mr.MANIFEST], repo=mini)
+            if rc:
+                raise AssertionError(f"{argv[0]} failed: {err} {LAST_RUN.get('private_stderr')}")
         cls.s1, cls.fit, cls.co = (rj(p) for p in (cls.s1p, cls.fitp, cls.cop))
         cls.legs = {leg["leg_key"]: leg for leg in cls.li["legs"]}
         refs = {sp["span_id"]: sp["soak_reference_tv0h_c"] for sp in cls.li["spans"]}
@@ -262,40 +199,6 @@ class RL175Cli(unittest.TestCase):
             leg["leg_key"]: F.predict(cls.co, cls.legs[leg["leg_key"]], refs[leg["span_id"]], held_out_day=leg["day"])
             for leg in cls.s1["legs"] if leg["in_energy_fit"]}
         cls.energy, _ = R.read_segment_energy(cls.s1, R.span_dirs(cls.custody, None))
-
-    def test_public_attack_fails_but_custody_recovers_truth_with_noise_bound(self):
-        recovered = []
-        for key, prediction in self.predictions.items():
-            for ch in F.CHANNELS:
-                keyed = self.fit["channels"][ch].get("residuals", {}).get("leg", {})
-                if key in keyed:
-                    inferred = prediction["channels"][ch]["total"] / (1 + keyed[key])
-                    measured = sum(self.energy["legs"][key][ch]["segments"])
-                    # The attack's 1% threshold is prescribed by RL-175 B.3.
-                    if abs(inferred / measured - 1) <= 0.01:
-                        recovered.append((key, ch))
-        self.assertEqual(len(self.predictions), 53)
-        self.assertEqual(len(recovered), 0)
-        private_path = self.custody / f"{F.LOOK_ID}.{R.sha256_file(self.s1p)}.restricted.json"
-        self.assertEqual(R.sha256_file(private_path), self.fit["restricted_sha256"])
-        self.assertEqual(private_path.stat().st_mode & 0o777, 0o600)
-        private = rj(private_path)
-        for key, prediction in self.predictions.items():
-            leg = self.legs[key]
-            duration = leg["turn"]["last_token_s"] - leg["turn"]["turn_start_s"]
-            # The generator adds independent segment N(0, seg_sd^2) and one shared
-            # leg-power N(0, power_sd^2) times duration: Var(total) = N*seg_sd^2
-            # + duration^2*power_sd^2. Six sigma has two-sided tail <2e-9 per leg.
-            # GPU traces integrate the planted piecewise-constant response exactly;
-            # DC's sampled step integration is checked separately by existing tests.
-            ch = "gpu_rail"
-            noise = self.truth["params"]["noise"]
-            sigma = math.sqrt(len(leg["turn"]["segments"]) * noise["seg_sd_j"][ch] ** 2
-                              + (duration * noise["leg_power_sd_w"][ch]) ** 2)
-            residual = private["channels"][ch]["residuals"]["leg"][key]
-            inferred = prediction["channels"][ch]["total"] / (1 + residual)
-            planted = self.truth["legs"][key]["planted_mean_j"][ch]
-            self.assertLessEqual(abs(inferred - planted), 6 * sigma, key)
 
     def test_unequal_day_bias_estimate_and_interval_from_cli_responses(self):
         for ch in F.CHANNELS:
@@ -575,18 +478,49 @@ if opts.get("trap"):
             return row
     TF.csv = type(sys)("csv_trap")
     TF.csv.DictReader = _Rows
+from pathlib import Path
+import shutil
 calls = []
+private = None
+if opts["exports"]:
+    # Retained fit tests read generated private artifacts after the command exits.
+    temp = Path(tempfile.mkdtemp(prefix="jw-look-fixture-"))
+    private = temp / "synthetic-reservation"
+    public = temp / "PUBLIC.json"
+    R.release.destinations = lambda *a: (private, public)
+    real_validate = R.validate_execution_row
+    def validate(row, stage1, custody):
+        holds = {flag: "RL-999" for flag in R.M.STAGE2_HOLD_FLAGS["interim"]
+                 if stage1[flag.split(".")[0]].get(flag.split(".")[1]) is True}
+        record = dict(row, execution_host=R.socket.gethostname(), custody_root=str(custody or temp),
+                      public_root="fixture", holds_cleared=holds)
+        return real_validate(record, stage1, custody)
+    R.validate_execution_row = validate
+    R.require_twin_runner = lambda doc: lambda *args: {"agreement": "not_evaluable"}
+    if not (R.ROOT / ".git").exists():
+        git = R.M._git
+        R.M._git = lambda repo, *args: ((0, b"f" * 40, "") if args == ("rev-parse", "HEAD") else git(repo, *args))
 if opts.get("mock_stage2"):
     def _stage2(*a, **k):
         calls.append(1)
         return {}
     R.F.stage2 = _stage2
+rc = None
 try:
     rc = R.main(argv)
 finally:
+    private_stderr = ""
+    if private is not None:
+        if rc == 0:
+            for name, path in opts["exports"].items():
+                shutil.copyfile(private / name, path)
+        if (private / "stderr").exists():
+            private_stderr = (private / "stderr").read_text()
+        shutil.rmtree(private.parent)
     if opts.get("report"):
         with open(opts["report"], "w") as f:
-            json.dump({"opened": opened, "frames": frames, "stage2_calls": len(calls)}, f)
+            json.dump({"opened": opened, "frames": frames, "stage2_calls": len(calls),
+                       "private_stderr": private_stderr}, f)
 sys.exit(rc)
 '''
 
@@ -611,7 +545,15 @@ def _cli_subprocess(argv, trap=False, mock_stage2=False, repo=None, extra=None):
     repo = Path(repo or REPO)
     _pin_dir()
     report = os.path.join(_PIN_DIR, f"report-{len(os.listdir(_PIN_DIR))}.json")
-    opts = {"repo": str(repo), "spy": bool(_SPIES), "trap": trap, "mock_stage2": mock_stage2, "report": report,
+    argv = list(map(str, argv))
+    exports = {}
+    if argv[0] == "stage2":
+        for flag, name in (("--out", "fit.json"), ("--coefficients-out", "coefficients.json")):
+            if flag in argv:
+                i = argv.index(flag)
+                exports[name] = argv[i + 1]
+                del argv[i:i + 2]
+    opts = {"repo": str(repo), "spy": bool(_SPIES), "trap": trap, "mock_stage2": mock_stage2, "report": report, "exports": exports,
             **(extra or {})}
     r = subprocess.run([sys.executable, "-I", "-B", _HARNESS, json.dumps(opts), *argv], cwd=repo,
                        capture_output=True, text=True, timeout=900)
@@ -791,7 +733,6 @@ class Stage2Custody(unittest.TestCase):
                                     "--out", fitp])
             self.assertEqual(rc, 0, err)
             fit = rj(fitp)
-        F.output_check(fit)
         self.assertEqual(fit["stage1_sha256"], h)
         for ch in F.CHANNELS:
             self.assertEqual(len(fit["channels"][ch]["coefficients"]), 9)
@@ -1338,38 +1279,6 @@ class RoundTwoCli(unittest.TestCase):
         self.assertEqual(got, base)
 
 
-class CliSubprocess(unittest.TestCase):
-    """The two stages as real processes (python -I -B), where the unpinned-module guard runs live: both exit 0,
-    and each output's code_sha256 names exactly the repository files that process loaded."""
-
-    def test_both_stages_in_a_fresh_interpreter(self):
-        import subprocess
-        import sys
-        li, en, _ = synth.build("exact")
-        man = pinned_manifest()
-        with tempfile.TemporaryDirectory() as d:
-            ip, ep, s1p, op = (os.path.join(d, n) for n in ("li.json", "en.json", "s1.json", "o.json"))
-            wb(ip, synth.dump(li))
-            wb(ep, synth.dump(en))
-            cli = str(REPO / "scripts/cadence_look_run.py")
-            r = subprocess.run([sys.executable, "-I", "-B", cli, "stage1", "--input", ip, "--out", s1p,
-                                "--manifest", man, "--allow-draft"], capture_output=True, text=True, timeout=600)
-            self.assertEqual(r.returncode, 0, r.stderr)
-            h = R.sha256_file(s1p)
-            r = subprocess.run([sys.executable, "-I", "-B", cli, "stage2", "--stage1", s1p, "--stage1-sha256", h,
-                                "--energy", ep, "--out", op, "--manifest", man, "--allow-draft",
-                                "--looks", looks_file(h)], capture_output=True, text=True, timeout=600)
-            self.assertEqual(r.returncode, 0, r.stderr)
-            d1, o = rj(s1p), rj(op)
-        for doc in (d1, o):
-            files = {k for k in doc["code_sha256"] if not k.startswith("input:")}
-            self.assertIn("joulewise/cadence_looks/fit_interim.py", files)
-            self.assertIn("scripts/cadence_look_run.py", files)
-            self.assertFalse([f for f in files if f.startswith("tests/")])
-            self.assertIs(doc["allow_draft"], True)
-        self.assertEqual(d1["code_sha256"]["input:roster_sha256"], d1["input_sha256"])   # level R stands as roster
-
-
 class CommittedLedger(unittest.TestCase):
     """Stage 2 without --allow-draft reads the committed ledger (manifest.require_stage1_committed) on a pinned copy
     of the look's files (look_minirepo): it runs when LOOKS.json at HEAD names this stage-1 hash and roster, and
@@ -1393,18 +1302,16 @@ class CommittedLedger(unittest.TestCase):
         roster = rj(s1p)["code_sha256"]["input:roster_sha256"]
         self.assertEqual(roster, roster_sha)
         mr.commit(mini, stage1_sha256=h, roster_sha256=roster, verdicts_sha256=verdicts_sha)
-        r = mr.py(mini, "scripts/cadence_look_run.py", "stage2", "--stage1", s1p, "--stage1-sha256", h,
-                  "--custody", c.root, "--out", op, "--manifest", man)
-        self.assertEqual(r.returncode, 0, r.stderr)
+        args = ["stage2", "--stage1", s1p, "--stage1-sha256", h, "--custody", c.root, "--out", op, "--manifest", man]
+        rc, _, err = _cli_subprocess(args, repo=mini)
+        self.assertEqual(rc, 0, err + LAST_RUN.get("private_stderr", ""))
         self.assertIs(rj(op)["allow_draft"], False)
         self.assertEqual(set(rj(op)["ledger_gate"]), {"commit", "ref", "ref_commit"})
-        mr.commit(mini, stage1_sha256="9" * 64, roster_sha256=roster,     # the ledger names another stage-1 file
-                  verdicts_sha256=verdicts_sha)
+        mr.commit(mini, stage1_sha256="9" * 64, roster_sha256=roster, verdicts_sha256=verdicts_sha)
         os.unlink(op)
-        r = mr.py(mini, "scripts/cadence_look_run.py", "stage2", "--stage1", s1p, "--stage1-sha256", h,
-                  "--custody", c.root, "--out", op, "--manifest", man)
-        self.assertEqual(r.returncode, 2)
-        self.assertIn("stage-1 sha256", r.stderr)
+        rc, _, err = _cli_subprocess(args, repo=mini)
+        self.assertEqual(rc, 2)
+        self.assertIn("stage-1 sha256", err)
         self.assertFalse(os.path.exists(op))
 
 
@@ -1598,7 +1505,7 @@ class RoundThree(unittest.TestCase):
 
     def test_n2_step3_module_flag_is_gone(self):
         rc, _, err = run_cli(["stage2", "--stage1", "x", "--stage1-sha256", "0" * 64, "--custody", "x",
-                              "--out", "x", "--step3-module", "x"])
+                              "--step3-module", "x"])
         self.assertEqual(rc, 2)
         self.assertIn("unrecognized arguments", err)
 
@@ -1657,10 +1564,10 @@ class RoundThree(unittest.TestCase):
                                 "--manifest", man, "--allow-draft"], capture_output=True, text=True, cwd=d)
             self.assertEqual(r.returncode, 0, r.stderr)
             h = R.sha256_file(s1p)
-            r = subprocess.run([sys.executable, "-I", "-B", cli, "stage2", "--stage1", str(s1p), "--stage1-sha256",
-                                h, "--energy", self.ep, "--out", str(op), "--manifest", man, "--allow-draft",
-                                "--looks", looks_file(h)], capture_output=True, text=True, cwd=d)
-            self.assertEqual(r.returncode, 0, r.stderr)
+            rc, _, err = _cli_subprocess(["stage2", "--stage1", s1p, "--stage1-sha256", h, "--energy", self.ep,
+                                             "--out", op, "--manifest", man, "--allow-draft",
+                                             "--looks", looks_file(h)], repo=root)
+            self.assertEqual(rc, 0, err + LAST_RUN.get("private_stderr", ""))
             self.assertEqual(rj(op)["qualified_interim_half"]["threshold"], 0.02)
 
     def test_n10_guard_refuses_a_module_with_a_cache_file(self):

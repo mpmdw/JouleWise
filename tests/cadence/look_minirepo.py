@@ -10,6 +10,7 @@ copy's own bytes. Synthetic only.
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -24,7 +25,24 @@ from tests.git_fixture import init_git_fixture
 REPO = Path(__file__).resolve().parents[2]
 LOOKS_DIR = "docs/process/cadence/looks"
 MANIFEST = f"{LOOKS_DIR}/lm-interim-01.json"
+TWIN_PATH = "scripts/synthetic_pin.py"
+TWIN_SOURCE = b"# Synthetic pin fixture. No independent fit or executable implementation.\n"
+TWIN_PIN = {"path": TWIN_PATH, "sha256": hashlib.sha256(TWIN_SOURCE).hexdigest()}
 STUB = "# stub: the pinned file lives on another branch (PR #795)\n"
+
+
+def synthetic_reservation_name(parent):
+    """Use the contract name where the local filesystem permits the generated test artifact."""
+    import errno
+    probe = Path(parent) / "RESTRICTED"
+    try:
+        probe.mkdir(mode=0o700)
+    except PermissionError as exc:
+        if exc.errno != errno.EPERM:
+            raise
+        return "synthetic-reservation"
+    probe.rmdir()
+    return probe.name
 
 
 def to_draft(doc):
@@ -57,6 +75,7 @@ def mini_repo(test):
         else:
             dst.write_text(STUB, encoding="utf-8")
     draft = to_draft(doc)                         # the copy starts as a draft, whatever the checked-in status
+    draft["fit"]["twin"] = None
     (root / MANIFEST).write_text(json.dumps(draft, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
     ledger = json.loads((root / lm.LOOK_LEDGER_PATH).read_text(encoding="utf-8"))
     (root / lm.LOOK_LEDGER_PATH).write_text(json.dumps(_draft_ledger(ledger, lm.sha256_file(root / MANIFEST)),
@@ -101,6 +120,8 @@ def commit(root, *, stage1_sha256=None, roster_sha256=None, verdicts_sha256=None
     m = root / MANIFEST
     doc = json.loads(m.read_text(encoding="utf-8"))
     doc["status"] = "committed"
+    (root / TWIN_PATH).write_bytes(TWIN_SOURCE)
+    doc["fit"]["twin"] = TWIN_PIN
     drift = next(d for d in doc["decisions"] if d["id"] == "drift_tripwire")
     if drift.pop("pending", None) is not None:  # a committed manifest carries Q11's disposition (synthetic here)
         drift["disposed_by"] = "RL-999"               # synthetic disposing ruling

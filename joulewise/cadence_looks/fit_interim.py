@@ -11,8 +11,7 @@ Two stages, on the data shapes of `docs/process/cadence_look_fit_interface.md`:
   (GPU rail, DC-in): the segment OLS with the count-only base and the heat term fitted jointly, covariance
   clustered by leg, no sign assumed (Q1, Q2); leave-one-day-out errors over the hot stretch and over the leg, with
   and without the heat columns (Q3); the prefix bias at 1.10, 1.30 and 1.374 (Q2, P2); the marked-span print (Q20).
-  The public output holds coefficients, covariances and aggregate diagnostics. RL-175 B.3 restricts the keyed
-  residuals and sparse-day diagnostics to a separate custody artifact.
+  The fit remains in custody. The single execution releases the registered words, count and hashes (RL-180).
 
 Python stdlib plus numpy; no scipy. Every open reading of the interface page's section 6 is named where it is
 applied (R-1 ... R-12).
@@ -24,18 +23,18 @@ import json
 import math
 import re
 from datetime import datetime
+from pathlib import Path
 from zoneinfo import ZoneInfo
 
 import numpy as np
 
 from joulewise.cadence_looks import inclusion_34 as I34
-from joulewise.cadence_looks.manifest import MIN_PUBLIC_FIT_LEGS_PER_DAY
+from joulewise.cadence_looks.interim_release import dump
 
 STAGE1_SCHEMA = "joulewise.cadence_look_stage1.v1"
 FIT_SCHEMA = "joulewise.cadence_look_fit.v1"
 INPUT_SCHEMA = "joulewise.cadence_look_input.v1"
 ENERGY_SCHEMA = "joulewise.cadence_look_energy.v1"
-RESTRICTED_SCHEMA = "joulewise.cadence_look_restricted.v1"
 LOOK_ID = "lm-interim-01"
 
 BLOCK = 256
@@ -1266,7 +1265,7 @@ def prefix_bias(plen, pairs):
 
 
 def _channel(design, E, ch):
-    """Fit and score one response. Return its public diagnostics and restricted data separately."""
+    """Fit and score one response. All diagnostics stay in custody."""
     by_key = design.legs
     fit = by_key.values()
 
@@ -1280,7 +1279,7 @@ def _channel(design, E, ch):
     b_full, cov_full = solve(design.full, keys_all)
     days = list(design.train)
 
-    fold_coef = {}
+    fold_coef, fold_coef_no_heat = {}, {}
     detail_out = []
     pred_seg = {}
 
@@ -1292,8 +1291,7 @@ def _channel(design, E, ch):
             test = [k for k in keys_all if by_key[k]["day"] == D]
             fold, regression = designs[D]
             b, _ = solve(regression, train)
-            if use_heat:
-                fold_coef[D] = {c: float(x) for c, x in zip(fold.cols, b)}       # P-1
+            (fold_coef if use_heat else fold_coef_no_heat)[D] = {c: float(x) for c, x in zip(fold.cols, b)}
             for k in test:
                 L = by_key[k]
                 rows = np.asarray(fold.rows(L))
@@ -1319,40 +1317,28 @@ def _channel(design, E, ch):
             L = by_key[k]
             hot = [i for i, s in enumerate(L["segments"]) if s["hot"]]
             meas_hot[k] = float(sum(seg_y(L)[i] for i in hot)) if hot else None
-        hot_day, leg_day, n_hot, withheld = {}, {}, {}, {}
+        hot_day, leg_day, n_hot = {}, {}, {}
         counted = []
         num_h = den_h = num_l = den_l = 0.0
-        public_num_h = public_den_h = public_num_l = public_den_l = 0.0
         for D in days:
             ks = [k for k in keys_all if by_key[k]["day"] == D]
             hk = [k for k in ks if meas_hot[k] is not None]
-            public = len(ks) >= MIN_PUBLIC_FIT_LEGS_PER_DAY
-            hot_error = None
             if hk:
                 pn, mn = sum(pred_hot[k] for k in hk), sum(meas_hot[k] for k in hk)
                 if mn <= 0:
                     raise LookInputError(f"stage 2: {ch}: day {D}: measured hot energy is not positive (R-18); "
                                          f"legs: {', '.join(hk)}")
-                hot_error = (pn - mn) / mn
+                hot_day[D] = (pn - mn) / mn
                 num_h += pn - mn                         # RL-167 row 12: pooled over every hot block, every day
                 den_h += mn
-                if public:
-                    hot_day[D] = hot_error
-                    public_num_h += pn - mn
-                    public_den_h += mn
                 if len(hk) >= MIN_HOT_LEGS_PER_DAY:
                     counted.append(D)
             pn, mn = sum(pred_leg[k] for k in ks), sum(meas_leg[k] for k in ks)
             leg_error = (pn - mn) / mn
             num_l += pn - mn
             den_l += mn
-            if public:
-                n_hot[D] = len(hk)
-                leg_day[D] = leg_error
-                public_num_l += pn - mn
-                public_den_l += mn
-            else:
-                withheld[D] = {"hot": hot_error, "leg": leg_error, "n_hot_legs": len(hk)}
+            n_hot[D] = len(hk)
+            leg_day[D] = leg_error
         mx = max(abs(hot_day[D]) for D in counted) if counted else None
         # P-2: per counted day, legs with a hot block, hot blocks and s/sqrt(n); s pooled within counted days
         for k, v in meas_hot.items():
@@ -1381,19 +1367,18 @@ def _channel(design, E, ch):
         res_hot = {k: None if meas_hot[k] is None else (pred_hot[k] - meas_hot[k]) / meas_hot[k] for k in keys_all}
         hv = [v for v in res_hot.values() if v is not None]
         return ({"hot": {"per_day": hot_day, "counted_days": counted, "n_hot_legs_per_day": n_hot, "max_abs": mx,
-                         "pooled": public_num_h / public_den_h if public_den_h else None, "verdict": verdict},
-                 "leg": {"per_day": leg_day, "pooled": public_num_l / public_den_l if public_den_l else None,
+                         "pooled": num_h / den_h if den_h else None, "verdict": verdict},
+                 "leg": {"per_day": leg_day, "pooled": num_l / den_l if den_l else None,
                          "rms_over_legs": math.sqrt(sum(v * v for v in res_leg.values()) / len(res_leg))},
                  "hot_rms_over_legs": math.sqrt(sum(v * v for v in hv) / len(hv)) if hv else None},
-                res_leg, res_hot, meas_leg,
-                {"per_day": withheld, "pooled": {"hot": num_h / den_h if den_h else None, "leg": num_l / den_l}})
+                meas_leg, {"leg": list(res_leg.values()), "hot_stretch": list(res_hot.values())})
 
     pl, ph, pp = lodo(True)
-    err, res_leg, res_hot, meas_leg, private_heat = errors(pl, ph)
+    err, meas_leg, residuals = errors(pl, ph)
     err["folds_delta_dropped"] = [day for day in days if design.onset_models[day] is None
                                   and DELTA_COL in design.heat_cols]
     pl0, ph0, _ = lodo(False)
-    err0, _, _, _, private_base = errors(pl0, ph0)
+    err0, _, residuals_no_heat = errors(pl0, ph0)
     err["no_heat"] = err0
 
     # P-3: held-out relative residual by block offset from the leg's first hot block
@@ -1459,8 +1444,9 @@ def _channel(design, E, ch):
             "n_legs_under_0_99": sum(1 for k in keys_all if E[k][ch]["coverage_min"] < TRACE_COVERAGE_PRINT)},
         "day_detail": day_detail,
         "onset_offset_residuals": onset_blocks,
-    }, {"residuals": {"leg": res_leg, "hot_stretch": res_hot},
-        "day_diagnostics": {"with_heat": private_heat, "no_heat": private_base}}
+        "residuals": {"with_heat": residuals, "no_heat": residuals_no_heat},
+        "fold_coefficients_no_heat": fold_coef_no_heat,
+    }
 
 
 class _Stage2Design:
@@ -1494,8 +1480,8 @@ def stage2_preflight(stage1_out):
     return _Stage2Design(stage1_out)
 
 
-def stage2(stage1_out, stage1_sha256, energy, code_sha256=None, *, restricted_out=None, _prepared=None):
-    """Return the public fit. If supplied, populate `restricted_out` for the custody writer (RL-175 B.3)."""
+def stage2(stage1_out, stage1_sha256, energy, code_sha256=None, *, _prepared=None):
+    """Return the full private fit."""
     if hashlib.sha256(dump(stage1_out)).hexdigest() != stage1_sha256:
         raise LookInputError("stage 2: the stage-1 output does not match the hash it was given")
     design = _prepared if _prepared is not None else stage2_preflight(stage1_out)
@@ -1505,16 +1491,15 @@ def stage2(stage1_out, stage1_sha256, energy, code_sha256=None, *, restricted_ou
     E = energy["legs"]
     with_delta = DELTA_COL in design.main.heat_cols
     channels = {}
-    private = {"schema": RESTRICTED_SCHEMA, "look_id": LOOK_ID, "stage1_sha256": stage1_sha256,
-               "synthetic": stage1_out["synthetic"], "channels": {}}
     for ch in CHANNELS:
-        c, private["channels"][ch] = _channel(design.main, E, ch)
+        c = _channel(design.main, E, ch)
         sensitivity = {"marked_spans": design.marked, "n_legs_without": design.n_without,
-                       "coefficients_without": None, "lodo_hot_max_abs_without": None}
+                       "coefficients_without": None, "lodo_hot_max_abs_without": None, "fit_without": None}
         if design.without_marked is not None:
             try:
-                cw, _ = _channel(design.without_marked, E, ch)
-                sensitivity.update(coefficients_without=cw["coefficients"], lodo_hot_max_abs_without=cw["lodo"]["hot"]["max_abs"])
+                cw = _channel(design.without_marked, E, ch)
+                sensitivity.update(coefficients_without=cw["coefficients"],
+                                   lodo_hot_max_abs_without=cw["lodo"]["hot"]["max_abs"], fit_without=cw)
             except LookInputError:
                 pass
         c["marked_sensitivity"] = sensitivity
@@ -1531,45 +1516,11 @@ def stage2(stage1_out, stage1_sha256, energy, code_sha256=None, *, restricted_ou
         "tau_uncertainty_propagated": False,    # RL-166b: the onset's scatter is in the delta column (B-1); its
                                                 # coefficients' uncertainty is not propagated
         "delta_column": "kept" if with_delta else "dropped_onset_not_estimable",
-        "channels": channels, "restricted_sha256": hashlib.sha256(dump(private)).hexdigest(),
+        "channels": channels,
         "qualified_interim_half": {"statistic": "gpu_rail.lodo.hot.max_abs", "value": hot["max_abs"],
                                    "threshold": QUALIFIED_THRESHOLD, "verdict": hot["verdict"]},
     }
-    output_check(out)
-    if restricted_out is not None:
-        restricted_out.update(private)
     return out
-
-
-# =============================================================================================== output custody
-_LEG_KEY = re.compile(r"/[LHT][0-9]{3}$")
-_OUT_FORBIDDEN = ("joule", "watt", "power", "energy", "_mj", "_wh", "measured", "meas_")
-
-
-def output_check(obj, path="$"):
-    """Public fit and Freeze 2 never carry energy quantities or leg-keyed maps (RL-175 B.3)."""
-    if isinstance(obj, dict):
-        for k, v in obj.items():
-            kl = str(k).lower()
-            if k == "code_sha256" and path == "$":          # paths name code files; the values are hashes only
-                if not all(isinstance(h, str) and re.fullmatch(r"[0-9a-f]{64}", h) for h in v.values()):
-                    raise ValueError("code_sha256 holds a non-hash")
-                continue
-            if _LEG_KEY.search(str(k)):
-                raise ValueError("a leg-keyed value in public output")
-            if any(f in kl for f in _OUT_FORBIDDEN) or kl.endswith("_j") or kl.endswith("_w"):
-                raise ValueError("forbidden output key")
-            output_check(v, path + "." + str(k))
-    elif isinstance(obj, list):
-        for x in obj:
-            output_check(x, path + "[]")
-    elif isinstance(obj, float) and not math.isfinite(obj):
-        raise ValueError("non-finite output value")
-
-
-def dump(obj):
-    """Canonical bytes: the hash of every file this module writes is the sha256 of these."""
-    return (json.dumps(obj, sort_keys=True, separators=(",", ":"), allow_nan=False) + "\n").encode()
 
 
 # =============================================================================================== freeze 2
@@ -1658,12 +1609,33 @@ def write_coefficients(stage1_out, stage1_sha256, fit_out, manifest_sha256, *, _
         "channels": channels,
         "qualified_interim_half": fit_out["qualified_interim_half"],
     }
-    doc = _plain(doc)
-    output_check(doc)                              # no energy or power key, no per-leg value
-    return doc
+    return _plain(doc)
+
+
+def predict_frozen(repo, leg, soak_reference_tv0h_c, *, held_out_day=None):
+    """Score using the exact coefficient bytes authenticated by the public freeze on main."""
+    from joulewise.cadence_looks import manifest
+
+    row = manifest.freeze2_commitment(repo)
+    root = Path(row["custody_root"])
+    path = root / row["look_id"] / "RESTRICTED" / "coefficients.json"
+    repo = Path(repo).resolve()
+    if path.resolve() != path or path.is_relative_to(repo) or repo.is_relative_to(root):
+        raise LookInputError("freeze 2: the coefficient path must be the registered custody file")
+    raw = path.read_bytes()
+    if hashlib.sha256(raw).hexdigest() != row["coefficients_sha256"]:
+        raise LookInputError("freeze 2: the stored coefficient bytes differ from the mainline commitment")
+    return _predict(json.loads(raw), leg, soak_reference_tv0h_c, held_out_day=held_out_day)
 
 
 def predict(coefficients, leg, soak_reference_tv0h_c, *, held_out_day=None):
+    """Exercise the prediction arithmetic on generated coefficients."""
+    if coefficients.get("synthetic") is not True:
+        raise LookInputError("non-synthetic coefficients require predict_frozen")
+    return _predict(coefficients, leg, soak_reference_tv0h_c, held_out_day=held_out_day)
+
+
+def _predict(coefficients, leg, soak_reference_tv0h_c, *, held_out_day=None):
     """RL-173 §E's predict path: from the freeze-2 coefficient file ALONE (no stage-1 or fit file, no energy), the
     main fit's prediction for one level-R leg (interface §1.2: a type-A leg with a turn) of a span whose soak
     reference is `soak_reference_tv0h_c`. It runs stage 1's arithmetic for that leg with the frozen rates,

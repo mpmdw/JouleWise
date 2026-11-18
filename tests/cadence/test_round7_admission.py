@@ -20,6 +20,7 @@ try:
     from scripts import cadence_look_synth as SY
     from joulewise.cadence_looks import fit_interim as F
     from tests.cadence.test_time_fields import gpu_hole, bundle_of
+    from tests.cadence import test_look_run as TLR
 except ModuleNotFoundError as exc:
     if exc.name != "numpy":
         raise
@@ -198,10 +199,10 @@ class Admission(unittest.TestCase):
         leg = next(leg for leg in stage1["legs"] if leg["leg_key"] == key)
         self.assertTrue(leg["included"])
         self.assertFalse(leg["in_energy_fit"])
-        self.assertEqual(S3.custody_problems(stage1, None, R.span_dirs(root, [])), [])
+        self.assertEqual(S3.custody_problems(stage1, R.span_dirs(root, [])), [])
         x = leg["segments"][3]["wall_start_s"] + 4
         gpu_hole(bundle / "power_trace.csv", x, 4.0)
-        problems = S3.custody_problems(stage1, None, R.span_dirs(root, []))
+        problems = S3.custody_problems(stage1, R.span_dirs(root, []))
         self.assertTrue(problems, "Step 3 accepted timing stage 1 never judged")
         self.assertIn(key, "; ".join(problems))
         self.assertIn("row stamps", "; ".join(problems))
@@ -213,7 +214,7 @@ class Admission(unittest.TestCase):
         sha = R.sha256_file
         hashes = dict(roster_sha256=sha(root / "roster.json"), verdicts_sha256=sha(root / "rules_3_4.json"))
         MR.commit(mini, **hashes)
-        stage1, fit, output = (root.parent / name for name in ("D.json", "O.json", "S3.json"))
+        stage1, fit = (root.parent / name for name in ("D.json", "O.json"))
         result = MR.py(mini, "scripts/cadence_look_run.py", "stage1", "--roster", root / "roster.json",
                        "--rules-3-4", root / "rules_3_4.json", "--custody", root,
                        "--manifest", mini / MR.MANIFEST, "--out", stage1)
@@ -225,11 +226,9 @@ class Admission(unittest.TestCase):
         MR.commit(mini, stage1_sha256=sha(stage1), **hashes)
         args = ("--stage1", stage1, "--stage1-sha256", sha(stage1), "--custody", root,
                 "--manifest", mini / MR.MANIFEST)
-        result = MR.py(mini, "scripts/cadence_look_run.py", "stage2", *args, "--out", fit)
-        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-        result = MR.py(mini, "joulewise/cadence_looks/step3_roster.py", *args, "--out", output)
-        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-        output.unlink()
+        rc, _, err = TLR._cli_subprocess(["stage2", *args, "--out", fit], repo=mini)
+        self.assertEqual(rc, 0, err + TLR.LAST_RUN.get("private_stderr", ""))
+        fit.unlink()
         gpu_hole(bundle / "power_trace.csv", leg["segments"][3]["wall_start_s"] + 4, 4.0)
         # An energy decoder reaching this canary would raise; the time-only custody guard must refuse first.
         path = bundle / "power_trace.csv"
@@ -238,12 +237,14 @@ class Admission(unittest.TestCase):
         fields[1] = "ENERGY_CANARY_NEVER_DECODE"
         rows[-1] = ",".join(fields)
         path.write_text("\n".join(rows) + "\n")
-        result = MR.py(mini, "joulewise/cadence_looks/step3_roster.py", *args, "--out", output)
-        self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
-        self.assertIn(key, result.stdout)
-        self.assertIn("row stamps", result.stdout)
-        self.assertNotIn("ENERGY_CANARY", result.stdout + result.stderr)
-        self.assertFalse(output.exists())
+        rc, stdout, err = TLR._cli_subprocess(["stage2", *args, "--out", fit], repo=mini)
+        self.assertEqual(rc, 1, stdout + err)
+        self.assertEqual((stdout, err), ("", "stage2_error\nOtherError\n"))
+        diagnostic = TLR.LAST_RUN["private_stderr"]
+        self.assertIn(key, diagnostic)
+        self.assertIn("row stamps", diagnostic)
+        self.assertNotIn("ENERGY_CANARY", diagnostic)
+        self.assertFalse(fit.exists())
 
     def test_committed_verdicts_cannot_admit_changed_meter_or_journal(self):
         mini = MR.mini_repo(self)

@@ -13,7 +13,8 @@ Three levels, each a JSON document (UTF-8, `allow_nan=False`; every float finite
 | R | `look_input` (one file) | no | production: the stage-1 reader from custody; synthetic: the generator | stage 1 |
 | D | `stage1_output` (committed with its sha256) | no | stage 1 | stage 2, by hash |
 | E | `segment_energy` | **yes** | production: built **in memory** by stage 2 from custody, never written; synthetic: the generator writes it | stage 2 only |
-| O | `fit_output` | derived | stage 2 | the lead (schema check), then the research lead |
+| O | `RESTRICTED/fit.json` | derived | stage 2 | the research lead under a named ruling |
+| Public | `PUBLIC.json` | derived words only | stage 2 | the public ledger operation and freeze gate |
 
 Units: tokens are integers; temperatures °C; fan speed rpm; energy J. "Epoch" is wall-clock UNIX seconds.
 
@@ -361,12 +362,13 @@ is a receipt field `refusal_kind` in ("slope", "load") when present, else "kind 
 
 ---
 
-## 4. Level O: `fit_output` (what the fit must emit)
+## 4. Stage 2 fit and public report
 
-The public fit is closed at every level. It carries coefficients, covariances, aggregate diagnostics,
-counts and the restricted artifact's `restricted_sha256`. The manifest builder's
-`lm-interim-01.output.schema.json` embeds this object as its fit section; the field names below are the
-contract between the two.
+Stage 2 writes the fit to `RESTRICTED/fit.json`. The closed
+[`PUBLIC.json` schema](cadence/looks/lm-interim-01.output.schema.json) names all
+15 fields. Its only count is copied from stage 1. Its five stage-1 tripwires
+and three stage-2 decisions use the vocabularies in the manifest. The public
+report records a fixed completion word and the named artifact hashes.
 
 ```
 {
@@ -378,7 +380,6 @@ contract between the two.
   "tau_uncertainty_propagated": false,    # RL-166b: the onset's scatter is in the delta column; its coefficients'
                                           # uncertainty is not propagated
   "delta_column": "kept" | "dropped_onset_not_estimable",
-  "restricted_sha256": hex64,             # RL-175 B.3, also recorded in LOOKS.json
   "channels": { "gpu_rail": ChannelFit, "dc_in": ChannelFit },
   "qualified_interim_half": { "statistic": "gpu_rail.lodo.hot.max_abs", "value": float | null,
                               "threshold": 0.02, "verdict": "passes" | "fails" | "not_evaluable" }
@@ -398,7 +399,7 @@ contract between the two.
     "hot":  { "per_day": {day: float},    # SIGNED (Σpred − Σmeas)/Σmeas over the day's hot blocks
               "counted_days": [day], "n_hot_legs_per_day": {day: int},
               "max_abs": float | null,       # over counted days
-              "pooled": float | null,        # over all hot blocks on public days (RL-175 B.3)
+              "pooled": float | null,        # over all hot blocks
               "verdict": "passes" | "fails" | "not_evaluable" },
     "leg":  { "per_day": {day: float}, "pooled": float | null, "rms_over_legs": float },
     "hot_rms_over_legs": float | null,    # THE "frozen holdout relative error" freeze 2 takes for SD_j (RL-167 R-14)
@@ -412,7 +413,7 @@ contract between the two.
     "1.374": {"prefix_len": 2981, ...}
   },
   "fold_coefficients": {day: {column: float}},   # RL-166b P-1: each LODO fold's heat-model vector (its own columns)
-  "trace_coverage": {"min": float,        # cold seat 9 (PENDING in #793's schema): min over energy-fit legs of the
+  "trace_coverage": {"min": float,        # min over energy-fit legs of the
                      "n_legs_under_0_99": int},   # channel's per-segment covered fraction; printed, decides nothing
   "day_detail": {                         # RL-166b P-2: counted days only
     "days": {day: {"legs_with_hot_block": int, "hot_blocks": int,
@@ -426,38 +427,35 @@ contract between the two.
     "rms_offsets_m2_to_p3": {"with_heat": float | null, "no_heat": float | null} },
   "marked_sensitivity": { "marked_spans": [span_id], "n_legs_without": int,
                           "coefficients_without": {column: float} | null,
-                          "lodo_hot_max_abs_without": float | null },
+                          "lodo_hot_max_abs_without": float | null, "fit_without": ChannelFit | null },
   "model_sha256": hex64, "qualified": "yes" | "no" | "not_run"
 }
 ```
 
-### Restricted diagnostics (RL-175 B.3)
+### Private diagnostics and execution
 
-Committed stage 2 writes a new owner-only restricted JSON file at
-`<custody>/lm-interim-01.<stage1_sha256>.restricted.json`. Use `--restricted-out`
-to choose another new path within custody and outside the checkout. The public
-fit is written after the restricted file. Synthetic draft runs write a separate
-restricted file when `--restricted-out` is supplied.
+The registered custody root holds `lm-interim-01/RESTRICTED/`. Its exclusive
+creation reserves the id. The process redirects descriptors 1 and 2 to
+`stdout` and `stderr` before opening any response-bearing file. The four
+additional files are `fit.json`, `step3.json`, `coefficients.json` and
+`twin.json`. An interruption after reservation consumes the id. The original
+stderr receives the fixed two-line failure notice with the manifest's exit
+status.
 
-The restricted file carries `channels[ch].residuals.{leg,hot_stretch}` keyed by
-leg and `channels[ch].day_diagnostics.{with_heat,no_heat}`. Each model records
-`per_day` lines for days with fewer than three fit legs and the full `pooled`
-ratios. Public day lines and public pooled ratios use only days with at least
-three fit legs, so subtracting disclosed day totals from a public pool cannot
-recover a withheld day. Registered holdout RMS and the qualification verdict
-retain their scoring populations. `cadence_look_manifest.py row --output` takes
-the digest from the validated public assembly. `cadence_look_run.py
-compare-restricted --custody DIR --left PATH --right PATH` prints only the
-maximum absolute difference for matching custody artifacts.
+The private fit retains every day's diagnostics and pooled errors. Residual
+arrays follow stage-1 roster order for the relevant fit. The primary fit and
+Step 3 complete before stage 2 stores and hashes the coefficient bytes. The
+independent twin is pending and stage 2 refuses without it.
 
-RL-175 B.4 takes the mean of each day's standardized pair differences, then
-weights those day means equally for the estimate and its 90% t interval.
+RL-175 B.4 weights the standardized day means equally for the prefix-bias
+estimate and its 90% t interval.
 
 ### 4.2 Freeze-2 coefficient file and the predict path (RL-173 E)
 
-`fit_interim.write_coefficients(stage1_out, stage1_sha256, fit_out, manifest_sha256)` writes it (stage 2's
-`--coefficients-out`, canonical bytes as `dump`); its schema is
-`docs/process/cadence/looks/lm-interim-01.coefficients.schema.json` (pinned at `freeze2.schema`). Freeze 2 is its hash.
+`fit_interim.write_coefficients` produces the canonical bytes stored in
+`RESTRICTED/coefficients.json`. The manifest pins its schema at
+`freeze2.schema`. The file's SHA-256 in a committed mainline `PUBLIC.json`
+takes effect as freeze 2 when `twin_agrees` is `yes`.
 
 ```
 { "schema": "joulewise.cadence_look_coefficients.v1", "look_id": "lm-interim-01", "synthetic": bool,
@@ -474,7 +472,10 @@ weights those day means equally for the estimate and its 90% t interval.
   "qualified_interim_half": {...} }
 ```
 
-`fit_interim.predict(coefficients, leg, soak_reference_tv0h_c)` takes a level-R Leg (type A, with a turn) and its
+`fit_interim.predict_frozen(repo, leg, soak_reference_tv0h_c)` authenticates
+the mainline decision and hashes the stored coefficient bytes before decoding
+them. `fit_interim.predict` accepts generated coefficients in memory for tests.
+The predictor takes a level-R Leg (type A, with a turn) and its
 span's soak reference, and uses the coefficient file alone: the start reading and z = reading − centring; the count
 clock with the frozen rates; τ̂ from the frozen onset model; the δ column with the frozen σ̂ (when kept); each
 channel's own columns. It returns `{"leg_key", "start": {"status", "state", "z", "extrapolated"}, "tau_hat_s", "t_p_s",
@@ -486,7 +487,7 @@ For a day-jackknife, call `predict` on the same reference leg with `held_out_day
 take the jackknife standard error of the resulting `H_hat` values. Each call uses that date's frozen onset
 coefficients and scatter and each channel's matching `fold_coefficients[day]`. A null onset fold uses its
 frozen vector with delta absent.
-The twin writes its own `predict`; the agreement compares both on each set's coefficient file.
+
 
 ### 4.3 The two fold lists (RL-167 row 7: "listed in both lists")
 
@@ -598,7 +599,7 @@ the stage-1 output. Stage 1 replays the same blind rules on its current custody 
 committed verdict with the replay before admission: a current failure excludes; a committed false stays false.
 The replay also reads the bundle's `config.json` sampling period and G0-to-last-token interval, with optional
 G0 fallbacks `outputs/align_runtime_events.jsonl` and `align_runtime_events.jsonl`. These operational files,
-including optional presence, join the source hash map checked by both later readers:
+including optional presence, join the source hash map checked by both stage-2 readers:
 
 ```
 { "<span_id>/<leg_id>": {"sidecar_coverage": bool, "km003c_clean": bool}, ... }   # one entry per roster leg
@@ -609,7 +610,7 @@ directory is `<custody>/<span_id>` unless `--span-dir SPAN_ID=PATH` says otherwi
 calendar dates. Stage 1 derives the Los Angeles date from `runner_receipt.json`'s `started.epoch_s` and requires
 the roster date to match. Direct level-R input must satisfy the same epoch-to-date check.
 
-**Stage 2 opens** each energy-fit leg's (never an hp-01 leg's) `leg_record.json` and `power_trace.csv` through the pinned step 3 reader, and that span's meter streams through the pinned decoder. Before reading responses it verifies the operational sources and time projections and checks the full design and every required leave-one-day-out design for column rank. Both channels use the same fold onsets and factorizations and retain their own residuals and covariance.
+**Stage 2 opens** each energy-fit leg's (never an hp-01 leg's) `leg_record.json` and `power_trace.csv` through the pinned step 3 reader, and that span's meter streams through the pinned decoder. Before reservation it verifies the operational sources and checks the full design and each required leave-one-day-out design for column rank. The reserved process checks the time projections before decoding responses. Both channels use the same fold onsets and factorizations and retain their own residuals and covariance.
 
 **Pins and commit (#793's helpers).** Both stages take `--manifest` (and `--allow-draft` for synthetic runs) and call
 `manifest.verify_pins(manifest, repo, allow_draft=..., running=(fit_interim.py, cadence_look_run.py))` before any
@@ -639,8 +640,7 @@ stage1_sha256, stage1_doc=...)` against committed `LOOKS.json`; `--looks` is a s
   any published `run`, `frozen` or output hash closes the rerun path. Shallow history refuses; Git replacement
   objects are ignored. A later empty-exclusion hash correction preserves all earlier exclusions.
 - `custody.files_sha256` binds receipt, soak reference, leg records, summaries, token/turn events and journals,
-  including their presence. Both later readers record these operational byte hashes; assembly compares them
-  along with the GPU traces. Rich/plist timing and native state are separately bound by `native_pm_sha256` in D;
+  including their presence. Both stage-2 readers check these operational hashes and the GPU trace projections against stage 1. Rich/plist timing and native state are separately bound by `native_pm_sha256` in D;
   both readers verify that blinded projection before their value reads. Type-T runtime files are omitted.
   Energy files retain time-only stage-1 projections.
 - Timestamp faults use rule 3 without converting power. Later trace/meter faults name the leg and stream with
@@ -662,10 +662,7 @@ The look records hashes and cross-checks readers; campaign seal/marker authentic
 custody handoff before this CLI, and no look command claims to verify that seal.
 
 Open research-lead questions remain explicit: N3's 2 s clock-fit line (unchanged from RL-173), the conservative
-reader's four unsupported malformed shapes, and whether a future persisted-coefficient reader must require
-schema/code provenance before calling the pure in-memory `predict` API. The writer validates its pinned schema;
-`predict` does not claim to authenticate a file or its executing code. Real-recording tests remain excluded here
-by the builder's synthetic-only blinding instruction.
+reader's four unsupported malformed shapes, and the registered cadence twin interface. Builder tests use generated inputs.
 
 **Round 5 and RL-173 (cold seats on 246a41db6).**
 - **Trace clauses (RL-173 E.1 items 1, 2):** stage 1 judges both channels on the leg's energy-fit intervals from time
@@ -673,7 +670,7 @@ by the builder's synthetic-only blinding instruction.
   stamp-only bound and `inclusion_34.meter_bracket` are gone: the support test is exact.
 - **Backstop (item 3):** `fit.gpu_trace_hole_refusal` is on at 2 s (the validator requires it for an interim look), and
   DC-in support is judged again on the decoded samples (`time_fields.support`, the function the clause calls). A
-  backstop refusal names the leg and the gap and prints no energy. Stage 2 also refuses if the decoder's sample times
+  backstop refusal keeps the leg and gap in private stderr. Stage 2 also refuses if the decoder's sample times
   differ from the time reader's.
 - **A second stage 1 (item 4; Mythos r5 N3):** only with the research lead's ruling in the committed row. The row's
   `stage1_superseded` lists each replaced (stage1, roster, verdicts) triple with its `ruling` and its
@@ -682,10 +679,9 @@ by the builder's synthetic-only blinding instruction.
   stage-1 hash. A corrected hash (a typo) is an entry with no exclusions; stage 1 is not run again. The history is
   read over HEAD and every remote-tracking ref (N5). `cadence_look_manifest.py row` writes the row's hashes from the
   files and checks them first; messages print full hashes.
-- **Custody binding (N6):** level R's span `custody` and leg `trace_holes.gpu_rail.rows_sha256` are checked by stage 2
-  before any energy file opens (receipt and leg records by sha256, meter and trace time fields by digest). Level O
-  records `custody` {root, span_dirs, files [{path, sha256}]}; step 3 checks the leg records and records its own;
-  `assemble` refuses unless both read one root and the same GPU traces.
+- **Custody binding (N6):** level R's span `custody` and leg `trace_holes.gpu_rail.rows_sha256` are checked by stage 2. Operational records are checked before reservation.
+  Within the reservation both readers share the same roster and custody root,
+  check the registered time digests and record the files they read.
 - **Pre-energy checks:** `manifest.stage1_problems` also checks the ledger gate against the run mode (Sol r5 NEW-3);
   stage 1 runs it on its own file before writing (Mythos r5 N7). STAGE1_CODE lives in manifest.py and is shared.
 - **R-20's header (Mythos r5 N1)** is read through the time reader, so the monitor's sorted-key header counts.

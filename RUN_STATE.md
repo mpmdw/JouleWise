@@ -1,5 +1,11 @@
 # JouleWise Run State
 
+PR #795 frozen-spec build (2026-11-18) applies RL-179 F-12 and RL-180 to
+`lm-interim-01`. Stage 2 has one reservation and a closed public report.
+An independent cadence twin is still needed before the manifest can be
+committed and the look can run. The next step is the independent Astra
+audit. [Builder report](docs/run_reports/2026-11-18-pr795-frozen-spec.md).
+
 PR #795 Builder E round 10 (2026-11-17) applies the Astra audit repairs on
 `align/2026-11-14-fit-interim` from `a33b37a00`. Stage 1 binds days to Los Angeles
 receipt dates. Stage 2 checks rank before reading responses and shares the fold

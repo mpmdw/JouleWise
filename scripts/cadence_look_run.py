@@ -5,9 +5,9 @@
                                | --roster ROSTER.json --custody ROOT --rules-3-4 VERDICTS.json
                                  [--span-dir SPAN_ID=PATH ...] [--write-input LOOK_INPUT.json])
            --manifest MANIFEST.json [--allow-draft]   (both stages; checked first, before any input opens)
-    stage2 --stage1 STAGE1.json --stage1-sha256 HEX --looks LOOKS.json --out FIT.json
-                              (--energy SEGMENT_ENERGY.json
-                               | --custody ROOT [--span-dir SPAN_ID=PATH ...]) [--coefficients-out COEF.json]
+    stage2 --manifest MANIFEST.json --stage1 STAGE1.json --stage1-sha256 HEX
+           --custody ROOT [--span-dir SPAN_ID=PATH ...]
+
 
 Stage 1 reads time fields and sample counters only from energy-bearing files. In custody mode it opens, per span: `runner_receipt.json`,
 `soak/soak_reference.json`, and per leg `leg_record.json`; per accepted attempt's bundle: `events.jsonl`
@@ -27,8 +27,8 @@ Stage 2 takes the stage-1 file by its sha256 as its only roster. In custody mode
 in memory (GPU rail through the committed step 3 module's `load_gpu_trace` and `Trace`; DC-in by the trapezoid
 between consecutive KM003C samples, through `joulewise.external.km003c_parse`) and never writes it.
 
-Stdout carries the output path and its sha256 only. A refusal prints its field-only message; any other
-exception prints its type and line number only (step 3's rule: a message could carry a value).
+The stage-2 destinations and execution host are registered in LOOKS.json. After reservation, only the
+closed public report or the fixed two-line failure notice leaves custody.
 """
 from __future__ import annotations
 
@@ -37,27 +37,25 @@ import hashlib
 import importlib
 import importlib.util
 import json
-import math
 import os
 from pathlib import Path
 import re
+import shutil
 import sys
+import tempfile
+import uuid
+import socket
+import traceback
 
 sys.dont_write_bytecode = True
-# Mythos N10: -B stops writing bytecode, not reading it. A fresh, empty pycache prefix makes Python look for cached
-# bytecode only there, so a stale __pycache__ entry beside a pinned source is never run; every repository module
-# below compiles from the source bytes verify_pins hashes. _check_sources() confirms it before any energy opens.
-import tempfile  # noqa: E402
-_PYC_PREFIX = tempfile.mkdtemp(prefix="jw-look-pyc-")
-sys.pycache_prefix = _PYC_PREFIX
-import atexit  # noqa: E402
-import shutil  # noqa: E402
-atexit.register(shutil.rmtree, _PYC_PREFIX, True)     # Mythos r4 N4: leave no empty prefix directory behind
+# An unused cache prefix forces source compilation, and -B prevents writes there.
 ROOT = Path(__file__).resolve().parents[1]
+sys.pycache_prefix = str(ROOT / f".jw-look-pyc-{uuid.uuid4().hex}")
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from joulewise.cadence_looks import fit_interim as F  # noqa: E402
+from joulewise.cadence_looks import interim_release as release  # noqa: E402
 from joulewise.cadence_looks import manifest as M  # noqa: E402
 from joulewise.cadence_looks import inclusion_34 as I34  # noqa: E402
 from joulewise.cadence_looks import time_fields as TF  # noqa: E402
@@ -118,60 +116,6 @@ def write_canonical(path, obj):
     with open(path, "wb") as f:
         f.write(data)
     return hashlib.sha256(data).hexdigest()
-
-
-def restricted_path(a):
-    """Stage 2's new private destination. A committed look keeps it in custody."""
-    name = getattr(a, "restricted_out", None)
-    if a.allow_draft and name is None:
-        return None
-    path = Path(name or (Path(a.custody) / f"{F.LOOK_ID}.{a.stage1_sha256}.restricted.json")).resolve()
-    if path.is_relative_to(ROOT.resolve()) or (not a.allow_draft and not path.is_relative_to(Path(a.custody).resolve())):
-        raise F.LookInputError("stage 2: restricted output must be outside the repository and in custody for a committed look")
-    if any(path == Path(other).resolve() for other in (a.out, a.coefficients_out, a.stage1, a.energy) if other):
-        raise F.LookInputError("stage 2: the restricted and other artifact paths must differ")
-    if path.exists() or not path.parent.is_dir():
-        raise F.LookInputError("stage 2: restricted output requires a new file in an existing directory")
-    return path
-
-
-def write_restricted(path, data):
-    """Publish complete owner-only bytes without replacing an existing custody file."""
-    with tempfile.NamedTemporaryFile(dir=path.parent, prefix=".look-restricted-") as f:
-        f.write(data)
-        f.flush()
-        os.link(f.name, path)
-
-
-def restricted_max_difference(left, right):
-    if isinstance(left, dict) and isinstance(right, dict) and left.keys() == right.keys():
-        return max((restricted_max_difference(left[key], right[key]) for key in left), default=0.0)
-    if type(left) in (float, int) and type(right) in (float, int):
-        difference = abs(left - right)
-        if math.isfinite(difference):
-            return difference
-    if type(left) is type(right) and (left is None or isinstance(left, (str, bool))) and left == right:
-        return 0.0
-    raise F.LookInputError("incompatible restricted artifacts")
-
-
-def compare_restricted(a):
-    """Print only the maximum absolute difference. An incompatible input exits silently."""
-    try:
-        custody = Path(a.custody).resolve()
-        paths = [Path(name).resolve() for name in (a.left, a.right)]
-        if any(not path.is_relative_to(custody) or path.is_relative_to(ROOT.resolve()) for path in paths):
-            return 2
-        left, right = (_json(path) for path in paths)
-        for doc in (left, right):
-            if (not isinstance(doc, dict) or doc.get("schema") != F.RESTRICTED_SCHEMA
-                    or doc.get("look_id") != F.LOOK_ID or not isinstance(doc.get("channels"), dict)):
-                return 2
-        maximum = restricted_max_difference(left, right)
-    except (OSError, TypeError, ValueError, OverflowError, RecursionError):
-        return 2
-    print(f"{maximum:.17g}")
-    return 0
 
 
 def span_dirs(custody, pairs):
@@ -439,10 +383,13 @@ def draft_ledger_check(looks_doc, stage1_sha256):
     stage1_committed or later. A real look uses manifest.require_stage1_committed on the committed ledger."""
     M.validate_look_ledger(looks_doc)
     row = next((r for r in looks_doc["looks"] if r.get("look_id") == F.LOOK_ID), None)
-    if row is None or row.get("status") not in ("stage1_committed", "run", "frozen"):
+    if row and row["status"] in release.SPENT_STATUSES:
+        raise F.LookInputError("draft ledger: the manifest id is already spent")
+    if row is None or row.get("status") != "stage1_committed":
         raise F.LookInputError("draft ledger: the look's row is not at stage1_committed or later")
     if row.get("stage1_sha256") != stage1_sha256:
         raise F.LookInputError("draft ledger: the row does not name this stage-1 file's sha256")
+    return row
 
 
 def _mode(result):
@@ -964,7 +911,7 @@ def cmd_stage1(a):
     return _stamp(out, a)
 
 
-def cmd_stage2(a):
+def cmd_stage2(a, *, keep_redirected=False):
     with open(a.stage1, "rb") as f:
         raw = f.read()
     if hashlib.sha256(raw).hexdigest() != a.stage1_sha256:
@@ -980,31 +927,132 @@ def cmd_stage2(a):
     # energy opens. A caller-named ledger is accepted for synthetic (--allow-draft) runs only.
     if a.looks and not a.allow_draft:
         raise F.LookInputError("--looks names a ledger other than the repository's; only with --allow-draft")
+    doc, manifest_path = _VERIFIED[0]
     if a.allow_draft:
-        draft_ledger_check(_json(a.looks) if a.looks else _json(ROOT / M.LOOK_LEDGER_PATH), a.stage1_sha256)
+        row = draft_ledger_check(_json(a.looks) if a.looks else _json(ROOT / M.LOOK_LEDGER_PATH), a.stage1_sha256)
+        rc, head, _ = M._git(ROOT, "rev-parse", "HEAD")
+        if rc:
+            raise F.LookInputError("stage 2: cannot resolve the synthetic checkout's commit")
+        commit = head.decode("ascii").strip()
+        ledger_gate = None
     else:
-        # the committed ledger at HEAD, HEAD on the ledger ref, the manifest and roster bound (builder's contract)
-        M.require_stage1_committed(ROOT, F.LOOK_ID, a.stage1_sha256, stage1_doc=s1, ledger_ref=a.ledger_ref)
-    prepared = F.stage2_preflight(s1)               # all required designs must pass before responses open
-    stage2_energy_preflight(s1, a)                  # Mythos round 3 N1, N2: every remaining refusal, before energy
-    a._restricted_path = restricted_path(a)
-    a._restricted = {} if a._restricted_path is not None else None
-    if a.energy:
-        energy, custody = _json(a.energy), None
+        commit, row = M.require_stage1_committed(ROOT, F.LOOK_ID, a.stage1_sha256, stage1_doc=s1,
+                                               ledger_ref=a.ledger_ref, for_execution=True)
+        ref, ref_commit = M.shared_ref(ROOT, a.ledger_ref)
+        ledger_gate = {"commit": commit, "ref": ref, "ref_commit": ref_commit}
+        if row["sha256"] != sha256_file(manifest_path):
+            raise F.LookInputError("stage 2: the execution row names a different manifest")
+    prepared = F.stage2_preflight(s1)
+    stage2_energy_preflight(s1, a)
+    validate_execution_row(row, s1, a.custody)
+    twin = require_twin_runner(doc)
+    try:
+        restricted, public = release.destinations(ROOT, row)
+    except (OSError, ValueError) as exc:
+        raise F.LookInputError(str(exc)) from None
+    sdir_of = span_dirs(a.custody, a.span_dir) if a.custody else None
+    if sdir_of is not None:
+        ids = [leg["span_id"] for leg in s1["legs"] if leg["included"] and leg["role"] == "fit" and
+               leg["leg_type"] == "A"]
+        problems = M.nonenergy_problems(s1, sdir_of, ids, include_native_pm=False)
+        if problems:
+            raise F.LookInputError("; ".join(problems))
+    _, public_schema = M.look_schemas(ROOT)
+    coefficients_schema = M.coefficients_schema(ROOT)
+    manifest_sha = sha256_file(manifest_path)
+
+    def execute():
+        finish_stage2(a, s1, prepared, doc, commit, manifest_sha, restricted, public, public_schema,
+                      coefficients_schema, sdir_of, twin, ledger_gate=ledger_gate)
+
+    try:
+        return release.run_reserved(restricted, execute, linear_algebra_error=F.np.linalg.LinAlgError,
+                                    keep_redirected=keep_redirected)
+    except FileExistsError:
+        raise F.LookInputError("the manifest id already has an execution reservation") from None
+
+
+def validate_execution_row(row, stage1, custody):
+    host = row.get("execution_host")
+    if not host or host != socket.gethostname():
+        raise F.LookInputError("stage 2: execution_host does not match this host")
+    if not row.get("custody_root") or not row.get("public_root"):
+        raise F.LookInputError("stage 2: register both look roots in the ledger")
+    if custody is not None and Path(custody).resolve() != Path(row["custody_root"]):
+        raise F.LookInputError("stage 2: --custody differs from the registered custody root")
+    holds = M.STAGE2_HOLD_FLAGS["interim"]
+    raised = {flag for flag in holds if stage1[flag.split(".")[0]].get(flag.split(".")[1]) is True}
+    if raised != set(row.get("holds_cleared", {})):
+        raise F.LookInputError("stage 2: the committed stage-1 flags and ledger clearing rulings differ")
+
+
+def require_twin_runner(doc):
+    """Refuse before reservation until the independent cadence reader and its adapter are specified."""
+    if not doc["fit"].get("twin"):
+        raise F.LookInputError("stage 2: RL-180 requires the independent twin path and sha256")
+    raise F.LookInputError("stage 2: NEEDS_SPEC for the pinned cadence twin's invocation and result contract")
+
+
+def finish_stage2(a, stage1, prepared, doc, commit, manifest_sha, restricted, public, public_schema,
+                  coefficients_schema, sdir_of, twin, *, ledger_gate=None):
+    """The fit, Step 3, coefficient commitment, and comparison share the same reservation."""
+    from joulewise.cadence_looks import step3_roster as S3
+
+    if sdir_of is None:
+        energy, custody = _json(a.energy), None   # synthetic level E only
     else:
-        sdir_of = span_dirs(a.custody, a.span_dir)
-        span_times = custody_check(s1, sdir_of)         # Mythos r5 N6: the custody stage 1 judged, before energy
-        energy, files = read_segment_energy(s1, sdir_of, gpu_max_gap_s=gpu_gap_rule(_VERIFIED[0][0]),
-                                            span_times=span_times)
+        # Even energy-blind scans of trace bytes run under the reservation and descriptor redirection.
+        span_times = custody_check(stage1, sdir_of)
+        problems = S3.custody_problems(stage1, sdir_of)
+        if problems:
+            raise F.LookInputError("; ".join(problems))
+        energy, files = read_segment_energy(stage1, sdir_of, gpu_max_gap_s=gpu_gap_rule(doc), span_times=span_times)
         custody = {"root": str(Path(a.custody).resolve()),
-                   "span_dirs": [{"span_id": sid, "path": str(Path(pth).resolve())}
-                                 for sid, pth in sorted(dict(x.split("=", 1) for x in a.span_dir or []).items())],
+                   "span_dirs": [{"span_id": sid, "path": str(Path(path).resolve())}
+                                 for sid, path in sorted(x.split("=", 1) for x in a.span_dir or [])],
                    "files": files}
-    a._stage1_doc = s1
-    a._prepared_fit = prepared
-    out = F.stage2(s1, a.stage1_sha256, energy, code_hashes(), restricted_out=a._restricted, _prepared=prepared)
-    out["custody"] = custody                        # Mythos r5 N6: what stage 2 read, by path and sha256
-    return _stamp(out, a)
+    fit = F.stage2(stage1, a.stage1_sha256, energy, code_hashes(), _prepared=prepared)
+    fit.update(custody=custody, soak_retries=stage1["soak_retries"], manifest_sha256=manifest_sha,
+               allow_draft=ledger_gate is None, ledger_gate=ledger_gate)
+    release.write_private(restricted / "fit.json", F.dump(fit))
+    entries = S3.entries_from_stage1(stage1, sdir_of) if sdir_of is not None else []
+    threshold = next(d["threshold"] for d in doc["decisions"] if d["id"] == "drift_tripwire")
+    step3 = S3.run_roster(entries, threshold=threshold)
+    if sdir_of is not None:
+        step3["custody"] = S3.custody_record(a.custody, a.span_dir, entries, sdir_of, stage1)
+        step3_files = {entry["path"]: entry["sha256"] for entry in step3["custody"]["files"]}
+        for entry in custody["files"]:
+            path = entry["path"]
+            if path.endswith("/power_trace.csv") and step3_files.get(path) != entry["sha256"]:
+                raise F.LookInputError("the primary fit and Step 3 read different GPU trace bytes")
+    release.write_private(restricted / "step3.json", F.dump(step3))
+    coefficients = F.write_coefficients(stage1, a.stage1_sha256, fit, manifest_sha, _prepared=prepared)
+    if release.schema_check.errors(coefficients, coefficients_schema):
+        raise F.LookInputError("the coefficient file violates its pinned schema")
+    coefficient_path = restricted / "coefficients.json"
+    release.write_private(coefficient_path, F.dump(coefficients))
+    coefficient_sha = sha256_file(coefficient_path)
+    verdict = fit["qualified_interim_half"]["verdict"]
+    drift = step3["tripwire"]["decision"]
+    try:
+        comparison = twin(a, stage1, fit, step3, coefficients)
+        agreement = comparison["agreement"]
+        if agreement not in release.THREE_WAY:
+            raise ValueError("invalid twin comparison")
+        comparison_bytes = F.dump(comparison)
+    except Exception:
+        traceback.print_exc()
+        agreement = "not_evaluable"
+        comparison_bytes = F.dump({"agreement": agreement})
+    release.write_private(restricted / "twin.json", comparison_bytes)
+    if sha256_file(coefficient_path) != coefficient_sha:
+        raise F.LookInputError("the stored coefficient bytes changed during the twin comparison")
+    if {child.name for child in restricted.iterdir()} != release.PRIVATE_NAMES:
+        raise F.LookInputError("stage 2: unexpected private artifact names")
+    release.sync_directory(restricted)
+    expected = release.public_record(doc["look_id"], manifest_sha, commit, stage1, a.stage1_sha256, coefficient_sha,
+                                     verdict, drift, agreement)
+    release.write_public(public, restricted, expected, public_schema, expected=expected)
 
 
 def stage2_energy_preflight(s1, a):
@@ -1014,13 +1062,15 @@ def stage2_energy_preflight(s1, a):
     - under --allow-draft, every span the custody run opens has a runner receipt saying "synthetic": true (N1);
     - stage 2's whole module set (the meter decoder, the step 3 file) is imported now and the unpinned-module and
       cached-bytecode checks run on it (N2, N10)."""
+    if s1.get("numpy_version") != F.np.__version__:
+        raise F.LookInputError("stage 2: numpy version differs from committed stage 1")
     if s1.get("allow_draft") is True and not a.allow_draft:
         raise F.LookInputError("the stage-1 file was made under --allow-draft; a run without it refuses it")
     doc, mpath = _VERIFIED[0]
     if s1.get("manifest_sha256") != sha256_file(mpath):
         raise F.LookInputError("the stage-1 file was made under another manifest")
     # Sol r4 NEW-3: the shared pre-energy check of the stage-1 file (schema, manifest, run mode, exact code at the
-    # pins, roster hash), the one assemble and step 3 also run
+    # pins, roster hash), before the reservation
     problems = M.stage1_problems(ROOT, doc, s1, sha256_file(mpath), allow_draft=a.allow_draft)
     if problems:
         raise F.LookInputError("the stage-1 file: " + "; ".join(problems))
@@ -1031,6 +1081,7 @@ def stage2_energy_preflight(s1, a):
                 raise F.LookInputError("--allow-draft opens synthetic custody only: a span's receipt is not synthetic")
     importlib.import_module("joulewise.external.km003c_parse")
     importlib.import_module("joulewise.cadence_looks.step3_energy_ratios")
+    importlib.import_module("joulewise.cadence_looks.step3_roster")
     _guard_loaded(doc)
 
 
@@ -1056,12 +1107,9 @@ def _check_sources():
             raise F.LookInputError(f"a repository module may have run from cached bytecode: {Path(f).name}")
 
 
-def main(argv=None):
+def main(argv=None, *, keep_redirected=False):
     ap = argparse.ArgumentParser(description="The interim look's two stages (RL-166 Q8).")
     sub = ap.add_subparsers(dest="cmd", required=True)
-    pc = sub.add_parser("compare-restricted", help="print the maximum difference between two custody artifacts")
-    for opt in ("custody", "left", "right"):
-        pc.add_argument(f"--{opt}", required=True)
     p1 = sub.add_parser("stage1")
     p1.add_argument("--out", required=True)
     g = p1.add_mutually_exclusive_group(required=True)
@@ -1082,21 +1130,16 @@ def main(argv=None):
     p2 = sub.add_parser("stage2")
     p2.add_argument("--stage1", required=True)
     p2.add_argument("--stage1-sha256", required=True)
-    p2.add_argument("--out", required=True)
     g2 = p2.add_mutually_exclusive_group(required=True)
     g2.add_argument("--energy")
     g2.add_argument("--custody")
-    p2.add_argument("--span-dir", action="append")
-    p2.add_argument("--coefficients-out", help="freeze 2's coefficient file (fit_interim.write_coefficients; RL-173 E)")
-    p2.add_argument("--restricted-out", help="new owner-only RL-175 artifact; defaults to a hash-named file in custody")
+    p2.add_argument("--span-dir", action="append", default=[])
     p2.add_argument("--looks", help="with --allow-draft only: a scratch LOOKS.json in place of the repository's")
     p2.add_argument("--ledger-ref", help="the ref HEAD must be an ancestor of (default: upstream, else origin/main)")
     for p in (p1, p2):
         p.add_argument("--manifest", required=True, help="the look manifest whose pins the running code must match")
         p.add_argument("--allow-draft", action="store_true", help="synthetic runs: accept a draft manifest")
     a = ap.parse_args(argv)
-    if a.cmd == "compare-restricted":
-        return compare_restricted(a)
     if a.cmd == "stage1" and a.roster and not (a.custody and a.rules_3_4):
         ap.error("--roster needs --custody and --rules-3-4")
     if a.cmd == "stage1" and (bool(a.stage_archives) != bool(a.staging_root) or (a.stage_archives and a.input)):
@@ -1105,30 +1148,13 @@ def main(argv=None):
         # FIRST, before any input is opened: the running code must be the pinned code (Mythos cold seat 3; Sol 9)
         _VERIFIED[:] = [(M.verify_pins(a.manifest, ROOT, allow_draft=a.allow_draft, running=RUNNING,
                                        ledger_ref=getattr(a, "ledger_ref", None)), a.manifest)]
-        out = cmd_stage1(a) if a.cmd == "stage1" else cmd_stage2(a)
-        if a.cmd == "stage1":
-            # Mythos r5 N7: stage 1 checks its own file as stage 2 and assemble will, before writing it
-            probs = M.stage1_problems(ROOT, _VERIFIED[0][0], out, sha256_file(a.manifest), allow_draft=a.allow_draft)
-            if probs:
-                raise F.LookInputError("stage 1's own output: " + "; ".join(probs))
-        coef = None
-        if a.cmd == "stage2" and a.coefficients_out:
-            # RL-173 E: freeze 2's coefficient file, written from the stage-1 file and this fit (no energy), checked
-            # against its pinned schema before anything is written
-            from joulewise.cadence_looks import schema_check as SC
-            coef = F.write_coefficients(a._stage1_doc, a.stage1_sha256, out, sha256_file(a.manifest),
-                                        _prepared=a._prepared_fit)
-            errs = SC.errors(coef, M.coefficients_schema(ROOT))
-            if errs:
-                raise F.LookInputError("the coefficient file does not pass its schema: " + "; ".join(errs[:5]))
-        if a.cmd == "stage2" and getattr(a, "_restricted_path", None) is not None:
-            data = F.dump(a._restricted)
-            if hashlib.sha256(data).hexdigest() != out["restricted_sha256"]:
-                raise F.LookInputError("stage 2: restricted artifact digest differs from the public fit")
-            write_restricted(a._restricted_path, data)
+        if a.cmd == "stage2":
+            return cmd_stage2(a, keep_redirected=keep_redirected)
+        out = cmd_stage1(a)
+        probs = M.stage1_problems(ROOT, _VERIFIED[0][0], out, sha256_file(a.manifest), allow_draft=a.allow_draft)
+        if probs:
+            raise F.LookInputError("stage 1's own output: " + "; ".join(probs))
         sha = write_canonical(a.out, out)
-        if coef is not None:
-            print(f"wrote {a.coefficients_out} sha256={write_canonical(a.coefficients_out, coef)}")
     except F.LookInputError as exc:
         print(f"REFUSED {exc}", file=sys.stderr)
         return 2
@@ -1147,4 +1173,4 @@ def main(argv=None):
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    sys.exit(main(keep_redirected=True))

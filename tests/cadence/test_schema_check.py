@@ -1,4 +1,4 @@
-"""The standard-library schema checker assemble and validate --output use (Sol N3). Synthetic documents only."""
+"""The standard-library schema checker used by the look and its manifest. Synthetic documents only."""
 from __future__ import annotations
 
 import copy

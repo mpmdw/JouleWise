@@ -40,6 +40,8 @@ def finalize(doc, shas=None):
     shas = shas or {}
     doc = copy.deepcopy(doc)
     doc["status"] = "committed"
+    from tests.cadence.look_minirepo import TWIN_PIN
+    doc["fit"]["twin"] = TWIN_PIN
 
     def fill(node):
         if isinstance(node, dict):
@@ -299,24 +301,13 @@ class RulingInvariants(Base):
                                  "cite": ["RL-149 §2.7"]})
         self.refused(lambda: lm.validate_manifest(doc), "retired")
 
-    def test_prints_and_channels(self):
+    def test_words_and_channels(self):
         doc = draft()
-        doc["outputs"]["prints"] = [p for p in doc["outputs"]["prints"] if p["id"] != "without_heat_columns"]
-        self.refused(lambda: lm.validate_manifest(doc), "prints without_heat_columns")
+        doc["outputs"]["words"]["twin_agrees"].append("maybe")
+        self.refused(lambda: lm.validate_manifest(doc), "the closed RL-180 interim word lists")
         doc = draft()
-        bias = next(p for p in doc["outputs"]["prints"] if p["id"] == "prefix_length_bias")
-        bias["ratios"] = [1.10, 1.374]
-        self.refused(lambda: lm.validate_manifest(doc), "ratios")
-        doc = draft()
-        doc["energy"]["channels"] = [c for c in doc["energy"]["channels"] if c["id"] != "dc_in"]
-        self.refused(lambda: lm.validate_manifest(doc), "reads exactly")
-        doc = draft()
-        doc["energy"]["channels"].append({"id": "cpu_rail", "source": "x", "unit": "J", "read_as": "x",
-                                          "cite": ["RL-149 §2.6"]})
-        self.refused(lambda: lm.validate_manifest(doc), "reads exactly")
-        doc = draft()
-        doc["energy"]["per_leg_energy_in_output"] = True
-        self.refused(lambda: lm.validate_manifest(doc), "per_leg_energy_in_output")
+        doc["energy"]["channels"].pop()
+        self.refused(lambda: lm.validate_manifest(doc), "channels")
 
     def test_leg_types_and_never_read(self):
         doc = draft()
@@ -539,7 +530,8 @@ class LookLedger(Base):
 class RepoCheck(Base):
     def make_repo(self, fit_src="def fit(rows):\n    return rows['start_tf08']\n", runner_src="import json\n"):
         tmp = tmpdir(self, "lm-repo-")
-        files = {FIT: fit_src, RULE34: "def judge(stamps):\n    return True\n",
+        from tests.cadence.look_minirepo import TWIN_PATH, TWIN_SOURCE
+        files = {TWIN_PATH: TWIN_SOURCE.decode(), FIT: fit_src, RULE34: "def judge(stamps):\n    return True\n",
                  lm.STEP3_PATH: (REPO / lm.STEP3_PATH).read_text(encoding="utf-8"),
                  ADAPTER: "from joulewise.cadence_looks import step3_energy_ratios\n", RUNNER: "X = 1\n",
                  "scripts/cadence_legs_runner.py": runner_src,
@@ -645,7 +637,7 @@ class SchemaCopy(Base):
     def test_the_json_schema_matches_the_validator(self):
         schema = json.loads(SCHEMA.read_text(encoding="utf-8"))
         self.assertEqual(set(schema["required"]), lm.TOP_KEYS)
-        self.assertEqual(set(schema["properties"]), lm.TOP_KEYS)
+        self.assertEqual(set(schema["properties"]), lm.TOP_KEYS | {"supersedes"})
         self.assertEqual(set(schema["$defs"]["predictor"]["enum"]), lm.ALLOWED_PREDICTORS)
         self.assertEqual(set(schema["$defs"]["channel"]["enum"]), lm.ENERGY_CHANNELS)
         self.assertEqual(set(schema["$defs"]["leg_type"]["enum"]), lm.LEG_TYPES)
@@ -689,371 +681,6 @@ class SchemaCopy(Base):
         jsonschema.validate(finalize(draft()), schema)
 
 
-class Assemble(Base):
-    """assemble on a pinned copy of the look's files (tests/cadence/look_minirepo.py), run as a file under -I. The
-    three inputs are the smallest documents their pinned schemas admit (tests/cadence/look_fixtures.py), carrying
-    the provenance a real run records: this manifest's sha256 and the pinned hashes of the code each stage runs."""
-
-    ROSTER, VERDICTS = "0" * 64, "1" * 64
-
-    def setUp(self):
-        from tests.cadence import look_minirepo as mr
-        from tests.cadence.look_fixtures import minimal
-        from joulewise.cadence_looks import schema_check as sc
-        self.mr, self.minimal, self.sc = mr, minimal, sc
-        self.mini = mr.mini_repo(self)
-        self.d = tmpdir(self, "lm-asm-")
-        self.s1 = self.d / "stage1.json"
-        self.s1_schema = json.loads((self.mini / LOOKS.relative_to(REPO) / "lm-interim-01.stage1.schema.json").read_text())
-        self.out_schema = json.loads((self.mini / LOOKS.relative_to(REPO) / "lm-interim-01.output.schema.json").read_text())
-        leg = minimal(self.s1_schema["properties"]["legs"]["items"], self.s1_schema)
-        self.legs = [dict(leg, leg_key="dev-03-s01/L001", cell_prompt_tokens=2000, prefill_tokens=2200),
-                     dict(leg, leg_key="dev-03-s01/L002", cell_prompt_tokens=10000, prefill_tokens=10100)]
-        self.write_stage1()
-
-    def pins(self):
-        man = json.loads((self.mini / self.mr.MANIFEST).read_text())
-        return lm.sha256_file(self.mini / self.mr.MANIFEST), {p: sha for _, p, sha in lm.code_refs(man)}, man
-
-    def write_stage1(self, **changes):
-        msha, pins, man = self.pins()
-        stage1 = self.minimal(self.s1_schema)
-        stage1.update(manifest_sha256=msha, synthetic=True, allow_draft=True, legs=self.legs,
-                      code_sha256={**{k: pins[k] for k in cli.STAGE1_CODE}, "input:roster_sha256": self.ROSTER,
-                                   "input:rules_3_4_sha256": self.VERDICTS})
-        stage1.update(changes)
-        self.stage1 = stage1
-        self.s1.write_text(json.dumps(stage1) + "\n")
-        h = hashlib.sha256(self.s1.read_bytes()).hexdigest()
-        stage2 = (set(cli.STAGE2_CODE) | {d["path"] for d in man["fit"]["dependencies"]}) - \
-            {"configs/align/v4/r1_runtime.json"}
-        self.fit = self.minimal(self.sc.sub_schema(self.out_schema, "fit_output"))
-        self.fit.update(stage1_sha256=h, manifest_sha256=msha, allow_draft=True, numpy_version="2.5.4",
-                        code_sha256={k: pins[k] for k in sorted(stage2)})
-        for ch in self.fit["channels"].values():                    # a channel's coefficients are its columns
-            ch["coefficients"] = {c: 0.0 for c in ch["columns"]}
-        drift = next(d for d in man["decisions"] if d["id"] == "drift_tripwire")
-        self.step3 = self.minimal(self.sc.sub_schema(self.out_schema, "step3_output"))
-        self.step3.update(stage1_sha256=h, manifest_sha256=msha, allow_draft=True, synthetic=True,
-                          code_sha256={k: pins[k] for k in cli.STEP3_CODE})
-        self.step3["tripwire"]["threshold_applied"] = drift["threshold"]
-        self.dump()
-        return h
-
-    def undraft(self):
-        """The inputs as a run without --allow-draft writes them, on the copy's current (committed) manifest."""
-        head = self.mr.git(self.mini, "rev-parse", "HEAD").stdout.strip()
-        gate = {"commit": head, "ref": "refs/remotes/origin/main", "ref_commit": head}
-        self.write_stage1(allow_draft=False, ledger_gate=gate)
-        self.fit["allow_draft"] = self.step3["allow_draft"] = False
-        self.fit["ledger_gate"] = self.step3["ledger_gate"] = gate
-        self.fit["custody"], self.step3["custody"] = self.custody(), self.custody()   # a real run reads custody
-        self.dump()
-        return hashlib.sha256(self.s1.read_bytes()).hexdigest()
-
-    TRACE = "dev-03-s01/legs/L001/runtime/runs/cadence-leg/power_trace.csv"
-
-    def custody(self, root="/custody", trace_sha="c" * 64):
-        """A custody record as the stage-2 CLI and step 3 write it (Mythos r5 N6): root, span overrides, files."""
-        return {"root": root, "span_dirs": [{"span_id": "dev-03-s01", "path": "/elsewhere/dev-03-s01"}],
-                "files": [{"path": "dev-03-s01/hazards/meter/stream-0001.jsonl", "sha256": "d" * 64},
-                          {"path": self.TRACE, "sha256": trace_sha}]}
-
-    def dump(self):
-        (self.d / "fit.json").write_text(json.dumps(self.fit))
-        (self.d / "step3.json").write_text(json.dumps(self.step3))
-
-    def run_(self, *extra):
-        return self.mr.py(self.mini, "scripts/cadence_look_manifest.py", "assemble",
-                          "--manifest", self.mini / self.mr.MANIFEST, "--stage1", self.s1, "--fit", self.d / "fit.json",
-                          "--step3", self.d / "step3.json", "--analyst-seat", "test", "--out", self.d / "out.json", *extra)
-
-    def refused_run(self, fragment, *extra):
-        r = self.run_(*extra)
-        self.assertEqual(r.returncode, 1, r.stdout + r.stderr)
-        self.assertIn(fragment, r.stdout)
-        self.assertFalse((self.d / "out.json").exists())
-        return r
-
-    def test_assemble_writes_the_schema_shape(self):
-        r = self.run_("--allow-draft")
-        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
-        out = json.loads((self.d / "out.json").read_text())
-        self.assertEqual(self.sc.errors(out, self.out_schema), [])
-        self.assertEqual(set(out), set(self.out_schema["required"]))
-        self.assertNotIn("high_power_table", out)                                     # RL-167 §3
-        self.assertNotIn("hp01_table", out["decisions"])
-        self.assertEqual(out["decisions"]["drift_tripwire"], "within")
-        self.assertEqual(out["realized_prompt_tokens"],                                 # RL-158 Q5, > 5 %
-                         [{"leg_key": "dev-03-s01/L001", "nominal": 2000, "realized": 2200}])
-        self.assertEqual(out["disclosure"]["holds_cleared"], [])
-        self.assertTrue(out["disclosure"]["statement"].endswith(lm.PUBLIC_RELEASE_STATEMENT))
-        self.assertEqual((out["allow_draft"], out["synthetic"]), (True, True))         # Mythos N2
-        self.assertEqual(out["soak_retries"], self.stage1["soak_retries"])              # RL-172a
-        r = self.run_("--allow-draft", "--hp-table", self.d / "fit.json")               # the option is gone
-        self.assertEqual(r.returncode, 2)
-        with unittest.mock.patch("sys.stdout", new_callable=io.StringIO) as so:          # validate --output
-            rc = cli.main(["validate", str(self.mini / self.mr.MANIFEST), "--output", str(self.d / "out.json")])
-        self.assertEqual(rc, 0, so.getvalue())
-        undrafted = dict(out, allow_draft=False)                                     # Mythos round-4 N6
-        (self.d / "out3.json").write_text(json.dumps(undrafted))
-        with unittest.mock.patch("sys.stdout", new_callable=io.StringIO) as so:
-            rc = cli.main(["validate", str(self.mini / self.mr.MANIFEST), "--output", str(self.d / "out3.json")])
-        self.assertEqual(rc, 1)
-        self.assertIn("assembled without --allow-draft but records no ledger gate", so.getvalue())
-        out["synthetic"] = False
-        (self.d / "out2.json").write_text(json.dumps(out))
-        with unittest.mock.patch("sys.stdout", new_callable=io.StringIO) as so:
-            rc = cli.main(["validate", str(self.mini / self.mr.MANIFEST), "--output", str(self.d / "out2.json")])
-        self.assertEqual(rc, 1)
-        self.assertIn("made under --allow-draft on input that is not synthetic", so.getvalue())
-
-    def test_assemble_refuses_keyed_residuals_and_sparse_day_lines(self):
-        channel = self.fit["channels"]["gpu_rail"]
-        channel["residuals"] = {"leg": {"dev-03-s01/L001": 0.01}}
-        self.dump()
-        self.refused_run("does not pass its schema", "--allow-draft")
-        del channel["residuals"]
-        channel["lodo"]["leg"]["per_day"] = {"2026-11-17": 0.01}
-        self.dump()
-        self.refused_run("below the RL-175 B.3 fit-leg minimum", "--allow-draft")
-
-    def test_ledger_records_restricted_digest_from_public_output(self):
-        self.mr.commit(self.mini)
-        sha = self.undraft()
-        self.mr.commit(self.mini, stage1_sha256=sha, roster_sha256=self.ROSTER)
-        result = self.run_()
-        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-        path = self.d / "out.json"
-        public = json.loads(path.read_text())
-        for record in (public, public["fit"], public["step3"]):
-            record["synthetic"] = False  # fabricated committed-mode metadata only
-        digest = "d" * 64
-        public["fit"]["restricted_sha256"] = digest
-        path.write_text(json.dumps(public))
-        result = self.mr.py(self.mini, "scripts/cadence_look_manifest.py", "row", "--repo", self.mini,
-                            "--manifest", self.mini / self.mr.MANIFEST, "--output", path, "--write")
-        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-        row = lm.load_json(self.mini / lm.LOOK_LEDGER_PATH)["looks"][0]
-        self.assertEqual((row["status"], row["restricted_sha256"], row["output_sha256"]),
-                         ("run", digest, lm.sha256_file(path)))
-
-    def test_assemble_refuses_code_that_is_not_the_pin(self):
-        """Mythos 3: the hashes the fit recorded are compared with the manifest's pins."""
-        self.fit["code_sha256"][FIT] = "f" * 64
-        self.dump()
-        self.refused_run("which is not the manifest's pin", "--allow-draft")
-        f = self.mini / "joulewise/cadence_looks/step3_roster.py"
-        f.write_text(f.read_text() + "\n# edited\n")
-        self.write_stage1()
-        self.refused_run("step3_roster.py sha256 differs from the pin", "--allow-draft")
-
-    def test_the_fit_records_exactly_the_pinned_stage(self):
-        """Sol N2: a fit that recorded fewer files, extra files, or ran under another manifest is refused."""
-        dep = "joulewise/external/km003c_parse.py"
-        del self.fit["code_sha256"][dep]
-        self.dump()
-        self.refused_run(f"the fit does not record {dep}'s hash", "--allow-draft")
-        self.write_stage1()
-        self.fit["code_sha256"][ADAPTER] = self.pins()[1][ADAPTER]
-        self.dump()
-        self.refused_run(f"records {ADAPTER}, which the pinned stage does not run", "--allow-draft")
-        self.write_stage1()
-        self.fit["manifest_sha256"] = "e" * 64            # the two-manifest case: same code, another manifest
-        self.dump()
-        self.refused_run("the fit was made under manifest eeeeeeeeeeee, not this one", "--allow-draft")
-
-    def test_inputs_must_pass_their_schemas(self):
-        """Sol N3: an unknown field (here, a per-leg energy payload) is refused before anything is written."""
-        self.fit["per_leg_joules"] = {"dev-03-s01/L001": 1.0}
-        self.dump()
-        self.refused_run("the fit does not pass its schema: $.per_leg_joules: not allowed", "--allow-draft")
-        self.write_stage1()
-        self.step3["cells"] = [{"cell": 2000, "joules": [1.0]}]
-        self.dump()
-        self.refused_run("step 3 does not pass its schema", "--allow-draft")
-        self.write_stage1(legs=[dict(self.legs[0], energy_j=1.0)])
-        self.refused_run("stage 1 does not pass its schema: $.legs[0].energy_j: not allowed", "--allow-draft")
-
-    def test_allow_draft_is_synthetic_only_and_recorded(self):
-        """Mythos N2: --allow-draft on input that is not synthetic, or a draft input without it, is refused."""
-        self.write_stage1(synthetic=False)
-        self.refused_run("--allow-draft on a stage-1 file that is not synthetic", "--allow-draft")
-        self.mr.commit(self.mini)
-        h = self.write_stage1()                     # made under --allow-draft, on the committed manifest
-        self.mr.commit(self.mini, stage1_sha256=h, roster_sha256=self.ROSTER)
-        self.refused_run("made under --allow-draft; a real output cannot use it")
-
-    def test_assemble_needs_stage1_committed_unless_draft(self):
-        """Mythos 8 / Sol N1: the stage-1 row is read from the committed, published LOOKS.json."""
-        self.mr.commit(self.mini)
-        h = self.undraft()
-        self.refused_run("stage 1 is not committed")
-        self.mr.commit(self.mini, stage1_sha256=h, roster_sha256=self.ROSTER, git_commit_it=False)
-        self.refused_run("differs from the one committed at HEAD")      # a loose ledger (Sol N1)
-        self.mr.git_commit(self.mini, "stage 1", publish=False)
-        self.refused_run("is not on")                                   # committed, not on the shared ref
-        self.mr.git(self.mini, "update-ref", "refs/remotes/origin/main", "HEAD")
-        self.refused_run("the shared ref is a remote-tracking branch", "--ledger-ref", "HEAD")   # Sol NEW-2
-        r = self.run_()
-        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
-        out = json.loads((self.d / "out.json").read_text())
-        self.assertEqual((out["allow_draft"], out["synthetic"]), (False, True))
-        head = self.mr.git(self.mini, "rev-parse", "HEAD").stdout.strip()
-        self.assertEqual(out["disclosure"]["ledger_gate"],
-                         {"commit": head, "ref": "refs/remotes/origin/main", "ref_commit": head})
-        self.mr.commit(self.mini, stage1_sha256=h, roster_sha256="9" * 64)   # another roster
-        (self.d / "out.json").unlink()
-        self.refused_run("is not the roster the stage-1 file records")
-
-    def test_the_fit_and_step3_read_one_custody(self):
-        """Mythos round-5 N6: assemble refuses unless the fit and step 3 read one custody root (with the same span
-        directories) and the same GPU traces; a committed look's fit always records its custody."""
-        self.fit["custody"], self.step3["custody"] = self.custody(), self.custody()
-        self.dump()
-        r = self.run_("--allow-draft")
-        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)                     # the control
-        (self.d / "out.json").unlink()
-        for name, fit_c, fragment in (
-                ("root", self.custody(root="/another"), "read different custody roots or span directories"),
-                ("span dirs", dict(self.custody(), span_dirs=[]), "read different custody roots or span directories"),
-                ("trace", self.custody(trace_sha="e" * 64), f"the fit's {self.TRACE} is not the file step 3 read"),
-                ("missing trace", dict(self.custody(), files=self.custody()["files"][:1] +
-                                       [{"path": self.TRACE.replace("L001", "L002"), "sha256": "c" * 64}]),
-                 "is not the file step 3 read")):
-            self.fit["custody"] = fit_c
-            self.dump()
-            self.refused_run(fragment, "--allow-draft")
-        self.fit["custody"] = self.custody()
-        self.step3["custody"] = None
-        self.dump()
-        self.refused_run("step 3", "--allow-draft")
-        self.mr.commit(self.mini)
-        self.undraft()
-        self.fit["custody"] = None                                   # a committed look's fit read no custody
-        self.dump()
-        self.refused_run("the fit records no custody: a committed look reads custody")
-
-    def with_cell(self):
-        """A step 3 cell in the producer's shape (step3_roster._project of step3_energy_ratios.analyse)."""
-        fe = {"slope": 0.001, "se": 0.0005, "n_obs": 10, "n_groups": 3, "n_groups_with_2plus": 3}
-        cell = self.minimal(self.sc.sub_schema(self.out_schema, "step3_output")["properties"]["cells"]["items"],
-                            self.out_schema)
-        cell.update(status="ok", n_legs=3, gamma_estimable=True,
-                    ii_gamma={"all_nine_legs": dict(fe), "without_two_high_power_legs": dict(fe),
-                              "original_eight_legs_record_only": dict(fe), "max_abs_over_reported": 0.001},
-                    vi_slope_lnE_on_lnclock={"all_blocks_k_ge_1_all_nine_legs": dict(fe),
-                                             "all_blocks_automatic_legs": dict(fe),
-                                             "precut_blocks_all_nine_legs": dict(fe)})
-        self.step3["cells"] = [cell]
-        self.dump()
-        return cell
-
-    def test_no_energy_nests_anywhere_in_the_output(self):
-        """Sol round-3 NEW-1, Mythos N9: nested joules or watts, and a leg key in a coefficient map, are refused by
-        assemble and by validate --output; the producer's own shapes pass."""
-        cell = self.with_cell()
-        r = self.run_("--allow-draft")
-        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)                     # the control
-        good = json.loads((self.d / "out.json").read_text())
-        (self.d / "out.json").unlink()
-        attacks = [("ii_gamma", lambda c: c["ii_gamma"].update(per_leg_joules={"dev-03-s01/L001": 123.0})),
-                   ("ii_gamma.all_nine_legs", lambda c: c["ii_gamma"]["all_nine_legs"].update(joules=1.0)),
-                   ("vi_slope", lambda c: c["vi_slope_lnE_on_lnclock"].update(per_block_watts={"3": 9.0}))]
-        for name, edit in attacks:
-            self.write_stage1()
-            c = copy.deepcopy(cell)
-            edit(c)
-            self.step3["cells"] = [c]
-            self.dump()
-            self.refused_run("step 3 does not pass its schema", "--allow-draft")
-            bad = copy.deepcopy(good)
-            bad["step3"]["cells"] = [c]
-            (self.d / "bad.json").write_text(json.dumps(bad))
-            with unittest.mock.patch("sys.stdout", new_callable=io.StringIO) as so:
-                rc = cli.main(["validate", str(self.mini / self.mr.MANIFEST), "--output", str(self.d / "bad.json")])
-            self.assertEqual(rc, 1, name)
-            self.assertRegex(so.getvalue(), "not allowed|matches 0 of oneOf")
-        for where in ("coefficients", "fold"):
-            self.write_stage1()
-            ch = self.fit["channels"]["gpu_rail"]
-            if where == "coefficients":
-                ch["coefficients"]["dev-03-s01/L001"] = 123.0
-            else:
-                ch["fold_coefficients"] = {"2026-11-16": {"dev-03-s01/L001": 123.0}}
-            self.dump()
-            r = self.refused_run("the fit does not pass its schema", "--allow-draft")
-            self.assertIn("key 'dev-03-s01/L001'", r.stdout)
-        self.write_stage1()
-        del self.fit["channels"]["gpu_rail"]["coefficients"][self.fit["channels"]["gpu_rail"]["columns"][0]]
-        self.dump()
-        self.refused_run("the fit's gpu_rail coefficients are not exactly its columns", "--allow-draft")
-
-    def test_every_stage_records_exactly_its_code(self):
-        """Sol round-3 NEW-3: stage 1 and step 3, like the fit, record exactly the files their stage loads."""
-        for name, rec, attr in (("step 3", "step3", "step3"), ("stage 1", "stage1", None)):
-            extra = ADAPTER if name == "stage 1" else FIT
-            for edit, fragment in ((lambda d: d.pop("joulewise/schemas.py"),
-                                    f"{name} does not record joulewise/schemas.py"),
-                                   (lambda d: d.update({extra: self.pins()[1][extra]}),
-                                    f"{name} records {extra}, which the pinned stage does not run")):
-                if attr is None:
-                    code = copy.deepcopy(self.stage1["code_sha256"])
-                    edit(code)
-                    self.write_stage1(code_sha256=code)
-                else:
-                    self.write_stage1()
-                    edit(self.step3["code_sha256"])
-                    self.dump()
-                self.refused_run(fragment, "--allow-draft")
-
-    def test_step3_threshold_is_the_manifest_s(self):
-        """Sol round-3 NEW-4."""
-        drift = next(d for d in self.pins()[2]["decisions"] if d["id"] == "drift_tripwire")
-        self.step3["tripwire"]["threshold_applied"] = 0.08 if drift["threshold"] == 0.04 else 0.04
-        self.dump()
-        self.refused_run("step 3 applied the drift threshold", "--allow-draft")
-
-    def test_a_ledger_gate_exactly_when_not_a_draft(self):
-        """Mythos round-4 N6: a draft-made record carries no gate; any other carries one."""
-        head = self.mr.git(self.mini, "rev-parse", "HEAD").stdout.strip()
-        self.fit["ledger_gate"] = {"commit": head, "ref": "refs/remotes/origin/main", "ref_commit": head}
-        self.dump()
-        self.refused_run("the fit was made under --allow-draft but records a ledger gate", "--allow-draft")
-        self.mr.commit(self.mini)
-        h = self.undraft()
-        self.mr.commit(self.mini, stage1_sha256=h, roster_sha256=self.ROSTER, verdicts_sha256=self.VERDICTS)
-        self.step3["ledger_gate"] = None
-        self.dump()
-        self.refused_run("step 3 was not made under --allow-draft but records no ledger gate")
-
-    def test_held_flags_need_their_clearing_ruling(self):
-        """RL-166c §2 row 7 and RL-166 Q8 (Mythos 8): P-4, R-20 and the five tripwires."""
-        self.assertEqual(self.run_("--allow-draft", "--hold-cleared", "meter_clock.to_research_lead=RL-170").returncode, 1)
-        trip = copy.deepcopy(self.minimal(self.s1_schema)["tripwires"])
-        trip["any"] = True
-        onsets = dict(self.minimal(self.s1_schema)["onsets_before_116_s"], to_research_lead=True, total=2)
-        self.write_stage1(tripwires=trip, onsets_before_116_s=onsets, legs=[])
-        r = self.run_("--allow-draft")
-        self.assertEqual(r.returncode, 1)
-        self.assertIn("onsets_before_116_s.to_research_lead true: stage 2 was held", r.stdout)
-        self.assertIn("tripwires.any true: stage 2 was held", r.stdout)
-        r = self.run_("--allow-draft", "--hold-cleared", "onsets_before_116_s.to_research_lead=RL-170",
-                      "--hold-cleared", "tripwires.any=not-a-ruling")
-        self.assertEqual(r.returncode, 1)
-        r = self.run_("--allow-draft", "--hold-cleared", "onsets_before_116_s.to_research_lead=RL-170",
-                      "--hold-cleared", "tripwires.any=RL-171")
-        self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
-        out = json.loads((self.d / "out.json").read_text())
-        self.assertEqual(out["disclosure"]["holds_cleared"],
-                         [{"flag": "onsets_before_116_s.to_research_lead", "cleared_by": "RL-170"},
-                          {"flag": "tripwires.any", "cleared_by": "RL-171"}])
-        self.step3["stage1_sha256"] = "0" * 64
-        self.dump()
-        self.assertEqual(self.run_("--allow-draft", "--hold-cleared", "onsets_before_116_s.to_research_lead=RL-170",
-                                   "--hold-cleared", "tripwires.any=RL-171").returncode, 1)
-
-
 def plant_stale_bytecode(source, edit):
     """Write, where Python looks for ``source``'s cached bytecode, a compilation of ``edit(text)`` that carries the
     source's own mtime and size, so an unguarded import runs it in place of the source (Mythos round-4 N4)."""
@@ -1076,7 +703,7 @@ class FreezeCommit(Base):
                "tests.cadence.test_schema_check", "tests.cadence.test_fit_interim", "tests.cadence.test_look_run",
                "tests.cadence.test_time_fields", "tests.cadence.test_predict",
                "tests.cadence.test_round6_guards", "tests.cadence.test_round6_diagnostics",
-               "tests.cadence.test_round7_admission")
+               "tests.cadence.test_round7_admission", "tests.cadence.test_interim_release")
 
     def test_the_look_s_tests_pass_on_the_frozen_tree(self):
         import os
@@ -1127,13 +754,7 @@ class StaleBytecode(Base):
         (d / "s1.json").write_text("{}")
         (d / "roster.json").write_text("[]")
         runs = {"inclusion_34": ("joulewise/cadence_looks/inclusion_34.py", "--roster", d / "roster.json", "--custody", d,
-                                 "--manifest", mini / mr.MANIFEST, "--out", d / "v.json"),
-                "step3_roster": ("joulewise/cadence_looks/step3_roster.py", "--manifest", mini / mr.MANIFEST,
-                                 "--stage1", d / "s1.json", "--stage1-sha256", lm.sha256_file(d / "s1.json"),
-                                 "--custody", d, "--out", d / "s3.json"),
-                "assemble": ("scripts/cadence_look_manifest.py", "assemble", "--manifest", mini / mr.MANIFEST,
-                             "--stage1", d / "s1.json", "--fit", d / "s1.json", "--step3", d / "s1.json",
-                             "--analyst-seat", "t", "--out", d / "o.json")}
+                                 "--manifest", mini / mr.MANIFEST, "--out", d / "v.json")}
         # Mythos r5 N9: the children get a private temp directory, so no other process's prefix bears on the check
         private = tmpdir(self, "lm-pyc-private-")
         for name, (rel, *args) in runs.items():
@@ -1252,20 +873,14 @@ class ColdSeatFixes(Base):
         drift["disposed_by"] = "the lead said so"
         self.refused(lambda: lm.validate_manifest(doc, final=True), "drift_tripwire.disposed_by: the disposing ruling")
 
-    def test_soak_retries_print_is_required(self):
-        """RL-172a: the look prints the retried soaks by refusal kind; the receipt read is operational."""
-        doc = draft()
-        doc["outputs"]["prints"] = [p for p in doc["outputs"]["prints"] if p["id"] != "soak_retries"]
-        self.refused(lambda: lm.validate_manifest(doc), "the interim look prints soak_retries")
+    def test_soak_retries_remain_in_stage1(self):
         doc = draft()
         doc["rulings"].remove("RL-172a")
         self.refused(lambda: lm.validate_manifest(doc), "rulings: must cite 'RL-172a'")
-        doc = draft()
         row = next(x for x in doc["reads"]["custody_files"] if "soak_attempts" in x["basename"])
         self.assertEqual((row["stage"], row["carries"].split(":")[0]), ("inclusion", "operational"))
-        for name in ("stage1", "output"):
-            schema = json.loads((LOOKS / f"lm-interim-01.{name}.schema.json").read_text())
-            self.assertIn("soak_retries", schema["required"])
+        schema = json.loads((LOOKS / "lm-interim-01.stage1.schema.json").read_text())
+        self.assertIn("soak_retries", schema["required"])
 
     def test_the_gpu_hole_switch_can_be_set(self):
         """Mythos round-4 N5, RL-173 E.1 item 3: fit.gpu_trace_hole_refusal (read by the stage-2 CLI) is a known,
@@ -1310,16 +925,12 @@ class ColdSeatFixes(Base):
             self.assertEqual((schema_ok, validator_ok), (ok, ok), shape)
 
     def test_hp01_table_is_out(self):
-        """Sol 5 / Mythos 5: RL-167 §3."""
         doc = draft()
-        self.assertNotIn("high_power_table", {p["id"] for p in doc["outputs"]["prints"]})
-        doc["outputs"]["prints"].append({"id": "high_power_table", "what": "x", "cite": ["RL-157 §1"]})
-        self.refused(lambda: lm.validate_manifest(doc), "high_power_table is not printed by this look")
-        out = json.loads((LOOKS / "lm-interim-01.output.schema.json").read_text())
-        self.assertNotIn("high_power_table", out["properties"])
-        self.assertNotIn("hp01_table", out["properties"]["decisions"]["properties"])
         self.assertIn("RL-167 §3", doc["rulings"])
         self.assertIn("RL-166a", doc["rulings"])
+        self.assertNotIn("high_power_table", doc["outputs"]["words"])
+        out = json.loads((LOOKS / "lm-interim-01.output.schema.json").read_text())
+        self.assertEqual({k for k in out["properties"] if k.startswith("hp01")}, {"hp01_below_9"})
 
     def test_dependencies_are_pinned(self):
         """Mythos 3 / Sol 9: the DC-in decoder and its imports."""
@@ -1348,8 +959,8 @@ class ColdSeatFixes(Base):
         row["output_sha256"] = "nothex"
         self.refused(lambda: lm.validate_look_ledger(led), "output_sha256: 64 hex or null")
         row.update(status="run", output_sha256="6" * 64)
-        self.refused(lambda: lm.validate_look_ledger(led), "needs restricted_sha256")
-        row["restricted_sha256"] = "7" * 64
+        self.refused(lambda: lm.validate_look_ledger(led), "needs coefficients_sha256")
+        row["coefficients_sha256"] = "7" * 64
         lm.validate_look_ledger(led)
 
     def test_require_stage1_committed_reads_git(self):

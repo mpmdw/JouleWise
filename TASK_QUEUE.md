@@ -1,5 +1,10 @@
 # JouleWise Task Queue
 
+PR #795 frozen-spec disposition (2026-11-18), [AGENT]. Review the
+draft head with Astra. The independent cadence twin and its pinned interface
+remain with the research lead before final manifest validation or execution.
+[Builder report](docs/run_reports/2026-11-18-pr795-frozen-spec.md).
+
 PR #795 round-10 disposition (2026-11-17) takes direct user priority in the
 interim-look worktree. WS 1 and design 4, 7 and throughput 1–2 have synthetic
 regressions. RL-175 B.3 and B.4 resolve design 1 and 8 and have synthetic

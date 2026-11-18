@@ -241,7 +241,6 @@ class Document(unittest.TestCase):
                 self.assertEqual(co["channels"][ch]["model_sha256"], c["model_sha256"])
             if s1["onset"]["status"] == "estimable":
                 self.assertEqual(co["onset"]["lodo_rms_s"], s1["onset"]["lodo"]["rms_s"])
-            F.output_check(co)
             text = json.dumps(co).lower().replace("joulewise", "")
             for word in ("joule", "watt", "power", "energy"):
                 self.assertNotIn(word, text)

@@ -134,10 +134,8 @@ MUTANTS = [
     ('cs_m4_no_power_trace_preflight', RUN, '        if not (sdir / "legs" / leg_id / "runtime" / rec["result"]["bundle"] / "power_trace.csv").is_file():', '        if False:', [T_RUN]),
     ('cs_sol8_no_cli_preflight', RUN, 'prepared = F.stage2_preflight(s1)', 'prepared = None', [T_RUN]),
     ('cs_sol8_no_day_check', FIT, '    if len(stage1_out["roster"]["fit_days"]) < 2:', '    if False:', [T_RUN]),
-    ('rl175_public_leg_key_allowed', FIT, 'if _LEG_KEY.search(str(k)):', 'if False:', [T_FIT]),
     ('rl175_prefix_pair_weights', FIT, 'est = sum(means) / nd', 'est = sum(x for _, x in diffs) / len(diffs)', [T_FIT]),
     ("pins_not_checked", RUN, '        _VERIFIED[:] = [(M.verify_pins(a.manifest, ROOT, allow_draft=a.allow_draft, running=RUNNING,\n                                       ledger_ref=getattr(a, "ledger_ref", None)), a.manifest)]\n', '        _VERIFIED[:] = [(json.loads(Path(a.manifest).read_text()), a.manifest)]\n', [T_RUN]),
-    ("stage1_commit_not_checked", RUN, '        M.require_stage1_committed(ROOT, F.LOOK_ID, a.stage1_sha256, stage1_doc=s1, ledger_ref=a.ledger_ref)\n', '        pass\n', [T_RUN]),
     ("level_off_requires_fresh", FIT, 'if ts < r["t_s"] <= tl and type(r["os_level"]) is int and r["os_level"] > 0:', 'if ts < r["t_s"] <= tl and type(r["os_level"]) is int and r["os_level"] > 0 and r["pm_fresh"]:', [T_FIT]),
     ("cluster_by_day", FIT, 'groups += [k] * len(L["segments"])', 'groups += [L["day"]] * len(L["segments"])', [T_FIT]),
     ("no_cr1_factor", FIT, 'corr = (G / (G - 1)) * ((n - 1) / (n - k)) if G > 1 and n > k else 1.0', 'corr = 1.0', [T_FIT]),
@@ -146,7 +144,6 @@ MUTANTS = [
      'cols = self.heat_cols', [T_FIT]),
     ("no_hash_gate", FIT, 'if hashlib.sha256(dump(stage1_out)).hexdigest() != stage1_sha256:\n        raise LookInputError("stage 2:',
      'if False:\n        raise LookInputError("stage 2:', [T_FIT]),
-    ("no_output_check", FIT, '    output_check(out)\n    if restricted_out is not None:', '    if restricted_out is not None:', [T_FIT]),
     ("energy_input_hash_unchecked", FIT, 'if energy["input_sha256"] != stage1_out["input_sha256"]:', 'if False:', [T_FIT]),
     ("forbidden_fields_allowed", FIT, 'FORBIDDEN_FIELDS = ("condition", "slot", "instruction", "start_band")', 'FORBIDDEN_FIELDS = ("start_band",)', [T_FIT]),
     # inside build_turn's try block (16 spaces), so the mutant compiles (Sol cold seat N4)
@@ -195,10 +192,7 @@ MUTANTS = [
     # Mythos r5 N9's six survivors
     ("n9_stage1_problems_draft_accepted", MAN, '    if not allow_draft and stage1.get("allow_draft") is True:', '    if False:', [TF_N9]),
     ("n9_inclusion_cached_bytecode_not_refused", I34, '        stale = lm.cached_bytecode(REPO)', '        stale = []', [TF_N9]),
-    ("n9_step3_cached_bytecode_not_refused", S3R, '        stale = lm.cached_bytecode(repo)', '        stale = []', [TF_N9]),
-    ("n9_assemble_cached_bytecode_not_refused", CLI, '    problems = [f"a repository module may have run from cached bytecode: {m}" for m in lm.cached_bytecode(repo)]', '    problems = []', [TF_N9]),
     ("n9_step3_bytes_loaded_through_the_cache", S3R, '    exec(compile(raw, str(path), "exec"), module.__dict__)', '    __import__("importlib.machinery").machinery.SourceFileLoader(spec.name, str(path)).exec_module(module)', [TF_N9]),
-    ("n9_run_prefix_not_removed_at_exit", RUN, 'atexit.register(shutil.rmtree, _PYC_PREFIX, True)     # Mythos r4 N4: leave no empty prefix directory behind\n', '', [TF_N9]),
     # Mythos round-6 N11: the eleven guards the independent seat found untested. Direct behavioral
     # controls isolate these checks; deleting one must fail an assertion rather than a source-pin test.
     ("r6_tf_excess_positive_side_only", TF, '    return max(st["excess_latency_ms_max"], -st["excess_latency_ms_min"]) / 1000.0', '    return st["excess_latency_ms_max"] / 1000.0', [T_R6]),

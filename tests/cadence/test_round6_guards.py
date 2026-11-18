@@ -152,11 +152,11 @@ class LedgerAndManifestGuards(unittest.TestCase):
         stage1 = {"synthetic": False, "roster": {"spans": [{"span_id": "dev-01-s01", "custody": None}]},
                   "legs": [{"leg_key": "dev-01-s01/L001", "span_id": "dev-01-s01", "included": True,
                             "role": "fit", "leg_type": "A"}]}
-        problems = S3.custody_problems(stage1, [{"key": "dev-01-s01/L001"}], lambda _: Path("/synthetic-unused"))
+        problems = S3.custody_problems(stage1, lambda _: Path("/synthetic-unused"))
         self.assertTrue(problems)
         self.assertIn("no custody record", "; ".join(problems))
         stage1["synthetic"] = True
-        self.assertEqual(S3.custody_problems(stage1, [], lambda _: Path("/synthetic-unused")), [])
+        self.assertEqual(S3.custody_problems(stage1, lambda _: Path("/synthetic-unused")), [])
 
 
 @unittest.skipIf(F is None, "numpy is not installed; required look-fit job executes this class")
@@ -177,25 +177,3 @@ class CoefficientGuards(unittest.TestCase):
         co["active_readings"][reading] = False
         with self.assertRaisesRegex(F.LookInputError, "inactive reading's column"):
             F.predict(co, leg, soak)
-
-    def test_cli_refuses_a_writer_result_that_breaks_the_pinned_schema(self):
-        # Inject a broken writer result to show that the read/write boundary, independently of the
-        # writer's own checks, enforces the schema before writing either artifact.
-        def stage2(a):
-            a._stage1_doc = {}
-            a._prepared_fit = None
-            return {"synthetic": True}
-        stderr = io.StringIO()
-        with mock.patch.object(M, "verify_pins", return_value={}), \
-             mock.patch.object(R, "cmd_stage2", side_effect=stage2), \
-             mock.patch.object(R, "sha256_file", return_value="a" * 64), \
-             mock.patch.object(F, "write_coefficients", return_value={"schema": "invalid"}), \
-             mock.patch.object(R, "write_canonical") as write, \
-             mock.patch.object(R, "_VERIFIED", []), \
-             contextlib.redirect_stderr(stderr), contextlib.redirect_stdout(io.StringIO()):
-            rc = R.main(["stage2", "--stage1", "synthetic-D.json", "--stage1-sha256", "b" * 64,
-                         "--energy", "synthetic-E.json", "--out", "synthetic-O.json",
-                         "--coefficients-out", "synthetic-C.json", "--manifest", "synthetic-manifest.json", "--allow-draft"])
-        self.assertEqual(rc, 2, stderr.getvalue())
-        self.assertIn("coefficient file does not pass its schema", stderr.getvalue())
-        write.assert_not_called()

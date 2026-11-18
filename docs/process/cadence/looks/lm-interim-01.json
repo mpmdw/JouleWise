@@ -35,7 +35,9 @@
     "RL-167 §3",
     "RL-171 §2",
     "RL-172a",
-    "RL-174"
+    "RL-174",
+    "RL-179 F12",
+    "RL-180"
   ],
   "when": {
     "after_desk_final": [
@@ -107,13 +109,15 @@
         "energy",
         "journal"
       ],
-      "roster_source": "stage 1's committed output, taken by sha256 as its only roster; a mismatch is refused. Stage 2 (scripts/cadence_look_run.py) writes level O; step3_roster.py writes step 3's statistic from the same stage-1 file and hash; the output schema embeds both",
+      "roster_source": "Stage 2 takes the committed stage-1 bytes by sha256 as its only roster and runs the primary fit, Step 3 and the pinned twin under one reservation.",
       "time_budget_s": 1200,
       "cite": [
         "RL-166 Q8",
         "RL-166 Q6",
         "RL-166 §2",
-        "RL-166c §2"
+        "RL-166c §2",
+        "RL-179 F12",
+        "RL-180 §1"
       ],
       "holds": [
         {
@@ -139,7 +143,8 @@
           ]
         }
       ],
-      "hold_record": "scripts/cadence_look_manifest.py assemble refuses an output whose stage-1 file shows a held flag true unless --hold-cleared FLAG=RL-n names the clearing ruling for each; the output's disclosure.holds_cleared records them."
+      "hold_record": "LOOKS.json records every clearing ruling in holds_cleared. Stage 2 checks the rulings before reservation.",
+      "failure_exit_status": 1
     },
     "tripwires": [
       {
@@ -500,7 +505,7 @@
     "code": [
       {
         "path": "joulewise/cadence_looks/fit_interim.py",
-        "sha256": "228bdffc7f38043a9155c9f473b128d0f72700ef85b7c00db8bd638d097d8303"
+        "sha256": "f67038cc7d829065f14edf665c56c39b0f2bffff07a3a5cf5ac2846016058ad5"
       },
       {
         "path": "joulewise/cadence_looks/inclusion_34.py",
@@ -516,25 +521,29 @@
       },
       {
         "path": "joulewise/cadence_looks/step3_roster.py",
-        "sha256": "f9cfcbd6ab82720d92b21675e0db3cc509ffdf03c9cc089d28c297e4237b960c"
+        "sha256": "c4bd3dce633390e3d7b7ef73f145a98dd5bf2daa5f482135a19f49d6d063f413"
       },
       {
         "path": "scripts/cadence_look_run.py",
-        "sha256": "8ba70468758d7a645a237984273006cf30e9955cf24afa81f0c16c1243438c61"
+        "sha256": "4a7448d0b8fa94fcf5fdd4fd0b0c01cd83a6f2fe88c8189501825096855bca5e"
       },
       {
         "path": "scripts/cadence_look_manifest.py",
-        "sha256": "e202656e5301163cd62bf65f215143d3f2ee5e9df23961c7703c11ffce87ea28"
+        "sha256": "f3943ca6312f782fb4cdac031e0ef933323423fa8b4b44fb2041febbb6f976cf"
       },
       {
         "path": "joulewise/cadence_looks/schema_check.py",
         "sha256": "ef2b5c841f6e2cfdbb5a770f0b1414a1f1a4daf54a0c810d0478e97f955f4d3f"
+      },
+      {
+        "path": "joulewise/cadence_looks/interim_release.py",
+        "sha256": "eab58aa65560c9c1784ed86baadab7add051e7e4fe5726ff2cf4e68f10785de5"
       }
     ],
-    "runtime": "Python standard library plus numpy, no scipy, run with -I. The numpy version prints in both stages' outputs.",
+    "runtime": "Python standard library plus numpy, no scipy, run with -I. Stage 2 refuses, before the first energy read, unless its numpy version equals the one in the committed stage-1 output.",
     "authors": {
       "analyst_seat": "the Opus builder the lead dispatches: writes fit_interim.py and scripts/cadence_look_run.py, and is the one seat that runs the look",
-      "twin": "a Sol seat writes the same arithmetic from RL-166 and the synthetic layout, without sight of the Opus code; its code never touches custody",
+      "twin": "a Sol seat writes the same arithmetic from RL-166 and the synthetic layout, without sight of the Opus code; its pinned code runs once on campaign data, inside stage 2, and writes only in custody",
       "manifest_builder": "writes inclusion_34.py and step3_roster.py; neither reads energy for a verdict",
       "cold_seat": "Mythos 5.2; writes none of it"
     },
@@ -659,7 +668,7 @@
       },
       "adapter": {
         "path": "joulewise/cadence_looks/step3_roster.py",
-        "sha256": "f9cfcbd6ab82720d92b21675e0db3cc509ffdf03c9cc089d28c297e4237b960c"
+        "sha256": "c4bd3dce633390e3d7b7ef73f145a98dd5bf2daa5f482135a19f49d6d063f413"
       },
       "statistic": "iii",
       "method": "The adapter loads the committed module, rebinds LEGS and ORIGINAL_EIGHT to the roster and calls analyse and custody_check, once per prompt-size cell. It contains no arithmetic on energy. Any edit to the step 3 bytes needs a ruling. Custody mode: `python3 -I -B joulewise/cadence_looks/step3_roster.py --manifest M --stage1 S1 --stage1-sha256 H --custody ROOT --out STEP3.json`; the stage-2 CLI does not compute statistic (iii).",
@@ -823,7 +832,7 @@
       },
       {
         "path": "joulewise/cadence_looks/manifest.py",
-        "sha256": "00b3cb38911d4071d801cc1d7ce8f8a941a0af065ebec819ad0e1ec81a8a1584"
+        "sha256": "16703ef25daed6aaf1f4c655a1abc2a8db7ce40a9e82a19557b004783fbe2b02"
       },
       {
         "path": "joulewise/desk_compress.py",
@@ -868,7 +877,8 @@
       "cite": [
         "RL-173"
       ]
-    }
+    },
+    "twin": null
   },
   "inclusion": {
     "rules": [
@@ -963,265 +973,51 @@
   "outputs": {
     "schema": {
       "path": "docs/process/cadence/looks/lm-interim-01.output.schema.json",
-      "sha256": "543c579ae71e5203ebd33f7be8ffdf803dade24733358a07128e3afeaeb3ad94"
+      "sha256": "4ad2b7aebad1df388168bdd27452ca781fb3b5cc981f1b2b57ff0a7d4addeb2b"
     },
-    "prints": [
-      {
-        "id": "inclusion_table",
-        "what": "Stage 1: per leg, the six rules' verdicts and the marks; included counts per block, cell and G0 role; Q8's five tripwires. The span trailers' meter counts print in inclusion_34.py's detail file. Reads no energy.",
-        "cite": [
-          "RL-149 §2.4",
-          "RL-150 R9",
-          "RL-157 §4",
-          "RL-166 Q7",
-          "RL-166 Q8"
-        ]
-      },
-      {
-        "id": "rates",
-        "what": "Stage 1: r_p and r_d, with the per-cell rates beside them (used nowhere).",
-        "cite": [
-          "RL-166 Q5"
-        ]
-      },
-      {
-        "id": "onset_fit",
-        "what": "Stage 1: the onset model's coefficients, its estimability and the counts left out or censored. With the uncensored count by cell (B-3) and B-5's convergence verdict.",
-        "cite": [
-          "RL-149 §2.6",
-          "RL-149 §4",
-          "RL-166 Q4"
-        ]
-      },
-      {
-        "id": "onset_lodo_error",
-        "what": "Stage 1: the onset model's leave-one-day-out RMS error in seconds; the count-only cut.",
-        "cite": [
-          "RL-149 §2.6",
-          "RL-149 §4",
-          "RL-166 Q4"
-        ]
-      },
-      {
-        "id": "heat_term_fit",
-        "what": "The parameters per channel (nine, less columns dropped by B-2 or a non-estimable onset) and their leg-clustered covariance; the onset's scatter is in the delta column, its coefficients' uncertainty is not propagated.",
-        "channels": [
-          "gpu_rail",
-          "dc_in"
-        ],
-        "cite": [
-          "RL-149 §2.6",
-          "RL-166 Q1",
-          "RL-166 Q2"
-        ]
-      },
-      {
-        "id": "lodo_rel_error_hot_stretch",
-        "what": "Leave-one-day-out relative error over the hot stretch: each day's signed value, the pooled value and the maximum over counted days.",
-        "channels": [
-          "gpu_rail",
-          "dc_in"
-        ],
-        "cite": [
-          "RL-149 §2.6",
-          "RL-166 Q3"
-        ]
-      },
-      {
-        "id": "lodo_rel_error_leg",
-        "what": "The same over all of a leg's segments.",
-        "channels": [
-          "gpu_rail",
-          "dc_in"
-        ],
-        "cite": [
-          "RL-149 §2.6",
-          "RL-166 Q3"
-        ]
-      },
-      {
-        "id": "holdout_rms_rel_error",
-        "what": "The RMS relative error over held-out legs: SD_j's frozen holdout relative error.",
-        "channels": [
-          "gpu_rail",
-          "dc_in"
-        ],
-        "cite": [
-          "RL-149 §2.7",
-          "RL-166 Q3"
-        ]
-      },
-      {
-        "id": "without_heat_columns",
-        "what": "All the error prints again with the heat columns removed.",
-        "channels": [
-          "gpu_rail",
-          "dc_in"
-        ],
-        "cite": [
-          "RL-166 Q3"
-        ]
-      },
-      {
-        "id": "restricted_sha256",
-        "what": "SHA-256 of the custody-only artifact containing keyed leg and hot-stretch residuals and diagnostics for days with fewer than three fit legs. The public artifact and LOOKS.json carry the digest.",
-        "channels": [
-          "gpu_rail",
-          "dc_in"
-        ],
-        "cite": [
-          "RL-175"
-        ]
-      },
-      {
-        "id": "prefix_length_bias",
-        "what": "Prefix length-only bias in score SD at each ratio, with its 90 % t interval on day means. 1.374 is a grid point with no standing.",
-        "channels": [
-          "gpu_rail",
-          "dc_in"
-        ],
-        "ratios": [
-          1.1,
-          1.3,
-          1.374
-        ],
-        "cite": [
-          "RL-149 §2.6",
-          "RL-150 §3.2",
-          "RL-151 §2.2",
-          "RL-166 Q2"
-        ]
-      },
-      {
-        "id": "step3_statistic_iii",
-        "what": "Per prompt-size cell (10k first): step 3's (ii), gamma's estimability, (iii) linear and exp form, (iv) median, min and max, and (vi), by the committed step 3 code through step3_roster.py; failed legs named by exception type.",
-        "cite": [
-          "RL-151 §1.3",
-          "RL-166 Q6",
-          "RL-166 Q11"
-        ]
-      },
-      {
-        "id": "qualified_interim_half",
-        "what": "Whether the maximum leave-one-day-out hot-stretch error over counted days (GPU rail) is at or under 0.02: passes, fails or not_evaluable.",
-        "cite": [
-          "RL-151 §2.1",
-          "RL-166 Q3"
-        ]
-      },
-      {
-        "id": "marked_span_sensitivity",
-        "what": "The fit with and without spans marked 'reference from an excluded leg' or 'reference from a redo', in one print.",
-        "channels": [
-          "gpu_rail",
-          "dc_in"
-        ],
-        "cite": [
-          "RL-161 §4",
-          "RL-166 Q20"
-        ]
-      },
-      {
-        "id": "realized_prompt_tokens",
-        "what": "Legs whose realized prompt count is more than 5 % from nominal, computed by assemble from stage 1's per-leg prefill_tokens against cell_prompt_tokens.",
-        "cite": [
-          "RL-158 Q5"
-        ]
-      },
-      {
-        "id": "soak_retries",
-        "what": "Stage 1, copied into the output by assemble: per roster span, its soak attempts, and in sum the spans with a retried soak, the retried soaks by refusal kind (slope or load), the spans accepted after a retry and the spans the soak stopped. Read from the receipt only: soak_attempts and its soak steps (soak, soak.a<n>). A receipt with no soak_attempts field (the v1 and v1.1 pins) is one attempt. The kind is read from a receipt field that names it; the RL-171 receipt has none (its refused text is the same for both kinds), so each retry counts under \"kind not recorded\" until a runner pin adds one. A soak retried and then accepted is not a stop: whether the soak was accepted is its last soak step's rc, its span's legs are judged as any other span's, and the look never reads the stage journal. Decides nothing.",
-        "cite": [
-          "RL-171 §2",
-          "RL-172a"
-        ]
-      },
-      {
-        "id": "disclosure",
-        "what": "The blind statement's entry: date, code hashes, stage-1 and output hashes, analyst seat, numpy version.",
-        "cite": [
-          "RL-149 §2.6",
-          "RL-150 R6",
-          "RL-166 Q1"
-        ]
-      },
-      {
-        "id": "active_readings",
-        "what": "Stage 1: each start reading's activity under RL-166b B-2, with its tolerance and smallest off-day count.",
-        "cite": [
-          "RL-166b §3"
-        ]
-      },
-      {
-        "id": "onsets_before_116_s",
-        "what": "Stage 1: legs starting in state with an observed onset under 116 s, by G0 role (P-4).",
-        "cite": [
-          "RL-166b §3"
-        ]
-      },
-      {
-        "id": "fold_coefficients",
-        "what": "Each LODO fold's coefficient vector, by held-out day and column name (P-1). SD_j's day-jackknife reads it at freeze 2.",
-        "channels": [
-          "gpu_rail",
-          "dc_in"
-        ],
-        "cite": [
-          "RL-166b §3",
-          "RL-166b §4"
-        ]
-      },
-      {
-        "id": "day_detail",
-        "what": "Per counted day, with and without the heat columns: legs with a hot block, hot blocks and s/sqrt(n) (P-2). No rule reads it.",
-        "channels": [
-          "gpu_rail",
-          "dc_in"
-        ],
-        "cite": [
-          "RL-166b §3"
-        ]
-      },
-      {
-        "id": "onset_offset_residuals",
-        "what": "Held-out relative residual by decode block from the leg's first hot block, offsets -2 to +5, with and without the heat columns, and the RMS over -2 to +3 (P-3).",
-        "channels": [
-          "gpu_rail",
-          "dc_in"
-        ],
-        "cite": [
-          "RL-166b §3"
-        ]
-      },
-      {
-        "id": "trace_coverage",
-        "what": "Per channel: the minimum over energy-fit legs of the per-segment covered fraction, and the count of legs under 0.99 (Mythos cold seat 9). Printed; decides nothing. A new print, pending the research lead's ruling; RL-166 Q16's output rule holds (no joule or watt).",
-        "channels": [
-          "gpu_rail",
-          "dc_in"
-        ],
-        "cite": [
-          "RL-166 Q16"
-        ]
-      }
-    ],
-    "every_print_carries": [
-      "model_sha256",
-      "qualified"
-    ],
-    "forbidden_content": [
-      "a joule or watt per leg, turn or block",
-      "a sample line of any stream, or any value from one",
-      "a token id or any text",
-      "any condition, slot or instruction key or label",
-      "any value from a qualification, control, filler, Part C, W1, C, T or v4 run, or from a type-T leg"
-    ],
+    "words": {
+      "qualified_interim": [
+        "yes",
+        "no",
+        "not_evaluable"
+      ],
+      "dev_included_below_45": [
+        "yes",
+        "no"
+      ],
+      "days_below_4": [
+        "yes",
+        "no"
+      ],
+      "cell_below_10": [
+        "yes",
+        "no"
+      ],
+      "start_reading_invalid_over_10pct": [
+        "yes",
+        "no"
+      ],
+      "hp01_below_9": [
+        "yes",
+        "no"
+      ],
+      "drift_tripwire": [
+        "within",
+        "to_research_lead",
+        "not_evaluable"
+      ],
+      "twin_agrees": [
+        "yes",
+        "no",
+        "not_evaluable"
+      ],
+      "stage2_error": [
+        "no"
+      ]
+    },
     "cite": [
-      "RL-149 §2.6",
-      "RL-149 §4",
-      "RL-151 §1.3",
-      "RL-151 §6",
-      "RL-166 Q16"
+      "RL-179 F12",
+      "RL-180 §1"
     ]
   },
   "decisions": [
@@ -1354,7 +1150,7 @@
       "the decisions and their thresholds"
     ],
     "committed_before": "any development energy is read",
-    "ledger_pointer": "docs/process/cadence/looks/LOOKS.json holds the look id, the manifest path, its sha256 and status, and, as the look proceeds, roster_sha256, stage1_sha256, output_sha256 and coefficients_sha256; the span ledger carries the manifest hash. No blocks.py change and no BLOCK-QUEUE field (RL-166 Q18).",
+    "ledger_pointer": "LOOKS.json records the manifest and roster commitments, the execution host and roots, any stage-1 clearing rulings, and the public report and coefficient hashes or the fixed failure type.",
     "cite": [
       "RL-149 §2.6",
       "RL-150 R4",
@@ -1365,7 +1161,7 @@
     ]
   },
   "freeze2": {
-    "artifact": "docs/process/cadence/looks/lm-interim-01.coefficients.json (written by stage 2's --coefficients-out through fit_interim.write_coefficients, committed with its sha256; fit_interim.predict scores a turn from it alone)",
+    "artifact": "SHA-256 of the exact RESTRICTED/coefficients.json bytes. PUBLIC.json on main establishes freeze 2 on twin_agrees = yes. With no or not_evaluable, the result is recorded and the research lead must rule before qualification arms or scoring uses the fit.",
     "schema": {
       "path": "docs/process/cadence/looks/lm-interim-01.coefficients.schema.json",
       "sha256": "766a25fd6f39a6483a60d8d35636fc11496e78ff45521ec1a396396142f7ccd9"
@@ -1377,7 +1173,7 @@
       "the start-reading medians and calibrated ranges (heat_extrapolated)",
       "the onset model's coefficients, its error and the count-only cut, or not_estimable",
       "the interim half of qualified",
-      "the hashes of this manifest, the code that ran, stage 1's output and stage 2's output; the numpy version",
+      "the hashes of this manifest, the code that ran, stage 1's output and the private fit; the numpy version",
       "the active readings (RL-166b B-2) and each fold's coefficient vector (P-1), which the SD_j rule reads",
       "each held-out day's onset coefficients and scatter for the reference-turn day-jackknife, or null when delta is absent"
     ],
@@ -1406,7 +1202,9 @@
       "RL-165 §8.1",
       "RL-166 Q2",
       "RL-166b §4",
-      "RL-173"
+      "RL-173",
+      "RL-179 F12",
+      "RL-180 §1"
     ],
     "deferred_rules": [
       {
@@ -1449,7 +1247,7 @@
     "seats": 1,
     "lead_checks_output_against_schema": true,
     "custody_copy": "One verified custody copy of the roster's spans by the existing offload tooling, made while the MBP is unarmed; the look runs on that copy, never on the MBP's measurement root.",
-    "host": "The Air, under AIR-QUIET.lock, with no live generator, reader or real run on that host. Stage 2 finishes within 20 minutes at 72 legs; the analyst seat times it on the synthetic set.",
+    "host": "The committed LOOKS.json row binds one execution_host using the campaign receipt host id. A host change requires a new ledger row and confirmation that the first host has no reservation.",
     "no_import_by": [
       "scripts/cadence_legs_runner.py",
       "scripts/cadence_leg_runtime.py",
@@ -1457,8 +1255,8 @@
       "every frozen path of every leg kit"
     ],
     "fit_paths_outside_kit_frozen_paths": true,
-    "disclosure": "The amendment's blind statement lists this look with its date, code hashes and outputs, worded as RL-150 R6 restates RL-149 §2.6: none comes from a run with a sabotage instruction, a slot or a v4 member. Of the energy files, stage 1 read time stamps and sample counters only (RL-173 E.1). The public outputs do not determine any single leg's energy. Day totals can be recovered from them.",
-    "pre_run_check": "Planted-truth synthetic bundles (a few legs, not a cohort) for the review and the twin comparison: coefficients to 1e-8 relative, the censored fit to 1e-6, every verdict equal. Then stage 1 as a dry run on the real roster, which opens no energy (RL-166 Q15, §2 items 7 and 12).",
+    "disclosure": "No number computed from energy is public before the data release. The public outputs are at most sixteen words, counts that hold no energy, and hashes.",
+    "pre_run_check": "Review planted-truth synthetic bundles and run the energy-blind stage 1. The separately pinned twin runs inside the look after coefficients are final. It compares both channels' coefficients to 1e-8 relative, the censored fit to 1e-6, and verdict words, trace_coverage and soak_retries for equality. The ledger_gate is excluded.",
     "cite": [
       "RL-149 §2.6",
       "RL-149 §2.9",
@@ -1467,9 +1265,11 @@
       "RL-150 R8",
       "RL-166 Q15",
       "RL-166 Q8",
-      "RL-166 §2"
+      "RL-166 §2",
+      "RL-179 F12",
+      "RL-180 §1"
     ],
-    "pin_check": "Every entry point (cadence_look_run.py stage 1 and stage 2, inclusion_34.py, step3_roster.py and assemble) calls joulewise.cadence_looks.manifest.verify_pins before it opens any custody file: the manifest validates as committed, the committed LOOKS.json (read with git at HEAD, clean, with HEAD on the shared ref) names its sha256 at status committed or later, and every file in fit.code, fit.dependencies and the schema pins hashes to its pin. The shared ref is resolved by one function for every tool (manifest.shared_ref, --ledger-ref): a remote-tracking branch only, by default the branch's upstream, else origin/main, never HEAD, a local branch, a tag, a commit or a revision expression. From a detached HEAD on a campaign branch not yet on main, the lead names that branch's remote-tracking ref (the PR's base branch). Every git call the gate makes drops the caller's GIT_* environment. Before stage 1, the lead commits in the look's LOOKS.json row the sha256 of the roster (validate --roster-out) and of inclusion_34.py's verdict file; stage 1 refuses inputs that are not those (require_inputs_committed). Stage 2, step3_roster.py and assemble also refuse unless that committed LOOKS.json names the stage-1 file's sha256 and the roster and verdict hashes it records (require_stage1_committed). Stage 1 is fixed once: the gates read LOOKS.json's history, and refuse a stage 1 run again after a stage-1 hash was committed, or a row that ever names a different stage-1 hash, roster or verdict file for the look (manifest.stage1_history). Every entry point runs with a fresh, empty pycache prefix and refuses if a loaded repository module may have run from cached bytecode; step 3's byte-pinned file runs from the bytes it hashed. Before writing, each entry point refuses if any repository module it loaded is unpinned (unpinned_loaded_modules), and records manifest_sha256, the code hashes of every loaded repository file, allow_draft and what satisfied the ledger gate in its output; assemble requires each stage's recorded code to be exactly that stage's pinned set, the step-3 applied threshold to be the manifest's, each coefficient map to carry its channel's columns only, and every input and its own output to pass the pinned, closed schemas (schema_check.py; every map's keys are constrained, so no per-leg or per-block energy can nest anywhere). --allow-draft is for synthetic runs only: with it, stage 1, inclusion_34.py, stage 2 and step3_roster.py refuse unless every span's runner_receipt.json they open says synthetic, and assemble unless the stage-1 file says synthetic; without it, every step refuses an input made under --allow-draft."
+    "pin_check": "Stage 1 and stage 2 verify the repository pins, stage-1 roster and verdict commitments, and the committed LOOKS.json row. Stage 2 checks its host, both registered roots, the hold rulings, prior execution history and the twin pins before reserving RESTRICTED/ by exclusive mkdir. Stage 2 redirects stdout and stderr into RESTRICTED/ before opening a response file. An interrupted reservation spends the id. Only PUBLIC.json leaves custody; a failed execution emits the two-line RL-180 notice."
   },
   "review": {
     "cold_seat": "Mythos 5.2: the design attack on RL-166 Q1 to Q4 (Sun 10:00), then a fresh Mythos seat's cold review of the manifest, rules 3 and 4, the step 3 adapter and the fit code against RL-149 §2.6 and §2.7 as amended, with Q6's and Q11's checks (Mon 14:00). Neither wrote any of the code.",
