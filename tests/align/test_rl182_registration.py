@@ -99,6 +99,24 @@ class RegistrationEditsTests(unittest.TestCase):
         self.assertEqual(am.count(wording), 1)
         self.assertNotIn(old_am, am)
 
+    def test_rl185_e18_and_e19_each_match_once_in_their_ruled_section(self):
+        # RL-185 §§2.1–2.2 copied from audit b9e46ef52.
+        source = (FIXTURES / "rl185.md").read_text()
+        p4 = (ROOT / "docs/align/pilot_protocol_v4.md").read_text()
+        for edit, anchor, start, end in (
+            ("E18", "Call it E18.**", "**B2a.", "**B3."),
+            ("E19", "to P4 B7 item 9 after E12's sentence:**", "9. *Power aligned to logged times", "**B8."),
+        ):
+            with self.subTest(edit=edit):
+                block = source.split(anchor, 1)[1].lstrip("\n").split("\n\n", 1)[0]
+                lines = block.splitlines()
+                self.assertTrue(all(line == ">" or line.startswith("> ") for line in lines))
+                expected = "\n".join(line[2:] for line in lines)
+                self.assertTrue(expected)
+                self.assertEqual(p4.count(expected), 1)
+                section = p4.split(start, 1)[1].split(end, 1)[0]
+                self.assertEqual(section.count(expected), 1)
+
     def test_named_power_script_reproduces_both_columns(self):
         output = subprocess.check_output([sys.executable, "-B", POWER_SCRIPT], text=True)
         rows = {}
