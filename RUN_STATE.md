@@ -12,15 +12,17 @@ right after item 167 below. [`CANONICAL.md`](CANONICAL.md) is the tool map:
 the one current tool or document per job. [`docs/ARCHIVE.md`](docs/ARCHIVE.md)
 says how to get back files removed from `main` in the 2026-11-06 prune.
 
-**2026-11-18 qualification draft handoff [AGENT].** The six unissued
-items bind the PR #812 pipeline repair pin
-`0d03cb7833bb8b15bc391127a7fe5519b7d98602` and its re-pinned kits and queues.
-RL-179 F-2 close proof follows attempt order and requires that attempt's
-own receipt with passing restore readbacks. Every qualification launch
-requires the attempt ledger and the previous close receipt. The lead
-supplies the complete ledger and owns review and issue. Qualification
-remains HOLD_FOR_FIT_FREEZE.
-See the [ledger authority report](docs/run_reports/2026-11-18-pr812-ledger-required.md).
+**2026-11-18 qualification draft handoff [AGENT].** Six unissued items
+for Nov 20–22 and two qualification-pin stability fillers bind the PR #812
+merge commit `6e9d42f1dd3d308bc9239143d0d634ab965e50e1`. All 38 frozen
+paths match the reviewed PR head. Qualification remains HOLD_FOR_FIT_FREEZE.
+Before qual-01-s01, the lead lands the RL-181 registration with these kit
+hashes on main, records exact-pin admission, stages the sequenced attempt
+ledger and supplies the latest pre-qualification attempt’s close Check if
+its older receipt lacks a span id. Before s02, the lead records the RL-172a
+soak comparison and RL-181 §4(a) q0 leg-type hand-read. The first native run
+on this pin remains a lead-controlled RL-179 F-11 prerequisite.
+[Draft handoff](docs/run_reports/2026-11-18-qual-items-merged.md)
 
 **Block-5 history: the magistrate's hand-off of 2026-10-10 08:40 PDT (activation cbe4230e).** It was the step list for block-5 collection, which closed on 2026-10-12 (item 31). The numbered items below grew from it; the current state is the top numbered item, not this block.
 
