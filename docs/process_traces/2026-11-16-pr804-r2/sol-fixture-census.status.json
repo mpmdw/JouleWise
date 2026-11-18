@@ -1,0 +1,9 @@
+{
+  "command": "python3.13 -B delta-tree/scripts/fixture_orphan_census.py --fail-on-orphans",
+  "exit_code": 2,
+  "count": null,
+  "rows": null,
+  "error": "PermissionError: [Errno 1] Operation not permitted: 'ps'",
+  "clean_census_claimed": false,
+  "sandbox_bypass_attempted": false
+}

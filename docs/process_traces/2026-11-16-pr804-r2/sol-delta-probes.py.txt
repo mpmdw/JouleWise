@@ -1,0 +1,340 @@
+import contextlib
+import copy
+import hashlib
+import io
+import json
+import os
+from pathlib import Path
+import shutil
+import subprocess
+import sys
+import tempfile
+import time
+import unittest
+from unittest import mock
+
+ROOT = Path(__file__).resolve().parent
+sys.path.insert(0, str(ROOT / 'delta-tree'))
+from joulewise import span_offload as so
+from scripts import span_offload as cli
+
+OPENSSL = '/usr/bin/openssl'
+PLAN = 'cold-synthetic'
+FAKE = '''import json, os, pathlib, shutil, sys
+state = pathlib.Path(os.environ['COLD_BRCTL_STATE'])
+args = sys.argv[1:]
+with (state/'calls').open('a') as f: f.write(json.dumps(args)+'\\n')
+cmd = args[0]
+if (state/('fail-'+cmd)).exists(): sys.exit(12)
+if cmd == 'status':
+    status = state/'status'
+    print(status.read_text() if status.exists() else 'com.apple.CloudDocs client:idle caught-up')
+elif cmd in ('evict','download'):
+    path = pathlib.Path(args[1]); remote=state/('remote-'+path.name)
+    if cmd == 'evict':
+        if not (state/'no-eviction').exists():
+            shutil.copyfile(path, remote); path.write_bytes(b'')
+    elif remote.exists():
+        shutil.copyfile(remote, path)
+        bad=state/'corrupt-suffix'
+        if bad.exists() and path.name.endswith(bad.read_text()):
+            data=bytearray(path.read_bytes()); data[0]^=1; path.write_bytes(data)
+else: sys.exit(13)
+'''
+
+class ColdProbes(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.keyroot=Path(tempfile.mkdtemp(prefix='cold-keys-', dir=ROOT/'tmp'))
+        cls.fp=so.keygen(OPENSSL, cls.keyroot/'fresh', 3072)
+        cls.pub=cls.keyroot/'fresh'/'span-offload.pub.pem'
+        cls.priv=cls.keyroot/'fresh'/'span-offload.key.pem'
+    @classmethod
+    def tearDownClass(cls): shutil.rmtree(cls.keyroot)
+    def setUp(self):
+        self.root=Path(tempfile.mkdtemp(prefix='cold-probe-',dir=ROOT/'tmp'))
+        for name in ('source','stage','markers','cloud','work','desk','state','ssd'):
+            (self.root/name).mkdir()
+        self.span=self.root/'source'/PLAN
+        self.span.mkdir()
+        (self.span/'nested').mkdir()
+        (self.span/'empty-directory').mkdir()
+        for name, data in [('a.bin', b'opaque alpha\x00'*200),('b.bin',b'opaque beta\xff'*300),
+                           ('runner_receipt.json',b'invalid JSON: purely synthetic'),('nested/c.bin',b'last bytes')]:
+            (self.span/name).write_bytes(data)
+        self.fake=self.root/'fake-brctl'
+        self.fake.write_text('#!'+sys.executable+'\n'+FAKE)
+        self.fake.chmod(0o700)
+        self.backend={'kind':'icloud','root':str(self.root/'cloud'),'brctl':str(self.fake),
+            'timeout_s':30,'poll_interval_s':0.01,'evict_timeout_s':0.15,'download_timeout_s':0.15}
+        self.config={'schema':so.MBP_CONFIG_SCHEMA,'recipient_public_key':str(self.pub),
+            'recipient_sha256':self.fp,'stage_root':str(self.root/'stage'),'marker_dir':str(self.root/'markers'),
+            'openssl':OPENSSL,'backend':self.backend,'default_budget_s':60,'lead_email':'synthetic@example.test'}
+        self.air={'schema':so.AIR_CONFIG_SCHEMA,'identity':str(self.priv),'recipient_sha256':self.fp,
+            'work_root':str(self.root/'work'),'openssl':OPENSSL,'backend':self.backend}
+        self.env=mock.patch.dict(os.environ,{'COLD_BRCTL_STATE':str(self.root/'state')}); self.env.start()
+        self.flags=mock.patch.object(so,'_is_dataless',side_effect=lambda info: info.st_size==0); self.flags.start()
+        # Do not launch mail from any close call. Test the threshold separately with a subprocess mock.
+        self.alarm=mock.patch.object(so,'storage_alarm',return_value=False); self.alarm.start()
+    def tearDown(self):
+        self.alarm.stop(); self.flags.stop(); self.env.stop()
+        for path, ds, fs in os.walk(self.root):
+            for d in ds: os.chmod(Path(path)/d,0o700)
+            for f in fs: os.chmod(Path(path)/f,0o600)
+        shutil.rmtree(self.root)
+    def off(self): return so.offload(self.config,PLAN,self.span)
+    def close(self,receipt=None): return so.close_offload(self.config,PLAN,self.span,ssd_receipt=receipt)
+    def marker(self): return self.root/'markers'/(PLAN+'.ok')
+    def archive(self): return self.root/'stage'/PLAN/(PLAN+'.tgz.enc')
+    def assert_refused(self, code, fn):
+        with self.assertRaises(so.OffloadError) as cm: fn()
+        self.assertEqual(cm.exception.code,code)
+        return cm.exception
+    def ssd(self,record):
+        with mock.patch.object(so,'require_ssd_mount'):
+            return Path(so.ssd_copy(self.air,PLAN,record,self.root/'ssd'))
+    def calls(self):
+        p=self.root/'state'/'calls'
+        return [json.loads(x) for x in p.read_text().splitlines()] if p.exists() else []
+
+    def test_new_member_between_reads_cannot_certify(self):
+        real=so._add_file; fired=[]
+        def add(*a):
+            r=real(*a)
+            if not fired: fired.append(1); (self.span/'arrived.bin').write_bytes(b'late')
+            return r
+        with mock.patch.object(so,'_add_file',side_effect=add): self.assert_refused('SPAN_CHANGED',self.off)
+        self.assertFalse(self.marker().exists()); self.assertTrue(self.span.exists())
+
+    def test_cross_file_mix_with_restored_mtime_cannot_certify(self):
+        real=so._add_file; fired=[]
+        def add(tar,path,name):
+            r=real(tar,path,name)
+            if not fired:
+                fired.append(1); st=path.stat(); path.write_bytes(b'updated old member')
+                os.utime(path,ns=(st.st_atime_ns,st.st_mtime_ns)); (self.span/'b.bin').write_bytes(b'updated new member')
+            return r
+        with mock.patch.object(so,'_add_file',side_effect=add): self.assert_refused('SPAN_CHANGED',self.off)
+        self.assertFalse(self.marker().exists())
+
+    def test_add_then_remove_while_archiving_cannot_certify(self):
+        real=so._add_file; fired=[]
+        def add(*a):
+            r=real(*a)
+            if not fired:
+                fired.append(1); p=self.span/'transient'; p.write_bytes(b'new'); p.unlink()
+            return r
+        with mock.patch.object(so,'_add_file',side_effect=add): self.assert_refused('SPAN_CHANGED',self.off)
+        self.assertFalse(self.marker().exists())
+
+    def test_mutation_after_last_provider_readback_cannot_certify(self):
+        real=so.ICloudBackend.put
+        def put(backend,local,plan,name,deadline):
+            r=real(backend,local,plan,name,deadline)
+            if name.endswith('.offload.json'): (self.span/'a.bin').write_bytes(b'late source mutation')
+            return r
+        with mock.patch.object(so.ICloudBackend,'put',put): self.assert_refused('SPAN_CHANGED',self.off)
+        self.assertFalse(self.marker().exists()); self.assertEqual(len([c for c in self.calls() if c[0]=='evict']),4)
+
+    def test_all_artifacts_reject_one_changed_downloaded_byte(self):
+        for suffix in so.FILE_SUFFIXES.values():
+            with self.subTest(suffix=suffix):
+                # Fresh independent destination/stage per artifact while retaining the same synthetic source.
+                n=str(len(self.calls()))
+                for k in ('stage_root','marker_dir'):
+                    p=self.root/(k+n); p.mkdir(); self.config[k]=str(p)
+                cloud=self.root/('cloud'+n); cloud.mkdir(); self.backend['root']=str(cloud)
+                (self.root/'state'/'corrupt-suffix').write_text(suffix)
+                self.assert_refused('READBACK_HASH',self.off)
+                self.assertFalse((Path(self.config['marker_dir'])/(PLAN+'.ok')).exists()); self.assertTrue(self.span.exists())
+
+    def test_success_without_observed_eviction_is_exit8(self):
+        (self.root/'state'/'no-eviction').touch()
+        config=self.root/'config.json'; config.write_bytes(so.canonical(self.config))
+        with contextlib.redirect_stdout(io.StringIO()),contextlib.redirect_stderr(io.StringIO()):
+            rc=cli.main(['offload','--config',str(config),'--plan',PLAN,'--span-dir',str(self.span)])
+        self.assertEqual(rc,8); self.assertFalse(self.marker().exists()); self.assertTrue(self.archive().exists())
+
+    def test_placeholder_failed_download_retry_keeps_exit8_then_recovers(self):
+        (self.root/'state'/'fail-download').touch()
+        config=self.root/'config.json'; config.write_bytes(so.canonical(self.config))
+        args=['offload','--config',str(config),'--plan',PLAN,'--span-dir',str(self.span)]
+        with contextlib.redirect_stdout(io.StringIO()),contextlib.redirect_stderr(io.StringIO()):
+            self.assertEqual(cli.main(args),8); self.assertEqual(cli.main(args),8)
+            self.assertFalse(self.marker().exists())
+            (self.root/'state'/'fail-download').unlink(); self.assertEqual(cli.main(args),0)
+        self.assertTrue(self.marker().exists()); self.assertTrue(Path(str(self.marker())+'.unconfirmed').exists())
+
+    def test_unsupported_flag_observation_never_certifies(self):
+        with mock.patch.object(so,'_is_dataless',return_value=None): r=self.off()
+        self.assertFalse(r['provider_confirmed']); self.assertFalse(self.marker().exists())
+
+    def test_crash_before_marker_reuses_stage_then_roundtrips(self):
+        with mock.patch.object(so,'write_marker',side_effect=KeyboardInterrupt):
+            with self.assertRaises(KeyboardInterrupt): self.off()
+        self.assertFalse(self.marker().exists()); self.assertTrue(self.archive().exists()); self.assertTrue(self.span.exists())
+        before=self.archive().read_bytes(); r=self.off()
+        self.assertTrue(r['stage_reused']); self.assertEqual(self.archive().read_bytes(),before)
+
+    def test_pack_manifest_mismatch_never_deletes_source(self):
+        real=so.encrypt_span
+        def encrypt(*a,**kw):
+            manifest,sha,size,count=real(*a,**kw)
+            return manifest.replace(manifest[:64],b'0'*64,1),sha,size,count
+        with mock.patch.object(so,'encrypt_span',encrypt): self.assert_refused('PACK_MANIFEST_MISMATCH',self.close)
+        self.assertTrue(self.span.exists()); self.assertFalse(self.archive().exists())
+
+    def test_cloud_only_close_and_repeated_close_keep_matching_archive(self):
+        before=so.hash_tree(self.span); r=self.close()
+        self.assertFalse(self.span.exists()); self.assertTrue(self.archive().exists()); self.assertFalse(r['archive_evicted'])
+        self.assertEqual(so.sha256_file(self.archive()),r['ciphertext']['sha256'])
+        self.assertFalse(self.close()['archive_evicted'])
+        got=so.pull(self.air,PLAN,'synthetic-kit',self.root/'desk',so.expectations(r))
+        self.assertEqual(so.hash_tree(got['dest']),before)
+
+    def test_changed_ssd_receipt_each_bound_field_prevents_deletion(self):
+        r=self.off(); receipt=self.ssd(r); original=json.loads(receipt.read_bytes())
+        variants=[('plan','other-plan'),('descriptor_sha256','0'*64),('verified_epoch_s','yesterday'),
+                  ('schema','other-schema'),('files',{})]
+        for key,value in variants:
+            with self.subTest(key=key):
+                receipt.write_bytes(so.canonical(dict(original,**{key:value})))
+                self.assert_refused('SSD_RECEIPT_INVALID',lambda:self.close(receipt))
+                self.assertTrue(self.span.exists()); self.assertTrue(self.archive().exists())
+
+    def test_ssd_readback_corruption_never_issues_receipt(self):
+        r=self.off(); (self.root/'state'/'corrupt-suffix').write_text('.key.enc')
+        with mock.patch.object(so,'require_ssd_mount'):
+            self.assert_refused('SSD_MISMATCH',lambda:so.ssd_copy(self.air,PLAN,r,self.root/'ssd'))
+        self.assertFalse((self.root/'ssd'/'span-archives'/PLAN).exists())
+
+    def test_ssd_eviction_failure_retains_pack_and_recovers(self):
+        r=self.off(); receipt=self.ssd(r)
+        (self.root/'state'/'fail-evict').touch()
+        self.assert_refused('BRCTL_FAILED',lambda:self.close(receipt))
+        self.assertFalse(self.span.exists()); self.assertTrue(self.archive().exists())
+        (self.root/'state'/'fail-evict').unlink()
+        self.assertTrue(self.close(receipt)['archive_evicted']); self.assertFalse(self.archive().exists())
+        self.assertTrue(self.close(receipt)['archive_evicted'])
+
+    def test_corrupt_materialised_pack_never_deletes_raw(self):
+        self.off(); self.archive().chmod(0o600); self.archive().write_bytes(b'corrupted')
+        self.assert_refused('PACK_UNVERIFIED',self.close)
+        self.assertTrue(self.span.exists())
+
+    def test_corrupt_cloud_retry_never_deletes_raw_or_rewrites_marker(self):
+        self.off(); before=self.marker().read_bytes()
+        (self.root/'state'/('remote-'+PLAN+'.key.enc')).write_bytes(b'corrupted')
+        with self.assertRaises(so.OffloadError): self.close()
+        self.assertTrue(self.span.exists()); self.assertTrue(self.archive().exists()); self.assertEqual(self.marker().read_bytes(),before)
+
+    def test_pending_observation_is_readonly_fresh_and_refuses_known_bad_states(self):
+        for text in ('unknown','com.apple.CloudDocs client:idle caught-up needs-upload','com.apple.CloudDocs offline'):
+            (self.root/'state'/'status').write_text(text)
+            self.assertFalse(so.pending_transfers(self.config)['clear'])
+        (self.root/'state'/'status').unlink()
+        a=so.pending_transfers(self.config); time.sleep(0.005); b=so.pending_transfers(self.config)
+        self.assertTrue(a['clear']); self.assertGreater(b['observed_epoch_s'],a['observed_epoch_s'])
+        self.assertTrue(all(c[0]=='status' for c in self.calls())); self.assertEqual(list((self.root/'cloud').iterdir()),[])
+
+    def test_characterize_status_with_unrecognised_pending_text(self):
+        text='com.apple.CloudDocs client:idle caught-up\npending transfers: 1'
+        (self.root/'state'/'status').write_text(text)
+        self.assertFalse(so.pending_transfers(self.config)['clear'])
+        print('FIXED: literal pending token refuses',flush=True)
+
+    def test_exposes_existing_ssd_receipt_schema_not_validated_on_retry(self):
+        r=self.off(); receipt=self.ssd(r); doc=json.loads(receipt.read_bytes()); doc['schema']='wrong-schema'
+        receipt.write_bytes(so.canonical(doc))
+        self.assert_refused('SSD_RECEIPT_INVALID',lambda:self.ssd(r))
+        self.assert_refused('SSD_RECEIPT_INVALID',lambda:self.close(receipt)); self.assertTrue(self.span.exists())
+        print('FIXED: malformed existing SSD receipt refuses at both retry and close',flush=True)
+
+    def test_all_legacy_hash_modes_are_unconfirmed_and_old_gate_marker_refuses(self):
+        conf=self.root/'legacy.conf'; conf.write_bytes(b'synthetic config')
+        memory={}
+        def respond(backend,args,deadline,cap=None):
+            if args[0]=='copyto':
+                memory[args[-1]]=Path(args[-2]).read_bytes(); return b''
+            if args[0]=='lsjson':
+                prefix=args[-1]+'/'
+                rows=[]
+                for key,data in memory.items():
+                    if not key.startswith(prefix): continue
+                    hashes={k:hashlib.new(k,data).hexdigest() for k in ('sha256','sha1','md5')}
+                    hashes['dropbox']=hashlib.sha256(b''.join(hashlib.sha256(data[i:i+4194304]).digest() for i in range(0,len(data),4194304))).hexdigest()
+                    rows.append({'Name':key.rsplit('/',1)[-1],'Size':len(data),'Hashes':hashes})
+                return json.dumps(rows).encode()
+            raise AssertionError(args)
+        for kind in ('sha256','sha1','md5','dropbox','size'):
+            with self.subTest(kind=kind):
+                config=dict(self.config,backend={'kind':'rclone','remote':'synthetic:offload','rclone_config':str(conf),'hash_type':kind})
+                unconfirmed=Path(str(self.marker())+'.unconfirmed')
+                if unconfirmed.exists(): unconfirmed.unlink()
+                with mock.patch.object(so.RcloneBackend,'_run',respond): r=so.offload(config,PLAN,self.span)
+                self.assertFalse(r['provider_confirmed']); self.assertFalse(self.marker().exists()); self.assertTrue(unconfirmed.exists())
+                self.assertEqual(self.calls(),[])
+        # Historical listing-backed records must not acquire today's valid-retry semantics.
+        self.marker().write_bytes(so.canonical(dict(r,provider_confirmed=True)))
+        with mock.patch.object(so.RcloneBackend,'_run',respond):
+            self.assert_refused('MARKER_INVALID',lambda:so.offload(config,PLAN,self.span))
+        print('FIXED: all five listing hash modes remain unconfirmed, old listing-backed .ok refuses',flush=True)
+
+    def test_retry_source_change_during_final_status_refuses(self):
+        r=self.off(); before=self.marker().read_bytes(); real=so.ICloudBackend._wait_uploaded
+        def mutate(backend,deadline):
+            t=real(backend,deadline); (self.span/'a.bin').write_bytes(b'late source edit'); return t
+        with mock.patch.object(so.ICloudBackend,'_wait_uploaded',mutate):
+            self.assert_refused('SPAN_CHANGED',self.off)
+        self.assertEqual(self.marker().read_bytes(),before); self.assertTrue(self.archive().exists())
+
+    def test_retry_absent_source_reappearing_during_final_status_refuses(self):
+        self.close(); before=self.marker().read_bytes(); real=so.ICloudBackend._wait_uploaded
+        def appear(backend,deadline):
+            t=real(backend,deadline); self.span.mkdir(); (self.span/'new.bin').write_bytes(b'new source'); return t
+        with mock.patch.object(so.ICloudBackend,'_wait_uploaded',appear):
+            self.assert_refused('SPAN_CHANGED',self.off)
+        self.assertEqual(self.marker().read_bytes(),before); self.assertTrue(self.archive().exists())
+
+    def test_partial_raw_cleanup_failure_retains_pack_and_refuses_changed_retry(self):
+        r=self.off(); real=so.shutil.rmtree
+        def fail(path,*a,**kw):
+            if Path(path)==self.span:
+                (self.span/'a.bin').unlink(); raise OSError('synthetic partial raw deletion')
+            return real(path,*a,**kw)
+        with mock.patch.object(so.shutil,'rmtree',fail):
+            with self.assertRaises(OSError): self.close()
+        self.assertTrue(self.archive().exists()); self.assertTrue(self.span.exists())
+        self.assert_refused('SPAN_CHANGED',self.close)
+        print('RECOVERY LIMIT: partial raw deletion retains verified pack; retry holds with SPAN_CHANGED pending lead recovery',flush=True)
+
+    def test_missing_keygen_output_dir_and_cli_entrypoint(self):
+        fresh=self.root/'new-keys'
+        self.assertFalse(fresh.exists()); fp=so.keygen(OPENSSL,fresh,3072)
+        self.assertEqual(fresh.stat().st_mode & 0o777,0o700)
+        self.assertEqual((fresh/'span-offload.key.pem').stat().st_mode & 0o777,0o600)
+        self.assertRegex(fp,r'^[0-9a-f]{64}$')
+        entry=(ROOT/'delta-tree'/'scripts'/'close_offload.py').read_text()
+        self.assertIn('main(["close"',entry)
+
+    def test_mail_threshold_and_failed_delivery_are_exact_without_real_mail(self):
+        self.alarm.stop()
+        try:
+            for free,want in ((60_000_000_001,False),(60_000_000_000,True),(59_999_999_999,True)):
+                with mock.patch.object(so.shutil,'disk_usage',return_value=(100_000_000_000,0,free)), mock.patch.object(so.subprocess,'run') as run:
+                    run.return_value.returncode=0
+                    self.assertEqual(so.storage_alarm(self.config,PLAN),want); self.assertEqual(run.called,want)
+            with mock.patch.object(so.shutil,'disk_usage',return_value=(100,0,40_000_000_000)), mock.patch.object(so.subprocess,'run') as run:
+                run.return_value.returncode=1
+                self.assert_refused('STORAGE_MAIL_FAILED',lambda:so.storage_alarm(self.config,PLAN))
+        finally: self.alarm.start()
+
+if __name__=='__main__':
+    # A subprocess tripwire supplements inherited OS blinding; it does not replace or alter it.
+    old=subprocess.Popen.__init__
+    def safe(self,args,*a,**kw):
+        if isinstance(args,(tuple,list)) and str(args[0]) in ('/usr/bin/mail','brctl','/usr/bin/brctl','rclone'):
+            raise RuntimeError('review prohibits real external service command')
+        return old(self,args,*a,**kw)
+    subprocess.Popen.__init__=safe
+    unittest.main(verbosity=2)
