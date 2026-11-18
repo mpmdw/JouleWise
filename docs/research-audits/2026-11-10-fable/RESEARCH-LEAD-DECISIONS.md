@@ -21222,3 +21222,225 @@ Rows for the lead to commit to `RULES.json`. Owner is `research_lead` for rows 1
 **Rows closed or changed by this ruling.** RL-180 row 6 is read with row 1. RL-180 row 3 is read with rows 3 and 4. RL-168's hold on the pack answer closes. The hold on series-record commits and on W1's signature (RLD:15460) ends when #826 merges.
 
 **What comes back to me.** The manifest packet with the census re-run table and the list of open twin classes. A real-roster spelling or receipt shape that stage 1 refuses. A `PUBLIC.json` whose word is not `yes`. A census class a builder disputes with a ruling line. Any wish to add a key to the naming record. Nothing else in this ruling returns.
+
+# RL-186. No decision trace is written and RL-107 is not opened: a gate's word is accepted only if no admissible poll schedule could have changed it, and its numbers only if some admissible schedule gives them. ctl-01: the draft's shapes, envelope contract, 3 + 9 layout and seed are accepted; doses, recovery and the split gap are fixed by rule now and by value at the `lm-inst-01` read; an executing Astra 6.2 seat satisfies RL-174 B row 4 and a Sol 6.2 seat does not. Slide 9: C/T labels yes, hardware clauses stay in design wording, the timeline ends at the paper, one post-freeze R1 status cell is allowed
+
+Research lead (Fable 5.2), Wed Nov 18 07:30 PST 2026 (from `date`). One ruling on three items: PR #809's replay contract for Part C, the five ctl-01 kit questions with RL-174 B row 4, and slide 9 of the Nov 30 talk. Nothing here is needed on the MBP before Thursday.
+
+**Cites.**
+- `RLD:n` is `RESEARCH-LEAD-DECISIONS.md` on the audit branch at `61e8c9c2c`.
+- At the R1 pin `b2e01464d`: `TG:n` is `joulewise/align/apple/thermal_gates.py`, `WL:n` is `joulewise/align/apple/workload.py`, `BG:n` is `joulewise/align/apple/budget.py`, `R1:n` is `joulewise/align/apple/r1_runtime.py`, `VR:n` is `joulewise/align/apple/v4_registration.py`.
+- Under `/Volumes/JW-EXT/scratch/`: `R3:n` is `pl-809/resolve-3/FINAL-MESSAGE.md`, `GC:n` is `sol62-fix809/gate-poll-counterexample.py`, `BR` is `pl-809/build/FINAL-MESSAGE.md`, `A3:n` is `sol62-fix809/audit3-handoff.md`, `CT:n` is `pl-d-ctl01-runner-qualpin/resolve-1/FINAL-MESSAGE.md`, `SH:n` is `d-nov30-v4-slide-authority/SLIDE-9-HANDOFF.md`.
+- At PR #808's head `282b1c9f3`: `CD:n` is `docs/process/cadence_ctl_runner.md`, `KD` is `docs/process/cadence/kits/cl-ctl-01.draft.json`.
+- `M:n` is `docs/capstone/TALK-10MIN.md` at main `56b0780fb`.
+
+**Read.** R3, GC, BR, A3, CT and SH in full. CD and KD in full; the ctl PR body and audit brief. RL-107 (RLD:6036-6065), RL-183 section 1, RL-185 section 1 and both registers, RL-174 B (RLD:17568-17590), RL-149 §2.5 and §2.6 (RLD:12531-12570), RL-151 3.3 (RLD:13438), RL-176 B.1 to B.3 (RLD:17996-18014), RL-179 F-3 (c) and F-11 (RLD:18695-18850). TG:265-294 and TG:504-652, WL:440-530 and WL:715-725, BG:22-66, R1:715-724, R1:1029-1058, R1:1745-1759, VR:489-495. M:92-102, M:122-123.
+
+**Not checked.**
+- I ran nothing, GC included. Section 1.1 is from source.
+- Whether `_window_coverage` can only rise when a row is added. 1.3 assumes it. Test 2 of 1.5 makes it a tested fact.
+- Which field of a turn's record carries the full rendered input length. 1.4 row 6 is written for both cases.
+- Whether any Part C member's frozen template is meant to stop on a context limit. If one is, it comes back.
+- Which stamps bracket `run_member` in the step record. 1.4 row 8 is written for both cases.
+- `lm-inst-01`'s draft and output: it has not been read by anyone. The planning register row SH:15 cites.
+- No custody, energy, power, meter, transcript, slot, hazard, sealed or restricted file was opened.
+
+**Not done.** No commit, push, comment, run or SSH. The only file written is this one.
+
+---
+
+## 0. The answers
+
+| Item | Answer |
+|---|---|
+| 1 (a) decision trace | **No producer writes one. No RL-107 branch is authorized.** The ten blobs stay at `b2e01464d` (1.2) |
+| 1 (b) evidence for `pass` | **Words by universality, numbers by existence** (1.3). The candidate rule is adopted for the terms that can change a gate's word, and relaxed to existence for the terms that can only delay a release. Acceptance tests per witness in 1.4 |
+| 2.1 doses, recovery | **Waits for the `lm-inst-01` read.** The rule the read is applied through is fixed now (2.1) |
+| 2.2 caps, shapes, gaps, replay | Draft caps and shapes accepted. **Literal replay is not required;** RL-149 §2.5's "the same tokens" is amended. The 10 s gap is confirmed at the read (2.2) |
+| 2.3 envelope, disclosures | **Accepted:** one logged envelope, `script-work.json` as ground truth. Disclosure list in 2.3 |
+| 2.4 ownership, freeze order | Table in 2.4. Legs may run before the print freezes; no ctl energy is read before it |
+| 2.5 layout, seed | **3 + 9 and seed `2026111601` accepted.** No date rule. One cold seat on the kit. L001 to L003 is the registered counted pilot and F-11's first native run (2.5) |
+| RL-174 B row 4 | **Astra 6.2 executing: yes. Sol 6.2: no,** it built the PR (2.6) |
+| Slide Q1 | **Yes** |
+| Slide Q2 | **No.** Keep both clauses, in design wording (3) |
+| Slide Q3 | **Yes** |
+| Slide Q4 | **Yes,** one cell, on four conditions (3) |
+
+---
+
+## 1. #809 Part C: decisions that cannot be replayed
+
+### 1.1 The facts
+
+- **`_wait` reads the clock and a live snapshot at every poll and keeps neither** (TG:558-559). The interval row keeps the entry and exit stamps, the release row's time and values, the last poll's slope and the word (TG:636-645).
+- **Low coverage is permanent.** One poll under .9 sets `unobserved` (TG:563-564). No later row is then good (TG:574), and the word is `unobserved` (TG:645). So a row that says `released` asserts coverage of at least .9 at every poll. That is the counterexample (GC:49-55).
+- **Two other terms depend on the poll time:** the sample's age (TG:574) and, for G0, the status reading's age (TG:584). A failure of either resets a count. The release then comes later or the cap ends the wait. Neither can make a release that the rows do not support.
+- **Every other term of a good row is fixed by the rows:** continuity, validity and the two deltas (TG:572-577), the sample slope, the OS level and the pressure state (TG:581-583).
+- **The gate is one of the ten** (VR:489-495). The poll loop has no seam outside it: the clock and the reader belong to the runtime process, whose argument list is tested equal to the frozen one (RLD:20136).
+- **The final deadline is recorded** (WL:721). The stamp behind a re-arm is not (R1:715-724). Step D's member wall time is measured outside the bundle (R1:1749-1753) and reaches the slot receipt as one scalar (R1:1090).
+
+### 1.2 (a) No trace
+
+**No producer writes a decision trace for Part C, and I authorize neither branch of RL-107.** No file of the ten changes, no wrapper or patch is loaded into the runtime process, and no second slot session is ordered.
+
+- **A trace inside the ten costs a slot session or a survival ruling** (RLD:6059-6063), to make a smoke's evaluator exact. RL-183 1.2 declined that trade for a smaller diff (RLD:20114-20117). The reason has not changed.
+- **A trace from outside the ten changes what Part C runs.** It puts I/O in the poll loop of a process W1 will run without it. Part C is the smoke of W1's bytes (RLD:18840).
+- **A trace would not be independent.** The process whose decisions are judged would write it. Against later edits the ledger's digests already bind the journal (RLD:20589).
+- **1.3 is enough.** It refuses the counterexample and audit 3's first finding, and passes a run with ordinary margins.
+
+**Deferred, not ordered.** If a slot session is ever ordered for a reason of its own, the interval row gains three fields in that commit: each poll's stamp, the newest row's `monotonic_ns` at that poll, and the coverage fraction. Until then RL-183's reading stands: where the unchanged call cannot distinguish two cases, the evaluator takes the failing one (RLD:20127).
+
+### 1.3 (b) The rule
+
+> **A recorded word is accepted only if no admissible poll schedule could have produced a different word from the same rows. A recorded number is accepted if some admissible schedule produces it. Otherwise the verdict is `other_failure` with reason `evidence_unverifiable`. Where every admissible schedule contradicts the record, the reason is the gate's existing decision reason.**
+
+**Admissible instants,** for a row with entry `s` and exit `x`. The two allowances are my choice and are assumptions, not measurements.
+- A poll may have happened at any instant in [s, x].
+- A sample with finish stamp `f` is *possibly visible* at `u` when f ≤ u, and *surely visible* when f ≤ u − 250 ms.
+- A sample is consumed at some instant in [f, min(f + 1.5 s, x)]: one 1 s sleep (TG:599, TG:609), 250 ms of overrun, 250 ms of visibility.
+
+**Why the split.** Coverage, the entry status check, a collector fault, the cap and the deadman change the word. Those are judged over every instant. The two age terms move only the release row, and a release later than it was due leaves the member cooler, not hotter. Requiring them to hold at every instant would refuse healthy runs whose status reading is a second old. They are judged by existence, on the rows the record itself names.
+
+### 1.4 The acceptance test for each witness
+
+`n` is 10 for G0 and 5 for G1 and H (TG:543). `e` is the row whose `monotonic_ns` is the record's `exit_sample_ns`. `D` is the recorded `deadline_ns`.
+
+| # | Witness | `pass` needs | From bound records? |
+|---|---|---|---|
+| 1 | **G0, G1, H: the word `released`** | **(U1)** frozen `_window_coverage` on the surely visible rows is ≥ .9 at every instant of [s, x]. It changes only at row times, finish times, those plus 250 ms, those plus 60 s and grid edges, so it is evaluated at each such point and 1 ns either side. **(U2)** G0 only: TG:532-534 gives the same answer on the surely and on the possibly visible rows at `s`. **(U3)** `f_e` + 1.5 s − s is under the cap. **(U4)** no deadman guarded the wait (R1:1784, R1:1841), or D > x | Yes |
+| 2 | **The same row's numbers** | **(N1)** `e` exists, `release` equals its two values (TG:628-630), and f_e ≤ x ≤ f_e + 1.75 s. **(N2)** rows e−n+1 to e exist, and the first is no older than the newest row surely visible at `s`. **(N3)** each passes every row-fixed term of TG:572-583 against the recorded `reference`, which equals the bound one: the window reference for G0, G0's `release` for G1 and H (TG:634). **(N4)** for each, max(f, `pm_observed_ns`) ≤ min(`monotonic_ns` + 2 s, `pm_observed_ns` + 2 s, x); G1 and H drop the status terms. **(N5)** `slope_c_per_min` equals frozen `slow_slope` at some instant of [f_e, x]; `entry_slope_c_per_min` and `entry_sensors` equal the frozen values at `s` on the surely or the possibly visible rows. **(N6)** the stamps equal the gate's begin event (TG:536-538) and `duration_s` is their difference | Yes |
+| 3 | **`unobserved`** | The reference was absent at entry; or a stretch of at least 1.25 s exists, before any row that could complete a run, on which even the possibly visible rows give under .9. For G0, x − s ≥ min(300 s, cap) (TG:596) | Yes |
+| 4 | **`timeout`** | U1 holds, x − s ≥ the cap, and no `n` consecutive rows of the wait pass N3 and N4 | Yes |
+| 5 | **`deadman` in a wait, and every deadman check in the turn and tool loops** (WL:490, WL:516-521, WL:583, WL:595) | Each check lies between two bound stamps a < b of the member. **Passed** is accepted when b < D. **Expired** is accepted when the stop is recorded at or after D and the work before it began before D. A check with a < D ≤ b is unverifiable. Work admitted with a ≥ D is a decision failure | Yes, after the re-arm. A check made before a re-arm is judged against the arm bracket plus the configured seconds, by the same three cases |
+| 5b | **The re-arm itself** | D minus the configured `rearm_s` lies between the bound stamps either side of the hook's re-arm, and `deadline_origin` is the name that member's hook writes (R1:1802, R1:1815, R1:1876) | Existence only. The exact stamp has no witness and needs none |
+| 6 | **Admission: G0 unreleased, decode budget** (WL:445-452, WL:508) | Exact, from the intervals and the token counts | Yes |
+| 6b | **Admission: context limit** (WL:519-528) | An admitted turn: its recorded rendered length plus `max_tokens` is within the limit. If the record carries only a partial count, the check is the partial count, and the report says so. **A rejected turn: `evidence_unverifiable`.** Its length was never recorded and I order no re-render | Admitted: yes. Rejected: no |
+| 7 | **Step D `prefill_s`, token cap and `B_D`** | As the builder has them (BR): exact from the turn clocks, the frozen template and R1:1044-1057 | Yes |
+| 8 | **Step D's enclosing wall time** | The recorded `member_wall_s` is at least the member's episode span and gives I_D in [0, 1750), the frozen bound (R1:1052). If bound stamps on the same clock bracket `run_member`, it is also at most their difference. Everything derived from it is recomputed exactly from the recorded scalar | Lower bound yes. Upper bound only if a bracket exists; its absence is not a failure |
+| 9 | **The native decode-end stamp** | It lies between the turn's last witnessed token stamp and the endpoint's return stamp, with order and counts reconciled as the builder has them (A3:12) | Existence only, and that suffices |
+
+**Why rows 8 and 9 may pass on existence.** Part C is a smoke. Its Step D derives no registered slot, and nothing W1 uses reads either value (RLD:20146). A scalar inside its bracket, with every dependent value recomputed from it, is what a smoke can prove.
+
+**What 1.4 does not prove.** That the poll loop never stalled for more than 250 ms. A stall tends to break N1 or N2 and refuse, not pass. That a release was not due earlier than recorded. That the runtime wrote a true row before its own close (RLD:20779).
+
+### 1.5 Tests owed, and the one check before W1's Part C
+
+1. **The counterexample is refused.** GC's rows with a recorded `released` give `evidence_unverifiable`. Audit 3's 53/60 case stays a decision failure. The passing control moves to rows that hold U1 at every instant; a control at exactly .9 is expected to become unverifiable.
+2. **Coverage is monotone in rows** on the suite's fixtures: removing a row never raises the fraction.
+3. **One mutation per clause** U1 to U4 and N1 to N6, and per case of rows 3 to 9, each refused with its reason.
+4. **No leak.** RL-183c's marker test covers every new check: names and counts leave the process, no value does.
+5. **The ten are untouched.** `git diff b2e01464d -- <the ten paths>` is empty; PR #823's comparator at 10 of 10.
+6. **Before the one Part C on the final W1 pin,** the replay RL-183 1.3 already orders on the stored records of the counted Part C and F0 run 11 (RLD:20144-20146) runs with 1.4. Output: the verdict word, the failing check names, and per gate the count of rows failing U1 or N4 by term name. No value. Two `pass` words are recorded and the work proceeds. **An `evidence_unverifiable` on a gate check of either run comes to me with those names.** I then choose between widening the two allowances and RL-107's branches. That choice is not made before then.
+
+---
+
+## 2. The ctl-01 kit
+
+### 2.1 Hidden doses and recovery: wait for the read
+
+**Not frozen today** (RLD:17577). The rule the read is applied through is fixed now, so the read cannot shop for values.
+- **Doses stay 128, 256 and 512, two legs each** (RLD:13438), unless `lm-inst-01`'s floor print (RLD:16366-16371) shows the 128 dose under the floor on the GPU rail and on DC-in. Then I raise doses in the freezing line. No dose goes below 128 and no fourth dose is added. A change of dose is kit data and no re-pin.
+- **Recovery is sampled inside the member** (CD:33-36), which is RL-169a's requirement (RLD:16703). Its length is five times the return-to-baseline time the read prints, at least 120 s and at most 600 s. The draft's 600 s stands until then.
+- **My freezing line** names the three doses, the recovery seconds and the split gap. The kit is issued after it and not before.
+
+### 2.2 Visible caps, turn shapes, split gaps, replay
+
+**Accepted as drafted** (KD `seed_law.scripts`, CD:67-70), on one condition and with one value confirmed at the read.
+
+| Field | Ruling |
+|---|---|
+| Prefill 2,000; visible 1,024 on hidden and plain legs | Accepted, if 2,000 is a prompt size `lm-inst-01`'s roster reads. If it is not, the kit takes the nearest size that is. Checked at the read |
+| Hidden call after G0 and before the visible call | Accepted. The print states that the visible call follows the hidden one |
+| Extra turn: 1,024 + 1,024, no gap | Accepted |
+| CPU: 512, one-core burn of 10, 30 or 90 s, 512 | Accepted. It is the shape RL-176 B.1's qualifier needs (RLD:18004) |
+| Split: 342 + 341 + 341 against plain 1,024 | Accepted |
+| Split gap 10 s | Provisional. At the read: 10 s stands if it is at least five times the printed decode-end lag; otherwise the gap becomes five times the lag, rounded up to a whole second |
+
+**The split and plain legs need not replay one token sequence.** Equal total decoded tokens from the same prompt and seed is the requirement, and it is what the runner does (CD:30-31).
+- **Why.** Literal replay needs a growing conversation or forced decoding. That is a new measured path on a print-only pair.
+- **What the pair then shows, and its limit.** Each split call starts at the same context; the plain call runs about 680 tokens deeper. The print labels the pair "equal counts, same prompt and seed, different context depth", prints each call's start context, and draws no word from the difference.
+- **RL-149 §2.5 is amended** (RLD:12542): "the same tokens in one turn and in three with gaps" reads "the same number of decoded tokens, from the same prompt and seed, in one turn and in three with gaps".
+
+### 2.3 One logged envelope, and what the controls print may disclose
+
+**Accepted** (CD:38-47). One envelope per episode whose counts sum the visible calls; hidden work absent from it; `script-work.json` as the ground truth, reached only through its custody hash.
+
+**The print may disclose, per leg:** script kind; the doses (hidden tokens, CPU seconds, gap, recovery); physical call counts and durations; the logged counts; energy above baseline by phase on the GPU rail, the CPU rail, the rail sum and DC-in; joules per hidden token; the dose-response slope with its range; each value in units of `lm-inst-01`'s floor; the 1 % closure check; the qualifier word (RLD:18004).
+
+**It may not disclose:** generated text or token ids; any K or S threshold, score or outcome word; "detected" or any word of that kind; anything from a series member. DC-in is allowed because every ctl leg is conditionless.
+
+### 2.4 Ownership and freeze order
+
+| Thing | Owner | Frozen |
+|---|---|---|
+| Doses, recovery, gap; the print list and the manifest's cold pass; the disclosure sentence | Research lead | At the read, in one ruling line |
+| The kit's issue, pins, ledger, close proof, dates (CT:6) | Lead | After that line and the cold seat of 2.5 |
+| Controls print code, output schema, manifest `lm-ctl-01` | Sol builder with an analyst seat (RLD:18125) | Hash committed **before any ctl energy is read** (RLD:17577) |
+| The registration's disclosure amendment (RLD:12544-12548) | Lead commits; I supply the sentence | After ctl-01's last span closes and before its look reads. A blind amendment in the deviation log. It does not hold W1's signature |
+
+**Order.** Runner PR admitted, then the read, my line, the cold seat, the issue, the pilot span. The remaining span waits for the pilot's hand-read. The print freeze may come after the legs run (RLD:18014) and must come before the look.
+
+### 2.5 Span layout and seed
+
+- **3 + 9 with master seed `2026111601` is accepted** (KD, CD:73-79). No outcome exists, so a new seed buys nothing. The split and plain legs stay adjacent in one span under one reference.
+- **No date rule from me.** ctl-01 prints no per-day error (RLD:18910). `t0_rule: free` stands.
+- **L001 to L003 is the registered counted pilot** (RLD:12676) and the new pin's first native run under F-11 (RLD:18840). It gets F-3 (c)'s hand-read by an independent seat from the template (RLD:18699-18704). L004 to L012 are ineligible until it passes. Script kind is a field this runner branches on, so the second span's first split leg is read before the look; it holds no other span.
+- **One cold seat on the kit,** by F-11's second clause (RLD:18846): a counted kit with a new layout. It rules on the balance of captures and consumers CD:79 leaves open. The lead assigns it.
+- **CT:6 is the lead's:** which ledger, receipt and close proof authorize the launch, inside RL-179 row 4 (RLD:18911).
+
+### 2.6 RL-174 B row 4
+
+**An executing Astra 6.2 seat satisfies the row. An executing Sol 6.2 seat does not.**
+- **What the row protects** is one independent, executing, top-tier attack on a class A runner before it measures. Mythos was named as the top-tier seat then available. Astra 6.2 is in that tier.
+- **Sol 6.2 built #808.** A review by the builder's own model is a second look, not the gate.
+- **The row now reads** "one executing seat of a top-tier model that is not the builder's". RL-176 row 4's Mythos seat (RLD:18124) is not changed by this.
+
+---
+
+## 3. Slide 9 of the Nov 30 talk
+
+| Q | Answer | Terms |
+|---|---|---|
+| **Q1** C/T labels (SH:40) | **Yes** | Replace only the two middle boxes with *C calibration windows* and *held-out T windows*. No counts, no dates. R0 to W1, recompute and release keep their order |
+| **Q2** omit the hardware clauses (SH:41) | **No** | The meter in every window is what v4 adds to the pilots (M:122), and the room needs the model's name. Both sources read: "Design: Qwen3.8-27B 8-bit; KM003C on DC input in every window; full transcripts sealed and unscored." The HTML's "captured" goes. No status sits beside this line |
+| **Q3** end the timeline at the paper (SH:42) | **Yes** | Cut the last two spans and their arrows in both sources. The v5 question and endpoint stay on the slide. v5 windows and a venue are targets and may be said aloud as such, without dates |
+| **Q4** post-freeze R1 status (SH:43) | **Yes, one cell** | (1) The word is the exact gate-status word of a public record on main. (2) It carries its as-of date. (3) Both sources change identically and nothing else changes. (4) No sentence is added and no K or S reading is drawn. W1 and release cells stay as frozen. With no such record, `pending` stands |
+
+M:101's answer stays. If the first-person clause is unsuitable on the day, M:123's short form replaces it in both places (SH:52).
+
+---
+
+## Amends
+
+- **RL-183 1.3** (RLD:20149): "a replay case that cannot keep its repaired verdict without a change inside the ten" is answered for poll timing by 1.3 and 1.4 of this ruling. Neither RL-107 branch is taken.
+- **RL-183 1.3** (RLD:20144-20146): the stored-record replay also reports the counts of 1.5 item 6.
+- **RL-149 §2.5** (RLD:12542): the split leg's sentence, as in 2.2.
+- **RL-174 B row 4** (RLD:17577): "one executing Mythos seat" reads as in 2.6.
+- **Stand unchanged:** the ten frozen sources and the pin `b2e01464d`; RL-107; RL-183c; RL-185; RL-151 3.3's doses until my freezing line; RL-176 B.1 to B.3; RL-179 F-3 and F-11.
+
+**Blind status.** Blind. This ruling rests on rulings, seat reports, source at the pin, a draft kit and the talk's public text. No series member exists, W1 is not signed, and no ctl or F2 energy has been read. Section 1 fixes an evaluator's acceptance rule before it sees a native run. Section 2 fixes how a read will be applied before the read. No estimator, threshold, level or inclusion rule changes.
+
+**For Ed, plainly.** "Three things, none of which stops the MacBook Pro. First, the smoke test's checker cannot replay a few thermal-gate decisions exactly, because the frozen code never logged when it looked. I am not reopening the frozen code. The checker instead accepts a decision only when no plausible timing could have changed it, and fails otherwise. Second, the positive-controls kit is approved in shape; its three numbers wait for the instrument read, and a GPT Astra review counts as its audit. Third, slide 9: C and T labels replace the old boxes, the model and meter stay on the slide, the timeline stops at the paper, and one R1 status cell may be updated after the freeze."
+
+---
+
+## Register
+
+Rows for the lead to commit to `RULES.json`. Owner is `research_lead` for rows 1 to 8; the lead owns rows 9 and 10.
+
+| # | Clause | Class | Protects | Scope | Ends | Test |
+|---|---|---|---|---|---|---|
+| 1 | No producer writes a decision trace for Part C; no file of the ten changes and nothing is loaded into the runtime process to record polls (1.2) | VALIDITY (prereg) | Part C runs W1's bytes; the ten are byte-identical at signing | The W1 line | With RL-183 row 1, or a slot session ordered for its own reasons | 1.5 test 5 |
+| 2 | A recorded gate word passes only if no admissible poll instant could change it; a recorded number passes if some admissible instant gives it; otherwise `other_failure / evidence_unverifiable`; a record every instant contradicts takes the gate's decision reason (1.3) | VALIDITY (prereg) | A Part C `pass` never rests on an unrecorded poll time | Every native Part C and replay on the W1 line | The last Part C of the series | 1.5 tests 1 to 3 |
+| 3 | The admissible instants: any poll in [s, x]; surely visible at f + 250 ms; consumed within f + 1.5 s. A change to either allowance is mine (1.3) | VALIDITY (prereg) | The rule is fixed before a native run is judged by it | The evaluator | The last Part C of the series | The constants appear once, in the evaluator, with this ruling's id |
+| 4 | Deadman checks are judged in three cases against the recorded deadline and the bound stamps either side; a rejected turn's context check is unverifiable; Step D's wall time and the decode-end stamp pass inside their brackets (1.4 rows 5 to 9) | VALIDITY | Each unreplayable witness has one written test | The evaluator | The last Part C of the series | 1.5 test 3 |
+| 5 | Before the one Part C on the final W1 pin, the stored-record replay runs with 1.4 and reports words, check names and counts only (1.5 item 6) | VALIDITY (blinding) | The rule meets a real run before the smoke that precedes W1, and no reading leaves the host | W1's chain | W1's Part C | The replay's two records |
+| 6 | ctl-01's doses, recovery seconds and split gap are frozen by one line of mine after the `lm-inst-01` read, through 2.1 and 2.2's rules; the kit is issued after it (2.1, 2.2) | VALIDITY (prereg) | The controls' doses are chosen by a rule written before the read | `cl-ctl-01` | The kit's issue | The freezing line quotes the read's two figures and the rule's result |
+| 7 | The split and plain legs match on total decoded tokens, prompt and seed; the print labels the pair as differing in context depth and draws no word from it (2.2) | VALIDITY | The pair is described as what it is | `lm-ctl-01` | The paper's data release | The print's label string; the kit validator's equal-total check |
+| 8 | The controls print discloses only 2.3's list; its code, schema and manifest hash are committed before any ctl energy is read (2.3, 2.4) | VALIDITY (blinding) | No control leg is read by unfrozen code; no K or S word leaks into a control | `lm-ctl-01` | The paper's data release | Schema check of the output; commit order in the ledger |
+| 9 | The class A seat on the ctl runner PR is one executing top-tier model that is not the builder's; L001 to L003 is the counted pilot with F-3 (c)'s read; one cold seat on the kit (2.5, 2.6) | SAFETY | New measured bytes are attacked and read before counted legs rest on them | PR #808 and `cl-ctl-01` | The pilot's hand-read PASS | The PR's gate ledger row 1; the read's record |
+| 10 | Slide 9: C/T labels, the design line with model and meter, the timeline ending at the paper, and at most one dated R1 status cell after the freeze, on 3's four conditions | VALIDITY | The talk states design and status, never an outcome or an unowned date | `TALK-10MIN.md` and `.html` | Nov 30 | The two sources diff to the same four edits |
+
+**Rows closed or changed by this ruling.** R3's two items and BR's NEEDS_SPEC are answered. CT's items 1 to 5 and 7 are answered or assigned; item 6 is the lead's. SH's Q1 to Q4 are answered. RL-174 B row 4 is read with row 9.
+
+**What comes back to me.** An `evidence_unverifiable` gate check on either stored run, with check names and counts. A Part C member whose frozen template expects a context-limit stop. A fixture on which removing a row raises coverage. The `lm-inst-01` output, for the freezing line. A prompt size or dose the read's roster does not cover. The cold seat's finding on the 3 + 9 balance, if it has one. Nothing else in this ruling returns.
