@@ -10,17 +10,15 @@ carries a superseded banner, and everything still current in them is
 folded in below. Do not create another dated restart doc; update this
 file instead.
 
-## 2026-11-17 W1 desk handoff — RL-176 and RL-177 draft
+## 2026-11-17 W1 desk handoff — RL-178 draft
 
 [AGENT] Draft PR #813 on `align/2026-11-17-rl176-build` is based on W1
-`b2e01464d`. RL-177 (`aeadb9122`) switches the candidate to decode-only
-S and Q after turn 0's first token. Its text is in the draft, with
-unfilled simulation percentages. The analyst reports upper-tail rates
-of .0402 in R3 and .0406 in R4, both above .035. The research lead's
-disposition is due before the score is frozen or the amendment merges.
-See the [run report](docs/run_reports/2026-11-17-rl176-build.md) for the
-synthetic checks, unchanged prompt differences, W1 dependency lookup and
-remaining cold-review decisions. This entry records desk work only.
+`b2e01464d`. RL-178 (`004d5f53b`) retains RL-177's three-term decode-only S
+and sets superiority to .0125. The analyst replication matched all 210 counts.
+The registration percentages and power columns are filled, and the fifth print
+includes the per-task length ratio. H.6's 16-token result holds under both tested
+Pydantic versions. The magistrate records the installed version at a close.
+Cold review and freeze are pending. [Run report](docs/run_reports/2026-11-17-rl176-build.md)
 
 **▶▶▶ HANDOFF 2026-10-10 08:40 PDT (magistrate activation cbe4230e, Opus 5.5, headless): BETA ATTEMPT 1 WAS COLLECTED AND IS NOT CLAIM-USABLE, AND STAYS SO. ERRATUM 2 IS ADMITTED. BETA ATTEMPT 2 IS NEXT. THIS BLOCK IS THE MAGISTRATE'S CURRENT STEP LIST. The block of 2026-10-09 15:45 below still gives the sealed objects, the fixed values and its eight numbered differences from the brief, all of which hold; where this block and that one differ, this block wins. The step-by-step authority is still the brief `docs/process_traces/2026-10-07-block5-seal/40-magistrate-brief.md`.**
 
