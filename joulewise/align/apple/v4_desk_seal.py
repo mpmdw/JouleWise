@@ -47,6 +47,7 @@ from pathlib import Path
 import re
 
 WITHHELD = 'withheld_until_series_complete'
+RL176 = 'rl176'
 WITHHELD_PILOT = 'archive/withheld/PILOT.full.json'
 WITHHELD_THERMAL_MD = 'archive/withheld/THERMAL.full.md'   # standalone thermal desk (Sol F1)
 SERIES_MANIFEST = 'configs/campaigns/align_v4/series/series_manifest.json'
@@ -750,6 +751,8 @@ def _seal_extra_w1(extra, plan_members, withhold):
     nonbenign = _nonbenign(plan_members)
     benign_ordinals = {m.get('ordinal') for m in plan_members or () if m.get('run_id') not in nonbenign}
     out = dict(extra)
+    if RL176 in extra:
+        out[RL176] = withheld(extra[RL176])
     if withhold:
         if isinstance(extra.get('balance_check'), dict) and extra['balance_check'].get('status') != WITHHELD:
             out['balance_check'] = seal_balance(extra['balance_check'])
@@ -843,6 +846,8 @@ def _seal_pilot_w1(pilot, plan_members, withhold):
     rows = {m.get('run_id'): m for m in plan_members or ()}
     cells = _cells_of(members, nonbenign)
     out = dict(pilot)
+    if RL176 in pilot:
+        out[RL176] = withheld(pilot[RL176])
 
     def minimum(member):
         member = dict(member)
