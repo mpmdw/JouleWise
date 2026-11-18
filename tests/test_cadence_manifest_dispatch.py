@@ -371,6 +371,68 @@ raise SystemExit(97)
                 with self.assertRaises(dispatch.ManifestError):
                     dispatch.validate_v2(encode(document))
 
+    def test_interim_filler_ids_and_digests_refuse_before_v1_delegation(self):
+        filler = json.loads(INSTRUMENT.read_bytes())["kits"][0]
+        interim = {
+            "schema": dispatch.V1,
+            "look_kind": "interim",
+            "look_id": "lm-interim-01",
+            "status": "committed",
+            "reads": {"blocks": [
+                {"block_id": "dev-01", "phase": "development", "kit_sha256": H},
+                {"block_id": "reserve-01", "phase": "reserve", "kit_sha256": H},
+                {"block_id": "hp-01", "phase": "extension", "kit_sha256": H},
+            ]},
+            "pins": {"schema": {"sha256": filler["sha256"]}},
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            candidate = Path(tmp) / "candidate.json"
+            tool = Path(tmp) / "legacy.py"
+            tool.write_text("print('synthetic legacy delegation')\n", encoding="utf-8")
+            candidate.write_bytes(encode(interim))
+            control = cli(candidate, "--v1-tool", tool, "--final")
+            self.assertEqual((control.returncode, control.stdout), (0, b"synthetic legacy delegation\n"))
+
+            for index, block in enumerate(interim["reads"]["blocks"]):
+                for override in (
+                    {"block_id": filler["kit_id"]},
+                    {"kit_sha256": filler["sha256"]},
+                    {"block_id": filler["kit_id"], "kit_sha256": filler["sha256"]},
+                ):
+                    with self.subTest(phase=block["phase"], override=override):
+                        changed = deepcopy(interim)
+                        changed["reads"]["blocks"][index].update(override)
+                        candidate.write_bytes(encode(changed))
+                        result = cli(candidate, "--v1-tool", tool, "--final")
+                        self.assertEqual((result.returncode, result.stdout), (2, b""))
+                        self.assertIn(b"filler kit", result.stderr)
+
+            changed["look_kind"] = "description"
+            candidate.write_bytes(encode(changed))
+            self.assertEqual(cli(candidate, "--v1-tool", tool, "--final").returncode, 2)
+
+    def test_shared_filler_gate_applies_before_v2_kind_validation(self):
+        registry_path = ROOT / "docs/process/cadence/looks/filler-kit-registry.json"
+        registry = json.loads(registry_path.read_bytes())["kit_sha256_by_id"]
+        for source, collection, digest_field in (
+            (QUALIFICATION, "blocks", "kit_sha256"),
+            (DRAFT, "kits", "sha256"),
+        ):
+            document = json.loads(source.read_bytes())
+            for override in (
+                {digest_field: registry["hp-02"]},
+                {digest_field: registry["f2-stab-16"]},
+                {"queue_class": "filler"},
+                {"kit_id": "f2-inst-99"},
+                {"kit_id": "F0"},
+            ):
+                trial = deepcopy(document)
+                trial["reads"][collection][0].update(override)
+                with self.subTest(source=source.name, override=override), self.assertRaisesRegex(
+                    dispatch.ManifestError, "filler kit"
+                ):
+                    dispatch.validate_v2(encode(trial))
+
     def test_kit_commitments_refuse_relabelling_and_substituted_paths(self):
         transfer = json.loads(DRAFT.read_bytes())
         filler = json.loads(INSTRUMENT.read_bytes())["kits"][0]
@@ -386,8 +448,11 @@ raise SystemExit(97)
         ):
             trial = deepcopy(transfer)
             trial["reads"]["kits"][0].update(substitute)
+            refusal = (
+                "filler kit" if substitute.get("sha256") == filler["sha256"] else "cl-transfer-01.*commitment"
+            )
             with self.subTest(substitute=substitute, status="draft"), self.assertRaisesRegex(
-                dispatch.ManifestError, "cl-transfer-01.*commitment"
+                dispatch.ManifestError, refusal
             ):
                 dispatch.validate_v2(encode(trial))
             trial["status"] = "registered"
@@ -399,7 +464,7 @@ raise SystemExit(97)
                 dispatch.validate_v2(final, final=True, registration=registration)
             valid_final = registered_fixture().replace(dispatch.REGISTRATION_PLACEHOLDER, json.dumps(H).encode())
             with self.subTest(substitute=substitute, status="registration only"), self.assertRaisesRegex(
-                dispatch.ManifestError, "cl-transfer-01.*commitment"
+                dispatch.ManifestError, refusal
             ):
                 dispatch.validate_v2(valid_final, final=True, registration=registration)
 
@@ -423,7 +488,7 @@ raise SystemExit(97)
             dispatch.validate_v2(encode(transfer))
         qualification = json.loads(QUALIFICATION.read_bytes())
         qualification["reads"]["blocks"][0]["kit_sha256"] = filler["sha256"]
-        with self.assertRaisesRegex(dispatch.ManifestError, "kit SHA-256 differs"):
+        with self.assertRaisesRegex(dispatch.ManifestError, "filler kit"):
             dispatch.validate_v2(encode(qualification))
 
     def test_rejects_unused_registration_before_open(self):
