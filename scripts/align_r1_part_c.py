@@ -46,6 +46,7 @@ from collections import defaultdict
 import json
 import math
 from pathlib import Path
+from stat import S_ISDIR, S_ISREG
 
 MAX_TOKENS = 4096                  # frozen turn cap (D-17a); no hold fires at or above it
 G0_LIMIT_S = 1200.0
@@ -319,6 +320,11 @@ def stamp_fresh(age_s):
     return rule(age_s)
 
 
+def _first_turn_reading(start, end, stamps):
+    first = next((stamp for stamp in stamps if stamp > start), None)
+    return first if first is not None and first <= end and first - start <= STAMP_MAX_AGE_S * 1e9 else None
+
+
 def d_bank_start_state(d_bank):
     """OS level 0 and Nominal at G0's and every G1's release sample, and at the first reading after each turn's start."""
     rows, reasons = [], []
@@ -343,7 +349,11 @@ def d_bank_start_state(d_bank):
         if r.get("kind") in ("G0", "G1") and r.get("outcome") == "released":
             row(f"{r['kind']} release" + ("" if r["kind"] == "G0" else f" (turn {r.get('turn')})"), r.get("release_status"))
     for turn in d_bank.get("turns", []):
-        row(f"first reading after turn {turn['index']} start", turn.get("first_reading_after_start"))
+        first = _first_turn_reading(turn["start_ns"], turn["end_ns"], d_bank.get("reading_stamps", ()))
+        status = turn.get("first_reading_after_start")
+        if first is None or not isinstance(status, dict) or status.get("sample_ns") != first:
+            status = None
+        row(f"first reading after turn {turn['index']} start", status)
     has_g0 = any(r.get("kind") == "G0" and r.get("outcome") == "released" for r in d_bank.get("intervals", []))
     if not has_g0:
         reasons.insert(0, "no released G0 sample")
@@ -396,7 +406,8 @@ def _reject_constant(value):
     raise ValueError(f"non-finite JSON constant {value}")
 
 
-def _json_record(text):
+def parse_evidence_json(text):
+    """Decode a wire record without collapsing conflicting JSON members."""
     return json.loads(text, object_pairs_hook=_unique_members, parse_constant=_reject_constant)
 
 
@@ -405,7 +416,7 @@ def _canonical(value):
 
 
 def _read_receipt(segment):
-    value = _json_record((segment / RECEIPT_NAME).read_text(encoding="utf-8"))
+    value = parse_evidence_json((segment / RECEIPT_NAME).read_text(encoding="utf-8"))
     if not isinstance(value, dict):
         raise ValueError("receipt is not a JSON object")
     return value
@@ -420,11 +431,21 @@ def _relative_bundle(name):
     return path
 
 
-def _predecessor_receipt(run_dir):
+def _predecessor_receipt(run_dir, stdout):
+    if not isinstance(stdout, dict):
+        raise ValueError("predecessor stdout receipt is missing")
     saved = _read_receipt(run_dir / "capture_predecessor_30b")
+    if _canonical(saved) != _canonical(stdout):
+        raise ValueError("saved predecessor receipt differs from runtime stdout")
     _relative_bundle(saved["bundle"])
     mode = saved["ac_powermode"]
-    if type(mode) is not int and not (isinstance(mode, str) and mode.strip()):
+    if isinstance(mode, dict):
+        if mode.get("observed_at") != "episode_start" or not isinstance(mode.get("source"), str) or not mode["source"].strip():
+            raise ValueError("invalid predecessor power mode observation")
+        mode = mode.get("value")
+        if type(mode) is not int or mode < 0:
+            raise ValueError("predecessor power mode was not observed")
+    elif not ((type(mode) is int and mode >= 0) or (isinstance(mode, str) and mode.strip())):
         raise ValueError("missing or invalid predecessor ac_powermode")
     if "admitted_turns" in saved and (type(saved["admitted_turns"]) is not int or saved["admitted_turns"] < 1):
         raise ValueError("invalid predecessor admission count")
@@ -453,6 +474,9 @@ def _check_turns(turns, receipt, role):
             raise ValueError(f"invalid evidence for turn {index}")
         if turn["index"] != index or turn["start_ns"] > turn["end_ns"]:
             raise ValueError(f"invalid turn index or bounds for turn {index}")
+        if index and (turn["start_ns"] <= turns[index - 1]["start_ns"]
+                      or turn["start_ns"] < turns[index - 1]["end_ns"]):
+            raise ValueError(f"turn {index} reuses or overlaps an earlier turn's time bounds")
     # The native Step-D receipt has one turn's token totals. The other roles
     # record admissions; the bound X_G runtime does not emit a token total.
     for key, expected, needed in (
@@ -477,6 +501,10 @@ def _check_gate_rows(member, role):
             raise ValueError("gate interval has an invalid kind or turn")
         if (kind == "G0" and turn != 0) or (kind == "G1" and turn == 0):
             raise ValueError("gate interval has an invalid G0/G1 role")
+        if kind in ("G0", "G1") and row["end_ns"] > member["turns"][turn]["start_ns"]:
+            raise ValueError(f"{kind} ends after turn {turn} starts")
+        if kind == "G1" and row["start_ns"] < member["turns"][turn - 1]["end_ns"]:
+            raise ValueError(f"G1 for turn {turn} starts before the previous turn ends")
         token = row["token_count"]
         if (kind == "H" and (type(token) is not int or token <= 0)) or (kind != "H" and token is not None):
             raise ValueError("gate interval has an invalid hold token count")
@@ -585,14 +613,22 @@ def _run_directory(step):
 
 def _check_launch_refusal(segment):
     try:
-        (segment / RECEIPT_NAME).lstat()
+        mode = segment.lstat().st_mode
     except FileNotFoundError:
         return
-    raise ValueError("X_G launch refusal conflicts with a saved receipt")
+    if not S_ISDIR(mode):
+        raise ValueError("X_G launch refusal has an invalid output directory")
+    # A pre-admission refusal may leave the runtime's terminal metadata.
+    # Any other output means the evaluator cannot establish that no member ran.
+    if any(child.name != "runtime_custody.json" or not S_ISREG(child.lstat().st_mode)
+           for child in segment.iterdir()):
+        raise ValueError("X_G launch refusal conflicts with output in its segment")
 
 
-def _adjudicate(step, bank, contrast, launcher_refusal, n_chunk, lines):
+def _adjudicate(step, bank, contrast, launcher_refusal, n_chunk, lines, predecessor, runtime_error):
     """The sole pass decision. Every required evidence check must succeed."""
+    if runtime_error:
+        return "other_failure", {"runtime_receipt": runtime_error}
     issues = {}
 
     def require(name, check, *args):
@@ -616,7 +652,7 @@ def _adjudicate(step, bank, contrast, launcher_refusal, n_chunk, lines):
     except (AttributeError, LookupError, TypeError, ValueError) as error:
         issues["receipts"] = f"{type(error).__name__}: {error}"
     else:
-        require("predecessor_receipt", _predecessor_receipt, root)
+        require("predecessor_receipt", _predecessor_receipt, root, predecessor)
         for role, member in (("step-d", step_member), ("d-bank", bank), ("x-g", contrast)):
             if role != "x-g" or member is not None:
                 require(f"{role}_receipt", _receipt_pair, member, root / SEGMENTS[role])
@@ -624,7 +660,7 @@ def _adjudicate(step, bank, contrast, launcher_refusal, n_chunk, lines):
             require("x_g_launch", _check_launch_refusal, root / SEGMENTS["x-g"])
 
     start, mechanics, x_line = (lines[key] for key in ("d_bank_start_state", "d_bank_mechanics", "x_g"))
-    if start is not None and start["pass"] is not True:
+    if start is not None and start["pass"] is not True and isinstance(bank, dict) and "evidence_error" not in bank:
         return "start_state_failed", issues
     if issues or lines["step_d"]["pass"] is not True or mechanics is None:
         return "other_failure", issues
@@ -638,7 +674,8 @@ def _adjudicate(step, bank, contrast, launcher_refusal, n_chunk, lines):
     return "other_failure", issues
 
 
-def evaluate(*, step_d=None, d_bank=None, n_chunk=None, x_g=None, x_g_not_run_reason=None, printed=None):
+def evaluate(*, predecessor=None, step_d=None, d_bank=None, n_chunk=None, x_g=None, x_g_not_run_reason=None,
+             printed=None, runtime_error=None):
     """Return the Part C table with the verdict from the complete evidence check."""
     def mechanics_line():
         checks = d_bank_mechanics(d_bank, n_chunk)
@@ -653,7 +690,7 @@ def evaluate(*, step_d=None, d_bank=None, n_chunk=None, x_g=None, x_g_not_run_re
                         and x_g_not_run_reason.startswith(("Refusal: ", "RuntimeLaunchError: "))
                         and bool(x_g_not_run_reason.partition(": ")[2].strip()))
     verdict, issues = _adjudicate(step_d if isinstance(step_d, dict) else {}, d_bank, x_g,
-                                  launcher_refusal, n_chunk, lines)
+                                  launcher_refusal, n_chunk, lines, predecessor, runtime_error)
     # RL-152 section 1.4: the slot session's three-turn set clause is not applied here.
     log = [THREE_TURN_CLAUSE_LINE] if d_bank is not None else []
     if x_g is None and launcher_refusal and "x_g_launch" not in issues:
@@ -678,7 +715,7 @@ def _journal(bundle):
     from joulewise.align.apple.thermal_gates import sample_rows
     from joulewise.desk_compress import read_bytes
     text = read_bytes(Path(bundle) / "outputs/align_thermal.jsonl")
-    entries = [_json_record(line) for line in text.splitlines() if line.strip()]
+    entries = [parse_evidence_json(line) for line in text.splitlines() if line.strip()]
     if not entries:
         raise ValueError("thermal journal is empty")
     boundaries = [row["kind"] for row in entries if row["kind"] in ("session_start", "session_end")]
@@ -741,6 +778,7 @@ def _status_with_age(row):
     status = row.get("status")
     status = dict(status) if isinstance(status, dict) else {}
     pm_ns = status.get("pm_observed_ns")
+    status["sample_ns"] = row["monotonic_ns"]
     status["pm_age_s"] = None if type(pm_ns) is not int else (row["monotonic_ns"] - pm_ns) / 1e9
     return status
 
@@ -760,9 +798,17 @@ def facts_from_bundle(bundle, *, role):
         return {"role": role, "bundle_path": str(path), "evidence_error": f"{type(error).__name__}: {error}"}
 
 
+def _episode_payload(text):
+    value = parse_evidence_json(text)
+    flags = value.get("flags") if isinstance(value, dict) else None
+    if not isinstance(flags, list) or not all(isinstance(flag, str) for flag in flags):
+        raise ValueError("episode must explicitly record its flags")
+    return value
+
+
 def _bundle_evidence(bundle, role):
     from joulewise.align.apple.workload import read_episode_bundle
-    ep = read_episode_bundle(bundle)
+    ep = read_episode_bundle(bundle, loads=_episode_payload)
     thermal = ep.hardware["thermal"]
     rows, journal_intervals, journal_flags = _journal(bundle)
     by_ns = {r["monotonic_ns"]: r for r in rows}
@@ -774,9 +820,8 @@ def _bundle_evidence(bundle, role):
     for t in ep.turns:
         # PR #777 row-2 finding 8: the first reading after the start counts only within 2 s of it; a later one
         # (a journal gap at the start) is not the start state, and the sample has no journal row.
-        first = next((x for x in rows if x["monotonic_ns"] > t.start_ns), None)
-        if first is not None and first["monotonic_ns"] - t.start_ns > STAMP_MAX_AGE_S * 1e9:
-            first = None
+        first_ns = _first_turn_reading(t.start_ns, t.end_ns, by_ns)
+        first = by_ns.get(first_ns)
         turns.append({"index": t.index, "start_ns": t.start_ns, "end_ns": t.end_ns, "decode_tokens": t.decode_tokens,
                       "prefill_tokens": t.prefill_tokens,
                       "first_reading_after_start": None if first is None else _status_with_age(first)})

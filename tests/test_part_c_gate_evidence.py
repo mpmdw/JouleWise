@@ -106,18 +106,32 @@ def member_record(root, role, facts, *, save=True):
     member = deepcopy(facts)
     segment = root / pc.SEGMENTS[role]
     member.setdefault("bundle_path", str(segment / "member"))
-    for idx, turn in enumerate(member.setdefault("turns", [])):
-        turn.setdefault("start_ns", (idx + 1) * 100_000_000_000)
-        turn.setdefault("end_ns", turn["start_ns"] + 5_000_000_000)
-        turn.setdefault("prefill_tokens", 50)
+    turns = member.setdefault("turns", [])
+    if turns and all("start_ns" not in turn for turn in turns):
+        for gate in member.get("intervals", []):
+            # Place fixture intervals on separate turn timelines.
+            offset = gate["turn"] * 10_000_000_000_000
+            for key in ("start_ns", "end_ns"):
+                if type(gate.get(key)) is int:
+                    gate[key] += offset
     for row in member.setdefault("intervals", []):
         row.setdefault("token_count", None)
         row.setdefault("exit_sample_ns", row.get("end_ns"))
         row.setdefault("release", deepcopy(STEP["release"]))
         row.setdefault("reference", deepcopy(STEP["reference"]))
         row.setdefault("slope_c_per_min", STEP["slope_c_per_min"])
-    member.setdefault("reading_stamps", sorted({row["exit_sample_ns"] for row in member["intervals"]
-                                                if type(row["exit_sample_ns"]) is int}))
+    stamps = {row["exit_sample_ns"] for row in member["intervals"] if type(row["exit_sample_ns"]) is int}
+    gates = {row["turn"]: row for row in member["intervals"] if row["kind"] in ("G0", "G1")}
+    for i, turn in enumerate(turns):
+        end = gates.get(i, {}).get("end_ns", i * 10_000_000_000_000)
+        turn.setdefault("start_ns", end + 1_000_000_000)
+        turn.setdefault("end_ns", turn["start_ns"] + 5_000_000_000)
+        turn.setdefault("prefill_tokens", 50)
+        status = turn.get("first_reading_after_start")
+        if role == "d-bank" and isinstance(status, dict):
+            sample = status.setdefault("sample_ns", turn["start_ns"] + 1_000_000_000)
+            stamps.add(sample)
+    member.setdefault("reading_stamps", sorted(stamps))
     member.setdefault("episode_flags", [])
     member.setdefault("thermal_flags", [])
     member.setdefault("journal_flags", [])
@@ -156,13 +170,15 @@ def step_record(root, step, n_chunk, *, receipt=None, save=True):
 
 
 def evaluation_inputs(root, *, step_d=STEP, d_bank=None, x_g=None, n_chunk=4096):
-    write_receipt(root / "capture_predecessor_30b", {"bundle": "predecessor", "ac_powermode": "Automatic"})
+    predecessor = {"bundle": "predecessor", "ac_powermode": {
+        "value": 0, "source": "synthetic", "observed_at": "episode_start"}}
+    write_receipt(root / "capture_predecessor_30b", predecessor)
     step = dict(step_d)
     if "member" not in step and all(step.get(key) is not None for key in STEP):
         wait = step["g0_wait_s"]
         if type(wait) in (int, float) and pc._finite(wait):
             step = step_record(root, step, n_chunk)
-    return {"step_d": step,
+    return {"predecessor": predecessor, "step_d": step,
             "d_bank": None if d_bank is None else member_record(root, "d-bank", d_bank),
             "x_g": None if x_g is None else member_record(root, "x-g", x_g),
             "n_chunk": n_chunk}
@@ -291,6 +307,31 @@ class PartCEvidenceReconciliationTests(unittest.TestCase):
             with self.subTest(damage=damage):
                 self.assertEqual(evaluate_world(step_d={**STEP, **damage})["verdict"], "other_failure")
 
+    def test_reused_start_time_cannot_hide_a_hot_turn(self):
+        with TemporaryDirectory() as tmp, evaluator_world():
+            root = Path(tmp)
+            inputs = evaluation_inputs(root, d_bank=clean_facts(), x_g=clean_facts(contrast=True))
+            turns = inputs["d_bank"]["turns"]
+            turns[2]["first_reading_after_start"]["os_level"] = 2
+            self.assertEqual(pc.evaluate(**inputs)["verdict"], "start_state_failed")
+            # Reproject the benign sample which the changed start would select.
+            turns[2]["start_ns"] = turns[1]["start_ns"]
+            turns[2]["first_reading_after_start"] = deepcopy(turns[1]["first_reading_after_start"])
+            result = pc.evaluate(**inputs)
+            self.assertEqual(result["verdict"], "other_failure")
+            self.assertIn("overlaps", result["evidence_failures"]["d_bank"])
+
+    def test_admission_gate_must_finish_before_its_turn(self):
+        with TemporaryDirectory() as tmp, evaluator_world():
+            inputs = evaluation_inputs(Path(tmp), d_bank=clean_facts(), x_g=clean_facts(contrast=True))
+            bank = inputs["d_bank"]
+            turn = bank["turns"][2]
+            turn["start_ns"] = bank["intervals"][2]["end_ns"] - 1
+            turn["first_reading_after_start"]["sample_ns"] = bank["intervals"][2]["exit_sample_ns"]
+            result = pc.evaluate(**inputs)
+            self.assertEqual(result["verdict"], "other_failure")
+            self.assertIn("ends after turn 2 starts", result["evidence_failures"]["d_bank"])
+
 
 def evidence_paths(value, prefix=()):
     """Visit every child, including whole rows and empty containers."""
@@ -351,7 +392,7 @@ class PartCMutationTests(unittest.TestCase):
                 for at, value in evidence_paths(saved):
                     path.write_text(json.dumps(change_evidence(saved, at)), encoding="utf-8")
                     rejected(("delete receipt field", segment, at))
-                    if segment != "capture_predecessor_30b" and type(value) in (int, float):
+                    if type(value) in (int, float):
                         path.write_text(json.dumps(change_evidence(saved, at, value + 1)), encoding="utf-8")
                         rejected(("perturb receipt field", segment, at))
                 path.write_text(original, encoding="utf-8")
