@@ -39,19 +39,17 @@ def midnight(day):
     return int(datetime.combine(day, time.min, ZONE).timestamp())
 
 
-def date_places(windows, transfer_t0s, *, freeze_date: date, as_of, final_window_known=False):
+def date_places(windows, transfer_t0s, *, freeze_date: date, as_of):
     """Map eligible dates to the first 20 ordinal places and their supporting attempt IDs.
 
-    A running rollover can suppress its originating date, but it gives no close date until
-    the structural close exists. A final rollover beyond the series' last t0-date requires
-    a ruling at the point that cutoff is applicable.
+    A running rollover can suppress its originating date. Its close date replaces the
+    originating date when the structural close exists, including for the last window.
     """
     attempts = set()
     eligible = {}
     served = {local_day(t0) for t0 in transfer_t0s if t0 <= as_of}
     starts = [window for window in windows
               if window.kind in WINDOW_KINDS and window.t0 is not None and window.t0 <= as_of]
-    last_t0 = max((local_day(window.t0) for window in starts), default=None)
     for window in starts:
         if window.attempt_id in attempts:
             raise ValueError("use one structural record per window attempt")
@@ -71,8 +69,6 @@ def date_places(windows, transfer_t0s, *, freeze_date: date, as_of, final_window
             eligible.setdefault(day, set()).add(window.attempt_id)
 
     ordered = sorted(eligible)[:MAX_DATES]
-    if final_window_known and any(day > last_t0 for day in ordered):
-        raise ValueError("NEEDS_SPEC: final window's substitute close date falls after the last t0-date")
     return {day: (place, tuple(sorted(eligible[day]))) for place, day in enumerate(ordered, 1)}
 
 

@@ -19,14 +19,13 @@ issue queue after all applicable gates pass.
    A forecast, READY or a pre-t0 refusal supplies no t0. Distinct windows
    on one date share one opportunity. If a window holds the host at
    midnight and there was no transfer t0 on its start date, its actual
-   close date qualifies in its place. Count that window once. Where the
-   last window's substituted date falls after the series' last t0-date,
-   hold that opportunity for the ruling in [NEEDS_SPEC](README.md#needs_spec).
+   close date qualifies in its place, including for the final window.
+   Count that window once (RL-183 §3.1).
 3. Record the date and opportunity status in ordinal order, including
    misses, and retain the supporting window attempt IDs. An unserved
-   eligible date spends its place. Close the series at the earlier of
-   the cap and the series' last eligible window opportunity, subject to
-   the terminal rollover ruling. The span's effective t0 itself sets its
+   eligible date spends its place. Close the series at the 20th place or
+   with the last date that the series' last window makes eligible. The
+   span's effective t0 itself sets its
    analysis date. A span that took t0 on its date may finish after midnight.
 4. Fill the issue identity, timestamp and Check pointer. Bind the exact
    latest predecessor and authenticated proven close, kit path/hash, the

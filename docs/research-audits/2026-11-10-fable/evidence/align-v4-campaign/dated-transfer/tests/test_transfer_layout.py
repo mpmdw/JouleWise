@@ -91,10 +91,24 @@ class DateTests(unittest.TestCase):
                                      freeze_date=self.day, as_of=self.boundary + 200),
                          {self.day: (1, ("C-cross",)), self.next_day: (2, ("T-close-date",))})
 
-    def test_final_window_rollover_holds_for_ruling(self):
-        cross = Window("T-final", "T", self.boundary - 120, self.boundary + 90, True)
-        with self.assertRaisesRegex(ValueError, "NEEDS_SPEC"):
-            date_places([cross], (), freeze_date=self.day, as_of=self.boundary + 200, final_window_known=True)
+    def test_final_window_replaces_place_twenty_at_midnight(self):
+        dates = [self.day + timedelta(days=i) for i in range(21)]
+        earlier = [Window(f"C-{i}", "C", midnight(day) + 3600) for i, day in enumerate(dates[:19], 1)]
+        start_day, close_day = dates[19:]
+        boundary = midnight(close_day)
+        crossing = Window("T-final", "T", boundary - 120, boundary + 90, True)
+        windows = [*earlier, crossing]
+
+        pending = date_places(windows, (), freeze_date=self.day, as_of=boundary + 1)
+        self.assertEqual(list(pending), dates[:19])
+        rolled = date_places(windows, (), freeze_date=self.day, as_of=boundary + 90)
+        self.assertEqual(list(rolled), [*dates[:19], close_day])
+        self.assertEqual(rolled[close_day], (20, ("T-final",)))
+        self.assertNotIn(start_day, rolled)
+
+        served = date_places(windows, (boundary - 300,), freeze_date=self.day, as_of=boundary + 90)
+        self.assertEqual(served[start_day], (20, ("T-final",)))
+        self.assertNotIn(close_day, served)
 
     def test_cap_and_missed_dates_keep_original_ordinals(self):
         days = [self.day + timedelta(days=i) for i in range(25)]
@@ -141,7 +155,7 @@ class LookTests(unittest.TestCase):
         doc = load(manifest)
         validate_draft(doc, manifest)
         doc["estimate"]["interval"]["series"] = "absolute_daily_error"
-        with self.assertRaisesRegex(ValueError, "signed daily interval"):
+        with self.assertRaisesRegex(ValueError, "signed_daily_error"):
             validate_draft(doc, manifest)
 
     def test_only_two_words_and_three_hashes(self):

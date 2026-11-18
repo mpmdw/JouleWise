@@ -10,7 +10,8 @@
     "RL-175 B.4",
     "RL-179 F-12 and rows 7, 26–28",
     "RL-180 rows 3–8 and 10",
-    "RL-181 §§1.0, 1.2, 1.5, 3 and register rows 1, 4, 5, 7, 13–15"
+    "RL-181 §§1.0, 1.2, 1.5, 3 and register rows 1, 4, 5, 7, 13–15",
+    "RL-183 §3 and register rows 13–14"
   ],
   "registered_paths": {
     "manifest": "docs/process/cadence/looks/lm-transfer-01.json",
@@ -18,7 +19,7 @@
   },
   "registration": {
     "before": "On main with ledger status registered before the first transfer arm.",
-    "final": "On main before reservation. Keep registration bytes identical outside PENDING:CODE slots.",
+    "final": "On main before reservation. Preserve the exact registration bytes outside its code hash slots.",
     "review": "One cold pass by Fable before the terminal read."
   },
   "reads": {
@@ -132,14 +133,14 @@
     "max_dates": 20,
     "max_legs": 120,
     "leg_budget": "Transfer only. No replacements or reserve legs. Campaign cap remains 132.",
-    "opportunity": "First distinct local dates of authenticated W1/C/T starts from effective freeze 2, including re-arms and reserves. An abort after t0 counts. A midnight-crossing window that still holds the host and had no transfer t0 on its start date contributes its actual close date in place of the start date. One window gives at most one block and two windows on a date give one block.",
-    "stop": "Earlier of the 20th place and the last W1/C/T t0-date under RL-181 §3.1. The terminal midnight substitution interaction is held for NEEDS_SPEC. Misses spend their ordinal and are never made up.",
+    "opportunity": "First distinct local dates of authenticated W1/C/T starts from effective freeze 2, including re-arms and reserves. An abort after t0 counts. A midnight-crossing window that still holds the host and had no transfer t0 on its start date contributes its actual close date in place of the start date. One window gives at most one block and two windows on a date give one block. This substitution also applies to the final window.",
+    "stop": "End at the 20th place or with the last date that the series' last W1, C or T window makes eligible under RL-181 §3.2 as amended by RL-183 §3.1. Misses spend their ordinal and are never made up.",
     "when": "One terminal read after the last place is served or expired and the required desks, hand-table sample and Q1 records are final.",
     "stage1": "Commit an operational-only date map keyed by roster ordinal. Carry every eligible date, structural window authority, actual span t0-date, kit/roster identity, served or missed status, and each leg attempt disposition. Authenticate the committed stage-1 roster by SHA-256 before stage 2.",
     "freeze2": {
       "look_id": "lm-interim-01",
       "hash_key": "freeze2_sha256",
-      "authority": "Obtain the coefficient SHA-256 from effective freeze 2 on main with twin_agrees = yes, or the research lead's named freeze-2 hash. Authenticate exact coefficient bytes in place before prediction."
+      "authority": "Use the shared freeze-2 reader under RL-183 §2.3. It authenticates the main-branch public hash and effective twin word or named ruling before returning the in-place coefficient bytes."
     }
   },
   "inclusion": {
@@ -181,13 +182,41 @@
     "support": "Zero evaluable dates gives neither point nor interval. One date gives the point only.",
     "comparison_only_abs_error_cutoff": 0.02,
     "restricted_prints": [
-      "daily signed and absolute errors",
-      "evaluable date count",
-      "largest absolute daily error",
-      "count of absolute daily errors at or below 0.02",
-      "mean of signed daily errors and its interval",
-      "pooled signed error over every included hot block on every date",
-      "date map including misses and non-evaluable dates"
+      {
+        "id": "daily_errors",
+        "description": "daily signed and absolute errors",
+        "destination": "scores.json"
+      },
+      {
+        "id": "evaluable_dates",
+        "description": "evaluable date count",
+        "destination": "scores.json"
+      },
+      {
+        "id": "largest_absolute_daily_error",
+        "description": "largest absolute daily error",
+        "destination": "scores.json"
+      },
+      {
+        "id": "days_within_comparison_cutoff",
+        "description": "count of absolute daily errors at or below 0.02",
+        "destination": "scores.json"
+      },
+      {
+        "id": "mean_signed_error_and_interval",
+        "description": "mean of signed daily errors and its interval",
+        "destination": "scores.json"
+      },
+      {
+        "id": "pooled_signed_error",
+        "description": "pooled signed error over every included hot block on every date",
+        "destination": "scores.json"
+      },
+      {
+        "id": "date_map",
+        "description": "date map including misses and non-evaluable dates",
+        "destination": "scores.json"
+      }
     ],
     "pair_description": "Pair contrasts are descriptive. Span position was constant."
   },
@@ -216,7 +245,15 @@
       "path": "docs/process/cadence/looks/lm-transfer-01.output.schema.json",
       "sha256": "PENDING:CODE"
     },
-    "predictor_equivalence": "If the predict path hash differs from the admitted interim pin, the lead commits and pins evidence that type-A predictions are byte equal on every interim-scored segment, with one generated coefficient set. Any difference returns to Fable before stage 2."
+    "predictor_equivalence": "If the predict path hash differs from the admitted interim pin, the lead commits and pins evidence that type-A predictions are byte equal on every interim-scored segment, with one generated coefficient set. Any difference returns to Fable before stage 2.",
+    "validator": {
+      "path": "joulewise/cadence_looks/manifest_dispatch.py",
+      "sha256": "PENDING:CODE"
+    },
+    "schema_validator": {
+      "path": "joulewise/cadence_looks/qualification_manifest.py",
+      "sha256": "PENDING:CODE"
+    }
   },
   "outputs": {
     "public_file": "PUBLIC.json",
@@ -257,7 +294,8 @@
       ],
       "exit_status": 1,
       "behavior": "Exactly two newline-terminated lines on original stderr. Stdout empty. No public file on failure. Lead records failed status and error_type in the ledger."
-    }
+    },
+    "pre_read_refusal_exit_status": 2
   },
   "reservation": {
     "host": "Bind execution_host in the committed ledger and check local host before reservation.",
@@ -270,6 +308,7 @@
     "Masked-hash invariance: precommitted roster stays fixed and identical public enums with pinned hashes give byte-identical public output when restricted numbers change.",
     "Signed daily interval, equal date weight, one/zero-date support, both native L tails and channel-specific guards.",
     "Exact post-read stderr bytes with Leak_123_456 mapped to OtherError. No stdout or public file.",
-    "Wrong host, concurrent reservation and spent-ID refusal before the first scoring input open."
+    "Wrong host, concurrent reservation and spent-ID refusal before the first scoring input open.",
+    "A refusal before the first read exits 2; post-read status 1 follows only the two-line notice."
   ]
 }
