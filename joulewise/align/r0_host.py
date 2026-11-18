@@ -131,14 +131,15 @@ class QuietGuard:
 
     After that admission a daemon thread repeats the census and takes a CPU
     snapshot every SNAPSHOT_CADENCE_S; it only stores what it saw (or the
-    first failure). Each admission repeats the agent census. Active-work
+    first failure). Each admission repeats the full census and uses the
+    admitted guard's caller snapshots alongside the background windows. Active-work
     polling keeps the existing throttle. The caller judges, for every
     snapshot stored since the last judged one, the window
     from the newest snapshot at least INTERVAL_S earlier (sliding windows,
     so a burst shorter than one cadence always falls wholly inside one 30 s
     window and no stretch of time escapes judgement). A stored failure, a
     stalled sampler or a window longer than MAX_WINDOW_S refuses.
-    Under R0-L3, contention in a judged window is recorded and flagged.
+    Contention in a judged window is recorded and blocks publication.
     finish() stops sampling and judges the final state before success can
     be published. An unfinished census at the join bound is indeterminate.
     """
@@ -165,8 +166,11 @@ class QuietGuard:
         self.last = float("-inf")
         self._clock_last = float("-inf")
         self._clock_lock = threading.Lock()
+        self._cpu_probe_lock = threading.Lock()
         self._snapshots = []
-        self._peak_counters = {}  # pid -> (start identity, highest observed CPU)
+        self._admission_snapshots = []
+        self._admission_previous_over = {}
+        self._process_history = {}  # pid -> (start identity, highest CPU, contaminant matches)
         self._previous_over = {}
         # Index into _snapshots of the snapshot that closed the last judged
         # window (or the first snapshot before admission).
@@ -181,6 +185,7 @@ class QuietGuard:
         self.failure = None
         self.receipts = []
         self.contention_flags = []
+        self._flagged_windows = set()
 
     @staticmethod
     def _empty_pending():
@@ -194,11 +199,11 @@ class QuietGuard:
             self._clock_last = now
             return now
 
-    def _cpu_snapshot(self, *, census_summary=None):
+    def _read_cpu_snapshot(self, *, include_host):
         started = self._now()
         wall = self.wall_clock_ns()
         host = host_error = None
-        if self.host_reader is not None:
+        if include_host and self.host_reader is not None:
             try:
                 host = [list(cpu) for cpu in self.host_reader()]
             except Exception as exc:
@@ -233,12 +238,34 @@ class QuietGuard:
                                               ("args", args.get(row["pid"], "")))
                 if re.search(prewindow.CONTAMINANTS, value, re.I)]
             row["contaminant"] = bool(row["contaminant_matches"])
-        snapshot = contention.Snapshot(
+        return contention.Snapshot(
             Stamp(wall, int(started * 1e9), int(started * 1e9)),
             Stamp(finished_wall, int(finished * 1e9), int(finished * 1e9)), rows, None,
             host=host, host_error=host_error)
-        with self._snapshot_lock:
-            backwards = snapshot.finished.wall_ns < wall
+
+    def _cpu_snapshot(self, *, census_summary=None, admission=False):
+        with self._cpu_probe_lock:
+            snapshot = self._read_cpu_snapshot(include_host=not admission)
+            with self._snapshot_lock:
+                self._remember_cpu_snapshot(snapshot, census_summary=census_summary, admission=admission)
+        return snapshot
+
+    def _remember_cpu_snapshot(self, snapshot, *, census_summary, admission):
+        rows = snapshot.rows
+        for (pid, start), row in rows.items():
+            cpu = row["cumulative_cpu_seconds"]
+            matches = set(row["contaminant_matches"])
+            prior_start, prior_cpu, prior_matches = self._process_history.get(pid, (None, 0, ()))
+            if prior_start == start:
+                matches.update(prior_matches)
+                if prior_cpu > cpu:
+                    row["peak_cpu_seconds"] = prior_cpu
+                    cpu = prior_cpu
+                row["contaminant_matches"] = sorted(matches)
+                row["contaminant"] = bool(matches)
+            self._process_history[pid] = (start, cpu, matches)
+        if not admission:
+            backwards = snapshot.finished.wall_ns < snapshot.started.wall_ns
             if self._snapshots:
                 previous = self._snapshots[-1]
                 backwards = backwards or snapshot.started.wall_ns < previous.finished.wall_ns
@@ -248,33 +275,25 @@ class QuietGuard:
                             "pid": identity[0], "start": identity[1],
                             "command": rows[identity]["command"], "reason": "counter regressed",
                             "contaminant": rows[identity]["contaminant"] or previous.rows[identity]["contaminant"]})
-            for (pid, start), row in rows.items():
-                cpu = row["cumulative_cpu_seconds"]
-                prior_start, prior_cpu = self._peak_counters.get(pid, (start, cpu))
-                if prior_start == start and prior_cpu > cpu:
-                    row["peak_cpu_seconds"] = prior_cpu
-                else:
-                    self._peak_counters[pid] = (start, cpu)
             self._pending["wall_clock_backwards"] |= backwards
             self._snapshots.append(snapshot)
             if census_summary is not None:
                 # A consumer sees the snapshot and its census together.
                 self._pending["census"].append({
                     "monotonic_s": snapshot.midpoint_ns / 1e9, **census_summary})
-        return snapshot
 
     def _probe(self, argv):
         result = self.run(argv, capture_output=True, text=True, timeout=15)
         return ProbeResult(argv, result.returncode, result.stdout, result.stderr, time.monotonic_ns())
 
-    def _agent_census(self, receipt, *, field="agent"):
+    def _agent_census(self, receipt):
         agent = self._probe(R0_AGENT_CENSUS_ARGV)
         if type(agent.exit_code) is not int or not isinstance(agent.stdout, str) or not isinstance(agent.stderr, str):
             raise Refused("agent census returned malformed probe result")
         agent = decide_census(agent)
-        receipt[field] = asdict(agent)
+        receipt["agent"] = asdict(agent)
         if agent.exit_code != 1 or agent.stdout.strip():
-            raise Refused(f"agent census refused ({field}): {receipt[field]}")
+            raise Refused(f"agent census refused: {receipt['agent']}")
 
     def _census(self, receipt):
         fs = measurement_liveness.census_fs
@@ -382,17 +401,18 @@ class QuietGuard:
             raise self._record_refusal(receipt, exc) from exc
 
     def verify_publication(self):
-        """Take a fresh agent census at the point that a pass can be published."""
+        """Take a fresh census at the point that a pass can be published."""
         if self.failure:
             raise Refused(self.failure)
         receipt = {}
         try:
             receipt["monotonic_s"] = self._now()
-            self._agent_census(receipt, field="publication_agent")
+            self._census(receipt)
+            self._admission_interval(receipt)
         except Exception as exc:
             raise self._record_refusal(receipt, exc) from exc
         if self.receipts:
-            self.receipts[-1]["publication_agent"] = receipt["publication_agent"]
+            self.receipts[-1]["publication_census"] = receipt
         else:
             self.receipts.append(receipt)
 
@@ -401,6 +421,45 @@ class QuietGuard:
 
     def __exit__(self, exc_type, exc, traceback):
         self.close()
+
+    def _record_cpu_flags(self, receipt, details, busy):
+        if not busy:
+            return
+        interval = {key: details[key] for key in ("start_monotonic_s", "end_monotonic_s", "elapsed_s")}
+        fresh = []
+        for row in busy:
+            key = (interval["start_monotonic_s"], interval["end_monotonic_s"], row["pid"], row["start"])
+            if key not in self._flagged_windows:
+                self._flagged_windows.add(key)
+                fresh.append(row)
+        if fresh:
+            names = ", ".join(f"{row['pid']} {row['command']} {row['cpu_s_per_s']:.6g} CPU-s/s" for row in fresh)
+            flag = f"contaminating CPU contention: {names}"
+            details["contention_flag"] = flag
+            receipt.setdefault("contention_flag", flag)
+            self.contention_flags.append({"monotonic_s": receipt.get("monotonic_s", interval["end_monotonic_s"]),
+                                          "flag": flag, "interval": interval, "busy": fresh})
+
+    def _admission_interval(self, receipt, current=None):
+        if current is None:
+            current = self._cpu_snapshot(admission=True)
+        # L3 chooses the newest eligible earlier *admission*. Daemon samples
+        # cannot replace that opening or its previous-over-limit evidence.
+        samples = self._admission_snapshots
+        dwell_ns = prewindow.INTERVAL_S * 1_000_000_000
+        start = next((i for i in range(len(samples) - 1, -1, -1)
+                      if current.midpoint_ns - samples[i].midpoint_ns >= dwell_ns), None)
+        if start is not None:
+            details = {"regressed_counters": [], "regressed_noncontaminant": []}
+            busy = self._judge_cpu_interval(samples[start], current, details, intermediate=(),
+                                           previous_over=self._admission_previous_over)
+            self._record_cpu_flags(receipt, details, busy)
+            receipt.setdefault("admission_cpu_intervals", []).append(details)
+            del samples[:start]
+        if not samples or samples[-1].midpoint_ns != current.midpoint_ns:
+            samples.append(current)
+        else:
+            samples[-1] = current
 
     def _cpu_interval(self, receipt):
         details = {"regressed_counters": [], "regressed_noncontaminant": []}
@@ -438,18 +497,7 @@ class QuietGuard:
                     raise Refused(
                         f"census indeterminate: judged CPU window of {interval_details['elapsed_s']:.1f} s "
                         f"exceeds {self.MAX_WINDOW_S:g} s (background snapshots stalled)")
-                if interval_busy:
-                    names = ", ".join(f"{row['pid']} {row['command']} {row['cpu_s_per_s']:.6g} CPU-s/s"
-                                      for row in interval_busy)
-                    flag = f"contaminating CPU contention: {names}"
-                    interval_details["contention_flag"] = flag
-                    receipt.setdefault("contention_flag", flag)
-                    self.contention_flags.append({
-                        "monotonic_s": receipt.get("monotonic_s", interval_details["end_monotonic_s"]),
-                        "flag": flag,
-                        "interval": {key: interval_details[key]
-                                     for key in ("start_monotonic_s", "end_monotonic_s", "elapsed_s")},
-                        "busy": interval_busy})
+                self._record_cpu_flags(receipt, interval_details, interval_busy)
         finally:
             for row in pending["regressed_counters"]:
                 for key in ("regressed_counters", "regressed_noncontaminant"):
@@ -479,11 +527,14 @@ class QuietGuard:
                 raise Refused(f"census indeterminate: background snapshots stalled ({lag:.1f} s since the last)")
         return busy
 
-    def _judge_cpu_interval(self, opening, current, details, *, intermediate):
+    def _judge_cpu_interval(self, opening, current, details, *, intermediate, previous_over=None):
         limit = prewindow.CPU_LIMIT_PERCENT / 100
+        admission = previous_over is not None
+        prior = previous_over if admission else self._previous_over
+
         def measure(before, after):
             return contention.interval(before, after, tree_roots=(), include_kernel_task=True,
-                                       limit=limit, previous_over=self._previous_over)
+                                       limit=limit, previous_over=prior)
 
         raw = measure(opening, current)
         # Keep the raw regression diagnostics and historical exit fallback.
@@ -521,8 +572,9 @@ class QuietGuard:
         # An unproven regression alone is disclosure.
         if measured["error"] and measured["error"] != contention.REGRESSED_COUNTER_ERROR:
             raise Refused(f"census indeterminate: {measured['error']}")
-        self._previous_over = {identity: rate for identity, rate in contention.over_limit(measured).items()
-                               if identity in matches}
+        observed_over = contention.over_limit(raw if admission else measured)
+        prior.clear()
+        prior.update((identity, rate) for identity, rate in observed_over.items() if identity in matches)
         for row in measured["outside_listed"]:
             if contaminant(row) and row["cpu_s_per_s"] > contention.REPORT_FLOOR_CPU_S_PER_S:
                 details["contaminants"].append({
@@ -532,6 +584,11 @@ class QuietGuard:
                     "cpu_s_per_s": row["cpu_s_per_s"]})
         direct = {(row["pid"], row["start"]): row for row in measured["outside_over_limit"]
                   if "basis" not in row and contaminant(row)}
+        if admission and measured is not raw:
+            for row in raw["outside_over_limit"]:
+                if "basis" not in row and contaminant(row):
+                    direct.setdefault((row["pid"], row["start"]),
+                                      {**row, "basis": "admitted R0-L3 counter decision"})
         exits = {(row["pid"], row["start"]): row for row in raw["exited_over_limit"] if contaminant(row)}
         for row in _interior_exit_evidence(peak_opening, current, intermediate, measured["elapsed_s"], limit):
             exits[row["pid"], row["start"]] = row
@@ -555,22 +612,25 @@ class QuietGuard:
                 return
             receipt["monotonic_s"] = now
             self.receipts.append(receipt)
+            current = None
             if self._sampler is None:
                 self._census(receipt)
                 if not self._snapshots:
                     first = self._cpu_snapshot()
+                    self._admission_snapshots.append(first)
                     # A mid-baseline snapshot: the daemon's first window
                     # (ending one cadence after admission) opens here, so it
                     # is 30 s, not 45 s (cold MEDIUM-1).
                     self.sleep(prewindow.INTERVAL_S / 2)
                     self._cpu_snapshot()
                     self.sleep(prewindow.INTERVAL_S / 2)
-                    self._cpu_snapshot()
+                    current = self._cpu_snapshot()
                     # Preserve the first forced call's full baseline wait.
-                    if self._snapshots[-1].midpoint_ns - first.midpoint_ns < prewindow.INTERVAL_S * 1e9:
+                    if current.midpoint_ns - first.midpoint_ns < prewindow.INTERVAL_S * 1e9:
                         raise Refused("census indeterminate: initial CPU baseline shorter than 30 s")
             self._cpu_interval(receipt)
-            self._agent_census(receipt, field="admission_agent")
+            self._census(receipt)
+            self._admission_interval(receipt, current)
             self.last = self._now()
             self._start_sampler()
         except Exception as exc:

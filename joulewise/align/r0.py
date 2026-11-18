@@ -752,8 +752,8 @@ def markdown(report):
         lines.append(f"| {row['check']} | {row.get('model', 'host')} | {row['status']} | {row.get('check_seconds', 0):.3f} |")
     contention = report.get("contention")
     if contention:
-        # R0-L3: background CPU contention is recorded and flagged, not fatal.
-        lines.extend(["", "## Contention (R0-L3: recorded, not fatal)", "",
+        # Guard flags block publication. SMC keeps its own capture policy.
+        lines.extend(["", "## Contention (R0-L3 guard flags block publication)", "",
                       f"SMC capture contended: **{contention['smc_contended']}**. "
                       f"SMC redos for sustained contention (largest single process >=0.5 cores for 60 s): {contention['smc_redo']}. "
                       f"SMC intervals flagged: {contention['smc_flagged_intervals']}.",

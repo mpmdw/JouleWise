@@ -331,6 +331,23 @@ class R0ChecksTest(unittest.TestCase):
             self.assertEqual(closed, [True])
             self.assertFalse(refused_output.exists())
 
+    def test_inventory_withholds_output_on_a_guard_flag(self):
+        class Flagged(FakeGuard):
+            contention_flags = [{"flag": "synthetic CPU contention"}]
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            config = root / "config.json"
+            config.write_text(json.dumps(config_at(root)))
+            hashed = root / "hashed"
+            hashed.mkdir()
+            (hashed / "a").write_bytes(b"abc")
+            output = root / "inventory.json"
+            code = main(["--config", str(config), "--output", str(output), "--inventory", str(hashed)],
+                        guard_factory=Flagged, lock_path=root / "r0.lock")
+            self.assertEqual(code, 2)
+            self.assertFalse(output.exists())
+
     def test_coherence_format_and_echo_are_diagnostics_but_nll_is_a_bar(self):
         from dataclasses import replace
         class Backend(FakeBackend):
@@ -462,7 +479,7 @@ class R0ChecksTest(unittest.TestCase):
             self.assertEqual(result["status"], "refused")
             self.assertEqual(json.loads((root / "report.json").read_text())["status"], "refused")
 
-    def test_r0l3_guard_and_smc_contention_are_recorded_flagged_and_not_fatal(self):
+    def test_r0l3_guard_flags_block_publication_and_smc_evidence_is_retained(self):
         class Contended(FakeGuard):
             # Once armed, every census records a flag (QuietGuard under R0-L3).
             armed = False
@@ -484,7 +501,8 @@ class R0ChecksTest(unittest.TestCase):
                     patch.object(r0, "template_rewrites", side_effect=template):
                 report = execute(config_at(root), root, ["smc", "template"], ["D"],
                                  guard=guard, backend_factory=FakeBackend)
-            self.assertEqual(report["status"], "pass")
+            self.assertEqual(report["status"], "refused")
+            self.assertIn("R0-L3 contention flagged", report["refusal"])
             template_row = next(r for r in report["checks"] if r["check"] == "template")
             self.assertEqual(len(guard.contention_flags), 1)  # the census after the armed unit
             self.assertEqual(template_row["contention_flags"], guard.contention_flags)
@@ -495,7 +513,7 @@ class R0ChecksTest(unittest.TestCase):
                              [{"check": "template", "model": "D", "flags": 1}])
             self.assertEqual(json.loads((root / "report.json").read_text())["contention"], report["contention"])
             markdown = (root / "report.md").read_text()
-            self.assertIn("## Contention (R0-L3: recorded, not fatal)", markdown)
+            self.assertIn("## Contention (R0-L3 guard flags block publication)", markdown)
             self.assertIn("SMC capture contended: **True**", markdown)
             self.assertIn("- template (D): 1 guard flag(s)", markdown)
 

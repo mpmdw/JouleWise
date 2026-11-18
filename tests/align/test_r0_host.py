@@ -98,7 +98,7 @@ class R0HostTest(unittest.TestCase):
                            clock=clock, sleep=clock.sleep, host_reader=None)
         self.addCleanup(guard.close)
         guard.check(force=True)
-        self.assertEqual(calls, [{"parents": [self.default_parent, explicit], "strict": True}])
+        self.assertEqual(calls, [{"parents": [self.default_parent, explicit], "strict": True}] * 2)
         self.assertEqual(len(guard.receipts), 1)
 
     def test_missing_configured_parent_refuses_with_path_and_errno(self):
@@ -769,7 +769,7 @@ class R0SamplerAdmissionSpec(unittest.TestCase):
                          [45])
         self.assertEqual([window["end_monotonic_s"] for window in receipt["cpu_intervals"]],
                          [45, 105])
-        self.assertEqual(launchctl_at, [0, 45, 105, 120])
+        self.assertEqual(launchctl_at, [0, 30, 45, 105, 120])
 
     def test_early_busy_window_allows_later_windows_and_their_censuses(self):
         guard, _, advance, launchctl_at = self.admission()
@@ -784,7 +784,7 @@ class R0SamplerAdmissionSpec(unittest.TestCase):
                          [45, 60, 75, 90])
         self.assertEqual([flag["interval"]["end_monotonic_s"] for flag in guard.contention_flags],
                          [45, 60])
-        self.assertEqual(launchctl_at, [0, 45, 60, 75, 90])
+        self.assertEqual(launchctl_at, [0, 30, 45, 60, 75, 90, 90])
         self.assertIsNone(guard.failure)
 
     def test_invalid_background_census_still_refuses_after_contention(self):
@@ -816,7 +816,7 @@ class R0SamplerAdmissionSpec(unittest.TestCase):
                 for at in range(45, 331, 15):
                     advance(at)
                 guard.check(force=True)
-                self.assertEqual(launchctl_at, [0, *range(45, 331, 15)])
+                self.assertEqual(launchctl_at, [0, 30, *range(45, 331, 15), 330])
                 self.assertEqual(sum(clock.sleeps), prewindow.INTERVAL_S)
                 self.assertEqual(len(guard.receipts[-1]["cpu_intervals"]), 20)
                 self.assertEqual([flag["interval"]["end_monotonic_s"] for flag in guard.contention_flags],
@@ -828,8 +828,8 @@ class R0SamplerAdmissionSpec(unittest.TestCase):
         from joulewise.align import r0_runner
         from tests.align.test_r0_checks import FakeBackend
 
-        for last, status in ((60, "pass"), (105, "refused")):
-            with self.subTest(status=status), tempfile.TemporaryDirectory() as tmp:
+        for last, reason, expected_flags in ((60, "R0-L3 contention flagged", 2), (105, "exceeds", 1)):
+            with self.subTest(last=last), tempfile.TemporaryDirectory() as tmp:
                 root = Path(tmp)
                 guard, _, advance, _ = self.admission()
                 def host():
@@ -843,11 +843,12 @@ class R0SamplerAdmissionSpec(unittest.TestCase):
                                      return_value={"status": "unknown"}):
                     report = r0_runner.execute(config_at(root), root, ["host"], ["D"],
                                                guard=guard, backend_factory=FakeBackend)
-                self.assertEqual(report["status"], status)
-                self.assertEqual(report["checks"][0]["status"], status)
+                self.assertEqual(report["status"], "refused")
+                self.assertEqual(report["checks"][0]["status"], "refused")
+                self.assertIn(reason, report["refusal"])
                 self.assertEqual(report["checks"][0]["contention_flags"][0]["interval"]["end_monotonic_s"], 45)
-                self.assertEqual(report["contention"]["guard_flags"], 2 if status == "pass" else 1)
-                self.assertEqual(json.loads((root / "report.json").read_text())["status"], status)
+                self.assertEqual(report["contention"]["guard_flags"], expected_flags)
+                self.assertEqual(json.loads((root / "report.json").read_text())["status"], "refused")
                 self.assertTrue(guard._stop_sampler.is_set())
 
     def execute_host(self, guard, host, output):
@@ -950,7 +951,8 @@ class R0SamplerAdmissionSpec(unittest.TestCase):
                     guard.close()
                 row = published["checks"][0]
                 if outcome == "valid":
-                    self.assertEqual((published["status"], row["status"]), ("pass", "pass"))
+                    self.assertEqual((published["status"], row["status"]), ("refused", "refused"))
+                    self.assertIn("R0-L3 contention flagged", published["refusal"])
                     self.assertEqual([flag["interval"]["end_monotonic_s"]
                                       for flag in row.get("contention_flags", ())], [45])
                     self.assertEqual(published["census"][-1]["background_census"][0]["monotonic_s"], 45)
@@ -1338,7 +1340,7 @@ class R0SamplerAdmissionSpec(unittest.TestCase):
 
                 guard.run = command
                 report = self.execute_host(guard, host, Path(tmp))
-                self.assertEqual(report["status"], "pass")
+                self.assertEqual(report["status"], "refused" if flagged else "pass")
                 self.assertEqual([flag["interval"]["end_monotonic_s"] for flag in guard.contention_flags], flagged)
                 if 60 in flagged:
                     evidence = guard.contention_flags[-1]["busy"][0]
@@ -1521,9 +1523,11 @@ class R0SamplerAdmissionSpec(unittest.TestCase):
 
                 guard.run = run
                 status, output, diagnostic = self.run_synthetic_host_cli(required, guard, lambda: {"status": "pass"})
-                self.assertEqual((status, output.exists()), (0, True), diagnostic)
-                self.assertEqual(samples, [0, 15, 30])
-                report = json.loads((output / "report.json").read_text())
+                self.assertEqual((status, output.exists()), (2, False) if flagged else (0, True), diagnostic)
+                self.assertEqual(samples[:3], [0, 15, 30])
+                self.assertTrue(all(at == 30 for at in samples[3:]))
+                record = output if output.exists() else next(output.parent.glob(".output.r0-*"))
+                report = json.loads((record / "report.json").read_text())
                 self.assertEqual(report["contention"]["guard_flags"], int(flagged))
                 if flagged:
                     event, = guard.contention_flags
@@ -1583,7 +1587,7 @@ class R0SamplerAdmissionSpec(unittest.TestCase):
                 self.assertEqual((rc, published), (0, True) if mode == "quiet" else (2, False), diagnostic)
                 self.assertIn(reason, diagnostic)
                 configured_calls = [call for call in resolve.call_args_list if Path(call.args[0]) == configured]
-                self.assertEqual([call.kwargs for call in configured_calls], [{"strict": True}] * 2)
+                self.assertEqual([call.kwargs for call in configured_calls], [{"strict": True}] * (8 if mode == "quiet" else 5))
 
     def test_background_census_refuses_symlink_substituted_before_root_open(self):
         import os
@@ -1840,8 +1844,12 @@ class R0SamplerAdmissionSpec(unittest.TestCase):
                 args = ["--config", str(config_file), "--output", str(output)]
                 if inventory_mode:
                     args += ["--inventory", str(work / "D")]
+                # The quiet control exercises real report serialization.
+                # Fault trials assert the CLI verdict and the public path.
+                save_report = r0_runner.save_report if target is None else lambda *_: None
                 try:
                     with (patch.object(live, "census_fs", inject),
+                          patch.object(r0_runner, "save_report", save_report),
                           patch.object(r0_runner, "host_snapshot", side_effect=host),
                           patch.object(r0_runner, "host_identity", return_value={"status": "pass"}),
                           patch.object(r0_runner, "smc_enumeration", side_effect=smc),
@@ -1904,19 +1912,28 @@ class R0QuietIntervalTest(unittest.TestCase):
     def guard(self, snapshots, *, diagnostic="", clock=None, driven=True, mid_baseline=None):
         """``snapshots`` are the admission's first and last tables, then the
         daemon's. The admission's mid-baseline table (at 15 s) repeats the
-        first unless ``mid_baseline`` gives it."""
+        first unless ``mid_baseline`` gives it. Caller admissions see the
+        latest table without advancing the daemon's fixture schedule."""
+        import threading
+
         clock = clock or GuardClock()
         snapshots = list(snapshots)
         if snapshots:
             snapshots.insert(1, snapshots[0] if mid_baseline is None else mid_baseline)
         samples = iter(snapshots)
         calls = []
+        latest = None
+        sampling = threading.local()
+
         def run(argv, **kwargs):
+            nonlocal latest
             if argv == contention.PS_ARGV:
-                calls.append(clock())
                 self.assertEqual(kwargs["env"]["LC_ALL"], "C")
                 self.assertEqual(kwargs["timeout"], contention.PROBE_TIMEOUT_S)
-                sample = next(samples)
+                if not sampling.admission:
+                    calls.append(clock())
+                    latest = next(samples)
+                sample = latest
                 if isinstance(sample, Exception):
                     raise sample
                 if isinstance(sample, tuple):
@@ -1928,7 +1945,12 @@ class R0QuietIntervalTest(unittest.TestCase):
                 args = diagnostic(clock()) if callable(diagnostic) else diagnostic
                 return subprocess.CompletedProcess(argv, 0, "1 0.0 /sbin/launchd\n" + args, "")
             return self.runner(argv, **kwargs)
-        class DrivenGuard(QuietGuard):
+        class FixtureGuard(QuietGuard):
+            def _cpu_snapshot(self, *, census_summary=None, admission=False):
+                sampling.admission = admission
+                return super()._cpu_snapshot(census_summary=census_summary, admission=admission)
+
+        class DrivenGuard(FixtureGuard):
             """Drive the daemon's tick deterministically for legacy unit cases."""
             def check(self, **kwargs):
                 if self._sampler is not None and not self.failure:
@@ -1941,7 +1963,7 @@ class R0QuietIntervalTest(unittest.TestCase):
                 if self._sampler is not None and receipt == {}:
                     self._background_snapshot()
                 return super()._cpu_interval(receipt)
-        guard_type = DrivenGuard if driven else QuietGuard
+        guard_type = DrivenGuard if driven else FixtureGuard
         guard = guard_type([], run=run, inspect_custody=lambda **kw: Census(),
                            clock=clock, sleep=clock.sleep, host_reader=None)
         # The real daemon thread never fires during a test; ticks are driven.
@@ -2217,7 +2239,9 @@ class R0QuietIntervalTest(unittest.TestCase):
         self.tick(guard, clock, 45, 60, 75)
         guard.check(force=True)
         self.assertEqual(guard.receipts[-1]["cpu_interval"]["start_monotonic_s"], 45)
-        self.assertFalse(any(flag["interval"]["end_monotonic_s"] == 75 for flag in guard.contention_flags))
+        final, = [flag for flag in guard.contention_flags if flag["interval"]["end_monotonic_s"] == 75]
+        self.assertEqual(final["interval"]["start_monotonic_s"], 30)
+        self.assertIn("previous interval", final["busy"][0]["basis"])
 
     def test_report_floor_filters_only_the_receipt(self):
         # 0.005 * 30 = 0.15 CPU-s; 0.14 / 0.16 are one TIME quantum
@@ -2332,9 +2356,10 @@ class R0QuietIntervalTest(unittest.TestCase):
         windows = guard.receipts[-1]["cpu_intervals"]
         self.assertLessEqual(max(w["elapsed_s"] for w in windows),
                              prewindow.INTERVAL_S + QuietGuard.SNAPSHOT_CADENCE_S)
-        # Admission's three snapshots ran on the caller; every later ps ran on
-        # the daemon, and the caller never slept again.
-        self.assertEqual(set(ps_threads[3:]), {"joulewise-quiet-snapshots"})
+        # The caller only sampled at baseline and the next admission, while
+        # the daemon sampled throughout the gap.
+        self.assertEqual(ps_threads.count("joulewise-quiet-snapshots"), 20)
+        self.assertEqual(len(ps_threads), 24)
         self.assertEqual(clock.sleeps, [prewindow.INTERVAL_S / 2] * 2)
 
     def test_calls_29_seconds_apart_flag_a_2_cpu_second_burst(self):
@@ -2394,9 +2419,7 @@ class R0QuietIntervalTest(unittest.TestCase):
         self.assert_rate(max(rates), 0.02, prewindow.INTERVAL_S)
         self.assertIsNone(guard.failure)
 
-    def test_caller_only_repeats_agent_census_at_admission_boundaries(self):
-        from joulewise.align.r0_host import R0_AGENT_CENSUS_ARGV
-
+    def test_caller_repeats_full_census_at_admission_boundaries(self):
         guard, clock, calls = self.guard([cpu_table()] * 4, driven=False)
         guard.check(force=True)
         guard.sleep = lambda seconds: self.fail("caller slept after admission")
@@ -2404,19 +2427,19 @@ class R0QuietIntervalTest(unittest.TestCase):
         run = guard.run
         admissions = []
 
-        def agent_only(argv, **kwargs):
-            self.assertEqual(argv, R0_AGENT_CENSUS_ARGV)
-            admissions.append(clock.now)
-            return self.runner(argv, **kwargs)
+        def record_census(argv, **kwargs):
+            if argv[0] == "/bin/launchctl":
+                admissions.append(clock.now)
+            return run(argv, **kwargs)
 
-        guard.run = agent_only
+        guard.run = record_census
         # Per-token checks, forced boundaries and windows judged on stored data.
         for step in range(1, 200):
             clock.now = 45 + step * 0.05
             guard.check(force=step % 50 == 0)
         guard.run = run
         self.tick(guard, clock, 60)
-        guard.run = agent_only
+        guard.run = record_census
         clock.now = 61
         guard.check(force=True)
         self.assertEqual(guard.receipts[-1]["cpu_interval"]["end_monotonic_s"], 60)

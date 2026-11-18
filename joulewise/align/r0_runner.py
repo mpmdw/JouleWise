@@ -113,12 +113,40 @@ def _end_guard(guard, *, verify=False):
     end = finish if finish is not None else getattr(guard, "close", None)
     if end is not None:
         end()
+    if verify:
+        _reject_contention(guard)
 
 
 def _verify_publication(guard):
     verify = getattr(guard, "verify_publication", None)
     if verify is not None:
         verify()
+    _reject_contention(guard)
+
+
+def _reject_contention(guard):
+    flags = getattr(guard, "contention_flags", ())
+    if flags:
+        raise Refused(f"R0-L3 contention flagged: {flags[0]['flag']}")
+
+
+def _contention_summary(report, guard):
+    smc = [row for row in report["checks"] if row["check"] == "smc"]
+    report["contention"] = {
+        "rule": "docs/align/r0/R0-L3-contention-rule.md",
+        "guard_flags": len(getattr(guard, "contention_flags", ())),
+        "flagged_checks": [{"check": row["check"], "model": row.get("model"), "flags": len(row["contention_flags"])}
+                           for row in report["checks"] if row.get("contention_flags")],
+        "smc_contended": any(row.get("contended") for row in smc),
+        "smc_redo": sum(len(row.get("contention_redo") or ()) for row in smc),
+        "smc_flagged_intervals": sum(len((row.get("contention") or {}).get("flags", ())) for row in smc)}
+
+
+def _record_final_flags(report, guard, start):
+    flags = getattr(guard, "contention_flags", ())[start:]
+    if flags and report["checks"]:
+        report["checks"][-1].setdefault("contention_flags", []).extend(flags)
+    _contention_summary(report, guard)
 
 
 def _record_guard_refusal(report, error):
@@ -199,20 +227,6 @@ def execute(config, output, checks, models, *, guard, backend_factory, per_check
     report["softwareupdate_scan_forecast"] = softwareupdate_scan_forecast(
         forecast_start, forecast_start + timedelta(seconds=per_check_timeout * max(1, len(checks))))
 
-    def contention_summary():
-        # R0-L3: contention is recorded, never fatal. Guard flags (every check)
-        # and the SMC capture's ruling-8 flag are collected for report.md.
-        flags = getattr(guard, "contention_flags", [])
-        smc = [r for r in report["checks"] if r["check"] == "smc"]
-        report["contention"] = {
-            "rule": "docs/align/r0/R0-L3-contention-rule.md",
-            "guard_flags": len(flags),
-            "flagged_checks": [{"check": r["check"], "model": r.get("model"), "flags": len(r["contention_flags"])}
-                               for r in report["checks"] if r.get("contention_flags")],
-            "smc_contended": any(r.get("contended") for r in smc),
-            "smc_redo": sum(len(r.get("contention_redo") or ()) for r in smc),
-            "smc_flagged_intervals": sum(len((r.get("contention") or {}).get("flags", ())) for r in smc)}
-
     def receipt(name, model, fn, *, incremental=False):
         started = time.monotonic()
         row = {"check": name, **({"model": model} if model else {}), "status": "running"}
@@ -226,7 +240,7 @@ def execute(config, output, checks, models, *, guard, backend_factory, per_check
             flags = getattr(guard, "contention_flags", [])[flags_before:]
             if flags:
                 row["contention_flags"] = list(flags)
-            contention_summary()
+            _contention_summary(report, guard)
             report["total_seconds"] = time.monotonic() - started_run
             report["census"] = guard.receipts
             if not unserializable:
@@ -370,20 +384,17 @@ def execute(config, output, checks, models, *, guard, backend_factory, per_check
             _end_guard(guard, verify=guard_admitted)
         except Refused as exc:
             _record_guard_refusal(report, exc)
-        flags = getattr(guard, "contention_flags", [])[flags_before:]
-        if flags and report["checks"]:
-            report["checks"][-1].setdefault("contention_flags", []).extend(flags)
         report["decisions_pending_lead_action"] = [
             {"check": row["check"], "model": row.get("model"), "outcome": row["status"]}
             for row in report["checks"] if row["status"] in {"required", "fallback"}]
         report["census"] = guard.receipts
-        contention_summary()
         display_summary(report, display_probe, started_epoch, time.time())
         if report["status"] == "pass":
             try:
                 _verify_publication(guard)
             except Refused as exc:
                 _record_guard_refusal(report, exc)
+        _record_final_flags(report, guard, flags_before)
         report["total_seconds"] = time.monotonic() - started_run
         report["finished_utc"] = datetime.now(timezone.utc).isoformat()
         _save_terminal_report(output, report)
@@ -476,10 +487,12 @@ def _main(argv, *, backend_factory, guard_factory, lock_path, display_probe):
                     attempt["output_dir"] = str(args.output / relative)
         save_report(working, report)
         if report["status"] == "pass":
+            flags_before = len(getattr(guard, "contention_flags", ()))
             try:
                 _verify_publication(guard)
             except Refused as exc:
                 _record_guard_refusal(report, exc)
+                _record_final_flags(report, guard, flags_before)
                 print(f"unpublished R0 diagnostics: {working}", file=sys.stderr)
                 _save_terminal_report(working, report)
                 raise
