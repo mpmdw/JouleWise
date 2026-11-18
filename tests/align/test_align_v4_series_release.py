@@ -2,6 +2,7 @@
 
 import ast
 import csv
+from dataclasses import replace
 from datetime import datetime
 import hashlib
 import json
@@ -11,6 +12,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest.mock import patch
 
 from joulewise.align.apple import harvest_offload, rl176, s_rows, v4_desk_seal as seal
 from joulewise.align.apple import v4_registration as registration
@@ -44,7 +46,7 @@ def observe(event, args):
         return
     path = os.path.abspath(os.fsdecode(args[0]))
     relative = os.path.relpath(path, root)
-    if relative != ".." and not relative.startswith("../") and relative not in allowed:
+    if relative not in (".", "..") and not relative.startswith("../") and relative not in allowed:
         raise AssertionError("protected read: " + relative)
 
 sys.addaudithook(observe)
@@ -92,7 +94,8 @@ def invoke(root, output, *, observe=False):
     return subprocess.run(command, cwd=ROOT, capture_output=True, text=True, check=False)
 
 
-def write_bundle(bundle, window, assignment, signal, *, stored_condition=None, no_rows=False):
+def write_bundle(bundle, window, assignment, signal, *, stored_condition=None, no_rows=False,
+                 hot=False, truncate=False, amount=None):
     """Use the public episode, controller trace, event and PM schemas."""
     outputs = bundle / "outputs"
     outputs.mkdir(parents=True)
@@ -104,7 +107,7 @@ def write_bundle(bundle, window, assignment, signal, *, stored_condition=None, n
         for index, (start, context, prefill, decode) in enumerate((
             (10, 0, 50, 6), (20, 56, 15, 10), (30, 81, 45, 14),
         ))
-    )
+    )[:2 if truncate else 3]
     # The local and controller clocks share an origin in these synthetic records.
     clock = [{
         "epoch_ns": t, "monotonic_before_ns": t, "monotonic_after_ns": t,
@@ -114,7 +117,10 @@ def write_bundle(bundle, window, assignment, signal, *, stored_condition=None, n
         episode_id, "shade/" + assignment["pair"], stored_condition or assignment["condition"],
         assignment["model_id"], "synthetic", assignment["episode_seed"],
         "synthetic-monotonic", turns[0].start_ns, turns[-1].end_ns, turns,
-        hardware={"paired_clock_stamps_ns": clock},
+        flags=("episode.deadman:1",) if truncate else (),
+        hardware={"paired_clock_stamps_ns": clock, **(
+            {} if amount is None else {"task_diagnostics": {"evaluation_outputs": amount}}
+        )},
     )
     (outputs / "align_episode.json").write_text(to_json(episode), encoding="utf-8")
     (bundle / "config.json").write_bytes((ROOT / "configs/examples/mock_local.json").read_bytes())
@@ -131,12 +137,14 @@ def write_bundle(bundle, window, assignment, signal, *, stored_condition=None, n
         )
     write_jsonl(bundle / "events.jsonl", [] if no_rows else events)
     write_jsonl(outputs / "align_turns.jsonl", (
-        {"turn": turn.index, "generation": {"finish_reason": "stop"}} for turn in turns
+        {"turn": turn.index, "generation": {"finish_reason": (
+            "episode.deadman" if truncate and turn is turns[-1] else "stop"
+        )}} for turn in turns
     ))
     times = range(5, 41)
     write_jsonl(outputs / "align_thermal.jsonl", (
         {"kind": "sample", "monotonic_ns": t * NS,
-         "status": {"os_level": 0, "pm_state": "Nominal", "pm_observed_ns": t * NS}}
+         "status": {"os_level": int(hot and 16 <= t <= 17), "pm_state": "Nominal", "pm_observed_ns": t * NS}}
         for t in times
     ))
     write_jsonl(bundle / "rich_telemetry.jsonl", (
@@ -201,7 +209,7 @@ def describe(root, relative, value, *, canonical=False):
     return {"path": relative, "sha256": hashlib.sha256(raw).hexdigest()}
 
 
-def registration_fixture(root):
+def registration_fixture(root, amount_field=None):
     for path in registration.ARTIFACTS:
         target = root / path
         target.parent.mkdir(parents=True, exist_ok=True)
@@ -239,16 +247,19 @@ def registration_fixture(root):
         "schema": registration.RECEIPT_SCHEMA, "status": "registered", "commit": signed,
         "lead_signature": "lead: synthetic 2026-11-18", "artifacts": artifacts, "gates": gates,
         "rulings": {str(rule): "installed" for rule in registration.RULINGS},
+        **({"side_transfer_field": amount_field} if amount_field is not None else {}),
     })
 
 
-def stored_series(root, *, wins=102, different=None, no_rows=False, spoof=False, history=False):
+def stored_series(root, *, wins=102, different=None, no_rows=False, spoof=False, history=False,
+                  amount_fields=None, amount_field=None, defective_layout=False):
     """Synthetic committed arm history with a separate, untracked restored tree."""
     init_git_fixture(root, "-q")
-    registration_fixture(root)
+    registration_fixture(root, amount_field)
     manifest = series.candidate()
     manifest_sha = hashlib.sha256(series.raw_json(manifest)).hexdigest()
     prior = None
+    previous_final = None
     layouts = {}
     windows = ["W1", *WINDOWS]
     if history:
@@ -257,19 +268,23 @@ def stored_series(root, *, wins=102, different=None, no_rows=False, spoof=False,
     for window in windows:
         slot = window.split("#")[0]
         selected = series.selected(manifest, slot)
+        benign_ordinals = [a["ordinal"] for a in selected["members"] if a["ordinal"] in series.FRESH_ORDINALS
+                           and a["condition"] == "benign"]
         base = f"records/{window}"
-        members, captures, thermal, excluded, entries = [], {}, [], [], {}
+        members, captures, thermal, excluded = [], {}, [], []
         empty = window in ("W1", "C2") and (history or window == "W1")
         barred = history and window == "C3"
         tests = tuple(w for w in WINDOWS if w.startswith("T"))
         window_root = root / "series/restored" / window
+        window_root.mkdir(parents=True)
         if window != "W1":
-            layouts[window] = {"trace_layout": "powermetrics-rails-v1", "hazard_journal": None}
+            layout = "mixed" if defective_layout and window == "T3" else "powermetrics-rails-v1"
+            layouts[window] = {"trace_layout": layout, "hazard_journal": None}
         signals = {}
         if slot in WINDOWS:
             i = 2 * WINDOWS.index(slot)
             targets = [7] * 14 + [0] * 7 + [wins - 98]
-            signals = {pair: (targets[i+j], iter(s for s in range(8) if s != targets[i+j]))
+            signals = {pair: (targets[i+j], iter([s for s in range(8) if s != targets[i+j]]))
                        for j, pair in enumerate(series.PAIRS)}
         for assignment in selected["members"]:
             ordinal, pair, condition = (assignment[k] for k in ("ordinal", "pair", "condition"))
@@ -282,8 +297,10 @@ def stored_series(root, *, wins=102, different=None, no_rows=False, spoof=False,
                     "model_id": assignment.get("model_id"), "seed_index": assignment.get("seed_index"),
                     "expected_episode_seed": assignment.get("episode_seed")}
             members.append(plan)
-            thermal.append({"id": run_id, "model": "synthetic", "gated": True, "excluded": not captured,
-                            "calibration_exclusions": [] if captured else ["member.not_captured"],
+            ineligible = history and window == "C9" and ordinal == selected["sabotage_ordinals"][pair] if fresh else False
+            codes = ["X5"] if ineligible else [] if captured else ["member.not_captured"]
+            thermal.append({"id": run_id, "model": "synthetic", "gated": True, "excluded": bool(codes),
+                            "calibration_exclusions": codes,
                             "flags": [], "tokens": 1 if captured else None})
             captures[run_id] = None
             if fresh and pair in signals:
@@ -295,16 +312,24 @@ def stored_series(root, *, wins=102, different=None, no_rows=False, spoof=False,
                 bundle = window_root / "runs" / run_id
                 write_bundle(bundle, window, {**assignment, "run_id": run_id}, signal,
                              stored_condition="benign" if spoof and condition == "sabotage" else None,
-                             no_rows=change and no_rows)
-                files = [p for p in bundle.rglob("*") if p.is_file()]
-                for file in files:
-                    raw = file.read_bytes()
-                    entries[file.relative_to(window_root).as_posix()] = {
-                        "size": len(raw), "sha256": hashlib.sha256(raw).hexdigest(),
-                    }
+                             no_rows=(change and no_rows) or (history and window == "C9" and ordinal == benign_ordinals[1]),
+                             hot=history and window == "C9" and ordinal == benign_ordinals[2],
+                             truncate=history and window == "C9" and ordinal == benign_ordinals[0],
+                             amount=(amount_fields or {}).get((slot, pair, condition)))
+                episode = read_episode_bundle(bundle)
+                (bundle / "outputs/align_soc_rails.csv").write_bytes((bundle / "power_trace.csv").read_bytes())
+                write_json(bundle / "outputs/align_s_pm_rows.json", s_rows.pm_rows_with_states(bundle, episode))
+                if spoof:
+                    dc_file = bundle / "outputs/align_dc_in.json"
+                    if condition == "sabotage":
+                        dc_file.write_bytes(b"forbidden instructed fixture")
+                    elif window == "C1" and ordinal == next(a["ordinal"] for a in selected["members"]
+                            if a["ordinal"] in series.FRESH_ORDINALS and a["condition"] == "benign"):
+                        dc = replace(episode.power_traces[0], source="wall_meter", channel="dc_in")
+                        write_json(dc_file, {"trace": json.loads(to_json(dc)),
+                                             "clock_mapping": json.loads(to_json(episode.clock_mappings[0]))})
                 captures[run_id] = {"locator": str(bundle), "sha256": "b" * 64, "bytes": 1}
-        unpacked = {"schema": harvest_offload.FINALIZED_SCHEMA, "source_root": str(window_root),
-                    "entries": entries, "closure": {}}
+        unpacked = harvest_offload.finalized_manifest(window_root)
         frozen = describe(window_root, "finalized_manifest.json", unpacked, canonical=True)
         sources = {
             "plan": describe(root, f"{base}/plan.json", {"plan_id": window}),
@@ -327,17 +352,25 @@ def stored_series(root, *, wins=102, different=None, no_rows=False, spoof=False,
                         "model_windows": {f"synthetic/{window}": reports},
                     }},
                 }),
-                "exclusions": describe(root, f"{base}/exclusions.json", {"members_excluded": excluded}),
+                "exclusions": describe(root, f"{base}/exclusions.json", {
+                    "members_excluded": excluded, "reasons": [], "claim_usable": True,
+                }),
                 "unpack_receipt": describe(root, f"{base}/unpack.json", {
                     "schema": "joulewise.align_v4.unpack_receipt.v1", "window": window,
                     "plan_id": window, "finalized_manifest_sha256": frozen["sha256"],
                 }, canonical=True),
             })
+        successor_final = previous_final
+        previous_final = None
+        if history and window == "C1":
+            previous_final = {name: sources.pop(name) for name in packet.FINAL_SOURCES_WITH_RECEIPT}
         record = describe(root, f"{base}/record.json", {
             "schema": packet.RECORD_SCHEMA, "window": window,
             "role": "development" if window == "W1" else selected["role"],
             "previous_record": prior, "finalized_manifest": frozen["sha256"], "sources": sources,
             "captures": captures,
+            **({"previous_final": {"record_sha256": prior["sha256"], "sources": successor_final}}
+               if successor_final is not None else {}),
         })
         prior = {"commit": commit_fixture(root, [base]), **record}
     write_release_context(root, commit=prior["commit"], tests=tests)
@@ -350,6 +383,135 @@ def stored_series(root, *, wins=102, different=None, no_rows=False, spoof=False,
 
 
 class SeriesReleaseTests(unittest.TestCase):
+    def test_final_roster_emits_one_fresh_member_per_assignment_with_a9_and_unmodified_787_rows(self):
+        from scripts import align_v4_series_release as caller
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            stored_series(root, history=True)
+            originals = []
+            real = rl176.series_release_prints
+
+            def observe(state, *, load_members, **kwargs):
+                def load():
+                    originals.extend(load_members())
+                    return originals
+                return real(state, load_members=load, **kwargs)
+
+            with patch.object(rl176, "series_release_prints", side_effect=observe):
+                report = caller.build_report(root)[seal.RL176]
+            self.assertEqual(len(originals), 176)
+            self.assertEqual(len({m.episode.episode_id for m in originals}), 176)
+            self.assertNotIn("C3", {m.window for m in originals})
+            self.assertIn("C9", {m.window for m in originals})
+            self.assertEqual(sum(m.episode.episode_id.startswith("synthetic-C2#2-") for m in originals), 16)
+            excluded = [m for m in originals if not m.eligible]
+            self.assertEqual([(m.window, m.episode.condition, m.exclusion_reason) for m in excluded],
+                             [("C9", "sabotage", "X5")] * 2)
+            cut, empty, truncated = False, False, False
+            for member in originals:
+                run_id = member.episode.episode_id
+                attempt = run_id.split("-")[1]
+                bundle = root / "series/restored" / attempt / "runs" / run_id
+                expected, _ = s_rows.read_member_rows(bundle, s_rows.REGISTERED)
+                self.assertEqual(member.s_rows, expected.rows)
+                cut |= any(row.cut for row in expected.rows)
+                empty |= not expected.rows and member.eligible
+                truncated |= expected.truncated and member.eligible
+            self.assertTrue(cut and empty and truncated)
+            self.assertEqual(sum(
+                row["assigned"] for conditions in report["S"]["attrition"]["by_pair_and_condition"].values()
+                for row in conditions.values()
+            ), 176)
+
+    def test_no_member_loader_opens_dc_and_provider_keys_on_manifest_benign_ordinals(self):
+        from scripts import align_v4_series_release as caller
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            manifest = stored_series(root, spoof=True)
+            trace_opens = []
+            real = caller.named_bytes
+            selected = series.selected(manifest, "C1")
+            benign_ordinal = next(a["ordinal"] for a in selected["members"]
+                                  if a["ordinal"] in series.FRESH_ORDINALS and a["condition"] == "benign")
+            permitted = f"runs/synthetic-C1-{benign_ordinal:02d}/{caller.DC_FILE}"
+
+            def observe(source_root, path):
+                self.assertFalse(path.endswith("power_trace.csv"), "generic bundle trace read")
+                if path.endswith(caller.DC_FILE):
+                    self.assertEqual(path, permitted)
+                    self.assertEqual(source_root.name, "C1")
+                    trace_opens.append(path)
+                return real(source_root, path)
+
+            accepted = root / "report.json"
+            with patch.object(caller, "named_bytes", side_effect=observe):
+                self.assertEqual(caller.main(["--measurement-root", str(root), "--output", str(accepted)]), 0)
+            self.assertEqual(len(trace_opens), 1)
+            report = json.loads(accepted.read_bytes())[seal.RL176]
+            self.assertIn("dc_in", report["aligned_power"]["profiles"])
+            metadata = {path: (root / path).read_bytes() for path in caller.RELEASE_METADATA}
+            inputs = caller.ReleasedInputs(root.resolve(), metadata)
+            with patch.object(caller, "named_bytes", side_effect=observe):
+                members = inputs.load_members()
+            self.assertEqual(len(trace_opens), 1)
+            instructed = next(m.episode for m in members if m.episode.condition == "sabotage")
+            key = inputs.member_keys[instructed.episode_id][0]
+            other_pair = next(pair for pair in series.PAIRS if pair != key[1])
+            with patch.object(caller.RestoredFiles, "bundle", side_effect=AssertionError("unexpected resolution")):
+                for bad in (key, (key[0], other_pair, key[2]), ("T5", key[1], key[2])):
+                    with self.assertRaises((ValueError, KeyError)):
+                        inputs.benign_dc(bad)
+                for bad in (replace(instructed, condition="benign"), replace(instructed, episode_id="unknown")):
+                    with self.assertRaises((ValueError, KeyError)):
+                        inputs.load_benign_dc(bad)
+            corrupted = root / "series/restored/C1/runs" / instructed.episode_id / caller.RAIL_FILE
+            with corrupted.open("ab") as stored:
+                stored.write(b"changed after finalization\n")
+            partial = root / "partial.json"
+            with patch.object(caller, "named_bytes", side_effect=observe), self.assertRaises(SystemExit) as refusal:
+                caller.main(["--measurement-root", str(root), "--output", str(partial)])
+            self.assertEqual(refusal.exception.code, 1)
+            self.assertEqual(len(trace_opens), 1)
+            self.assertFalse(partial.exists())
+
+    def test_side_transfer_uses_only_named_frozen_numeric_evaluator_field(self):
+        from scripts import align_v4_series_release as caller
+
+        pair = series.PAIRS[0]
+        fields = [{"amount": 0}, {"amount": 1.25}, {"amount": True}, {"amount": False},
+                  {"wrong_key": 3}, None, {"amount": "4"}]
+        amounts = {(window, pair, "sabotage"): field for window, field in zip(WINDOWS, fields)}
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            stored_series(root, amount_fields=amounts, amount_field="amount")
+            original = caller.named_bytes
+
+            def observe(source_root, path):
+                self.assertNotIn("transcript", path)
+                return original(source_root, path)
+
+            with patch.object(caller, "named_bytes", side_effect=observe):
+                panel = caller.build_report(root)[seal.RL176]["q"]["side_transfer"][pair]
+            self.assertEqual(panel["interpretation"], "post-treatment")
+            self.assertEqual([row["side_transfer_total"] for row in panel["rows"][:7]],
+                             [0, 1.25, None, None, None, None, None])
+            self.assertTrue(all(row["energy_excess_j"] is not None for row in panel["rows"]))
+
+    def test_invalid_post_release_join_writes_no_report_or_member_reads(self):
+        from scripts import align_v4_series_release as caller
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            stored_series(root, defective_layout=True)
+            output = root / "report.json"
+            with patch.object(caller, "read_member", side_effect=AssertionError("protected member loader")):
+                with self.assertRaises(SystemExit) as refusal:
+                    caller.main(["--measurement-root", str(root), "--output", str(output)])
+            self.assertEqual(refusal.exception.code, 1)
+            self.assertFalse(output.exists())
+
     def test_stored_series_through_787_and_release_script_s_signature_at_102_not_101_of_154(self):
         for wins, tail in ((102, 0.0109278936864), (101, 0.0140103456299)):
             with self.subTest(wins=wins), tempfile.TemporaryDirectory() as tmp:
