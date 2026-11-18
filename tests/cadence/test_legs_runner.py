@@ -56,45 +56,91 @@ def campaign_kit(n_legs=12, bands=("q0",), validate=True, **template):
 
 
 class T0AuthorityTests(unittest.TestCase):
-    def test_launcher_handoff_checks_the_recorded_child_start(self):
-        day = "2026-11-22"
-        midnight = int(local("2026-11-23T00:00:00"))
-        cases = (
-            ("last authorized fraction", midnight - 0.25, midnight, True),
-            ("midnight during handoff", midnight, midnight, False),
-            ("wrong date before cutoff", midnight, midnight + 3600, False),
-            ("expiry during handoff", midnight - 30, midnight - 30, False),
-        )
-        with tempfile.TemporaryDirectory(dir=TMP) as tmp:
-            root = Path(tmp)
-            kit = root / "kit.json"
-            kit.write_text(json.dumps(campaign_kit(n_legs=6, legs_per_span=6)))
-            for case, epoch, cutoff, allowed in cases:
-                with self.subTest(case=case):
-                    output = root / case
-                    authority = ["--authorized-t0-date", day, "--t0-before", str(cutoff)]
-                    argv = [
-                        "launch", "--repo", tmp, "--python-bin", sys.executable,
-                        "--kit", str(kit), "--output", str(output), "--disk-path", tmp,
-                        "--custody-root", str(root / "synthetic-fence"), "--magistrate-pid", "123",
-                        "--deadline", str(epoch + 29000), *authority,
-                    ]
-                    with patch.object(cadence_launch, "launch") as launch:
-                        self.assertEqual(cadence_launch.main(argv), 0)
-                        child_argv = cadence_launch.runner_argv(launch.call_args.args[0])
-                    self.assertEqual(child_argv[-4:], authority)
+    ns = 1_000_000_000
+    midnight = 1795161600
+    kit = runner.ROOT / "docs/process/cadence/kits/cl-qual-01.v1.1.json"
 
-                    deps = runner.mock_deps(output, runner.FakeClock(epoch))
-                    with patch.object(runner, "production_deps", return_value=deps), redirect_stderr(io.StringIO()):
-                        rc = runner.main(child_argv[2:])
-                    if allowed:
-                        self.assertEqual(rc, 0)
-                        receipt = json.loads((output / runner.RECEIPT_NAME).read_text())
-                        self.assertEqual(receipt["started"]["epoch_s"], epoch)
-                    else:
-                        self.assertEqual(rc, 3)
-                        self.assertFalse(output.exists())
-                        self.assertEqual(deps.host.calls, [])
+    def setUp(self):
+        self.root = Path(self.enterContext(tempfile.TemporaryDirectory(dir=TMP)))
+        self.output = self.root / "span"
+        self.spec = ["--kit", str(self.kit), "--output", str(self.output), "--deadline", str(self.midnight + 29000),
+                     "--legs", "L001,L002,L003,L004,L005,L006"]
+        self.launch = ["launch", "--repo", str(self.root), "--python-bin", sys.executable,
+                       "--disk-path", str(self.root), "--custody-root", str(self.root / "synthetic-fence"),
+                       "--magistrate-pid", "123", *self.spec]
+
+    def handoff(self, *, day="2026-11-19", earliest=None, cutoff=None, projected_ns, wall_ns, allowed):
+        earliest = self.midnight - 3600 if earliest is None else earliest
+        cutoff = self.midnight if cutoff is None else cutoff
+        authority = ["--authorized-t0-date", day, "--t0-not-before", str(earliest), "--t0-before", str(cutoff),
+                     "--t0-anchor", f"{projected_ns - self.ns}:{999 * self.ns}"]
+        with patch.object(cadence_launch, "launch") as launch:
+            self.assertEqual(cadence_launch.main(self.launch + authority), 0)
+            child_argv = cadence_launch.runner_argv(launch.call_args.args[0])
+        self.assertEqual(child_argv[-len(authority):], authority)
+
+        clock = runner.FakeClock(wall_ns / self.ns)
+        deps = runner.mock_deps(self.output, clock)
+        with (patch.object(runner, "production_deps", return_value=deps),
+              patch.object(clock, "epoch_and_monotonic_ns", return_value=(wall_ns, 1000 * self.ns)),
+              redirect_stderr(io.StringIO())):
+            rc = runner.main(child_argv[2:])
+        if allowed:
+            self.assertEqual(rc, 0)
+            receipt = json.loads((self.output / runner.RECEIPT_NAME).read_text())
+            self.assertEqual(receipt["started"]["epoch_ns"], projected_ns)
+            return receipt
+        self.assertEqual(rc, 3)
+        self.assertFalse(self.output.exists())
+        self.assertEqual(deps.host.calls, [])
+        return None
+
+    def test_handoff_refuses_a_rollback_into_the_batch_hold(self):
+        hold_end = self.midnight - 3600
+        for offset in (250_000_000, 87 * 60 * self.ns):
+            with self.subTest(offset=offset):
+                self.handoff(earliest=hold_end, projected_ns=hold_end * self.ns,
+                             wall_ns=hold_end * self.ns - offset, allowed=False)
+        self.handoff(earliest=hold_end, projected_ns=hold_end * self.ns - 1,
+                     wall_ns=hold_end * self.ns, allowed=False)
+        self.handoff(earliest=hold_end, projected_ns=hold_end * self.ns,
+                     wall_ns=hold_end * self.ns, allowed=True)
+
+    def test_handoff_refuses_when_anchored_t0_crosses_exclusive_cutoff(self):
+        cutoff = self.midnight - 30
+        for wall_ns in (cutoff * self.ns, cutoff * self.ns - 1):
+            with self.subTest(wall_ns=wall_ns):
+                self.handoff(cutoff=cutoff, projected_ns=cutoff * self.ns, wall_ns=wall_ns, allowed=False)
+
+    def test_submicrosecond_t0_stays_on_its_exact_los_angeles_date(self):
+        for offset in (200, 1):
+            with self.subTest(offset=offset):
+                epoch_ns = self.midnight * self.ns - offset
+                self.handoff(day="2026-11-20", cutoff=self.midnight + 3600, projected_ns=epoch_ns,
+                             wall_ns=epoch_ns, allowed=False)
+        epoch_ns = self.midnight * self.ns - 1
+        receipt = self.handoff(projected_ns=epoch_ns, wall_ns=epoch_ns, allowed=True)
+        self.assertEqual(receipt["started"]["epoch_s"], 1795161599.9999998)
+
+    def test_qualification_requires_authority_in_both_clis(self):
+        authority = [("--authorized-t0-date", "2026-11-19"), ("--t0-not-before", str(self.midnight - 3600)),
+                     ("--t0-before", str(self.midnight))]
+        cases = [[], *[authority[:i] + authority[i + 1:] for i in range(len(authority))]]
+        for pairs in cases:
+            for module, argv, entry in ((cadence_launch, self.launch, "launch"),
+                                        (runner, ["run", *self.spec], "production_deps")):
+                with (self.subTest(module=module.__name__, pairs=pairs), patch.object(module, entry) as work,
+                      redirect_stderr(io.StringIO()), self.assertRaises(SystemExit) as error):
+                    module.main(argv + [arg for pair in pairs for arg in pair])
+                self.assertEqual(error.exception.code, 2)
+                work.assert_not_called()
+
+    def test_child_receipt_includes_all_three_authority_values(self):
+        earliest = self.midnight - 3600
+        epoch_ns = (earliest + 10) * self.ns
+        receipt = self.handoff(earliest=earliest, projected_ns=epoch_ns, wall_ns=epoch_ns - self.ns, allowed=True)
+        self.assertEqual(receipt["t0_authority"], {"authorized_t0_date": "2026-11-19",
+                                                   "t0_not_before": earliest, "t0_before": self.midnight})
 
 
 # --------------------------------------------------------------------------

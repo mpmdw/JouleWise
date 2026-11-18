@@ -80,8 +80,11 @@ def cadence_minimum_seconds(plan: dict) -> float:
 def runner_argv(args) -> list[str]:
     legs, window = getattr(args, "legs", None), getattr(args, "batch_window", None)
     t0_date = getattr(args, "authorized_t0_date", None)
-    t0_before = getattr(args, "t0_before", None)
-    t0_args = ["--authorized-t0-date", t0_date, "--t0-before", str(t0_before)] if t0_date else []
+    t0_args = []
+    if t0_date is not None:
+        epoch_ns, monotonic_ns = args.t0_anchor
+        t0_args = ["--authorized-t0-date", t0_date, "--t0-not-before", str(args.t0_not_before),
+                   "--t0-before", str(args.t0_before), "--t0-anchor", f"{epoch_ns}:{monotonic_ns}"]
     return [str(args.python_bin), str(args.repo / RUNNER), "run", "--kit", str(args.kit), "--output", str(args.output),
             *(["--legs", legs] if legs else []), *(["--batch-window", window] if window else []),
             "--deadline", str(args.deadline), "--pmset-bin", str(args.pmset_bin), *t0_args]
@@ -199,6 +202,9 @@ def main(argv=None) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
     if argv[:1] in (["handoff"], ["preflight"], ["clear"]):
         return base.main(argv)               # the desk launcher's own fence and host steps
+    from joulewise.cadence import kit as kitmod
+    from scripts import cadence_legs_runner as runner
+
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     sub = parser.add_subparsers(dest="command", required=True)
     start = sub.add_parser("launch", help="magistrate: publish fence, bootstrap once, then exit session")
@@ -212,8 +218,7 @@ def main(argv=None) -> int:
     start.add_argument("--custody-root", type=Path, required=True)
     start.add_argument("--magistrate-pid", type=int, required=True)
     start.add_argument("--deadline", type=float, required=True)
-    start.add_argument("--authorized-t0-date", help="authorized America/Los_Angeles calendar date")
-    start.add_argument("--t0-before", type=int, help="exclusive start cutoff in whole epoch seconds")
+    runner.add_t0_authority_arguments(start)
     start.add_argument("--launchctl-bin", default="/bin/launchctl")
     start.add_argument("--pmset-bin", default="/usr/bin/pmset")
     start.add_argument("--pgrep-bin", default="/usr/bin/pgrep")
@@ -225,12 +230,6 @@ def main(argv=None) -> int:
     run.add_argument("--runner-spec", type=Path, required=True)
     run.add_argument("--pmset-bin", default="/usr/bin/pmset")
     args = parser.parse_args(argv)
-    if args.command == "launch":
-        from scripts.cadence_legs_runner import validate_t0_authority
-        try:
-            validate_t0_authority(args.authorized_t0_date, args.t0_before)
-        except ValueError as error:
-            parser.error(str(error))
     for name in ("repo", "kit", "output", "disk_path", "custody_root"):
         if getattr(args, name, None) is not None:
             setattr(args, name, getattr(args, name).expanduser().resolve())
@@ -238,6 +237,14 @@ def main(argv=None) -> int:
         args.python_bin = Path(os.path.abspath(args.python_bin.expanduser()))   # not symlink-resolved (venv)
     try:
         if args.command == "launch":
+            kit, _ = kitmod.load_kit(args.kit)
+            try:
+                runner.validate_t0_authority(kit, args.authorized_t0_date, args.t0_not_before,
+                                             args.t0_before, args.t0_anchor, require_anchor=False)
+            except ValueError as error:
+                parser.error(str(error))
+            if args.authorized_t0_date is not None and args.t0_anchor is None:
+                args.t0_anchor = runner.RealClock.epoch_and_monotonic_ns()
             launch(args)
             return 0
         return run_until_deadline(args)
