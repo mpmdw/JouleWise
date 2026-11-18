@@ -18,6 +18,7 @@ with zero S rows.
 | RL-185 authority and RL-183b dependency | `b9e46ef52c3c87bf16fdeac96fcf4b2e767b7fe7`, PR #826 `3dfeadc0cd9448b664541407153941a27664fea7` |
 | RL-185 PIPELINE §3 freeze | `ca768c768b1bc9308fb4c1075a5ac81a0db82fde` (draft replay `187bf277e`) |
 | Private test head and tree | `ce2aebc838d4e0f4a606bcb1899f9dd2cce20133`, `4da685deb63d32d0231dac7a6413669055f353f0` |
+| Resolved-interface test head and tree | `3ab402d58eb4c82645db233721945f0388040d01`, `d7baf074110f80c3b978336753d32a2c1e131370` |
 | Caller SHA-256 for signatory | `6ab1d68db3d6190f9bf4ae5335124c587397f68284f8adc6c9596744c933fc28` |
 | Draft code head and tree before report | `b7a0440a00442151c5b18a73a7b48fb5beeb72ec`, `77c7065e57a5bc17cb436adc041f6ff45bfdb175` |
 
@@ -48,7 +49,12 @@ the dependency landings. [Draft PR #836](https://github.com/mpmdw/JouleWise/pull
 | Stored rows | Caller :42,124,250, PR #787 `s_rows.py:193,751,774`, PR #813 `workload.py:893` | Give the real #787 adapter its isolated rail-only projection and registered PM rows, then pass the returned tuple directly. |
 | DC and disclosures | Caller :306,321,345, PR #813 `rl176.py:459,468,527,550,628` | Use the loaded episode identity to request the separate manifest-keyed provider. Keep uncaptured assignments out of scorer inputs and apply the existing numeric rule. |
 
-## Fail-closed choices under RL-185 §3
+## Resolved interfaces under RL-185 §3
+
+The lead confirmed the terminal ref, restore layout, signing-owner gate and
+unbound companion output. The caller bytes and their SHA-256 stayed fixed.
+[Terminal authority](https://github.com/mpmdw/JouleWise/blob/61e8c9c2ccfd023c82e0da048dd89f4ed854a5bc/docs/research-audits/2026-11-10-fable/RESEARCH-LEAD-DECISIONS.md#L20874) ·
+[Restore layout](https://github.com/mpmdw/JouleWise/blob/61e8c9c2ccfd023c82e0da048dd89f4ed854a5bc/docs/research-audits/2026-11-10-fable/RESEARCH-LEAD-DECISIONS.md#L20863)
 
 - The input Git worktree is the measurement root. Its fixed local
   remote-tracking authority is `refs/remotes/origin/align-v4-series-release`.
@@ -74,13 +80,17 @@ the dependency landings. [Draft PR #836](https://github.com/mpmdw/JouleWise/pull
   ineligible members retain their dispositions. Ambiguous bindings refuse.
 - No companion producers or looks accessor were supplied as admitted pins.
   `S_a4`, `S_w` and the benign slopes print `not_computed` with
-  `producer_not_bound`. `S_pf` and the unavailable turn-0 context slope
-  remain separate. Null is the ruled current amount default. The named
-  numeric controls use the scorer's existing finite-number rule.
-- The synthetic registration exercises the current receipt and signing-input
-  validator. It gives no independent proof of the four code bindings or
-  of the actual executing tree against a real receipt. The registration
-  owner still owns that gate. No receipt was edited.
+  `producer_not_bound`. Missing producer pins do not hold C1's arm. For a
+  receipt-bound `S_w` producer, a looks accessor refusal yields
+  `not_computed` with `look_not_authorised`. That conditional path awaits
+  the admitted producer and accessor pins. `S_pf` and the unavailable
+  turn-0 context slope remain separate. Null is the ruled current amount
+  default. The named numeric controls use the scorer's finite-number rule.
+- The synthetic registration receipt is fixture evidence for the current
+  validator. The signing owner verifies that one valid receipt binds the
+  executing `s_rows.py`, `scripts/align_v4_series_release.py`, `rl176.py`
+  and `rl176_phases.py` before C1 arms. A missing or mismatched digest fails
+  that gate. [Four-file gate](https://github.com/mpmdw/JouleWise/blob/61e8c9c2ccfd023c82e0da048dd89f4ed854a5bc/docs/research-audits/2026-11-10-fable/RESEARCH-LEAD-DECISIONS.md#L19785)
 
 ## Executed checks and Tier 2 dispositions
 
@@ -90,6 +100,8 @@ the dependency landings. [Draft PR #836](https://github.com/mpmdw/JouleWise/pull
 | `test_uncaptured_and_captured_without_s_rows_form_two_distinct_world_pairs` | PASS. Benign Q count 7 → 8 with the same S and Q strata. Instructed Q count 0 → 8 with one additional Q stratum and unchanged S membership. Both pairs change exact Q p. |
 | `test_final_roster_emits_one_fresh_member_per_assignment_with_a9_and_unmodified_787_rows` | PASS for reserve, retry, barred attempt, successor finality, X5 exclusions, row parity, truncation, missing stamps and hot cut. |
 | `test_no_member_loader_opens_dc_and_provider_keys_on_manifest_benign_ordinals` | PASS for the spoofed label, one benign DC open, direct ordinal refusals and corrupted rail bytes, with no partial report. |
+| `test_post_release_terminal_authority_refuses_before_member_loading` | PASS for a missing ref, stale terminal binding, wrong digest, unreachable commit and simultaneous direct and successor evidence. The release guard recognizes the synthetic authorization in each case. The member loader stays closed and no report is created. |
+| `test_invalid_post_release_join_writes_no_report_or_member_reads` | PASS for a mixed-file declaration and a required PM projection missing from the verified restore manifest. Neither case opens a member file or creates a report. |
 | `test_side_transfer_uses_only_named_frozen_numeric_evaluator_field` | PASS for zero, finite positive value, booleans, wrong key, missing and text. |
 | `test_released_unbound_companion_prints_are_not_computed` | PASS for the RL-185 unbound branch. Equality and coefficient authorization await producer pins before release. |
 | Three PR #826 `UnpackReceiptTests` at the owner pin | PASS for malformed receipt, successor digest mismatch and zero capture. |
