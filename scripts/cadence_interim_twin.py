@@ -26,7 +26,7 @@ import os
 from pathlib import Path
 import plistlib
 import re
-from types import ModuleType
+from types import ModuleType, SimpleNamespace
 
 
 CHANNELS = {"gpu_rail", "dc_in"}
@@ -83,6 +83,13 @@ class OnsetRow:
     prefill_s: float
     end_s: float
     observed: bool
+
+
+@dataclass(frozen=True)
+class MeterInput:
+    path: Path
+    resolved: Path
+    sha256: str
 
 
 class RankDeficient(ValueError):
@@ -463,19 +470,64 @@ def verify_pins(manifest, code_path):
     return decoder
 
 
-def meter_decoder(verified):
+def meter_decoder(verified, streams):
+    """Load the pinned decoder with imports local to it and one active stream."""
     path, data = verified
     module = ModuleType("_cadence_twin_km003c")
     module.__file__ = str(path)
+    allowed = {stream.path: stream for stream in streams}
+    active = None
+
+    def read_stream(requested):
+        if active is None or Path(requested) != active.path:
+            raise PermissionError("decoder requested a different meter stream")
+        resolved = active.path.resolve(strict=True)
+        if resolved != active.resolved:
+            raise PermissionError("verified meter stream path changed")
+        for candidate in (active.path, resolved):
+            sibling = candidate.with_name(candidate.name + ".zst")
+            if candidate.suffix == ".zst" or sibling.exists() or sibling.is_symlink():
+                raise ValueError("compressed meter input")
+        return read_bound(resolved, active.sha256)
+
+    def reject_t_diagnostic(*args, **kwargs):
+        raise RuntimeError("meter diagnostic is outside the twin decoder scope")
+
+    reader = SimpleNamespace(read_bytes=read_stream)
+    diagnostic = SimpleNamespace(student_t_critical_95=reject_t_diagnostic)
+
     def import_decoder_dependency(name, globals=None, locals=None, fromlist=(), level=0):
+        if level == 0:
+            if name == "joulewise.desk_compress" and fromlist == ("read_bytes",):
+                return reader
+            if name == "joulewise.aggregate" and fromlist == ("student_t_critical_95",):
+                return diagnostic
         if level or name.partition(".")[0] not in sys.stdlib_module_names:
             raise ImportError("meter decoder dependency is outside the allowed standard library")
         return builtins.__import__(name, globals, locals, fromlist)
 
     module.__dict__["__builtins__"] = {**vars(builtins), "__import__": import_decoder_dependency}
+    previous = sys.modules.get(module.__name__)
     sys.modules[module.__name__] = module
-    exec(compile(data, str(path), "exec", dont_inherit=True), module.__dict__)
-    return module.parse
+    try:
+        exec(compile(data, str(path), "exec", dont_inherit=True), module.__dict__)
+    finally:
+        if previous is None:
+            del sys.modules[module.__name__]
+        else:
+            sys.modules[module.__name__] = previous
+
+    def parse(stream_path):
+        nonlocal active
+        if active is not None or stream_path not in allowed:
+            raise PermissionError("meter stream is outside the verified parse scope")
+        active = allowed[stream_path]
+        try:
+            return module.parse(stream_path)
+        finally:
+            active = None
+
+    return parse
 
 
 def select_paths(view, prefix, fields):
@@ -1260,13 +1312,25 @@ def span_identities(span):
     return receipt, bundles, raw_files, native_time
 
 
-def verified_span_inputs(span, identity):
+def verified_span_inputs(span, identity, inventory):
     receipt, bundles, operational, native = span_identities(span)
     if identity["files_sha256"] != operational or identity["native_pm_sha256"] != native:
         raise ValueError("stage-1 span identities differ from custody")
-    streams = meter_stream_paths(span)
+    paths = meter_stream_paths(span)
     expected = identity["meter_time_sha256"]
-    if expected is not None and expected != meter_time_digest((path.name, path.read_bytes()) for path in streams):
+    streams = []
+
+    def meter_preimages():
+        for path in paths:
+            resolved = child_path(span, path.relative_to(span))
+            data = resolved.read_bytes()
+            raw_sha256 = digest(data)
+            if resolved in inventory and inventory[resolved] != raw_sha256:
+                raise ValueError("meter bytes differ from comparison inventory")
+            streams.append(MeterInput(path, resolved, raw_sha256))
+            yield path.name, data
+
+    if expected is not None and expected != meter_time_digest(meter_preimages()):
         raise ValueError("stage-1 meter time identity differs from custody")
     return receipt, bundles, streams
 
@@ -1288,6 +1352,7 @@ def check_custody_inventory(root, spans, *inventories):
                 if file_digest(resolved) != sha256:
                     raise ValueError("comparison input digest mismatch")
                 seen[resolved] = sha256
+    return seen
 
 
 def gpu_input(span, bundle):
@@ -1304,11 +1369,11 @@ def recompute_bundle(args, stage1, fit_identity, step3_identity, decoder_pin, th
     if len(span_records) != len(roster):
         raise ValueError("duplicate span ID")
     directories = span_dirs(args.custody, args.span_dir, span_records)
-    parse = meter_decoder(decoder_pin)
-    check_custody_inventory(args.custody.resolve(), directories.values(), fit_identity, step3_identity)
+    inventory = check_custody_inventory(args.custody.resolve(), directories.values(), fit_identity, step3_identity)
     receipts, bundle_paths, streams = {}, {}, {}
     for key, row in span_records.items():
-        receipts[key], bundle_paths[key], streams[key] = verified_span_inputs(directories[key], row["custody"])
+        receipts[key], bundle_paths[key], streams[key] = verified_span_inputs(directories[key], row["custody"], inventory)
+    parse = meter_decoder(decoder_pin, (stream for inputs in streams.values() for stream in inputs))
     fit_legs = [row for row in stage1["legs"] if row["in_energy_fit"]]
     step3_legs = [row for row in stage1["legs"] if row["included"] and row["role"] == "fit" and row["leg_type"] == "A"]
     known_bundles = {}
@@ -1336,7 +1401,7 @@ def recompute_bundle(args, stage1, fit_identity, step3_identity, decoder_pin, th
         if span_records[key]["custody"]["meter_time_sha256"] is None:
             raise ValueError("meter time identity required for fit")
         if key not in dc_readers:
-            dc_readers[key] = pooled_meter(streams[key], parse)
+            dc_readers[key] = pooled_meter((stream.path for stream in streams[key]), parse)
         bundle = known_bundles[row["leg_key"]]
         gpu = gpu_rows(gpu_input(directories[key], bundle).read_bytes())
         responses.append(responses_for_leg(row, gpu, dc_readers[key]))

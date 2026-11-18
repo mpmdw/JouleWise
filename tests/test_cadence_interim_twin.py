@@ -283,9 +283,57 @@ class ReaderTests(unittest.TestCase):
     def test_meter_decoder_import_boundary(self):
         from scripts.cadence_interim_twin import meter_decoder
 
-        decoder_with_extra_import = b"from joulewise.aggregate import student_t_critical_95\n"
-        with self.assertRaises(ImportError):
-            meter_decoder((SCRIPT, decoder_with_extra_import))
+        for attempted in (b"import joulewise.aggregate", b"from joulewise.desk_compress import write_bytes",
+                          b"from joulewise.aggregate import student_t_critical_95, mean", b"import other_package"):
+            with self.subTest(attempted=attempted), self.assertRaises(ImportError):
+                meter_decoder((SCRIPT, attempted + b"\n"), ())
+
+    def test_meter_shim_reads_only_the_active_verified_stream(self):
+        from scripts.cadence_interim_twin import MeterInput, digest, meter_decoder
+
+        data = b"synthetic stream bytes\n"
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp).resolve()
+            first, second = root / "stream-first.jsonl", root / "stream-second.jsonl"
+            for path in (first, second):
+                path.write_bytes(data)
+            streams = tuple(MeterInput(path, path, digest(data)) for path in (first, second))
+            source = b"""
+from joulewise.desk_compress import read_bytes
+def parse(path):
+    if path.name == 'stream-first.jsonl':
+        return read_bytes(path.with_name('stream-second.jsonl'))
+    return read_bytes(path)
+"""
+            parse = meter_decoder((SCRIPT, source), streams)
+            self.assertEqual(parse(second), data)
+            with self.assertRaises(PermissionError):
+                parse(first)
+            with self.assertRaises(PermissionError):
+                parse(root / "unlisted.jsonl")
+            self.assertEqual(parse(second), data)
+            second.with_name(second.name + ".zst").write_bytes(data)
+            with self.assertRaises(ValueError):
+                parse(second)
+            second.with_name(second.name + ".zst").unlink()
+            second.write_bytes(data + b"changed")
+            with self.assertRaises(ValueError):
+                parse(second)
+
+    def test_meter_shim_refuses_t_diagnostic(self):
+        from scripts.cadence_interim_twin import MeterInput, digest, meter_decoder
+
+        source = b"""
+from joulewise.aggregate import student_t_critical_95
+def parse(path):
+    return student_t_critical_95(10)
+"""
+        with tempfile.TemporaryDirectory() as tmp:
+            stream = Path(tmp).resolve() / "stream.jsonl"
+            stream.write_bytes(b"synthetic stream\n")
+            parse = meter_decoder((SCRIPT, source), (MeterInput(stream, stream, digest(stream.read_bytes())),))
+            with self.assertRaises(RuntimeError):
+                parse(stream)
 
     def test_gpu_rows_and_raw_meter_time_identities(self):
         import struct
@@ -476,6 +524,32 @@ def parse(path):
                            host_ns=[row['rx'] for row in polls], watts=watts)
 '''
 
+FIXTURE_PARENT = """
+import json, pathlib, runpy, subprocess, sys
+test = runpy.run_path(sys.argv[1])
+private = pathlib.Path(sys.argv[2])
+child_stdout, child_stderr = private / 'stdout', private / 'stderr'
+with child_stdout.open('wb') as stdout, child_stderr.open('wb') as stderr:
+    child = subprocess.run(sys.argv[3:], stdout=stdout, stderr=stderr, check=False)
+assert child.returncode in (0, 1)
+frame = json.loads(child_stdout.read_bytes()) if child.returncode == 0 else None
+print(json.dumps({'twin_agrees': test['parent_agreement'](frame)}, separators=(',', ':')))
+"""
+
+IMPORT_AUDIT_CHILD = """
+import builtins, runpy, sys
+search_path, import_hook = sys.path[:], builtins.__import__
+helpers = ('joulewise.aggregate', 'joulewise.desk_compress')
+assert all(name not in sys.modules for name in helpers)
+twin = runpy.run_path(sys.argv[1])
+def evaluate():
+    frame = twin['child_frame'](twin['child_arguments'](sys.argv[2:]))
+    assert all(name not in sys.modules for name in helpers)
+    assert sys.path == search_path and builtins.__import__ is import_hook
+    return frame
+twin['run_child'](evaluate)
+"""
+
 
 @unittest.skipUnless(HAS_NUMPY, "NumPy is required for the fit")
 class RawBundleTests(unittest.TestCase):
@@ -627,6 +701,9 @@ class RawBundleTests(unittest.TestCase):
             package = decoder.with_name("__init__.py")
             decoder_bytes = (Path(decoder_dir) / decoder.name).read_bytes() if decoder_dir else FIXTURE_DECODER.encode()
             package_bytes = (Path(decoder_dir) / package.name).read_bytes() if decoder_dir else b"# Synthetic dependency pin.\n"
+            if decoder_dir:
+                self.assertEqual(sha(decoder_bytes), "6b2e4f57776f03ba39ea644e395d4649d4e7a4ded27dd1e008eda77601fa6e0e")
+                self.assertEqual(sha(package_bytes), "368cf26e48aa87f2bf0816009947df03bfaa75276c58e30e2cdbc84e3f14835c")
             decoder_pin = {"path": decoder.relative_to(root).as_posix(), "sha256": write(decoder, decoder_bytes)}
             package_pin = {"path": package.relative_to(root).as_posix(), "sha256": write(package, package_bytes)}
             stub = b"synthetic code and schema placeholder pinned by the fixture manifest"
@@ -681,7 +758,10 @@ class RawBundleTests(unittest.TestCase):
                     "--span-dir", f"{days[0]}={custody / days[0]}", "--coefficients", str(c),
                     "--coefficients-sha256", ch, "--fit", str(f), "--step3", str(d)]
 
-            for mode, expected, error in (("match", "yes", None), ("perturbation", "no", None),
+            stream = custody / days[0] / "hazards/meter/stream-a.jsonl"
+            original_stream = stream.read_bytes()
+            for mode, expected, error in (("match", "yes", None), ("import audit", "yes", None),
+                    ("perturbation", "no", None), ("missing stream", "not_evaluable", "FileNotFoundError"),
                     ("stage1 meter identity", "not_evaluable", "ValueError"),
                     ("decoder pin", "not_evaluable", "ValueError"), ("package pin", "not_evaluable", "ValueError"),
                     ("missing coefficient", "not_evaluable", "FileNotFoundError")):
@@ -689,7 +769,10 @@ class RawBundleTests(unittest.TestCase):
                     if mode == "perturbation":
                         primary_c["channels"]["dc_in"]["coefficients"]["p1"] *= 1.001
                         argv[argv.index("--coefficients-sha256") + 1] = write(c, json_bytes(primary_c))
+                    elif mode == "missing stream":
+                        stream.unlink()
                     elif mode == "stage1 meter identity":
+                        write(stream, original_stream)
                         spans[0]["custody"]["meter_time_sha256"] = "b" * 64
                         altered = write(s1, json_bytes(stage1))
                         primary_c["stage1_sha256"] = altered
@@ -705,25 +788,28 @@ class RawBundleTests(unittest.TestCase):
                         c.unlink()
                     before = {path: sha(path.read_bytes()) for path in root.rglob("*") if path.is_file()
                               and path.name not in ("stdout", "stderr")}
-                    with (private / "stdout").open("wb") as stdout, (private / "stderr").open("wb") as stderr:
-                        process = subprocess.run([sys.executable, "-I", "-B", str(local_script), *argv],
-                                                 stdout=stdout, stderr=stderr, check=False)
+                    child = [sys.executable, "-I", "-B"]
+                    if mode == "import audit":
+                        child.extend(("-c", IMPORT_AUDIT_CHILD))
+                    child.extend((str(local_script), *argv))
+                    outer = subprocess.run([sys.executable, "-I", "-B", "-c", FIXTURE_PARENT,
+                                            str(Path(__file__).resolve()), str(private), *child],
+                                           capture_output=True, check=True)
+                    self.assertEqual(outer.stderr, b"")
+                    self.assertEqual(outer.stdout, json_bytes({"twin_agrees": expected}) + b"\n")
+                    self.assertIsNone(re.search(rb"[0-9]", outer.stdout + outer.stderr))
                     frame_bytes = (private / "stdout").read_bytes()
                     error_bytes = (private / "stderr").read_bytes()
                     if error is None:
-                        self.assertEqual(process.returncode, 0, error_bytes)
                         self.assertEqual(error_bytes, b"")
                         self.assertEqual(frame_bytes.count(b"\n"), 1)
                         frame = json.loads(frame_bytes)
                         self.assertEqual(set(frame), {"schema", "coefficients", "censored_fit", "verdicts",
                                                        "trace_coverage", "soak_retries", "max_relative_difference"})
                     else:
-                        self.assertEqual(process.returncode, 1)
                         self.assertEqual(frame_bytes, b"")
                         self.assertEqual(error_bytes, f"stage2_error\n{error}\n".encode())
                         frame = None
-                    agreement = parent_agreement(frame)
-                    self.assertEqual(agreement, expected)
-                    self.assertIsNone(re.search(rb"[0-9]", json_bytes({"twin_agrees": agreement})))
+                    self.assertEqual(parent_agreement(frame), expected)
                     self.assertEqual(before, {path: sha(path.read_bytes()) for path in root.rglob("*") if path.is_file()
                                              and path.name not in ("stdout", "stderr")})
