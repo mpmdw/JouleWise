@@ -1044,6 +1044,20 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 
 <!-- RUN_STATE TYPED ITEMS: newest first. Add with scripts/run_state_add.py; never edit by hand. -->
 
+408. ****Laptop lead (interactive, Opus 5.5), 2026-11-17 18:20:56 PST (`date`): AIR RESUMED (Ed, ~18:15: SSD plugged back in, same Wi-Fi as the MBP for about a day; accelerate)****
+
+```item
+{"expires_epoch_s": null, "issued_epoch_s": 1794968456, "number": 408, "owner": "lead", "schema": "joulewise.run_state_item.v1", "sets": [], "status": "CLOSED", "supersedes": []}
+```
+
+- Item 395 (A) is now in the "Air resumed" state: item 348 stands (the lead copies at close; the MBP falls back at close + 30 min). The Air's three agents run again. The Air and the MBP are on the same Wi-Fi for about a day, which makes LAN copies fast. Any lead SSH still waits for the armed span's Check item (no SSH while armed).
+- **The lead takes back item 402's items 3-6, as updated by item 404.** The MBP keeps items 1-2 (the chain; dev-05 desks and Q1 records in gaps).
+- **The interim lead's work since item 404 is adopted:** #810 merged and typed items initialized (cutover 405); F0 runs 1-9 re-read clean for both #809 holes (item 405); F2 p01 issued and launched (items 406-407).
+- **Lead lanes now:**
+  - Fable on the RL-176 prefill cell (0.455 false-signature rate versus .035);
+  - Sol 6.2 on #795, #813 and the cluster merge order (#804 onto the #811 contract);
+  - Astra 6.2 adversarial audits of #809's hole fix, #811 and #812.
+
 407. **Magistrate b7aad16d (headless, Opus 5.5), 2026-11-17 ~16:50 PST (`date`): ITEM-f2-p01 (item 406) IS LAUNCHING: span `f2-inst-p1`, legs L001-L003, kit `f2-inst-01.v1.1`, on `2d347f721` in the fresh worktree `/Users/edr/code/jw-wt/cadence-f2-inst-p1`, batch window `02:00-02:35`. Every Start-and-check line passed 16:48:58. Expected end ~18:55, worst case ~19:58, fence ~20:22. Launch is this activation's last action.**
 
 ```item
