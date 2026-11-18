@@ -12,6 +12,8 @@ import os
 import re
 import stat
 import struct
+import subprocess
+import sys
 import urllib.request
 from dataclasses import dataclass
 from pathlib import Path
@@ -29,6 +31,9 @@ RESERVE = 40_000_000_000 + 30_000_000_000
 CONTROL_HEADROOM = 64 * 2**20
 BLOCK = 8 * 2**20
 PLACEHOLDER = "0" * 64
+# Apple identifies Mac16,13 as the 15-inch M4 MacBook Air used for engineering.
+OFF_MBP_MODEL = b"Mac16,13"
+HARDWARE_MODEL_ARGV = ("/usr/sbin/sysctl", "-n", "hw.model")
 
 
 def json_bytes(value):
@@ -674,7 +679,8 @@ class Conversion:
         return self.finish(rows)
 
 
-def stream(root, plan, *, reserve=RESERVE, plan_only=False, encode=mlx_encoding):
+def _run_conversion(root, plan, *, reserve=RESERVE, plan_only=False, encode=mlx_encoding):
+    """Worker for an admitted caller. The standalone CLI verifies the host first."""
     root = Path(root).absolute()
     if "restricted" in root.resolve().parts or root.is_symlink():
         raise ValueError("use a private, non-symlink conversion directory")
@@ -716,21 +722,39 @@ def load_port(port):
     return canonical, rules, module
 
 
+def _prepare_plan(port_checkout, profile):
+    canonical, rules, module = load_port(port_checkout)
+    return Plan(HubSource(), canonical, rules, module, profile, canonical.SHARD_BYTES)
+
+
+def _require_off_mbp():
+    if sys.platform != "darwin":
+        raise ValueError("standalone conversion requires a verified macOS hardware model")
+    try:
+        model = subprocess.run(HARDWARE_MODEL_ARGV, check=True, capture_output=True).stdout.strip()
+    except (OSError, subprocess.CalledProcessError) as exc:
+        raise ValueError("could not read the local hardware model") from exc
+    if model != OFF_MBP_MODEL:
+        raise ValueError("standalone conversion requires a recognized off-MBP hardware model")
+
+
 def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("root", type=Path, help="new or resumable work directory; artifact is under root/artifact")
     parser.add_argument("--port-checkout", type=Path, required=True, help="canonical port checkout at 97d780d59")
     parser.add_argument("--execution", choices=("engineering", "off-mbp"), required=True,
-                        help="execution context declared by the operator")
+                        help="standalone conversion requires off-mbp and verifies local hardware")
     parser.add_argument("--profile", choices=("maxfit", "maxfit5", "bf16"), default="maxfit")
     auth = parser.add_mutually_exclusive_group(required=True)
     auth.add_argument("--plan-only", action="store_true", help="fetch only Hub metadata and safetensors headers")
     auth.add_argument("--allow-official-download", action="store_true", help="owner-authorized transfer of official weights")
     args = parser.parse_args(argv)
+    if args.execution == "engineering":
+        parser.error("engineering execution requires a queue launcher")
     try:
-        canonical, rules, module = load_port(args.port_checkout)
-        plan = Plan(HubSource(), canonical, rules, module, args.profile, canonical.SHARD_BYTES)
-        manifest = stream(args.root, plan, plan_only=args.plan_only)
+        _require_off_mbp()
+        plan = _prepare_plan(args.port_checkout, args.profile)
+        manifest = _run_conversion(args.root, plan, plan_only=args.plan_only)
     except (OSError, ValueError, KeyError, TypeError, struct.error) as exc:
         parser.exit(1, f"Conversion refused: {exc}\n")
     if manifest:

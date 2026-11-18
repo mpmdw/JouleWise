@@ -539,4 +539,4 @@ from fewer than 10 seats per (model, role).
 | S-013 SEED | 11-17 | Astra 6.2 | high | design audit | 2 | astra-design (finding 2 ruled in RL-175) | ruled by Fable | unknown | unknown | unknown | 1 | unknown | RUN_STATE 391, 396 |
 | S-014 SEED | 11-17 | Fable 5.2 | unknown | research-lead ruling | 2 | RL-175 | in force | n/a | n/a | n/a | 1 | unknown | RUN_STATE 396 |
 | S-015 SEED BATCH | 11-1x | unknown | unknown | review | 2 | #800 rounds 1-10 | REFUSE before round 9 (two HIGH); 4 findings fixed in round 9; round 10 open | unknown | unknown | unknown | 10 | unknown | RUN_STATE 384, 390; per-round counts to be filled from the PR thread |
-| S-016 | 11-18 | Sol 6.2 | xhigh | build | 1 | RL-182 Flash-Next streamed weight conversion | synthetic acceptance PASS, review pending | n/a | n/a | unknown | n/a | unknown | RUN_STATE 433 and [run report](../run_reports/2026-11-18-flashnext-stream-converter.md) |
+| S-016 | 11-18 | Sol 6.2 | xhigh | build | 1 | RL-182 Flash-Next streamed weight conversion | synthetic acceptance PASS, Astra MERGE | n/a | n/a | unknown | n/a | unknown | PR #825 and [run report](../run_reports/2026-11-18-flashnext-stream-converter.md) |

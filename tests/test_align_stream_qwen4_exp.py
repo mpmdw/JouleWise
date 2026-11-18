@@ -6,9 +6,11 @@ import math
 import os
 import re
 import struct
+import subprocess
 import tempfile
 import unittest
 from collections import defaultdict
+from contextlib import redirect_stderr
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -86,6 +88,7 @@ def checkpoint(root, config, by_shard):
 class FixtureCanonical:
     FORMAT = "joulewise-qwen4-exp-canonical-v2"
     PINS = {"mlx": "fixture"}
+    SHARD_BYTES = 160
     SHARD_RE = re.compile(r"\.ngram_embedding\.shard_(\d+)\.weight$")
     EXPERT_RE = re.compile(r"^(?P<head>.+)\.mlp\.experts\.(?P<e>\d+)\.(?P<proj>gate|up|down)_proj\.weight$")
 
@@ -185,10 +188,89 @@ class StreamTests(unittest.TestCase):
         self.plan = self.make_plan()
 
     def make_plan(self):
-        return stream.Plan(self.source, FixtureCanonical(), FixtureRules(), MODULE, "maxfit", 160)
+        return stream.Plan(self.source, FixtureCanonical(), FixtureRules(), MODULE,
+                           "maxfit", FixtureCanonical.SHARD_BYTES)
 
     def convert(self):
-        return stream.stream(self.root, self.plan, reserve=0, encode=fixture_encode)
+        return stream._run_conversion(self.root, self.plan, reserve=0, encode=fixture_encode)
+
+    def cli_args(self, root, execution, action):
+        return [str(root), "--port-checkout", str(self.base / "port"), "--execution", execution, action]
+
+    def test_off_mbp_cli_reaches_worker_for_plan_conversion_and_resume(self):
+        actual_worker = stream._run_conversion
+
+        def synthetic_worker(root, plan, *, plan_only):
+            return actual_worker(root, plan, reserve=0, plan_only=plan_only, encode=fixture_encode)
+
+        air = subprocess.CompletedProcess(stream.HARDWARE_MODEL_ARGV, 0, stdout=b"Mac16,13\n")
+        with (patch.object(stream.sys, "platform", "darwin"),
+              patch.object(stream.subprocess, "run", return_value=air) as probe,
+              patch.object(stream, "load_port", return_value=(FixtureCanonical(), FixtureRules(), MODULE)),
+              patch.object(stream, "HubSource", return_value=self.source) as source,
+              patch.object(stream, "_run_conversion", side_effect=synthetic_worker) as worker):
+            self.assertEqual(stream.main(self.cli_args(self.root, "off-mbp", "--plan-only")), 0)
+            self.assertFalse(self.root.exists())
+            self.assertEqual(self.source.downloads, [])
+            arguments = self.cli_args(self.root, "off-mbp", "--allow-official-download")
+            self.source.interrupt = self.source.inputs[1].name
+            with redirect_stderr(io.StringIO()), self.assertRaises(SystemExit) as interrupted:
+                stream.main(arguments)
+            self.assertEqual(interrupted.exception.code, 1)
+            staged, = self.root.glob("source-*.part")
+            offset = staged.stat().st_size
+            self.source.interrupt = None
+            self.assertEqual(stream.main(arguments), 0)
+        self.assertTrue((self.root / "artifact/manifest.json").is_file())
+        self.assertEqual(self.source.downloads[2], (self.source.inputs[1].name, offset))
+        self.assertEqual([call.kwargs["plan_only"] for call in worker.call_args_list], [True, False, False])
+        self.assertEqual(source.call_count, 3)
+        probe.assert_called_with(("/usr/sbin/sysctl", "-n", "hw.model"), check=True, capture_output=True)
+        self.assertEqual(probe.call_count, 3)
+
+    def test_cli_refuses_unadmitted_hosts_before_source_or_job_access(self):
+        self.source.interrupt = self.source.inputs[1].name
+        with self.assertRaisesRegex(ValueError, "short download"):
+            self.convert()
+        before = {p.relative_to(self.root): p.read_bytes() for p in self.root.rglob("*") if p.is_file()}
+        downloads = list(self.source.downloads)
+        fresh = self.base / "fresh"
+        cases = [
+            ("engineering", "darwin", b"Mac16,13\n", None, "queue launcher", False),
+            ("off-mbp", "darwin", b"Mac15,9\n", None, "recognized off-MBP", True),
+            ("off-mbp", "darwin", b"VirtualMac2,1\n", None, "recognized off-MBP", True),
+            ("off-mbp", "darwin", b"", None, "recognized off-MBP", True),
+            ("off-mbp", "darwin", b"", OSError("synthetic failure"), "read the local hardware", True),
+            ("off-mbp", "darwin", b"", subprocess.CalledProcessError(1, "sysctl"), "read the local hardware", True),
+            ("off-mbp", "linux", b"", None, "verified macOS hardware", False),
+        ]
+        for execution, platform, model, error, reason, probed in cases:
+            for root in (fresh, self.root):
+                for action in ("--plan-only", "--allow-official-download"):
+                    with self.subTest(execution=execution, platform=platform, model=model,
+                                      error=error, root=root.name, action=action):
+                        reply = subprocess.CompletedProcess(stream.HARDWARE_MODEL_ARGV, 0, stdout=model)
+                        stderr = io.StringIO()
+                        with (patch.object(stream.sys, "platform", platform),
+                              patch.object(stream.subprocess, "run", return_value=reply, side_effect=error) as probe,
+                              patch.object(stream, "load_port") as port,
+                              patch.object(stream, "HubSource", return_value=self.source) as source,
+                              patch.object(stream, "_run_conversion") as worker,
+                              patch.object(Path, "stat") as stat,
+                              patch.object(Path, "resolve") as resolve,
+                              patch.object(Path, "open") as open_path,
+                              patch.object(os, "statvfs") as disk,
+                              redirect_stderr(stderr),
+                              self.assertRaises(SystemExit) as refused):
+                            stream.main(self.cli_args(root, execution, action))
+                        self.assertNotEqual(refused.exception.code, 0)
+                        self.assertIn(reason, stderr.getvalue())
+                        self.assertEqual(probe.call_count, int(probed))
+                        for unexpected in (port, source, worker, stat, resolve, open_path, disk):
+                            unexpected.assert_not_called()
+        self.assertEqual(downloads, self.source.downloads)
+        self.assertFalse(fresh.exists())
+        self.assertEqual(before, {p.relative_to(self.root): p.read_bytes() for p in self.root.rglob("*") if p.is_file()})
 
     def test_budget_one_source_and_allocation_bound(self):
         budget = stream.Budget(self.base, self.plan, 0)
@@ -200,7 +282,7 @@ class StreamTests(unittest.TestCase):
             yield from real_encode(*args)
 
         with patch.object(stream, "range_sha", wraps=stream.range_sha) as verify:
-            stream.stream(self.root, self.plan, reserve=0, encode=observe)
+            stream._run_conversion(self.root, self.plan, reserve=0, encode=observe)
         self.assertTrue(any(call.args[0].parent.name == "artifact" for call in verify.call_args_list))
         self.assertEqual(len(self.source.downloads), 3)
         self.assertEqual([number for number, _ in self.source.observations], [0, 0, 0])
@@ -213,7 +295,7 @@ class StreamTests(unittest.TestCase):
         with patch.object(stream.os, "statvfs", return_value=SimpleNamespace(
                 f_frsize=1, f_bavail=budget.peak + budget.reserve - 1)), patch("builtins.print") as reported:
             with self.assertRaisesRegex(ValueError, "short disk"):
-                stream.stream(self.root, self.plan, reserve=123, encode=fixture_encode)
+                stream._run_conversion(self.root, self.plan, reserve=123, encode=fixture_encode)
         self.assertFalse(self.root.exists())
         self.assertEqual(self.source.downloads, [])
         report = json.loads(reported.call_args.args[0])
@@ -418,7 +500,7 @@ class NativeParityTests(unittest.TestCase):
             limit = 45_000
             original = canonical.convert(source, ref, module_file=canonical.MODULE_FILE, shard_bytes=limit)
             plan = stream.Plan(FixtureSource(source, root), canonical, rules, module, "maxfit", limit)
-            pin = stream.stream(root, plan, reserve=0)
+            pin = stream._run_conversion(root, plan, reserve=0)
             artifact = root / "artifact"
             manifest = canonical.verify_manifest(artifact, pin)
             self.assertEqual(manifest["files"], original["files"])
