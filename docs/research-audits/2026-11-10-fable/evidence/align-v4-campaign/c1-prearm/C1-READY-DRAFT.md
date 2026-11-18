@@ -22,6 +22,7 @@ magistrate owns execution of the registered C1 route. [Typed priority and route]
 | Binding for `joulewise/align/apple/rl176_phases.py` | UNFILLED |
 | PR #831 admission in the operational ancestry and eligible A/B agreement or research-lead disposition. PR #836 release-script evidence and the stored-record-to-word witness at 102 and 101 of 154. | UNFILLED |
 | Protected-function and level-constant diff between receipts, with research-lead ruling ID for any change | UNFILLED |
+| E17 receipt disposition. A numeric field is eligible only if already in the frozen evaluator output and named by the signer. Otherwise use the ruled null path. | UNFILLED |
 | Signed series admission, authenticated manifest and W1 collection bindings, explicit choices, scorer/fit contract, seed-allocation evidence, R13/R14 gate, paired-build agreement and W1 clearance | UNFILLED |
 | C1 cohort and thermal identity, applicable registered W1→C1 policy step, ruling and evidence rebind if required | UNFILLED |
 | Part C carry diff and ruling, or clean new-pin Part C close with desk and hand-read | UNFILLED |
@@ -33,6 +34,8 @@ must give `S SIGNATURE` at 102 of 154 and withhold that word at 101. An
 unclean A/B row or `token_stamps_unavailable` goes to the research lead
 before that row can support PR #831's admission or agreement. Return a held
 reason or a D G1 admission timeout rate over 10% to the research lead.
+The producer bindings for `S_a4`, `S_w` and the benign-only slope are
+release-time checks.
 [Receipt and protected symbols](https://github.com/mpmdw/JouleWise/blob/5a1151544/docs/research-audits/2026-11-10-fable/RESEARCH-LEAD-DECISIONS.md#L19776-L19796) · [Receipt, witness and W1 close requirements](https://github.com/mpmdw/JouleWise/blob/5a1151544/docs/research-audits/2026-11-10-fable/RESEARCH-LEAD-DECISIONS.md#L19923-L19930) · [W1 gap](https://github.com/mpmdw/JouleWise/blob/5a1151544/docs/research-audits/2026-11-10-fable/RESEARCH-LEAD-DECISIONS.md#L20003-L20011) · [Pin and A/B rulings](https://github.com/mpmdw/JouleWise/blob/5a1151544/docs/research-audits/2026-11-10-fable/RESEARCH-LEAD-DECISIONS.md#L20163-L20177) · [RL-185 open rows](https://github.com/mpmdw/JouleWise/blob/5a1151544/docs/research-audits/2026-11-10-fable/RESEARCH-LEAD-DECISIONS.md#L20885-L20903)
 
 The series admission predicate `require_admission(..., post_w1=True)`
