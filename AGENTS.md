@@ -124,7 +124,9 @@ changes.
 ## Handoff
 
 Return a concise summary with findings, changed files, verification, blockers,
-and the next exact step. A substantial run must also update `RUN_STATE.md`,
-`TASK_QUEUE.md`, and a dated report under `docs/run_reports/`; update
+and the next exact step. A substantial run must also write a dated report under
+`docs/run_reports/`. Do not edit `RUN_STATE.md` or `TASK_QUEUE.md` in a PR:
+parallel PRs conflict there and the MBP magistrate executes `RUN_STATE.md`,
+so only the lead posts typed items (`scripts/run_state_add.py`). Update
 `PROJECT_STATUS.md` only when advisor-visible state changed. Record delegated
 process evidence at the level required by D-050 and `docs/orchestration.md`.
