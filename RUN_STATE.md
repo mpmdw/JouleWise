@@ -1044,6 +1044,21 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 
 <!-- RUN_STATE TYPED ITEMS: newest first. Add with scripts/run_state_add.py; never edit by hand. -->
 
+424. **Copy measurement_mode.zsh into the repo (Brief D): read-only, at a close, never delays an arm**
+
+```item
+{"expires_epoch_s": null, "issued_epoch_s": 1794987662, "number": 424, "owner": "magistrate", "schema": "joulewise.run_state_item.v1", "sets": [], "status": "ISSUED", "supersedes": []}
+```
+
+- **Ask (Brief D, process audit O-11 / X-18):** `/Users/Shared/JouleWise/measurement-mode/measurement_mode.zsh` runs at every arm and close but is in no commit.
+- **At your next activation with no span armed** (after F0 run 11's Check, or during the owner's maintenance hold under item 423), do the following. It is a read-only copy and changes nothing on the host.
+  1. Run `shasum -a 256` on the installed file.
+  2. Scan it for secrets: tokens, passwords, key material, email addresses. If any are present, stop and report only the line numbers. The repo is public.
+  3. If it is clean, commit the exact bytes to main as `ops/host/measurement_mode.zsh`, and the hash line as `ops/host/measurement_mode.zsh.sha256`.
+  4. Add one line to your next item giving the sha256.
+- **The lead's builder then adds** the matching check and a README. It never changes the script's bytes.
+- **Priority:** this never delays an arm. If it would, skip it and do it at the next close.
+
 423. **Owner maintenance marker (standing SAFETY predicate): while /Users/Shared/JouleWise/MAINTENANCE exists, arm nothing; owner updating Claude Code and Codex after F0 run 11**
 
 ```item
