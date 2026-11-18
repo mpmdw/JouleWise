@@ -13,8 +13,9 @@ from pathlib import Path
 import re
 import sys
 import traceback
+import warnings
 
-from .manifest_dispatch import PRE_READ_REFUSAL, save_public_stderr
+from .manifest_dispatch import PRE_READ_REFUSAL, finish_notice, redirect_to_devnull, save_public_stderr
 
 CUSTODY_NAMES = frozenset(("scores.json", "stdout", "stderr"))
 HASHES = ("manifest_sha256", "stage1_roster_sha256", "freeze2_sha256")
@@ -28,7 +29,7 @@ _BUILTIN_ERRORS = tuple(
     if isinstance(candidate, type) and issubclass(candidate, BaseException)
     and candidate.__module__ == "builtins" and candidate.__name__ == name
 )
-_REFUSAL = b"REFUSE transfer look before read\n"
+_REFUSAL = "REFUSE transfer look before read\n"
 
 
 def validate_public(record):
@@ -87,6 +88,9 @@ def _redirect(restricted):
             os.dup2(stream, fd)
         finally:
             os.close(stream)
+        # A missing Python stream can be recreated after its descriptor is private.
+        if getattr(sys, name) is None:
+            setattr(sys, name, os.fdopen(fd, "w", encoding="utf-8", closefd=False))
 
 
 def run_transfer_worker(*, restricted: Path, public: Path, execution_host: str, local_host: str,
@@ -102,13 +106,18 @@ def run_transfer_worker(*, restricted: Path, public: Path, execution_host: str, 
     """
     original_stderr = None
     try:
+        warnings.simplefilter("ignore")
+        sys.warnoptions = []
         original_stderr = save_public_stderr()
-        sys.stdout.flush()
-        sys.stderr.flush()
+        redirect_to_devnull(2)
+        if finish_notice(0, flush_streams=True):
+            raise OSError("worker streams could not be flushed")
     except OSError:
-        if original_stderr is not None:
-            os.close(original_stderr)
-        return PRE_READ_REFUSAL
+        try:
+            return finish_notice(PRE_READ_REFUSAL, stderr=_REFUSAL, stderr_fd=original_stderr)
+        finally:
+            if original_stderr is not None:
+                os.close(original_stderr)
     read_started = False
     redirected = False
 
@@ -154,10 +163,8 @@ def run_transfer_worker(*, restricted: Path, public: Path, execution_host: str, 
             except Exception:
                 pass
         if read_started:
-            notice = f"stage2_error\n{_failure_type(error)}\n".encode("ascii")
-            os.write(original_stderr, notice)
-            return POST_READ_FAILURE
-        os.write(original_stderr, _REFUSAL)
-        return PRE_READ_REFUSAL
+            notice = f"stage2_error\n{_failure_type(error)}\n"
+            return finish_notice(POST_READ_FAILURE, stderr=notice, stderr_fd=original_stderr)
+        return finish_notice(PRE_READ_REFUSAL, stderr=_REFUSAL, stderr_fd=original_stderr)
     finally:
         os.close(original_stderr)
