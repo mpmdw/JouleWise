@@ -1,0 +1,559 @@
+{
+  "schema": "joulewise.cadence_look_manifest.v2",
+  "look_id": "lm-qual-01",
+  "look_kind": "qualification",
+  "status": "registered",
+  "title": "Qualification of the frozen predictor on three registered blocks",
+  "rulings": [
+    "RL-149 §2.6",
+    "RL-150 R4",
+    "RL-151 §2.1",
+    "RL-151 §2.2",
+    "RL-166 §1",
+    "RL-166 Q10",
+    "RL-166a",
+    "RL-166b §3",
+    "RL-166b §4",
+    "RL-167",
+    "RL-172a",
+    "RL-174",
+    "RL-175",
+    "RL-179 F12",
+    "RL-180 §1",
+    "RL-181 §1.0–1.5",
+    "RL-181 §2.1",
+    "RL-181 §4(a)"
+  ],
+  "registration": {
+    "ledger_path": "docs/process/cadence/looks/LOOKS.json",
+    "registration_deadline": "On main strictly before the first authenticated qualification receipt. Prove the registration commit precedes every authenticated receipt used, including the last. Ties, missing order evidence and scientific changes after the first receipt refuse the look.",
+    "final_deadline": "On main before the stage-2 reservation.",
+    "finalization": "The final manifest equals the registered bytes outside the code and schema hash placeholders. Fill every placeholder with the lowercase SHA-256 of the exact bytes. A scientific change after the first receipt goes to the research lead."
+  },
+  "reads": {
+    "blocks": [
+      {
+        "block_id": "qual-01",
+        "phase": "qualification",
+        "role": "describe",
+        "kit_sha256": "ce5c16d221f838ca8f06af68aa7380a4cb0d6fb4b5b5825444db6c7433fd40c7",
+        "spans": [
+          "qual-01-s01",
+          "qual-01-s02"
+        ],
+        "cite": [
+          "RL-166 Q10",
+          "RL-167 §4",
+          "RL-175"
+        ]
+      },
+      {
+        "block_id": "qual-02",
+        "phase": "qualification",
+        "role": "describe",
+        "kit_sha256": "f421d6a4c9a7214a1c220e4009619c7ea02590031a25122b6f379dab8fec7f75",
+        "spans": [
+          "qual-02-s01",
+          "qual-02-s02"
+        ],
+        "cite": [
+          "RL-166 Q10",
+          "RL-167 §4",
+          "RL-175"
+        ]
+      },
+      {
+        "block_id": "qual-03",
+        "phase": "qualification",
+        "role": "describe",
+        "kit_sha256": "9c4396ea1cff66fc4bbcf944ee2142bfb8b18f3a8547269c163faee9a3e03e88",
+        "spans": [
+          "qual-03-s01",
+          "qual-03-s02"
+        ],
+        "cite": [
+          "RL-166 Q10",
+          "RL-167 §4",
+          "RL-175"
+        ]
+      }
+    ],
+    "leg_types_read": [
+      "A",
+      "L"
+    ],
+    "leg_types_never": [
+      "H",
+      "M",
+      "T",
+      "C"
+    ],
+    "attempts": "accepted_only",
+    "day_rule": "Use the America/Los_Angeles date of the span's authenticated t0 as run. Split blocks keep both dates; each L pair stays inside its span.",
+    "excluded_inputs": [
+      "Development responses",
+      "Fillers",
+      "Controls",
+      "v4",
+      "Rejected attempts",
+      "Other look results as qualification observations"
+    ],
+    "required_per_span": [
+      "Hand-table sample",
+      "Desk-final record",
+      "Typed Q1 record"
+    ],
+    "first_span_hand_read": "The magistrate uses the hand-read template and operational records during the close interval of qual-01-s01. Check the capture leg's G0 record, each consumer's release against the span reference and its wait, and each leg's decode count against its own cap (4096, 3724 or 3151). qual-01-s02 can arm once the hand-read passes. If the hand-read has not passed by the latest t0 for qual-01-s02 under F-1 rule 3, re-date s02 under RL-175 C.3 and keep the half that ran. A hand-read from an earlier filler or pilot discharges the gate if the lead shows that read before Friday and the run exercised both leg types at q0 on this pin (6e9d42f1dd3d308bc9239143d0d634ab965e50e1)."
+  },
+  "inclusion": {
+    "rules": [
+      {
+        "rule": 1,
+        "id": "ran_to_cap",
+        "text": "It ran to its decode cap, or was cut by T_dead where the design says it should be.",
+        "judged_at": "runner",
+        "reads_energy": false,
+        "cite": [
+          "RL-149 §2.4"
+        ]
+      },
+      {
+        "rule": 2,
+        "id": "g0_released",
+        "text": "Its G0 released.",
+        "judged_at": "runner",
+        "reads_energy": false,
+        "cite": [
+          "RL-149 §2.4",
+          "RL-150 R1"
+        ]
+      },
+      {
+        "rule": 3,
+        "id": "sidecar_coverage",
+        "text": "Over the leg's interval (G0's start to the last stamped token): sidecar coverage at least 99 % and no gap over 2 s; powermetrics gaps at most max(1 s, 5 periods), U1's registered number (pilot_protocol_v4.md:451). Coverage and gap are the registered U1 evaluator's definitions (thermal.Coverage; thermal_desk.member_record's pm_gap), copied with a cite and an equality test because both are v4 strict paths. Delivered to stage 1 as the verdict file {\"<span_id>/<leg_id>\": {\"sidecar_coverage\": bool, \"km003c_clean\": bool}} (`python3 -I -B joulewise/cadence_looks/inclusion_34.py --manifest M ...`).",
+        "judged_at": "look",
+        "reads_energy": false,
+        "code": {
+          "path": "joulewise/cadence_looks/inclusion_34.py",
+          "sha256": "PENDING:CODE"
+        },
+        "cite": [
+          "RL-149 §2.4",
+          "RL-150 R9",
+          "RL-166 Q7"
+        ]
+      },
+      {
+        "rule": 4,
+        "id": "km003c_clean",
+        "text": "Header and trailer both present with a normal stop reason; inside the leg's interval, samples at least 99 % of the header's nominal rate (the count n of each sample line, summed, against sps x the interval) and no gap over 2 s between polls that carried samples (n > 0). Stamps and counts only: each sample line's rt and n are taken by pattern and the line dropped; no sample value is decoded (Sol cold seat N5). The span trailer's counts print in the inclusion table and decide nothing. Delivered to stage 1 as the verdict file {\"<span_id>/<leg_id>\": {\"sidecar_coverage\": bool, \"km003c_clean\": bool}} (`python3 -I -B joulewise/cadence_looks/inclusion_34.py --manifest M ...`).",
+        "judged_at": "look",
+        "reads_energy": false,
+        "code": {
+          "path": "joulewise/cadence_looks/inclusion_34.py",
+          "sha256": "PENDING:CODE"
+        },
+        "cite": [
+          "RL-149 §2.4",
+          "RL-150 R8",
+          "RL-150 R9",
+          "RL-166 Q7"
+        ]
+      },
+      {
+        "rule": 5,
+        "id": "not_a_contaminated_attempt",
+        "text": "It is not an attempt judged contaminated under the load-redo rule (above 0.5 core of outside load for 60 s), whether or not a redo replaced it.",
+        "judged_at": "runner",
+        "reads_energy": false,
+        "cite": [
+          "RL-150 R7"
+        ]
+      },
+      {
+        "rule": 6,
+        "id": "block_power_mode",
+        "text": "The power mode is the block's.",
+        "judged_at": "runner",
+        "reads_energy": false,
+        "cite": [
+          "RL-149 §2.4"
+        ]
+      }
+    ],
+    "interval": "G0's start to the last stamped token, for rules 3 and 4",
+    "inclusion_reads_no_energy": true,
+    "no_drop_by_outcome": true,
+    "verdicts_frozen_before_energy": true,
+    "cite": [
+      "RL-149 §2.4",
+      "RL-150 R7",
+      "RL-150 R9",
+      "RL-157 §4",
+      "RL-166 Q7",
+      "RL-166 Q8"
+    ]
+  },
+  "freeze2": {
+    "direction": "input",
+    "look_id": "lm-interim-01",
+    "commitment_ref": "main",
+    "public_file": "PUBLIC.json",
+    "commitment_field": "coefficients_sha256",
+    "effective_if": "Authenticate the interim manifest, ledger and public report on main. An interim twin_agrees of yes makes the hash effective. Otherwise require a ledger ruling naming that exact SHA-256 as freeze 2.",
+    "coefficient_file": "RESTRICTED/coefficients.json",
+    "verification": "Authenticate the exact stored bytes in their interim location after reservation and before parsing or the first qualification response read.",
+    "required_before": [
+      "qualification_energy_opened",
+      "qualification_leg_runs",
+      "phase_boundary_crossed",
+      "release_run_inputs_signed"
+    ],
+    "refit_on_qualification": false
+  },
+  "pins": {
+    "scorer": {
+      "path": "joulewise/cadence_looks/fit_interim.py",
+      "sha256": "PENDING:CODE"
+    },
+    "code": [
+      {
+        "path": "joulewise/cadence_looks/inclusion_34.py",
+        "sha256": "PENDING:CODE"
+      },
+      {
+        "path": "joulewise/cadence_looks/time_fields.py",
+        "sha256": "PENDING:CODE"
+      },
+      {
+        "path": "joulewise/cadence_looks/step3_energy_ratios.py",
+        "sha256": "PENDING:CODE"
+      },
+      {
+        "path": "scripts/cadence_look_run.py",
+        "sha256": "PENDING:CODE"
+      },
+      {
+        "path": "scripts/cadence_look_manifest.py",
+        "sha256": "PENDING:CODE"
+      },
+      {
+        "path": "joulewise/cadence_looks/schema_check.py",
+        "sha256": "PENDING:CODE"
+      },
+      {
+        "path": "joulewise/cadence_looks/interim_release.py",
+        "sha256": "PENDING:CODE"
+      },
+      {
+        "path": "joulewise/cadence_looks/qual_score.py",
+        "sha256": "PENDING:CODE"
+      },
+      {
+        "path": "joulewise/__init__.py",
+        "sha256": "PENDING:CODE"
+      },
+      {
+        "path": "joulewise/aggregate.py",
+        "sha256": "PENDING:CODE"
+      },
+      {
+        "path": "joulewise/authentication_io.py",
+        "sha256": "PENDING:CODE"
+      },
+      {
+        "path": "joulewise/axi_decode_config.py",
+        "sha256": "PENDING:CODE"
+      },
+      {
+        "path": "joulewise/bundle_read.py",
+        "sha256": "PENDING:CODE"
+      },
+      {
+        "path": "joulewise/cadence_looks/__init__.py",
+        "sha256": "PENDING:CODE"
+      },
+      {
+        "path": "joulewise/cadence_looks/manifest.py",
+        "sha256": "PENDING:CODE"
+      },
+      {
+        "path": "joulewise/desk_compress.py",
+        "sha256": "PENDING:CODE"
+      },
+      {
+        "path": "joulewise/desk_restore.py",
+        "sha256": "PENDING:CODE"
+      },
+      {
+        "path": "joulewise/external/__init__.py",
+        "sha256": "PENDING:CODE"
+      },
+      {
+        "path": "joulewise/external/km003c_parse.py",
+        "sha256": "PENDING:CODE"
+      },
+      {
+        "path": "joulewise/idle_admission.py",
+        "sha256": "PENDING:CODE"
+      },
+      {
+        "path": "joulewise/provenance.py",
+        "sha256": "PENDING:CODE"
+      },
+      {
+        "path": "joulewise/schemas.py",
+        "sha256": "PENDING:CODE"
+      },
+      {
+        "path": "joulewise/suite.py",
+        "sha256": "PENDING:CODE"
+      },
+      {
+        "path": "joulewise/validation.py",
+        "sha256": "PENDING:CODE"
+      },
+      {
+        "path": "joulewise/cadence_looks/qualification_manifest.py",
+        "sha256": "PENDING:CODE"
+      }
+    ],
+    "schemas": {
+      "manifest": {
+        "path": "docs/process/cadence/looks/look_manifest.v2.schema.json",
+        "sha256": "PENDING:CODE"
+      },
+      "stage1": {
+        "path": "docs/process/cadence/looks/lm-qual-01.stage1.schema.json",
+        "sha256": "PENDING:CODE"
+      },
+      "public": {
+        "path": "docs/process/cadence/looks/lm-qual-01.output.schema.json",
+        "sha256": "PENDING:CODE"
+      },
+      "coefficients": {
+        "path": "docs/process/cadence/looks/lm-interim-01.coefficients.schema.json",
+        "sha256": "PENDING:CODE"
+      }
+    }
+  },
+  "scoring": {
+    "entry_point": "predict_frozen",
+    "channels": [
+      "gpu_rail",
+      "dc_in"
+    ],
+    "equivalence": "If the predict-path hash differs from the admitted interim pin, before stage 2 the lead commits and binds in the ledger a generated type-A equivalence record. With one coefficient set the files must give byte-equal predictions for every segment the interim look scores. A difference goes to the research lead.",
+    "native_short_legs": "The fit_interim.py owner adds native L support and the terminal segment without changing existing branches. Use the pinned predictor with native inputs and keep native shorts distinct from own-prefix observations. No second scorer, padding, truncation or relabelling.",
+    "tail_segments": [
+      {
+        "decode_tokens": 3724,
+        "first_stamp": 3583,
+        "last_stamp": 3723,
+        "gaps": 140
+      },
+      {
+        "decode_tokens": 3151,
+        "first_stamp": 3071,
+        "last_stamp": 3150,
+        "gaps": 79
+      }
+    ],
+    "tail_rule": "For the L-pair prints, use one terminal segment from last full-block closing stamp to last stamped token, once on each of the measured and predicted sides for both channels. Keep the frozen integration and count clock: n = gaps and c = P + (first_stamp + last_stamp) / 2."
+  },
+  "decision": {
+    "word": "qualified_qualification",
+    "series": {
+      "channel": "gpu_rail",
+      "decode_ratio": "1.10",
+      "leg_type": "A",
+      "included_only": true,
+      "long_decode_tokens": 4096,
+      "short_own_prefix_tokens": 3724,
+      "residual": "Measured joules minus frozen prediction in joules at the corresponding length",
+      "independent_l_pairs_gate_word": false
+    },
+    "scale": {
+      "source": "Compute long and short residual SDs separately, once over the same full included qualification decision roster",
+      "ddof": 1,
+      "sd_floor_joules": 1e-12
+    },
+    "interval": {
+      "per_leg": "residual_long / SD_long − residual_short / SD_short",
+      "estimate": "Arithmetic mean of the day means",
+      "day_weight": "equal",
+      "day_source": "America/Los_Angeles local t0-date of the span as run",
+      "confidence": 0.9,
+      "formula": "mean ± t(0.95, D − 1) × sample SD(day means, ddof 1) / sqrt(D), with D distinct contributing dates"
+    },
+    "support": {
+      "min_legs": 3,
+      "min_days": 3
+    },
+    "containment": {
+      "lower": -0.1,
+      "upper": 0.1,
+      "inclusive": true,
+      "round_before_comparison": false
+    },
+    "mapping": {
+      "not_evaluable": "Fewer than 3 decision legs, fewer than 3 distinct decision days, either length SD at or below 1e-12 J, or an undefined interval",
+      "yes": "Evaluable and both unrounded endpoints are contained inclusively in [-0.10, +0.10]",
+      "no": "Evaluable and at least one endpoint is outside [-0.10, +0.10]"
+    }
+  },
+  "pair_description": {
+    "population": "The 1.10 and 1.30 true pairs whose two members each pass the six rules. Record complete and incomplete counts and incomplete IDs by ratio. An included singleton stays in the L leg-level description. No rerun or change of type.",
+    "status": {
+      "not_evaluable": "0 or 1 complete pair",
+      "pairs_only": "Exactly 2 complete pairs: show both contrasts and their own-prefix comparators with null estimate and interval",
+      "described": "At least 3 complete pairs: R-11 estimate and interval, day-weighted under RL-175 B.4"
+    },
+    "design": [
+      {
+        "block_id": "qual-01",
+        "ratio_1_10": "span 2 full first",
+        "ratio_1_30": "span 1 short first"
+      },
+      {
+        "block_id": "qual-02",
+        "ratio_1_10": "span 2 full first",
+        "ratio_1_30": "span 1 full first"
+      },
+      {
+        "block_id": "qual-03",
+        "ratio_1_10": "span 1 short first",
+        "ratio_1_30": "span 2 full first"
+      }
+    ],
+    "pooled": "Six planned pairs in three out of four order-by-span cells. Retain the empty cell and actual layout. Pool across ratios for description without estimating an order or position correction."
+  },
+  "outputs": {
+    "public_file": "PUBLIC.json",
+    "fields": {
+      "look_id": {
+        "type": "fixed_id",
+        "source": "lm-qual-01 from the authenticated manifest, stage 1 and ledger"
+      },
+      "manifest_sha256": {
+        "type": "sha256",
+        "source": "Exact admitted qualification manifest bytes, matching the ledger"
+      },
+      "commit": {
+        "type": "git_commit",
+        "source": "Full pre-read execution revision authenticating the stage-1 ledger row"
+      },
+      "stage1_sha256": {
+        "type": "sha256",
+        "source": "Exact committed stage-1 bytes whose roster is used, matching the ledger"
+      },
+      "coefficients_sha256": {
+        "type": "sha256",
+        "source": "Stored interim input bytes authenticated against effective freeze 2 on main"
+      },
+      "development_config_sha256": {
+        "type": "sha256",
+        "source": "Development configs/align/v4/r1_runtime.json at its applicable pinned ref, authenticated by the interim manifest and bound at stage 1 /configs/development_sha256"
+      },
+      "qualification_config_sha256": {
+        "type": "sha256",
+        "source": "Config bytes bound by the three qualification kits and committed at stage 1 /configs/qualification_sha256. Check each phase against its own source."
+      },
+      "included_legs": {
+        "type": "nonnegative_json_integer",
+        "source": "Exact authenticated stage-1 /counts/included_legs, including eligible L singletons"
+      },
+      "qualified_qualification": {
+        "type": "word",
+        "source": "The GPU-rail own-prefix decision on the full included decision roster"
+      },
+      "type_m_residual": {
+        "type": "word",
+        "source": "Design constant not_run. Former M positions have no marker and are ordinary A at 19,458. Each kit has 2 A at 2,000, 2 at 10,000 and 4 at 19,458."
+      },
+      "stage2_error": {
+        "type": "word",
+        "source": "Completed report constant no. A failure writes the fixed notice and no JSON."
+      }
+    },
+    "words": {
+      "qualified_qualification": [
+        "yes",
+        "no",
+        "not_evaluable"
+      ],
+      "type_m_residual": [
+        "not_run"
+      ],
+      "stage2_error": [
+        "no"
+      ]
+    },
+    "energy_dependent_words": [
+      "qualified_qualification",
+      "stage2_error"
+    ],
+    "format": "Exact closed object, with lowercase hex hashes and Git object ID, canonical sorted compact UTF-8 JSON and one final LF. Verify each value against its listed source before the first public byte.",
+    "destinations": {
+      "public_manifest": [
+        "Frozen pair order and span design, prompt/decode caps and the terminal segment edges",
+        "The changed config key d_n_chunk_status in configs/align/v4/r1_runtime.json, an unread label",
+        "Required paper wording and the blinding statement"
+      ],
+      "committed_stage1": [
+        "Blind accepted-leg roster with six-rule verdicts, as-run dates, types, caps, order and span positions",
+        "Blind counts by job, cell and ratio, complete and incomplete pair IDs, and included L singleton IDs",
+        "Blind realized order-by-span counts and IDs, segment map, maintenance marks and both config commitments"
+      ],
+      "RESTRICTED/scores.json": [
+        "Bias estimates, both 90% interval endpoints and containment at 1.10 and 1.30 on GPU rail and DC-in",
+        "The 1.374 decode-ratio grid value (4096/2981) and the smaller load-seconds ratios by prompt-size cell",
+        "True L-pair contrasts, own-prefix comparisons, per-leg residuals and included L singleton scores",
+        "Private per-ratio status, numbers and comparisons",
+        "Energy columns of the order-by-span joint table and the pooled descriptive line across both ratios",
+        "Maintenance-flagged and unflagged errors side by side with counts, and by-cell errors",
+        "Both terminal segment contributions on measured and predicted sides, leg totals and differences",
+        "Every number computed from energy and every count formed after an energy open"
+      ]
+    }
+  },
+  "release": {
+    "custody_names": [
+      "scores.json",
+      "stdout",
+      "stderr"
+    ],
+    "twin": false,
+    "disclosure": "No number computed from energy is public before the data release. The public outputs are at most sixteen words, counts that hold no energy, and hashes.",
+    "stage2_time_budget_s": 1200,
+    "preflight": [
+      "Authenticate the committed final manifest, all applicable code and schema pins, the ledger, exact committed stage-1 bytes and their roster, kit and execution revision bindings. Stage 2 must match the NumPy version committed at stage 1.",
+      "Verify freeze 2 is effective on main and check the qualification scorer and any required equivalence record.",
+      "Bind each receipt to its span and actual t0 and prove all six receipts strictly follow the exact registration commit.",
+      "Authenticate per-span hand/desk/Q1 evidence before reading any qualification response. Stage 1 uses blind records and commits inclusion verdicts before stage 2.",
+      "Check spent history, existing output/reservation and the committed execution_host against the local receipt-style host ID before exclusive reservation. A host rebind requires a new ledger row and proof of no reservation on the first host."
+    ],
+    "reservation": "Exclusively create RESTRICTED/ once for this ID. Before any read, confine process-tree fds 1 and 2 to stdout and stderr in the directory and retain the original stderr solely for the fixed failure notice. Authenticate the interim coefficient bytes in place before any qualification response. Success leaves exactly the registered custody names. PUBLIC.json is the only write outside that directory. All temporary files stay inside it.",
+    "failure": {
+      "first_stderr_line": "stage2_error",
+      "second_stderr_line": "Exact class identity from builtins, numpy.linalg.LinAlgError or json.JSONDecodeError. An unlisted class maps to OtherError.",
+      "exit_status": 1,
+      "rule": "After first energy read emit exactly the two ASCII lines with final LF, empty external stdout and no public JSON. A blind ledger operation records failed and error_type. Preserve the reservation, including on interruption and uncertain read. A spent ID needs a failed row and named research-lead ruling for a successor."
+    }
+  },
+  "oracle": {
+    "author_rule": "A seat from a different model family than the scorer builder writes expected values from RL-181 §1.1 and §1.2 without seeing qual_score.py.",
+    "tests": [
+      "test_qual_interval_containment",
+      "test_qual_equal_day_unequal_counts",
+      "test_qual_fewer_than_three_pair_days",
+      "test_qual_undefined_interval",
+      "test_qual_l_partial_blocks_same_scorer"
+    ]
+  },
+  "paper_sentences": {
+    "independent_seeds": "The two legs of a pair have the same prompt size and start rule and different decode caps. They are independently seeded; the short leg is not the first tokens of the long one.",
+    "order_and_position": "At the 1.10 ratio the long-first pairs were also the second-span pairs, so an effect of order cannot be told from an effect of span position. The pair contrasts describe the orders and positions that were run and carry no word. The qualification word compares each full-length leg with its own first 3,724 tokens; three independently seeded pairs a ratio cannot resolve a tenth of a score SD."
+  }
+}

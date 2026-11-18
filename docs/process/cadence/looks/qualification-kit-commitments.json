@@ -1,0 +1,23 @@
+{
+  "lm-qual-01": {
+    "source": {
+      "commit": "6f32db2af5be1b8b719658b92adfc4698372b056",
+      "path": "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/item-drafts-1118/kits"
+    },
+    "kit_sha256_by_block": {
+      "qual-01": "ce5c16d221f838ca8f06af68aa7380a4cb0d6fb4b5b5825444db6c7433fd40c7",
+      "qual-02": "f421d6a4c9a7214a1c220e4009619c7ea02590031a25122b6f379dab8fec7f75",
+      "qual-03": "9c4396ea1cff66fc4bbcf944ee2142bfb8b18f3a8547269c163faee9a3e03e88"
+    },
+    "runner_pin": "6e9d42f1dd3d308bc9239143d0d634ab965e50e1",
+    "cold_pass": {
+      "manifest_commit": "0b09bee24eb4981aa6da9cb18f991eb0e676b67c",
+      "manifest_sha256": "57ee6b131cf680a1a4bf76866e3d764961510c0b4d26254c5adaaad716d8b795",
+      "kit_sha256_by_block": {
+        "qual-01": "35ded7c83290f24306a646a503647a2af6e3f725708507f27e7502fa4d06fdd2",
+        "qual-02": "69ba7cfe616f3d273f34dcd98a2ab7ce8b3c73609256b441cc73ea362eaa32c5",
+        "qual-03": "d7e6fda18d3213678931b29fc7fa12b0710204c627ea07d3cf456d8e4150e021"
+      }
+    }
+  }
+}
