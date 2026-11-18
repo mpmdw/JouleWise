@@ -1044,6 +1044,23 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 
 <!-- RUN_STATE TYPED ITEMS: newest first. Add with scripts/run_state_add.py; never edit by hand. -->
 
+423. **Owner maintenance marker (standing SAFETY predicate): while /Users/Shared/JouleWise/MAINTENANCE exists, arm nothing; owner updating Claude Code and Codex after F0 run 11**
+
+```item
+{"expires_epoch_s": null, "issued_epoch_s": 1794987211, "number": 423, "owner": "magistrate", "schema": "joulewise.run_state_item.v1", "sets": [], "status": "ISSUED", "supersedes": []}
+```
+
+- **What:** the owner will update Claude Code and Codex on this Mac and relaunch its LaunchAgents. He will do it in the gap after STANDING-F0 run 11 closes and before dev-05-s01 arms.
+- **Standing SAFETY predicate (Register class SAFETY: no unpredictable process during a measured span; RL-171, "quiet means processes"):** while `/Users/Shared/JouleWise/MAINTENANCE` exists, the host is not quiet.
+  - Arm nothing.
+  - Re-check every 60 s.
+  - When the file is gone, re-run the start check and arm the next eligible entry at once.
+  - The file is the owner's to create and remove. No agent creates it.
+  - It blocks only arming. It does not block a Check or a close.
+- **After the owner removes the marker,** the next activation records `claude --version` and `codex --version` in its first item and confirms that every LaunchAgent the magistrate depends on is loaded (`launchctl list`). It does this before arming dev-05-s01.
+- **A relaunch of the magistrate's agents during the maintenance** may end a waiting activation. That is expected. The next activation resumes from RUN_STATE.
+- **dev-05-s01 has slack.** COUNTED_LATEST is Wed 17:02:29 (item 421), so a short maintenance gap costs no date.
+
 422. **Laptop lead (interactive, Opus 5.5), 2026-11-17 22:09:24 PST: RL-179 IN FORCE: no timed close gaps (close proven), copy waits at most 600 s, no caps or ages, High Power any hour, pre-notice hold withdrawn, filler ladder f2-stab then f2-inst then hp-02 then F0 until R1; dev-05 and R1 run as issued**
 
 ```pointer
