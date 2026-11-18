@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+from collections.abc import Callable
 from contextlib import contextmanager
 import fcntl
 import json
@@ -87,8 +88,8 @@ def init_text(text: str) -> tuple[str, int]:
     return updated, cutover
 
 
-def _validated(text: str) -> items.Parsed:
-    parsed = items.parse(text)
+def _validated(text: str, *, read_archive: Callable[[str], str] | None = None) -> items.Parsed:
+    parsed = items.parse(text, read_archive=read_archive)
     errors = items.validate(parsed)
     if errors:
         raise ValueError("\n".join(map(str, errors)))
@@ -101,14 +102,26 @@ def _line(value: str, name: str) -> None:
 
 
 def _request_header(request: dict) -> dict:
+    if not isinstance(request, dict):
+        raise ValueError("request must be a JSON object")
     _line(request["heading"], "heading")
+    if not isinstance(request["body"], str):
+        raise ValueError("body must be text")
+    if request["pointer"] is not None and not isinstance(request["pointer"], str):
+        raise ValueError("pointer must be text or null")
     if request["message"] is not None:
         _line(request["message"], "message")
+    for field in ("with", "trailers"):
+        values = request[field]
+        if not isinstance(values, list) or any(not isinstance(value, str) for value in values):
+            raise ValueError(f"{field} must be a list of strings")
     for trailer in request["trailers"]:
         _line(trailer, "trailer")
         if not re.fullmatch(r"[A-Za-z0-9-]+:[ \t]*\S.*", trailer):
             raise ValueError("trailer must be TOKEN: VALUE")
     header = {key: request[key] for key in items.HEADER_KEYS - {"schema", "number"}}
+    if "kind" in request:
+        header["kind"] = request["kind"]
     header.update(schema=items.SCHEMA, number=1)
     errors = items.header_errors(header, 1, 1)
     if errors:
@@ -116,8 +129,9 @@ def _request_header(request: dict) -> dict:
     return header
 
 
-def _prepare(text: str, request: dict, header: dict) -> tuple[int, str, bytes]:
-    parsed = _validated(text)
+def _prepare(source: Path, request: dict, header: dict) -> tuple[int, str, bytes]:
+    text = source.read_bytes().decode("utf-8")
+    parsed = _validated(text, read_archive=items.archive_reader(source.parent))
     if parsed.cutover is None:
         raise ValueError("run init first")
     body = request["body"]
@@ -126,9 +140,11 @@ def _prepare(text: str, request: dict, header: dict) -> tuple[int, str, bytes]:
             raise ValueError("body cannot contain item or pointer fences")
         if (match := items.HEADING.match(line)) and int(match[1]) >= parsed.cutover:
             raise ValueError("body cannot contain a heading at or above the cutover")
-    if (line := items.unclosed_code_fence(body)) is not None:
-        raise ValueError(f"body line {line}: unclosed code fence")
-    number = max((row[1] for row in items.heading_lines(text)), default=0) + 1
+    for opening, _, closing in items.code_fences(body):
+        if closing is None:
+            raise ValueError(f"body line {opening}: unclosed code fence")
+    highest = max((row[1] for row in items.heading_lines(text)), default=0)
+    number = max(highest + 1, parsed.cutover)
     rendered = render_item(number, request["heading"], {**header, "number": number}, body, request["pointer"])
     updated = _insert_at(text, parsed.top_line, rendered)
     new_items = items.parse(updated).items
@@ -137,7 +153,7 @@ def _prepare(text: str, request: dict, header: dict) -> tuple[int, str, bytes]:
     for before, after in zip(parsed.items, new_items[1:]):
         if (before.number, before.heading, before.header) != (after.number, after.heading, after.header):
             raise ValueError(f"insertion must preserve previous typed item {before.number}")
-    return number, updated, gen_current.render(updated)
+    return number, updated, gen_current.render(updated, source_path=source)
 
 
 def _stage_file(path: Path, data: bytes) -> Path:
@@ -178,7 +194,7 @@ def _write_pair(run_state: Path, current: Path, updated: str, document: bytes) -
 
 def add_local(run_state: Path, current: Path, request: dict) -> int:
     header = _request_header(request)
-    number, updated, document = _prepare(run_state.read_bytes().decode("utf-8"), request, header)
+    number, updated, document = _prepare(run_state, request, header)
     _write_pair(run_state, current, updated, document)
     return number
 
@@ -316,7 +332,7 @@ def _land(repo: Path, request: dict, remote: str, branch: str, attempts: int) ->
                 source, current = path / RUN_STATE, path / CURRENT
                 if source.resolve() != source or current.resolve() != current:
                     raise ValueError("RUN_STATE and CURRENT must be regular checkout paths")
-                number, updated, document = _prepare(source.read_bytes().decode("utf-8"), request, header)
+                number, updated, document = _prepare(source, request, header)
                 source.write_text(updated, encoding="utf-8")
                 current.write_bytes(document)
                 head = _commit(path, number, request, sources)
@@ -372,6 +388,14 @@ def _error_text(error: Exception) -> str:
     return str(error)
 
 
+def _error_code(error: Exception) -> int:
+    if isinstance(error, GitFailure):
+        return error.code
+    if isinstance(error, subprocess.CalledProcessError):
+        return 3
+    return 2
+
+
 def add_git(repo: Path, request: dict, *, remote="origin", branch="main", attempts=5) -> tuple[int, str]:
     spool = _spool_dir()
     with _locked(spool):
@@ -383,8 +407,18 @@ def add_git(repo: Path, request: dict, *, remote="origin", branch="main", attemp
             raise failure(f"{_error_text(error)}; spooled at {target}") from error
 
 
-def _flush(repo: Path) -> None:
+def _read_git_archive(repo: Path, head: str, relative: str) -> str:
+    entry = _git(repo, "ls-tree", head, "--", relative).split()
+    if not entry:
+        return ""
+    if entry[0] not in ("100644", "100755"):
+        raise ValueError(f"RUN_STATE legacy archive must be a regular checkout file: {relative}")
+    return _git(repo, "show", f"{head}:{relative}")
+
+
+def _flush(repo: Path) -> int:
     spool = _spool_dir()
+    code = 0
     with _locked(spool):
         queue = sorted(spool.glob("*.json"))
         if not queue:
@@ -392,15 +426,29 @@ def _flush(repo: Path) -> None:
             private_ref = f"refs/joulewise/run-state-add/{uuid.uuid4().hex}"
             try:
                 head = _fetch(repo, "origin", "refs/heads/main", private_ref)
-                if _validated(_git(repo, "show", f"{head}:{RUN_STATE}")).cutover is None:
+                parsed = _validated(_git(repo, "show", f"{head}:{RUN_STATE}"),
+                                    read_archive=lambda relative: _read_git_archive(repo, head, relative))
+                if parsed.cutover is None:
                     raise ValueError("run init first")
             finally:
                 _remove_ref(repo, private_ref)
         for path in queue:
-            request = json.loads(path.read_text(encoding="utf-8"))
-            number, head = _land(repo, request, "origin", "main", 5)
-            path.unlink()
+            try:
+                if path.is_symlink() or not path.is_file():
+                    raise ValueError("spool entry must be a regular file")
+                request = json.loads(path.read_text(encoding="utf-8"))
+                number, head = _land(repo, request, "origin", "main", 5)
+            except (GitFailure, subprocess.CalledProcessError, OSError, ValueError, KeyError, RecursionError) as error:
+                print(f"run_state_add: skipped {path.name}: {_error_text(error)}", file=sys.stderr)
+                code = code or _error_code(error)
+                continue
             print(number, head)
+            try:
+                path.unlink()
+            except OSError as error:
+                print(f"run_state_add: item {number} landed but cannot remove {path.name}: {error}", file=sys.stderr)
+                code = code or _error_code(error)
+    return code
 
 
 def _iso(value: str, name: str) -> int:
@@ -417,10 +465,18 @@ def _read_request(args) -> dict:
         if not match:
             raise ValueError("--set requires N=STATUS@ISO")
         changes.append({"item": int(match[1]), "status": match[2], "at_epoch_s": _iso(match[3], "--set")})
+    body = args.body.read_text(encoding="utf-8")
+    # Intake limits apply to new requests. The spool replays their existing bytes.
+    for opening, info, closing in items.code_fences(body):
+        if closing is not None and info in ("sh", "zsh", "bash", "python", "") and closing - opening - 1 > 3:
+            raise ValueError("body holds a program; put it in the repository and cite its path")
+    limit = 120 if args.kind == "incident" else 40
+    if len(body.splitlines()) > limit:
+        raise ValueError(f"body exceeds {limit} lines")
     return {
-        "heading": args.heading, "body": args.body.read_text(encoding="utf-8"),
+        "heading": args.heading, "body": body,
         "pointer": args.pointer.read_text(encoding="utf-8") if args.pointer else None,
-        "owner": args.owner, "status": args.status,
+        "owner": args.owner, "status": args.status, "kind": args.kind,
         "issued_epoch_s": _iso(args.issued, "--issued") if args.issued else int(time.time()),
         "expires_epoch_s": _iso(args.expires, "--expires") if args.expires else None,
         "supersedes": args.supersedes, "sets": changes, "with": args.with_files,
@@ -442,6 +498,7 @@ def main(argv=None) -> int:
     add.add_argument("--body", required=True, type=Path)
     add.add_argument("--owner", required=True, choices=items.OWNERS)
     add.add_argument("--status", required=True, choices=items.INITIAL)
+    add.add_argument("--kind", default="event", choices=items.KINDS, help="item kind (default: event)")
     for field in ("issued", "expires", "message"):
         add.add_argument(f"--{field}")
     add.add_argument("--pointer", type=Path)
@@ -451,7 +508,7 @@ def main(argv=None) -> int:
     args = parser.parse_args(argv)
     try:
         if args.command == "flush-spool":
-            _flush(Path.cwd())
+            return _flush(Path.cwd())
         else:
             if args.no_git != bool(args.run_state and args.current) or (
                     (args.run_state is None) != (args.current is None)):
@@ -471,7 +528,7 @@ def main(argv=None) -> int:
                 print(*add_git(Path.cwd(), _read_request(args)))
     except (GitFailure, subprocess.CalledProcessError) as error:
         print(f"run_state_add: {_error_text(error)}", file=sys.stderr)
-        return error.code if isinstance(error, GitFailure) else 3
+        return _error_code(error)
     except (OSError, ValueError, KeyError) as error:
         print(f"run_state_add: {error}", file=sys.stderr)
         return 2

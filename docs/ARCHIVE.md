@@ -1,5 +1,9 @@
 # Archive: retrieving retired repository files
 
+| Archive | Contents |
+|---|---|
+| [Legacy RUN_STATE, 2026-11-17](archive/RUN_STATE-legacy-2026-11-17.md) | After the three-line archive header, moved bytes appear in source order around the original legacy marker. Legacy records from both sides of the original typed region are retained in `RUN_STATE.md` unless explicitly superseded and outside the live reference closure. |
+
 ## Window-status publisher retirement, 2026-11-11
 
 `WINDOW_STATUS.md`, `scripts/window_status.sh`, and `tests/test_window_status_guard.py`

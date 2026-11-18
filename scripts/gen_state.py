@@ -14,7 +14,8 @@ Modes:
 Exit codes: 0 exact agreement / success; 1 drift; 2 invalid input or markers.
 
 The live RUN_STATE.md and TASK_QUEUE.md marker-fenced regions are checked by
-default; optional paths exist only for focused fixtures.
+default. Generation can restore the live RUN_STATE projection above the typed
+log using the cutover marker. Optional paths exist for focused fixtures.
 """
 
 from __future__ import annotations
@@ -34,6 +35,11 @@ AUTHORITY_NOTICE = "AUTHORITATIVE_WORK_SELECTION_STATE"
 
 RS_BEGIN = "<!-- BEGIN GENERATED: state-kernel run-state-intake -->"
 RS_END = "<!-- END GENERATED: state-kernel run-state-intake -->"
+RUN_STATE_ARCHIVE = "docs/archive/RUN_STATE-legacy-2026-11-17.md"
+RS_ARCHIVE_MARKER = re.compile(
+    rf"^<!-- RUN_STATE LEGACY ITEMS: archived in {re.escape(RUN_STATE_ARCHIVE)}; "
+    r"cutover [1-9][0-9]*; legacy_max [1-9][0-9]* -->$", re.MULTILINE)
+RS_TYPED_MARKER = re.compile(r"^<!-- RUN_STATE TYPED ITEMS:", re.MULTILINE)
 Q_BEGIN = "<!-- BEGIN GENERATED: state-kernel current-queue -->"
 Q_END = "<!-- END GENERATED: state-kernel current-queue -->"
 
@@ -770,6 +776,20 @@ def replace_region(text: str, rendered: str, begin: str, end: str, path: str) ->
     return text[:start] + rendered.rstrip("\n") + text[stop:]
 
 
+def _update_run_state(text: str, rendered: str, path: str, *, check: bool) -> str:
+    if check or RS_BEGIN in text or RS_END in text or not RS_ARCHIVE_MARKER.search(text):
+        return replace_region(text, rendered, RS_BEGIN, RS_END, path)
+
+    tops = list(RS_TYPED_MARKER.finditer(text))
+    if len(tops) != 1:
+        fail(f"{path}: expected exactly one typed item marker (found {len(tops)})")
+    archive = os.path.join(os.path.dirname(path), RUN_STATE_ARCHIVE)
+    _find_region(_read(archive), RS_BEGIN, RS_END, archive)
+
+    top = tops[0].start()
+    return text[:top] + rendered + "\n" + text[top:]
+
+
 def _read(path: str) -> str:
     try:
         with open(path, encoding="utf-8") as fh:
@@ -839,26 +859,24 @@ def main(argv=None) -> int:
             (args.queue, render_queue(kernel), Q_BEGIN, Q_END),
         )
 
-        if args.check:
-            drift = False
-            if raw != canonical:
-                fail(f"{args.kernel}: kernel bytes are not canonical")
-            for path, rendered, begin, end in targets:
-                text = _read(path)
-                if replace_region(text, rendered, begin, end, path) != text:
-                    print(f"DRIFT: {path} generated region differs", file=sys.stderr)
-                    drift = True
-            pointer = _current_pointer(True, args.run_state)
-            return 2 if pointer == 2 else 1 if drift or pointer else 0
-
         if raw != canonical:
+            if args.check:
+                fail(f"{args.kernel}: kernel bytes are not canonical")
             _atomic_write(args.kernel, canonical)
+        drift = False
         for path, rendered, begin, end in targets:
             text = _read(path)
-            updated = replace_region(text, rendered, begin, end, path)
-            if updated != text:
+            updated = (_update_run_state(text, rendered, path, check=args.check) if begin == RS_BEGIN
+                       else replace_region(text, rendered, begin, end, path))
+            if updated == text:
+                continue
+            if args.check:
+                print(f"DRIFT: {path} generated region differs", file=sys.stderr)
+                drift = True
+            else:
                 _atomic_write(path, updated.encode("utf-8"))
-        return _current_pointer(False, args.run_state)
+        pointer = _current_pointer(args.check, args.run_state)
+        return 1 if drift and pointer == 0 else pointer
     except KernelError as exc:
         print(f"gen_state: {exc}", file=sys.stderr)
         return 2

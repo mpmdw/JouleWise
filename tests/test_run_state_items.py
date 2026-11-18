@@ -3,13 +3,16 @@
 from __future__ import annotations
 
 from contextlib import redirect_stderr, redirect_stdout
+from hashlib import sha256
 from io import StringIO
 import json
 from pathlib import Path
+import re
+import subprocess
 import tempfile
 import unittest
 
-from scripts import gen_current, run_state_items as items
+from scripts import gen_current, gen_state, run_state_items as items
 from scripts.run_state_add import LEGACY_MARKER, TOP_MARKER, render_item
 
 
@@ -34,10 +37,17 @@ LEGACY = """# Synthetic RUN_STATE
 EARLY, LATE = LEGACY.split("20. **", 1)
 LATE = "20. **" + LATE
 POINTER = "owner: lead\nwait: none\nnext_observable: fixture observable"
+ARCHIVE = "docs/archive/RUN_STATE-legacy-2026-11-17.md"
+CUT_FROM = "d934178b9bd836162122db941c64d185593fa554"
 
 
 def doc(typed=(), cutover=21):
     return EARLY + TOP_MARKER + "\n\n" + "".join(typed) + LEGACY_MARKER.format(cutover) + "\n\n" + LATE
+
+
+def archived_doc(typed=(), cutover=405, legacy_max=404, legacy=""):
+    marker = f"<!-- RUN_STATE LEGACY ITEMS: archived in {ARCHIVE}; cutover {cutover}; legacy_max {legacy_max} -->"
+    return "# Synthetic RUN_STATE\n\n" + TOP_MARKER + "\n\n" + "".join(typed) + marker + "\n" + legacy
 
 
 def header(number, **changes):
@@ -56,6 +66,10 @@ def change(target, status, at=ISSUED):
 
 def codes(text):
     return [error.code for error in items.validate(items.parse(text))]
+
+
+def cutover_source():
+    return subprocess.check_output(["git", "show", f"{CUT_FROM}:RUN_STATE.md"], cwd=gen_current.ROOT)
 
 
 class RunStateItemsTests(unittest.TestCase):
@@ -267,6 +281,144 @@ class RunStateItemsTests(unittest.TestCase):
     def test_r25_live_repository(self):
         self.assertEqual(items.main(["check"]), 0)
 
+    def test_archived_legacy_range_reserves_numbers_and_resolves_references(self):
+        live_legacy = "\n346. **Retained fixture**\n"
+        parsed = items.parse(archived_doc([item(405, supersedes=["346"])], legacy=live_legacy))
+        self.assertEqual((parsed.cutover, parsed.legacy_max), (405, 404))
+        self.assertEqual(items.validate(parsed), [])
+        self.assertEqual(items.replay(parsed), {405: "ISSUED"})
+        self.assertIn("DUPLICATE_NUMBER", codes(archived_doc([item(404)])))
+        self.assertEqual(codes(archived_doc([item(405, supersedes=["346z", "404"])], legacy=live_legacy)),
+                         ["DANGLING_REF", "DANGLING_REF"])
+        self.assertEqual(codes(archived_doc([item(406, supersedes=["405"])])), ["DANGLING_REF"])
+        self.assertEqual(codes(archived_doc([item(405, sets=[change(346, "VOID")])], legacy=live_legacy)),
+                         ["LEGACY_TARGET"])
+        self.assertIn("MARKER", codes(archived_doc(legacy_max=405)))
+
+    def test_kind_is_optional_and_restricted_to_the_enum(self):
+        for kind in ("event", "decision", "incident"):
+            with self.subTest(kind=kind):
+                self.assertEqual(codes(doc([item(22, kind=kind), item(21)])), [])
+        for kind in (None, "note"):
+            with self.subTest(kind=kind):
+                self.assertEqual(codes(doc([item(21, kind=kind)])), ["SCHEMA"])
+
+    def test_archive_round_trips_cutover_snapshot(self):
+        root = gen_current.ROOT
+        full_source = cutover_source()
+        top = (TOP_MARKER + "\n").encode()
+        old_marker = (LEGACY_MARKER.format(405) + "\n").encode()
+        plan = items.legacy_archive_plan(full_source.decode())
+        lines = full_source.splitlines(keepends=True)
+        top_index = lines.index(top)
+        marker = lines.index(old_marker)
+        old_typed = b"".join(lines[top_index + 1:marker])
+        projection_start = lines.index((gen_state.RS_BEGIN + "\n").encode())
+        projection_end = lines.index((gen_state.RS_END + "\n").encode()) + 1
+        moved_lines = set(range(1, plan.prefix_start))
+        for start, end in (*plan.spans, (projection_start, projection_end)):
+            moved_lines.update(range(start, end))
+        expected_payload = (b"".join(lines[i] for i in range(1, top_index) if i in moved_lines) + old_marker
+                            + b"".join(lines[i] for i in range(marker + 1, len(lines)) if i in moved_lines))
+
+        archive = (root / ARCHIVE).read_bytes()
+        archive_title, archive_source, archive_order, moved = archive.split(b"\n", 3)
+        self.assertTrue(archive_title.startswith(b"# "))
+        self.assertIn(CUT_FROM.encode(), archive_source)
+        self.assertIn(b"pre-item introduction", archive_order)
+        self.assertEqual(sha256(moved).digest(), sha256(expected_payload).digest())
+
+        current = (root / "RUN_STATE.md").read_bytes()
+        self.assertEqual(current.splitlines(keepends=True)[0], lines[0])
+        current_header, current_top, current_regions = current.partition(top)
+        new_marker = f"<!-- RUN_STATE LEGACY ITEMS: archived in {ARCHIVE}; cutover 405; legacy_max 404 -->\n".encode()
+        typed, found, rest = current_regions.partition(new_marker)
+        self.assertEqual(found, new_marker)
+        restored_header, restored_marker, archive_tail = moved.partition(old_marker)
+        _, projection_end_marker, retained_prefix = current_header.partition((gen_state.RS_END + "\n\n").encode())
+        self.assertTrue(projection_end_marker)
+        retained = iter((retained_prefix + rest).splitlines(keepends=True))
+        archived = iter((restored_header + archive_tail).splitlines(keepends=True))
+
+        def restore(start, stop):
+            return b"".join(next(archived if i in moved_lines else retained) for i in range(start, stop))
+
+        # Later log entries can be prepended ahead of the cutover snapshot.
+        kept = typed[-len(old_typed):]
+        restored = (lines[0] + restore(1, top_index) + current_top + kept + restored_marker
+                    + restore(marker + 1, len(lines)))
+        self.assertIsNone(next(archived, None))
+        self.assertIsNone(next(retained, None))
+        self.assertEqual(sha256(restored).digest(), sha256(full_source).digest())
+
+    def test_every_item_reachable_from_the_newest_remains_in_run_state(self):
+        original = cutover_source().decode()
+        newest = str(max(entry.number for entry in items.parse(original).items))
+        plan = items.legacy_archive_plan(original)
+        reachable = items.reachable_items(plan.references, {newest})
+        self.assertTrue(reachable - {str(entry.number) for entry in items.parse(original).items})
+        current = (gen_current.ROOT / "RUN_STATE.md").read_text(encoding="utf-8")
+        present = {f"{number}{suffix}" for _, number, suffix in items.heading_lines(current)}
+        self.assertEqual(reachable - present, set())
+        self.assertEqual(plan.live - present, set())
+
+    def test_issued_item_reaches_pre_typed_record_in_the_live_log(self):
+        source = cutover_source().decode()
+        parsed = items.parse(source)
+        plan = items.legacy_archive_plan(source)
+        chain = ("418", "346", "325", "29")
+        self.assertEqual(items.replay(parsed)[int(chain[0])], "ISSUED")
+        for parent, child in zip(chain, chain[1:]):
+            self.assertIn(child, plan.references[parent])
+        source_lines = {str(number): line for line, number, suffix in items.heading_lines(source) if not suffix}
+        self.assertLess(source_lines[chain[-1]], parsed.top_line)
+        self.assertTrue(set(chain) <= items.reachable_items(plan.references, {chain[0]}))
+        current = (gen_current.ROOT / "RUN_STATE.md").read_text(encoding="utf-8")
+        self.assertEqual(sum(str(number) == chain[-1] for _, number, _ in items.heading_lines(current)), 1)
+        archive = (gen_current.ROOT / ARCHIVE).read_text(encoding="utf-8")
+        self.assertFalse(any(str(number) == chain[-1] for _, number, _ in items.heading_lines(archive)))
+
+    def test_archive_plan_traverses_adjacent_legacy_headings_before_the_typed_marker(self):
+        prefix = ("# Synthetic RUN_STATE\n\n"
+                  "11. **Fixture legacy**\n"
+                  "10. **Fixture legacy refers to item 19**\n"
+                  "9. **Fixture unreferenced superseded legacy**\n\n")
+        typed = item(24, body="See item 20.", supersedes=["10", "9"])
+        legacy = "20. **Fixture legacy**\n\nSee item 10.\n\n19. **Fixture legacy refers to item 11**\n"
+        source = prefix + TOP_MARKER + "\n\n" + typed + LEGACY_MARKER.format(21) + "\n\n" + legacy
+        plan = items.legacy_archive_plan(source)
+        self.assertEqual(plan.live, {"24", "20", "19", "11", "10"})
+        span, = plan.spans
+        self.assertEqual("".join(source.splitlines(keepends=True)[slice(*span)]),
+                         "9. **Fixture unreferenced superseded legacy**\n\n")
+
+    def test_archive_plan_keeps_live_and_unknown_legacy_and_moves_unreferenced_superseded(self):
+        typed = [item(24, body="Run items 19, 18 and 17 as issued.", supersedes=["19", "16", "14"]),
+                 render_item(23, "Fixture (standing), see item 15", header(23, status="CLOSED"), "", None)
+                 + "\n\n"]
+        legacy = ("19. **Fixture legacy**\n\nSee item 16.\n\n"
+                  "18. **Fixture legacy**\n\n17. **Fixture legacy**\n\n"
+                  "16. **Fixture legacy**\n\n15. **Fixture referenced by a standing order**\n\n"
+                  "13. **Fixture unknown status**\n\n"
+                  "14. **Fixture superseded**\n\n")
+        state = EARLY + TOP_MARKER + "\n\n" + "".join(typed) + LEGACY_MARKER.format(21) + "\n\n" + legacy
+        plan = items.legacy_archive_plan(state)
+        self.assertTrue({"24", "23", "19", "18", "17", "16", "15"} <= plan.live)
+        self.assertEqual(len(plan.spans), 1)
+        start, end = plan.spans[0]
+        self.assertEqual("".join(state.splitlines(keepends=True)[start:end]), "14. **Fixture superseded**\n\n")
+
+    def test_run_state_intro_paths_exist_in_tree(self):
+        root = gen_current.ROOT
+        intro = (root / "RUN_STATE.md").read_text(encoding="utf-8").split(gen_state.RS_BEGIN, 1)[0]
+        paths = re.findall(r"(?<![\w.-])(?:[\w.-]+/)*[\w-]+(?:\.[\w-]+)+(?![\w.-])", intro)
+        self.assertTrue(paths)
+        for path in paths:
+            with self.subTest(path=path):
+                self.assertTrue((root / path).is_file())
+                self.assertEqual(subprocess.run(["git", "ls-files", "--error-unmatch", "--", path],
+                                                cwd=root, capture_output=True).returncode, 0)
+
     def test_check_refuses_typed_item_hidden_by_its_own_closing_fence(self):
         hidden = doc([item(405, status="CLOSED", body="```\nunterminated"), item(404)], cutover=404)
         expected_line = hidden.splitlines().index("404. **Item 404**") + 1
@@ -295,6 +447,8 @@ class RunStateItemsTests(unittest.TestCase):
         properties = schema["properties"]
         self.assertEqual(tuple(properties["owner"]["enum"]), items.OWNERS)
         self.assertEqual(tuple(properties["status"]["enum"]), items.INITIAL)
+        self.assertEqual(tuple(properties["kind"]["enum"]), items.KINDS)
+        self.assertNotIn("kind", schema["required"])
         self.assertEqual(tuple(properties["sets"]["items"]["properties"]["status"]["enum"]), items.SETTABLE)
         epoch = schema["$defs"]["epoch"]
         self.assertEqual((epoch["minimum"], epoch["maximum"]), (gen_current.MIN_EPOCH, gen_current.MAX_EPOCH))
