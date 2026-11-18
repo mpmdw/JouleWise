@@ -823,8 +823,12 @@
         "sha256": "16cbe1a91a4b9e6cf85dd324ff49eabbc46887d8704b23f270be44e9a3a95d7e"
       },
       {
+        "path": "joulewise/analysis_run_cache.py",
+        "sha256": "6eb99fe2f621fc4741ebd5e8063d9444499ec315b88d74c8bc716dec2ba60de7"
+      },
+      {
         "path": "joulewise/authentication_io.py",
-        "sha256": "5a959cfe09b932bb043945b95e939cac56b23febf519cc9f08dce780f336c492"
+        "sha256": "80d2a7be065e5d4416cdc2657a26a37fac60680b38e5f7b48d34e285f6528699"
       },
       {
         "path": "joulewise/axi_decode_config.py",
@@ -832,7 +836,7 @@
       },
       {
         "path": "joulewise/bundle_read.py",
-        "sha256": "8eeae4f575d59447d372ac7184362365cce3b118125791465069ae1a14218403"
+        "sha256": "dacba842582b2a70fecc3cb5c9502b9ebebc144d7c639657aace6c4a16cafb8d"
       },
       {
         "path": "joulewise/cadence_looks/__init__.py",
@@ -840,15 +844,15 @@
       },
       {
         "path": "joulewise/cadence_looks/manifest.py",
-        "sha256": "1446f55cfe8bfa0b489b3beefbf0b275763f5bfdbbdd4984ed0f10fad8acd332"
+        "sha256": "4b0505f8c31fc461803d520fd088a1d6fe89b909c1b85134398eda273bdbaec6"
       },
       {
         "path": "joulewise/desk_compress.py",
-        "sha256": "ac770c9407dad936cc742957b6f5673a1b69523156aa2be9baf7de8eb2b56777"
+        "sha256": "310dae22bec5690899fcc61652086d102a44acee68734622ff99d7df5ded0e55"
       },
       {
-        "path": "joulewise/analysis_run_cache.py",
-        "sha256": "6eb99fe2f621fc4741ebd5e8063d9444499ec315b88d74c8bc716dec2ba60de7"
+        "path": "joulewise/desk_restore.py",
+        "sha256": "b8d5d301d59ba41cc77e201122a48781dd3f96aede94a799afa7a135864d35f9"
       },
       {
         "path": "joulewise/external/__init__.py",
@@ -868,7 +872,7 @@
       },
       {
         "path": "joulewise/schemas.py",
-        "sha256": "f47fbf68c2c4a931854995d1258425b476c4bc8a686dfccf011d9caef092cc3b"
+        "sha256": "344b12ce178b8acb212059097a4ade507812a4be1673a6552ec221a83055e1d1"
       },
       {
         "path": "joulewise/suite.py",

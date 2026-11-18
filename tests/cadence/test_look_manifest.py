@@ -539,6 +539,9 @@ class RepoCheck(Base):
                  "docs/process/cadence/looks/lm-interim-01.stage1.schema.json": "{}\n",
                  "docs/process/cadence/looks/lm-interim-01.coefficients.schema.json": "{}\n"}
         doc0 = draft()
+        for where, rel, _ in lm.code_refs(doc0):
+            if where.startswith("reads.blocks"):
+                files[rel] = (REPO / rel).read_text(encoding="utf-8")
         for ref in doc0["fit"]["dependencies"] + doc0["fit"]["code"] + \
                 [{"path": p} for p in list(lm.EVIDENCE) + [lm.Q11_EVIDENCE["path"]]]:
             files.setdefault(ref["path"], (REPO / ref["path"]).read_text(encoding="utf-8"))

@@ -1849,7 +1849,8 @@ _SHARED_CODE = ("joulewise/__init__.py", "joulewise/cadence_looks/__init__.py", 
 # RL-173 E.1: stage 1 reads time fields of the energy files through time_fields.py, which runs the pinned meter
 # decoder's unwrap and clock fit on the counters; its import closure joins stage 1's set
 _DECODER_CODE = ("joulewise/aggregate.py", "joulewise/analysis_run_cache.py", "joulewise/authentication_io.py",
-                 "joulewise/bundle_read.py", "joulewise/desk_compress.py", "joulewise/external/__init__.py",
+                 "joulewise/bundle_read.py", "joulewise/desk_compress.py", "joulewise/desk_restore.py",
+                 "joulewise/external/__init__.py",
                  "joulewise/external/km003c_parse.py", "joulewise/provenance.py", "joulewise/suite.py")
 STAGE1_CODE = _SHARED_CODE + ("joulewise/cadence_looks/fit_interim.py", "joulewise/cadence_looks/inclusion_34.py",
                               "joulewise/cadence_looks/time_fields.py", "scripts/cadence_look_run.py") + _DECODER_CODE

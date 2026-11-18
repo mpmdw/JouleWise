@@ -39,6 +39,28 @@ from types import MappingProxyType
 from typing import Any, BinaryIO, Iterator, Literal, Mapping, TextIO
 
 from joulewise import analysis_run_cache as _run_cache
+from joulewise import desk_compress
+from joulewise.desk_restore import RestoreRefused
+
+
+class CompressedBundleRequiresRestore(RestoreRefused):
+    """Compressed primary bytes must be restored before ordinary reads."""
+
+    def __init__(self, path):
+        self.path = str(path)
+        super().__init__(f"compressed_bundle_requires_restore: {self.path}")
+
+    def __reduce__(self):
+        return type(self), (self.path,)
+
+
+def _compressed_input(path, *, allow_compressed):
+    """Choose an existing compressed sibling only at an explicit caller seam."""
+    path = Path(path)
+    compressed = not path.is_file() and path.with_name(path.name + ".zst").is_file()
+    if compressed and not allow_compressed:
+        raise CompressedBundleRequiresRestore(path)
+    return compressed
 
 
 AuthenticationGrammar = Literal["json", "jsonl", "raw"]
@@ -1203,11 +1225,14 @@ class V2AuthenticationReadSession:
         *,
         grammar: AuthenticationGrammar,
         label: str,
+        allow_compressed: bool = False,
     ) -> bytes:
+        compressed = _compressed_input(path, allow_compressed=allow_compressed)
         normalized = str(Path(path).resolve(strict=False))
         effective = _forced_grammar(normalized, grammar)
         with self._lock:
-            with builtins.open(path, "rb") as handle:
+            stream = desk_compress.open_bytes(Path(path)) if compressed else builtins.open(path, "rb")
+            with stream as handle:
                 raw = handle.read()
             digest = hashlib.sha256(raw).hexdigest()
             vocabulary = normalized in self._governed_spec_vocabulary_identities
@@ -1345,18 +1370,21 @@ class V2AuthenticationReadSession:
         *,
         label: str,
         chunk_size: int = 1024 * 1024,
+        allow_compressed: bool = False,
     ) -> str:
         """Hash one large raw input and finish through the same registry."""
 
+        compressed = _compressed_input(path, allow_compressed=allow_compressed)
         normalized = str(Path(path).resolve(strict=False))
         effective = _forced_grammar(normalized, "raw")
         if effective != "raw":
             return hashlib.sha256(
-                self.read(path, grammar=effective, label=label)
+                self.read(path, grammar=effective, label=label, allow_compressed=allow_compressed)
             ).hexdigest()
         with self._lock:
             digest = hashlib.sha256()
-            with builtins.open(path, "rb") as handle:
+            stream = desk_compress.open_bytes(Path(path)) if compressed else builtins.open(path, "rb")
+            with stream as handle:
                 while True:
                     chunk = handle.read(chunk_size)
                     if not chunk:
@@ -1401,10 +1429,12 @@ def read_authentication_input(
     *,
     grammar: AuthenticationGrammar,
     label: str,
+    allow_compressed: bool = False,
 ) -> bytes:
+    compressed = _compressed_input(path, allow_compressed=allow_compressed)
     session = _ACTIVE_SESSION.get()
     if session is None:
-        raw = Path(path).read_bytes()
+        raw = desk_compress.read_bytes(Path(path)) if compressed else Path(path).read_bytes()
         sinks = _READ_RECORDER.get()
         if sinks is not None:
             _record_sessionless(
@@ -1416,7 +1446,7 @@ def read_authentication_input(
                 label=label,
             )
         return raw
-    return session.read(path, grammar=grammar, label=label)
+    return session.read(path, grammar=grammar, label=label, allow_compressed=allow_compressed)
 
 
 def read_authentication_text(
@@ -1426,9 +1456,15 @@ def read_authentication_text(
     label: str,
     encoding: str | None = None,
     errors: str | None = None,
+    allow_compressed: bool = False,
 ) -> str:
+    compressed = _compressed_input(path, allow_compressed=allow_compressed)
     session = _ACTIVE_SESSION.get()
     if session is None:
+        if compressed:
+            raw = read_authentication_input(path, grammar=grammar, label=label, allow_compressed=True)
+            with io.TextIOWrapper(io.BytesIO(raw), encoding=encoding, errors=errors) as handle:
+                return handle.read()
         kwargs: dict[str, str] = {}
         if encoding is not None:
             kwargs["encoding"] = encoding
@@ -1459,7 +1495,7 @@ def read_authentication_text(
         )
         _note_text_divergence(text, raw, encoding, errors)
         return text
-    raw = session.read(path, grammar=grammar, label=label)
+    raw = session.read(path, grammar=grammar, label=label, allow_compressed=allow_compressed)
     return raw.decode(encoding or "utf-8", errors or "strict")
 
 
@@ -1472,12 +1508,18 @@ def open_authentication_input(
     encoding: str | None = None,
     errors: str | None = None,
     newline: str | None = None,
+    allow_compressed: bool = False,
 ) -> BinaryIO | TextIO:
     """Open an input while preserving ordinary file semantics outside v2."""
 
     if any(flag in mode for flag in ("w", "a", "x", "+")):
         raise ValueError("open_authentication_input only supports read modes")
+    compressed = _compressed_input(path, allow_compressed=allow_compressed)
     session = _ACTIVE_SESSION.get()
+    if session is None and compressed:
+        raw = read_authentication_input(path, grammar=grammar, label=label, allow_compressed=True)
+        return io.BytesIO(raw) if "b" in mode else io.TextIOWrapper(io.BytesIO(raw), encoding=encoding,
+                                                                  errors=errors, newline=newline)
     if session is None:
         kwargs: dict[str, str | None] = {}
         if "b" not in mode:
@@ -1510,7 +1552,7 @@ def open_authentication_input(
             label=label,
         )
         return served
-    raw = session.read(path, grammar=grammar, label=label)
+    raw = session.read(path, grammar=grammar, label=label, allow_compressed=allow_compressed)
     buffer = io.BytesIO(raw)
     if "b" in mode:
         return buffer
@@ -1584,11 +1626,14 @@ def sha256_authentication_input(
     path: Path | str,
     *,
     label: str,
+    allow_compressed: bool = False,
 ) -> str:
+    compressed = _compressed_input(path, allow_compressed=allow_compressed)
     session = _ACTIVE_SESSION.get()
     if session is None:
         digest = hashlib.sha256()
-        with Path(path).open("rb") as handle:
+        stream = desk_compress.open_bytes(Path(path)) if compressed else Path(path).open("rb")
+        with stream as handle:
             while True:
                 chunk = handle.read(1024 * 1024)
                 if not chunk:
@@ -1606,7 +1651,7 @@ def sha256_authentication_input(
                 label=label,
             )
         return hexdigest
-    return session.sha256_streaming_raw(path, label=label)
+    return session.sha256_streaming_raw(path, label=label, allow_compressed=allow_compressed)
 
 
 def direct_read_violations(
