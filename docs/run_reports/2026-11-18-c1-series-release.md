@@ -24,7 +24,9 @@ with zero S rows.
 | Pipeline round-two test head and tree | `4b9ef3f5335e162c58d30e787aafba2a11539cd7`, `9041697dc498f55858b9555200a64da85cc7b8eb` |
 | Pipeline round-three spec freeze | `d68b5b3469fbde61da29ed339977f6c65d19eddf` |
 | Pipeline round-three test head and tree | `25a906a71716f874156e2f318c97df2fe567ce69`, `1352dc01b312551d97d5a6d6cec2dc6f17fcfe8a` |
-| Caller SHA-256 for signatory | `ab31650356d079a625c29d09db1582695e92ff489cdc16a36454e0822548a425` |
+| Lead's structural spec freeze | `1e550ca36c51f7b8f9d1e930dea5d58909eca57c` |
+| Structural spec test head and tree | `1f00d3789aad10fa842a84762d7843fac9f6f09c`, `e9656d50dd08fec04d433095cd48c3cb6b049ba2` |
+| Caller SHA-256 for signatory | `bbd074f12d265f3241e9e95a1f2803d35f32fde77c775d685edd2cc1b3ba7a6d` |
 | Draft code head and tree before report | `b7a0440a00442151c5b18a73a7b48fb5beeb72ec`, `77c7065e57a5bc17cb436adc041f6ff45bfdb175` |
 
 At the initial freeze the CLI tests failed with no script. At the RL-185
@@ -33,8 +35,9 @@ During build, an eager selection fixed the fixture's last-stratum offsets
 so both worlds have no ties, and the fixtures gained bound, named PM and
 rail projections.
 
-Handoff found PR #813 at `5765be0437816f0832d429ecaff34258ca30cd37`,
-an additional generation, protocol and test delta from `7498dfe3`.
+Handoff found PR #813 at `07ebee6c8a58eb9f4d444335bf79456217c45ddb`,
+which updates the first-token path and its boundary tests from
+`5765be0437816f0832d429ecaff34258ca30cd37`.
 The private synthetic tests use the original pinned sources in the table.
 PR #787 remains at its pin. PR #826 advanced to
 `1fc28324d51f8057fa6228e6e7d42b5ea331d52c` with test changes only since the
@@ -52,11 +55,11 @@ the dependency landings. [Draft PR #836](https://github.com/mpmdw/JouleWise/pull
 
 | Stage | File and line | Evidence |
 |---|---|---|
-| CLI and guard | Caller :488,519, PR #813 `v4_desk_seal.py:351,418` and `rl176.py:611,622,633` | Snapshot the guard's named metadata, call the real guard and use the literal freeze flag in the scorer. |
-| Registration and history | Caller :128,175,271,382, `v4_registration.py` `validate_receipt` and `require_registration`, and `scripts/align_v4_series.py:220,231,239,510` | Match committed authority, verify the registered Python source inventory and module provenance, and replay attempt order against the frozen manifest. |
+| CLI and guard | Caller :620,651, PR #813 `v4_desk_seal.py:351,418` and `rl176.py:611,622,633` | Snapshot the guard's named metadata, call the real guard and use the literal freeze flag in the scorer. |
+| Registration and history | Caller :140,187,347,466, `v4_registration.py` `validate_receipt` and `require_registration`, and `scripts/align_v4_series.py:220,231,239,510` | Verify the C1 predecessor's receipt digest, verify the executing source inventory, and join the authorized history to the frozen manifest. |
 | Final records and A9 | PR #826 `scripts/align_v4_next_arm_packet.py:237,306,395` and `light_triage.py:79,163` | Use the shared RL-183b finality, including successor `previous_final`, and independently preserve final per-member reasons. |
-| Stored rows | Caller :108,244,357, PR #787 `s_rows.py:193,751,774`, PR #813 `workload.py:893` | Require a plain bound input when the restore manifest lists a compressed sibling. Give #787 the isolated rail-only projection and registered PM rows, then pass the returned tuple directly. |
-| DC and disclosures | Caller `benign_dc`, `load_benign_dc`, `add_disclosures`, PR #813 `rl176.py:459,468,527,550,628` | Use the loaded episode identity to request the separate manifest-keyed provider. Keep uncaptured assignments out of scorer inputs and apply the existing numeric rule. |
+| Stored rows | Caller :120,253,311,325,433, PR #787 `s_rows.py:193,751,774`, PR #813 `workload.py:893` | Bind every relevant file to its canonical path and digest. Give #787 the isolated rail-only projection and registered PM rows, then pass the returned tuple directly. |
+| Pre-scoring roster and DC | Caller :458,506,535,558,585, PR #813 `rl176.py:459,468,527,550,628` | Compare the loaded stratum and member identities to the bound roster, then verify the separately authorized benign DC bytes before scoring. |
 
 ## Resolved interfaces under RL-185 §3
 
@@ -212,6 +215,57 @@ fails on the private staged tree because the W1 template omits #813's
 inventory have the same blobs as before this round. The integration owner
 rechecks template parity alongside exact CI after the dependency gates.
 [Round-two CI](https://github.com/mpmdw/JouleWise/actions/runs/44327891055) ·
+[Current draft checks](https://github.com/mpmdw/JouleWise/pull/836/checks)
+
+## Lead's structural spec after the fourth audit
+
+**HIGH, verified, input completeness.** At `e6c761da4`, four synthetic
+gzip cases wrote `S SIGNATURE` across 21 strata. The intact 101-win
+world wrote `S INCONCLUSIVE` across 22 strata. The four bad cases bound
+only the archive name, then left that archive intact, deleted it, made
+it unreadable or changed its digest. In each case the old projection
+treated the optional event stream as absent. The frozen tests also
+reached scoring with an authenticated header-only rail file and with a
+stratum omitted from the loaded roster.
+
+`1f00d378` derives each captured member's exact input paths, sizes and
+digests from the finalized manifest. Each input slot accepts one
+canonical bound name in its directory and filename namespace. A
+competing bound name refuses without opening it. Unrelated or unbound
+files are outside the projection. Each opened file must be readable,
+regular, unlinked and digest-matched. The caller checks the registered
+plain JSON, JSONL and rail CSV grammars. The rail projection must
+contain the GPU trace. The separately authorized benign provider
+verifies its inputs after row loading and before scoring.
+
+The expected strata are the authenticated `(window, pair)` groups
+with both conditions among captured, eligible members. The caller
+compares the loaded identities and dispositions, then requires equality
+of the stratum sets before it supplies members to the scorer. The
+registered scorer still determines which complete input strata have
+defined S and Q outcomes. Genuine empty rows retain their existing
+dispositions.
+
+**HIGH, verified, receipt substitution.** The frozen synthetic
+reproduction wrote a side-transfer total of 9 after T3 using a new
+caller and field. C1's predecessor still bound the original caller and
+field for the value 1. `4d2f7f74` reads the receipt from the Git tree
+named by the digest-checked predecessor link of C1. Its SHA-256 must
+match both the receipt at the release ref and the worktree receipt.
+The receipt's artifact commit must also be in the predecessor's history.
+
+| Regression | Verification |
+|---|---|
+| `test_exact_input_inventory_refuses_defects_for_every_input_class` | Eleven input classes crossed with the eight requested defects plus compressed bytes at the canonical path. The observer only permits the manifest and the approved input path. Genuine optional absence and an unbound extra are covered. |
+| `test_stored_101_win_series_refuses_gzip_archive_and_its_mutations` | Four ordinary CLI reproductions for the intact gzip, deletion, unreadability and digest change. Each exits 1 with no report. |
+| `test_bound_rail_projection_missing_gpu_refuses_before_scoring` and `test_loaded_stratum_set_must_match_the_bound_roster_before_scoring` | Both refuse before `_series_prints` is invoked and leave no report. |
+| `test_receipt_from_after_t3_cannot_replace_the_c1_predecessors_receipt` | Only the caller and receipt change after T3. The new receipt independently validates, but the CLI refuses it with no report. |
+
+**MED, verified, signing-owner follow-up.** The ordinary kit still
+rejects the expanded receipt profile. Production receipt issuance and
+C1 arm remain the signing owner's gates. The prior scorer, fitter and
+lossless Zstandard reproductions remain regression checks.
+[Round-three CI](https://github.com/mpmdw/JouleWise/actions/runs/44334196623) ·
 [Current draft checks](https://github.com/mpmdw/JouleWise/pull/836/checks)
 
 ## Executed checks and Tier 2 dispositions
