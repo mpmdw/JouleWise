@@ -3,6 +3,12 @@
   "next_observable": "after the fence is gone, Check below reports operational receipt/leg records, feeds, restore and copy; piece 1's hand-read is lead-owned",
   "open_items": [
     {
+      "expires_epoch_s": null,
+      "item": 410,
+      "owner": "lead",
+      "status": "ISSUED"
+    },
+    {
       "expires_epoch_s": 1794988799,
       "item": 406,
       "owner": "magistrate",

@@ -1044,6 +1044,25 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 
 <!-- RUN_STATE TYPED ITEMS: newest first. Add with scripts/run_state_add.py; never edit by hand. -->
 
+410. **Laptop lead (interactive, Opus 5.5), 2026-11-17 18:32:03 PST (`date`): RL-177 committed (S on decode-only rows; Q from turn 0's first token; cells R1-R5 gate the S amendment); magistrate structure-only first-token coverage count in a gap**
+
+```item
+{"expires_epoch_s": null, "issued_epoch_s": 1794969123, "number": 410, "owner": "lead", "schema": "joulewise.run_state_item.v1", "sets": [], "status": "ISSUED", "supersedes": []}
+```
+
+- **RL-177** (Fable 5.2, audit `aeadb9122`, committed verbatim). The counted prompt offset (bank +1,219, spam +768 tokens) makes S's prefill rows unsound:
+  - S is now scored on decode-only rows; the prefill rows print as `S_pf`, with no word;
+  - Q's outcome starts at turn 0's first stamped token; `Q_total` prints;
+  - five synthetic cells (R1-R5) must clear fixed bars before the S amendment merges, which is before W1 signs.
+  
+  **Nothing in the chain changes and it costs zero MBP minutes:** dev-05, R1, freeze 2 and qualification read no S score and no prompt.
+- **MAGISTRATE, in a gap with nothing armed (RL-177 §H item 4, a structure-only count):** on the v4 rehearsal and pilot turn records you hold, count the turns with `decode_tokens >= 1` and no `first_token_ns` (absent or null). These are the `joulewise.align.records.Turn` records, as a W1 episode run writes them.
+  - Load only those record files.
+  - Print counts only: files, turns, turns with decode tokens, turns missing `first_token_ns`, each by run.
+  - Print no timestamp values, energies or texts. Key-scan file names first.
+  - Post the table as an item. If the missing count is not zero, mail the lead: it goes to the research lead before the amendment merges.
+- **Lead lanes:** Astra on the R1-R5 cells; the Sol #813 builder gets RL-177's code changes when its current run ends.
+
 409. **Laptop lead (interactive, Opus 5.5), 2026-11-17 18:22:50 PST (`date`): COPY OWNER TONIGHT = MBP AT ONCE (no 30-minute wait at the F2 p01, dev-05-s01 and dev-05-s02 closes); the Air pulls afterwards**
 
 ```item
