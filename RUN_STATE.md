@@ -1042,6 +1042,26 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 - **Size:** about 31k code lines of the retired arm/T-0 chain plus about 115k test lines naming it; the never-live NVIDIA/remote stack (about 4.6k); frozen reducer versions and analysis manifest v2; the about 440-line `whole_window.py` mirror; about 1.6k lines of duplicated verification helpers; about 40k lines of census data.
 - Fold in the post-release deferrals already listed in item 165 and in the D-188 retrospective.
 
+404. **Laptop lead (interactive, Opus 5.5), 2026-11-17 16:26:15 PST (`date`): AIR PAUSED AGAIN (Ed: wrap up by 16:50 and eject). ITEM 402 APPLIES AGAIN AS WRITTEN (the MBP interim lead holds items 1-6; item 395 (A) is in the "Air paused" state: the MBP is the copy owner at once at every close). Updates since item 402 are below. RL-176 (Fable, audit `66d0d622d`) is committed.**
+- **#810 (typed RUN_STATE items, tier 1).** The review passed: MERGE, the MED fence finding fixed, and the review record `docs/run_reports/2026-11-17-pr810-review.md` is on the branch. The gate ledger is in the body. CI is re-running on head `442e37c49`. INTERIM LEAD:
+  - when every check is green, merge it (merge commit);
+  - then on main run `python3 scripts/run_state_add.py init` and confirm that `python3 scripts/run_state_items.py check` exits 0;
+  - from then on add every RUN_STATE item through `run_state_add.py`.
+- **#809: BLOCKED by Astra (VERIFIED HIGH x2).** Both holes are already present on the CURRENT F0 pin, so they predate #809:
+  - (1) Part C returns `pass` with a recorded G1 timeout (`thermal.gate_timeout` in episode_flags) when its interval row is missing;
+  - (2) a completed X_G whose evidence cannot be read is treated as unrun and left out of the verdict.
+
+  The report and reproductions are at `/Volumes/JW-EXT/scratch/astra-review-809/` (Air SSD), and in summary the evaluator's no-timeout check must honour either source, and an unreadable X_G must fail closed. INTERIM LEAD:
+  - (a) in gaps, re-read F0 runs 1-9's Part C outputs for (1) a gate_timeout in episode_flags and (2) an X_G result that was run but omitted, the same way as item 400's re-read, and report a table;
+  - (b) have #809 fixed by a Sol 6.2 Codex Cloud task (fail closed on both, with regressions), and get one Astra re-review before merge;
+  - (c) the STANDING-F0 renewal must use the fixed pin.
+
+  R1's pin and R1 are unaffected: RL-175 D.2's re-read passed (item 400). A finding of (1) or (2) in the counted Part C at `c3f4bacd8` goes to the research lead before R1 installs.
+- **RL-176 prefill cell (Astra, synthetic): FALSE S SIGNATURE RATE 0.455 ± 0.016 at the counted prompt sizes** (0.418 at +16 tokens), against RL-176's .035 threshold (`/Volumes/JW-EXT/scratch/astra-rl176-prefill/CELL.md`). Under RL-176 this goes back to the research lead before the S amendment merges. Lead-owed on return: the Fable question, with the cell and the token count. Nothing in the chain, freeze 2 or qualification changes.
+- **#811** (cluster contract, step 1): 20/20 CI; 75 scenarios, 1 passed and 74 xfail awaiting member bindings. Ready for its adversarial audit, then the merge order of item 402 §4.
+- **#812** (qualification pin `0576ed76d` with the t0 guard): 21/21 CI, both admission lines pass for all three kits, cold attestation open. The drafts are repointed (audit `c84a47674`). RL-175 C.3/C.4 are in the drafts per its builder; verify before issue.
+- **Frozen mid-run, with pushed heads:** #795 (Sol, adding RL-175 B.3/B.4) and the RL-176 builder (token count, Q, S_dec, the action-aligned print, the amendment text). Continue both via Codex Cloud tasks from their branches. Check each branch head first: the frozen builders may have pushed partial work.
+
 403. **Laptop lead (interactive, Opus 5.5), 2026-11-17 15:24:07 PST (`date`): AIR RESUMED (Ed, ~15:20: SSD plugged back in, resume work). Item 395 (A) is now in the "Air resumed" state: item 348 stands (the lead copies at close; the MBP falls back at close + 30 min). The Air's three agents run again from 15:24:07. The LEAD TAKES BACK item 402's items 3-6 (freeze-2 packet, PRs #810/#809/#811/#812 and the cluster merge order, qualification items, F0 renewal, F2 re-dating, hp-02). The MBP keeps items 1-2 (the chain; dev-05 desks and Q1 records in gaps, local Sol desk seat). If the Air pauses again, item 402 applies again as written.**
 
 402. **Laptop lead (interactive, Opus 5.5), 2026-11-17 14:43:11 PST (`date`): AIR PAUSED (Ed, ~14:20: wrap up the Air; ~14:45: pass as much work as possible back to the MBP). The Air's agents are booted out and every lead lane is frozen with its work PUSHED. LEAD WORK HANDED TO THE MBP's INTERIM LEAD (item 388 fallback 6), in the priority order below. Item 395 (A): the Air is recorded paused, so the MBP is the copy owner at every close, with no 30-minute wait.**
