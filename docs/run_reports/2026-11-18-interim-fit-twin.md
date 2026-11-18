@@ -18,7 +18,7 @@ outputs were opened. Tests generated every input in memory or temporary
 storage.
 
 The script path is `scripts/cadence_interim_twin.py`. The SHA-256 of the draft
-file is `8a57effa47418c66945a45b697eda4d95746139fc662690d14568d0df1eddf62`.
+file is `ba9e0f761257e3e64013930b93cd0fa0cfe04ab0262bbb2d4dccf782eacb24dd`.
 The synthetic acceptance freeze is `e23e26dce`. The implementation and test
 corrections are in `19f3e5a47`.
 
@@ -31,6 +31,7 @@ corrections are in `19f3e5a47`.
 | RL-166 Q2/Q3 and RL-173 E/E.1, cut trapezoid, trace gap, coverage aggregation and hot-day verdict | `19f3e5a47` | `test_hand_derived_trapezoid_and_coverage`, `test_day_qualification_uses_sums_and_hot_leg_counts` | PASS |
 | RL-180 amendment 2, both channels' primary and fold coefficients, censored fit, exact verdicts, coverage and retries, ledger exclusion | `19f3e5a47` | `test_all_registered_fields_on_both_channels`, `test_relative_tolerances_and_missing_inputs` | PASS on normalized values |
 | F-12 and RL-180 amendment 2, isolated subprocess success, mismatch, missing file, thrown exception, attempted overwrite and byte scan | `19f3e5a47` | `test_isolated_child_byte_scan_and_write_boundary` | PASS with an injected synthetic evaluator |
+| Python `-I` alone allowed a lazy import to write a bytecode cache | `a6f21114a` | `test_isolated_child_byte_scan_and_write_boundary` | PASS; the test failed on all five cases using the preceding implementation |
 | Manifest-to-custody reader and complete parent integration | `19f3e5a47` | `test_direct_entrypoint_refuses_unbound_inputs` | PASS for refusal, BLOCKED for end-to-end agreement |
 
 All ten tests passed on Python 3.14.6 with NumPy 2.2.6. The repo's bare-Python
