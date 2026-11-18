@@ -125,7 +125,12 @@ class TransferReleaseTests(unittest.TestCase):
     def worker(self, root, mode):
         return subprocess.run(self.command(root, mode), cwd=ROOT, capture_output=True, check=False)
 
-    def worker_with_notice_pipe(self, root, mode, *, connected):
+    def worker_with_notice_pipe(self, root, mode, *, connected, unbuffered):
+        environment = os.environ.copy()
+        if unbuffered:
+            environment["PYTHONUNBUFFERED"] = "1"
+        else:
+            environment.pop("PYTHONUNBUFFERED", None)
         reader, writer = os.pipe()
         if not connected:
             os.close(reader)
@@ -133,7 +138,7 @@ class TransferReleaseTests(unittest.TestCase):
         try:
             with os.fdopen(writer, "wb") as sink:
                 result = subprocess.run(self.command(root, mode), cwd=ROOT, stdout=subprocess.PIPE,
-                                        stderr=sink, check=False)
+                                        stderr=sink, env=environment, check=False)
             return result, os.read(reader, 4096) if reader is not None else None
         finally:
             if reader is not None:
@@ -174,24 +179,31 @@ class TransferReleaseTests(unittest.TestCase):
             ("post-systemexit", 1, b"stage2_error\nSystemExit\n", True, True),
         ):
             for connected in (True, False):
-                with self.subTest(mode=mode, connected=connected):
-                    value = None if mode == "missing-input" else 123.456
-                    root = self.fixture(f"{mode}-{connected}", value=value)
-                    result, delivered = self.worker_with_notice_pipe(root, mode, connected=connected)
-                    self.assertEqual((result.returncode, result.stdout), (status, b""))
-                    self.assertEqual((root / "worker-returned").read_text(), str(status))
-                    self.assertEqual(delivered, notice if connected else None)
-                    self.assertEqual((root / "score-entered").exists(), entered)
-                    self.assertEqual((root / "saw-read").exists(), read_started)
-                    self.assertEqual(list((root / "public").iterdir()), [])
-                    self.assertEqual((root / "private" / "synthetic-result").exists(), entered)
+                for unbuffered in (False, True):
+                    with self.subTest(mode=mode, connected=connected, unbuffered=unbuffered):
+                        value = None if mode == "missing-input" else 123.456
+                        root = self.fixture(f"{mode}-{connected}-{unbuffered}", value=value)
+                        result, delivered = self.worker_with_notice_pipe(
+                            root, mode, connected=connected, unbuffered=unbuffered
+                        )
+                        self.assertEqual((result.returncode, result.stdout), (status, b""))
+                        self.assertEqual((root / "worker-returned").read_text(), str(status))
+                        self.assertEqual(delivered, notice if connected else None)
+                        self.assertEqual((root / "score-entered").exists(), entered)
+                        self.assertEqual((root / "saw-read").exists(), read_started)
+                        self.assertEqual(list((root / "public").iterdir()), [])
+                        self.assertEqual((root / "private" / "synthetic-result").exists(), entered)
 
     def test_transfer_status_survives_initial_buffered_stream_failure(self):
-        root = self.fixture("buffered-stderr")
-        result, delivered = self.worker_with_notice_pipe(root, "buffered-stderr", connected=False)
-        self.assertEqual((result.returncode, result.stdout, delivered), (2, b"", None))
-        self.assertFalse((root / "score-entered").exists())
-        self.assertEqual(list((root / "public").iterdir()), [])
+        for unbuffered in (False, True):
+            with self.subTest(unbuffered=unbuffered):
+                root = self.fixture(f"buffered-stderr-{unbuffered}")
+                result, delivered = self.worker_with_notice_pipe(
+                    root, "buffered-stderr", connected=False, unbuffered=unbuffered
+                )
+                self.assertEqual((result.returncode, result.stdout, delivered), (2, b"", None))
+                self.assertFalse((root / "score-entered").exists())
+                self.assertEqual(list((root / "public").iterdir()), [])
 
     def test_transfer_python_exits_follow_first_read(self):
         for mode in ("pre-systemexit", "pre-custom-base"):

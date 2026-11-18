@@ -5,6 +5,7 @@ from copy import deepcopy
 from hashlib import sha256
 from io import StringIO
 import json
+import os
 from pathlib import Path
 import subprocess
 import sys
@@ -54,6 +55,23 @@ def cli(*args):
     )
 
 
+def cli_with_closed_consumer(*args, channel, unbuffered):
+    environment = os.environ.copy()
+    if unbuffered:
+        environment["PYTHONUNBUFFERED"] = "1"
+    else:
+        environment.pop("PYTHONUNBUFFERED", None)
+    reader, writer = os.pipe()
+    os.close(reader)
+    with os.fdopen(writer, "wb") as sink:
+        streams = {"stdout": subprocess.PIPE, "stderr": subprocess.PIPE}
+        streams[channel] = sink
+        return subprocess.run(
+            [sys.executable, "-B", "-m", "joulewise.cadence_looks.manifest_dispatch", *map(str, args)],
+            cwd=ROOT, env=environment, check=False, **streams,
+        )
+
+
 def object_paths(value, path=()):
     if isinstance(value, dict):
         yield path
@@ -97,8 +115,45 @@ class VariantContractTests(unittest.TestCase):
                     # A v1 delegation receives the original payload. It cannot
                     # be overridden via its v2 look_kind or filename.
                     v1_tool = Path(tmp) / "synthetic_v1.py"
-                    v1_tool.write_text("raise SystemExit(17)\n", encoding="utf-8")
-                    self.assertEqual(cli(candidate, "--v1-tool", v1_tool).returncode, 17)
+                    v1_tool.write_text("print('synthetic legacy delegation')\nraise SystemExit(17)\n",
+                                       encoding="utf-8")
+                    legacy = cli(candidate, "--v1-tool", v1_tool)
+                    self.assertEqual((legacy.returncode, legacy.stdout), (2, b"synthetic legacy delegation\n"))
+
+    def test_dispatch_refusals_survive_disconnected_stderr(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            folder = Path(tmp)
+            unknown = folder / "unknown.json"
+            unknown.write_bytes(encode({"schema": "unknown"}))
+            interim = folder / "interim.json"
+            interim.write_bytes(encode({"schema": dispatch.V1, "look_id": "lm-interim-01"}))
+            v1_tool = folder / "legacy.py"
+            v1_tool.write_text(
+                "import sys\nprint('synthetic legacy refusal', file=sys.stderr)\nraise SystemExit(1)\n",
+                encoding="utf-8",
+            )
+            for route, args in (
+                ("validate", ["validate", unknown]),
+                ("transfer final", ["validate", "--final", DRAFT]),
+                ("qualification final", ["validate", "--final", QUALIFICATION]),
+                ("description final", ["validate", "--final", INSTRUMENT]),
+                ("root parser", []),
+                ("validate parser", ["validate", DRAFT, "--unknown"]),
+                ("delegated v1 final", ["validate", "--final", interim, "--v1-tool", v1_tool]),
+            ):
+                for unbuffered in (False, True):
+                    with self.subTest(route=route, unbuffered=unbuffered):
+                        result = cli_with_closed_consumer(*args, channel="stderr", unbuffered=unbuffered)
+                        self.assertEqual((result.returncode, result.stdout), (2, b""))
+            connected = cli(interim, "--v1-tool", v1_tool, "--final")
+            self.assertEqual((connected.returncode, connected.stderr), (2, b"synthetic legacy refusal\n"))
+
+    def test_dispatch_stdout_notices_survive_disconnected_reader(self):
+        for args in (["validate", DRAFT], ["--help"], ["validate", "--help"]):
+            for unbuffered in (False, True):
+                with self.subTest(args=args, unbuffered=unbuffered):
+                    result = cli_with_closed_consumer(*args, channel="stdout", unbuffered=unbuffered)
+                    self.assertEqual((result.returncode, result.stderr), (2, b""))
 
     def test_v1_refuses_v2_look_ids_and_final_markers_before_delegating(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -144,9 +199,10 @@ class VariantContractTests(unittest.TestCase):
             payload = encode(interim)
             candidate.write_bytes(payload)
 
-            def delegate(command, *, check):
+            def delegate(command, *, check, capture_output, text, encoding, errors):
                 candidate.write_bytes(encode(dict(interim, look_id="lm-transfer-01")))
                 self.assertEqual(Path(command[4]).read_bytes(), payload)
+                self.assertTrue(capture_output)
                 return subprocess.CompletedProcess(command, 0)
 
             with patch.object(dispatch.subprocess, "run", side_effect=delegate):
