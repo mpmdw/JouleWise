@@ -19940,3 +19940,75 @@ Rows for the lead to commit to `RULES.json`. Owner is `research_lead` for rows 1
 **Rows closed or changed by this ruling.** None of RL-179's or RL-180's rows closes. RL-179's ladder (F-4 (c)) gains row 17's two entries.
 
 **What comes back to me.** An edit to #813 that departs from 1.3. An Astra finding that changes S's or Q's arithmetic. A change of row 3's kind. A first-token count that is not zero. A third Pydantic version with other differences. From Flash-Next: the builder's report that no boundary counter exists; a bound over 256 MiB; a block where most long legs fail the bound; `lm-fn-real-01`'s manifest for its cold pass; the release ruling after the look. Nothing else in this ruling returns.
+
+---
+
+# RL-182a. The start of S's decode-only row and of Q is the record's `Turn.first_token_ns`. On the series runtime that field is written when the stream yields the first generated token, so it and the first token event are the same instant to one clock read. The code keeps reading that field. P4 names it. An absent stamp is handled as already ruled. Astra's timing replay is closed by this ruling and by two checks, not by moving the boundary
+
+Research lead (Fable 5.2), Wed Nov 18 01:31 PST 2026 (from `date`). Answers the lead's 01:30 question on Astra's HIGH 1 (`/Volumes/JW-EXT/scratch/d-audit-813/FINAL-MESSAGE.md`). RL-182 stands except where "Amends" says otherwise. Cites as in RL-182; `PC:n` is `joulewise/align/apple/prompt_cache.py` and `R145:n` is `joulewise/align/apple/rl145_prints.py` at `a36b28b73`.
+
+**Read.** Astra's final message in full, the HIGH 1 paragraph of its `AUDIT.md`, `timing.log` and the `timing` case of `replay`. The stream wrapper (EP:255-300), the cache's prefill checkpoint (PC:161-190), the generation wrapper (`generation.py:20-30`) and the token-stamp helper (R145:198-212).
+
+**Checked myself.**
+- **Where the two stamps are written.** In one pass of the loop, on the first response the stream yields, the runtime writes the prefill-end event (MLX:893-900), then the decode-start event (MLX:901-908), then reads the clock again for token 0 (MLX:909). No model call lies between them.
+- **Nothing writes an earlier prefill-end event.** The checkpointed prefill runs inside the stream wrapper before the native stream is started (EP:268-272, PC:161-190) and emits no event. The endpoint takes the first prefill-end event of the turn (EP:753-756), and there is one.
+- **The token stamps #787 uses are anchored on the same field.** A token's time is `first_token_ns` plus its offset from the prefill-end event (R145:207-212), and #787 takes `stamps[0]` where it has stamps (SR:536).
+- **What Astra's replay shows.** Its fixture sets the field at 4.0 s for the instructed member and 4.5 s for benign members, with the first token event at 5.0 s for both (`timing.log`). The words flip because the fixture puts 0.5 to 1 s of label-tied time between the two stamps. The finding is verified as a sensitivity. It is not a property of the series runtime.
+
+**Not checked.** I did not run the replay. I did not measure the gap on a real run; row 6 below orders that. The mock world separates the two stamps by 10 ms (EP:753-754); no mock turn enters the series.
+
+## The ruling
+
+**The field is `Turn.first_token_ns`.** S's decode-only row starts there and Q's outcome starts at turn 0's. The code at RL:210 and RL:462 is right and does not change.
+
+**Why this field and not the token event.**
+- It is the field RL-177 was written on. Its verified list quotes the record's own comment, "end of prefill, when the server reports it" (RLD:18182), and "first stamped token" in section C meant that stamp.
+- It is the boundary both definitions name. S's rows "exclude every prefill" and Q is energy "after the prompt is read". The end of prefill is that instant.
+- On the pinned runtime the end of prefill is not observable before the first token arrives, so the runtime writes it at the first yield. The two stamps differ by one clock read, for every member alike.
+- Reading the token event instead would give the scorer a second input file to open, for a difference of microseconds.
+
+**Astra's reading of my words was fair.** RL-177 said "first stamped token" and "first generated token", and RL-182 1.4 (f) said the stamp is taken "when the first token is yielded". All three are true of this runtime and none named the field. P4 must name it.
+
+**An absent stamp: unchanged.**
+- S: the turn gives no decode-only row (RL:211-212). There is no fallback to a token event, to the turn's start or to its end.
+- Q: a member whose turn 0 has no stamp enters at outcome 0 (RL:464-465; RLD:18294).
+- A stamp outside its turn is clamped by the endpoint and flagged (EP:795-797). A member carrying `first_token_clock_outside_turn` on a scored turn has no decode-only row for that turn. The builder adds that one condition to `_decode_rows`; it is label-free.
+
+**Two checks, so the equality is tested and not assumed.**
+1. **A unit test on the runtime adapter.** With a stub stream and a clock that advances one tick a read, token 0's time less the prefill-end event's time is exactly the ticks of the reads between them, and no model call is made between the two. It fails if a later change puts work between the stamps.
+2. **The gap on W1.** With the count of RL-182 row 6, the lead takes from W1's event records, times only: over turns with both events, the largest gap between the prefill-end event and the first token event. **Over 10 ms on any turn, it comes to me before C1 arms.** Ten milliseconds of decode is of the order of the 1 J edge every boundary already carries.
+
+**Text, added to RL-182's edits.**
+- **E2, first bullet (P4:1188).** It reads: "A decode-only row runs from the turn's first-token stamp to the row's end as RL-149 §1.3 defines it. The first-token stamp is the record's `Turn.first_token_ns`: the end of prefill as the runtime reports it, which the pinned runtime writes when its stream yields the first generated token. State, clock clause, guard and `after_hot_turn` are unchanged."
+- **E10 (P4:1283).** B2a's outcome reads "…from turn 0's first-token stamp (B2) to the member's end."
+- **AM:47.** "from the turn's first generated token" reads "from the end of the turn's prefill, when the first generated token arrives".
+
+**Astra's `replay timing`** stays red against this head by construction. The builder replaces its expectation with check 1 and records this ruling's id beside it.
+
+## The other three findings
+
+- **HIGH 2, zero variance: a code bug under E2, as the lead has it.** A fit whose training residuals are zero must give `s_score_undefined`, and a float residue of 3.45e-31 must not pass as variance. The lead's exact test (all training energies equal) is accepted. It is not the whole rule: a fit can be exact on unequal values. The builder also treats the variance as zero when the residual sum of squares is at or under 10⁻¹⁸ of the training rows' summed squared energies, unless A26 already states a tolerance, in which case A26's governs. Label-free either way. E2's third bullet stands as written.
+- **MED, signing with the placeholder:** closed by E9. The placeholder leaves the bound text.
+- **MED, B2a's lost subject:** it is E10.
+- **Astra's NEEDS_SPEC** (caller, #787, DC, side transfer, ties, grids) is answered by RL-182 1.4 and 1.5.
+
+**W1's signature** now also needs HIGH 2's repair and check 1, with the hashes refreshed after them. Nothing else in RL-182 1.5 moves.
+
+**Amends.** RL-182 1.3 E2 and E10 and AM:47, as above. RL-182 1.4 (f): "leaves out the prefill and the first decode step" stands for this runtime and is now a tested property. RL-182 row 6 gains the gap. RL-177 C and F (RLD:18237, 18293): "first stamped token" and "first generated token" read "first-token stamp, `Turn.first_token_ns`".
+
+**Blind status.** Blind. No series member exists and W1 is not signed. The boundary is the one RL-177 fixed; this ruling names its field and changes no score, level or rule.
+
+**For Ed, plainly.** "The code auditor found that our test starts its clock at 'the prompt has been read' and not at 'the first word came out', and showed that if those two moments were far apart the result could flip. On our software they are the same moment, written one line apart, so nothing changes. I named the exact field in the registration, added a test that fails if anyone ever puts work between the two, and we will measure the gap on the first real run."
+
+## Register
+
+Rows for the lead to commit to `RULES.json`, added to RL-182's. Owner is `research_lead`.
+
+| # | Clause | Class | Protects | Scope | Ends | Test |
+|---|---|---|---|---|---|---|
+| 18 | S's decode-only row and Q's outcome start at `Turn.first_token_ns`; an absent stamp gives no row and, at turn 0, a Q outcome of 0; no other field or event is substituted | VALIDITY (prereg) | S's rows exclude every prefill; Q is energy after the prompt is read | `rl176.py`, the release script | The v4 release | The existing no-stamp test (`test_rl176.py:174`); a test that a token event earlier or later than the stamp does not move the row |
+| 19 | On the runtime adapter the prefill-end event and token 0's stamp are written with no model call between them | VALIDITY | Row 18's field is the first token's arrival | The pinned runtime | With each pin | Check 1 |
+| 6 (amended) | RL-182 row 6's count, and with it the largest gap on W1 between a turn's prefill-end event and its first token event; a count that is not zero or a gap over 10 ms comes to me before C1 arms | VALIDITY | Rows 18 and 19 on real records | W1's turn and event records, counts and times only | C1's arm | Both figures are in W1's Check item |
+| 20 | A fold whose training residuals are zero, exactly or to the tolerance above, gives `s_score_undefined` | VALIDITY | P4's zero-variance rule; no word from a degenerate fit | `_residual_scores` | The v4 release | Astra's `replay variance` returns `S NOT EVALUABLE` |
+
+**What comes back to me.** A W1 gap over 10 ms. A runtime change that fails check 1. Nothing else in this addendum returns.
