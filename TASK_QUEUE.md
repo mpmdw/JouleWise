@@ -599,7 +599,7 @@ At the end of substantial work:
 
 | Item | Priority and lane | Disposition |
 |---|---|---|
-| RL-176 builder work | P1 [AGENT], directly ordered for the blind W1 amendment and the pre-C1 code freeze | Token evidence published on the audit branch at `38bb2f40e`. Code and protocol text are in the W1 draft for independent execution and lead review. The analyst cell ran and was referred with the token count to RL-177. The draft reserves the prompt-offset text for that ruling. See the [builder report](docs/run_reports/2026-11-17-rl176-build.md). |
+| RL-176 / RL-177 builder work | P1 [AGENT], directly ordered for the blind W1 amendment and pre-C1 freeze | Token evidence is on the audit branch at `38bb2f40e` and `27cc1338b`. PR #813 carries the RL-177 candidate and unresolved simulation percentages. R3 and R4 exceeded .035, so the lead's ruling gates final scorer adoption and amendment merge. See the [builder report](docs/run_reports/2026-11-17-rl176-build.md). |
 
 ## Intake Batch Owed To The Kernel (2026-07-30/31)
 
