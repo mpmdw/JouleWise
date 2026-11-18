@@ -1044,6 +1044,25 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 
 <!-- RUN_STATE TYPED ITEMS: newest first. Add with scripts/run_state_add.py; never edit by hand. -->
 
+431. **Kill census blockers, never wait on them (owner directive, standing): pre-arm kill + immediate zero-capture retry; KILL-NEEDED escalates to the lead**
+
+```item
+{"expires_epoch_s": null, "issued_epoch_s": 1794990961, "number": 431, "owner": "magistrate", "schema": "joulewise.run_state_item.v1", "sets": [], "status": "ISSUED", "supersedes": []}
+```
+
+- **Owner directive (Ed, 2026-11-18 00:47):** "kill the processes on the mbp blocking the windows if it can't". Any process that would make the agent census refuse a start is killed, not waited on. A census refusal that measured nothing is retried at once.
+- **Standing procedure.** Run it immediately before every Start and check, and again after any zero-capture `start-agents` / `night_refused_agent_present` refusal.
+  1. **List** census hits with the runner's own census patterns (measurement_mode.zsh and the runner's start-agents check).
+  2. **Never kill:**
+     - your own process tree (the magistrate's claude, its shell and MCP children);
+     - launchd jobs `com.joulewise.*` and `local.jwbench.*`;
+     - the measurement runner, powermetrics and the meter reader of a span that is armed or closing.
+  3. **Kill everything else the census names:** SIGTERM, then after 5 s SIGKILL. That includes `codex app-server` daemons (`codex app-server daemon stop` first), stray `codex exec`, other `claude` sessions (the owner's interactive ones included), Ollama/LM Studio servers, and Spotlight/backup helpers only if the census names them.
+  4. **Re-run the census.** If it is clear, launch. A refused attempt with zero capture relaunches immediately as `rerun_of` (retry class: Ed 2026-09-16; RL-179 row 21), at most two retries per span. Then the kit is held and the lead is told.
+  5. **Record** the pids, names and the signal used in the item.
+- **If you cannot kill** (permission refused, or a root-owned process): put `KILL-NEEDED` and the pids in the item heading and push at once. The lead's watcher reads every magistrate commit and will kill them over ssh. The span's Check is on main at that point, so ssh is allowed. Then go on with the ladder; do not wait.
+- **Scope:** this is about the census only. Host stops (restore unproven, disk, meter missing) and item 423's maintenance marker still bind. The marker means the owner is working on purpose: never kill around it.
+
 430. **dev-05-s02 re-issued for Wed: pred_gate reads a2, day_gate counts measured legs only (a1 zero-capture = 0); standing pre-arm codex daemon stop**
 
 ```item
