@@ -624,10 +624,9 @@ class TraceClausesThroughTheCli(unittest.TestCase):
         rc, _, err = TLR.run_cli(["stage2", "--stage1", str(p1), "--stage1-sha256", R.sha256_file(p1), "--custody",
                                   str(self.c.root), "--span-dir", f"{sid}={sdir}", "--out", str(fit)])
         self.assertEqual(rc, 0, err)                                  # the backstop (on at 2 s) admits B's 2.0 s
-        files = {f["path"] for f in rj(fit)["custody"]["files"]}
-        lid = lambda L: L["leg_key"].split("/")[1]
-        self.assertTrue([f for f in files if f.startswith(f"{sid}/legs/{lid(B)}/")])
-        self.assertFalse([f for f in files if f.startswith(f"{sid}/legs/{lid(A)}/") and f.endswith("/power_trace.csv")])   # A's trace never opened
+        files = {Path(entry["path"]) for entry in rj(fit)["custody"]["files"]}
+        self.assertIn(bundle_of(sdir, B["leg_key"]).resolve() / "power_trace.csv", files)
+        self.assertNotIn(bundle_of(sdir, A["leg_key"]).resolve() / "power_trace.csv", files)
 
     def test_meter_attacks_are_excluded_in_stage_1(self):
         """Stage 1 excludes, by rule 4's DC-in clause, each shape of the round-5 reports; none reaches stage 2."""
