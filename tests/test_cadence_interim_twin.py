@@ -92,7 +92,7 @@ def evaluate():
     if sys.argv[3] == "error":
         raise RuntimeError(canary)
     return data["twin"], data["primary"]
-run_child(root / "RESTRICTED", evaluate)
+run_child(root / "fixture-output", evaluate)
 """
         for mode, expected in (
             ("match", b"yes\n"),
@@ -103,9 +103,9 @@ run_child(root / "RESTRICTED", evaluate)
         ):
             with self.subTest(mode=mode), tempfile.TemporaryDirectory() as tmp:
                 root = Path(tmp)
-                private = root / "RESTRICTED"
+                private = root / "fixture-output"
                 private.mkdir()
-                initial = {"RESTRICTED"}
+                initial = {"fixture-output"}
                 if mode != "missing":
                     primary = result()
                     if mode == "mismatch":
@@ -134,12 +134,18 @@ run_child(root / "RESTRICTED", evaluate)
                 else:
                     self.assertEqual(list(private.iterdir()), [])
 
+    def test_direct_entrypoint_refuses_unbound_inputs(self):
+        completed = subprocess.run([sys.executable, "-I", "-B", str(SCRIPT)],
+                                   capture_output=True, check=True)
+        self.assertEqual(completed.stdout, b"not_evaluable\n")
+        self.assertEqual(completed.stderr, b"")
+
 
 @unittest.skipUnless(HAS_NUMPY, "NumPy is required for the fit")
 class FitTests(unittest.TestCase):
     def test_hand_derived_rows_full_fit_and_prediction(self):
         from scripts.cadence_interim_twin import (
-            FitLeg, design_rows, fit_channel, predict, token_rates,
+            FitLeg, design_rows, fit_channels, predict, token_rates,
         )
 
         legs = [
@@ -159,17 +165,36 @@ class FitTests(unittest.TestCase):
         self.assertEqual(rows[3][2:5], (1, 514, 2))
 
         # Independent planted measurements. Use a distinct exact vector on each channel.
-        design = [row for leg in legs for row in design_rows(leg, rates, ("k_tf08",))[1]]
-        for factor in (1, 3):
+        measurements = {}
+        truth = {}
+        for channel, factor in (("gpu_rail", 1), ("dc_in", 3)):
             coefficients = [factor * v for v in (2, 5, 11, 17, 23, -31)]
-            measured = [math.fsum(a * b for a, b in zip(row, coefficients)) for row in design]
-            fitted = fit_channel(names, design, measured)
-            for name, coefficient in zip(names, coefficients):
-                self.assertTrue(math.isclose(fitted[name], coefficient, rel_tol=1e-8), name)
-            heat, predictions = predict(legs[0], rates, ("k_tf08",), fitted)
-            self.assertAlmostEqual(heat, -4.5 * coefficients[-1])
-            for prediction, energy in zip(predictions, measured[:4]):
-                self.assertTrue(math.isclose(prediction, energy, rel_tol=1e-8))
+            truth[channel] = coefficients
+            p1, p2, a0, a1, a2, k = coefficients
+            measured = []
+            for leg in legs:
+                prompt, (z,) = leg.prompt_tokens, leg.readings
+                t = prompt / 2
+                segments = [p1 * prompt + p2 * prompt**2 + k * z * t**2 / 2]
+                for lo, hi, n, offset in ((0, 255, 255, 128), (255, 511, 256, 383.5),
+                                          (511, 512, 1, 512)):
+                    ramp = ((t + hi / 256)**2 - (t + lo / 256)**2) / 2
+                    segments.append(n * (a0 + a1 * (prompt + offset) + a2 * prompt) + k * z * ramp)
+                measured.append(segments)
+            measurements[channel] = measured
+
+        full = fit_channels(legs, rates, ("k_tf08",), measurements, None)
+        contaminated = {channel: [*values[:2], [3 * v for v in values[2]]]
+                        for channel, values in measurements.items()}
+        fold = fit_channels(legs, rates, ("k_tf08",), contaminated, None, exclude_day="c")
+        for fitted in (full, fold):
+            for channel, coefficients in truth.items():
+                for name, coefficient in zip(names, coefficients):
+                    self.assertTrue(math.isclose(fitted[channel][name], coefficient, rel_tol=1e-8), name)
+                heat, predictions = predict(legs[0], rates, ("k_tf08",), fitted[channel])
+                self.assertAlmostEqual(heat, -4.5 * coefficients[-1])
+                for prediction, energy in zip(predictions, measurements[channel][0]):
+                    self.assertTrue(math.isclose(prediction, energy, rel_tol=1e-8))
 
     def test_right_censored_normal_with_analytic_optimum(self):
         from scripts.cadence_interim_twin import censored_normal
@@ -193,7 +218,22 @@ class FitTests(unittest.TestCase):
         # Symmetry around the mean gives half the interval, for any sigma.
         self.assertAlmostEqual(expected_hot_seconds(2, 8, 5, 1.25), 3)
         self.assertEqual(expected_hot_seconds(2, 8, 5, 1e-7), 3)
-        self.assertAlmostEqual(expected_hot_seconds(0, 2, -1, 1), 1.917067587140796, places=12)
+        self.assertAlmostEqual(expected_hot_seconds(0, 2, -1, 1), 1.9170666837293613, places=12)
+
+    def test_onset_gate_counts_uncensored_by_day_and_cell(self):
+        from scripts.cadence_interim_twin import OnsetRow, fit_onset
+
+        rows = [OnsetRow(day, str(cell), (), cell, 4 + 2 * cell + noise, True)
+                for day in ("a", "b", "c") for cell in (1, 2) for noise in (-1, 1)]
+        fit = fit_onset(rows)
+        self.assertAlmostEqual(fit.coefficients[0], 4)
+        self.assertAlmostEqual(fit.coefficients[1], 2)
+        two_days = [r for r in rows if r.day != "a"]
+        self.assertIsNone(fit_onset(two_days))
+        self.assertAlmostEqual(fit_onset(rows, held_out_day="a").sigma_s, 1)
+        one_cell = [OnsetRow(r.day, "1", r.readings, r.prefill_s, r.end_s, r.observed) for r in rows]
+        self.assertIsNone(fit_onset(one_cell))
+        self.assertIsNone(fit_onset(one_cell, held_out_day="a"))
 
 
 class DiagnosticsTests(unittest.TestCase):
