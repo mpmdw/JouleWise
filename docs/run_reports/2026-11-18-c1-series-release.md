@@ -19,7 +19,8 @@ with zero S rows.
 | RL-185 PIPELINE §3 freeze | `ca768c768b1bc9308fb4c1075a5ac81a0db82fde` (draft replay `187bf277e`) |
 | Private test head and tree | `ce2aebc838d4e0f4a606bcb1899f9dd2cce20133`, `4da685deb63d32d0231dac7a6413669055f353f0` |
 | Resolved-interface test head and tree | `3ab402d58eb4c82645db233721945f0388040d01`, `d7baf074110f80c3b978336753d32a2c1e131370` |
-| Caller SHA-256 for signatory | `6ab1d68db3d6190f9bf4ae5335124c587397f68284f8adc6c9596744c933fc28` |
+| Pipeline audit fix test head and tree | `e505c3e2b6387e484a5baea4f5adc98906b0d0bf`, `a75d7766bc10b5da65673be4a46796fc2ccb314d` |
+| Caller SHA-256 for signatory | `d55b7db7257f8e96a0cc702254ac3d01868924de6efba133d206bf31ced58ded` |
 | Draft code head and tree before report | `b7a0440a00442151c5b18a73a7b48fb5beeb72ec`, `77c7065e57a5bc17cb436adc041f6ff45bfdb175` |
 
 At the initial freeze the CLI tests failed with no script. At the RL-185
@@ -31,7 +32,8 @@ rail projections.
 Handoff found PR #813 at `7498dfe3ffcbedd47262220cdb1e99113d2c9869`, a
 test and documentation delta from its initial pin. PR #787 and PR #826
 remained at the pins above. All three remain separate drafts on W1. The
-public caller draft contains only the script, test and report. The staged
+public draft includes the caller, its test and report, and the audit's
+release-specific registration validator change. The staged
 integration tree is private. First public CI was queued on a W1 checkout
 that lacks the dependencies. Running the module at that public code head
 fails to import `rl176`. Exact-head full CI for acceptance is owed after
@@ -43,16 +45,17 @@ the dependency landings. [Draft PR #836](https://github.com/mpmdw/JouleWise/pull
 
 | Stage | File and line | Evidence |
 |---|---|---|
-| CLI and guard | Caller :380,403,410, PR #813 `v4_desk_seal.py:351,418` and `rl176.py:611,622,633` | Snapshot only the guard's named metadata, call the real guard and use the literal freeze flag in the scorer. |
-| Registration and history | Caller :72,164,275, PR #813 `v4_registration.py:518,569` and `scripts/align_v4_series.py:220,231,239,510` | Match existing committed authority, validate signing inputs and replay the actual attempt order against the frozen manifest. |
+| CLI and guard | Caller :444,474, PR #813 `v4_desk_seal.py:351,418` and `rl176.py:611,622,633` | Snapshot the guard's named metadata, call the real guard and use the literal freeze flag in the scorer. |
+| Registration and history | Caller :101,135,227,344, `v4_registration.py:527,581` and `scripts/align_v4_series.py:220,231,239,510` | Match committed authority, verify the executing sources against the release receipt, and replay attempt order against the frozen manifest. |
 | Final records and A9 | PR #826 `scripts/align_v4_next_arm_packet.py:237,306,395` and `light_triage.py:79,163` | Use the shared RL-183b finality, including successor `previous_final`, and independently preserve final per-member reasons. |
-| Stored rows | Caller :42,124,250, PR #787 `s_rows.py:193,751,774`, PR #813 `workload.py:893` | Give the real #787 adapter its isolated rail-only projection and registered PM rows, then pass the returned tuple directly. |
-| DC and disclosures | Caller :306,321,345, PR #813 `rl176.py:459,468,527,550,628` | Use the loaded episode identity to request the separate manifest-keyed provider. Keep uncaptured assignments out of scorer inputs and apply the existing numeric rule. |
+| Stored rows | Caller :80,313, PR #787 `s_rows.py:193,751,774`, PR #813 `workload.py:893` | Give the real #787 adapter its isolated rail-only projection and registered PM rows, then pass the returned tuple directly. |
+| DC and disclosures | Caller `benign_dc`, `load_benign_dc`, `add_disclosures`, PR #813 `rl176.py:459,468,527,550,628` | Use the loaded episode identity to request the separate manifest-keyed provider. Keep uncaptured assignments out of scorer inputs and apply the existing numeric rule. |
 
 ## Resolved interfaces under RL-185 §3
 
 The lead confirmed the terminal ref, restore layout, signing-owner gate and
-unbound companion output. The caller bytes and their SHA-256 stayed fixed.
+unbound companion output. The pipeline audit added the executing-source check
+described below.
 [Terminal authority](https://github.com/mpmdw/JouleWise/blob/61e8c9c2ccfd023c82e0da048dd89f4ed854a5bc/docs/research-audits/2026-11-10-fable/RESEARCH-LEAD-DECISIONS.md#L20874) ·
 [Restore layout](https://github.com/mpmdw/JouleWise/blob/61e8c9c2ccfd023c82e0da048dd89f4ed854a5bc/docs/research-audits/2026-11-10-fable/RESEARCH-LEAD-DECISIONS.md#L20863)
 
@@ -91,6 +94,42 @@ unbound companion output. The caller bytes and their SHA-256 stayed fixed.
   executing `s_rows.py`, `scripts/align_v4_series_release.py`, `rl176.py`
   and `rl176_phases.py` before C1 arms. A missing or mismatched digest fails
   that gate. [Four-file gate](https://github.com/mpmdw/JouleWise/blob/61e8c9c2ccfd023c82e0da048dd89f4ed854a5bc/docs/research-audits/2026-11-10-fable/RESEARCH-LEAD-DECISIONS.md#L19785)
+
+## Automated pipeline audit round 1
+
+**HIGH, verified, integration seam.** The original 102-win CLI accepted a
+receipt for a different scorer checkout and printed `S SIGNATURE`. The
+registered scorer digest was `d60588f1…` while the executing digest was
+`b72a6799…`. The W1 receipt's artifact map also omitted the release caller
+and row builder. The original synthetic reproducer exited 0 at the audited
+head `1d4a0d7be`.
+
+The fix at `e505c3e2b` gives the existing registration validator a release
+mode. That mode requires the exact W1 artifact set plus the four release
+paths and verifies their committed and worktree bytes. Its default W1
+mode still uses the W1 artifact set. Before roster processing or member
+loading, the caller compares the validated receipt to the executing
+checkout. The CLI loads the three analysis modules from source and checks
+the loader's digests, and compares the caller's compiled code to its
+verified source. This is release enforcement. Receipt issuance and C1 arm
+enforcement remain with the signing owner.
+
+| Regression | Result |
+|---|---|
+| `test_audit_scorer_differs_from_legacy_receipt_refuses_without_report` | PASS. The original mismatched scorer with a valid W1-only receipt refuses at the ordinary CLI and writes no report. |
+| `test_each_executing_release_binding_is_required_before_loading_members` | PASS. Each missing path and each valid receipt for a different copy of one of the four files refuses before the member loader. A stale captured scorer digest also refuses. |
+| `test_release_source_loader_uses_source_even_with_stale_timestamp_bytecode` | PASS. An otherwise usable stale cache does not supply the executing code. |
+
+The four-file synthetic receipt binds the reviewed test sources. The
+signing owner verifies the executing candidate and supplies the actual
+receipt. Source digests on the private test head follow.
+
+| Path | SHA-256 |
+|---|---|
+| `scripts/align_v4_series_release.py` | `d55b7db7257f8e96a0cc702254ac3d01868924de6efba133d206bf31ced58ded` |
+| `joulewise/align/apple/s_rows.py` | `f47f1e9ca1c7c1602297ba16229308fa1201ef602a3816ad12dbf019277c5ccb` |
+| `joulewise/align/apple/rl176.py` | `b72a6799aa92279af9b6ea1880ed978546d84de5017244fd5c493dd1529b348e` |
+| `joulewise/align/apple/rl176_phases.py` | `a924b1f4fe5e4e3d7dee719027e57cdb7548f4d66ec7705ad249d5d6b2ff18f8` |
 
 ## Executed checks and Tier 2 dispositions
 
