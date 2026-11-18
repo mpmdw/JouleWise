@@ -283,6 +283,32 @@ The historical transfer branch's focused run reported 15 passes and one
 expected v1 skip. Descriptor exhaustion still exits 2 whether the
 reserved range is unavailable or full.
 
+## Round 10 startup warnings
+
+Encoding diagnostics exposed a text-stream open before the transfer worker
+isolated stderr. The original probe showed six contaminated notices on each
+branch. Eight subcases failed in the prior regression with
+`PYTHONWARNDEFAULTENCODING=1`.
+
+The regression froze at `3c5101d38`. Fix `3aa2335d3` suppresses warnings at
+entry, restores vacant descriptors using only OS operations, and routes
+fd 2 to `/dev/null` after saving public stderr. The notice helper writes
+UTF-8 bytes to the saved fd. The pinned v1 subprocess gets `-W ignore`.
+When a Python output stream starts unset, the worker rebuilds it only after
+redirecting that descriptor to its private file. Transfer-branch commit
+`f00601398` applies the same notice boundary to the source dispatcher and worker.
+Commit `70edd1f43` retains the source dispatcher's callable `main` and uses
+a separate process boundary for module execution.
+
+| Finding | Disposition and regression |
+| --- | --- |
+| HIGH, implementation bug | `test_dispatch_warning_matrix_has_exact_public_stderr` and `test_transfer_warning_matrix_has_exact_public_stderr` check three warning configurations across all eight open/closed descriptor layouts. All 168 integration cases passed with exact stderr bytes and statuses on success, before-read refusal and after-read failure. The original probe recovered all 12 exact two-line notices on both branches. The previously failing regression passed under encoding diagnostics. |
+| MED, pinned standalone command | PR #821's standalone qualification CLI retains its pinned bytes. The supported dispatcher was checked independently. |
+| MED, admission integration | Transfer stage-1 arm bounds and authoritative public registration-source authorization remain with their owners. |
+| LOW, preservation | The schemas, pinned validators, registered and candidate manifests, ledger and state files retain their prior bytes. |
+
+The niced integration shard reported 68 passes and one expected v1 skip.
+
 ## RL-185 and lead handoff
 
 RL-185 §4 resolves the previous NEEDS_SPEC. Both description drafts carry
