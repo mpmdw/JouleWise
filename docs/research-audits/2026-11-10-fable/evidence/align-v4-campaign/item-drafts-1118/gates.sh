@@ -89,7 +89,7 @@ close_gate() {
   test "${LAST_CLOSE_KIND:-}" = "$actual" || { echo 'STOP: contradictory LAST_CLOSE_KIND'; return 1; }
   echo "CLOSE PROVEN $EFF_SPAN at $EFF_CLOSE_NS ns kind $actual"
 }
-# RL-165 §8.1; RL-180 amendment 3; RL-183 §2.3: public authorization for lm-interim-01.
+# RL-165 §8.1; RL-180 amendment 3; RL-183 §2.3; RL-184 §2: public authorization for lm-interim-01.
 FREEZE2_COEF_SHA256="<LEAD FILLS: FREEZE2_COEF_SHA256>"
 COLD_SEAT_RECORD="<LEAD FILLS: per-kit cold seat ADMIT and RL-167 Part B Q2 confirmation>"
 LINE2_RECORD="<LEAD FILLS: qual-pin suite red set equals c3f4bacd8 test for test>"
@@ -114,7 +114,7 @@ repo, expected = sys.argv[1:]
 if not re.fullmatch(r"[0-9a-f]{64}", expected):
     sys.exit("STOP: malformed issued freeze-2 public hash")
 
-# Bind the full reviewed PR #795 commit and its exact import closure here after owner delivery.
+# Bind the PR #795 public verifier for ordinary yes and RL-184 naming after owner delivery.
 # build_items.py renders these literals as part of the common gate in all six items.
 provider_commit = None
 provider_paths = ()

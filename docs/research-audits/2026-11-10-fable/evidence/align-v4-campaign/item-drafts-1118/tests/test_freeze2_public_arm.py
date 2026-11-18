@@ -20,6 +20,10 @@ MANIFEST = f"docs/process/cadence/looks/{LOOK}.json"
 SCHEMA = f"docs/process/cadence/looks/{LOOK}.output.schema.json"
 ROOT = "invented/public"
 REPORT = f"{ROOT}/{LOOK}/PUBLIC.json"
+NAMING = f"docs/process/cadence/looks/{LOOK}.freeze2.json"
+DECISIONS = "docs/research-audits/2026-11-10-fable/RESEARCH-LEAD-DECISIONS.md"
+NAMING_SCHEMA = "joulewise.cadence_looks.freeze2_naming.v1"
+RULING = "RL-9999"  # Invented for offline test histories only.
 CLI = "scripts/cadence_look_manifest.py"
 DEPENDENCY = "fixture_dependency.py"
 CODE_PATHS = (CLI, DEPENDENCY)
@@ -107,6 +111,43 @@ def require(condition, detail):
         raise ValueError(detail)
 
 
+def naming_stanza(record):
+    return ("FREEZE-2-NAMING ruling={ruling} look={look_id} "
+            "coefficients_sha256={coefficients_sha256} public_sha256={public_sha256} "
+            "designation={designation}").format(**record)
+
+
+def verify_naming(main, row, expected, git, blob):
+    """Model the RL-184 §2 interface in the synthetic provider only."""
+    content = blob(main, NAMING)
+    record = json.loads(content)
+    require(type(record) is dict and set(record) == {
+        "schema", "look_id", "ruling", "coefficients_sha256", "public_sha256",
+        "designation", "decisions_path", "decisions_commit", "stanza",
+    } and content == raw(record), "canonical naming record")
+    require(record["schema"] == NAMING_SCHEMA, "naming schema")
+    require(record["ruling"] == row["ruling"] and re.fullmatch(r"RL-\d+[a-z]?", record["ruling"]),
+            "naming ruling")
+    require(record["look_id"] == row["look_id"] == LOOK, "naming look")
+    require(record["coefficients_sha256"] == expected and record["public_sha256"] == row["output_sha256"],
+            "naming digests")
+    require(record["designation"] == "freeze-2" and record["stanza"] == naming_stanza(record),
+            "naming designation or stanza")
+    decision = record["decisions_commit"]
+    require(record["decisions_path"] == DECISIONS and re.fullmatch("[0-9a-f]{40}", decision),
+            "naming audit route")
+    audit = git("rev-parse", "--verify", AUDIT + "^{commit}").decode().strip()
+    git("merge-base", "--is-ancestor", decision, audit)
+    lines = blob(decision, DECISIONS).split(b"\n")
+    stanza = record["stanza"].encode()
+    require(lines.count(stanza) == 1, "unique naming stanza")
+    heading = next((line for line in reversed(lines[:lines.index(stanza)])
+                    if line.startswith(b"# RL-")), b"")
+    match = re.match(rb"# (RL-\d+[a-z]?)(?:[. \t]|$)", heading)
+    require(match is not None and match[1].decode() == record["ruling"], "naming ruling heading")
+    return record["ruling"]
+
+
 def authorize(repo, look, expected):
     """Model the requested interface in synthetic Git only. The owner supplies production validation."""
     require(look == LOOK and re.fullmatch("[0-9a-f]{64}", expected), "issued identity")
@@ -160,6 +201,8 @@ def authorize(repo, look, expected):
         require(earlier[key] == row[key], "execution binding")
     word = public["twin_agrees"]
     source = decision_source(word, row.get("ruling"), look, expected)
+    if source is None and word in ("no", "not_evaluable") and row.get("ruling"):
+        source = verify_naming(main, row, expected, git, blob)
     require(source is not None, "no effective public decision")
     print("FREEZE2", look, main, row["output_sha256"], expected, source)
 
@@ -178,9 +221,10 @@ def provider_source(answer):
     import inspect
 
     lines = ["import json, re, subprocess, sys", "from fixture_dependency import digest"]
-    for name in ("MAIN", "LEDGER", "LOOK", "QUAL", "MANIFEST", "SCHEMA", "ROOT", "REPORT"):
+    for name in ("MAIN", "AUDIT", "LEDGER", "LOOK", "QUAL", "MANIFEST", "SCHEMA", "ROOT", "REPORT",
+                 "NAMING", "DECISIONS", "NAMING_SCHEMA"):
         lines.append(f"{name} = {globals()[name]!r}")
-    for fn in (raw, decision_source, require, authorize, provider_main):
+    for fn in (raw, decision_source, require, naming_stanza, verify_naming, authorize, provider_main):
         lines.append(inspect.getsource(fn))
     source = "\n".join(lines)
     if answer is not None:
@@ -256,6 +300,10 @@ class PublicHistory:
             report["twin_agrees"] = "no"
         if case == "bare-ruling":
             row["ruling"] = "RL-183"
+        named_words = {"named-no": "no", "named-not-evaluable": "not_evaluable", "named-invalid": "maybe"}
+        if case in named_words:
+            report["twin_agrees"] = named_words[case]
+            row["ruling"] = RULING
         if case == "changed-commitment":
             report["coefficients_sha256"] = row["coefficients_sha256"] = OTHER
         for label, field, value in (
@@ -465,7 +513,7 @@ def projection(item):
     return preamble, *phases
 
 
-def public_rules(world, main, pin, *, execution=None):
+def public_rules(world, main, pin, *, execution=None, naming=False):
     execution = execution or world.execution
     ops = [["rev-parse", "--verify", MAIN + "^{commit}"],
            ["rev-parse", "--verify", pin + "^{commit}"],
@@ -475,6 +523,8 @@ def public_rules(world, main, pin, *, execution=None):
         ops.extend([["ls-tree", "-z", "--full-tree", pin, "--", path],
                     ["cat-file", "blob", pin + ":" + path]])
     ops.extend(["cat-file", "blob", main + ":" + path] for path in (LEDGER, MANIFEST, SCHEMA, REPORT))
+    if naming:
+        ops.append(["cat-file", "blob", main + ":" + NAMING])
     return dict(repo=str(world.auth), tmp=str(world.tmp), git=ops)
 
 
@@ -492,6 +542,137 @@ def assert_receipt(result, trace, rules, main, pin, source="yes"):
     git_ops = [op for kind, op in trace if kind == "git"]
     assert git_ops.count(["rev-parse", "--verify", MAIN + "^{commit}"]) == 1
     assert {tuple(op) for op in git_ops} == {tuple(op) for op in rules["git"]}, git_ops
+
+
+def named_history(world, case):
+    word = {
+        "yes-ignores-record": "yes", "named-not-evaluable": "named-not-evaluable",
+        "invalid-word": "named-invalid",
+    }.get(case, "named-no")
+    publication = world.publish(word, parent=world.main)
+    report = git(world.publisher, "cat-file", "blob", publication + ":" + REPORT)
+    record = dict(schema=NAMING_SCHEMA, ruling=RULING, look_id=LOOK, coefficients_sha256=DIGEST,
+                  public_sha256=digest(report), designation="freeze-2", decisions_path=DECISIONS)
+    field_changes = {
+        "wrong-ruling": ("ruling", "RL-9998"), "wrong-look": ("look_id", QUAL),
+        "wrong-coefficient": ("coefficients_sha256", OTHER), "wrong-public": ("public_sha256", OTHER),
+        "wrong-purpose": ("designation", "admit-a-successor"),
+        "wrong-route": ("decisions_path", "invented/restricted/coefficients.json"),
+    }
+    if case in field_changes:
+        field, value = field_changes[case]
+        record[field] = value
+    stanza = naming_stanza(record)
+    record["stanza"] = stanza if case != "wrong-stanza" else stanza + " "
+    heading = "RL-9998" if case == "wrong-heading" else record["ruling"]
+    lines = [f"# {heading}. Synthetic ruling"]
+    if case == "near-match":
+        lines.append(stanza + " ")
+    elif case != "main-only-record":
+        lines.append(stanza)
+    if case == "duplicate-stanza":
+        lines.append(stanza)
+    put(world.publisher, DECISIONS, ("\n".join(lines) + "\n").encode())
+    decision = commit(world.publisher, "Synthetic naming audit entry " + case, publication)
+    audit = commit(world.publisher, "Synthetic audit descendant", decision)
+    (world.publisher / DECISIONS).unlink()
+    record["decisions_commit"] = decision
+    if case == "extra-key":
+        record["extra"] = True
+    data = raw(record)
+    if case in ("noncanonical", "yes-ignores-record"):
+        data = json.dumps(record, indent=2).encode()
+    put(world.publisher, NAMING, data)
+    if case == "audit-only-record":
+        main, audit = publication, commit(world.publisher, "Synthetic audit-only record", decision)
+    else:
+        parent = decision if case == "off-audit" else publication
+        main = commit(world.publisher, "Synthetic main naming record " + case, parent)
+        if case == "off-audit":
+            audit = publication
+    (world.publisher / NAMING).unlink()
+    world.set_heads(main, audit)
+    return main, audit, decision
+
+
+def naming_rules(world, main, audit, decision, case):
+    reads_record = case not in ("yes-ignores-record", "invalid-word")
+    rules = public_rules(world, main, world.code, naming=reads_record)
+    if case in ("named-no", "named-not-evaluable", "main-only-record", "wrong-heading", "near-match",
+                "duplicate-stanza", "off-audit"):
+        rules["git"].extend((
+            ["rev-parse", "--verify", AUDIT + "^{commit}"],
+            ["merge-base", "--is-ancestor", decision, audit],
+        ))
+        if case != "off-audit":
+            rules["git"].append(["cat-file", "blob", decision + ":" + DECISIONS])
+    return rules
+
+
+def naming_matrix(root, probe, world, projections):
+    definitions, start, run = projections[0]
+    data = with_test_pin(definitions, world.code)
+    cases = (
+        "named-no", "named-not-evaluable", "yes-ignores-record", "invalid-word", "wrong-ruling",
+        "wrong-look", "wrong-coefficient", "wrong-public", "wrong-purpose", "wrong-stanza",
+        "wrong-route", "noncanonical", "extra-key", "audit-only-record", "main-only-record",
+        "off-audit", "wrong-heading", "near-match", "duplicate-stanza",
+    )
+    for case in cases:
+        main, audit, decision = named_history(world, case)
+        rules = naming_rules(world, main, audit, decision, case)
+        accepted = case in ("named-no", "named-not-evaluable", "yes-ignores-record")
+        for shell in SHELLS:
+            result, trace = exercise(root, probe, shell, data + "\n" + start, world.auth, rules)
+            assert_outcome(result, trace, accepted, label=(case, shell))
+            assert "Traceback" not in result.stderr, (case, shell, result.stderr)
+            if accepted:
+                source = "yes" if case == "yes-ignores-record" else RULING
+                assert_receipt(result, trace, rules, main, world.code, source)
+                receipt = next(line for line in result.stdout.splitlines() if line.startswith("FREEZE2 "))
+                assert receipt.split()[3] == digest(git(world.publisher, "cat-file", "blob", main + ":" + REPORT))
+            else:
+                assert "HOLD_FOR_FIT_FREEZE" in result.stderr, result.stderr
+                assert "qual_pin_gate" not in result.stdout and "scripts/" not in result.stdout
+        print(f"PASS RL-184 {case} (bash, zsh)")
+
+    main, audit, decision = named_history(world, "named-no")
+    rules = naming_rules(world, main, audit, decision, "named-no")
+    for index, (definitions, start, run) in enumerate(projections, 1):
+        data = with_test_pin(definitions, world.code)
+        for shell in SHELLS:
+            world.set_heads(main, audit)
+            result, trace = exercise(root, probe, shell, "\n".join((data, start, run)), world.auth, rules)
+            assert_outcome(result, trace, True, label=(index, shell, "named Start and Run"))
+            assert result.stdout.count(f"{DIGEST} {RULING}") == 2, result.stdout
+            assert trace.count(["git", ["cat-file", "blob", main + ":" + NAMING]]) == 2
+            assert trace.count(["git", ["cat-file", "blob", decision + ":" + DECISIONS]]) == 2
+    # Keep main fixed while the synthetic audit tip moves behind the decision.
+    earlier = oid(world.publisher, "rev-parse", decision + "^")
+    changed = naming_rules(world, main, earlier, decision, "off-audit")
+    for shell in SHELLS:
+        world.set_heads(main, audit)
+        switch = shlex.join(["git", "-C", str(world.publisher), "update-ref",
+                             "refs/heads/audit/2026-11-10-fable", earlier])
+        transition = "\n".join((switch + " || exit 1",
+            "export FREEZE_TEST_RULES=" + shlex.quote(json.dumps(changed))))
+        result, trace = exercise(root, probe, shell, "\n".join((data, start, transition, run)),
+                                 world.auth, rules)
+        assert_outcome(result, trace, False, label=(shell, "named authority lost at Run"))
+        assert result.stdout.count(f"{DIGEST} {RULING}") == 1
+        assert "scripts/launch_cadence_span.py launch" not in result.stdout
+        assert trace.count(["git", ["cat-file", "blob", decision + ":" + DECISIONS]]) == 1
+
+        world.set_heads(main, audit)
+        delete = shlex.join(["git", "-C", str(world.publisher), "update-ref", "-d",
+                             "refs/heads/audit/2026-11-10-fable"])
+        result, trace = exercise(root, probe, shell, "\n".join((data, start, delete + " || exit 1", run)),
+                                 world.auth, rules)
+        assert_outcome(result, trace, False, label=(shell, "failed audit fetch at Run"))
+        assert result.stdout.count("native_checks") == 1
+        assert result.stdout.count(f"{DIGEST} {RULING}") == 1
+        assert "scripts/launch_cadence_span.py launch" not in result.stdout
+    print("PASS RL-184 named Start and Run in all six items; Run refuses stale audit proof or failed audit fetch")
 
 
 def matrix(root, probe, items):
@@ -535,7 +716,7 @@ def matrix(root, probe, items):
         if case == "nonancestor-execution":
             audit = execution  # Supply the object without making it a main ancestor.
         world.set_heads(main, audit)
-        rules = public_rules(world, main, pin, execution=execution)
+        rules = public_rules(world, main, pin, execution=execution, naming=case == "bare-ruling")
         value = {"wrong-expected": OTHER, "malformed-expected": "wrong", "unfilled": ""}.get(case, DIGEST)
         data = definitions if case == "provider-held" else with_test_pin(definitions, pin)
         for shell in SHELLS:
@@ -622,7 +803,7 @@ def matrix(root, probe, items):
         result, trace = exercise(root, probe, SHELLS[0], mutant + "\n" + start, world.auth, rules)
         assert_outcome(result, trace, False, label=forbidden, denied_count=1)
     print("PASS open, stat and Git blob observer mutations blocked; zero forbidden lookups on ordinary paths")
-    print("HELD — Fable representation (committed exception)")
+    naming_matrix(root, probe, world, projections)
 
 
 def check_regeneration(scratch, base, items):
@@ -740,7 +921,7 @@ def main():
               f"({', '.join(failures)})")
         return 1
     matrix(scratch, probe, items)
-    print("PASS public freeze arm in bash and zsh (synthetic interface only); committed exception HELD")
+    print("PASS public freeze arm in bash and zsh (synthetic CLI, ordinary yes and committed RL-184 naming)")
     return 0
 
 
