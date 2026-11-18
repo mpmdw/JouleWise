@@ -8,6 +8,7 @@ import io
 import json
 import os
 from pathlib import Path
+import subprocess
 import tempfile
 import time
 from types import SimpleNamespace
@@ -17,7 +18,9 @@ from unittest.mock import patch
 from joulewise.align.apple import r1_runtime as rt
 from scripts import align_r1_followup_kit as kit, align_r1_part_c as pc, launch_align_r0 as launcher
 from scripts import run_align_r1_smoke as smoke
-from tests.test_part_c_gate_evidence import evaluation_inputs, member_record, step_record, write_receipt
+from tests.test_part_c_gate_evidence import (
+    evaluation_inputs, member_record, step_record, synthetic_episode, write_predecessor, write_receipt,
+)
 
 
 def status(level=0, state='Nominal', age=0.5):
@@ -95,11 +98,11 @@ class EvaluatorPassTests(unittest.TestCase):
         self.assertEqual(run(d_bank=d, n_chunk=4096)['verdict'], 'other_failure')
 
     def test_x_g_not_run_is_logged_and_does_not_fail(self):
-        result = run(x_g=None, x_g_not_run_reason='Refusal: launcher cannot run it')
+        result = run(x_g=None, x_g_not_run_reason=pc.RuntimeAdmissionRefusal('x-g', 'native exit 2'))
         self.assertTrue(result['pass'])
         self.assertIsNone(result['lines']['x_g'])
         self.assertEqual(result['log'], ['three-turn clause not evaluated: one D run',     # RL-152 section 1.4
-                                         'X_G was not run: Refusal: launcher cannot run it'])
+                                         'X_G was not run: runtime.x-g: native exit 2'])
 
 
 class EvaluatorFailureTests(unittest.TestCase):
@@ -321,6 +324,7 @@ class SidecarJournalTests(unittest.TestCase):
         self.sidecar = thermal.Sidecar(self.bundle / 'outputs', POLICY, reader=FakeSensors(),
                                        ctx=base.Context(clocks=self.clocks), status_reader=status_reader)
         self.sidecar.start(background=False)
+        (self.bundle / 'outputs/align_episode.json').write_text(json.dumps(synthetic_episode('d-bank')))
         self.stamps = []
 
     def tick(self, n=1):
@@ -380,7 +384,7 @@ class SidecarJournalTests(unittest.TestCase):
             self.assertLess(sample['pm_age_s'], 0)           # the stamp follows the sample's own stamp
             self.assertGreater(sample['pm_age_s'], -0.1)
         facts.pop('bundle_path')
-        result = run(d_bank=facts, x_g=None, x_g_not_run_reason='Refusal: synthetic launch refusal')
+        result = run(d_bank=facts, x_g=None, x_g_not_run_reason=pc.RuntimeAdmissionRefusal('x-g', 'native exit 2'))
         self.assertEqual((result['pass'], result['verdict']), (True, 'pass'), result['lines'])
         self.assertEqual(result['lines']['d_bank_mechanics']['checks']['admitted_turns']['status'],
                          'not_applicable: episode returned at turn 1')
@@ -427,6 +431,23 @@ class SidecarJournalTests(unittest.TestCase):
         facts['turns'][0]['first_reading_after_start'] = selected
         self.assertEqual(run(d_bank=facts)['verdict'], 'start_state_failed')
 
+    def test_reversed_bracket_cannot_move_a_hot_reading_out_of_the_start_window(self):
+        facts = self.facts()
+        journal = self.bundle / 'outputs/align_thermal.jsonl'
+        rows = [json.loads(line) for line in journal.read_text().splitlines()]
+        first = next(row for row in rows if row["kind"] == "reading"
+                     and row["started"]["monotonic_ns"] > facts["turns"][0]["start_ns"])
+        first["values"]["status"]["os_level"] = 2
+        with patch('joulewise.align.apple.workload.read_episode_bundle', return_value=self.fixture_episode):
+            journal.write_text(''.join(json.dumps(row) + '\n' for row in rows))
+            hot = pc.facts_from_bundle(self.bundle, role='d-bank')
+            self.assertEqual(run(d_bank=hot)['verdict'], 'start_state_failed')
+            first["started"]["monotonic_ns"] = first["finished"]["monotonic_ns"] + 10_000_000_000
+            journal.write_text(''.join(json.dumps(row) + '\n' for row in rows))
+            rejected = pc.facts_from_bundle(self.bundle, role='d-bank')
+            self.assertIn('reading_clock', rejected['evidence_error'])
+            self.assertEqual(run(d_bank=rejected)['verdict'], 'other_failure')
+
     def test_every_native_journal_row_is_required(self):
         control = self.facts()
         control.pop('bundle_path')
@@ -469,8 +490,8 @@ class SidecarJournalTests(unittest.TestCase):
         hardware = {**fixture.hardware, 'paired_clock_stamps_ns': [dict(
             epoch_ns=1, monotonic_before_ns=1, monotonic_after_ns=1,
             wall_resolution_ns=1, monotonic_resolution_ns=1)]}
-        episode = Episode(episode_id='synthetic', task_pair='synthetic', condition='benign', agent_model='test',
-                          endpoint='test', seed=1, clock_domain='synthetic', start_ns=0,
+        episode = Episode(episode_id='synthetic', task_pair='shade/bank_transfer_2', condition='benign',
+                          agent_model='Qwen3.8-27B-8bit', endpoint='test', seed=1, clock_domain='synthetic', start_ns=0,
                           end_ns=fixture.turns[-1].end_ns, hardware=hardware, flags=tuple(fixture.flags),
                           turns=tuple(Turn(context_tokens=0, **vars(turn)) for turn in fixture.turns))
         payload = to_jsonable(episode)
@@ -510,7 +531,7 @@ class SidecarJournalTests(unittest.TestCase):
             with self.subTest(journal_turn=journal_turn), \
                     patch('joulewise.align.apple.workload.read_episode_bundle', return_value=ep), \
                     patch('joulewise.desk_compress.read_bytes', return_value=encoded):
-                extracted = pc.facts_from_bundle(self.bundle, role='x-g')
+                extracted = pc.facts_from_bundle(self.bundle, role='d-bank')
                 self.assertEqual(extracted['journal_intervals'][0]['outcome'], 'timeout')
                 for role in ('d_bank', 'x_g'):
                     facts = {**bank(), **extracted, 'turns': bank()['turns'], 't_dead_s': 1000.0}
@@ -537,17 +558,16 @@ class KitSequenceTests(unittest.TestCase):
     def invoke(self, runtime, kind, output, **kw):
         self.calls.append(kind)
         if kind == 'x-g' and self.x_g_fails:
-            raise kit.r1.Refusal('runtime.x-g: exit 2: synthetic')
+            raise pc.RuntimeAdmissionRefusal('x-g', 'native exit 2')
         if kind == 'step-d':
-            fields = {'slots': {'N_chunk': 4096, 'B_D': 6144}, 'slot_detail': {'N_chunk_formula': 1280}}
+            fields = {'slots': {'N_chunk': 4096, 'B_D': 6144, 'T_dead': 1000.0},
+                      'slot_detail': {'N_chunk_formula': 1280}}
             return step_record(output.parent, STEP, 4096, receipt=fields)['member']['runtime']
         if kind == 'd-bank-benign-s1':
             return member_record(output.parent, 'd-bank', bank())['runtime']
         if kind == 'x-g':
             return member_record(output.parent, 'x-g', XG)['runtime']
-        fields = {'bundle': 'member', 'ac_powermode': 'Automatic'}
-        write_receipt(output, fields)
-        return fields
+        return write_predecessor(output)
 
     def facts(self, bundle, *, role):
         return {'d-bank': bank(), 'x-g': deepcopy(XG)}[role]
@@ -582,6 +602,16 @@ class KitSequenceTests(unittest.TestCase):
         self.assertFalse((self.tmp / 'c' / 'r1_slots.json').exists())
         self.assertIs(result['evaluation']['pass'], True)
 
+    def test_native_entry_refuses_before_any_launch_without_authorized_evidence(self):
+        with patch.object(kit.r1, '_run') as run:
+            with self.assertRaisesRegex(ValueError, 'evidence_unverifiable'):
+                kit.smoke_part_c(self.tmp / 'c', ['synthetic-runtime'], SimpleNamespace(),
+                                 soak_reference='synthetic')
+        run.assert_not_called()
+        record = json.loads((self.tmp / 'c/smoke_part_c.json').read_text())
+        self.assertEqual(record['evaluation']['verdict'], 'other_failure')
+        self.assertEqual(record, json.loads((self.tmp / 'c/smoke.json').read_text()))
+
     def test_the_verdict_and_the_log_are_printed_to_the_terminal(self):
         # RL-153 section 1.2 note 6, RL-156 section 3.2: finish prints the evaluation's log, RL-152 section
         # 1.4's line among them, as well as writing the record.
@@ -598,7 +628,7 @@ class KitSequenceTests(unittest.TestCase):
         result = self.run_c()
         evaluation = result['evaluation']
         self.assertTrue(evaluation['pass'])
-        self.assertTrue(any(line.startswith('X_G was not run: Refusal') for line in evaluation['log']))
+        self.assertTrue(any(line.startswith('X_G was not run: runtime.x-g') for line in evaluation['log']))
 
     def test_native_predecessor_receipts_are_reconciled(self):
         from joulewise.align.apple.workload import EpisodeRuntimeAdapter
@@ -614,13 +644,15 @@ class KitSequenceTests(unittest.TestCase):
                     template = self.tmp / 'synthetic-template.json'
                     template.write_text('{}')
                     mode = EpisodeRuntimeAdapter._observe_ac_powermode(SimpleNamespace(powermode_reader=lambda: 0))
-                    member = SimpleNamespace(status='succeeded', bundle=output / 'member',
+                    member = SimpleNamespace(status='succeeded', bundle=output / 'runs/member',
                                              ep=SimpleNamespace(turns=[object()], hardware={'ac_powermode': mode}))
                     segment = SimpleNamespace(out=output, config={'templates': {'model_30b': str(template)}},
                                               run_member=lambda template, hook: member,
                                               template=lambda key: ({'run_metadata': {'tags': []}}, {}))
                     fields = rt.Segment.k_capture_predecessor_30b(segment)
-                    write_receipt(output, {**fields, 'ac_powermode': 'Automatic'} if mismatch else fields)
+                    write_predecessor(output, fields)
+                    if mismatch:
+                        write_receipt(output, {**fields, 'ac_powermode': 'Automatic'})
                     return fields
 
                 self.invoke = invoke
@@ -645,7 +677,7 @@ class KitSequenceTests(unittest.TestCase):
             write_receipt(output, fields)
             raw = '{"episode_flags":["episode.deadman:2"],' + json.dumps(fields)[1:]
             with patch.object(kit.r1, '_run', return_value=SimpleNamespace(returncode=0, stdout=raw, stderr='')):
-                return kit.r1._invoke(runtime, kind, output, **kwargs)
+                return pc.judged_invoke(runtime, kind, output, **kwargs)
 
         self.invoke = invoke
         with self.assertRaisesRegex(ValueError, 'invalid'):
@@ -665,7 +697,7 @@ class KitSequenceTests(unittest.TestCase):
             (bundle / 'align_episode.json').write_text('{"turns":[{},{}],"flags":[]}')
             (bundle / 'align_thermal.jsonl').write_text('{}\n')
             with patch.object(kit.r1, '_run', return_value=SimpleNamespace(returncode=2, stdout='', stderr='refused')):
-                return kit.r1._invoke(runtime, kind, output, **kwargs)
+                return pc.judged_invoke(runtime, kind, output, **kwargs)
 
         self.invoke = invoke
         with self.assertRaisesRegex(ValueError, 'other_failure'):
@@ -673,6 +705,30 @@ class KitSequenceTests(unittest.TestCase):
         result = json.loads((self.tmp / 'c/smoke_part_c.json').read_text())['evaluation']
         self.assertIn('conflicts with output', result['evidence_failures']['x_g_launch'])
         self.assertFalse(any(line.startswith('X_G was not run:') for line in result['log']))
+
+    def test_x_g_oserror_and_exit_two_with_completion_stdout_fail(self):
+        original = self.invoke
+        for error, response, reason in (
+            (OSError('synthetic'), None, 'process_exit'),
+            (None, SimpleNamespace(returncode=2, stdout='{"member_status":"succeeded","admitted_turns":2}',
+                                   stderr='refused'), 'x_g_launch_conflict'),
+            (None, SimpleNamespace(returncode=2, stdout=None, stderr='refused'), 'x_g_launch_conflict'),
+        ):
+            with self.subTest(reason=reason, response=response), tempfile.TemporaryDirectory() as tmp:
+                self.tmp = Path(tmp)
+
+                def invoke(runtime, kind, output, **kwargs):
+                    if kind != 'x-g':
+                        return original(runtime, kind, output, **kwargs)
+                    with patch.object(kit.r1, '_run', side_effect=error, return_value=response):
+                        return pc.judged_invoke(runtime, kind, output, **kwargs)
+
+                self.invoke = invoke
+                with self.assertRaisesRegex(ValueError, 'other_failure'):
+                    self.run_c()
+                evaluated = json.loads((self.tmp / 'c/smoke_part_c.json').read_text())['evaluation']
+                self.assertIn(reason, evaluated['lines']['x_g']['evidence_error'])
+                self.assertFalse(any(line.startswith('X_G was not run:') for line in evaluated['log']))
 
     def test_completed_x_g_with_missing_or_unreadable_evidence_fails(self):
         original = self.facts
@@ -699,7 +755,7 @@ class KitSequenceTests(unittest.TestCase):
             receipt = {'bundle': 'synthetic', 'admitted_turns': 2, 'episode_flags': []}
             process = SimpleNamespace(returncode=0, stdout=json.dumps(receipt), stderr='')
             with patch.object(kit.r1, '_run', return_value=process):
-                return kit.r1._invoke(runtime, kind, output, **kwargs)
+                return pc.judged_invoke(runtime, kind, output, **kwargs)
 
         self.invoke = invoke
         with self.assertRaisesRegex(ValueError, 'other_failure'):
@@ -719,7 +775,7 @@ class KitSequenceTests(unittest.TestCase):
 
     def test_no_step_d_slots_stops_before_the_gated_member(self):
         original = self.invoke
-        self.invoke = lambda runtime, kind, output, **kw: ({'bundle': 'b', 'g0_outcome': 'timeout'}
+        self.invoke = lambda runtime, kind, output, **kw: ({'g0_outcome': 'timeout'}
                                                            if kind == 'step-d' else original(runtime, kind, output, **kw))
         with self.assertRaisesRegex(ValueError, 'no slots'):
             self.run_c()
@@ -760,6 +816,51 @@ class LauncherWiringTests(unittest.TestCase):
         self.assertEqual(argv[2:6], [str(smoke.ROOT / 'scripts/align_r1_followup_kit.py'), 'smoke', '--part', 'C'])
         with self.assertRaises(SystemExit):
             smoke.main(['--output', '/tmp/rl145-never', '--parts', 'C', '--soak-reference', '/s.json', '--deadline', '1e12'])
+
+
+class FrozenBoundaryTests(unittest.TestCase):
+    def test_all_ten_r1_sources_are_exactly_the_issued_bytes(self):
+        from joulewise.align.apple.v4_registration import R1_EXECUTED_SOURCES
+
+        self.assertEqual(len(set(R1_EXECUTED_SOURCES)), 10)
+        for path in R1_EXECUTED_SOURCES:
+            with self.subTest(path=path):
+                issued = subprocess.check_output(['git', 'show', f'b2e01464d:{path}'], cwd=kit.ROOT)
+                self.assertEqual((kit.ROOT / path).read_bytes(), issued)
+
+    def test_judged_invoker_uses_the_frozen_argv_with_and_without_lock(self):
+        r1 = kit.r1
+        for kind in ('capture-predecessor-30b', 'step-d', 'd-bank-benign-s1', 'x-g'):
+            fields = {}
+            for field in r1.contract.required_fields(kind, quiet=False):
+                *parents, key = field.split('.')
+                node = fields
+                for parent in parents:
+                    node = node.setdefault(parent, {})
+                node.setdefault(key, {})
+            process = SimpleNamespace(returncode=0, stdout=json.dumps(fields), stderr='')
+            for held in (False, True):
+                lock = SimpleNamespace(held=held, pass_fds=lambda: (17,))
+                with self.subTest(kind=kind, held=held), patch.object(r1, '_CHILD_HOST_LOCK', lock), \
+                        patch.object(r1, '_run', return_value=process) as transport:
+                    args = (['runtime', '--config', 'synthetic.json'], kind, Path('member'))
+                    r1._invoke(*args, soak_reference=Path('soak.json'))
+                    pc.judged_invoke(*args, soak_reference=Path('soak.json'))
+                    self.assertEqual(transport.call_args_list[0], transport.call_args_list[1])
+
+    def test_episode_replacement_during_frozen_read_fails(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            bundle = Path(tmp)
+            path = bundle / 'outputs/align_episode.json'
+            path.parent.mkdir()
+            path.write_text(json.dumps(synthetic_episode('d-bank')))
+
+            def replace(_):
+                path.write_text('{"flags":["different"]}')
+
+            with patch('joulewise.align.apple.workload.read_episode_bundle', side_effect=replace):
+                evidence = pc.facts_from_bundle(bundle, role='d-bank')
+            self.assertIn('source changed', evidence['evidence_error'])
 
 
 class RunnerPartCTests(unittest.TestCase):

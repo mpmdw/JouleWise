@@ -890,7 +890,7 @@ class EpisodeRuntimeAdapter:
             self.thermal = self.thermal_sidecar = None
 
 
-def read_episode_bundle(bundle: Path, *, loads=json.loads) -> Episode:
+def read_episode_bundle(bundle: Path) -> Episode:
     """Return the immutable episode joined with the controller trace and anchor.
 
     No native plist is parsed here and no finalized file is modified. The
@@ -901,7 +901,7 @@ def read_episode_bundle(bundle: Path, *, loads=json.loads) -> Episode:
     silent fallback to the compressed sibling.
     """
     reader = BundleReader(Path(bundle))
-    episode = from_json(Episode, (Path(bundle) / "outputs" / "align_episode.json").read_text(), loads=loads)
+    episode = from_json(Episode, (Path(bundle) / "outputs" / "align_episode.json").read_text())
     metadata = reader.metadata()
     evidence = metadata.get("uncertainty_evidence")
     stamps = tuple(_restore_stamp(row) for row in episode.hardware["paired_clock_stamps_ns"])

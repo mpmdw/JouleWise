@@ -198,18 +198,6 @@ class Refusal(RuntimeError):
     pass
 
 
-class RuntimeLaunchError(OSError):
-    """The runtime process could not be started."""
-
-
-class RuntimeEvidenceError(Refusal):
-    """A started runtime ended without an evaluable receipt."""
-
-    def __init__(self, message, receipt=None):
-        super().__init__(message)
-        self.receipt = receipt
-
-
 # Fable cold pass MEDIUM-1: on the first signal the runtime (which owns the SMC
 # sidecar, the thermal journal, powermetrics and its output custody) gets TERM
 # and up to 20 s to close them, inside run_night's 30 s; only then KILL.
@@ -376,11 +364,8 @@ def _run(argv: Sequence[str]) -> subprocess.CompletedProcess[str]:
     # KeyboardInterrupt here) it SIGKILLs the child at once.
     lock = _CHILD_HOST_LOCK
     pass_fds = lock.pass_fds() if lock is not None and lock.held else ()
-    try:
-        process = subprocess.Popen(list(argv), text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
-                                   pass_fds=pass_fds)
-    except OSError as error:
-        raise RuntimeLaunchError(*error.args) from error
+    process = subprocess.Popen(list(argv), text=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                               pass_fds=pass_fds)
     try:
         cap = 10.0
         if "--r1-kind" in argv:
@@ -540,7 +525,7 @@ class PowerModeGuard(AbstractContextManager):
 
 
 def _invoke(runtime, kind, output, duration=None, *, soak_reference=None, quiet=False, contract_key=None,
-            watch=None, loads=json.loads):
+            watch=None):
     if watch is not None:
         # Ruling 20: no external volume may be mounted between t0 and the
         # terminal record; check before every runtime invocation.
@@ -558,18 +543,16 @@ def _invoke(runtime, kind, output, duration=None, *, soak_reference=None, quiet=
         raise Refusal(f"runtime.{kind}: no soak reference exists yet")
     result = _run(argv)
     if result.returncode:
-        # The native runtime reserves exit 2 for explicit admission refusals.
-        error = Refusal if result.returncode == 2 else RuntimeEvidenceError
-        raise error(f"runtime.{kind}: exit {result.returncode}: {result.stderr.strip()}")
+        raise Refusal(f"runtime.{kind}: exit {result.returncode}: {result.stderr.strip()}")
     try:
-        value = loads(result.stdout)
+        value = json.loads(result.stdout)
     except (ValueError, TypeError) as error:
-        raise RuntimeEvidenceError(f"runtime.{kind}.invalid_json: {error}") from error
+        raise Refusal(f"runtime.{kind}.invalid_json: {error}") from error
     if not isinstance(value, dict):
-        raise RuntimeEvidenceError(f"runtime.{kind}: result is not a JSON object")
+        raise Refusal(f"runtime.{kind}: result is not a JSON object")
     missing = contract.missing_fields(kind, value, quiet=quiet, contract_key=contract_key)
     if missing:
-        raise RuntimeEvidenceError(f"runtime.{kind}: contract fields missing: " + ", ".join(missing), value)
+        raise Refusal(f"runtime.{kind}: contract fields missing: " + ", ".join(missing))
     return value
 
 

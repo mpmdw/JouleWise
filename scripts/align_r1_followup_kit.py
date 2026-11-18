@@ -458,7 +458,7 @@ PART_C_GATED_D = "D_bank_benign_s1_gated_held"      # r1_phase_table.GATED_D_RUN
 PART_C_X_G = "X_G_contrast"
 
 
-def smoke_part_c(output, runtime, config, *, soak_reference, invoke=r1._invoke,
+def smoke_part_c(output, runtime, config, *, soak_reference, invoke=None,
                  facts=None, step_facts=None, prints=None):
     """RL-145 step 3 / addendum section 6, Part C: a gated smoke on the final bytes.
 
@@ -470,11 +470,7 @@ def smoke_part_c(output, runtime, config, *, soak_reference, invoke=r1._invoke,
     is ``align_r1_part_c.evaluate``'s; a failure raises after the table is written.
     """
     from scripts import align_r1_part_c as part_c
-    facts = facts or part_c.facts_from_bundle
-    step_facts = step_facts or part_c.step_d_facts
-    if prints is None:
-        from joulewise.align.apple.rl145_prints import bundle_prints
-        prints = lambda bundle: bundle_prints(bundle, estimate_tokens=True)
+    invoke = invoke or part_c.judged_invoke
     output = Path(output)
     output.mkdir(parents=True, exist_ok=False)
     started = time.monotonic()
@@ -495,7 +491,14 @@ def smoke_part_c(output, runtime, config, *, soak_reference, invoke=r1._invoke,
             for line in verdict_doc.get("log") or ():
                 print(f"Part C log: {line}")
     def run_member(kind, directory):
-        return invoke(runtime, kind, directory, soak_reference=soak_reference, loads=part_c.parse_evidence_json)
+        return invoke(runtime, kind, directory, soak_reference=soak_reference)
+
+    if facts is None or step_facts is None:
+        # The native CLI does not yet carry the authorized, independently
+        # bound verifier projection required by the evidence inventory.
+        error = "evidence_unverifiable: authorized Part C projection is unavailable"
+        finish(part_c.evaluate(runtime_error=error), error)
+        raise ValueError(error)
 
     try:
         predecessor = run_member("capture-predecessor-30b", output / "capture_predecessor_30b")
@@ -505,7 +508,8 @@ def smoke_part_c(output, runtime, config, *, soak_reference, invoke=r1._invoke,
         result["members"]["step_d"] = step
         slots = step.get("slots")
         n_chunk = (slots or {}).get("N_chunk")
-        step_line = step_facts(step_dir / step["bundle"], step) if step.get("bundle") else {"g0_outcome": step.get("g0_outcome")}
+        step_line = (step_facts(part_c.bundle_directory(step_dir, step["bundle"]), step)
+                     if step.get("bundle") else {"g0_outcome": step.get("g0_outcome")})
         if not isinstance(slots, dict) or not isinstance(n_chunk, int):
             doc = part_c.evaluate(predecessor=predecessor, step_d=step_line,
                                   n_chunk=n_chunk if isinstance(n_chunk, int) else 1)
@@ -514,29 +518,26 @@ def smoke_part_c(output, runtime, config, *, soak_reference, invoke=r1._invoke,
         bank_dir = output / PART_C_GATED_D
         bank = run_member("d-bank-benign-s1", bank_dir)
         result["members"]["d_bank"] = bank
-        bank_facts = {**facts(bank_dir / bank["bundle"], role="d-bank"), "runtime": bank}
-        printed = None if "evidence_error" in bank_facts else prints(bank_dir / bank["bundle"])
+        bank_bundle = part_c.bundle_directory(bank_dir, bank["bundle"])
+        bank_facts = {**facts(bank_bundle, role="d-bank"), "runtime": bank}
+        printed = prints(bank_bundle) if prints is not None and "evidence_error" not in bank_facts else None
         x_g_facts, why = None, None
         x_g_dir = output / PART_C_X_G
         try:
             x_g = run_member("x-g", x_g_dir)
-        except r1.RuntimeEvidenceError as exc:
+        except part_c.RuntimeEvidenceError as exc:
             if exc.receipt is not None:
                 result["members"]["x_g"] = exc.receipt
             x_g_facts = {"evidence_error": str(exc)}
-        except r1.RuntimeLaunchError as exc:
-            why = f"{type(exc).__name__}: {exc}"
         except (subprocess.TimeoutExpired, UnicodeError, OSError) as exc:
             x_g_facts = {"evidence_error": f"{type(exc).__name__}: {exc}"}
-        except r1.Refusal as exc:
-            why = f"{type(exc).__name__}: {exc}"
+        except part_c.RuntimeAdmissionRefusal as exc:
+            why = exc
         else:
             result["members"]["x_g"] = x_g
             try:
-                bundle = Path(x_g["bundle"])
-                if not bundle.parts or bundle.is_absolute() or ".." in bundle.parts:
-                    raise ValueError("X_G receipt has no relative bundle path")
-                x_g_facts = {**facts(x_g_dir / bundle, role="x-g"), "runtime": x_g}
+                bundle = part_c.bundle_directory(x_g_dir, x_g["bundle"])
+                x_g_facts = {**facts(bundle, role="x-g"), "runtime": x_g}
             except Exception as exc:
                 # Once the runtime returns, any failure to read its evidence is judged.
                 x_g_facts = {"evidence_error": f"{type(exc).__name__}: {exc}"}
@@ -544,7 +545,7 @@ def smoke_part_c(output, runtime, config, *, soak_reference, invoke=r1._invoke,
                               x_g_not_run_reason=why, printed=printed)
         result["n_chunk_formula_recorded"] = (step.get("slot_detail") or {}).get("N_chunk_formula")
         finish(doc)
-    except r1.RuntimeEvidenceError as exc:
+    except (part_c.RuntimeEvidenceError, part_c.RuntimeAdmissionRefusal) as exc:
         finish(part_c.evaluate(runtime_error=str(exc)), error=str(exc))
         raise ValueError("Part C: runtime receipt is invalid; see smoke_part_c.json") from exc
     except BaseException as exc:
@@ -556,7 +557,7 @@ def smoke_part_c(output, runtime, config, *, soak_reference, invoke=r1._invoke,
     return result
 
 
-def smoke(output, part, runtime, *, soak_reference, invoke=r1._invoke):
+def smoke(output, part, runtime, *, soak_reference, invoke=None):
     """Native only when explicitly run by the lead in an agent-free session.
 
     B runs the same admission followed by the D step, in one member. Its
@@ -573,6 +574,7 @@ def smoke(output, part, runtime, *, soak_reference, invoke=r1._invoke):
     config, _ = rt.load_config(config_path)
     if part == "C":
         return smoke_part_c(output, runtime, config, soak_reference=soak_reference, invoke=invoke)
+    invoke = invoke or r1._invoke
     output = Path(output)
     output.mkdir(parents=True, exist_ok=False)
     started = time.monotonic()
