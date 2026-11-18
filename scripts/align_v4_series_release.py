@@ -5,6 +5,8 @@ from __future__ import annotations
 import argparse
 from collections import defaultdict
 from dataclasses import dataclass, replace
+from importlib.machinery import SourceFileLoader
+from importlib.util import spec_from_file_location
 import json
 import os
 from pathlib import Path
@@ -13,11 +15,47 @@ import sys
 from tempfile import TemporaryDirectory
 
 ROOT = Path(__file__).resolve().parents[1]
+_CALLER_CODE = sys._getframe().f_code
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from joulewise.align.apple import harvest_offload, light_triage, rl176, s_rows
-from joulewise.align.apple import v4_contention, v4_desk_seal as seal, v4_registration
+from joulewise.align.apple import v4_registration
+
+
+class ReleaseSourceLoader(SourceFileLoader):
+    """Keep the digest of the source bytes used to create the loaded code."""
+
+    def get_code(self, fullname):
+        source = self.get_data(self.path)
+        self.source_digest = v4_registration.digest(source)
+        return self.source_to_code(source, self.path)
+
+
+class ReleaseSourceFinder:
+    paths = {
+        path.removesuffix(".py").replace("/", "."): path
+        for path in v4_registration.SERIES_RELEASE_ARTIFACTS
+        if path.startswith("joulewise/")
+    }
+
+    def find_spec(self, fullname, path=None, target=None):
+        if fullname in self.paths:
+            origin = str(ROOT / self.paths[fullname])
+            return spec_from_file_location(fullname, origin, loader=ReleaseSourceLoader(fullname, origin))
+        return None
+
+
+# A release subprocess imports these three pinned modules from source.
+# A stale Python bytecode cache must never stand in for the receipt's bytes.
+_release_finder = ReleaseSourceFinder()
+sys.meta_path.insert(0, _release_finder)
+try:
+    from joulewise.align.apple import rl176, rl176_phases, s_rows
+finally:
+    sys.meta_path.remove(_release_finder)
+    del _release_finder
+
+from joulewise.align.apple import harvest_offload, light_triage, v4_contention, v4_desk_seal as seal
 from joulewise.align.apple.workload import read_episode_bundle
 from joulewise.align.records import ClockMapping, PowerTrace, from_json
 from joulewise.b5.harvest import write_json_once
@@ -58,6 +96,31 @@ def named_bytes(root, relative):
             return source.read()
     finally:
         os.close(directory)
+
+
+def require_executing_bindings(receipt):
+    origins = {
+        "scripts/align_v4_series_release.py": Path(__file__),
+        **{ReleaseSourceFinder.paths[module.__name__]: Path(module.__file__)
+           for module in (s_rows, rl176, rl176_phases)},
+    }
+    for relative in v4_registration.SERIES_RELEASE_ARTIFACTS:
+        packet.require(origins[relative].resolve() == ROOT / relative,
+                       "release source was loaded from another checkout")
+        expected = receipt["artifacts"][relative]
+        raw = named_bytes(ROOT, relative)
+        packet.require(packet.digest(raw) == expected, "executing release source differs from the receipt")
+        if relative == "scripts/align_v4_series_release.py":
+            code = compile(raw, _CALLER_CODE.co_filename, "exec", dont_inherit=True)
+            packet.require(code == _CALLER_CODE, "loaded release caller differs from the receipt")
+    for module in (s_rows, rl176, rl176_phases):
+        loader = module.__loader__
+        if isinstance(loader, ReleaseSourceLoader):
+            relative = ReleaseSourceFinder.paths[module.__name__]
+            packet.require(loader.source_digest == receipt["artifacts"][relative],
+                           "loaded release source differs from the receipt")
+        elif __name__ == "__main__":
+            raise ValueError("release module was loaded outside the source loader")
 
 
 class SeriesEvidence(packet.GitEvidence):
@@ -278,8 +341,9 @@ class ReleasedInputs:
         self.manifest = series.load(root)
         packet.require(packet.digest(series.raw_json(self.manifest)) == completion["series_manifest_sha256"],
                        "completion does not bind the loaded manifest")
-        self.registration_receipt = v4_registration.require_registration(root)
+        self.registration_receipt = v4_registration.require_registration(root, series_release=True)
         packet.require(self.registration_receipt == packet.decode(registered), "registration receipt changed")
+        require_executing_bindings(self.registration_receipt)
         self.assignments = {a.key: a for a in final_roster(root, self.manifest, completion, ledger, chain)}
         self.members = None
         self.member_keys = {}

@@ -7,9 +7,12 @@ from dataclasses import replace
 from datetime import datetime
 import hashlib
 from io import StringIO
+from importlib.machinery import SourceFileLoader
 import json
+import os
 from pathlib import Path
 import plistlib
+import py_compile
 import subprocess
 import sys
 import tempfile
@@ -28,6 +31,12 @@ from tests.git_fixture import init_git_fixture
 
 ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = ROOT / "scripts/align_v4_series_release.py"
+RELEASE_PATHS = (
+    "scripts/align_v4_series_release.py",
+    "joulewise/align/apple/s_rows.py",
+    "joulewise/align/apple/rl176.py",
+    "joulewise/align/apple/rl176_phases.py",
+)
 NS = 1_000_000_000
 WINDOWS = [f"C{i}" for i in range(1, 9)] + [f"T{i}" for i in range(1, 4)]
 
@@ -235,8 +244,7 @@ def registration_fixture(root, amount_field=None):
         target = root / path
         target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text("synthetic\n")
-    for code in ("scripts/align_v4_series_release.py", "joulewise/align/apple/s_rows.py",
-                 "joulewise/align/apple/rl176.py", "joulewise/align/apple/rl176_phases.py"):
+    for code in RELEASE_PATHS:
         (root / code).write_bytes((ROOT / code).read_bytes())
     manifest = root / seal.SERIES_MANIFEST
     manifest.write_bytes(series.raw_json(series.candidate()))
@@ -262,8 +270,8 @@ def registration_fixture(root, amount_field=None):
         "static_proof": True, "contrast_predeclared": "INCONCLUSIVE: identity broken",
     })
     signed = commit_fixture(root, ["configs", "docs", "synthetic-transfer.json", "synthetic-u3.json"])
-    artifacts = {path: hashlib.sha256((root / path).read_bytes()).hexdigest()
-                 for path in registration.ARTIFACTS}
+    paths = dict.fromkeys((*registration.ARTIFACTS, *RELEASE_PATHS))
+    artifacts = {path: hashlib.sha256((root / path).read_bytes()).hexdigest() for path in paths}
     describe(root, reg + "registration_receipt.json", {
         "schema": registration.RECEIPT_SCHEMA, "status": "registered", "commit": signed,
         "lead_signature": "lead: synthetic 2026-11-18", "artifacts": artifacts, "gates": gates,
@@ -404,7 +412,99 @@ def stored_series(root, *, wins=102, different=None, no_rows=False, spoof=False,
     return manifest
 
 
+def publish_fixture_receipt(root, receipt):
+    path = registration.REGISTRATION + "registration_receipt.json"
+    write_json(root / path, receipt)
+    tip = commit_fixture(root, [path])
+    fixture_git(root, "update-ref", "refs/remotes/origin/align-v4-series-release", tip)
+
+
 class SeriesReleaseTests(unittest.TestCase):
+    def test_audit_scorer_differs_from_legacy_receipt_refuses_without_report(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            stored_series(root, wins=102)
+            receipt_path = root / registration.REGISTRATION / "registration_receipt.json"
+            receipt = json.loads(receipt_path.read_bytes())
+            scorer = "joulewise/align/apple/rl176.py"
+            registered = (ROOT / scorer).read_bytes() + b"\n# Synthetic registration snapshot.\n"
+            (root / scorer).write_bytes(registered)
+            receipt["commit"] = commit_fixture(root, [scorer])
+            receipt["artifacts"] = {path: receipt["artifacts"][path] for path in registration.ARTIFACTS}
+            receipt["artifacts"][scorer] = registration.digest(registered)
+            publish_fixture_receipt(root, receipt)
+            self.assertEqual(registration.require_registration(root), receipt)
+            output = root / "report.json"
+            result = invoke(root, output)
+            self.assertEqual(result.returncode, 1, result.stderr)
+            self.assertFalse(output.exists())
+
+    def test_each_executing_release_binding_is_required_before_loading_members(self):
+        from scripts import align_v4_series_release as caller
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            stored_series(root)
+            receipt = registration.require_registration(root, series_release=True)
+            self.assertTrue(set(RELEASE_PATHS) <= receipt["artifacts"].keys())
+            output = root / "report.json"
+            argv = ["--measurement-root", str(root), "--output", str(output)]
+
+            def assert_refusal():
+                with patch.object(caller.ReleasedInputs, "load_members",
+                                  side_effect=AssertionError("member loader invoked")), \
+                        redirect_stderr(StringIO()), self.assertRaises(SystemExit) as refusal:
+                    caller.main(argv)
+                self.assertEqual(refusal.exception.code, 1)
+                self.assertFalse(output.exists())
+
+            with self.subTest(defect="loaded scorer snapshot differs from current source"):
+                loader = caller.ReleaseSourceLoader(rl176.__name__, rl176.__file__)
+                loader.source_digest = "0" * 64
+                with patch.object(rl176, "__loader__", loader):
+                    assert_refusal()
+
+            for path in RELEASE_PATHS:
+                with self.subTest(path=path, defect="missing"):
+                    absent = {key: value for key, value in receipt["artifacts"].items() if key != path}
+                    publish_fixture_receipt(root, {**receipt, "artifacts": absent})
+                    assert_refusal()
+
+            for path in RELEASE_PATHS:
+                with self.subTest(path=path, defect="registered version differs"):
+                    original = (ROOT / path).read_bytes()
+                    different = original + b"\n# Synthetic registered version change.\n"
+                    (root / path).write_bytes(different)
+                    commit = commit_fixture(root, [path])
+                    artifacts = {**receipt["artifacts"], path: registration.digest(different)}
+                    signed = {**receipt, "commit": commit, "artifacts": artifacts}
+                    publish_fixture_receipt(root, signed)
+                    self.assertEqual(registration.require_registration(root, series_release=True), signed)
+                    assert_refusal()
+                    (root / path).write_bytes(original)
+                    commit_fixture(root, [path])
+
+    def test_release_source_loader_uses_source_even_with_stale_timestamp_bytecode(self):
+        from scripts import align_v4_series_release as caller
+
+        with tempfile.TemporaryDirectory() as tmp:
+            source = Path(tmp) / "module.py"
+            source.write_bytes(b"value = 1\n")
+            before = source.stat()
+            py_compile.compile(str(source), doraise=True,
+                               invalidation_mode=py_compile.PycInvalidationMode.TIMESTAMP)
+            new_source = b"value = 2\n"
+            source.write_bytes(new_source)
+            os.utime(source, ns=(before.st_atime_ns, before.st_mtime_ns))
+            cached = {}
+            exec(SourceFileLoader("module", str(source)).get_code("module"), cached)
+            self.assertEqual(cached["value"], 1)
+            checked = {}
+            loader = caller.ReleaseSourceLoader("module", str(source))
+            exec(loader.get_code("module"), checked)
+            self.assertEqual(checked["value"], 2)
+            self.assertEqual(loader.source_digest, registration.digest(new_source))
+
     def test_final_roster_emits_one_fresh_member_per_assignment_with_a9_and_unmodified_787_rows(self):
         from scripts import align_v4_series_release as caller
 

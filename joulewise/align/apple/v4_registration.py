@@ -347,6 +347,15 @@ EXECUTED_CLOSURE = (
 )
 ARTIFACTS = _NAMED_ARTIFACTS + tuple(p for p in EXECUTED_CLOSURE if p not in _NAMED_ARTIFACTS)
 
+# RL-182 §1.5. The release verifies these bindings in the existing signed
+# artifact map. The W1 artifact inventory remains independent of release.
+SERIES_RELEASE_ARTIFACTS = (
+    'scripts/align_v4_series_release.py',
+    'joulewise/align/apple/s_rows.py',
+    'joulewise/align/apple/rl176.py',
+    'joulewise/align/apple/rl176_phases.py',
+)
+
 # Two tiers (Opus cold review MED-1; delta2 inverted the default; delta3 emptied the allowlist).
 # STRICT is the default: every bound path is strict, and a change is a re-registration (new
 # receipt, signature, both gates). AMENDMENT is an explicit allowlist, and it may hold only a
@@ -512,7 +521,7 @@ def verify_r1_executed_sources(root, slots):
     return commit
 
 
-def validate_receipt(receipt, root):
+def validate_receipt(receipt, root, *, series_release=False):
     """Bind reviewed bytes to one existing Git commit and current working bytes.
 
     Gate judgments and signature are lead-owned assertions, not fabricated by
@@ -529,7 +538,10 @@ def validate_receipt(receipt, root):
     if receipt.get('rulings') != {str(n): 'installed' for n in RULINGS}:
         raise ValueError('registration_receipt ruling installation incomplete')
     artifacts = receipt.get('artifacts')
-    if not isinstance(artifacts, dict) or set(artifacts) != set(ARTIFACTS):
+    required = set(ARTIFACTS)
+    if series_release:
+        required.update(SERIES_RELEASE_ARTIFACTS)
+    if not isinstance(artifacts, dict) or set(artifacts) != required:
         raise ValueError('registration_receipt artifact set incomplete')
     gates = receipt.get('gates')
     if not isinstance(gates, dict) or set(gates) != {'A', 'B'}:
@@ -563,13 +575,13 @@ def validate_receipt(receipt, root):
     return receipt
 
 
-def require_registration(root):
+def require_registration(root, *, series_release=False):
     path = REGISTRATION+'registration_receipt.json'
     try:
         receipt = json.loads(_local(root, path).read_bytes())
     except (OSError, ValueError) as exc:
         raise ValueError('registration_receipt.json missing or unreadable; W1 is not registered') from exc
-    validate_receipt(receipt, root)
+    validate_receipt(receipt, root, series_release=series_release)
     verify_r1_executed_sources(root, json.loads(_local(root, REGISTRATION+'r1_slots.json').read_bytes()))
     bar = json.loads(_local(root, REGISTRATION+'u3_bar.json').read_bytes())
     validate_u3(bar, root=root, commit=receipt['commit'])
