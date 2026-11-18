@@ -8,6 +8,7 @@
   "properties": {
     "schema": {"const": "joulewise.run_state_item.v1"},
     "number": {"type": "integer", "minimum": 1},
+    "kind": {"enum": ["event", "decision", "incident"]},
     "owner": {"enum": ["lead", "magistrate", "research_lead", "ed"]},
     "status": {"enum": ["DRAFT", "ISSUED", "CLOSED"]},
     "issued_epoch_s": {"$ref": "#/$defs/epoch"},

@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 from contextlib import redirect_stderr, redirect_stdout
+from hashlib import sha256
 from io import StringIO
 import json
 from pathlib import Path
+import subprocess
 import tempfile
 import unittest
 
@@ -34,10 +36,16 @@ LEGACY = """# Synthetic RUN_STATE
 EARLY, LATE = LEGACY.split("20. **", 1)
 LATE = "20. **" + LATE
 POINTER = "owner: lead\nwait: none\nnext_observable: fixture observable"
+ARCHIVE = "docs/archive/RUN_STATE-legacy-2026-11-17.md"
 
 
 def doc(typed=(), cutover=21):
     return EARLY + TOP_MARKER + "\n\n" + "".join(typed) + LEGACY_MARKER.format(cutover) + "\n\n" + LATE
+
+
+def archived_doc(typed=(), cutover=405, legacy_max=404):
+    marker = f"<!-- RUN_STATE LEGACY ITEMS: archived in {ARCHIVE}; cutover {cutover}; legacy_max {legacy_max} -->"
+    return "# Synthetic RUN_STATE\n\n" + TOP_MARKER + "\n\n" + "".join(typed) + marker + "\n"
 
 
 def header(number, **changes):
@@ -267,6 +275,53 @@ class RunStateItemsTests(unittest.TestCase):
     def test_r25_live_repository(self):
         self.assertEqual(items.main(["check"]), 0)
 
+    def test_archived_legacy_range_reserves_numbers_and_resolves_references(self):
+        parsed = items.parse(archived_doc([item(405, supersedes=["346", "256b", "404"])]))
+        self.assertEqual((parsed.cutover, parsed.legacy_max), (405, 404))
+        self.assertEqual(items.validate(parsed), [])
+        self.assertEqual(items.replay(parsed), {405: "ISSUED"})
+        self.assertIn("DUPLICATE_NUMBER", codes(archived_doc([item(404)])))
+        self.assertEqual(codes(archived_doc([item(406, supersedes=["405"])])), ["DANGLING_REF"])
+        self.assertEqual(codes(archived_doc([item(405, sets=[change(346, "VOID")])])), ["LEGACY_TARGET"])
+        self.assertIn("MARKER", codes(archived_doc(legacy_max=405)))
+
+    def test_kind_is_optional_and_restricted_to_the_enum(self):
+        for kind in ("event", "decision", "incident"):
+            with self.subTest(kind=kind):
+                self.assertEqual(codes(doc([item(22, kind=kind), item(21)])), [])
+        for kind in (None, "note"):
+            with self.subTest(kind=kind):
+                self.assertEqual(codes(doc([item(21, kind=kind)])), ["SCHEMA"])
+
+    def test_archive_round_trips_cutover_snapshot(self):
+        root = gen_current.ROOT
+        source = "7aa6747175d9cc2265811711e47c8dc5f055ab8d"
+        original = subprocess.check_output(["git", "show", f"{source}:RUN_STATE.md"], cwd=root)
+        title, _, original = original.partition(b"\n")
+        top = (TOP_MARKER + "\n").encode()
+        old_marker = LEGACY_MARKER.format(405).encode()
+        old_header, _, original_regions = original.partition(top)
+        old_typed, _, old_legacy = original_regions.partition(old_marker)
+
+        archive = (root / ARCHIVE).read_bytes()
+        archive_title, archive_source, archive_order, moved = archive.split(b"\n", 3)
+        self.assertTrue(archive_title.startswith(b"# "))
+        self.assertIn(source.encode(), archive_source)
+        self.assertIn(b"pre-item text followed by the legacy marker", archive_order)
+        self.assertEqual(sha256(moved).digest(), sha256(old_header + old_marker + old_legacy).digest())
+
+        current = (root / "RUN_STATE.md").read_bytes()
+        self.assertEqual(current.split(b"\n", 1)[0], title)
+        _, current_top, current_regions = current.partition(top)
+        new_marker = f"<!-- RUN_STATE LEGACY ITEMS: archived in {ARCHIVE}; cutover 405; legacy_max 404 -->\n".encode()
+        typed, found, rest = current_regions.partition(new_marker)
+        self.assertEqual((found, rest), (new_marker, b""))
+        restored_header, restored_marker, restored_legacy = moved.partition(old_marker)
+        # Later log entries can be prepended ahead of the cutover snapshot.
+        kept = typed[-len(old_typed):]
+        restored = title + b"\n" + restored_header + current_top + kept + restored_marker + restored_legacy
+        self.assertEqual(sha256(restored).digest(), sha256(title + b"\n" + original).digest())
+
     def test_check_refuses_typed_item_hidden_by_its_own_closing_fence(self):
         hidden = doc([item(405, status="CLOSED", body="```\nunterminated"), item(404)], cutover=404)
         expected_line = hidden.splitlines().index("404. **Item 404**") + 1
@@ -295,6 +350,8 @@ class RunStateItemsTests(unittest.TestCase):
         properties = schema["properties"]
         self.assertEqual(tuple(properties["owner"]["enum"]), items.OWNERS)
         self.assertEqual(tuple(properties["status"]["enum"]), items.INITIAL)
+        self.assertEqual(tuple(properties["kind"]["enum"]), items.KINDS)
+        self.assertNotIn("kind", schema["required"])
         self.assertEqual(tuple(properties["sets"]["items"]["properties"]["status"]["enum"]), items.SETTABLE)
         epoch = schema["$defs"]["epoch"]
         self.assertEqual((epoch["minimum"], epoch["maximum"]), (gen_current.MIN_EPOCH, gen_current.MAX_EPOCH))

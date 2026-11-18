@@ -109,6 +109,8 @@ def _request_header(request: dict) -> dict:
         if not re.fullmatch(r"[A-Za-z0-9-]+:[ \t]*\S.*", trailer):
             raise ValueError("trailer must be TOKEN: VALUE")
     header = {key: request[key] for key in items.HEADER_KEYS - {"schema", "number"}}
+    if "kind" in request:
+        header["kind"] = request["kind"]
     header.update(schema=items.SCHEMA, number=1)
     errors = items.header_errors(header, 1, 1)
     if errors:
@@ -121,14 +123,23 @@ def _prepare(text: str, request: dict, header: dict) -> tuple[int, str, bytes]:
     if parsed.cutover is None:
         raise ValueError("run init first")
     body = request["body"]
-    for line in body.splitlines():
+    body_lines = body.splitlines()
+    for line in body_lines:
         if line.strip() in ("```item", "```pointer"):
             raise ValueError("body cannot contain item or pointer fences")
         if (match := items.HEADING.match(line)) and int(match[1]) >= parsed.cutover:
             raise ValueError("body cannot contain a heading at or above the cutover")
-    if (line := items.unclosed_code_fence(body)) is not None:
-        raise ValueError(f"body line {line}: unclosed code fence")
-    number = max((row[1] for row in items.heading_lines(text)), default=0) + 1
+    for opening, info, closing in items.code_fences(body):
+        if closing is None:
+            raise ValueError(f"body line {opening}: unclosed code fence")
+        if info in ("sh", "zsh", "bash", "python", "") and closing - opening - 1 > 3:
+            raise ValueError("body holds a program; put it in the repository and cite its path")
+    # Pre-existing spool entries have no kind and use the ordinary 40-line limit.
+    limit = 120 if header.get("kind") == "incident" else 40
+    if len(body_lines) > limit:
+        raise ValueError(f"body exceeds {limit} lines")
+    highest = max((row[1] for row in items.heading_lines(text)), default=0)
+    number = max(highest + 1, parsed.cutover)
     rendered = render_item(number, request["heading"], {**header, "number": number}, body, request["pointer"])
     updated = _insert_at(text, parsed.top_line, rendered)
     new_items = items.parse(updated).items
@@ -420,7 +431,7 @@ def _read_request(args) -> dict:
     return {
         "heading": args.heading, "body": args.body.read_text(encoding="utf-8"),
         "pointer": args.pointer.read_text(encoding="utf-8") if args.pointer else None,
-        "owner": args.owner, "status": args.status,
+        "owner": args.owner, "status": args.status, "kind": args.kind,
         "issued_epoch_s": _iso(args.issued, "--issued") if args.issued else int(time.time()),
         "expires_epoch_s": _iso(args.expires, "--expires") if args.expires else None,
         "supersedes": args.supersedes, "sets": changes, "with": args.with_files,
@@ -442,6 +453,7 @@ def main(argv=None) -> int:
     add.add_argument("--body", required=True, type=Path)
     add.add_argument("--owner", required=True, choices=items.OWNERS)
     add.add_argument("--status", required=True, choices=items.INITIAL)
+    add.add_argument("--kind", required=True, choices=items.KINDS)
     for field in ("issued", "expires", "message"):
         add.add_argument(f"--{field}")
     add.add_argument("--pointer", type=Path)

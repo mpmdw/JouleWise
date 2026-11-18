@@ -14,7 +14,7 @@ from unittest import mock
 
 from scripts import gen_current, run_state_add as add, run_state_items as items
 from tests.git_fixture import clone_git_fixture, init_git_fixture
-from tests.test_run_state_items import EXPIRY, ISSUED, LEGACY, doc, item
+from tests.test_run_state_items import EXPIRY, ISSUED, LEGACY, archived_doc, doc, item
 
 
 ISSUED_ISO = "2026-11-18T11:33:20Z"
@@ -22,7 +22,7 @@ ISSUED_ISO = "2026-11-18T11:33:20Z"
 
 def request(**updates):
     return {"heading": "A new item", "body": "An ordinary body.\n", "pointer": None,
-            "owner": "lead", "status": "ISSUED", "issued_epoch_s": ISSUED,
+            "owner": "lead", "status": "ISSUED", "kind": "event", "issued_epoch_s": ISSUED,
             "expires_epoch_s": None, "sets": [], "supersedes": [], "with": [],
             "message": None, "trailers": [], **updates}
 
@@ -44,10 +44,11 @@ class LocalTests(unittest.TestCase):
         gen_current.generate(self.run_state, self.current)
         self.body = self.directory / "body.md"
 
-    def flags(self, *flags):
+    def flags(self, *flags, kind="event"):
+        kind_flags = ("--kind", kind) if kind is not None else ()
         return ("add", "--run-state", str(self.run_state), "--current", str(self.current), "--no-git",
                 "--heading", "Fixture", "--owner", "lead", "--status", "CLOSED",
-                "--body", str(self.body), "--issued", ISSUED_ISO, *flags)
+                "--body", str(self.body), "--issued", ISSUED_ISO, *kind_flags, *flags)
 
     def test_a01_add_allocates_and_rebuilds_current(self):
         self.assertEqual(add.add_local(self.run_state, self.current, request(expires_epoch_s=EXPIRY)), 24)
@@ -55,6 +56,7 @@ class LocalTests(unittest.TestCase):
         self.assertTrue(text.split(add.TOP_MARKER, 1)[1].startswith("\n\n24. **A new item**\n"))
         parsed = items.parse(text)
         self.assertEqual(items.validate(parsed), [])
+        self.assertEqual(parsed.items[0].header["kind"], "event")
         self.assertEqual(self.current.read_bytes(), gen_current.render(text))
         self.assertEqual(json.loads(self.current.read_bytes())["open_items"][0],
                          {"item": 24, "status": "ISSUED", "owner": "lead", "expires_epoch_s": EXPIRY})
@@ -85,6 +87,52 @@ class LocalTests(unittest.TestCase):
         self.assertEqual(updated, doc())
         with self.assertRaisesRegex(ValueError, "already initialized"):
             add.init_text(updated)
+
+    def test_archived_log_allocates_above_legacy_max_and_accepts_supersedes(self):
+        self.run_state.write_text(archived_doc(), encoding="utf-8")
+        self.body.write_text("Fixture body.\n", encoding="utf-8")
+        self.assertEqual(cli(*self.flags("--supersedes", "346")), (0, "405\n", ""))
+        new, = items.parse(self.run_state.read_text()).items
+        self.assertEqual(new.header["supersedes"], ["346"])
+
+    def test_kind_is_required(self):
+        self.body.write_text("Fixture body.\n", encoding="utf-8")
+        before = self.run_state.read_bytes(), self.current.read_bytes()
+        errors = StringIO()
+        with redirect_stderr(errors), self.assertRaises(SystemExit) as caught:
+            add.main(self.flags(kind=None))
+        self.assertEqual(caught.exception.code, 2)
+        self.assertIn("the following arguments are required: --kind", errors.getvalue())
+        self.assertEqual((self.run_state.read_bytes(), self.current.read_bytes()), before)
+
+    def test_program_fence_limits(self):
+        before = self.run_state.read_bytes(), self.current.read_bytes()
+        for opener in ("```sh", "```zsh", "```bash", "```python", "```", "~~~ sh  "):
+            with self.subTest(opener=opener):
+                body = f"{opener}\nline one\n\nline three\nline four\nline five\n{opener[:3]}\n"
+                self.body.write_text(body, encoding="utf-8")
+                code, output, error = cli(*self.flags(kind="incident"))
+                self.assertEqual((code, output), (2, ""))
+                self.assertIn("body holds a program; put it in the repository and cite its path", error)
+                self.assertEqual((self.run_state.read_bytes(), self.current.read_bytes()), before)
+        self.body.write_text("```sh\nexample\nexample\n```\n", encoding="utf-8")
+        self.assertEqual(cli(*self.flags()), (0, "24\n", ""))
+        self.body.write_text("````markdown\n```sh\none\ntwo\nthree\nfour\n```\n````\n", encoding="utf-8")
+        self.assertEqual(cli(*self.flags()), (0, "25\n", ""))
+
+    def test_body_line_limits_by_kind(self):
+        for kind, limit in (("event", 40), ("decision", 40), ("incident", 120)):
+            with self.subTest(kind=kind):
+                before = self.run_state.read_bytes(), self.current.read_bytes()
+                self.body.write_text("line\n" * (limit + 1), encoding="utf-8")
+                code, output, error = cli(*self.flags(kind=kind))
+                self.assertEqual((code, output), (2, ""))
+                self.assertIn(f"{limit} lines", error)
+                self.assertEqual((self.run_state.read_bytes(), self.current.read_bytes()), before)
+                self.body.write_text("line\n" * limit, encoding="utf-8")
+                self.assertEqual(cli(*self.flags(kind=kind))[0], 0)
+        self.body.write_text("line\n" * 41, encoding="utf-8")
+        self.assertEqual(cli(*self.flags(kind="incident"))[0], 0)
 
     def test_unclosed_body_fence_refuses_add_and_preserves_item_404(self):
         initialized, cutover = add.init_text(LEGACY.replace("20. **", "403. **"))
@@ -178,7 +226,7 @@ class GitTests(unittest.TestCase):
         body = self.directory / "input.md"
         body.write_text("Synthetic CLI body.", encoding="utf-8")
         return ("add", "--heading", "Fixture CLI", "--body", str(body), "--owner", "lead",
-                "--status", "ISSUED", "--issued", ISSUED_ISO, *extra)
+                "--status", "ISSUED", "--kind", "decision", "--issued", ISSUED_ISO, *extra)
 
     def test_a05_illegal_set_aborts_before_write_or_commit(self):
         caller_head = self.git(self.a, "rev-parse", "HEAD")
@@ -270,6 +318,18 @@ git rev-parse --verify "$ref" >> fixture-raced-heads
         self.assertEqual(self.remote_items(), [24, 23, 22, 21])
         spooled, = self.spool.glob("*.json")
         self.assertEqual(json.loads(spooled.read_bytes()), request())
+
+    def test_flush_accepts_a_spooled_request_from_before_kind(self):
+        data = request()
+        del data["kind"]
+        self.spool.mkdir()
+        spooled = self.spool / "legacy.json"
+        spooled.write_text(json.dumps(data), encoding="utf-8")
+        code, output, error = self.call_in(self.a, "flush-spool")
+        self.assertEqual((code, output.strip(), error), (0, f"25 {self.remote_head()}", ""))
+        self.assertFalse(spooled.exists())
+        text = self.git(self.remote, "show", f"main:{add.RUN_STATE}")
+        self.assertNotIn("kind", items.parse(text).items[0].header)
 
     def test_a09_dirty_callers_branch_and_worktrees_are_preserved(self):
         self.git(self.b, "switch", "-c", "fixture-local")

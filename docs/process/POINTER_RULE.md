@@ -55,17 +55,24 @@ lines, a second block in one item, an unterminated block, and a misplaced block
 are named errors with RUN_STATE line numbers. Every block is validated, even
 when an item with a higher number also carries one.
 
-The highest numbered item **carrying a block** wins, regardless of file order.
-Sort the numeric part first, then the optional lowercase letter (`256b > 256`,
-`257 > 256b`). Items without a block do not affect pointer selection. Ordinary
-legacy text needs no regeneration. After cutover, `run_state_add.py` regenerates
-the file for each typed item. Headings inside other fenced examples are ignored.
+The highest numbered item **carrying a block** in `RUN_STATE.md` wins, regardless
+of file order. Sort the numeric part first, then the optional lowercase letter
+(`256b > 256`, `257 > 256b`). Items without a block do not affect pointer
+selection. Legacy items are in [the RUN_STATE archive](../archive/RUN_STATE-legacy-2026-11-17.md).
+The archive marker reserves every item number through `legacy_max`, and a
+`supersedes` reference in that range resolves to legacy history.
+`run_state_add.py` regenerates `CURRENT.json` for each typed item. Headings
+inside other fenced examples are ignored.
 Quoted or indented pointer fences are examples and ignored; indented fenced
 examples also suppress recognition until their matching closing fence. Other
 Markdown fences close with the same character and at least the opening length.
 A declaration's own closing line must be exactly three backticks.
 A typed item block (TYPED-ITEMS, `docs/process/run_state_item.schema.json`) may
 follow the pointer block.
+
+`run_state_add.py add` requires `--kind event`, `--kind decision`, or `--kind incident`.
+Events and decisions allow 40 body lines, and incidents allow 120. Fences with
+no info string or with `sh`, `zsh`, `bash`, or `python` allow three content lines.
 
 ## Generated file and commands
 

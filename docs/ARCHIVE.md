@@ -1,5 +1,9 @@
 # Archive: retrieving retired repository files
 
+| Archive | Contents |
+|---|---|
+| [Legacy RUN_STATE, 2026-11-17](archive/RUN_STATE-legacy-2026-11-17.md) | After the three-line archive header, the former pre-item text is followed by the original legacy marker and everything through the original end of file. |
+
 ## Window-status publisher retirement, 2026-11-11
 
 `WINDOW_STATUS.md`, `scripts/window_status.sh`, and `tests/test_window_status_guard.py`
