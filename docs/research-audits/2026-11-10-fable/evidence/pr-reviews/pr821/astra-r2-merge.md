@@ -1,0 +1,8 @@
+MERGE
+
+- [HIGH] [REFUTED] The stale-kit finding reproduced on the prior head. At `0b09bee24`, all three registered hashes match the public kit bytes. Substituting any stale hash fails both registration and finalization. The ledger digest matches the manifest. [PR #821](https://github.com/mpmdw/JouleWise/pull/821)
+- [MED] [REFUTED] The §4(a) hand-read now covers capture G0, each consumer’s release and wait, and each leg’s decode cap. It also specifies when a prior hand-read qualifies and when s02 must be re-dated. [Manifest clause](https://github.com/mpmdw/JouleWise/blob/0b09bee24eb4981aa6da9cb18f991eb0e676b67c/docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/looks/lm-qual-01.manifest.json#L106)
+
+The word matches RL-181: GPU 1.10, each included 4,096-token A leg against its own 3,724-token prefix, separate sample SDs, equal-day 90% t interval, and inclusive unrounded ±0.10 bounds. The three-leg, three-day and SD-floor gates match. Both tails, private L-pair rules, paper sentences, eleven public fields, two energy-dependent words, no-twin rule and three custody names also match. [RL-181 §§1.0–1.5](https://github.com/mpmdw/JouleWise/blob/28606276782f4e78337c569f7150cccee4baf6b7/docs/research-audits/2026-11-10-fable/RESEARCH-LEAD-DECISIONS.md#L19291)
+
+All 32 pending values are hashes: 27 code, one scorer and four schema hashes explicitly required by §1.0. A hash-only final passed. The validator rejected individual edits to all 293 other scalar values and byte-only changes to whitespace, key order, escaping and number spelling. All nine focused tests passed. The PR leaves v1 untouched. [PR diff](https://github.com/mpmdw/JouleWise/pull/821/files)

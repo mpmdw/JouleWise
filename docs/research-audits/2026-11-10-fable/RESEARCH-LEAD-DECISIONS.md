@@ -20443,3 +20443,97 @@ Rows for the lead to commit to `RULES.json`. Owner is `research_lead` for all fo
 **Rows closed or changed by this ruling.** None. RL-180 row 2 is read with row 1.
 
 **What comes back to me.** A manifest already committed when the `authors.twin` sentence is due. A `not_run` cell. A public `drift_tripwire = not_evaluable`. Nothing else in this ruling returns.
+
+# RL-183b. The unpack receipt is four committed fields written only by `unpack`. It is a fourth final source. One shared predicate checks it against the window's own committed digest in `cmd_final` and in `WindowRecord.final_evidence`, so the direct path and the `previous_final` path refuse alike. A window with captures and no matching receipt is never final
+
+Research lead (Fable 5.2), Wed Nov 18 02:18 PST 2026 (from `date`). Addendum to RL-183 section 2.5. Rules the receipt reserved in RL-163 section 1 (RLD:15454). RL-163 section 1 points 1 to 6 stand.
+
+**Cites.** `RLD:n` is `RESEARCH-LEAD-DECISIONS.md` on `origin/audit/2026-11-10-fable`. Code is the successor worktree at `98edcc0fe` (draft PR #826): `HO` is `scripts/align_v4_harvest_off.py`, `PK` is `scripts/align_v4_next_arm_packet.py`, `LT` is `joulewise/align/apple/light_triage.py`, `OFF` is `joulewise/align/apple/harvest_offload.py`, `RB` is `docs/align/v4/HARVEST-OFF-MAGISTRATE-RUNBOOK.md`, `RR` is `docs/run_reports/2026-11-18-desk-seal-successor.md`.
+
+**Read.** The builder's and the resolver's final messages, RR in full, RL-163 and RL-168 (RLD:15409-15476, 16189-16332), and the code lines cited below. No custody, energy, meter, transcript or restricted file was opened. I ran no test.
+
+**The finding, confirmed in the code.** `cmd_final` reads `desk.json`, `PILOT.json`, the exclusions, capture presence and the plan id (HO:273-300). Nothing in it refers to an unpack. `WindowRecord.final_evidence` applies the same predicate to the committed sources (PK:244-269) and is equally blind. So RL-163 point 3 (RLD:15444) does not hold as built, and the receipt is owed.
+
+## 1. Format and fields
+
+The receipt is one canonical JSON object: `json.dumps(obj, sort_keys=True, separators=(',', ':'))`, the encoding the manifest already uses (HO:513). The key set is exactly these four.
+
+| Field | Value |
+|---|---|
+| `schema` | `joulewise.align_v4.unpack_receipt.v1` |
+| `window` | the window id given to `unpack` as `--window-id` |
+| `plan_id` | `session_id` from the restored tree's `session.json`, read after the restore |
+| `finalized_manifest_sha256` | the digest `unpack` verified, 64 lowercase hex |
+
+**Nothing else may be committed.** No file count, byte count, payload size, payload digest, elapsed time, path, host name or timestamp. RL-163 point 1 bars counts and sizes (RLD:15442); elapsed time is a size by another name; the rest add nothing the check uses.
+
+**The receipt is deterministic.** A fresh restore of the same window after a faulted desk (RB:275) gives the same bytes.
+
+**Who writes it.** Only `cmd_unpack`, after `harvest_offload.unpack` has returned (HO:215-217). It gains two required arguments, `--window-id` and `--receipt-out`.
+- `--receipt-out` is refused if it lies under the finalized `source_root`, and is opened in `'xb'` mode.
+- A refused or failed unpack writes no receipt.
+- If the restore succeeds and the write fails, the pre-desk restore is removed and `unpack` is run again. Nobody writes the file by hand.
+
+## 2. The binding
+
+`unpack` restores only after it has checked the chain digest → manifest body → transport manifest → restored bytes → mirror (HO:197-217, OFF:763-809). The receipt records which digest that was, for which window and plan. Finality then requires three equalities, against the window being judged:
+
+1. `receipt.window` equals the record's `window`.
+2. `receipt.plan_id` equals the window's plan id, the same id `final_adjudication_error` is given (HO:289, PK:265).
+3. `receipt.finalized_manifest_sha256` equals the digest committed in that window's record (`WindowRecord.finalized_manifest_sha256`, PK:219).
+
+**What this buys.** A record whose committed digest is not the one `unpack` verified cannot become final. That is RL-163 point 3 made true.
+
+**What it does not buy.** The receipt is an attestation, not a proof. A public repository holds no secret, so a hand-written file with the right three values would pass. That route is closed by procedure (the line above) and proved at release, when each committed body is checked against its record's digest (RLD:15446).
+
+## 3. Where finality is blocked
+
+**One predicate, in `LT` beside `final_adjudication_error` (LT:131):**
+
+`unpack_receipt_error(raw, *, window, plan_id, finalized_sha256, captured)`
+
+- `raw` is the receipt's bytes, or `None`.
+- `None` with `captured` true returns an error. `None` with `captured` false returns `None`.
+- A receipt that is present must pass in both cases: canonical bytes, the exact key set, the schema, and the three equalities of section 2.
+- It is not called for R1, which has no committed manifest (PK:224).
+
+**Direct `final`: `cmd_final` (HO:273).** It gains `--unpack-receipt` and `--finalized-sha256`. It calls the predicate straight after `final_adjudication_error` (HO:289-292) with `window=args.window_id`, `plan_id=state['session_id']`, and raises `final eligibility refused: ...` the same way. Its output gains `unpack_receipt_sha256`. This is the early refusal on the Air. The desk on the MBP's original tree therefore cannot reach `final` for a window with captures.
+
+**Committed sources: `WindowRecord.final_evidence` (PK:244).** This is the binding check, because it reads the committed digest.
+- The source name is `unpack_receipt`. Direct: `sources.unpack_receipt` → `records/$K/evidence/unpack_receipt.json`. Successor: `previous_final.sources.unpack_receipt` → `records/K1/previous-final/unpack_receipt.json`. Both are the file `unpack` wrote, byte for byte.
+- `WindowRecord.source` (PK:237-242) routes `unpack_receipt` through `final_from` as it does the three final sources.
+- `bind_final` (PK:300-309) accepts a source set of exactly the three final sources, or the three plus `unpack_receipt`.
+- `final_evidence` calls the predicate after `final_adjudication_error` passes (PK:269), with `window=self.window`, the plan id it already has, `finalized_sha256=self.finalized_manifest_sha256` and `captured=not absent`.
+
+**The `previous_final` rule.** The receipt rides in the successor's record but is judged against the predecessor's window, plan and committed digest. `final_evidence` runs on record k, so this follows from the call above. A receipt matching the successor's own digest does not make k final.
+
+**Everything downstream is covered by `is_final`:** `last_desk_state` (PK:746-760), `pilot_view` (PK:294), and R17's k+2 bound, which then stops the arm (RLD:15444).
+
+**A window with no capture** stays final by its light triage (PK:256-262). Its digest is checked at release only. That was already so under RL-163.
+
+**When.** In the successor PR, in the commit W1 is signed at: `PK` and `LT` are strict artifacts. RB sections 2a, 3, 4 and its refusal table gain the receipt lines.
+
+**Tests owed.**
+1. RR's probe inverted: a real harvest on synthetic bundles, then `final` with no receipt, is refused.
+2. At both enforcement points, each of these is refused: another window, another plan, another digest, non-canonical bytes, an extra key.
+3. A `previous_final` whose receipt matches the successor's digest and not k's leaves k not final.
+4. A zero-capture record is final by light triage with no receipt, as today. R1 is exempt.
+5. A failed `unpack` leaves no receipt.
+
+**Not checked.** Whether any caller of `final` runs on a non-R1 window that is never unpacked by design; if one exists it comes to me. An MBP-only fallback (move the originals aside and unpack the window's own pack at the source root) follows from `unpack`'s rules (OFF:805) but is not tested.
+
+## Register
+
+Rows for the lead to commit to `RULES.json`. Owner is `research_lead` for all three.
+
+| # | Clause | Class | Protects | Scope | Ends | Test |
+|---|---|---|---|---|---|---|
+| 1 | The unpack receipt is canonical JSON with exactly `schema`, `window`, `plan_id`, `finalized_manifest_sha256`, written only by `cmd_unpack` after a successful restore; no count, size, time or path is committed (1) | VALIDITY (blinding) | The record leaks no fault count through the receipt | Every v4 record after R1 | The series release | The predicate's exact-key-set test; test 5 |
+| 2 | A window with captures is final only if its receipt's window, plan id and digest equal that window's own, the digest being the one committed in its record (2, 3) | VALIDITY (prereg) | A record whose digest matches no verified manifest never becomes final | Every v4 record after R1 | The series release | Tests 1 and 2 |
+| 3 | The check is `light_triage.unpack_receipt_error`, called in `cmd_final` and in `WindowRecord.final_evidence`; a successor's `previous_final` receipt is judged against the predecessor's record (3) | VALIDITY (prereg) | The direct and successor paths cannot diverge | The harvest-off runner and the packet builder | The series release | Tests 3 and 4 |
+
+**Rows closed or changed by this ruling.** None. The hold on series-record commits and on W1's signature (RLD:15460) stands until the successor merges with rows 1 to 3.
+
+**What comes back to me.** The successor's diff with the five tests. A caller of `final` that cannot have a receipt. Any wish to add a field to the receipt.
+
+**Blind status.** Blind. This ruling rests on rulings, two seat messages, one run report and code. The receipt's fields were fixed before any series record exists.
