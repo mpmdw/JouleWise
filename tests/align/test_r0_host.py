@@ -1243,6 +1243,150 @@ class R0SamplerAdmissionSpec(unittest.TestCase):
                     self.assertAlmostEqual(evidence["cpu_s_per_s"], 0.06)
                     self.assertIn("lower bound", evidence["basis"])
 
+    def run_background_census(self, configured, prepare, *, just_before_census=lambda: None):
+        from contextlib import nullcontext, redirect_stderr, redirect_stdout
+        from io import StringIO
+        from joulewise import measurement_liveness as live
+        from joulewise.align import r0_runner
+        from tests.align.test_r0_checks import FakeBackend
+
+        work = configured.parent
+        config = config_at(work)
+        config["custody_parents"] = [str(configured)]
+        config_file = work / "config.json"
+        config_file.write_text(json.dumps(config))
+        output = work / "output"
+        guard, clock, advance, _ = self.admission(busy=False)
+        guard.parents = [configured]
+        command = guard.run
+
+        def observe(pid):
+            self.assertEqual(pid, 42)
+            return live.Identity("LIVE", OLD_START)
+
+        def run(argv, **kwargs):
+            if clock.now == 45 and argv[0] == "/bin/launchctl":
+                just_before_census()
+            return command(argv, **kwargs)
+
+        def host():
+            prepare()
+            advance(45)
+            return {"status": "pass"}
+
+        guard.run = run
+        guard.inspect_custody = lambda **kwargs: live.census(**kwargs, observer=observe)
+        stderr = StringIO()
+        with (patch.object(r0_runner, "host_snapshot", side_effect=host),
+              patch.object(r0_runner, "deadline", return_value=nullcontext()),
+              patch.object(r0_runner, "command", return_value="synthetic-head"),
+              patch.object(r0_runner, "softwareupdate_scan_forecast", return_value={"status": "unknown"}),
+              redirect_stderr(stderr), redirect_stdout(StringIO())):
+            status = r0_runner.main(["--config", str(config_file), "--output", str(output), "--checks", "host"],
+                                    guard_factory=lambda _: guard, backend_factory=FakeBackend,
+                                    display_probe=None, lock_path=work / "lock")
+        return status, output.exists(), stderr.getvalue()
+
+    def test_background_census_resolves_configured_alias_at_scan_time(self):
+        for mode, reason in (("quiet", ""), ("removed", "errno 2"), ("retargeted", "live measurement owner")):
+            with self.subTest(mode=mode), tempfile.TemporaryDirectory() as tmp:
+                work = Path(tmp).resolve()
+                original, active, configured = (work / name for name in ("original", "active", "configured"))
+                original.mkdir()
+                night = active / "plan" / "night"
+                night.mkdir(parents=True)
+                (night / "chain.started").write_text(json.dumps({"pid": 42, "start_time": OLD_START}))
+                configured.symlink_to(original, target_is_directory=True)
+
+                def swap():
+                    if mode != "quiet":
+                        configured.unlink()
+                    if mode == "retargeted":
+                        configured.symlink_to(active, target_is_directory=True)
+
+                rc, published, diagnostic = self.run_background_census(
+                    configured, lambda: None, just_before_census=swap)
+                self.assertEqual((rc, published), (0, True) if mode == "quiet" else (2, False), diagnostic)
+                self.assertIn(reason, diagnostic)
+
+    def test_background_census_keeps_open_root_when_its_path_is_replaced(self):
+        import os
+
+        with tempfile.TemporaryDirectory() as tmp:
+            work = Path(tmp).resolve()
+            configured, original, moved = (work / name for name in ("configured", "original", "moved"))
+            original.mkdir()
+            configured.symlink_to(original, target_is_directory=True)
+            root_stat = original.stat()
+            swapped = False
+            scandir = os.scandir
+
+            def prepare():
+                night = original / "plan" / "night"
+                night.mkdir(parents=True)
+                (night / "chain.started").write_text(json.dumps({"pid": 42, "start_time": OLD_START}))
+
+            def swap_at_scan(value):
+                nonlocal swapped
+                if isinstance(value, int) and not swapped and (original / "plan").is_dir():
+                    if os.path.samestat(os.fstat(value), root_stat):
+                        original.rename(moved)
+                        original.mkdir()
+                        swapped = True
+                return scandir(value)
+
+            with patch.object(os, "scandir", side_effect=swap_at_scan):
+                rc, published, diagnostic = self.run_background_census(configured, prepare)
+            self.assertTrue(swapped, "the census must enumerate the held root descriptor")
+            self.assertEqual((rc, published), (2, False), diagnostic)
+            self.assertIn("live measurement owner", diagnostic)
+
+    def test_background_census_matches_folded_names_and_refuses_collisions(self):
+        import os
+
+        for mode in ("night", "chain", "registry", "collision"):
+            with self.subTest(mode=mode), tempfile.TemporaryDirectory() as tmp:
+                configured = Path(tmp).resolve() / "configured"
+                configured.mkdir()
+                record = {"pid": 42, "start_time": OLD_START}
+                night = configured / "plan" / ("Night" if mode == "night" else "night")
+
+                def prepare():
+                    if mode == "registry":
+                        registry = configured / "Active-Campaigns"
+                        registry.mkdir()
+                        (registry / "worker.json").write_text(json.dumps({
+                            **record, "schema": "joulewise.active_campaign.v1",
+                            "nonce": "fixture", "runs_root": str(configured)}))
+                    else:
+                        night.mkdir(parents=True)
+                        name = "CHAIN.STARTED" if mode == "chain" else "chain.started"
+                        (night / name).write_text(json.dumps(record))
+
+                if mode == "collision":
+                    # Inject the two spellings as directory entries on either
+                    # case-sensitive or case-insensitive test filesystems.
+                    from contextlib import contextmanager
+                    scandir = os.scandir
+
+                    @contextmanager
+                    def with_collision(value):
+                        with scandir(value) as entries:
+                            if night.is_dir() and (value == night or (isinstance(value, int)
+                                    and os.path.samestat(os.fstat(value), night.stat()))):
+                                yield iter([*entries, SimpleNamespace(name="CHAIN.STARTED")])
+                            else:
+                                yield entries
+
+                    with patch.object(os, "scandir", side_effect=with_collision):
+                        rc, published, diagnostic = self.run_background_census(configured, prepare)
+                    expected = "case-folded name collision"
+                else:
+                    rc, published, diagnostic = self.run_background_census(configured, prepare)
+                    expected = "live measurement owner"
+                self.assertEqual((rc, published), (2, False), diagnostic)
+                self.assertIn(expected, diagnostic)
+
     def test_census_filesystem_calls_are_confined_to_the_helper(self):
         import ast
         from joulewise import measurement_liveness
