@@ -432,5 +432,17 @@
       "maintenance_marker": "/Users/Shared/JouleWise/MAINTENANCE",
       "recheck_s": 60
     }
+  },
+  {
+    "id": "host-power",
+    "class": "PHYSICS",
+    "protects": "AC power preserves the measurement host's required supply state.",
+    "test": "host_power",
+    "scope": "host",
+    "source": "Brief A host_power; kit checklist",
+    "owner": "research_lead",
+    "added": "2026-11-18",
+    "review_by": "end:standing",
+    "status": "LIVE"
   }
 ]

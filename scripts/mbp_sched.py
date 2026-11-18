@@ -5,10 +5,11 @@ Ledger decision observations have a decision key. Producers record actual host
 events with an event key (LAUNCH, CLOSE, COPY_VERIFIED, REFUSAL, STOP, GATE, READY).
 Only those events are used as launch and close history.
 
-LAUNCH, CLOSE and COPY_VERIFIED identify an attempt by entry_id, kit_sha256
-and t0_epoch. A CLOSE adds its kind, ended_epoch, clean result, and the
-restore_readbacks named in RESTORE_READBACKS. A GATE carries its id. REFUSAL,
-STOP and READY use the same fields as the respective facts lists.
+LAUNCH, CLOSE, COPY_VERIFIED and the receipt share a span_id for each attempt.
+Legacy inputs use entry_id, kit_sha256 and t0_epoch. Order launches by sequence
+or by boot_id, boot_order and monotonic_ns, with append order as the legacy
+fallback. A CLOSE adds kind, ended_epoch, clean and the RESTORE_READBACKS.
+A GATE carries its id. REFUSAL, STOP and READY use the respective facts fields.
 
 Probe sources that need no native command (for example meter readiness, the
 High Power marker and queue commit) can be supplied via --host-facts. Probe
@@ -302,19 +303,25 @@ def validate_queue(path, data, rules, errors, check_references):
                 errors.add(path, "BAD_PLAN_ARGV",
                            f"{entry_id}: a dry run needs its own concrete command")
         refs = entry.get("requires")
+        params = entry.get("params")
         if check_references and array(identifier)(refs):
             for ref in refs:
                 if ref not in rules or rules[ref]["status"] == "RETIRED":
                     errors.add(path, "BAD_RULE_REFERENCE", f"{entry_id}: {ref}")
             restricted = {rules[ref]["test"] for ref in refs if ref in rules}
-            if entry.get("repeat") is True and not restricted.intersection(
-                    {"window", "dependency", "session_route"}):
+            if (entry.get("repeat") is True and entry.get("done") is not True
+                    and one_of(*FILLERS)(entry.get("kind"))
+                    and not restricted.intersection({"window", "dependency", "session_route"})):
                 standing = True
-        params = entry.get("params")
+            if (entry.get("kind") == "counted" and isinstance(params, dict)
+                    and any(params.get(key) for key in ("window", "date_caps", "not_on_dates_of"))
+                    and not any(ref in rules and rules[ref]["test"] == "window"
+                                and rules[ref]["status"] == "LIVE" for ref in refs)):
+                errors.add(path, "UNBOUND_DATE_RULE", f"{entry_id}: configured dates require a LIVE window rule")
         if isinstance(params, dict):
             validate_entry_params(path, where, params, errors)
     if check_references and not standing:
-        errors.add(path, "NO_STANDING_FILLER", "no repeat entry free of window, dependency and session_route")
+        errors.add(path, "NO_STANDING_FILLER", "no unfinished repeating filler free of window, dependency and session_route")
 
 
 def validate_entry_params(path, where, params, errors):
@@ -337,6 +344,7 @@ FACT_TYPES = {
     "now_epoch": epoch, "boot_epoch": epoch, "power": IS_OBJECT, "disk_free_gib": number,
     "meter_ready": boolean, "fence": IS_OBJECT, "labels_loaded": array(string),
     "foreign_processes": array(IS_OBJECT), "high_power_marker": boolean, "owner_stop": boolean,
+    "maintenance_active": boolean,
     "launches": array(IS_OBJECT), "closes": array(IS_OBJECT), "refusals": array(IS_OBJECT),
     "gates": array(identifier), "ready": array(IS_OBJECT), "queue_commit": string,
     "uncopied": array(IS_OBJECT), "stops": array(IS_OBJECT), "plans": IS_OBJECT,
@@ -345,14 +353,16 @@ FACT_TYPES = {
 CLOSE_FIELDS = {"entry_id": identifier, "kind": nullable(one_of(*KINDS)),
                 "ended_epoch": nullable(epoch), "clean": nullable(boolean),
                 "restore_proven": nullable(boolean), "t0_epoch": nullable(epoch)}
-CLOSE_OPTIONAL = {"kit_sha256": KIT, "pin": PIN, "mock": nullable(boolean),
+ATTEMPT_FIELDS = {"span_id": identifier, "sequence": integer, "boot_id": identifier,
+                  "boot_order": integer, "monotonic_ns": integer, "ledger_index": integer}
+CLOSE_OPTIONAL = {**ATTEMPT_FIELDS, "kit_sha256": KIT, "pin": PIN, "mock": nullable(boolean),
                   "copy_verified": nullable(boolean), "fault": nullable(string),
                   "load_redos": nullable(integer), "load_flag": nullable(boolean), "stranded": boolean,
                   "group": nullable(identifier), "legs": integer}
 RESTORE_READBACKS = ("power_mode", "network_time_off", "frequency_word_zero", "no_monitor",
                      "no_high_power_marker", "feeds_stopped", "process_group_gone")
 LAUNCH_FIELDS = {"entry_id": identifier, "t0_epoch": nullable(epoch)}
-LAUNCH_OPTIONAL = {"kit_sha256": KIT, "kind": one_of(*KINDS),
+LAUNCH_OPTIONAL = {**ATTEMPT_FIELDS, "kit_sha256": KIT, "kind": one_of(*KINDS),
                    "group": nullable(identifier), "legs": integer}
 FACT_ROWS = {
     "launches": (LAUNCH_FIELDS, LAUNCH_OPTIONAL),
@@ -448,7 +458,97 @@ def local_candidates(day, hour, zone):
 
 
 def identity(record):
-    return record["entry_id"], record.get("kit_sha256"), record["t0_epoch"]
+    when = ("span", record["span_id"]) if "span_id" in record else ("t0", record["t0_epoch"])
+    return record["entry_id"], record.get("kit_sha256"), when
+
+
+def attempt_name(attempt):
+    return attempt.get("span_id", attempt["entry_id"])
+
+
+def latest_attempt(attempts):
+    if not attempts:
+        return None, None
+    if any("sequence" in row for row in attempts):
+        if any("sequence" not in row for row in attempts):
+            return None, "launch sequence is incomplete"
+        newest = max(attempts, key=lambda row: row["sequence"])
+        if sum(row["sequence"] == newest["sequence"] for row in attempts) != 1:
+            return None, "latest launch sequence is ambiguous"
+        return newest, None
+    if all("boot_order" in row for row in attempts):
+        order = max(row["boot_order"] for row in attempts)
+        in_boot = [row for row in attempts if row["boot_order"] == order]
+        latest_boots = {row.get("boot_id") for row in in_boot}
+        if len(latest_boots) != 1:
+            return None, "latest boot order is ambiguous"
+        newest_boot = latest_boots.pop()
+    else:
+        newest_boot = next(reversed(dict.fromkeys(row.get("boot_id") for row in attempts)))
+        in_boot = [row for row in attempts if row.get("boot_id") == newest_boot]
+    if (newest_boot is not None or "boot_order" in in_boot[0]) and all(
+            "monotonic_ns" in row for row in in_boot):
+        newest = max(in_boot, key=lambda row: row["monotonic_ns"])
+        if sum(row["monotonic_ns"] == newest["monotonic_ns"] for row in in_boot) != 1:
+            return None, "latest monotonic launch stamp is ambiguous"
+        return newest, None
+    return in_boot[-1], None
+
+
+class AttemptHistory:
+    def __init__(self, facts):
+        self.launches = facts.get("launches")
+        self.closes = facts.get("closes")
+        self.latest, self.order_error = latest_attempt(self.launches)
+        self.receipts = {}
+        for receipt in facts.get("receipts") or []:
+            if receipt is not None and receipt["mock"] is False and receipt["entry_id"] is not None:
+                start = receipt["started"]["epoch_s"]
+                finish = receipt["ended"]["epoch_s"]
+                if start is not None and finish is not None and start <= finish:
+                    key = identity({**receipt, "t0_epoch": start})
+                    self.receipts.setdefault(key, set()).add(finish)
+
+        self.closes_by_launch = {}
+        self.unpaired_closes = []
+        by_identity = {}
+        for index, launch in enumerate(self.launches or []):
+            by_identity.setdefault(identity(launch), []).append((index, launch))
+        self.reused_ids = {key for key, attempts in by_identity.items() if len(attempts) > 1}
+        for close in self.closes or []:
+            matching = [index for index, launch in by_identity.get(identity(close), ())
+                        if self.close_follows(launch, close)]
+            if len(matching) == 1:
+                self.closes_by_launch.setdefault(matching[0], []).append(close)
+            elif not by_identity.get(identity(close)):
+                self.unpaired_closes.append(close)
+
+        if self.latest is not None:
+            index = next(index for index, launch in enumerate(self.launches) if launch is self.latest)
+            self.latest_close = next(iter(self.closes_by_launch.get(index, ())), None)
+        else:
+            self.latest_close = None
+
+    @staticmethod
+    def close_follows(launch, close):
+        if "ledger_index" in launch and "ledger_index" in close:
+            if close["ledger_index"] <= launch["ledger_index"]:
+                return False
+        return all(key not in launch or key not in close or launch[key] == close[key]
+                   for key in ("sequence", "boot_id", "boot_order", "monotonic_ns", "t0_epoch"))
+
+    def receipt_matches(self, close):
+        key = identity(close)
+        finishes = self.receipts.get(key, ())
+        return (key not in self.reused_ids and close["t0_epoch"] is not None
+                and close["ended_epoch"] is not None and len(finishes) == 1
+                and close["t0_epoch"] <= next(iter(finishes)) <= close["ended_epoch"])
+
+    def runs(self):
+        for index, launch in enumerate(self.launches or []):
+            yield launch, self.closes_by_launch.get(index, ())
+        for close in self.unpaired_closes:
+            yield close, ()
 
 
 def kit_matches(record, entry):
@@ -473,9 +573,12 @@ class Scheduler:
         self.today = self.local(now).date()
         self.caller_pid = caller_pid
         self.closes = facts.get("closes")
-        self.closes_sorted = sorted(self.closes or [], key=lambda row: row["ended_epoch"]
-                                    if row["ended_epoch"] is not None else float("inf"), reverse=True)
-        self.newest = self.closes_sorted[0] if self.closes_sorted else None
+        self.history = AttemptHistory(facts)
+        self.bound_closes = [
+            rows[0] for rows in self.history.closes_by_launch.values()
+            if self.history.receipt_matches(rows[0])
+        ]
+        self.newest = self.history.latest_close
         self.launches = facts.get("launches")
         self.rule_status = {key: status_at(rule, self.today) for key, rule in rules.items()}
         self.blocks = {}
@@ -483,7 +586,8 @@ class Scheduler:
             if "block" in entry:
                 self.blocks.setdefault(entry["block"], []).append(entry)
         self.active_blocks = {name for name, entries in self.blocks.items()
-                              if self.closed_clean(entries[0]) and any(not self.done(e) for e in entries[1:])}
+                              if all(entry["kind"] == "counted" for entry in entries)
+                              and self.closed_clean(entries[0]) and any(not self.done(e) for e in entries[1:])}
         self.batches = next((rule["params"] for rule in rules.values()
                              if rule["test"] == "batch_clear" and rule["status"] != "RETIRED"), None)
         self.ladder = next((rule["params"] for rule in rules.values()
@@ -500,18 +604,14 @@ class Scheduler:
 
     def closed_clean(self, entry):
         return any(kit_matches(close, entry) and close["clean"] is True
-                   for close in self.closes_sorted)
+                   for close in self.bound_closes)
 
     def done(self, entry):
         return entry.get("done", False) or not entry["repeat"] and self.closed_clean(entry)
 
     def latest_launch_owed(self):
-        if not self.launches or self.closes is None:
-            return None
-        latest = max(self.launches, key=lambda row: row["t0_epoch"] or 0)
-        if latest["t0_epoch"] is not None and not any(identity(latest) == identity(close)
-                                                       for close in self.closes_sorted):
-            return latest["entry_id"]
+        if self.history.latest is not None and self.newest is None and self.closes is not None:
+            return attempt_name(self.history.latest)
         return None
 
     def host_check(self, rule):
@@ -532,12 +632,23 @@ class Scheduler:
         if test == "host_clean":
             if self.closes is None:
                 return missing("closes")
-            if self.newest is not None and self.newest["ended_epoch"] is None:
-                return missing("newest close.ended_epoch")
-            if self.newest is not None and self.newest["restore_proven"] is not True:
-                if self.newest["restore_proven"] is None:
-                    return missing("newest close.restore_proven")
-                return fails("newest close has unproven restoration")
+            if self.history.order_error:
+                return fails(self.history.order_error)
+            if self.closes and self.history.latest is None:
+                return missing("launch attempt history for the recorded close")
+            if self.newest is not None:
+                span = attempt_name(self.history.latest or self.newest)
+                ended = self.newest["ended_epoch"]
+                if ended is None:
+                    return missing(f"{span} close.ended_epoch")
+                if self.newest["restore_proven"] is not False and not self.history.receipt_matches(self.newest):
+                    return fails(f"{span} has no matching close receipt")
+                if self.newest["restore_proven"] is not True:
+                    if self.newest["restore_proven"] is None:
+                        return missing(f"{span} close.restore_proven")
+                    return fails(f"{span} close has unproven restoration")
+                if ended > self.now:
+                    return fails(f"{span} close ends after the requested start")
             marker = facts.get("high_power_marker")
             if marker is None:
                 return missing("high_power_marker")
@@ -558,10 +669,9 @@ class Scheduler:
                     return fails("fence process is alive", deadline)
             if self.launches is None:
                 return missing("launches")
-            if any(row["t0_epoch"] is None for row in self.launches):
-                return missing("launches.t0_epoch")
-            if self.latest_launch_owed() is not None:
-                return fails("newest launch has no matching close")
+            owed = self.latest_launch_owed()
+            if owed is not None:
+                return fails(f"{owed} has no matching close")
             foreign = facts.get("foreign_processes")
             if foreign is None:
                 return missing("foreign_processes")
@@ -569,11 +679,14 @@ class Scheduler:
                 return fails("foreign processes are present", self.now + params["recheck_s"])
         if test == "owner_stop":
             stop = facts.get("owner_stop")
-            if stop is None:
-                return missing("owner_stop")
-            if stop:
+            maintenance = facts.get("maintenance_active")
+            if stop is True or maintenance is True:
                 retry = params.get("recheck_s")
                 return fails("owner maintenance or stop is active", self.now + retry if retry else None)
+            if stop is None:
+                return missing("owner_stop")
+            if maintenance is None and "maintenance_active" in facts:
+                return missing("maintenance_active")
         if test == "copy_debt" and self.newest is not None:
             ended = self.newest["ended_epoch"]
             if ended is None:
@@ -630,24 +743,34 @@ class Scheduler:
     def history_for_date(self, day):
         if self.launches is None or self.closes is None:
             return None
-        known = set()
+        launched = set()
         counts = Counter()
         unknown = False
-        for row in self.launches + self.closes_sorted:
+        for row, closes in self.history.runs():
             entry = self.by_id.get(row["entry_id"])
             params = entry["params"] if entry is not None and kit_matches(row, entry) else {}
-            group = row.get("group", params.get("group"))
             if row["t0_epoch"] is None:
                 unknown = True
                 continue
-            key = identity(row)
-            if key not in known and self.local(row["t0_epoch"]).date() == day:
-                known.add(key)
-                if group:
-                    counts[group] += row.get("legs", params.get("legs", 1))
-                elif entry is None and "group" not in row and row.get("kind") in (None, "counted"):
+            if self.local(row["t0_epoch"]).date() != day:
+                continue
+            launched.add(row["entry_id"])
+            facts = (row, *closes)
+            groups = {record["group"] for record in facts if record.get("group") is not None}
+            legs = {record["legs"] for record in facts if "legs" in record}
+            if len(groups) > 1 or len(legs) > 1:
+                unknown = True
+                continue
+            group = next(iter(groups), params.get("group"))
+            if group:
+                count = next(iter(legs), params.get("legs"))
+                if count is None:
                     unknown = True
-        return counts, known, unknown
+                else:
+                    counts[group] += count
+            elif entry is None and not any("group" in record for record in facts) and row.get("kind") in (None, "counted"):
+                unknown = True
+        return counts, launched, unknown
 
     def date_caps(self, entry, day):
         params = entry["params"]
@@ -728,8 +851,7 @@ class Scheduler:
                 history = self.history_for_date(self.local(when).date())
                 if history is not None:
                     _, launched, _ = history
-                    if not any(entry_id.startswith(self.ladder["stability_prefix"])
-                               for entry_id, _, _ in launched):
+                    if not any(entry_id.startswith(self.ladder["stability_prefix"]) for entry_id in launched):
                         return (0, "")
                 return (4, "")
             if entry["id"].startswith(self.ladder["instrument_prefix"]):
@@ -836,7 +958,7 @@ class Scheduler:
             for predecessor in params.get("after", []):
                 row = self.by_id.get(predecessor)
                 clean = self.closed_clean(row) if row is not None else any(
-                    c["entry_id"] == predecessor and c["clean"] is True for c in self.closes_sorted)
+                    c["entry_id"] == predecessor and c["clean"] is True for c in self.bound_closes)
                 if not clean:
                     return fails(f"{predecessor} has no clean close")
             if params.get("gates") and facts.get("gates") is None:
@@ -885,18 +1007,18 @@ class Scheduler:
             if self.closes is None or facts.get("stops") is None:
                 return missing("closes or stops")
             events = [row["epoch"] for row in facts["stops"] if row["code"] == "CONTAMINATED_REDOS"]
-            events += [row["ended_epoch"] for row in self.closes_sorted
+            events += [row["ended_epoch"] for row in self.bound_closes
                        if row.get("fault") == "CONTAMINATED_REDOS" and row["ended_epoch"] is not None]
             if events and not any(row["ended_epoch"] is not None and row["ended_epoch"] > max(events)
                                   and row["clean"] is True and row.get("load_redos") == 0
-                                  and row.get("load_flag") is False for row in self.closes_sorted):
+                                  and row.get("load_flag") is False for row in self.bound_closes):
                 return fails("CONTAMINATED_REDOS awaits a clean span with no load redo or flag")
         if test == "new_pin_smoke" and kind in COUNTED_KINDS and not params.get("pilot"):
             if self.closes is None:
                 return missing("closes")
             if not any(row["clean"] is True and row.get("mock") is False
                        and (row.get("pin") or self.by_id.get(row["entry_id"], {}).get("pin")) == entry["pin"]
-                       for row in self.closes_sorted):
+                       for row in self.bound_closes):
                 return fails("no clean native smoke on this pin")
         if test == "f0_retirement" and entry["id"] == "f0-part-c":
             if facts.get("gates") is None:
@@ -953,6 +1075,16 @@ class Scheduler:
 
     def earliest_entry(self, entry, when, omit_fits):
         """Follow known recheck times until all predicates can hold together."""
+        anchors = [self.now]
+        if self.batches is not None and self.facts.get("boot_epoch") is not None:
+            anchors.append(self.facts["boot_epoch"] + self.batches["offset_s"])
+        for member in self.remaining(entry):
+            anchors.extend(stamp for stamp in self.shift_window(member, 0) if stamp is not None)
+        for launch, _ in self.history.runs():
+            if launch["t0_epoch"] is not None:
+                anchors.append(launch["t0_epoch"])
+        last_anchor = max(anchors)
+        seen = set()
         while True:
             checks = list(self.checks(entry, when, omit_fits))
             failures = [(rule, check) for rule, check in checks
@@ -962,10 +1094,18 @@ class Scheduler:
             if any(check.until is None for _, check in failures):
                 return None
             later = max(check.until for _, check in failures)
-            # A repeating set of calendar constraints can be unsatisfiable. Ten days
-            # covers the registered single-date and daily clocks, including a DST change.
-            if later <= when or later > self.now + 10 * 86400:
+            if later <= when or not epoch(later):
                 return None
+            if when > last_anchor and self.local(when).date() > self.local(last_anchor).date():
+                # Once dated input events are past, only recurring local clocks
+                # and the boot-relative batch phase can change the outcome.
+                local = self.local(when)
+                phase = when % self.batches["period_s"] if self.batches else 0
+                state = (local.month, local.day, local.weekday(), local.time(), local.utcoffset(), phase,
+                         tuple((rule["id"], check.until - when) for rule, check in failures))
+                if state in seen:
+                    return None
+                seen.add(state)
             when = later
 
     def prepare_cutoffs(self, entries):
@@ -987,7 +1127,7 @@ class Scheduler:
 
     def host_decision(self, rule, check):
         owed = self.latest_launch_owed()
-        if rule["test"] == "host_quiet" and owed is not None and check.detail == "newest launch has no matching close":
+        if rule["test"] == "host_quiet" and owed is not None and check.detail == f"{owed} has no matching close":
             return {"decision": "CLOSE_OWED", "entry": owed}
         if check.until is not None:
             return self.wait(rule, check, check.until)
@@ -1141,6 +1281,7 @@ def overlay_ledger(facts, path, errors):
                 optional = {**optional, "restore_readbacks": IS_OBJECT,
                             "restore_proven": nullable(boolean)}
             if errors.fields(path, where, payload, required, optional):
+                payload["ledger_index"] = index
                 if event == "LAUNCH":
                     launches.append(payload)
                 elif event == "CLOSE":
@@ -1181,28 +1322,9 @@ def overlay_ledger(facts, path, errors):
         {key: close[key] for key in ("entry_id", "kind", "ended_epoch", "kit_sha256") if key in close}
         for close in closes if close.get("copy_verified") is not True
     ]
-    closes.sort(key=lambda row: row["ended_epoch"] if row["ended_epoch"] is not None else float("inf"),
-                reverse=True)
+    closes.reverse()
     facts.update(launches=launches, closes=closes, uncopied=uncopied, refusals=refusals,
                  gates=gates, ready=list(ready.values()), stops=stops)
-
-
-def bind_close_receipts(facts):
-    """When a receipt source was requested, require matching native evidence."""
-    receipts = facts.get("receipts")
-    if receipts is None or facts.get("closes") is None:
-        return
-    by_identity = {
-        (receipt["entry_id"], receipt["kit_sha256"], receipt["started"]["epoch_s"]): receipt
-        for receipt in receipts if receipt is not None and receipt["mock"] is False
-    }
-    for close in facts["closes"]:
-        if close.get("stranded", False):
-            continue
-        matching = by_identity.get(identity(close))
-        if close["t0_epoch"] is None or matching is None or matching["ended"]["epoch_s"] is None:
-            close["restore_proven"] = None
-            close["clean"] = None
 
 
 def append_decision(path, decision, now):
@@ -1328,7 +1450,7 @@ def project_receipt(receipt):
     steps = span.get("steps")
     if steps is None:
         steps = receipt.get("steps")
-    return {
+    result = {
         "entry_id": take(receipt, "entry_id", identifier),
         "kit_sha256": take(receipt, "kit_sha256", KIT),
         "rc": take(receipt, "rc", integer_rc),
@@ -1345,6 +1467,9 @@ def project_receipt(receipt):
                       for step in steps if isinstance(step, dict)] if isinstance(steps, list) else None,
         },
     }
+    if "span_id" in receipt:
+        result["span_id"] = take(receipt, "span_id", identifier)
+    return result
 
 
 def read_regular_json(path, *, dir_fd=None):
@@ -1405,6 +1530,28 @@ def run_plans(queue, facts, errors):
     return plans
 
 
+def maintenance_active(args, rules, errors):
+    paths = []
+    for row in rules.values():
+        marker = row.get("params", {}).get("maintenance_marker")
+        if row["test"] == "owner_stop" and row["status"] != "RETIRED" and marker:
+            paths.append(Path(marker))
+    if args.maintenance_marker is not None:
+        paths.append(args.maintenance_marker)
+    active = False
+    for path in dict.fromkeys(paths):
+        try:
+            path.lstat()
+            active = True
+        except FileNotFoundError:
+            continue
+        except OSError as err:
+            errors["maintenance_active"] = str(err)
+    if not active and "maintenance_active" in errors:
+        return None
+    return active
+
+
 def probe(args, queue, rules, supplied):
     failures = {}
     power = probe_command(["/usr/bin/pmset", "-g", "batt"], parse_power, "power", failures)
@@ -1413,7 +1560,7 @@ def probe(args, queue, rules, supplied):
     processes = probe_command(["/bin/ps", "-axo", "pid,ppid,comm"], parse_processes,
                               "foreign_processes", failures)
     boot = probe_command(["/usr/sbin/sysctl", "-n", "kern.boottime"], parse_boot, "boot_epoch", failures)
-    now = int(time.time())
+    now = time.time()
     quiet_rules = [row for row in rules.values() if row["test"] == "host_quiet" and row["status"] != "RETIRED"]
     foreign = None
     if processes is not None:
@@ -1447,22 +1594,7 @@ def probe(args, queue, rules, supplied):
             fence = supplied["fence"]
         else:
             failures["fence"] = "fence fact not supplied"
-    owner = supplied.get("owner_stop")
-    for row in rules.values():
-        if row["test"] == "owner_stop" and row["status"] != "RETIRED":
-            marker = row.get("params", {}).get("maintenance_marker")
-            if args.maintenance_marker is not None:
-                marker = args.maintenance_marker
-            if marker:
-                try:
-                    Path(marker).lstat()
-                    owner = True
-                except FileNotFoundError:
-                    if owner is None and Path(marker).parent.is_dir():
-                        owner = False
-                except OSError as err:
-                    failures["owner_stop"] = str(err)
-                    owner = None
+    maintenance = maintenance_active(args, rules, failures)
     receipts = []
     for root in args.receipt_root:
         try:
@@ -1478,10 +1610,15 @@ def probe(args, queue, rules, supplied):
     facts.update({key: supplied[key] for key in FACT_TYPES if key in supplied})
     facts.update(now_epoch=now, boot_epoch=boot, power=power, disk_free_gib=disk, labels_loaded=labels,
                  foreign_processes=foreign, fence=fence,
-                 receipts=receipts if args.receipt_root else None, owner_stop=owner,
+                 receipts=receipts if args.receipt_root else None, maintenance_active=maintenance,
                  errors=failures)
-    if args.ledger is not None:
-        bind_close_receipts(facts)
+    if facts["closes"]:
+        history = AttemptHistory(facts)
+        for close in facts["closes"]:
+            if not history.receipt_matches(close):
+                close["clean"] = None
+                if close["restore_proven"] is True:
+                    close["restore_proven"] = None
     if args.queue_commit is not None:
         facts["queue_commit"] = args.queue_commit
     if args.run_plans:
@@ -1553,7 +1690,7 @@ def create_parser():
             command.add_argument("--host-facts", type=Path, help="additional structural facts from the caller")
             command.add_argument("--ledger", type=Path, help="append-only structural launch and close events")
             command.add_argument("--queue-commit")
-            command.add_argument("--maintenance-marker", type=Path)
+            command.add_argument("--maintenance-marker", type=Path, help="additional stop marker to check")
             command.add_argument("--run-plans", action="store_true")
     command = commands.add_parser("report")
     command.add_argument("--ledger", type=Path, required=True)
@@ -1614,8 +1751,6 @@ def main(argv=None):
     validate_facts(args.facts, facts, errors, args.now)
     if args.ledger is not None and isinstance(facts, dict):
         overlay_ledger(facts, args.ledger, errors)
-        if not errors.items:
-            bind_close_receipts(facts)
     if errors.items:
         return errors.finish()
     now = args.now if args.now is not None else facts["now_epoch"]

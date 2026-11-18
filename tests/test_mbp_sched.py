@@ -44,6 +44,27 @@ def probe_child(argv, **kwargs):
     return subprocess.CompletedProcess(argv, 0, stdout=responses[Path(argv[0]).name], stderr="")
 
 
+def launch(entry_id, started, **updates):
+    return {"event": "LAUNCH", "entry_id": entry_id, "kit_sha256": None,
+            "t0_epoch": started, **updates}
+
+
+def ledger_close(attempt, ended, **updates):
+    readbacks = dict.fromkeys(sched.RESTORE_READBACKS, True)
+    return {
+        "kind": "diagnostic_filler", **attempt, "event": "CLOSE", "ended_epoch": ended,
+        "clean": True, "restore_readbacks": readbacks, "copy_verified": True, **updates,
+    }
+
+
+def receipt(attempt, ended, **updates):
+    identity = {key: attempt[key] for key in ("entry_id", "kit_sha256", "span_id") if key in attempt}
+    return sched.project_receipt({
+        **identity, "mock": False, "rc": 0, "started": {"epoch_s": attempt["t0_epoch"]},
+        "ended": {"epoch_s": ended}, **updates,
+    })
+
+
 class SchedulerTests(unittest.TestCase):
     def setUp(self):
         directory = tempfile.TemporaryDirectory()
@@ -55,6 +76,8 @@ class SchedulerTests(unittest.TestCase):
         self.ledger = self.directory / "ledger.jsonl"
         self.queue = json.loads(sched.DEFAULT_QUEUE.read_text())
         self.rules = json.loads(sched.DEFAULT_RULES.read_text())
+        owner = next(row for row in self.rules if row["test"] == "owner_stop")
+        owner["params"]["maintenance_marker"] = str(self.directory / "maintenance-marker")
         self.facts = json.loads((FIXTURES / "facts.json").read_text())
         self.facts["now_epoch"] = epoch(hour=14)
         self.f0 = self.queue["entries"][0]
@@ -76,6 +99,15 @@ class SchedulerTests(unittest.TestCase):
 
     def next(self, *options):
         return json.loads(self.call("next", *options)[0])
+
+    def snapshot_closes(self, *closes):
+        self.facts["closes"] = list(closes)
+        self.facts["launches"] = [
+            {"entry_id": row["entry_id"], "t0_epoch": row["t0_epoch"]} for row in reversed(closes)
+        ]
+        self.facts["receipts"] = [
+            receipt(launch(row["entry_id"], row["t0_epoch"]), row["ended_epoch"]) for row in closes
+        ]
 
     def explain(self, entry_id):
         rows = json.loads(self.call("explain", "--json")[0])["entries"]
@@ -106,7 +138,7 @@ class SchedulerTests(unittest.TestCase):
         for age in (0, 1, 1201):
             with self.subTest(age=age):
                 self.f0["close_gap_s"] = 1200
-                self.facts["closes"] = [close("f0-part-c", "diagnostic_filler", epoch(hour=14) - age)]
+                self.snapshot_closes(close("f0-part-c", "diagnostic_filler", epoch(hour=14) - age))
                 self.assertEqual(self.next()["entry"], "f0-part-c")
 
     def test_frozen_launch_window(self):
@@ -147,7 +179,7 @@ class SchedulerTests(unittest.TestCase):
     def test_day_caps_count_launch_and_close_once_and_bind_only_counted(self):
         self.add("previous", "counted", params={"group": "dev-mixed", "legs": 12}, done=True)
         self.facts["launches"] = [{"entry_id": "previous", "t0_epoch": epoch(hour=11)}]
-        self.facts["closes"] = [close("previous", "counted", epoch(hour=12), t0_epoch=epoch(hour=11))]
+        self.snapshot_closes(close("previous", "counted", epoch(hour=12), t0_epoch=epoch(hour=11)))
         params = {"group": "dev-mixed", "legs": 6, "date_caps": [{"group": "dev-mixed", "max": 12}]}
         self.add("span", "counted", ["registered-window"], params)
         self.add("filler", "product_filler", ["registered-window"], params)
@@ -157,8 +189,9 @@ class SchedulerTests(unittest.TestCase):
         self.assertEqual(self.next()["entry"], "span")
 
     def test_batch_clearance(self):
-        self.f0["done"] = True
         now = self.facts["now_epoch"]
+        self.facts["refusals"] = [{"entry_id": self.f0["id"], "queue_commit": self.facts["queue_commit"],
+                                   "epoch": now, "reason": "synthetic refusal"}]
         self.facts["boot_epoch"] = now + 2400 - 43248
         self.add("qual", "counted", ["registered-window"], {
             "batch_clear": True, "soak_end_s": 1950,
@@ -171,7 +204,7 @@ class SchedulerTests(unittest.TestCase):
         self.add("first", "counted", block="pair")
         self.add("second", "counted", block="pair")
         self.add("session", "v4_session", ["session-route"])
-        self.facts["closes"] = [close("first", "counted", epoch(hour=13))]
+        self.snapshot_closes(close("first", "counted", epoch(hour=13)))
         self.facts["ready"] = [{"entry_id": "session", "effective": True}]
         self.assertEqual(self.next()["entry"], "second")
 
@@ -190,8 +223,8 @@ class SchedulerTests(unittest.TestCase):
         self.facts["disk_free_gib"] = None
         self.assertIn("disk_free_gib", self.next()["detail"])
         self.facts["disk_free_gib"] = 120
-        self.facts["closes"] = [close("f0-part-c", "diagnostic_filler", epoch(hour=13),
-                                      restore_proven=None)]
+        self.snapshot_closes(close("f0-part-c", "diagnostic_filler", epoch(hour=13),
+                                   restore_proven=None))
         self.assertEqual(self.next()["decision"], "HALT")
 
     def test_foreign_process(self):
@@ -213,11 +246,11 @@ class SchedulerTests(unittest.TestCase):
     def test_copy_wait_is_bounded_and_old_debt_does_not_hold_counted(self):
         now = self.facts["now_epoch"]
         self.add("counted", "counted")
-        self.facts["closes"] = [close("old", "counted", now - 10)]
+        self.snapshot_closes(close("old", "counted", now - 10))
         self.facts["uncopied"] = [{"entry_id": "old", "kind": "counted", "ended_epoch": now - 10}]
         self.assertEqual(self.next()["until_epoch"], now + 590)
         self.assertEqual(self.next("--now", now + 590)["entry"], "counted")
-        self.facts["closes"][0]["ended_epoch"] = now - 86401
+        self.snapshot_closes(close("old", "counted", now - 86401))
         self.facts["uncopied"][0]["ended_epoch"] = now - 86401
         self.assertEqual(self.next()["entry"], "counted")
 
@@ -231,7 +264,7 @@ class SchedulerTests(unittest.TestCase):
         for name in ("hp-02", "f2-inst-02", "f2-stab-02", "f2-inst-01", "f2-stab-01"):
             self.add(name, "product_filler")
         self.assertEqual(self.next()["entry"], "f2-stab-02")
-        self.facts["closes"] = [close("f2-stab-02", "product_filler", epoch(hour=13))]
+        self.snapshot_closes(close("f2-stab-02", "product_filler", epoch(hour=13)))
         self.assertEqual(self.next()["entry"], "f2-inst-01")
         for entry in self.queue["entries"]:
             if entry["id"].startswith("f2-inst"):
@@ -286,19 +319,19 @@ class SchedulerTests(unittest.TestCase):
         self.assertEqual(self.call("next")[0], self.call("next")[0])
 
     def test_ledger_events_and_close_owed(self):
-        launch = {"event": "LAUNCH", "entry_id": "f0-part-c", "kit_sha256": None,
-                  "t0_epoch": epoch(hour=13)}
-        self.ledger.write_text(json.dumps(launch) + "\n", encoding="utf-8")
+        attempt = launch("f0-part-c", epoch(hour=13))
+        self.ledger.write_text(json.dumps(attempt) + "\n", encoding="utf-8")
         self.assertEqual(self.next("--ledger", self.ledger),
                          {"decision": "CLOSE_OWED", "entry": "f0-part-c"})
         record = {"event": "CLOSE", **close("f0-part-c", "diagnostic_filler", epoch(hour=14),
-                                           t0_epoch=launch["t0_epoch"], kit_sha256=None,
+                                           t0_epoch=attempt["t0_epoch"], kit_sha256=None,
                                            copy_verified=True)}
         with self.ledger.open("a", encoding="utf-8") as stream:
             stream.write(json.dumps(record) + "\n")
         self.assertEqual(self.next("--ledger", self.ledger)["rule"], "host-clean")
         record["restore_readbacks"] = dict.fromkeys(sched.RESTORE_READBACKS, True)
-        self.ledger.write_text("".join(json.dumps(row) + "\n" for row in (launch, record)),
+        self.facts["receipts"] = [receipt(attempt, record["ended_epoch"])]
+        self.ledger.write_text("".join(json.dumps(row) + "\n" for row in (attempt, record)),
                                encoding="utf-8")
         self.assertEqual(self.next("--ledger", self.ledger)["entry"], "f0-part-c")
 
@@ -325,7 +358,7 @@ class SchedulerTests(unittest.TestCase):
         recorded = close("f0-part-c", "diagnostic_filler", now - 1)
         recorded.update(event="CLOSE", kit_sha256=None, copy_verified=True,
                         restore_readbacks=dict.fromkeys(sched.RESTORE_READBACKS, True))
-        self.ledger.write_text(json.dumps(recorded) + "\n", encoding="utf-8")
+        self.write_events(launch(recorded["entry_id"], recorded["t0_epoch"]), recorded)
         receipt.update(entry_id=recorded["entry_id"], mock=False,
                        started={"epoch_s": recorded["t0_epoch"]},
                        ended={"epoch_s": recorded["ended_epoch"]})
@@ -379,8 +412,8 @@ class SchedulerTests(unittest.TestCase):
         self.assertEqual(self.explain("affected")["rule"], "not-refused")
         self.assertEqual(self.explain("counted")["rule"], "contaminated-redos")
         self.assertEqual(self.next()["entry"], "f0-part-c")
-        self.facts["closes"] = [close("f0-part-c", "diagnostic_filler", now - 1,
-                                      load_redos=0, load_flag=False)]
+        self.snapshot_closes(close("f0-part-c", "diagnostic_filler", now - 1,
+                                   load_redos=0, load_flag=False))
         self.assertEqual(self.next()["entry"], "counted")
 
     def test_redates_missed_counted_window_by_calendar_date(self):
@@ -397,6 +430,163 @@ class SchedulerTests(unittest.TestCase):
         now = self.facts["now_epoch"]
         self.assertEqual(self.next("--caller-pid", 99)["argv"],
                          ["example", f"--deadline={now + 12210}", f"/synthetic root/f0-part-c-{now}", "99"])
+
+    def write_events(self, *events):
+        self.ledger.write_text("".join(json.dumps(row) + "\n" for row in events), encoding="utf-8")
+
+    def test_latest_attempt_by_append_order_survives_clock_rollback(self):
+        now = self.facts["now_epoch"]
+        a, b = launch("a", now - 100), launch("b", now - 200)
+        ac = ledger_close(a, now - 99)
+        self.facts["receipts"] = [receipt(a, now - 99), receipt(b, now - 199)]
+        self.write_events(a, ac, b)
+        self.assertEqual(self.next("--ledger", self.ledger), {"decision": "CLOSE_OWED", "entry": "b"})
+        bc = ledger_close(b, now - 199, restore_proven=False)
+        self.write_events(a, ac, b, bc)
+        decision = self.next("--ledger", self.ledger)
+        self.assertEqual((decision["decision"], decision["rule"]), ("HALT", "host-clean"))
+        self.assertIn("b", decision["detail"])
+
+    def test_reused_legacy_timestamp_does_not_borrow_first_attempt_close(self):
+        attempt = launch("same-entry", self.facts["now_epoch"] - 100)
+        self.facts["receipts"] = [receipt(attempt, attempt["t0_epoch"] + 1)]
+        self.write_events(attempt, ledger_close(attempt, attempt["t0_epoch"] + 1), attempt)
+        self.assertEqual(self.next("--ledger", self.ledger)["decision"], "CLOSE_OWED")
+        a, b = ({**attempt, "sequence": sequence} for sequence in (1, 2))
+        self.write_events(a, ledger_close(a, a["t0_epoch"] + 1), b, ledger_close(b, b["t0_epoch"] + 2))
+        self.assertEqual(self.next("--ledger", self.ledger)["rule"], "host-clean")
+
+    def test_sequence_takes_precedence_and_monotonic_orders_within_the_latest_boot(self):
+        now = self.facts["now_epoch"]
+        for a_fields, b_fields in (
+                ({"sequence": 4}, {"sequence": 5}),
+                ({"boot_id": "boot", "monotonic_ns": 4}, {"boot_id": "boot", "monotonic_ns": 5}),
+                ({"boot_id": "old-z", "boot_order": 4}, {"boot_id": "new-a", "boot_order": 5}),
+                ({"boot_order": 4}, {"boot_order": 5})):
+            with self.subTest(a_fields=a_fields, b_fields=b_fields):
+                a = launch("a", now - 100, span_id="span-a", **a_fields)
+                b = launch("b", now - 200, span_id="span-b", **b_fields)
+                self.write_events(b, a, ledger_close(a, now - 99))
+                self.facts["receipts"] = [receipt(a, now - 99)]
+                result = self.next("--ledger", self.ledger)
+                self.assertEqual((result["decision"], result["entry"]), ("CLOSE_OWED", "span-b"))
+
+    def test_latest_attempt_requires_its_own_receipt_in_both_input_paths(self):
+        start = self.facts["now_epoch"] - 100
+        a = launch("same-kit", start, span_id="span-a", sequence=1)
+        b = launch("same-kit", start, span_id="span-b", sequence=2)
+        ac, bc = ledger_close(a, start + 2), ledger_close(b, start + 1)
+        self.write_events(a, ac, b, bc)
+        self.facts["launches"] = [{k: v for k, v in row.items() if k != "event"} for row in (a, b)]
+        self.facts["closes"] = [
+            {**{k: v for k, v in row.items() if k not in ("event", "restore_readbacks")}, "restore_proven": True}
+            for row in (bc, ac)
+        ]
+        for receipts in (None, [], [receipt(a, start + 2)]):
+            self.facts["receipts"] = receipts
+            for options in ((), ("--ledger", self.ledger)):
+                with self.subTest(receipts=receipts, options=options):
+                    decision = self.next(*options)
+                    self.assertEqual((decision["decision"], decision["rule"]), ("HALT", "host-clean"))
+                    self.assertIn("span-b", decision["detail"])
+        self.facts["receipts"] = [receipt(a, start + 2), receipt(b, start + 1)]
+        self.assertEqual(self.next("--ledger", self.ledger)["decision"], "LAUNCH")
+        self.facts["launches"] = []
+        result = self.next()
+        self.assertEqual(result["rule"], "host-clean")
+        self.assertIn("launch attempt history", result["detail"])
+
+    def test_subsecond_close_comparison(self):
+        second = self.facts["now_epoch"]
+        attempt = launch("a", second - 1.25, span_id="span-a", sequence=1)
+        self.write_events(attempt, ledger_close(attempt, second + 0.125))
+        self.facts["receipts"] = [receipt(attempt, second + 0.125)]
+        self.assertEqual(self.next("--ledger", self.ledger, "--now", second + 0.750)["decision"], "LAUNCH")
+        decision = self.next("--ledger", self.ledger, "--now", second + 0.100)
+        self.assertEqual(decision["rule"], "host-clean")
+
+    def test_date_cap_uses_matching_close_metadata_when_launch_omits_legs(self):
+        now = self.facts["now_epoch"]
+        attempt = launch("prior-dev", now - 100, kind="counted", group="dev-mixed")
+        self.write_events(attempt, ledger_close(attempt, now - 99, legs=12))
+        self.facts["receipts"] = [receipt(attempt, now - 99)]
+        self.add("next-dev", "counted", ["registered-window"], {
+            "group": "dev-mixed", "legs": 6, "date_caps": [{"group": "dev-mixed", "max": 12}],
+        })
+        self.assertEqual(self.next("--ledger", self.ledger)["entry"], "f0-part-c")
+        self.write_events({**attempt, "legs": 1}, ledger_close(attempt, now - 99, legs=12))
+        self.assertEqual(self.next("--ledger", self.ledger)["entry"], "f0-part-c")
+
+    def test_counted_date_constraints_require_a_live_window_rule(self):
+        self.add("dev-tomorrow", "counted", params={
+            "window": {"earliest_epoch": epoch(19), "latest_epoch": epoch(19, 23, 59, 59)},
+        })
+        for command in ("validate", "next"):
+            self.assertIn(": UNBOUND_DATE_RULE:", self.call(command, status=2)[1])
+
+    def test_started_filler_block_does_not_displace_ready_counted_or_v4(self):
+        self.facts["now_epoch"] = epoch(hour=23)
+        started = self.facts["now_epoch"] - 100
+        a = launch("fill-1", started)
+        self.write_events(a, ledger_close(a, started + 1, kind="product_filler"),
+                          {"event": "READY", "entry_id": "ready", "effective": True})
+        self.facts["receipts"] = [receipt(a, started + 1)]
+        self.add("fill-1", "product_filler", block="fill-pair")
+        self.add("fill-2", "product_filler", block="fill-pair")
+        candidate = self.add("ready", "counted", ["registered-window", "session-route"], {
+            "window": {"earliest_epoch": epoch(18), "latest_epoch": epoch(18, 23, 59, 59)},
+        })
+        for kind in ("counted", "v4_session"):
+            with self.subTest(kind=kind):
+                candidate["kind"] = kind
+                self.assertEqual(self.next("--ledger", self.ledger)["entry"], "ready")
+
+    def test_registered_maintenance_marker_cannot_be_overridden_or_clear_unknown_stop(self):
+        marker = self.directory / "registered-marker"
+        rule = next(row for row in self.rules if row["test"] == "owner_stop")
+        rule["params"]["maintenance_marker"] = str(marker)
+        out = self.directory / "probe.json"
+        extra = self.directory / "absent-alternate"
+        self.facts.pop("owner_stop")
+        with patch.object(sched.subprocess, "run", side_effect=probe_child), patch.object(
+                sched.time, "time", return_value=self.facts["now_epoch"]):
+            self.call("probe", "--out", out, "--self-pid", 10, "--host-facts", self.facts_path)
+            old_facts = self.facts
+            self.facts = json.loads(out.read_text())
+            self.assertIsNone(self.facts["owner_stop"])
+            self.assertEqual(self.next()["rule"], "owner-stop")
+            self.facts = old_facts
+            marker.touch()
+            self.facts["owner_stop"] = False
+            self.call("probe", "--out", out, "--self-pid", 10, "--host-facts", self.facts_path,
+                      "--maintenance-marker", extra)
+        self.facts = json.loads(out.read_text())
+        decision = self.next()
+        self.assertEqual((decision["decision"], decision["rule"]), ("WAIT", "owner-stop"))
+
+    def test_false_or_unknown_ac_stops_launch(self):
+        for power in ({"ac": False, "charging": False}, {"ac": None}, None):
+            with self.subTest(power=power):
+                self.facts["power"] = power
+                self.assertEqual(self.next()["rule"], "host-power")
+
+    def test_active_repeating_filler_required(self):
+        for changes in ({"kind": "maintenance"}, {"done": True}):
+            with self.subTest(changes=changes):
+                self.queue["entries"] = [{**self.f0, **changes}]
+                self.assertIn(": NO_STANDING_FILLER:", self.call("validate", status=2)[1])
+
+    def test_known_calendar_opening_beyond_ten_days(self):
+        opening = epoch(30)
+        self.add("dev-later", "counted", ["registered-window"], {
+            "window": {"earliest_epoch": opening, "latest_epoch": opening + 36000},
+        })
+        self.facts["refusals"] = [{
+            "entry_id": "f0-part-c", "queue_commit": self.facts["queue_commit"],
+            "epoch": self.facts["now_epoch"], "reason": "synthetic refusal",
+        }]
+        result = self.next()
+        self.assertEqual((result["decision"], result.get("until_epoch")), ("WAIT", opening))
 
 
 if __name__ == "__main__":
