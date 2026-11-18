@@ -1012,6 +1012,107 @@ class R0SamplerAdmissionSpec(unittest.TestCase):
                 self.assertEqual([flag["interval"]["end_monotonic_s"] for flag in guard.contention_flags], [45])
                 self.assertIn("contention_flag", guard.receipts[-1])
 
+    def test_execute_refuses_when_background_launchagent_directory_is_unreadable(self):
+        import errno
+        import os
+        import threading
+
+        agents = self.default_parent / "Library" / "LaunchAgents"
+        agents.mkdir(parents=True)
+        plist = agents / "com.joulewise.night.future.plist"
+        scandir = os.scandir
+        for denied in (False, True):
+            with self.subTest(denied=denied), tempfile.TemporaryDirectory() as tmp:
+                guard, clock, _, _ = self.admission()
+                guard.SNAPSHOT_CADENCE_S = 0.001
+                ready = threading.Event()
+                sampled = threading.Event()
+                cycle = guard._background_snapshot
+
+                def watch_cycle():
+                    if ready.wait(3):
+                        cycle()
+                        sampled.set()
+
+                def fixture_scandir(path):
+                    if denied and ready.is_set() and Path(path) == agents:
+                        raise PermissionError(errno.EACCES, "fixture LaunchAgents listing denied")
+                    return scandir(path)
+
+                def host():
+                    plist.write_text("synthetic installed future window")
+                    clock.now = 45
+                    ready.set()
+                    self.assertTrue(sampled.wait(3))
+                    return {"status": "pass"}
+
+                guard._background_snapshot = watch_cycle
+                output = Path(tmp)
+                with patch("joulewise.align.r0_host.os.scandir", side_effect=fixture_scandir):
+                    self.execute_host(guard, host, output)
+                plist.unlink()
+                published = json.loads((output / "report.json").read_text())
+                self.assertEqual(published["status"], "refused")
+                self.assertEqual(published["checks"][0]["status"], "refused")
+                reason = "LaunchAgent census indeterminate" if denied else "measurement window armed"
+                self.assertIn(reason, published["refusal"])
+                self.assertEqual([entry for receipt in published["census"]
+                                  for entry in receipt.get("background_census", ())], [])
+
+    def test_launchagent_enumeration_errors_after_presence_is_observed_refuse_at_admission(self):
+        from contextlib import contextmanager
+        import errno
+        import os
+
+        agents = self.default_parent / "Library" / "LaunchAgents"
+        agents.mkdir(parents=True)
+        scandir = os.scandir
+        for error in (FileNotFoundError(errno.ENOENT, "fixture directory vanished"),
+                      OSError(errno.EIO, "fixture enumeration failed")):
+            for partial in (False, True):
+                with self.subTest(error=error.errno, partial=partial):
+                    guard, _, _, launchctl_at = self.admission()
+
+                    def entries():
+                        yield SimpleNamespace(name="unrelated.plist")
+                        raise error
+
+                    @contextmanager
+                    def partial_listing():
+                        yield entries()
+
+                    def fixture_scandir(path):
+                        if Path(path) != agents:
+                            return scandir(path)
+                        if partial:
+                            return partial_listing()
+                        raise error
+
+                    with patch("joulewise.align.r0_host.os.scandir", side_effect=fixture_scandir):
+                        with self.assertRaisesRegex(Refused, "LaunchAgent census indeterminate"):
+                            guard.check(force=True)
+                    self.assertEqual(launchctl_at, [])
+                    self.assertNotIn("installed_night_agents", guard.receipts[-1])
+
+    def test_execute_retains_sampler_refusal_and_contention_when_host_check_fails(self):
+        guard, _, advance, _ = self.admission()
+        with tempfile.TemporaryDirectory() as tmp:
+            output = Path(tmp)
+
+            def host():
+                advance(45)
+                advance(60, census_ok=False)
+                raise RuntimeError("injected host failure")
+
+            self.execute_host(guard, host, output)
+            published = json.loads((output / "report.json").read_text())
+        row = published["checks"][0]
+        self.assertEqual((published["status"], row["status"]), ("fail", "fail"))
+        self.assertEqual(row["error"], "RuntimeError: injected host failure")
+        self.assertIn("LaunchAgent census indeterminate", published.get("refusal", ""))
+        self.assertEqual(published["contention"]["guard_flags"], 1)
+        self.assertEqual([flag["interval"]["end_monotonic_s"] for flag in row["contention_flags"]], [45])
+
 
 class R0QuietIntervalTest(unittest.TestCase):
     # CPU fixtures derive from the 0.05 CPU-s/s bar and 30 s interval:
