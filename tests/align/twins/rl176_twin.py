@@ -2,8 +2,10 @@
 
 from fractions import Fraction
 from itertools import product
-from math import sqrt
+from math import comb, sqrt
 from statistics import mean
+
+from joulewise.align.apple.rl176 import S_SUPERIORITY_ALPHA
 
 
 def exact_tails(populations, assigned):
@@ -97,3 +99,16 @@ def q_by_second(episode, watts, ns):
                   and all(not (c.start_ns <= t < c.end_ns) for c in tools))
     q = sum(charges(t) for t in times if t >= first)
     return q, total, prefill
+
+
+def complete_strata_signature(wins, strata):
+    """Count bounded compositions of the null support by inclusion-exclusion."""
+    misses = 7 * strata - wins
+    count = sum((-1) ** j * comb(strata, j) * comb(misses - 8 * j + strata, strata)
+                for j in range(min(strata, misses // 8) + 1))
+    p = Fraction(count, 8 ** strata)
+    return p, p <= S_SUPERIORITY_ALPHA
+
+
+def decode_length_ratio(instructed, benign):
+    return mean(instructed) / mean(benign)

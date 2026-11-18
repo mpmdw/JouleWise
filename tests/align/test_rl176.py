@@ -14,7 +14,9 @@ from unittest.mock import Mock, patch
 from joulewise.align.apple import rl176 as r, rl176_phases as phases, v4_desk_seal as seal
 from joulewise.align.energy_residual import TurnRow
 from joulewise.align.records import ClockMapping, Episode, PowerTrace, ToolCall, Turn
-from tests.align.twins.rl176_twin import exact_tails, held_decode_score, held_prefill_score, q_by_second
+from tests.align.twins.rl176_twin import (
+    complete_strata_signature, decode_length_ratio, exact_tails, held_decode_score, held_prefill_score, q_by_second,
+)
 
 NS = phases.NS
 
@@ -279,6 +281,63 @@ class RL177Tests(unittest.TestCase):
 
 
 
+class RL178Tests(unittest.TestCase):
+    def test_superiority_boundary_in_22_complete_untied_strata(self):
+        self.assertEqual(r.S_SUPERIORITY_ALPHA, Fraction(".0125"))
+        windows = [f"C{i}" for i in range(1, 9)] + [f"T{i}" for i in range(1, 4)]
+        for wins, signature in ((101, False), (102, True)):
+            ranks = [7] * 14 + [wins - 98] + [0] * 7
+            strata = [(windows[i // 2], j + .5, list(range(1, 8))) for i, j in enumerate(ranks)]
+            out = r._s_rank(strata, decide=True)
+            p, twin_signature = complete_strata_signature(wins, 22)
+            self.assertEqual(out["strata"], 22)
+            self.assertEqual(out["windows"], 11)
+            self.assertEqual(out["p_sup"], float(p))
+            self.assertEqual(twin_signature, signature)
+            self.assertEqual("S SIGNATURE" in out["words"], signature)
+
+    def test_fifth_print_uses_means_from_entering_s_strata_only(self):
+        bank, spam = r.PAIRS
+        roster = []
+        fixture_scores = {}
+
+        def groups(extra):
+            groups = {}
+            for window, pair, instructed, benign in (
+                ("C1", bank, 78, [30, 100]), ("C2", bank, 182 + extra, [170, None]),
+                ("C3", bank, None, [20_000]), ("T1", spam, 13, [10]), ("T2", spam, 30_000, [None]),
+            ):
+                observations = []
+                for index, tokens in enumerate((instructed, *benign)):
+                    e = episode(f"{window}-{pair}-{index}", pair=pair,
+                                condition="sabotage" if index == 0 else "benign")
+                    m = r.FreshMember(window, e, True)
+                    roster.append(m)
+                    observations.append(r._Observation(m, None, {"decode_tokens": tokens or 20_000},
+                                                       (), {}, ()))
+                    if tokens is not None:
+                        fixture_scores[e.episode_id] = tokens
+                groups[(window, pair)] = observations
+            return groups
+
+        def scores(group):
+            return {m.episode.episode_id: fixture_scores[m.episode.episode_id] for m in group
+                    if m.episode.episode_id in fixture_scores}
+
+        for extra in (0, 2):
+            roster.clear()
+            fixture_scores.clear()
+            with patch.object(r, "_decode_scores", side_effect=scores):
+                out = r._s_release(groups(extra), roster)["S"]
+            ratios = out["attrition"]["decode_length_ratios"]
+            self.assertEqual(out["strata"], 3)
+            self.assertEqual(ratios[bank]["mean_ratio"], decode_length_ratio([78, 182 + extra], [30, 100, 170]))
+            self.assertEqual(ratios[bank]["above_30_percent"], extra > 0)
+            self.assertEqual(ratios[spam]["percent_longer"], 30)
+            self.assertFalse(ratios[spam]["above_30_percent"])
+            self.assertEqual(out["words"], ["S INCONCLUSIVE"])
+
+
 class PhaseTests(unittest.TestCase):
     def test_phase_closure_package_and_native_event_resolution(self):
         e = episode("shifted", level=2, shift_ns=413_000_000)
@@ -382,6 +441,8 @@ class ReleaseTests(unittest.TestCase):
             self.assertGreater(out["S"]["strata"], 0)
             self.assertIn("words", out["S"])
             self.assertEqual(out["S"]["score"], "decode_only_reference_state_rows")
+            self.assertEqual(out["S"]["superiority_alpha"], float(r.S_SUPERIORITY_ALPHA))
+            self.assertIn("decode_length_ratios", out["S"]["attrition"])
             self.assertGreater(out["S_pf"]["strata"], 0)
             self.assertEqual(set(out["S_pf"]), {"strata", "theta", "p_sup", "p_inf"})
             self.assertNotIn("word", q["Q_total"][r.PAIRS[0]])
