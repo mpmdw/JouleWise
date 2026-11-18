@@ -12,6 +12,13 @@ right after item 167 below. [`CANONICAL.md`](CANONICAL.md) is the tool map:
 the one current tool or document per job. [`docs/ARCHIVE.md`](docs/ARCHIVE.md)
 says how to get back files removed from `main` in the 2026-11-06 prune.
 
+**2026-11-18 dated transfer draft handoff [AGENT].** RL-181's 20 optional
+date places bind one six-leg span each, outside the 132. Every draft is
+held for effective freeze 2 and scientific registration. Pinned kit,
+queue and plan validation passed, as did one synthetic span. The lead
+takes the final-window midnight cutoff and transfer v2 dispatch to Fable.
+See the [dated transfer run report](docs/run_reports/2026-11-18-dated-transfer-drafts.md).
+
 **2026-11-17 qualification draft handoff [AGENT].** The six unissued
 items bind the PR #812 delta-audit pin
 `ab32a6c915a9a78f92554a89c5d0eb93333b7a39` and its re-pinned kits and queues.

@@ -3,6 +3,16 @@
 This is the live queue for JouleWise work. When the user gives a new task, first
 triage it here instead of assuming it should happen immediately.
 
+## 2026-11-18 RL-181 dated transfer draft intake
+
+P1 [AGENT], user-selected draft build on the audit branch. One span per
+eligible date place, with up to 20 places and 120 legs in its own budget.
+The draft entries are held for effective freeze 2, scientific registration
+and dated lead issue. The transfer look remains a draft for Fable's cold
+pass. The lead owns the two unresolved spec points. No live queue or
+phase exit gate changed.
+[Run report](docs/run_reports/2026-11-18-dated-transfer-drafts.md).
+
 ## 2026-11-17 qualification t0 guard successor
 
 P1 [AGENT], user-selected Tier 2 to clear the PR #812 delta-audit blockers

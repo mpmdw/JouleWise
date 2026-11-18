@@ -1,0 +1,590 @@
+{
+  "status": "draft",
+  "issue_gate": "DRAFT: hold for effective freeze 2, registered manifest and dated lead issue",
+  "timezone": "America/Los_Angeles",
+  "max_dates": 20,
+  "max_legs": 120,
+  "runner_pin": "ab32a6c915a9a78f92554a89c5d0eb93333b7a39",
+  "places": [
+    {
+      "date_place": 1,
+      "kit_id": "cl-transfer-01",
+      "span_id": "cl-transfer-01-s01",
+      "kit": {
+        "path": "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/dated-transfer/kits/cl-transfer-01.v1.1.json",
+        "sha256": "62188932ab4011804d72bdce2d65c144e748f7ac62e45f0ebf4b747a47dddd9f"
+      },
+      "queue": {
+        "path": "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/dated-transfer/queues/cl-transfer-01.queue.json",
+        "sha256": "710d7b3a22d25955610baf69c3127b08f24083aee7e79547ff56c354f49a2ed3"
+      },
+      "legs": [
+        "L001",
+        "L002",
+        "L003",
+        "L004",
+        "L005",
+        "L006"
+      ],
+      "master_seed": 2026111806,
+      "pair_caps": [
+        4096,
+        3724
+      ],
+      "expected_s": 12310,
+      "worst_case_s": 24750,
+      "launch_minimum_s": 27260
+    },
+    {
+      "date_place": 2,
+      "kit_id": "cl-transfer-02",
+      "span_id": "cl-transfer-02-s01",
+      "kit": {
+        "path": "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/dated-transfer/kits/cl-transfer-02.v1.1.json",
+        "sha256": "0d7f417fb5361c39265ac95ac27d16923545e35353345c2f94aec4c3fb57fa6f"
+      },
+      "queue": {
+        "path": "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/dated-transfer/queues/cl-transfer-02.queue.json",
+        "sha256": "14b244f93e742dd6caf20be3ddd9fe5d0d951a89b63669d1fbfce48edc4fcc1b"
+      },
+      "legs": [
+        "L001",
+        "L002",
+        "L003",
+        "L004",
+        "L005",
+        "L006"
+      ],
+      "master_seed": 2026111800,
+      "pair_caps": [
+        3151,
+        4096
+      ],
+      "expected_s": 12262,
+      "worst_case_s": 24750,
+      "launch_minimum_s": 27260
+    },
+    {
+      "date_place": 3,
+      "kit_id": "cl-transfer-03",
+      "span_id": "cl-transfer-03-s01",
+      "kit": {
+        "path": "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/dated-transfer/kits/cl-transfer-03.v1.1.json",
+        "sha256": "e29bd9fe49ec45256c1cf304c91d16d2afdfb477a661f3a8c691c6414c28b736"
+      },
+      "queue": {
+        "path": "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/dated-transfer/queues/cl-transfer-03.queue.json",
+        "sha256": "5ab5a2f5d6aa430778dc42306a584bdc68bdc75d170e0ebef132da0c3420d24a"
+      },
+      "legs": [
+        "L001",
+        "L002",
+        "L003",
+        "L004",
+        "L005",
+        "L006"
+      ],
+      "master_seed": 2026111804,
+      "pair_caps": [
+        3724,
+        4096
+      ],
+      "expected_s": 12310,
+      "worst_case_s": 24750,
+      "launch_minimum_s": 27260
+    },
+    {
+      "date_place": 4,
+      "kit_id": "cl-transfer-04",
+      "span_id": "cl-transfer-04-s01",
+      "kit": {
+        "path": "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/dated-transfer/kits/cl-transfer-04.v1.1.json",
+        "sha256": "8733acf69434d8b6d63abf9aad686a8e7ddcd6b85b496f85bdd954fc5105c244"
+      },
+      "queue": {
+        "path": "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/dated-transfer/queues/cl-transfer-04.queue.json",
+        "sha256": "8b21dfb7c72097f61d3d23195e26635ef0044854e9feed5fe19eae2cf06eaf17"
+      },
+      "legs": [
+        "L001",
+        "L002",
+        "L003",
+        "L004",
+        "L005",
+        "L006"
+      ],
+      "master_seed": 2026111801,
+      "pair_caps": [
+        4096,
+        3151
+      ],
+      "expected_s": 12262,
+      "worst_case_s": 24750,
+      "launch_minimum_s": 27260
+    },
+    {
+      "date_place": 5,
+      "kit_id": "cl-transfer-05",
+      "span_id": "cl-transfer-05-s01",
+      "kit": {
+        "path": "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/dated-transfer/kits/cl-transfer-05.v1.1.json",
+        "sha256": "9ace0db032b332a3a350739609e9ba421b2ca5bd84e214ff0af502de1055c20b"
+      },
+      "queue": {
+        "path": "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/dated-transfer/queues/cl-transfer-05.queue.json",
+        "sha256": "290cb879a6628690be488fbb41553826b92cdf84269f52339fc6b542dfece5e5"
+      },
+      "legs": [
+        "L001",
+        "L002",
+        "L003",
+        "L004",
+        "L005",
+        "L006"
+      ],
+      "master_seed": 2026111802,
+      "pair_caps": [
+        4096,
+        3724
+      ],
+      "expected_s": 12310,
+      "worst_case_s": 24750,
+      "launch_minimum_s": 27260
+    },
+    {
+      "date_place": 6,
+      "kit_id": "cl-transfer-06",
+      "span_id": "cl-transfer-06-s01",
+      "kit": {
+        "path": "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/dated-transfer/kits/cl-transfer-06.v1.1.json",
+        "sha256": "ce150a91217d795ec8d42d6553734c199ab1ef7c30e2fee129576a343cb4c344"
+      },
+      "queue": {
+        "path": "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/dated-transfer/queues/cl-transfer-06.queue.json",
+        "sha256": "564e2341f5bb9eb0c3b50f44a9073fbb9b161df86f49fc271c166c708ac4b7e9"
+      },
+      "legs": [
+        "L001",
+        "L002",
+        "L003",
+        "L004",
+        "L005",
+        "L006"
+      ],
+      "master_seed": 2026111805,
+      "pair_caps": [
+        3151,
+        4096
+      ],
+      "expected_s": 12262,
+      "worst_case_s": 24750,
+      "launch_minimum_s": 27260
+    },
+    {
+      "date_place": 7,
+      "kit_id": "cl-transfer-07",
+      "span_id": "cl-transfer-07-s01",
+      "kit": {
+        "path": "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/dated-transfer/kits/cl-transfer-07.v1.1.json",
+        "sha256": "0c65124b3175428dbd37763951b3927a52e03b9e657c4333a5e3e86bfe792199"
+      },
+      "queue": {
+        "path": "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/dated-transfer/queues/cl-transfer-07.queue.json",
+        "sha256": "b17de779263f2d0de89fe11dfca4f87d08c8300c48195756f2b3354d7e418d24"
+      },
+      "legs": [
+        "L001",
+        "L002",
+        "L003",
+        "L004",
+        "L005",
+        "L006"
+      ],
+      "master_seed": 2026111803,
+      "pair_caps": [
+        3724,
+        4096
+      ],
+      "expected_s": 12310,
+      "worst_case_s": 24750,
+      "launch_minimum_s": 27260
+    },
+    {
+      "date_place": 8,
+      "kit_id": "cl-transfer-08",
+      "span_id": "cl-transfer-08-s01",
+      "kit": {
+        "path": "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/dated-transfer/kits/cl-transfer-08.v1.1.json",
+        "sha256": "aca60a0c0b94f8a7f642e0bf338b0a1fe539867c36ab6aab0b6296be4a31cc8c"
+      },
+      "queue": {
+        "path": "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/dated-transfer/queues/cl-transfer-08.queue.json",
+        "sha256": "e6f8143e9624fcd8fc72d6a519857b3b4f464d39c2feacbbff62f2325fe303fb"
+      },
+      "legs": [
+        "L001",
+        "L002",
+        "L003",
+        "L004",
+        "L005",
+        "L006"
+      ],
+      "master_seed": 2026111807,
+      "pair_caps": [
+        4096,
+        3151
+      ],
+      "expected_s": 12262,
+      "worst_case_s": 24750,
+      "launch_minimum_s": 27260
+    },
+    {
+      "date_place": 9,
+      "kit_id": "cl-transfer-09",
+      "span_id": "cl-transfer-09-s01",
+      "kit": {
+        "path": "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/dated-transfer/kits/cl-transfer-09.v1.1.json",
+        "sha256": "99a78db14f7d798b9378399c2bc6397bb415242fe692c260842eed7cec7969d3"
+      },
+      "queue": {
+        "path": "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/dated-transfer/queues/cl-transfer-09.queue.json",
+        "sha256": "09a3292d415bd00e843e23b947529c566fdaf1fd924a6df7f243eb88998620a9"
+      },
+      "legs": [
+        "L001",
+        "L002",
+        "L003",
+        "L004",
+        "L005",
+        "L006"
+      ],
+      "master_seed": 2026111811,
+      "pair_caps": [
+        4096,
+        3724
+      ],
+      "expected_s": 12310,
+      "worst_case_s": 24750,
+      "launch_minimum_s": 27260
+    },
+    {
+      "date_place": 10,
+      "kit_id": "cl-transfer-10",
+      "span_id": "cl-transfer-10-s01",
+      "kit": {
+        "path": "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/dated-transfer/kits/cl-transfer-10.v1.1.json",
+        "sha256": "a00de3a0db0f90f366a6c71e0c44a0c2d3bd4f5d26b0fcb3a9e09dc9ddb4b09e"
+      },
+      "queue": {
+        "path": "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/dated-transfer/queues/cl-transfer-10.queue.json",
+        "sha256": "f76bdfaba4142cd0557ab1d505a45edf392d2d58ecf330ca67e53c6ed5e11582"
+      },
+      "legs": [
+        "L001",
+        "L002",
+        "L003",
+        "L004",
+        "L005",
+        "L006"
+      ],
+      "master_seed": 2026111810,
+      "pair_caps": [
+        3151,
+        4096
+      ],
+      "expected_s": 12262,
+      "worst_case_s": 24750,
+      "launch_minimum_s": 27260
+    },
+    {
+      "date_place": 11,
+      "kit_id": "cl-transfer-11",
+      "span_id": "cl-transfer-11-s01",
+      "kit": {
+        "path": "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/dated-transfer/kits/cl-transfer-11.v1.1.json",
+        "sha256": "7bdc83c142a397bc16b0f0750335262d9e34156b1ef4d91dd67ed17317fe7a77"
+      },
+      "queue": {
+        "path": "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/dated-transfer/queues/cl-transfer-11.queue.json",
+        "sha256": "0355b75ec771d6aec64b8b51a248c0070d4cb3620e26135e77873daaa121bd1e"
+      },
+      "legs": [
+        "L001",
+        "L002",
+        "L003",
+        "L004",
+        "L005",
+        "L006"
+      ],
+      "master_seed": 2026111815,
+      "pair_caps": [
+        3724,
+        4096
+      ],
+      "expected_s": 12310,
+      "worst_case_s": 24750,
+      "launch_minimum_s": 27260
+    },
+    {
+      "date_place": 12,
+      "kit_id": "cl-transfer-12",
+      "span_id": "cl-transfer-12-s01",
+      "kit": {
+        "path": "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/dated-transfer/kits/cl-transfer-12.v1.1.json",
+        "sha256": "b9b7e552a343b1acc8a44cc5eaae4dc586d32e6e8d385df54c10ad5d009259cb"
+      },
+      "queue": {
+        "path": "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/dated-transfer/queues/cl-transfer-12.queue.json",
+        "sha256": "e9ef2d490836e75377507c1ad6cebb38b7a801ced948b1f460b0ec8ff456015e"
+      },
+      "legs": [
+        "L001",
+        "L002",
+        "L003",
+        "L004",
+        "L005",
+        "L006"
+      ],
+      "master_seed": 2026111808,
+      "pair_caps": [
+        4096,
+        3151
+      ],
+      "expected_s": 12262,
+      "worst_case_s": 24750,
+      "launch_minimum_s": 27260
+    },
+    {
+      "date_place": 13,
+      "kit_id": "cl-transfer-13",
+      "span_id": "cl-transfer-13-s01",
+      "kit": {
+        "path": "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/dated-transfer/kits/cl-transfer-13.v1.1.json",
+        "sha256": "79162f5dd05639f6f29ce94ee8df428f42898f467cea4cc70b35351356ba8a7b"
+      },
+      "queue": {
+        "path": "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/dated-transfer/queues/cl-transfer-13.queue.json",
+        "sha256": "3407a84d628106a9b6643937796086c6d0bea0cf22ea528bc9c449be373e9780"
+      },
+      "legs": [
+        "L001",
+        "L002",
+        "L003",
+        "L004",
+        "L005",
+        "L006"
+      ],
+      "master_seed": 2026111809,
+      "pair_caps": [
+        4096,
+        3724
+      ],
+      "expected_s": 12310,
+      "worst_case_s": 24750,
+      "launch_minimum_s": 27260
+    },
+    {
+      "date_place": 14,
+      "kit_id": "cl-transfer-14",
+      "span_id": "cl-transfer-14-s01",
+      "kit": {
+        "path": "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/dated-transfer/kits/cl-transfer-14.v1.1.json",
+        "sha256": "2ce78699e7fa9497c3acc5d8057c56efe97bf3bd92e1764cb4ef37115767bfba"
+      },
+      "queue": {
+        "path": "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/dated-transfer/queues/cl-transfer-14.queue.json",
+        "sha256": "c47e8a32a9eea7b68d3acaa4703b7086278edf797a7300a85c917417a9c676a4"
+      },
+      "legs": [
+        "L001",
+        "L002",
+        "L003",
+        "L004",
+        "L005",
+        "L006"
+      ],
+      "master_seed": 2026111812,
+      "pair_caps": [
+        3151,
+        4096
+      ],
+      "expected_s": 12262,
+      "worst_case_s": 24750,
+      "launch_minimum_s": 27260
+    },
+    {
+      "date_place": 15,
+      "kit_id": "cl-transfer-15",
+      "span_id": "cl-transfer-15-s01",
+      "kit": {
+        "path": "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/dated-transfer/kits/cl-transfer-15.v1.1.json",
+        "sha256": "3f8dfb7d5f1a8b0c637f5ea169df891361298c13de2438ef8d8d6667fd9cd675"
+      },
+      "queue": {
+        "path": "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/dated-transfer/queues/cl-transfer-15.queue.json",
+        "sha256": "553a0ce284adff155827b8ccc5d6bfd5fd5e0c0cdc1bb57df399c5d0e1f299e6"
+      },
+      "legs": [
+        "L001",
+        "L002",
+        "L003",
+        "L004",
+        "L005",
+        "L006"
+      ],
+      "master_seed": 2026111813,
+      "pair_caps": [
+        3724,
+        4096
+      ],
+      "expected_s": 12310,
+      "worst_case_s": 24750,
+      "launch_minimum_s": 27260
+    },
+    {
+      "date_place": 16,
+      "kit_id": "cl-transfer-16",
+      "span_id": "cl-transfer-16-s01",
+      "kit": {
+        "path": "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/dated-transfer/kits/cl-transfer-16.v1.1.json",
+        "sha256": "704b33d21e9173214c5e1d04443c2d4a97c4fdd849a1cb163eeb485fd9645d2c"
+      },
+      "queue": {
+        "path": "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/dated-transfer/queues/cl-transfer-16.queue.json",
+        "sha256": "3750dcc4ad9cb876f92b3202262f799bf5260054e8e3bde39e53e685e0eacc8d"
+      },
+      "legs": [
+        "L001",
+        "L002",
+        "L003",
+        "L004",
+        "L005",
+        "L006"
+      ],
+      "master_seed": 2026111818,
+      "pair_caps": [
+        4096,
+        3151
+      ],
+      "expected_s": 12262,
+      "worst_case_s": 24750,
+      "launch_minimum_s": 27260
+    },
+    {
+      "date_place": 17,
+      "kit_id": "cl-transfer-17",
+      "span_id": "cl-transfer-17-s01",
+      "kit": {
+        "path": "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/dated-transfer/kits/cl-transfer-17.v1.1.json",
+        "sha256": "ebc92d1087e8c859d1af55957f6560768ca313d845a21ab3f88e5cec157ad780"
+      },
+      "queue": {
+        "path": "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/dated-transfer/queues/cl-transfer-17.queue.json",
+        "sha256": "adf820bccef44376c51b5fb2dbf4b27a8109164f660e290d0ce6af28cf03fd0d"
+      },
+      "legs": [
+        "L001",
+        "L002",
+        "L003",
+        "L004",
+        "L005",
+        "L006"
+      ],
+      "master_seed": 2026111819,
+      "pair_caps": [
+        4096,
+        3724
+      ],
+      "expected_s": 12310,
+      "worst_case_s": 24750,
+      "launch_minimum_s": 27260
+    },
+    {
+      "date_place": 18,
+      "kit_id": "cl-transfer-18",
+      "span_id": "cl-transfer-18-s01",
+      "kit": {
+        "path": "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/dated-transfer/kits/cl-transfer-18.v1.1.json",
+        "sha256": "8bf206b1fd28342547c7ce42f96a4a8f8edbef6bbefeae5e8c76b8739ebe06b9"
+      },
+      "queue": {
+        "path": "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/dated-transfer/queues/cl-transfer-18.queue.json",
+        "sha256": "e43434a0e614fd6f0328ebe834ad36d5a986b907c9ad490668f429f409b441bf"
+      },
+      "legs": [
+        "L001",
+        "L002",
+        "L003",
+        "L004",
+        "L005",
+        "L006"
+      ],
+      "master_seed": 2026111817,
+      "pair_caps": [
+        3151,
+        4096
+      ],
+      "expected_s": 12262,
+      "worst_case_s": 24750,
+      "launch_minimum_s": 27260
+    },
+    {
+      "date_place": 19,
+      "kit_id": "cl-transfer-19",
+      "span_id": "cl-transfer-19-s01",
+      "kit": {
+        "path": "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/dated-transfer/kits/cl-transfer-19.v1.1.json",
+        "sha256": "7acab32e2d323f96ade7106da1fe08c7b1c547ac5b2cec307d7bab26559d48d4"
+      },
+      "queue": {
+        "path": "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/dated-transfer/queues/cl-transfer-19.queue.json",
+        "sha256": "bec811065740c0fb7a96dfa5947a9905edd0ab8398de4fd208b0ea4618893861"
+      },
+      "legs": [
+        "L001",
+        "L002",
+        "L003",
+        "L004",
+        "L005",
+        "L006"
+      ],
+      "master_seed": 2026111814,
+      "pair_caps": [
+        3724,
+        4096
+      ],
+      "expected_s": 12310,
+      "worst_case_s": 24750,
+      "launch_minimum_s": 27260
+    },
+    {
+      "date_place": 20,
+      "kit_id": "cl-transfer-20",
+      "span_id": "cl-transfer-20-s01",
+      "kit": {
+        "path": "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/dated-transfer/kits/cl-transfer-20.v1.1.json",
+        "sha256": "586145d13ad04551f501b3eb2f7bca46ee665ac208cccee136b1221ce1632b09"
+      },
+      "queue": {
+        "path": "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/dated-transfer/queues/cl-transfer-20.queue.json",
+        "sha256": "9dd04bfab2c9db317c0bf8b1c9188217e1585e850cfa5d48662ec66b2e5d81a7"
+      },
+      "legs": [
+        "L001",
+        "L002",
+        "L003",
+        "L004",
+        "L005",
+        "L006"
+      ],
+      "master_seed": 2026111816,
+      "pair_caps": [
+        4096,
+        3151
+      ],
+      "expected_s": 12262,
+      "worst_case_s": 24750,
+      "launch_minimum_s": 27260
+    }
+  ]
+}
