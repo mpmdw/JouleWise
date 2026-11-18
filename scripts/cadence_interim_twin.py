@@ -8,6 +8,11 @@ can evaluate a bundle. See the run report for the missing interface clauses.
 
 from __future__ import annotations
 
+import sys
+
+if __name__ == "__main__":
+    sys.dont_write_bytecode = True
+
 from bisect import bisect_right
 from collections import Counter
 from dataclasses import dataclass
@@ -15,7 +20,6 @@ import json
 import math
 import os
 from pathlib import Path
-import sys
 
 
 CHANNELS = {"gpu_rail", "dc_in"}
@@ -392,6 +396,7 @@ def _write_result(restricted, twin, word):
 
 def run_child(restricted: Path, evaluate):
     """Run a child evaluator behind a file-descriptor boundary and exit."""
+    sys.dont_write_bytecode = True
     output = os.dup(1)
     discard = os.open(os.devnull, os.O_WRONLY)
     os.dup2(discard, 1)

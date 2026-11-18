@@ -77,11 +77,13 @@ class ComparisonTests(unittest.TestCase):
 
     def test_isolated_child_byte_scan_and_write_boundary(self):
         launcher = """
-import json, os, pathlib, runpy, sys, warnings
+import importlib.util, json, os, pathlib, runpy, sys, warnings
 run_child = runpy.run_path(sys.argv[1])["run_child"]
 root = pathlib.Path(sys.argv[2])
 def evaluate():
     assert sys.flags.isolated
+    spec = importlib.util.spec_from_file_location("synthetic_import", root / "synthetic_import.py")
+    spec.loader.exec_module(importlib.util.module_from_spec(spec))
     data = json.loads((root / "synthetic.json").read_bytes())
     canary = str(data["canary"])
     print(canary, flush=True)
@@ -105,7 +107,8 @@ run_child(root / "fixture-output", evaluate)
                 root = Path(tmp)
                 private = root / "fixture-output"
                 private.mkdir()
-                initial = {"fixture-output"}
+                (root / "synthetic_import.py").write_text("# Test import-side file creation.\n")
+                initial = {"fixture-output", "synthetic_import.py"}
                 if mode != "missing":
                     primary = result()
                     if mode == "mismatch":
@@ -117,7 +120,7 @@ run_child(root / "fixture-output", evaluate)
                 if mode == "occupied":
                     (private / "twin.json").symlink_to(root / "synthetic.json")
                 completed = subprocess.run(
-                    [sys.executable, "-I", "-B", "-c", launcher, str(SCRIPT), tmp, mode],
+                    [sys.executable, "-I", "-c", launcher, str(SCRIPT), tmp, mode],
                     capture_output=True, check=True,
                 )
                 self.assertEqual(completed.stdout, expected)
