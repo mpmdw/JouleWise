@@ -32,8 +32,10 @@ eligible captured member contributes no S score.
 | Round-six test head and tree | `0ddc13c8e18f28e42832fd85a6b63c1e5a039096`, `c726d8e53af26a9bad95c0dbd32d896df8e7668d` |
 | Round-seven test freeze | `afcea7090` |
 | Round-seven test head and tree | `56de7b49165633240a900d17158f69b5d8bed49d`, `2d45ad1d9dcb9f2d6fbe74fffe08f7b2c44553d7` |
-| Caller SHA-256 for signatory | `106b7cf4f6252f6254e3c1c19d1caadd6f0aea42623eb37a5eb48c363478ef32` |
-| Draft code head and tree before report | `b7a0440a00442151c5b18a73a7b48fb5beeb72ec`, `77c7065e57a5bc17cb436adc041f6ff45bfdb175` |
+| Round-eight revised spec freeze | `c4acf71fdd177648f39c9de51e7e736ab13d3491` (draft replay `dc3020ea285cd75ba5a6c69fde382a7c5c57c240`) |
+| Revised spec private test head and tree | `1c70f484fb08e8df93253edc65857d91aada86cb`, `ff53b57846248a43f91f4361a814769d0ef2c675` |
+| Caller SHA-256 for signatory | `a845e18142193d9f7a33f0f664923fa539dcbd6d46feecb6480c94dcaf6f01d4` |
+| Draft code head and tree before report | `cd1ed56b9e2dfd51dc690396ab56b880a6dad509`, `3071559148f3f009b6cfd1050386d172c8374a0e` |
 
 At the initial freeze the CLI tests failed with no script. At the RL-185
 freeze both stored worlds reached the provisional provider and refused.
@@ -63,8 +65,8 @@ the dependency landings. [Draft PR #836](https://github.com/mpmdw/JouleWise/pull
 | CLI and guard | Caller `build_report`, `main`, PR #813 `v4_desk_seal.py:351,418` and `rl176.py:611,622,633` | Snapshot the guard's named metadata, call the real guard and use the literal freeze flag in the scorer. |
 | Registration and history | Caller `require_executing_bindings`, `bound_history`, `final_roster`, `ReleasedInputs`, `v4_registration.py` `validate_receipt` and `require_registration`, and `scripts/align_v4_series.py:220,231,239,510` | Verify the C1 predecessor's receipt digest, verify the executing source inventory, and join the authorized history to the frozen manifest. |
 | Final records and A9 | PR #826 `scripts/align_v4_next_arm_packet.py:237,306,395` and `light_triage.py:79,163` | Use the shared RL-183b finality, including successor `previous_final`, and independently preserve final per-member reasons. |
-| Stored rows and complete manifest | Caller `manifest_inputs`, :341,452,518,538, `read_member`, PR #787 `s_rows.py:193,751,774`, PR #813 `workload.py:893` | Classify protected sources and aliases from the manifest. Verify unprotected byte bindings and Git-mirror targets. Pass #787's row tuple directly. |
-| Roster, DC and coverage | Caller :735,792, `verify_score_inputs`, `verify_s_coverage`, PR #813 `rl176.py:200,291,352,379,527,550,628` | The eligible benign provider verifies its own DC bytes. Check registered S decode and fit contributor identities before any comparison, then check the report's counts before publishing. |
+| Stored rows and complete manifest | Caller `manifest_inputs`, :343,411,619,638, `read_member`, PR #787 `s_rows.py:193,751,774`, PR #813 `workload.py:893` | Classify protected sources and aliases from the manifest. Verify unprotected byte bindings, internal links, and Git-mirror targets. Pass #787's row tuple directly. |
+| Roster, DC and coverage | Caller :664,832,890,999, `verify_score_inputs`, `verify_s_coverage`, PR #813 `rl176.py:200,291,352,379,527,550,628` | The eligible benign provider verifies its own DC bytes. Require the complete ledger and check registered S decode and fit contributor identities before any comparison. Check ledger completeness and the report's counts before publishing. |
 
 ## Resolved interfaces under RL-185 §3
 
@@ -388,6 +390,68 @@ link also fails the hop check.
 The frozen Astra module SHA-256 remains
 `4d20a378775680182baf7679305fcdafb9434974f258b9445398add15cb0e02e`.
 Exact suite totals and CI are recorded on the draft. [Draft checks](https://github.com/mpmdw/JouleWise/pull/836/checks)
+
+## Round-eight audit and frozen control
+
+The first private round-eight candidate was `c3aac86ef25b97ddc463aeeb6ab31922d624685f`,
+tree `0477bd53d8dabc956e3f7460882ad4c069bb56ee`, with caller
+SHA-256 `a845e18142193d9f7a33f0f664923fa539dcbd6d46feecb6480c94dcaf6f01d4`.
+The frozen red
+regressions at `fe15fbcb3` recorded 14 failures on the round-seven
+caller. The audit's declared protected input and replaced or dangling
+internal link each previously allowed a report.
+
+| Finding | Private fix | Regression |
+|---|---|---|
+| Listed protected paths could stay unread and still allow a report. | `6a7ed3447`, with a shared verification ledger in `c3aac86ef`. The ledger gates scoring and publication. Only the authorized benign ordinal opens and verifies the canonical DC input. | `test_declared_protected_inputs_without_a_provider_refuse_release`, `test_benign_dc_requires_provider_verification_to_publish`, and `test_release_verifier_never_opens_protected_meter_or_dc`. |
+| Ordinary internal links skipped the closure-link check. | `6a7ed3447`, with resolution through linked ancestors in `c3aac86ef`. Verify each recorded link hop and its final bound target. | `test_internal_link_and_its_finalized_target_are_verified`. |
+
+The frozen acceptance module remains byte-identical at SHA-256
+`4d20a378775680182baf7679305fcdafb9434974f258b9445398add15cb0e02e`.
+Its intact control lists an additional independent copy of the canonical
+benign DC trace under `runs/<second-benign-run>/synthetic-reference-copies/benign_dc`.
+The ledger witness on `6a7ed3447` verified the canonical trace and found
+only the protected copy pending. The CLI refused before scoring and
+created no report. The frozen intact control reproduced that refusal
+on the final private candidate. Two frozen unreadable cases, both audit
+regressions, the skipped-provider regression, and the protected-open
+observer passed on `6a7ed3447`.
+The row, scorer and registration suites ran 98 tests with 94 passes and
+four opt-in skips. Both stored S decision worlds and the predecessor
+receipt regression passed.
+
+The published draft still points to `d723f2ecd815af0ea9c67b749ea6020a9869b764`.
+Its CI completed with 18 successful jobs and three failures. The quick
+job and Python 3.13 shards 6 and 9 all reported discovery errors from
+W1's missing scorer import. W1 remains at
+`b2e01464d6d4fbf2901ff4d4154df9455104a12a`. The refreshed heads are
+PR #813 `82542232dbb7459b0320c37380925e9372afb7e8`,
+PR #787 `0a032c835de1af8ba180f6e0356feae129b01456`, and
+PR #826 `1fc28324d51f8057fa6228e6e7d42b5ea331d52c`.
+All three remain open. [Published-head CI](https://github.com/mpmdw/JouleWise/actions/runs/44385228268)
+
+### Revised freeze and regression results
+
+The lead resolved the frozen-control conflict by moving only its synthetic
+`benign_dc` link-mutation donor outside the measurement root. The canonical
+trace remains in the finalized inventory and retains its original
+window, pair, and benign-ordinal authorization. The four ruling edits
+produce the frozen module SHA-256
+`d0370ec0743b5f0f4787d6d5c1137b2f7d408440f44f0d1459a80840345f8dcc`.
+The verified module was run byte-for-byte from the recorded private tree.
+[RL-185 §3.2](https://github.com/mpmdw/JouleWise/blob/56f239dd25e09a39aed8cfdbea8028ebaefbab77/docs/research-audits/2026-11-10-fable/RESEARCH-LEAD-DECISIONS.md#L20863) · [PIPELINE §3](https://github.com/mpmdw/JouleWise/blob/f1be75b21978da69fa20506640bcb76ec53f6df2/docs/process/PIPELINE.md#L36)
+
+| Regression | Result on the revised spec candidate |
+|---|---|
+| Frozen acceptance module | PASS, 244/244 with zero skips. The intact CLI exits 0 and writes `S INCONCLUSIVE` with 176 contributors, 22 strata, 11 windows, and 101 of 154 wins. Each of the 243 mutated worlds refuses publication. |
+| `test_listed_copy_of_benign_dc_refuses_without_opening_it` | PASS. The byte-identical listed copy remained unverified. The CLI made zero opens of the copy, exited 1 before scoring, and wrote no report. |
+| `test_declared_protected_inputs_without_a_provider_refuse_release` | PASS. A listed native stream or file under `dc_in/` without an authorized provider refuses, including all four file mutations. |
+| `test_internal_link_and_its_finalized_target_are_verified` | PASS. Intact literal hops and linked ancestors release. Replaced, dangling, and byte-changed links or targets refuse. |
+| `test_release_verifier_never_opens_protected_meter_or_dc` | PASS. No native, instructed, or protected Git-mirror input opens. The single authorized canonical benign DC open occurs in the provider after member loading. |
+
+The protected source comparison and the release-only diff were rechecked
+against W1. Exact-head integrated sharded CI remains the post-landing
+gate. [Draft CI](https://github.com/mpmdw/JouleWise/pull/836/checks)
 
 ## Executed checks and Tier 2 dispositions
 
