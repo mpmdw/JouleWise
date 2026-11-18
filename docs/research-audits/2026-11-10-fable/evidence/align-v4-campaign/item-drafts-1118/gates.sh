@@ -65,26 +65,33 @@ PY
 }
 effective_close() {
   case "${OTHER_CLOSE_EPOCH:-}" in ''|*[!0-9]*) echo 'STOP: OTHER_CLOSE_EPOCH required, explicit 0 if none'; return 1;; esac
-  CENSUS="$("$PY" -I -B - /Users/edr/campaign-out /Users/edr/code/jw-wt <<'PY'
+  CENSUS="$("$PY" -I -B - "$OTHER_CLOSE_EPOCH" "${OTHER_CLOSE_RECEIPT:-}" /Users/edr/campaign-out /Users/edr/code/jw-wt <<'PY'
 import json, math, os, sys
+from decimal import Decimal
 def fail(e): raise e
+def close_stamp(p):
+    if '\n' in p: sys.exit('STOP: bad receipt path')
+    try:
+        with open(p) as handle: ended = json.load(handle,parse_float=Decimal)['ended']['epoch_s']
+        if (type(ended) is not int and (not isinstance(ended,Decimal) or not ended.is_finite())) or ended<=0:
+            raise ValueError('invalid ended.epoch_s')
+        return ended
+    except (OSError, ValueError, KeyError, TypeError) as e:
+        sys.exit('STOP: unreadable receipt close stamp: ' + p + ': ' + str(e))
+other_epoch, other_receipt, *roots = sys.argv[1:]
 found = []
-for root in sys.argv[1:]:
+for root in roots:
     if not os.path.isdir(root): sys.exit('STOP: missing receipt root: ' + root)
     base = root.rstrip('/').count('/')
     for d, dirs, files in os.walk(root, onerror=fail):
         if d.count('/') - base >= 3: dirs[:] = []
         if 'runner_receipt.json' in files:
             p = os.path.join(d, 'runner_receipt.json')
-            if '\n' in p: sys.exit('STOP: bad receipt path')
-            try:
-                with open(p) as handle: ended = json.load(handle)['ended']['epoch_s']
-                if (isinstance(ended, bool) or not isinstance(ended, (int, float))
-                        or not math.isfinite(ended) or ended <= 0):
-                    raise ValueError('invalid ended.epoch_s')
-            except (OSError, ValueError, KeyError, TypeError) as e:
-                sys.exit('STOP: unreadable receipt close stamp: ' + p + ': ' + str(e))
-            found.append((ended, p))
+            found.append((close_stamp(p), p))
+if int(other_epoch):
+    ended = close_stamp(other_receipt)
+    if math.ceil(ended)!=int(other_epoch): sys.exit('STOP: OTHER_CLOSE_EPOCH disagrees with its close receipt')
+    found.append((ended,other_receipt))
 if not found: sys.exit('STOP: empty receipt census')
 latest = max(t for t, p in found)
 newest = [p for t, p in found if t == latest]
@@ -94,9 +101,6 @@ PY
 )" || return 1
   EFF_EPOCH="$(printf '%s\n' "$CENSUS" | sed -n 1p)"
   EFF_PATH="$(printf '%s\n' "$CENSUS" | sed -n 2p)"
-  if test "$OTHER_CLOSE_EPOCH" -gt "$EFF_EPOCH"; then
-    EFF_EPOCH=$OTHER_CLOSE_EPOCH; EFF_PATH=OTHER
-  fi
 }
 copy_gate() (
   # RL-171 §6.1/RL-173 A: campaign marker, or exact latest non-campaign Check's copy proof.
@@ -116,20 +120,23 @@ copy_gate() (
   echo "WAIT: no verified cloud .ok or Air .air.ok copy marker for $id (RL-173 A)"; exit 1
 )
 close_gate() {
-  test "${HOST_RESTORE_OK:-}" = 1 && test "${GROUPS_ABSENT:-}" = 1 \
-    || { echo 'STOP: restore or process-group absence unproven'; return 1; }
+  local actual now
+  test "${HOST_RESTORE_OK:-}" = 1 && test "${FEEDS_STOPPED:-}" = 1 \
+    && test "${GROUPS_ABSENT:-}" = 1 && test "${FOREIGN_PROCESSES_ABSENT:-}" = 1 \
+    || { echo 'STOP: restore, feed stop or process absence unproven (RL-179 F-2)'; return 1; }
   effective_close || return 1
+  test "${CLOSE_PROOF_RECEIPT:-}" = "$EFF_PATH" \
+    || { echo 'STOP: restore and shutdown proof must bind the latest close receipt (RL-179 F-2)'; return 1; }
   copy_gate || return 1
   case "$EFF_PATH" in
-    /Users/edr/campaign-out/cl-*/cq-*/runner_receipt.json) actual=campaign; gap=300;;
-    *) actual=other; gap=1200;;
+    /Users/edr/campaign-out/cl-*/cq-*/runner_receipt.json) actual=campaign;;
+    *) actual=other;;
   esac
   test "${LAST_CLOSE_KIND:-}" = "$actual" || { echo 'STOP: contradictory LAST_CLOSE_KIND'; return 1; }
-  # Even though the F2 files live in campaign-out, F2 is OTHER: always 1,200 s.
   now=$(date +%s)
-  test "$now" -ge $((EFF_EPOCH + gap)) && test "$now" -ge $((PRIOR_CLOSE_EPOCH + gap)) \
-    || { echo "WAIT: close interval $gap s"; return 1; }
-  echo "CLOSE OK latest $EFF_EPOCH kind $actual interval $gap"
+  test "$now" -ge "$EFF_EPOCH" && test "$now" -ge "$PRIOR_CLOSE_EPOCH" \
+    || { echo 'STOP: close stamp is in the future (RL-179 F-2)'; return 1; }
+  echo "CLOSE PROVEN latest $EFF_EPOCH kind $actual"
 }
 # RL-165 §8.1; RL-172 (i) row 9; RL-173 E: freeze 2 is the committed coefficient hash.
 FREEZE2_COMMIT="<LEAD FILLS: FREEZE2_COMMIT>"
@@ -267,7 +274,8 @@ PY
 }
 queue_gate() {
   filled "$QUEUE_COMMIT" || { echo 'WAIT: lead records queue commit (RL-149 §2.8 line 3)'; return 1; }
-  QUEUE_EXPIRES_EPOCH="$("$PY" -I -B - "$AUTH_REPO" "$QUEUE_COMMIT" "$QUEUE_PATH" "$QUEUE_SHA" "$SPAN" "$LEGS" "$T0_DATE" "$KIT_SHA" "$(date +%s)" <<'PY'
+  local stamps
+  stamps="$("$PY" -I -B - "$AUTH_REPO" "$QUEUE_COMMIT" "$QUEUE_PATH" "$QUEUE_SHA" "$SPAN" "$LEGS" "$T0_DATE" "$KIT_SHA" "$(date +%s)" <<'PY'
 import hashlib, json, re, subprocess, sys
 repo, commit, path, sha, span, legs, day, kit_sha, now=sys.argv[1:]; now=int(now)
 def git(*a): return subprocess.check_output(['git','-C',repo,*a],stderr=subprocess.DEVNULL)
@@ -285,9 +293,12 @@ try:
     entry=entries[0]
     assert entry['legs']==legs.split(',') and entry['not_before']==day and entry['kit']['sha256']==kit_sha and entry['attempt']==1
 except (OSError,ValueError,KeyError,TypeError,AssertionError,subprocess.CalledProcessError): sys.exit('STOP: queue commit/hash/roster/span date/kit/attempt/seven-day expiry (RL-149 §2.8 line 3; RL-175 C.3)')
-print(int(expiry))
+print(committed,int(expiry))
 PY
 )" || return 1
+  IFS=' ' read -r QUEUE_COMMIT_EPOCH QUEUE_EXPIRES_EPOCH <<EOF
+$stamps
+EOF
   echo "QUEUE COMMITTED $QUEUE_COMMIT finite expiry $QUEUE_EXPIRES_EPOCH"
 }
 debt_gate() {
@@ -336,6 +347,13 @@ window_gate() {
     || { echo 'REFUSE: outside item t0-date or LIMIT; follow missed-date recovery (RL-172 (a)5)'; return 1; }
 }
 arm_bound_gate() {
+  local opens expires now
+  ARM_NOT_BEFORE_EPOCH=$WINDOW_START
+  for opens in "$ISSUED_EPOCH" "$((WATCH_UNTIL_EPOCH - 86400))" "$QUEUE_COMMIT_EPOCH" \
+    "$PRED_CLOSE_EPOCH" "$PRIOR_CLOSE_EPOCH" "$EFF_EPOCH"; do
+    case "$opens" in ''|*[!0-9]*) echo 'STOP: start bound missing or invalid'; return 1;; esac
+    if test "$opens" -gt "$ARM_NOT_BEFORE_EPOCH"; then ARM_NOT_BEFORE_EPOCH=$opens; fi
+  done
   # Date/window end is inclusive to the printed second. Expiries are exclusive.
   ARM_BEFORE_EPOCH=$((WINDOW_END + 1))
   for expires in "$EXPIRES_EPOCH" "$QUEUE_EXPIRES_EPOCH" "$WATCH_UNTIL_EPOCH"; do
@@ -353,21 +371,26 @@ arm_bound_gate() {
     pair_before=$((second_before - FIRST_TO_SECOND_S))
     if test "$pair_before" -lt "$ARM_BEFORE_EPOCH"; then ARM_BEFORE_EPOCH=$pair_before; fi
   fi
-  test "$(date +%s)" -lt "$ARM_BEFORE_EPOCH" || {
+  now=$(date +%s)
+  test "$now" -ge "$ARM_NOT_BEFORE_EPOCH" || {
+    echo "REFUSE: before earliest authorized t0 $ARM_NOT_BEFORE_EPOCH"
+    return 1
+  }
+  test "$now" -lt "$ARM_BEFORE_EPOCH" || {
     echo "REFUSE: effective t0 cutoff $ARM_BEFORE_EPOCH (date, item/queue/watch expiry, dependent span)"
     return 1
   }
-  echo "AUTHORIZED T0 $T0_DATE before $ARM_BEFORE_EPOCH"
+  echo "AUTHORIZED T0 $T0_DATE [$ARM_NOT_BEFORE_EPOCH, $ARM_BEFORE_EPOCH)"
 }
 t0_clock_anchor() {
-  "$PY" -I -B -c 'import time; before = time.monotonic_ns(); print(f"{time.time_ns()}:{before}:{time.monotonic_ns()}")'
+  "$PY" -I -B "$REPO/scripts/cadence_legs_runner.py" t0-anchor
 }
 batch_gate() {
   # Fresh boot and clock reads at both Start and Run.
   local anchor bounds
   BATCH_BOOT="$(sysctl -n kern.boottime)" || { echo 'STOP: boot time unavailable (RL-175 C.4)'; return 1; }
   anchor="$(t0_clock_anchor)" || return 1
-  bounds="$("$PY" -I -B - "$BATCH_BOOT" "$anchor" "$EXPECTED_SPAN_S" "$WINDOW_START" "$ARM_BEFORE_EPOCH" <<'PY'
+  bounds="$("$PY" -I -B - "$BATCH_BOOT" "$anchor" "$EXPECTED_SPAN_S" "$ARM_NOT_BEFORE_EPOCH" "$ARM_BEFORE_EPOCH" <<'PY'
 import re, sys
 raw, anchor, expected, start, cutoff = sys.argv[1:]
 boot = re.fullmatch(r'\{\s*sec\s*=\s*([0-9]+),\s*usec\s*=\s*[0-9]+\s*\}.*',raw)
@@ -377,7 +400,9 @@ if not boot or not stamp or not all(v.isascii() and v.isdecimal() for v in (expe
 boot, expected, start, cutoff = int(boot[1]), int(expected), int(start), int(cutoff)
 now = int(stamp[1])//1_000_000_000
 soak_s, cooldown_s, day_s = 1950, 27*60, 86400
-if int(stamp[2])>int(stamp[3]) or not 0<boot<=now or not soak_s<=expected<day_s-cooldown_s or not start<=now<cutoff:
+if now<start:
+    sys.exit(f'REFUSE: arm clock before earliest authorized t0 {start}')
+if int(stamp[2])>int(stamp[3]) or not 0<boot<=now or not soak_s<=expected<day_s-cooldown_s or now>=cutoff:
     sys.exit('STOP: invalid boot time, span duration or t0 cutoff (RL-175 C.4)')
 # The existing prediction is anchored to boot, with the observed 48 s offset.
 first = boot + 43248

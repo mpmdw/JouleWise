@@ -144,7 +144,7 @@ def render(dates, queue_expiry):
                 limit=epoch(day,limit_hms)
                 extra=plan['launch_deadline_epoch_s']-plan['t0_epoch_s']
                 assert extra==plan['worst_case_s']+1950+560
-                first_to_second=int(extra+300) if s==1 else 0
+                first_to_second=int(extra) if s==1 else 0
                 config=f'''SPAN={span}; CAMP={camp}; LEGS={legs}
 PRED_SPAN={previous[0]}; PRED_CAMP={previous[1]}; PRED_ROSTER={','.join(previous[2])}
 PRED_KIT_SHA={previous[3]}; PRED_PIN={previous[4]}

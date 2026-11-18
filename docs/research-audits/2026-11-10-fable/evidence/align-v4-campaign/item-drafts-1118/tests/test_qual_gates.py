@@ -49,6 +49,8 @@ def run_item(item,shell):
     gates=gates.replace('/Users/edr/campaign-out',str(root)).replace('/Users/edr/code/jw-wt',str(wt)).replace('/Users/Shared/JouleWise/desk-copy',str(markers))
     defaults=dict(AUTH_REPO=str(auth),PIN=META['pin'],KIT_SHA=item['kit_sha'],QUEUE_PATH=item['queue_path'],QUEUE_SHA=item['queue_sha'],
         NONCAMPAIGN_COPY_OK='yes',NONCAMPAIGN_COPY_CLOSE_EPOCH=now-1200,NONCAMPAIGN_COPY_RECEIPT=str(latest/'runner_receipt.json'),NONCAMPAIGN_COPY_RECORD='synthetic latest Check/copy proof',PRIOR_CLOSE_EPOCH=now-4000,OTHER_CLOSE_EPOCH=0,HOST_RESTORE_OK=1,GROUPS_ABSENT=1,LAST_CLOSE_KIND='other',
+        FEEDS_STOPPED=1,FOREIGN_PROCESSES_ABSENT=1,CLOSE_PROOF_RECEIPT=str(latest/'runner_receipt.json'),
+        QUEUE_COMMIT_EPOCH=now-300,PRED_CLOSE_EPOCH=now-4000,EFF_EPOCH=now-1200,ARM_NOT_BEFORE_EPOCH=now-1200,
         QUAL_COLD_SEAT='ADMIT',LINE2_EQUAL='yes',LINE2_PIN=META['pin'],LINE2_BASE=META['merged_w1'],COLD_SEAT_KIT_SHA=item['kit_sha'],FIRST_CAPTURE_CONFIRMED='yes',
         HOST_EVENT_DISPOSITION='done',CURRENT_HOST_STATE_ID='synthetic-host',FREEZE2_HOST_STATE_ID='synthetic-host',HOST_EVENT_BEFORE_FREEZE2='yes',QUAL_INCLUSION_UNCHANGED='yes',
         S02_ISSUED_EPOCH='unissued',SESSION_READY='no',SESSION_RECORD='synthetic fresh READY census',STOPS_CLEAR='yes',VETO_CLEAR='yes',CHECKLIST_OK='yes',PILOT_PASSED='yes',SAMPLE_HAND_CLEAR='yes',COPY_KEY_SAFE='yes',OFFLOAD_CLEAR='yes',
@@ -78,7 +80,7 @@ def run_item(item,shell):
         p=predout/'desk-bundle'/'legs'/leg/'leg_summary.json'; r=json.loads(p.read_text()); r.update(kw); dump(p,r)
     def debt_change(key,value):
         r=json.loads(debt.read_text()); r['machine_order'][0][key]=value; dump(debt,r)
-    def run(name,setup=lambda:None,overrides=None,fill_changes=None,want=True,command='all_gates',stamp=None,contains=None,full_start=False,run_boot=None):
+    def run(name,setup=lambda:None,overrides=None,fill_changes=None,want=True,command='all_gates',stamp=None,contains=None,full_start=False,run_boot=None,run_anchor=None):
         global checks,failures
         fixture(); setup(); vals={**defaults,**(overrides or {})}; ff={**fills,**(fill_changes or {})}; program=gates
         for key,value in ff.items():
@@ -88,7 +90,7 @@ def run_item(item,shell):
         assignments='\n'.join('unset '+key if value is None else key+'='+quote(value) for key,value in vals.items())
         default_boot=quote(f'{{ sec = {now-21600}, usec = 0 }}')
         clock=f'''date() {{ echo {now if stamp is None else stamp}; }}
-synthetic_t0_clock_anchor() {{ echo {now if stamp is None else stamp}000000000:1000000000000:1000000000000; }}
+synthetic_t0_clock_anchor() {{ printf '%s000000000:1000000000000:1000000000000\n' "${{SYNTHETIC_ANCHOR_EPOCH:-{now if stamp is None else stamp}}}"; }}
 t0_clock_anchor() {{ synthetic_t0_clock_anchor; }}
 BATCH_DEFAULT_BOOT={default_boot}
 sysctl() {{
@@ -117,7 +119,7 @@ sysctl() {{
     "-B scripts/cadence_queue.py checklist "*) echo MOCK_NATIVE_CHECKLIST; test "$NATIVE_RC" = 0;;
     "-B scripts/cadence_legs_runner.py plan "*) echo MOCK_PLAN;;
     "-B scripts/launch_cadence_span.py launch "*) echo MOCK_LAUNCH "$@";;
-    "-I -B -c "*time.time_ns*) synthetic_t0_clock_anchor;;
+    "-I -B "*"/scripts/cadence_legs_runner.py t0-anchor") synthetic_t0_clock_anchor;;
     *) {quote(sys.executable)} "$@";;
   esac
 }}
@@ -142,7 +144,10 @@ unset MAGISTRATE_WATCHDOG_CUSTODY_ROOT
 '''
             script=assignments+'\n'+clock+overrides_sh+start
             if run_boot is not None:
-                script+='\nBATCH_SYSCTL='+quote(run_boot)+'\n'+blocks[1]
+                script+='\nBATCH_SYSCTL='+quote(run_boot)+'\n'
+                if run_anchor is not None:
+                    script+='SYNTHETIC_ANCHOR_EPOCH='+quote(run_anchor)+'\n'
+                script+=blocks[1]
         else:
             script=f'PY={quote(sys.executable)}\n'+config+program+clock+assignments+'\n'+command+'\n'
         result=subprocess.run([shell],input=script,text=True,capture_output=True,env=dict(os.environ,PYTHONDONTWRITEBYTECODE='1',TMPDIR=str(home)))
@@ -174,6 +179,19 @@ unset MAGISTRATE_WATCHDOG_CUSTODY_ROOT
         stamp=now+1,fill_changes={'WATCH_UNTIL_EPOCH':now+1},
         command=f'EXPIRES_EPOCH={now+86400}; QUEUE_EXPIRES_EPOCH={now+86400}; arm_bound_gate',
         want=False,contains=f'effective t0 cutoff {now+1}')
+    proven_now={'NATIVE_RC':0,'NONCAMPAIGN_COPY_CLOSE_EPOCH':now}
+    issue_now={'ISSUED_EPOCH':now,'WATCH_UNTIL_EPOCH':now+86400}
+    run('Delta audit: rollback after Run gates refuses before issue, watch and proven close',
+        setup=lambda:close_stamp(latest/'runner_receipt.json',now),overrides=proven_now,fill_changes=issue_now,
+        full_start=True,run_boot=boot_at(now+expected+60),run_anchor=now-2,
+        want=False,contains=f'arm clock before earliest authorized t0 {now}')
+    run('Run forwards the exact latest close, issue and observation bound',
+        setup=lambda:close_stamp(latest/'runner_receipt.json',now),overrides=proven_now,fill_changes=issue_now,
+        full_start=True,run_boot=boot_at(now+expected+60),contains=f'--t0-not-before {now}')
+    for lower in ('ISSUED_EPOCH','WATCH_UNTIL_EPOCH','QUEUE_COMMIT_EPOCH','PRED_CLOSE_EPOCH','PRIOR_CLOSE_EPOCH','EFF_EPOCH'):
+        opening=now+86400 if lower=='WATCH_UNTIL_EPOCH' else now
+        run('inclusive start from '+lower,command=f'EXPIRES_EPOCH={now+86400}; QUEUE_EXPIRES_EPOCH={now+86400}; '
+            f'{lower}={opening}; arm_bound_gate && echo "LOWER $ARM_NOT_BEFORE_EPOCH"',contains=f'LOWER {now}')
     batch_only=f'ARM_BEFORE_EPOCH={now+86400}; batch_gate && echo "FINAL CUTOFF $ARM_BEFORE_EPOCH"'
     for label, batch, allow in (
         ('expected close one second before batch',now+expected+1,True),
@@ -246,20 +264,42 @@ unset MAGISTRATE_WATCHDOG_CUSTODY_ROOT
     run('other noncampaign receipt copy proof WAIT',overrides={'NONCAMPAIGN_COPY_RECEIPT':'old-F0-receipt'},want=False,contains='WAIT')
     run('missing receipt root STOP',setup=lambda:shutil.rmtree(wt),want=False,contains='missing receipt root')
     run('restore unproven STOP',overrides={'HOST_RESTORE_OK':0},want=False,contains='STOP')
+    run('feed stop unproven STOP',overrides={'FEEDS_STOPPED':0},want=False,contains='feed stop')
     run('process group unproven STOP',overrides={'GROUPS_ABSENT':0},want=False,contains='STOP')
-    run('F0/F2 gap 1199 WAIT',setup=lambda:close_stamp(latest/'runner_receipt.json',now-1199),overrides={'NONCAMPAIGN_COPY_CLOSE_EPOCH':now-1199},want=False,contains='interval 1200')
-    run('fractional close rounded up',setup=lambda:close_stamp(latest/'runner_receipt.json',now-1199.9),overrides={'NONCAMPAIGN_COPY_CLOSE_EPOCH':now-1199},want=False,contains='interval 1200')
+    run('foreign process alive STOP',overrides={'FOREIGN_PROCESSES_ABSENT':0},want=False,contains='absence unproven')
+    run('stale restore receipt identity STOP',overrides={'CLOSE_PROOF_RECEIPT':str(predout/'runner_receipt.json')},
+        want=False,contains='proof must bind the latest close receipt')
+    run('RL-179 noncampaign close proof permits start immediately',
+        setup=lambda:close_stamp(latest/'runner_receipt.json',now),
+        overrides={'NONCAMPAIGN_COPY_CLOSE_EPOCH':now},contains=f'CLOSE PROVEN latest {now}')
+    run('fractional close rounded up to the next whole second',
+        setup=lambda:close_stamp(latest/'runner_receipt.json',now-0.1),
+        overrides={'NONCAMPAIGN_COPY_CLOSE_EPOCH':now},contains=f'CLOSE PROVEN latest {now}')
+    run('future close refused even with matching proof',
+        setup=lambda:close_stamp(latest/'runner_receipt.json',now+0.1),
+        overrides={'NONCAMPAIGN_COPY_CLOSE_EPOCH':now+1},want=False,contains='close stamp is in the future')
+    outside=home/'external-runner_receipt.json'
+    run('declared external close without a receipt STOP',
+        overrides={'OTHER_CLOSE_EPOCH':now,'OTHER_CLOSE_RECEIPT':str(outside)},
+        want=False,contains='unreadable receipt close stamp')
+    run('proven external close can be the latest receipt',
+        setup=lambda:dump(outside,{'synthetic_fixture':True,'ended':{'epoch_s':now}}),
+        overrides={'OTHER_CLOSE_EPOCH':now,'OTHER_CLOSE_RECEIPT':str(outside),'CLOSE_PROOF_RECEIPT':str(outside),
+                   'NONCAMPAIGN_COPY_RECEIPT':str(outside),'NONCAMPAIGN_COPY_CLOSE_EPOCH':now},
+        contains=f'CLOSE PROVEN latest {now}')
+    campaign_receipt=root/'cl-hp-01'/'cq-hp-01-s03-a1-20261119T110000Z'/'runner_receipt.json'
+    campaign_proof={'LAST_CLOSE_KIND':'campaign','CLOSE_PROOF_RECEIPT':str(campaign_receipt)}
     def campaign_close(age):
-        dest=root/'cl-hp-01'/'cq-hp-01-s03-a1-20261119T110000Z'; dest.parent.mkdir(parents=True); latest.rename(dest); close_stamp(dest/'runner_receipt.json',now-age)
+        dest=campaign_receipt.parent; dest.parent.mkdir(parents=True); latest.rename(dest); close_stamp(campaign_receipt,now-age)
         (markers/'cq-hp-01-s03-a1.ok').write_text('SYNTHETIC verified offload')
     def campaign_no_copy():
         campaign_close(300); (markers/'cq-hp-01-s03-a1.ok').unlink()
     def air_copy():
         campaign_close(300); (markers/'cq-hp-01-s03-a1.ok').rename(markers/'cq-hp-01-s03-a1.air.ok')
-    run('campaign marker missing WAIT',setup=campaign_no_copy,overrides={'LAST_CLOSE_KIND':'campaign'},want=False,contains='WAIT')
-    run('Air campaign marker accepted',setup=air_copy,overrides={'LAST_CLOSE_KIND':'campaign'})
-    run('campaign exact 300 allowed',setup=lambda:campaign_close(300),overrides={'LAST_CLOSE_KIND':'campaign'})
-    run('campaign 299 WAIT',setup=lambda:campaign_close(299),overrides={'LAST_CLOSE_KIND':'campaign'},want=False,contains='interval 300')
+    run('campaign marker missing WAIT',setup=campaign_no_copy,overrides=campaign_proof,want=False,contains='WAIT')
+    run('Air campaign marker accepted',setup=air_copy,overrides=campaign_proof)
+    run('RL-179 campaign close proof permits start immediately',
+        setup=lambda:campaign_close(0),overrides=campaign_proof,contains=f'CLOSE PROVEN latest {now}')
     def date_receipt(camp,span,day,roster,attempt=1):
         out=root/camp/f'cq-{span}-a{attempt}-20261119T000000Z'
         dump(out/'runner_receipt.json',{'synthetic_fixture':True,'started':{'epoch_s':epoch(day)},'roster':roster})
@@ -323,7 +363,7 @@ unset MAGISTRATE_WATCHDOG_CUSTODY_ROOT
         run('C.3 split plan for an untouched block REFUSE',overrides={'QUAL_DATES':dates_arg(revised)},
             command='day_gate',want=False,contains='must move whole')
     if item['span'].endswith('s01'):
-        pair_budget=int(item['launch_minimum_s'])+300
+        pair_budget=int(item['launch_minimum_s'])
         # If s02's item expires at exactly the backed-out handoff, s01 is too late.
         run('WS 4 s02 item expiry binds s01', overrides={'S02_ISSUED_EPOCH': now+pair_budget-86400},
             want=False, contains='effective t0 cutoff')

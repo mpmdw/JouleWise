@@ -1,4 +1,4 @@
-TBD. **Laptop lead, drafted by Sol 6.1; ISSUED <LEAD FILLS: YYYY-MM-DD HH:MM:SS PST from `date`> (`date`): MAGISTRATE: arm the SECOND span of qualification block `qual-01`, span `qual-01-s02`, legs L007,L008,L009,L010,L011,L012, kit `cl-qual-01.v1.1` (sha256 `d77768e391f5ea9f3d8cd92a3bc97f846cf05c09cf66494579481b75b2932236`), runner kind `cadence-legs-v1.1`, frozen pin `57ed7334ea7dbc24ed47dfbf70c29c41197c9f01` checked out detached in a fresh staged worktree. A fresh soak, then six conditionless 27B legs, Automatic, band q0; L007 captures the span reference, the five other legs consume it. Short leg: L010 cap 3,724; all other caps 4,096. Expected 12310 s; work worst case 24750 s; launcher deadline reserve includes the additional 1,950 s soak retry and 560 s cleanup reserves. EARLIEST 2026-11-19 00:00:00 PST (epoch 1795075200), LIMIT 2026-11-19 23:59:59 PST (epoch 1795161599), shortened by 24 h after issue. HOLD_FOR_FIT_FREEZE until freeze 2 is committed and verified. Predecessor `qual-01-s01` must close clean or this item is VOID and is never skipped. The pinned runner takes no batch-window argument for qualification. The arm remains subject to RL-175 C.4. Launch is your LAST action; exit at once. Nothing else is authorized.**
+TBD. **Laptop lead, drafted by Sol 6.1; ISSUED <LEAD FILLS: YYYY-MM-DD HH:MM:SS PST from `date`> (`date`): MAGISTRATE: arm the SECOND span of qualification block `qual-01`, span `qual-01-s02`, legs L007,L008,L009,L010,L011,L012, kit `cl-qual-01.v1.1` (sha256 `fe5b692a39b8646b81fc4e7b738a1802ba00ab51bd09158d1525e2bec0ccbac4`), runner kind `cadence-legs-v1.1`, frozen pin `ab32a6c915a9a78f92554a89c5d0eb93333b7a39` checked out detached in a fresh staged worktree. A fresh soak, then six conditionless 27B legs, Automatic, band q0; L007 captures the span reference, the five other legs consume it. Short leg: L010 cap 3,724; all other caps 4,096. Expected 12310 s; work worst case 24750 s; launcher deadline reserve includes the additional 1,950 s soak retry and 560 s cleanup reserves. EARLIEST 2026-11-19 00:00:00 PST (epoch 1795075200), LIMIT 2026-11-19 23:59:59 PST (epoch 1795161599), shortened by 24 h after issue. HOLD_FOR_FIT_FREEZE until freeze 2 is committed and verified. Predecessor `qual-01-s01` must close clean or this item is VOID and is never skipped. The pinned runner takes no batch-window argument for qualification. The arm remains subject to RL-175 C.4. Launch is your LAST action; exit at once. Nothing else is authorized.**
 
 ```pointer
 owner: magistrate
@@ -13,12 +13,12 @@ next_observable: after fence disappearance, Check below reports operational rece
 - **Config provenance (RL-167 Part B Q1; Mythos #794 F5).** Record both runtime-config hashes: development `bf2cb2e6503c46373b52b10f32642d95a66a6636a3d7caaad0ce8b2b756781df`, qualification `272aecb8bc0d9e33defd7f686b129ea236b925fdfbf68137697120dd63232f46`. Only the unused `d_n_chunk_status` label differs; `lm-qual-01` prints both and must not require equality for inclusion.
 - **Freeze and pin.** `freeze2_gate` implements RL-165 §8.1, RL-172 (i) row 9 and RL-173 E. Full commit/hash/path unfilled = WAIT/HOLD_FOR_FIT_FREEZE. The commit must be an ancestor of freshly fetched audit or main and contain that exact coefficient hash. No forecast or fit-code hash substitutes for it. `qual_pin_gate`: line 1 cold seat ADMIT **per kit**, including RL-167 Part B Q2's same-code capture/five-consumer confirmation; line 2 suite red set at the frozen bytes equals the merged W1-line commit `c3f4bacd8`, test for test, no added red (RL-165 §8.1). Record pointers remain lead fills. Later W1 merges do not move the qualification pin. The frozen child validates the authorized date and exclusive cutoff against its recorded start before span work. HOLD until both admission lines are recorded against the exact successor kit bytes. RL-175 C.4 also requires the separate predicted-batch check at each arm.
 - **Day law (RL-174 B.3, RL-175 C.3).** Span dates: qual-01-s01=2026-11-19, qual-01-s02=2026-11-19, qual-02-s01=2026-11-20, qual-02-s02=2026-11-20, qual-03-s01=2026-11-21, qual-03-s02=2026-11-21. Each date holds spans from only one qualification block, with no development leg. Each whole block holds two L pairs. Fewer than three pair-days prints `not_evaluable` for the ±0.10 word (RL-166b §4). Sat 14–Wed 18 Nov are reserved development dates, and `day_gate` also checks moved development spans. Each span's recorded t0-date assigns all six legs even if it closes after midnight. The one-block rule is stricter than the RL-149 §2.3 cap of two blocks and 24 legs with block starts at least 10 h apart. The queues expire **2026-11-23T00:00:00-08:00**. A new expiry requires a new lead-committed queue.
-- **Dependent spans (WS 4 and QUEUE-SPEC D8).** The printed s01 LIMIT is 16:32:00 PST at the latest. Reserve 24,750 s for s01 work, 1,950 s for a possible soak retry plus 560 s of cleanup reserve, then 300 s for the campaign close interval before s02. The latest s01 t0 moves earlier if s02's date, item or queue expires before this pair can fit. Use the same bounds in standing-F0 rule 7 while both spans remain outstanding, including planned s02 when its hand gate prevents early issue. Provide the actual s02 issue epoch when issued, or record `unissued` when its hand gate still holds. The plan then assumes a fresh s02 item in time for the planned t0. The actual Check, verified copy, hand-read and remaining gates still govern.
+- **Dependent spans (WS 4 and QUEUE-SPEC D8).** The printed s01 LIMIT is 16:32:00 PST at the latest. Reserve 24,750 s for s01 work, 1,950 s for a possible soak retry and 560 s for cleanup. The latest s01 t0 moves earlier if s02's date, item or queue expires before this pair can fit. Supply the actual s02 issue epoch if issued or `unissued` if awaiting issue. The latter assumes a fresh s02 item in time for the planned t0. RL-179 F-2 allows s02 once the close is proven and the other gates pass.
 - **Missed-date recovery (RL-175 C.3).** **Untouched block:** move both spans together to an unused legal date. **Partially run block:** retain s01's recorded date and receipts, then schedule only the missing s02 once on the next unused legal date with the same legs and seeds and a fresh soak. Move later untouched blocks whole. Every qualification receipt's recorded date must match its own span entry. A span with an existing t0 cannot arm again. The lead commits the revised finite queue and issues fresh items for the remaining spans.
 - **Predicted OS batch (RL-175 C.4).** Start and Run each read the current boot time and use this span's pinned expected close. A planned span that reaches the predicted batch holds until batch start plus 27 minutes. The boot read also refreshes the prediction after a restart. Record the boot, batch, soak and close epochs and the resulting t0 bound from the gate.
 - **Host state (RL-174 C).** Freeze 2 proceeds on the host as it is; no visit, hygiene action or restart is a gate. Each arm states four lines: `spotlightknowledged` and updater present/absent (stopped Sun 15 Nov 15:32); `corespotlightd` present/on demand; indexing of `/` off; Time Machine destination none (`backupd` resident). The lead supplies the readback record and a hygiene-state identity, excluding boot time. Nobody changes a hygiene setting from freeze 2 through qual-03 close. An unplanned restart is an event: record it and refresh the four lines at the next arm; it holds nothing. `INCLUSION_RECORD` is filled by **RL-174 B.5**: the six rules stay unchanged and maintenance overlaps are print-only. `lm-qual-01` prints flagged and unflagged errors side by side, with counts by job, description only and no word. The lead appends the by-job count through dev-05 when its desk is final; that count gates nothing. The maintenance print carries the Sun15 15:32 service-stop date.
 - **Gates 5–9 (RL-149 §2.8; RL-165 §6; RL-172 (c),(f); RL-173 A–E; RL-174 E.5).** Line 6: no named stop, halt or veto open, lead record of dispositions. Line 7: watcher observed within 24 h, re-read at both gates; this draft uses C.5. For an Actions watcher, RL-174 A.13 requires a scheduled successful completed run on this repository's `main`, started after the previous close; a manual run never serves an arm. Line 9: actual machine order across blocks/queues, desk-final and **typed Q1 completion** through span k−2. In particular qual-01-s01 needs dev-05-s01's desk-final and Q1 records; qual-01-s02 needs dev-05-s02's, span for span. `debt_gate` requires those named rows as well as the full machine-order debt record. No "first span of kit" exception. Automatic desk must satisfy all four RL-172 (c) identity/authentication rules, sampled hand table clear, disagreement holds next arm. Lead/magistrate supply observations and pointers; no default yes.
-- **Close and copy (RL-171 §6.1; RL-172 (d); RL-173 A,B).** At least 300 s after a campaign close; 1,200 s after F0/F2/Part C/session/W1, using the **latest close of anything**, its Check and process-group absence, fence gone. Census stops on missing roots, unreadable or ambiguous stamps; `OTHER_CLOSE_EPOCH` covers sessions outside it. `PRIOR_CLOSE_EPOCH` cannot precede predecessor close. After a campaign close, copy marker `.ok` or `.air.ok` for that plan is required; after any other close, its Check/copy proof must bind the exact latest receipt path and close epoch; verified synchronous encrypted cloud offload counts permanently, upload finished before soak, plaintext/ciphertext hashes and size/provider confirmation recorded, key held off MBP, originals retained until verified copy. An unverified offload holds every arm including F0. A sync daemon is interim only; maintenance print includes bird/cloudd/fileproviderd. No marker is written by this item.
+- **Close proven (RL-179 F-2).** Require the latest close receipt, every restore readback, every feed stopped, the process group gone, no foreign process alive and the desk fence gone. Bind the Check to the selected receipt. The close census refuses missing roots, unreadable records and ambiguous latest stamps. Supply the receipt and timestamp for any close outside the census roots. The named predecessor's close and the actual latest close both bound the earliest start. A successor can arm as soon as that proof and its other gates pass. The copy check binds the verified campaign marker or other Check to the latest close.
 - **Quiet, native checks and stops.** Same measurement_mode (RL-149 §2.2/§2.4), Automatic, network time Off, frequency word 0, AC, meter ready, disk ≥40 GiB, no night/smoke agent, High Power marker, night.lock holder, stray monitor, root powermetrics or other agent. Preserve the dev-05 own-process-tree-only measurement_mode exception. Process/load census and rule 5 enforce quiet (RL-171 §2); no builds, analysis, SSH or tests while anything is armed. Named stops stop the next arm, never a running span. REFUSAL/restore/disk/watcher: lead clears; INSTRUMENT_FAULT: research lead; 3 contaminated redos: lead once, then research lead; two legs >1.5× own budget: lead; frozen-path/host-state changes: research lead (RL-149 §2.4). A reference missing at capture is refusal; no consumer proceeds on an invented reference. A v4 READY record preempts when effective under RL-175 A.2. A READY record cannot take effect between the halves of a block.
 
 **Start and check** (magistrate on the MBP only **after issue**; this builder never executes these blocks).
@@ -31,21 +31,21 @@ set -o pipefail
 cd /Users/edr/code/jw-wt/cadence-qual-01-s02
 REPO="$PWD"
 AUTH_REPO=/Users/edr/code/JouleWise
-PIN=57ed7334ea7dbc24ed47dfbf70c29c41197c9f01
+PIN=ab32a6c915a9a78f92554a89c5d0eb93333b7a39
 test "$(git rev-parse HEAD)" = "$PIN" && test -z "$(git status --porcelain)" || exit 1
 git symbolic-ref -q HEAD >/dev/null && exit 1
 : "${PY:?pinned measurement-venv interpreter}"
 : "${MAGISTRATE_PID:?own magistrate process PID}"
-KIT=/Users/edr/campaign-out/kits/cl-qual-01.v1.1-57ed7334e.json
-KIT_SHA=d77768e391f5ea9f3d8cd92a3bc97f846cf05c09cf66494579481b75b2932236
+KIT=/Users/edr/campaign-out/kits/cl-qual-01.v1.1-ab32a6c91.json
+KIT_SHA=fe5b692a39b8646b81fc4e7b738a1802ba00ab51bd09158d1525e2bec0ccbac4
 test "$(shasum -a 256 "$KIT" | cut -c1-64)" = "$KIT_SHA" || exit 1
 QUEUE_PATH=docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/item-drafts-1118/queues/cl-qual-01.queue.json
-QUEUE_SHA=b1a64f48892df87822618ed1ae55fb62ad313aca37e99174c9a92e54a4f8e03b
+QUEUE_SHA=fd540120f5cd54728635c4a86e037548af0cc8798a8b4a308dc5fd1ed50b6416
 QUEUE_FILE=/Users/edr/campaign-out/queues/cl-qual-01.queue.json
 test "$(shasum -a 256 "$QUEUE_FILE" | cut -c1-64)" = "$QUEUE_SHA" || exit 1
 SPAN=qual-01-s02; CAMP=cl-qual-01; LEGS=L007,L008,L009,L010,L011,L012
 PRED_SPAN=qual-01-s01; PRED_CAMP=cl-qual-01; PRED_ROSTER=L001,L002,L003,L004,L005,L006
-PRED_KIT_SHA=d77768e391f5ea9f3d8cd92a3bc97f846cf05c09cf66494579481b75b2932236; PRED_PIN=57ed7334ea7dbc24ed47dfbf70c29c41197c9f01
+PRED_KIT_SHA=fe5b692a39b8646b81fc4e7b738a1802ba00ab51bd09158d1525e2bec0ccbac4; PRED_PIN=ab32a6c915a9a78f92554a89c5d0eb93333b7a39
 T0_DATE=2026-11-19; WINDOW_START=1795075200; WINDOW_END=1795161599
 DAY_END=1795161599; FIRST_TO_SECOND_S=0
 EXPECTED_SPAN_S=12310
@@ -117,26 +117,33 @@ PY
 }
 effective_close() {
   case "${OTHER_CLOSE_EPOCH:-}" in ''|*[!0-9]*) echo 'STOP: OTHER_CLOSE_EPOCH required, explicit 0 if none'; return 1;; esac
-  CENSUS="$("$PY" -I -B - /Users/edr/campaign-out /Users/edr/code/jw-wt <<'PY'
+  CENSUS="$("$PY" -I -B - "$OTHER_CLOSE_EPOCH" "${OTHER_CLOSE_RECEIPT:-}" /Users/edr/campaign-out /Users/edr/code/jw-wt <<'PY'
 import json, math, os, sys
+from decimal import Decimal
 def fail(e): raise e
+def close_stamp(p):
+    if '\n' in p: sys.exit('STOP: bad receipt path')
+    try:
+        with open(p) as handle: ended = json.load(handle,parse_float=Decimal)['ended']['epoch_s']
+        if (type(ended) is not int and (not isinstance(ended,Decimal) or not ended.is_finite())) or ended<=0:
+            raise ValueError('invalid ended.epoch_s')
+        return ended
+    except (OSError, ValueError, KeyError, TypeError) as e:
+        sys.exit('STOP: unreadable receipt close stamp: ' + p + ': ' + str(e))
+other_epoch, other_receipt, *roots = sys.argv[1:]
 found = []
-for root in sys.argv[1:]:
+for root in roots:
     if not os.path.isdir(root): sys.exit('STOP: missing receipt root: ' + root)
     base = root.rstrip('/').count('/')
     for d, dirs, files in os.walk(root, onerror=fail):
         if d.count('/') - base >= 3: dirs[:] = []
         if 'runner_receipt.json' in files:
             p = os.path.join(d, 'runner_receipt.json')
-            if '\n' in p: sys.exit('STOP: bad receipt path')
-            try:
-                with open(p) as handle: ended = json.load(handle)['ended']['epoch_s']
-                if (isinstance(ended, bool) or not isinstance(ended, (int, float))
-                        or not math.isfinite(ended) or ended <= 0):
-                    raise ValueError('invalid ended.epoch_s')
-            except (OSError, ValueError, KeyError, TypeError) as e:
-                sys.exit('STOP: unreadable receipt close stamp: ' + p + ': ' + str(e))
-            found.append((ended, p))
+            found.append((close_stamp(p), p))
+if int(other_epoch):
+    ended = close_stamp(other_receipt)
+    if math.ceil(ended)!=int(other_epoch): sys.exit('STOP: OTHER_CLOSE_EPOCH disagrees with its close receipt')
+    found.append((ended,other_receipt))
 if not found: sys.exit('STOP: empty receipt census')
 latest = max(t for t, p in found)
 newest = [p for t, p in found if t == latest]
@@ -146,9 +153,6 @@ PY
 )" || return 1
   EFF_EPOCH="$(printf '%s\n' "$CENSUS" | sed -n 1p)"
   EFF_PATH="$(printf '%s\n' "$CENSUS" | sed -n 2p)"
-  if test "$OTHER_CLOSE_EPOCH" -gt "$EFF_EPOCH"; then
-    EFF_EPOCH=$OTHER_CLOSE_EPOCH; EFF_PATH=OTHER
-  fi
 }
 copy_gate() (
   # RL-171 §6.1/RL-173 A: campaign marker, or exact latest non-campaign Check's copy proof.
@@ -168,20 +172,23 @@ copy_gate() (
   echo "WAIT: no verified cloud .ok or Air .air.ok copy marker for $id (RL-173 A)"; exit 1
 )
 close_gate() {
-  test "${HOST_RESTORE_OK:-}" = 1 && test "${GROUPS_ABSENT:-}" = 1 \
-    || { echo 'STOP: restore or process-group absence unproven'; return 1; }
+  local actual now
+  test "${HOST_RESTORE_OK:-}" = 1 && test "${FEEDS_STOPPED:-}" = 1 \
+    && test "${GROUPS_ABSENT:-}" = 1 && test "${FOREIGN_PROCESSES_ABSENT:-}" = 1 \
+    || { echo 'STOP: restore, feed stop or process absence unproven (RL-179 F-2)'; return 1; }
   effective_close || return 1
+  test "${CLOSE_PROOF_RECEIPT:-}" = "$EFF_PATH" \
+    || { echo 'STOP: restore and shutdown proof must bind the latest close receipt (RL-179 F-2)'; return 1; }
   copy_gate || return 1
   case "$EFF_PATH" in
-    /Users/edr/campaign-out/cl-*/cq-*/runner_receipt.json) actual=campaign; gap=300;;
-    *) actual=other; gap=1200;;
+    /Users/edr/campaign-out/cl-*/cq-*/runner_receipt.json) actual=campaign;;
+    *) actual=other;;
   esac
   test "${LAST_CLOSE_KIND:-}" = "$actual" || { echo 'STOP: contradictory LAST_CLOSE_KIND'; return 1; }
-  # Even though the F2 files live in campaign-out, F2 is OTHER: always 1,200 s.
   now=$(date +%s)
-  test "$now" -ge $((EFF_EPOCH + gap)) && test "$now" -ge $((PRIOR_CLOSE_EPOCH + gap)) \
-    || { echo "WAIT: close interval $gap s"; return 1; }
-  echo "CLOSE OK latest $EFF_EPOCH kind $actual interval $gap"
+  test "$now" -ge "$EFF_EPOCH" && test "$now" -ge "$PRIOR_CLOSE_EPOCH" \
+    || { echo 'STOP: close stamp is in the future (RL-179 F-2)'; return 1; }
+  echo "CLOSE PROVEN latest $EFF_EPOCH kind $actual"
 }
 # RL-165 §8.1; RL-172 (i) row 9; RL-173 E: freeze 2 is the committed coefficient hash.
 FREEZE2_COMMIT="<LEAD FILLS: FREEZE2_COMMIT>"
@@ -319,7 +326,8 @@ PY
 }
 queue_gate() {
   filled "$QUEUE_COMMIT" || { echo 'WAIT: lead records queue commit (RL-149 §2.8 line 3)'; return 1; }
-  QUEUE_EXPIRES_EPOCH="$("$PY" -I -B - "$AUTH_REPO" "$QUEUE_COMMIT" "$QUEUE_PATH" "$QUEUE_SHA" "$SPAN" "$LEGS" "$T0_DATE" "$KIT_SHA" "$(date +%s)" <<'PY'
+  local stamps
+  stamps="$("$PY" -I -B - "$AUTH_REPO" "$QUEUE_COMMIT" "$QUEUE_PATH" "$QUEUE_SHA" "$SPAN" "$LEGS" "$T0_DATE" "$KIT_SHA" "$(date +%s)" <<'PY'
 import hashlib, json, re, subprocess, sys
 repo, commit, path, sha, span, legs, day, kit_sha, now=sys.argv[1:]; now=int(now)
 def git(*a): return subprocess.check_output(['git','-C',repo,*a],stderr=subprocess.DEVNULL)
@@ -337,9 +345,12 @@ try:
     entry=entries[0]
     assert entry['legs']==legs.split(',') and entry['not_before']==day and entry['kit']['sha256']==kit_sha and entry['attempt']==1
 except (OSError,ValueError,KeyError,TypeError,AssertionError,subprocess.CalledProcessError): sys.exit('STOP: queue commit/hash/roster/span date/kit/attempt/seven-day expiry (RL-149 §2.8 line 3; RL-175 C.3)')
-print(int(expiry))
+print(committed,int(expiry))
 PY
 )" || return 1
+  IFS=' ' read -r QUEUE_COMMIT_EPOCH QUEUE_EXPIRES_EPOCH <<EOF
+$stamps
+EOF
   echo "QUEUE COMMITTED $QUEUE_COMMIT finite expiry $QUEUE_EXPIRES_EPOCH"
 }
 debt_gate() {
@@ -388,6 +399,13 @@ window_gate() {
     || { echo 'REFUSE: outside item t0-date or LIMIT; follow missed-date recovery (RL-172 (a)5)'; return 1; }
 }
 arm_bound_gate() {
+  local opens expires now
+  ARM_NOT_BEFORE_EPOCH=$WINDOW_START
+  for opens in "$ISSUED_EPOCH" "$((WATCH_UNTIL_EPOCH - 86400))" "$QUEUE_COMMIT_EPOCH" \
+    "$PRED_CLOSE_EPOCH" "$PRIOR_CLOSE_EPOCH" "$EFF_EPOCH"; do
+    case "$opens" in ''|*[!0-9]*) echo 'STOP: start bound missing or invalid'; return 1;; esac
+    if test "$opens" -gt "$ARM_NOT_BEFORE_EPOCH"; then ARM_NOT_BEFORE_EPOCH=$opens; fi
+  done
   # Date/window end is inclusive to the printed second. Expiries are exclusive.
   ARM_BEFORE_EPOCH=$((WINDOW_END + 1))
   for expires in "$EXPIRES_EPOCH" "$QUEUE_EXPIRES_EPOCH" "$WATCH_UNTIL_EPOCH"; do
@@ -405,21 +423,26 @@ arm_bound_gate() {
     pair_before=$((second_before - FIRST_TO_SECOND_S))
     if test "$pair_before" -lt "$ARM_BEFORE_EPOCH"; then ARM_BEFORE_EPOCH=$pair_before; fi
   fi
-  test "$(date +%s)" -lt "$ARM_BEFORE_EPOCH" || {
+  now=$(date +%s)
+  test "$now" -ge "$ARM_NOT_BEFORE_EPOCH" || {
+    echo "REFUSE: before earliest authorized t0 $ARM_NOT_BEFORE_EPOCH"
+    return 1
+  }
+  test "$now" -lt "$ARM_BEFORE_EPOCH" || {
     echo "REFUSE: effective t0 cutoff $ARM_BEFORE_EPOCH (date, item/queue/watch expiry, dependent span)"
     return 1
   }
-  echo "AUTHORIZED T0 $T0_DATE before $ARM_BEFORE_EPOCH"
+  echo "AUTHORIZED T0 $T0_DATE [$ARM_NOT_BEFORE_EPOCH, $ARM_BEFORE_EPOCH)"
 }
 t0_clock_anchor() {
-  "$PY" -I -B -c 'import time; before = time.monotonic_ns(); print(f"{time.time_ns()}:{before}:{time.monotonic_ns()}")'
+  "$PY" -I -B "$REPO/scripts/cadence_legs_runner.py" t0-anchor
 }
 batch_gate() {
   # Fresh boot and clock reads at both Start and Run.
   local anchor bounds
   BATCH_BOOT="$(sysctl -n kern.boottime)" || { echo 'STOP: boot time unavailable (RL-175 C.4)'; return 1; }
   anchor="$(t0_clock_anchor)" || return 1
-  bounds="$("$PY" -I -B - "$BATCH_BOOT" "$anchor" "$EXPECTED_SPAN_S" "$WINDOW_START" "$ARM_BEFORE_EPOCH" <<'PY'
+  bounds="$("$PY" -I -B - "$BATCH_BOOT" "$anchor" "$EXPECTED_SPAN_S" "$ARM_NOT_BEFORE_EPOCH" "$ARM_BEFORE_EPOCH" <<'PY'
 import re, sys
 raw, anchor, expected, start, cutoff = sys.argv[1:]
 boot = re.fullmatch(r'\{\s*sec\s*=\s*([0-9]+),\s*usec\s*=\s*[0-9]+\s*\}.*',raw)
@@ -429,7 +452,9 @@ if not boot or not stamp or not all(v.isascii() and v.isdecimal() for v in (expe
 boot, expected, start, cutoff = int(boot[1]), int(expected), int(start), int(cutoff)
 now = int(stamp[1])//1_000_000_000
 soak_s, cooldown_s, day_s = 1950, 27*60, 86400
-if int(stamp[2])>int(stamp[3]) or not 0<boot<=now or not soak_s<=expected<day_s-cooldown_s or not start<=now<cutoff:
+if now<start:
+    sys.exit(f'REFUSE: arm clock before earliest authorized t0 {start}')
+if int(stamp[2])>int(stamp[3]) or not 0<boot<=now or not soak_s<=expected<day_s-cooldown_s or now>=cutoff:
     sys.exit('STOP: invalid boot time, span duration or t0 cutoff (RL-175 C.4)')
 # The existing prediction is anchored to boot, with the observed 48 s offset.
 first = boot + 43248
@@ -498,7 +523,7 @@ case "$OUT" in */restricted/*|*/night-*|"$REPO"/*|*/configs/campaigns/align_v4*)
 
 Lead/magistrate supplies the current observations listed in `evidence/record-shapes.md`. `CHECKLIST_OK=yes` is set only **after** every native read above and the kit's complete checklist passes; each call clears any supplied yes before running the checks. Disk, meter, process census, no halt/veto and all restore lines are mandatory.
 
-**Run (your last action).** Re-read stops, veto, watcher, typed desk/Q1 debt, host-state identity, v4 READY record and current boot time. Verify the current kit/queue hashes again and fetch refs before the last gate. Pass the authorized date, inclusive earliest start, exclusive cutoff and clock anchor to the child. Watcher expiry bounds the cutoff alongside the other expiry, window and batch limits. After a batch, the earliest start includes its cooldown. The pinned runner checks both clocks against this authority before creating the output directory and records the authority with its admitted t0. The runner then checks its native checklist and per-leg process census. The LaunchAgent holds the **shared desk fence** until close. The launch omits `--batch-window`.
+**Run (your last action).** Re-read stops, veto, watcher, typed desk/Q1 debt, host-state identity, v4 READY record and current boot time. Verify the current kit/queue hashes again and fetch refs before the last gate. Pass the authorized date, inclusive earliest start, exclusive cutoff and pinned clock anchor to the child. The earliest start is the maximum of the window start, issue, watcher observation, queue commit, proven close timestamps and any batch cooldown. The cutoff is the minimum of the expiry, window, dependent-span and batch bounds. The child checks the wall sample and the start interval projected on the sleep-inclusive clock before creating the output directory. The launch uses the shared desk fence and omits `--batch-window`.
 
 ```sh
 git -C "$AUTH_REPO" fetch -q origin audit/2026-11-10-fable main || exit 1
@@ -519,7 +544,7 @@ DEADLINE="$("$PY" -I -B -c 'import time; print(time.time()+28160)')"
 echo "$OUT"
 ```
 
-Require exit 0, `"next": "exit the magistrate session now"`, a claimed desk fence whose pid differs from MAGISTRATE_PID, and launch plan `batch_windows == []`. Record every gate print, all record pointers, date-rule/cap reading, predecessor/host close epochs and kind, GAP, issue/expiry/watch stamps, freeze-2 commit/path/hash, host-state identity, worktree HEAD, kit/queue commit/hash, six legs and their caps, OUT, DEADLINE, native readbacks and plan. Then exit at once. Any refusal is reported; nothing is re-armed on this authority.
+Require exit 0, `"next": "exit the magistrate session now"`, a claimed desk fence whose pid differs from MAGISTRATE_PID, and launch plan `batch_windows == []`. Record every gate print, all record pointers, date-rule/cap reading, close proof and epochs, issue/expiry/watch stamps, freeze-2 commit/path/hash, host-state identity, worktree HEAD, kit/queue commit/hash, six legs and their caps, OUT, DEADLINE, native readbacks and plan. Then exit at once. Report any refusal and await fresh authority before re-arming.
 
 **Check (next activation, after the fence is gone).** Maintenance first, print only under RL-174 B.5: one system-log query over this span, save beside journals, count by 10-minute bucket and process, associate leg intervals from summaries if available. No additional exclusion. Keep `bird`, `cloudd` and `fileproviderd` in the print permanently (RL-174 D.1).
 
@@ -547,7 +572,7 @@ from pathlib import Path
 root=Path(sys.argv[1]); roster=sys.argv[2].split(',')
 r=json.loads((root/'runner_receipt.json').read_text())
 assert r['runner_kind']=='cadence-legs-v1.1' and r['roster']==roster
-assert r['kit']['sha256']=='d77768e391f5ea9f3d8cd92a3bc97f846cf05c09cf66494579481b75b2932236' and r['kit']['frozen_commit']=='57ed7334ea7dbc24ed47dfbf70c29c41197c9f01' and r['kit']['campaign_id']=='cl-qual-01'
+assert r['kit']['sha256']=='fe5b692a39b8646b81fc4e7b738a1802ba00ab51bd09158d1525e2bec0ccbac4' and r['kit']['frozen_commit']=='ab32a6c915a9a78f92554a89c5d0eb93333b7a39' and r['kit']['campaign_id']=='cl-qual-01'
 assert r['batch_windows']==[] and r.get('mock') in (None,False)
 print({k:r.get(k) for k in ('rc','error','legs_planned','legs_finished','span_result','ended','soak_attempts')})
 print('steps',[(s['name'],s['rc']) for s in r['steps']])
@@ -628,4 +653,4 @@ zsh /Users/Shared/JouleWise/measurement-mode/measurement_mode.zsh verify
 
 Report SPAN/LEGS, six caps (short leg L010 cap 3,724), receipt/restore and feed-stop lines, named stops, admitted count and exclusions under the six fixed rules, each consumer's release or timeout against L007, whether the reference came from a redo/excluded leg, maintenance overlaps, retry count (`soak_refusals`: kind not recorded), Q1 print, close epoch/fence-gone time, verified copy/offload marker and all native readbacks. Do not print power or energy. No commit from OUT. The magistrate reports; it never decides.
 
-**After (the lead, at the desk; not the magistrate).** Use this kit and the frozen pin `57ed7334ea7dbc24ed47dfbf70c29c41197c9f01` for deterministic desk, off-host or controller-only during a clean close interval (RL-173 B). Check exact roster/attempt/reference/kit/plan identities and authenticated nonempty table (RL-172 (c)). Record desk FINAL and the separate typed Q1 completion in actual machine order before k+2; hand-read first kit/G0-shape group and every redo/exclusion/schema-change span (RL-173 E). First qualification close: compare soak operational fields/reference schema to dev-05 and record SAME before qual-01-s02 (RL-172a F1); difference goes to research lead. Mark retried soaks for sampled hand-read; no missing refusal-kind field is invented. Update ledger `qual-01` RUNNING/COLLECTED/DESK_FINAL. Next block under its own dated item. Qualification energy stays sealed for its separately frozen look; no change to fit coefficients or score is authorized.
+**After (the lead, at the desk; not the magistrate).** Use this kit and the frozen pin `ab32a6c915a9a78f92554a89c5d0eb93333b7a39` for deterministic desk, off-host or controller-only during a clean close interval (RL-173 B). Check exact roster/attempt/reference/kit/plan identities and authenticated nonempty table (RL-172 (c)). Record desk FINAL and the separate typed Q1 completion in actual machine order before k+2; hand-read first kit/G0-shape group and every redo/exclusion/schema-change span (RL-173 E). First qualification close: compare soak operational fields/reference schema to dev-05 and record SAME before qual-01-s02 (RL-172a F1); difference goes to research lead. Mark retried soaks for sampled hand-read; no missing refusal-kind field is invented. Update ledger `qual-01` RUNNING/COLLECTED/DESK_FINAL. Next block under its own dated item. Qualification energy stays sealed for its separately frozen look; no change to fit coefficients or score is authorized.
