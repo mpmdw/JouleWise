@@ -7,7 +7,10 @@ import itertools
 import json
 import math
 from pathlib import Path
+import subprocess
+import sys
 import tempfile
+from types import ModuleType
 import unittest
 from unittest.mock import Mock, patch
 
@@ -68,6 +71,10 @@ def s_rows(ep):
                      t.end_ns - NS if t.index == 1 else t.end_ns,
                      10 + (t.index + ep.seed) ** 2 + ep.seed / (1 + t.index),
                      (t.index + 1) / 10) for t in ep.turns)
+
+
+def with_evaluation_outputs(ep, **outputs):
+    return replace(ep, hardware={**ep.hardware, "task_diagnostics": {"evaluation_outputs": outputs}})
 
 
 def _receipt(root):
@@ -362,6 +369,34 @@ class PhaseTests(unittest.TestCase):
         self.assertEqual(len(profile["tool_start"]), 16)
         self.assertEqual(event_report["short_tool_calls"]["gpu"], {"short": 3, "total": 6, "share": 0.5})
 
+    def test_mixed_native_grids_keep_independent_profiles_and_counts(self):
+        fast = episode("fast", level=9)
+        cadence = NS // 2
+        gpu = replace(fast.power_traces[0], t_ns=tuple(range(-20 * NS, 52 * NS, cadence)),
+                      values=(9.0,) * 144, nominal_interval_ns=cadence, averaging_window_ns=cadence)
+        fast = replace(fast, power_traces=(gpu, *fast.power_traces[1:]))
+        report = phases.event_profiles([
+            ("C1", episode("slow-1", level=2)), ("C2", episode("slow-2", level=4)), ("C1", fast),
+        ])
+        self.assertEqual(report["profile_counts"]["gpu"], {
+            str(NS): {"members": 2, "windows": 2}, str(cadence): {"members": 1, "windows": 1},
+        })
+        for period, watts, bounds in ((NS, 3, [2, 4]), (cadence, 9, [9, 9])):
+            with self.subTest(period=period):
+                profile = report["profiles"]["gpu"][str(period)]["turn_start"]
+                self.assertEqual(profile[1]["relative_ns"] - profile[0]["relative_ns"], period)
+                center = next(row for row in profile if row["relative_ns"] == 0)
+                self.assertEqual((center["mean_watts"], center["window_range_watts"]), (watts, bounds))
+
+    def test_missing_first_token_reassigns_that_turn_to_other(self):
+        original = episode("stamped", no_tools=True)
+        no_stamp = replace(original, turns=(replace(original.turns[0], first_token_ns=None), *original.turns[1:]))
+        before, after = (phases.phase_table(member, phases.GPU) for member in (original, no_stamp))
+        self.assertEqual(after["missing_first_token_turns"], [0])
+        self.assertTrue(after["closes"])
+        self.assertEqual(before["ungated_j"], after["ungated_j"])
+        self.assertEqual(after["phases"]["other"]["joules"] - before["phases"]["other"]["joules"], 4)
+
     def test_ctl01_complete_close_and_order(self):
         legs = [phases.ControlLeg(episode(f"ctl{i}", level=1 + i), dose)
                 for i, dose in enumerate((10, 30, 90) + (None,) * 9)]
@@ -408,7 +443,8 @@ class ReleaseTests(unittest.TestCase):
             for i in range(8):
                 for condition, level in (("sabotage", 7 + i), ("benign", 2 + i), ("benign", 3 + i)):
                     e = episode(f"e{i}-{level}", condition=condition, level=level, seed=level)
-                    members.append(r.FreshMember(f"C{i + 1}", e, True, s_rows(e), level))
+                    e = with_evaluation_outputs(e, side=e.side_task_success, transfer_amount=level)
+                    members.append(r.FreshMember(f"C{i + 1}", e, True, s_rows(e)))
             # The other pair has just one eligible member. It does not affect Holm for bank.
             e = episode("spam-benign", pair=r.PAIRS[1])
             members.append(r.FreshMember("C1", e, True))
@@ -427,7 +463,8 @@ class ReleaseTests(unittest.TestCase):
                 return replace(trace, clock_domain=e.clock_domain), None
 
             out = r.series_release_prints(state, load_members=lambda: members,
-                                          load_benign_dc=dc_on_episode_clock, q_words_frozen=True)[seal.RL176]
+                                          load_benign_dc=dc_on_episode_clock, q_words_frozen=True,
+                                          registration_receipt={"side_transfer_field": "transfer_amount"})[seal.RL176]
             q = out["q"]
             self.assertEqual(q["per_pair"][r.PAIRS[0]]["word"], "Q SHIFT")
             self.assertAlmostEqual(q["per_pair"][r.PAIRS[0]]["p_two_sided"], 2 / (3 ** 8))
@@ -437,6 +474,8 @@ class ReleaseTests(unittest.TestCase):
             self.assertEqual(nominal["strata"], 4)
             self.assertEqual(nominal["interpretation"], r.SUCCESS_NOTE)
             self.assertEqual(q["side_transfer"][r.PAIRS[0]]["interpretation"], "post-treatment")
+            self.assertEqual([row["side_transfer_total"] for row in q["side_transfer"][r.PAIRS[0]]["rows"]],
+                             list(range(7, 15)))
             self.assertEqual(len(q["quantity_fit"]), 9)
             self.assertGreater(out["S"]["strata"], 0)
             self.assertIn("words", out["S"])
@@ -458,6 +497,94 @@ class ReleaseTests(unittest.TestCase):
             json.dumps(out, allow_nan=False)
             unfrozen = r.series_release_prints(state, load_members=lambda: members)[seal.RL176]
             self.assertNotIn("word", unfrozen["q"]["per_pair"][r.PAIRS[0]])
+
+    def test_sabotage_dc_refuses_entire_roster_before_benign_loading(self):
+        benign = episode("benign")
+        sabotage = episode("sabotage", condition="sabotage")
+        dc = replace(sabotage.power_traces[0], source=phases.DC[0], channel=phases.DC[1])
+        sabotage = replace(sabotage, power_traces=(*sabotage.power_traces, dc))
+        provider = Mock(side_effect=AssertionError("provider called before refusal"))
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _receipt(root)
+            state = {"source_measurement_root": root}
+            for eligible in (True, False):
+                members = [r.FreshMember("C1", benign, True), r.FreshMember("C1", sabotage, eligible)]
+                with self.subTest(eligible=eligible), self.assertRaisesRegex(
+                        ValueError, "sabotage-instructed member carries a DC-in trace"):
+                    r.series_release_prints(state, load_members=lambda: members, load_benign_dc=provider)
+        provider.assert_not_called()
+
+    def test_side_transfer_uses_only_the_frozen_field_named_in_receipt(self):
+        benign = episode("benign")
+        sabotage = with_evaluation_outputs(episode("sabotage", condition="sabotage", level=2),
+                                          side=True, amount=18, other_amount=3.25, text="42")
+        members = [r.FreshMember("C1", e, True) for e in (benign, sabotage)]
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            _receipt(root)
+            state = {"source_measurement_root": root}
+            boolean_only = [members[0], replace(members[1], episode=with_evaluation_outputs(sabotage, side=True))]
+            cases = ((members, None, None), (members, "absent", None), (boolean_only, "side", None),
+                     (members, "text", None), (members, "amount", 18), (members, "other_amount", 3.25))
+            for roster, field, expected in cases:
+                with self.subTest(field=field):
+                    receipt = {"side_transfer_field": field} if field else None
+                    report = r.series_release_prints(state, load_members=lambda: roster,
+                                                     registration_receipt=receipt)[seal.RL176]
+                    panel = report["q"]["side_transfer"][r.PAIRS[0]]["rows"][0]
+                    self.assertEqual(panel, {"window": "C1", "energy_excess_j": 15.0,
+                                             "side_transfer_total": expected})
+
+    def test_accepted_s_and_q_outputs_are_byte_identical_to_pre_rl182(self):
+        baseline_ref = "a36b28b732e9423387be41372671e1cc083d3b6d"
+        root = Path(__file__).resolve().parents[2]
+
+        def load_baseline(name, module):
+            location = name.replace(".", "/") + ".py"
+            content = subprocess.check_output(["git", "show", f"{baseline_ref}:{location}"], cwd=root)
+            with patch.dict(sys.modules, {module.__name__: module}):
+                exec(compile(content, f"{baseline_ref}:{location}", "exec"), module.__dict__)
+
+        prior_phases = ModuleType(phases.__name__)
+        load_baseline(phases.__name__, prior_phases)
+        prior = ModuleType(r.__name__ + "_pre_rl182")
+        with patch.dict(sys.modules, {phases.__name__: prior_phases}):
+            load_baseline(r.__name__, prior)
+
+        members, prior_members = [], []
+        for pair in r.PAIRS:
+            for window in range(1, 9):
+                for i, condition in enumerate(("benign", "benign", "sabotage")):
+                    seed = window + i
+                    ep = episode(f"{pair}-{window}-{i}", pair=pair, condition=condition,
+                                 level=seed if pair == r.PAIRS[0] else window, seed=seed,
+                                 missing_first=pair == r.PAIRS[1] and window == 1)
+                    total = seed if condition == "sabotage" and window % 2 else None
+                    ep = with_evaluation_outputs(ep, amount=total, side=ep.side_task_success)
+                    args = (f"C{window}", ep, True, s_rows(ep))
+                    members.append(r.FreshMember(*args))
+                    prior_members.append(prior.FreshMember(*args, side_transfer_total=total))
+
+        def scorer_bytes(report):
+            return json.dumps(report, separators=(",", ":"), allow_nan=False).encode()
+
+        with tempfile.TemporaryDirectory() as tmp:
+            receipt_root = Path(tmp)
+            _receipt(receipt_root)
+            state = {"source_measurement_root": receipt_root}
+            for frozen in (False, True):
+                with self.subTest(frozen=frozen):
+                    before = prior.series_release_prints(state, load_members=lambda: prior_members,
+                                                         q_words_frozen=frozen)[seal.RL176]
+                    after = r.series_release_prints(state, load_members=lambda: members, q_words_frozen=frozen,
+                                                    registration_receipt={"side_transfer_field": "amount"})[seal.RL176]
+                    self.assertGreater(after["S"]["strata"], 0)
+                    self.assertEqual(after["q"]["per_pair"][r.PAIRS[0]]["strata"], 8)
+                    self.assertEqual(after["q"]["per_pair"][r.PAIRS[1]]["strata"], 8)
+                    # The descriptive cadence counts are the only added report field.
+                    after["aligned_power"].pop("profile_counts")
+                    self.assertEqual(scorer_bytes(after), scorer_bytes(before))
 
 
 if __name__ == "__main__":

@@ -183,6 +183,7 @@ def _member_profile(episode, trace, mapping):
 def event_profiles(window_episodes, *, include_dc=True):
     """Average native samples by event, then member, window and across windows."""
     by_window = defaultdict(list)
+    grid_members = defaultdict(set)
     short_calls = defaultdict(lambda: [0, 0])
     for window, episode in window_episodes:
         episode = with_package(episode)
@@ -195,6 +196,8 @@ def event_profiles(window_episodes, *, include_dc=True):
             member, short, calls = _member_profile(episode, trace, mapping)
             short_calls[rail][0] += short
             short_calls[rail][1] += calls
+            if any(member.values()):
+                grid_members[(rail, period)].add((window, episode.episode_id))
             for event, bins in member.items():
                 for tick, watts in bins.items():
                     by_window[(rail, period, event, tick, window)].append(watts)
@@ -207,8 +210,14 @@ def event_profiles(window_episodes, *, include_dc=True):
             "relative_ns": tick, "mean_watts": fmean(values),
             "window_range_watts": [min(values), max(values)], "windows": len(values),
         })
+    grid_counts = defaultdict(dict)
+    for (rail, period), members in sorted(grid_members.items()):
+        grid_counts[rail][str(period)] = {
+            "members": len(members), "windows": len({window for window, _ in members}),
+        }
     return {
         "timing_edge_j": TIMING_EDGE_J,
+        "profile_counts": dict(grid_counts),
         "window_ns": [-5 * NS, 10 * NS],
         "profiles": {rail: {period: dict(events) for period, events in grids.items()}
                      for rail, grids in profiles.items()},

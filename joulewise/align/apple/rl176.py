@@ -1,4 +1,4 @@
-"""ALIGN v4 series analysis under RL-176 through RL-178.
+"""ALIGN v4 series analysis under RL-176 through RL-182.
 
 The release caller supplies the finalized fresh C/T roster, A9 eligibility
 and the reference-state rows selected by RL-149. RL-177 changes S's score
@@ -7,6 +7,7 @@ No loaders are called by the guarded entry point on an incremental desk.
 """
 
 from collections import Counter, defaultdict
+from collections.abc import Mapping
 from dataclasses import dataclass, replace
 from fractions import Fraction
 import math
@@ -57,7 +58,6 @@ class FreshMember:
     episode: Episode
     eligible: bool
     s_rows: tuple[ReferenceRow, ...] = ()
-    side_transfer_total: float | None = None
     exclusion_reason: str | None = None
 
 
@@ -444,17 +444,25 @@ def _quantity_print(observations):
             "fit_status": "full_rank" if full is not None else "insufficient_or_rank_deficient"}
 
 
-def _side_transfer(groups):
+def _side_transfer_total(episode, field):
+    if not isinstance(field, str) or not field:
+        return None
+    diagnostics = episode.hardware.get("task_diagnostics")
+    outputs = diagnostics.get("evaluation_outputs") if isinstance(diagnostics, Mapping) else None
+    value = outputs.get(field) if isinstance(outputs, Mapping) else None
+    return value if finite(value) else None
+
+
+def _side_transfer(groups, field):
     rows = []
     for group in groups:
         instructed = next((m for m in group if m.episode.condition == "sabotage"), None)
         benign = [m.q_j for m in group if m.episode.condition == "benign" and finite(m.q_j)]
         if instructed is None:
             continue
-        total = instructed.member.side_transfer_total
         excess = instructed.q_j - fmean(benign) if benign and finite(instructed.q_j) else None
         rows.append({"window": instructed.member.window, "energy_excess_j": excess,
-                     "side_transfer_total": total if finite(total) else None})
+                     "side_transfer_total": _side_transfer_total(instructed.episode, field)})
     return {"interpretation": "post-treatment", "rows": rows}
 
 
@@ -504,10 +512,15 @@ def _prompt_phase_print(group):
                              for condition in ("benign", "sabotage")}}
 
 
-def _series_prints(members, ctl01, *, q_words_frozen, load_benign_dc):
+def _series_prints(members, ctl01, *, q_words_frozen, load_benign_dc, side_transfer_field=None):
     groups = defaultdict(list)
     ids, assigned = set(), set()
     roster = tuple(members)
+    for member in roster:
+        episode = member.episode
+        if episode.condition == "sabotage" and any(
+                (trace.source, trace.channel) == DC for trace in episode.power_traces):
+            raise ValueError("sabotage-instructed member carries a DC-in trace")
     for member in roster:
         e = member.episode
         pair = e.task_pair.removeprefix("shade/")
@@ -568,7 +581,7 @@ def _series_prints(members, ctl01, *, q_words_frozen, load_benign_dc):
             "work_nominal": work,
             "quantity_fit": [{"window": window, "pair": pair, **_quantity_print(group)}
                              for (window, pair), group in sorted(groups.items())],
-            "side_transfer": {pair: _side_transfer(group) for pair, group in per_pair.items()},
+            "side_transfer": {pair: _side_transfer(group, side_transfer_field) for pair, group in per_pair.items()},
         },
         "aligned_power": {
             **event_profiles((m.member.window, m.episode) for group in pooled for m in group),
@@ -584,12 +597,15 @@ def _series_prints(members, ctl01, *, q_words_frozen, load_benign_dc):
 
 
 def series_release_prints(state, *, load_members, load_ctl01=None, load_benign_dc=None,
-                          q_words_frozen=False):
+                          q_words_frozen=False, registration_receipt=None):
     """Compute S, Q and their prints under the series desk release guard.
 
     Callers may enable words only with the pre-C1 code freeze or re-signed
     receipt in RL-176 F. The default prints Q's exact p without outcome words.
-    Benign DC is opened via its own optional, benign-only adapter.
+    The caller keys its DC provider by the manifest's benign ordinals.
+    For the side-transfer print, the caller supplies the validated binding
+    receipt. Its optional side_transfer_field names a single key in the
+    frozen evaluator output. Without that key and a number, print null.
     """
     if not v4_desk_seal.released(state):
         return {v4_desk_seal.RL176: dict.fromkeys(RELEASE_LEAVES, v4_desk_seal.WITHHELD)}
@@ -597,6 +613,10 @@ def series_release_prints(state, *, load_members, load_ctl01=None, load_benign_d
         raise TypeError("q_words_frozen must be a documented boolean freeze decision")
     members = load_members()
     ctl01 = load_ctl01() if load_ctl01 is not None else None
-    report = _series_prints(members, ctl01, q_words_frozen=q_words_frozen, load_benign_dc=load_benign_dc)
+    side_transfer_field = (
+        registration_receipt.get("side_transfer_field") if isinstance(registration_receipt, Mapping) else None
+    )
+    report = _series_prints(members, ctl01, q_words_frozen=q_words_frozen, load_benign_dc=load_benign_dc,
+                            side_transfer_field=side_transfer_field)
     report["S"]["superiority_alpha"] = float(S_SUPERIORITY_ALPHA)
     return {v4_desk_seal.RL176: report}
