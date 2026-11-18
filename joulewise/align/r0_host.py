@@ -14,11 +14,10 @@ import shutil
 import subprocess
 import threading
 import time
-from types import SimpleNamespace
 
 from joulewise import measurement_liveness
 from joulewise.measurement_liveness import census, custody_parent, Refused, ADDITIONAL_PARENTS_ENV
-from joulewise.night_gate import ProbeResult, agent_census
+from joulewise.night_gate import AGENT_CENSUS_PATTERN, ProbeResult, decide_census
 from joulewise.prewindow import PS_ARGV, busy_contaminants
 from joulewise import prewindow
 from joulewise.hazards import contention
@@ -26,6 +25,12 @@ from joulewise.hazards.base import Stamp
 from joulewise.align.r0_step import (ProfileRefused, profile_config as fixed_profile,
                                      rank_response, step_budget as fixed_budget)
 from joulewise.align.apple.smc_enumeration import rank as classify_smc
+
+
+R0_AGENT_CENSUS_ARGV = (
+    "/usr/bin/pgrep", "-a", "-lf", "-i",
+    r"/(Claude|Codex)[.]app/Contents/MacOS/|" + AGENT_CENSUS_PATTERN,
+)
 
 
 def profile_config(value=None):
@@ -76,27 +81,34 @@ def _installed_night_agents():
 
 
 def _interior_exit_evidence(opening, current, intermediate, elapsed_s, limit):
-    """CPU lower bounds for contenders sampled only inside the window."""
-    endpoints = opening.rows.keys() | current.rows.keys()
+    """CPU lower bounds for contenders seen before the closing sample."""
     evidence = {}
     for snapshot in intermediate:
         wall_shift_ns = ((snapshot.started.wall_ns - opening.started.wall_ns)
                          - (snapshot.started.monotonic_ns - opening.started.monotonic_ns))
-        if abs(wall_shift_ns) > 1_000_000_000:
-            continue
-        # Charge cumulative CPU only with a birth known to follow the
-        # completed opening sample. Allow for positive wall-clock skew.
         window_start_ns = opening.finished.wall_ns + max(0, wall_shift_ns)
-        for identity in snapshot.rows.keys() - endpoints:
+        for identity in snapshot.rows.keys() - current.rows.keys():
             row = snapshot.rows[identity]
-            birth_ns = row["start_epoch_s"] * 1_000_000_000
-            if not row["contaminant"] or not window_start_ns <= birth_ns <= snapshot.finished.wall_ns:
-                continue
-            rate = row["cumulative_cpu_seconds"] / elapsed_s
-            if rate > evidence.get(identity, {}).get("cpu_s_per_s", limit):
+            first = opening.rows.get(identity)
+            if first is None:
+                # An unmatched opening counter can only be zero for a
+                # process known to be born after the opening sample.
+                birth_ns = row["start_epoch_s"] * 1_000_000_000
+                if (not row["contaminant"] or abs(wall_shift_ns) > 1_000_000_000
+                        or not window_start_ns <= birth_ns <= snapshot.finished.wall_ns):
+                    continue
+                cpu = row["cumulative_cpu_seconds"]
+                basis = "CPU lower bound from a process sampled inside this window"
+            else:
+                if not (first["contaminant"] or row["contaminant"]):
+                    continue
+                cpu = row["cumulative_cpu_seconds"] - first["cumulative_cpu_seconds"]
+                basis = "CPU lower bound from the opening counter and a sample before exit"
+            rate = cpu / elapsed_s
+            if math.isfinite(rate) and rate > evidence.get(identity, {}).get("cpu_s_per_s", limit):
                 evidence[identity] = {
                     "pid": row["pid"], "command": row["command"], "start": row["start_identity"],
-                    "cpu_s_per_s": rate, "basis": "CPU lower bound from a process sampled inside this window"}
+                    "cpu_s_per_s": rate, "basis": basis}
     return sorted(evidence.values(), key=lambda row: (-row["cpu_s_per_s"], row["pid"], row["start"]))
 
 
@@ -259,7 +271,10 @@ class QuietGuard:
         def probe(argv):
             r = self.run(argv, capture_output=True, text=True, timeout=15)
             return ProbeResult(argv, r.returncode, r.stdout, r.stderr, time.monotonic_ns())
-        agent, refusal = agent_census(SimpleNamespace(run=probe, monotonic_ns=time.monotonic_ns))
+        agent = probe(R0_AGENT_CENSUS_ARGV)
+        if type(agent.exit_code) is not int or not isinstance(agent.stdout, str) or not isinstance(agent.stderr, str):
+            raise Refused("agent census returned malformed probe result")
+        agent = decide_census(agent)
         custody = self.inspect_custody(parents=parents, strict=True)
         receipt["resolved_custody_parents"] = custody.resolved_parents
         table = probe(PS_ARGV)
@@ -277,7 +292,7 @@ class QuietGuard:
                 chains.append(line)
         receipt.update(agent=asdict(agent), custody={"refusals": custody.refusals, "warnings": custody.warnings},
                        pcpu_diagnostic=diagnostic, chains=chains)
-        if refusal or not custody.clear or chains:
+        if agent.exit_code != 1 or agent.stdout.strip() or not custody.clear or chains:
             raise Refused(f"machine occupied or census indeterminate: {receipt}")
 
     def _background_snapshot(self):
@@ -461,7 +476,6 @@ class QuietGuard:
         # An unproven regression alone is disclosure.
         if measured["error"] and measured["error"] != contention.REGRESSED_COUNTER_ERROR:
             raise Refused(f"census indeterminate: {measured['error']}")
-        busy = [row for row in measured["outside_over_limit"] if contaminant(row)]
         self._previous_over = {identity: rate for identity, rate in contention.over_limit(measured).items()
                                if identity in matches}
         for row in measured["outside_listed"]:
@@ -472,9 +486,14 @@ class QuietGuard:
                     "cpu_s": row["cpu_s_per_s"] * measured["elapsed_s"],
                     "cpu_s_per_s": row["cpu_s_per_s"]})
         interior_exits = _interior_exit_evidence(opening, current, intermediate, measured["elapsed_s"], limit)
-        details["exited_over_limit"] = [
-            row for row in measured["exited_over_limit"] if contaminant(row)] + interior_exits
-        return busy + interior_exits
+        interior_ids = {(row["pid"], row["start"]) for row in interior_exits}
+
+        def keep_endpoint_evidence(row):
+            return contaminant(row) and (row["pid"], row["start"]) not in interior_ids
+
+        details["exited_over_limit"] = [row for row in measured["exited_over_limit"]
+                                        if keep_endpoint_evidence(row)] + interior_exits
+        return [row for row in measured["outside_over_limit"] if keep_endpoint_evidence(row)] + interior_exits
 
     def _record_refusal(self, receipt, error):
         if not any(item is receipt for item in self.receipts):

@@ -2025,6 +2025,22 @@ class R0QuietIntervalTest(unittest.TestCase):
         self.assertIn("previous interval", busy[0]["basis"])
         self.assert_rate(busy[0]["cpu_s_per_s"], 0.06, 30)
 
+    def test_exit_delta_replaces_previous_interval_evidence_for_same_worker(self):
+        guard, clock, _ = self.guard([
+            cpu_table((42, OLD_START, "0:00.00", "mdworker_shared")),
+            cpu_table((42, OLD_START, "0:01.80", "mdworker_shared")),
+            cpu_table((42, OLD_START, "0:03.90", "mdworker_shared")),
+            cpu_table(),
+        ], driven=False)
+        guard.check(force=True)
+        self.tick(guard, clock, 45, 60)
+        guard.check(force=True)
+        interval = guard.receipts[-1]["cpu_intervals"][-1]
+        evidence, = interval["exited_over_limit"]
+        self.assertIn("opening counter", evidence["basis"])
+        self.assertAlmostEqual(evidence["cpu_s_per_s"], 0.07)
+        self.assertEqual(guard.contention_flags[-1]["busy"], [evidence])
+
     def test_report_floor_filters_only_the_receipt(self):
         # 0.005 * 30 = 0.15 CPU-s; 0.14 / 0.16 are one TIME quantum
         # below / above that receipt floor, not extra acceptance margins.
