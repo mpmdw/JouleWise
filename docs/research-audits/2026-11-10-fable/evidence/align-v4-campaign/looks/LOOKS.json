@@ -1,0 +1,11 @@
+{
+  "schema": "joulewise.cadence_look_ledger.v1",
+  "looks": [
+    {
+      "look_id": "lm-qual-01",
+      "manifest_path": "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/looks/lm-qual-01.manifest.json",
+      "sha256": "2ca269bb0b59e29aed29a12f13dfb5d02adef1d5b615b8e1833b5ee4650f9096",
+      "status": "registered"
+    }
+  ]
+}
