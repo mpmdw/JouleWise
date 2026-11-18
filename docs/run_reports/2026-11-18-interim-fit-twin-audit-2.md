@@ -37,3 +37,8 @@ Round 1 had four verified high or medium findings and round 2 had five.
 Round 2 is non-decaying under Pipeline §3. The user authorized these bounded
 corrections. The next gate belongs to the lead's return-to-spec disposition
 and the parent coverage correction before further audit or manifest pinning.
+
+The first round-two push conflicted with main's concurrent queue entry. A
+scratch three-way file check isolated `TASK_QUEUE.md`. Moving this lane's
+manual entry below the typed-state entry resolved the conflict while
+retaining main's addition and the tested script bytes.
