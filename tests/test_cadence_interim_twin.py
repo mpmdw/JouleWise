@@ -115,6 +115,26 @@ class ComparisonTests(unittest.TestCase):
             del twin[section][path]
             self.assertEqual(parent_agreement(comparison_frame(projections(*example_outputs()), twin)), "no")
 
+    def test_audit_p01_p02_frame_preserves_coverage_and_valid_cell_keys(self):
+        from copy import deepcopy
+        from scripts.cadence_interim_twin import comparison_frame, projections
+
+        stage1, coefficients, fit, step3 = example_outputs()
+        fit["channels"]["gpu_rail"]["trace_coverage"]["min"] = 1.5
+        step3["cells"].append({"prompt_tokens": 4, "status": "not_run", "gamma_estimable": None})
+        primary = projections(stage1, coefficients, fit, step3)
+        frame = comparison_frame(primary, deepcopy(primary))
+        overlap = frame["trace_coverage"]["gpu_rail"]
+        for side in ("primary", "twin"):
+            self.assertEqual(overlap[side]["F#/channels/gpu_rail/trace_coverage"]["min"], 1.5)
+        self.assertEqual(parent_agreement(frame), "yes")
+
+        twin_step3 = {**step3, "cells": step3["cells"][:1]}
+        frame = comparison_frame(primary, projections(stage1, coefficients, fit, twin_step3))
+        self.assertEqual(set(frame["verdicts"]["primary"]["D#/cells"]), {"2", "4"})
+        self.assertEqual(set(frame["verdicts"]["twin"]["D#/cells"]), {"2"})
+        self.assertEqual(parent_agreement(frame), "no")
+
     def test_isolated_child_private_capture_and_closed_failure(self):
         launcher = """
 import importlib.util, os, pathlib, runpy, sys, warnings
@@ -788,6 +808,33 @@ def parse(path):
             with self.subTest(structured=structured), self.assertRaisesRegex(ValueError, "rostered writers"):
                 span_soak({**base, "soak_refusals": structured})
 
+    def test_audit_f03_f04_incomplete_steps_and_fatal_waits(self):
+        from scripts.cadence_interim_twin import span_soak
+
+        for step in ({"name": "soak", "rc": None}, {"name": "soak"}, {"name": "soak", "rc": 130}):
+            with self.subTest(legacy_step=step):
+                self.assertEqual(span_soak({"steps": [step]}), {"attempts": 1, "field_present": False,
+                                                                "accepted": False, "retried": []})
+        interrupted = {"soak_attempts": [soak_attempt(1)], "steps": []}
+        self.assertEqual(span_soak(interrupted), {"attempts": 1, "field_present": True,
+                                                 "accepted": False, "retried": []})
+        retry_interrupted = {"soak_attempts": [soak_attempt(1, "refused"), soak_attempt(2)],
+                             "steps": [{"name": "soak", "rc": 1}]}
+        self.assertEqual(span_soak(retry_interrupted), {"attempts": 2, "field_present": True,
+                         "accepted": False, "retried": [{"attempt": 1, "kind": "kind not recorded",
+                                                         "read_from": None}]})
+        for wait_rc in (130, None):
+            wait = {"name": "soak-blackout-wait", "rc": wait_rc}
+            legacy = {"steps": [wait, {"name": "soak", "rc": 0}]}
+            retry = {"steps": [{"name": "soak", "rc": 1}, {"name": "soak.a2-blackout-wait", "rc": wait_rc},
+                               {"name": "soak.a2", "rc": 0}],
+                     "soak_attempts": retry_interrupted["soak_attempts"]}
+            for receipt in (legacy, {**interrupted, **legacy}, {**interrupted, "steps": [wait]}, retry):
+                with self.subTest(receipt=receipt), self.assertRaisesRegex(ValueError, "failed soak wait"):
+                    span_soak(receipt)
+        with self.assertRaises(ValueError):
+            span_soak({**interrupted, "soak_attempts": [soak_attempt(1, "refused")]})
+
     def test_step3_fixed_effect_and_tripwire_against_hand_fit(self):
         from scripts.cadence_interim_twin import mean_centered_slope, step3_projection
 
@@ -914,6 +961,10 @@ class CensusStep3Tests(unittest.TestCase):
         if name == "phase":
             events.insert(0, {"event_type": "phase_start", "timestamp_s": 12, "phase": "align_thermal_hold",
                               "metadata": option})
+        if name == "hold_missing_stamp":
+            events.append({"event_type": option, "phase": "align_thermal_hold"})
+        if name == "token_null_metadata":
+            events[0]["metadata"] = None
 
         turns = [{"start_stamp": {"epoch_s": 0}, "end_stamp": {"epoch_s": 39 if name == "end_early" else 48},
                   "generation": {"output_token_ids": [1] * len(tokens)}}]
@@ -942,6 +993,15 @@ class CensusStep3Tests(unittest.TestCase):
                 alter(status, name)
             if name == "TV0h":
                 alter(sensors, name)
+            if name == "missing_freshness_sources":
+                status.pop("pm_observed_ns")
+                reading.pop("started")
+            if name == "started_without_clock":
+                reading.pop("started")
+            if name == "off_float" and t == 9:
+                status["os_level"] = 1.0
+            if name == "zero_before_cut" and t == 12:
+                status["os_level"] = 1
             if name == "all_error":
                 reading["error"] = "synthetic"
             readings.append(reading)
@@ -951,14 +1011,20 @@ class CensusStep3Tests(unittest.TestCase):
             for t in range(1, 49):
                 elapsed = 0 if name == "zero_elapsed" else 10**9
                 state = {"freq": 1000, "used_ns": 1000}
-                if name == "clock_overlap":
+                if name in ("clock_overlap", "clock_far_overlap"):
                     if t == 28:
                         state["freq"] = 100
-                    if t == 45:
+                    if t == 45 and name == "clock_overlap":
                         elapsed, state["used_ns"] = 45 * 10**9, 4_500_000
                 if name == "used_ns":
                     alter(state, name)
                 gpu = {"dvfm_states": [state]}
+                if name == "clock_state_without_use":
+                    gpu["dvfm_states"] = [{}]
+                if name == "bad_gpu_energy" and t == 20:
+                    gpu["gpu_energy"] = "bad"
+                if name == "native_default_elapsed" and t == 1:
+                    elapsed = option
                 frame = {"timestamp_s": t, "elapsed_ns": elapsed, "gpu": gpu}
                 if name == "dvfm_states":
                     alter(gpu, name)
@@ -966,6 +1032,8 @@ class CensusStep3Tests(unittest.TestCase):
                     alter(frame, name)
                 rich.append(frame)
                 raw = {"elapsed_ns": str(elapsed) if name == "native_elapsed" else elapsed}
+                if name == "native_default_elapsed" and t == 1:
+                    raw.clear()
                 if name == "pressure" and (option != "UnregisteredState" or leg == 0):
                     raw["thermal_pressure"] = option
                 native.append(plistlib.dumps(raw))
@@ -974,12 +1042,22 @@ class CensusStep3Tests(unittest.TestCase):
         if name == "native_outside":
             rich.append(dict(rich[-1], timestamp_s=1000))
             native.append(b"invalid plist outside the load window")
+        if name == "pressure_after_turn":
+            rich.append(dict(rich[-1], timestamp_s=49))
+            native.append(plistlib.dumps({"elapsed_ns": 10**9, "thermal_pressure": "UnregisteredState"}))
+        if name in ("clock_far_overlap", "clock_far_reference"):
+            frequency = 2000 if name == "clock_far_reference" else 1000
+            rich.append({"timestamp_s": 100, "elapsed_ns": 100 * 10**9,
+                         "gpu": {"dvfm_states": [{"freq": frequency, "used_ns": 100_000_000}]}})
+            native.append(plistlib.dumps({}))
 
         gpu = [(t, t + 8, 2 if t < 32 or name != "zero_last" else 0) for t in range(0, 48, 8)]
         if name == "gap_part":
             gpu[2:3] = [(16, 19, 2), (22, 24, 2)]
         if name == "nonpositive_width":
             gpu.append((*option, 100))
+        if name == "zero_before_cut":
+            gpu[1] = (10, 16, 2)
         trace = "source,rail,interval_start_s,interval_end_s,timestamp_s,power_w\n"
         trace += "".join(f"powermetrics,gpu_power,{start},{stop},{stop},{power}\n" for start, stop, power in gpu)
         for path, rows in (("events.jsonl", events), ("outputs/align_turns.jsonl", turns),
@@ -991,6 +1069,38 @@ class CensusStep3Tests(unittest.TestCase):
         (directory / "raw/powermetrics.plist").write_bytes(b"\0".join(native))
         (directory / "power_trace.csv").write_text(trace)
         return step3_measurements(directory)
+
+    def test_round_one_step3_witnesses(self):
+        from scripts.cadence_interim_twin import step3_cells
+
+        within = ("within", False, "ok", True)
+        not_run = ("not_evaluable", None, "not_run", None)
+        unestimable = ("not_evaluable", None, "ok", False)
+        cases = [
+            ("T05", "hold_missing_stamp", "phase_start", 3, not_run),
+            ("T05", "hold_missing_stamp", "phase_end", 3, not_run),
+            ("T05", "token_null_metadata", None, 3, not_run),
+            ("T07", "missing_freshness_sources", None, 3, unestimable),
+            ("T07", "started_without_clock", None, 3, not_run),
+            ("T08", "off_float", None, 3, within),
+            ("T09", "TV0h", "absent", 1, not_run),
+            ("T10", "clock_state_without_use", None, 3, within),
+            ("T11", "native_default_elapsed", -1, 3, within),
+            ("T11", "native_default_elapsed", 1, 3, not_run),
+            ("T12", "pressure_after_turn", None, 3, within),
+            ("T13", "clock_far_overlap", None, 3, unestimable),
+            ("T13", "clock_far_reference", None, 3, unestimable),
+            ("T14", "bad_gpu_energy", None, 3, not_run),
+            ("T14", "zero_before_cut", None, 3, not_run),
+        ]
+        for clause, name, option, count, expected in cases:
+            with self.subTest(clause=clause, case=name, option=option), tempfile.TemporaryDirectory() as tmp:
+                entrants = [(2000, lambda i=i: self.measurements(Path(tmp) / str(i), i, (name, option)))
+                            for i in range(count)]
+                result = step3_cells(entrants, 0.08)
+                cell, = result["cells"]
+                self.assertEqual((result["tripwire"]["decision"], result["tripwire"]["trips"],
+                                  cell["status"], cell["gamma_estimable"]), expected)
 
     def test_census_t04_through_t15_step3_primary_outcomes(self):
         from scripts.cadence_interim_twin import step3_cells
@@ -1323,12 +1433,37 @@ class RawBundleTests(unittest.TestCase):
             stream = staged_span / "hazards/meter/stream-a.jsonl"
             original_stream = stream.read_bytes()
             for mode, expected, error in (("match", "yes", None), ("import audit", "yes", None),
+                    ("hold without timestamp", "yes", None),
                     ("perturbation", "no", None), ("missing stream", "not_evaluable", "FileNotFoundError"),
                     ("stage1 meter identity", "not_evaluable", "ValueError"),
                     ("decoder pin", "not_evaluable", "ValueError"), ("package pin", "not_evaluable", "ValueError"),
                     ("missing coefficient", "not_evaluable", "FileNotFoundError")):
                 with self.subTest(mode=mode):
-                    if mode == "perturbation":
+                    if mode == "hold without timestamp":
+                        hold = lines([{"event_type": "phase_start", "phase": "align_thermal_hold"}])
+                        file_entries = {file["path"]: file for file in fixture_files}
+                        for span in spans[:len(days)]:
+                            day = span["span_id"]
+                            directory = staged_span if day == days[0] else custody / day
+                            operational = span["custody"]["files_sha256"]
+                            for name in operational:
+                                if not name.endswith("/events.jsonl"):
+                                    continue
+                                path = directory / name
+                                updated = write(path, path.read_bytes() + hold)
+                                inventory_key = Path(day) / name if day == days[0] else path
+                                operational[name] = updated
+                                file_entries[str(inventory_key)]["sha256"] = updated
+                        sh = write(s1, json_bytes(stage1))
+                        primary_c["stage1_sha256"] = sh
+                        argv[argv.index("--stage1-sha256") + 1] = sh
+                        argv[argv.index("--coefficients-sha256") + 1] = write(c, json_bytes(primary_c))
+                        step3["cells"] = [dict(cell, status="not_run", gamma_estimable=None)
+                                          for cell in step3["cells"]]
+                        step3["tripwire"].update(decision="not_evaluable", trips=None)
+                        write(f, json_bytes(primary_fit))
+                        write(d, json_bytes(step3))
+                    elif mode == "perturbation":
                         primary_c["channels"]["dc_in"]["coefficients"]["p1"] *= 1.001
                         argv[argv.index("--coefficients-sha256") + 1] = write(c, json_bytes(primary_c))
                     elif mode == "missing stream":

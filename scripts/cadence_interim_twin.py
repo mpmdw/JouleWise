@@ -1047,36 +1047,49 @@ def span_soak(receipt):
     if not isinstance(steps, list):
         raise ValueError("invalid runner receipt steps")
     soak_steps = []
-    waits = set()
+    waits = {}
     for step in steps:
         if not isinstance(step, dict) or not isinstance(step.get("name"), str) or not step["name"]:
             raise ValueError("invalid runner step")
         name = step["name"]
+        rc = step.get("rc")
         if name in ("soak-blackout-wait", "soak.a2-blackout-wait"):
             prior_attempts = int(name == "soak.a2-blackout-wait")
             if name in waits or len(soak_steps) != prior_attempts:
                 raise ValueError("invalid soak wait order")
-            waits.add(name)
+            if rc is not None and type(rc) is not int:
+                raise ValueError("invalid soak wait return code")
+            waits[name] = rc
             continue
         if name == "soak" or name.startswith("soak.a"):
-            rc = step.get("rc")
             if rc is not None and type(rc) is not int:
                 raise ValueError("invalid soak step return code")
             soak_steps.append((name, rc))
 
+    step_names = [name for name, _ in soak_steps]
     if "soak_attempts" not in receipt:
-        if "soak.a2-blackout-wait" in waits or [name for name, _ in soak_steps] not in ([], ["soak"]):
+        if "soak.a2-blackout-wait" in waits or step_names not in ([], ["soak"]):
             raise ValueError("invalid legacy soak history")
-        return {"attempts": 1, "field_present": False, "accepted": True, "retried": []}
-
-    attempts = receipt["soak_attempts"]
+    attempts = receipt.get("soak_attempts", [])
     if not isinstance(attempts, list) or len(attempts) > SOAK_RETRIES + 1:
         raise ValueError("invalid soak attempts")
-    expected_names = ["soak", "soak.a2"][:len(attempts)]
-    if [name for name, _ in soak_steps] != expected_names:
-        raise ValueError("invalid soak step order")
+    progress = max(len(attempts), len(soak_steps))
+    for prior, name in enumerate(("soak-blackout-wait", "soak.a2-blackout-wait")):
+        if name in waits and waits[name] != 0 and progress > prior:
+            raise ValueError("attempt after a failed soak wait")
+    if "soak_attempts" not in receipt:
+        accepted = not soak_steps or soak_steps[0][1] == 0
+        return {"attempts": 1, "field_present": False, "accepted": accepted, "retried": []}
 
-    for number, (row, (_, rc)) in enumerate(zip(attempts, soak_steps, strict=True), 1):
+    expected_names = ["soak", "soak.a2"][:len(attempts)]
+    # The writer appends the terminal attempt before it can append the step.
+    interrupted = bool(attempts) and step_names == expected_names[:-1]
+    if step_names != expected_names and not interrupted:
+        raise ValueError("invalid soak step order")
+    codes = [rc for _, rc in soak_steps]
+    if interrupted:
+        codes.append(None)
+    for number, (row, rc) in enumerate(zip(attempts, codes, strict=True), 1):
         if not isinstance(row, dict) or row.keys() != SOAK_ATTEMPT_FIELDS:
             raise ValueError("invalid soak attempt fields")
         if type(row["attempt"]) is not int or row["attempt"] != number:
@@ -1091,11 +1104,13 @@ def span_soak(receipt):
         if row["output_dir"] != "soak" and (number != 1 or reason is None or row["output_dir"] != "soak.rejected1"):
             raise ValueError("invalid soak attempt directory")
 
+    if interrupted and attempts[-1]["refused"] is not None:
+        raise ValueError("refused soak attempt without a step")
     if "soak.a2-blackout-wait" in waits and (attempts[0]["refused"] is None or soak_steps[0][1] is None):
         raise ValueError("retry wait without a failed soak step")
     retried = [{"attempt": number, "kind": "kind not recorded", "read_from": None}
                for number in range(1, len(attempts))]
-    accepted = bool(attempts and attempts[-1]["refused"] is None and soak_steps[-1][1] == 0)
+    accepted = bool(attempts and attempts[-1]["refused"] is None and codes[-1] == 0)
     return {"attempts": len(attempts), "field_present": True, "accepted": accepted, "retried": retried}
 
 
@@ -1115,6 +1130,8 @@ def matched_step3_blocks(legs):
     by_block = {}
     for leg in legs:
         for block, temperature, joules in leg:
+            if temperature is None:
+                raise ValueError("missing pre-cut block temperature")
             by_block.setdefault(block, []).append((temperature, math.log(joules)))
     return [rows for rows in by_block.values() if len(rows) > 1]
 
@@ -1217,10 +1234,15 @@ def step3_records(events_data, turns_data, journal_data, rich_data, native_data)
     count = len(turn["generation"]["output_token_ids"])
     tokens = []
     for row in json_lines(events_data):
-        # Thermal hold and other phase events are outside the token stream.
-        if row.get("event_type") != "token":
+        event_type = row.get("event_type")
+        if event_type != "token":
+            # The hold diagnostic still requires the times of its phase events.
+            if event_type in ("phase_start", "phase_end") and row.get("phase") == "align_thermal_hold":
+                finite(row["timestamp_s"])
             continue
         metadata = row["metadata"]
+        if not isinstance(metadata, dict):
+            raise ValueError("invalid Step 3 token metadata")
         if metadata.get("align_turn_index") not in (None, 0):
             raise ValueError("invalid Step 3 turn index")
         tokens.append((int(metadata["index"]), float(row["timestamp_s"])))
@@ -1236,8 +1258,10 @@ def step3_records(events_data, turns_data, journal_data, rich_data, native_data)
         if row.get("kind") != "reading" or row.get("error"):
             continue
         values = row.get("values") or {}
-        journal.append((row["finished"]["wall_ns"] / 1e9, row["started"]["monotonic_ns"],
-                        (values.get("sensors") or {}).get("TV0h"), values.get("status") or {}))
+        status = values.get("status") or {}
+        started = row["started"]["monotonic_ns"] if type(status.get("pm_observed_ns")) is int else None
+        journal.append((row["finished"]["wall_ns"] / 1e9, started,
+                        (values.get("sensors") or {}).get("TV0h"), status))
     rich = json_lines(rich_data)
     native = [frame for frame in native_data.split(b"\0") if frame.strip()]
     if len(native) not in (len(rich), len(rich) + 1):
@@ -1248,12 +1272,18 @@ def step3_records(events_data, turns_data, journal_data, rich_data, native_data)
         state = None
         if start - 5 <= stamp <= token_times[-1] + 5:
             raw = plistlib.loads(raw_bytes)
-            if elapsed != int(raw["elapsed_ns"]):
+            if elapsed != int(raw.get("elapsed_ns", -1)):
                 raise ValueError("Step 3 telemetry intervals disagree")
             value = raw.get("thermal_pressure")
             state = value if isinstance(value, str) else None
-        frequencies = (frame.get("gpu") or {}).get("dvfm_states") or []
-        states = [(item["freq"], int(item.get("used_ns", 0))) for item in frequencies]
+        gpu = frame.get("gpu") or {}
+        if gpu.get("gpu_energy") is not None:
+            finite(gpu["gpu_energy"])
+        states = []
+        for item in gpu.get("dvfm_states") or []:
+            used = int(item.get("used_ns", 0))
+            if used > 0:
+                states.append((finite(item["freq"]), used))
         power_state.append((stamp, elapsed, state, states))
     return start, end, token_times, sorted(journal, key=lambda row: row[0]), power_state
 
@@ -1272,7 +1302,7 @@ def step3_cut(start, token_times, journal, power_state):
 
     def off(status):
         level = status.get("os_level")
-        return (isinstance(level, (int, float)) and level > 0
+        return (type(level) is int and level > 0
                 or status.get("pm_state") not in (None, "Nominal", "Unknown"))
 
     carry = next((row for row in reversed(journal) if row[0] <= start), None)
@@ -1294,10 +1324,11 @@ def step3_cut(start, token_times, journal, power_state):
     # Apply the e20 rule only to windows beginning at least 10 s into decode.
     # Scale active time by each row's overlap with the window.
     reference = max((freq for _, _, _, states in power_state for freq, used in states if used > 0), default=0)
+    clock_rows = [row for row in power_state if row[0] <= end + 30]
     intervals = [(right - elapsed / 1e9, right, math.fsum(used for _, used in states),
                   math.fsum(freq * used for freq, used in states))
-                 for right, elapsed, _, states in power_state if elapsed > 0]
-    for right in sorted({row[0] for row in power_state}):
+                 for right, elapsed, _, states in clock_rows if elapsed > 0]
+    for right in sorted({row[0] for row in clock_rows}):
         begin = right - 10
         if not token_times[0] + 10 <= begin < right <= end:
             continue
@@ -1336,6 +1367,8 @@ def step3_observations(start, tokens, journal, power, gpu):
     if cut is None:
         return False, None, []
     prefix = bisect_right(tokens, cut)
+    if 1 < prefix < len(tokens) and power_intervals(gpu, tokens[0], tokens[prefix - 1])[0] <= 0:
+        raise ValueError("nonpositive Step 3 pre-cut diagnostic response")
     first, last = step3_temperature(journal, tokens[0]), step3_temperature(journal, cut)
     rise = last - first if first is not None and last is not None else None
     observations = []
@@ -1363,7 +1396,7 @@ def step3_measurements(bundle):
     start, _, tokens, journal, power = step3_records(*(child_path(bundle, name).read_bytes() for name in sources))
     gpu = gpu_rows(child_path(bundle, "power_trace.csv").read_bytes())
     observations = step3_observations(start, tokens, journal, power, gpu)
-    if any(state not in STEP3_PRESSURE_STATES for _, _, state, _ in power):
+    if any(state not in STEP3_PRESSURE_STATES for stamp, _, state, _ in power if start <= stamp <= tokens[-1]):
         raise Step3CellFailure("unregistered Step 3 pressure state")
     return observations
 
