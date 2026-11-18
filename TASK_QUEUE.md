@@ -663,12 +663,6 @@ remain outstanding.
 
 T38c folds the six live follow-ups (including the existing bridge-baseline row) into the kernel and generated Current Queue below. Registration date is carried in each status note. The completed liveness-docs row above is the sole DONE record; completed tasks are absent from the live-only kernel. [Verification and flagged evidence discrepancies](docs/process_traces/2026-09-08-handoff-redo/99gk-bookkeeping-t38c-astra.md).
 
-## W1 line follow-up, 2026-11-18
-
-| Work | Priority and lane | Status and next gate | Evidence |
-| --- | --- | --- | --- |
-| Desk-seal successor and U3 export repair | P1 Phase Gate [AGENT] | Draft PR #826. Astra's round 4 audit returned MERGE at `134860d4a`. The follow-up separates the private timing spans and fixes the zsh command. The lead is scheduling Fable's cold pass on the desk and seal diff under RL-183 §2.5. Verify the Air gate hash against the signing pin before W1 and review the U3 exporter at `5a325b2ee` before step 4. | [Run report and clause map](docs/run_reports/2026-11-18-desk-seal-successor.md). Authority is RL-163, RL-168, RL-183 §2.5, RL-183b and register row 13. |
-
 ## Current Queue
 
 The generated region below is the sole live queue and source of truth for

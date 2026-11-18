@@ -98,3 +98,7 @@ Astra independently executed the synthetic retention, pack and desk regressions 
 | HIGH, premature v4 deletion | Astra independently reproduced the historical failure and confirmed retention on `134860d4a` under both clients, before pushed desk finality. | Refuted on audit head |
 
 The 221 local checks passed with synthetic inputs, including the ten-blob comparison and the U3 exporter. The local suite omitted two process-signal tests and one workspace-blocked synthetic fixture. The lead is scheduling the Fable cold pass required by RL-183 §2.5. The audit verdict applies to `134860d4a`, and the current draft carries the author's verified follow-up.
+
+## W1 handoff, 04:10
+
+PR #826 restores `RUN_STATE.md` and `TASK_QUEUE.md` to the W1 base under PR #829 so the candidate can take PR #813's updates. The lead is scheduling Fable's cold pass under RL-183 §2.5. Review the U3 exporter at `5a325b2ee` before W1-BLOCKERS step 4, and repeat step 4 at the signing pin if it used the earlier blob. Verify the installed Air gate hash against that pin before W1. Series-record commits and W1 signing wait for successor review and merge.
