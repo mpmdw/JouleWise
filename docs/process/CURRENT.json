@@ -1,10 +1,10 @@
 {
   "armed": null,
-  "next_observable": "the next activation (after the fence is gone) runs item 394's \"Check\" on the dev-05-s02 OUT (copy custody `cadence-dev05-s01a2-postcheck-4ad54659.sh`, OUT -> the s02 directory, LEGS L007-L012, ARG as recorded), copies it at once, reports (Ed + lead, RUN_STATE), then R1 as issued (items 397, 398; item 433)",
+  "next_observable": "the next activation after the fence of plan align-r1-20261118T1445Z is gone (latest end Thu 19 Nov 16:08:00 PST) runs item 398's \"Check after the fence is gone\": R1 terminal status and chain exit first; restore and process-group absence; the three A-B-A G0 releases; uninstall via `arm_align_r1.py uninstall`; network time ON then OFF with frequency word 0 and readback, minutes ON recorded; R1 close epoch recorded as OTHER_CLOSE_EPOCH with LAST_CLOSE_KIND=other; the G1 count by hand (RL-175 D.2); then the post-close disposition by the kit's printed word (item 433); then f2-stab-15 L001 (item 434)",
   "open_items": [
     {
       "expires_epoch_s": null,
-      "item": 436,
+      "item": 437,
       "owner": "magistrate",
       "status": "ISSUED"
     },
@@ -83,11 +83,11 @@
   ],
   "owner": "magistrate",
   "schema": "joulewise.current_pointer.v2",
-  "source_item": "436",
+  "source_item": "437",
   "source_item_heading_date": "2026-11-18",
   "wait": {
-    "deadline_epoch_s": 1795105020,
+    "deadline_epoch_s": 1795136880,
     "observable": "none",
-    "on_early_or_refused": "as item 394's pointer (re-issued by item 430): a launch refusal or STOP in the Run block means nothing of s02 ran; mail the lead; then the filler ladder (item 422). A census refusal with zero capture is retried under item 431."
+    "on_early_or_refused": "an install failure, an Ed NO or a directive stop before t0: nothing runs; uninstall through `arm_align_r1.py uninstall`, preserve S, mail Ed and the lead; the READY record (item 397) is then VOID under its clause 6 and a new READY record is needed. A t0 refusal by the night job: preserve S and every marker, no retry of a measured session; the next activation reports it to the lead."
   }
 }
