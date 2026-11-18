@@ -276,12 +276,14 @@ def registration_fixture(root, amount_field=None):
     })
     signed = commit_fixture(root, ["configs", "docs", "synthetic-transfer.json", "synthetic-u3.json"])
     artifacts = {path: hashlib.sha256((root / path).read_bytes()).hexdigest() for path in paths}
-    describe(root, reg + "registration_receipt.json", {
+    receipt_path = reg + "registration_receipt.json"
+    describe(root, receipt_path, {
         "schema": registration.RECEIPT_SCHEMA, "status": "registered", "commit": signed,
         "lead_signature": "lead: synthetic 2026-11-18", "artifacts": artifacts, "gates": gates,
         "rulings": {str(rule): "installed" for rule in registration.RULINGS},
         **({"side_transfer_field": amount_field} if amount_field is not None else {}),
     })
+    commit_fixture(root, [receipt_path])
 
 
 def stored_series(root, *, wins=102, different=None, no_rows=False, spoof=False, history=False,
@@ -410,8 +412,7 @@ def stored_series(root, *, wins=102, different=None, no_rows=False, spoof=False,
     write_release_context(root, commit=prior["commit"], tests=tests)
     describe(root, packet.SERIES_PATH, {"schema": packet.SERIES_SCHEMA, "previous_record": prior,
                                         "release_layouts": layouts})
-    tip = commit_fixture(root, [packet.SERIES_PATH, seal.SERIES_COMPLETE, seal.RELEASE_RECEIPT,
-                                registration.REGISTRATION + "registration_receipt.json"])
+    tip = commit_fixture(root, [packet.SERIES_PATH, seal.SERIES_COMPLETE, seal.RELEASE_RECEIPT])
     fixture_git(root, "update-ref", "refs/remotes/origin/align-v4-series-release", tip)
     return manifest
 
@@ -877,6 +878,11 @@ class SeriesReleaseTests(unittest.TestCase):
             with self.subTest(wins=wins), tempfile.TemporaryDirectory() as tmp:
                 root = Path(tmp)
                 stored_series(root, wins=wins)
+                c1_record = json.loads((root / "records/C1/record.json").read_bytes())
+                w1_commit = c1_record["previous_record"]["commit"]
+                receipt_path = registration.REGISTRATION + "registration_receipt.json"
+                self.assertEqual(json.loads(fixture_git(root, "show", f"{w1_commit}:{receipt_path}")),
+                                 json.loads((root / receipt_path).read_bytes()))
                 output = root / "report.json"
                 result = invoke(root, output)
                 self.assertEqual(result.returncode, 0, result.stderr)
