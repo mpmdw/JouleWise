@@ -4,6 +4,7 @@ from contextlib import redirect_stderr, redirect_stdout
 from copy import deepcopy
 from hashlib import sha256
 from io import StringIO
+from itertools import product
 import json
 import os
 from pathlib import Path
@@ -110,6 +111,8 @@ class VariantContractTests(unittest.TestCase):
     def test_dispatch_by_schema_id(self):
         with tempfile.TemporaryDirectory() as tmp:
             candidate = Path(tmp) / "unrelated-filename.json"
+            v1_tool = Path(tmp) / "synthetic_v1.py"
+            v1_tool.write_text("print('synthetic legacy delegation')\n", encoding="utf-8")
             for source in (QUALIFICATION, INSTRUMENT, STABILITY, DRAFT):
                 with self.subTest(source=source.name):
                     candidate.write_bytes(source.read_bytes())
@@ -119,16 +122,64 @@ class VariantContractTests(unittest.TestCase):
                     result = cli(candidate)
                     self.assertEqual((result.returncode, result.stdout), (2, b""))
                     self.assertIn(b"unknown cadence manifest schema ID", result.stderr)
-                    if document["look_kind"] == "description":
-                        document["kits"] = [{"kit_id": "dev-01", "sha256": H}]
                     candidate.write_bytes(encode(dict(document, schema=dispatch.V1, look_id="lm-interim-01")))
-                    # A v1 delegation receives the original payload. It cannot
-                    # be overridden via its v2 look_kind or filename.
-                    v1_tool = Path(tmp) / "synthetic_v1.py"
-                    v1_tool.write_text("print('synthetic legacy delegation')\nraise SystemExit(17)\n",
-                                       encoding="utf-8")
                     legacy = cli(candidate, "--v1-tool", v1_tool)
-                    self.assertEqual((legacy.returncode, legacy.stdout), (2, b"synthetic legacy delegation\n"))
+                    self.assertEqual((legacy.returncode, legacy.stdout), (2, b""))
+                    self.assertIn(b"schema, look_kind and look_id", legacy.stderr)
+
+    def test_dispatch_accepts_only_closed_manifest_identity_triples(self):
+        allowed = {
+            (dispatch.V1, "interim", "lm-interim-01"),
+            (dispatch.V2, "qualification", "lm-qual-01"),
+            (dispatch.V2, "description", "lm-inst-01"),
+            (dispatch.V2, "description", "lm-stab-01"),
+            (dispatch.V2, "description", "lm-stab-02"),
+            (dispatch.V2, "transfer", "lm-transfer-01"),
+        }
+        templates = {
+            document["look_id"]: document
+            for document in (json.loads(source.read_bytes()) for source in (QUALIFICATION, INSTRUMENT, STABILITY, DRAFT))
+        }
+        templates["lm-stab-02"] = dict(templates["lm-stab-01"], kit_index_path="f2-stab/KITS.json")
+        schemas = {schema for schema, _, _ in allowed} | {"unknown"}
+        kinds = {kind for _, kind, _ in allowed} | {"controls"}
+        look_ids = {look_id for _, _, look_id in allowed} | {"lm-qual-42", "lm-qualification-01"}
+        with tempfile.TemporaryDirectory() as tmp:
+            candidate = Path(tmp) / "candidate.json"
+            tool = Path(tmp) / "legacy.py"
+            tool.write_text("raise SystemExit(0)\n", encoding="utf-8")
+            args = ["validate", str(candidate), "--v1-tool", str(tool)]
+            for schema, kind, look_id in product(sorted(schemas), sorted(kinds), sorted(look_ids)):
+                route = (schema, kind, look_id)
+                accepted = route in allowed
+                document = templates.get(look_id, {"status": "committed"})
+                candidate.write_bytes(encode(dict(document, schema=schema, look_kind=kind, look_id=look_id)))
+                with (
+                    self.subTest(route=route),
+                    patch.object(dispatch, "_validate_legacy", wraps=dispatch._validate_legacy) as legacy,
+                    patch.object(dispatch, "_validate_v2_document", wraps=dispatch._validate_v2_document) as v2,
+                    redirect_stdout(StringIO()),
+                    redirect_stderr(StringIO()),
+                ):
+                    self.assertEqual(dispatch._dispatch(args), 0 if accepted else 2)
+                    self.assertEqual(legacy.call_count, int(accepted and schema == dispatch.V1))
+                    self.assertEqual(v2.call_count, int(accepted and schema == dispatch.V2))
+
+    def test_v1_interim_mislabeled_qualification_refuses_before_delegate(self):
+        blocks = json.loads(QUALIFICATION.read_bytes())["reads"]["blocks"]
+        blocks[0]["kit_sha256"] = "a" * 64
+        fixture = {
+            "schema": dispatch.V1, "look_kind": "qualification", "look_id": "lm-interim-01",
+            "status": "committed", "fit": {"synthetic": True}, "reads": {"blocks": blocks},
+        }
+        with tempfile.TemporaryDirectory() as tmp:
+            candidate = Path(tmp) / "candidate.json"
+            candidate.write_bytes(encode(fixture))
+            tool = Path(tmp) / "legacy.py"
+            tool.write_text("print('synthetic legacy delegation')\n", encoding="utf-8")
+            result = cli(candidate, "--v1-tool", tool, "--final")
+            self.assertEqual((result.returncode, result.stdout), (2, b""))
+            self.assertIn(b"schema, look_kind and look_id", result.stderr)
 
     def test_dispatch_refusals_survive_disconnected_stderr(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -136,7 +187,7 @@ class VariantContractTests(unittest.TestCase):
             unknown = folder / "unknown.json"
             unknown.write_bytes(encode({"schema": "unknown"}))
             interim = folder / "interim.json"
-            interim.write_bytes(encode({"schema": dispatch.V1, "look_id": "lm-interim-01"}))
+            interim.write_bytes(encode({"schema": dispatch.V1, "look_kind": "interim", "look_id": "lm-interim-01"}))
             v1_tool = folder / "legacy.py"
             v1_tool.write_text(
                 "import sys\nprint('synthetic legacy refusal', file=sys.stderr)\nraise SystemExit(1)\n",
@@ -259,7 +310,7 @@ raise SystemExit(97)
                 dispatch.REGISTRATION_PLACEHOLDER, json.dumps(H).encode()
             ))
             interim = root / "interim.json"
-            interim.write_bytes(encode({"schema": dispatch.V1, "look_id": "lm-interim-01"}))
+            interim.write_bytes(encode({"schema": dispatch.V1, "look_kind": "interim", "look_id": "lm-interim-01"}))
             for step, source in (
                 ("parser", DRAFT), ("parser-system-exit", DRAFT), ("candidate-open", DRAFT), ("decode", DRAFT),
                 ("validate", DRAFT), ("registration-open", final),
@@ -295,7 +346,7 @@ raise SystemExit(97)
                         candidate.write_bytes(encode(dict(interim, look_id=look_id)))
                         with self.subTest(look_id=look_id, flags=flags), redirect_stderr(StringIO()) as stderr:
                             self.assertEqual(dispatch._dispatch([*args, *flags]), 2)
-                            self.assertIn("reserved for v2", stderr.getvalue())
+                            self.assertIn("schema, look_kind and look_id", stderr.getvalue())
                 for variant in (
                     dict(interim, title="OPEN-19"),
                     dict(interim, rulings=[["PENDING:CODE"]]),
