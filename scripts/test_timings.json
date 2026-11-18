@@ -11,6 +11,7 @@
   "_local_observation_2026_10_15_b6_round_desk": "SUPERSEDED 2026-11-06 for scheduling: tests.b6.test_loop_round_desk now weighs 324.191 s, its hosted median from _hosted_observations_2026_11_06_cross_lane, which replaces the earlier hint recorded below (carried verbatim from lane/2026-11-05-align-pilot10-benign so this map is a key superset of every open lane's map and a merge can keep this file's values whole). Earlier hint: tests.b6.test_loop_round_desk: one local /opt/homebrew/bin/python3.13 unittest run on the M3 Max, 4 end-to-end scenarios in 160.727 s with the real harvest CLI's two-worker pool, JW_B5_SYNTHETIC_ONLY=1 and subprocess audit guarding; part of the run overlapped the required desk suite. Six strict bundles per session, four per smoke; all validators and reductions run. Scheduling hint only, not a hosted median or hardware evidence.",
   "_hosted_observation_2026_10_22_align_moe": "SUPERSEDED 2026-11-06 for scheduling: tests.align.test_moe_calibration now weighs 1376.959 s, its hosted median from _hosted_observations_2026_11_06_cross_lane, which replaces the earlier hint recorded below (carried verbatim from lane/2026-11-05-align-pilot10-benign so this map is a key superset of every open lane's map and a merge can keep this file's values whole). Earlier hint: ADDED for tests.align.test_moe_calibration: single hosted observation from CI run 39715696032, shard 9, MODULE PASS seconds=1451.183. This is a scheduling hint, not evidence; replace with hosted medians at the next timing harvest.",
   "_local_observation_2026_11_11_b6_analysis": "ADDED for the Block 6 analysis lane: tests.independent_recompute.test_block6 (26 tests, 10.372 s process wall) and tests.independent_recompute.test_b6_production (15 tests, 20.055 s process wall), each run separately with JW_B5_SYNTHETIC_ONLY=1, TMPDIR unset and Python 3.13. Local observations under current load, not hosted medians or production speed evidence. See docs/run_reports/2026-11-11-p1-seat7-r2.md; replace with hosted observations when available.",
+  "_local_observation_2026_11_18_flashnext_stream": "tests.test_align_stream_qwen4_exp took 0.139 s in one local Python 3.13 unittest run on the engineering MacBook Air. Eleven synthetic tests passed and native parity was skipped. This is a shard scheduling hint.",
   "exclusive_modules": {
     "tests.test_calibration_exits": {
       "seconds": 820.019,
@@ -379,6 +380,7 @@
     "tests.test_aggregate": 0.04,
     "tests.test_air_watch_agent": 3.0,
     "tests.test_align_pilot_session": 122.321,
+    "tests.test_align_stream_qwen4_exp": 0.139,
     "tests.test_analysis_claims": 0.485,
     "tests.test_analysis_engine": 0.023,
     "tests.test_analysis_engine_evidence_roots": 46.711,
