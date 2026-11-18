@@ -306,6 +306,26 @@ class InstallerTest(unittest.TestCase):
         self.assertIn("NOTIFY ok ALARM WATCHER_EXIT agent repo_missing", log.read_text())
         self.assertIn("WATCHER_EXIT_SUPPRESSED", log.read_text())
 
+    def test_missing_repo_wrapper_retries_after_failed_notification(self):
+        statedir = self.home / "state"
+        log = self.home / "Logs/air-watch.log"
+        text = (ROOT / "scripts/air/air-watch-run.sh.template").read_text()
+        for key, value in (("@REPO@", self.home / "unmounted"), ("@PYTHON@", "/unused"),
+                           ("@LOG@", log), ("@STATEDIR@", statedir)):
+            text = text.replace(key, str(value))
+        wrapper = self.home / "run.sh"
+        wrapper.write_text(text)
+        stamp = statedir / "repo-missing.stamp"
+        for notifier, stamped in (("/usr/bin/false", False), ("/usr/bin/true", True)):
+            env = dict(self.env, JW_OSASCRIPT=notifier)
+            done = subprocess.run(["sh", str(wrapper)], env=env, capture_output=True, timeout=30)
+            self.assertEqual(done.returncode, 78)
+            self.assertEqual(stamp.exists(), stamped)
+        lines = log.read_text()
+        self.assertIn("NOTIFY failed ALARM WATCHER_EXIT agent repo_missing", lines)
+        self.assertIn("NOTIFY ok ALARM WATCHER_EXIT agent repo_missing", lines)
+        self.assertNotIn("WATCHER_EXIT_SUPPRESSED", lines)
+
     def test_bad_flag(self):
         self.assertEqual(self.sh("--bogus").returncode, 2)
 
