@@ -219,6 +219,31 @@ case.
 The niced synthetic shard reported 60 tests, zero failures, zero errors
 and one expected v1 skip.
 
+## Round 7 filler exclusion
+
+The round-7 probe found that the pinned and current PR #795 validators
+both accepted a filler in the reserve role and a filler kit digest under
+`dev-01`. The shared restriction froze at `51645a937` and landed in
+`baeda27b7`. It checks kit IDs and digests before v1 delegation or v2
+kind validation. Only the v2 description kind can use the filler roster
+its existing commitments authorize.
+
+`docs/process/cadence/looks/filler-kit-registry.json` records 20 public
+kit digests with their audit commit and source paths. The F2 digests from
+the ready and draft queues agree with the stability verification records
+and the existing description commitments where they overlap. The
+`hp-02` queue digest matches the committed kit. F0 is a Part C diagnostic
+and has no separate cadence kit digest in the standing notice. The guard
+checks its declared identity and the Part C run identifier.
+
+| Finding | Disposition and regression |
+| --- | --- |
+| HIGH, implementation bug | `test_interim_filler_ids_and_digests_refuse_before_v1_delegation` and `test_shared_filler_gate_applies_before_v2_kind_validation` passed. The original probe passed, and the expanded replay returned 2 on all 18 filler substitutions across development, reserve and extension in the two v1 trees. The two interim controls returned 0. |
+| MED, admission integration | The transfer stage-1 arm-bounds check and authoritative public registration-source authorization remain with their owners. |
+| LOW, preservation | The qualification registration and validator, interim pins, candidate manifests, output schema and both state files retain their prior bytes. |
+
+The niced synthetic shard reported 62 passes and one expected v1 skip.
+
 ## RL-185 and lead handoff
 
 RL-185 §4 resolves the previous NEEDS_SPEC. Both description drafts carry
