@@ -85,3 +85,18 @@ Both CLI modes return 2 on refusal. Inventory writes its requested file after fi
 | A raw filesystem call bypasses the common helper. | `test_census_filesystem_calls_are_confined_to_the_helper`, verified by injecting a raw `readlink` into a function called by the census | PASS |
 
 The quiet controls passed in both modes. Injecting EIO, ENOENT and EACCES at each observed helper call passed 198 check-mode cases and 99 inventory cases. The synthetic audit replays separately verified exit 2 with no publication for unreadable roots, disappearing chain and registry entries, and the inventory CLI. The original sampler dispositions and frozen test commits remain in force. Exact-candidate CI and two-family review are tracked on PR #824. NEEDS_SPEC has no entries.
+
+## Lead-directed census repair after round 5
+
+Round 5 reviewed `610507f5e13c526c83c92c6f758f1a3d76c3d9b5` and verified two HIGH findings. Regression commit `6a029d5c0` produced seven failing synthetic cases on that implementation. Repair `639ab359040c236d96aff5de5cf721b5b6c46f67` addresses both findings.
+
+Each strict census resolves a configured root once at scan time with `realpath(strict=True)`. Opening the resolved path with `O_RDONLY | O_DIRECTORY | O_NOFOLLOW` verifies that it is a directory and holds the object for enumeration. Within that tree, directory opens, marker reads and metadata lookups use their held parent descriptors. The filesystem helper closes the descriptors and retains path and errno on failure. A configured alias removed or repointed before the scan is observed at resolution. Replacing the filesystem path after the root is opened leaves the scan on the held directory.
+
+Complete listings index entries by case-folded name and preserve their recorded spelling for subsequent opens. Duplicate folded names refuse. Strict custody and LaunchAgent lookups use this index. Other shared-census callers retain their existing traversal and reconciliation policy.
+
+| Verified finding | Regression | Result on `639ab3590` |
+| --- | --- | --- |
+| HIGH, a configured root changed between preflight and the census. | `test_background_census_resolves_configured_alias_at_scan_time`, `test_background_census_refuses_symlink_substituted_before_root_open`, `test_background_census_keeps_open_root_when_its_path_is_replaced` | PASS |
+| HIGH, matching exact stored case skipped a live owner under `Night`. | `test_background_census_matches_folded_names_and_refuses_collisions` covers `Night`, `CHAIN.STARTED`, `Active-Campaigns` and a colliding pair. | PASS |
+
+The round 4 fault matrix now injects errors at the descriptor-relative filesystem operations. Both CLI modes still return 2 without publication on census refusal. The frozen sampler spec remains in force. Exact-candidate CI and the requested two-family delta reviews are tracked on draft PR #824. NEEDS_SPEC has no entries.
