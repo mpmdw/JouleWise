@@ -1261,12 +1261,7 @@ class SoakLauncherBindingTests(unittest.TestCase):
             if role == "d-bank":
                 receipt["deadman"]["deadline_ns"] = deadline
             if role != "step-d":
-                sibling = segment.parent / pc.KINDS["step-d"] / "runs/member"
-                source_policy = {"sensors": sensors, "window_reference": {
-                    "role": "consume", "source_run_id": sibling.name,
-                    "source_config_sha256": hashed((sibling / "config.json").read_bytes())}}
-                _, hardware["thermal"]["custody"] = tg.load_window_reference(
-                    source_policy, SimpleNamespace(run_id="fixture-consumer", bundle_path=sibling.parent / "consumer"))
+                hardware["thermal"]["custody"] = dict(self.step_binding)
         receipt.update(schema=rt.RESULT_SCHEMA, kind=kind, backend="production", config_sha256=self.attempt.config_sha,
                        ac_powermode=native_mode, energy_j=MARKER, battery_drain_pct_per_h=MARKER,
                        battery={"drain_pct_per_h": MARKER, "drain_unavailable_reason": None})
@@ -1368,6 +1363,12 @@ class SoakLauncherBindingTests(unittest.TestCase):
             reference["record_sha256"] = hashed(pc.canonical(reference))
             (out / "align_window_reference.json").write_bytes(pc.canonical(reference) + b"\n")
             receipt["operating_reference"].update(span_ns=reference["span_ns"])
+            # Preserve what the synthetic consumer observed before a test
+            # edits committed Step-D bytes. The evaluator still sees the edit.
+            source_policy = {"sensors": sensors, "window_reference": {
+                "role": "consume", "source_run_id": bundle.name, "source_config_sha256": hashed(config_raw)}}
+            _, self.step_binding = tg.load_window_reference(
+                source_policy, SimpleNamespace(run_id="fixture-consumer", bundle_path=bundle.parent / "consumer"))
             hardware["thermal"]["custody"] = {"record_sha256": reference["record_sha256"],
                                                "source_run_id": bundle.name,
                                                "source_config_sha256": hashed(config_raw),
