@@ -469,6 +469,7 @@
     "tests.test_bytes_plan_trees": 2.068,
     "tests.test_bytes_roster_drop": 62.761,
     "tests.test_bytes_twin": 145.061,
+    "tests.test_cadence_interim_twin": 0.23,
     "tests.test_calibration_bracketing": 10.571,
     "tests.test_calibration_cadence_report": 0.623,
     "tests.test_calibration_custody_store": 0.097,

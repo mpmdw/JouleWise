@@ -598,6 +598,11 @@ now has an explicit disposition:
   `python3 scripts/run_state_items.py check`. Open legacy items continue to
   close in prose. [Build handoff](docs/run_reports/2026-11-17-typed-items-pipeline.md)
 
+- **lm-interim-01 twin (2026-11-18)** — Draft PR #816 passed the synthetic
+  regressions for audit round 2. The lead owns the convergence gate and the
+  parent GPU coverage follow-up. See the
+  [round 2 disposition](docs/run_reports/2026-11-18-interim-fit-twin-audit-2.md).
+
 At the end of substantial work:
 
 - Update live status, rank, dependencies, and new tasks in
