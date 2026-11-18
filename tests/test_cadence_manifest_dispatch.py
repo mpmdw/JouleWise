@@ -382,7 +382,7 @@ step, candidate, registration = sys.argv[1:]
 read_bytes = Path.read_bytes
 
 def fail_registration(path):
-    if path == Path(registration):
+    if path == Path(registration).resolve():
         fail()
     return read_bytes(path)
 
@@ -648,9 +648,31 @@ raise SystemExit(97)
         with self.assertRaisesRegex(dispatch.ManifestError, "filler kit"):
             dispatch.validate_v2(encode(qualification))
 
+    def test_restricted_cli_paths_refuse_before_either_file_is_opened(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            restricted = root / "RESTRICTED"
+            direct = restricted / "synthetic.json"
+            alias = root / "alias.json"
+            alias.symlink_to(direct)
+            public = root / "public.json"
+
+            for path in (direct, alias, restricted / ".." / public.name, restricted):
+                for argument, argv in (
+                    ("manifest", [str(path)]),
+                    ("--registration", [str(public), "--final", "--registration", str(path)]),
+                ):
+                    with self.subTest(path=path, argument=argument):
+                        with patch.object(Path, "read_bytes", side_effect=AssertionError("unexpected read")) as read:
+                            with redirect_stdout(StringIO()) as stdout, redirect_stderr(StringIO()) as stderr:
+                                status = dispatch._dispatch(["validate", *argv])
+                        read.assert_not_called()
+                        self.assertEqual((status, stdout.getvalue(), stderr.getvalue()),
+                                         (2, "", f"REFUSE {argument} path contains RESTRICTED\n"))
+
     def test_rejects_unused_registration_before_open(self):
         with tempfile.TemporaryDirectory() as tmp:
-            registration = Path(tmp) / "RESTRICTED" / "coefficients.json"
+            registration = Path(tmp).resolve() / "registration.json"
             description = Path(tmp) / "description.json"
             payload = json.loads(INSTRUMENT.read_bytes())
             payload["status"] = "committed"
@@ -700,7 +722,7 @@ raise SystemExit(97)
     def test_rejects_invalid_final_candidate_before_registration_open(self):
         with tempfile.TemporaryDirectory() as tmp:
             candidate = Path(tmp) / "final.json"
-            registration = Path(tmp) / "RESTRICTED" / "coefficients.json"
+            registration = Path(tmp).resolve() / "registration.json"
             read_bytes = Path.read_bytes
 
             def guard(path):

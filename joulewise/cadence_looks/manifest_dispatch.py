@@ -367,6 +367,14 @@ def _read_cli_registration(path):
     return payload
 
 
+def _public_input_path(path, argument):
+    if "RESTRICTED" not in path.parts:
+        resolved = path.resolve()
+        if "RESTRICTED" not in resolved.parts:
+            return resolved
+    raise ManifestError(f"{argument} path contains RESTRICTED")
+
+
 def _dispatch(argv, *, stderr_fd=None):
     parser = _NoticeArgumentParser(description=__doc__, stderr_fd=stderr_fd)
     commands = parser.add_subparsers(dest="command", required=True)
@@ -381,7 +389,11 @@ def _dispatch(argv, *, stderr_fd=None):
     except _ParserExit as completion:
         return completion.code
     try:
-        payload = args.manifest.read_bytes()
+        manifest = _public_input_path(args.manifest, "manifest")
+        registration = None
+        if args.registration is not None:
+            registration = _public_input_path(args.registration, "--registration")
+        payload = manifest.read_bytes()
         document = _decode_cli_manifest(payload)
         schema, kind, _ = _manifest_route(document)
         if schema == V1:
@@ -391,7 +403,7 @@ def _dispatch(argv, *, stderr_fd=None):
             if args.final:
                 _reject_final_placeholders(document)
             return _validate_legacy(args.v1_tool, payload, args.final, stderr_fd=stderr_fd)
-        read_registration = None if args.registration is None else lambda: _read_cli_registration(args.registration)
+        read_registration = None if registration is None else lambda: _read_cli_registration(registration)
         doc = _validate_v2_document(payload, document, kind, args.final, read_registration)
     except (ManifestError, OSError) as error:
         return finish_notice(PRE_READ_REFUSAL, stderr=f"REFUSE {error}\n", stderr_fd=stderr_fd)
