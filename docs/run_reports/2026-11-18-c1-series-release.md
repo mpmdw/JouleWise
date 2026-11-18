@@ -28,7 +28,9 @@ eligible captured member contributes no S score.
 | Structural spec test head and tree | `1f00d3789aad10fa842a84762d7843fac9f6f09c`, `e9656d50dd08fec04d433095cd48c3cb6b049ba2` |
 | Frozen Astra acceptance module commit | `21b26ba78` |
 | Exact completeness test head and tree | `64b36cd64d154b15d4765c4c0d39f0892c195940`, `31f9a6cb2008beda1bc7707bff4a01264a675dfa` |
-| Caller SHA-256 for signatory | `a5115ac949821dd702e3474c10cc784c27be4e2156112df2fd0ad6705dd20753` |
+| Round-six test freeze | `ecf0352fd` |
+| Round-six test head and tree | `0ddc13c8e18f28e42832fd85a6b63c1e5a039096`, `c726d8e53af26a9bad95c0dbd32d896df8e7668d` |
+| Caller SHA-256 for signatory | `1b8b8b8474afd40def8bd59403a09721c35329bb044005ca1bf3b2ee8365696d` |
 | Draft code head and tree before report | `b7a0440a00442151c5b18a73a7b48fb5beeb72ec`, `77c7065e57a5bc17cb436adc041f6ff45bfdb175` |
 
 At the initial freeze the CLI tests failed with no script. At the RL-185
@@ -37,9 +39,9 @@ During build, an eager selection fixed the fixture's last-stratum offsets
 so both worlds have no ties, and the fixtures gained bound, named PM and
 rail projections.
 
-Handoff found PR #813 at `6093a7454d181c87ae6fcb2e3d30c25fb1e97cce`,
-which extends the first-token boundary checks since
-`07ebee6c8a58eb9f4d444335bf79456217c45ddb`.
+Handoff found PR #813 at `2fe705e73f55cbe0d62177eb2123f512e80a8b90`,
+which extends the first-token AST checks since
+`6093a7454d181c87ae6fcb2e3d30c25fb1e97cce`.
 The private synthetic tests use the original pinned sources in the table.
 PR #787 remains at its pin. PR #826 advanced to
 `1fc28324d51f8057fa6228e6e7d42b5ea331d52c` with test changes only since the
@@ -57,11 +59,11 @@ the dependency landings. [Draft PR #836](https://github.com/mpmdw/JouleWise/pull
 
 | Stage | File and line | Evidence |
 |---|---|---|
-| CLI and guard | Caller :669,701, PR #813 `v4_desk_seal.py:351,418` and `rl176.py:611,622,633` | Snapshot the guard's named metadata, call the real guard and use the literal freeze flag in the scorer. |
-| Registration and history | Caller :151,198,376,497, `v4_registration.py` `validate_receipt` and `require_registration`, and `scripts/align_v4_series.py:220,231,239,510` | Verify the C1 predecessor's receipt digest, verify the executing source inventory, and join the authorized history to the frozen manifest. |
+| CLI and guard | Caller `build_report`, `main`, PR #813 `v4_desk_seal.py:351,418` and `rl176.py:611,622,633` | Snapshot the guard's named metadata, call the real guard and use the literal freeze flag in the scorer. |
+| Registration and history | Caller `require_executing_bindings`, `bound_history`, `final_roster`, `ReleasedInputs`, `v4_registration.py` `validate_receipt` and `require_registration`, and `scripts/align_v4_series.py:220,231,239,510` | Verify the C1 predecessor's receipt digest, verify the executing source inventory, and join the authorized history to the frozen manifest. |
 | Final records and A9 | PR #826 `scripts/align_v4_next_arm_packet.py:237,306,395` and `light_triage.py:79,163` | Use the shared RL-183b finality, including successor `previous_final`, and independently preserve final per-member reasons. |
-| Stored rows | Caller :121,137,264,323,340,354,462, PR #787 `s_rows.py:193,751,774`, PR #813 `workload.py:893` | Verify the exact directory-entry inventory and bind scoring files to plain canonical paths and digests. Pass #787's row tuple directly. |
-| Roster, DC and coverage | Caller :537,583,669, PR #813 `rl176.py:352,379,527,550,628` | Compare loaded identities, verify authorized benign DC bytes, then match the registered S scorer's ranked strata and contributor counts before publishing. |
+| Stored rows and complete manifest | Caller :265,315,322,436,545, PR #787 `s_rows.py:193,751,774`, PR #813 `workload.py:893` | Verify keyed and explicit path/digest bindings, including inputs outside the selected projection. Pass #787's row tuple directly. |
+| Roster, DC and coverage | Caller :621,645,691, PR #813 `rl176.py:200,291,352,379,527,550,628` | Verify authorized benign DC bytes and check registered S decode and fit contributor identities before running any comparisons. Check the report's counts again before publishing. |
 
 ## Resolved interfaces under RL-185 §3
 
@@ -300,6 +302,54 @@ refusal for otherwise eligible captures with no S rows. Registered S/Q
 calculation and the authenticated C1 predecessor receipt check are
 unchanged. The exact checkout and suite totals are recorded on the draft.
 [Draft verification](https://github.com/mpmdw/JouleWise/pull/836)
+
+## Round-six audit and disposition
+
+The audit found two verified HIGHs at `221031020898`. A missing,
+unreadable, compressed-only or digest-mismatched calibration ledger in
+the finalized closure still yielded `S SIGNATURE`. A listed cut journal
+also escaped the digest check when the layout field was null. The
+zero-row case refused only after ranking. Red tests at `ecf0352fd`
+independently reached the first registered comparison in all four
+reproductions for a damaged ledger, a damaged unselected journal and
+an instructed or benign missing contributor.
+
+`0ddc13c8e` walks each admitted finalized manifest for explicit
+path/digest objects and the schema's keyed file inventories. It joins
+declared closure inputs to their byte bindings and refuses missing or
+contradictory declarations. It verifies each permitted file at its
+exact path by type, digest and admitted plain representation. Layout
+selection controls whether the journal is used for cuts. It has no
+effect on integrity verification. `test_every_nested_manifest_file_binding_is_verified`
+independently walks the synthetic manifest and mutates each listed file
+in turn. `test_listed_ledger_and_unselected_journal_refuse_before_scoring`
+exercises the same checks through the release entry point.
+
+The caller refuses before opening any binding for which the release
+has no authorized reader. This preserves the prescribed separation of
+generic controller traces and instructed DC. The separate benign
+provider verifies its own admitted files. Absolute descriptors require
+an exact path under the authenticated measurement root. Ancillary
+inputs use plain text, and an unsupported representation refuses.
+The synthetic restore fixture publishes the already split rail and PM
+sources after using the generated native files to make those projections.
+`test_unadmitted_listed_trace_refuses_without_opening_it` covers the
+fail-closed path.
+
+The guarded loader checks manifest-derived strata and exact contributor
+identities using the registered decode preparation and held-out fit.
+Missing rows and undefined fits refuse before the scorer can run the
+first S, Q or descriptive comparison. `test_pre_rank_coverage_refuses_zero_rows`
+and `test_pre_rank_coverage_refuses_nonempty_rows_with_an_undefined_fit`
+instrument the registered tail entry point. The existing post-score
+coverage check provides a second invariant before writing. The C1
+predecessor receipt binding remains in force.
+
+The frozen 244-case module is unchanged at SHA-256
+`4d20a378775680182baf7679305fcdafb9434974f258b9445398add15cb0e02e`.
+Exact suite totals and the CI run are recorded in the draft. W1's
+standalone missing scorer and the signing kit's release-profile
+acceptance remain owner dependencies. [Draft checks](https://github.com/mpmdw/JouleWise/pull/836/checks)
 
 ## Executed checks and Tier 2 dispositions
 
