@@ -8,7 +8,8 @@ import os
 from pathlib import Path
 import random
 import re
-import socket
+import runpy
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -22,6 +23,9 @@ from tests.cadence import look_minirepo as MR
 REPO = MR.REPO
 LOOK = "lm-interim-01"
 SCHEMA = M.look_schemas(REPO)[1]
+UUID_LINE = '  |   "IOPlatformUUID" = "12345678-9abc-def0-1234-56789abcdef0"\n'
+HOST_TOKEN = "hw1:6fd8db3c47b37aaa51f7b08c4f9af1bc1b989f8adda676166a4ad80b83565a11"
+BAD_UUID_PROBES = ("", UUID_LINE.replace("12345678", "xyz"), UUID_LINE + UUID_LINE)
 try:
     from scripts import cadence_look_run as R, cadence_look_synth as S
 except ModuleNotFoundError as exc:
@@ -38,6 +42,29 @@ def report(count=1, *, twin="yes"):
     stage1 = {"counts": {"in_energy_fit": count},
               "tripwires": {key: {"trips": False} for key in C.TRIPWIRES}}
     return C.public_record(LOOK, "a" * 64, "b" * 40, stage1, "c" * 64, "d" * 64, "passes", "within", twin)
+
+
+class HostIdentity(unittest.TestCase):
+    def test_host_probe_argv_and_normalized_digest(self):
+        for line in (UUID_LINE, UUID_LINE.replace("9abc-def0", "9ABC-DEF0")):
+            with mock.patch.object(M.subprocess, "run", return_value=SimpleNamespace(stdout=line.encode())) as probe:
+                self.assertEqual(M.execution_host(), HOST_TOKEN)
+            probe.assert_called_once_with(["/usr/sbin/ioreg", "-rd1", "-c", "IOPlatformExpertDevice"],
+                                          capture_output=True, check=True)
+        for line in BAD_UUID_PROBES:
+            with mock.patch.object(M.subprocess, "run", return_value=SimpleNamespace(stdout=line.encode())):
+                with self.assertRaisesRegex(M.ManifestError, "exactly one UUID-shaped IOPlatformUUID"):
+                    M.execution_host()
+        with mock.patch.object(M.subprocess, "run", side_effect=FileNotFoundError):
+            with self.assertRaisesRegex(M.ManifestError, "could not read IOPlatformUUID"):
+                M.execution_host()
+
+    @unittest.skipIf(R is None, "numpy is required by the CLI")
+    def test_host_id_cli_prints_only_the_token(self):
+        from tests.cadence import test_look_run as cli_fixture
+
+        result = cli_fixture._cli_subprocess(["host-id"], extra={"host_probe": UUID_LINE})
+        self.assertEqual(result, (0, HOST_TOKEN + "\n", ""))
 
 
 class PublicSchema(unittest.TestCase):
@@ -287,7 +314,7 @@ class LookExecution(unittest.TestCase):
         self.private.parent.mkdir(parents=True)
         self.public.parent.mkdir(parents=True)
         self.row = M.load_json(self.mini / M.LOOK_LEDGER_PATH)["looks"][0]
-        self.row.update(status="stage1_committed", execution_host=socket.gethostname(), public_root="public",
+        self.row.update(status="stage1_committed", execution_host=HOST_TOKEN, public_root="public",
                         custody_root=str(self.private.parent.parent), roster_sha256="c" * 64,
                         verdicts_sha256="d" * 64, stage1_sha256=self.stage1_sha,
                         holds_cleared={flag: "RL-999" for flag in M.STAGE2_HOLD_FLAGS["interim"]
@@ -298,14 +325,14 @@ class LookExecution(unittest.TestCase):
     def save_ledger(self):
         self.ledger.write_bytes(C.dump({"schema": M.LOOK_LEDGER_SCHEMA, "looks": [self.row]}))
 
-    def stage2(self):
+    def stage2(self, *, host_probe=UUID_LINE):
         from tests.cadence import test_look_run as cli_fixture
 
         responses = self.root / "must-not-be-opened"
         args = ["stage2", "--stage1", self.stage1_path, "--stage1-sha256", self.stage1_sha,
                 "--manifest", self.manifest_path, "--allow-draft", "--looks", self.ledger, "--energy", responses]
         with cli_fixture.spy_opens() as opened:
-            code, stdout, stderr = cli_fixture._cli_subprocess(args, repo=self.mini)
+            code, stdout, stderr = cli_fixture._cli_subprocess(args, repo=self.mini, extra={"host_probe": host_probe})
         self.assertNotIn(str(responses), opened)
         self.assertFalse(self.private.exists())
         self.assertFalse(self.public.exists())
@@ -321,7 +348,7 @@ class LookExecution(unittest.TestCase):
             draft["fit"]["twin"] = pin
             with self.assertRaisesRegex(M.ManifestError, "fit.twin"):
                 M.validate_manifest(draft, final=True)
-        for host, reason in ((None, "register the execution_host"), ("synthetic-wrong-host", "does not match")):
+        for host, reason in ((None, "register the execution_host"), ("hw1:" + "0" * 64, "does not match")):
             with self.subTest(host=host):
                 self.row.pop("execution_host", None)
                 if host is not None:
@@ -331,9 +358,18 @@ class LookExecution(unittest.TestCase):
                 self.assertEqual(result.returncode, 2)
                 self.assertIn(reason, result.stderr)
 
-    def test_unconfirmed_production_host_cannot_reserve(self):
-        with self.assertRaisesRegex(R.F.LookInputError, "production host identity awaits"):
-            R.validate_execution_row(self.row, dict(self.stage1, synthetic=False), self.row["custody_root"])
+    def test_exact_host_match_uses_the_same_gate_for_both_modes(self):
+        with mock.patch.object(R.M, "execution_host", return_value=HOST_TOKEN) as probe:
+            for synthetic in (True, False):
+                R.validate_execution_row(self.row, dict(self.stage1, synthetic=synthetic), self.row["custody_root"])
+            self.assertEqual(probe.call_count, 2)
+
+    def test_missing_malformed_and_duplicate_uuid_refuse_before_reservation(self):
+        for index, probe in enumerate(BAD_UUID_PROBES):
+            with self.subTest(probe=index):
+                result = self.stage2(host_probe=probe)
+                self.assertEqual(result.returncode, 2)
+                self.assertIn("exactly one UUID-shaped IOPlatformUUID", result.stderr)
 
     def test_missing_and_one_byte_twin_script_refuse_before_reservation(self):
         pin = M.load_json(REPO / MR.MANIFEST)["fit"]["twin"]
@@ -551,6 +587,10 @@ look.release.destinations = destinations
 original_run = subprocess.run
 attempts = []
 def run(argv, *args, **kwargs):
+    if argv[0] == "/usr/sbin/ioreg":
+        assert argv == ["/usr/sbin/ioreg", "-rd1", "-c", "IOPlatformExpertDevice"]
+        return subprocess.CompletedProcess(argv, 0,
+            b'    "IOPlatformUUID" = "12345678-9abc-def0-1234-56789abcdef0"\n', b"")
     if Path(argv[0]) != Path(sys.executable) or argv[1:4] != ["-I", "-B", str(repo / "scripts/cadence_interim_twin.py")]:
         return original_run(argv, *args, **kwargs)
     attempts.append(argv)
@@ -608,26 +648,19 @@ class TwinThroughCLI(unittest.TestCase):
         self.manifest = self.mini / MR.MANIFEST
         draft = M.load_json(self.manifest)
         pin = M.load_json(REPO / MR.MANIFEST)["fit"]["twin"]
-        self.assertEqual(digest((self.mini / pin["path"]).read_bytes()),
-                         "aa041772d45bc955aba999721cfdea4b9776875ca635449fd0ff60593a5ba22a")
+        self.twin = self.mini / pin["path"]
+        self.assertEqual(digest(self.twin.read_bytes()),
+                         "a79ccaa4b15e8601500c1653aa1d5c161f4c830678500f42be7b5737dc7ef59c")
         draft["fit"]["twin"] = pin
         self.manifest.write_bytes(C.dump(draft))
         tokens = {}
         look_input, energy, _ = S.build("exact", tokens=tokens)
         source = self.root / "generated-bundles"
+        self.source = source
         locators = S.write_custody(source, look_input, energy, tokens)
-        # The accepted #816 pin accepts a single component per receipt locator.
-        # Generate that layout before stage 1 binds the fixture's record bytes.
-        for path in source.glob("*/legs/*/leg_record.json"):
-            record = M.load_json(path)
-            if record["result"]["bundle"]:
-                runtime = path.parent / "runtime"
-                (runtime / record["result"]["bundle"]).rename(runtime / "mock-bundle")
-                record["result"]["bundle"] = "mock-bundle"
-                path.write_bytes(C.dump(record))
         # Use complete Step 3 telemetry so both implementations evaluate three
         # cells on the same generated native state and clock frames.
-        for rich in source.glob("*/legs/*/runtime/mock-bundle/rich_telemetry.jsonl"):
+        for rich in source.glob("*/legs/*/runtime/runs/cadence-leg/rich_telemetry.jsonl"):
             rows = [json.loads(line) for line in rich.read_bytes().splitlines()]
             for item in rows:
                 item["gpu"]["dvfm_states"] = [{"freq": 1000, "used_ns": 10**9}]
@@ -638,26 +671,26 @@ class TwinThroughCLI(unittest.TestCase):
                 item.setdefault("thermal_pressure", "Unknown")
             native.write_bytes(b"".join(plistlib.dumps(item) + b"\0" for item in frames))
         self.stage1 = self.root / "stage1.json"
-        stage1 = MR.py(self.mini, "scripts/cadence_look_run.py", "stage1", "--roster", locators["roster.json"],
-                       "--rules-3-4", locators["rules_3_4.json"], "--custody", source, "--out", self.stage1,
-                       "--manifest", self.manifest, "--allow-draft")
+        self.stage1_args = ["stage1", "--roster", locators["roster.json"], "--rules-3-4", locators["rules_3_4.json"],
+                            "--custody", source, "--manifest", self.manifest, "--allow-draft"]
+        stage1 = MR.py(self.mini, "scripts/cadence_look_run.py", *self.stage1_args, "--out", self.stage1)
         self.assertEqual(stage1.returncode, 0, stage1.stderr)
         doc = M.load_json(self.stage1)
         self.response_sha = digest(self.stage1.read_bytes())
-        self.overrides = [(row["span_id"], source / row["span_id"]) for row in doc["roster"]["spans"]]
+        self.spans = [row["span_id"] for row in doc["roster"]["spans"]]
         self.row = {"look_id": LOOK, "manifest_path": MR.MANIFEST, "sha256": digest(self.manifest.read_bytes()),
                     "stage1_sha256": self.response_sha, "status": "stage1_committed",
                     "roster_sha256": doc["code_sha256"]["input:roster_sha256"],
                     "verdicts_sha256": doc["code_sha256"]["input:rules_3_4_sha256"],
-                    "execution_host": socket.gethostname(),
+                    "execution_host": HOST_TOKEN,
                     "holds_cleared": {flag: "RL-999" for flag in M.STAGE2_HOLD_FLAGS["interim"]
                                       if doc[flag.split(".")[0]].get(flag.split(".")[1]) is True}}
         self.driver = self.root / "run.py"
         self.driver.write_text(TWIN_DRIVER)
         self.basename = MR.synthetic_reservation_name(self.root)
 
-    def trial(self, fault):
-        private_root = self.root / fault
+    def trial(self, fault, *, relocated=None):
+        private_root = self.source if relocated is None else self.root / fault
         private = private_root / LOOK / self.basename
         public_rel = f"generated-{fault}"
         public = self.mini / public_rel / LOOK / "PUBLIC.json"
@@ -669,17 +702,29 @@ class TwinThroughCLI(unittest.TestCase):
         argv = [sys.executable, "-I", "-B", self.driver, self.mini, self.basename, fault,
                 "stage2", "--manifest", self.manifest, "--stage1", self.stage1, "--stage1-sha256", self.response_sha,
                 "--looks", ledger, "--allow-draft", "--custody", private_root]
-        for sid, path in self.overrides:
-            argv.extend(("--span-dir", f"{sid}={path}"))
+        if relocated is not None:
+            for sid in self.spans:
+                argv.extend(("--span-dir", f"{sid}={relocated / sid}"))
         result = subprocess.run(argv, cwd=self.root, capture_output=True, timeout=180)
         return result, private, public
 
     def test_actual_parent_child_handshake_and_failure_channels(self):
-        for fault, agreement in (("match", "yes"), ("numeric", "no"), ("omitted_fold", "not_evaluable"),
+        direct, private, public = self.trial("match")
+        self.assertEqual((direct.returncode, direct.stdout, direct.stderr), (0, b"", b""))
+        self.assertEqual(C.read_public(public.read_bytes(), SCHEMA)["twin_agrees"], "yes")
+        fit = M.load_json(private / "fit.json")
+        self.assertTrue(any("/runtime/runs/cadence-leg/" in f["path"] for f in fit["custody"]["files"]))
+        direct_coefficients = (private / "coefficients.json").read_bytes()
+        relocated = self.root / "relocated-spans"
+        relocated.mkdir()
+        for sid in self.spans:
+            shutil.move(self.source / sid, relocated / sid)
+            self.assertFalse((self.source / sid).exists())
+        for fault, agreement in (("relocated", "yes"), ("numeric", "no"), ("omitted_fold", "not_evaluable"),
                                  ("forged_primary", "not_evaluable"), ("nonzero", "not_evaluable"),
                                  ("malformed", "not_evaluable"), ("timeout", "not_evaluable")):
             with self.subTest(fault=fault):
-                run, private, public = self.trial(fault)
+                run, private, public = self.trial(fault, relocated=relocated)
                 self.assertEqual((run.returncode, run.stdout, run.stderr), (0, b"", b""),
                                  (private / "stderr").read_bytes() if private.exists() else run.stderr)
                 self.assertEqual({path.name for path in private.iterdir()}, C.PRIVATE_NAMES)
@@ -690,9 +735,14 @@ class TwinThroughCLI(unittest.TestCase):
                 coefficients = (private / "coefficients.json").read_bytes()
                 self.assertEqual(row["coefficients_sha256"], digest(coefficients))
                 frame = (private / "stdout").read_bytes()
-                if fault == "match":
+                if fault == "relocated":
                     self.assertTrue(json.loads(frame)["schema"].endswith(".v1"))
                     self.assertTrue(all(cell["status"] == "ok" for cell in M.load_json(private / "step3.json")["cells"]))
+                    fit = M.load_json(private / "fit.json")
+                    paths = [Path(f["path"]) for f in fit["custody"]["files"] if "/runtime/runs/cadence-leg/" in f["path"]]
+                    self.assertTrue(paths)
+                    self.assertTrue(all(path.is_relative_to(relocated) for path in paths))
+                    self.assertEqual(coefficients, direct_coefficients)
                     original = dict(row, twin_agrees=None)
                     original_coefficients = coefficients
                 else:
@@ -707,7 +757,53 @@ class TwinThroughCLI(unittest.TestCase):
                     self.assertEqual(frame, b"not a frame\n")
                 if fault == "timeout":
                     self.assertEqual(frame, b"synthetic partial frame")
-        run, private, public = self.trial("coefficient_change")
+        run, private, public = self.trial("coefficient_change", relocated=relocated)
         self.assertEqual((run.returncode, run.stdout, run.stderr), (C.FAILURE_STATUS, b"", b"stage2_error\nOtherError\n"))
         self.assertTrue(private.is_dir())
         self.assertFalse(public.exists())
+
+    def test_primary_and_twin_refuse_bad_bundle_locators_before_response_reads(self):
+        from tests.cadence import test_look_run as cli_fixture
+
+        child_span = runpy.run_path(str(self.twin))["span_identities"]
+        span = self.source / self.spans[0]
+        leg = next(row for row in M.load_json(self.stage1)["legs"]
+                   if row["span_id"] == self.spans[0] and row["in_energy_fit"])
+        record_path = span / "legs" / leg["leg_key"].split("/", 1)[1] / "leg_record.json"
+        record = M.load_json(record_path)
+        self.assertEqual(record["result"]["bundle"], "runs/cadence-leg")
+        out = self.root / "refused-stage1.json"
+        ledger = self.root / "refusal-ledger.json"
+        row = dict(self.row, custody_root=str(self.source), public_root="generated-refusal")
+        ledger.write_bytes(C.dump({"schema": M.LOOK_LEDGER_SCHEMA, "looks": [row]}))
+        (self.source / LOOK).mkdir()
+        (self.mini / row["public_root"] / LOOK).mkdir(parents=True)
+        private = self.source / LOOK / "RESTRICTED"
+        stage2 = ["stage2", "--stage1", self.stage1, "--stage1-sha256", self.response_sha, "--manifest", self.manifest,
+                  "--allow-draft", "--looks", ledger, "--custody", self.source]
+        outside = self.root / "outside-runtime"
+        outside.mkdir()
+        (record_path.parent / "runtime" / "runs" / "escaped").symlink_to(outside, target_is_directory=True)
+        bad = ("", "/runs/cadence-leg", "runs//cadence-leg", "runs/cadence-leg/", "./runs/cadence-leg",
+               "runs/../cadence-leg", "runs/escaped")
+        for locator in bad:
+            with self.subTest(locator=locator):
+                record["result"]["bundle"] = locator
+                record_path.write_bytes(C.dump(record))
+                reason = "escapes the leg runtime" if locator == "runs/escaped" else "invalid runtime bundle path"
+                with self.assertRaisesRegex(ValueError, reason):
+                    child_span(span)
+                for args in ([*self.stage1_args, "--out", out], stage2):
+                    with cli_fixture.spy_opens() as opened:
+                        code, stdout, stderr = cli_fixture._cli_subprocess(args, repo=self.mini,
+                                                                          extra={"host_probe": UUID_LINE})
+                    self.assertEqual((code, stdout), (2, ""), stderr)
+                    self.assertIn(reason, stderr)
+                    self.assertFalse([path for path in opened if "/hazards/meter/" in path or Path(path).name in
+                                      ("power_trace.csv", "rich_telemetry.jsonl", "powermetrics.plist")])
+                self.assertFalse(out.exists() or private.exists())
+        record["attempts"] = []
+        record["result"].update(bundle=None, leg_status="incomplete", decode_cap_reached=False, g0_released=False)
+        record_path.write_bytes(C.dump(record))
+        self.assertIsNone(M.runtime_bundle(span, record_path.parent.name, record))
+        self.assertNotIn(record_path.parent.name, child_span(span)[1])

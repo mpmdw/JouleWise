@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """The interim look's two-stage CLI (RL-166 Q1, Q2, Q8; the analyst seat runs it).
 
+    host-id
     stage1 --out STAGE1.json  (--input LOOK_INPUT.json
                                | --roster ROSTER.json --custody ROOT --rules-3-4 VERDICTS.json
                                  [--span-dir SPAN_ID=PATH ...] [--write-input LOOK_INPUT.json])
@@ -44,7 +45,6 @@ import shutil
 import sys
 import tempfile
 import uuid
-import socket
 import time
 
 sys.dont_write_bytecode = True
@@ -521,9 +521,10 @@ def read_span(sdir, entry, rules34, fan_keys, ruled=None):
             if entry["role"] == "fit" and sm is None:   # RL-174 A.4: every fit leg, even without a turn
                 inc["km003c_clean"] = False
         turn = None
-        if leg_type == "A" and result.get("bundle"):
+        bundle = M.runtime_bundle(sdir, leg_id, rec)
+        if bundle is not None:
             try:
-                turn = build_turn(ldir / "runtime" / result["bundle"], result, fan_keys)
+                turn = build_turn(bundle, result, fan_keys)
             except (OSError, ValueError, KeyError, TypeError, IndexError) as exc:
                 # A G0 timeout (cadence_leg.py: a bundle and no turn) is a ruled exclusion (rules 1 and 2), not a
                 # refusal: a leg the six verdicts already exclude carries no turn. An included leg refuses.
@@ -533,7 +534,7 @@ def read_span(sdir, entry, rules34, fan_keys, ruled=None):
         holes = None
         if turn is not None and entry["role"] != "describe":
             # RL-173 E.1: the two time-stamp clauses, on every development leg with a turn (hp-01's are never read)
-            holes = trace_holes(turn, ldir / "runtime" / result["bundle"], sm, sm_why, key)
+            holes = trace_holes(turn, bundle, sm, sm_why, key)
             inc["sidecar_coverage"] = inc["sidecar_coverage"] and not holes["gpu_rail"]["excluded"]
             inc["km003c_clean"] = inc["km003c_clean"] and not holes["dc_in"]["excluded"]
         ruled_x = None
@@ -563,6 +564,7 @@ def read_look_input(roster, sdir_of, rules34, fan_keys=FAN_KEYS, ruled=None):
     (the synthetic generator writes it; a real runner never does)."""
     if not isinstance(roster, list):                # one shape: validate --roster-out's JSON list
         raise F.LookInputError("roster: not a list of spans")
+    validate_runtime_bundles(roster, sdir_of)
     spans, legs, synth = [], [], []
     ruled = dict(ruled or {})
     for entry in roster:
@@ -577,6 +579,11 @@ def read_look_input(roster, sdir_of, rules34, fan_keys=FAN_KEYS, ruled=None):
             "spans": spans, "legs": legs}
 
 
+def validate_runtime_bundles(roster, sdir_of):
+    for span in roster:
+        M.check_runtime_bundles(sdir_of(span["span_id"]))
+
+
 def stage2_preflight(stage1_out, sdir_of):
     """Structural checks of every file stage 2 will open, by presence only (stat, never a read): each
     energy-fit leg's power_trace.csv, and a meter stream in its span. Run by stage 1, so a layout fault refuses
@@ -588,7 +595,8 @@ def stage2_preflight(stage1_out, sdir_of):
         sdir = sdir_of(L["span_id"])
         leg_id = L["leg_key"].split("/", 1)[1]
         rec = _json(sdir / "legs" / leg_id / "leg_record.json")
-        if not (sdir / "legs" / leg_id / "runtime" / rec["result"]["bundle"] / "power_trace.csv").is_file():
+        bundle = M.runtime_bundle(sdir, leg_id, rec)
+        if bundle is None or not (bundle / "power_trace.csv").is_file():
             raise F.LookInputError(f"stage-2 preflight: {L['leg_key']} has no power_trace.csv")
         if not TF.span_streams(sdir):
             raise F.LookInputError(f"stage-2 preflight: {L['leg_key']}'s span has no meter stream")
@@ -741,7 +749,9 @@ def custody_check(stage1_out, sdir_of):
                 raise F.LookInputError(f"custody: {sid}'s meter streams are not the ones stage 1 read (time fields)")
             meters[sid] = sm
         rec = _json(sdir / "legs" / leg_id / "leg_record.json")
-        bundle = sdir / "legs" / leg_id / "runtime" / rec["result"]["bundle"]
+        bundle = M.runtime_bundle(sdir, leg_id, rec)
+        if bundle is None:
+            raise F.LookInputError("custody: an energy-fit leg has no bundle")
         try:
             rows = TF.gpu_rows(bundle)
         except (OSError, TF.TimeFieldError) as exc:
@@ -771,7 +781,9 @@ def read_segment_energy(stage1_out, sdir_of, step3_path=None, gpu_max_gap_s=None
         sdir = sdir_of(L["span_id"])
         leg_id = key.split("/", 1)[1]
         rec = _json(sdir / "legs" / leg_id / "leg_record.json")
-        bundle = sdir / "legs" / leg_id / "runtime" / rec["result"]["bundle"]
+        bundle = M.runtime_bundle(sdir, leg_id, rec)
+        if bundle is None:
+            raise F.LookInputError("custody: an energy-fit leg has no bundle")
         opened[f"{L['span_id']}/legs/{leg_id}/runtime/{rec['result']['bundle']}/power_trace.csv"] = \
             TF.file_sha256(bundle / "power_trace.csv")
         try:
@@ -936,9 +948,14 @@ def cmd_stage2(a, *, keep_redirected=False):
         commit = head.decode("ascii").strip()
         ledger_gate = None
     else:
+        ledger_ref = a.ledger_ref
+        if s1.get("synthetic") is not True:
+            if ledger_ref not in (None, "origin/main", "refs/remotes/origin/main"):
+                raise F.LookInputError("stage 2: campaign execution requires the row on origin/main")
+            ledger_ref = "origin/main"
         commit, row = M.require_stage1_committed(ROOT, F.LOOK_ID, a.stage1_sha256, stage1_doc=s1,
-                                               ledger_ref=a.ledger_ref, for_execution=True)
-        ref, ref_commit = M.shared_ref(ROOT, a.ledger_ref)
+                                               ledger_ref=ledger_ref, for_execution=True)
+        ref, ref_commit = M.shared_ref(ROOT, ledger_ref)
         ledger_gate = {"commit": commit, "ref": ref, "ref_commit": ref_commit}
         if row["sha256"] != sha256_file(manifest_path):
             raise F.LookInputError("stage 2: the execution row names a different manifest")
@@ -953,6 +970,7 @@ def cmd_stage2(a, *, keep_redirected=False):
     overrides = stage2_overrides(a.span_dir, s1)
     sdir_of = span_dirs(a.custody, (f"{sid}={path}" for sid, path in overrides)) if a.custody else None
     if sdir_of is not None:
+        validate_runtime_bundles(s1["roster"]["spans"], sdir_of)
         ids = [leg["span_id"] for leg in s1["legs"] if leg["included"] and leg["role"] == "fit" and
                leg["leg_type"] == "A"]
         problems = M.nonenergy_problems(s1, sdir_of, ids, include_native_pm=False)
@@ -976,12 +994,10 @@ def cmd_stage2(a, *, keep_redirected=False):
 
 
 def validate_execution_row(row, stage1, custody):
-    if stage1["synthetic"] is not True:
-        raise F.LookInputError("stage 2: production host identity awaits the manifest cold pass (RL-183)")
     host = row.get("execution_host")
     if not host:
         raise F.LookInputError("stage 2: register the execution_host before reservation")
-    if host != socket.gethostname():
+    if host != M.execution_host():
         raise F.LookInputError("stage 2: execution_host does not match this host")
     if not row.get("custody_root") or not row.get("public_root"):
         raise F.LookInputError("stage 2: register both look roots in the ledger")
@@ -1154,6 +1170,7 @@ def _check_sources():
 def main(argv=None, *, keep_redirected=False):
     ap = argparse.ArgumentParser(description="The interim look's two stages (RL-166 Q8).")
     sub = ap.add_subparsers(dest="cmd", required=True)
+    sub.add_parser("host-id", help="print this machine's RL-184 execution host token")
     p1 = sub.add_parser("stage1")
     p1.add_argument("--out", required=True)
     g = p1.add_mutually_exclusive_group(required=True)
@@ -1189,6 +1206,9 @@ def main(argv=None, *, keep_redirected=False):
     if a.cmd == "stage1" and (bool(a.stage_archives) != bool(a.staging_root) or (a.stage_archives and a.input)):
         ap.error("--stage-archives and --staging-root must be used together with --roster")
     try:
+        if a.cmd == "host-id":
+            print(M.execution_host())
+            return 0
         # FIRST, before any input is opened: the running code must be the pinned code (Mythos cold seat 3; Sol 9)
         _VERIFIED[:] = [(M.verify_pins(a.manifest, ROOT, allow_draft=a.allow_draft, running=RUNNING,
                                        ledger_ref=getattr(a, "ledger_ref", None)), a.manifest)]

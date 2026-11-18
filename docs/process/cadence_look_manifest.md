@@ -229,8 +229,19 @@ The committed `LOOKS.json` row supplies `execution_host`, `public_root`
 (repository-relative), `custody_root` (absolute), and any `holds_cleared` ruling
 ids. Establish the two look directories before running. They must be on the
 same filesystem so stage 2 can publish the complete report by atomic rename
-without creating a public temporary file. The lead must confirm the campaign receipt field and its local derivation at the
-manifest cold pass. Production admission stays closed while this confirmation is pending.
+without creating a public temporary file. Under RL-184 the lead runs
+`cadence_look_run.py host-id` at the admitted commit on the execution machine
+and records its `hw1:` token in the `stage1_committed` row on main. The token
+is derived from the machine's hardware UUID. Stage 2 derives it again before
+reservation. The campaign row awaits Astra's paired census rerun and Fable's
+manifest cold pass.
+
+Stage 1 checks every rostered bundle locator before reading trace data.
+`runs/cadence-leg` is a valid literal relative POSIX path beneath a leg's
+`runtime/` directory. Staged span overrides preserve the locator. A null
+locator for an unrun leg remains absent. Stage 1 and stage 2 preflight reject
+empty, absolute or noncanonical paths and locators that resolve outside the
+leg's runtime directory. The pinned twin checks them independently.
 
 Stage 2 checks pins, host, stage-1 commitments, hold clearances, rank, and prior
 execution history. Its exclusive creation of `RESTRICTED/` consumes the id.

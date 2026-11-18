@@ -433,14 +433,14 @@ def span_dirs(custody, overrides=()):
 def judge_span(sdir, span_id, selected_keys):
     """({leg_key: {sidecar_coverage, km003c_clean}}, {leg_key: detail}, trailers) for one span directory."""
     sdir = Path(sdir)
-    from joulewise.cadence_looks import time_fields as TF
+    from joulewise.cadence_looks import manifest as lm, time_fields as TF
     streams = [read_meter_stream(p) for p in TF.span_streams(sdir)]       # a .zst sibling refuses (Mythos r5 N8)
     verdicts, detail = {}, {}
     for leg_id in _json(sdir / "runner_receipt.json")["roster"]:
         key = f"{span_id}/{leg_id}"
         record = sdir / "legs" / leg_id / "leg_record.json"
-        bundle = None
         rec = _json(record) if record.is_file() else {}
+        bundle = lm.runtime_bundle(sdir, leg_id, rec)
         if (rec.get("spec") or {}).get("leg_type") == "T":
             # RL-166 Q14: a type-T leg is not read at this look at all. The ruled selector only (RL-167 R-21):
             # spec.leg_type, no legacy field.
@@ -448,11 +448,7 @@ def judge_span(sdir, span_id, selected_keys):
             why = ["type T: never read (RL-166 Q14)"]
             detail[key] = {"rule3": {"reasons": why}, "rule4": {"reasons": why}}
             continue
-        if rec:
-            name = (rec.get("result") or {}).get("bundle")
-            if isinstance(name, str) and name and (sdir / "legs" / leg_id / "runtime" / name).is_dir():
-                bundle = sdir / "legs" / leg_id / "runtime" / name
-        if bundle is None:
+        if bundle is None or not bundle.is_dir():
             verdicts[key] = {k: False for k in VERDICT_KEYS}
             detail[key] = {"rule3": {"reasons": ["no accepted bundle"]}, "rule4": {"reasons": ["no accepted bundle"]}}
             continue

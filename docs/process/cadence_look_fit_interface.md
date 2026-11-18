@@ -449,8 +449,11 @@ the registered inputs. It authenticates the frame's primary projection,
 recomputes agreement and the relative maxima, and rechecks the coefficient
 hash before publication. Captured stdout, stderr and the comparison stay in
 custody. A child failure or incomplete frame yields `not_evaluable` on a
-completed primary report. Production admission awaits the receipt-host
-confirmation and the reader's nested-locator check.
+completed primary report. Under RL-184, stage 2 matches the local `host-id`
+token to the lead's row on main. The pinned twin and the primary accept
+literal nested bundle locators, including under a staged span override.
+Campaign execution awaits Astra's paired census rerun and Fable's manifest
+cold pass.
 
 RL-175 B.4 weights the standardized day means equally for the prefix-bias
 estimate and its 90% t interval.

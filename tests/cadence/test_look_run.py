@@ -456,6 +456,18 @@ if opts.get("trap"):
         raise AssertionError("plist parsed")
     plistlib.loads = plistlib.load = _no_plist
 from scripts import cadence_look_run as R
+if "host_probe" in opts:
+    import subprocess
+    real_run = subprocess.run
+    def run(argv, *args, **kwargs):
+        if argv[0] == "/usr/sbin/ioreg":
+            assert argv == ["/usr/sbin/ioreg", "-rd1", "-c", "IOPlatformExpertDevice"]
+            assert kwargs == {"capture_output": True, "check": True}
+            return subprocess.CompletedProcess(argv, 0, opts["host_probe"].encode(), b"")
+        return real_run(argv, *args, **kwargs)
+    R.M.subprocess.run = run
+else:
+    R.M.execution_host = lambda: "hw1:" + "a" * 64
 if opts.get("stage1_problems"):                  # a planted problem in the shared stage-1 check (Mythos r5 N7)
     R.M.stage1_problems = lambda *a, **k: list(opts["stage1_problems"])
 if opts.get("trap"):
@@ -492,7 +504,7 @@ if opts["exports"]:
     def validate(row, stage1, custody):
         holds = {flag: "RL-999" for flag in R.M.STAGE2_HOLD_FLAGS["interim"]
                  if stage1[flag.split(".")[0]].get(flag.split(".")[1]) is True}
-        record = dict(row, execution_host=R.socket.gethostname(), custody_root=str(custody or temp),
+        record = dict(row, execution_host="hw1:" + "a" * 64, custody_root=str(custody or temp),
                       public_root="fixture", holds_cleared=holds)
         return real_validate(record, stage1, custody)
     R.validate_execution_row = validate

@@ -39,7 +39,9 @@
     "RL-179 F12",
     "RL-180",
     "RL-181 §5",
-    "RL-183 §2.4"
+    "RL-183 §2.4",
+    "RL-184 §1",
+    "RL-184 §3.3"
   ],
   "when": {
     "after_desk_final": [
@@ -511,7 +513,7 @@
       },
       {
         "path": "joulewise/cadence_looks/inclusion_34.py",
-        "sha256": "5d68ec842a1d7c429ceb1fd96e169ffbfc08b142fb56c3200b37ba3febb3e1fa"
+        "sha256": "fb774e07e7522f712e7c40d8f847799face78e2435a40d30d2f7d3d314de249c"
       },
       {
         "path": "joulewise/cadence_looks/time_fields.py",
@@ -523,11 +525,11 @@
       },
       {
         "path": "joulewise/cadence_looks/step3_roster.py",
-        "sha256": "c4bd3dce633390e3d7b7ef73f145a98dd5bf2daa5f482135a19f49d6d063f413"
+        "sha256": "76eae1c57bd2730aaaaa11de83f343840588c00aa75f3e03673411eea0d36821"
       },
       {
         "path": "scripts/cadence_look_run.py",
-        "sha256": "0846a8a32a43aaefb3ab745840ffa4eb192299408b785c34de5b1cef434694ab"
+        "sha256": "617ba1efd838389b6aae0f2c1b2dbdde571a9635e6968d20b8556e6822c9c9b0"
       },
       {
         "path": "scripts/cadence_look_manifest.py",
@@ -674,7 +676,7 @@
       },
       "adapter": {
         "path": "joulewise/cadence_looks/step3_roster.py",
-        "sha256": "c4bd3dce633390e3d7b7ef73f145a98dd5bf2daa5f482135a19f49d6d063f413"
+        "sha256": "76eae1c57bd2730aaaaa11de83f343840588c00aa75f3e03673411eea0d36821"
       },
       "statistic": "iii",
       "method": "The adapter loads the committed module, rebinds LEGS and ORIGINAL_EIGHT to the roster and calls analyse and custody_check, once per prompt-size cell. It contains no arithmetic on energy. Any edit to the step 3 bytes needs a ruling. Custody mode: `python3 -I -B joulewise/cadence_looks/step3_roster.py --manifest M --stage1 S1 --stage1-sha256 H --custody ROOT --out STEP3.json`; the stage-2 CLI does not compute statistic (iii).",
@@ -838,7 +840,7 @@
       },
       {
         "path": "joulewise/cadence_looks/manifest.py",
-        "sha256": "e59920c39c1a834e988f67a0536d8fb5de3e222948ea5b0a60d883589a4a9bb1"
+        "sha256": "4587f256a52d915d10b9e542f7c0098a27211773033b3a65f9fb9dbaf83d753d"
       },
       {
         "path": "joulewise/desk_compress.py",
@@ -886,7 +888,7 @@
     },
     "twin": {
       "path": "scripts/cadence_interim_twin.py",
-      "sha256": "aa041772d45bc955aba999721cfdea4b9776875ca635449fd0ff60593a5ba22a"
+      "sha256": "a79ccaa4b15e8601500c1653aa1d5c161f4c830678500f42be7b5737dc7ef59c"
     }
   },
   "inclusion": {
@@ -920,7 +922,7 @@
         "reads_energy": false,
         "code": {
           "path": "joulewise/cadence_looks/inclusion_34.py",
-          "sha256": "5d68ec842a1d7c429ceb1fd96e169ffbfc08b142fb56c3200b37ba3febb3e1fa"
+          "sha256": "fb774e07e7522f712e7c40d8f847799face78e2435a40d30d2f7d3d314de249c"
         },
         "cite": [
           "RL-149 §2.4",
@@ -936,7 +938,7 @@
         "reads_energy": false,
         "code": {
           "path": "joulewise/cadence_looks/inclusion_34.py",
-          "sha256": "5d68ec842a1d7c429ceb1fd96e169ffbfc08b142fb56c3200b37ba3febb3e1fa"
+          "sha256": "fb774e07e7522f712e7c40d8f847799face78e2435a40d30d2f7d3d314de249c"
         },
         "cite": [
           "RL-149 §2.4",
@@ -1256,7 +1258,7 @@
     "seats": 1,
     "lead_checks_output_against_schema": true,
     "custody_copy": "One verified custody copy of the roster's spans by the existing offload tooling, made while the MBP is unarmed; the look runs on that copy, never on the MBP's measurement root.",
-    "host": "The committed LOOKS.json row binds one execution_host using the campaign receipt host id. Non-synthetic stage 2 refuses pending confirmation of the receipt identifier and local derivation at the RL-183 manifest cold pass. A host change requires a new ledger row and confirmation that the first host has no reservation.",
+    "host": "Under RL-184 the lead records the admitted commit's host-id token from the named machine in the stage1_committed LOOKS.json row on main. Stage 2 recomputes it before reservation. A host change requires a new ledger row and confirmation that the first host has no reservation.",
     "no_import_by": [
       "scripts/cadence_legs_runner.py",
       "scripts/cadence_leg_runtime.py",
@@ -1282,7 +1284,7 @@
   },
   "review": {
     "cold_seat": "Mythos 5.2: the design attack on RL-166 Q1 to Q4 (Sun 10:00), then a fresh Mythos seat's cold review of the manifest, rules 3 and 4, the step 3 adapter and the fit code against RL-149 §2.6 and §2.7 as amended, with Q6's and Q11's checks (Mon 14:00). Neither wrote any of the code.",
-    "then": "Twin agreement (lead, Mon 10:00); fixes and validate --final with every hash filled (Mon 18:00); the research lead's cold pass (Mon night); the manifest and LOOKS.json committed (Tue 06:00).",
+    "then": "Astra reruns the paired census on the pinned primary and twin; Fable cold-passes the manifest; the lead commits the manifest and look ledger on main before campaign execution (RL-184).",
     "paper_bound": true,
     "due": "Manifest, schemas, validator and LOOKS.json Sun 15 Nov 12:00 PST; rules 3/4 and the step 3 adapter Sun 18:00 (RL-166 §2 items 3 and 4)",
     "cite": [

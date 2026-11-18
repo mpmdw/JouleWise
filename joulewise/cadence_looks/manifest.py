@@ -1434,6 +1434,22 @@ def freeze2_commitment(repo):
     return row
 
 
+def execution_host():
+    """Return the RL-184 host token without publishing the hardware UUID."""
+    try:
+        probe = subprocess.run(["/usr/sbin/ioreg", "-rd1", "-c", "IOPlatformExpertDevice"],
+                               capture_output=True, check=True)
+    except (OSError, subprocess.CalledProcessError):
+        raise ManifestError(["host-id: could not read IOPlatformUUID"]) from None
+    properties = re.findall(rb'(?m)^[ \t|]*"IOPlatformUUID"[ \t]*=[ \t]*([^\r\n]*)', probe.stdout)
+    uuid_pattern = rb'"([0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12})"[ \t]*'
+    uuid = re.fullmatch(uuid_pattern, properties[0]) if len(properties) == 1 else None
+    if uuid is None:
+        raise ManifestError(["host-id: expected exactly one UUID-shaped IOPlatformUUID"])
+    material = ("joulewise.execution_host.v1:" + uuid[1].decode("ascii").upper()).encode("utf-8")
+    return "hw1:" + hashlib.sha256(material).hexdigest()
+
+
 def _ledger_history_rows(repo, look_id, head):
     """Every preserved row of this look on HEAD or any remote-tracking history, newest first."""
     rc, out, err = _git(repo, "log", "--full-history", "--format=%H", head, "--remotes", "--", LOOK_LEDGER_PATH)
@@ -1582,6 +1598,40 @@ def require_inputs_committed(repo, look_id, manifest_sha256, *, roster_sha256, v
     return row
 
 
+def runtime_bundle(sdir, leg_id, record):
+    """Bind the literal RL-184 F01 locator. Resolution is used only to check containment."""
+    name = (record.get("result") or {}).get("bundle")
+    if name is None:
+        return None
+    if not isinstance(name, str) or "\0" in name or any(part in ("", ".", "..") for part in name.split("/")):
+        raise ManifestError(["invalid runtime bundle path (RL-184 F01)"])
+    if (record.get("spec") or {}).get("leg_type") == "T":
+        return None
+    sdir = Path(sdir)
+    parent = Path("legs") / leg_id / "runtime"
+    path = sdir / parent / name
+    try:
+        root = sdir.resolve() / parent
+        resolved = path.resolve()
+    except (OSError, RuntimeError):
+        raise ManifestError(["runtime bundle path could not be resolved (RL-184 F01)"]) from None
+    if root not in resolved.parents:
+        raise ManifestError(["bundle escapes the leg runtime directory (RL-184 F01)"])
+    return path
+
+
+def check_runtime_bundles(sdir):
+    """Check all rostered locators using only the receipt and leg records."""
+    receipt = json.loads((sdir / "runner_receipt.json").read_text(encoding="utf-8"))
+    for leg_id in receipt["roster"]:
+        if (not isinstance(leg_id, str) or not leg_id or "\0" in leg_id
+                or Path(leg_id).name != leg_id or leg_id in (".", "..")):
+            raise ManifestError(["invalid receipt leg ID (RL-184 F01)"])
+        record = sdir / "legs" / leg_id / "leg_record.json"
+        if record.is_file():
+            runtime_bundle(sdir, leg_id, json.loads(record.read_text(encoding="utf-8")))
+
+
 def nonenergy_files(sdir):
     """Operational sources reused by the look, with paths relative to a span and byte hashes.
     Optional files are included when present; adding or removing one changes the map. No energy-bearing
@@ -1596,9 +1646,9 @@ def nonenergy_files(sdir):
         recpath = sdir / base / "leg_record.json"
         if recpath.is_file():
             rec = json.loads(recpath.read_text(encoding="utf-8"))
-            bundle = (rec.get("result") or {}).get("bundle")
-            if bundle and (rec.get("spec") or {}).get("leg_type") != "T":
-                b = f"{base}/runtime/{bundle}"
+            bundle = runtime_bundle(sdir, lid, rec)
+            if bundle is not None:
+                b = bundle.relative_to(sdir).as_posix()
                 paths.update(f"{b}/{n}" for n in ("events.jsonl", "outputs/align_turns.jsonl",
                                                   "outputs/align_thermal.jsonl", "config.json",
                                                   "outputs/align_runtime_events.jsonl", "align_runtime_events.jsonl"))
@@ -1622,11 +1672,10 @@ def native_pm_files(sdir):
         if not p.is_file():
             continue
         rec = json.loads(p.read_text(encoding="utf-8"))
-        name = (rec.get("result") or {}).get("bundle")
-        if not name or (rec.get("spec") or {}).get("leg_type") == "T":
+        b = runtime_bundle(sdir, lid, rec)
+        if b is None:
             continue
-        rel = f"legs/{lid}/runtime/{name}"
-        b = sdir / rel
+        rel = b.relative_to(sdir).as_posix()
         # Missing pairs are represented by absence and differ from any previously recorded projection.
         if not (b / "rich_telemetry.jsonl").is_file() or not (b / "raw/powermetrics.plist").is_file():
             continue

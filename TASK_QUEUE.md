@@ -1,5 +1,10 @@
 # JouleWise Task Queue
 
+PR #795 RL-184 follow-up (2026-11-18), [AGENT]. Astra reruns the census on
+the paired primary and corrected #816 reader. Fable cold-passes the
+manifest before the lead registers a campaign look on main.
+[Builder report](docs/run_reports/2026-11-18-pr795-rl184.md).
+
 PR #795 follow-up (2026-11-18), [AGENT]. Audit the pinned parent-child
 handshake and the interruption ledger. The manifest cold pass owns
 confirmation of the campaign host identifier and the nested-locator reader

@@ -163,14 +163,19 @@ def run_roster(entries, *, threshold=DRIFT_THRESHOLD, loader=load_step3):
 
 def entries_from_stage1(stage1, sdir_of):
     import json
+    from joulewise.cadence_looks import manifest as lm
+
     out = []
     for leg in stage1["legs"]:
         if not (leg.get("included") is True and leg.get("role") == "fit" and leg.get("leg_type") == "A"):
             continue
         span_id, leg_id = leg["leg_key"].split("/", 1)
-        ldir = Path(sdir_of(span_id)) / "legs" / leg_id
-        result = json.loads((ldir / "leg_record.json").read_text(encoding="utf-8")).get("result") or {}
-        out.append({"key": leg["leg_key"], "day": leg["day"], "bundle": str(ldir / "runtime" / result["bundle"]),
+        sdir = Path(sdir_of(span_id))
+        record = json.loads((sdir / "legs" / leg_id / "leg_record.json").read_text(encoding="utf-8"))
+        bundle = lm.runtime_bundle(sdir, leg_id, record)
+        if bundle is None:
+            raise ValueError("an included Step 3 leg has no bundle")
+        out.append({"key": leg["leg_key"], "day": leg["day"], "bundle": str(bundle),
                     "role": "fit", "leg_type": "A", "included": True, "prompt_tokens_nominal": leg["cell_prompt_tokens"]})
     return out
 
@@ -198,9 +203,13 @@ def custody_problems(stage1, sdir_of):
         try:
             # Operational hashes above authenticate this bundle locator before it is used.
             import json
-            ldir = Path(sdir_of(leg["span_id"])) / "legs" / leg["leg_key"].split("/", 1)[1]
-            record = json.loads((ldir / "leg_record.json").read_text(encoding="utf-8"))
-            rows = tf.gpu_rows(ldir / "runtime" / record["result"]["bundle"])
+            sdir = Path(sdir_of(leg["span_id"]))
+            leg_id = leg["leg_key"].split("/", 1)[1]
+            record = json.loads((sdir / "legs" / leg_id / "leg_record.json").read_text(encoding="utf-8"))
+            bundle = lm.runtime_bundle(sdir, leg_id, record)
+            if bundle is None:
+                raise ValueError("an included Step 3 leg has no bundle")
+            rows = tf.gpu_rows(bundle)
             if expected is None or tf.rows_digest(rows) != expected:
                 problems.append(f"custody: {leg['leg_key']}'s power_trace.csv is not the one stage 1 read (row stamps)")
         except (OSError, ValueError, TypeError, KeyError, tf.TimeFieldError):

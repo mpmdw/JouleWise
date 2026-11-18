@@ -1,5 +1,10 @@
 # JouleWise Run State
 
+PR #795 RL-184 follow-up (2026-11-18) installs the hardware-derived host token
+and literal nested bundle binding. The draft pins the corrected #816 reader.
+Campaign registration awaits Astra's paired census rerun and Fable's
+manifest cold pass. [Builder report](docs/run_reports/2026-11-18-pr795-rl184.md).
+
 PR #795 twin adoption (2026-11-18) installs the #816 reader pin and the
 RL-181 parent handshake. The spent-ID ledger records RL-183 interruptions.
 Production admission awaits host-identifier confirmation, and the pinned
