@@ -584,6 +584,10 @@ now has an explicit disposition:
 
 ## Queue Maintenance
 
+- **lm-interim-01 twin (2026-11-18)** — NEEDS_SPEC for the synthetic
+  parent/child input interface. The [run report](docs/run_reports/2026-11-18-interim-fit-twin.md)
+  records the independent checks and the integration blockers.
+
 - **[AGENT] Typed RUN_STATE cutover (2026-11-17).** The lead recorded a
   Tier 1 MERGE review. The follow-up reruns both CI workflows before merge.
   After merge, the lead runs
