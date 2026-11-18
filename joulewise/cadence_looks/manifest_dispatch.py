@@ -25,6 +25,15 @@ KIT_COMMITMENTS = V2_SCHEMA.with_name("look-kit-commitments.v2.json")
 FILLER_KIT_REGISTRY = V2_SCHEMA.with_name("filler-kit-registry.json")
 ManifestError = schema_check.ManifestError
 
+_MANIFEST_ROUTES = frozenset((
+    (V1, "interim", "lm-interim-01"),
+    (V2, "qualification", "lm-qual-01"),
+    (V2, "description", "lm-inst-01"),
+    (V2, "description", "lm-stab-01"),
+    (V2, "description", "lm-stab-02"),
+    (V2, "transfer", "lm-transfer-01"),
+))
+
 TRANSFER_PRINTS = (
     "daily_errors",
     "evaluable_dates",
@@ -93,8 +102,17 @@ class _NoticeArgumentParser(argparse.ArgumentParser):
         raise _ParserExit(status)
 
 
-def _reject_filler_kits(document):
-    if document.get("schema") == V2 and document.get("look_kind") == "description":
+def _manifest_route(document):
+    if not isinstance(document, dict) or document.get("schema") not in (V1, V2):
+        raise ManifestError("unknown cadence manifest schema ID")
+    route = (document["schema"], document.get("look_kind"), document.get("look_id"))
+    if not all(isinstance(value, str) for value in route) or route not in _MANIFEST_ROUTES:
+        raise ManifestError("unrecognized cadence manifest schema, look_kind and look_id combination")
+    return route
+
+
+def _reject_filler_kits(document, kind):
+    if kind == "description":
         return
 
     registry = schema_check._decode(FILLER_KIT_REGISTRY.read_bytes())
@@ -171,10 +189,7 @@ def _validate_description(document, commitments):
         raise ManifestError("description prints must cover exactly the selected look's destinations")
 
 
-def _validate_shape(document, definitions, commitments):
-    kind = document.get("look_kind")
-    if kind not in ("qualification", "description", "transfer"):
-        raise ManifestError("expected v2 look_kind qualification, description or transfer")
+def _validate_shape(document, kind, definitions, commitments):
     pins = {}
     schema_check._check(document, definitions[kind], definitions, pins)
     if kind == "transfer":
@@ -186,12 +201,11 @@ def _validate_shape(document, definitions, commitments):
 
 def _transfer_final(registration, candidate, pins, definitions, commitments):
     registered = schema_check._decode(registration)
-    if not isinstance(registered, dict) or (
-        registered.get("schema"), registered.get("look_kind"), registered.get("status")
-    ) != (V2, "transfer", "registered"):
+    schema, kind, _ = _manifest_route(registered)
+    if (schema, kind, registered.get("status")) != (V2, "transfer", "registered"):
         raise ManifestError("expected a registered transfer manifest")
-    _reject_filler_kits(registered)
-    pending = _validate_shape(registered, definitions, commitments)
+    _reject_filler_kits(registered, kind)
+    pending = _validate_shape(registered, kind, definitions, commitments)
     if pending.keys() != pins.keys() or any(value != "PENDING:CODE" for value in pending.values()):
         raise ManifestError("registration must leave every code hash slot pending")
     sections = registration.split(REGISTRATION_PLACEHOLDER)
@@ -212,19 +226,6 @@ def _reject_final_placeholders(document):
         raise ManifestError(f"final manifest contains {marker.group()}")
 
 
-def _reject_reserved_v1_look(document):
-    schema = json.loads(V2_SCHEMA.read_bytes())
-    definitions = schema["$defs"]
-    for variant in schema["oneOf"]:
-        name = variant["$ref"].removeprefix("#/$defs/")
-        rule = definitions[name]["properties"]["look_id"]
-        try:
-            schema_check._check(document.get("look_id"), rule, definitions, {})
-        except ManifestError:
-            continue
-        raise ManifestError("look_id is reserved for v2 cadence validation")
-
-
 def _validate_legacy(tool, payload, final):
     if not tool.is_file():
         raise ManifestError("pinned v1 entry point unavailable, supply --v1-tool")
@@ -241,10 +242,10 @@ def _validate_legacy(tool, payload, final):
         return finish_notice(status, stdout=result.stdout or None, stderr=result.stderr or None)
 
 
-def _check_registration_use(document, final):
+def _check_registration_use(document, kind, final):
     if not final:
         raise ManifestError("--registration requires --final")
-    if document.get("look_kind") not in ("qualification", "transfer") or document.get("status") != "registered":
+    if kind not in ("qualification", "transfer") or document.get("status") != "registered":
         raise ManifestError("--registration requires a registered qualification or transfer final")
 
 
@@ -272,13 +273,10 @@ def _validate_qualification(payload, final, read_registration, commitments):
     return document
 
 
-def _validate_v2_document(payload, document, final, read_registration):
-    if not isinstance(document, dict) or document.get("schema") != V2:
-        raise ManifestError("expected the v2 cadence manifest schema ID")
-    _reject_filler_kits(document)
-    kind = document.get("look_kind")
+def _validate_v2_document(payload, document, kind, final, read_registration):
+    _reject_filler_kits(document, kind)
     if read_registration is not None:
-        _check_registration_use(document, final)
+        _check_registration_use(document, kind, final)
     if final and document.get("status") != "draft":
         _reject_final_placeholders(document)
     commitments = schema_check._decode(KIT_COMMITMENTS.read_bytes())
@@ -286,7 +284,7 @@ def _validate_v2_document(payload, document, final, read_registration):
         return _validate_qualification(payload, final, read_registration, commitments)
 
     definitions = json.loads(V2_SCHEMA.read_bytes())["$defs"]
-    pins = _validate_shape(document, definitions, commitments)
+    pins = _validate_shape(document, kind, definitions, commitments)
     if not final:
         return document
 
@@ -304,8 +302,11 @@ def _validate_v2_document(payload, document, final, read_registration):
 def validate_v2(payload: bytes, *, final=False, registration: bytes | None = None) -> dict:
     """Check the closed v2 variant and, for final transfer or qualification, its registration."""
     document = schema_check._decode(payload)
+    schema, kind, _ = _manifest_route(document)
+    if schema != V2:
+        raise ManifestError("expected the v2 cadence manifest schema ID")
     read_registration = None if registration is None else lambda: registration
-    return _validate_v2_document(payload, document, final, read_registration)
+    return _validate_v2_document(payload, document, kind, final, read_registration)
 
 
 def _dispatch(argv):
@@ -324,19 +325,16 @@ def _dispatch(argv):
     try:
         payload = args.manifest.read_bytes()
         document = schema_check._decode(payload)
-        schema = document.get("schema") if isinstance(document, dict) else None
+        schema, kind, _ = _manifest_route(document)
         if schema == V1:
-            _reject_filler_kits(document)
+            _reject_filler_kits(document, kind)
             if args.registration is not None:
                 raise ManifestError("--registration applies to v2 manifests")
-            _reject_reserved_v1_look(document)
             if args.final:
                 _reject_final_placeholders(document)
             return _validate_legacy(args.v1_tool, payload, args.final)
-        if schema != V2:
-            raise ManifestError("unknown cadence manifest schema ID")
         read_registration = args.registration.read_bytes if args.registration is not None else None
-        doc = _validate_v2_document(payload, document, args.final, read_registration)
+        doc = _validate_v2_document(payload, document, kind, args.final, read_registration)
     except (ManifestError, OSError) as error:
         return finish_notice(PRE_READ_REFUSAL, stderr=f"REFUSE {error}\n")
     return finish_notice(0, stdout=f"ok {doc['look_id']} ({doc['status']})\n")
