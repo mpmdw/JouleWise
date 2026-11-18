@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 """Validate the MBP schedule and recommend one action from structural facts.
 
+The scheduler is advisory. Every start passes through the pinned launcher
+gates. The pinned launchers and runners enforce start safety.
+
 Ledger decision observations have a decision key. Producers record actual host
 events with an event key (LAUNCH, CLOSE, COPY_VERIFIED, REFUSAL, STOP, GATE, READY).
 Only those events are used as launch and close history.
@@ -320,7 +323,7 @@ def validate_queue(path, data, rules, errors, check_references):
             if (entry.get("repeat") is True and entry.get("done") is not True
                     and one_of(*FILLERS)(entry.get("kind"))
                     and not entry.get("block") and not (isinstance(params, dict) and
-                         (params.get("after") or params.get("gates")))
+                         any(params.get(key) for key in ("after", "gates", "window")))
                     and not restricted.intersection({"window", "dependency", "session_route"})):
                 standing = True
         if isinstance(params, dict):
@@ -484,6 +487,7 @@ def read_events(path):
 @dataclass
 class Attempt:
     launch: dict
+    governing_commit: str | None = None
     close: dict | None = None
     receipt: dict | None = None
     restore: dict | None = None
@@ -558,7 +562,8 @@ class History:
                 require(self.latest.close is not None, "LEDGER_OVERLAP",
                         f"{row['span_id']} opened before {self.latest.span} closed")
                 self.latest.prove_close()
-            fields(row["registration"], REGISTRATION, "LEDGER_REGISTRATION", f"{label}.registration")
+            fields(row["registration"], REGISTRATION, "LEDGER_REGISTRATION", f"{label}.registration",
+                   {"pilot": boolean})
             require(all(same(row[key], row["registration"][key]) for key in REGISTRATION),
                     "LEDGER_REGISTRATION", f"{label} disagrees with its kit registration")
             require(len(set(row["groups"])) == len(row["groups"]), "LEDGER_REGISTRATION",
@@ -570,7 +575,10 @@ class History:
                         f"{label} lacks explicit registered memberships")
             require(row["span_id"] not in self.spans, "LEDGER_DUPLICATE", f"reused attempt {row['span_id']}")
             self.spans.add(row["span_id"])
-            self.latest = self.attempts[seq] = Attempt(row)
+            # CONFIG governs subsequent attempts. Keep the raw committed row for digest verification.
+            governing_commit = None if self.revision is None else self.revision["queue_commit"]
+            launch = row if governing_commit is None else {**row, "queue_commit": governing_commit}
+            self.latest = self.attempts[seq] = Attempt(launch, governing_commit)
         elif event == "GATE":
             self.gates[row["id"]] = row["passed"]
             if row["passed"]:
@@ -580,7 +588,8 @@ class History:
         elif event == "CONFIG":
             self.revision = {key: row[key] for key in REVISION_FIELDS}
         elif event == "REFUSAL":
-            self.refusals.append(row)
+            governing_commit = None if self.revision is None else self.revision["queue_commit"]
+            self.refusals.append((row, governing_commit))
         else:
             attempt = self.attempts.get(row["open_seq"])
             require(attempt is not None, "LEDGER_ORPHAN", f"{label} names missing attempt {row['span_id']}")
@@ -680,24 +689,38 @@ class History:
                  "ended_epoch": run.close["ended_epoch"]}
                 for run in self.attempts.values() if run.close is not None and not run.copy_verified()]
 
+    def contamination_events(self):
+        # A close can commit before its STOP. A delayed STOP still needs a later clean span.
+        stops = {row["open_seq"]: row["seq"] for row, _ in self.stops if row["code"] == CONTAMINATED}
+        for seq, attempt in self.attempts.items():
+            close = attempt.close
+            if seq in stops:
+                yield attempt, stops[seq]
+            elif close is not None and close["load_redos"] >= 3:
+                yield attempt, close["seq"]
+
     def contaminated(self):
-        return any(row["code"] == CONTAMINATED and not any(
+        return any(not any(
             later.launch["seq"] > attempt.launch["seq"] and later.clean_load()
-            and later.close["seq"] > row["seq"] for later in self.attempts.values()
-        ) for row, attempt in self.stops)
+            and measured_span(later.launch) and later.close["seq"] > stop_seq
+            for later in self.attempts.values()
+        ) for attempt, stop_seq in self.contamination_events())
 
     def batch_triggered(self, campaign):
-        affected = set()
-        for stop, attempt in self.stops:
+        hits = 0
+        for attempt, _ in self.contamination_events():
             row = attempt.launch
-            if stop["code"] != CONTAMINATED or row["kind"] != "counted" or row["campaign"] != campaign:
+            if row["kind"] != "counted" or row["campaign"] != campaign:
                 continue
             require(attempt.close is not None and all(
                 key in row for key in ("soak_end_epoch", "predicted_batch_epoch")
             ), "BATCH_HISTORY_UNKNOWN", f"{attempt.span} lacks batch timing evidence")
-            if row["soak_end_epoch"] <= row["predicted_batch_epoch"] <= attempt.close["ended_epoch"]:
-                affected.add(attempt.span)
-        return len(affected) >= 2
+            start, end = row["t0_epoch"], attempt.close["ended_epoch"]
+            soak, predicted = row["soak_end_epoch"], row["predicted_batch_epoch"]
+            # A bad soak timestamp cannot rule out a batch inside the measured span.
+            if start <= predicted <= end and (not start <= soak <= end or soak <= predicted):
+                hits += 1
+        return hits >= 2
 
 
 @dataclass(frozen=True)
@@ -740,6 +763,18 @@ def status_at(rule, day):
     if rule["status"] == "LIVE" and calendar_date(review) and review < day.isoformat():
         return ("FLAG", False) if rule["owner"] == "lead" else ("LIVE", True)
     return rule["status"], False
+
+
+def completion_key(row):
+    name = row["entry_id"] if "entry_id" in row else row["id"]
+    return name, *pair(row), row["kind"], row.get("block")
+
+
+def measured_span(row):
+    if row["kind"] == "maintenance":
+        return False
+    return (row["legs"] > 0
+            or row["kind"] == "diagnostic_filler" and row["entry_id"] == "f0-part-c")
 
 
 def entry_groups(entry):
@@ -826,13 +861,13 @@ class Scheduler:
         self.completed = {}
         for attempt in history.attempts.values():
             if attempt.close is not None and attempt.close["clean"] is True:
-                self.completed[(attempt.launch["entry_id"], attempt.launch["kit_sha256"])] = attempt
+                self.completed[completion_key(attempt.launch)] = attempt
         for entry in self.entries:
             if entry.get("block"):
                 self.blocks.setdefault(entry["block"], []).append(entry)
         self.active = {block for block, entries in self.blocks.items()
                        if all(e["kind"] == "counted" for e in entries)
-                       and self.completed.get(self.key(entries[0])) is not None
+                       and self.completed.get(completion_key(entries[0])) is not None
                        and any(not self.done(e) for e in entries[1:])}
         self.commands = {}
         self.batch_rule = self.require_rule("batch_clear") if any(
@@ -846,11 +881,8 @@ class Scheduler:
         require(len(rows) == 1, "RULE_REQUIRED", f"{test} needs one live register row")
         return rows[0]
 
-    def key(self, entry):
-        return entry["id"], entry["kit_sha256"]
-
     def done(self, entry):
-        return entry.get("done", False) or not entry["repeat"] and self.key(entry) in self.completed
+        return entry.get("done", False) or not entry["repeat"] and completion_key(entry) in self.completed
 
     def host(self):
         facts, latest = self.facts, self.history.latest
@@ -907,24 +939,35 @@ class Scheduler:
             require(pair(row) == pair(entry) and row["kind"] == entry["kind"]
                     and row["block"] == entry.get("block") and set(row["groups"]) == entry_groups(entry)
                     and ("campaign" not in params or row["campaign"] == params["campaign"])
+                    and ("pilot" not in row["registration"]
+                         or row["registration"]["pilot"] == params.get("pilot", False))
                     and (entry["kind"] != "counted" and "legs" not in params or row["legs"] == params.get("legs")),
                     "LEDGER_REGISTRATION", f"{attempt.span} disagrees with its current kit registration")
 
     def static_blocks(self, entry):
-        def affects(row):
-            return row["queue_commit"] == self.history.revision["queue_commit"] and (
-                (row["entry_id"], row["kit_sha256"]) == self.key(entry)
+        _, candidate_kit = pair(entry)
+        current_commit = self.history.revision["queue_commit"]
+
+        def affects(row, governing_commit):
+            # An unbound historical claim cannot demonstrate a governing change.
+            kit = (row["kit_sha256"] or "").lower()
+            return (governing_commit is None or governing_commit == current_commit) and (
+                (row["entry_id"], kit) == (entry["id"], candidate_kit)
                 or row["block"] is not None and row["block"] == entry.get("block")
-                or row["kit_sha256"] is not None and row["kit_sha256"] == entry["kit_sha256"]
+                or bool(kit) and kit == candidate_kit
             )
 
-        if any(affects(row) for row in self.history.refusals):
+        # A refusal can arrive before its matching CONFIG. Neither the
+        # recorded target nor the preceding governing revision clears a hold.
+        if any(affects(row, current_commit if row["queue_commit"] == current_commit else commit)
+               for row, commit in self.history.refusals):
             return Eligibility("not-refused", "a refusal holds the current kit or block")
         for stop, attempt in self.history.stops:
-            if stop["code"] in KIT_STOPS and affects(attempt.launch):
+            if stop["code"] in KIT_STOPS and affects(attempt.launch, attempt.governing_commit):
                 return Eligibility(stop["code"], "the named stop holds this kit or block")
         for attempt in self.history.attempts.values():
-            if attempt.close is not None and not attempt.close["clean"] and affects(attempt.launch):
+            if (attempt.close is not None and not attempt.close["clean"]
+                    and affects(attempt.launch, attempt.governing_commit)):
                 return Eligibility("NON_CLEAN_CLOSE", f"{attempt.span} holds this kit or block")
         if entry["id"] == "f0-part-c" or any(self.rules[rule]["test"] == "f0_retirement"
                                            for rule in entry["requires"]):
@@ -1093,6 +1136,24 @@ class Scheduler:
                 "READY_DEADLINE_CONFLICT", f"{name} queue deadline disagrees with the committed READY transition")
         return state
 
+    def smoke_on_pin(self, run, pin):
+        row = run.launch
+        if row["pin"].lower() != pin.lower() or not run.clean_load() or not measured_span(row):
+            return False
+        if row["kind"] == "diagnostic_filler":
+            return row["entry_id"] == "f0-part-c"
+        if row["kind"] == "product_filler":
+            return True
+        if row["kind"] != "counted":
+            return False
+        # Older events lack the optional pilot flag. Use their committed queue registration
+        # only when it is the revision available here (validated by registered_history).
+        if "pilot" in row["registration"]:
+            return row["registration"]["pilot"]
+        entry = self.by_id.get(row["entry_id"])
+        return (entry is not None and run.governing_commit == self.history.revision["queue_commit"]
+                and completion_key(row) == completion_key(entry) and entry["params"].get("pilot") is True)
+
     def checks(self, entry):
         """Return a known ineligibility. Unknown evidence raises Halt."""
         params, kind = entry["params"], entry["kind"]
@@ -1104,16 +1165,15 @@ class Scheduler:
             return Eligibility("contaminated-redos", "no later clean span clears the stop"), None, False
         if entry.get("block"):
             members = self.blocks[entry["block"]]
-            if any(self.key(member) not in self.completed for member in members[:members.index(entry)]):
+            if any(completion_key(member) not in self.completed for member in members[:members.index(entry)]):
                 return self.pending(entry, "block-dependency", "a preceding span is not closed clean")
         if kind == "v4_session" and self.active:
             if any(any(qualification(member) for member in self.blocks[block]) for block in self.active):
                 return Eligibility("ready-outside-block", "qualification block is in progress"), None, False
         for parent in params.get("after", []):
-            if parent not in self.by_id:
-                require(any(key[0] == parent for key in self.completed), "DEPENDENCY_UNKNOWN",
-                        f"{entry['id']} names unknown predecessor {parent}")
-            elif self.key(self.by_id[parent]) not in self.completed:
+            require(parent in self.by_id, "DEPENDENCY_UNKNOWN",
+                    f"{entry['id']} lacks a registered identity for predecessor {parent}")
+            if completion_key(self.by_id[parent]) not in self.completed:
                 return self.pending(entry, "block-dependency", f"{parent} has not closed clean")
         gates = set(params.get("gates", []))
         if kind == "counted" and qualification(entry):
@@ -1122,8 +1182,8 @@ class Scheduler:
             require(gate in self.history.gates, "GATE_UNKNOWN", f"{entry['id']} requires gate {gate}")
             if not self.history.gates[gate]:
                 return self.pending(entry, "block-dependency", f"gate {gate} is closed")
-        if kind in COUNTED_KINDS and not params.get("pilot"):
-            if not any(run.launch["pin"] == entry["pin"] and run.clean_load()
+        if kind in COUNTED_KINDS and not (kind == "counted" and params.get("pilot")):
+            if not any(self.smoke_on_pin(run, entry["pin"])
                        for run in self.history.attempts.values()):
                 return Eligibility("new-pin-smoke", "a clean native smoke on this pin is owed"), None, False
         if params.get("floating_battery") and self.facts["power"]["charging"]:
@@ -1529,13 +1589,13 @@ def probe_plans(queue, rules, facts, history, args, errors):
         return plans
     output_root = next((row.get("params", {}).get("output_root") for row in rules.values()
                         if row["test"] == "launcher_admits" and row["status"] == "LIVE"), None)
-    completed = {(run.launch["entry_id"], run.launch["kit_sha256"]) for run in history.attempts.values()
+    completed = {completion_key(run.launch) for run in history.attempts.values()
                  if run.close is not None and run.close["clean"]}
     now = facts["now_epoch"]
     for entry in queue["entries"]:
         name = entry["id"]
         if ("plan_argv" not in entry or entry.get("done")
-                or not entry["repeat"] and (name, entry["kit_sha256"]) in completed):
+                or not entry["repeat"] and completion_key(entry) in completed):
             continue
         try:
             argv = render_argv(entry, now, args.caller_pid, output_root)
