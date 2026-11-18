@@ -13,8 +13,8 @@ Air (later; verifies against the marker's hashes and decrypts read-only):
     python3.13 -B scripts/span_offload.py keygen --out-dir DIR [--openssl PATH]
 
 Output is one line of operational codes and hashes. Exit codes: 0 ok, 1 internal, 2 usage, 3 marker
-legacy marker exists / marker writer raced, 4 input or stability refused, 5 upload or provider read-back failed, the
-deadline passed or the tool was terminated (no marker), 6 pull integrity failure, 7 pull destination
+legacy marker exists / marker writer raced, 4 input or stability refused, 5 upload, provider access or
+publication I/O failed, the deadline passed or the tool was terminated, 6 readback or pull integrity failure, 7 pull destination
 exists (or an interrupted landing), 8 offload without observed iCloud readback (no copy-gate marker).
 """
 from __future__ import annotations

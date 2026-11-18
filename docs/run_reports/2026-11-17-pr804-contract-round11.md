@@ -32,6 +32,12 @@ An OS signal guard refused any attempt to send a real signal. The canonical shar
 GitHub Actions. This software evidence leaves native GUI-domain qualification
 PROVISIONAL. The new head requires independent delta admission before merge.
 
+The first hosted run exposed the child fixture's reliance on the unittest
+loader's import name. The fixture now resolves its module from the repository
+path. Discovery rooted at `tests/contract` verified the subprocess import and
+passed all enabled scenarios. The first run also reported three deadline
+failures in the calibration custody tests, whose code is outside this diff.
+
 ## NEEDS_SPEC
 
 - **I-01.** Section 3.2 says an upload that never confirms returns 8 with
