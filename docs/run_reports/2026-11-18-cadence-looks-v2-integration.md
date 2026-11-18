@@ -188,6 +188,37 @@ and one expected v1 skip. The pinned #795 CLI also passed an independent
 control through the dispatcher, with exit 0 for a valid v1 final and
 exit 2 for a delegated refusal.
 
+## Lead-directed terminal exit boundary
+
+The audit at `2c47ed73` verified two HIGH findings. Descriptor exhaustion
+could still allow a shutdown flush to replace exit 2 with 120. Decoding a
+synthetic integer beyond Python's conversion limit could escape the
+dispatcher with exit 1 before any read. The lead directed hard process
+exit across the dispatcher and transfer worker. The tests froze at
+`05f5043df` with 28 failing subcases. Commit `6296431b6` implements the
+terminal boundary.
+
+The dispatcher guards parser setup, parsing, manifest and registration
+access, validation, delegation and output. The transfer worker uses its
+first-read flag to select 2 or 1 for any Python exception. Both make a
+best-effort notice attempt and terminate with `os._exit`. A successful
+CLI flushes its streams explicitly. The worker flushes before the atomic
+publication and exits 0 after it. The dedicated worker no longer returns
+or runs Python shutdown callbacks. Callback cleanup must complete inside
+the callback. OS termination by signal still follows RL-183's interrupted
+case.
+
+| Finding | Disposition and regression |
+| --- | --- |
+| HIGH, `impl-bug` | `test_dispatch_exits_two_with_descriptor_exhaustion` passed with a connected or disconnected stderr reader in both buffering modes. The auditor's probe agreed with the regression. Its parser-priming call uses the nonterminal dispatcher core because the public entry point now terminates on success. |
+| HIGH, `impl-bug` | `test_oversized_json_integer_refuses_before_read` passed. The original numeric probe returned 2 for both 4,300 and 4,301 digits. |
+| Boundary coverage | `test_dispatch_boundary_contains_arbitrary_pre_read_exceptions` and `test_transfer_boundary_contains_arbitrary_exceptions_at_each_step` passed. They cover dispatcher parsing through output, plus ten worker steps before the read and nine after. An unexpected parser `SystemExit(0)` also refuses with 2. |
+| MED follow-ups | Transfer stage-1 arm-bounds verification and production public registration-source authorization remain with the admission integration owners. |
+| LOW | Preservation checks passed for the qualification registration and validator, the interim pins, the candidate manifests, the output schema and the state files. |
+
+The niced synthetic shard reported 60 tests, zero failures, zero errors
+and one expected v1 skip.
+
 ## RL-185 and lead handoff
 
 RL-185 §4 resolves the previous NEEDS_SPEC. Both description drafts carry
