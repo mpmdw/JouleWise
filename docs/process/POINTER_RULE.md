@@ -58,7 +58,8 @@ when an item with a higher number also carries one.
 The highest numbered item **carrying a block** in `RUN_STATE.md` wins, regardless
 of file order. Sort the numeric part first, then the optional lowercase letter
 (`256b > 256`, `257 > 256b`). Items without a block do not affect pointer
-selection. Retained legacy items follow the archive marker in `RUN_STATE.md`.
+selection. Retained legacy records stay on their original side of the typed
+region in `RUN_STATE.md`.
 The [RUN_STATE archive](../archive/RUN_STATE-legacy-2026-11-17.md) holds the
 pre-item history and legacy text moved at cutover. The archive marker reserves
 every item number through `legacy_max`, and a `supersedes` reference in that

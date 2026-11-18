@@ -78,6 +78,7 @@ class LegacyArchivePlan:
     references: dict[str, set[str]]
     live: set[str]
     spans: tuple[tuple[int, int], ...]
+    prefix_start: int
 
 
 @dataclass(frozen=True)
@@ -181,12 +182,18 @@ def reachable_items(references: dict[str, set[str]], roots: set[str]) -> set[str
     return live
 
 
+def _record_blocks(headings: list[tuple[int, str]], stop: int) -> list[tuple[int, int, str]]:
+    return [(start, end, ref) for (start, ref), end in
+            zip(headings, [start for start, _ in headings[1:]] + [stop])]
+
+
 def legacy_archive_plan(text: str) -> LegacyArchivePlan:
     """Find movable legacy records in the pre-archive RUN_STATE snapshot.
 
     Typed records stay in the log. Legacy prose has no typed status, so an
     untyped record is eligible only with an explicit typed supersession.
     Spans are zero-based, half-open line ranges in the original file.
+    prefix_start separates the pre-item introduction from pre-typed records.
     """
     parsed = parse(text)
     if parsed.cutover is None or parsed.legacy_max is not None or validate(parsed):
@@ -194,14 +201,15 @@ def legacy_archive_plan(text: str) -> LegacyArchivePlan:
 
     lines = text.split("\n")
     legacy_line = next(row.number for row in _scan(text) if row.kind == "legacy")
+    numbered = list(heading_lines(text))
     typed = [(entry.line - 1, str(entry.number)) for entry in parsed.items]
-    # Legacy records start a paragraph. Keep list headings within a record's body.
-    legacy = [(line - 1, f"{number}{suffix}") for line, number, suffix in heading_lines(text)
+    # The early numbered log has adjacent record headings. The later legacy
+    # records start a paragraph and can contain their own numbered lists.
+    before = [(line - 1, f"{number}{suffix}") for line, number, suffix in numbered if line < parsed.top_line]
+    after = [(line - 1, f"{number}{suffix}") for line, number, suffix in numbered
               if line > legacy_line and (line == legacy_line + 1 or not lines[line - 2].strip())]
-    typed_blocks = [(start, end, ref) for (start, ref), end in
-                    zip(typed, [start for start, _ in typed[1:]] + [legacy_line - 1])]
-    legacy_blocks = [(start, end, ref) for (start, ref), end in
-                     zip(legacy, [start for start, _ in legacy[1:]] + [len(lines)])]
+    typed_blocks = _record_blocks(typed, legacy_line - 1)
+    legacy_blocks = _record_blocks(before, parsed.top_line - 1) + _record_blocks(after, len(lines))
 
     roots = {str(number) for number, status in replay(parsed).items() if status == "ISSUED"}
     roots.update(ref for start, _, ref in legacy_blocks if re.search(r"\bISSUED\b", lines[start]))
@@ -218,7 +226,8 @@ def legacy_archive_plan(text: str) -> LegacyArchivePlan:
     newest = {typed[0][1]} if typed else set()
     movable = superseded - live - reachable_items(references, newest)
     spans = tuple((start, end) for start, end, ref in legacy_blocks if ref in movable)
-    return LegacyArchivePlan(references, live, spans)
+    prefix_start = before[0][0] if before else parsed.top_line - 1
+    return LegacyArchivePlan(references, live, spans, prefix_start)
 
 
 def _markers(lines: list[_Line], errors: list[ItemError]) -> tuple[int | None, int | None, int | None, int | None]:
