@@ -1,18 +1,19 @@
 # lm-qual-01 registration
 
 The [registration manifest](../research-audits/2026-11-10-fable/evidence/align-v4-campaign/looks/lm-qual-01.manifest.json)
-and [ledger row](../research-audits/2026-11-10-fable/evidence/align-v4-campaign/looks/LOOKS.json)
+and [ledger row](../process/cadence/looks/LOOKS.json)
 are on `align/2026-11-18-lm-qual-01-registered` for Tier 2 review. The
-registration commit is `50ffe953dc3e339c3e4f84a9b3e0960adda90911` and
+registration artifact commit is `f3b2d79c67c30e56ce23094a329fb5a9f2eb778e` and
 the manifest's SHA-256 is
-`2ca269bb0b59e29aed29a12f13dfb5d02adef1d5b615b8e1833b5ee4650f9096`.
+`2d4c281e8a6a930faaa0b338a8c2358726f7d3520d8e23cc62e658f5e9a6d956`.
 The branch started at `origin/main` `2bb70e14379b7b82b02019674be4f1bf82f5b193`.
 
 The location is the dispatch's fallback. PR #793 was open and main had no
 look directory. RL-181 refers to the draft layout and specifies the
-sibling schema name. The v2 file sits with the other schema paths under
-`docs/process/cadence/looks/`. Validation is in a new qualification
-module. Authority is [RL-181 at the pinned audit revision](https://github.com/mpmdw/JouleWise/blob/e964c97d8278c023319b8ef748e75f0101011ca1/docs/research-audits/2026-11-10-fable/RESEARCH-LEAD-DECISIONS.md#L19235).
+sibling schema name. The v2 file and the shared ledger sit under
+`docs/process/cadence/looks/`, where the draft names the ledger.
+Validation is in a new qualification module.
+Authority is [RL-181 at the pinned audit revision](https://github.com/mpmdw/JouleWise/blob/e964c97d8278c023319b8ef748e75f0101011ca1/docs/research-audits/2026-11-10-fable/RESEARCH-LEAD-DECISIONS.md#L19235).
 
 | RL-181 clause | Fields |
 | --- | --- |

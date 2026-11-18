@@ -16,6 +16,7 @@ from joulewise.cadence_looks.qualification_manifest import (
 ROOT = Path(__file__).resolve().parents[1]
 LOOKS = ROOT / "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/looks"
 MANIFEST = LOOKS / "lm-qual-01.manifest.json"
+LEDGER = ROOT / "docs/process/cadence/looks/LOOKS.json"
 PLACEHOLDER = b'"PENDING:CODE"'
 
 
@@ -47,7 +48,8 @@ class QualificationRegistrationTests(unittest.TestCase):
         document = validate_registration(self.registered)
         self.assertEqual(document["look_kind"], "qualification")
         self.assertEqual(document["status"], "registered")
-        ledger = json.loads((LOOKS / "LOOKS.json").read_bytes())
+        self.assertEqual(document["registration"]["ledger_path"], LEDGER.relative_to(ROOT).as_posix())
+        ledger = json.loads(LEDGER.read_bytes())
         self.assertEqual(ledger["looks"], [{
             "look_id": document["look_id"],
             "manifest_path": MANIFEST.relative_to(ROOT).as_posix(),
