@@ -335,17 +335,56 @@ def manifest_inputs(manifest, root, prefix):
 class ClosureLink:
     hops: tuple[tuple[str, str], ...]
     target: str
-    mirror_path: str | None
+    mirror_path: str | None = None
+    directories: tuple[str, ...] = ()
+    directory_target: bool = False
+
+
+def internal_link(entries, root, prefix, name):
+    """Resolve authenticated link text within the finalized directory inventory."""
+    store = str(root / prefix)
+    path = name
+    hops, directories = [], set()
+    while "link" in entries.get(path, {}):
+        packet.require(len(hops) < harvest_offload.MAX_LINK_HOPS, "cyclic or excessive internal link chain")
+        hop = entries[path]["link"]
+        packet.require(isinstance(hop, str) and hop, "invalid internal link text")
+        hops.append((f"{prefix}/{path}", hop))
+        if hop.startswith("/"):
+            packet.require(hop == store or hop.startswith(store + "/"), "internal link leaves the restore")
+            parts = []
+            components = hop[len(store):].split("/")
+        else:
+            parts = path.split("/")[:-1]
+            components = hop.split("/")
+        for index, component in enumerate(components):
+            if component == "..":
+                packet.require(parts, "internal link leaves the restore")
+                parts.pop()
+            elif component not in ("", "."):
+                parts.append(component)
+            if parts and index < len(components) - 1:
+                parent = "/".join(parts)
+                packet.require(entries.get(parent) == {"directory": True}, "internal link traverses an unbound directory")
+                directories.add(f"{prefix}/{parent}")
+        path = "/".join(parts)
+    target = entries.get(path, {"directory": True} if not path else {})
+    directory = target == {"directory": True}
+    packet.require(directory or "sha256" in target or "digest" in target, "unbound internal link target")
+    return ClosureLink(tuple(hops), f"{prefix}/{path}" if path else prefix,
+                       directories=tuple(sorted(directories)), directory_target=directory)
 
 
 def manifest_links(manifest, root, prefix):
     """Plan the exact link hops from authenticated text, without resolving any file."""
     closure = manifest["closure"]
-    for name, row in closure["links"].items():
+    entries = manifest["entries"]
+    external = closure["links"]
+    for name, row in external.items():
         path = manifest_path(root, prefix, name)
         hops = row["hops"]
         packet.require(isinstance(hops, list) and hops and len(hops) <= harvest_offload.MAX_LINK_HOPS
-                       and manifest["entries"].get(name) == {"link": hops[0]}, "unbound closure link")
+                       and entries.get(name) == {"link": hops[0]}, "unbound closure link")
         planned = []
         for hop in hops:
             packet.require(isinstance(hop, str) and hop and ".." not in Path(hop).parts, "unsafe closure hop")
@@ -359,7 +398,54 @@ def manifest_links(manifest, root, prefix):
             mirror_root = Path(closure["mirror"]["root"])
             packet.require(mirror_root.is_absolute() and str(mirror_root / mirror_path) == row["target"],
                            "closure target differs from its mirror path")
-        yield ClosureLink(tuple(planned), path, mirror_path)
+        yield ClosureLink(tuple(planned), path, mirror_path, directory_target=row.get("kind") == "directory")
+    for name, row in entries.items():
+        if "link" in row and name not in external:
+            yield internal_link(entries, root, prefix, name)
+
+
+class InputLedger:
+    def __init__(self):
+        self.entries = {}
+        self.verified = set()
+        self.protected = set()
+
+    def add_manifest(self, files, links):
+        for path, bound in files.items():
+            previous = self.entries.get(path)
+            if previous is not None:
+                packet.require(isinstance(previous, BoundInput) and previous.sha256 == bound.sha256
+                               and (bound.size is None or previous.size in (None, bound.size)),
+                               "conflicting finalized input bindings")
+            self.entries[path] = previous if bound.size is None and previous is not None else bound
+        for link in links:
+            path = link.hops[0][0]
+            packet.require(path not in self.entries, "conflicting finalized link bindings")
+            self.entries[path] = link
+            if link.mirror_path is not None:
+                self.entries.setdefault(link.target, None)
+
+    def classify(self):
+        chains = [{entry.target, *entry.directories, *(path for path, _ in entry.hops)}
+                  for entry in self.entries.values() if isinstance(entry, ClosureLink)]
+        paths = self.entries.keys() | set().union(*chains)
+        self.protected = {path for path in paths if protected_path(path)}
+        while True:
+            expanded = self.protected.union(*(chain for chain in chains if any(self.is_protected(p) for p in chain)))
+            if expanded == self.protected:
+                break
+            self.protected = expanded
+        for binding in self.entries.values():
+            if isinstance(binding, ClosureLink) and self.is_protected(binding.target) and not binding.directory_target:
+                packet.require(isinstance(self.entries.get(binding.target), BoundInput),
+                               "protected link target lacks a manifest digest")
+
+    def is_protected(self, path):
+        return protected_path(path) or path in self.protected or any(
+            parent.as_posix() in self.protected for parent in Path(path).parents)
+
+    def require_complete(self):
+        packet.require(self.entries.keys() == self.verified, "finalized release inputs remain unverified")
 
 
 def bound_bytes(root, bound):
@@ -416,7 +502,7 @@ def plain_input(name, raw):
 
 
 class RestoredFiles:
-    def __init__(self, root, record, layout):
+    def __init__(self, root, record, layout, ledger=None):
         packet.require(layout["trace_layout"] == LAYOUT, "no admitted rail-only file layout")
         self.root = root
         self.prefix = f"series/restored/{record.window}"
@@ -429,13 +515,16 @@ class RestoredFiles:
         self.listed = manifest_inputs(manifest, root, self.prefix)
         self.mirror = manifest["closure"]["mirror"]
         self.links = tuple(manifest_links(manifest, root, self.prefix))
-        self.protected = self.protected_bindings()
+        self.ledger = InputLedger() if ledger is None else ledger
+        self.ledger.add_manifest(self.listed, self.links)
         self.read_inputs = set()
         self.stems = defaultdict(set)
         for name in self.entries:
             input_parts(name)
             self.stems[self.stem(name)].add(name)
-        self.verify_inventory()
+        if ledger is None:
+            self.ledger.classify()
+            self.verify_inventory()
         journal = layout["hazard_journal"]
         self.hazard_input = None
         if journal is not None:
@@ -449,27 +538,8 @@ class RestoredFiles:
         parent, _, filename = name.rpartition("/")
         return parent.casefold(), filename.partition(".")[0].casefold()
 
-    def protected_bindings(self):
-        chains = [{link.target, *(path for path, _ in link.hops)} for link in self.links]
-        paths = {*self.listed, *(f"{self.prefix}/{name}" for name in self.entries), *set().union(*chains)}
-        protected = {path for path in paths if protected_path(path)}
-        while True:
-            expanded = protected.union(*(chain for chain in chains if chain & protected))
-            if expanded == protected:
-                break
-            protected = expanded
-        protected_links = {link.hops[0][0] for link in self.links if link.target in protected}
-        for link in self.links:
-            if link.target in protected:
-                packet.require(link.target in self.listed, "protected link target lacks a manifest digest")
-        for name, row in self.entries.items():
-            path = f"{self.prefix}/{name}"
-            if path in protected and row != {"directory": True}:
-                packet.require(path in self.listed or path in protected_links, "protected path lacks a manifest digest")
-        return protected
-
     def is_protected(self, path):
-        return path in self.protected or protected_path(path)
+        return self.ledger.is_protected(path)
 
     def verify_inventory(self):
         # Check directory entry names without opening or following any of the
@@ -482,6 +552,9 @@ class RestoredFiles:
             if entry == {"directory": True}:
                 directories.add(path)
                 children.setdefault(path, set())
+            else:
+                packet.require(f"{self.prefix}/{path}" in self.ledger.entries,
+                               "restored input lacks a manifest binding")
         packet.require(directories == children.keys(), "restore inventory has an unbound parent directory")
         for parent, expected in children.items():
             relative = (Path(self.prefix) / parent).as_posix()
@@ -509,10 +582,12 @@ class RestoredFiles:
     def read_bound(self, bound):
         relative = f"{self.prefix}/{bound.path}"
         packet.require(not self.is_protected(relative), "protected input requires the authorized benign provider")
-        listed = self.listed[relative]
+        packet.require(relative in self.listed, "member input lacks a manifest binding")
+        listed = self.ledger.entries[relative]
         raw = bound_bytes(self.root, listed)
         parsed = plain_input(bound.path, raw)
         self.read_inputs.add(relative)
+        self.ledger.verified.add(relative)
         return raw, parsed
 
     def verify_mirror_target(self, link):
@@ -529,28 +604,45 @@ class RestoredFiles:
             packet.require(identity.get("head", commit) == commit, "closure mirror identities disagree")
             committed = evidence.read(evidence.commit(commit), link.mirror_path)
         reference = BoundInput(link.target, len(committed), packet.digest(committed))
-        existing = self.listed.get(link.target)
-        packet.require(existing is None or (existing.sha256 == reference.sha256
+        existing = self.ledger.entries[link.target]
+        packet.require(existing is None or (isinstance(existing, BoundInput) and existing.sha256 == reference.sha256
                                             and existing.size in (None, reference.size)),
                        "closure mirror target conflicts with its listed digest")
         verify_ancillary_input(self.root, reference)
+        self.ledger.entries[link.target] = reference
+        self.ledger.verified.add(link.target)
+
+    def verify_link(self, link):
+        for path in link.directories:
+            with named_directory(self.root, input_parts(path)):
+                pass
+        for path, expected in link.hops:
+            *parents, name = input_parts(path)
+            with named_directory(self.root, parents) as directory:
+                packet.require(name in os.listdir(directory) and os.readlink(name, dir_fd=directory) == expected,
+                               "restored link differs from its manifest binding")
+        if link.mirror_path is not None:
+            self.verify_mirror_target(link)
+        elif link.directory_target:
+            with named_directory(self.root, input_parts(link.target)):
+                pass
+        else:
+            packet.require(isinstance(self.ledger.entries.get(link.target), BoundInput),
+                           "restored link target lacks a manifest digest")
+        self.ledger.verified.add(link.hops[0][0])
 
     def verify_listed_inputs(self):
         mirror_files = set()
         for link in self.links:
-            if self.is_protected(link.target):
+            if self.is_protected(link.hops[0][0]):
                 continue
-            for path, expected in link.hops:
-                *parents, name = input_parts(path)
-                with named_directory(self.root, parents) as directory:
-                    packet.require(name in os.listdir(directory) and os.readlink(name, dir_fd=directory) == expected,
-                                   "restored link differs from its manifest binding")
+            self.verify_link(link)
             if link.mirror_path is not None:
-                self.verify_mirror_target(link)
                 mirror_files.add(link.target)
-        for path, bound in self.listed.items():
+        for path in self.listed:
             if not self.is_protected(path) and path not in self.read_inputs and path not in mirror_files:
-                verify_ancillary_input(self.root, bound)
+                verify_ancillary_input(self.root, self.ledger.entries[path])
+                self.ledger.verified.add(path)
 
     def bind_bundle(self, run_id, name, *, optional=False):
         packet.require(Path(run_id).name == run_id and run_id not in ("", ".", ".."),
@@ -568,7 +660,7 @@ class RestoredFiles:
         return self._hazard
 
 
-def final_roster(root, manifest, completion, ledger, chain):
+def final_roster(root, manifest, completion, ledger, chain, input_ledger):
     history, admitted, layouts = [], [], ledger["release_layouts"]
     retries = set()
     for record in chain:
@@ -626,7 +718,7 @@ def final_roster(root, manifest, completion, ledger, chain):
         captured = record.captures()
         final = light_triage.member_eligibility(record.thermal()["members"], plan, captured=captured, final=True)
         harvest_codes = v4_contention.exclusion_map(exclusions["members_excluded"])
-        files = RestoredFiles(root, record, layouts[record.window])
+        files = RestoredFiles(root, record, layouts[record.window], input_ledger)
         restored.append(files)
         for frozen in selected["members"]:
             ordinal = frozen["ordinal"]
@@ -653,6 +745,9 @@ def final_roster(root, manifest, completion, ledger, chain):
             packet.require(identity not in assignments and run_id not in run_ids, "ambiguous final assignment")
             assignments[identity] = assignment
             run_ids.add(run_id)
+    input_ledger.classify()
+    for files in restored:
+        files.verify_inventory()
     return assignments.values(), restored
 
 
@@ -700,7 +795,8 @@ class ReleasedInputs:
         self.registration_receipt = v4_registration.require_registration(root, series_release=True)
         packet.require(self.registration_receipt == packet.decode(registered), "registration receipt changed")
         require_executing_bindings(self.registration_receipt)
-        assignments, self.restored = final_roster(root, self.manifest, completion, ledger, chain)
+        self.input_ledger = InputLedger()
+        assignments, self.restored = final_roster(root, self.manifest, completion, ledger, chain, self.input_ledger)
         self.assignments = {a.key: a for a in assignments}
         captured = [a for a in self.assignments.values() if a.files is not None]
         self.member_inputs = {a.key: a.files.member_inputs(a.run_id) for a in captured}
@@ -753,6 +849,7 @@ class ReleasedInputs:
         self.dc_results = {episode.episode_id: self.read_benign_dc(episode, key) for key, episode in benign.items()}
         for files in self.restored:
             files.verify_listed_inputs()
+        self.input_ledger.require_complete()
         self.verify_score_inputs(members)
         return members
 
@@ -799,12 +896,17 @@ class ReleasedInputs:
         packet.require(bound.path == f"runs/{assignment.run_id}/{DC_FILE}",
                        "provider input is outside the bound benign path")
         relative = f"{files.prefix}/{bound.path}"
-        raw = require_bound_bytes(open_named_bytes(files.root, relative), files.listed[relative])
+        packet.require(relative in files.listed and files.is_protected(relative), "unbound protected input")
+        listed = self.input_ledger.entries[relative]
+        packet.require(isinstance(listed, BoundInput) and listed.sha256 == bound.sha256,
+                       "provider input differs from its manifest binding")
+        raw = require_bound_bytes(open_named_bytes(files.root, relative), listed)
         data = plain_input(bound.path, raw)
         trace = from_json(PowerTrace, json.dumps(data["trace"]))
         mapping = from_json(ClockMapping, json.dumps(data["clock_mapping"])) if data.get("clock_mapping") else None
         packet.require((trace.source, trace.channel) == rl176.DC, "wrong separately bound DC channel")
         packet.require(bool(trace.t_ns), "bound DC trace has no samples")
+        self.input_ledger.verified.add(relative)
         return trace, mapping
 
     def verify_s_coverage(self, score):
@@ -919,6 +1021,7 @@ def build_report(root):
             q_words_frozen=True,
         )
         if inputs is not None:
+            inputs.input_ledger.require_complete()
             inputs.verify_s_coverage(report[seal.RL176]["S"])
             inputs.add_disclosures(report[seal.RL176])
         packet.require(not _release_sources.binding_refused, "release dependency verification refused")
