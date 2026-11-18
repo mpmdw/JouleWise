@@ -21,6 +21,7 @@ import time
 import unittest
 from unittest import mock
 
+from joulewise import durable
 from joulewise import span_offload as so
 from scripts import span_offload as cli
 from tests.git_fixture import init_git_fixture
@@ -60,8 +61,6 @@ FAKE_RCLONE = textwrap.dedent('''\
     cmd = positional[0]
     if os.environ.get("FAKE_RCLONE_FAIL") == cmd:
         sys.exit(1)
-    if os.environ.get("FAKE_RCLONE_SLEEP") and cmd == "copyto":
-        time.sleep(float(os.environ["FAKE_RCLONE_SLEEP"]))
     if cmd == "copyto":
         src, dst = local(positional[1]), local(positional[2])
         os.makedirs(os.path.dirname(dst), exist_ok=True)
@@ -99,8 +98,6 @@ FAKE_BRCTL = textwrap.dedent('''\
     with (state / "calls").open("a") as log:
         log.write(json.dumps(args) + "\\n")
     cmd = args[0]
-    if os.environ.get("FAKE_BRCTL_SLEEP") == cmd:
-        time.sleep(30)
     if os.environ.get("FAKE_BRCTL_FAIL") == cmd or (cmd == "evict" and
             os.environ.get("FAKE_BRCTL_FAIL_SUFFIX") and args[1].endswith(os.environ["FAKE_BRCTL_FAIL_SUFFIX"])):
         sys.exit(1)
@@ -223,7 +220,9 @@ class SpanOffloadTests(unittest.TestCase):
                                 os.utime(path, ns=(stamp.st_atime_ns, stamp.st_mtime_ns))
                     return result
 
-                with mock.patch.object(so, "_add_file", race), self.assertRaises(so.OffloadError) as caught:
+                encryptor = mock.Mock(stdin=io.BytesIO())
+                with self.substitute_child(lambda argv: argv[:2] == [OPENSSL, "enc"], encryptor), \
+                        mock.patch.object(so, "_add_file", race), self.assertRaises(so.OffloadError) as caught:
                     so.offload(self.config, plan, span, allow_local=True)
                 self.assertEqual(caught.exception.code, "SPAN_CHANGED")
                 self.assertFalse(self.marker(plan).exists())
@@ -289,51 +288,39 @@ class SpanOffloadTests(unittest.TestCase):
         self.assertTrue(self.span.exists())
         self.assertEqual(list((self.tmp / "cloud").iterdir()), [])
 
-    def test_close_cloud_only_deletes_raw_but_keeps_materialised_pack(self):
+    def test_verified_offload_keeps_original_and_materialised_pack(self):
         backend = self.fake_brctl()
-        config = dict(self.config, backend=backend, lead_email="lead@example.test")
+        config = dict(self.config, backend=backend)
         before = so.hash_tree(self.span)
-        result = so.close_offload(config, PLAN, self.span)
-        self.assertTrue(result["original_deleted"])
-        self.assertFalse(result["archive_evicted"])
-        self.assertFalse(self.span.exists())
+        result = so.offload(config, PLAN, self.span)
         archive = self.tmp / "stage" / PLAN / (PLAN + ".tgz.enc")
-        self.assertGreater(archive.stat().st_size, 0)
         self.assertEqual(so.sha256_file(archive), result["ciphertext"]["sha256"])
         self.pull(so.expectations(result), config=dict(self.air, backend=backend))
         self.assertEqual(so.hash_tree(self.tmp / "desk" / "cl-syn-01" / SPAN), before)
-        # Retrying a completed close rechecks its cloud hashes and returns 0, including with no OUT.
-        self.assertTrue(so.close_offload(config, PLAN, self.span)["original_deleted"])
+        self.assertEqual(so.offload(config, PLAN, self.span), result)
+        self.assertEqual(so.hash_tree(self.span), before)
 
-    def test_close_unconfirmed_never_deletes_and_ssd_mismatch_never_evicts(self):
-        backend = self.fake_brctl(FAKE_BRCTL_NO_EVICTION="1")
-        config = dict(self.config, backend=backend, lead_email="lead@example.test")
-        with self.assertRaises(so.OffloadError):
-            so.close_offload(config, PLAN, self.span)
-        self.assertTrue(self.span.exists())
-        os.environ.pop("FAKE_BRCTL_NO_EVICTION")
+    def test_unconfirmed_copy_retains_original_and_materialised_pack(self):
+        config = dict(self.config, backend=self.fake_brctl(FAKE_BRCTL_NO_EVICTION="1"))
+        before = so.hash_tree(self.span)
         record = so.offload(config, PLAN, self.span)
-        receipt = self.tmp / "ssd.json"
-        receipt.write_bytes(so.canonical({"schema": so.SSD_SCHEMA, "plan": PLAN, "files": {}}))
-        with self.assertRaises(so.OffloadError):
-            so.close_offload(config, PLAN, self.span, ssd_receipt=receipt)
+        self.assertFalse(record["provider_confirmed"])
+        self.assertEqual(so.copy_evidence(config, PLAN, out_path=self.span).status, "UNCONFIRMED")
         self.assertTrue((self.tmp / "stage" / PLAN / (PLAN + ".tgz.enc")).exists())
-        self.assertTrue(record["provider_confirmed"])
+        self.assertEqual(so.hash_tree(self.span), before)
 
-    def test_close_evicts_only_after_ssd_copy_readback_matches_receipt(self):
+    def test_ssd_copy_leaves_mb_packs_and_original_in_place(self):
         backend = self.fake_brctl()
-        config = dict(self.config, backend=backend, lead_email="lead@example.test")
+        config = dict(self.config, backend=backend)
         record = so.offload(config, PLAN, self.span)
         ssd = self.tmp / "ssd"
         ssd.mkdir()
         with mock.patch.object(so, "require_ssd_mount"):
-            receipt = so.ssd_copy(dict(self.air, backend=backend), PLAN, record, ssd)
-        self.assertEqual(so.sha256_file(Path(receipt).parent / (PLAN + ".tgz.enc")), record["ciphertext"]["sha256"])
-        result = so.close_offload(config, PLAN, self.span, ssd_receipt=receipt)
-        self.assertTrue(result["archive_evicted"])
-        self.assertFalse(self.span.exists())
-        self.assertFalse((self.tmp / "stage" / PLAN / (PLAN + ".tgz.enc")).exists())
-        self.assertEqual((self.tmp / "cloud" / PLAN / (PLAN + ".tgz.enc")).stat().st_size, 0)
+            receipt = Path(so.ssd_copy(dict(self.air, backend=backend), PLAN, record, ssd))
+        name = so.names(PLAN)["ciphertext"]
+        for archive in (receipt.parent / name, self.tmp / "stage" / PLAN / name, self.tmp / "cloud" / PLAN / name):
+            self.assertEqual(so.sha256_file(archive), record["ciphertext"]["sha256"])
+        self.assertTrue(self.span.exists())
 
     def test_low_space_mails_at_sixty_decimal_gb_and_never_forces_eviction(self):
         for free, expected in ((60_000_000_001, False), (60_000_000_000, True), (39_000_000_000, True)):
@@ -374,6 +361,77 @@ class SpanOffloadTests(unittest.TestCase):
         self.assertEqual(caught.exception.code, "SPAN_CHANGED")
         self.assertEqual(self.marker(confirmed=True).read_bytes(), original)
 
+    def test_copy_evidence_opens_only_control_files_and_binds_their_hashes(self):
+        config = dict(self.config, backend=self.fake_brctl())
+        self.assertEqual(so.copy_evidence(config, PLAN, out_path=self.span).status, "ABSENT")
+        self.assertEqual(list((self.tmp / "stage").iterdir()), [])
+        so.offload(config, PLAN, self.span)
+        descriptor_name = so.names(PLAN)["descriptor"]
+        with mock.patch.object(so, "open_regular", wraps=so.open_regular) as opened:
+            verdict = so.copy_evidence(config, PLAN, out_path=self.span)
+        self.assertEqual([call.args[0] for call in opened.call_args_list], [so.SOURCE_RECORD, descriptor_name])
+        self.assertEqual(verdict.status, "CLEAR")
+        self.assertEqual(verdict.marker_sha256, so.sha256_file(self.marker(confirmed=True)))
+        stage = self.tmp / "stage" / PLAN
+        self.assertEqual(verdict.descriptor_sha256, so.sha256_file(stage / descriptor_name))
+        self.assertEqual(verdict.span_name, self.span.name)
+        for path, wrong in ((stage / so.SOURCE_RECORD, b'{"source":"/other"}'), (stage / descriptor_name, b"{}")):
+            with self.subTest(file=path.name):
+                previous = path.read_bytes()
+                path.chmod(0o600)
+                path.write_bytes(wrong)
+                self.assertEqual(so.copy_evidence(config, PLAN, out_path=self.span).code, "STAGE_BINDING")
+                path.write_bytes(previous)
+        for wrong in (dict(config, recipient_sha256="0" * 64),
+                      dict(config, backend=self.fake_brctl() | {"root": str(self.tmp / "other-cloud")})):
+            self.assertEqual(so.copy_evidence(wrong, PLAN, out_path=self.span).status, "INVALID")
+
+    def test_copy_evidence_rejects_size_only_markers_and_waits_for_future_markers(self):
+        config = dict(self.config, backend=self.fake_brctl())
+        record = so.offload(config, PLAN, self.span)
+        marker = self.marker(confirmed=True)
+        marker.write_bytes(so.canonical({"plan": PLAN, "ciphertext": {"size": 1}}))
+        self.assertEqual(so.copy_evidence(config, PLAN, out_path=self.span).status, "INVALID")
+        future = round(time.time()) + 600
+        for proof in record["provider_confirmation"]:
+            proof["verified_epoch_s"] = proof["uploaded_epoch_s"] - 600
+        marker.write_bytes(so.canonical(dict(record, written_epoch_s=future)))
+        self.assertEqual(so.copy_evidence(config, PLAN, out_path=self.span).status, "BUSY")
+        with mock.patch.object(so.time, "time", return_value=future + 1):
+            self.assertEqual(so.copy_evidence(config, PLAN, out_path=self.span).status, "CLEAR")
+
+    def test_legacy_marker_migration_preserves_old_line_and_requires_fresh_readback(self):
+        config = dict(self.config, backend=self.fake_brctl(FAKE_BRCTL_NO_EVICTION="1"))
+        marker = self.marker(confirmed=True)
+        old = b"previous plain-text copy marker\n"
+        marker.write_bytes(old)
+        self.assertEqual(so.copy_evidence(config, PLAN, out_path=self.span).code, "LEGACY_MARKER")
+        result = so.offload(config, PLAN, self.span)
+        self.assertFalse(result["provider_confirmed"])
+        self.assertFalse(marker.exists())
+        saved = marker.with_suffix(".ok.legacy-line")
+        self.assertEqual(saved.read_bytes(), old)
+        os.environ.pop("FAKE_BRCTL_NO_EVICTION")
+        self.assertTrue(so.offload(config, PLAN, self.span)["provider_confirmed"])
+        self.assertEqual(so.copy_evidence(config, PLAN, out_path=self.span).status, "CLEAR")
+        self.assertEqual(saved.read_bytes(), old)
+
+    def test_stranded_span_copy_and_evidence_cli(self):
+        config = dict(self.config, backend=self.fake_brctl())
+        (self.span / "runner_receipt.json").unlink()
+        argv = self.offload_argv(config)
+        evidence = ["evidence", *argv[1:]]
+        with contextlib.redirect_stdout(io.StringIO()) as stdout:
+            self.assertEqual(cli.main(evidence), so.EXIT["unverified"])
+        self.assertEqual(json.loads(stdout.getvalue())["status"], "ABSENT")
+        with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+            self.assertEqual(cli.main(argv), so.EXIT["refused"])
+            self.assertEqual(cli.main([*argv, "--require-file", "empty.txt"]), 0)
+        self.assertEqual(so.copy_evidence(config, PLAN, out_path=self.span, require_closed=False).status, "CLEAR")
+        with contextlib.redirect_stdout(io.StringIO()) as stdout:
+            self.assertEqual(cli.main(evidence), so.EXIT["refused"])
+        self.assertEqual(json.loads(stdout.getvalue())["code"], "SPAN_NOT_CLOSED")
+
     def test_pending_cli_holds_on_unknown_or_pending_state(self):
         backend = self.fake_brctl()
         conf = self.tmp / "mbp.json"
@@ -385,22 +443,15 @@ class SpanOffloadTests(unittest.TestCase):
                 self.assertEqual(cli.main(argv), 5)
         self.assertIn("ICLOUD_CLEAR", out.getvalue())
 
-    def test_close_refuses_missing_or_corrupt_local_pack_before_raw_deletion(self):
-        backend = self.fake_brctl()
-        config = dict(self.config, backend=backend)
-        so.offload(config, PLAN, self.span)
-        archive = self.tmp / "stage" / PLAN / (PLAN + ".tgz.enc")
-        data = archive.read_bytes()
-        archive.chmod(0o600)
-        archive.write_bytes(b"bad")
-        with self.assertRaises(so.OffloadError):
-            so.close_offload(config, PLAN, self.span)
+    def test_cli_has_only_copy_commands_and_refuses_the_retired_close_verb(self):
+        with contextlib.redirect_stdout(io.StringIO()) as out, self.assertRaises(SystemExit) as result:
+            cli.main(["--help"])
+        self.assertEqual(result.exception.code, 0)
+        self.assertIn("{offload,evidence,pending,ssd-copy,pull,keygen}", out.getvalue())
+        with contextlib.redirect_stderr(io.StringIO()), self.assertRaises(SystemExit) as result:
+            cli.main(["close", "--span-dir", str(self.span)])
+        self.assertEqual(result.exception.code, 2)
         self.assertTrue(self.span.exists())
-        archive.write_bytes(data)
-        shutil.rmtree(self.span)
-        archive.unlink()
-        with self.assertRaises(so.OffloadError):
-            so.close_offload(config, PLAN, self.span)
 
     def test_ssd_copy_refuses_system_disk_and_wrong_cloud_bytes(self):
         backend = self.fake_brctl()
@@ -504,17 +555,23 @@ class SpanOffloadTests(unittest.TestCase):
         with self.assertRaises(so.OffloadError) as caught:
             self.offload()
         self.assertEqual((caught.exception.code, caught.exception.exit_kind), ("MARKER_EXISTS", "marker_exists"))
-        self.assertEqual(os.listdir(self.tmp / "stage"), [])
+        self.assertEqual(os.listdir(self.tmp / "stage"), [f".{PLAN}.lock"])
         self.assertEqual(os.listdir(self.tmp / "cloud"), [])
         self.assertEqual(marker.read_text(), "written by the Air\n")
 
     def test_interrupted_marker_publish_recovers_its_temp_under_plan_lock(self):
         config = dict(self.config, backend=self.fake_brctl())
-        record = so.offload(config, PLAN, self.span)
+        def interrupt(name):
+            if name == "durable.linked":
+                raise KeyboardInterrupt
+
+        with mock.patch.object(durable, "checkpoint", interrupt), self.assertRaises(KeyboardInterrupt):
+            so.offload(config, PLAN, self.span)
         marker = self.marker(confirmed=True)
         before = marker.read_bytes()
-        temp = marker.with_name(f".{marker.name}.tmp-123-0123abcd")
-        os.link(marker, temp)
+        record = json.loads(before)
+        temp, = marker.parent.glob(".jw-publish-*.tmp")
+        self.assertEqual(so.copy_evidence(config, PLAN, out_path=self.span).status, "BUSY")
 
         with so.plan_lock(config["stage_root"], PLAN), self.assertRaisesRegex(so.OffloadError, "BUSY"):
             so.offload(config, PLAN, self.span)
@@ -538,7 +595,7 @@ class SpanOffloadTests(unittest.TestCase):
         foreign = marker.with_name("foreign-link")
         os.link(marker, foreign)
         temp.write_bytes(before)  # a matching name and contents are insufficient
-        with self.assertRaisesRegex(so.OffloadError, "HARD_LINKED"):
+        with self.assertRaisesRegex(so.OffloadError, "MARKER_UNSAFE"):
             so.offload(config, PLAN, self.span)
         self.assertTrue(foreign.exists())
         self.assertTrue(temp.exists())
@@ -553,13 +610,13 @@ class SpanOffloadTests(unittest.TestCase):
 
     def test_marker_race_keeps_the_first_writer(self):
         marker = self.marker()
-        real = so.write_marker
+        real = durable.publish_once
 
         def racing(path, record):
             Path(path).write_text("first\n")
             return real(path, record)
 
-        with mock.patch.object(so, "write_marker", racing), self.assertRaises(so.OffloadError) as caught:
+        with mock.patch.object(durable, "publish_once", racing), self.assertRaises(so.OffloadError) as caught:
             self.offload()
         self.assertEqual(caught.exception.code, "MARKER_EXISTS")
         self.assertEqual(marker.read_text(), "first\n")
@@ -627,7 +684,9 @@ class SpanOffloadTests(unittest.TestCase):
                     handle.write(b"late")
             return data
 
-        with mock.patch.object(so._HashingReader, "read", growing), self.assertRaises(so.OffloadError) as caught:
+        encryptor = mock.Mock(stdin=io.BytesIO())
+        with self.substitute_child(lambda argv: argv[:2] == [OPENSSL, "enc"], encryptor), \
+                mock.patch.object(so._HashingReader, "read", growing), self.assertRaises(so.OffloadError) as caught:
             self.offload()
         self.assertEqual(caught.exception.code, "SPAN_CHANGED")
         self.assertEqual(os.listdir(self.tmp / "markers"), [])
@@ -750,8 +809,49 @@ class SpanOffloadTests(unittest.TestCase):
 
     # --- rclone backend (fake binary) ---------------------------------------------------------
 
+    def substitute_child(self, match, child):
+        popen = subprocess.Popen
+
+        def spawn(argv, *args, **kwargs):
+            if match(argv):
+                return child
+            return popen(argv, *args, **kwargs)
+
+        return mock.patch.object(subprocess, "Popen", side_effect=spawn)
+
+    def child_timeout(self, match):
+        child = mock.Mock()
+
+        def communicate(timeout=None):
+            if timeout is not None:
+                raise subprocess.TimeoutExpired("fixture child", timeout)
+            return b"", b""
+
+        child.communicate.side_effect = communicate
+        return self.substitute_child(match, child), child
+
+    def offload_argv(self, config, *flags):
+        path = self.tmp / "mbp.json"
+        path.write_bytes(so.canonical(config))
+        return ["offload", "--config", str(path), "--plan", PLAN, "--span-dir", str(self.span), *flags]
+
+    def assert_terminated(self, argv, child):
+        with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()) as err:
+            self.assertEqual(cli.main(argv), so.EXIT["unverified"])
+        self.assertIn("TERMINATED", err.getvalue())
+        self.assertEqual(len(err.getvalue().strip().splitlines()), 1)
+        child.kill.assert_called()
+        child.wait.assert_called_once()
+        self.assertNotIn(child, so._CHILDREN)
+        self.assertEqual(os.listdir(self.tmp / "markers"), [])
+
     def fake_brctl(self, observe=True, **env):
         """Fake executable on PATH; no real CloudDocs or file flags are touched, on any platform."""
+        if "FAKE_BRCTL_SLEEP" in env:
+            timeout, _ = self.child_timeout(
+                lambda argv: Path(argv[0]).name == "brctl" and argv[1] == os.environ.get("FAKE_BRCTL_SLEEP")
+            )
+            self.enterContext(timeout)
         bindir = self.tmp / "bin"
         bindir.mkdir(exist_ok=True)
         script = bindir / "brctl"
@@ -809,21 +909,28 @@ class SpanOffloadTests(unittest.TestCase):
                 self.assertFalse(so.ICloudBackend._uploaded(text))
 
     def test_icloud_status_failure_timeout_and_hash_mismatch_write_no_marker(self):
-        cases = [({"FAKE_BRCTL_FAIL": "status"}, {}, "BRCTL_FAILED"),
-                 ({"FAKE_BRCTL_SLEEP": "status"}, {"timeout_s": 0.2}, "BRCTL_TIMEOUT"),
-                 ({"FAKE_BRCTL_STATUSES": '["com.apple.CloudDocs client:idle caught-up needs-upload"]'},
-                  {"timeout_s": 0.2}, "DEADLINE"),
-                 ({"FAKE_BRCTL_STATUSES": '["unrecognized"]'}, {"timeout_s": 0.2}, "DEADLINE"),
-                 ({"FAKE_BRCTL_CORRUPT": ".enc"}, {}, "READBACK_HASH")]
-        for i, (env, overrides, code) in enumerate(cases):
+        cases = [({"FAKE_BRCTL_FAIL": "status"}, "BRCTL_FAILED"),
+                 ({"FAKE_BRCTL_SLEEP": "status"}, "BRCTL_TIMEOUT"),
+                 ({"FAKE_BRCTL_STATUSES": '["com.apple.CloudDocs client:idle caught-up needs-upload"]'}, "DEADLINE"),
+                 ({"FAKE_BRCTL_STATUSES": '["unrecognized"]'}, "DEADLINE"),
+                 ({"FAKE_BRCTL_CORRUPT": ".enc"}, "READBACK_HASH")]
+        for i, (env, code) in enumerate(cases):
             with self.subTest(code=code):
-                backend = dict(self.fake_brctl(**env), **overrides)
+                backend = self.fake_brctl(**env)
                 plan = f"{PLAN}-bad{i}"
-                with self.assertRaises(so.OffloadError) as caught:
-                    so.offload(dict(self.config, backend=backend), plan, self.span_for(plan))
-                # A status process can start just before the same absolute deadline expires.
-                self.assertIn(caught.exception.code, ("DEADLINE", "BRCTL_TIMEOUT") if code == "DEADLINE" else (code,))
-                self.assertEqual(caught.exception.exit_kind, "unverified")
+                now = time.time()
+
+                def expire_on_poll(_seconds):
+                    nonlocal now
+                    now += 11
+
+                polling = mock.patch.object(so.time, "sleep", expire_on_poll) if code == "DEADLINE" \
+                    else contextlib.nullcontext()
+                with polling, self.assertRaises(so.OffloadError) as caught:
+                    so.offload(dict(self.config, backend=backend), plan, self.span_for(plan), clock=lambda: now)
+                self.assertEqual(caught.exception.code, code)
+                exit_kind = "integrity" if code == "READBACK_HASH" else "unverified"
+                self.assertEqual(caught.exception.exit_kind, exit_kind)
                 self.assertEqual(os.listdir(self.tmp / "markers"), [])
                 for key in env:
                     os.environ.pop(key)
@@ -864,11 +971,12 @@ class SpanOffloadTests(unittest.TestCase):
         self.assertEqual(so.offload(dict(self.config, backend=backend), PLAN, self.span), record)
         self.assertEqual(self.marker(confirmed=True).read_bytes(), marker_before)
         plan = PLAN + "-timeout"
-        conf.write_text(json.dumps(dict(self.config, backend=dict(backend, timeout_s=0.2))))
-        with mock.patch.dict(os.environ, {"FAKE_BRCTL_STATUSES": '["com.apple.CloudDocs needs-upload"]'}), \
+        timeout, provider = self.child_timeout(lambda args: args[:2] == ["brctl", "status"])
+        with timeout, \
                 contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(err):
             self.assertEqual(cli.main(["offload", "--config", str(conf), "--plan", plan,
                                        "--span-dir", str(self.span_for(plan))]), 5)
+        provider.kill.assert_called_once()
         self.assertIn("OFFLOAD_UNVERIFIED", err.getvalue())
         self.assertFalse(self.marker(plan).exists())
         self.assertFalse(self.marker(plan, True).exists())
@@ -904,10 +1012,24 @@ class SpanOffloadTests(unittest.TestCase):
         self.assertFalse(record["provider_confirmed"])
         self.assertFalse(self.marker(confirmed=True).exists())
         plan = PLAN + "-deadline"
-        backend = self.fake_brctl(FAKE_BRCTL_SLEEP="evict")
-        with self.assertRaises(so.OffloadError) as caught:
-            so.offload(dict(self.config, backend=backend), plan, self.span_for(plan), deadline_epoch=time.time() + 0.3)
+        now = time.time()
+        elapsed = 0
+        provider = mock.Mock()
+
+        def overall_deadline(timeout=None):
+            nonlocal elapsed
+            if timeout is not None:
+                elapsed = 301
+                raise subprocess.TimeoutExpired("evict", timeout)
+            return b"", b""
+
+        provider.communicate.side_effect = overall_deadline
+        with self.substitute_child(lambda argv: argv[:2] == ["brctl", "evict"], provider), \
+                self.assertRaises(so.OffloadError) as caught:
+            so.offload(dict(self.config, backend=backend), plan, self.span_for(plan),
+                       deadline_epoch=now + 300, clock=lambda: now + elapsed)
         self.assertEqual(caught.exception.exit_kind, "unverified")
+        provider.kill.assert_called_once()
         self.assertFalse(self.marker(plan).exists())
         self.assertFalse(self.marker(plan, True).exists())
 
@@ -1036,10 +1158,12 @@ class SpanOffloadTests(unittest.TestCase):
                     os.environ.pop(key)
 
     def test_rclone_timeout(self):
-        backend = self.fake_rclone(FAKE_RCLONE_SLEEP="5")
+        backend = self.fake_rclone()
         backend["timeout_s"] = 1
-        with self.assertRaises(so.OffloadError) as caught:
+        timeout, child = self.child_timeout(lambda argv: argv[0] == backend["rclone"])
+        with timeout, self.assertRaises(so.OffloadError) as caught:
             so.offload(dict(self.config, backend=backend), PLAN, self.span)
+        child.kill.assert_called_once()
         self.assertEqual((caught.exception.code, caught.exception.exit_kind), ("UPLOAD_TIMEOUT", "unverified"))
         self.assertEqual(os.listdir(self.tmp / "markers"), [])
 
@@ -1118,16 +1242,23 @@ class SpanOffloadTests(unittest.TestCase):
         self.assertEqual([n for n in os.listdir(self.tmp / "stage") if not n.startswith(".")], [])
 
     def test_a_stalled_encryptor_is_killed_at_the_deadline(self):
-        stall = self.tmp / "openssl-stall"
-        stall.write_text(f'#!/bin/sh\ncase "$1" in enc) exec sleep 60 ;; esac\nexec {OPENSSL} "$@"\n')
-        stall.chmod(0o755)
-        (self.span / "runtime" / "incompressible.bin").write_bytes(os.urandom(4_000_000))
-        start = time.monotonic()
-        with self.assertRaises(so.OffloadError) as caught:
-            so.offload(dict(self.config, openssl=str(stall)), PLAN, self.span, allow_local=True,
-                       deadline_epoch=time.time() + 2)
+        child = mock.Mock()
+        timer = mock.Mock()
+        with self.substitute_child(lambda argv: argv[:2] == [OPENSSL, "enc"], child), \
+                mock.patch.object(so.threading, "Timer", return_value=timer) as make_timer:
+            def blocked_write(_data):
+                _, expire = make_timer.call_args.args
+                expire()
+                raise BrokenPipeError
+
+            child.stdin.write.side_effect = blocked_write
+            with self.assertRaises(so.OffloadError) as caught:
+                self.offload(deadline_epoch=time.time() + 30)
         self.assertEqual((caught.exception.code, caught.exception.exit_kind), ("DEADLINE", "unverified"))
-        self.assertLess(time.monotonic() - start, 30)
+        child.kill.assert_called()
+        child.wait.assert_called_once()
+        timer.cancel.assert_called_once()
+        self.assertNotIn(child, so._CHILDREN)
         self.assertEqual(os.listdir(self.tmp / "markers"), [])
 
     def test_the_recipient_key_is_read_once(self):
@@ -1248,14 +1379,10 @@ class SpanOffloadTests(unittest.TestCase):
         self.pull()  # the one marker written decrypts and matches
         self.assertEqual(so.hash_tree(self.tmp / "desk" / "cl-syn-01" / SPAN), so.hash_tree(self.span))
 
-    def test_span_identity_emptiness_and_fence(self):
+    def test_span_identity_and_emptiness(self):
         cases = [("PLAN_SPAN_MISMATCH", lambda: so.offload(self.config, "cq-syn-01-s02-a1", self.span, allow_local=True)),
                  ("SPAN_EMPTY", lambda: so.offload(self.config, PLAN, self.empty_span(receipt=False),
                                                    require_files=(), allow_local=True))]
-        fence = self.tmp / "desk_fence.json"
-        fence.write_text("{}")
-        cases.append(("FORBIDDEN_PATH_PRESENT", lambda: so.offload(dict(self.config, forbid_paths=[str(fence)]), PLAN,
-                                                                   self.span, allow_local=True)))
         for code, call in cases:
             with self.subTest(code=code):
                 with self.assertRaises(so.OffloadError) as caught:
@@ -1309,27 +1436,12 @@ class SpanOffloadTests(unittest.TestCase):
         self.assertEqual((snap["sha256"], snap["size"]), (hashlib.sha256(data).hexdigest(), len(data)))
 
     def test_sigterm_kills_the_upload_and_exits_5(self):
-        backend = self.fake_rclone(FAKE_RCLONE_SLEEP="30", FAKE_RCLONE_PIDFILE=str(self.tmp / "rclone.pids"))
-        config = self.tmp / "mbp.json"
-        config.write_text(json.dumps(dict(self.config, backend=backend)))
-        root = Path(__file__).resolve().parents[1]
-        proc = subprocess.Popen([sys.executable, str(root / "scripts" / "span_offload.py"), "offload", "--config",
-                                 str(config), "--plan", PLAN, "--span-dir", str(self.span)],
-                                stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        deadline = time.time() + 30
-        while not (self.tmp / "rclone.pids").exists() and time.time() < deadline:
-            time.sleep(0.1)
-        time.sleep(0.3)
-        proc.send_signal(signal.SIGTERM)
-        out, err = proc.communicate(timeout=30)
-        self.assertEqual(proc.returncode, so.EXIT["unverified"])
-        self.assertIn(b"TERMINATED", err)
-        self.assertEqual(len(err.strip().splitlines()), 1)
-        time.sleep(0.3)
-        for pid in (self.tmp / "rclone.pids").read_text().split():
-            with self.assertRaises(ProcessLookupError):
-                os.kill(int(pid), 0)
-        self.assertEqual(os.listdir(self.tmp / "markers"), [])
+        backend = self.fake_rclone()
+        argv = self.offload_argv(dict(self.config, backend=backend))
+        child = mock.Mock()
+        child.communicate.side_effect = lambda **_: cli._terminate(signal.SIGTERM, None)
+        with self.substitute_child(lambda args: args[0] == backend["rclone"], child):
+            self.assert_terminated(argv, child)
 
     # --- round-2 regressions (Sol r2 findings 1-7) -----------------------------------------------
 
@@ -1394,37 +1506,26 @@ class SpanOffloadTests(unittest.TestCase):
         self.assertLess(time.monotonic() - start, 5)
 
     def test_sigterm_during_a_stalled_encryption_exits_promptly(self):
-        stall = self.tmp / "openssl-stall"
-        stall.write_text(f'#!/bin/sh\ncase "$1" in enc) exec sleep 60 ;; esac\nexec {OPENSSL} "$@"\n')
-        stall.chmod(0o755)
-        (self.span / "runtime" / "incompressible.bin").write_bytes(os.urandom(4_000_000))
-        config = self.tmp / "mbp.json"
-        config.write_text(json.dumps(dict(self.config, openssl=str(stall))))
-        root = Path(__file__).resolve().parents[1]
-        proc = subprocess.Popen([sys.executable, str(root / "scripts" / "span_offload.py"), "offload", "--config",
-                                 str(config), "--plan", PLAN, "--span-dir", str(self.span), "--allow-local-backend"],
-                                stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-        time.sleep(2.0)
-        proc.send_signal(signal.SIGTERM)
-        out, err = proc.communicate(timeout=15)
-        self.assertEqual(proc.returncode, so.EXIT["unverified"])
-        self.assertEqual(len(err.strip().splitlines()), 1)
-        self.assertIn(b"TERMINATED", err)
+        argv = self.offload_argv(self.config, "--allow-local-backend")
+        child = mock.Mock()
+        child.stdin.write.side_effect = lambda _: cli._terminate(signal.SIGTERM, None)
+        with self.substitute_child(lambda args: args[:2] == [OPENSSL, "enc"], child):
+            self.assert_terminated(argv, child)
 
     def test_an_empty_completion_record_is_an_incomplete_landing(self):
         self.offload()
-        real = so.write_marker
+        real = durable.publish_once
 
         def crash(path, record):
             Path(path).write_bytes(b"")
             raise KeyboardInterrupt
 
-        with mock.patch.object(so, "write_marker", crash), self.assertRaises(KeyboardInterrupt):
+        with mock.patch.object(durable, "publish_once", crash), self.assertRaises(KeyboardInterrupt):
             self.pull()
         with self.assertRaises(so.OffloadError) as caught:
             self.pull()
         self.assertEqual(caught.exception.code, "INCOMPLETE_LANDING")
-        self.assertIs(so.write_marker, real)
+        self.assertIs(durable.publish_once, real)
 
     def test_odd_provider_listings_and_member_names_are_classified(self):
         backend = so.RcloneBackend({"remote": "x:y", "hash_type": "size", "rclone_config": "/x/rclone.conf"})
@@ -1712,7 +1813,8 @@ class SpanOffloadStaticTests(unittest.TestCase):
         self.assertNotRegex(source, r"\[\s*['\"]git['\"]")
         loads = [line.strip() for line in source.splitlines() if "json.loads(" in line]
         allowed = ("descriptor_path.read_bytes()", "listing", "Path(path).read_text()",
-                   'tmp / files["descriptor"]', "_read_in(dfd", "descriptor_bytes", "handle.read(65536)", "handle.read(1 << 20)")
+                   'tmp / files["descriptor"]', "_read_in(dfd", "descriptor_bytes", "handle.read(65536)",
+                   "handle.read(1 << 20)", "json.loads(marker_bytes)")
         for line in loads:
             self.assertTrue(any(token in line for token in allowed), line)
 

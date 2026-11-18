@@ -1,9 +1,10 @@
-# Span cloud offload and close (RL-173 A; RL-174 D.1/D.2)
+# Span cloud offload (RL-173 A; RL-174 D.1/D.2)
 
 The MBP makes its own encrypted off-host copy between spans. The Air is outside the arm path.
-`scripts/span_offload.py` and `scripts/close_offload.py` share `joulewise/span_offload.py`, one iCloud
-backend and one marker schema, `joulewise.span_offload_marker.v1`. Synthetic coverage is in
-`tests/test_span_offload.py`.
+`scripts/span_offload.py` uses `joulewise/span_offload.py`, which owns the iCloud backend and the marker
+schema `joulewise.span_offload_marker.v1`. The [cluster contract](cluster_contract.md) assigns close,
+retirement and reclaim to PR #807. Synthetic coverage is in `tests/test_span_offload.py` and
+`tests/contract/test_cluster_804.py`.
 
 Authority: RL-173 A, amended by RL-174 D.1/D.2 in
 `origin/audit/2026-11-10-fable:docs/research-audits/2026-11-10-fable/RESEARCH-LEAD-DECISIONS.md`.
@@ -13,16 +14,16 @@ the production key.** Software tests do not establish that gate.
 
 ## Operations and gates
 
-`offload` packs a closed OUT and retains the original. `close` (also exposed as
-`scripts/close_offload.py`) performs the same offload, then applies the storage table below.
-Run close after the span's Check, the desk bundle's push and the MBP desk, with all source writers
-stopped, nothing armed, and before the next soak. Failure holds the next arm and F0. The tool handles
+`offload` packs a closed OUT and retains the original and the materialised stage. Run it after the
+span's Check, with all source writers stopped, nothing armed, and before the next soak. A failed
+bundle push permits copying. For a stranded span, use `--require-file` with a basename attested by
+the Check. Failure holds the next arm and F0. The tool handles
 bytes and parses only its own transport records, tar headers and brctl status; no source payload is
 parsed. A packed unreleased span remains as restricted as its source. Never expand one outside a
 registered look. Keep the newest desk projections outside OUT for the GAP census.
 
 1. Refuse unsafe plan/OUT names (OUT must be `<plan>` or `<plan>-<YYYYMMDDTHHMMSSZ>`), an empty tree,
-   absent `runner_receipt.json` (existence only), or any configured `forbid_paths`. Refuse source links,
+   and absence of the required file (default `runner_receipt.json`, existence only). Refuse source links,
    special files and unsafe names, and control/output paths overlapping OUT or inside Git repositories.
    Configs, keys, stages and records must be single-name regular files; iCloud directory components
    are opened with O_NOFOLLOW. A plan lock excludes concurrent offloads of the same plan.
@@ -32,7 +33,7 @@ registered look. Keep the newest desk projections outside OUT for the GAP census
    writes between different files' reads, and writes with restored mtime refuse `SPAN_CHANGED`. Ignore
    only read-induced atime. This requires a closed source on a local filesystem; it cannot freeze an
    active writer or defeat forged kernel metadata. A mutation after the final check is outside that
-   contract; the controller must stop writers before close.
+   contract; the caller must stop writers before copying.
 3. Stream tar+gzip into OpenSSL; the SHA256SUMS manifest hashes exactly those archived bytes, in byte
    order, as `sha256  ./relative-path`. Re-read the decrypted transport stream while the fresh passphrase
    is still in memory, requiring both the archive hash and **every file's manifest digest and exact file
@@ -60,49 +61,36 @@ registered look. Keep the newest desk projections outside OUT for the GAP census
    `icloud evict+redownload sha256 match`, upload, observed eviction and verification times. Recheck
    CloudDocs idle and source stability before publication. Successful completion precedes the next soak.
 
-Upload/status failure, wrong bytes or the overall deadline returns 5 without a new marker. Failed,
+Upload/status failure, publication I/O failure, or the overall deadline returns 5. Readback hash
+mismatches return 6. If the marker is visible after a sync failure, the next writer finishes
+publication under the plan lock and rechecks the copy. Failed,
 unobserved or phase-timeout eviction/download returns 8 with only `.ok.unconfirmed`, including a retry
 of a placeholder left by failed download. That record satisfies no gate. A confirmed retry may add
 `.ok` while preserving the historical unconfirmed record. A valid typed `.ok` retry rechecks all four
 cloud hashes (and the original archive if OUT remains), then returns 0 without rewriting the marker.
-A legacy one-line marker returns 3 and needs separate evidence verification; existence alone authorises
-nothing. A racing marker writer also returns 3.
+A legacy one-line marker is preserved as `<plan>.ok.legacy-line` under the plan lock. The writer
+publishes a typed marker after full verification. A marker publication race returns 3.
 
-Other exits: 1 internal, 2 usage, 4 input/stability refusal, 6 pull/SSD integrity failure, 7 existing or
+Other exits: 1 internal, 2 usage, 4 input/stability refusal, 7 existing or
 incomplete pull destination. Every nonzero exit holds the next arm. Await completion and recheck time.
-Without `--deadline-epoch`, one 5400 s budget covers the close; an explicit deadline must be finite and
+Without `--deadline-epoch`, one 5400 s budget covers the offload; an explicit deadline must be finite and
 within 24 h. Supervised children are killed on deadline or TERM/HUP/INT. Filesystem calls are
 cooperative: a final delayed publication can complete after its last check, so the caller must still
 await and recheck time. After abnormal termination check remaining children and pending sync.
 
-### RL-174 D.2 storage table
+### Copy evidence and SSD receipt
 
-| Verified state | Close action |
-|---|---|
-| Packed stream re-read equals the per-file manifest | May delete the uncompressed original; archive stays materialised on the MBP |
-| iCloud readback AND SSD copy sha256 equal the receipt | May evict the local iCloud ciphertext and remove the stage ciphertext |
-| Only iCloud verified; Air/SSD away | Keep the materialised stage archive; proceed without waiting for the Air |
-| Free space <=60 decimal GB (20 GB above the kit's 40 GB line) | Mail lead_email; never force eviction to a single verified copy |
-
-Close conservatively also waits for the iCloud gate before raw deletion. It rechecks the materialised
-stage, descriptor and original bytes immediately before deletion. Low-level offload retains OUT.
-Close refuses a missing/corrupt local pack when only iCloud is verified. Optional backends cannot drive
-close's deletion or eviction. Close leaves small stage metadata; it never removes the remote folder.
+`evidence` prints one JSON object and exits 0 for `CLEAR`. It validates the published marker's
+readback proofs, backend, recipient fingerprint and span name, then checks the stage source path and
+descriptor digest. It checks receipt presence through file metadata. The controller uses
+`copy_evidence(..., require_closed=False)` for a stranded span. Marker publication in progress, a busy
+plan lock or a marker more than five minutes ahead of the local clock returns `BUSY`. A legacy line
+returns `INVALID` with `LEGACY_MARKER`.
 
 On the Air, `ssd-copy` downloads the four encrypted artifacts to `<mounted SSD>/span-archives/<plan>`,
-syncs and re-reads them against the marker, then issues `ssd.ok.json`. It requires an external mounted
-filesystem and never expands custody. Courier that small receipt to the MBP through the lead's approved
-record-delivery path. Like the copy marker, it is a **trusted record of an observed readback**, not an
-authenticated statement of current drive health. `close --ssd-receipt PATH` requires its plan, descriptor
-digest and all four hashes/sizes to match before eviction. Wrong/partial receipts refuse cleanup.
-No receipt means no eviction and no wait for the Air. Keep SSD bytes and receipt together.
-Configure and verify `/usr/bin/mail` and `lead_email` before close; mail failure holds the next arm.
-
-A failed partial raw-directory deletion keeps the verified pack and returns nonzero. Its next retry
-refuses the now-incomplete source rather than repacking it. The lead verifies the retained pack hash
-against `.ok` and the cloud artifacts (or obtains an equal SSD readback), then removes or quarantines
-only that partial original and retries close with OUT absent. Preserve the verified pack throughout;
-never rebuild from the partial tree or relax its source checks. This recovery is manual.
+syncs and re-reads them against the marker, then publishes `ssd.ok.json`. It requires an external mounted
+filesystem. Courier the receipt to the MBP through the lead's approved record-delivery path and keep it
+with the SSD bytes. The receipt records an observed readback.
 
 ### Every arm: pending-transfer read
 
@@ -123,7 +111,7 @@ line, including after qualification.
 
 **MBP iCloud access requires a process launched in the signed-in user's GUI domain**, such as a
 LaunchAgent or the magistrate. SSH processes cannot reach iCloud Drive. Do not run qualification,
-offload, close or pending through SSH or count SSH output as provider evidence. Preparing files is
+offload or pending through SSH or count SSH output as provider evidence. Preparing files is
 separate from launching the actual GUI job. The PR builder does not contact the MBP or install this.
 
 1. On the Air, create the private key directory (keygen also creates a missing final directory as 0700):
@@ -151,17 +139,18 @@ separate from launching the actual GUI job. The PR builder does not contact the 
     "marker_dir":"/Users/Shared/JouleWise/desk-copy",
     "openssl":"/usr/bin/openssl",
     "backend":{"kind":"icloud","brctl":"/usr/bin/brctl","timeout_s":5400},
-    "forbid_paths":["/Users/edr/night-custody/magistrate/desk_fence.json"],
+    "key_second_copy_attested_sha256":"<attested key fingerprint>",
     "lead_email":"<lead email>","default_budget_s":5400}
    ```
 
-   Add the controller's actual armed/close fences to forbid_paths. Verify the mail route. Unknown
-   top-level keys refuse. An absolute backend root may override the default for a synthetic probe.
+   Remove `forbid_paths` from older offload configs. The close tool's fence mode owns that check.
+   The controller's preflight checks the attested fingerprint. Unknown top-level keys refuse.
+   An absolute backend root may override the default for a synthetic probe.
    Defaults: polling 2 s, observed eviction 30 s, download 600 s; every phase shares the overall deadline.
 4. On the Air, create a config with schema joulewise.span_offload_pull_config.v1, absolute identity,
    recipient_sha256, absolute work_root on JW-EXT (same filesystem as pull destination),
    openssl `/usr/bin/openssl`, and the same iCloud backend/root. Work/desk roots stay outside Git.
-5. Configure the GUI-domain magistrate to await close, hold every nonzero result, read pending transfers
+5. Configure the GUI-domain magistrate to await the offload, hold every nonzero result, read pending transfers
    before every arm, and retain the daemon maintenance line. Qualification below precedes production use.
 
 ## Native production-key round trip (external gate; still owed)
@@ -198,35 +187,34 @@ production key pair. Use scratch source/stage/marker/destination paths; never re
 3. Await completion. In that GUI session record
    `launchctl print "gui/$(id -u)/com.joulewise.span-offload-probe"` (last exit status 0), stdout/stderr,
    sw_vers, checkout SHA, Python/OpenSSL versions, public-key fingerprint and complete scratch `.ok`.
-   Require four `icloud evict+redownload sha256 match` rows with ordered upload/observed eviction/readback
-   times and equal hashes/sizes. The tool observes Apple's stat.st_flags SF_DATALESS (0x40000000).
+   Require four `icloud evict+redownload sha256 match` rows with upload, observed eviction and readback
+   observations and equal hashes/sizes. The tool observes Apple's stat.st_flags SF_DATALESS (0x40000000).
    Preserve the status/flag transition evidence in the native record. Unknown status, unsupported
    flags or exit 8 leaves qualification PROVISIONAL; keep source and stage and report to the lead.
 4. Courier the scratch marker to the Air by the approved record path. In the Air GUI session, pull into
    a scratch desk using the command below. Require exit 0, exact MBP/Air manifest equality and every
    synthetic file's hash. This tests the production RSA unwrap. Run ssd-copy against that marker and
    JW-EXT; preserve ssd.ok.json and require the retained ciphertext digest to equal the marker.
-5. In the MBP GUI domain, run probe close without an SSD receipt: require raw removal and a materialised
-   stage ciphertext. Deliver the probe SSD receipt and repeat close with it: require observed cache
-   eviction and stage ciphertext removal. Require a fresh pending read / ICLOUD_CLEAR before any next
-   soak. Failure holds the next arm.
+5. In the MBP GUI domain, require `evidence` to return `CLEAR`, with raw originals and the materialised
+   stage ciphertext present. Require a fresh pending read / ICLOUD_CLEAR before any next soak.
 6. The lead records plan, paths, hashes, key fingerprint, native evidence and verdict in a dated report.
    Only then change INTERIM/PROVISIONAL to permanent/qualified. Boot out the probe LaunchAgent in the
    GUI session. The lead may remove only the synthetic probe/cloud artifacts; retain the native record.
    A software-review verdict never substitutes for this round trip.
 
-## Close and Air commands
+## MBP and Air commands
 
-The magistrate uses the exact OUT from the span record, in its GUI domain after the pushed desk bundle
-and MBP desk, before soak:
+The magistrate uses the exact OUT from the span record, in its GUI domain after the Check and before
+the next soak:
 
 ```sh
-"$PY" -B "$REPO/scripts/close_offload.py" --config "$MBP_CONFIG" \
+"$PY" -B "$REPO/scripts/span_offload.py" offload --config "$MBP_CONFIG" \
   --plan "$PLAN" --span-dir "$OUT" --deadline-epoch "$NEXT_SOAK_EPOCH"
+"$PY" -B "$REPO/scripts/span_offload.py" evidence --config "$MBP_CONFIG" --plan "$PLAN" --span-dir "$OUT"
 "$PY" -B "$REPO/scripts/span_offload.py" pending --config "$MBP_CONFIG"
 ```
 
-Record CLOSE_OK and fresh ICLOUD_CLEAR, then recheck time. Any nonzero result holds the next arm and F0;
+Record OFFLOAD_OK, CLEAR evidence and fresh ICLOUD_CLEAR, then recheck time. Any nonzero result holds the next arm and F0;
 report stderr to the lead. On the Air, retaining encrypted SSD copies does not require the private key:
 
 ```sh
@@ -235,8 +223,7 @@ python3.13 -B scripts/span_offload.py ssd-copy --config "$AIR_CONFIG" --plan "$P
 # Courier /Volumes/JW-EXT/span-archives/$PLAN/ssd.ok.json through the approved record path.
 ```
 
-In a later close interval the MBP may repeat close with `--ssd-receipt <courier path>` to reclaim local
-ciphertext. Cloud hashes are rechecked even with OUT absent. A registered desk/look can stage raw bytes:
+A registered desk/look can stage raw bytes:
 
 ```sh
 python3.13 -B scripts/span_offload.py pull --config "$AIR_CONFIG" --plan "$PLAN" --kit "$KIT" \
@@ -250,6 +237,5 @@ registered look. Keep a pending look's designated raw copy until that look ends 
 
 Legacy rclone configurations remain for low-level offload/pull; hash_type size proves length only.
 Both rclone and local write only .ok.unconfirmed (exit 8): listing evidence cannot replace RL-174's
-observed iCloud round trip. Local additionally requires --allow-local-backend. Neither can perform
-RL-174 close, satisfy the copy gate, or supply the iCloud arm check. Existing legacy typed markers
+observed iCloud round trip. Local additionally requires --allow-local-backend. The copy gate and pending-transfer check require iCloud. Existing legacy typed markers
 without that observed iCloud evidence refuse current retry validation.

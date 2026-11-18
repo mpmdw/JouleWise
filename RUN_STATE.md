@@ -1042,6 +1042,8 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 - **Size:** about 31k code lines of the retired arm/T-0 chain plus about 115k test lines naming it; the never-live NVIDIA/remote stack (about 4.6k); frozen reducer versions and analysis manifest v2; the about 440-line `whole_window.py` mirror; about 1.6k lines of duplicated verification helpers; about 40k lines of census data.
 - Fold in the post-release deferrals already listed in item 165 and in the D-188 retrospective.
 
+399a. **PR #804 round 11 contract binding (Sol 6.2, 2026-11-17).** Rebased on #811 `4a4d12930`; seven offload scenarios use real code. The offload preserves the original and stage, and #807 owns the close and retirement commands. See [round 11](docs/run_reports/2026-11-17-pr804-contract-round11.md) for the scenario results and I-01 question. The next observable is hosted CI on #804's new head. A failed check holds the PR. Lead delta admission and the #811-first merge order apply.
+
 399. **Laptop lead (interactive, Opus 5.5), 2026-11-17 13:16:26 PST (`date`): CLARIFIES ITEM 396 (raw retention): MAKING COPIES IS ALLOWED; ONLY REMOVING THE ORIGINAL IS NOT. Item 347/348's close offload of every dev-05 span (an encrypted or packed archive built FROM the span directory, the cloud upload, the round trip and the copy marker) runs as usual: it leaves the original directory in place. What item 396 forbids until the lead records "interim look complete" is any step that deletes, moves or replaces a dev-01..dev-05 span directory or its files in place (in-place packing, retirement, eviction of originals). A copy-marker hold because of item 396 would be wrong: the marker is written as normal.**
 - **Also adopted (integration contract for #799/#800/#804/#807, Mythos 5.2, `/Volumes/JW-EXT/scratch/mythos-cluster-contract/CONTRACT.md`, lead decisions L1-L6):**
   - Closed spans are retained by default; the controller retires a span only once its debts close.
@@ -19519,7 +19521,7 @@ NONE — no global work-selection gate is active.
 
 ## Restart By Machine-State Lane
 
-Source of truth for work selection: [state kernel](docs/process/state_kernel.json) (updated 2026-11-16). Latest report: [PR #804 repair and RL-174 D.1/D.2: synthetic software checks; native GUI-domain qualification external](docs/run_reports/2026-11-16-pr804-r2.md).
+Source of truth for work selection: [state kernel](docs/process/state_kernel.json) (updated 2026-11-17). Latest report: [PR #804 round 11 contract binding and synthetic validation](docs/run_reports/2026-11-17-pr804-contract-round11.md).
 
 ### [ED-EXTERNAL]
 
