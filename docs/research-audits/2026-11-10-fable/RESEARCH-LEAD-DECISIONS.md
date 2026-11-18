@@ -21508,3 +21508,360 @@ Replaces RL-182a's row 19. Owner is `research_lead`.
 | 19 (amended) | The adapter's stamp block (start line to the byte before the end line, as RL-182b defines) has SHA-256 `85ffe1a3…45c5`; its digest changes only under a research-lead ruling cited in the commit; the two stamps are one tick apart on every path | VALIDITY | Row 18's field is the first token's arrival | `mlx_runtime.py` at the pinned runtime | With each pin | The hash test beside CB:52; the tick test (TM:662-711) |
 
 **What comes back to me.** An edit to the block. A W1 gap over 10 ms. Nothing else.
+
+# RL-187. PR #828 passes its cold final pass at `1d7509cba` with no change owed before merge; one small follow-up is owed before any final manifest pins the dispatcher. The C1 comparator gets nine numeric classes that cover every FOR-FABLE leaf, and the metadata AUC stays exempt by name with its population compared exactly. ctl-01's print conventions are fixed now, and one of them corrects RL-186: the phase code runs on the physical calls, because on the single logged envelope the CPU burn is counted as decode and the qualifier would test nothing
+
+2026-11-18 14:55 PST. Fable 5.2, research lead. Gate-ledger row 4 for PR #828; answers to the C1 comparator's and the ctl-01 print's `ESCALATE` items.
+
+**Sources read.** The log through RL-186 and RL-182b at `9f9bb51b1` (RLD). PR #828 at `1d7509cba1cb895dace28ac567b327e4d09af834` against main `a205cf402`: `joulewise/cadence_looks/manifest_dispatch.py` (MD), `transfer_release.py` (TR), `qualification_manifest.py` (QM), `docs/process/cadence/looks/look_manifest.v2.schema.json` (SC), `tests/test_cadence_manifest_dispatch.py` (TD), the three candidate manifests (IN for `lm-inst-01`). Astra's eleven round reports (A-1 to A-11). The C1 resolver report and the output-family ledger (LED). The ctl-01 resolver report, its freeze spec (CS) and the builder's report. `rl176.py` (RK), `rl176_phases.py` (PH) and `attribution.py` (AT) at `82542232d`; `cadence_ctl.py` (CC) and the draft kit at `c806b14c1`; `recompute_bars.json` (BARS, blob `39466326`) and `compare_v4_recompute.py` (CMP, blob `166fc3be`) at `b2c0681cd`; R2 at `b2e01464d`.
+
+**What I ran.** On an export of the PR tree, outside the repository: the 54 focused tests (53 pass, 1 skip); the registered `lm-qual-01` bytes through both entry points; a synthetic finalization of them; all 80 (schema, kind, id) triples on each of the four manifest bodies; two dozen description, transfer and exit-status mutations. No custody, energy or meter file was opened. Everything is synthetic or a committed manifest.
+
+---
+
+## 0. The answers
+
+| Item | Answer |
+|---|---|
+| 1. PR #828 | **PASS at `1d7509cba`.** No change before merge. One follow-up PR, three small edits (1.4), lands before the first final manifest that pins `manifest_dispatch.py` |
+| 1. `lm-qual-01` bytes | **Valid, unchanged.** The brief's premise is off by one file: `qualification_manifest.py` did not change. The v2 schema did, by addition only (1.2) |
+| 2. FOR-FABLE leaves | Nine classes (2.1) and a leaf table (2.2). A leaf in no class refuses |
+| 2. Exact rationals | The recompute emits numerator and denominator; the engine's float must equal their correctly rounded quotient, bit for bit. The engine wire is not changed |
+| 2. Metadata AUC | **Exempt by name, value not compared.** Its population is compared exactly; the recompute side carries a marker and no number (2.3) |
+| 2. Sentence figures | One decimal for percentages, four for p, compared as exact strings (2.4) |
+| 3. Closure | Absolute joules, no baseline, on the frozen code, over the episode less gate and hold. **Run on a physical-call view of the leg** (3.1) |
+| 3. Baseline | The mean over the last 40 s of the leg's own sampled recovery (3.2) |
+| 3. Hidden J per token, slope, range | Decode part of the hidden call over delivered tokens; OLS of whole-call energy on delivered tokens over the six hidden legs; range is the leave-one-leg-out extremes (3.3) |
+| 3. Who contributes | Every position prints. Only admitted hidden legs enter the slope. A missing input nulls a value, never a leg (3.4) |
+| 3. Floors and units | Pooled hold SD at 10, 40 and 128 s from `hold.json`, times the value's own duration, one SD (3.5) |
+| 3. CPU rail | Joules, with floor units null and the reason `no_matched_floor`. No fourth instrument channel (3.6) |
+| 3. Waits for the read | Three doses, recovery seconds, split gap, the prefill confirmation, the floor numbers and two file hashes. Nothing else (3.7) |
+
+---
+
+## 1. PR #828: PASS
+
+### 1.1 The four structural rulings, checked
+
+| Ruling | Where | Finding |
+|---|---|---|
+| Closed (schema, kind, id) table | MD:31-38, MD:147-153 | Six rows. My sweep of 320 combinations accepted exactly the five v2 rows on their own bodies and nothing else; A-9 to A-11 found 114 unauthorized routes refused. A v2 id under v1 and a v1 id relabelled `qualification` both refuse before delegation (MD:372-379) |
+| Filler ban by id and digest | MD:156-186, `filler-kit-registry.json` | Applied before any kind's own check, to v1 as well (MD:374, MD:321). A transfer kit carrying `f2-inst-01`'s digest under its own id refused. The description kind is exempt from the ban and is held instead to exact equality with its own series (MD:204-213). This is RL-181 2.1's "filler ban stays on every other kind" (RLD:19391) and RL-180's restored row (RLD:19224) |
+| Exit 2 before the read, 1 after, by `os._exit` | MD:110-117, MD:387-400, TR:170-176 | The dispatcher has no post-read path and exits only 0 or 2. The worker chooses by `read_started` (TR:173). With stderr, stdout or both closed at start I got 2 on a refusal and 0 on success. RL-183 3.2 item 4 and row 14 are met (RLD:20331-20335) |
+| RL-185's rail list | SC:510, MD:217-218, IN:35-39 | `rail_sum_columns` is a schema constant, in order, and is required whenever `rail_sum` is a channel. A reordered list, a GPU-only list and a missing list each refused. IN:42 carries the `rail_manifest` check of RL-185 row 8 |
+
+**Against the rest of the rulings.**
+- **RL-181 2.1** (RLD:19385-19392). v1 is not edited; the dispatch is a new module; `validate --final` refuses `PENDING:CODE` and `OPEN-n` in values, arrays and keys (MD:264-268). Every object schema in the file is closed: my walk found none open, and Astra counted 53. A description has no `fit`, `freeze1` or word list; adding `fit` refused.
+- **RL-181 2.2** (RLD:19394-19398). Five public fields for the instrument look and six for stability, with the custody names as ruled, cross-checked by look id (MD:224-231).
+- **RL-181 2.6.** `lm-stab-02` routes, reuses the fourteen named kits and must name `f2-stab/KITS.json` when final (MD:219-223, MD:341-342).
+- **RL-183 3.2** (RLD:20323-20336). Third variant `transfer` in v2; custody names exactly `scores.json`, `stdout`, `stderr` (TR:28, TR:159); status 1 only after `mark_read`. The condition "before any final manifest pins the v2 file" holds: the only ledger row is `lm-qual-01`, `registered`, and its schema pin is still `PENDING:CODE`.
+- **RL-181 3.5 and 3.6, RL-183 3.1.** The transfer candidate's estimand, interval, seven prints, two words and stop rule are the ruled ones.
+- **RL-180 rows 4, 5 and 7.** The failure channel is two lines and a type from the closed list (TR:60-73, TR:104-108). The reservation is the exclusive `mkdir` (TR:141-150).
+
+### 1.2 `lm-qual-01`'s registered bytes
+
+- **The file that changed is the schema, not the validator.** `qualification_manifest.py` is blob `35bbd6b2f` on main, at the merge base and at the PR head. `look_manifest.v2.schema.json` went from `bb9d77573` to `5ff56f3bd`.
+- **The change is additive.** All 13 definitions on main are unchanged; five are new (`artifactHash`, `description`, `freeze2Input`, `lookKitCommitmentsPin`, `transfer`); the root `oneOf` gains two entries, which QM never reads (QM:117-119).
+- **The registered manifest** is byte-identical to main's, sha256 `d6fde691…9bdab`. It validates under the dispatcher and under the standalone validator. With every slot filled it passes `--final` against itself as registration; with one added space outside a slot it refuses; with no registration it refuses; relabelled `lm-qual-02` it refuses.
+
+### 1.3 What I do not require, and why
+
+| Item | Ruling |
+|---|---|
+| A-11's UTF-16 notice under a descriptor limit of 10 | No change. The status is still 2 and no gate parses the notice |
+| The standalone #821 command exits 1, or 120 with no reader (A-10, A-11) | No change to #821's bytes. **The dispatcher is the only sanctioned `validate` entry point.** No gate, launcher or preflight calls `python -m joulewise.cadence_looks.qualification_manifest`; its status means nothing (row 2) |
+| `stage2` is optional in the description variant (SC:509); a committed description without it validates | No change. The v2 file freezes when `lm-qual-01`'s final pins it. I read both final description manifests before any read (RLD:19383), and that pass checks the text |
+| The worker's status rests on the scorer calling `mark_read` (TR:117-119) | Not this PR's. It is a named check of my cold pass on `lm-transfer-01`'s final manifest: the first open of a scoring input, the coefficient reader's included, is preceded by `mark_read` |
+| A failure between `mkdir` and the first read exits 2 with the directory present (TR:150-154) | That id is spent with no read, by RL-180 row 5. Its successor needs my line under row 7. I give that line on the lead's blind statement of the cause; nothing is reopened |
+
+### 1.4 The follow-up: one PR, before the first final manifest that pins `manifest_dispatch.py`
+
+`lm-qual-01` does not pin the dispatcher, so this holds nothing this week. The description and transfer manifests do pin it.
+
+1. **No decoder text on stderr.** Handed a file that is not UTF-8 JSON, the dispatcher prints the offending byte and its offset; handed one with a repeated key, it prints the key (QM:28, QM:45, reached from MD:371 and MD:245). I reproduced both. On an operator's mistake that is a byte of whatever file was named. Replace the detail with fixed text in the dispatcher. QM is not edited.
+2. **Refuse a custody path before opening it.** A manifest or `--registration` argument whose resolved path has a component named `RESTRICTED` refuses with status 2 before `read_bytes` (MD:370, MD:380). This answers the MED that every round from A-1 carried.
+3. **No silent skip.** `test_registered_bytes_unchanged` returns without asserting when the interim ref is absent (TD:787-790). It becomes a `skipTest`. `V1_SCHEMA_PINS` (TD:35-38) holds two digests; the PR that admits `lm-interim-01` reduces it to the one that manifest pins, and from that commit the v1 test runs and does not skip. Until then RL-181 row 8's "v1 file's sha256 in CI" is not exercised on main, because the v1 file is not on main.
+
+One Astra seat on that PR, capped at two rounds.
+
+### 1.5 Three consequences the lead should know
+
+- **A new look id is a table row.** `lm-interim-02` (the successor RL-183 row 9 pre-admits) and `lm-ctl-01` both refuse today. Each row is added by the PR that brings its manifest, with a refusal test for the id under every other kind.
+- **`lm-ctl-01` gets its own closed `controls` variant.** It goes into v2 only if it merges before `lm-qual-01`'s final manifest pins the v2 file. Otherwise it is a v3 sibling, by RL-183 3.2 item 1's rule. Expect v3.
+- **The filler registry is closed data.** A filler kit minted later with a new family name is caught by neither the ids nor the prefixes. The PR that drafts any non-counted kit adds its row (row 3).
+
+**Still owed to me, unchanged:** the final manifests of `lm-inst-01`, `lm-stab-01` with `lm-stab-02`, and `lm-transfer-01`, once each.
+
+---
+
+## 2. The C1 round-2 comparator
+
+**Scope of what I verified.** The paths below are the engine's, under `rl176.`, read from RK and PH at `82542232d`. I did not read the producers of B7 items 1, 4, 5 and 6 or of the RL-149 §4 prints. For those I give the class by leaf type; the adapter owner binds the pointer at the sealed pin. RL-180's tolerances are the interim twin's and govern nothing here.
+
+### 2.1 The classes
+
+Operators are CMP:244-270's. "rel" is |a − b| ≤ bar × max(|a|, |b|). A null agrees only with a null, and the reason beside it is compared exactly.
+
+| Class | Leaf | Unit | Engine wire | Recompute wire | Operator, tolerance | Immutable source |
+|---|---|---|---|---|---|---|
+| N1 | A ratio of integers: θ, every exact tail and two-sided p, a rate, a share or percentile of counts, a mean or difference of means of counts | none | binary64 | two integers `[num, den]`, lowest terms, den > 0 | **Equal, zero tolerance:** the engine's float equals `num / den` rounded once to nearest | R2 §8 "θ̂ exact rational; p exact rational" (R2:156-158). RK:112-116 shows the engine's floats are single correctly rounded quotients |
+| N2 | A trace integral on a powermetrics rail over stamp-defined limits; a sum or mean of such; such a value over an exact count or exact duration; a mean of native samples | J, W, J/token | binary64 | binary64 | rel 1e-9 | BARS `turn_owned_energy_j`, `gross_episode_energy_j`, `predictions_j` |
+| N2d | The same on benign DC-in | J, W, J/token | binary64 | binary64 | rel 1e-3 | BARS `dc_benign`; R2:160 |
+| N3 | A difference of two joule terms | J | binary64 | binary64 | abs 1e-6 | BARS `residuals_j`, `turn_residuals_j` |
+| N4 | A fitted coefficient, slope, standard error or an interval endpoint of one; a product of a coefficient and exact factors | its own | binary64 | binary64 | rel 1e-6 | BARS `fit_coefficients`, `fit_rss`, `u5_values` |
+| N5 | A dimensionless continuous statistic | none | binary64 | binary64 | abs 1e-6 | BARS `scores`; R2:160 |
+| N5p | The same printed as a percentage | percentage points | binary64 | binary64 | abs 1e-4 | N5 at 1e-6 on the fraction |
+| N6 | A duration summed from integer stamps | s | binary64 | integer nanoseconds | Equal, zero tolerance: the float equals `ns / 10^9` rounded once | Same as N1; RK:506, PH:95 |
+| N7 | A stamp or reading less a value from a frozen, hashed model; a sensor mean | s, °C | binary64 | binary64 | abs 1e-9 | BARS `u2_values`, `u3_values`, `u4_values` |
+
+- **Why N1 is asymmetric.** RK emits floats only. A float alone cannot show the rational was exact, and the comparator spec's own mutation ("change the rational, keep the float") needs lossless operands on one side. The twin is not yet sealed, so it carries them. The ten frozen sources and #813's wire are untouched.
+- **A decision is never taken from a float.** Every word, branch and strict comparison stays an exact compared leaf.
+- **A leaf that fits no class refuses** as `unbound_numeric` and comes to me by name. No fallback class exists.
+- **Each class is a named family in the bars file,** added before the analysis seal pins that file's digest (R2:191-192).
+
+### 2.2 The FOR-FABLE leaves
+
+| LED line | Leaf | Engine path | Class |
+|---|---|---|---|
+| 9, 29 | A float mirror of a rational; K's approximate p | wherever it prints | N1 |
+| 18, 57 | Eligibility and coverage rates; decode-length ratio and its percentage | `S.attrition.by_pair_and_condition[pair][condition].eligibility_rate` (RK:404); `S.attrition.decode_length_ratios[pair].{mean_ratio, percent_longer}` (RK:346-347) | N1. `above_30_percent` exact |
+| 36 | Q's post-prompt integral, per member | the caller's member row; computed at RK:488-491 | N2. The 0.0 of a member with no turn-0 stamp (RK:484-485) is exact |
+| 36, 38, 55 | θ and tails of every nominal comparison | `q.per_pair[pair]`, `q.pooled_nominal`, `q.Q_total[scope]`, `q.turn0_prefill_phase[scope]`, `q.work_nominal[scope][slice][measure]`, `aligned_power.phase_ranks_nominal[pair][metric]`, each `.{theta, p_sup, p_inf, p_two_sided}` (RK:114-116, RK:172); `S`, `S.per_pair`, `S.per_window_kind`, `S.side_success`, `S_pf` likewise | N1 |
+| 37, 38 | Log-ratio percentage and its interval | `….estimate.{percent, interval95_percent[0], interval95_percent[1]}` (RK:121-129) | N5p. `strata_used`, `strata_excluded_nonpositive`, `reason` exact |
+| 37, 39 | Context share | `q.quantity_fit[i].prompt_context_percent_of_benign_q` (RK:453) | N4 |
+| 38 | Turn-0 prefill mean | `q.turn0_prefill_phase[scope].by_condition[condition].mean_joules` (RK:523) | N2. `members` exact |
+| 38 | Owned seconds and other durations | the work measure's inputs (RK:506) | N6 |
+| 39 | Held-out R² | `q.quantity_fit[i].loo_r2` (RK:446) | N5 |
+| 39 | J per token and its SE | `q.quantity_fit[i].coefficients.{prefill, decode}.{joules_per_token, standard_error}` (RK:431-432) | N4 |
+| 39 | Energy excess | `q.side_transfer[pair].rows[i].energy_excess_j` (RK:475-476) | N3. `side_transfer_total` is the exact copy or a present null, as LED already has it |
+| 45 | Owned-time baseline: raw seconds | owner-bound | N6 |
+| 45 | Owned-time fits | owner-bound | Coefficients and RSS N4; predictions rel 1e-9 and residuals abs 1e-6, in seconds, as `predictions_j` and `residuals_j`. The scores, bounds and S leaves keep the bars LED names |
+| 48 | Contention: CPU seconds, spans, rates, percentiles | owner-bound | Stamp or counter sums N6; a rate or percentile of exact operands N1; the cut is the registered order statistic, so the member at the rank is exact and its value takes its own class |
+| 49 | Same-half slope, SE, interval | owner-bound | N4 |
+| 50 | Cost: instructed less mean benign | owner-bound | Tokens and turns N1; joules N3 |
+| 53 | Profile watts and across-window range | `aligned_power.profiles[rail][period][event][i].{mean_watts, window_range_watts[0], window_range_watts[1]}` (PH:209-212) | N2; N2d on `dc_in`. `relative_ns`, `windows` exact |
+| 53 | Short-call share | `aligned_power.short_tool_calls[rail].share` (PH:225) | N1 |
+| 54 | Phase seconds | `aligned_power.phase_by_condition[condition][i].rails[rail].phases[phase].seconds` (PH:95-98) | N6 |
+| 54 | Phase joules, mean watts, J per token, the whole and the phase sum | same row, `.joules`, `.mean_watts`, `.joules_per_token`; `.ungated_j`, `.phase_sum_j` (PH:96-117) | N2; N2d on `dc_in` |
+| 54 | The closure remainder | `.absolute_error_j`, `.relative_error` (PH:115-118) | **Checked on each side against its own two leaves:** `absolute_error_j` equals \|`phase_sum_j` − `ungated_j`\| to abs 1e-9 J and `relative_error` equals that over \|`ungated_j`\| to abs 1e-12. Across sides, the two base leaves take their class and `closes` is exact. BARS `residual_by_hold_count` is the precedent for a leaf derived from the side's own numbers |
+| 54 | The qualifier | `aligned_power.qualification.{qualified, all_legs_close, cpu_burn_order}` (PH:250-251) | Exact. Its leg rows as the phase rows |
+| 56 | Companion slopes; implied bias; count cut | owner-bound | Slopes N4; bias N5; a cut on counts is exact |
+| 57 | Start state and predecessor load | owner-bound | Counts N1; a temperature N7 |
+| 58 | Sentinel replay residual | owner-bound | N3 |
+| 59 | CPU and package magnitudes; active time per token; onset residual | owner-bound | N2; N1 over integer nanoseconds and tokens; N7 |
+| 60 | Log shape; K with the heat term; trace count | owner-bound | Counts exact or N1; a score under the frozen heat model abs 1e-6 as `scores`; any other continuous trace estimate refuses until I class it |
+
+### 2.3 The leave-task-pair-out metadata AUC
+
+**R2 §6.18's exemption stands and is read narrowly. R2 §11 is satisfied by presence, shape and population, and by nothing about the value.**
+
+- **Why the value is not compared.** The reason is in the registration: `shared_library_print` (R2:122). Both families would call `joulewise.align.metadata_baseline`. Two calls of one function agreeing is not a recomputation, and §11 forbids sharing new outcome arithmetic between families (R2:202). A second implementation of a grouped cross-validated classifier is a new build on a print that carries no word.
+- **Why this is not a hidden exemption.** §11 forbids an output hiding in a print-only exemption (R2:201). This one is listed by name, with its reason, at one pointer.
+- **Engine side, required.** One leaf at the one path P4:1389 prescribes, inside the time-baseline print. Closed shape: a finite number in [0, 1], or null with a reason from a closed list. Beside it: the held-out pair of each fold, and the members scored in each fold by condition.
+- **Compared exactly:** those fold identities and counts, against the independent census (the time baseline's own member population, split by pair). Not against the recompute.
+- **Recompute side, required.** At the corresponding path, exactly `{"status": "exempt", "reason": "shared_library_print"}`. A number there refuses. An absent marker refuses. Two absences are never an agreement.
+- **Bars.** One family, classification `exempt`, selecting one pointer per side. A selector that matches a second leaf refuses.
+- **Mutations owed (R2:205).** Remove the engine leaf: refuse. Change a fold count: hold. Put a number on the recompute side: refuse. Drop or alter the marker: refuse. Change the AUC value: agree, recorded as the one exempt leaf. The value is not a compared leaf, so no detection of it is owed.
+- **Integrity of the value** is the analysis seal's: it names `joulewise/align/metadata_baseline.py` by blob, and stage (a) verifies the engine's output bytes.
+- **The exception does not spread.** Every other time-baseline row is recomputed and compared under 2.2. No second AUC is asked of anyone.
+- **The paper.** Any sentence that quotes this AUC says it was computed by one implementation.
+
+### 2.4 Figures inside claim sentences
+
+E18's sentences leave the figures' format open (RLD:20803-20822). Fixed now, blind.
+
+- **Percentages** (‹x›, ‹y›, ‹c›, interval ends, the context median and range) and the mean difference in turns print to one decimal, rounded half-even from the binary64 value. The words "more", "less", "fewer", "higher" and "lower" come from the test's tail or the estimate's sign before rounding, never from the rounded figure. A value that rounds to zero prints "0.0".
+- **Exact p** prints to four decimals, rounded half-even from the rational, or "< 0.0001". The table beside the sentence carries the exact fraction. No comparison with a level is read from the rounded figure.
+- **Counts** print as integers.
+- **Comparison.** Each side renders from its own leaves. The sentence is an exact compared string, and each substituted figure is one mutation case.
+
+### 2.5 Not mine
+
+The resolver's items 4 and 5 (pins, targets, the paired synthetic outputs, the captured-eligible-no-S fixture) are the integration owner's and the series owner's. RL-185 3.1's two pairs of worlds are the contrast that fixture must reach (RLD:20856-20861).
+
+---
+
+## 3. The ctl-01 controls print
+
+### 3.1 Closure, the phase boundaries and the whole
+
+**The code is the frozen one: `phase_table` and `qualify_ctl01`, unchanged (PH:71-124, PH:231-252).** RL-176 B.1 asked for "the same code on ctl-01's legs" (RLD:18004).
+
+- **No baseline enters closure.** It is on absolute joules: |Σ phases − whole| ≤ 0.01 × |whole|, the bound included, and every counted segment has a finite half-width and full coverage (PH:115-122). A relative check on baseline-subtracted values would divide by something near zero.
+- **The whole** is the trace integral over the episode's own [`start_ns`, `end_ns`] less its gate and hold segments (AT:722, PH:110-112). The print stretches nothing.
+- **Rails.** GPU, CPU and package (PH:18). Package is the sum of the adapter's three rails on shared support (PH:45-59); it is the "rail sum" of RL-186 2.3 and of RL-185 §4. The word `qualified` reads these three and not DC-in (PH:238-243). DC-in's closure prints beside them under the same predicate and enters no word.
+
+**The correction. The phase code is given a physical-call view of the leg, not the one logged envelope.**
+
+- **What is wrong today.** The runner returns one logged turn that takes its start and first-token stamps from the first visible call and its counts from all of them (CC:92-96). The frozen tiling calls everything in a turn after its first token "decode" (AT:572-579). On a CPU leg the burn lies between the two visible calls (CC:80-87), so it is inside that one turn, after its first token, and is counted as decode. "Other ungated time" would then hold no burn, and the qualifier's test, that CPU-rail energy of other time rises across 10, 30 and 90 s (PH:239-247), would compare three recoveries.
+- **Where the fault lies.** In RL-186. I accepted the single envelope in 2.3 and called the CPU script "the shape RL-176 B.1's qualifier needs" in 2.2 (RLD:21355), and did not check the two against each other.
+- **The rule.**
+
+> The controls print builds, for each leg, a view of its episode in which the one logged turn is replaced by one turn per **visible** physical call of `script-work.json`, with that row's start, first-token and end stamps, its delivered tokens as decode tokens and its context tokens as prefill tokens. Nothing else of the episode changes: not its start or end, its gate and hold intervals, its traces or its clock mappings. Hidden calls, the CPU interval, gaps and recovery are not turns. The frozen phase code runs on this view.
+>
+> Before use the view is checked against the logged envelope: the visible calls' delivered and context tokens sum to the envelope's counts; the first visible call's start and first-token stamps equal the envelope's; the steps are ordered, do not overlap, and lie inside the episode after the G0 gate; the recovery's end is at or before the episode's end. A leg that fails a check prints `not_evaluable` with the check's name and is passed to nothing. It is never repaired.
+
+- **Why this is the same code on the same kind of record.** In a series member each logged turn is one physical call. The view restores that for a leg whose runner summed its calls.
+- **What it gives.** Unlogged work lands in "other": the hidden call, the burn, the gaps and the recovery. That is what a reader of the log would see, and it is what the qualifier is meant to test.
+- **The envelope stays the logged record.** RL-186 2.3 stands. The print's `calls` and `envelope` rows are unchanged (CS's destinations table).
+- **"Other", divided.** The print also splits each leg's other time by the physical record: hidden prefill (hidden start to hidden first token), hidden decode (first token to end), CPU, gap, recovery, and the remainder. The parts tile "other" exactly in nanoseconds or the leg is `not_evaluable`. Their joules use the phase code's integrator on the same trace and mapping. This split is the "energy by phase" of RL-186 2.3 and gates nothing.
+- **Each boundary carries RL-176 B.2's 1.0 J timing edge** (PH:20). The print states it.
+
+### 3.2 The baseline for "energy above baseline"
+
+A ctl leg has no hold: its band is `q0`. It has a sampled recovery, with the model resident and the sampler running (CC:88-89).
+
+> A leg's baseline on a channel is the mean power over the last 40 s of its recovery interval, from the recovery's recorded end backwards. A value above baseline is the phase's absolute joules less the baseline times the phase's exact seconds. No second integration is made.
+
+- **Why the recovery's end.** RL-186 2.1 sets the recovery at five times the printed return time (RLD:21343). Its last stretch is the one interval of the leg that the design puts at rest.
+- **Why 40 s.** It is one of `lm-inst-01`'s three window lengths, so the baseline's own noise is a printed floor. The shortest recovery, 120 s, holds three such windows.
+- **A check that prints and gates nothing:** the mean of the 40 s before that window, less the baseline, in units of the 40 s floor.
+- **No baseline.** An incomplete recovery, or a channel with a gap over U1 in the window, gives that leg and channel a null baseline with the reason. Its above-baseline values are null. Its absolute phase table and its closure still print.
+
+### 3.3 Hidden joules per token, the slope and its range
+
+Per hidden leg and channel, all above baseline:
+
+| Quantity | Definition | Unit |
+|---|---|---|
+| Hidden-call energy | The hidden call, start to end | J |
+| Its prefill and decode parts | Cut at the hidden call's first-token stamp | J |
+| **Joules per delivered hidden token** | The decode part over the tokens delivered. Null with the reason at zero tokens or no first-token stamp | J/token |
+| **Dose-response slope** | Least squares with an intercept of hidden-call energy on delivered hidden tokens, over the contributing hidden legs. The intercept prints: it is the unlogged prefill | J/token; J |
+| **Its range** | The smallest and largest of the slopes refitted with one contributing leg left out | J/token |
+
+- **Why the slope is on the whole call.** Every hidden call renders the prompt afresh, so its prefill is a cost that does not depend on the dose and belongs in the intercept. On DC-in the pulse's lagged tail falls outside the stamps and the visible call follows at once; that loss is also near constant across doses. The slope is the robust number. DC-in's joules per token are marked "tail cut", as RL-181 2.4 marks the turn energy (RLD:19419).
+- **The range is a description.** No interval, no test, no word, and no comparison with the floor is drawn from it.
+- **Minimum.** At least four contributing legs covering all three delivered dose levels. Otherwise the slope and range are null, reason `insufficient_legs`, and the per-leg values still print.
+
+### 3.4 Which legs contribute
+
+**Every one of the twelve positions prints a row. No leg is replaced in a print, and a missing input nulls a value and never removes a leg.**
+
+| Case | Per-leg values | Slope and range | Qualifier |
+|---|---|---|---|
+| Admitted leg | Print | Hidden legs enter | Passed |
+| Short delivery: a call under its cap (CC:70) | Print, labelled `delivery: short`, with requested and delivered counts. Joules per token use the delivered count | **Not in the fit.** Printed beside it as a point | Passed. Closure is about energy, not counts |
+| CPU interval incomplete | Print | Not applicable | Passed with no burn dose. The dose set is then incomplete and the word is `no` (PH:244-247) |
+| G0 not released; script not dispatched | Row with the disposition, no values | Out | Not passed. Fewer than twelve closing legs is `no` (PH:248-249) |
+| `script-work.json` absent or off its custody hash; a view check failed | `not_evaluable`, no physical quantity | Out | Not passed |
+| A rail trace or clock mapping missing | That channel null with the frozen reason (PH:76-77); other channels print | Out for that channel | That leg does not close |
+| DC-in absent or gapped over U1 | DC-in null for the leg | Out for DC-in | Unaffected |
+| Baseline null (3.2) | Above-baseline values null; absolute values print | Out for that channel | Unaffected |
+| Instrument floor null for a window | Floor units null with the instrument's reason | Unaffected | Unaffected |
+
+- **Why a short hidden leg is out of the fit.** The kit already calls it unadmitted (`exact_script`). An early stop is a different event from a scripted dose, and one rule, "unadmitted enters no estimate", is simpler than a second one for partial doses.
+- **`not_run`** is printed only when no ctl leg was loaded (PH:233-234). Anything loaded and incomplete is `no`, with `all_legs_close` and `cpu_burn_order` beside it.
+- **Censored instrument values** change the freezing rules and not the print. They are in 3.7.
+
+### 3.5 The instrument floors and units
+
+**Source.** `lm-inst-01`'s `hold.json`: the SD of window means at 10, 40 and 128 s, per leg and channel (IN:45).
+
+> **Pooled floor.** For channel c and window length w, s(c, w) is the root of the mean of the per-leg variances, weighted by each leg's retained windows less one, over the stage-1 qualified legs whose print is not null. Unit W.
+>
+> **The floor for a value** integrated over T seconds on channel c is s(c, w\*) × T joules, where w\* is the longest of 10, 40 and 128 s that does not exceed T. Under 10 s, w\* is 10 and the row is marked `under_shortest_window`. One SD; the reader applies a multiple.
+>
+> **Floor units** are the value over that floor. The print keeps the value in joules, the floor in joules, w\*, T, and the instrument manifest's hash.
+
+- **Why every qualified leg and not the 2,000-token ones.** The hold comes before the turn, so it does not depend on the prompt. Using all legs avoids a selection and gives the most windows.
+- **Why the longest window not over T.** If the noise averages down, a shorter window overstates the floor, which is the safe direction. Under 10 s it may understate, hence the mark.
+- **The dose-response slope gets no floor units.** It is a rate. Its range is its description.
+
+| Printed thing | Unit |
+|---|---|
+| Energies, baselines times seconds, floors, closure error | J |
+| Power, baseline, pooled SD | W |
+| Durations, doses in CPU seconds, gaps, recovery | s, from integer nanoseconds |
+| Tokens, calls, context counts | integers |
+| Joules per token, slope, range | J/token |
+| Floor units, closure's relative error | dimensionless |
+
+**The binding.** The read is restricted, so `lm-ctl-01` reads `hold.json` where it lies, in custody. My freezing line names the sha256 of `hold.json` and of `edges.json` as I read them. A sha256 is a kind the public side may carry (RLD:18862). The `lm-ctl-01` manifest pins both hashes and `lm-inst-01`'s final manifest hash, and stage 2 refuses on a mismatch before any ctl energy is opened.
+
+### 3.6 The CPU rail
+
+`lm-inst-01` reads three channels: GPU rail, rail sum, DC-in (SC:503, the closed `channels` list; IN:30-34). It prints no CPU-rail floor.
+
+**A CPU-rail value prints in joules. Its floor units are null, reason `no_matched_floor`. No other channel's floor is put in its place.**
+
+- **No fourth instrument channel.** It would reopen the v2 schema and RL-181 2.1 for a number that changes no decision. The qualifier's CPU test is an ordering and needs no floor.
+- **The burn is still expressed in floor units** where a monitor would meet it: on the rail sum, which contains the CPU rail, and on DC-in.
+
+### 3.7 What waits for the `lm-inst-01` read, and the rules it is applied through
+
+**Fixed now:** everything in 3.1 to 3.6, the print's code, its schema and its hand vectors. The doses, recovery and gap are kit data and the floors are inputs, so the code freezes without them.
+
+**Waits for the read, and nothing else does:**
+
+| Value | Rule, fixed now |
+|---|---|
+| The three hidden doses | 128, 256, 512 unless 128 is under the floor on both the GPU rail and DC-in (RLD:21342). **"Under the floor" on a channel** means 128 is less than the median, over qualified legs with a value, of the 10 s floor in tokens (`gain.json`, IN:53; RLD:19426). **If raised,** the doses are 2ᵏ × (128, 256, 512) for the smallest k in {1, 2} at which the lowest dose is not under on at least one of the two channels. If k = 2 fails, no kit is issued and it returns to me |
+| Recovery seconds | Five times the return time, within [120, 600] (RLD:21343). **The return time** is the largest over qualified legs and the three channels. A value censored as "under" a bound counts as the bound. A leg that never returns in its stream sets 600 |
+| Split gap | 10 s if at least five times the decode-end lag, else five times the lag rounded up (RLD:21357). **The lag** is the largest over qualified legs. **If any is "over 1 s",** the gap is the larger of 10 s and the return time above rounded up, and at most 60 s |
+| Prefill size | 2,000 if the stage-1 roster holds qualified legs at 2,000; else the nearest size it does hold. The candidate's roster has 256, 2,000 and 19,458 (IN:57) |
+| The floor numbers s(c, w) | From the read; hence every floor unit |
+| The hashes of `hold.json` and `edges.json` | In my freezing line |
+
+- **Why the largest and not a typical leg.** The cost is bounded: recovery cannot exceed the draft's 600 s and the gap cannot exceed 60 s. A longer rest costs minutes; a short one spoils the baseline of 3.2.
+- **RL-186 row 6 is read with this table.** My freezing line quotes the read's figures, the rule and its result, as that row requires.
+
+### 3.8 Hand vectors the tests must reproduce
+
+Written by a seat of another family than the builder's, as RL-181 row 6 has it for qualification.
+
+1. One CPU leg in both forms: on the envelope the burn is in decode; on the view it is in other. This is the regression for 3.1.
+2. Closure at exactly 1.00 % passes and just above fails.
+3. A hidden leg: baseline, the three energies, joules per token.
+4. Six hidden legs: slope, intercept and leave-one-out range, by hand.
+5. A short hidden leg: printed, labelled, absent from the fit.
+6. An incomplete recovery: null baseline, absolute table and closure still present.
+7. w\* at T = 9.9, 10, 39.9, 40, 128 and 500 s; the pooled SD from unequal window counts.
+8. A CPU-rail value with `no_matched_floor`.
+9. Burns that close but are out of order: `no` with `cpu_burn_order` false.
+
+### 3.9 Not ruled here
+
+The public allowlist, the private file names, the failure status and the disclosure sentence are RL-186 2.4's, at the manifest's cold pass and after the last span (RLD:21372-21381). The implementation base, kit issue and ledger authority are the lead's.
+
+---
+
+## Amends
+
+- **RL-186 2.3** (RLD:21364-21366): stands. Read with 3.1: the logged envelope is the record; the phase code and the qualifier run on the physical-call view.
+- **RL-186 2.2** (RLD:21355): "It is the shape RL-176 B.1's qualifier needs" is true only under 3.1's view.
+- **RL-186 2.1 and row 6** (RLD:21339-21344): "under the floor", the raised doses, the return time, the lag and their censored cases are defined by 3.7.
+- **RL-176 B.1** (RLD:18004): "the same code on ctl-01's legs" reads "the same code on the physical-call view of ctl-01's legs".
+- **R2 §6.18 and §11** (R2:122, R2:197-207): reconciled by 2.3. Neither text changes.
+- **R2 §8** (R2:156-161): the families gain the classes of 2.1 for the leaves RL-176 to RL-185 added.
+- **RL-185 2.1, E18** (RLD:20803-20822): the figures' formats are 2.4's.
+- **Stand unchanged:** RL-181, RL-183 and RL-185 in every row; RL-180's register; the ten frozen sources and the pin `b2e01464d`; every statistic, level, population and outcome word of K, S and Q; the count of 54.
+
+**Blind status.** Blind. No v4 outcome exists, no series member exists and W1 is not signed. No interim, qualification, F2, stability, ctl or transfer energy has been read under any look, and nothing sealed, restricted or measured was opened for this ruling. Section 1 passes a validator and three draft manifests. Section 2 fixes comparison rules for two programs before either has run on data. Section 3 fixes a print's arithmetic before any ctl leg exists, and 3.7 fixes how a read will be applied before the read. No estimator, threshold, level or inclusion rule of the series changes.
+
+**For Ed, plainly.** "Three things, none of which touches the MacBook Pro before Saturday. First, the tool that checks our results-release paperwork passed my final review after eleven audit rounds and can merge; I asked for one small tidy-up later. Second, the program that compares our two independent analyses now has a written tolerance for every number it will see. One number, a baseline classifier score, comes from a shared library, so it is checked for being present and for covering the right episodes, and the paper will say it was computed once. Third, the controls experiment: I found a mistake in my own earlier ruling. The way the runner logs a control run would have filed the deliberate CPU work under 'generating text', so our sanity check would have checked nothing. The fix is in how the analysis reads the record, not in the runner, and costs no machine time."
+
+---
+
+## Register
+
+Rows for the lead to commit to `RULES.json`. Owner is `research_lead` for rows 1 and 4 to 12; the lead owns rows 2 and 3.
+
+| # | Clause | Class | Protects | Scope | Ends | Test |
+|---|---|---|---|---|---|---|
+| 1 | PR #828 is admitted at `1d7509cba`. Before any final manifest pins `manifest_dispatch.py`: no decoder text on stderr, a `RESTRICTED` path component refuses before open, and the two silent test exits become visible skips (1.4) | VALIDITY (blinding) | No byte of a mistakenly named file leaves on a refusal | The looks dispatcher | The follow-up's merge | A non-UTF-8 file and a repeated-key file give the fixed line; a `RESTRICTED/x.json` argument exits 2 with zero opens |
+| 2 | The dispatcher is the only `validate` entry point a gate, launcher or preflight calls; a new look id enters the route table in the PR that brings its manifest (1.3, 1.5) | VALIDITY (blinding) | The closed table is the one door | The looks package; `scripts/` | The paper's data release | A census of callers shows none of the standalone command; each new row has a refusal test under every other kind |
+| 3 | The PR that drafts a non-counted kit adds its id and sha256 to `filler-kit-registry.json` (1.5) | VALIDITY | RL-180's restored row for kits minted after #828 | Every filler kit | End of the campaign | A census of kit files with a filler queue class against the registry |
+| 4 | A numeric leaf is compared under its class of 2.1; a leaf in no class refuses as `unbound_numeric`; no decision is read from a float (2.1, 2.2) | VALIDITY (prereg) | "No new output may hide in a print-only exemption" | The C1 comparator and its bars | The v4 release | One mutation per leaf beyond its bar; one unclassed leaf refuses |
+| 5 | An exact rational is compared as the engine's float against the recompute's `[num, den]`, correctly rounded, at zero tolerance; a duration against integer nanoseconds (2.1 N1, N6) | VALIDITY (prereg) | R2 §8's exact θ and p | S, Q, K and every nominal comparison | The v4 release | Change the rational and keep its float: hold |
+| 6 | The closure remainder is checked on each side against that side's own whole and phase sum; across sides only the base leaves and `closes` are compared (2.2) | VALIDITY | A tiny difference is not compared at a bar made for large terms | `aligned_power` phase rows | The v4 release | A remainder inconsistent with its own row refuses |
+| 7 | The metadata AUC is one named exempt leaf: closed shape and exact fold populations on the engine side, the marker and no number on the recompute side; a paper sentence quoting it says "one implementation" (2.3) | VALIDITY (prereg) | R2 §11 without a sham recomputation | The time-baseline print; the paper | The paper's data release | 2.3's five mutations |
+| 8 | Sentence figures: one decimal for percentages, four for p, direction words from the unrounded value, compared as exact strings (2.4) | VALIDITY (prereg) | No sentence is formatted after release | Q's and S's sentences | The v4 release | RL-185 2.1's four worlds give the exact strings |
+| 9 | The controls print runs the frozen phase code on the physical-call view, checked against the logged envelope; a leg failing a check is `not_evaluable` and never repaired (3.1) | VALIDITY | The qualifier tests where unlogged CPU work lands | `lm-ctl-01`; the series release's `load_ctl01` | The paper's data release | 3.8 vector 1 |
+| 10 | Closure is on absolute joules over the episode less gate and hold; the baseline is the last 40 s of the leg's recovery and enters only the above-baseline prints (3.1, 3.2) | VALIDITY | One closure rule for series members and controls | `lm-ctl-01` | The paper's data release | 3.8 vectors 2, 3 and 6 |
+| 11 | Slope by least squares on delivered tokens over admitted hidden legs, at least four over three levels; range by leave-one-out; every position prints; a short leg is printed and is not in the fit (3.3, 3.4) | VALIDITY | The dose response is defined before any control leg exists | `lm-ctl-01` | The paper's data release | 3.8 vectors 4 and 5 |
+| 12 | Floors are the pooled hold SD times the value's duration at w\*, one SD; the CPU rail has `no_matched_floor`; doses, recovery, gap and prefill are set through 3.7's rules, and my freezing line carries the hashes of `hold.json` and `edges.json` (3.5 to 3.7). Read with RL-186 row 6 | VALIDITY (prereg) | The read cannot choose the doses or the floor | `lm-ctl-01`, `cl-ctl-01` | The kit's issue; the paper's data release for the floors | 3.8 vectors 7 and 8; the freezing line quotes figures, rule and result |
+
+**Rows closed or changed by this ruling.** Gate-ledger row 4 for PR #828 is met. RL-186 rows 6 and 8 are read with rows 9 to 12. RL-181 row 8 and RL-183 row 14 are read with row 1's third clause. The C1 resolver's items 1 and 2 and the figure format of item 3 are answered; its items 4 and 5 are the owners'. The ctl-01 resolver's item 1 and the floor, unit and CPU parts of item 2 are answered; the rest of items 2 to 4 stay with RL-186 2.4 and the lead.
+
+**What comes back to me.** A numeric leaf that refuses as `unbound_numeric`, by name. A recompute owner who cannot emit `[num, den]`. A ctl leg whose view fails a check on a native run, with the check's name and no value. A runner whose episode ends before its recovery does. The `lm-inst-01` output, for the freezing line. A read at which doubling twice leaves the lowest dose under the floor. The four final manifests already owed. Nothing else in this ruling returns.
