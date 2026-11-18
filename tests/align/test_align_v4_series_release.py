@@ -1,6 +1,7 @@
 """Synthetic tests for the C1 caller and its stored-bundle inputs."""
 
 import ast
+import builtins
 import bz2
 from contextlib import redirect_stderr
 import csv
@@ -452,6 +453,155 @@ def authored_receipt(root, window="C1"):
 
 
 class SeriesReleaseTests(unittest.TestCase):
+    def test_manifest_mirror_target_matches_its_pinned_git_blob(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp).resolve()
+            mirror = root / "synthetic-input-repo"
+            mirror.mkdir()
+            init_git_fixture(mirror, "-q")
+            target = mirror / "calibration-reference.json"
+            original = b'{"synthetic_factor":1}\n'
+            target.write_bytes(original)
+            commit = commit_fixture(mirror, [target.name])
+            ledger = root / "synthetic-calibration.jsonl"
+            ledger.write_bytes(original)
+            finalize = harvest_offload.finalized_manifest
+
+            def with_mirror(window):
+                if window.name != "C8":
+                    return finalize(window)
+                (window / target.name).symlink_to(target)
+                (window / "reference-ledger.jsonl").symlink_to(ledger)
+                return finalize(window, mirror={"root": str(mirror), "identity": {"commit": commit}}, inputs=(ledger,))
+
+            with patch.object(harvest_offload, "finalized_manifest", with_mirror):
+                stored_series(root)
+            store = root / "series/restored/C8"
+            raw = (store / "finalized_manifest.json").read_bytes()
+            record = json.loads((root / "records/C8/record.json").read_bytes())
+            self.assertEqual(packet.digest(raw), record["finalized_manifest"])
+            closure = json.loads(raw)["closure"]
+            self.assertEqual(closure["mirror"]["identity"], {"commit": commit})
+            self.assertEqual(closure["links"][target.name]["target"], str(target))
+            control = root / "control.json"
+            result = invoke(root, control)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(json.loads(control.read_bytes())[seal.RL176]["S"]["words"], ["S SIGNATURE"])
+            archive = target.with_suffix(".json.gz")
+            alias = store / "reference-ledger.jsonl"
+            for mutation in ("absent", "compressed-only", "unreadable", "changed", "replaced-ledger-link"):
+                with self.subTest(mutation=mutation):
+                    try:
+                        if mutation == "absent":
+                            target.unlink()
+                        elif mutation == "compressed-only":
+                            archive.write_bytes(gzip.compress(original))
+                            target.unlink()
+                        elif mutation == "unreadable":
+                            target.chmod(0)
+                        elif mutation == "changed":
+                            target.write_bytes(original.replace(b"1", b"2"))
+                        else:
+                            alias.unlink()
+                            alias.write_bytes(original)
+                        output = root / f"{mutation}.json"
+                        result = invoke(root, output)
+                        self.assertEqual(result.returncode, 1, result.stderr)
+                        self.assertFalse(output.exists())
+                    finally:
+                        if target.exists():
+                            target.chmod(0o600)
+                        target.write_bytes(original)
+                        if archive.exists():
+                            archive.unlink()
+                        if mutation == "replaced-ledger-link":
+                            alias.unlink()
+                            alias.symlink_to(ledger)
+
+    def test_release_verifier_never_opens_protected_meter_or_dc(self):
+        from joulewise.align.apple.km003c import REQUIREMENT
+        from scripts import align_v4_series_release as caller
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp).resolve()
+            meter = Path(REQUIREMENT["custody_directory"]) / "stream-001.jsonl"
+            window = "C8"
+            ordinal = series.selected(series.candidate(), window)["sabotage_ordinals"][series.PAIRS[0]]
+            instructed = Path("runs") / f"synthetic-{window}-{ordinal:02d}" / caller.DC_FILE
+            finalize = harvest_offload.finalized_manifest
+
+            def with_markers(store):
+                if store.name == window:
+                    for name in (meter, instructed):
+                        path = store / name
+                        path.parent.mkdir(parents=True, exist_ok=True)
+                        path.write_bytes(b'{"synthetic_canary":true}\n')
+                return finalize(store)
+
+            with patch.object(harvest_offload, "finalized_manifest", with_markers):
+                stored_series(root, spoof=True)
+
+            native = root / "series/restored" / window / meter.parent
+            blocked = root / "series/restored" / window / instructed
+            verification_opens, provider_opens = [], []
+            directories = {}
+            verifying = False
+            loaded = False
+            real_open, real_close, real_builtin_open = os.open, os.close, builtins.open
+            real_verify, real_load = caller.RestoredFiles.verify_listed_inputs, caller.ReleasedInputs.load_members
+
+            def observe(path):
+                if path == blocked or path == native or path.is_relative_to(native):
+                    self.fail(f"opened a protected input: {path.name}")
+                if path.is_relative_to(root) and path.as_posix().endswith("/" + caller.DC_FILE):
+                    (verification_opens if verifying else provider_opens).append(path)
+                    self.assertTrue(loaded, "provider opened DC before member loading")
+
+            def open_at(path, flags, mode=0o777, *, dir_fd=None):
+                target = Path(os.fsdecode(path))
+                if dir_fd in directories:
+                    target = directories[dir_fd] / target
+                observe(target)
+                fd = real_open(path, flags, mode, dir_fd=dir_fd)
+                if flags & os.O_DIRECTORY:
+                    directories[fd] = target
+                return fd
+
+            def close(fd):
+                directories.pop(fd, None)
+                real_close(fd)
+
+            def builtin_open(path, *args, **kwargs):
+                if isinstance(path, (str, bytes, os.PathLike)):
+                    observe(Path(os.fsdecode(path)))
+                return real_builtin_open(path, *args, **kwargs)
+
+            def verify(files):
+                nonlocal verifying
+                verifying = True
+                try:
+                    return real_verify(files)
+                finally:
+                    verifying = False
+
+            def load(inputs):
+                nonlocal loaded
+                result = real_load(inputs)
+                loaded = True
+                return result
+
+            output = root / "report.json"
+            with patch.object(os, "open", open_at), patch.object(os, "close", close), \
+                    patch.object(builtins, "open", builtin_open), \
+                    patch.object(caller.RestoredFiles, "verify_listed_inputs", verify), \
+                    patch.object(caller.ReleasedInputs, "load_members", load):
+                self.assertEqual(caller.main(["--measurement-root", str(root), "--output", str(output)]), 0)
+                with self.assertRaisesRegex(ValueError, "protected"):
+                    caller.named_bytes(root, blocked.relative_to(root).as_posix())
+            self.assertEqual(verification_opens, [])
+            self.assertEqual(len(provider_opens), 1)
+            self.assertTrue(output.is_file())
+
     def test_every_nested_manifest_file_binding_is_verified(self):
         from scripts import align_v4_series_release as caller
 
