@@ -529,10 +529,23 @@ class Conversion:
         if (data != self.plan.journal(rows) or not isinstance(rows, list) or len(rows) > len(self.stages)
                 or self.manifest.exists() and len(rows) != len(self.stages)):
             raise ValueError("journal does not match the conversion plan")
-        for item, row in zip(self.plan.source.inputs, rows):
+        canonical = self.plan.canonical
+        for item, stage, row in zip(self.plan.source.inputs, self.stages, rows):
             spans = self.plan.span_list(item.name)
             if not isinstance(row, list) or len(row) != len(spans) + 1 or any(not is_digest(d) for d in row):
                 raise ValueError(f"malformed journal row: {item.name}")
+            expected = item.checksum
+            if item.size > canonical.HASH_CHUNK_BYTES:
+                # Larger files use the canonical chunk-composite digest. The pinned
+                # whole-file LFS digest authenticates the retained bytes, if present.
+                attrs = existing(stage)
+                if attrs is None or attrs.st_size != item.size:
+                    raise ValueError(f"cannot authenticate committed input digest without a complete source: {item.name}")
+                if range_sha(stage, 0, item.size) != item.checksum:
+                    raise ValueError(f"retained source sha256 mismatch: {item.name}")
+                expected = canonical.sha256(stage)
+            if row[0] != expected:
+                raise ValueError(f"committed input digest mismatch: {item.name}")
             self.verify_spans(spans, row[1:])
         return rows
 

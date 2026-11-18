@@ -11,6 +11,7 @@ import tempfile
 import unittest
 from collections import defaultdict
 from contextlib import redirect_stderr
+from functools import partial
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -89,6 +90,7 @@ class FixtureCanonical:
     FORMAT = "joulewise-qwen4-exp-canonical-v2"
     PINS = {"mlx": "fixture"}
     SHARD_BYTES = 160
+    HASH_CHUNK_BYTES = 256 * 2**20
     SHARD_RE = re.compile(r"\.ngram_embedding\.shard_(\d+)\.weight$")
     EXPERT_RE = re.compile(r"^(?P<head>.+)\.mlp\.experts\.(?P<e>\d+)\.(?P<proj>gate|up|down)_proj\.weight$")
 
@@ -101,9 +103,9 @@ class FixtureCanonical:
             return (2, 2 if key.endswith("gate_proj.weight") else 1, 64)
         return shape
 
-    @staticmethod
-    def digest_scheme():
-        return {"algorithm": "sha256"}
+    def digest_scheme(self):
+        return {"algorithm": "sha256", "chunk_bytes": self.HASH_CHUNK_BYTES,
+                "large_files": "sha256 of the concatenated sha256 digests of consecutive chunk_bytes ranges"}
 
     @staticmethod
     def tensor_bytes(shape, dtype):
@@ -117,13 +119,16 @@ class FixtureCanonical:
     def expected_parameters(rules, config):
         return WEIGHTS, SimpleNamespace(tie_word_embeddings=False, ple_layer_ids=[1])
 
-    @staticmethod
-    def sha256(path):
-        return digest(path.read_bytes())
+    def sha256(self, path):
+        raw = path.read_bytes()
+        chunk_bytes = self.HASH_CHUNK_BYTES
+        if len(raw) <= chunk_bytes:
+            return digest(raw)
+        return digest(b"".join(hashlib.sha256(raw[start:start + chunk_bytes]).digest()
+                               for start in range(0, len(raw), chunk_bytes)))
 
-    @classmethod
-    def hash_files(cls, paths, nofollow=False):
-        return {p: cls.sha256(p) for p in paths}
+    def hash_files(self, paths, nofollow=False):
+        return {p: self.sha256(p) for p in paths}
 
 
 class FixtureRules:
@@ -185,11 +190,12 @@ class StreamTests(unittest.TestCase):
         source[1]["language_model.lm_head.weight"] = ((2, 2), "BF16", bytes(range(8)))
         source.append({"mtp.extra": ((2,), "BF16", b"\x01\x02\x03\x04")})
         self.source = FixtureSource(checkpoint(self.base / "hf", {}, source), self.root)
+        self.canonical = FixtureCanonical()
         self.plan = self.make_plan()
 
     def make_plan(self):
-        return stream.Plan(self.source, FixtureCanonical(), FixtureRules(), MODULE,
-                           "maxfit", FixtureCanonical.SHARD_BYTES)
+        return stream.Plan(self.source, self.canonical, FixtureRules(), MODULE,
+                           "maxfit", self.canonical.SHARD_BYTES)
 
     def convert(self):
         return stream._run_conversion(self.root, self.plan, reserve=0, encode=fixture_encode)
@@ -318,36 +324,136 @@ class StreamTests(unittest.TestCase):
         self.convert()
         self.assertEqual(self.source.downloads, [(item.name, 0) for item in self.source.inputs])
 
-    def test_resume_reuses_committed_shard_and_partial_download(self):
+    def standalone_convert(self, root, source):
+        worker = partial(stream._run_conversion, reserve=0, encode=fixture_encode)
+        air = subprocess.CompletedProcess(stream.HARDWARE_MODEL_ARGV, 0, stdout=b"Mac16,13\n")
+        with (patch.object(stream.sys, "platform", "darwin"),
+              patch.object(stream.subprocess, "run", return_value=air),
+              patch.object(stream, "load_port", return_value=(self.canonical, FixtureRules(), MODULE)),
+              patch.object(stream, "HubSource", return_value=source),
+              patch.object(stream, "_run_conversion", worker)):
+            return stream.main(self.cli_args(root, "off-mbp", "--allow-official-download"))
+
+    def assert_standalone_refused(self, reason):
+        stderr = io.StringIO()
+        with redirect_stderr(stderr), self.assertRaises(SystemExit) as refused:
+            self.standalone_convert(self.root, self.source)
+        self.assertEqual(refused.exception.code, 1)
+        self.assertIn(reason, stderr.getvalue())
+
+    def assert_resume_refused_without_side_effects(self, reason):
+        downloads = list(self.source.downloads)
+        before = {p.relative_to(self.root): p.read_bytes() for p in self.root.rglob("*") if p.is_file()}
+        with patch.object(Path, "unlink", autospec=True, side_effect=Path.unlink) as unlink:
+            self.assert_standalone_refused(reason)
+        unlink.assert_not_called()
+        self.assertEqual(self.source.downloads, downloads)
+        self.assertFalse((self.root / "artifact/manifest.json").exists())
+        self.assertEqual(before, {p.relative_to(self.root): p.read_bytes() for p in self.root.rglob("*") if p.is_file()})
+
+    def assert_manifest_matches_uninterrupted(self):
+        clean_root = self.base / "clean"
+        clean_source = FixtureSource(self.source.checkpoint, clean_root)
+        self.assertEqual(self.standalone_convert(clean_root, clean_source), 0)
+        raw = (self.root / "artifact/manifest.json").read_bytes()
+        self.assertEqual(raw, (clean_root / "artifact/manifest.json").read_bytes())
+        self.assertEqual(json.loads(raw)["inputs"], {
+            name: self.canonical.sha256(self.source.checkpoint / name)
+            for name in ("config.json", *(item.name for item in self.source.inputs))
+        })
+
+    def interrupt_during_second_transfer(self):
         second = self.source.inputs[1].name
         self.source.interrupt = second
-        with self.assertRaisesRegex(ValueError, "short download"):
-            self.convert()
-        staged, = self.root.glob("source-*.part")
-        self.assertGreater(staged.stat().st_size, 0)
-        offset = staged.stat().st_size
-        self.assertFalse((self.root / "artifact/manifest.json").exists())
+        self.assert_standalone_refused("short download")
         self.source.interrupt = None
-        first_result = self.convert()
-        self.assertEqual(self.source.downloads, [(self.source.inputs[0].name, 0), (second, 0),
-                                                (second, offset), (self.source.inputs[2].name, 0)])
-        self.assertEqual(self.convert(), first_result)
-        self.assertEqual(len(self.source.downloads), 4)
+        staged, = self.root.glob("source-*.part")
+        self.assertEqual(staged.name, "source-001.part")
+        self.assertGreater(staged.stat().st_size, 0)
+        self.assertFalse((self.root / "artifact/manifest.json").exists())
+        return staged.stat().st_size
 
-    def test_resume_after_journal_commit_before_source_unlink(self):
+    def test_resume_reuses_committed_shard_and_partial_download(self):
+        first, second, third = self.source.inputs
+        self.canonical.HASH_CHUNK_BYTES = first.size
+        offset = self.interrupt_during_second_transfer()
+        journal = json.loads((self.root / "journal.json").read_bytes())
+        self.assertEqual(journal.keys(), {"schema", "plan_sha256", "committed"})
+        self.assertEqual(journal["schema"], 1)
+        row, = journal["committed"]
+        self.assertEqual(row[0], first.checksum)
+        self.assertEqual(self.standalone_convert(self.root, self.source), 0)
+        self.assertEqual(self.source.downloads, [(first.name, 0), (second.name, 0),
+                                                (second.name, offset), (third.name, 0)])
+        self.assert_manifest_matches_uninterrupted()
+
+    def test_resume_refuses_one_bit_tamper_of_committed_input_digest(self):
+        self.interrupt_during_second_transfer()
+        path = self.root / "journal.json"
+        journal = json.loads(path.read_bytes())
+        checksum = journal["committed"][0][0]
+        journal["committed"][0][0] = f"{int(checksum[0], 16) ^ 1:x}" + checksum[1:]
+        path.write_bytes(stream.json_bytes(journal))
+        self.assert_resume_refused_without_side_effects("committed input digest mismatch")
+
+    def interrupt_after_journal_commit(self):
         original = Path.unlink
 
         def interrupt(path, *args, **kwargs):
             if path.name == "source-000.part":
-                raise InterruptedError("synthetic interruption")
+                raise InterruptedError("synthetic interruption before source unlink")
             return original(path, *args, **kwargs)
 
-        with patch.object(Path, "unlink", interrupt), self.assertRaises(InterruptedError):
-            self.convert()
-        self.assertTrue((self.root / "source-000.part").exists())
-        self.convert()
+        with patch.object(Path, "unlink", interrupt):
+            self.assert_standalone_refused("synthetic interruption before source unlink")
+        staged, = self.root.glob("source-*.part")
+        self.assertEqual(staged.name, "source-000.part")
+        self.assertEqual(staged.read_bytes(), (self.source.checkpoint / self.source.inputs[0].name).read_bytes())
+        return staged
+
+    def test_resume_after_journal_commit_before_source_unlink(self):
+        self.canonical.HASH_CHUNK_BYTES = self.source.inputs[0].size - 1
+        self.interrupt_after_journal_commit()
+        path = self.root / "journal.json"
+        original = path.read_bytes()
+        journal = json.loads(original)
+        row, = journal["committed"]
+        first = self.source.inputs[0]
+        self.assertNotEqual(row[0], first.checksum)
+        self.assertEqual(row[0], self.canonical.sha256(self.source.checkpoint / first.name))
+        row[0] = first.checksum
+        path.write_bytes(stream.json_bytes(journal))
+        self.assert_resume_refused_without_side_effects("committed input digest mismatch")
+        path.write_bytes(original)
+        self.assertEqual(self.standalone_convert(self.root, self.source), 0)
         self.assertEqual(self.source.downloads, [(item.name, 0) for item in self.source.inputs])
+        self.assertEqual([count for count, _ in self.source.observations], [0, 0, 0])
         self.assertFalse(list(self.root.glob("source-*.part")))
+        self.assert_manifest_matches_uninterrupted()
+
+    def test_resume_refuses_chunked_digest_without_retained_source(self):
+        self.canonical.HASH_CHUNK_BYTES = self.source.inputs[0].size - 1
+        self.interrupt_during_second_transfer()
+        self.assert_resume_refused_without_side_effects("cannot authenticate committed input digest without a complete source")
+
+    def test_resume_refuses_chunked_digest_from_changed_retained_source(self):
+        self.canonical.HASH_CHUNK_BYTES = self.source.inputs[0].size - 1
+        staged = self.interrupt_after_journal_commit()
+        raw = staged.read_bytes()
+        staged.write_bytes(raw[:-1] + bytes([raw[-1] ^ 1]))
+        path = self.root / "journal.json"
+        journal = json.loads(path.read_bytes())
+        journal["committed"][0][0] = self.canonical.sha256(staged)
+        path.write_bytes(stream.json_bytes(journal))
+        self.assert_resume_refused_without_side_effects("retained source sha256 mismatch")
+
+    def test_completed_resume_reuses_verified_payload_and_manifest(self):
+        self.assertEqual(self.standalone_convert(self.root, self.source), 0)
+        path = self.root / "artifact/manifest.json"
+        before = path.read_bytes()
+        self.assertEqual(self.standalone_convert(self.root, self.source), 0)
+        self.assertEqual(path.read_bytes(), before)
+        self.assertEqual(self.source.downloads, [(item.name, 0) for item in self.source.inputs])
 
     def test_output_hash_failure_retains_source_and_refuses_resume_on_committed_corruption(self):
         original = stream.range_sha
