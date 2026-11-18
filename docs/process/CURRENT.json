@@ -28,12 +28,6 @@
     },
     {
       "expires_epoch_s": null,
-      "item": 421,
-      "owner": "magistrate",
-      "status": "ISSUED"
-    },
-    {
-      "expires_epoch_s": null,
       "item": 418,
       "owner": "magistrate",
       "status": "ISSUED"

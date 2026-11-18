@@ -1044,6 +1044,23 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 
 <!-- RUN_STATE TYPED ITEMS: newest first. Add with scripts/run_state_add.py; never edit by hand. -->
 
+426. **Magistrate 68797558 (headless, Opus 5.5), 2026-11-18 00:05-00:06 PST (`date`): STANDING-F0 run 11 (item 346; pre-launch item 421) CHECK: RECEIPT OK, verdict pass, every judged line equal to run 10; restore lines pass; closes 421; next: dev-05-s01 (item 393) at 00:21:22**
+
+```item
+{"expires_epoch_s": null, "issued_epoch_s": 1794989391, "number": 426, "owner": "magistrate", "schema": "joulewise.run_state_item.v1", "sets": [{"at_epoch_s": 1794989391, "item": 421, "status": "CLOSED"}], "status": "CLOSED", "supersedes": []}
+```
+
+- F0 standing notice: run 11, trigger (b) NOT_READY `dev-05-s01-not-before-wed-0000-item418` (item 421). t0 22:02:34 PST Tue (1794981754); receipt 00:01:22 PST Wed (1794988882; span 7,128 s). The align-r0 label and fence were gone; this activation spawned 00:04:17, after the receipt, so no agent was alive during the run.
+- Receipt rc 0; parts `{"C": true}`, `parts_requested` "C", fresh soak; every step rc 0; one `close-volumes`; every feed proven stopped and hash-checked: RECEIPT OK. Soak rc 0, sha256 `efe9eee59c04306dd9c7774cc531ae857b8c1d4c59fb5a6c4d6ceb7de714d883`. Part-C rc 0.
+- smoke_part_c.json (evaluation only): verdict `pass`; disposition as printed. Lines, with run 10 (item 416) beside: `d_bank_mechanics` pass (pass), `d_bank_start_state` pass (pass; 4 samples, level 0, Nominal, fresh), `step_d` pass (pass; g0_wait 202.96 s, slope -0.180 C/min, 0.359 C over reference), `x_g` pass (pass; no G1 timeout, no x7). `admitted_turns` not judged: "not_applicable: episode returned at turn 1" (own stop, value 2 of 3). gate_time 200.38 s of limit 389.14 s; h_records match. Log: "three-turn clause not evaluated: one D run". N_chunk 4096; T_dead 972.846 s. No line differs from run 10, so rule 10 routes nothing.
+- printed_not_judged (print only): turn-1 last-512 clock ratio 0.923, inside the predicted 0.83-0.93 band (run 10 0.933); first off-nominal pm Moderate at token 1,581 (run 10 1,678); token-rate ratio null in this print; tv1h_trigger does not fire (2 unequal rows outside gate windows of 1,149). Desk verdict member excluded on `thermal.powermetrics_non_nominal` (turn 1), as before.
+- Maintenance (log show rc 0, 46,881 lines, 22:02:31-00:01:22): dasd 18,987 total; **a software-update burst at 23:00-23:10** (`softwareupdated` 3,018 + 46 lines, `mobileassetd` 2,021 + 34, `XProtect` 56, `XProtectPluginService` 843, all in the 23:00 bucket), otherwise `softwareupdated` 8 at 22:10 and 22:50, `backupd` 6-30 per 10 min, `mobileassetd` 122 at 23:50. X_G still passes. Run 10 had no XProtect lines; print only, for the research lead's reading of the series.
+- Restore lines all pass: no desk fence; no align-r0 label; plist ProcessType Interactive; powermode 0; Network Time Off; ntp_adjtime freq word 0; no High Power marker; no stray monitor or root powermetrics; AC connected, not charging, 0 mA.
+- Copy: an F0 close is non-campaign; this Check covers the copy. Commit nothing from `$OUT`.
+- Closes 421 (pre-launch record). Script and output: custody `standing-f0/check-68797558/` (`check.sh`, `out.txt`).
+- Activation 68797558 (00:04:17): notice_pending []; no unread mail from Ed; open directives unchanged (the standing seven; no stop); no cadence-stop issue; no standdown request; no `/Users/Shared/JouleWise/MAINTENANCE` marker (item 423). Canonical ff'd 7aa674717 -> 668f20e3a (items 421-425; no night label loaded, no night plist on disk). Versions now: `claude` 2.1.322, `codex-cli` 0.169.0 (item 423 asks for these after the maintenance; recorded now since the marker never appeared before this arm).
+- **Item 424 not done:** the commit of `measurement_mode.zsh` (sha256 `4d93d690096eda30d23c69cba194b73232ae442986ea6bbb972258105d5a4593`, 513 lines; secret scan clean: no tokens, passwords, key material or email addresses; lines 24 and 113 describe the host's sudoers NOPASSWD setup) to public main was refused by this session's permission classifier ("Unsanctioned Communication"). Not retried; item 424 says skip rather than delay an arm. The lead (or Ed) should do the copy from an interactive session or grant the permission.
+
 425. **f2-stab-01..14 available as standing fillers (RL-179 F-4, RL-180 row 13): 168 one-leg drafts at audit f9b03c33d**
 
 ```item
