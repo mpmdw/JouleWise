@@ -115,3 +115,19 @@ For a contender present at opening and absent at close, R0 now subtracts the ope
 | MED, a worker present at baseline opening could exceed the limit and exit without a flag. | `test_r0_baseline_flags_cpu_delta_of_worker_that_exits_mid_window`, `test_exit_delta_replaces_previous_interval_evidence_for_same_worker` | PASS |
 
 Both auditor probes passed three synthetic replays. Claude and Codex each refused with exit 2 and no publication. The exiting-worker baseline passed with one R0-L3 flag at 0.06 CPU-s/s, as did the still-running control. The R0 lane delta leaves all ten frozen R1 paths, `night_gate.py` and the code pin registry byte-identical to its base. Exact-candidate CI and two-family review are tracked on draft PR #824. NEEDS_SPEC has no entries.
+
+## Lead-directed R0 repair after round 7
+
+Round 7 reviewed `caff40650a34ef1b51e748ad4dbee7e087850df5`. Regression commit `1d699ed4d` produced six assertion failures and one input error on those bytes. Repair `8bb807fd6c1156c16864f3054092b517a1883774` addresses all three verified findings.
+
+R0 runs the full case-insensitive agent query and identity filter at baseline opening, baseline close, subsequent admission boundaries and the existing background cycles. Polling during an admitted operation keeps its throttle. The CLI repeats the query after preparing its staged report or serializing its inventory, immediately before making the result visible at the requested path. An agent hit yields exit 2 and withholds publication.
+
+CPU judgement retains the highest counter observed for each PID and start identity. The high counter survives later low samples and rolled windows. A lower opening sample therefore cannot charge past CPU to a fresh interval. Raw regressions remain available in the receipt. The existing fallback carries a previous over-limit observation when the window has no stronger direct observation. Inventory drains the sampler after an input error and surfaces any census refusal before propagating the input failure.
+
+| Verified finding | Regression | Result on `8bb807fd6` |
+| --- | --- | --- |
+| HIGH, an agent appearing during the baseline could survive admission and publication. | `test_r0_rechecks_agents_at_baseline_close_later_admission_and_publication`, `test_inventory_rechecks_agents_after_serializing_before_publication` | PASS |
+| MED, a zeroed closing counter could hide an earlier 0.06 CPU-s/s lower bound. | `test_r0_baseline_flags_cpu_delta_of_worker_that_exits_mid_window`, `test_lower_opening_counter_cannot_recount_cpu_in_a_later_window` | PASS |
+| MED, an inventory input error could mask a latched census refusal. | `test_inventory_census_refusal_takes_precedence_over_input_read_error` injects EIO during the required root read, with and without an inventory read error. | PASS |
+
+All three auditor probes passed synthetic replays. The late agent refused before the first host check, the zeroed counter retained one contention flag, and the simultaneous inventory and census EIO returned exit 2 with the census path and errno and no output. Exact-candidate CI and the requested two-family delta reviews are tracked on draft PR #824. NEEDS_SPEC has no entries.
