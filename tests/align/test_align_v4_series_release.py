@@ -441,6 +441,125 @@ def authored_receipt(root, window="C1"):
 
 
 class SeriesReleaseTests(unittest.TestCase):
+    def test_every_nested_manifest_file_binding_is_verified(self):
+        from scripts import align_v4_series_release as caller
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp).resolve()
+            store = root / "series/restored/C8"
+            store.mkdir(parents=True)
+            ledger = root / "calibration.jsonl"
+            ignored = root / "ignored-note.txt"
+            nested = root / "notes.json"
+            journal = store / "archive/align_s_hazard.jsonl"
+            journal.parent.mkdir()
+            for path in (ledger, ignored, nested, journal):
+                path.write_bytes(b'{"synthetic":1}\n')
+            manifest = harvest_offload.finalized_manifest(store, inputs=(ledger,))
+
+            def digest_row(path):
+                data = path.read_bytes()
+                return dict(sha256=packet.digest(data), size=len(data))
+
+            manifest["closure"]["ignored"][str(ignored)] = digest_row(ignored)
+            manifest["closure"]["ignored_policy"]["synthetic_bindings"] = [
+                {"nested": {"path": str(nested), **digest_row(nested)}},
+            ]
+            path = describe(store, "finalized_manifest.json", manifest, canonical=True)
+            record = SimpleNamespace(window="C8", finalized_manifest_sha256=path["sha256"])
+            files = caller.RestoredFiles(root, record, {"trace_layout": caller.LAYOUT, "hazard_journal": None})
+
+            def listed_files(node):
+                if isinstance(node, dict):
+                    if "path" in node and "sha256" in node:
+                        yield Path(node["path"])
+                    for key, value in node.items():
+                        if isinstance(value, dict) and "sha256" in value and "path" not in value:
+                            yield store / key
+                        yield from listed_files(value)
+                elif isinstance(node, list):
+                    for value in node:
+                        yield from listed_files(value)
+
+            targets = set(listed_files(manifest))
+            self.assertEqual(targets, {ledger, ignored, nested, journal})
+            files.verify_listed_inputs(set())
+            for target in targets:
+                original = target.read_bytes()
+                for mode in ("absent", "digest-mismatch", "compressed-only", "unreadable"):
+                    with self.subTest(path=target.name, mode=mode):
+                        archive = target.with_name(target.name + ".gz")
+                        try:
+                            if mode == "absent":
+                                target.unlink()
+                            elif mode == "digest-mismatch":
+                                target.write_bytes(original.replace(b"1", b"2"))
+                            elif mode == "compressed-only":
+                                archive.write_bytes(gzip.compress(original))
+                                target.unlink()
+                            else:
+                                target.chmod(0)
+                            with self.assertRaises((ValueError, OSError)):
+                                files.verify_listed_inputs(set())
+                        finally:
+                            if target.is_file():
+                                target.chmod(0o600)
+                            target.write_bytes(original)
+                            if archive.is_file():
+                                archive.unlink()
+
+    def test_listed_ledger_and_unselected_journal_refuse_before_scoring(self):
+        from scripts import align_v4_series_release as caller
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp).resolve()
+            ledger = root / "synthetic-calibration.jsonl"
+            ledger.write_bytes(b'{"synthetic":1}\n')
+            finalize = harvest_offload.finalized_manifest
+            journal_name = "archive/align_s_hazard.jsonl"
+
+            def with_listed_sources(window):
+                if window.name != "C8":
+                    return finalize(window)
+                journal = window / journal_name
+                journal.parent.mkdir()
+                journal.write_bytes(b'{"synthetic":1}\n')
+                return finalize(window, inputs=(ledger,))
+
+            with patch.object(harvest_offload, "finalized_manifest", with_listed_sources):
+                stored_series(root)
+            journal = root / "series/restored/C8" / journal_name
+            ledger_data = json.loads((root / packet.SERIES_PATH).read_bytes())
+            self.assertIsNone(ledger_data["release_layouts"]["C8"]["hazard_journal"])
+            for target in (ledger, journal):
+                with self.subTest(path=target.name):
+                    original = target.read_bytes()
+                    target.write_bytes(original.replace(b"1", b"2"))
+                    output = root / "report.json"
+                    try:
+                        with patch.object(rl176, "_tail_test", side_effect=AssertionError("ranked a damaged manifest")), \
+                                redirect_stderr(StringIO()), self.assertRaises(SystemExit) as refusal:
+                            caller.main(["--measurement-root", str(root), "--output", str(output)])
+                        self.assertEqual(refusal.exception.code, 1)
+                        self.assertFalse(output.exists())
+                    finally:
+                        target.write_bytes(original)
+
+    def test_pre_rank_coverage_refuses_zero_rows_and_unidentified_fits(self):
+        from scripts import align_v4_series_release as caller
+        from tests.align import test_c1_release_input_completeness as frozen
+
+        for kind in ("events", "benign_events"):
+            with self.subTest(kind=kind), tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp).resolve()
+                frozen.build_world(root, kind, "zero_rows")
+                output = root / "report.json"
+                with patch.object(rl176, "_tail_test", side_effect=AssertionError("ranked incomplete contributions")), \
+                        redirect_stderr(StringIO()), self.assertRaises(SystemExit) as refusal:
+                    caller.main(["--measurement-root", str(root), "--output", str(output)])
+                self.assertEqual(refusal.exception.code, 1)
+                self.assertFalse(output.exists())
+
     def test_receipt_from_after_t3_cannot_replace_the_c1_predecessors_receipt(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
