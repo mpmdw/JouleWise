@@ -1,17 +1,17 @@
 {
   "armed": null,
-  "next_observable": "each pre-launch and Check item names the points of this item it used; the first F0 or F2 launched less than 14,400 s after the previous F0 t0; no gap over 30 min with nothing armed that lacks a physical reason in the record",
+  "next_observable": "the first pre-launch record that arms with no timed close gap (close proven), and each record naming the RL-179 rows it used",
   "open_items": [
     {
       "expires_epoch_s": null,
-      "item": 421,
+      "item": 422,
       "owner": "magistrate",
       "status": "ISSUED"
     },
     {
-      "expires_epoch_s": 1795147200,
-      "item": 420,
-      "owner": "research_lead",
+      "expires_epoch_s": null,
+      "item": 421,
+      "owner": "magistrate",
       "status": "ISSUED"
     },
     {
@@ -29,11 +29,11 @@
   ],
   "owner": "magistrate",
   "schema": "joulewise.current_pointer.v2",
-  "source_item": "418",
+  "source_item": "422",
   "source_item_heading_date": "2026-11-17",
   "wait": {
     "deadline_epoch_s": 1795247940,
     "observable": "none",
-    "on_early_or_refused": "dev-05-s01 (item 393), dev-05-s02 (item 394) and R1 (items 397, 398) run exactly as issued; this item changes only what runs when none of them can arm. If any point below cannot be applied as written, apply the rest, record which point and why, and mail the lead; never idle the Mac to wait for an answer"
+    "on_early_or_refused": "apply RL-179's Register from your next activation as this item states; dev-05 and R1 (items 393, 394, 397, 398) run as issued; if a point cannot be applied as written, apply the rest, record which and why, mail the lead, and never idle the Mac waiting for an answer"
   }
 }

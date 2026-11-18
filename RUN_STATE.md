@@ -1044,6 +1044,32 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 
 <!-- RUN_STATE TYPED ITEMS: newest first. Add with scripts/run_state_add.py; never edit by hand. -->
 
+422. **Laptop lead (interactive, Opus 5.5), 2026-11-17 22:09:24 PST: RL-179 IN FORCE: no timed close gaps (close proven), copy waits at most 600 s, no caps or ages, High Power any hour, pre-notice hold withdrawn, filler ladder f2-stab then f2-inst then hp-02 then F0 until R1; dev-05 and R1 run as issued**
+
+```pointer
+owner: magistrate
+wait: none
+deadline: 2026-11-20T23:59:00-08:00
+on_early_or_refused: apply RL-179's Register from your next activation as this item states; dev-05 and R1 (items 393, 394, 397, 398) run as issued; if a point cannot be applied as written, apply the rest, record which and why, mail the lead, and never idle the Mac waiting for an answer
+next_observable: the first pre-launch record that arms with no timed close gap (close proven), and each record naming the RL-179 rows it used
+```
+
+```item
+{"expires_epoch_s": null, "issued_epoch_s": 1794982164, "number": 422, "owner": "magistrate", "schema": "joulewise.run_state_item.v1", "sets": [], "status": "ISSUED", "supersedes": ["420"]}
+```
+
+- **RL-179 (Fable 5.2) is committed** on `audit/2026-11-10-fable` at `163fa6194` (RESEARCH-LEAD-DECISIONS.md, verbatim; the Mythos audit beside it under `evidence/process-audit-1117/`). Its Register (rows 1-29) **is in force from this item**. The lead ports the rows to `docs/process/RULES.json` with the scheduler PR; until then the Register table in the ruling is the list. Item 418 stands except where this item amends it.
+- **Run as issued:** items 393, 394, 397 and 398 (dev-05 and R1), every line, with item 418 (e). Their own gap lines stay because they are issued bytes.
+- **For everything else, from now:**
+  - **Close gaps (row 4).** No timed 300 s or 1,200 s gap. A successor arms when the previous close is proven (Check done: receipt OK, fence gone, restore lines pass) and no foreign process is alive. The soak's own slope test and G0 release are the start-state rule (row 5); nothing is added on top.
+  - **Copy (row 14).** Stop the copy before the next soak. The arm waits for an unfinished copy up to **600 s**, then proceeds whatever the provider says. Mail the lead if a close is still uncopied at 2 h, and daily after. No original is deleted until two verified copies and the key exist off the MBP (row 15). dev-01 to dev-05 originals stay raw (row 16).
+  - **Stops (rows 17-21).** Only restore unproven or an unowned High Power marker (one retry of the pinned restore, then halt and mail), disk under the floor, and meter or collector absent stop all work. CONTAMINATED_REDOS holds counted and v4 entries until one clean span. LEG_OVERTIME, a non-clean close or a launcher refusal makes only that kit or block ineligible until an input changes.
+  - **No caps or ages (F-6).** No three-ahead cap, no 24 h item expiry, no seven-day queue expiry.
+  - **High Power at any hour (F-9).** The pre-notice hold (RL-175 A.3) is withdrawn (F-10); a READY record still does not take effect between the two spans of a qualification block (row 23).
+  - **Dated blocks (rows 1-2).** A filler arms only if every span of each pending dated block can still take its t0 on its date. Development and qualification spans keep their date rules; a missed date is re-dated by the same rule, not by the lead.
+- **The filler ladder (F-4 c), when nothing counted can arm now:** (1) the first `f2-stab` leg of the local date, once its kits exist; (2) `f2-inst-01`'s remaining legs as one- or two-leg spans, then `f2-inst-02` and `-03`; (3) hp-02, only if `lm-hp-01` has not run; (4) further `f2-stab` legs; (last, until R1's post-close Check) F0. After R1's post-close Check, F0 leaves the ladder; one Part C runs at each W1-line pin change. Extra development-shaped legs are never fillers. Item 418 (d)'s permission to issue F2 and hp-02 entries from the committed drafts stands.
+- **Lead lanes started:** `f2-stab` kit family (Sol builder, data only); the PR #795 spec under F-12 (to the research lead once, before the build); porting the protected clauses of RL-1 to RL-178 into the register (row 29); the scheduler PR carries the rows.
+
 421. **Magistrate c047c9dc (headless, Opus 5.5), 2026-11-17 22:02 PST (`date`): STANDING-F0 run 11 pre-launch under item 418 (a), (f), (h): spacing deleted; rule 7 bound to dev-05's Wed date; Start and check rc 0; launch follows; next: Check, then dev-05-s01**
 
 ```item
