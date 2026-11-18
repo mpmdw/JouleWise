@@ -20012,3 +20012,372 @@ Rows for the lead to commit to `RULES.json`, added to RL-182's. Owner is `resear
 | 20 | A fold whose training residuals are zero, exactly or to the tolerance above, gives `s_score_undefined` | VALIDITY | P4's zero-variance rule; no word from a degenerate fit | `_residual_scores` | The v4 release | Astra's `replay variance` returns `S NOT EVALUABLE` |
 
 **What comes back to me.** A W1 gap over 10 ms. A runtime change that fails check 1. Nothing else in this addendum returns.
+
+# RL-183. The fail-closed Part C evaluator lands without touching any of the ten R1 sources: its two hooks leave the frozen files and move into the evaluator's own; RL-107 is not carved and no second slot night is ordered. W1's arm does not wait for qualification, so eight of the register's 30 open rows are not W1's. The pilot export waits for one commit, not for the whole desk-seal follow-up. The signing inputs are committed as bytes in the public repository, as registered. Transfer: a crossing window's close date is eligible for the last window as for any other; the look gets a third closed variant in the v2 schema, three custody names and exit status 1
+
+Research lead (Fable 5.2), Wed Nov 18 01:46 PST 2026 (from `date`). Answers the fourteen questions of the W1 pre-arm register and the transfer builder's two. RL-182 and RL-182a stand; Q2, Q3, Q4 and the code side of Q6 are theirs and are cited, not re-derived. RL-181 stands except where "Amends" says otherwise.
+
+**Cites.** `RLD:n` is `RESEARCH-LEAD-DECISIONS.md` on the audit branch at `45b2d57fb`. `REG:n` and `TRL:n` are `REGISTER.md` and `TO-RESEARCH-LEAD.md` in `/Volumes/JW-EXT/scratch/d-w1-prearm-register/`; "register row n" is the table row at REG:12+n. `CE:n` is `d-w1-candidate-evidence/FINAL-MESSAGE.md` and `A9C:n` is `astra-audit-809c/FINAL-MESSAGE.md`, both under `/Volumes/JW-EXT/scratch/`. `VR:n`, `RH:n` and `KIT:n` are `joulewise/align/apple/v4_registration.py`, `scripts/align_r1_rehearsal.py` and `scripts/align_r1_followup_kit.py` at the R1 pin `b2e01464d`. `EV:n` and `KIT′:n` are `scripts/align_r1_part_c.py` and the kit at #809's W1 candidate `b3b88c696`. `TF:n` is `pl-transfer/resolve-1/FINAL-MESSAGE.md`, `TR:n` the transfer run report, and `DR:n`, `VL:n` are `date_rules.py` and `validate_look.py` in the transfer draft's `dated-transfer/` directory.
+
+**Read.**
+- REGISTER, TO-RESEARCH-LEAD, STALE and the register's final message, in full. CE and A9C in full. TF and TR in full.
+- RL-107 (RLD:6038-6065), RL-175 A and D.2, RL-179 F-4, F-10, F-11 and its register, RL-180 section 1 and its register, RL-181 sections 1.5, 2.1, 2.2 and 3 and its register, RL-182 and RL-182a in full. The passages each question cites.
+- The diff `b2e01464d..b3b88c696` for the two frozen files, `records.py` and the kit, in full; the evaluator's function list and EV:400-461, EV:684-692, EV:798-811.
+- `R1-TO-W1-CHAIN.md:21-59` and `W1-BLOCKERS-merged.md:88-112` at `b2e01464d`.
+
+**Checked myself.**
+- **The evaluator is not in the ten.** `R1_EXECUTED_SOURCES` is ten paths (VR:489-495). `scripts/align_r1_part_c.py` and `scripts/align_r1_followup_kit.py` are not among them. The candidate's diff is eight files and 1,436 added lines; the evaluator changes by 714 lines and the kit by 60.
+- **What the candidate changes inside the ten is 37 changed lines of hooks.** In `workload.py`, a `loads` keyword on `read_episode_bundle`, passed on to `from_json`. In the rehearsal driver: two exception classes, a wrap of `Popen`'s `OSError`, a `loads` keyword on `_invoke`, and three `Refusal`s retyped, one carrying the receipt.
+- **Who uses the hooks.** Only the kit and the evaluator: KIT′:497-498 passes `loads=part_c.parse_evidence_json` to the invoker; KIT′:523-527 and KIT′:547 catch the two new classes; EV:811 passes `loads=_episode_payload` to the reader. Nothing in R1's or W1's measured path calls them.
+- **The kit already takes its invoker as a parameter.** `smoke_part_c(..., invoke=r1._invoke, ...)` at KIT:461 and `smoke(..., invoke=r1._invoke)` at KIT:547.
+- **The frozen invoker is seventeen lines over `_run`** (RH:527-555): it builds the argument list, checks the soak reference, calls `_run` (RH:362-386), and reads the exit status, the JSON and the contract fields.
+- **The check at every arm is byte equality.** `verify_r1_executed_sources` compares each of the ten working files with the blob at the slots file's `executed_commit` (VR:498-511), and `require_registration` calls it (VR:573).
+- **The kit's own call of that check proves nothing here.** KIT:554 compares the tree with its own head.
+- **W1 has never been ruled to wait for qualification.** R-A: "v4 sessions take the machine first… W1 does not wait for the campaign" (RLD:14164-14165). The ladder puts a READY v4 session first (RLD:17592). F-10 kept one limit only: no READY record takes effect between the two spans of a qualification block (RLD:18831).
+- **The receipt already binds the five signing inputs as files of the tree** (VR:42-47), and `r1_slots.json` is a tracked file at the pin.
+
+**Not checked.**
+- I ran nothing: no test, no replay, no comparator. The 9/10 and 8/10 figures are CE:8-9's and the register's (REG:66). The replay verdicts are the builder's and Astra's.
+- Whether R1 has armed or returned. No SSH. This ruling holds either way.
+- Whether every Part C member has a saved receipt. The route below does not depend on it.
+- PR #823's report beyond its summary in CE. #812, #793, #795 and #816 at their heads.
+- The registered text of each R1 post-close predicate. Section 2.6 routes by the kit's own printed word and names no new branch.
+- What `pilot.json`, `r1.json` and `pairs.json` hold. I opened no file under `u3_sources/`.
+- No custody, energy, power, meter, transcript, slot, hazard, sealed or restricted file was opened.
+
+**Not done.** No commit, push, comment or run. The only file written is this one.
+
+---
+
+## 0. The answers
+
+| # | Answer | In one line |
+|---|---|---|
+| Q1 | **Keep all ten blobs. Revert the two files to R1's bytes; the hooks move into the evaluator** | No carve-out, no slot-survival ruling, no new slot session. Section 1 |
+| Schedule | **W1's arm does not wait for qual-03, freeze 2 or #812** | Register rows 6 to 9 and 21 are qualification's. W1 arms when its own chain is done. Section 2.0 |
+| Q2 | RL-182 1.5 (RLD:19776-19796) | One named release script, bound with #787 by one re-signed receipt before C1 arms. Not W1's |
+| Q3 | RL-182 1.4 (b) to (e) (RLD:19757-19766), with E3, E12, E16, E17 | All four accepted as there |
+| Q4 | RL-182 1.4 (f) (RLD:19768-19772) and RL-182a row 6 | Item 411's count closes it as scoped. No wider population. The next count is on W1's records |
+| Q5 | **No use.** It holds #787's merge and C1's arm, not W1's signature | An unclean row is used for nothing until I rule on its difference |
+| Q6 | **ADMIT on the edited bytes,** after one Sol attack seat. Code side: RL-182 1.1 to 1.3, RL-182a | Astra's audit is the first attack. Row 19 (Pydantic) is closed by E9. The merge is the lead's under Ed's rule as it now stands |
+| Q7 | **One function, one census test.** W1's signature carries no freeze-2 proof beyond that test's count | Qualification and the looks need it before they arm or read; v4's consumers are prints and are bound by C1's receipt |
+| Q8 | **Fixed now:** I name a `no` hash only at equal words and 1e-6; `not_evaluable` gets a twin-only run; an interruption with a host cause gets `lm-interim-02` without a further line, once | Qualification stays held meanwhile. Fillers run |
+| Q9 | **Nothing to rule: no successor exists.** The hold on step 4 is narrowed to finding 1's commit | The builder starts today. It is the long pole nobody has started |
+| Q10 | **The kit's printed word governs.** `R1-RERUN` re-arms at the same pin on the lead's record. Everything else comes to me | No slot and no fill from a disputed record |
+| Q11 | **Yes, that list is the packet,** plus three items. A verdict carries on an unchanged blob | Stage B is new bytes and gets one cross-family recomputation |
+| Q12 | **Yes.** "Merged" means in the ancestry of the commit the receipt is signed at | One promotion of the live W1 ref, one Part C |
+| Q13 | **The date's first `f2-stab` leg, on the new pin** | Thursday, so qual-01 keeps Friday. A differing first-span comparison comes to me |
+| Q14 | **The public repository, as bytes.** No private repository, no digest in place of a byte comparison | They are registration inputs. The receipt has bound them as tree files since they were named |
+| B.1 | **Yes. D+1 is eligible in place of D,** for the last window as for any other | 3.1's end is the last eligible date |
+| B.2 | **Yes to all four** | A third closed variant, `transfer`, in v2; dispatch in a new module; `scores.json`, `stdout`, `stderr`; exit status 1 after a read, 2 before |
+
+**What this changes on the MBP before Sunday.**
+1. **R1 runs as issued at `b2e01464d`.** No F0 and no Part C is issued on `5434cb49d`, `e26b04b53` or `b3b88c696`. No second slot session is ordered.
+2. **W1 may arm before qual-03.** It takes the first clean close after its own chain is done that is not between the two spans of a qualification block.
+3. **The pilot export (W1-BLOCKERS step 4) may run in the gap after R1** as soon as finding 1's commit is reviewed, not after the whole follow-up.
+4. **If #812's successor changes a measured path,** one `f2-stab` leg runs on that pin on Thursday as its first native run.
+5. **The Pydantic version is no longer read before signing.** It is a field of W1's close record.
+6. **One Part C on the final W1 pin,** by the repaired evaluator. Unchanged.
+
+---
+
+## 1. Q1. The evaluator and the ten frozen sources
+
+### 1.1 Ruling
+
+**The two files go back to R1's bytes. The four repairs stay. The hooks they reached for are rebuilt in the evaluator's own files.**
+
+- `scripts/align_r1_rehearsal.py` is blob `33c6876e6` and `joulewise/align/apple/workload.py` is blob `ff30c2917` on every W1-line candidate from here to the end of the series, unless a later slot session moves the freeze.
+- RL-107 stands as written (RLD:6059-6063). It is not carved, and I rule no slot survival.
+- RL-175 D.2 stands: the fix "lands on the W1 line after R1 returns and before W1 signing" (RLD:17852). It gains one sentence, in 1.3.
+- R1's pin does not move.
+
+### 1.2 Why this route and not the other two
+
+**The premise of the question is half right.** The evaluator does not live in the frozen sources. It lives in two files outside them. The builder made it strict by adding a keyword to a frozen reader and typed errors to a frozen invoker, because that was the shortest edit. The fault Astra found, eleven verified ways to pass a damaged run (A9C:9-13 and the six of the round before), is in the evaluator. None of it is in the ten.
+
+**So the freeze and the repair do not conflict.** Each hook has an equivalent that calls the frozen code unchanged:
+
+| Hook in the candidate | Its place under this ruling |
+|---|---|
+| `read_episode_bundle(bundle, loads=_episode_payload)` (EV:811) | The evaluator reads `outputs/align_episode.json` itself, parses the bytes with `_episode_payload` (EV:801-806), then calls the frozen `read_episode_bundle(bundle)`. It takes the file's sha256 before the parse and after the reader returns; unequal is an evidence error |
+| `_invoke(..., loads=parse_evidence_json)` with `RuntimeEvidenceError` and its receipt (KIT′:497-498, :523) | A judged invoker in `align_r1_part_c.py`, handed to the kit through the parameter it already has (KIT:461, KIT:547). It builds the argument list as RH:532-542 does, calls the frozen `r1._run`, and reads the exit status, the JSON and `contract.missing_fields` itself, strictly. Its two error classes are defined in the evaluator |
+| `RuntimeLaunchError` from `Popen` (the candidate's `_run`) | Not rebuilt. See below |
+| `from_json(..., loads=)` in `records.py` | Removed. Nothing else calls it. `records.py` is outside the ten and may keep it if the builder shows a second caller |
+
+**The one thing the frozen bytes cannot tell apart, and how it fails.** The frozen `_run` raises a plain `OSError` whether the runtime could not be started or failed while being read. The candidate uses the difference only for X_G: a launch error leaves X_G "not run", which can still pass (EV:688-691).
+
+> An `OSError` out of the frozen `_run` is an evidence error for the member it was launching. The verdict is `other_failure`. It is never "X_G not run". X_G is "not run" only on the runtime's own admission refusal, exit status 2, or on the pre-launch soak-reference refusal.
+
+- **What that costs.** A runtime that cannot be executed on the fourth member, after three members ran from the same path, fails the Part C. That is a redo of a two-hour smoke in a case I do not expect to see. A fail-closed evaluator fails closed.
+
+**Why not a carve-out of RL-107.**
+- The check is byte equality on the real tree at every arm (VR:498-511, VR:573), pinned by two tests by name (RLD:6045-6048). A carve-out is an edit to a registered check, its tests and the R1-PHASE-TABLE row, reviewed cold, to admit a diff nobody needs.
+- The diff is not behaviour-neutral on its face. It changes the class of three refusals, and any place that prints `type(exc).__name__` would print a different word. I could rule that the slots survive that. I would be spending a registered guarantee on a convenience.
+- The sentence the paper gets to write is "the ten sources that ran in the slot session are byte-identical at signing". Under this route it needs no footnote.
+
+**Why not the old evaluator behind a wrapper.** The old evaluator's verdict is the thing that is wrong. A wrapper that makes it right must make every check the new one makes. That is the new evaluator, and it is already written, outside the ten.
+
+**The project's standing practice is to fix a bug in a frozen component in place.** That practice is not set aside here. The bug is not in a frozen component.
+
+### 1.3 Exact text
+
+**RL-175 D.2, appended after "before W1 signing" (RLD:17852):**
+
+> The fix changes none of the ten condition-13 paths. Where a repair wants behaviour the frozen invoker or reader does not have, the evaluator supplies it around an unchanged call, and where the unchanged call cannot distinguish two cases the evaluator takes the failing one.
+
+**RL-107 item 3, unchanged, with this reading recorded beside it:**
+
+> "A needed change" (RLD:6061) means a change without which a registered check or measurement on the W1 line is wrong and which cannot be made outside the ten. A change that can be made outside the ten is made there and is not brought to the research lead as a freeze question.
+
+**For the builder, the contract.** One commit on the evaluator's W1-line branch, on top of `b3b88c696` or replacing it:
+1. The two frozen files are restored from `b2e01464d`. `git diff b2e01464d -- <the ten paths>` is empty.
+2. The table of 1.2, with the quoted rule.
+3. **A test of the argument list.** With `r1._run` stubbed to record, the judged invoker and the frozen `_invoke` are each called for the four Part C kinds, with the host lock held and not held. The recorded argument lists are equal.
+4. **A test of the quoted rule.** A stub `_run` that raises `OSError` on X_G gives `other_failure`.
+5. **Every replay case keeps its repaired verdict:** the eight original cases and the five of A9C:9-13, on the new head, and the four controls of A9C:32 (three pass; the known timeout gives `other_failure`).
+6. If the builder finds a smaller way to meet 1 and 3 to 5, it may take it. The tests are the contract, not the table.
+
+**For the lead.**
+- **One executing seat of a top-tier family audits the new head,** with Astra's two harnesses and the freedom to add cases. CE and the register both note that no independent ADMIT exists for any successor (REG:34, register row 22). Its verdict, the lead's proportionate review and green CI on the W1 candidate admit it. It does not come to me.
+- **The ten-blob comparison that counts is against R1's executed commit,** by PR #823's comparator, on the exact candidate. KIT:554 is not that evidence.
+- **Before the one Part C on the final pin,** the repaired evaluator is replayed on the stored records of the counted Part C (RUN_STATE 328) and of F0 run 11 (item 426), by the magistrate or an authorised seat, in a close interval or on a verified copy. Output: the verdict word and the names of failing checks. No reading, no value.
+  - **Why.** Every test so far is on synthetic damage. The smoke that precedes W1 should not be the evaluator's first sight of a real run.
+  - A `pass` on both is recorded. Anything else comes to me with the check names. It does not reopen R1: R1's record is judged by its own post-close tests, and Part C was its smoke, not its evidence.
+- **STANDING-F0 is not rebound.** F0 runs at `b2e01464d` with the hand count of RL-175 D.2 until R1's post-close Check, then leaves the ladder (RLD:18713). A9C's hold on the renewal at `5434cb49d` is confirmed and widened to all three candidates.
+
+**What comes back to me from Q1.** A replay case that the builder shows cannot keep its repaired verdict without a change inside the ten, with the case. I will then choose between RL-107's two branches. Nothing else.
+
+---
+
+## 2. The other questions
+
+### 2.0 W1's arm does not wait for qualification
+
+**The register's first line is not a rule of mine.** "Earliest possible arm: Sunday 22 November 2026, Pacific, after qual-03 closes" (REG:3) makes freeze 2, the look, #812 and three qualification dates prerequisites of W1 (register rows 6 to 9 and 21).
+
+- R-A: W1 does not wait for the campaign, and a READY v4 session takes the slot while the campaign block slides (RLD:14164-14165).
+- S has one score, fixed before any series data, and it reads no campaign fit. S_w is print-only and "W1 does not wait for S_w" (RLD:12637, RLD:13339).
+- The one tie between W1 and qualification is F-10's: no READY record takes effect between the two spans of a qualification block (RLD:18831).
+
+**So:**
+
+> W1 arms at the first clean close after its own chain is complete that does not lie between the two spans of a qualification block. If W1 and a qualification block want the same date, W1 takes it and the block moves whole to its next eligible date (RLD:17811). The hygiene rule of RLD:17612 holds through qual-03's close whatever the order.
+
+- **W1's chain** is register rows 4, 5, 10 to 13, 17, 20, 22 to 36, less what this ruling moves.
+- **The W1 candidate need not carry #812's delta.** Qualification runs at its own admitted pin. When that delta later reaches the W1 line, RL-155 §3.1's carry rule decides whether a Part C is owed (RLD:14538), and C1's re-signed receipt covers the tree (RL-182 1.5).
+- **Rows that leave W1's list:** 6, 7, 8, 9 and 21 (qualification's), 14 and 15 (#787, C1's arm under RL-182 1.5), 19 (closed by E9). **Thirty open rows become twenty-two.**
+- **I do not give a new date.** The poles are now R1's return, the desk-seal follow-up (2.5) and the signing chain. If those are done on Friday, W1 arms on Friday.
+
+### 2.1 Q5. An unclean A/B reconciliation
+
+> A row on which report A or report B is not clean as RL-155b defined it (RLD:14108-14110), and any turn that report B marks `token_stamps_unavailable`, is used for nothing until I rule on its difference: not to admit #787, not as a twin-agreement case, not to reopen steps 3 and 4. It comes to me with the number of the difference that explains it, or "unexplained" (RLD:14108).
+
+- **It does not hold W1's signature.** #787 is bound before C1 arms (RLD:19785), and W1 enters no S stratum.
+- A clean pair closes item 4 without me, as before (RLD:14110).
+
+### 2.2 Q6. The amendment's disposition
+
+**My cold verdict is given, and it came before the attacks instead of after them.** RL-148 §4 and RL-151 put two attack seats first, one of them Sol, and my review last (RLD:11186-11188, RLD:12864). The lead sent me #813 before either had reported, and RL-182 is that review. I do not repeat it. I say what the bytes still owe.
+
+**ADMIT, for the amendment as these bytes:** #813 with E1 to E17, RL-182a's three text edits, its condition on `_decode_rows`, HIGH 2's repair and check 1 (RLD:19648, RLD:19990-19995).
+
+| Item of TRL:10 | Disposition |
+|---|---|
+| Two independent attacks | **One is done:** Astra's executing audit of #813, by a seat that wrote no part of the design. **One is owed:** a Sol seat on the edited head, executing, on P4's and B-S-admit's bytes, the release seal, the twin, the count of 54 and the five cells |
+| Executing Mythos coverage | Not owed in addition. Astra's audit executed its replays |
+| The 210-count replication | Met (RLD:19669) |
+| The .0125 boundary | Checked by me (RLD:19594) |
+| The installed-Pydantic counts | E9: both renders are in the text and no fill is signed (RLD:19714-19721). **Register row 19 closes** |
+| C1(b) | A line of the W1 receipt checklist with its test (RLD:13487-13490). It is shown by test id on the signing head in register row 30. It is not part of this verdict |
+
+- **What the Sol seat returns to me:** a finding that changes S's or Q's arithmetic, level, population or words. Anything else the lead disposes.
+- **The merge.** "The PR stays open" was the lead applying Ed's standing rule on designs from a new model family (RLD:11188-11190). Nothing in my rulings needs Ed's hand on this merge. The lead applies Ed's rule as Ed now states it.
+
+### 2.3 Q7. Freeze-2 authority on every scorer
+
+**One function.** Everything that opens a look's coefficient file does so through one function in the looks package:
+
+> It takes the look id. It reads that look's `PUBLIC.json` and ledger row from `origin/main`. It returns the file's bytes only if `twin_agrees` is `yes` or the row carries a ruling id that names the hash (RLD:19026), and the file's sha256 equals the public hash. Otherwise it raises, and the caller has no fallback.
+
+**The evidence, once.**
+1. The four negative tests the register lists: wrong hash, absent or negative word, a `PUBLIC.json` not on main, and a valid naming ruling (register row 21).
+2. **A census test:** no module in the repository opens a path named by a look's custody list except through that function. It prints the callers.
+
+| Consumer | When its proof is due |
+|---|---|
+| Qualification's arm predicate (reads the word, not the file) | Before qual-01 arms. RL-180 row 3 |
+| The predict path and `lm-qual-01`'s scorer | Before `lm-qual-01`'s final manifest. RL-181 rows 1 and 5 |
+| `lm-transfer-01`'s scorer | Before its final manifest |
+| v4's consumers: S_w and any other print that carries a model hash (RLD:12790-12793) | In the release script, bound by C1's receipt (RL-182 1.5) |
+
+**What accompanies W1's signature:** the census test passes by name on the signing head, and its caller list holds no module that W1's receipt binds. If it holds one, that module's four negative tests pass by name too. Nothing else about freeze 2 is on W1's signing list.
+
+The qualification word selects nothing in S (RLD:13339). `lm-qual-01`'s registration precedes its first receipt (RL-181 row 1).
+
+### 2.4 Q8. If freeze 2 does not take effect
+
+**Fixed now, while I am blind to the fit.**
+
+| Outcome | Disposition |
+|---|---|
+| `twin_agrees = no` | I open `RESTRICTED/twin.json` under a ruling that names it. **I name the hash as freeze 2 only if every verdict word, `trace_coverage` and `soak_retries` are equal and every coefficient agrees to 1e-6 relative.** Otherwise the cause is found on the synthetic world and I admit a new look |
+| `twin_agrees = not_evaluable` | The twin's failure is reproduced without custody and fixed blind. I then admit one twin-only execution, id `lm-interim-01t`, on the same host: it checks `coefficients.json` against the public hash, runs the fixed twin, and publishes `twin_agrees` and nothing else. The primary is not run again |
+| A failure with a type name | RL-180 amendment 5, unchanged (RLD:19072-19074) |
+| An interruption with no type name (power, a signal, a reboot) | The ledger row reads `status: interrupted`, `error_type: none_recorded`. It counts as a read and the id is spent. **If host records outside custody show the cause, `lm-interim-02` is admitted by this ruling, once,** with a manifest that differs only in its id and `supersedes`. A second interruption comes to me |
+
+- **Why 1e-6.** It is the tolerance already registered for the censored fit (RLD:19017). `twin_agrees` keeps its registered 1e-8 and still prints `no`. I am fixing what I will accept, before I can see what it would decide.
+- Until one of these ends in an effective freeze 2, qualification and every scorer stay held. Fillers and the v4 lane run.
+- **The single host and #816's reader against #795** are checked at my cold pass of the manifest. Send it when the cold seat is clean (RLD:17647).
+
+### 2.5 Q9. The desk-seal follow-up
+
+**There is nothing to rule on: no successor PR exists** (register row 13). Its diff comes to me once when it does, with finding 1's test and the pack answer (RLD:16323-16327). The standing answers:
+- A reused pilot id is allowed only at a path the committed `selection.json` names (RLD:16229).
+- A better stored field comes to me before it is built (RLD:16231).
+- A pack that can carry `archive/`, `PILOT.json` or `desk.json` comes to me with the pack's file rule (RLD:16274).
+
+**The hold on step 4 is narrowed.** RL-168 held the pilot export "until the follow-up merges" (RLD:16233). Only finding 1 touches the export.
+
+> W1-BLOCKERS step 4 may run once finding 1's commit, with its test and the lead's review, is in the checkout it is run from. The blob of `scripts/align_v4_u3_export.py` at that run equals its blob at the signing commit; if it does not, step 4 is run again. The rest of the follow-up is owed before the signing commit, as before (RLD:15458).
+
+**This is the pole to start today.** Six to twelve hours and a review, off the MBP, and U3 and the signature stand behind it.
+
+### 2.6 Q10. If R1's post-close tests do not all pass
+
+**No new branch is written. The kit's own word governs** (chain step 6: `TYPICAL-CASE`, `RESEARCH-LEAD` or `R1-RERUN`).
+
+| What failed | Branch |
+|---|---|
+| The duty or typical-case evaluation | The word `decide` prints. `TYPICAL-CASE` proceeds |
+| `decide` prints `R1-RERUN` | R1 re-arms at `b2e01464d` on a new READY record of the lead's, under R-A. No ruling, no new Part C: the pin is the same. The ten blobs are unchanged |
+| `decide` prints `RESEARCH-LEAD` | To me, with the kit's printed lines |
+| Any gated-D H record | A defect (RLD:12871-12872). To me. No rerun on the same bytes until the cause is known |
+| The G1 count of RL-175 D.2 is incomplete | "Not established", with the member and turn index, to me (RLD:17850) |
+| Thermometry not `ok` | To me, with the two verdict words and no reading |
+| A redo flag still set at close | To me |
+| The chain did not exit 0, or the close or restore is unproven | The host rules first (RL-179 rows 17 and 21). No slots. To me once the host is clean |
+
+- **No slot is installed and nothing that depends on R_op is filled from a disputed record.**
+- Everything that does not read the slot record goes on: the evaluator, the follow-up, the amendment, the candidate's assembly.
+- **A second slot session moves RL-107's freeze to its own commit.** It is not a reason to put the hooks of section 1 back.
+
+### 2.7 Q11. The Stage A and Stage B packet
+
+**Yes. The list in TRL:15 is the packet,** with three additions: the amendment as admitted in 2.2, the evaluator of section 1, and the desk-seal follow-up.
+
+- **A cold verdict carries on an unchanged blob.** The packet lists each component's blob id at the signing head beside the blob its verdict was given on. Equal means the verdict stands and nobody reads it again. Unequal means the diff is read, not the file.
+- **Stage B is new bytes** (the slot record's fills, the contrast fields, the U3 bar, WP19, `w1_plan.json`, the soak reference). It gets one recomputation by a seat of another family than the one that produced it, and the U3 gate of step 9.
+- **The anti-hindsight list comes to me:** every analysis rule changed since R1's record existed, each with its ruling id. A change with no ruling id is a deviation and returns under the existing rule.
+- The 7 November verdict signs nothing (register row 29). The signatures are the lead's.
+
+### 2.8 Q12. Where a required merge takes effect
+
+> "Merged before the W1 receipt is signed" means: in the ancestry of the commit the receipt is signed at. An integration branch satisfies it. The live W1 ref advances once, to the receipt-carrying head, and that advance is the pin change that owes the one Part C.
+
+- "Nobody runs step 4 until the follow-up merges" is replaced by 2.5's text.
+- **Qualification's admission on its own branch** needs no promotion to the live W1 ref. Its exact-head lines 1 and 2 are shown on the pin its kits name (RLD:17648).
+- An intermediate advance of the live ref is a pin change and owes its own Part C unless RL-155 §3.1's diff is empty (RLD:14538). The lead records that diff.
+
+### 2.9 Q13. A changed qualification pin
+
+| Case | Ruling |
+|---|---|
+| The successor's diff from the last natively run pin touches no measured path (the lead's diff record, by RL-171 §3's test) | No new first run. RL-172a's comparison (RLD:17360) is the read of RL-181 row 16 |
+| It changes a measured path | **The first native run on the pin is one `f2-stab` leg issued on that pin.** It is that date's first stability leg (RL-179 row 13), so it costs no hour. Closing clean, with the automatic desk and the hand-read, it is the smoke of F-11 (RLD:18840). qual-01-s01 then still owes row 16's read for the `q0` capture and consumer types |
+| The first span's soak record differs from dev-05's | To me before the second span arms (RLD:17360). A block left half-run follows RL-175 C.3 (RLD:17806-17813) |
+| An unruled layout or estimand | The cold seat of RL-179 row 10 |
+
+- A registered pilot is not needed for this.
+- #794's class B was ruled for one diff on one pin (RLD:17345). It certifies nothing about the successor.
+- The runner pin then joins the fields that differ between stability kits, and that list already comes to me before any read (RLD:19233).
+
+### 2.10 Q14. Where the signing inputs are bound
+
+**In the public repository, as bytes, at the paths the receipt names** (VR:42-47): `inputs.json`, `r1_slots.json`, `w1_plan.json`, `u3_bar.json`, `wp19_receipt.json`, `r1_soak_reference.json`. This is the registered arrangement and I do not replace it.
+
+- **They are registration inputs.** A registration that withholds its thresholds and operating values fixes nothing a reader can check. RL-107's test reads `executed_commit` from the committed slot record (RLD:6057-6058).
+- **None is a v4 outcome.** No series member exists. The slot record and the U3 bar come from the slot session and the pilots.
+- **The rule that seats do not open slot data is about who may see a measured record before it is disposed of.** It is not a classification of the committed registration. A proposal that fails its disposition is not committed (RLD:6790).
+- **F-12's sentence** ("no number computed from energy is public before the data release", RLD:18876) is scoped to the looks and to campaign energy (RL-179 row 26). It does not reach a registered bar.
+- **No digest replaces a byte comparison.** VR:498-511 stays as it is.
+
+> Committed: the files the receipt binds by path, and the U3 sources the runbook's step 12 names. Not committed: the R1 run directory, any bundle, any transcript, and anything on the deny list the seats are given. If a file the receipt binds would carry a per-member energy of a v4 series window, it comes to me with its key list. None can before W1 has run.
+
+---
+
+## 3. The transfer block
+
+### 3.1 The last window's close date: eligible
+
+**Yes. D+1 is eligible in place of D.** The clause I added to 3.2 exists because "a window that runs across midnight runs on both" dates (RLD:19473). That is as true of the last window as of the first. A rule that honoured the substitution for nineteen windows and refused it for the last would drop a window-date for no reason the estimand knows.
+
+**RL-181 3.1's second-last sentence** (RLD:19463) reads:
+
+> It ends at the 20th place or with the last date that the series' last W1, C or T window makes eligible under 3.2.
+
+- Eligibility is decided window by window. The checker does not need to know which window is last. The refusal at DR:74-75 is removed, and its fixture becomes a pass.
+- The block's own day is its span's t0-date, so the span takes its t0 on D+1. If none does, the place is a miss and is not made up (RLD:19474).
+- One window gives at most one block. The cap of 20 places and 120 legs is unchanged.
+
+### 3.2 Where the transfer variant lives
+
+**Yes on all four points.**
+
+1. **`look_manifest.v2.schema.json` gains a third closed variant, `transfer`,** selected by `look_kind`. It names the incoming freeze-2 reference, the kit family and its roster hash, the 20 date places, section 3.5's prints with their destinations, and the word list of 3.6. It has no training object and no `qualified` word.
+   - It goes in before any final manifest pins the v2 file. If one already does when the builder gets there, the variant goes in a v3 sibling under the same rule as RL-181 row 8.
+2. **`validate --final` dispatches by schema id through a new module.** RL-181 2.1 already allowed it (RLD:19392). No file `lm-interim-01` pins is edited. The pinned v1 validator's refusal of a v2 kind is correct and stays as a test (TR:31).
+3. **The custody names are `scores.json`, `stdout`, `stderr`,** exactly those on success (VL:99). They are `lm-qual-01`'s three (RLD:19377). The coefficient file is read where it lies, through the function of 2.3.
+4. **Exit status 1 after the two-line notice stands.**
+   - It is the status the interpreter gives a failure nobody caught, so a post-read path that misses the handler still exits with the registered status. RL-180 asks that it be "the same for every post-read failure" (RLD:19035).
+   - **One addition: a refusal before the first energy read exits 2.** Then a status of 1 always means a read. VL:129 and VL:134 are pre-read refusals and move to 2.
+   - A death by signal has no status of its own and is 2.4's interrupted row.
+
+**Still owed to me:** the final manifest, once, for the cold pass (RLD:19498).
+
+---
+
+## Amends and retirements
+
+- **RL-175 D.2** (RLD:17852): gains 1.3's sentence. "STANDING-F0 is reissued with that head" was already superseded by RL-179 F-4 (a).
+- **RL-107 item 3** (RLD:6059-6063): unchanged; 1.3's reading is recorded beside it.
+- **RL-168 finding 1, item 4** (RLD:16233) and the hold in its gate line: replaced by 2.5's text.
+- **RL-148 §4 and RL-151 step 10** (RLD:11186-11190, RLD:12864): the order "attacks, then cold review" was not kept, and 2.2 says what is still owed. "The PR stays open" is the lead's to apply under Ed's current rule.
+- **RL-177 H item 6** as carried in register row 19: closed by RL-182 E9.
+- **RL-180 amendment 3** (RLD:19026): my acceptance rule for a `no` is fixed by 2.4. **Amendment 5** (RLD:19072-19074): gains the interrupted row and one pre-admitted successor.
+- **RL-181 3.1** (RLD:19463) and rows 13 and 14: the end is the last eligible date.
+- **RL-181 2.1** (RLD:19389): "two closed variants" reads "three", with `transfer`.
+- **RL-180 1 (b)** (RLD:19035): the fixed status is 1 for the transfer look, and a pre-read refusal exits 2. The other looks keep the status their manifests name.
+- **The pre-arm register:** rows 6 to 9, 14, 15, 19 and 21 are not W1's.
+- **Stand unchanged:** RL-182 and RL-182a in every row; RL-179's and RL-180's registers; every level, score and word.
+
+**Blind status.** Blind. No v4 outcome exists, no series member exists and W1 is not signed. Stage 2 of the interim look has not published. Nothing sealed or measured was opened. Section 1 moves code between files and changes no check's verdict except to fail one unreadable case. Section 2.4 fixes my acceptance rule for a disputed fit before the fit exists. Section 3 fixes a date rule and a file layout before any transfer leg exists.
+
+**For Ed, plainly.** "Three things. First, the repaired safety check for the short pre-run was written in a way that edited two of the ten files we promised not to touch after the long calibration session. The repair did not need those edits; they were shortcuts. I had the shortcuts moved into the checker's own files. The ten files stay exactly as the calibration session ran them, the promise holds without an exception, and no second calibration session is needed. Second, the plan said the first real window could not start before Sunday because it waited for three days of qualification runs. I never ruled that, and my earlier rulings say the opposite: the window goes when its own paperwork is done. That could be Friday. Third, the piece nobody has started is a follow-up to the tool that hides results from us until release. One fix in it unblocks a step on the laptop, so I let that step go ahead as soon as that one fix is reviewed. Nothing here needs a decision from you."
+
+---
+
+## Register
+
+Rows for the lead to commit to `RULES.json`. Owner is `research_lead` for rows 1 to 3, 6 to 9 and 11 to 14; the lead owns rows 4, 5 and 10.
+
+| # | Clause | Class | Protects | Scope | Ends | Test |
+|---|---|---|---|---|---|---|
+| 1 | The ten condition-13 paths are byte-equal to R1's executed commit on every W1-line candidate; a repair that can be made outside them is made outside them (1.1, 1.3) | VALIDITY (prereg) | The slots W1 signs on were produced by the sources W1 signs | The W1 line | The end of the v4 series, or a later slot session's commit | PR #823's comparator at 10 of 10 on the candidate; both `R1ExecutedSourceTests` by name |
+| 2 | Where the unchanged frozen call cannot distinguish a launch failure from an evidence failure, the Part C verdict is `other_failure`; X_G is "not run" only on exit status 2 or the pre-launch soak-reference refusal (1.2) | VALIDITY | A damaged run is not passed | The Part C evaluator | The end of the v4 series | 1.3 item 4; the thirteen replay cases and four controls |
+| 3 | The evaluator's invoker gives the frozen `_invoke`'s argument list for every Part C kind (1.3) | VALIDITY | Part C launches the runtime as R1 and W1 do | The Part C evaluator | With each W1-line pin | 1.3 item 3 |
+| 4 | No F0 and no Part C is issued on a commit that fails row 1 (1.3) | SAFETY | Machine hours on a pin that cannot be signed | The W1 line | With row 1 | The issue record cites the comparator's output |
+| 5 | Before the Part C on the final pin, the repaired evaluator is replayed on the stored counted Part C and F0 run 11; the output is a verdict word and check names (1.3) | SAFETY | The one smoke before W1 is not the evaluator's first real run | The final W1 pin | When both replays are recorded | The record is in the Part C's issue item |
+| 6 | A row unclean under reports A or B, or marked `token_stamps_unavailable`, is used for nothing until I rule on its difference (2.1) | VALIDITY | #787's admission rests on reconciled rows | #787 | #787's merge | The merge record cites both reports as clean, or a ruling id |
+| 7 | A look's coefficient file is opened only through the one authorising function; no module opens a custody path otherwise (2.3) | VALIDITY (prereg and blinding) | Every score is against a fit that passed its check | The looks package and every scorer | The paper's data release | The four negative tests; the census test by name |
+| 8 | A `twin_agrees = no` hash is named as freeze 2 only at equal words, equal `trace_coverage` and `soak_retries`, and 1e-6 relative on every coefficient (2.4) | VALIDITY (prereg) | My acceptance of a disputed fit is fixed before I can see it | `lm-interim-01` and its successors | Effective freeze 2 | The naming ruling quotes the comparison's three results |
+| 9 | An interrupted look is recorded `interrupted`, `none_recorded`, and is spent; one successor id is admitted without a further line when host records outside custody show the cause (2.4) | VALIDITY (blinding) | RL-180 rows 5 and 7 across a hard stop | `lm-interim-01` | Effective freeze 2 | `validate --final` accepts `supersedes` with an `interrupted` row and a cause field, once |
+| 10 | W1-BLOCKERS step 4 runs only from a checkout holding finding 1's reviewed commit, and is run again if the export tool's blob differs at the signing commit (2.5) | VALIDITY | The U3 bar's inputs are produced by the bytes the receipt binds | The pilot export | W1's signature | The step-4 record and the signing dossier carry the two blob ids |
+| 11 | A cold verdict carries only on an unchanged blob; Stage B's fills get one cross-family recomputation; the anti-hindsight list comes to me (2.7) | VALIDITY (prereg) | Nothing signed is unread, and nothing is read twice | W1's Stage A and B packet | W1's signature | The packet's two blob columns |
+| 12 | The receipt's signing inputs are committed as bytes at their bound paths; no digest replaces the byte comparison of condition 13 (2.10) | VALIDITY (prereg) | The registration states its own inputs | W1's receipt | The end of the v4 series | `require_registration` on the signing head |
+| 13 | A crossing window's close date is eligible in place of its t0-date for every window, the last included; the transfer block ends at the 20th place or the last date the last window makes eligible (3.1) | VALIDITY | The window-date population | `cl-transfer-*`; amends RL-181 rows 13 and 14 | With RL-181 row 13 | DR's fixture for a final crossing window passes; a second block for one window is refused |
+| 14 | `lm-transfer-01` validates under the `transfer` variant of the v2 schema through a new dispatch module, keeps exactly `scores.json`, `stdout`, `stderr`, exits 1 after a read and 2 before (3.2) | VALIDITY (blinding) | One public file; the status tells whether a read happened | `lm-transfer-01` | The paper's data release | Its type, failure and once tests; a pre-read refusal test at status 2; the v1 file's sha256 in CI |
+
+**Rows closed or changed by this ruling.** RL-181 rows 13 and 14 are read with row 13. RL-181 row 8 is read with row 14's third variant. No row of RL-179, RL-180 or RL-182 closes. The lead's hold "step 4 waits for the follow-up" becomes row 10.
+
+**What comes back to me.** A replay case that needs a change inside the ten. A replay of the repaired evaluator on stored records that is not `pass`. A Sol finding that changes S's or Q's arithmetic, level, population or words. An unclean A/B row. A `twin_agrees` other than `yes`; a second interruption. The follow-up's diff with finding 1's test and the pack answer. Every R1 post-close branch of 2.6 except `TYPICAL-CASE` and `R1-RERUN`. A first-span comparison that differs from dev-05's. The anti-hindsight list. `lm-transfer-01`'s final manifest. Nothing else in this ruling returns.
