@@ -29,7 +29,42 @@ digest remains gated on the interim schema being present, as ruled for PR #795.
 The pre-change focused baseline ran 54 tests with one expected skip. Each
 new regression failed against the pre-fix behavior, then passed on its fix.
 The whole-suite gate uses hosted GitHub CI because the unfiltered local
-suite can access real measurement inputs. The live CI state and any review
-evidence belong in the draft PR ledger. Independent review is pending at
-handoff. RL-187 names an Astra seat, and the Tier 1 pipeline calls for a
-cross-family reviewer. The lead owns review routing before readiness.
+suite can access real measurement inputs. PR #854 records CI and the cold
+verdict against the exact candidate head. [Draft PR #854](https://github.com/mpmdw/JouleWise/pull/854)
+
+## Astra 6.2 independent executing review
+
+Round one reviewed `ae89fcc13f8069b1006bedf388f35ab970eed916` against base
+`44c58650ed75c2d9db22349c663261c748244e39`. Astra confirmed the checkout SHA
+and ran five focused regressions with Python 3.13. All five passed. The
+independent probes also passed six decoder refusal cases and four uppercase
+path refusal cases with zero reads. A forced-missing-input unittest run
+reported two reasoned skips and passed the qualification byte check.
+
+| Finding | Disposition | Regression |
+| --- | --- | --- |
+| VERIFIED MED. `Path.resolve()` preserved an alternate spelling accepted by the case-insensitive worktree volume. Astra reproduced this with a neutral directory name. | Fixed in `0209067082245e731098adab184c1d47deef7c75` by folding case on each supplied and resolved component. | `test_restricted_cli_paths_refuse_before_either_file_is_opened` failed four new synthetic cases before the fix and passed after it. |
+
+Round two reviewed `0209067082245e731098adab184c1d47deef7c75` against the
+round-one head. Astra verified the MED fix and passed the repository
+regression and eight independent synthetic probes. The probes used lower
+and mixed case in direct arguments and dangling symlink destinations, for
+both the manifest and `--registration`. Every case returned status 2 and
+the fixed notice with zero calls to `Path.read_bytes`. No VERIFIED HIGH
+remained. Both rounds used synthetic inputs and public source metadata.
+
+## Exact-head cold pass
+
+The fresh Fable 5.2 seat executes the following synthetic checks on the
+final PR head in a private scratch directory. Record the reviewed SHA,
+execution results, and verdict in the PR body to keep the evidence bound
+to that head.
+
+```sh
+python3.13 -B -m unittest -v \
+  tests.test_cadence_manifest_dispatch.VariantContractTests.test_cli_candidate_decode_refusal_is_fixed \
+  tests.test_cadence_manifest_dispatch.VariantContractTests.test_cli_registration_decode_refusal_is_fixed \
+  tests.test_cadence_manifest_dispatch.VariantContractTests.test_restricted_cli_paths_refuse_before_either_file_is_opened \
+  tests.test_cadence_manifest_dispatch.VariantContractTests.test_qualification_bytes_unchanged \
+  tests.test_cadence_manifest_dispatch.TransferManifestTests.test_missing_interim_inputs_are_reported_as_skips
+```
