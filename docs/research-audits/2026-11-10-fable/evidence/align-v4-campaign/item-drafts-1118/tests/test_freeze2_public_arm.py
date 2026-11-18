@@ -16,6 +16,11 @@ AUDIT = "refs/remotes/origin/audit/2026-11-10-fable"
 LEDGER = "docs/process/cadence/looks/LOOKS.json"
 LOOK = "lm-interim-01"
 QUAL = "lm-qual-01"
+# Public manifest path from the registered row. Every other row value here is synthetic.
+QUAL_REGISTERED_PATH = (
+    "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/"
+    "looks/lm-qual-01.manifest.json"
+)
 MANIFEST = f"docs/process/cadence/looks/{LOOK}.json"
 SCHEMA = f"docs/process/cadence/looks/{LOOK}.output.schema.json"
 ROOT = "invented/public"
@@ -111,6 +116,12 @@ def require(condition, detail):
         raise ValueError(detail)
 
 
+def ledger_json_path(path):
+    return (isinstance(path, str) and path.endswith(".json")
+            and not path.startswith(("/", "~")) and "\\" not in path
+            and ".." not in path.split("/"))
+
+
 def naming_stanza(record):
     return ("FREEZE-2-NAMING ruling={ruling} look={look_id} "
             "coefficients_sha256={coefficients_sha256} public_sha256={public_sha256} "
@@ -165,9 +176,10 @@ def authorize(repo, look, expected):
         require(len(rows) == len(ledger["looks"]) and set(rows) <= {LOOK, QUAL}, "ledger rows")
         if QUAL in rows:
             sibling = rows[QUAL]
-            require(sibling["status"] == "registered" and sibling["manifest_path"] ==
-                    f"docs/process/cadence/looks/{QUAL}.json" and
-                    re.fullmatch("[0-9a-f]{64}", sibling["sha256"]), "registered sibling")
+            # Validate the sibling's ledger metadata. Its manifest is outside this look's reads.
+            require(sibling["status"] == "registered"
+                    and ledger_json_path(sibling["manifest_path"])
+                    and re.fullmatch("[0-9a-f]{64}", sibling["sha256"]), "registered sibling")
         row = rows[LOOK]
         require(row["status"] in statuses, "interim status")
         return row
@@ -224,7 +236,7 @@ def provider_source(answer):
     for name in ("MAIN", "AUDIT", "LEDGER", "LOOK", "QUAL", "MANIFEST", "SCHEMA", "ROOT", "REPORT",
                  "NAMING", "DECISIONS", "NAMING_SCHEMA"):
         lines.append(f"{name} = {globals()[name]!r}")
-    for fn in (raw, decision_source, require, naming_stanza, verify_naming, authorize, provider_main):
+    for fn in (raw, decision_source, require, ledger_json_path, naming_stanza, verify_naming, authorize, provider_main):
         lines.append(inspect.getsource(fn))
     source = "\n".join(lines)
     if answer is not None:
@@ -250,7 +262,7 @@ class PublicHistory:
         git(self.auth, "remote", "add", "origin", str(self.publisher.resolve()))
         self.code = self.provider()
         self.qual = dict(look_id=QUAL, status="registered",
-                         manifest_path=f"docs/process/cadence/looks/{QUAL}.json",
+                         manifest_path=QUAL_REGISTERED_PATH,
                          sha256="2" * 64)
         self.report = dict(look_id=LOOK, manifest_sha256=None, commit=None, stage1_sha256="3" * 64,
                            coefficients_sha256=DIGEST, in_energy_fit=0, qualified_interim="no",
@@ -675,11 +687,72 @@ def naming_matrix(root, probe, world, projections):
     print("PASS RL-184 named Start and Run in all six items; Run refuses stale audit proof or failed audit fetch")
 
 
+def registered_sibling_matrix(root, probe, world, definitions, start):
+    alternate = f"docs/process/cadence/looks/{QUAL}.json"
+    malformed = (
+        "/" + QUAL_REGISTERED_PATH,
+        "invented/../" + QUAL_REGISTERED_PATH,
+        QUAL_REGISTERED_PATH.removesuffix(".json"),
+    )
+    cases = [
+        ("control", alternate, alternate, True),
+        ("registered path on current ledger", QUAL_REGISTERED_PATH, alternate, True),
+        ("registered path on execution ledger", alternate, QUAL_REGISTERED_PATH, True),
+        ("registered path on both ledgers", QUAL_REGISTERED_PATH, QUAL_REGISTERED_PATH, True),
+    ]
+    for path in malformed:
+        cases.extend((
+            (f"malformed current path {path}", path, QUAL_REGISTERED_PATH, False),
+            (f"malformed execution path {path}", QUAL_REGISTERED_PATH, path, False),
+        ))
+
+    original_sibling, original_execution = world.qual, world.execution
+    body = with_test_pin(definitions, world.code) + "\n" + start
+    observations = []
+    for case, current_path, execution_path, accepted in cases:
+        world.qual = dict(original_sibling, manifest_path=execution_path)
+        world.execution = world.execution_commit()
+        world.qual = dict(original_sibling, manifest_path=current_path)
+        main = world.publish("yes")
+        world.set_heads(main)
+        rules = public_rules(world, main, world.code)
+        for shell in SHELLS:
+            result, trace = exercise(root, probe, shell, body, world.auth, rules)
+            passed = (result.returncode == 0) == accepted
+            print(f"{'PASS' if passed else 'FAIL'} {case} ({Path(shell).name}, exit {result.returncode})")
+            observations.append((case, shell, result, trace, accepted, rules, main))
+    world.qual, world.execution = original_sibling, original_execution
+    for case, shell, result, trace, accepted, rules, main in observations:
+        assert_outcome(result, trace, accepted, label=(case, shell))
+        if accepted:
+            assert_receipt(result, trace, rules, main, world.code)
+        else:
+            assert "HOLD_FOR_FIT_FREEZE: registered sibling" in result.stderr
+
+
+def unpinned_provider_matrix(root, probe, world, items, projections):
+    # Run each phase independently with the shipped definitions and a valid public yes.
+    world.set_heads(world.main)
+    rules = public_rules(world, world.main, world.code)
+    rules["git"] = []
+    for item, (definitions, start, run) in zip(items, projections):
+        for shell in SHELLS:
+            for phase, entry in (("Start", start), ("Run", run)):
+                result, trace = exercise(root, probe, shell, definitions + "\n" + entry, world.auth, rules)
+                assert_outcome(result, trace, False, label=(item.name, shell, phase))
+                assert "WAIT: HOLD_FOR_FIT_FREEZE (reviewed public verifier pin pending)" in result.stderr
+                assert not any(kind == "git" or detail[1].startswith(rules["tmp"]) for kind, detail in trace)
+                assert result.stdout.splitlines() == ["native_checks"], result.stdout
+    print("PASS all six shipped items hold at Start and Run before evidence access without a reviewed pin (bash, zsh)")
+
+
 def matrix(root, probe, items):
     world = PublicHistory(root / "matrix")
     projections = [projection(item) for item in items]
     assert len(set(projections)) == 1
     definitions, start, run = projections[0]
+    registered_sibling_matrix(root, probe, world, definitions, start)
+    unpinned_provider_matrix(root, probe, world, items, projections)
     cases = (
         "yes", "single", "frozen", "dirty-sources", "no", "not-evaluable", "bad-word", "bare-ruling",
         "missing-word", "missing-report", "audit-only", "worktree-only", "qual-only", "duplicate",
@@ -687,7 +760,7 @@ def matrix(root, probe, items):
         "manifest-pin", "manifest-look", "report-pin", "report-look", "report-manifest", "report-stage1",
         "report-coefficient", "noncanonical-report", "schema-pin", "execution-binding",
         "nonancestor-execution", "manifest-route", "report-route", "schema-route", "wrong-expected",
-        "malformed-expected", "unfilled", "provider-held", "missing-pin", "missing-dependency",
+        "malformed-expected", "unfilled", "missing-pin", "missing-dependency",
         "symlink-dependency", "verified-response", "wrong-hash-response",
     )
     for case in cases:
@@ -718,7 +791,7 @@ def matrix(root, probe, items):
         world.set_heads(main, audit)
         rules = public_rules(world, main, pin, execution=execution, naming=case == "bare-ruling")
         value = {"wrong-expected": OTHER, "malformed-expected": "wrong", "unfilled": ""}.get(case, DIGEST)
-        data = definitions if case == "provider-held" else with_test_pin(definitions, pin)
+        data = with_test_pin(definitions, pin)
         for shell in SHELLS:
             body = data + '\nFREEZE2_COEF_SHA256="$FREEZE_TEST_EXPECTED"\n' + start
             result, trace = exercise(root, probe, shell, body, world.auth, rules,
@@ -736,7 +809,7 @@ def matrix(root, probe, items):
                                for line in result.stdout.splitlines()), result.stdout
                 if case == "unfilled":
                     assert not trace, (case, trace)
-                if case in ("malformed-expected", "provider-held"):
+                if case == "malformed-expected":
                     assert not any(kind == "git" or where[1].startswith(rules["tmp"])
                                    for kind, where in trace), (case, trace)
                 if case in ("missing-dependency", "symlink-dependency"):
