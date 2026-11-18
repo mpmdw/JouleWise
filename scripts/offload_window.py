@@ -9,7 +9,8 @@ MBP side (runs right after finalize, commit and push, at the START of cool-down)
               monotonic deadline. One pack per window: a finalized_manifest.v2 record is packed once by the
               harvest-off lane (--harvest-pack); --pack is the fallback for R1 and legacy manifests only
   release     delete the MBP copy only after a FRESH Air receipt (the Air re-hashes the
-              compressed parts against the MBP's nonce) AND a sealed second-copy receipt
+              compressed parts against the MBP's nonce) AND a sealed second-copy receipt.
+              V4 also requires a matching final record on the pushed records ref.
   triage      evidence for the pre-arm `quiet_start_state` entry
 Air side:
   init-store  bind the landing store to one APFS volume (by volume UUID); run once
@@ -540,6 +541,7 @@ def parse_record_manifest(raw: bytes, record_root: Path, manifest_path: Path | N
                             and type(row.get("size")) is int, f"finalized_manifest_bad_closure_row:{name}", Mismatch)
                     env.byte_bound[name] = {"sha256": row["sha256"], "size": row["size"]}
             env.doc = doc
+            check_pre_desk_inventory(env)
         elif schema == SCHEMA_R1:  # joulewise/align/apple/r1_runtime.py k_harvest
             env = Envelope("r1_harvest_manifest.v1")
             require(os.path.abspath(str(doc.get("root", ""))) == str(record_root),
@@ -740,6 +742,17 @@ def bound_directories(doc: dict) -> list[str]:
     return sorted(out)
 
 
+def check_pre_desk_inventory(env: Envelope):
+    """RL-168: the verified copy must be usable as a fresh, pre-desk restore."""
+    inputs = env.doc["closure"].get("inputs") or {}
+    resolved_inputs = (inputs[name]["real"] for name in env.byte_bound if name in inputs)
+    names = (name for group in (env.files, env.links, env.dirs, env.byte_bound, resolved_inputs,
+                                bound_directories(env.doc)) for name in group)
+    forbidden = {"archive", "pilot.json", "desk.json"}
+    require(not any(part.casefold() in forbidden for name in names for part in Path(name).parts),
+            "harvest_pack_contains_desk_artifact", Mismatch)
+
+
 def reserved_entries(env: Envelope) -> list[str]:
     """Session entries under the harvest transport's reserved names (`.external/`, `.external-staged`)."""
     return sorted(rel for rel in [*env.files, *env.links, *env.dirs]
@@ -879,11 +892,68 @@ def check_duplicate_roots(record_root: Path, roots) -> list[str]:
     return out
 
 
+def requires_final_record(manifest: dict) -> bool:
+    fmt = manifest.get("record_format")
+    if fmt == "finalized_manifest.v2" or manifest.get("pack_format") == SCHEMA_HARVEST_PACK:
+        return True
+    if fmt == "r1_harvest_manifest.v1" or manifest.get("window_id") == "R1":
+        return False
+    plan_id = (manifest.get("terminal") or {}).get("plan_id", "")
+    return (str(plan_id).startswith("align-v4-")
+            or re.fullmatch(r"W1|[CDT][1-9][0-9]*", manifest.get("window_id", "")) is not None)
+
+
+class PushedFinalRecords:
+    """A snapshot of the pushed record chain, using the normal packet finality predicate."""
+
+    def __init__(self, repo, pushed_ref, head_path):
+        self.repo, self.pushed_ref, self.head_path = repo, pushed_ref, head_path
+        self.records = None
+
+    def _read_chain(self):
+        # The Air's installed forced-command script stays standalone. Only MBP release uses these readers.
+        if str(ROOT) not in sys.path:
+            sys.path.insert(0, str(ROOT))
+        from scripts.align_v4_next_arm_packet import GitEvidence, WindowRecord
+
+        require(self.pushed_ref.startswith("refs/remotes/"), "v4_release_needs_remote_tracking_ref")
+        evidence = GitEvidence(self.repo)
+        tip = evidence.git("show-ref", "--verify", "--hash", self.pushed_ref).decode().strip()
+        record = WindowRecord(evidence, tip, self.head_path)
+        chain = {record.window: record}
+        while record.previous_link is not None:
+            link = record.previous_link
+            parent = WindowRecord(evidence, link["commit"], link["path"])
+            require(parent.sha256 == link["sha256"] and parent.commit != record.commit
+                    and parent.window not in chain, "v4_release_previous_record_mismatch")
+            evidence.git("merge-base", "--is-ancestor", parent.commit, record.commit)
+            parent.bind_final(record)
+            chain[parent.window] = parent
+            record = parent
+        return chain
+
+    def check(self, manifest):
+        try:
+            if self.records is None:
+                self.records = self._read_chain()
+            record = self.records.get(manifest["window_id"])
+            require(record is not None, "v4_release_window_record_not_pushed")
+            require(record.finalized_manifest_sha256 == manifest["record_manifest_sha256"],
+                    "v4_release_finalized_digest_mismatch")
+            require(record.source("plan")["plan_id"] == manifest["terminal"]["plan_id"],
+                    "v4_release_plan_mismatch")
+            record.captures()
+            require(record.is_final(), "v4_release_desk_not_final")
+        except (OSError, ValueError, KeyError, TypeError, AttributeError) as exc:
+            raise Refusal("v4_release_pushed_records_unreadable") from exc
+
+
 class Offload:
     """State for one window on the MBP: <state_root>/<window_id>/."""
 
     def __init__(self, state_root: Path, window_id: str, *, runner=None, now=time.time, mono=time.monotonic,
-                 deadline_epoch: float | None = None, state_probe=None, lease: Lease | None = None, log=None):
+                 deadline_epoch: float | None = None, state_probe=None, lease: Lease | None = None, log=None,
+                 pushed_records: PushedFinalRecords | None = None):
         self.window_id = valid_window(window_id)
         self.state_root = plain_path(state_root)
         self.dir = self.state_root / window_id
@@ -892,6 +962,7 @@ class Offload:
         # The deadline is held on the monotonic clock: a wall-clock step cannot extend it.
         self.mono_deadline = None if deadline_epoch is None else mono() + (deadline_epoch - now())
         self.state_probe, self.lease = state_probe, lease
+        self.pushed_records = pushed_records
         self.log = log or (lambda message: None)
         self.unlink = os.unlink  # tests inject an interruption here
 
@@ -945,6 +1016,8 @@ class Offload:
                                                           terminal)
         # Lead ruling 2026-11-08: one pack per window. A v4 session is packed once, by the harvest-off lane.
         require(env.fmt != "finalized_manifest.v2", "finalized_manifest_v2_is_packed_once_by_harvest_off:use_--harvest-pack")
+        require(not requires_final_record({"window_id": self.window_id, "record_format": env.fmt, "terminal": term}),
+                "v4_window_needs_finalized_manifest_v2:use_--harvest-pack")
         files, parts, current, current_bytes = [], [], [], 0
         suffix = "zst" if codec["name"] == "zstd" else "gz"
         for rel in sorted(env.files):
@@ -1036,6 +1109,7 @@ class Offload:
                     and manifest.get("pack_format") == SCHEMA_HARVEST_PACK
                     and manifest.get("local_parts_dir") == str(plain_path(harvest_pack)), "duplicate_run_conflict",
                     Mismatch)
+            self.check_restorable(manifest)
             return manifest
         record_root, raw, env, infos, term = self.preflight(record_root, record_manifest, record_manifest_sha256,
                                                             terminal)
@@ -1310,7 +1384,8 @@ class Offload:
 
     def release(self) -> dict:
         """Delete the MBP copy only after a FRESH Air receipt, a sealed second-copy receipt and a restorable
-        Air copy, and only objects proven, after they are detached into a private quarantine, to be this
+        Air copy. RL-168 additionally requires a pushed final v4 record. Delete only objects proven, after
+        they are detached into a private quarantine, to be this
         window's bound objects (reviews F1, F2, D1, D2, S1-D01). Never rmtree. There is no pressure route:
         under disk pressure the policy is HOLD (lead ruling 2026-11-08)."""
         with state_lock(self.state_root):
@@ -1319,6 +1394,10 @@ class Offload:
                 return read_json(self.dir / "released.json")
             self.check_quiet_allowed()
             self.check_restorable(manifest)
+            if requires_final_record(manifest):
+                require(manifest["window_id"] == self.window_id, "v4_release_window_mismatch", Mismatch)
+                require(self.pushed_records is not None, "v4_release_needs_final_pushed_record")
+                self.pushed_records.check(manifest)
             nonce = secrets.token_hex(16)
             receipts = self.call(f"receipts {self.window_id} {nonce}")
             air, second, fresh = receipts.get("air"), receipts.get("second"), receipts.get("fresh")
@@ -1774,6 +1853,9 @@ def _supervised(args, kind, action, *, runner, state_probe, now, mono, lease, al
             "interlock": {"mode": "lease+loop_lock+probe" if lease is not None else "probe_only"}}
     rc, outcome, off = 0, {}, None
     try:
+        proof = tuple(getattr(args, name, None) for name in ("records_repo", "pushed_ref", "record_path"))
+        require(not any(proof) or all(proof), "v4_release_records_options_must_be_supplied_together")
+        pushed_records = PushedFinalRecords(*proof) if all(proof) else None
         if lease is not None:
             lease.acquire()
             lease.check()
@@ -1781,7 +1863,7 @@ def _supervised(args, kind, action, *, runner, state_probe, now, mono, lease, al
             span.update(deadline_epoch_s=deadline)
             span["interlock"]["generation"] = lease.generation
         off = Offload(state_root, args.window_id, runner=runner, now=now, mono=mono, deadline_epoch=deadline,
-                      state_probe=state_probe, lease=lease)
+                      state_probe=state_probe, lease=lease, pushed_records=pushed_records)
         with alarm_guard(off.remaining_s() if alarm else None):
             rc, outcome = action(off, span, state_root, deadline)
     except Refusal as exc:
@@ -1829,7 +1911,8 @@ def _run_stages(args, off, state_root, span, runner, now, mono, deadline, state_
         if harvest_pack is not None:
             with contextlib.suppress(OSError):
                 compressed = os.lstat(Path(harvest_pack) / HARVEST_PAYLOAD).st_size
-    older_bytes, older_s = _pending_older(state_root, args.window_id, rates) if args.release_older else (0, 0.0)
+    older_bytes, older_s = (_pending_older(state_root, args.window_id, rates, off.pushed_records)
+                            if args.release_older else (0, 0.0))
     predicted = predict_s(raw_bytes, rates, done, 0, compressed) + older_s
     span["predicted_s"] = round(predicted, 1)
     span["rates_used"] = rates
@@ -1837,7 +1920,7 @@ def _run_stages(args, off, state_root, span, runner, now, mono, deadline, state_
     older = []
     if args.release_older:
         span["stages"].append(_stage("release_older", now, lambda: older.extend(release_older(
-            state_root, args.window_id, runner, now, mono, deadline, state_probe, lease))))
+            state_root, args.window_id, runner, now, mono, deadline, state_probe, lease, off.pushed_records))))
     manifest = {}
     if harvest_pack is not None:  # lead ruling 2026-11-08: one pack per window, consumed as is
         span["stages"].append(_stage("adopt_harvest_pack", now, lambda: manifest.update(off.adopt_harvest_pack(
@@ -1886,7 +1969,7 @@ def _raw_size(args) -> int:
     return total
 
 
-def _pending_older(state_root: Path, current: str, rates: dict) -> tuple[int, float]:
+def _pending_older(state_root: Path, current: str, rates: dict, pushed_records=None) -> tuple[int, float]:
     """(compressed bytes the Air rechecks, predicted seconds) for older windows still to release."""
     total, seconds = 0, 0.0
     for directory in state_root.iterdir():
@@ -1895,6 +1978,13 @@ def _pending_older(state_root: Path, current: str, rates: dict) -> tuple[int, fl
         with contextlib.suppress(OSError, ValueError, KeyError):
             if not (directory / "released.json").exists():
                 manifest = read_json(directory / MANIFEST_NAME)
+                if requires_final_record(manifest):
+                    if pushed_records is None:
+                        continue
+                    try:
+                        pushed_records.check(manifest)
+                    except Refusal:
+                        continue
                 total += manifest["compressed_bytes"]
                 seconds += predict_release_s(manifest, rates)
     return total, seconds
@@ -1920,7 +2010,8 @@ def _update_rates(state_root: Path, rates: dict, manifest: dict, span: dict, old
     write_atomic(state_root / "rates.json", canonical(new))
 
 
-def release_older(state_root: Path, current: str, runner, now, mono, deadline, state_probe, lease) -> list:
+def release_older(state_root: Path, current: str, runner, now, mono, deadline, state_probe, lease,
+                  pushed_records=None) -> list:
     results = []
     for directory in sorted(p for p in state_root.iterdir() if p.is_dir() and not p.is_symlink()):
         if directory.name == current or not WINDOW_ID.match(directory.name):
@@ -1928,7 +2019,7 @@ def release_older(state_root: Path, current: str, runner, now, mono, deadline, s
         if not (directory / MANIFEST_NAME).exists() or (directory / "released.json").exists():
             continue
         off = Offload(state_root, directory.name, runner=runner, now=now, mono=mono, deadline_epoch=deadline,
-                      state_probe=state_probe, lease=lease)
+                      state_probe=state_probe, lease=lease, pushed_records=pushed_records)
         try:
             results.append(off.release())
         except DeadlineStop:
@@ -2597,6 +2688,9 @@ def main(argv=None) -> int:
         p.add_argument("--watchdog-state", type=Path, help="magistrate watchdog state (fenced_checkouts)")
         p.add_argument("--loop-lock", type=Path, help="the magistrate's persistent loop lock file")
         p.add_argument("--lease-margin-s", type=float, default=120.0)
+        p.add_argument("--records-repo", type=Path, help="desk records Git checkout for v4 deletion proof")
+        p.add_argument("--pushed-ref", help="local remote-tracking ref of the pushed desk records branch")
+        p.add_argument("--record-path", help="latest window index path on --pushed-ref for v4 deletion proof")
         return p
 
     run = mbp("run")

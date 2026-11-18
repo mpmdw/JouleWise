@@ -22,6 +22,7 @@ import time
 from contextlib import redirect_stderr as contextlib_redirect_stderr
 from types import SimpleNamespace
 import unittest
+from unittest.mock import Mock
 
 ROOT = Path(__file__).resolve().parents[1]
 SPEC = importlib.util.spec_from_file_location("offload_window", ROOT / "scripts/offload_window.py")
@@ -200,8 +201,10 @@ class Fixture(unittest.TestCase):
                                   now=self.clock, mono=self.clock, lease=lease)
 
     def offload(self, window="w1-test"):
+        # These direct-release fixtures exercise the transport receipts and deletion journal.
+        # The audit regression below exercises the actual pushed-record check separately.
         return ow.Offload(self.state, window, runner=self.transport, now=self.clock, mono=self.clock,
-                          state_probe=lambda: self.probe_state)
+                          state_probe=lambda: self.probe_state, pushed_records=Mock(spec=ow.PushedFinalRecords))
 
     def span(self, window="w1-test", state=None):
         return json.loads(((state or self.state) / window / "timing/offload-span.json").read_text())
@@ -216,6 +219,12 @@ class Fixture(unittest.TestCase):
 
 
 class HappyPath(Fixture):
+    def test_audit_w1_cannot_use_legacy_pack_to_escape_retention(self):
+        self.assertEqual(self.run_offload(window_id='W1'), 2)
+        self.assertIn('v4_window_needs_finalized_manifest_v2', self.span('W1')['reason'])
+        self.assertEqual(self.transport.calls, [])
+        self.assert_nothing_deleted()
+
     def test_round_trip_verify_second_copy_release(self):
         self.assertEqual(self.run_offload(), 0)
         span = self.span()
@@ -537,6 +546,93 @@ class FinalizedManifestV2(Fixture):
         self.assertEqual(list(self.record.iterdir()), [])
         self.assertFalse(self.pack_dir.exists())  # payload and MANIFEST.json gone; the empty directory too
         self.assertTrue(self.ledger.exists())     # a closure input is never deleted
+
+    @unittest.skipUnless(ow.zstd_cli(), 'native harvest pack requires zstd')
+    def test_audit_w1_two_verified_copies_hold_until_the_final_record_is_pushed(self):
+        from joulewise.align.apple import harvest_offload
+        from tests.align.test_v4_next_arm_packet import Scenario
+
+        # Audit reproduction: use the actual harvest pack and make the second copy ready before release.
+        (self.record / 'view').unlink()
+        (self.record / 'view').symlink_to('members')
+        mirror = {'root': str(self.ledger.parents[1]), 'identity': {'fixture': 'synthetic'}}
+        finalized = harvest_offload.finalized_manifest(self.record, mirror=mirror, inputs=(self.ledger,))
+        raw = harvest_offload._canonical_bytes(finalized)
+        body = self.tmp / 'mbp/finalized_manifest.json'
+        body.write_bytes(raw)
+        digest = sha(raw)
+        harvest_offload.pack(self.record, self.pack_dir, finalized=finalized, external=(self.ledger,),
+                             mirror_identity=mirror['identity'])
+        packed = dict(window_id='W1', record_manifest=body, record_manifest_sha256=digest,
+                      harvest_pack=self.pack_dir, pack=False)
+
+        def confirm_after_verify(command, reply):
+            if command == 'verify W1':
+                self.assertEqual(self.confirm_second_copy(), ['W1'])
+            return reply
+
+        self.transport.replace_reply = confirm_after_verify
+        self.assertEqual(self.run_offload(**packed), 0)
+        self.assertEqual(self.span('W1')['outcome'], 'verified_on_air')
+        self.assertEqual(self.span('W1')['release_held'], 'v4_release_needs_final_pushed_record')
+        self.assertTrue((self.store / 'second/W1' / ow.SECOND_RECEIPT).exists())
+        self.assertTrue(self.pack_dir.exists())
+        self.assert_nothing_deleted()
+
+        # Explicit release and the older-window sweep run through the same guard.
+        with _redirect(io.StringIO()):
+            rc = ow.run_release(self.args(window_id='W1'), runner=self.transport,
+                                state_probe=lambda: self.probe_state, now=self.clock, mono=self.clock, alarm=False)
+        self.assertEqual(rc, 2)
+        self.assertEqual(ow.release_older(self.state, 'C1', self.transport, self.clock, self.clock,
+                                          self.clock() + 600, lambda: self.probe_state, None),
+                         [{'window_id': 'W1', 'held': 'v4_release_needs_final_pushed_record'}])
+        self.assert_nothing_deleted()
+
+        repo = self.tmp / 'records'
+        repo.mkdir()
+        r1 = Scenario(repo, 'R1').finish()
+        w1 = Scenario(repo, 'W1', previous=r1, provisional=True)
+        for source in ('plan', 'desk', 'pilot'):
+            w1.sources[source]['plan_id'] = 'plan-w1'
+        w1.record['finalized_manifest'] = digest
+        w1.finish()
+        ref = 'refs/remotes/origin/records'
+        w1.git('update-ref', ref, w1.record_commit)
+        c1 = Scenario(repo, 'C1', previous=w1, previous_final=True).finish()
+        proof = dict(records_repo=repo, pushed_ref=ref)
+        self.assertEqual(self.run_offload(**packed, **proof, record_path=w1.record_path), 0)
+        self.assertEqual(self.span('W1')['release_held'], 'v4_release_desk_not_final')
+        self.assertEqual(self.run_offload(**packed, **proof, record_path=c1.record_path), 0)
+        self.assertEqual(self.span('W1')['release_held'], 'v4_release_pushed_records_unreadable')
+        self.assert_nothing_deleted()
+        self.assertTrue(self.pack_dir.exists())
+        self.assertFalse((self.state / 'W1/deleting.json').exists())
+
+        c1.git('update-ref', ref, c1.record_commit)
+        self.assertEqual(self.run_offload(**packed, **proof, record_path=c1.record_path), 0)
+        self.assertIsNone(self.span('W1')['release_held'])
+        self.assertFalse(self.pack_dir.exists())
+        self.assertFalse((self.record / 'empty.txt').exists())
+
+    def test_audit_offload_refuses_packs_that_carry_desk_artifacts_before_upload(self):
+        for name in ('archive', 'PILOT.json', 'desk.json'):
+            with self.subTest(name=name):
+                artifact = self.record / name
+                if name == 'archive':
+                    artifact.mkdir()
+                else:
+                    artifact.write_text('{}')
+                self.pack_dir = self.tmp / 'mbp' / f'pack-with-{name}'
+                self.assertEqual(self.run_offload(**self.packed(window_id='W1')), 3)
+                self.assertIn('harvest_pack_contains_desk_artifact', self.span('W1')['reason'])
+                self.assertEqual(self.transport.calls, [])
+                self.assertTrue(self.pack_dir.exists())
+                self.assert_nothing_deleted()
+                if name == 'archive':
+                    artifact.rmdir()
+                else:
+                    artifact.unlink()
 
     def test_pack_mode_refuses_a_v2_record(self):
         path, digest = self.v2()

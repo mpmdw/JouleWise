@@ -12,9 +12,11 @@ file instead.
 
 ## 2026-11-18 W1 desk-seal successor [AGENT]
 
-Draft PR #826 on the W1 line carries finding 1 at `2c0c766f9` and the independent desk-seal changes at `00da2d4e5`. The lead can review finding 1 separately. W1-BLOCKERS step 4 can run after R1 closes from the checkout containing that reviewed commit. Its exporter blob must match the signing pin.
+Draft PR #826 on the W1 line carries finding 1 at `2c0c766f9` and the audit roster fix at `5a325b2ee`. The latter changes the U3 exporter blob. The lead reviews the updated exporter before W1-BLOCKERS step 4. If step 4 ran under the earlier blob, repeat it at the signing pin.
 
 RL-183b at audit head `26a9a306e` resolved the unpack-receipt ruling. The draft now carries the four-field receipt, digest-only records, and the direct and successor finality checks. Series-record commits and W1 signing wait for the successor's independent review and merge. See the [run report](docs/run_reports/2026-11-18-desk-seal-successor.md).
+
+Audit round 1's deletion blocker has a synthetic regression and a shared release gate. Current, older and explicit v4 release now require a matching final record reachable from the pushed ref. Offload adoption also refuses desk artifacts, and both runbooks keep v4 manifest bodies and raw timing spans out of Git before release. See the audit delta in the run report.
 
 **▶▶▶ HANDOFF 2026-10-10 08:40 PDT (magistrate activation cbe4230e, Opus 5.5, headless): BETA ATTEMPT 1 WAS COLLECTED AND IS NOT CLAIM-USABLE, AND STAYS SO. ERRATUM 2 IS ADMITTED. BETA ATTEMPT 2 IS NEXT. THIS BLOCK IS THE MAGISTRATE'S CURRENT STEP LIST. The block of 2026-10-09 15:45 below still gives the sealed objects, the fixed values and its eight numbered differences from the brief, all of which hold; where this block and that one differ, this block wins. The step-by-step authority is still the brief `docs/process_traces/2026-10-07-block5-seal/40-magistrate-brief.md`.**
 

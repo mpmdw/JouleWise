@@ -96,10 +96,10 @@ offload_window.py run --state-root "$OFFLOAD_STATE" --window-id "$K" --record-ro
 
 - `$TERMINAL` is the window's `result.json`. It must lie inside the finalized manifest's closure, as that runbook's §1a requires (for example `night/result.json`, relative to the record root).
 
-- The tool checks the pack against the committed digest `H` before sending anything. It pushes the payload, `MANIFEST.json` and the finalized manifest (as `record-manifest.bin`) into `/Volumes/JW-EXT/jw-offload/inbox/$K` on the Air, and the Air verifies every member there.
-- Commit the span (`$OFFLOAD_STATE/$K/timing/offload-span.json`) into the record branch, as its §4 says.
+- The tool checks the pack against digest `H` before sending anything. It transfers the payload, `MANIFEST.json` and the finalized manifest (as `record-manifest.bin`) to the Air store outside Git. The Air verifies every member there.
+- Keep `$OFFLOAD_STATE/$K/timing/offload-span.json` in private offload state. It includes raw and compressed byte counts. Use the `triage` receipt for quiet-start evidence.
 - The transfer must finish before the dwell starts. Before the arm, run its `triage --dwell-start-epoch` check.
-- Keep the offload pack and MBP originals until the window's desk is final and its record is pushed (RL-168 finding 3). The offload tool's two-verified-copy requirement also applies before its deletion step.
+- Keep the offload pack and MBP originals until the window's desk is final and its record is pushed (RL-168 finding 3). The offload tool also requires two verified copies. Pass the pushed records checkout, remote-tracking ref and latest index path from AIR-OFFLOAD §4 to enable deletion on `run` or `release`.
 
 ## 2. Air, during the MBP cool-down
 

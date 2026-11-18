@@ -51,3 +51,16 @@ Authority is RL-183b on audit head `26a9a306e`. The production caller census fou
 The actual pack/unpack round-trip also verifies exactly four canonical fields, deterministic bytes on a fresh restore, refusal inside the source tree, and preservation of an existing output. The frozen-source test compares all ten R1 files against `b2e01464d`. Finding 1's exporter blob still equals the early-review blob. Independent review and the W1 signing gate remain with the lead. The draft remains the venue for Fable's readback.
 
 The 49-test packet suite and the targeted receipt reruns passed. The broader offload run identified one old assertion that labeled a test window final before its desk finished, and one transient archive-provenance difference. The revised T-window test passed with provisional history and R17 refusal at k+2. The provenance test passed unchanged on rerun.
+
+## Audit round 1 delta
+
+The audit ran against `bac0c4f6e`. Four findings were verified. The W1 deletion gate now lives at the common `Offload.release` entry before the two-copy release and journal. It reads the Git history reachable from the supplied remote-tracking ref, matches the window, plan and finalized manifest digest to the offload, and reuses RL-183b finality for direct or successor sources. Missing proof holds both originals and the pack. `run` and `release` accept the same proof inputs. The alternate legacy pack route refuses a v4 window.
+
+| Audit finding | Regression or check | Result |
+| --- | --- | --- |
+| HIGH, RL-168 retention | `test_audit_w1_two_verified_copies_hold_until_the_final_record_is_pushed` reproduces the real W1 pack with a second copy ready before release. It covers the current, older and explicit deletion routes, provisional pushed state, a final successor only in the local checkout, and release once that successor is pushed. `test_audit_w1_cannot_use_legacy_pack_to_escape_retention` covers the alternate pack route. | PASS |
+| MED, pack adoption | `test_audit_offload_refuses_packs_that_carry_desk_artifacts_before_upload` refuses each of the three audited artifacts without contacting the transport. The Air uses the same finalized inventory check before verifying. | PASS |
+| MED, U3 roster | `test_registered_e01_e09_is_measured_but_another_e01_path_is_refused` edits the working-tree roster and confirms refusal before measurement. Both registration inputs now come from the same Git commit. | PASS |
+| MED, RL-163 §1 publishing | Both operational runbooks direct the canonical manifest body and timing span to private state. The v4 record carries the digest, and the span is available for local timing use. | PASS |
+
+The 137-test focused run passed, including the ten-blob comparison against `b2e01464d`. A separate legacy run passed 105 checks and hit a workspace permission error creating the synthetic `restricted` directory in `test_git_and_restricted_members_refuse_without_entering`. GitHub CI covers the wider suite. The exporter blob is now `b35c94801a6700947e8c370e27b9d538e13404df` at `5a325b2ee`. Review that commit before step 4 and rerun step 4 at the signing pin if it used the earlier blob.
