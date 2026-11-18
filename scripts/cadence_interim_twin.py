@@ -827,7 +827,13 @@ def span_dirs(root, overrides, spans):
 
 
 def json_lines(data):
-    return [decode_json(line) for line in data.splitlines() if line.strip()]
+    # Step 3 converts numbers at the field boundary. A phase timestamp may
+    # overflow float representation and fall outside a finite turn.
+    rows = [json.loads(line, object_pairs_hook=unique_object, parse_constant=finite)
+            for line in data.splitlines() if line.strip()]
+    if any(not isinstance(row, dict) for row in rows):
+        raise ValueError("invalid Step 3 JSON record")
+    return rows
 
 
 def gpu_fields(data):
@@ -1088,10 +1094,10 @@ def span_soak(receipt):
     interrupted = bool(attempts) and step_names == expected_names[:-1]
     if step_names != expected_names and not interrupted:
         raise ValueError("invalid soak step order")
-    codes = [rc for _, rc, _ in soak_steps]
+    results = [(rc, error) for _, rc, error in soak_steps]
     if interrupted:
-        codes.append(None)
-    for number, (row, rc) in enumerate(zip(attempts, codes, strict=True), 1):
+        results.append((None, None))
+    for number, (row, (rc, error)) in enumerate(zip(attempts, results, strict=True), 1):
         if not isinstance(row, dict) or row.keys() != SOAK_ATTEMPT_FIELDS:
             raise ValueError("invalid soak attempt fields")
         if type(row["attempt"]) is not int or row["attempt"] != number:
@@ -1099,20 +1105,18 @@ def span_soak(receipt):
         if type(row["started_epoch_s"]) not in (int, float) or not math.isfinite(row["started_epoch_s"]):
             raise ValueError("invalid soak attempt time")
         reason = row["refused"]
-        if reason is not None and (not isinstance(reason, str) or not reason or rc == 0):
-            raise ValueError("invalid refused soak attempt")
+        if reason is not None:
+            if not isinstance(reason, str) or not reason or rc != SOAK_REFUSAL_STEP_RC or error != f"SoakRefusal: {reason}":
+                raise ValueError("invalid refused soak attempt")
         retry_started = number < len(attempts) or (number == 1 and "soak.a2-blackout-wait" in waits)
-        if retry_started and (reason is None or rc != SOAK_REFUSAL_STEP_RC
-                              or soak_steps[number - 1][2] != f"SoakRefusal: {reason}"):
+        if retry_started and reason is None:
             raise ValueError("retry without a recorded soak refusal")
         if row["output_dir"] != "soak" and (number != 1 or reason is None or row["output_dir"] != "soak.rejected1"):
             raise ValueError("invalid soak attempt directory")
 
-    if interrupted and attempts[-1]["refused"] is not None:
-        raise ValueError("refused soak attempt without a step")
     retried = [{"attempt": number, "kind": "kind not recorded", "read_from": None}
                for number in range(1, len(attempts))]
-    accepted = bool(attempts and attempts[-1]["refused"] is None and codes[-1] == 0)
+    accepted = bool(attempts and attempts[-1]["refused"] is None and results[-1][0] == 0)
     return {"attempts": len(attempts), "field_present": True, "accepted": accepted, "retried": retried}
 
 
@@ -1229,6 +1233,18 @@ def child_frame(args):
     return comparison_frame(primary_projection, twin_projection)
 
 
+def step3_mapping(value):
+    if value is None:
+        return {}
+    if not isinstance(value, dict):
+        raise ValueError("invalid Step 3 field map")
+    return value
+
+
+def in_step3_rich_window(stamp, start, last_token):
+    return start - 30 <= stamp <= last_token + 30
+
+
 def step3_records(events_data, turns_data, journal_data, rich_data, native_data):
     """Decode the independent Step 3 inputs without retaining synthetic token IDs."""
     (turn,) = json_lines(turns_data)
@@ -1259,15 +1275,16 @@ def step3_records(events_data, turns_data, journal_data, rich_data, native_data)
     for row in json_lines(journal_data):
         if row.get("kind") != "reading" or row.get("error"):
             continue
-        values = row.get("values") or {}
-        status = values.get("status") or {}
+        values = step3_mapping(row.get("values"))
+        status = step3_mapping(values.get("status"))
+        sensors = step3_mapping(values.get("sensors"))
         started = None
         if type(status.get("pm_observed_ns")) is int:
             started = row["started"]["monotonic_ns"]
             if not isinstance(started, (int, float)):
                 raise ValueError("invalid Step 3 journal freshness clock")
         journal.append((row["finished"]["wall_ns"] / 1e9, started,
-                        (values.get("sensors") or {}).get("TV0h"), status))
+                        sensors.get("TV0h"), status))
     rich = json_lines(rich_data)
     native = [frame for frame in native_data.split(b"\0") if frame.strip()]
     if len(native) not in (len(rich), len(rich) + 1):
@@ -1279,21 +1296,28 @@ def step3_records(events_data, turns_data, journal_data, rich_data, native_data)
             raise ValueError("non-finite Step 3 elapsed count")
         state = None
         if start - 5 <= stamp <= token_times[-1] + 5:
-            raw = plistlib.loads(raw_bytes)
+            try:
+                raw = plistlib.loads(raw_bytes)
+            except (AttributeError, ExpatError, plistlib.InvalidFileException) as error:
+                raise ValueError("invalid Step 3 native plist") from error
             if not isinstance(raw, dict):
                 raise ValueError("invalid Step 3 native frame")
-            if elapsed != int(raw.get("elapsed_ns", -1)):
+            if int(elapsed) != int(raw.get("elapsed_ns", -1)):
                 raise ValueError("Step 3 telemetry intervals disagree")
             value = raw.get("thermal_pressure")
             state = value if isinstance(value, str) else None
-        gpu = frame.get("gpu") or {}
+        gpu = step3_mapping(frame.get("gpu"))
         gpu_energy = gpu.get("gpu_energy")
-        if gpu_energy is not None and elapsed > 0:
+        if gpu_energy is not None and elapsed > 0 and in_step3_rich_window(stamp, start, token_times[-1]):
             left = max(stamp - elapsed / 1e9, token_times[0])
             right = min(stamp, token_times[-1])
             if left < right and not math.isfinite(gpu_energy):
                 raise ValueError("non-finite Step 3 GPU energy")
-        used_states = [(item, item.get("used_ns", 0)) for item in gpu.get("dvfm_states") or []]
+        used_states = []
+        for item in gpu.get("dvfm_states") or []:
+            if not isinstance(item, dict):
+                raise ValueError("invalid Step 3 GPU state")
+            used_states.append((item, item.get("used_ns", 0)))
         states = []
         if sum(used for _, used in used_states) > 0:
             for item, used in used_states:
@@ -1341,7 +1365,7 @@ def step3_cut(start, token_times, journal, power_state):
     # Apply the e20 rule only to windows beginning at least 10 s into decode.
     # Scale active time by each row's overlap with the window.
     reference = max((freq for _, _, _, states in power_state for freq, used in states if used > 0), default=0)
-    clock_rows = sorted((row for row in power_state if start - 30 <= row[0] <= end + 30), key=lambda row: row[0])
+    clock_rows = sorted((row for row in power_state if in_step3_rich_window(row[0], start, end)), key=lambda row: row[0])
     intervals = []
     for right, elapsed, _, states in clock_rows:
         active = sum(used for _, used in states)
@@ -1356,7 +1380,7 @@ def step3_cut(start, token_times, journal, power_state):
         for lo, hi, active, clock in intervals:
             overlap = min(hi, right) - max(lo, begin)
             if overlap > 0 and hi > lo:
-                weight = active * (overlap / (hi - lo))
+                weight = active * overlap / (hi - lo)
                 weight_sum += weight
                 clock_sum += clock * weight
         # The registered cutoff uses the ordered floating-point window mean.
@@ -1401,8 +1425,11 @@ def step3_observations(start, tokens, journal, power, gpu):
     return False, rise, observations
 
 
-STEP3_PRESSURE_STATES = {None, "None", "Nominal", "Moderate", "Heavy", "Trapping", "Sleeping",
-                         "Unknown", "not_read"}
+# The histogram goes through the registered Step 3 output-key check.
+STEP3_HISTOGRAM_KEYS = {
+    None, "None", "Nominal", "Moderate", "Heavy", "Trapping", "Sleeping", "Unknown", "not_read",
+    "slope", "gamma_estimable", "drift_fraction_linear",
+}
 
 
 class Step3CellFailure(ValueError):
@@ -1415,7 +1442,7 @@ def step3_measurements(bundle):
     start, _, tokens, journal, power = step3_records(*(child_path(bundle, name).read_bytes() for name in sources))
     gpu = gpu_rows(child_path(bundle, "power_trace.csv").read_bytes())
     observations = step3_observations(start, tokens, journal, power, gpu)
-    if any(state not in STEP3_PRESSURE_STATES for stamp, _, state, _ in power if start < stamp <= tokens[-1]):
+    if any(state not in STEP3_HISTOGRAM_KEYS for stamp, _, state, _ in power if start < stamp <= tokens[-1]):
         raise Step3CellFailure("unregistered Step 3 pressure state")
     return observations
 
@@ -1429,8 +1456,7 @@ def step3_cells(entrants, threshold):
             legs.append(read_leg())
         except Step3CellFailure:
             invalid_cells.add(size)
-        except (OSError, KeyError, TypeError, IndexError, ValueError, ArithmeticError,
-                plistlib.InvalidFileException, ExpatError):
+        except (OSError, KeyError, TypeError, IndexError, ValueError, ArithmeticError):
             cells[size] = (failures + 1, legs)
     for size in invalid_cells:
         cells[size] = (1, [])
