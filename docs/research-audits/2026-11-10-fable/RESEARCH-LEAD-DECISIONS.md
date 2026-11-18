@@ -20537,3 +20537,151 @@ Rows for the lead to commit to `RULES.json`. Owner is `research_lead` for all th
 **What comes back to me.** The successor's diff with the five tests. A caller of `final` that cannot have a receipt. Any wish to add a field to the receipt.
 
 **Blind status.** Blind. This ruling rests on rulings, two seat messages, one run report and code. The receipt's fields were fixed before any series record exists.
+
+# RL-183c. For a fresh Part C the verifier is the evaluator itself, run in the kit's process on the measurement host; no seat reads a protected source and no projection is handed to anyone. What binds the evidence is a ledger the judged invoker writes when each member returns. The stdout observation is the text the frozen transport returns, under two shape checks that leave a newline translation only one thing to hide: which line ending closed the receipt
+
+Research lead (Fable 5.2), Wed Nov 18 02:59 PST 2026 (from `date`). Addendum to RL-183 section 1. Answers the two questions the Astra resolver escalated on PR #809. RL-183 sections 1.1 to 1.3 stand except where "Amends" says otherwise.
+
+**Cites.** `RLD:n` is `RESEARCH-LEAD-DECISIONS.md` on the audit branch at `6f32db2af`. `ES:n` is `/Volumes/JW-EXT/scratch/astra-partc-evidence-spec/EVIDENCE-SPEC.md`. `RS:n` and `BR:n` are `pl-809/resolve-1/FINAL-MESSAGE.md` and `pl-809/build/FINAL-MESSAGE.md` under `/Volumes/JW-EXT/scratch/`. `HO:n` is `docs/run_reports/2026-11-18-pr809-rl183.md` in the `sol62-small-fixes` worktree. `RH:n`, `RT:n` and `VR:n` are `scripts/align_r1_rehearsal.py`, `joulewise/align/apple/r1_runtime.py` and `joulewise/align/apple/v4_registration.py` at the R1 pin `b2e01464d`.
+
+**Read.** RS, BR and HO in full. ES:1-28 and ES:74-91 in full, the rest by its rows on bytes, projections and witnesses. RL-183 sections 0 and 1 (RLD:20016-20148). RH:362-389 and RH:527-555. RT:1366-1395, RT:2476-2484 and RT:2505-2527. VR:489-511.
+
+**Not checked.**
+- I ran nothing. That `Popen(..., text=True)` maps `\r\n` and a lone `\r` to `\n` is the Python library's documented behaviour and the builder's finding (HO:22-24). Test 4 below makes it a tested fact.
+- The evaluator and kit at #809's head `eb76f4a75`. I ruled from the spec, the reports and the frozen sources.
+- What the S, D and X lines of the emitted Part C record hold today (ES:81). Section 1.2 adds no field to them.
+- Whether any runtime result has non-string keys. Section 2 is written so that it does not matter.
+- No custody, energy, power, meter, transcript, slot, hazard, sealed or restricted file was opened.
+
+**Not done.** No commit, push, comment, run or SSH. The only file written is this one.
+
+---
+
+## 1. Protected evidence for a fresh Part C
+
+### 1.1 The verifier is the evaluator, on the measurement host
+
+**The authorized verifier is `scripts/align_r1_part_c.py` itself, running in the kit's process on the measurement host, in the Part C the magistrate issued.** It reads the native sources in place. There is no separate verifier, no second seat and no projection file for a fresh attempt.
+
+- **It is already inside the boundary.** The kit consumes each member's receipt, and the S and D receipts carry energy fields (ES:49). RL-183 1.2 already has the evaluator call the frozen `read_episode_bundle`, which opens the power trace (RLD:20103, ES:7).
+- **Blinding gates what a person or an agent seat sees.** It does not gate what a pinned program reads on the machine that measured. The program's output is what is gated, in 1.2.
+- **A seat cannot be the verifier.** No agent runs on the host during the span, and the smoke's verdict is the launcher's exit status at the end of the span (ES:81). A verdict that waits for a seat is no longer that.
+- **A second program on the same host under the same user adds an interface to attack and no independence.**
+
+ES:7's sentence "an evaluator outside the data boundary consumes authorized, integrity-bound field projections" describes the replay of RL-183 1.3 and any off-host use. It does not describe the native run.
+
+### 1.2 What leaves the process
+
+**Nothing new.** The evaluator releases:
+
+1. The emitted record, both copies, in today's schema (ES:81). No field is added by this ruling.
+2. Findings in ES:14's seven fields. Each field is a structural identifier: a verdict word, a reason name, a role, a file or stream name, a row index, a field name, a peer name. **No finding carries a value read from a source, and none carries the text of an exception raised while reading one.**
+3. The ledger of 1.3, which holds digests, exit statuses and names.
+
+A seat, the lead and any email get the verdict word and the reason names, as RL-183 1.3 set for the replay (RLD:20144). A failure that cannot be understood from those comes to me. I then say who looks, and where.
+
+### 1.3 The binding: an attempt ledger, written at each member's return
+
+**The independently trusted pre-edit record is `part-c/evidence_ledger.jsonl`, written by the judged invoker.** It lives in the attempt's Part C directory, outside every member segment. The invoker is the one RL-183 1.2 put in the evaluator's file (RLD:20104), so nothing in the ten changes.
+
+| Row | Written | Fields |
+|---|---|---|
+| 0 | At kit start, before the first launch | `attempt` (the run root's unique segment and a nonce drawn then), mode, producer revision, runtime-config path and sha256, soak-reference path and sha256 |
+| One for each member | When the frozen `_run` returns or raises, before any file of that member is opened and before the next member launches | `attempt`, member kind, sha256 of the argument list, spawn and exit outcome (exit status, or the exception's class name), sha256 of the returned stdout text and of stderr, the segment's relative path, and the relative path and sha256 of `<segment>/runtime_custody.json`, or `absent` |
+| Last | After the verdict | The verdict word and the sha256 of each emitted copy |
+
+Every row carries the sha256 of the row before it and is flushed and synced when written. The invoker keeps the same rows in memory, and the native run judges against the copy in memory.
+
+**How a source is bound.** Attempt and member come from the row. The source path and its digest come from the `files` map of that member's custody manifest, which the runtime writes last, before its stdout line (RT:1366-1395, RT:2512, RT:2520). The manifest's own digest is in the row. So:
+
+- The evaluator reads the manifest's bytes and compares their digest with the row. Unequal gives `source_integrity`.
+- It hashes every member file it opens before the parse and after the last read, and compares both with the manifest's entry. RL-183 1.2 already asks this of the episode file (RLD:20103).
+- An entry that reads `unhashed` or `unreadable` authenticates nothing (RT:1380-1388, ES:26). A required file with such an entry fails.
+- A process outcome or outer record has no manifest entry. Its digest is in the row itself (ES:86).
+- A required source with neither a manifest entry nor a ledger field gives `other_failure / evidence_unverifiable`. That is the only use of that reason for a missing witness.
+
+**Why this record is independent.** It is written by a different process from the one that wrote the sources, at the moment the member ended, in a different directory. No later step can have touched the segment before the row exists.
+
+**What it proves and what it does not.** It detects any change to a bound source made after the member returned. That is the property ES:86 asks for. It does not detect a runtime that wrote a wrong file before its own close. The cross-checks of the spec's tables are for that, and ES:86's last sentence already says so.
+
+**Cost in the span.** One small file is hashed and one line appended between members, by the kit. No large file is hashed at a member's return.
+
+**For the mutation matrix.** The fixture runs the normal launcher with a stubbed `_run`, so the ledger is written as in a native run. A mutation applied after the row must give `source_integrity`. A mutation written by the stub producer before its close, with a consistent manifest, is a semantic mutation and is judged by the cross-checks.
+
+### 1.4 The replay of RL-183 1.3
+
+It has no ledger and none is invented for it. It runs in a named replay mode, binds each source to the segment's custody manifest as found, and its record says `binding: archived_custody`. Verifier and output stay as RL-183 1.3 has them (RLD:20144-20146). A replay verdict is never a Part C.
+
+---
+
+## 2. The stdout byte witness: (a)
+
+**The accepted observation is the `stdout` text the frozen `r1._run` returns. The spec is amended. No byte witness is named, and a clean run does not fail for want of one.**
+
+### 2.1 What a newline translation could hide
+
+The frozen transport decodes the child's output strictly and maps `\r\n` and a lone `\r` to `\n` (RH:367-368, RH:380). Nothing else is altered. The frozen runtime writes one line: `json.dumps(result, sort_keys=True, allow_nan=False) + "\n"` (RT:2520). With no indent that serializer emits no newline, and by default it emits ASCII only.
+
+The evaluator therefore requires of the returned text, before parsing:
+
+1. It is empty, or it ends in exactly one `\n` and holds no other `\n`.
+2. Every other character is in U+0020 to U+007E.
+
+A failure of either is `stdout_receipt`, `invalid`.
+
+Under those two checks the bytes are known from the text with one exception: whether the receipt's single line ended in `\n`, `\r\n` or `\r`.
+
+- **A newline in JSON is white space between tokens. It is illegal inside a string.** So the three endings carry the same object. The translation cannot hide a second object, trailing data, a truncation, a duplicate key, a changed value or a changed type. Each of those changes the text.
+- **An interior `\r` is not hidden.** It arrives as an interior `\n` and fails check 1.
+- **Empty is exact.** The text is empty only if the stream was (ES:28).
+- **What stays hidden is a provenance fact:** a line ending the frozen producer does not write. A writer that can forge the receipt line can also end it in `\n`. A byte witness would not catch that writer either.
+
+### 2.2 Why not (b) or (c)
+
+- **(b)** The judged invoker must call the frozen `_run` with the frozen argument list (RLD:20104, RLD:20136). The only ways to see the bytes are a wrapper around the child, which changes the argument list and puts a process in the measured path, or a patch of `subprocess` under a frozen call, which is an edit to the ten by another name.
+- **(c)** No witness exists, so every Part C would fail. The check would then tell a damaged run from a clean one in no case. Fail-closed means an unreadable run fails. It does not mean that every run does.
+
+### 2.3 The second copy keeps its byte witness
+
+`runtime_result.json` is written with an indent (RT:2481), so it is never byte-equal to stdout. The evaluator reads it as bytes, its digest is in the custody manifest, and the whole parsed payloads are compared (ES:24). That stands.
+
+---
+
+## 3. Tests owed
+
+1. A native-shaped synthetic attempt writes row 0, one row for each member and the last row. Removing, reordering or editing any row is refused.
+2. After a member's row is written, a one-byte change to its custody manifest, and to each required file, gives `source_integrity`. A required file whose entry reads `unhashed` fails.
+3. No finding and no emitted line contains a value planted in a synthetic source. The fixture plants a marker number in every protected field and searches all output for it.
+4. Through the frozen `_run` and a real child: endings `\n`, `\r\n` and `\r` give the same verdict. An interior `\r`, a second line, a missing final newline, a non-ASCII byte and a byte-order mark each give `stdout_receipt`, `invalid`. An empty stream is read as empty.
+5. A replay with no ledger runs only in replay mode and prints `binding: archived_custody`. The native mode with no ledger row for a member gives `evidence_unverifiable`.
+
+---
+
+## Amends
+
+- **RL-183 1.2** (RLD:20104): the judged invoker also writes the ledger of 1.3.
+- **RL-183 1.3** (RLD:20144): the replay is read with 1.4.
+- **ES:7:** "An evaluator outside the data boundary consumes authorized, integrity-bound field projections" is followed by: "The native evaluator runs on the measurement host inside the boundary and reads the native sources in place (RL-183c 1.1)."
+- **ES:24:** "stdout bytes including empty" reads "the stdout text returned by the frozen transport, including empty, under RL-183c 2.1's two checks".
+- **ES:13:** "to the exact original bytes" stands for files. It does not apply to stdout.
+- **ES:25, ES:26, ES:37, ES:44, ES:49:** "the authorized verifier", "a verifier's run-bound projection" and "authorized projections" mean, in the native run, the evaluator's own in-place read bound by 1.3. ES:26's "the manifest itself needs an independent trusted binding" is met by the member's ledger row.
+- **ES:28:** its first branch, a typed inability to launch, is governed by RL-183 1.2's quoted rule (RLD:20110). An `OSError` from the frozen `_run` is `other_failure`.
+- **ES:86:** the "independently trusted pre-edit digest" is the ledger row, and through it the custody manifest's entry.
+- **Stand unchanged:** RL-183 1.1, the table and quoted rule of 1.2, contract items 1 to 6, and every other row of the spec.
+
+## Register
+
+Rows for the lead to commit to `RULES.json`. Owner is `research_lead` for all four.
+
+| # | Clause | Class | Protects | Scope | Ends | Test |
+|---|---|---|---|---|---|---|
+| 1 | In a native Part C the evaluator, in the kit's process on the measurement host, is the only reader of protected sources; no seat reads them and no projection is handed off (1.1) | VALIDITY (blinding) | The smoke's verdict is computed where the data is and seen by nobody | Every Part C and F0 on the W1 line | The last Part C of the series | Test 5; the kit has no projection argument |
+| 2 | A finding carries ES:14's seven structural fields and no source value or exception text; the emitted record gains no field (1.2) | VALIDITY (blinding) | A failed smoke leaks no reading through its reasons | The evaluator's output, native and replay | The last Part C of the series | Test 3 |
+| 3 | The judged invoker writes a chained ledger row at kit start, at each member's return and after the verdict; a source is bound through the row's custody-manifest digest; a required source with no binding is `evidence_unverifiable` (1.3, 1.4) | VALIDITY (prereg) | No source edited after a member's return can pass | Every native Part C; the replay binds to archived custody and is never a Part C | The last Part C of the series | Tests 1, 2 and 5 |
+| 4 | The stdout observation is the frozen transport's text; it is empty, or one line ending in one `\n`, with every other character in U+0020 to U+007E (2.1) | VALIDITY (prereg) | The text fixes the bytes up to the final line ending, which carries no JSON content | Every invocation the judged invoker makes | The last Part C of the series, or a slot session that moves the freeze | Test 4 |
+
+**Rows closed or changed by this ruling.** None. The two NEEDS_SPEC items of HO:18-26 and BR:9-10 are answered.
+
+**What comes back to me.** A runtime result the two checks of 2.1 refuse on a clean run, with the kind and no value. A source the spec requires that has neither a manifest entry nor a ledger field. A failed Part C whose reason names do not explain it. Nothing else.
+
+**Blind status.** Blind. This ruling rests on rulings, a spec, three reports and code.
