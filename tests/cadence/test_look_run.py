@@ -16,6 +16,7 @@ from pathlib import Path
 import plistlib
 import re
 import shutil
+import statistics
 import struct
 import tempfile
 import unittest
@@ -74,6 +75,31 @@ ENERGY_MARKERS = ("power_trace.csv", "segment_energy.json")
 
 
 class AstraPreResponse(unittest.TestCase):
+    def test_singular_onset_keeps_rank_refusal_before_responses(self):
+        li, _, _ = synth.build("noisy", seed=3)
+        for leg in li["legs"]:
+            if leg["turn"]:
+                for reading in leg["turn"]["journal"]:
+                    if reading["tf08_c"] is not None:
+                        reading["fan_rpm"] = 100 * reading["tf08_c"]
+        with tempfile.TemporaryDirectory(prefix="singular-onset-cli-") as tmp:
+            root = Path(tmp)
+            ip, s1p, ep, op = [root / name for name in ("input.json", "stage1.json", "responses.json", "fit.json")]
+            wb(ip, synth.dump(li))
+            # Any attempt to decode this sentinel as level E fails; the audit hook
+            # also proves it is never opened. Only generated predictors enter stage 1.
+            wb(ep, "synthetic responses must remain unopened")
+            rc, _, err = run_cli(["stage1", "--input", str(ip), "--out", str(s1p)])
+            self.assertEqual(rc, 0, err)
+            self.assertEqual(rj(s1p)["onset"]["status"], "not_estimable")
+            with spy_opens() as opened:
+                rc, _, err = run_cli(["stage2", "--stage1", str(s1p), "--stage1-sha256", R.sha256_file(s1p),
+                                      "--energy", str(ep), "--out", str(op)])
+            self.assertEqual(rc, 2, err)
+            self.assertIn("rank deficient", err)
+            self.assertNotIn(str(ep), opened)
+            self.assertFalse(op.exists())
+
     def test_restricted_comparison_prints_only_the_maximum_difference(self):
         left = {"schema": F.RESTRICTED_SCHEMA, "look_id": F.LOOK_ID,
                 "channels": {"gpu_rail": {"residuals": {"leg": {"a/L001": 0.5, "a/L002": 0.25}}}}}
@@ -194,6 +220,115 @@ class AstraPreResponse(unittest.TestCase):
         private_bytes = write_restricted.call_args.args[1]
         public = write.call_args_list[0].args[1]
         self.assertEqual(hashlib.sha256(private_bytes).hexdigest(), public["restricted_sha256"])
+
+
+class RL175Cli(unittest.TestCase):
+    """RL-175 B.3/B.4 on generated noisy custody through both real CLI subprocesses."""
+
+    @classmethod
+    def setUpClass(cls):
+        tmp = tempfile.TemporaryDirectory(prefix="rl175-noisy-cli-")
+        cls.addClassCleanup(tmp.cleanup)
+        cls.root = Path(tmp.name)
+        tokens = {}
+        cls.li, energy, cls.truth = synth.build("noisy", tokens=tokens)
+        cls.custody = cls.root / "custody"
+        paths = synth.write_custody(cls.custody, cls.li, energy, tokens)
+        from tests.cadence import look_minirepo as mr
+        owner = unittest.TestCase()
+        cls.addClassCleanup(owner.doCleanups)
+        mini = mr.mini_repo(owner)
+        roster_sha, verdicts_sha = (R.sha256_file(paths[name]) for name in ("roster.json", "rules_3_4.json"))
+        mr.commit(mini, roster_sha256=roster_sha, verdicts_sha256=verdicts_sha)
+        cls.s1p, cls.fitp, cls.cop = [cls.root / name for name in ("stage1.json", "fit.json", "freeze2.json")]
+        commands = [
+            ["stage1", "--roster", paths["roster.json"], "--custody", str(cls.custody),
+             "--rules-3-4", paths["rules_3_4.json"], "--out", str(cls.s1p)],
+            ["stage2", "--stage1", str(cls.s1p), "--stage1-sha256", "", "--custody", str(cls.custody),
+             "--out", str(cls.fitp), "--coefficients-out", str(cls.cop)],
+        ]
+        for argv in commands:
+            if argv[0] == "stage2":
+                h = R.sha256_file(cls.s1p)
+                argv[argv.index("--stage1-sha256") + 1] = h
+                mr.commit(mini, stage1_sha256=h, roster_sha256=roster_sha, verdicts_sha256=verdicts_sha)
+            result = mr.py(mini, "scripts/cadence_look_run.py", *argv, "--manifest", mini / mr.MANIFEST)
+            if result.returncode:
+                raise AssertionError(f"{argv[0]} failed: {result.stderr}")
+        cls.s1, cls.fit, cls.co = (rj(p) for p in (cls.s1p, cls.fitp, cls.cop))
+        cls.legs = {leg["leg_key"]: leg for leg in cls.li["legs"]}
+        refs = {sp["span_id"]: sp["soak_reference_tv0h_c"] for sp in cls.li["spans"]}
+        cls.predictions = {
+            leg["leg_key"]: F.predict(cls.co, cls.legs[leg["leg_key"]], refs[leg["span_id"]], held_out_day=leg["day"])
+            for leg in cls.s1["legs"] if leg["in_energy_fit"]}
+        cls.energy, _ = R.read_segment_energy(cls.s1, R.span_dirs(cls.custody, None))
+
+    def test_public_attack_fails_but_custody_recovers_truth_with_noise_bound(self):
+        recovered = []
+        for key, prediction in self.predictions.items():
+            for ch in F.CHANNELS:
+                keyed = self.fit["channels"][ch].get("residuals", {}).get("leg", {})
+                if key in keyed:
+                    inferred = prediction["channels"][ch]["total"] / (1 + keyed[key])
+                    measured = sum(self.energy["legs"][key][ch]["segments"])
+                    # The attack's 1% threshold is prescribed by RL-175 B.3.
+                    if abs(inferred / measured - 1) <= 0.01:
+                        recovered.append((key, ch))
+        self.assertEqual(len(self.predictions), 53)
+        self.assertEqual(len(recovered), 0)
+        private_path = self.custody / f"{F.LOOK_ID}.{R.sha256_file(self.s1p)}.restricted.json"
+        self.assertEqual(R.sha256_file(private_path), self.fit["restricted_sha256"])
+        self.assertEqual(private_path.stat().st_mode & 0o777, 0o600)
+        private = rj(private_path)
+        for key, prediction in self.predictions.items():
+            leg = self.legs[key]
+            duration = leg["turn"]["last_token_s"] - leg["turn"]["turn_start_s"]
+            # The generator adds independent segment N(0, seg_sd^2) and one shared
+            # leg-power N(0, power_sd^2) times duration: Var(total) = N*seg_sd^2
+            # + duration^2*power_sd^2. Six sigma has two-sided tail <2e-9 per leg.
+            # GPU traces integrate the planted piecewise-constant response exactly;
+            # DC's sampled step integration is checked separately by existing tests.
+            ch = "gpu_rail"
+            noise = self.truth["params"]["noise"]
+            sigma = math.sqrt(len(leg["turn"]["segments"]) * noise["seg_sd_j"][ch] ** 2
+                              + (duration * noise["leg_power_sd_w"][ch]) ** 2)
+            residual = private["channels"][ch]["residuals"]["leg"][key]
+            inferred = prediction["channels"][ch]["total"] / (1 + residual)
+            planted = self.truth["legs"][key]["planted_mean_j"][ch]
+            self.assertLessEqual(abs(inferred - planted), 6 * sigma, key)
+
+    def test_unequal_day_bias_estimate_and_interval_from_cli_responses(self):
+        for ch in F.CHANNELS:
+            for label, plen in F.PREFIX.items():
+                pairs = []
+                for leg in self.s1["legs"]:
+                    key = leg["leg_key"]
+                    if key not in self.predictions or leg["decode_tokens"] <= plen:
+                        continue
+                    pred = self.predictions[key]["channels"][ch]
+                    response = self.energy["legs"][key][ch]
+                    short = sum(y for y, seg in zip(response["segments"], leg["segments"])
+                                if seg["kind"] == "prefill" or seg["block"] < plen // F.BLOCK)
+                    short += response["prefix_tails"][str(plen)]
+                    pairs.append((leg["day"], sum(response["segments"]) - pred["total"],
+                                  short - pred["prefix_tails"][str(plen)]))
+                sd_l, sd_s = (statistics.stdev(p[j] for p in pairs) for j in (1, 2))
+                by_day = {}
+                for day, long, short in pairs:
+                    by_day.setdefault(day, []).append(long / sd_l - short / sd_s)
+                self.assertGreater(len({len(v) for v in by_day.values()}), 1)
+                means = [statistics.mean(v) for v in by_day.values()]
+                estimate = statistics.mean(means)
+                half = F.t_quantile(0.95, len(means) - 1) * statistics.stdev(means) / math.sqrt(len(means))
+                got = self.fit["channels"][ch]["prefix_bias"][label]
+                # Same responses, independent sums: allow 4096 accumulated binary64
+                # rounding units per pair (the generator's decode cap), scaled to
+                # the standardized residuals. This is an arithmetic, not a noise bar.
+                tol = 4096 * len(pairs) * math.ulp(max(1.0, *(abs(x) for v in by_day.values() for x in v)))
+                self.assertAlmostEqual(got["estimate"], estimate, delta=tol)
+                for actual, expected in zip(got["ci90"], (estimate - half, estimate + half)):
+                    self.assertAlmostEqual(actual, expected, delta=tol)
+                self.assertEqual((got["n_pairs"], got["n_days"]), (len(pairs), len(means)))
 
 
 class Staging(unittest.TestCase):

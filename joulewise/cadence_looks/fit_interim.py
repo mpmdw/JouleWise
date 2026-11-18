@@ -572,7 +572,12 @@ def convergence_test(q, G, H):
     if not ev[0] > 0:
         return out
     cond = float(ev[-1] / ev[0])
-    dec = float(G @ np.linalg.solve(negH, G))
+    try:
+        dec = float(G @ np.linalg.solve(negH, G))
+    except np.linalg.LinAlgError:
+        # Rounded eigenvalues can appear positive for a singular Hessian.
+        # It still fails the existing convergence rule; no decrement is available.
+        return out
     out.update(decrement=dec, condition_number=cond)
     out["passes"] = bool(cond <= CONV_MAX_COND and dec <= CONV_DECREMENT and math.isfinite(dec))
     return out
