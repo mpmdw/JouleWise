@@ -20381,3 +20381,65 @@ Rows for the lead to commit to `RULES.json`. Owner is `research_lead` for rows 1
 **Rows closed or changed by this ruling.** RL-181 rows 13 and 14 are read with row 13. RL-181 row 8 is read with row 14's third variant. No row of RL-179, RL-180 or RL-182 closes. The lead's hold "step 4 waits for the follow-up" becomes row 10.
 
 **What comes back to me.** A replay case that needs a change inside the ten. A replay of the repaired evaluator on stored records that is not `pass`. A Sol finding that changes S's or Q's arithmetic, level, population or words. An unclean A/B row. A `twin_agrees` other than `yes`; a second interruption. The follow-up's diff with finding 1's test and the pack answer. Every R1 post-close branch of 2.6 except `TYPICAL-CASE` and `R1-RERUN`. A first-span comparison that differs from dev-05's. The anti-hindsight list. `lm-transfer-01`'s final manifest. Nothing else in this ruling returns.
+
+# RL-183a. The twin of `lm-interim-01` calls the pinned KM003C decoder and writes everything above it itself. It takes the producer's order at equal timestamps and the span's largest nominal period for the coverage print. A prompt size with no entrants has no cell; a populated cell with no survivors is `not_run`/null; no eligible cell gives `not_evaluable`, which is not `within` and comes to me
+
+Research lead (Fable 5.2), Wed Nov 18 02:09 PST 2026 (from `date`). Addendum to RL-183. Answers the three questions Astra's second twin-interface seat left for me. RL-166 Q6 and RL-180 section 1 (a) stand and are read with this.
+
+**Cites.** `RLD:n` is `RESEARCH-LEAD-DECISIONS.md` on the audit branch at `fa9e4c24e`. `FM:n`, `TI2:n` and `TI:n` are `astra-twin-interface-2/FINAL-MESSAGE.md`, `astra-twin-interface-2/TWIN-INTERFACE-2.md` and `astra-twin-interface/TWIN-INTERFACE.md` under `/Volumes/JW-EXT/scratch/`. Code and pages are at the #795 head `f0946989`: `MAN` is `docs/process/cadence/looks/lm-interim-01.json`, `RUN` is `scripts/cadence_look_run.py`, `TF` is `joulewise/cadence_looks/time_fields.py`, `S3R` is `joulewise/cadence_looks/step3_roster.py`, `KP` is `joulewise/external/km003c_parse.py`, `IF` is `docs/process/cadence_look_fit_interface.md`.
+
+**Read.** FM, TI2 and TI in full. RL-166 Q6 (RLD:15879-15887), RL-173 E's `trace_coverage` row (RLD:17490), RL-174 A (RLD:17549-17554), RL-180 1 (a) (RLD:19013-19028). The source lines cited below. No custody, energy, meter or transcript file was opened.
+
+**Not checked.** Whether any campaign span has aligned streams at two rates, or equal timestamps across streams: that needs the meter files. Whether the manifest is still `draft` on main: it is at `f0946989` (MAN:5).
+
+## 1. The decoder is shared. The twin calls it and does not re-implement it
+
+**Ruling.** The twin calls `km003c_parse.parse` on each stream file and takes from the result `header`, `present`, `aligned`, `host_ns` and `watts` (KP:302-312, KP:340-356; used so at RUN:627-637). Everything above that is the twin's own code: listing the streams, the raw-to-wall shift, pooling, ordering, bracketing, the 2 s gap, the trapezoid, coverage. It calls no other function of the decoder (`integrate`, `span_has_drops`, `raw_offset_ns` and the rest are not its arithmetic) and imports nothing else from `joulewise`.
+
+**Why this is what RL-180 meant.**
+- "Its own reader" (RLD:19015) is the counterpart of the look's readers, `MeterSpan` (RUN:613) and the time reader (TF:371-383). The decoder sits below both. It is a manifest dependency with its own pin (MAN:849-852), the manifest defines the DC-in channel as "decoded by `joulewise.external.km003c_parse`" (MAN:456), and it is not among the look's code written by the Opus seat (MAN:546).
+- The primary already shares it: stage 1 and stage 2 both take their sample times from it, and stage 2 refuses if they differ (IF:588-590, RUN:645-647).
+- **Re-implementing it would put the one look at risk for nothing the twin is for.** `trace_coverage` is compared for exact equality (TI:47). A second clock fit that rounds one sample to a different nanosecond gives `twin_agrees = no` on a consumed look (RLD:19026), and that `no` would say nothing about the fit.
+
+**Conditions.**
+1. Before use, the twin hashes the bytes of `joulewise/external/km003c_parse.py` and `joulewise/external/__init__.py`, requires the manifest's two pins (MAN:845-852), and loads the module from the bytes it hashed. The decoder is standard library only (KP:3), so this works under `-I`.
+2. The twin builder may read the decoder. It still does not read `RUN`, `TF`, `inclusion_34.py`, `step3_roster.py` or the fit code.
+3. `authors.twin` (MAN:546) gains: "it calls the pinned KM003C decoder for sample times and watts and writes every step above it". The lead makes the edit while the manifest is `draft`. If the manifest is already committed, it comes back to me.
+
+**The limit this leaves.** `twin_agrees = yes` does not attest to the decoder: the counter unwrap, the clock fit and Vbus x Ibus are common to both sides. The paper says so wherever it describes the twin.
+
+## 2. Overlapping streams: the producer's two conventions are adopted
+
+**2.1 Equal timestamps.** Adopted. The twin concatenates the admitted streams in lexical path order, keeps sample order within a stream, and sorts stably by epoch time (RUN:641-643, TI2:26). Both tied samples stay. The pair spans zero seconds and adds no energy; the sample before joins the first tied value and the last tied value joins the sample after.
+- The order decides which of two readings joins which neighbour, so it changes two trapezoids. Neither order is more correct. The registration did not fix one; this ruling does.
+- The twin reaches the order by its own construction. It is not given the producer's sorted series.
+
+**2.2 The period.** Adopted. `p` is the largest nominal period among the span's present, aligned streams, whether or not a stream overlaps the segment, and `h = p/2` (RUN:634, RUN:644, RUN:673; TI2:30-36).
+- Coverage is a print and decides nothing (RUN:670, RLD:17490). Holes are judged by bracketing and the 2 s gap on decoded samples and by rule 4 (IF:725-727), and none of those uses `p`.
+- **Direction of the error.** In a span whose aligned streams have different rates, the number overstates coverage of a segment sampled at the faster rate. There it is an upper bound. With one rate in the span it is exact.
+- IF:728 gains "the largest among the span's aligned streams" when the page is next edited. No re-pin for it.
+
+## 3. Empty prompt-size cells: all three confirmed
+
+**3.1 A size with no entrants has no cell.** Confirmed. Entrants are stage-1 legs with `included`, `role == "fit"` and `leg_type == "A"` (S3R:144-147, TI:27). Q6 is "one call per prompt-size cell" (RLD:15883): with no entrant there is no call, so there is no row. `not_run` is Q6's word for a cell that failed and comes to me (RLD:15886). Writing it for a size that had nothing to run would report a failure that did not happen. The twin's cell map has exactly the sizes with at least one entrant, and the key sets are compared exactly (TI:70).
+
+**3.2 A populated cell with no survivors is `status = "not_run"`, `gamma_estimable = null`.** Confirmed, for each of: every entrant dropped (one or two entrants, all failing), more than two legs failing, or a failure not tied to a leg (S3R:46, S3R:110-130). Q6's "comes to me" covers every `not_run` cell, not only the more-than-two case. It reaches me in the restricted Step 3 file; it adds no public word.
+- The twin applies the same rule to its own failures: a leg its own Step 3 cannot compute is left out and counted, up to two. A different `status` or `gamma_estimable` on either side is `twin_agrees = no` (TI:73). That is the comparison working.
+
+**3.3 No eligible cell is `decision = "not_evaluable"`, `trips = null`, `value = null`, `cell = null`; public `drift_tripwire = not_evaluable`.** Confirmed (S3R:149-159). A cell is eligible when its status is `ok`, `gamma_estimable` is true and its linear drift is a number (S3R:149-150). Q6's maximum (RLD:15884) over no cells has no value. `within` would be a pass nobody computed, and it is not a trip either.
+- **`not_evaluable` is not `within`.** Nothing conditioned on the drift tripwire reading `within` is met by it. A public `drift_tripwire = not_evaluable` comes to me.
+
+## Register
+
+Rows for the lead to commit to `RULES.json`. Owner is `research_lead` for all four.
+
+| # | Clause | Class | Protects | Scope | Ends | Test |
+|---|---|---|---|---|---|---|
+| 1 | The twin takes sample times and watts from the manifest-pinned `km003c_parse.parse`, loaded from bytes it has hashed against the pins, and imports nothing else from `joulewise` (1) | VALIDITY | The twin's `yes` is about the fit, and its code is independent of the look's readers | `lm-interim-01`; every look that freezes coefficients | The paper's data release | A twin test that refuses on a one-byte change to the decoder; an import check on the twin's module list; `authors.twin` carries the sentence |
+| 2 | Pooled DC-in samples are ordered by epoch time, ties by lexical stream path then sample order, both tied samples kept (2.1) | VALIDITY | One defined trapezoid at coincident samples | `lm-interim-01` and later looks on this reader | The paper's data release | A synthetic span with two streams tied at one stamp: twin and primary segment energies agree to 1e-8 |
+| 3 | DC-in coverage uses half the largest nominal period among the span's aligned streams; it is a print (2.2) | VALIDITY | `trace_coverage` is one defined number, with its bias stated | `lm-interim-01` and later looks on this reader | The paper's data release | A synthetic span with two rates: twin and primary `trace_coverage` are equal |
+| 4 | Step 3 cells: no row for a size with no entrants; `not_run`/null for a populated cell with no survivors; `not_evaluable`/null when no cell is eligible; `not_evaluable` is not `within` (3) | VALIDITY (prereg) | The drift tripwire never passes on an empty set | `lm-interim-01`; later looks that run Step 3 | The paper's data release | Three synthetic rosters, one per case, with equal twin and primary projections; a predicate test that `not_evaluable` does not satisfy `within` |
+
+**Rows closed or changed by this ruling.** None. RL-180 row 2 is read with row 1.
+
+**What comes back to me.** A manifest already committed when the `authors.twin` sentence is due. A `not_run` cell. A public `drift_tripwire = not_evaluable`. Nothing else in this ruling returns.
