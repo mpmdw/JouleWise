@@ -69,10 +69,7 @@ class RebindPairDryCheck(unittest.TestCase):
                 (lambda x: x['night_confirmation'].update(second_key_rule='RL-78'), 'aliased'),
                 (lambda x: x['night_confirmation'].update(authority='RL-122'), 'heatsink list'),
                 (lambda x: x['night_confirmation'].update(s_slow='Th0C'), 'aliased'),
-                (lambda x: x.update(s_slow='Th0C'), 'must equal'),
-                # A group whose lexically first other member is not the policy's slow key.
-                (lambda x: x['alias_groups'].__setitem__(x['alias_groups'].index(group),
-                                                         ['TV0a', 'TV0h', 'TV1h']), 'aliased')):
+                (lambda x: x.update(s_slow='Th0C'), 'must equal')):
             bad = deepcopy(d)
             mutate(bad)
             with self.subTest(message=message), self.assertRaisesRegex(ValueError, message):
@@ -81,6 +78,12 @@ class RebindPairDryCheck(unittest.TestCase):
     def test_kit_takes_a_three_member_group_when_the_slow_key_is_its_lexically_first_other(self):
         d, _ = night_d(self.classification, self.pair, self.config['r0_classified_keys'], self.config['r0_classes'])
         d['alias_groups'][d['alias_groups'].index(['TV0h', 'TV1h'])] = ['TV0h', 'TV1h', 'TVh0']
+        self.ready(d)
+
+    def test_kit_takes_the_named_pair_when_a_third_alias_sorts_first(self):
+        # RL-156 section 2: the bar is the pair by name; RL-145 section 3's lexical rule is not a condition of it.
+        d, _ = night_d(self.classification, self.pair, self.config['r0_classified_keys'], self.config['r0_classes'])
+        d['alias_groups'][d['alias_groups'].index(['TV0h', 'TV1h'])] = ['TV0a', 'TV0h', 'TV1h']
         self.ready(d)
 
 
