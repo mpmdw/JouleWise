@@ -52,6 +52,7 @@ def preflight():
     return {key: sha256(key.encode()).hexdigest() for key in HASHES}
 
 def score(mark_read):
+    (root / "score-entered").touch()
     if mode == "empty":
         return {"synthetic": None}, "not_evaluable"
     print("buffered fixture output", end="")
@@ -90,13 +91,19 @@ def score(mark_read):
 
 if __name__ == "__main__":
     ledger = {"draft-ledger": "draft", "spent-ledger": "failed"}.get(mode, "stage1_committed")
-    raise SystemExit(run_transfer_worker(
+    if mode == "buffered-stderr":
+        sys.stderr = os.fdopen(2, "w", encoding="utf-8", closefd=False)
+        sys.stderr.write("buffered fixture stderr")
+        ledger = "draft"
+    status = run_transfer_worker(
         restricted=root / "private" / "synthetic-result",
         public=root / "public" / "PUBLIC.json",
         execution_host="synthetic-authority",
         local_host="synthetic-other" if mode == "wrong-host" else "synthetic-authority",
         ledger_status=ledger, preflight=preflight, score=score,
-    ))
+    )
+    (root / "worker-returned").write_text(str(status))
+    raise SystemExit(status)
 """
 
 
@@ -117,6 +124,20 @@ class TransferReleaseTests(unittest.TestCase):
 
     def worker(self, root, mode):
         return subprocess.run(self.command(root, mode), cwd=ROOT, capture_output=True, check=False)
+
+    def worker_with_notice_pipe(self, root, mode, *, connected):
+        reader, writer = os.pipe()
+        if not connected:
+            os.close(reader)
+            reader = None
+        try:
+            with os.fdopen(writer, "wb") as sink:
+                result = subprocess.run(self.command(root, mode), cwd=ROOT, stdout=subprocess.PIPE,
+                                        stderr=sink, check=False)
+            return result, os.read(reader, 4096) if reader is not None else None
+        finally:
+            if reader is not None:
+                os.close(reader)
 
     def test_success_closes_three_names_and_one_public_file(self):
         root = self.fixture("success")
@@ -145,6 +166,32 @@ class TransferReleaseTests(unittest.TestCase):
     def test_transfer_exit_statuses(self):
         self.check_pre_read_refusals_exit_two()
         self.check_read_failures_emit_exact_notice()
+
+    def test_transfer_status_survives_lost_notice_consumer(self):
+        for mode, status, notice, entered, read_started in (
+            ("draft-ledger", 2, REFUSAL, False, False),
+            ("missing-input", 2, REFUSAL, True, False),
+            ("post-systemexit", 1, b"stage2_error\nSystemExit\n", True, True),
+        ):
+            for connected in (True, False):
+                with self.subTest(mode=mode, connected=connected):
+                    value = None if mode == "missing-input" else 123.456
+                    root = self.fixture(f"{mode}-{connected}", value=value)
+                    result, delivered = self.worker_with_notice_pipe(root, mode, connected=connected)
+                    self.assertEqual((result.returncode, result.stdout), (status, b""))
+                    self.assertEqual((root / "worker-returned").read_text(), str(status))
+                    self.assertEqual(delivered, notice if connected else None)
+                    self.assertEqual((root / "score-entered").exists(), entered)
+                    self.assertEqual((root / "saw-read").exists(), read_started)
+                    self.assertEqual(list((root / "public").iterdir()), [])
+                    self.assertEqual((root / "private" / "synthetic-result").exists(), entered)
+
+    def test_transfer_status_survives_initial_buffered_stream_failure(self):
+        root = self.fixture("buffered-stderr")
+        result, delivered = self.worker_with_notice_pipe(root, "buffered-stderr", connected=False)
+        self.assertEqual((result.returncode, result.stdout, delivered), (2, b"", None))
+        self.assertFalse((root / "score-entered").exists())
+        self.assertEqual(list((root / "public").iterdir()), [])
 
     def test_transfer_python_exits_follow_first_read(self):
         for mode in ("pre-systemexit", "pre-custom-base"):
