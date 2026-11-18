@@ -1,5 +1,5 @@
 """SYNTHETIC ONLY. Real launch-to-close orchestration; no hardware or process signalling."""
-from contextlib import redirect_stderr, redirect_stdout
+from contextlib import contextmanager, redirect_stderr, redirect_stdout
 from copy import deepcopy
 import io
 import json
@@ -39,10 +39,54 @@ class KitTests(unittest.TestCase):
         for s in altered["seed_law"]["scripts"]:
             if s["hidden_tokens"] == 128:
                 s["hidden_tokens"] = 192
-            if s["cpu_s"] == 90:
-                s["cpu_s"] = 120
         altered["legs"] = ctl.generate_legs(altered["campaign_id"], altered["seed_law"], altered["leg_defaults"])
         ctl.validate_kit(altered)  # no runner hardcoding of a dose that lm-inst-01 may change
+
+    def test_rl186_parameters_remain_draft_and_follow_the_read(self):
+        kit = draft()
+        original = deepcopy(kit)
+        for gpu, dc_in, dose, recovery, lag, gap, prompt_sizes, prefill in (
+            (True, False, (128, 256, 512), 120, 2, 10, [2048, 2000], 2000),
+            (False, True, (128, 256, 512), 600, 2.01, 11, [2016, 2048], 2016),
+            (True, True, (192, 384, 768), 126.25, 2.2, 11, [1872, 2048], 2048),
+        ):
+            with self.subTest(gpu=gpu, dc_in=dc_in):
+                return_time = {120: 20, 600: 140, 126.25: 25.25}[recovery]
+                updated = ctl.apply_instrument_read(
+                    kit, below_gpu_floor=gpu, below_dc_in_floor=dc_in, return_time_s=return_time,
+                    decode_end_lag_s=lag, prompt_sizes=prompt_sizes, raised_doses=dose if gpu and dc_in else None)
+                scripts = updated["seed_law"]["scripts"]
+                self.assertEqual(sorted(s["hidden_tokens"] for s in scripts if s["kind"] == "hidden"),
+                                 sorted(dose * 2))
+                self.assertEqual({s["recovery_s"] for s in scripts}, {recovery})
+                self.assertEqual(next(s["gap_s"] for s in scripts if s["kind"] == "split"), gap)
+                self.assertEqual(updated["leg_defaults"]["prefill_tokens"], prefill)
+                self.assertEqual(updated["status"], "draft")
+                self.assertFalse(updated["ruling"]["authorizes_spans"])
+                self.assertEqual(updated["frozen"], kit["frozen"])
+                self.assertEqual(updated["layout"], kit["layout"])
+                self.assertEqual([leg["seed"] for leg in updated["legs"]], [leg["seed"] for leg in kit["legs"]])
+        self.assertEqual(kit, original)
+
+    def test_rl186_read_refuses_to_choose_raised_doses_or_break_a_prompt_tie(self):
+        facts = dict(below_gpu_floor=True, below_dc_in_floor=True, return_time_s=60,
+                     decode_end_lag_s=2, prompt_sizes=[2000])
+        with self.assertRaisesRegex(kits.KitError, "three raised doses from the research lead"):
+            ctl.apply_instrument_read(draft(), **facts)
+        with self.assertRaisesRegex(kits.KitError, "only when both floors"):
+            ctl.apply_instrument_read(draft(), **{**facts, "below_gpu_floor": False}, raised_doses=(192, 384, 768))
+        with self.assertRaisesRegex(kits.KitError, "tie for nearest prompt size"):
+            ctl.apply_instrument_read(draft(), **{**facts, "below_gpu_floor": False, "prompt_sizes": [1900, 2100]})
+
+    def test_rl186_rejects_changes_to_the_ruled_shape_and_master_seed(self):
+        kit = draft()
+        kit["seed_law"]["master_seed"] += 1
+        with self.assertRaisesRegex(kits.KitError, "master_seed"):
+            ctl.validate_kit(kit)
+        kit = draft()
+        next(s for s in kit["seed_law"]["scripts"] if s["cpu_s"] == 90)["cpu_s"] = 120
+        with self.assertRaisesRegex(kits.KitError, "RL-186 CPU doses"):
+            ctl.validate_kit(kit)
 
     def test_seed_law_refuses_reorder_and_bad_scripts(self):
         kit = draft()
@@ -89,6 +133,12 @@ class KitTests(unittest.TestCase):
                             if s["script"]["kind"] in {"hidden","plain","split"}))
         pair = [i for i,s in enumerate(all_specs) if s["script"]["kind"] in {"plain","split"}]
         self.assertEqual(pair[1]-pair[0],1)
+        for field in ("seed", "prefill_chars", "decode_tokens"):
+            self.assertEqual(all_specs[pair[0]][field], all_specs[pair[1]][field])
+        kit["legs"][pair[1]]["seed"] += 1
+        with self.assertRaisesRegex(kits.KitError, "script seed law"):
+            ctl.validate_kit(kit)
+        kit["legs"][pair[1]]["seed"] -= 1
         for ids in (["L001"],["L006","L007"],["L003","L004"]):
             with self.assertRaisesRegex(legs.PlanError,"layout"):
                 legs.leg_specs(kit,ids)
@@ -120,31 +170,113 @@ class KitTests(unittest.TestCase):
             with self.assertRaisesRegex(kits.KitError,"DRAFT"):
                 launcher.launch(args)
 
-    def test_issued_ctl_refuses_before_clock_anchor_fence_and_bootstrap(self):
-        # An issued-shaped fixture exercises the unresolved authority independently of the draft gate.
+
+class LaunchAuthorityTests(unittest.TestCase):
+    now = int(local("2026-11-19T00:00"))
+    ns = runner.NS_PER_SECOND
+    span_id = "ctl-01-s01"
+
+    def setUp(self):
         kit = draft()
         kit.update(status="issued", frozen={"commit": "a" * 40, "paths": {kit["runner"]["entry"]: "b" * 64}})
         kit["ruling"]["authorizes_spans"] = True
-        root = Path(self.enterContext(tempfile.TemporaryDirectory()))
-        path = root / "synthetic-issued.json"
+        self.root = Path(self.enterContext(tempfile.TemporaryDirectory())).resolve()
+        path = self.root / "synthetic-issued.json"
         path.write_text(json.dumps(kit))
-        argv = ["launch", "--repo", str(root), "--kit", str(path), "--output", str(root / "out"),
-                "--python-bin", sys.executable, "--disk-path", str(root), "--custody-root", str(root / "fence"),
-                "--magistrate-pid", "234", "--deadline", "2000"]
-        self.assertEqual(kits.load_kit(path)[0]["status"], "issued")
-        authority = ["--attempt-ledger", str(root / "ledger.json"), "--previous-close-receipt",
-                     str(root / "close.json"), "--span-id", "ctl-01-s01", "--authorized-t0-date", "2026-11-19",
-                     "--t0-not-before", "1000", "--t0-before", "2000", "--t0-not-before-ns", "1000000000000"]
+        self.output = self.root / "out"
+        self.fence_root = self.root / "fence"
+        self.ledger = self.root / "ledger.json"
+        self.receipt = self.root / "close.json"
+        self.close_ns = self.now * self.ns
+        self.prior = {"sequence": 1, "span_id": "previous", "close_receipt": str(self.receipt)}
+        self.ledger.write_text(json.dumps({"attempts": [self.prior]}))
+        self.write_close(self.close_ns)
+        self.argv = ["launch", "--repo", str(runner.ROOT), "--kit", str(path), "--output", str(self.output),
+                     "--legs", "L001,L002,L003", "--python-bin", sys.executable, "--disk-path", str(self.root),
+                     "--custody-root", str(self.fence_root), "--magistrate-pid", "234",
+                     "--deadline", str(self.now + 40000), "--launchctl-bin", "synthetic-launchctl"]
+        self.proof = [("--attempt-ledger", str(self.ledger)), ("--previous-close-receipt", str(self.receipt)),
+                      ("--span-id", self.span_id), ("--t0-not-before-ns", str(self.close_ns))]
+
+    def write_close(self, epoch_ns):
+        self.receipt.write_text(json.dumps({"span_id": "previous", "ended": {"epoch_ns": epoch_ns},
+                                           "restore_readbacks": {"synthetic": True}}))
+
+    def launch(self, pairs, *extra):
+        with redirect_stderr(io.StringIO()) as stderr:
+            self.assertEqual(launcher.main(self.argv + [item for pair in pairs for item in pair] + list(extra)), 2)
+        return stderr.getvalue()
+
+    def test_ctl_requires_full_close_authority_without_calendar_arguments(self):
         with (patch.object(runner.RealClock, "arm_anchor_ns", side_effect=AssertionError("clock anchor")),
-              patch.object(launcher.base, "pid_alive", side_effect=AssertionError("host probe")),
-              patch.object(launcher.subprocess, "run", side_effect=AssertionError("host command"))):
-            for extra in ([], authority):
-                with self.subTest(extra=extra), redirect_stderr(io.StringIO()) as stderr:
-                    self.assertEqual(launcher.main(argv + extra), 2)
-                    self.assertIn("NEEDS_SPEC: ctl launch authority", stderr.getvalue())
-        self.assertFalse((root / "fence").exists())
-        with self.assertRaisesRegex(runner.SpanRefusal, "NEEDS_SPEC"):
-            runner.verify_frozen_production(kit)
+              patch.object(launcher.base, "pid_alive", side_effect=AssertionError("host probe"))):
+            for i, (flag, _) in enumerate(self.proof):
+                with self.subTest(omitted=flag):
+                    self.assertIn("ledger-backed launch requires", self.launch(self.proof[:i] + self.proof[i + 1:]))
+            refusal = self.launch(self.proof, "--authorized-t0-date", "2026-11-19")
+            self.assertIn("ctl has free t0", refusal)
+        self.assertFalse(self.fence_root.exists())
+
+    def test_ctl_reproves_close_and_records_attempt_before_bootstrap(self):
+        actual_lock = launcher.base.fence_lock
+
+        @contextmanager
+        def change_close_under_lock(root):
+            with actual_lock(root):
+                self.write_close(self.close_ns + 1)
+                yield
+
+        pending = {"sequence": 2, "span_id": self.span_id,
+                   "close_receipt": str(self.output / runner.RECEIPT_NAME)}
+        anchor = (self.close_ns, 1000 * self.ns, 1000 * self.ns)
+        child = []
+
+        def synthetic_service(command, **_kwargs):
+            self.assertEqual(command[0], "synthetic-launchctl")
+            if command[1] == "bootstrap":
+                self.assertEqual(json.loads(self.ledger.read_text())["attempts"], [self.prior, pending])
+                child.extend(json.loads(Path(command[3]).with_name("runner.json").read_text())["argv"])
+                raise subprocess.CalledProcessError(19, command)
+            self.assertEqual(command[1], "bootout")
+            return subprocess.CompletedProcess(command, 0, b"", b"")
+
+        with (patch.object(launcher.base, "pid_alive", return_value=True),
+              patch.object(launcher.time, "time", return_value=self.now),
+              patch.object(runner.RealClock, "arm_anchor_ns", return_value=anchor),
+              patch.object(launcher.subprocess, "run", side_effect=synthetic_service) as service):
+            with patch.object(launcher.base, "fence_lock", side_effect=change_close_under_lock):
+                self.assertIn("close proof changed before launch", self.launch(self.proof))
+            service.assert_not_called()
+            self.assertEqual(json.loads(self.ledger.read_text())["attempts"], [self.prior])
+            self.write_close(self.close_ns)
+            self.assertIn("returned non-zero exit status 19", self.launch(self.proof))
+            self.assertEqual([call.args[0][1] for call in service.call_args_list], ["bootstrap", "bootout"])
+        self.assertIsNone(launcher.base.read_fence(self.fence_root))
+        self.assertEqual(json.loads(self.ledger.read_text())["attempts"], [self.prior, pending])
+        self.assertNotIn("--authorized-t0-date", child)
+        self.assertEqual(child[child.index("--t0-anchor") + 1], ":".join(map(str, anchor)))
+        self.assertEqual(child[child.index("--t0-not-before-ns") + 1], str(self.close_ns))
+        self.check_child_close_bound(child[2:])
+
+    def check_child_close_bound(self, argv):
+        clock = runner.FakeClock(self.now)
+        deps = runner.mock_deps(self.output, clock)
+        with patch.object(runner, "production_deps", return_value=deps):
+            for wall_ns, continuous_ns in ((self.close_ns - 1, 1000 * self.ns),
+                                           (self.close_ns, 1000 * self.ns - 1)):
+                with (self.subTest(wall_ns=wall_ns, continuous_ns=continuous_ns),
+                      patch.object(clock, "epoch_and_monotonic_ns", return_value=(wall_ns, continuous_ns)),
+                      redirect_stderr(io.StringIO()) as stderr):
+                    self.assertEqual(runner.main(argv), 3)
+                    self.assertIn("exact close bound", stderr.getvalue())
+                self.assertFalse(self.output.exists())
+                self.assertEqual(deps.host.calls, [])
+            with patch.object(clock, "epoch_and_monotonic_ns", return_value=(self.close_ns, 1000 * self.ns)):
+                self.assertEqual(runner.main(argv), 0)
+        result = json.loads((self.output / runner.RECEIPT_NAME).read_text())
+        self.assertEqual(result["started"]["epoch_ns"], self.close_ns)
+        self.assertEqual(result["span_id"], self.span_id)
+        self.assertEqual(result["t0_authority"], {"t0_not_before_ns": self.close_ns})
 
     def test_ctl_checklist_refuses_draft_without_requiring_batch_window(self):
         root = Path(self.enterContext(tempfile.TemporaryDirectory()))
@@ -194,7 +326,10 @@ class RuntimeTests(unittest.TestCase):
         return code,out,result
 
     def test_every_script_runs_physical_doses_and_sampled_recovery(self):
-        kit = draft()
+        kit = ctl.apply_instrument_read(draft(), below_gpu_floor=True, below_dc_in_floor=True,
+                                        return_time_s=25.25, decode_end_lag_s=2.01, prompt_sizes=[2048],
+                                        raised_doses=(192, 384, 768))
+        pair_contexts = {}
         for raw in specs(kit):
             spec = {**raw,"g0_role":"capture"}
             # Independent captures here; the integration test below exercises consumers.
@@ -210,7 +345,14 @@ class RuntimeTests(unittest.TestCase):
             self.assertEqual(hidden,[script["hidden_tokens"]] if script["hidden_tokens"] else [])
             recovery = audit["steps"][-1]
             self.assertEqual(recovery["kind"],"recovery")
-            self.assertAlmostEqual((recovery["ended_ns"]-recovery["started_ns"])/rt.NS,600)
+            self.assertAlmostEqual((recovery["ended_ns"]-recovery["started_ns"])/rt.NS, script["recovery_s"])
+            if script["kind"] in {"split", "plain"}:
+                pair_contexts[script["kind"]] = [s["context_tokens"] for s in turns]
+            if script["kind"] == "split":
+                gaps = [s for s in audit["steps"] if s["kind"] == "gap"]
+                self.assertEqual(len(gaps), 2)
+                for gap in gaps:
+                    self.assertAlmostEqual((gap["ended_ns"] - gap["started_ns"]) / rt.NS, script["gap_s"])
             if script["cpu_s"]:
                 cpu = next(s for s in audit["steps"] if s["kind"] == "cpu")
                 self.assertEqual((cpu["ended_ns"]-cpu["started_ns"])/rt.NS,script["cpu_s"])
@@ -222,6 +364,8 @@ class RuntimeTests(unittest.TestCase):
             self.assertTrue(stops)
             self.assertGreaterEqual(stops[-1]["timestamp_s"],recovery["ended_epoch_s"])
             legs.guard_projection(result,"ctl result",values=False)
+        self.assertGreater(pair_contexts["plain"][0], 0)
+        self.assertEqual(pair_contexts["split"], pair_contexts["plain"] * 3)
 
     def test_consumer_authenticates_capture(self):
         pair = specs()[:2]

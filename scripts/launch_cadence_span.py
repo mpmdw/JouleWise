@@ -192,10 +192,13 @@ def append_attempt(path, ledger, previous, span_id, receipt, span_pattern):
 def runner_argv(args) -> list[str]:
     legs, window = getattr(args, "legs", None), getattr(args, "batch_window", None)
     t0_date = getattr(args, "authorized_t0_date", None)
+    anchor = getattr(args, "t0_anchor", None)
     t0_args = []
     if t0_date is not None:
         t0_args = ["--authorized-t0-date", t0_date, "--t0-not-before", str(args.t0_not_before),
-                   "--t0-before", str(args.t0_before), "--t0-anchor", ":".join(map(str, args.t0_anchor))]
+                   "--t0-before", str(args.t0_before)]
+    if t0_date is not None or anchor is not None:
+        t0_args += ["--t0-anchor", ":".join(map(str, anchor))]
     if getattr(args, "t0_not_before_ns", None) is not None:
         t0_args += ["--t0-not-before-ns", str(args.t0_not_before_ns)]
     span_id = getattr(args, "span_id", None)
@@ -213,19 +216,25 @@ def launch(args) -> None:
     if args.kit is None or not args.kit.is_file():
         raise ValueError("cadence-legs-v1 requires an existing --kit")
     kit, _ = kitmod.load_kit(args.kit)
-    if kit["runner"]["kind"] == ctl.RUNNER_KIND:
-        ctl.require_launch_authority(kit)
+    scripted_ctl = kit["runner"]["kind"] == ctl.RUNNER_KIND
+    if scripted_ctl:
+        ctl.require_issued(kit)
     ledger_path = getattr(args, "attempt_ledger", None)
     previous_receipt = getattr(args, "previous_close_receipt", None)
     span_id = getattr(args, "span_id", None)
     close_bound = getattr(args, "t0_not_before_ns", None)
     if span_id is not None and not span_runner.SPAN_ID_PATTERN.fullmatch(span_id):
         raise ValueError("invalid --span-id")
-    if (kit["seed_law"]["method"] == span_runner.QUAL_LAW
+    if (scripted_ctl or kit["seed_law"]["method"] == span_runner.QUAL_LAW
             or ledger_path is not None or previous_receipt is not None):
         if ledger_path is None or not previous_receipt or span_id is None or close_bound is None:
             raise ValueError("ledger-backed launch requires --attempt-ledger, --previous-close-receipt, "
                              "--span-id and --t0-not-before-ns")
+    if scripted_ctl:
+        span_runner.validate_t0_authority(kit, getattr(args, "authorized_t0_date", None),
+                                          getattr(args, "t0_not_before", None), getattr(args, "t0_before", None),
+                                          getattr(args, "t0_anchor", None), require_anchor=False,
+                                          t0_not_before_ns=close_bound)
     if (args.magistrate_pid <= 1 or not base.pid_alive(args.magistrate_pid)
             or not math.isfinite(args.deadline) or args.deadline <= time.time()):
         raise ValueError("live magistrate PID and future finite epoch deadline required")
@@ -240,6 +249,8 @@ def launch(args) -> None:
     plan = cadence_plan(kit, args.legs, args.batch_window)
     if args.deadline - time.time() < cadence_minimum_seconds(plan):
         raise ValueError("cadence-legs-v1 deadline cannot fit the span's worst case, work reserve and cleanup grace")
+    if scripted_ctl and getattr(args, "t0_anchor", None) is None:
+        args.t0_anchor = span_runner.RealClock.arm_anchor_ns()
     runner = Path(runner_argv(args)[1])
     if not runner.is_file() or not os.access(args.python_bin, os.X_OK):
         raise ValueError("measurement checkout runner and executable interpreter required")
@@ -358,8 +369,8 @@ def main(argv=None) -> int:
     start.add_argument("--magistrate-pid", type=int, required=True)
     start.add_argument("--deadline", type=float, required=True)
     start.add_argument("--span-id", help="span identity carried into its close receipt")
-    start.add_argument("--attempt-ledger", type=Path, help="shared launch/start-plan ledger, required for qualification")
-    start.add_argument("--previous-close-receipt", help="proved close receipt, required for qualification")
+    start.add_argument("--attempt-ledger", type=Path, help="shared launch/start-plan ledger, required for qualification and ctl")
+    start.add_argument("--previous-close-receipt", help="proved close receipt, required for qualification and ctl")
     runner.add_t0_authority_arguments(start)
     start.add_argument("--launchctl-bin", default="/bin/launchctl")
     start.add_argument("--pmset-bin", default="/usr/bin/pmset")
@@ -387,7 +398,8 @@ def main(argv=None) -> int:
         if args.command == "launch":
             kit, _ = kitmod.load_kit(args.kit)
             if kit["runner"]["kind"] == ctl.RUNNER_KIND:
-                ctl.require_launch_authority(kit)
+                launch(args)
+                return 0
             try:
                 runner.validate_t0_authority(kit, args.authorized_t0_date, args.t0_not_before,
                                              args.t0_before, args.t0_anchor, require_anchor=False,

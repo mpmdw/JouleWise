@@ -61,7 +61,8 @@ def endpoint_class(base, script, audit, *, synthetic):
             audit["steps"].append(row)
             try:
                 result = base.chat(endpoint, messages, **{**kwargs, "max_tokens": tokens})
-                row.update(actual_tokens=result.completion_tokens, first_token_ns=result.first_token_ns)
+                row.update(actual_tokens=result.completion_tokens, first_token_ns=result.first_token_ns,
+                           context_tokens=result.prompt_tokens)
             finally:
                 row["ended_ns"] = self.stamp()
             if result.tool_calls:

@@ -64,7 +64,7 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from joulewise.cadence import kit as kitmod, legs as legsmod  # noqa: E402
+from joulewise.cadence import ctl, kit as kitmod, legs as legsmod  # noqa: E402
 from joulewise.cadence.kit_v11 import QUAL_LAW  # noqa: E402
 
 RECEIPT_SCHEMA = "joulewise.cadence_span_receipt.v1"
@@ -295,10 +295,9 @@ class ProductionHost:
 
 
 def verify_frozen_production(kit):
-    if kit.get("runner", {}).get("kind") == "cadence-ctl-v1":
-        from joulewise.cadence import ctl
+    if kit.get("runner", {}).get("kind") == ctl.RUNNER_KIND:
         try:
-            ctl.require_launch_authority(kit)
+            ctl.require_issued(kit)
         except kitmod.KitError as error:
             raise SpanRefusal(str(error)) from error
     head = subprocess.run(["git", "-C", str(ROOT), "rev-parse", "HEAD"], capture_output=True, text=True,
@@ -388,6 +387,14 @@ def add_t0_authority_arguments(parser):
 
 def validate_t0_authority(kit, authorized_date, t0_not_before, t0_before, t0_anchor, *, require_anchor,
                           t0_not_before_ns=None):
+    if kit.get("runner", {}).get("kind") == ctl.RUNNER_KIND:
+        if any(value is not None for value in (authorized_date, t0_not_before, t0_before)):
+            raise ValueError("ctl has free t0; use the exact close bound without calendar t0 arguments")
+        if type(t0_not_before_ns) is not int or t0_not_before_ns <= 0:
+            raise ValueError("ctl requires a positive --t0-not-before-ns from the proven close")
+        if require_anchor and t0_anchor is None:
+            raise ValueError("ctl requires the arm clock anchor from the launcher")
+        return
     qualification = kit["seed_law"]["method"] == QUAL_LAW
     if not qualification and all(value is None for value in
                                  (authorized_date, t0_not_before, t0_before, t0_anchor, t0_not_before_ns)):
@@ -413,15 +420,17 @@ def _authorized_start(clock, authorized_date, t0_not_before, t0_before, anchor, 
     # Require the full projected interval to fit even if the sampler was preempted.
     earliest_ns = anchor_epoch_ns + continuous_ns - after_ns
     latest_ns = anchor_epoch_ns + continuous_ns - before_ns
-    lower_ns = max(t0_not_before * NS_PER_SECOND, t0_not_before_ns or 0)
-    cutoff_ns = t0_before * NS_PER_SECOND
+    lower_ns = max((t0_not_before or 0) * NS_PER_SECOND, t0_not_before_ns or 0)
     for epoch_ns in (earliest_ns, latest_ns, wall_ns):
-        if not lower_ns <= epoch_ns < cutoff_ns:
+        if epoch_ns < lower_ns:
             return None
-        second = epoch_ns // NS_PER_SECOND
-        day = (UNIX_EPOCH + timedelta(seconds=second)).astimezone(legsmod.LOCAL_ZONE).date()
-        if day.isoformat() != authorized_date:
-            return None
+        if authorized_date is not None:
+            if epoch_ns >= t0_before * NS_PER_SECOND:
+                return None
+            second = epoch_ns // NS_PER_SECOND
+            day = (UNIX_EPOCH + timedelta(seconds=second)).astimezone(legsmod.LOCAL_ZONE).date()
+            if day.isoformat() != authorized_date:
+                return None
     t0_ns = (earliest_ns + latest_ns) // 2
     epoch_s = t0_ns / NS_PER_SECOND
     # Keep the legacy numeric seconds in the same whole second as the exact stamp.
@@ -437,15 +446,28 @@ def run_span(*, kit, kit_sha256, output, deadline, windows, deps, leg_ids=None,
     """Run one span. Returns the receipt's rc (0 = every roster leg attempted, cleanup proven)."""
     clock = deps.clock
     authority = {}
-    if authorized_t0_date is not None:
+    scripted_ctl = kit["runner"]["kind"] == ctl.RUNNER_KIND
+    ctl_start = scripted_ctl and (not deps.mock or t0_not_before_ns is not None or t0_anchor is not None)
+    if ctl_start:
+        try:
+            validate_t0_authority(kit, authorized_t0_date, t0_not_before, t0_before, t0_anchor,
+                                  require_anchor=True, t0_not_before_ns=t0_not_before_ns)
+        except ValueError as error:
+            print(f"REFUSE: {error}", file=sys.stderr)
+            return 3
+    if authorized_t0_date is not None or ctl_start:
         started = _authorized_start(clock, authorized_t0_date, t0_not_before, t0_before, t0_anchor,
                                     t0_not_before_ns)
         if started is None:
-            print(f"REFUSE: t0 clocks must agree on authority for {authorized_t0_date} "
-                  f"within [{t0_not_before}, {t0_before}) with exact close bound {t0_not_before_ns}", file=sys.stderr)
+            scope = (f" for {authorized_t0_date} within [{t0_not_before}, {t0_before})"
+                     if authorized_t0_date is not None else "")
+            print(f"REFUSE: t0 clocks must agree on authority{scope} "
+                  f"with exact close bound {t0_not_before_ns}", file=sys.stderr)
             return 3
-        authority = {"t0_authority": {"authorized_t0_date": authorized_t0_date,
-                                      "t0_not_before": t0_not_before, "t0_before": t0_before}}
+        authority = {"t0_authority": {}}
+        if authorized_t0_date is not None:
+            authority["t0_authority"].update(authorized_t0_date=authorized_t0_date,
+                                             t0_not_before=t0_not_before, t0_before=t0_before)
         if t0_not_before_ns is not None:
             authority["t0_authority"]["t0_not_before_ns"] = t0_not_before_ns
     else:
@@ -463,7 +485,7 @@ def run_span(*, kit, kit_sha256, output, deadline, windows, deps, leg_ids=None,
         record["span_id"] = span_id
     state = {"power_read": False, "plan": None, "summaries": [], "finished": 0, "fault": False, "redos": 0}
     kit_legs = {leg["leg_id"]: leg for leg in kit["legs"]}
-    result_keep = _RESULT_KEEP_CTL if kit["runner"]["kind"] == "cadence-ctl-v1" else _RESULT_KEEP
+    result_keep = _RESULT_KEEP_CTL if scripted_ctl else _RESULT_KEEP
 
     def work_remaining():
         remaining = deadline - WORK_RESERVE_S - clock.time()
@@ -1069,7 +1091,12 @@ def main(argv=None):
         return 1
     if not math.isfinite(args.deadline):
         parser.error("deadline must be finite")
+    scripted_ctl = kit["runner"]["kind"] == ctl.RUNNER_KIND
     try:
+        if scripted_ctl:
+            ctl.require_issued(kit)
+            if args.span_id is None:
+                raise ValueError("ctl requires --span-id from the launch ledger")
         if args.span_id is not None and not SPAN_ID_PATTERN.fullmatch(args.span_id):
             raise ValueError("invalid --span-id")
         validate_t0_authority(kit, args.authorized_t0_date, args.t0_not_before, args.t0_before, args.t0_anchor,
@@ -1078,7 +1105,7 @@ def main(argv=None):
         parser.error(str(error))
     output = args.output.resolve()
     deps = production_deps(inputs=args.inputs, pmset_bin=args.pmset_bin, output=output,
-                           scripted_ctl=kit["runner"]["kind"] == "cadence-ctl-v1")
+                           scripted_ctl=scripted_ctl)
     return run_span(kit=kit, kit_sha256=sha, output=output, deadline=args.deadline, windows=windows, deps=deps,
                     leg_ids=_roster(args), authorized_t0_date=args.authorized_t0_date,
                     t0_not_before=args.t0_not_before, t0_before=args.t0_before, t0_anchor=args.t0_anchor,

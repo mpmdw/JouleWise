@@ -183,7 +183,7 @@ def cmd_checklist(args):
                                           batch_window=_window(args.batch_window) if args.batch_window else None)
         if kit["schema"] == ctl.SCHEMA:
             try:
-                ctl.require_launch_authority(kit)
+                ctl.require_issued(kit)
             except kitmod.KitError as error:
                 rows.append({"id": "ctl_authority", "kind": "ctl_authority", "ok": False,
                              "detail": str(error)})
