@@ -1,10 +1,12 @@
 """Synthetic tests for the C1 caller and its stored-bundle inputs."""
 
 import ast
+import bz2
 from contextlib import redirect_stderr
 import csv
 from dataclasses import replace
 from datetime import datetime
+import gzip
 import hashlib
 from io import StringIO
 from importlib import import_module
@@ -242,12 +244,14 @@ def describe(root, relative, value, *, canonical=False):
     return {"path": relative, "sha256": hashlib.sha256(raw).hexdigest()}
 
 
-def registration_fixture(root, amount_field=None):
+def registration_fixture(root, amount_field=None, artifact_overrides=None):
     paths = dict.fromkeys((*registration.ARTIFACTS, *registration.SERIES_RELEASE_ARTIFACTS))
     for path in paths:
         target = root / path
         target.parent.mkdir(parents=True, exist_ok=True)
-        if path.startswith(("joulewise/", "scripts/")) and path.endswith(".py"):
+        if path in (artifact_overrides or {}):
+            target.write_bytes(artifact_overrides[path])
+        elif path.startswith(("joulewise/", "scripts/")) and path.endswith(".py"):
             target.write_bytes((ROOT / path).read_bytes())
         else:
             target.write_text("synthetic\n")
@@ -287,10 +291,11 @@ def registration_fixture(root, amount_field=None):
 
 
 def stored_series(root, *, wins=102, different=None, no_rows=False, spoof=False, history=False,
-                  amount_fields=None, amount_field=None, defective_layout=False, omit_first_pm=False):
+                  amount_fields=None, amount_field=None, artifact_overrides=None, defective_layout=False,
+                  omit_first_pm=False):
     """Synthetic committed arm history with a separate, untracked restored tree."""
     init_git_fixture(root, "-q")
-    registration_fixture(root, amount_field)
+    registration_fixture(root, amount_field, artifact_overrides)
     manifest = series.candidate()
     manifest_sha = hashlib.sha256(series.raw_json(manifest)).hexdigest()
     prior = None
@@ -424,23 +429,55 @@ def publish_fixture_receipt(root, receipt):
     fixture_git(root, "update-ref", "refs/remotes/origin/align-v4-series-release", tip)
 
 
+def authored_receipt(root, window="C1"):
+    record = json.loads((root / f"records/{window}/record.json").read_bytes())
+    path = registration.REGISTRATION + "registration_receipt.json"
+    return json.loads(fixture_git(root, "show", f"{record['previous_record']['commit']}:{path}"))
+
+
 class SeriesReleaseTests(unittest.TestCase):
+    def test_receipt_from_after_t3_cannot_replace_the_c1_predecessors_receipt(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            pair = series.PAIRS[0]
+            caller = RELEASE_PATHS[0]
+            previous_caller = (ROOT / caller).read_bytes() + b"\n# Earlier synthetic caller.\n"
+            stored_series(root, amount_field="amount_a", artifact_overrides={caller: previous_caller},
+                          amount_fields={("C1", pair, "sabotage"): {"amount_a": 1, "amount_b": 9}})
+            before = registration.require_registration(root, series_release=True)
+            self.assertEqual(before, authored_receipt(root))
+            self.assertEqual(before["artifacts"][caller], registration.digest(previous_caller))
+            tip = fixture_git(root, "rev-parse", "refs/remotes/origin/align-v4-series-release")
+            (root / caller).write_bytes((ROOT / caller).read_bytes())
+            new_commit = commit_fixture(root, [caller])
+            completed = json.loads((root / seal.SERIES_COMPLETE).read_bytes())["record_commit"]
+            fixture_git(root, "merge-base", "--is-ancestor", completed, new_commit)
+            replacement = {**before, "commit": new_commit, "side_transfer_field": "amount_b", "artifacts": {
+                **before["artifacts"], caller: registration.digest((ROOT / caller).read_bytes()),
+            }}
+            publish_fixture_receipt(root, replacement)
+            self.assertEqual(registration.require_registration(root, series_release=True), replacement)
+            self.assertEqual(authored_receipt(root), before)
+            self.assertEqual(fixture_git(root, "diff", "--name-only", tip, "HEAD").splitlines(), sorted([
+                caller, registration.REGISTRATION + "registration_receipt.json",
+            ]))
+            output = root / "report.json"
+            result = invoke(root, output)
+            amount = None
+            if output.exists():
+                panel = json.loads(output.read_bytes())[seal.RL176]["q"]["side_transfer"][pair]
+                amount = next(row["side_transfer_total"] for row in panel["rows"] if row["window"] == "C1")
+            self.assertEqual(result.returncode, 1, (result.stderr, amount))
+            self.assertFalse(output.exists())
+
     def test_audit_receipt_for_different_fit_source_refuses_without_report(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            stored_series(root, wins=102)
-            receipt = registration.require_registration(root, series_release=True)
             solver = "joulewise/align/energy_residual.py"
+            stored_series(root, wins=102, artifact_overrides={solver: b"synthetic\n"})
+            receipt = registration.require_registration(root, series_release=True)
+            self.assertEqual(authored_receipt(root), receipt)
             self.assertEqual(Path(rl176._wls.__code__.co_filename).resolve(), ROOT / solver)
-            other_source = b"synthetic\n"
-            if (root / solver).read_bytes() != other_source:
-                (root / solver).write_bytes(other_source)
-                commit = commit_fixture(root, [solver])
-                receipt = {**receipt, "commit": commit, "artifacts": {
-                    **receipt["artifacts"], solver: registration.digest(other_source),
-                }}
-                publish_fixture_receipt(root, receipt)
-            self.assertEqual(registration.require_registration(root, series_release=True), receipt)
             for path in RELEASE_PATHS:
                 self.assertEqual(registration.digest((ROOT / path).read_bytes()), receipt["artifacts"][path])
             self.assertNotEqual(registration.digest((ROOT / solver).read_bytes()), receipt["artifacts"][solver])
@@ -714,11 +751,9 @@ class SeriesReleaseTests(unittest.TestCase):
             self.assertEqual(refusal.exception.code, 1)
             self.assertFalse(output.exists())
 
-    def test_bound_compressed_only_inputs_require_restore_before_reading(self):
+    def test_exact_input_inventory_refuses_defects_for_every_input_class(self):
         from scripts import align_v4_series_release as caller
 
-        # Every named input goes through the same manifest lookup. The bytes
-        # of a compressed sibling must never be opened at this boundary.
         run_id = "synthetic-C1-01"
         names = {
             **dict.fromkeys((*caller.REQUIRED_BUNDLE_FILES, caller.PM_ROWS), False),
@@ -727,32 +762,156 @@ class SeriesReleaseTests(unittest.TestCase):
         checks = {f"runs/{run_id}/{name}": optional for name, optional in names.items()}
         journal = "archive/align_s_hazard.jsonl"
         checks[journal] = False
+        for name, optional in checks.items():
+            for defect in ("absent", "unreadable", ".gz-only", ".zst-only", ".bz2-only", "symlink",
+                           "digest-changed", "extra file", "compressed at canonical path"):
+                with self.subTest(name=name, defect=defect), tempfile.TemporaryDirectory() as tmp:
+                    root = Path(tmp)
+                    restored = root / "series/restored/C1"
+                    path = restored / name
+                    path.parent.mkdir(parents=True)
+                    if name.endswith(".csv"):
+                        plain = (b"timestamp_s,power_w,source,rail,interval_start_s,interval_end_s\n"
+                                 b"1,2,powermetrics,gpu_power,0,1\n")
+                    else:
+                        plain = b"[]\n" if name.endswith(caller.PM_ROWS) else b'{"synthetic": true}\n'
+                    path.write_bytes(plain)
+                    if defect in (".gz-only", ".zst-only", ".bz2-only"):
+                        compressors = {".gz": gzip.compress, ".bz2": bz2.compress,
+                                       ".zst": lambda raw: b"\x28\xb5\x2f\xfd"}
+                        suffix = defect.removesuffix("-only")
+                        path.with_name(path.name + suffix).write_bytes(compressors[suffix](plain))
+                        path.unlink()
+                    elif defect == "extra file":
+                        path.with_name(path.name + ".extra").write_bytes(plain)
+                    elif defect == "compressed at canonical path":
+                        path.write_bytes(gzip.compress(plain))
+                    manifest = describe(restored, "finalized_manifest.json",
+                                        harvest_offload.finalized_manifest(restored), canonical=True)
+                    record = SimpleNamespace(window="C1", finalized_manifest_sha256=manifest["sha256"])
+                    if defect == "absent":
+                        path.unlink()
+                    elif defect == "unreadable":
+                        path.chmod(0)
+                    elif defect == "symlink":
+                        target = root / "synthetic-link-target"
+                        target.write_bytes(plain)
+                        path.unlink()
+                        path.symlink_to(target)
+                    elif defect == "digest-changed":
+                        path.write_bytes(b"0" + plain[1:])
+
+                    real = caller.named_bytes
+
+                    def open_exact(source_root, relative):
+                        if relative.endswith("finalized_manifest.json") or relative == f"series/restored/C1/{name}":
+                            return real(source_root, relative)
+                        raise AssertionError(f"opened an unapproved input: {relative}")
+
+                    with patch.object(caller, "named_bytes", side_effect=open_exact):
+                        with self.assertRaises((ValueError, OSError)):
+                            files = caller.RestoredFiles(root, record,
+                                                         {"trace_layout": caller.LAYOUT, "hazard_journal": None})
+                            files.read(name, optional=optional)
+
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             restored = root / "series/restored/C1"
-            for name in checks:
-                sibling = restored / (name + ".zst")
-                sibling.parent.mkdir(parents=True, exist_ok=True)
-                sibling.write_bytes(b"synthetic compressed entry")
+            restored.mkdir(parents=True)
             manifest = describe(restored, "finalized_manifest.json",
                                 harvest_offload.finalized_manifest(restored), canonical=True)
             record = SimpleNamespace(window="C1", finalized_manifest_sha256=manifest["sha256"])
-            files = caller.RestoredFiles(root, record, {"trace_layout": caller.LAYOUT, "hazard_journal": journal})
-            with patch.object(caller, "named_bytes", side_effect=AssertionError("unexpected input read")):
-                self.assertIsNone(files.read("runs/synthetic-absent/events.jsonl", optional=True))
-                for name, optional in checks.items():
-                    with self.subTest(name=name), self.assertRaisesRegex(ValueError, "requires restoration"):
-                        files.read(name, optional=optional)
+            files = caller.RestoredFiles(root, record, {"trace_layout": caller.LAYOUT, "hazard_journal": None})
+            self.assertIsNone(files.read(f"runs/{run_id}/events.jsonl", optional=True))
 
-            # The frozen reader prefers the bound plain file if both exist.
-            name = f"runs/{run_id}/events.jsonl"
-            plain = b"synthetic plain entry\n"
-            (restored / name).write_bytes(plain)
-            manifest = describe(restored, "finalized_manifest.json",
-                                harvest_offload.finalized_manifest(restored), canonical=True)
-            record.finalized_manifest_sha256 = manifest["sha256"]
-            files = caller.RestoredFiles(root, record, {"trace_layout": caller.LAYOUT, "hazard_journal": journal})
-            self.assertEqual(files.bundle(run_id, "events.jsonl", optional=True), plain)
+    def test_stored_101_win_series_refuses_gzip_archive_and_its_mutations(self):
+        window = "C8"
+        selected = series.selected(series.candidate(), window)
+        ordinal = selected["sabotage_ordinals"][series.PAIRS[0]]
+        run_id = f"synthetic-{window}-{ordinal:02d}"
+        finalized_manifest = harvest_offload.finalized_manifest
+
+        def finalize(directory):
+            if directory.name == window:
+                events = directory / "runs" / run_id / "events.jsonl"
+                raw = events.read_bytes()
+                archived = events.with_name(events.name + ".gz")
+                archived.write_bytes(gzip.compress(raw, mtime=0))
+                self.assertEqual(gzip.decompress(archived.read_bytes()), raw)
+                events.unlink()
+            return finalized_manifest(directory)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            with patch.object(harvest_offload, "finalized_manifest", side_effect=finalize):
+                stored_series(root, wins=101)
+            archived = root / "series/restored" / window / "runs" / run_id / "events.jsonl.gz"
+            intact = archived.read_bytes()
+            for defect in ("gzip-only", "absent", "unreadable", "digest-changed"):
+                with self.subTest(defect=defect):
+                    archived.write_bytes(intact)
+                    if defect == "absent":
+                        archived.unlink()
+                    elif defect == "unreadable":
+                        archived.chmod(0)
+                    elif defect == "digest-changed":
+                        archived.write_bytes(b"invalid gzip bytes")
+                    output = root / f"{defect}.json"
+                    try:
+                        result = invoke(root, output)
+                        summary = None
+                        if output.exists():
+                            leaf = json.loads(output.read_bytes())[seal.RL176]["S"]
+                            summary = {key: leaf[key] for key in ("strata", "p_sup", "words")}
+                        self.assertEqual(result.returncode, 1, (result.stderr, summary))
+                        self.assertFalse(output.exists())
+                    finally:
+                        if archived.exists():
+                            archived.chmod(0o600)
+
+    def test_bound_rail_projection_missing_gpu_refuses_before_scoring(self):
+        from scripts import align_v4_series_release as caller
+
+        finalized_manifest = harvest_offload.finalized_manifest
+        window = "C8"
+        ordinal = series.selected(series.candidate(), window)["sabotage_ordinals"][series.PAIRS[0]]
+
+        def finalize(directory):
+            if directory.name == window:
+                rail = directory / "runs" / f"synthetic-{window}-{ordinal:02d}" / caller.RAIL_FILE
+                rail.write_bytes(rail.read_bytes().splitlines(keepends=True)[0])
+            return finalized_manifest(directory)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            with patch.object(harvest_offload, "finalized_manifest", side_effect=finalize):
+                stored_series(root, wins=101)
+            output = root / "report.json"
+            with patch.object(rl176, "_series_prints", side_effect=AssertionError("scored incomplete inputs")), \
+                    redirect_stderr(StringIO()), self.assertRaises(SystemExit) as refusal:
+                caller.main(["--measurement-root", str(root), "--output", str(output)])
+            self.assertEqual(refusal.exception.code, 1)
+            self.assertFalse(output.exists())
+
+    def test_loaded_stratum_set_must_match_the_bound_roster_before_scoring(self):
+        from scripts import align_v4_series_release as caller
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            stored_series(root, wins=101)
+            original = caller.ReleasedInputs.load_members
+
+            def drop_stratum(inputs):
+                return tuple(m for m in original(inputs) if not (
+                    m.window == "C8" and m.episode.task_pair == "shade/" + series.PAIRS[0]))
+
+            output = root / "report.json"
+            with patch.object(caller.ReleasedInputs, "load_members", drop_stratum), \
+                    patch.object(rl176, "_series_prints", side_effect=AssertionError("scored an incomplete stratum set")), \
+                    redirect_stderr(StringIO()), self.assertRaises(SystemExit) as refusal:
+                caller.main(["--measurement-root", str(root), "--output", str(output)])
+            self.assertEqual(refusal.exception.code, 1)
+            self.assertFalse(output.exists())
 
     @unittest.skipUnless(shutil.which("zstd") or Path("/opt/homebrew/bin/zstd").is_file(), "zstd CLI required")
     def test_stored_101_win_series_refuses_bound_compressed_only_events_without_report(self):
