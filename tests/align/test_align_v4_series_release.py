@@ -789,8 +789,11 @@ class SeriesReleaseTests(unittest.TestCase):
                 stored_series(root, wins=101)
             output = root / "report.json"
             result = invoke(root, output)
-            written = json.loads(output.read_bytes())[seal.RL176]["S"] if output.exists() else None
-            self.assertEqual(result.returncode, 1, (result.stderr, written))
+            summary = None
+            if output.exists():
+                score = json.loads(output.read_bytes())[seal.RL176]["S"]
+                summary = {key: score[key] for key in ("strata", "p_sup", "words")}
+            self.assertEqual(result.returncode, 1, (result.stderr, summary))
             self.assertFalse(output.exists())
 
     def test_post_release_terminal_authority_refuses_before_member_loading(self):

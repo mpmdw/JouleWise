@@ -242,7 +242,11 @@ class RestoredFiles:
         self._hazard = None
 
     def read(self, name, *, optional=False):
-        if optional and name not in self.entries:
+        if name not in self.entries:
+            # A compressed-only binding needs restoration, even for an
+            # optional input that would otherwise be absent from the projection.
+            packet.require(name + ".zst" not in self.entries, "compressed release input requires restoration")
+            packet.require(optional, "required release input missing from the restored manifest")
             return None
         row = self.entries[name]
         packet.require(set(row) == {"size", "sha256"}, "release input is not a bound regular file")
