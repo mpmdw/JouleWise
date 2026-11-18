@@ -4,7 +4,7 @@
   "open_items": [
     {
       "expires_epoch_s": null,
-      "item": 435,
+      "item": 436,
       "owner": "magistrate",
       "status": "ISSUED"
     },
@@ -83,7 +83,7 @@
   ],
   "owner": "magistrate",
   "schema": "joulewise.current_pointer.v2",
-  "source_item": "435",
+  "source_item": "436",
   "source_item_heading_date": "2026-11-18",
   "wait": {
     "deadline_epoch_s": 1795105020,
