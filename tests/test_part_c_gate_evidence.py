@@ -1,5 +1,6 @@
 """Synthetic gate evidence for the Part C cited rebind."""
 from contextlib import contextmanager
+from pathlib import Path
 import sys
 from types import ModuleType
 import unittest
@@ -54,8 +55,8 @@ def evaluator_world():
 
         def turn_check(count, x7, flags, minimum):
             assert type(count) is int and count >= minimum
-            assert x7 is False and isinstance(flags, list)
-            return True, {"own_stop": not flags, "why": ", ".join(flags) or None}
+            assert type(x7) is bool and isinstance(flags, list)
+            return True, {"own_stop": not x7 and not flags, "why": ", ".join(flags) or None}
 
         rehearsal.turn_check = turn_check
         modules[rehearsal.__name__] = rehearsal
@@ -88,15 +89,18 @@ def clean_facts(*, contrast=False):
     }
 
 
-def evaluate_world(*, d_bank=None, x_g=None):
+STEP = {"g0_outcome": "released", "g0_wait_s": 20.0,
+        "release": {"fast_c": 35.4, "slow_c": 35.4},
+        "reference": {"fast_c": 35.0, "slow_c": 35.0},
+        "slope_c_per_min": 0.05}
+
+
+def evaluate_world(*, d_bank=None, x_g=None, step_d=STEP, **kwargs):
     with evaluator_world():
         return pc.evaluate(
-            step_d={"g0_outcome": "released", "g0_wait_s": 20.0,
-                    "release": {"fast_c": 35.4, "slow_c": 35.4},
-                    "reference": {"fast_c": 35.0, "slow_c": 35.0},
-                    "slope_c_per_min": 0.05},
+            step_d=step_d,
             d_bank=clean_facts() if d_bank is None else d_bank,
-            n_chunk=4096, x_g=clean_facts(contrast=True) if x_g is None else x_g)
+            n_chunk=4096, x_g=clean_facts(contrast=True) if x_g is None else x_g, **kwargs)
 
 
 class PartCEvaluatorTimeoutTests(unittest.TestCase):
@@ -148,3 +152,67 @@ class PartCEvaluatorTimeoutTests(unittest.TestCase):
                 facts = clean_facts(contrast=role == "x_g")
                 facts["episode_flags"] = ["thermal.gate_timeout"]
                 self.assertFalse(evaluate_world(**{role: facts})["pass"])
+
+
+class PartCEvidenceReconciliationTests(unittest.TestCase):
+    def test_failure_in_either_flag_source_or_later_interval_fails_both_roles(self):
+        for role in ("d_bank", "x_g"):
+            for source, flag in (("runtime", "thermal.gate_timeout:3"),
+                                 ("runtime", "episode.deadman:3"),
+                                 ("episode", "episode.deadman:3"),
+                                 ("thermal", "thermal.gate_timeout:3"),
+                                 ("interval", None)):
+                with self.subTest(role=role, source=source, flag=flag):
+                    facts = clean_facts(contrast=role == "x_g")
+                    facts["runtime"] = {"admitted_turns": 3, "episode_flags": []}
+                    if source == "interval":
+                        facts["intervals"].append(interval("G1", 3, 20, outcome="deadman"))
+                    elif source == "runtime":
+                        facts["runtime"]["episode_flags"] = [flag]
+                    else:
+                        facts[f"{source}_flags"] = [flag]
+                    self.assertEqual(evaluate_world(**{role: facts})["verdict"], "other_failure")
+
+    def test_admissions_count_cannot_be_reconciled_to_truncated_turns(self):
+        for role in ("d_bank", "x_g"):
+            with self.subTest(role=role):
+                facts = clean_facts(contrast=role == "x_g")
+                facts["runtime"] = {"admitted_turns": 4, "episode_flags": []}
+                self.assertEqual(evaluate_world(**{role: facts})["verdict"], "other_failure")
+
+    def test_runtime_gate_waits_cannot_disagree_with_the_bundle(self):
+        for role in ("d_bank", "x_g"):
+            with self.subTest(role=role):
+                facts = clean_facts(contrast=role == "x_g")
+                facts["runtime"] = {"admitted_turns": 3, "g0_outcome": "released", "g0_wait_s": 20,
+                                    "deadman": {"T_dead_s": 1000}, "gate_waits_s": {"G0": [20], "G1": [20, 20], "H": []}}
+                self.assertTrue(evaluate_world(**{role: facts})["pass"])
+                facts["runtime"]["gate_waits_s"]["G1"][1] = 30
+                self.assertEqual(evaluate_world(**{role: facts})["verdict"], "other_failure")
+
+    def test_runtime_and_bundle_duty_budgets_are_reported_and_must_match(self):
+        facts = clean_facts()
+        facts["runtime"] = {"admitted_turns": 3, "deadman": {"T_dead_s": 2000.0}}
+        result = evaluate_world(d_bank=facts)
+        self.assertEqual(result["verdict"], "other_failure")
+        budget = result["lines"]["d_bank_mechanics"]["checks"]["duty_budget"]
+        self.assertEqual((budget["runtime_s"], budget["bundle_s"]), (2000.0, 1000.0))
+
+    def test_step_d_g0_interval_must_agree_with_summary_and_bounds(self):
+        good = {**interval("G0", 0, 20), **{k: STEP[k] for k in ("release", "reference", "slope_c_per_min")}}
+        for damage in ({"outcome": "timeout"}, {"end_ns": 1_202_000_000_000},
+                       {"end_ns": 0}, {"duration_s": 19, "end_ns": 20_000_000_000}):
+            with self.subTest(damage=damage), patch.object(pc, "facts_from_bundle",
+                                                          return_value={"intervals": [{**good, **damage}]}):
+                step = pc.step_d_facts(Path("/synthetic"), STEP)
+                self.assertEqual(evaluate_world(step_d=step)["verdict"], "other_failure")
+        with patch.object(pc, "facts_from_bundle", return_value={"intervals": [good]}):
+            self.assertTrue(evaluate_world(step_d=pc.step_d_facts(Path("/synthetic"), STEP))["pass"])
+
+    def test_step_d_requires_finite_nonnegative_wait_and_finite_release_facts(self):
+        cases = ({"g0_wait_s": -1}, {"g0_wait_s": float("nan")}, {"g0_wait_s": True},
+                 {"reference": {"fast_c": float("inf"), "slow_c": 35.0}},
+                 {"slope_c_per_min": float("nan")})
+        for damage in cases:
+            with self.subTest(damage=damage):
+                self.assertEqual(evaluate_world(step_d={**STEP, **damage})["verdict"], "other_failure")

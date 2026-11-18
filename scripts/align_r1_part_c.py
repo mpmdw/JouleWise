@@ -81,29 +81,37 @@ def _check(ok, **detail):
     return {"pass": bool(ok), **detail}
 
 
+def _finite(value):
+    try:
+        return type(value) in (int, float) and math.isfinite(value)
+    except OverflowError:
+        return False
+
+
 def step_d_line(step_d):
     """``step_d``: {g0_outcome, g0_wait_s, release: {fast_c, slow_c}, reference: {fast_c, slow_c}, slope_c_per_min}."""
-    reasons = []
+    reasons = list(step_d.get("interval_reasons", []))
     if step_d.get("g0_outcome") != "released":
         reasons.append(f"G0 outcome {step_d.get('g0_outcome')!r}, not released")
     wait = step_d.get("g0_wait_s")
-    if not isinstance(wait, (int, float)) or wait > G0_LIMIT_S:
+    if not _finite(wait) or not 0 <= wait <= G0_LIMIT_S:
         reasons.append(f"G0 wait {wait!r} s is not inside {G0_LIMIT_S:g} s")
     over = {}
     for role in ("fast_c", "slow_c"):
         release, ref = (step_d.get("release") or {}).get(role), (step_d.get("reference") or {}).get(role)
-        if not isinstance(release, (int, float)) or not isinstance(ref, (int, float)):
+        if not _finite(release) or not _finite(ref):
             reasons.append(f"{role}: release or reference not recorded")
             continue
         over[role] = release - ref
         if over[role] > STEP_D_BAND_C:
             reasons.append(f"{role}: release is {over[role]:.3f} C over the reference (limit {STEP_D_BAND_C} C)")
     slope = step_d.get("slope_c_per_min")
-    if not isinstance(slope, (int, float)):
+    if not _finite(slope):
         reasons.append("slope not recorded")
     elif abs(slope) > STEP_D_SLOPE_C_PER_MIN:
         reasons.append(f"slope {slope:.3f} C/min is outside +/-{STEP_D_SLOPE_C_PER_MIN}")
-    return _check(not reasons, reasons=reasons, g0_wait_s=wait, over_reference_c=over, slope_c_per_min=slope)
+    return _check(not reasons, reasons=reasons, g0_wait_s=wait, over_reference_c=over, slope_c_per_min=slope,
+                  **({"g0_interval": step_d["g0_interval"]} if "g0_interval" in step_d else {}))
 
 
 def _judged(checks):
@@ -132,14 +140,95 @@ def no_g1_timeout(member):
     hold_timeout flags and are not G1s.
     """
     intervals = member.get("intervals", [])
-    timeouts = [r.get("turn") for r in intervals
-                if r.get("kind") == "G1" and r.get("outcome") == "timeout"]
-    flags = [f for f in member.get("episode_flags") or []
-             if isinstance(f, str) and (f == "thermal.gate_timeout" or f.startswith("thermal.gate_timeout:"))]
+    timeouts = list(dict.fromkeys(r.get("turn") for rows in _interval_sources(member).values() for r in rows
+                                  if r.get("kind") == "G1" and r.get("outcome") == "timeout"))
+    flags = [f for f in _all_flags(member) if f.partition(":")[0] == "thermal.gate_timeout"]
     missing = [r["turn"] for r in g1_records(member.get("turns", []), intervals)["per_turn"]
                if not r["outcomes"]]
     return _check(not timeouts and not flags and not missing,
                   g1_timeout_turns=timeouts, gate_timeout_flags=flags, missing_g1_turns=missing)
+
+
+def _flag_sources(member):
+    return {"runtime": (member.get("runtime") or {}).get("episode_flags"),
+            "episode": member.get("episode_flags"), "thermal": member.get("thermal_flags"),
+            "journal": member.get("journal_flags")}
+
+
+def _all_flags(member):
+    return sorted({f for flags in _flag_sources(member).values() if isinstance(flags, (list, tuple))
+                   for f in flags if isinstance(f, str)})
+
+
+def _interval_sources(member):
+    return {"bundle": member.get("intervals", []), "journal": member.get("journal_intervals", [])}
+
+
+def _no_x7(member):
+    runtime = member.get("runtime") or {}
+    flags = [f for f in _all_flags(member) if f.partition(":")[0] == "episode.deadman"]
+    return _check(member.get("x7") is False and ("x7" not in runtime or runtime["x7"] is False) and not flags,
+                  x7=member.get("x7"), runtime_x7=runtime.get("x7"), deadman_flags=flags)
+
+
+def member_evidence(member):
+    """Reconcile comparable claims and retain failures from every source."""
+    runtime = member.get("runtime")
+    sources = _interval_sources(member)
+    cut_flags = {"episode.deadman", "episode.g0_unreleased", "episode.malformed_tool_call",
+                 "thermal.start_gate_timeout",
+                 "thermal.gate_timeout", "thermal.hold_timeout", "thermal.collector_failed",
+                 "thermal.status_source_missing", "episode_error", "endpoint_error"}
+    sources_flags = _flag_sources(member)
+    failures = {
+        source: [f for f in flags if f.partition(":")[0] in cut_flags]
+        for source, flags in sources_flags.items()
+        if isinstance(flags, (list, tuple)) and all(isinstance(f, str) for f in flags)
+    }
+    cuts = [{"source": source, "kind": row.get("kind"), "turn": row.get("turn"), "outcome": row.get("outcome")}
+            for source, rows in sources.items() for row in rows
+            if row.get("kind") in ("G0", "G1", "H") and row.get("outcome") in ("timeout", "deadman")]
+    disagreements = []
+    indices = [turn["index"] for turn in member.get("turns", [])]
+    count = len(indices)
+    if indices != list(range(count)):
+        disagreements.append("bundle turn indices are not consecutive from zero")
+    recorded = None
+    if runtime is not None:
+        recorded = runtime.get("admitted_turns")
+        if type(recorded) is not int or recorded != count:
+            disagreements.append("runtime admitted_turns differs from the extracted turn count")
+        if "member_status" in runtime and runtime["member_status"] != "succeeded":
+            disagreements.append(f"runtime member_status {runtime['member_status']!r}")
+        g0 = [row for row in sources["bundle"] if row.get("kind") == "G0"]
+        if "g0_outcome" in runtime:
+            if [row.get("outcome") for row in g0] != [runtime["g0_outcome"]]:
+                disagreements.append("runtime G0 outcome differs from the bundle G0")
+            if runtime["g0_outcome"] in ("timeout", "deadman"):
+                cuts.append({"source": "runtime", "kind": "G0", "turn": 0, "outcome": runtime["g0_outcome"]})
+        if "g0_wait_s" in runtime and [row.get("duration_s") for row in g0] != [runtime["g0_wait_s"]]:
+            disagreements.append("runtime G0 wait differs from the bundle G0")
+        if "gate_waits_s" in runtime:
+            waits = {kind: [row.get("duration_s") for row in sources["bundle"] if row.get("kind") == kind]
+                     for kind in ("G0", "G1", "H")}
+            if waits != runtime["gate_waits_s"]:
+                disagreements.append("runtime gate waits differ from the bundle intervals")
+
+    # The journal's finalized rows independently attest the bundle's gate records.
+    # Match each positive attestation once, so a contradictory or repeated row fails.
+    unmatched = [_interval_facts(row) for row in sources["bundle"]]
+    for row in map(_interval_facts, sources["journal"]):
+        if row in unmatched:
+            unmatched.remove(row)
+        else:
+            disagreements.append(f"journal {row.get('kind')} turn {row.get('turn')} differs from the bundle")
+    flag_errors = [source for source, flags in sources_flags.items()
+                   if flags is not None and not (isinstance(flags, (list, tuple))
+                                                and all(isinstance(f, str) for f in flags))]
+    return _check(not any(failures.values()) and not cuts and not disagreements and not flag_errors,
+                  admitted_turns={"runtime": recorded, "bundle": count},
+                  failure_flags=failures, failed_intervals=cuts, disagreements=disagreements,
+                  invalid_flag_sources=flag_errors)
 
 
 def gate_durations(intervals):
@@ -173,11 +262,13 @@ def d_bank_mechanics(d_bank, n_chunk, *, max_tokens=MAX_TOKENS):
     out = {}
     # RL-149 sections 1.2 item 5 and 1.5: the R1 driver's own turn rule. A G1 timeout is a gate timeout
     # and is read from the intervals as well as from the flags.
-    flags = d_bank.get("episode_flags")
-    g1_cut = [f"thermal.{'hold' if r.get('kind') == 'H' else 'gate'}_timeout:{r.get('turn')}" for r in intervals
+    flags = _all_flags(d_bank) if any(v is not None for v in _flag_sources(d_bank).values()) else None
+    g1_cut = [f"thermal.{'hold' if r.get('kind') == 'H' else 'gate'}_timeout:{r.get('turn')}"
+              for rows in _interval_sources(d_bank).values() for r in rows
               if r.get("kind") in ("G1", "H") and r.get("outcome") not in ("released", "unobserved")]
-    turns_ok, stop = turn_check(len(turns), d_bank.get("x7"), None if flags is None else list(flags) + g1_cut,
-                                MIN_ADMITTED_TURNS)
+    out["no_x7"] = _no_x7(d_bank)
+    turns_ok, stop = turn_check(len(turns), not out["no_x7"]["pass"],
+                                None if flags is None else flags + g1_cut, MIN_ADMITTED_TURNS)
     out["admitted_turns"] = (_check(turns_ok, value=len(turns), need=MIN_ADMITTED_TURNS, stop=stop)
                              if type(turns_ok) is bool else
                              {"pass": None, "judged": False, "status": turns_ok, "value": len(turns),
@@ -186,13 +277,19 @@ def d_bank_mechanics(d_bank, n_chunk, *, max_tokens=MAX_TOKENS):
     out["gate_durations"] = gate_durations(intervals)
     gate_s = out["gate_durations"]["total_s"]
     t_dead = d_bank.get("t_dead_s")
-    valid_budget = type(t_dead) in (int, float) and math.isfinite(t_dead) and t_dead > 0
+    runtime = d_bank.get("runtime")
+    runtime_budget = (runtime.get("deadman") or {}).get("T_dead_s") if runtime is not None else None
+    if runtime is not None:
+        out["duty_budget"] = _check(_finite(runtime_budget) and _finite(t_dead) and runtime_budget == t_dead,
+                                    runtime_s=runtime_budget, bundle_s=t_dead)
+    valid_budget = (_finite(t_dead) and t_dead > 0
+                    and (runtime is None or out["duty_budget"]["pass"]))
     limit = GATE_SHARE_OF_T_DEAD * t_dead if valid_budget else None
     out["gate_time"] = _check(gate_s is not None and limit is not None and gate_s <= limit,
                               gates_plus_holds_s=gate_s, limit_s=limit,
                               share_of_t_dead=gate_s / t_dead if valid_budget and gate_s is not None else None)
-    out["no_x7"] = _check(d_bank.get("x7") is False, x7=d_bank.get("x7"))
     out["no_g1_timeout"] = no_g1_timeout(d_bank)
+    out["member_evidence"] = member_evidence(d_bank)
     holds, per_turn = {}, []
     for r in intervals:
         if r.get("kind") == "H":
@@ -227,11 +324,14 @@ def d_bank_start_state(d_bank):
         level, state = (status or {}).get("os_level"), (status or {}).get("pm_state")
         age = (status or {}).get("pm_age_s")
         fresh = stamp_fresh(age)
-        ok = status is not None and level == 0 and state == "Nominal" and fresh
+        error = (status or {}).get("error")
+        ok = status is not None and error is None and type(level) is int and level == 0 and state == "Nominal" and fresh
         rows.append({"at": what, "os_level": level, "pm_state": state, "pm_age_s": age, "stamp_fresh": fresh,
                      "ok": ok})
         if status is None:
             reasons.append(f"{what}: no journal row for sample")
+        elif error is not None:
+            reasons.append(f"{what}: status reader failed ({error})")
         elif not ok:
             reasons.append(f"{what}: level {level!r}, state {state!r}, stamp age {age!r} s"
                            + ("" if fresh else f" (not recorded: not within {STAMP_MAX_AGE_S:g} s of the sample, or absent)"))
@@ -253,13 +353,18 @@ def x_g_line(x_g):
     """Check X_G only when it ran. Its contrast rule permits unobserved G1."""
     if x_g is None:
         return None
+    if "evidence_error" in x_g:
+        return _check(False, evidence_error=x_g["evidence_error"])
     intervals = x_g.get("intervals", [])
     timeout_check = no_g1_timeout(x_g)
     coverage = g1_records(x_g.get("turns", []), intervals, allowed_outcomes=("released", "unobserved"))
     durations = gate_durations(intervals)
+    evidence = member_evidence(x_g)
+    no_x7 = _no_x7(x_g)
     return {**timeout_check,
-            **_check(x_g.get("x7") is False and timeout_check["pass"] and coverage["pass"] and durations["pass"],
-                     x7=x_g.get("x7"), g1_records=coverage, gate_durations=durations)}
+            **_check(all(check["pass"] for check in (no_x7, timeout_check, coverage, durations, evidence)),
+                     x7=x_g.get("x7"), no_x7=no_x7, g1_records=coverage, gate_durations=durations,
+                     member_evidence=evidence)}
 
 
 def _printed_rows(printed):
@@ -283,6 +388,8 @@ def evaluate(*, step_d, d_bank, n_chunk, x_g=None, x_g_not_run_reason=None, prin
     log = [THREE_TURN_CLAUSE_LINE] if d_bank is not None else []
     if x_g is None:
         log.append("X_G was not run: " + (x_g_not_run_reason or "no reason recorded"))
+    elif "evidence_error" in x_g:
+        log.append("X_G evidence could not be evaluated: " + x_g["evidence_error"])
     judged = [v for v in lines.values() if v is not None]
     ok = d_bank is not None and all(v["pass"] for v in judged)
     if d_bank is None:
@@ -307,24 +414,42 @@ def evaluate(*, step_d, d_bank, n_chunk, x_g=None, x_g_not_run_reason=None, prin
 # ---- fact extraction (reads one immutable member bundle; no writes) --------------------------------
 
 def _journal(bundle):
-    """The gate journal as the gate reads it: ``thermal_gates.sample_rows`` (RL-149 section 1.2 item 1; no
-    second projection). The Sidecar writes ``reading`` rows; legacy ``sample`` rows pass through."""
+    """Read gate samples via the gate's projection and keep finalized intervals."""
     from joulewise.align.apple.thermal_gates import sample_rows
     from joulewise.desk_compress import read_bytes
-    try:
-        text = read_bytes(Path(bundle) / "outputs/align_thermal.jsonl")
-    except FileNotFoundError:
-        return []
-    return sorted(sample_rows([json.loads(x) for x in text.splitlines() if x.strip()]),
-                  key=lambda r: r["monotonic_ns"])
+    text = read_bytes(Path(bundle) / "outputs/align_thermal.jsonl")
+    entries = [json.loads(line) for line in text.splitlines() if line.strip()]
+    if not entries:
+        raise ValueError("thermal journal is empty")
+    intervals, flags = [], []
+    for row in entries:
+        if row.get("module") != "temperature":
+            continue
+        if row.get("kind") == "session_end" and row["values"].get("collector_error"):
+            flags.append("thermal.collector_failed")
+        if row.get("kind") in ("align_thermal_gate", "align_thermal_hold"):
+            values = row["values"]
+            if values.get("state") == "end":
+                gate = values["gate"]
+                if not isinstance(gate, dict) or gate.get("kind") not in ("G0", "G1", "H"):
+                    raise ValueError("thermal journal has an invalid finalized gate interval")
+                intervals.append(gate)
+    return sorted(sample_rows(entries), key=lambda row: row["monotonic_ns"]), intervals, flags
 
 
 def _status_with_age(row):
     """The row's status plus the age (s) of its power-management stamp at the row's own time."""
-    status = dict(row.get("status") or {})
+    status = row.get("status")
+    status = dict(status) if isinstance(status, dict) else {}
     pm_ns = status.get("pm_observed_ns")
     status["pm_age_s"] = None if type(pm_ns) is not int else (row["monotonic_ns"] - pm_ns) / 1e9
     return status
+
+
+def _interval_facts(row):
+    return {key: row.get(key) for key in ("kind", "turn", "token_count", "outcome", "duration_s",
+                                         "start_ns", "end_ns", "exit_sample_ns", "reference",
+                                         "release", "slope_c_per_min")}
 
 
 def facts_from_bundle(bundle, *, role):
@@ -332,21 +457,18 @@ def facts_from_bundle(bundle, *, role):
     turns (with the first status reading after each start), the deadman flag and the budget."""
     from joulewise.align.apple.workload import read_episode_bundle
     ep = read_episode_bundle(Path(bundle))
-    intervals = (ep.hardware.get("thermal") or {}).get("intervals", [])
-    rows = _journal(bundle)
+    thermal = ep.hardware.get("thermal") or {}
+    rows, journal_intervals, journal_flags = _journal(bundle)
     by_ns = {r["monotonic_ns"]: r for r in rows}
     out_intervals = []
-    for r in intervals:
+    for r in thermal.get("intervals", []):
         sample = by_ns.get(r.get("exit_sample_ns")) if r.get("exit_sample_ns") is not None else None
-        out_intervals.append({k: r.get(k) for k in ("kind", "turn", "token_count", "outcome", "duration_s", "start_ns", "end_ns", "reference",
-                                                    "release", "slope_c_per_min")}
-                             | {"release_status": None if sample is None else _status_with_age(sample)})
+        out_intervals.append({**_interval_facts(r), "release_status": None if sample is None else _status_with_age(sample)})
     turns = []
     for t in ep.turns:
         # PR #777 row-2 finding 8: the first reading after the start counts only within 2 s of it; a later one
         # (a journal gap at the start) is not the start state, and the sample has no journal row.
-        first = next((x for x in rows if x["monotonic_ns"] > t.start_ns and isinstance(x.get("status"), dict)
-                      and "os_level" in x["status"]), None)
+        first = next((x for x in rows if x["monotonic_ns"] > t.start_ns), None)
         if first is not None and first["monotonic_ns"] - t.start_ns > STAMP_MAX_AGE_S * 1e9:
             first = None
         turns.append({"index": t.index, "start_ns": t.start_ns, "end_ns": t.end_ns, "decode_tokens": t.decode_tokens,
@@ -355,14 +477,29 @@ def facts_from_bundle(bundle, *, role):
     budget = ep.hardware.get("token_budget") or {}
     return {"role": role, "turns": turns, "intervals": out_intervals, "t_dead_s": budget.get("deadman_s"),
             "x7": any(str(f).startswith("episode.deadman:") for f in ep.flags),
-            "episode_flags": [str(f) for f in ep.flags]}
+            "episode_flags": [str(f) for f in ep.flags], "thermal_flags": thermal.get("flags"),
+            "journal_intervals": [_interval_facts(row) for row in journal_intervals], "journal_flags": journal_flags}
 
 
 def step_d_facts(bundle, fields):
     """Step-D's G0 line inputs: the G0 interval's reference, release and slope, and the result's wait/outcome."""
     facts = facts_from_bundle(bundle, role="step-d")
-    g0 = next((r for r in facts["intervals"] if r["kind"] == "G0"), {})
-    return {"g0_outcome": fields.get("g0_outcome", g0.get("outcome")),
-            "g0_wait_s": fields.get("g0_wait_s", g0.get("duration_s")),
+    intervals = [row for row in facts["intervals"] if row["kind"] == "G0"]
+    g0 = intervals[0] if len(intervals) == 1 else {}
+    outcome, wait = fields.get("g0_outcome"), fields.get("g0_wait_s")
+    reasons = []
+    if not g0:
+        reasons.append(f"expected one G0 interval, found {len(intervals)}")
+    else:
+        duration = gate_durations([g0])
+        if not duration["pass"] or duration["total_s"] > G0_LIMIT_S:
+            reasons.append(f"G0 interval does not reconcile to monotonic bounds within {G0_LIMIT_S:g} s")
+        if outcome != g0.get("outcome") or wait != g0.get("duration_s"):
+            reasons.append("G0 summary outcome or wait differs from the bundle interval")
+    evidence = member_evidence(facts)
+    if not evidence["pass"]:
+        reasons.append("G0 bundle or journal contains conflicting or failed gate evidence")
+    return {"g0_outcome": outcome, "g0_wait_s": wait, "interval_reasons": reasons,
+            "g0_interval": {key: g0.get(key) for key in ("outcome", "duration_s", "start_ns", "end_ns")},
             "release": g0.get("release"), "reference": g0.get("reference"),
             "slope_c_per_min": g0.get("slope_c_per_min")}
