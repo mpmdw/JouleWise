@@ -23,6 +23,9 @@ standard pending-hosted-timing exemption in `scripts/test_timings.json`.
 
 ## Standing F0 rebind
 
+The candidate in this section is historical. The [PR #809 repair report](2026-11-17-pr809-part-c-repair.md)
+records the replacement and its verification.
+
 RL-145 addendum §6 and RL-149 §1.2 require the G1 release samples and a duty
 budget verdict. The workload at
 [`b2e01464d`](https://github.com/mpmdw/JouleWise/blob/b2e01464d6d4fbf2901ff4d4154df9455104a12a/joulewise/align/apple/workload.py#L545-L552)

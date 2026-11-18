@@ -13,8 +13,9 @@ the one current tool or document per job. [`docs/ARCHIVE.md`](docs/ARCHIVE.md)
 says how to get back files removed from `main` in the 2026-11-06 prune.
 
 **Round 10 Astra audit, Builder D (2026-11-17).** The [draft PR handoff](docs/run_reports/2026-11-17-astra-small-fixes.md)
-records the Air watcher, pointer generator and stop probe fixes and the
-prospective Part C evaluator rebind for the next STANDING-F0 renewal.
+records the Air watcher, pointer generator and stop probe fixes. The
+[PR #809 repair report](docs/run_reports/2026-11-17-pr809-part-c-repair.md)
+records the synthetic replay and the replacement candidate for STANDING-F0 renewal.
 
 **Block-5 history: the magistrate's hand-off of 2026-10-10 08:40 PDT (activation cbe4230e).** It was the step list for block-5 collection, which closed on 2026-10-12 (item 31). The numbered items below grew from it; the current state is the top numbered item, not this block.
 
