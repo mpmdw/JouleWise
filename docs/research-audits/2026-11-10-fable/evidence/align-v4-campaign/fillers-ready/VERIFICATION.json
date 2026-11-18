@@ -1,0 +1,1355 @@
+{
+  "runner_pin": "2d347f721552fe03bdd19f113e7bad7a7c24908e",
+  "cwd": "$PINNED_CHECKOUT",
+  "expires_at": "2026-11-24T12:35:29-08:00",
+  "checks": [
+    {
+      "check": "queue",
+      "sha256": "3884b5a7daa60e3983bf2abf5d32f20ba820908b6cb3e57fa6feb174f17b12f6",
+      "argv": [
+        "python3.13",
+        "-I",
+        "-B",
+        "scripts/cadence_queue.py",
+        "validate-queue",
+        "$AUDIT_CHECKOUT/docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/fillers-ready/queues/f2-stab-01.json",
+        "--kits-root",
+        "$AUDIT_CHECKOUT"
+      ],
+      "exit_code": 0,
+      "result": {
+        "ok": true,
+        "plan_ids": [
+          "cq-f2-stab-01-l001-a1",
+          "cq-f2-stab-01-l002-a1",
+          "cq-f2-stab-01-l003-a1",
+          "cq-f2-stab-01-l004-a1",
+          "cq-f2-stab-01-l005-a1",
+          "cq-f2-stab-01-l006-a1",
+          "cq-f2-stab-01-l007-a1",
+          "cq-f2-stab-01-l008-a1",
+          "cq-f2-stab-01-l009-a1",
+          "cq-f2-stab-01-l010-a1",
+          "cq-f2-stab-01-l011-a1",
+          "cq-f2-stab-01-l012-a1"
+        ],
+        "queue_id": "cq-f2-stab-01",
+        "spans": 12
+      },
+      "stderr": ""
+    },
+    {
+      "check": "queue",
+      "sha256": "9ebaba3b985c69eab5da1004b2c6e49383cff71d46763048396393c2d2f42c28",
+      "argv": [
+        "python3.13",
+        "-I",
+        "-B",
+        "scripts/cadence_queue.py",
+        "validate-queue",
+        "$AUDIT_CHECKOUT/docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/fillers-ready/queues/f2-stab-02.json",
+        "--kits-root",
+        "$AUDIT_CHECKOUT"
+      ],
+      "exit_code": 0,
+      "result": {
+        "ok": true,
+        "plan_ids": [
+          "cq-f2-stab-02-l001-a1",
+          "cq-f2-stab-02-l002-a1",
+          "cq-f2-stab-02-l003-a1",
+          "cq-f2-stab-02-l004-a1",
+          "cq-f2-stab-02-l005-a1",
+          "cq-f2-stab-02-l006-a1",
+          "cq-f2-stab-02-l007-a1",
+          "cq-f2-stab-02-l008-a1",
+          "cq-f2-stab-02-l009-a1",
+          "cq-f2-stab-02-l010-a1",
+          "cq-f2-stab-02-l011-a1",
+          "cq-f2-stab-02-l012-a1"
+        ],
+        "queue_id": "cq-f2-stab-02",
+        "spans": 12
+      },
+      "stderr": ""
+    },
+    {
+      "check": "queue",
+      "sha256": "18a79d1aada6f7bbabd45d9ec9208d70a0a938e16c8459e60da75aca8bda13ea",
+      "argv": [
+        "python3.13",
+        "-I",
+        "-B",
+        "scripts/cadence_queue.py",
+        "validate-queue",
+        "$AUDIT_CHECKOUT/docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/fillers-ready/queues/f2-stab-03.json",
+        "--kits-root",
+        "$AUDIT_CHECKOUT"
+      ],
+      "exit_code": 0,
+      "result": {
+        "ok": true,
+        "plan_ids": [
+          "cq-f2-stab-03-l001-a1",
+          "cq-f2-stab-03-l002-a1",
+          "cq-f2-stab-03-l003-a1",
+          "cq-f2-stab-03-l004-a1",
+          "cq-f2-stab-03-l005-a1",
+          "cq-f2-stab-03-l006-a1",
+          "cq-f2-stab-03-l007-a1",
+          "cq-f2-stab-03-l008-a1",
+          "cq-f2-stab-03-l009-a1",
+          "cq-f2-stab-03-l010-a1",
+          "cq-f2-stab-03-l011-a1",
+          "cq-f2-stab-03-l012-a1"
+        ],
+        "queue_id": "cq-f2-stab-03",
+        "spans": 12
+      },
+      "stderr": ""
+    },
+    {
+      "check": "queue",
+      "sha256": "5eded096303a87cba421a8c70e851d0e5714e7d147bc6803e539c83c9ca5e7be",
+      "argv": [
+        "python3.13",
+        "-I",
+        "-B",
+        "scripts/cadence_queue.py",
+        "validate-queue",
+        "$AUDIT_CHECKOUT/docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/fillers-ready/queues/f2-stab-04.json",
+        "--kits-root",
+        "$AUDIT_CHECKOUT"
+      ],
+      "exit_code": 0,
+      "result": {
+        "ok": true,
+        "plan_ids": [
+          "cq-f2-stab-04-l001-a1",
+          "cq-f2-stab-04-l002-a1",
+          "cq-f2-stab-04-l003-a1",
+          "cq-f2-stab-04-l004-a1",
+          "cq-f2-stab-04-l005-a1",
+          "cq-f2-stab-04-l006-a1",
+          "cq-f2-stab-04-l007-a1",
+          "cq-f2-stab-04-l008-a1",
+          "cq-f2-stab-04-l009-a1",
+          "cq-f2-stab-04-l010-a1",
+          "cq-f2-stab-04-l011-a1",
+          "cq-f2-stab-04-l012-a1"
+        ],
+        "queue_id": "cq-f2-stab-04",
+        "spans": 12
+      },
+      "stderr": ""
+    },
+    {
+      "check": "queue",
+      "sha256": "5ceccf92081435d6062fc21d3a892afa8dfe678d5fdef9a9f5b3a18253d84834",
+      "argv": [
+        "python3.13",
+        "-I",
+        "-B",
+        "scripts/cadence_queue.py",
+        "validate-queue",
+        "$AUDIT_CHECKOUT/docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/fillers-ready/queues/f2-stab-05.json",
+        "--kits-root",
+        "$AUDIT_CHECKOUT"
+      ],
+      "exit_code": 0,
+      "result": {
+        "ok": true,
+        "plan_ids": [
+          "cq-f2-stab-05-l001-a1",
+          "cq-f2-stab-05-l002-a1",
+          "cq-f2-stab-05-l003-a1",
+          "cq-f2-stab-05-l004-a1",
+          "cq-f2-stab-05-l005-a1",
+          "cq-f2-stab-05-l006-a1",
+          "cq-f2-stab-05-l007-a1",
+          "cq-f2-stab-05-l008-a1",
+          "cq-f2-stab-05-l009-a1",
+          "cq-f2-stab-05-l010-a1",
+          "cq-f2-stab-05-l011-a1",
+          "cq-f2-stab-05-l012-a1"
+        ],
+        "queue_id": "cq-f2-stab-05",
+        "spans": 12
+      },
+      "stderr": ""
+    },
+    {
+      "check": "queue",
+      "sha256": "95e624286191b42e0232f66a444b401a6039017994ef1b102904775bcbf3544d",
+      "argv": [
+        "python3.13",
+        "-I",
+        "-B",
+        "scripts/cadence_queue.py",
+        "validate-queue",
+        "$AUDIT_CHECKOUT/docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/fillers-ready/queues/f2-stab-06.json",
+        "--kits-root",
+        "$AUDIT_CHECKOUT"
+      ],
+      "exit_code": 0,
+      "result": {
+        "ok": true,
+        "plan_ids": [
+          "cq-f2-stab-06-l001-a1",
+          "cq-f2-stab-06-l002-a1",
+          "cq-f2-stab-06-l003-a1",
+          "cq-f2-stab-06-l004-a1",
+          "cq-f2-stab-06-l005-a1",
+          "cq-f2-stab-06-l006-a1",
+          "cq-f2-stab-06-l007-a1",
+          "cq-f2-stab-06-l008-a1",
+          "cq-f2-stab-06-l009-a1",
+          "cq-f2-stab-06-l010-a1",
+          "cq-f2-stab-06-l011-a1",
+          "cq-f2-stab-06-l012-a1"
+        ],
+        "queue_id": "cq-f2-stab-06",
+        "spans": 12
+      },
+      "stderr": ""
+    },
+    {
+      "check": "queue",
+      "sha256": "6f25a3dc93a431cfd1875388ea3ea3642830230a8868aab1c5d6af9ca9fbce05",
+      "argv": [
+        "python3.13",
+        "-I",
+        "-B",
+        "scripts/cadence_queue.py",
+        "validate-queue",
+        "$AUDIT_CHECKOUT/docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/fillers-ready/queues/f2-stab-07.json",
+        "--kits-root",
+        "$AUDIT_CHECKOUT"
+      ],
+      "exit_code": 0,
+      "result": {
+        "ok": true,
+        "plan_ids": [
+          "cq-f2-stab-07-l001-a1",
+          "cq-f2-stab-07-l002-a1",
+          "cq-f2-stab-07-l003-a1",
+          "cq-f2-stab-07-l004-a1",
+          "cq-f2-stab-07-l005-a1",
+          "cq-f2-stab-07-l006-a1",
+          "cq-f2-stab-07-l007-a1",
+          "cq-f2-stab-07-l008-a1",
+          "cq-f2-stab-07-l009-a1",
+          "cq-f2-stab-07-l010-a1",
+          "cq-f2-stab-07-l011-a1",
+          "cq-f2-stab-07-l012-a1"
+        ],
+        "queue_id": "cq-f2-stab-07",
+        "spans": 12
+      },
+      "stderr": ""
+    },
+    {
+      "check": "queue",
+      "sha256": "e485ce18d528f07820675e205b0b2427be12727da336eb57acc07bb996908939",
+      "argv": [
+        "python3.13",
+        "-I",
+        "-B",
+        "scripts/cadence_queue.py",
+        "validate-queue",
+        "$AUDIT_CHECKOUT/docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/fillers-ready/queues/f2-stab-08.json",
+        "--kits-root",
+        "$AUDIT_CHECKOUT"
+      ],
+      "exit_code": 0,
+      "result": {
+        "ok": true,
+        "plan_ids": [
+          "cq-f2-stab-08-l001-a1",
+          "cq-f2-stab-08-l002-a1",
+          "cq-f2-stab-08-l003-a1",
+          "cq-f2-stab-08-l004-a1",
+          "cq-f2-stab-08-l005-a1",
+          "cq-f2-stab-08-l006-a1",
+          "cq-f2-stab-08-l007-a1",
+          "cq-f2-stab-08-l008-a1",
+          "cq-f2-stab-08-l009-a1",
+          "cq-f2-stab-08-l010-a1",
+          "cq-f2-stab-08-l011-a1",
+          "cq-f2-stab-08-l012-a1"
+        ],
+        "queue_id": "cq-f2-stab-08",
+        "spans": 12
+      },
+      "stderr": ""
+    },
+    {
+      "check": "queue",
+      "sha256": "b9fab75048daab65dc1aeda1364270b7a3581853e2a7a9a89b1d7733c35c7c95",
+      "argv": [
+        "python3.13",
+        "-I",
+        "-B",
+        "scripts/cadence_queue.py",
+        "validate-queue",
+        "$AUDIT_CHECKOUT/docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/fillers-ready/queues/f2-stab-09.json",
+        "--kits-root",
+        "$AUDIT_CHECKOUT"
+      ],
+      "exit_code": 0,
+      "result": {
+        "ok": true,
+        "plan_ids": [
+          "cq-f2-stab-09-l001-a1",
+          "cq-f2-stab-09-l002-a1",
+          "cq-f2-stab-09-l003-a1",
+          "cq-f2-stab-09-l004-a1",
+          "cq-f2-stab-09-l005-a1",
+          "cq-f2-stab-09-l006-a1",
+          "cq-f2-stab-09-l007-a1",
+          "cq-f2-stab-09-l008-a1",
+          "cq-f2-stab-09-l009-a1",
+          "cq-f2-stab-09-l010-a1",
+          "cq-f2-stab-09-l011-a1",
+          "cq-f2-stab-09-l012-a1"
+        ],
+        "queue_id": "cq-f2-stab-09",
+        "spans": 12
+      },
+      "stderr": ""
+    },
+    {
+      "check": "queue",
+      "sha256": "74b5a6b0f68100bd91c1eab9c0aec3327098c77d1d38a2d96f3241a60dda1ad3",
+      "argv": [
+        "python3.13",
+        "-I",
+        "-B",
+        "scripts/cadence_queue.py",
+        "validate-queue",
+        "$AUDIT_CHECKOUT/docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/fillers-ready/queues/f2-stab-10.json",
+        "--kits-root",
+        "$AUDIT_CHECKOUT"
+      ],
+      "exit_code": 0,
+      "result": {
+        "ok": true,
+        "plan_ids": [
+          "cq-f2-stab-10-l001-a1",
+          "cq-f2-stab-10-l002-a1",
+          "cq-f2-stab-10-l003-a1",
+          "cq-f2-stab-10-l004-a1",
+          "cq-f2-stab-10-l005-a1",
+          "cq-f2-stab-10-l006-a1",
+          "cq-f2-stab-10-l007-a1",
+          "cq-f2-stab-10-l008-a1",
+          "cq-f2-stab-10-l009-a1",
+          "cq-f2-stab-10-l010-a1",
+          "cq-f2-stab-10-l011-a1",
+          "cq-f2-stab-10-l012-a1"
+        ],
+        "queue_id": "cq-f2-stab-10",
+        "spans": 12
+      },
+      "stderr": ""
+    },
+    {
+      "check": "queue",
+      "sha256": "07f4886956d295f8fea4a4347c79d9388ce7218cbca991bbee8554ed85779466",
+      "argv": [
+        "python3.13",
+        "-I",
+        "-B",
+        "scripts/cadence_queue.py",
+        "validate-queue",
+        "$AUDIT_CHECKOUT/docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/fillers-ready/queues/f2-stab-11.json",
+        "--kits-root",
+        "$AUDIT_CHECKOUT"
+      ],
+      "exit_code": 0,
+      "result": {
+        "ok": true,
+        "plan_ids": [
+          "cq-f2-stab-11-l001-a1",
+          "cq-f2-stab-11-l002-a1",
+          "cq-f2-stab-11-l003-a1",
+          "cq-f2-stab-11-l004-a1",
+          "cq-f2-stab-11-l005-a1",
+          "cq-f2-stab-11-l006-a1",
+          "cq-f2-stab-11-l007-a1",
+          "cq-f2-stab-11-l008-a1",
+          "cq-f2-stab-11-l009-a1",
+          "cq-f2-stab-11-l010-a1",
+          "cq-f2-stab-11-l011-a1",
+          "cq-f2-stab-11-l012-a1"
+        ],
+        "queue_id": "cq-f2-stab-11",
+        "spans": 12
+      },
+      "stderr": ""
+    },
+    {
+      "check": "queue",
+      "sha256": "b83e8c45fdb541d304fea4a4e93ff61e8f29801715b995dc6ad52db8af839893",
+      "argv": [
+        "python3.13",
+        "-I",
+        "-B",
+        "scripts/cadence_queue.py",
+        "validate-queue",
+        "$AUDIT_CHECKOUT/docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/fillers-ready/queues/f2-stab-12.json",
+        "--kits-root",
+        "$AUDIT_CHECKOUT"
+      ],
+      "exit_code": 0,
+      "result": {
+        "ok": true,
+        "plan_ids": [
+          "cq-f2-stab-12-l001-a1",
+          "cq-f2-stab-12-l002-a1",
+          "cq-f2-stab-12-l003-a1",
+          "cq-f2-stab-12-l004-a1",
+          "cq-f2-stab-12-l005-a1",
+          "cq-f2-stab-12-l006-a1",
+          "cq-f2-stab-12-l007-a1",
+          "cq-f2-stab-12-l008-a1",
+          "cq-f2-stab-12-l009-a1",
+          "cq-f2-stab-12-l010-a1",
+          "cq-f2-stab-12-l011-a1",
+          "cq-f2-stab-12-l012-a1"
+        ],
+        "queue_id": "cq-f2-stab-12",
+        "spans": 12
+      },
+      "stderr": ""
+    },
+    {
+      "check": "queue",
+      "sha256": "dd15946a64a3e7c64f7e534d6c3ffaa11ebb3b6280165fd1e9a848163aa69752",
+      "argv": [
+        "python3.13",
+        "-I",
+        "-B",
+        "scripts/cadence_queue.py",
+        "validate-queue",
+        "$AUDIT_CHECKOUT/docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/fillers-ready/queues/f2-stab-13.json",
+        "--kits-root",
+        "$AUDIT_CHECKOUT"
+      ],
+      "exit_code": 0,
+      "result": {
+        "ok": true,
+        "plan_ids": [
+          "cq-f2-stab-13-l001-a1",
+          "cq-f2-stab-13-l002-a1",
+          "cq-f2-stab-13-l003-a1",
+          "cq-f2-stab-13-l004-a1",
+          "cq-f2-stab-13-l005-a1",
+          "cq-f2-stab-13-l006-a1",
+          "cq-f2-stab-13-l007-a1",
+          "cq-f2-stab-13-l008-a1",
+          "cq-f2-stab-13-l009-a1",
+          "cq-f2-stab-13-l010-a1",
+          "cq-f2-stab-13-l011-a1",
+          "cq-f2-stab-13-l012-a1"
+        ],
+        "queue_id": "cq-f2-stab-13",
+        "spans": 12
+      },
+      "stderr": ""
+    },
+    {
+      "check": "queue",
+      "sha256": "199474d75f7f7932694f42173167a269b0682d06b82f43b95d956ff5a3869a12",
+      "argv": [
+        "python3.13",
+        "-I",
+        "-B",
+        "scripts/cadence_queue.py",
+        "validate-queue",
+        "$AUDIT_CHECKOUT/docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/fillers-ready/queues/f2-stab-14.json",
+        "--kits-root",
+        "$AUDIT_CHECKOUT"
+      ],
+      "exit_code": 0,
+      "result": {
+        "ok": true,
+        "plan_ids": [
+          "cq-f2-stab-14-l001-a1",
+          "cq-f2-stab-14-l002-a1",
+          "cq-f2-stab-14-l003-a1",
+          "cq-f2-stab-14-l004-a1",
+          "cq-f2-stab-14-l005-a1",
+          "cq-f2-stab-14-l006-a1",
+          "cq-f2-stab-14-l007-a1",
+          "cq-f2-stab-14-l008-a1",
+          "cq-f2-stab-14-l009-a1",
+          "cq-f2-stab-14-l010-a1",
+          "cq-f2-stab-14-l011-a1",
+          "cq-f2-stab-14-l012-a1"
+        ],
+        "queue_id": "cq-f2-stab-14",
+        "spans": 12
+      },
+      "stderr": ""
+    },
+    {
+      "check": "queue",
+      "sha256": "2c8aeb02c58cb8b7072a21effefecff298cb23334d94652b99d70ce1297d8eff",
+      "argv": [
+        "python3.13",
+        "-I",
+        "-B",
+        "scripts/cadence_queue.py",
+        "validate-queue",
+        "$AUDIT_CHECKOUT/docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/fillers-ready/queues/f2-inst-01.json",
+        "--kits-root",
+        "$AUDIT_CHECKOUT"
+      ],
+      "exit_code": 0,
+      "result": {
+        "ok": true,
+        "plan_ids": [
+          "cq-f2-inst-01-l004-a1",
+          "cq-f2-inst-01-l005-a1",
+          "cq-f2-inst-01-l006-a1",
+          "cq-f2-inst-01-l007-a1",
+          "cq-f2-inst-01-l008-a1",
+          "cq-f2-inst-01-l009-a1",
+          "cq-f2-inst-01-l010-a1",
+          "cq-f2-inst-01-l011-a1",
+          "cq-f2-inst-01-l012-a1"
+        ],
+        "queue_id": "cq-f2-inst-01",
+        "spans": 9
+      },
+      "stderr": ""
+    },
+    {
+      "check": "queue",
+      "sha256": "86884f2e706efedcf70de730133ff435eb231875f63fec63efcd6c127ecaefbe",
+      "argv": [
+        "python3.13",
+        "-I",
+        "-B",
+        "scripts/cadence_queue.py",
+        "validate-queue",
+        "$AUDIT_CHECKOUT/docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/fillers-ready/queues/f2-inst-02.json",
+        "--kits-root",
+        "$AUDIT_CHECKOUT"
+      ],
+      "exit_code": 0,
+      "result": {
+        "ok": true,
+        "plan_ids": [
+          "cq-f2-inst-02-l001-a1",
+          "cq-f2-inst-02-l002-a1",
+          "cq-f2-inst-02-l003-a1",
+          "cq-f2-inst-02-l004-a1",
+          "cq-f2-inst-02-l005-a1",
+          "cq-f2-inst-02-l006-a1",
+          "cq-f2-inst-02-l007-a1",
+          "cq-f2-inst-02-l008-a1",
+          "cq-f2-inst-02-l009-a1",
+          "cq-f2-inst-02-l010-a1",
+          "cq-f2-inst-02-l011-a1",
+          "cq-f2-inst-02-l012-a1"
+        ],
+        "queue_id": "cq-f2-inst-02",
+        "spans": 12
+      },
+      "stderr": ""
+    },
+    {
+      "check": "queue",
+      "sha256": "b0cfbe401037d6527de903634fa9bdd4a1185dad677e8d728b89309ca4fbd5b3",
+      "argv": [
+        "python3.13",
+        "-I",
+        "-B",
+        "scripts/cadence_queue.py",
+        "validate-queue",
+        "$AUDIT_CHECKOUT/docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/fillers-ready/queues/f2-inst-03.json",
+        "--kits-root",
+        "$AUDIT_CHECKOUT"
+      ],
+      "exit_code": 0,
+      "result": {
+        "ok": true,
+        "plan_ids": [
+          "cq-f2-inst-03-l001-a1",
+          "cq-f2-inst-03-l002-a1",
+          "cq-f2-inst-03-l003-a1",
+          "cq-f2-inst-03-l004-a1",
+          "cq-f2-inst-03-l005-a1",
+          "cq-f2-inst-03-l006-a1",
+          "cq-f2-inst-03-l007-a1",
+          "cq-f2-inst-03-l008-a1",
+          "cq-f2-inst-03-l009-a1",
+          "cq-f2-inst-03-l010-a1",
+          "cq-f2-inst-03-l011-a1",
+          "cq-f2-inst-03-l012-a1"
+        ],
+        "queue_id": "cq-f2-inst-03",
+        "spans": 12
+      },
+      "stderr": ""
+    },
+    {
+      "check": "stability_kit",
+      "sha256": "dbad9c7b79088bb6f06aac1c1148c3631a0c616fd2ece596bab0f56657ce70fe",
+      "argv": [
+        "python3.13",
+        "-I",
+        "-B",
+        "$AUDIT_CHECKOUT/docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/f2-stab/tools/validate_kit.py",
+        "$AUDIT_CHECKOUT/docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/f2-stab/f2-stab-01.v1.1.json",
+        "--repo",
+        "$PINNED_CHECKOUT",
+        "--batch-window",
+        "02:00-02:35"
+      ],
+      "exit_code": 0,
+      "result": {
+        "base_kit_sha256": "651d1815ca87ee23640a8db1483d4ecaf42d70d029855ad03c14bfa076116f2b",
+        "campaign_id": "f2-stab-01",
+        "frozen_commit": "2d347f721552fe03bdd19f113e7bad7a7c24908e",
+        "frozen_paths_verified": true,
+        "kit_sha256": "dbad9c7b79088bb6f06aac1c1148c3631a0c616fd2ece596bab0f56657ce70fe",
+        "legs": 12,
+        "ok": true,
+        "positional_cells_verified": true
+      },
+      "stderr": ""
+    },
+    {
+      "check": "stability_kit",
+      "sha256": "dbad9c7b79088bb6f06aac1c1148c3631a0c616fd2ece596bab0f56657ce70fe",
+      "argv": [
+        "python3.13",
+        "-I",
+        "-B",
+        "$AUDIT_CHECKOUT/docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/f2-stab/tools/validate_kit.py",
+        "$AUDIT_CHECKOUT/docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/f2-stab/f2-stab-01.v1.1.json",
+        "--repo",
+        "$PINNED_CHECKOUT",
+        "--batch-window",
+        "13:14-13:15"
+      ],
+      "exit_code": 0,
+      "result": {
+        "base_kit_sha256": "651d1815ca87ee23640a8db1483d4ecaf42d70d029855ad03c14bfa076116f2b",
+        "campaign_id": "f2-stab-01",
+        "frozen_commit": "2d347f721552fe03bdd19f113e7bad7a7c24908e",
+        "frozen_paths_verified": true,
+        "kit_sha256": "dbad9c7b79088bb6f06aac1c1148c3631a0c616fd2ece596bab0f56657ce70fe",
+        "legs": 12,
+        "ok": true,
+        "positional_cells_verified": true
+      },
+      "stderr": ""
+    },
+    {
+      "check": "stability_kit",
+      "sha256": "1fe8dd1d0fb60fe1d481ecb0d4358fda595668c1e889a35a75695e290fcad505",
+      "argv": [
+        "python3.13",
+        "-I",
+        "-B",
+        "$AUDIT_CHECKOUT/docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/f2-stab/tools/validate_kit.py",
+        "$AUDIT_CHECKOUT/docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/f2-stab/f2-stab-02.v1.1.json",
+        "--repo",
+        "$PINNED_CHECKOUT",
+        "--batch-window",
+        "02:00-02:35"
+      ],
+      "exit_code": 0,
+      "result": {
+        "base_kit_sha256": "651d1815ca87ee23640a8db1483d4ecaf42d70d029855ad03c14bfa076116f2b",
+        "campaign_id": "f2-stab-02",
+        "frozen_commit": "2d347f721552fe03bdd19f113e7bad7a7c24908e",
+        "frozen_paths_verified": true,
+        "kit_sha256": "1fe8dd1d0fb60fe1d481ecb0d4358fda595668c1e889a35a75695e290fcad505",
+        "legs": 12,
+        "ok": true,
+        "positional_cells_verified": true
+      },
+      "stderr": ""
+    },
+    {
+      "check": "stability_kit",
+      "sha256": "1fe8dd1d0fb60fe1d481ecb0d4358fda595668c1e889a35a75695e290fcad505",
+      "argv": [
+        "python3.13",
+        "-I",
+        "-B",
+        "$AUDIT_CHECKOUT/docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/f2-stab/tools/validate_kit.py",
+        "$AUDIT_CHECKOUT/docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/f2-stab/f2-stab-02.v1.1.json",
+        "--repo",
+        "$PINNED_CHECKOUT",
+        "--batch-window",
+        "13:14-13:15"
+      ],
+      "exit_code": 0,
+      "result": {
+        "base_kit_sha256": "651d1815ca87ee23640a8db1483d4ecaf42d70d029855ad03c14bfa076116f2b",
+        "campaign_id": "f2-stab-02",
+        "frozen_commit": "2d347f721552fe03bdd19f113e7bad7a7c24908e",
+        "frozen_paths_verified": true,
+        "kit_sha256": "1fe8dd1d0fb60fe1d481ecb0d4358fda595668c1e889a35a75695e290fcad505",
+        "legs": 12,
+        "ok": true,
+        "positional_cells_verified": true
+      },
+      "stderr": ""
+    },
+    {
+      "check": "stability_kit",
+      "sha256": "ac4b303e228233765efda120b2d63f2f6e59d7f8565c4b913880c4a1aa1dc404",
+      "argv": [
+        "python3.13",
+        "-I",
+        "-B",
+        "$AUDIT_CHECKOUT/docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/f2-stab/tools/validate_kit.py",
+        "$AUDIT_CHECKOUT/docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/f2-stab/f2-stab-03.v1.1.json",
+        "--repo",
+        "$PINNED_CHECKOUT",
+        "--batch-window",
+        "02:00-02:35"
+      ],
+      "exit_code": 0,
+      "result": {
+        "base_kit_sha256": "651d1815ca87ee23640a8db1483d4ecaf42d70d029855ad03c14bfa076116f2b",
+        "campaign_id": "f2-stab-03",
+        "frozen_commit": "2d347f721552fe03bdd19f113e7bad7a7c24908e",
+        "frozen_paths_verified": true,
+        "kit_sha256": "ac4b303e228233765efda120b2d63f2f6e59d7f8565c4b913880c4a1aa1dc404",
+        "legs": 12,
+        "ok": true,
+        "positional_cells_verified": true
+      },
+      "stderr": ""
+    },
+    {
+      "check": "stability_kit",
+      "sha256": "ac4b303e228233765efda120b2d63f2f6e59d7f8565c4b913880c4a1aa1dc404",
+      "argv": [
+        "python3.13",
+        "-I",
+        "-B",
+        "$AUDIT_CHECKOUT/docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/f2-stab/tools/validate_kit.py",
+        "$AUDIT_CHECKOUT/docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/f2-stab/f2-stab-03.v1.1.json",
+        "--repo",
+        "$PINNED_CHECKOUT",
+        "--batch-window",
+        "13:14-13:15"
+      ],
+      "exit_code": 0,
+      "result": {
+        "base_kit_sha256": "651d1815ca87ee23640a8db1483d4ecaf42d70d029855ad03c14bfa076116f2b",
+        "campaign_id": "f2-stab-03",
+        "frozen_commit": "2d347f721552fe03bdd19f113e7bad7a7c24908e",
+        "frozen_paths_verified": true,
+        "kit_sha256": "ac4b303e228233765efda120b2d63f2f6e59d7f8565c4b913880c4a1aa1dc404",
+        "legs": 12,
+        "ok": true,
+        "positional_cells_verified": true
+      },
+      "stderr": ""
+    },
+    {
+      "check": "stability_kit",
+      "sha256": "494739dedbc07f2ee3a02b1e5f9561bb4812d765c7630e6931c24ea138525bff",
+      "argv": [
+        "python3.13",
+        "-I",
+        "-B",
+        "$AUDIT_CHECKOUT/docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/f2-stab/tools/validate_kit.py",
+        "$AUDIT_CHECKOUT/docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/f2-stab/f2-stab-04.v1.1.json",
+        "--repo",
+        "$PINNED_CHECKOUT",
+        "--batch-window",
+        "02:00-02:35"
+      ],
+      "exit_code": 0,
+      "result": {
+        "base_kit_sha256": "651d1815ca87ee23640a8db1483d4ecaf42d70d029855ad03c14bfa076116f2b",
+        "campaign_id": "f2-stab-04",
+        "frozen_commit": "2d347f721552fe03bdd19f113e7bad7a7c24908e",
+        "frozen_paths_verified": true,
+        "kit_sha256": "494739dedbc07f2ee3a02b1e5f9561bb4812d765c7630e6931c24ea138525bff",
+        "legs": 12,
+        "ok": true,
+        "positional_cells_verified": true
+      },
+      "stderr": ""
+    },
+    {
+      "check": "stability_kit",
+      "sha256": "494739dedbc07f2ee3a02b1e5f9561bb4812d765c7630e6931c24ea138525bff",
+      "argv": [
+        "python3.13",
+        "-I",
+        "-B",
+        "$AUDIT_CHECKOUT/docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/f2-stab/tools/validate_kit.py",
+        "$AUDIT_CHECKOUT/docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/f2-stab/f2-stab-04.v1.1.json",
+        "--repo",
+        "$PINNED_CHECKOUT",
+        "--batch-window",
+        "13:14-13:15"
+      ],
+      "exit_code": 0,
+      "result": {
+        "base_kit_sha256": "651d1815ca87ee23640a8db1483d4ecaf42d70d029855ad03c14bfa076116f2b",
+        "campaign_id": "f2-stab-04",
+        "frozen_commit": "2d347f721552fe03bdd19f113e7bad7a7c24908e",
+        "frozen_paths_verified": true,
+        "kit_sha256": "494739dedbc07f2ee3a02b1e5f9561bb4812d765c7630e6931c24ea138525bff",
+        "legs": 12,
+        "ok": true,
+        "positional_cells_verified": true
+      },
+      "stderr": ""
+    },
+    {
+      "check": "stability_kit",
+      "sha256": "023febe9afc8532b8f06bb40dfe32dd64a933c99e8e080a51e2686e888246b11",
+      "argv": [
+        "python3.13",
+        "-I",
+        "-B",
+        "$AUDIT_CHECKOUT/docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/f2-stab/tools/validate_kit.py",
+        "$AUDIT_CHECKOUT/docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/f2-stab/f2-stab-05.v1.1.json",
+        "--repo",
+        "$PINNED_CHECKOUT",
+        "--batch-window",
+        "02:00-02:35"
+      ],
+      "exit_code": 0,
+      "result": {
+        "base_kit_sha256": "651d1815ca87ee23640a8db1483d4ecaf42d70d029855ad03c14bfa076116f2b",
+        "campaign_id": "f2-stab-05",
+        "frozen_commit": "2d347f721552fe03bdd19f113e7bad7a7c24908e",
+        "frozen_paths_verified": true,
+        "kit_sha256": "023febe9afc8532b8f06bb40dfe32dd64a933c99e8e080a51e2686e888246b11",
+        "legs": 12,
+        "ok": true,
+        "positional_cells_verified": true
+      },
+      "stderr": ""
+    },
+    {
+      "check": "stability_kit",
+      "sha256": "023febe9afc8532b8f06bb40dfe32dd64a933c99e8e080a51e2686e888246b11",
+      "argv": [
+        "python3.13",
+        "-I",
+        "-B",
+        "$AUDIT_CHECKOUT/docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/f2-stab/tools/validate_kit.py",
+        "$AUDIT_CHECKOUT/docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/f2-stab/f2-stab-05.v1.1.json",
+        "--repo",
+        "$PINNED_CHECKOUT",
+        "--batch-window",
+        "13:14-13:15"
+      ],
+      "exit_code": 0,
+      "result": {
+        "base_kit_sha256": "651d1815ca87ee23640a8db1483d4ecaf42d70d029855ad03c14bfa076116f2b",
+        "campaign_id": "f2-stab-05",
+        "frozen_commit": "2d347f721552fe03bdd19f113e7bad7a7c24908e",
+        "frozen_paths_verified": true,
+        "kit_sha256": "023febe9afc8532b8f06bb40dfe32dd64a933c99e8e080a51e2686e888246b11",
+        "legs": 12,
+        "ok": true,
+        "positional_cells_verified": true
+      },
+      "stderr": ""
+    },
+    {
+      "check": "stability_kit",
+      "sha256": "a02d18bafca780c580ae7dfe970e3a81e3e12b4051b269699db329f02c33172c",
+      "argv": [
+        "python3.13",
+        "-I",
+        "-B",
+        "$AUDIT_CHECKOUT/docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/f2-stab/tools/validate_kit.py",
+        "$AUDIT_CHECKOUT/docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/f2-stab/f2-stab-06.v1.1.json",
+        "--repo",
+        "$PINNED_CHECKOUT",
+        "--batch-window",
+        "02:00-02:35"
+      ],
+      "exit_code": 0,
+      "result": {
+        "base_kit_sha256": "651d1815ca87ee23640a8db1483d4ecaf42d70d029855ad03c14bfa076116f2b",
+        "campaign_id": "f2-stab-06",
+        "frozen_commit": "2d347f721552fe03bdd19f113e7bad7a7c24908e",
+        "frozen_paths_verified": true,
+        "kit_sha256": "a02d18bafca780c580ae7dfe970e3a81e3e12b4051b269699db329f02c33172c",
+        "legs": 12,
+        "ok": true,
+        "positional_cells_verified": true
+      },
+      "stderr": ""
+    },
+    {
+      "check": "stability_kit",
+      "sha256": "a02d18bafca780c580ae7dfe970e3a81e3e12b4051b269699db329f02c33172c",
+      "argv": [
+        "python3.13",
+        "-I",
+        "-B",
+        "$AUDIT_CHECKOUT/docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/f2-stab/tools/validate_kit.py",
+        "$AUDIT_CHECKOUT/docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/f2-stab/f2-stab-06.v1.1.json",
+        "--repo",
+        "$PINNED_CHECKOUT",
+        "--batch-window",
+        "13:14-13:15"
+      ],
+      "exit_code": 0,
+      "result": {
+        "base_kit_sha256": "651d1815ca87ee23640a8db1483d4ecaf42d70d029855ad03c14bfa076116f2b",
+        "campaign_id": "f2-stab-06",
+        "frozen_commit": "2d347f721552fe03bdd19f113e7bad7a7c24908e",
+        "frozen_paths_verified": true,
+        "kit_sha256": "a02d18bafca780c580ae7dfe970e3a81e3e12b4051b269699db329f02c33172c",
+        "legs": 12,
+        "ok": true,
+        "positional_cells_verified": true
+      },
+      "stderr": ""
+    },
+    {
+      "check": "stability_kit",
+      "sha256": "fb22cadce8be3c7d7642c9b55802aa0bd4ea90e41c7c0e9a5038e7a8dc88746d",
+      "argv": [
+        "python3.13",
+        "-I",
+        "-B",
+        "$AUDIT_CHECKOUT/docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/f2-stab/tools/validate_kit.py",
+        "$AUDIT_CHECKOUT/docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/f2-stab/f2-stab-07.v1.1.json",
+        "--repo",
+        "$PINNED_CHECKOUT",
+        "--batch-window",
+        "02:00-02:35"
+      ],
+      "exit_code": 0,
+      "result": {
+        "base_kit_sha256": "651d1815ca87ee23640a8db1483d4ecaf42d70d029855ad03c14bfa076116f2b",
+        "campaign_id": "f2-stab-07",
+        "frozen_commit": "2d347f721552fe03bdd19f113e7bad7a7c24908e",
+        "frozen_paths_verified": true,
+        "kit_sha256": "fb22cadce8be3c7d7642c9b55802aa0bd4ea90e41c7c0e9a5038e7a8dc88746d",
+        "legs": 12,
+        "ok": true,
+        "positional_cells_verified": true
+      },
+      "stderr": ""
+    },
+    {
+      "check": "stability_kit",
+      "sha256": "fb22cadce8be3c7d7642c9b55802aa0bd4ea90e41c7c0e9a5038e7a8dc88746d",
+      "argv": [
+        "python3.13",
+        "-I",
+        "-B",
+        "$AUDIT_CHECKOUT/docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/f2-stab/tools/validate_kit.py",
+        "$AUDIT_CHECKOUT/docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/f2-stab/f2-stab-07.v1.1.json",
+        "--repo",
+        "$PINNED_CHECKOUT",
+        "--batch-window",
+        "13:14-13:15"
+      ],
+      "exit_code": 0,
+      "result": {
+        "base_kit_sha256": "651d1815ca87ee23640a8db1483d4ecaf42d70d029855ad03c14bfa076116f2b",
+        "campaign_id": "f2-stab-07",
+        "frozen_commit": "2d347f721552fe03bdd19f113e7bad7a7c24908e",
+        "frozen_paths_verified": true,
+        "kit_sha256": "fb22cadce8be3c7d7642c9b55802aa0bd4ea90e41c7c0e9a5038e7a8dc88746d",
+        "legs": 12,
+        "ok": true,
+        "positional_cells_verified": true
+      },
+      "stderr": ""
+    },
+    {
+      "check": "stability_kit",
+      "sha256": "aaba2ad04cbc88e9872c292699dfa9f98dfb15ad9f7e0af23a1faf0091bebf00",
+      "argv": [
+        "python3.13",
+        "-I",
+        "-B",
+        "$AUDIT_CHECKOUT/docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/f2-stab/tools/validate_kit.py",
+        "$AUDIT_CHECKOUT/docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/f2-stab/f2-stab-08.v1.1.json",
+        "--repo",
+        "$PINNED_CHECKOUT",
+        "--batch-window",
+        "02:00-02:35"
+      ],
+      "exit_code": 0,
+      "result": {
+        "base_kit_sha256": "651d1815ca87ee23640a8db1483d4ecaf42d70d029855ad03c14bfa076116f2b",
+        "campaign_id": "f2-stab-08",
+        "frozen_commit": "2d347f721552fe03bdd19f113e7bad7a7c24908e",
+        "frozen_paths_verified": true,
+        "kit_sha256": "aaba2ad04cbc88e9872c292699dfa9f98dfb15ad9f7e0af23a1faf0091bebf00",
+        "legs": 12,
+        "ok": true,
+        "positional_cells_verified": true
+      },
+      "stderr": ""
+    },
+    {
+      "check": "stability_kit",
+      "sha256": "aaba2ad04cbc88e9872c292699dfa9f98dfb15ad9f7e0af23a1faf0091bebf00",
+      "argv": [
+        "python3.13",
+        "-I",
+        "-B",
+        "$AUDIT_CHECKOUT/docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/f2-stab/tools/validate_kit.py",
+        "$AUDIT_CHECKOUT/docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/f2-stab/f2-stab-08.v1.1.json",
+        "--repo",
+        "$PINNED_CHECKOUT",
+        "--batch-window",
+        "13:14-13:15"
+      ],
+      "exit_code": 0,
+      "result": {
+        "base_kit_sha256": "651d1815ca87ee23640a8db1483d4ecaf42d70d029855ad03c14bfa076116f2b",
+        "campaign_id": "f2-stab-08",
+        "frozen_commit": "2d347f721552fe03bdd19f113e7bad7a7c24908e",
+        "frozen_paths_verified": true,
+        "kit_sha256": "aaba2ad04cbc88e9872c292699dfa9f98dfb15ad9f7e0af23a1faf0091bebf00",
+        "legs": 12,
+        "ok": true,
+        "positional_cells_verified": true
+      },
+      "stderr": ""
+    },
+    {
+      "check": "stability_kit",
+      "sha256": "9a2b863f7abbffdc2d33a3af6bee7d8381d0c54883dbb4a7cac41378572c5ce8",
+      "argv": [
+        "python3.13",
+        "-I",
+        "-B",
+        "$AUDIT_CHECKOUT/docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/f2-stab/tools/validate_kit.py",
+        "$AUDIT_CHECKOUT/docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/f2-stab/f2-stab-09.v1.1.json",
+        "--repo",
+        "$PINNED_CHECKOUT",
+        "--batch-window",
+        "02:00-02:35"
+      ],
+      "exit_code": 0,
+      "result": {
+        "base_kit_sha256": "651d1815ca87ee23640a8db1483d4ecaf42d70d029855ad03c14bfa076116f2b",
+        "campaign_id": "f2-stab-09",
+        "frozen_commit": "2d347f721552fe03bdd19f113e7bad7a7c24908e",
+        "frozen_paths_verified": true,
+        "kit_sha256": "9a2b863f7abbffdc2d33a3af6bee7d8381d0c54883dbb4a7cac41378572c5ce8",
+        "legs": 12,
+        "ok": true,
+        "positional_cells_verified": true
+      },
+      "stderr": ""
+    },
+    {
+      "check": "stability_kit",
+      "sha256": "9a2b863f7abbffdc2d33a3af6bee7d8381d0c54883dbb4a7cac41378572c5ce8",
+      "argv": [
+        "python3.13",
+        "-I",
+        "-B",
+        "$AUDIT_CHECKOUT/docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/f2-stab/tools/validate_kit.py",
+        "$AUDIT_CHECKOUT/docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/f2-stab/f2-stab-09.v1.1.json",
+        "--repo",
+        "$PINNED_CHECKOUT",
+        "--batch-window",
+        "13:14-13:15"
+      ],
+      "exit_code": 0,
+      "result": {
+        "base_kit_sha256": "651d1815ca87ee23640a8db1483d4ecaf42d70d029855ad03c14bfa076116f2b",
+        "campaign_id": "f2-stab-09",
+        "frozen_commit": "2d347f721552fe03bdd19f113e7bad7a7c24908e",
+        "frozen_paths_verified": true,
+        "kit_sha256": "9a2b863f7abbffdc2d33a3af6bee7d8381d0c54883dbb4a7cac41378572c5ce8",
+        "legs": 12,
+        "ok": true,
+        "positional_cells_verified": true
+      },
+      "stderr": ""
+    },
+    {
+      "check": "stability_kit",
+      "sha256": "bb54fdaff1292ab24f53204698649d0925fa00beedca70604f760a340c9ee926",
+      "argv": [
+        "python3.13",
+        "-I",
+        "-B",
+        "$AUDIT_CHECKOUT/docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/f2-stab/tools/validate_kit.py",
+        "$AUDIT_CHECKOUT/docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/f2-stab/f2-stab-10.v1.1.json",
+        "--repo",
+        "$PINNED_CHECKOUT",
+        "--batch-window",
+        "02:00-02:35"
+      ],
+      "exit_code": 0,
+      "result": {
+        "base_kit_sha256": "651d1815ca87ee23640a8db1483d4ecaf42d70d029855ad03c14bfa076116f2b",
+        "campaign_id": "f2-stab-10",
+        "frozen_commit": "2d347f721552fe03bdd19f113e7bad7a7c24908e",
+        "frozen_paths_verified": true,
+        "kit_sha256": "bb54fdaff1292ab24f53204698649d0925fa00beedca70604f760a340c9ee926",
+        "legs": 12,
+        "ok": true,
+        "positional_cells_verified": true
+      },
+      "stderr": ""
+    },
+    {
+      "check": "stability_kit",
+      "sha256": "bb54fdaff1292ab24f53204698649d0925fa00beedca70604f760a340c9ee926",
+      "argv": [
+        "python3.13",
+        "-I",
+        "-B",
+        "$AUDIT_CHECKOUT/docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/f2-stab/tools/validate_kit.py",
+        "$AUDIT_CHECKOUT/docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/f2-stab/f2-stab-10.v1.1.json",
+        "--repo",
+        "$PINNED_CHECKOUT",
+        "--batch-window",
+        "13:14-13:15"
+      ],
+      "exit_code": 0,
+      "result": {
+        "base_kit_sha256": "651d1815ca87ee23640a8db1483d4ecaf42d70d029855ad03c14bfa076116f2b",
+        "campaign_id": "f2-stab-10",
+        "frozen_commit": "2d347f721552fe03bdd19f113e7bad7a7c24908e",
+        "frozen_paths_verified": true,
+        "kit_sha256": "bb54fdaff1292ab24f53204698649d0925fa00beedca70604f760a340c9ee926",
+        "legs": 12,
+        "ok": true,
+        "positional_cells_verified": true
+      },
+      "stderr": ""
+    },
+    {
+      "check": "stability_kit",
+      "sha256": "e8cb23471f556d21514fb5ba37ffa409b9b697cfbd2519d3c2ab0c6922ed36fe",
+      "argv": [
+        "python3.13",
+        "-I",
+        "-B",
+        "$AUDIT_CHECKOUT/docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/f2-stab/tools/validate_kit.py",
+        "$AUDIT_CHECKOUT/docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/f2-stab/f2-stab-11.v1.1.json",
+        "--repo",
+        "$PINNED_CHECKOUT",
+        "--batch-window",
+        "02:00-02:35"
+      ],
+      "exit_code": 0,
+      "result": {
+        "base_kit_sha256": "651d1815ca87ee23640a8db1483d4ecaf42d70d029855ad03c14bfa076116f2b",
+        "campaign_id": "f2-stab-11",
+        "frozen_commit": "2d347f721552fe03bdd19f113e7bad7a7c24908e",
+        "frozen_paths_verified": true,
+        "kit_sha256": "e8cb23471f556d21514fb5ba37ffa409b9b697cfbd2519d3c2ab0c6922ed36fe",
+        "legs": 12,
+        "ok": true,
+        "positional_cells_verified": true
+      },
+      "stderr": ""
+    },
+    {
+      "check": "stability_kit",
+      "sha256": "e8cb23471f556d21514fb5ba37ffa409b9b697cfbd2519d3c2ab0c6922ed36fe",
+      "argv": [
+        "python3.13",
+        "-I",
+        "-B",
+        "$AUDIT_CHECKOUT/docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/f2-stab/tools/validate_kit.py",
+        "$AUDIT_CHECKOUT/docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/f2-stab/f2-stab-11.v1.1.json",
+        "--repo",
+        "$PINNED_CHECKOUT",
+        "--batch-window",
+        "13:14-13:15"
+      ],
+      "exit_code": 0,
+      "result": {
+        "base_kit_sha256": "651d1815ca87ee23640a8db1483d4ecaf42d70d029855ad03c14bfa076116f2b",
+        "campaign_id": "f2-stab-11",
+        "frozen_commit": "2d347f721552fe03bdd19f113e7bad7a7c24908e",
+        "frozen_paths_verified": true,
+        "kit_sha256": "e8cb23471f556d21514fb5ba37ffa409b9b697cfbd2519d3c2ab0c6922ed36fe",
+        "legs": 12,
+        "ok": true,
+        "positional_cells_verified": true
+      },
+      "stderr": ""
+    },
+    {
+      "check": "stability_kit",
+      "sha256": "7a0440d3f15823760179782f85cad560e8ca917bf66201c02b1b911d79af35f9",
+      "argv": [
+        "python3.13",
+        "-I",
+        "-B",
+        "$AUDIT_CHECKOUT/docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/f2-stab/tools/validate_kit.py",
+        "$AUDIT_CHECKOUT/docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/f2-stab/f2-stab-12.v1.1.json",
+        "--repo",
+        "$PINNED_CHECKOUT",
+        "--batch-window",
+        "02:00-02:35"
+      ],
+      "exit_code": 0,
+      "result": {
+        "base_kit_sha256": "651d1815ca87ee23640a8db1483d4ecaf42d70d029855ad03c14bfa076116f2b",
+        "campaign_id": "f2-stab-12",
+        "frozen_commit": "2d347f721552fe03bdd19f113e7bad7a7c24908e",
+        "frozen_paths_verified": true,
+        "kit_sha256": "7a0440d3f15823760179782f85cad560e8ca917bf66201c02b1b911d79af35f9",
+        "legs": 12,
+        "ok": true,
+        "positional_cells_verified": true
+      },
+      "stderr": ""
+    },
+    {
+      "check": "stability_kit",
+      "sha256": "7a0440d3f15823760179782f85cad560e8ca917bf66201c02b1b911d79af35f9",
+      "argv": [
+        "python3.13",
+        "-I",
+        "-B",
+        "$AUDIT_CHECKOUT/docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/f2-stab/tools/validate_kit.py",
+        "$AUDIT_CHECKOUT/docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/f2-stab/f2-stab-12.v1.1.json",
+        "--repo",
+        "$PINNED_CHECKOUT",
+        "--batch-window",
+        "13:14-13:15"
+      ],
+      "exit_code": 0,
+      "result": {
+        "base_kit_sha256": "651d1815ca87ee23640a8db1483d4ecaf42d70d029855ad03c14bfa076116f2b",
+        "campaign_id": "f2-stab-12",
+        "frozen_commit": "2d347f721552fe03bdd19f113e7bad7a7c24908e",
+        "frozen_paths_verified": true,
+        "kit_sha256": "7a0440d3f15823760179782f85cad560e8ca917bf66201c02b1b911d79af35f9",
+        "legs": 12,
+        "ok": true,
+        "positional_cells_verified": true
+      },
+      "stderr": ""
+    },
+    {
+      "check": "stability_kit",
+      "sha256": "47c3d2f5f6133112e7a209c9522e48bb3388c7fa27f56e5ffdf86962d95f7de3",
+      "argv": [
+        "python3.13",
+        "-I",
+        "-B",
+        "$AUDIT_CHECKOUT/docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/f2-stab/tools/validate_kit.py",
+        "$AUDIT_CHECKOUT/docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/f2-stab/f2-stab-13.v1.1.json",
+        "--repo",
+        "$PINNED_CHECKOUT",
+        "--batch-window",
+        "02:00-02:35"
+      ],
+      "exit_code": 0,
+      "result": {
+        "base_kit_sha256": "651d1815ca87ee23640a8db1483d4ecaf42d70d029855ad03c14bfa076116f2b",
+        "campaign_id": "f2-stab-13",
+        "frozen_commit": "2d347f721552fe03bdd19f113e7bad7a7c24908e",
+        "frozen_paths_verified": true,
+        "kit_sha256": "47c3d2f5f6133112e7a209c9522e48bb3388c7fa27f56e5ffdf86962d95f7de3",
+        "legs": 12,
+        "ok": true,
+        "positional_cells_verified": true
+      },
+      "stderr": ""
+    },
+    {
+      "check": "stability_kit",
+      "sha256": "47c3d2f5f6133112e7a209c9522e48bb3388c7fa27f56e5ffdf86962d95f7de3",
+      "argv": [
+        "python3.13",
+        "-I",
+        "-B",
+        "$AUDIT_CHECKOUT/docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/f2-stab/tools/validate_kit.py",
+        "$AUDIT_CHECKOUT/docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/f2-stab/f2-stab-13.v1.1.json",
+        "--repo",
+        "$PINNED_CHECKOUT",
+        "--batch-window",
+        "13:14-13:15"
+      ],
+      "exit_code": 0,
+      "result": {
+        "base_kit_sha256": "651d1815ca87ee23640a8db1483d4ecaf42d70d029855ad03c14bfa076116f2b",
+        "campaign_id": "f2-stab-13",
+        "frozen_commit": "2d347f721552fe03bdd19f113e7bad7a7c24908e",
+        "frozen_paths_verified": true,
+        "kit_sha256": "47c3d2f5f6133112e7a209c9522e48bb3388c7fa27f56e5ffdf86962d95f7de3",
+        "legs": 12,
+        "ok": true,
+        "positional_cells_verified": true
+      },
+      "stderr": ""
+    },
+    {
+      "check": "stability_kit",
+      "sha256": "73fe743e013cddd6d5294e95e076c64933a81eb95933fb4aa5dfb85471b9402d",
+      "argv": [
+        "python3.13",
+        "-I",
+        "-B",
+        "$AUDIT_CHECKOUT/docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/f2-stab/tools/validate_kit.py",
+        "$AUDIT_CHECKOUT/docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/f2-stab/f2-stab-14.v1.1.json",
+        "--repo",
+        "$PINNED_CHECKOUT",
+        "--batch-window",
+        "02:00-02:35"
+      ],
+      "exit_code": 0,
+      "result": {
+        "base_kit_sha256": "651d1815ca87ee23640a8db1483d4ecaf42d70d029855ad03c14bfa076116f2b",
+        "campaign_id": "f2-stab-14",
+        "frozen_commit": "2d347f721552fe03bdd19f113e7bad7a7c24908e",
+        "frozen_paths_verified": true,
+        "kit_sha256": "73fe743e013cddd6d5294e95e076c64933a81eb95933fb4aa5dfb85471b9402d",
+        "legs": 12,
+        "ok": true,
+        "positional_cells_verified": true
+      },
+      "stderr": ""
+    },
+    {
+      "check": "stability_kit",
+      "sha256": "73fe743e013cddd6d5294e95e076c64933a81eb95933fb4aa5dfb85471b9402d",
+      "argv": [
+        "python3.13",
+        "-I",
+        "-B",
+        "$AUDIT_CHECKOUT/docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/f2-stab/tools/validate_kit.py",
+        "$AUDIT_CHECKOUT/docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/f2-stab/f2-stab-14.v1.1.json",
+        "--repo",
+        "$PINNED_CHECKOUT",
+        "--batch-window",
+        "13:14-13:15"
+      ],
+      "exit_code": 0,
+      "result": {
+        "base_kit_sha256": "651d1815ca87ee23640a8db1483d4ecaf42d70d029855ad03c14bfa076116f2b",
+        "campaign_id": "f2-stab-14",
+        "frozen_commit": "2d347f721552fe03bdd19f113e7bad7a7c24908e",
+        "frozen_paths_verified": true,
+        "kit_sha256": "73fe743e013cddd6d5294e95e076c64933a81eb95933fb4aa5dfb85471b9402d",
+        "legs": 12,
+        "ok": true,
+        "positional_cells_verified": true
+      },
+      "stderr": ""
+    }
+  ]
+}
