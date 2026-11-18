@@ -1,0 +1,66 @@
+{
+  "call": 1,
+  "ran_by": "arm",
+  "results": [
+    {
+      "argv": [
+        "/Users/edr/night-custody/measurement/JouleWise-measurement-20261102-align-pilot2/.venv/bin/python",
+        "-B",
+        "/Users/edr/code/jw-wt/r1-slot-b2e01464d/scripts/collect_window_flags.py",
+        "--stage",
+        "arm",
+        "--custody",
+        "/Users/edr/night-align/r1-20261118T141128Z",
+        "--repo",
+        "/Users/edr/code/jw-wt/r1-slot-b2e01464d",
+        "--pack",
+        "/Users/edr/night-align/r1-20261118T141128Z/align-r1-runtime",
+        "--plan-id",
+        "align-r1-20261118T1445Z",
+        "--attempt",
+        "1",
+        "--h-claim",
+        "b2e01464d6d4fbf2901ff4d4154df9455104a12a",
+        "--chain",
+        "/Users/edr/night-align/r1-20261118T141128Z/chain.zsh",
+        "--chain-sidecar",
+        "/Users/edr/night-align/r1-20261118T141128Z/chain.zsh.sha256",
+        "--ledger",
+        "/Users/edr/code/jw-wt/r1-slot-b2e01464d/runs/calibration_observation_ledger.jsonl",
+        "--head-pin",
+        "/Users/edr/code/jw-wt/r1-slot-b2e01464d/configs/calibration/calibration_ledger_head.json",
+        "--session-id",
+        "align-r1-20261118T1445Z",
+        "--catalog",
+        "/Users/edr/code/jw-wt/r1-slot-b2e01464d/configs/campaigns/v5_claim_25g83/flag_catalog.json",
+        "--sealed-inventory",
+        "/Users/edr/code/jw-wt/r1-slot-b2e01464d/configs/campaigns/v5_claim_25g83/sealed_inventory.json",
+        "--identity-pins",
+        "/Users/edr/code/jw-wt/r1-slot-b2e01464d/configs/campaigns/v5_claim_25g83/identity_pins.json"
+      ],
+      "elapsed_s": 0.474508666,
+      "error": null,
+      "finished": {
+        "monotonic_ns": 2997440269251041,
+        "monotonic_raw_ns": 2997440269250666,
+        "wall_ns": 1795013102570849000
+      },
+      "name": "flags.arm",
+      "returncode": 0,
+      "started": {
+        "monotonic_ns": 2997439794742375,
+        "monotonic_raw_ns": 2997439794742208,
+        "wall_ns": 1795013102096340000
+      },
+      "stderr": "",
+      "stdout": {
+        "name": "collector-flags.arm.stdout",
+        "path": "hazards/arm-raw/collector-flags.arm.stdout",
+        "sha256": "d82b3b9893c3ff0853865b60ec9a0b9d1bc622eace90f47df72b88ed7489528e",
+        "size": 385
+      },
+      "timed_out": false
+    }
+  ],
+  "schema": "joulewise.b5_arm_collectors.v1"
+}

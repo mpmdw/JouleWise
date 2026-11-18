@@ -1,0 +1,266 @@
+{
+  "aborted_reason": null,
+  "agent_pause": {
+    "episodes": [],
+    "stopped_by_limit": false,
+    "total_pause_s": 0.0
+  },
+  "arm": {
+    "go": true,
+    "reasons": [],
+    "record_path": "/Users/edr/night-align/r1-20261118T141128Z/hazards/arm.json",
+    "verdicts": {
+      "battery": "PASS",
+      "clock": "PASS",
+      "contention": "PASS",
+      "disk": "PASS",
+      "instrument": "PASS",
+      "thermal": "PASS"
+    }
+  },
+  "attempt": 1,
+  "census": {
+    "clean": true,
+    "exit_code": 1
+  },
+  "census_supervision": {
+    "consecutive_unmeasured": 0,
+    "journal_failures": 0,
+    "retried_probes": 0,
+    "unmeasured_censuses": 0
+  },
+  "chain": {
+    "exit_code": 0,
+    "matches_sidecar": true,
+    "sha256": "d09037025b70481a405c40f41595c0f2ff706c9c808ccae0a8062b9fd60aa6c8",
+    "sidecar_sha256": "d09037025b70481a405c40f41595c0f2ff706c9c808ccae0a8062b9fd60aa6c8",
+    "stages": [],
+    "started": true,
+    "termination_proven": true
+  },
+  "chain_outcome": "COMPLETE",
+  "diagnostics": [
+    "yield plan unavailable: ChainRenderError: plan tree has no stage_graph"
+  ],
+  "disk_floor": {
+    "errors": [],
+    "low_bytes": 10737418240,
+    "stops": []
+  },
+  "ended": {
+    "monotonic_ns": 3020597693949000,
+    "monotonic_raw_ns": 3020597693948833,
+    "wall_s": 1795036259.995546
+  },
+  "faults": {
+    "bound_derivation_failed": "not_run",
+    "post_bracket_failed": "not_run",
+    "reasons": []
+  },
+  "final_census": {
+    "clean": true,
+    "exit_code": 1
+  },
+  "flags_emitted": [
+    "network_time.off_output"
+  ],
+  "g10": {
+    "ran": false,
+    "reason": "not requested",
+    "requested": false
+  },
+  "inventory": {
+    "errors": [],
+    "file_count": 541,
+    "head": "b2e01464d6d4fbf2901ff4d4154df9455104a12a",
+    "path": "/Users/edr/night-align/r1-20261118T141128Z/night/executed_inventory.json",
+    "sha256": "cb4621f6e6fa6e4dd43ae93bb26fc8ae8e6535c66a0280fc17cb877ca06d74a5",
+    "status_clean": false
+  },
+  "keep_awake": {
+    "pid": 84375,
+    "restarts": 0,
+    "verified_end": true,
+    "verified_start": true
+  },
+  "lineage": {
+    "boot_changed": [],
+    "error": null,
+    "locators_valid": true,
+    "published": true
+  },
+  "measurement_outcome": "complete",
+  "meter": {
+    "argv": [
+      "/Users/edr/night-custody/measurement/JouleWise-measurement-20261102-align-pilot2/.venv/bin/python",
+      "-B",
+      "/Users/edr/code/jw-wt/r1-slot-b2e01464d/scripts/km003c_monitor.py",
+      "--out",
+      "/Users/edr/night-align/r1-20261118T141128Z/hazards/meter/stream-001.jsonl"
+    ],
+    "crash_loop": false,
+    "errors": [],
+    "exits": [],
+    "gaps": [],
+    "journal": "meter_supervision.jsonl",
+    "restarts": 0,
+    "schema": "joulewise.b5_monitor_supervision.v1",
+    "start_failures": 0,
+    "starts": 1,
+    "stop": {
+      "group_absent": true,
+      "group_census": [],
+      "proven_stopped": true,
+      "requested": {
+        "monotonic_ns": 3020597375840625,
+        "monotonic_raw_ns": 3020597375840500,
+        "wall_s": 1795036259.677438
+      },
+      "returncode": 0,
+      "was_running": true
+    },
+    "streams": [
+      {
+        "path": "hazards/meter/stream-001.jsonl",
+        "sha256": "3e9ff02ef5f561cbd0258638706beb1f33214adb0d1949b3217a4598dd774f61",
+        "status": "streaming"
+      }
+    ]
+  },
+  "meter_readiness": {
+    "live": true,
+    "probe_seconds": 3,
+    "raw_offset_ns": -708,
+    "samples": 150,
+    "stream_sha256": "ccb5896c44ad0a76761d94167451541eb2a7554c35eae1ece4c4a1e4b0d1572a"
+  },
+  "meter_stream_readiness": {
+    "last_sample_monotonic_s": 2997756.744008041,
+    "ready": true
+  },
+  "monitor": {
+    "argv": [
+      "/usr/sbin/taskpolicy",
+      "-b",
+      "/Users/edr/night-custody/measurement/JouleWise-measurement-20261102-align-pilot2/.venv/bin/python",
+      "-B",
+      "/Users/edr/code/jw-wt/r1-slot-b2e01464d/scripts/hazard_monitor.py",
+      "--config",
+      "/Users/edr/night-align/r1-20261118T141128Z/hazards/monitor/config.json"
+    ],
+    "crash_loop": false,
+    "errors": [],
+    "exits": [],
+    "gaps": [],
+    "journal": "monitor_supervision.jsonl",
+    "restarts": 0,
+    "schema": "joulewise.b5_monitor_supervision.v1",
+    "start_failures": 0,
+    "starts": 1,
+    "stop": {
+      "group_absent": true,
+      "group_census": [],
+      "proven_stopped": true,
+      "requested": {
+        "monotonic_ns": 3020596948629750,
+        "monotonic_raw_ns": 3020596948628708,
+        "wall_s": 1795036259.250227
+      },
+      "returncode": 0,
+      "was_running": true
+    }
+  },
+  "monitor_readiness": {
+    "attempts": [
+      {
+        "at": {
+          "monotonic_ns": 2997754906233625,
+          "monotonic_raw_ns": 2997754906233416,
+          "wall_s": 1795013417.2078311
+        },
+        "attempt": 1,
+        "ready": true,
+        "started": true,
+        "status": {
+          "battery": true,
+          "contention": true,
+          "ready": true,
+          "session_start": true
+        },
+        "waited_s": 0.633
+      }
+    ],
+    "ready": true
+  },
+  "monitor_stop": {
+    "chain_returned": {
+      "monotonic_ns": 3020591941826125,
+      "monotonic_raw_ns": 3020591941825916,
+      "wall_s": 1795036254.243424
+    },
+    "hold_s": 5.0,
+    "monitor_stop_requested": {
+      "monotonic_ns": 3020596948629750,
+      "monotonic_raw_ns": 3020596948628708,
+      "wall_s": 1795036259.250227
+    },
+    "released": {
+      "monotonic_ns": 3020596948105833,
+      "monotonic_raw_ns": 3020596948103750,
+      "wall_s": 1795036259.249703
+    },
+    "released_after_chain_s": 5.006
+  },
+  "neg8_corpus": {
+    "collected_manifest": null,
+    "committed_manifest": null,
+    "errors": [
+      "summary: FileNotFoundError: [Errno 2] No such file or directory: '/Users/edr/night-align/r1-20261118T141128Z/night/transcript/neg8-settled-corpus.collected.summary.json'",
+      "collected manifest: FileNotFoundError: [Errno 2] No such file or directory: '/Users/edr/night-align/r1-20261118T141128Z/night/transcript/neg8-settled-corpus.collected.json'"
+    ],
+    "members_kept": null,
+    "members_listed": null,
+    "pruned": null,
+    "summary": null
+  },
+  "pack_id": "align-r1-runtime",
+  "plan_id": "align-r1-20261118T1445Z",
+  "receipt_class": "HAZARD_PACK",
+  "schema": "joulewise.b5_hazard_night.v1",
+  "sleep": {
+    "chain_slept_ns": -21,
+    "end": {
+      "monotonic_ns": 3020591941844583,
+      "monotonic_raw_ns": 3020591941840708,
+      "read_skew_ns": 333,
+      "sleep_offset_ns": 42,
+      "uptime_raw_ns": 3020591941840666,
+      "wall_s": 1795036254.2434418
+    },
+    "runs_excluded": [],
+    "start": {
+      "monotonic_ns": 2997756830983958,
+      "monotonic_raw_ns": 2997756830970708,
+      "read_skew_ns": 875,
+      "sleep_offset_ns": 63,
+      "uptime_raw_ns": 2997756830970645,
+      "wall_s": 1795013419.132582
+    }
+  },
+  "stage_reached": "chain",
+  "started": {
+    "monotonic_ns": 2997439277167958,
+    "monotonic_raw_ns": 2997439277167333,
+    "wall_s": 1795013101.5787652
+  },
+  "supervision_faults": {},
+  "verdict": "GO",
+  "yield": {
+    "error": "ChainRenderError: plan tree has no stage_graph",
+    "schema": "joulewise.b5_window_yield.v1",
+    "yield_status": "UNKNOWN"
+  },
+  "yield_plan": {
+    "error": "ChainRenderError: plan tree has no stage_graph"
+  }
+}

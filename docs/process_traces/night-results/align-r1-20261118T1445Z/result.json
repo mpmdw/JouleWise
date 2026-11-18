@@ -1,0 +1,138 @@
+{
+  "aborted_reason": null,
+  "artifacts": [
+    {
+      "path": "night.log",
+      "sha256": "4e5e4b62bf4fa381c520f35fa81eb91174305e2e65b0fd888d2d8fec0a1225e0"
+    },
+    {
+      "path": "night/chain.started",
+      "sha256": "a1a2631cd0bc6b145ed992680b5cfb08cf529c0de8267e13de98b23aae275ae6"
+    },
+    {
+      "path": "night/chain.exited",
+      "sha256": "1b94ea78a7856b0d72bddd880347f5f1c2cd018e8d191f5c350a777f20762108"
+    },
+    {
+      "path": "night/censuses.jsonl",
+      "sha256": "30ac5e6117ab0ecb9ddb25375023333fbff124e773bb496c9251c88ef660eee5"
+    },
+    {
+      "path": "night/chain.stdout.log",
+      "sha256": "1b4f30f9ff9f29aa93f380054342fb94dbb59aa9ec0ad7c8ef12005699d46681"
+    },
+    {
+      "path": "night/chain.stderr.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "night/hazard_result.json",
+      "sha256": "eeeab438783aae44c900e8313a5c39883a06cd1deb3c8e93162bb40991a3376b"
+    },
+    {
+      "path": "night/arm_decision.json",
+      "sha256": "7a8d2dc0aa9e3aa7074104549abc85cea3dc98238a7a16242d9b9b9d098d21b7"
+    },
+    {
+      "path": "night/network_time_off.action.json",
+      "sha256": "a0b05007ad59b7e7d36677c1d8d1359870f376d7377b0ff99c4f5973c3b40c33"
+    },
+    {
+      "path": "night/arm_collectors.json",
+      "sha256": "1611a357d5487b52f790eb405801b32c0311263f4cdd9ab087f25d17f5640160"
+    },
+    {
+      "path": "night/executed_inventory.json",
+      "sha256": "cb4621f6e6fa6e4dd43ae93bb26fc8ae8e6535c66a0280fc17cb877ca06d74a5"
+    },
+    {
+      "path": "night/lineage.json",
+      "sha256": "12796dfcd7363cd9ef28d835816edd67778f7d3eebb5c28a1600d54c42fbc7e6"
+    },
+    {
+      "path": "night/monitor_supervision.jsonl",
+      "sha256": "c7c91a0498c4eb54c3855c1d138a9706c88a29aa0d7e83d6a565b1eca45056af"
+    },
+    {
+      "path": "night/meter_supervision.jsonl",
+      "sha256": "52f7e93d793777b11f2c580f1666bf07cb0d52b9b207d96bccc24a5e32a3ae5b"
+    },
+    {
+      "path": "night/chain.exit-census.json",
+      "sha256": "a4fb88bf235016de539d15e3b6a464ddac03174cd85b408aa0fa746c8d5f0a90"
+    }
+  ],
+  "calibration_code": null,
+  "calibration_refusal": null,
+  "census_count": 761,
+  "census_hits": [],
+  "chain_exit_code": 0,
+  "chain_outcome": "COMPLETE",
+  "chain_refusal_codes": [],
+  "chain_refused_phase": null,
+  "chain_sha256": "d09037025b70481a405c40f41595c0f2ff706c9c808ccae0a8062b9fd60aa6c8",
+  "ended_epoch_s": 1795036259.886404,
+  "ended_monotonic_ns": 3020597767083833,
+  "evidence": {
+    "calibration_refusal": null
+  },
+  "fault": false,
+  "fault_reasons": [],
+  "host_restoration": {
+    "action": "restored",
+    "argv": [
+      "sudo",
+      "-n",
+      "/usr/bin/pmset",
+      "-c",
+      "powermode",
+      "0"
+    ],
+    "exit_code": 0,
+    "marker": null,
+    "marker_removed": false,
+    "markers": [],
+    "network_time": {
+      "next_arm_owns_zeroing": true,
+      "next_arm_preflight": "clock.frequency_word_nonzero",
+      "observed": "on",
+      "ok": true,
+      "read": {
+        "argv": [
+          "/usr/bin/sudo",
+          "-n",
+          "/usr/sbin/systemsetup",
+          "-getusingnetworktime"
+        ],
+        "exit_code": 0,
+        "stderr": "",
+        "stdout": "Network Time: On\n"
+      },
+      "requested": "on",
+      "set": {
+        "argv": [
+          "/usr/bin/sudo",
+          "-n",
+          "/usr/sbin/systemsetup",
+          "-setusingnetworktime",
+          "on"
+        ],
+        "exit_code": 0,
+        "stderr": "2026-11-18 13:11:00.042 systemsetup[14780:97843033] ### Error:-99 File:/AppleInternal/Library/BuildRoots/4~CVSrugDU1y1BQluOAwbcrw5V7M6lsMeD-KfSuUA/Library/Caches/com.apple.xbs/TemporaryDirectory.4VW9ci/Sources/Admin/InternetServices.m Line:395\n",
+        "stdout": "setUsingNetworkTime: On\n"
+      }
+    },
+    "observed": 0,
+    "ok": true,
+    "powermode_ok": true,
+    "stderr": ""
+  },
+  "measurement_outcome": "complete",
+  "plan_id": "align-r1-20261118T1445Z",
+  "receipt_class": "HAZARD_PACK",
+  "refusal_documents": [],
+  "schema": "joulewise.unattended_night_result.v1",
+  "started_epoch_s": 1795013101.5438862,
+  "started_monotonic_ns": 2997439242288458,
+  "verdict": "GO"
+}
