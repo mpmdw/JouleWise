@@ -729,6 +729,53 @@ class RunnerTests(unittest.TestCase):
         shutil.move(session, root / 'session.mbp')
         return root, finalized['sha256']
 
+    def test_audit_round4_committed_offload_receipts_have_only_the_documented_fields(self):
+        import io
+        from scripts import align_v4_harvest_off as runner
+        from tests.test_offload_window import FinalizedManifestV2, ow as offload
+
+        # Reproduce the audit through a real synthetic transfer and the documented CLI.
+        case = FinalizedManifestV2()
+        case.setUp()
+        self.addCleanup(case.doCleanups)
+        self.assertEqual(case.run_offload(**case.packed(window_id='W1')), 0)
+        span_file = case.state / 'W1/timing/offload-span.json'
+        span = json.loads(span_file.read_bytes())
+        self.assertGreater(span['raw_bytes'], 0)
+        self.assertGreater(span['compressed_bytes'], 0)
+        private = {'files': 3, 'source_path': '/synthetic/input', 'payload_sha256': '7' * 64}
+        span_file.write_bytes(offload.canonical({**span, 'private_details': private}))
+        before = span_file.read_bytes()
+        activity_file = case.state / offload.ACTIVITY_SPAN
+        activity_file.write_bytes(offload.canonical({**json.loads(activity_file.read_bytes()), **private}))
+        activity = activity_file.read_bytes()
+        args = ['triage', '--state-root', str(case.state), '--window-id', 'W1', '--dwell-start-epoch']
+        expected = {'schema': 'joulewise.ops.offload_triage.v1', 'window_id': 'W1',
+                    'quiet_start_state_ok': True, 'reasons': [], 'air_receipt': True, 'second_copy': False}
+        for seconds, rc, reasons in (
+            (300, 0, []),
+            (60, 2, ['offload_ended_inside_dwell_margin', 'offload_activity_inside_dwell_margin']),
+        ):
+            with self.subTest(exit_code=rc), contextlib.redirect_stdout(io.StringIO()) as out:
+                self.assertEqual(offload.main(args + [str(span['ended_epoch_s'] + seconds)]), rc)
+                self.assertEqual(json.loads(out.getvalue()), {**expected, 'quiet_start_state_ok': rc == 0,
+                                                            'reasons': reasons})
+        self.assertEqual(span_file.read_bytes(), before)
+        self.assertEqual(activity_file.read_bytes(), activity)
+
+        # packed_session also checks the finalize command's digest-only projection. Direct and
+        # previous_final records use the same canonical receipt written by verified unpack.
+        root, digest = self.packed_session()
+        receipt = root / 'unpack_receipt.json'
+        unpack = ['unpack', '--offload', str(root / 'o'), '--window-id', 'W1', '--receipt-out', str(receipt),
+                  '--finalized-manifest', str(root / 'M.json'), '--finalized-sha256', digest]
+        with contextlib.redirect_stdout(io.StringIO()):
+            self.assertEqual(runner.main(unpack, run=self.fake_run('a' * 40)), 0)
+        unpack_document = {'schema': 'joulewise.align_v4.unpack_receipt.v1', 'window': 'W1',
+                           'plan_id': 'align-v4-synthetic', 'finalized_manifest_sha256': digest}
+        self.assertEqual(receipt.read_bytes(), json.dumps(unpack_document, sort_keys=True,
+                                                        separators=(',', ':')).encode())
+
     def test_pack_then_unpack_only_onto_an_identical_mirror(self):
         import io
         from scripts import align_v4_harvest_off as runner

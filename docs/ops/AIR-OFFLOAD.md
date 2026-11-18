@@ -107,6 +107,10 @@ no raw or payload hashing on the MBP:
 transfer of `$OUT/offload` in the harvest-off runbook's step 1d. Checked end to end with the real
 `harvest_offload.unpack` (§9).
 
+Commit the finalized manifest digest and the four-field `unpack_receipt.json` as directed in the magistrate
+runbook. Keep the manifest body, Air and second-copy receipts, and command diagnostics in private state until
+the series release. Use only the `offload triage` decision below for the offload portion of quiet-start evidence.
+
 **Terminal evidence (lead ruling 2026-11-08).** `result.json`, `chain.*` and `courier.sent` must be inside the
 finalize manifest's closure: either files of the session root (`--terminal night/result.json`, record-relative),
 or, if the native layout puts them outside the session root, declared as external inputs of
@@ -254,8 +258,8 @@ For v4, `offload` below refers to the pinned-checkout function from the magistra
 |---|---|---|
 | Window terminal | v4: finalize to the private output directory and make the single pack. Carry digest `H` into the pushed record. R1 and legacy use their existing manifest publication procedure. | For v4 keep the canonical manifest body on the MBP and with the Air restore outside Git until release (RL-163 §1). Follow harvest-off runbook §1b–c. |
 | Cool-down start `t_c` | v4: `offload run --state-root S --window-id K --record-root <session root> --record-manifest $OUT/finalized_manifest.json --record-manifest-sha256 H --harvest-pack $OUT/offload --terminal <result.json> --deadline-epoch <planned dwell start − 120>`. R1 or legacy: the same with `--pack` instead of `--harvest-pack` | One call; prints the span. Exit 0 = verified on the Air. Without a planned dwell start, `t_c + 900 − 120` is safe |
-| Right after | Keep the v4 `S/K/timing/offload-span.json` in private offload state. | The span includes raw and compressed byte counts. `window_timing --span offload=<path>` may read it locally. Use the `triage` receipt for quiet-start evidence. |
-| Pre-arm checks | `offload triage --state-root S --window-id K --dwell-start-epoch <planned>` | Evidence for `quiet_start_state`; exit 2 if an offload is running, started without an end receipt, or ended within 120 s of the dwell |
+| Right after | Keep `S/K/timing/offload-span.json` and the state-wide activity receipts in private offload state. | The spans include sizes or timestamps. `window_timing --span offload=<path>` may read the offload span locally. |
+| Pre-arm checks | `offload triage --state-root S --window-id K --dwell-start-epoch <planned>` | Use its stdout JSON for the offload check in `quiet_start_state`. Exit 2 if an offload is running, started without an end receipt, or ended within 120 s of the dwell. |
 | Dwell, arm | unchanged | |
 
 Current and older v4 windows are held for the pushed-record check on every deletion route. Once the desk record

@@ -86,3 +86,15 @@ Audit base `36aadc888` allowed an obsolete client to obtain fresh v4 deletion re
 | MED, cached Air receipts for forbidden inventory | `test_audit_round3_air_refuses_cached_packs_that_carry_desk_artifacts` seeds verified copies under the old policy for `archive/`, `PILOT.json` and `desk.json`. Cached verification, both fresh receipt requests and MBP resume refuse each case. | PASS |
 
 The 214-test local suite passed, including the prior offload regressions, all ten frozen R1 blobs, the U3 exporter and documentation. It omitted two process-signal tests and one synthetic fixture blocked by workspace permissions. The exporter still matches `5a325b2ee`. Native deployment and independent review remain with the lead.
+
+## Audit round 4 delta
+
+Astra independently executed the synthetic retention, pack and desk regressions and returned MERGE at `134860d4a`. The audit refuted premature deletion with both client versions and verified two MED findings. The offload CLI now renders only its quiet-start decision, fixed reason codes, window and receipt-presence booleans. It still checks both timing spans against the dwell margin. Both runbooks direct the private spans, diagnostics and transport receipts to offload state. The native input census receipt also stays private.
+
+| Finding | Regression or evidence | Result |
+| --- | --- | --- |
+| MED, quiet-start stdout included private timing and sizes | `test_audit_round4_committed_offload_receipts_have_only_the_documented_fields` ran an actual synthetic transfer and checked exact passing and refusing `offload triage` output with positive private sizes and planted paths and digests. It checks the digest-only finalize output and the four canonical unpack fields used in direct and successor records. | PASS |
+| MED, `status` is read-only in zsh | `test_magistrate_runbook_runs_only_the_reviewed_offload_checkout` runs the documented command in Bash and zsh, with reviewed, mismatched and dirty checkouts. | PASS |
+| HIGH, premature v4 deletion | Astra independently reproduced the historical failure and confirmed retention on `134860d4a` under both clients, before pushed desk finality. | Refuted on audit head |
+
+The 221 local checks passed with synthetic inputs, including the ten-blob comparison and the U3 exporter. The local suite omitted two process-signal tests and one workspace-blocked synthetic fixture. The lead is scheduling the Fable cold pass required by RL-183 §2.5. The audit verdict applies to `134860d4a`, and the current draft carries the author's verified follow-up.

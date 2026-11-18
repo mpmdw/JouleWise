@@ -142,7 +142,8 @@ class Runbook(unittest.TestCase):
             checkout = scratch / 'reviewed checkout'
             script = checkout / 'scripts/offload_window.py'
             script.parent.mkdir(parents=True)
-            script.write_text('import sys\nprint("reviewed", *sys.argv[1:3])\n')
+            reviewed = 'import sys\nprint("reviewed", *sys.argv[1:3])\n'
+            script.write_text(reviewed)
             path_client = scratch / 'offload_window.py'
             path_client.write_text('#!/bin/sh\necho stale-client\n')
             path_client.chmod(0o755)
@@ -156,21 +157,24 @@ class Runbook(unittest.TestCase):
                 'commit', '-qm', 'synthetic reviewed checkout')
             expected = git('rev-parse', 'HEAD')
 
-            def invoke(pin):
+            def invoke(shell, pin):
                 env = dict(os.environ, OFFLOAD_REPO=str(checkout), OFFLOAD_COMMIT=pin,
                            PATH=f'{scratch}{os.pathsep}{os.environ["PATH"]}')
-                return subprocess.run(['bash', '-c', command], cwd=scratch, env=env,
+                return subprocess.run([shell, '-f', '-c', command], cwd=scratch, env=env,
                                       text=True, capture_output=True)
 
-            good = invoke(expected)
-            self.assertEqual((good.returncode, good.stdout), (0, 'reviewed run --state-root\n'))
-            stale = invoke('0' * 40)
-            self.assertNotEqual(stale.returncode, 0)
-            self.assertEqual(stale.stdout, '')
-            script.write_text('print("dirty script")\n')
-            dirty = invoke(expected)
-            self.assertNotEqual(dirty.returncode, 0)
-            self.assertEqual(dirty.stdout, '')
+            for shell in ('bash', 'zsh'):
+                with self.subTest(shell=shell):
+                    script.write_text(reviewed)
+                    good = invoke(shell, expected)
+                    self.assertEqual((good.returncode, good.stdout), (0, 'reviewed run --state-root\n'), good.stderr)
+                    stale = invoke(shell, '0' * 40)
+                    self.assertNotEqual(stale.returncode, 0)
+                    self.assertEqual(stale.stdout, '')
+                    script.write_text('print("dirty script")\n')
+                    dirty = invoke(shell, expected)
+                    self.assertNotEqual(dirty.returncode, 0)
+                    self.assertEqual(dirty.stdout, '')
 
 
 class _redirect:

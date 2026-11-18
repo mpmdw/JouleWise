@@ -2060,7 +2060,7 @@ def release_older(state_root: Path, current: str, runner, now, mono, deadline, s
 
 
 def triage(state_root: Path, window_id: str, dwell_start_epoch: float, margin_s: float) -> dict:
-    """Evidence for the pre-arm `quiet_start_state` entry; passes only if no offload can be active."""
+    """Public pre-arm offload decision. The spans used to judge it stay in private state."""
     reasons = []
     lock = state_root / ".lock"
     if lock.exists():
@@ -2087,11 +2087,9 @@ def triage(state_root: Path, window_id: str, dwell_start_epoch: float, margin_s:
         reasons.append("offload_activity_without_end_receipt")
     if act_span is not None and act_span["ended_epoch_s"] > dwell_start_epoch - margin_s:
         reasons.append("offload_activity_inside_dwell_margin")
-    return {"schema": SCHEMA_TRIAGE, "activity": act_span, "window_id": window_id, "quiet_start_state_ok": not reasons,
-            "reasons": reasons, "span": span, "dwell_start_epoch_s": dwell_start_epoch, "margin_s": margin_s,
+    return {"schema": SCHEMA_TRIAGE, "window_id": window_id, "quiet_start_state_ok": not reasons, "reasons": reasons,
             "air_receipt": (state_root / window_id / "receipt-air.json").exists(),
-            "second_copy": (state_root / window_id / "receipt-second.json").exists(),
-            "free_bytes": free_bytes(state_root)}
+            "second_copy": (state_root / window_id / "receipt-second.json").exists()}
 
 
 # -- Air side: the landing store, bound to one APFS volume ------------------------------------

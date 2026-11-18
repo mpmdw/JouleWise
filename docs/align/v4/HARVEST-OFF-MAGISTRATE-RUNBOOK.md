@@ -103,8 +103,8 @@ offload() (
         echo 'Offload checkout does not match the reviewed commit' >&2
         exit 2
     }
-    status=$(git -C "$OFFLOAD_REPO" status --porcelain --untracked-files=all) &&
-        [ -z "$status" ] || {
+    checkout_status=$(git -C "$OFFLOAD_REPO" status --porcelain --untracked-files=all) &&
+        [ -z "$checkout_status" ] || {
         echo 'Offload checkout must be clean' >&2
         exit 2
     }
@@ -121,8 +121,8 @@ offload run --state-root "$OFFLOAD_STATE" --window-id "$K" --record-root "$S" \
 - `$TERMINAL` is the window's `result.json`. It must lie inside the finalized manifest's closure, as that runbook's §1a requires (for example `night/result.json`, relative to the record root).
 
 - The tool checks the pack against digest `H` before sending anything. It transfers the payload, `MANIFEST.json` and the finalized manifest (as `record-manifest.bin`) to the Air store outside Git. The Air verifies every member there.
-- Keep `$OFFLOAD_STATE/$K/timing/offload-span.json` in private offload state. It includes raw and compressed byte counts. Use the `triage` receipt for quiet-start evidence.
-- The transfer must finish before the dwell starts. Before the arm, run its `triage --dwell-start-epoch` check.
+- Keep `$OFFLOAD_STATE/$K/timing/offload-span.json`, the state-wide activity receipts and the transfer diagnostics in private offload state. They contain sizes and timing.
+- The transfer must finish before the dwell starts. Before the arm, run `offload triage --state-root "$OFFLOAD_STATE" --window-id "$K" --dwell-start-epoch "$PLANNED_DWELL_START"`. Use only its stdout JSON for the offload check in the quiet-start evidence. It carries `schema`, `window_id`, `quiet_start_state_ok`, `reasons`, `air_receipt` and `second_copy`. The last two keys are booleans.
 - Keep the offload pack and MBP originals until the window's desk is final and its record is pushed (RL-168 finding 3). The offload tool also requires two verified copies. Pass the pushed records checkout, remote-tracking ref and latest index path from AIR-OFFLOAD §4 to enable deletion on `run` or `release`.
 
 ## 2. Air, during the MBP cool-down
@@ -144,6 +144,11 @@ Nothing is published at `$S` until all of these hold:
 A payload member outside the manifest refuses before anything is written. Nothing is ever written through a restored link.
 
 After the restore succeeds, `unpack` exclusively creates `$OUT/unpack_receipt.json` outside `$S` (RL-183b). Its four canonical JSON keys are `schema`, `window`, `plan_id` (from the restored `session_id`) and `finalized_manifest_sha256`. If writing the receipt fails after restore, clear the pre-desk restore and retry `unpack` from the verified pack. Use only the receipt written by `unpack`.
+
+Before series release, the offload outputs that may enter Git are the `finalized_manifest` digest from §1b,
+the offload `triage` decision from §1d, and `unpack_receipt.json` for either §3 or §4. Keep pack, transfer,
+unpack and release diagnostics, transport receipts and the manifest body in private state. The digest in the
+unpack receipt identifies the finalized manifest.
 
 **2b. Run the light triage** and write the record source:
 
@@ -332,7 +337,7 @@ These are magistrate-owned native gates. None of them can be passed off the MBP 
      - `declared_directories` (`runs/`): directories whose consumed files are exactly the declared inputs.
    - **Declare each consumed ignored file** as a finalize input. Today that is only the calibration ledger, which comes from the plan's `ledger_path`. Any other file needs a reviewed code change to `_ledger_input`'s declared set, never an ad hoc CLI flag. Add its directory to `declared_directories` if it is not there.
    - **An ignored path that is linked but not consumed** goes under `regenerated` only if it really is a cache. Otherwise keep the dependency out of the measurement view.
-   - **Commit the declaration change with the census receipt**, and record it in RUN_STATE. Until then, a session whose links reach any other ignored content refuses at finalize, fail closed: `reaches an undeclared ignored input`.
+   - **Commit the declaration change** and record the census disposition in RUN_STATE. Keep the native census receipt with its input paths in private state. Until then, a session whose links reach any other ignored content refuses at finalize, fail closed: `reaches an undeclared ignored input`.
    - Re-run the census after any change to the measurement view, the harvest or the desk.
 2. **Time the first native finalize** (`finalize-manifest`, including the per-link `git ls-files` and closure hashing). Then time pack and the Air restore.
 3. **N2:** archive identity between the MBP and the Air, §7.
