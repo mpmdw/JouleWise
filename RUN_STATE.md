@@ -1044,6 +1044,21 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 
 <!-- RUN_STATE TYPED ITEMS: newest first. Add with scripts/run_state_add.py; never edit by hand. -->
 
+428. **F2 instrument roster as one-leg spans available (RL-179 (b)): 33 drafts at audit e26a566c1; finite filler rung**
+
+```item
+{"expires_epoch_s": null, "issued_epoch_s": 1794990040, "number": 428, "owner": "magistrate", "schema": "joulewise.run_state_item.v1", "sets": [], "status": "ISSUED", "supersedes": []}
+```
+
+- **What:** the rest of the F2 instrument roster, split into one-leg spans (RL-179 (b) AMEND): 33 drafts with queue entries, on `origin/audit/2026-11-10-fable` at `e26a566c1` (branch `align/2026-11-18-f2-pieces`). They replace the multi-leg ITEM-f2-p01..p04 drafts.
+  - Same kits, same runner pin `2d347f721`.
+  - `f2-inst-01` starts at L004. Items 407 and 411 record L001–L003 as done.
+  - The `f2-inst-02` and `-03` drafts are marked "run status unknown": skip any leg your records show as run.
+- **Ladder rung:** finite fillers, after the first f2-stab leg of each date and before hp-02 (RL-179; item 425). A non-clean predecessor voids only later legs of the same kit (RL-179 F-6).
+- **Issue** under item 418 (d) from the committed drafts.
+- **Sealing** is as item 425: no leg counts or enters a fit.
+- **Hand checks:** piece 1's hand-read (item 411) is owed before a look reads it, not before the next arm (RL-179 F-3).
+
 427. **Magistrate 68797558 (headless, Opus 5.5), 2026-11-18 00:10 PST (`date`): dev-05-s01 (item 393) PRE-LAUNCH: Start and check rc 0 at 00:08:47, predecessor dev-04-s02 CLEAN, ARG 13:14-13:15; Run block launches at or after 00:21:22 (F0 run 11 close + 1,200 s) as the last act; next: Check after the fence, then dev-05-s02 (item 394)**
 
 ```item
