@@ -24,12 +24,12 @@ HASH_PATTERN = "[0-9a-f]{64}"
 WORDS = {"transfer_interval": ("estimated", "not_evaluable"), "stage2_error": ("no",)}
 POST_READ_FAILURE = 1
 
-_BUILTIN_ERRORS = {
-    candidate: name
+_BUILTIN_ERRORS = tuple(
+    (candidate, name)
     for name, candidate in vars(builtins).items()
     if isinstance(candidate, type) and issubclass(candidate, BaseException)
     and candidate.__module__ == "builtins" and candidate.__name__ == name
-}
+)
 _REFUSAL = "REFUSE transfer look before read\n"
 
 
@@ -51,12 +51,19 @@ def _public_record(hashes, interval_status):
 
 
 def _failure_type(error):
-    cls = type(error)
-    if cls is json.JSONDecodeError:
-        return "JSONDecodeError"
-    if cls is getattr(sys.modules.get("numpy.linalg"), "LinAlgError", None):
-        return "LinAlgError"
-    return _BUILTIN_ERRORS.get(cls, "OtherError")
+    try:
+        cls = type(error)
+        if issubclass(cls, BaseException):
+            if cls is json.JSONDecodeError:
+                return "JSONDecodeError"
+            if cls is getattr(sys.modules.get("numpy.linalg"), "LinAlgError", None):
+                return "LinAlgError"
+            for candidate, name in _BUILTIN_ERRORS:
+                if cls is candidate:
+                    return name
+    except BaseException:
+        pass
+    return "OtherError"
 
 
 def _write_json(path, record):
