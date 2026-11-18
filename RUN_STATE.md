@@ -1052,6 +1052,20 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 
 <!-- RUN_STATE TYPED ITEMS: newest first. Add with scripts/run_state_add.py; never edit by hand. -->
 
+435. **Magistrate 4ad54659 (headless, Opus 5.5), 2026-11-18 03:24-03:35 PST (`date`): dev-05-s01 attempt 2 CHECK: RECEIPT OK, 6/6 MEASURED_OK, restore lines pass, copied; dev-05-s02 (item 394 re-issued by 430) Start and check rc 0, ARG 02:00-02:35; launches as the last act; next: Check s02, then R1**
+
+```pointer
+owner: magistrate
+wait: none
+deadline: 2026-11-19T08:17:00-08:00
+on_early_or_refused: as item 394's pointer (re-issued by item 430): a launch refusal or STOP in the Run block means nothing of s02 ran; mail the lead; then the filler ladder (item 422). A census refusal with zero capture is retried under item 431.
+next_observable: the next activation (after the fence is gone) runs item 394's "Check" on the dev-05-s02 OUT (copy custody `cadence-dev05-s01a2-postcheck-4ad54659.sh`, OUT -> the s02 directory, LEGS L007-L012, ARG as recorded), copies it at once, reports (Ed + lead, RUN_STATE), then R1 as issued (items 397, 398; item 433)
+```
+
+```item
+{"expires_epoch_s": null, "issued_epoch_s": 1795001435, "number": 435, "owner": "magistrate", "schema": "joulewise.run_state_item.v1", "sets": [{"at_epoch_s": 1795001435, "item": 429, "status": "CLOSED"}], "status": "ISSUED", "supersedes": []}
+```
+
 434. **Qualification pin 6e9d42f1d admitted (PR #812 merged; 38 paths = reviewed head); first native run = f2-stab-15 L001 after R1, with F-3(c) hand-read**
 
 ```item

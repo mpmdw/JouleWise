@@ -1,7 +1,13 @@
 {
   "armed": null,
-  "next_observable": "the first pre-launch record that arms with no timed close gap (close proven), and each record naming the RL-179 rows it used",
+  "next_observable": "the next activation (after the fence is gone) runs item 394's \"Check\" on the dev-05-s02 OUT (copy custody `cadence-dev05-s01a2-postcheck-4ad54659.sh`, OUT -> the s02 directory, LEGS L007-L012, ARG as recorded), copies it at once, reports (Ed + lead, RUN_STATE), then R1 as issued (items 397, 398; item 433)",
   "open_items": [
+    {
+      "expires_epoch_s": null,
+      "item": 435,
+      "owner": "magistrate",
+      "status": "ISSUED"
+    },
     {
       "expires_epoch_s": null,
       "item": 434,
@@ -29,12 +35,6 @@
     {
       "expires_epoch_s": null,
       "item": 430,
-      "owner": "magistrate",
-      "status": "ISSUED"
-    },
-    {
-      "expires_epoch_s": null,
-      "item": 429,
       "owner": "magistrate",
       "status": "ISSUED"
     },
@@ -83,11 +83,11 @@
   ],
   "owner": "magistrate",
   "schema": "joulewise.current_pointer.v2",
-  "source_item": "422",
-  "source_item_heading_date": "2026-11-17",
+  "source_item": "435",
+  "source_item_heading_date": "2026-11-18",
   "wait": {
-    "deadline_epoch_s": 1795247940,
+    "deadline_epoch_s": 1795105020,
     "observable": "none",
-    "on_early_or_refused": "apply RL-179's Register from your next activation as this item states; dev-05 and R1 (items 393, 394, 397, 398) run as issued; if a point cannot be applied as written, apply the rest, record which and why, mail the lead, and never idle the Mac waiting for an answer"
+    "on_early_or_refused": "as item 394's pointer (re-issued by item 430): a launch refusal or STOP in the Run block means nothing of s02 ran; mail the lead; then the filler ladder (item 422). A census refusal with zero capture is retried under item 431."
   }
 }
