@@ -1044,6 +1044,32 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 
 <!-- RUN_STATE TYPED ITEMS: newest first. Add with scripts/run_state_add.py; never edit by hand. -->
 
+418. **Laptop lead (interactive, Opus 5.5), 2026-11-17 21:52:49 PST: PHYSICS-ONLY SCHEDULING (standing; the process audit's ruling): F0 spacing and age expiry removed; nothing waits for a person, the Air or a count; the MBP copies at once, always; product fillers before F0; items 393, 394, 397 and 398 run as issued**
+
+```pointer
+owner: magistrate
+wait: none
+deadline: 2026-11-20T23:59:00-08:00
+on_early_or_refused: dev-05-s01 (item 393), dev-05-s02 (item 394) and R1 (items 397, 398) run exactly as issued; this item changes only what runs when none of them can arm. If any point below cannot be applied as written, apply the rest, record which point and why, and mail the lead; never idle the Mac to wait for an answer
+next_observable: each pre-launch and Check item names the points of this item it used; the first F0 or F2 launched less than 14,400 s after the previous F0 t0; no gap over 30 min with nothing armed that lacks a physical reason in the record
+```
+
+```item
+{"expires_epoch_s": null, "issued_epoch_s": 1794981169, "number": 418, "owner": "magistrate", "schema": "joulewise.run_state_item.v1", "sets": [], "status": "ISSUED", "supersedes": ["348", "395", "409", "412", "413", "415"]}
+```
+
+- **Authority.** Ed, 2026-11-17: the only limits on how much the MBP measures are physical (item 415). The Mythos 5.2 process audit Ed asked for is done (`/Volumes/JW-EXT/scratch/mythos-process-audit/`: RULES.md, CUT.md, STRUCTURE.md, MIGRATION.md) and the lead adopts it. Ruling (lead; scheduling rules only, blind; deviation recorded). Item 415 left item 346's spacing, window and rule 7 "until the process audit rules on them"; this is that ruling.
+- **What does not change.** Items 393, 394, 397 and 398 run as issued, every line, except point (e). Blinding. Every pin and hash. Item 346 rule 6 (02:35:00 to 22:40:00 is what the bytes at `b2e01464d` do), rule 7 (a filler never costs a counted span its date), rule 9 (a running span is never aborted). The 300 s and 1,200 s close gaps (with the research lead). Every host-state stop: restore unproven, High Power marker, a live fence, a foreign process, power, disk, meter.
+- **(a) F0 spacing is removed.** Item 346 rule 5 is deleted whole: no 14,400 s between F0 t0s and no daily count. Delete the spacing test from the Start-and-check and Run script as item 415 deleted the cap. The t0 ledger stays as a record. Item 346 no longer expires by age (its Sun 22 Nov 11:51 expiry is withdrawn), and a moved W1-line head does not stop F0 at `b2e01464d`: it runs at that commit until the lead names a new pin. F0 is eligible whenever rule 6 and rule 7 hold, the close gap has passed, the host-state lines pass and nothing higher can arm now.
+- **(b) Nothing waits for a person after a refusal.** Item 346 rule 4's 20-minute wait for the lead's reply is deleted. After a refused arm of any span or session: record it, mail the lead once, and continue down the ladder at the next close gap. A lead reply that clears the refusal is acted on at the next close. A READY session whose arm refuses is not READY until a new READY record (item 397's clause 6 already says this for R1).
+- **(c) The MBP copies at once at every campaign close, permanently.** Item 348's 30-minute wait and item 395 (A)'s choice of copy owner by Air state are withdrawn. Item 409 no longer ends when R1 arms. The Air's state changes nothing on the MBP; the lead pulls copies afterwards. Originals stay in place (items 396, 399).
+- **(d) The ladder puts product before diagnostics.** When no counted span or READY session can arm now: an issued F2 piece or hp-02 span first, then F0. The magistrate may fill and issue F2 p02 to p04 and hp-02 from the committed drafts in any gap (item 388 fallback 4), reading any date window in those drafts as "any date" (they are outside every count, RL-175 D.3). An F2 or hp-02 item issued under this point does not expire by age; it is void only if its pin or kit hash changes. If piece 1's hand-read is not on main when p02 is the next eligible filler, the magistrate does it with the template as interim lead (item 388 fallback 6) in that gap; it holds nothing else.
+- **(e) Expiry by age, dev-05 only, used only if the chain slips.** The expiry of items 393 and 394 is the end of their date window (Wed 18 Nov 23:59:59 PST), not issue + 24 h. If the 24 h line is the only failing line of a Start and check or Run, record "EXPIRY BY AGE SUSPENDED (this item)" and proceed with every other line as issued. Item 397's clause (4) reads "item 394 goes VOID" on that basis. If the chain runs on time this point is never used.
+- **(f) No idle without a physical reason.** If at any close nothing can launch within 30 minutes, write the reason in one line. If the reason is not one of: power, disk, meter, an unclean host, a live foreign process, a refusal by the pinned launcher itself, or a registered date or batch window with no eligible filler that fits, then launch the lowest eligible filler and mail the lead the rule that stood in the way. This generalises item 415's last instruction.
+- **(g) Mail.** Counted spans and R1: one mail per close, as now. F0 and F2 closes: no mail per run; one summary a day, unless a judged verdict line changes from the previous run, which is mailed at once.
+- **(h) Record.** Each pre-launch and Check item says in one line which of points (a) to (g) it used. Nothing else is added to the per-run record.
+- **Lead lanes started by this item:** the ladder is stocked tonight (F2 queue b; F2 p02 to p04; hp-02); eleven questions go to the research lead as one batch (CUT.md section 3); three builder briefs (MIGRATION.md section 4).
+
 417. **Magistrate e0552b22 (headless, Opus 5.5), 2026-11-17 ~21:25 PST (`date`): item 415 APPLIED: F0 three-per-day check deleted from item 346 scripts (cap-free templates in custody); spacing, window and rule 7 kept; no F0 lawful before dev-05-s01**
 
 ```item

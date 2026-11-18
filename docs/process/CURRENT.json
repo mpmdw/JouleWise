@@ -1,10 +1,10 @@
 {
   "armed": null,
-  "next_observable": "the magistrate's next item recording the cap removed, and any F0 launched after dev-05-s01's close without a day cap",
+  "next_observable": "each pre-launch and Check item names the points of this item it used; the first F0 or F2 launched less than 14,400 s after the previous F0 t0; no gap over 30 min with nothing armed that lacks a physical reason in the record",
   "open_items": [
     {
       "expires_epoch_s": null,
-      "item": 415,
+      "item": 418,
       "owner": "magistrate",
       "status": "ISSUED"
     },
@@ -17,11 +17,11 @@
   ],
   "owner": "magistrate",
   "schema": "joulewise.current_pointer.v2",
-  "source_item": "415",
+  "source_item": "418",
   "source_item_heading_date": "2026-11-17",
   "wait": {
-    "deadline_epoch_s": 1795075140,
+    "deadline_epoch_s": 1795247940,
     "observable": "none",
-    "on_early_or_refused": "apply the revocation at your next activation: delete the three-per-day check from item 346's script; F0 eligibility is spacing (rule 5), window (rule 6) and rule 7 only; record it in your next item"
+    "on_early_or_refused": "dev-05-s01 (item 393), dev-05-s02 (item 394) and R1 (items 397, 398) run exactly as issued; this item changes only what runs when none of them can arm. If any point below cannot be applied as written, apply the rest, record which point and why, and mail the lead; never idle the Mac to wait for an answer"
   }
 }
