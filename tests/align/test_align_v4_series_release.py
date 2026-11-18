@@ -529,6 +529,12 @@ class SeriesReleaseTests(unittest.TestCase):
             ordinal = series.selected(series.candidate(), window)["sabotage_ordinals"][series.PAIRS[0]]
             instructed = Path("runs") / f"synthetic-{window}-{ordinal:02d}" / caller.DC_FILE
             finalize = harvest_offload.finalized_manifest
+            mirror = root / "synthetic-protected-mirror"
+            external = mirror / meter
+            external.parent.mkdir(parents=True)
+            init_git_fixture(mirror, "-q")
+            external.write_bytes(b'{"synthetic_canary":true}\n')
+            mirror_commit = commit_fixture(mirror, [meter.as_posix()])
 
             def with_markers(store):
                 if store.name == window:
@@ -536,6 +542,9 @@ class SeriesReleaseTests(unittest.TestCase):
                         path = store / name
                         path.parent.mkdir(parents=True, exist_ok=True)
                         path.write_bytes(b'{"synthetic_canary":true}\n')
+                    (store / "native-reference.jsonl").symlink_to(external)
+                    return finalize(store, mirror={"root": str(mirror), "identity": {"commit": mirror_commit}},
+                                    inputs=(external,))
                 return finalize(store)
 
             with patch.object(harvest_offload, "finalized_manifest", with_markers):
@@ -549,9 +558,10 @@ class SeriesReleaseTests(unittest.TestCase):
             loaded = False
             real_open, real_close, real_builtin_open = os.open, os.close, builtins.open
             real_verify, real_load = caller.RestoredFiles.verify_listed_inputs, caller.ReleasedInputs.load_members
+            real_git = caller.SeriesEvidence.git
 
             def observe(path):
-                if path == blocked or path == native or path.is_relative_to(native):
+                if path == blocked or path.is_relative_to(native) or path.is_relative_to(external.parent):
                     self.fail(f"opened a protected input: {path.name}")
                 if path.is_relative_to(root) and path.as_posix().endswith("/" + caller.DC_FILE):
                     (verification_opens if verifying else provider_opens).append(path)
@@ -590,11 +600,16 @@ class SeriesReleaseTests(unittest.TestCase):
                 loaded = True
                 return result
 
+            def observe_git(evidence, *args):
+                self.assertNotEqual(evidence.repo, mirror, "read a Git mirror for a protected target")
+                return real_git(evidence, *args)
+
             output = root / "report.json"
             with patch.object(os, "open", open_at), patch.object(os, "close", close), \
                     patch.object(builtins, "open", builtin_open), \
                     patch.object(caller.RestoredFiles, "verify_listed_inputs", verify), \
-                    patch.object(caller.ReleasedInputs, "load_members", load):
+                    patch.object(caller.ReleasedInputs, "load_members", load), \
+                    patch.object(caller.SeriesEvidence, "git", observe_git):
                 self.assertEqual(caller.main(["--measurement-root", str(root), "--output", str(output)]), 0)
                 with self.assertRaisesRegex(ValueError, "protected"):
                     caller.named_bytes(root, blocked.relative_to(root).as_posix())
@@ -756,20 +771,19 @@ class SeriesReleaseTests(unittest.TestCase):
     def test_unadmitted_listed_trace_refuses_without_opening_it(self):
         from scripts import align_v4_series_release as caller
 
-        for name in ("power_trace.csv", caller.DC_FILE):
-            with self.subTest(name=name), tempfile.TemporaryDirectory() as tmp:
-                root = Path(tmp).resolve()
-                store = root / "series/restored/C8"
-                trace = store / "runs/synthetic-instructed" / name
-                trace.parent.mkdir(parents=True)
-                trace.write_bytes(b"forbidden synthetic trace")
-                manifest = describe(store, "finalized_manifest.json", harvest_offload.finalized_manifest(store),
-                                    canonical=True)
-                record = SimpleNamespace(window="C8", finalized_manifest_sha256=manifest["sha256"])
-                files = caller.RestoredFiles(root, record, {"trace_layout": caller.LAYOUT, "hazard_journal": None})
-                with patch.object(caller, "named_bytes", side_effect=AssertionError("opened an unadmitted trace")), \
-                        self.assertRaisesRegex(ValueError, "no authorized release reader"):
-                    files.verify_listed_inputs()
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp).resolve()
+            store = root / "series/restored/C8"
+            trace = store / "runs/synthetic-instructed/power_trace.csv"
+            trace.parent.mkdir(parents=True)
+            trace.write_bytes(b"forbidden synthetic trace")
+            manifest = describe(store, "finalized_manifest.json", harvest_offload.finalized_manifest(store),
+                                canonical=True)
+            record = SimpleNamespace(window="C8", finalized_manifest_sha256=manifest["sha256"])
+            files = caller.RestoredFiles(root, record, {"trace_layout": caller.LAYOUT, "hazard_journal": None})
+            with patch.object(caller, "open_named_bytes", side_effect=AssertionError("opened an unadmitted trace")), \
+                    self.assertRaisesRegex(ValueError, "no authorized release reader"):
+                files.verify_listed_inputs()
 
     def test_receipt_from_after_t3_cannot_replace_the_c1_predecessors_receipt(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -975,7 +989,7 @@ class SeriesReleaseTests(unittest.TestCase):
             root = Path(tmp)
             manifest = stored_series(root, spoof=True)
             trace_opens = []
-            real = caller.named_bytes
+            real = caller.open_named_bytes
             selected = series.selected(manifest, "C1")
             benign_ordinal = next(a["ordinal"] for a in selected["members"]
                                   if a["ordinal"] in series.FRESH_ORDINALS and a["condition"] == "benign")
@@ -990,14 +1004,14 @@ class SeriesReleaseTests(unittest.TestCase):
                 return real(source_root, path)
 
             accepted = root / "report.json"
-            with patch.object(caller, "named_bytes", side_effect=observe):
+            with patch.object(caller, "open_named_bytes", side_effect=observe):
                 self.assertEqual(caller.main(["--measurement-root", str(root), "--output", str(accepted)]), 0)
             self.assertEqual(len(trace_opens), 1)
             report = json.loads(accepted.read_bytes())[seal.RL176]
             self.assertIn("dc_in", report["aligned_power"]["profiles"])
             metadata = {path: (root / path).read_bytes() for path in caller.RELEASE_METADATA}
             inputs = caller.ReleasedInputs(root.resolve(), metadata)
-            with patch.object(caller, "named_bytes", side_effect=observe):
+            with patch.object(caller, "open_named_bytes", side_effect=observe):
                 members = inputs.load_members()
             self.assertEqual(len(trace_opens), 1)
             instructed = next(m.episode for m in members if m.episode.condition == "sabotage")
@@ -1015,7 +1029,7 @@ class SeriesReleaseTests(unittest.TestCase):
             with corrupted.open("ab") as stored:
                 stored.write(b"changed after finalization\n")
             partial = root / "partial.json"
-            with patch.object(caller, "named_bytes", side_effect=observe), self.assertRaises(SystemExit) as refusal:
+            with patch.object(caller, "open_named_bytes", side_effect=observe), self.assertRaises(SystemExit) as refusal:
                 caller.main(["--measurement-root", str(root), "--output", str(partial)])
             self.assertEqual(refusal.exception.code, 1)
             self.assertEqual(len(trace_opens), 1)

@@ -85,7 +85,7 @@ class ReleaseSourceFinder:
 # finder while releasing so late imports cannot execute unsigned code.
 _release_sources = ReleaseSourceFinder()
 with _release_sources.installed():
-    from joulewise.align.apple import harvest_offload, light_triage, rl176, s_rows
+    from joulewise.align.apple import harvest_offload, km003c, light_triage, rl176, s_rows
     from joulewise.align.apple import v4_contention, v4_desk_seal as seal, v4_registration
     from joulewise.align.apple.workload import read_episode_bundle
     from joulewise.align.records import ClockMapping, PowerTrace, from_json
@@ -108,6 +108,15 @@ COMPANION_PRINTS = ("S_a4", "S_w", "benign_slopes")
 SOC_RAILS = frozenset(("powermetrics", name) for name in ("cpu_power", "gpu_power", "ane_power"))
 RAIL_COLUMNS = {"timestamp_s", "power_w", "source", "rail"}
 RAIL_INTERVAL_COLUMNS = {"interval_start_s", "interval_end_s"}
+METER_DIRECTORY = tuple(Path(km003c.REQUIREMENT["custody_directory"]).parts)
+PROTECTED_ENERGY_NAMES = {"align_dc_in", "dc_in", "benign_dc", "wall_meter", "km003c", "system_total"}
+
+
+def protected_path(path):
+    parts = Path(path.casefold()).parts
+    native_meter = any(parts[i:i + len(METER_DIRECTORY)] == METER_DIRECTORY for i in range(len(parts)))
+    return native_meter or any(part.partition(".")[0].replace("-", "_") in PROTECTED_ENERGY_NAMES
+                               for part in parts)
 
 
 def input_parts(relative):
@@ -136,6 +145,11 @@ def named_directory(root, parts):
 
 
 def named_bytes(root, relative):
+    packet.require(not protected_path(relative), "protected input requires the authorized benign provider")
+    return open_named_bytes(root, relative)
+
+
+def open_named_bytes(root, relative):
     """Open exactly one readable, unlinked regular file below a real root."""
     *parents, name = input_parts(relative)
     with named_directory(root, parents) as directory:
@@ -159,7 +173,7 @@ def require_executing_bindings(receipt):
     # Check the signed source inventory before any member file is opened.
     # This includes registered lazy imports that have not executed yet.
     for relative, expected in bindings.items():
-        raw = named_bytes(ROOT, relative)
+        raw = open_named_bytes(ROOT, relative)
         packet.require(packet.digest(raw) == expected, "executing release source differs from the receipt")
         if relative == CALLER_PATH:
             code = compile(raw, _CALLER_CODE.co_filename, "exec", dont_inherit=True)
@@ -189,6 +203,9 @@ def require_executing_bindings(receipt):
 
 class SeriesEvidence(packet.GitEvidence):
     """Verify capture inventories without opening embedded capture bytes."""
+
+    def git(self, *args):
+        return super().git("--no-replace-objects", *args)
 
     def raw_evidence(self, commit, record_path, descriptor):
         packet.require(isinstance(descriptor, dict) and "locator" in descriptor,
@@ -262,25 +279,26 @@ class BoundInput:
     sha256: str
 
 
+def manifest_path(root, prefix, name):
+    packet.require(isinstance(name, str), "manifest input path is missing")
+    path = Path(name)
+    if path.is_absolute():
+        packet.require(path.as_posix() == name and path.is_relative_to(root),
+                       "manifest input is outside the authenticated measurement root")
+        relative = path.relative_to(root).as_posix()
+    else:
+        input_parts(name)
+        relative = f"{prefix}/{name}"
+    input_parts(relative)
+    return relative
+
+
 def manifest_inputs(manifest, root, prefix):
     """Collect keyed file tables and explicit descriptors at any depth."""
     bindings = {}
 
-    def relative_path(name):
-        packet.require(isinstance(name, str), "manifest input path is missing")
-        path = Path(name)
-        if path.is_absolute():
-            packet.require(path.as_posix() == name and path.is_relative_to(root),
-                           "manifest input is outside the authenticated measurement root")
-            relative = path.relative_to(root).as_posix()
-        else:
-            input_parts(name)
-            relative = f"{prefix}/{name}"
-        input_parts(relative)
-        return relative
-
     def add(name, descriptor):
-        relative = relative_path(name)
+        relative = manifest_path(root, prefix, name)
         sha256 = descriptor.get("sha256", descriptor.get("digest"))
         size = descriptor.get("size")
         packet.require(v4_registration.is_digest(sha256) and descriptor.get("digest", sha256) == sha256
@@ -307,13 +325,48 @@ def manifest_inputs(manifest, root, prefix):
         elif isinstance(node, list):
             pending.extend(node)
     for name, declared in closure["inputs"].items():
-        packet.require(Path(name).is_absolute() and declared["real"] == name and relative_path(name) in bindings,
+        packet.require(Path(name).is_absolute() and declared["real"] == name
+                       and manifest_path(root, prefix, name) in bindings,
                        "declared input does not name a byte-bound regular path")
     return bindings
 
 
+@dataclass(frozen=True)
+class ClosureLink:
+    hops: tuple[tuple[str, str], ...]
+    target: str
+    mirror_path: str | None
+
+
+def manifest_links(manifest, root, prefix):
+    """Plan the exact link hops from authenticated text, without resolving any file."""
+    closure = manifest["closure"]
+    for name, row in closure["links"].items():
+        path = manifest_path(root, prefix, name)
+        hops = row["hops"]
+        packet.require(isinstance(hops, list) and hops and len(hops) <= harvest_offload.MAX_LINK_HOPS
+                       and manifest["entries"].get(name) == {"link": hops[0]}, "unbound closure link")
+        planned = []
+        for hop in hops:
+            packet.require(isinstance(hop, str) and hop and ".." not in Path(hop).parts, "unsafe closure hop")
+            planned.append((path, hop))
+            path = manifest_path(root, prefix, (root / path).parent.joinpath(hop).as_posix())
+        packet.require(str(root / path) == row["target"], "closure link target disagrees with its hops")
+        mirror_path = None
+        if row["class"] == "mirror":
+            mirror_path = row["mirror_path"]
+            input_parts(mirror_path)
+            mirror_root = Path(closure["mirror"]["root"])
+            packet.require(mirror_root.is_absolute() and str(mirror_root / mirror_path) == row["target"],
+                           "closure target differs from its mirror path")
+        yield ClosureLink(tuple(planned), path, mirror_path)
+
+
 def bound_bytes(root, bound):
-    raw = named_bytes(root, bound.path)
+    return require_bound_bytes(named_bytes(root, bound.path), bound)
+
+
+def require_bound_bytes(raw, bound):
     packet.require((bound.size is None or len(raw) == bound.size) and packet.digest(raw) == bound.sha256,
                    "restored file differs from record manifest")
     return raw
@@ -323,8 +376,7 @@ def verify_ancillary_input(root, bound):
     """Verify a listed ancillary input in an admitted plain representation."""
     path = bound.path
     stems = {part.partition(".")[0].replace("-", "_") for part in path.casefold().split("/")}
-    packet.require(not stems.intersection({"power_trace", "align_dc_in", "dc_in", "system_total",
-                                          "transcript", "transcripts", "restricted", "custody", "night_custody",
+    packet.require(not stems.intersection({"power_trace", "transcript", "transcripts", "restricted", "custody", "night_custody",
                                           "night_archive", "sealed"}), "manifest input has no authorized release reader")
     packet.require(Path(path).suffix.casefold() not in {".zst", ".gz", ".bz2", ".xz", ".zip", ".lz4", ".7z"},
                    "manifest lists a compressed file")
@@ -375,6 +427,9 @@ class RestoredFiles:
         harvest_offload._validate_finalized(manifest)
         self.entries = manifest["entries"]
         self.listed = manifest_inputs(manifest, root, self.prefix)
+        self.mirror = manifest["closure"]["mirror"]
+        self.links = tuple(manifest_links(manifest, root, self.prefix))
+        self.protected = self.protected_bindings()
         self.read_inputs = set()
         self.stems = defaultdict(set)
         for name in self.entries:
@@ -394,6 +449,28 @@ class RestoredFiles:
         parent, _, filename = name.rpartition("/")
         return parent.casefold(), filename.partition(".")[0].casefold()
 
+    def protected_bindings(self):
+        chains = [{link.target, *(path for path, _ in link.hops)} for link in self.links]
+        paths = {*self.listed, *(f"{self.prefix}/{name}" for name in self.entries), *set().union(*chains)}
+        protected = {path for path in paths if protected_path(path)}
+        while True:
+            expanded = protected.union(*(chain for chain in chains if chain & protected))
+            if expanded == protected:
+                break
+            protected = expanded
+        protected_links = {link.hops[0][0] for link in self.links if link.target in protected}
+        for link in self.links:
+            if link.target in protected:
+                packet.require(link.target in self.listed, "protected link target lacks a manifest digest")
+        for name, row in self.entries.items():
+            path = f"{self.prefix}/{name}"
+            if path in protected and row != {"directory": True}:
+                packet.require(path in self.listed or path in protected_links, "protected path lacks a manifest digest")
+        return protected
+
+    def is_protected(self, path):
+        return path in self.protected or protected_path(path)
+
     def verify_inventory(self):
         # Check directory entry names without opening or following any of the
         # unprojected files. The finalizer excludes its own manifest from entries.
@@ -406,10 +483,14 @@ class RestoredFiles:
                 directories.add(path)
                 children.setdefault(path, set())
         packet.require(directories == children.keys(), "restore inventory has an unbound parent directory")
-        prefix = input_parts(self.prefix)
         for parent, expected in children.items():
-            with named_directory(self.root, (*prefix, *Path(parent).parts)) as directory:
-                packet.require(set(os.listdir(directory)) == expected, "restored names differ from finalized inventory")
+            relative = (Path(self.prefix) / parent).as_posix()
+            if self.is_protected(relative):
+                continue
+            with named_directory(self.root, input_parts(relative)) as directory:
+                actual = set(os.listdir(directory))
+            unprotected = lambda names: {name for name in names if not self.is_protected(f"{relative}/{name}")}
+            packet.require(unprotected(actual) == unprotected(expected), "restored names differ from finalized inventory")
 
     def bind(self, name, *, optional=False):
         # Only the canonical representation belongs to this input. Compare
@@ -427,15 +508,48 @@ class RestoredFiles:
 
     def read_bound(self, bound):
         relative = f"{self.prefix}/{bound.path}"
+        packet.require(not self.is_protected(relative), "protected input requires the authorized benign provider")
         listed = self.listed[relative]
         raw = bound_bytes(self.root, listed)
         parsed = plain_input(bound.path, raw)
         self.read_inputs.add(relative)
         return raw, parsed
 
+    def verify_mirror_target(self, link):
+        packet.require(not self.is_protected(link.target), "protected mirror target cannot be opened")
+        mirror_root = Path(self.mirror["root"])
+        relative = mirror_root.relative_to(self.root)
+        packet.require(not self.is_protected(relative.as_posix()), "protected mirror path cannot be opened")
+        with named_directory(self.root, relative.parts):
+            evidence = SeriesEvidence(mirror_root)
+            packet.require(evidence.git("rev-parse", "--show-toplevel").decode().strip() == str(mirror_root),
+                           "closure mirror does not bind the named Git worktree")
+            identity = self.mirror["identity"]
+            commit = identity.get("commit", identity.get("head"))
+            packet.require(identity.get("head", commit) == commit, "closure mirror identities disagree")
+            committed = evidence.read(evidence.commit(commit), link.mirror_path)
+        reference = BoundInput(link.target, len(committed), packet.digest(committed))
+        existing = self.listed.get(link.target)
+        packet.require(existing is None or (existing.sha256 == reference.sha256
+                                            and existing.size in (None, reference.size)),
+                       "closure mirror target conflicts with its listed digest")
+        verify_ancillary_input(self.root, reference)
+
     def verify_listed_inputs(self):
+        mirror_files = set()
+        for link in self.links:
+            if self.is_protected(link.target):
+                continue
+            for path, expected in link.hops:
+                *parents, name = input_parts(path)
+                with named_directory(self.root, parents) as directory:
+                    packet.require(name in os.listdir(directory) and os.readlink(name, dir_fd=directory) == expected,
+                                   "restored link differs from its manifest binding")
+            if link.mirror_path is not None:
+                self.verify_mirror_target(link)
+                mirror_files.add(link.target)
         for path, bound in self.listed.items():
-            if path not in self.read_inputs:
+            if not self.is_protected(path) and path not in self.read_inputs and path not in mirror_files:
                 verify_ancillary_input(self.root, bound)
 
     def bind_bundle(self, run_id, name, *, optional=False):
@@ -681,7 +795,12 @@ class ReleasedInputs:
                  if self.dc_inputs is None else self.dc_inputs[key])
         if bound is None:
             return None
-        _, data = assignment.files.read_bound(bound)
+        files = assignment.files
+        packet.require(bound.path == f"runs/{assignment.run_id}/{DC_FILE}",
+                       "provider input is outside the bound benign path")
+        relative = f"{files.prefix}/{bound.path}"
+        raw = require_bound_bytes(open_named_bytes(files.root, relative), files.listed[relative])
+        data = plain_input(bound.path, raw)
         trace = from_json(PowerTrace, json.dumps(data["trace"]))
         mapping = from_json(ClockMapping, json.dumps(data["clock_mapping"])) if data.get("clock_mapping") else None
         packet.require((trace.source, trace.channel) == rl176.DC, "wrong separately bound DC channel")
