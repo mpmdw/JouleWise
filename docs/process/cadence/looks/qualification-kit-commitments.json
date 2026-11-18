@@ -1,0 +1,13 @@
+{
+  "lm-qual-01": {
+    "source": {
+      "commit": "d7c436930ec1a3a29b262990837e6154058b5add",
+      "path": "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/item-drafts-1118/STATUS.md"
+    },
+    "kit_sha256_by_block": {
+      "qual-01": "35ded7c83290f24306a646a503647a2af6e3f725708507f27e7502fa4d06fdd2",
+      "qual-02": "69ba7cfe616f3d273f34dcd98a2ab7ce8b3c73609256b441cc73ea362eaa32c5",
+      "qual-03": "d7e6fda18d3213678931b29fc7fa12b0710204c627ea07d3cf456d8e4150e021"
+    }
+  }
+}

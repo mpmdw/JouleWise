@@ -17,6 +17,8 @@ ROOT = Path(__file__).resolve().parents[1]
 LOOKS = ROOT / "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/looks"
 MANIFEST = LOOKS / "lm-qual-01.manifest.json"
 LEDGER = ROOT / "docs/process/cadence/looks/LOOKS.json"
+KIT_COMMITMENTS = LEDGER.with_name("qualification-kit-commitments.json")
+OBSOLETE_KIT_PINS = ROOT / "docs/run_reports/2026-11-18-lm-qual-01-audit-1-obsolete-kit-pins.json"
 PLACEHOLDER = b'"PENDING:CODE"'
 
 
@@ -56,6 +58,60 @@ class QualificationRegistrationTests(unittest.TestCase):
             "sha256": hashlib.sha256(self.registered).hexdigest(),
             "status": "registered",
         }])
+
+    def test_registered_kit_pins_match_independent_source(self):
+        registered = validate_registration(self.registered)
+        source = json.loads(KIT_COMMITMENTS.read_bytes())[registered["look_id"]]
+        blocks = registered["reads"]["blocks"]
+        self.assertEqual(len(blocks), len(source["kit_sha256_by_block"]))
+        self.assertEqual(
+            {block["block_id"]: block["kit_sha256"] for block in blocks},
+            source["kit_sha256_by_block"],
+        )
+
+    def test_each_obsolete_kit_refuses_registration_and_finalization(self):
+        registered = json.loads(self.registered)
+        obsolete = json.loads(OBSOLETE_KIT_PINS.read_bytes())["kit_sha256_by_block"]
+        for block in registered["reads"]["blocks"]:
+            block_id = block["block_id"]
+            with self.subTest(block_id=block_id):
+                current_digest = block["kit_sha256"].encode()
+                bad_digest = obsolete[block_id].encode()
+                self.assertNotEqual(current_digest, bad_digest)
+                stale = self.registered.replace(current_digest, bad_digest, 1)
+                with self.assertRaisesRegex(ManifestError, rf"{block_id}.*kit SHA-256"):
+                    validate_registration(stale)
+                with self.assertRaisesRegex(ManifestError, rf"{block_id}.*kit SHA-256"):
+                    validate_final(stale, _final_bytes(stale))
+                with self.assertRaisesRegex(ManifestError, "differs outside"):
+                    validate_final(self.registered, self.final.replace(current_digest, bad_digest, 1))
+
+    def test_kit_commitments_are_bound_to_the_exact_block_set_and_id(self):
+        registered = json.loads(self.registered)
+        first, second, _ = registered["reads"]["blocks"]
+
+        for source, replacement, message in (
+            (first["kit_sha256"], second["kit_sha256"], "qual-01.*kit SHA-256"),
+            ('"block_id": "qual-02"', '"block_id": "qual-01"', "duplicate qualification block"),
+            ('"block_id": "qual-02"', '"block_id": "qual-04"', "qualification block set"),
+            ('"look_id": "lm-qual-01"', '"look_id": "lm-qual-02"', "no independent qualification kit commitments"),
+        ):
+            with self.subTest(replacement=replacement):
+                changed = self.registered.replace(source.encode(), replacement.encode(), 1)
+                with self.assertRaisesRegex(ManifestError, message):
+                    validate_registration(changed)
+
+    def test_first_span_hand_read_covers_checks_and_prior_read(self):
+        hand_read = validate_registration(self.registered)["reads"]["first_span_hand_read"]
+        for clause in (
+            "capture leg's G0 record",
+            "each consumer's release against the span reference and its wait",
+            "each leg's decode count against its own cap (4096, 3724 or 3151)",
+            "hand-read from an earlier filler or pilot",
+            "both leg types at q0 on this pin",
+        ):
+            with self.subTest(clause=clause):
+                self.assertIn(clause, hand_read)
 
     def test_registered_hash_slots_and_complete_synthetic_final(self):
         registered = validate_registration(self.registered)

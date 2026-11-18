@@ -585,8 +585,10 @@ now has an explicit disposition:
 ## Queue Maintenance
 
 - **[AGENT] `lm-qual-01` registration (2026-11-18).** Manifest, ledger row,
-  and hash-only finalization validator are on the Tier 2 draft lane. Lead
-  review and admission to main precede the first qualification receipt.
+  and hash-only finalization validator are on the Tier 2 draft lane. Audit
+  round 1 added independent kit commitment validation and the full hand-read
+  clause. Lead review and admission to main precede the first qualification
+  receipt.
   [Build handoff](docs/run_reports/2026-11-18-lm-qual-01-registration.md).
 
 - **[AGENT] Typed RUN_STATE cutover (2026-11-17).** The lead recorded a

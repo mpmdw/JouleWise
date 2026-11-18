@@ -14,8 +14,10 @@ says how to get back files removed from `main` in the 2026-11-06 prune.
 
 **Qualification registration build (2026-11-18, [AGENT]).** The
 `lm-qual-01` scientific registration and matching ledger row are on
-`align/2026-11-18-lm-qual-01-registered` for Tier 2 review. RL-181 §1.0
-requires the registration on main before the first qualification receipt.
+`align/2026-11-18-lm-qual-01-registered` for Tier 2 review. Audit round 1
+updated the three kit commitments against the pinned source and completed
+the hand-read clause. RL-181 §1.0 requires the registration on main
+before the first qualification receipt.
 See the [run report](docs/run_reports/2026-11-18-lm-qual-01-registration.md).
 
 **Block-5 history: the magistrate's hand-off of 2026-10-10 08:40 PDT (activation cbe4230e).** It was the step list for block-5 collection, which closed on 2026-10-12 (item 31). The numbered items below grew from it; the current state is the top numbered item, not this block.

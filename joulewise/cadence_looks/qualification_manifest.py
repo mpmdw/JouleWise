@@ -11,6 +11,7 @@ import sys
 
 _ROOT = Path(__file__).resolve().parents[2]
 _SCHEMA = _ROOT / "docs/process/cadence/looks/look_manifest.v2.schema.json"
+_KIT_COMMITMENTS = _SCHEMA.with_name("qualification-kit-commitments.json")
 _V2 = "joulewise.cadence_look_manifest.v2"
 _PENDING = "PENDING:CODE"
 _OPEN = re.compile(r"\bOPEN-[0-9]+\b")
@@ -119,8 +120,28 @@ def _parse(payload):
     return document, pins
 
 
+def _check_registered_kits(document):
+    # This roster comes from the reviewed kit source for the look. Reading it
+    # independently prevents a well-formed manifest from authenticating itself.
+    look_id = document["look_id"]
+    record = _decode(_KIT_COMMITMENTS.read_bytes()).get(look_id)
+    if record is None:
+        raise ManifestError(f"{look_id}: no independent qualification kit commitments")
+    expected = record["kit_sha256_by_block"]
+    blocks = document["reads"]["blocks"]
+    actual = {block["block_id"]: block["kit_sha256"] for block in blocks}
+    if len(actual) != len(blocks):
+        raise ManifestError("duplicate qualification block ID")
+    if actual.keys() != expected.keys():
+        raise ManifestError(f"{look_id}: qualification block set differs from the kit commitments")
+    for block_id, digest in actual.items():
+        if digest != expected[block_id]:
+            raise ManifestError(f"{block_id}: kit SHA-256 differs from the kit commitments")
+
+
 def _registered(payload):
     document, pins = _parse(payload)
+    _check_registered_kits(document)
     if not pins or any(value != _PENDING for value in pins.values()):
         raise ManifestError("every registered code and schema hash must be PENDING:CODE")
     sections = payload.split(b'"PENDING:CODE"')

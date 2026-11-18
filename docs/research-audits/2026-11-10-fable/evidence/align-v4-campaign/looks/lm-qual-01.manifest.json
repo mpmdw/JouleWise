@@ -36,7 +36,7 @@
         "block_id": "qual-01",
         "phase": "qualification",
         "role": "describe",
-        "kit_sha256": "fe5b692a39b8646b81fc4e7b738a1802ba00ab51bd09158d1525e2bec0ccbac4",
+        "kit_sha256": "35ded7c83290f24306a646a503647a2af6e3f725708507f27e7502fa4d06fdd2",
         "spans": [
           "qual-01-s01",
           "qual-01-s02"
@@ -51,7 +51,7 @@
         "block_id": "qual-02",
         "phase": "qualification",
         "role": "describe",
-        "kit_sha256": "a1b964faec281cf351e6387759a84178097ad6f8c94011a0856647a3197e2742",
+        "kit_sha256": "69ba7cfe616f3d273f34dcd98a2ab7ce8b3c73609256b441cc73ea362eaa32c5",
         "spans": [
           "qual-02-s01",
           "qual-02-s02"
@@ -66,7 +66,7 @@
         "block_id": "qual-03",
         "phase": "qualification",
         "role": "describe",
-        "kit_sha256": "f977eff89859d3111b9dee7afee7e9ac0c5232463dd7f980b2dfa7015b4ba4b1",
+        "kit_sha256": "d7e6fda18d3213678931b29fc7fa12b0710204c627ea07d3cf456d8e4150e021",
         "spans": [
           "qual-03-s01",
           "qual-03-s02"
@@ -103,7 +103,7 @@
       "Desk-final record",
       "Typed Q1 record"
     ],
-    "first_span_hand_read": "The second hand-read on qual-01-s01 covers the capture and consumer types at q0, unless both were previously shown on this pin at q0. qual-01-s02 waits for it and is re-dated under RL-175 C.3 if it misses its latest t0."
+    "first_span_hand_read": "The magistrate uses the hand-read template and operational records during the close interval of qual-01-s01. Check the capture leg's G0 record, each consumer's release against the span reference and its wait, and each leg's decode count against its own cap (4096, 3724 or 3151). qual-01-s02 can arm once the hand-read passes. If the hand-read has not passed by the latest t0 for qual-01-s02 under F-1 rule 3, re-date s02 under RL-175 C.3 and keep the half that ran. A hand-read from an earlier filler or pilot discharges the gate if the lead shows that read before Friday and the run exercised both leg types at q0 on this pin."
   },
   "inclusion": {
     "rules": [
