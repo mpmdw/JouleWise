@@ -1,0 +1,805 @@
+{
+  "runner_pin": "2d347f721552fe03bdd19f113e7bad7a7c24908e",
+  "base_kit_sha256": "651d1815ca87ee23640a8db1483d4ecaf42d70d029855ad03c14bfa076116f2b",
+  "kits": [
+    {
+      "kit": "f2-stab-01",
+      "master_seed": 2026112460,
+      "candidates_tested": 1017,
+      "kit_sha256": "dbad9c7b79088bb6f06aac1c1148c3631a0c616fd2ece596bab0f56657ce70fe",
+      "first_differing_leg_index_zero_based": 0,
+      "validate_kit": [
+        {
+          "batch_window": "02:00-02:35",
+          "output": {
+            "base_kit_sha256": "651d1815ca87ee23640a8db1483d4ecaf42d70d029855ad03c14bfa076116f2b",
+            "campaign_id": "f2-stab-01",
+            "frozen_commit": "2d347f721552fe03bdd19f113e7bad7a7c24908e",
+            "frozen_paths_verified": true,
+            "kit_sha256": "dbad9c7b79088bb6f06aac1c1148c3631a0c616fd2ece596bab0f56657ce70fe",
+            "legs": 12,
+            "ok": true,
+            "positional_cells_verified": true
+          }
+        },
+        {
+          "batch_window": "13:14-13:15",
+          "output": {
+            "base_kit_sha256": "651d1815ca87ee23640a8db1483d4ecaf42d70d029855ad03c14bfa076116f2b",
+            "campaign_id": "f2-stab-01",
+            "frozen_commit": "2d347f721552fe03bdd19f113e7bad7a7c24908e",
+            "frozen_paths_verified": true,
+            "kit_sha256": "dbad9c7b79088bb6f06aac1c1148c3631a0c616fd2ece596bab0f56657ce70fe",
+            "legs": 12,
+            "ok": true,
+            "positional_cells_verified": true
+          }
+        }
+      ],
+      "worst_case_s": 5850,
+      "validated_queue_fixture": {
+        "ok": true,
+        "plan_ids": [
+          "cq-f2-stab-01-l001-a1",
+          "cq-f2-stab-01-l002-a1",
+          "cq-f2-stab-01-l003-a1",
+          "cq-f2-stab-01-l004-a1",
+          "cq-f2-stab-01-l005-a1",
+          "cq-f2-stab-01-l006-a1",
+          "cq-f2-stab-01-l007-a1",
+          "cq-f2-stab-01-l008-a1",
+          "cq-f2-stab-01-l009-a1",
+          "cq-f2-stab-01-l010-a1",
+          "cq-f2-stab-01-l011-a1",
+          "cq-f2-stab-01-l012-a1"
+        ],
+        "queue_id": "cq-f2-stab-01",
+        "spans": 12
+      }
+    },
+    {
+      "kit": "f2-stab-02",
+      "master_seed": 2026112341,
+      "candidates_tested": 898,
+      "kit_sha256": "1fe8dd1d0fb60fe1d481ecb0d4358fda595668c1e889a35a75695e290fcad505",
+      "first_differing_leg_index_zero_based": 0,
+      "validate_kit": [
+        {
+          "batch_window": "02:00-02:35",
+          "output": {
+            "base_kit_sha256": "651d1815ca87ee23640a8db1483d4ecaf42d70d029855ad03c14bfa076116f2b",
+            "campaign_id": "f2-stab-02",
+            "frozen_commit": "2d347f721552fe03bdd19f113e7bad7a7c24908e",
+            "frozen_paths_verified": true,
+            "kit_sha256": "1fe8dd1d0fb60fe1d481ecb0d4358fda595668c1e889a35a75695e290fcad505",
+            "legs": 12,
+            "ok": true,
+            "positional_cells_verified": true
+          }
+        },
+        {
+          "batch_window": "13:14-13:15",
+          "output": {
+            "base_kit_sha256": "651d1815ca87ee23640a8db1483d4ecaf42d70d029855ad03c14bfa076116f2b",
+            "campaign_id": "f2-stab-02",
+            "frozen_commit": "2d347f721552fe03bdd19f113e7bad7a7c24908e",
+            "frozen_paths_verified": true,
+            "kit_sha256": "1fe8dd1d0fb60fe1d481ecb0d4358fda595668c1e889a35a75695e290fcad505",
+            "legs": 12,
+            "ok": true,
+            "positional_cells_verified": true
+          }
+        }
+      ],
+      "worst_case_s": 5850,
+      "validated_queue_fixture": {
+        "ok": true,
+        "plan_ids": [
+          "cq-f2-stab-02-l001-a1",
+          "cq-f2-stab-02-l002-a1",
+          "cq-f2-stab-02-l003-a1",
+          "cq-f2-stab-02-l004-a1",
+          "cq-f2-stab-02-l005-a1",
+          "cq-f2-stab-02-l006-a1",
+          "cq-f2-stab-02-l007-a1",
+          "cq-f2-stab-02-l008-a1",
+          "cq-f2-stab-02-l009-a1",
+          "cq-f2-stab-02-l010-a1",
+          "cq-f2-stab-02-l011-a1",
+          "cq-f2-stab-02-l012-a1"
+        ],
+        "queue_id": "cq-f2-stab-02",
+        "spans": 12
+      }
+    },
+    {
+      "kit": "f2-stab-03",
+      "master_seed": 2026112481,
+      "candidates_tested": 1038,
+      "kit_sha256": "ac4b303e228233765efda120b2d63f2f6e59d7f8565c4b913880c4a1aa1dc404",
+      "first_differing_leg_index_zero_based": 0,
+      "validate_kit": [
+        {
+          "batch_window": "02:00-02:35",
+          "output": {
+            "base_kit_sha256": "651d1815ca87ee23640a8db1483d4ecaf42d70d029855ad03c14bfa076116f2b",
+            "campaign_id": "f2-stab-03",
+            "frozen_commit": "2d347f721552fe03bdd19f113e7bad7a7c24908e",
+            "frozen_paths_verified": true,
+            "kit_sha256": "ac4b303e228233765efda120b2d63f2f6e59d7f8565c4b913880c4a1aa1dc404",
+            "legs": 12,
+            "ok": true,
+            "positional_cells_verified": true
+          }
+        },
+        {
+          "batch_window": "13:14-13:15",
+          "output": {
+            "base_kit_sha256": "651d1815ca87ee23640a8db1483d4ecaf42d70d029855ad03c14bfa076116f2b",
+            "campaign_id": "f2-stab-03",
+            "frozen_commit": "2d347f721552fe03bdd19f113e7bad7a7c24908e",
+            "frozen_paths_verified": true,
+            "kit_sha256": "ac4b303e228233765efda120b2d63f2f6e59d7f8565c4b913880c4a1aa1dc404",
+            "legs": 12,
+            "ok": true,
+            "positional_cells_verified": true
+          }
+        }
+      ],
+      "worst_case_s": 5850,
+      "validated_queue_fixture": {
+        "ok": true,
+        "plan_ids": [
+          "cq-f2-stab-03-l001-a1",
+          "cq-f2-stab-03-l002-a1",
+          "cq-f2-stab-03-l003-a1",
+          "cq-f2-stab-03-l004-a1",
+          "cq-f2-stab-03-l005-a1",
+          "cq-f2-stab-03-l006-a1",
+          "cq-f2-stab-03-l007-a1",
+          "cq-f2-stab-03-l008-a1",
+          "cq-f2-stab-03-l009-a1",
+          "cq-f2-stab-03-l010-a1",
+          "cq-f2-stab-03-l011-a1",
+          "cq-f2-stab-03-l012-a1"
+        ],
+        "queue_id": "cq-f2-stab-03",
+        "spans": 12
+      }
+    },
+    {
+      "kit": "f2-stab-04",
+      "master_seed": 2026111676,
+      "candidates_tested": 233,
+      "kit_sha256": "494739dedbc07f2ee3a02b1e5f9561bb4812d765c7630e6931c24ea138525bff",
+      "first_differing_leg_index_zero_based": 0,
+      "validate_kit": [
+        {
+          "batch_window": "02:00-02:35",
+          "output": {
+            "base_kit_sha256": "651d1815ca87ee23640a8db1483d4ecaf42d70d029855ad03c14bfa076116f2b",
+            "campaign_id": "f2-stab-04",
+            "frozen_commit": "2d347f721552fe03bdd19f113e7bad7a7c24908e",
+            "frozen_paths_verified": true,
+            "kit_sha256": "494739dedbc07f2ee3a02b1e5f9561bb4812d765c7630e6931c24ea138525bff",
+            "legs": 12,
+            "ok": true,
+            "positional_cells_verified": true
+          }
+        },
+        {
+          "batch_window": "13:14-13:15",
+          "output": {
+            "base_kit_sha256": "651d1815ca87ee23640a8db1483d4ecaf42d70d029855ad03c14bfa076116f2b",
+            "campaign_id": "f2-stab-04",
+            "frozen_commit": "2d347f721552fe03bdd19f113e7bad7a7c24908e",
+            "frozen_paths_verified": true,
+            "kit_sha256": "494739dedbc07f2ee3a02b1e5f9561bb4812d765c7630e6931c24ea138525bff",
+            "legs": 12,
+            "ok": true,
+            "positional_cells_verified": true
+          }
+        }
+      ],
+      "worst_case_s": 5850,
+      "validated_queue_fixture": {
+        "ok": true,
+        "plan_ids": [
+          "cq-f2-stab-04-l001-a1",
+          "cq-f2-stab-04-l002-a1",
+          "cq-f2-stab-04-l003-a1",
+          "cq-f2-stab-04-l004-a1",
+          "cq-f2-stab-04-l005-a1",
+          "cq-f2-stab-04-l006-a1",
+          "cq-f2-stab-04-l007-a1",
+          "cq-f2-stab-04-l008-a1",
+          "cq-f2-stab-04-l009-a1",
+          "cq-f2-stab-04-l010-a1",
+          "cq-f2-stab-04-l011-a1",
+          "cq-f2-stab-04-l012-a1"
+        ],
+        "queue_id": "cq-f2-stab-04",
+        "spans": 12
+      }
+    },
+    {
+      "kit": "f2-stab-05",
+      "master_seed": 2026111508,
+      "candidates_tested": 65,
+      "kit_sha256": "023febe9afc8532b8f06bb40dfe32dd64a933c99e8e080a51e2686e888246b11",
+      "first_differing_leg_index_zero_based": 0,
+      "validate_kit": [
+        {
+          "batch_window": "02:00-02:35",
+          "output": {
+            "base_kit_sha256": "651d1815ca87ee23640a8db1483d4ecaf42d70d029855ad03c14bfa076116f2b",
+            "campaign_id": "f2-stab-05",
+            "frozen_commit": "2d347f721552fe03bdd19f113e7bad7a7c24908e",
+            "frozen_paths_verified": true,
+            "kit_sha256": "023febe9afc8532b8f06bb40dfe32dd64a933c99e8e080a51e2686e888246b11",
+            "legs": 12,
+            "ok": true,
+            "positional_cells_verified": true
+          }
+        },
+        {
+          "batch_window": "13:14-13:15",
+          "output": {
+            "base_kit_sha256": "651d1815ca87ee23640a8db1483d4ecaf42d70d029855ad03c14bfa076116f2b",
+            "campaign_id": "f2-stab-05",
+            "frozen_commit": "2d347f721552fe03bdd19f113e7bad7a7c24908e",
+            "frozen_paths_verified": true,
+            "kit_sha256": "023febe9afc8532b8f06bb40dfe32dd64a933c99e8e080a51e2686e888246b11",
+            "legs": 12,
+            "ok": true,
+            "positional_cells_verified": true
+          }
+        }
+      ],
+      "worst_case_s": 5850,
+      "validated_queue_fixture": {
+        "ok": true,
+        "plan_ids": [
+          "cq-f2-stab-05-l001-a1",
+          "cq-f2-stab-05-l002-a1",
+          "cq-f2-stab-05-l003-a1",
+          "cq-f2-stab-05-l004-a1",
+          "cq-f2-stab-05-l005-a1",
+          "cq-f2-stab-05-l006-a1",
+          "cq-f2-stab-05-l007-a1",
+          "cq-f2-stab-05-l008-a1",
+          "cq-f2-stab-05-l009-a1",
+          "cq-f2-stab-05-l010-a1",
+          "cq-f2-stab-05-l011-a1",
+          "cq-f2-stab-05-l012-a1"
+        ],
+        "queue_id": "cq-f2-stab-05",
+        "spans": 12
+      }
+    },
+    {
+      "kit": "f2-stab-06",
+      "master_seed": 2026114403,
+      "candidates_tested": 2960,
+      "kit_sha256": "a02d18bafca780c580ae7dfe970e3a81e3e12b4051b269699db329f02c33172c",
+      "first_differing_leg_index_zero_based": 0,
+      "validate_kit": [
+        {
+          "batch_window": "02:00-02:35",
+          "output": {
+            "base_kit_sha256": "651d1815ca87ee23640a8db1483d4ecaf42d70d029855ad03c14bfa076116f2b",
+            "campaign_id": "f2-stab-06",
+            "frozen_commit": "2d347f721552fe03bdd19f113e7bad7a7c24908e",
+            "frozen_paths_verified": true,
+            "kit_sha256": "a02d18bafca780c580ae7dfe970e3a81e3e12b4051b269699db329f02c33172c",
+            "legs": 12,
+            "ok": true,
+            "positional_cells_verified": true
+          }
+        },
+        {
+          "batch_window": "13:14-13:15",
+          "output": {
+            "base_kit_sha256": "651d1815ca87ee23640a8db1483d4ecaf42d70d029855ad03c14bfa076116f2b",
+            "campaign_id": "f2-stab-06",
+            "frozen_commit": "2d347f721552fe03bdd19f113e7bad7a7c24908e",
+            "frozen_paths_verified": true,
+            "kit_sha256": "a02d18bafca780c580ae7dfe970e3a81e3e12b4051b269699db329f02c33172c",
+            "legs": 12,
+            "ok": true,
+            "positional_cells_verified": true
+          }
+        }
+      ],
+      "worst_case_s": 5850,
+      "validated_queue_fixture": {
+        "ok": true,
+        "plan_ids": [
+          "cq-f2-stab-06-l001-a1",
+          "cq-f2-stab-06-l002-a1",
+          "cq-f2-stab-06-l003-a1",
+          "cq-f2-stab-06-l004-a1",
+          "cq-f2-stab-06-l005-a1",
+          "cq-f2-stab-06-l006-a1",
+          "cq-f2-stab-06-l007-a1",
+          "cq-f2-stab-06-l008-a1",
+          "cq-f2-stab-06-l009-a1",
+          "cq-f2-stab-06-l010-a1",
+          "cq-f2-stab-06-l011-a1",
+          "cq-f2-stab-06-l012-a1"
+        ],
+        "queue_id": "cq-f2-stab-06",
+        "spans": 12
+      }
+    },
+    {
+      "kit": "f2-stab-07",
+      "master_seed": 2026111733,
+      "candidates_tested": 290,
+      "kit_sha256": "fb22cadce8be3c7d7642c9b55802aa0bd4ea90e41c7c0e9a5038e7a8dc88746d",
+      "first_differing_leg_index_zero_based": 0,
+      "validate_kit": [
+        {
+          "batch_window": "02:00-02:35",
+          "output": {
+            "base_kit_sha256": "651d1815ca87ee23640a8db1483d4ecaf42d70d029855ad03c14bfa076116f2b",
+            "campaign_id": "f2-stab-07",
+            "frozen_commit": "2d347f721552fe03bdd19f113e7bad7a7c24908e",
+            "frozen_paths_verified": true,
+            "kit_sha256": "fb22cadce8be3c7d7642c9b55802aa0bd4ea90e41c7c0e9a5038e7a8dc88746d",
+            "legs": 12,
+            "ok": true,
+            "positional_cells_verified": true
+          }
+        },
+        {
+          "batch_window": "13:14-13:15",
+          "output": {
+            "base_kit_sha256": "651d1815ca87ee23640a8db1483d4ecaf42d70d029855ad03c14bfa076116f2b",
+            "campaign_id": "f2-stab-07",
+            "frozen_commit": "2d347f721552fe03bdd19f113e7bad7a7c24908e",
+            "frozen_paths_verified": true,
+            "kit_sha256": "fb22cadce8be3c7d7642c9b55802aa0bd4ea90e41c7c0e9a5038e7a8dc88746d",
+            "legs": 12,
+            "ok": true,
+            "positional_cells_verified": true
+          }
+        }
+      ],
+      "worst_case_s": 5850,
+      "validated_queue_fixture": {
+        "ok": true,
+        "plan_ids": [
+          "cq-f2-stab-07-l001-a1",
+          "cq-f2-stab-07-l002-a1",
+          "cq-f2-stab-07-l003-a1",
+          "cq-f2-stab-07-l004-a1",
+          "cq-f2-stab-07-l005-a1",
+          "cq-f2-stab-07-l006-a1",
+          "cq-f2-stab-07-l007-a1",
+          "cq-f2-stab-07-l008-a1",
+          "cq-f2-stab-07-l009-a1",
+          "cq-f2-stab-07-l010-a1",
+          "cq-f2-stab-07-l011-a1",
+          "cq-f2-stab-07-l012-a1"
+        ],
+        "queue_id": "cq-f2-stab-07",
+        "spans": 12
+      }
+    },
+    {
+      "kit": "f2-stab-08",
+      "master_seed": 2026112349,
+      "candidates_tested": 906,
+      "kit_sha256": "aaba2ad04cbc88e9872c292699dfa9f98dfb15ad9f7e0af23a1faf0091bebf00",
+      "first_differing_leg_index_zero_based": 0,
+      "validate_kit": [
+        {
+          "batch_window": "02:00-02:35",
+          "output": {
+            "base_kit_sha256": "651d1815ca87ee23640a8db1483d4ecaf42d70d029855ad03c14bfa076116f2b",
+            "campaign_id": "f2-stab-08",
+            "frozen_commit": "2d347f721552fe03bdd19f113e7bad7a7c24908e",
+            "frozen_paths_verified": true,
+            "kit_sha256": "aaba2ad04cbc88e9872c292699dfa9f98dfb15ad9f7e0af23a1faf0091bebf00",
+            "legs": 12,
+            "ok": true,
+            "positional_cells_verified": true
+          }
+        },
+        {
+          "batch_window": "13:14-13:15",
+          "output": {
+            "base_kit_sha256": "651d1815ca87ee23640a8db1483d4ecaf42d70d029855ad03c14bfa076116f2b",
+            "campaign_id": "f2-stab-08",
+            "frozen_commit": "2d347f721552fe03bdd19f113e7bad7a7c24908e",
+            "frozen_paths_verified": true,
+            "kit_sha256": "aaba2ad04cbc88e9872c292699dfa9f98dfb15ad9f7e0af23a1faf0091bebf00",
+            "legs": 12,
+            "ok": true,
+            "positional_cells_verified": true
+          }
+        }
+      ],
+      "worst_case_s": 5850,
+      "validated_queue_fixture": {
+        "ok": true,
+        "plan_ids": [
+          "cq-f2-stab-08-l001-a1",
+          "cq-f2-stab-08-l002-a1",
+          "cq-f2-stab-08-l003-a1",
+          "cq-f2-stab-08-l004-a1",
+          "cq-f2-stab-08-l005-a1",
+          "cq-f2-stab-08-l006-a1",
+          "cq-f2-stab-08-l007-a1",
+          "cq-f2-stab-08-l008-a1",
+          "cq-f2-stab-08-l009-a1",
+          "cq-f2-stab-08-l010-a1",
+          "cq-f2-stab-08-l011-a1",
+          "cq-f2-stab-08-l012-a1"
+        ],
+        "queue_id": "cq-f2-stab-08",
+        "spans": 12
+      }
+    },
+    {
+      "kit": "f2-stab-09",
+      "master_seed": 2026112216,
+      "candidates_tested": 773,
+      "kit_sha256": "9a2b863f7abbffdc2d33a3af6bee7d8381d0c54883dbb4a7cac41378572c5ce8",
+      "first_differing_leg_index_zero_based": 0,
+      "validate_kit": [
+        {
+          "batch_window": "02:00-02:35",
+          "output": {
+            "base_kit_sha256": "651d1815ca87ee23640a8db1483d4ecaf42d70d029855ad03c14bfa076116f2b",
+            "campaign_id": "f2-stab-09",
+            "frozen_commit": "2d347f721552fe03bdd19f113e7bad7a7c24908e",
+            "frozen_paths_verified": true,
+            "kit_sha256": "9a2b863f7abbffdc2d33a3af6bee7d8381d0c54883dbb4a7cac41378572c5ce8",
+            "legs": 12,
+            "ok": true,
+            "positional_cells_verified": true
+          }
+        },
+        {
+          "batch_window": "13:14-13:15",
+          "output": {
+            "base_kit_sha256": "651d1815ca87ee23640a8db1483d4ecaf42d70d029855ad03c14bfa076116f2b",
+            "campaign_id": "f2-stab-09",
+            "frozen_commit": "2d347f721552fe03bdd19f113e7bad7a7c24908e",
+            "frozen_paths_verified": true,
+            "kit_sha256": "9a2b863f7abbffdc2d33a3af6bee7d8381d0c54883dbb4a7cac41378572c5ce8",
+            "legs": 12,
+            "ok": true,
+            "positional_cells_verified": true
+          }
+        }
+      ],
+      "worst_case_s": 5850,
+      "validated_queue_fixture": {
+        "ok": true,
+        "plan_ids": [
+          "cq-f2-stab-09-l001-a1",
+          "cq-f2-stab-09-l002-a1",
+          "cq-f2-stab-09-l003-a1",
+          "cq-f2-stab-09-l004-a1",
+          "cq-f2-stab-09-l005-a1",
+          "cq-f2-stab-09-l006-a1",
+          "cq-f2-stab-09-l007-a1",
+          "cq-f2-stab-09-l008-a1",
+          "cq-f2-stab-09-l009-a1",
+          "cq-f2-stab-09-l010-a1",
+          "cq-f2-stab-09-l011-a1",
+          "cq-f2-stab-09-l012-a1"
+        ],
+        "queue_id": "cq-f2-stab-09",
+        "spans": 12
+      }
+    },
+    {
+      "kit": "f2-stab-10",
+      "master_seed": 2026111733,
+      "candidates_tested": 290,
+      "kit_sha256": "bb54fdaff1292ab24f53204698649d0925fa00beedca70604f760a340c9ee926",
+      "first_differing_leg_index_zero_based": 0,
+      "validate_kit": [
+        {
+          "batch_window": "02:00-02:35",
+          "output": {
+            "base_kit_sha256": "651d1815ca87ee23640a8db1483d4ecaf42d70d029855ad03c14bfa076116f2b",
+            "campaign_id": "f2-stab-10",
+            "frozen_commit": "2d347f721552fe03bdd19f113e7bad7a7c24908e",
+            "frozen_paths_verified": true,
+            "kit_sha256": "bb54fdaff1292ab24f53204698649d0925fa00beedca70604f760a340c9ee926",
+            "legs": 12,
+            "ok": true,
+            "positional_cells_verified": true
+          }
+        },
+        {
+          "batch_window": "13:14-13:15",
+          "output": {
+            "base_kit_sha256": "651d1815ca87ee23640a8db1483d4ecaf42d70d029855ad03c14bfa076116f2b",
+            "campaign_id": "f2-stab-10",
+            "frozen_commit": "2d347f721552fe03bdd19f113e7bad7a7c24908e",
+            "frozen_paths_verified": true,
+            "kit_sha256": "bb54fdaff1292ab24f53204698649d0925fa00beedca70604f760a340c9ee926",
+            "legs": 12,
+            "ok": true,
+            "positional_cells_verified": true
+          }
+        }
+      ],
+      "worst_case_s": 5850,
+      "validated_queue_fixture": {
+        "ok": true,
+        "plan_ids": [
+          "cq-f2-stab-10-l001-a1",
+          "cq-f2-stab-10-l002-a1",
+          "cq-f2-stab-10-l003-a1",
+          "cq-f2-stab-10-l004-a1",
+          "cq-f2-stab-10-l005-a1",
+          "cq-f2-stab-10-l006-a1",
+          "cq-f2-stab-10-l007-a1",
+          "cq-f2-stab-10-l008-a1",
+          "cq-f2-stab-10-l009-a1",
+          "cq-f2-stab-10-l010-a1",
+          "cq-f2-stab-10-l011-a1",
+          "cq-f2-stab-10-l012-a1"
+        ],
+        "queue_id": "cq-f2-stab-10",
+        "spans": 12
+      }
+    },
+    {
+      "kit": "f2-stab-11",
+      "master_seed": 2026112450,
+      "candidates_tested": 1007,
+      "kit_sha256": "e8cb23471f556d21514fb5ba37ffa409b9b697cfbd2519d3c2ab0c6922ed36fe",
+      "first_differing_leg_index_zero_based": 0,
+      "validate_kit": [
+        {
+          "batch_window": "02:00-02:35",
+          "output": {
+            "base_kit_sha256": "651d1815ca87ee23640a8db1483d4ecaf42d70d029855ad03c14bfa076116f2b",
+            "campaign_id": "f2-stab-11",
+            "frozen_commit": "2d347f721552fe03bdd19f113e7bad7a7c24908e",
+            "frozen_paths_verified": true,
+            "kit_sha256": "e8cb23471f556d21514fb5ba37ffa409b9b697cfbd2519d3c2ab0c6922ed36fe",
+            "legs": 12,
+            "ok": true,
+            "positional_cells_verified": true
+          }
+        },
+        {
+          "batch_window": "13:14-13:15",
+          "output": {
+            "base_kit_sha256": "651d1815ca87ee23640a8db1483d4ecaf42d70d029855ad03c14bfa076116f2b",
+            "campaign_id": "f2-stab-11",
+            "frozen_commit": "2d347f721552fe03bdd19f113e7bad7a7c24908e",
+            "frozen_paths_verified": true,
+            "kit_sha256": "e8cb23471f556d21514fb5ba37ffa409b9b697cfbd2519d3c2ab0c6922ed36fe",
+            "legs": 12,
+            "ok": true,
+            "positional_cells_verified": true
+          }
+        }
+      ],
+      "worst_case_s": 5850,
+      "validated_queue_fixture": {
+        "ok": true,
+        "plan_ids": [
+          "cq-f2-stab-11-l001-a1",
+          "cq-f2-stab-11-l002-a1",
+          "cq-f2-stab-11-l003-a1",
+          "cq-f2-stab-11-l004-a1",
+          "cq-f2-stab-11-l005-a1",
+          "cq-f2-stab-11-l006-a1",
+          "cq-f2-stab-11-l007-a1",
+          "cq-f2-stab-11-l008-a1",
+          "cq-f2-stab-11-l009-a1",
+          "cq-f2-stab-11-l010-a1",
+          "cq-f2-stab-11-l011-a1",
+          "cq-f2-stab-11-l012-a1"
+        ],
+        "queue_id": "cq-f2-stab-11",
+        "spans": 12
+      }
+    },
+    {
+      "kit": "f2-stab-12",
+      "master_seed": 2026111711,
+      "candidates_tested": 268,
+      "kit_sha256": "7a0440d3f15823760179782f85cad560e8ca917bf66201c02b1b911d79af35f9",
+      "first_differing_leg_index_zero_based": 0,
+      "validate_kit": [
+        {
+          "batch_window": "02:00-02:35",
+          "output": {
+            "base_kit_sha256": "651d1815ca87ee23640a8db1483d4ecaf42d70d029855ad03c14bfa076116f2b",
+            "campaign_id": "f2-stab-12",
+            "frozen_commit": "2d347f721552fe03bdd19f113e7bad7a7c24908e",
+            "frozen_paths_verified": true,
+            "kit_sha256": "7a0440d3f15823760179782f85cad560e8ca917bf66201c02b1b911d79af35f9",
+            "legs": 12,
+            "ok": true,
+            "positional_cells_verified": true
+          }
+        },
+        {
+          "batch_window": "13:14-13:15",
+          "output": {
+            "base_kit_sha256": "651d1815ca87ee23640a8db1483d4ecaf42d70d029855ad03c14bfa076116f2b",
+            "campaign_id": "f2-stab-12",
+            "frozen_commit": "2d347f721552fe03bdd19f113e7bad7a7c24908e",
+            "frozen_paths_verified": true,
+            "kit_sha256": "7a0440d3f15823760179782f85cad560e8ca917bf66201c02b1b911d79af35f9",
+            "legs": 12,
+            "ok": true,
+            "positional_cells_verified": true
+          }
+        }
+      ],
+      "worst_case_s": 5850,
+      "validated_queue_fixture": {
+        "ok": true,
+        "plan_ids": [
+          "cq-f2-stab-12-l001-a1",
+          "cq-f2-stab-12-l002-a1",
+          "cq-f2-stab-12-l003-a1",
+          "cq-f2-stab-12-l004-a1",
+          "cq-f2-stab-12-l005-a1",
+          "cq-f2-stab-12-l006-a1",
+          "cq-f2-stab-12-l007-a1",
+          "cq-f2-stab-12-l008-a1",
+          "cq-f2-stab-12-l009-a1",
+          "cq-f2-stab-12-l010-a1",
+          "cq-f2-stab-12-l011-a1",
+          "cq-f2-stab-12-l012-a1"
+        ],
+        "queue_id": "cq-f2-stab-12",
+        "spans": 12
+      }
+    },
+    {
+      "kit": "f2-stab-13",
+      "master_seed": 2026115694,
+      "candidates_tested": 4251,
+      "kit_sha256": "47c3d2f5f6133112e7a209c9522e48bb3388c7fa27f56e5ffdf86962d95f7de3",
+      "first_differing_leg_index_zero_based": 0,
+      "validate_kit": [
+        {
+          "batch_window": "02:00-02:35",
+          "output": {
+            "base_kit_sha256": "651d1815ca87ee23640a8db1483d4ecaf42d70d029855ad03c14bfa076116f2b",
+            "campaign_id": "f2-stab-13",
+            "frozen_commit": "2d347f721552fe03bdd19f113e7bad7a7c24908e",
+            "frozen_paths_verified": true,
+            "kit_sha256": "47c3d2f5f6133112e7a209c9522e48bb3388c7fa27f56e5ffdf86962d95f7de3",
+            "legs": 12,
+            "ok": true,
+            "positional_cells_verified": true
+          }
+        },
+        {
+          "batch_window": "13:14-13:15",
+          "output": {
+            "base_kit_sha256": "651d1815ca87ee23640a8db1483d4ecaf42d70d029855ad03c14bfa076116f2b",
+            "campaign_id": "f2-stab-13",
+            "frozen_commit": "2d347f721552fe03bdd19f113e7bad7a7c24908e",
+            "frozen_paths_verified": true,
+            "kit_sha256": "47c3d2f5f6133112e7a209c9522e48bb3388c7fa27f56e5ffdf86962d95f7de3",
+            "legs": 12,
+            "ok": true,
+            "positional_cells_verified": true
+          }
+        }
+      ],
+      "worst_case_s": 5850,
+      "validated_queue_fixture": {
+        "ok": true,
+        "plan_ids": [
+          "cq-f2-stab-13-l001-a1",
+          "cq-f2-stab-13-l002-a1",
+          "cq-f2-stab-13-l003-a1",
+          "cq-f2-stab-13-l004-a1",
+          "cq-f2-stab-13-l005-a1",
+          "cq-f2-stab-13-l006-a1",
+          "cq-f2-stab-13-l007-a1",
+          "cq-f2-stab-13-l008-a1",
+          "cq-f2-stab-13-l009-a1",
+          "cq-f2-stab-13-l010-a1",
+          "cq-f2-stab-13-l011-a1",
+          "cq-f2-stab-13-l012-a1"
+        ],
+        "queue_id": "cq-f2-stab-13",
+        "spans": 12
+      }
+    },
+    {
+      "kit": "f2-stab-14",
+      "master_seed": 2026114612,
+      "candidates_tested": 3169,
+      "kit_sha256": "73fe743e013cddd6d5294e95e076c64933a81eb95933fb4aa5dfb85471b9402d",
+      "first_differing_leg_index_zero_based": 0,
+      "validate_kit": [
+        {
+          "batch_window": "02:00-02:35",
+          "output": {
+            "base_kit_sha256": "651d1815ca87ee23640a8db1483d4ecaf42d70d029855ad03c14bfa076116f2b",
+            "campaign_id": "f2-stab-14",
+            "frozen_commit": "2d347f721552fe03bdd19f113e7bad7a7c24908e",
+            "frozen_paths_verified": true,
+            "kit_sha256": "73fe743e013cddd6d5294e95e076c64933a81eb95933fb4aa5dfb85471b9402d",
+            "legs": 12,
+            "ok": true,
+            "positional_cells_verified": true
+          }
+        },
+        {
+          "batch_window": "13:14-13:15",
+          "output": {
+            "base_kit_sha256": "651d1815ca87ee23640a8db1483d4ecaf42d70d029855ad03c14bfa076116f2b",
+            "campaign_id": "f2-stab-14",
+            "frozen_commit": "2d347f721552fe03bdd19f113e7bad7a7c24908e",
+            "frozen_paths_verified": true,
+            "kit_sha256": "73fe743e013cddd6d5294e95e076c64933a81eb95933fb4aa5dfb85471b9402d",
+            "legs": 12,
+            "ok": true,
+            "positional_cells_verified": true
+          }
+        }
+      ],
+      "worst_case_s": 5850,
+      "validated_queue_fixture": {
+        "ok": true,
+        "plan_ids": [
+          "cq-f2-stab-14-l001-a1",
+          "cq-f2-stab-14-l002-a1",
+          "cq-f2-stab-14-l003-a1",
+          "cq-f2-stab-14-l004-a1",
+          "cq-f2-stab-14-l005-a1",
+          "cq-f2-stab-14-l006-a1",
+          "cq-f2-stab-14-l007-a1",
+          "cq-f2-stab-14-l008-a1",
+          "cq-f2-stab-14-l009-a1",
+          "cq-f2-stab-14-l010-a1",
+          "cq-f2-stab-14-l011-a1",
+          "cq-f2-stab-14-l012-a1"
+        ],
+        "queue_id": "cq-f2-stab-14",
+        "spans": 12
+      }
+    }
+  ],
+  "mock": {
+    "kit": "f2-stab-01",
+    "roster": [
+      "L001"
+    ],
+    "fixture_t0_local": "2026-11-18T13:20:00",
+    "batch_window": "02:00-02:35",
+    "output": {
+      "rc": 0,
+      "legs": 1,
+      "stops": []
+    }
+  },
+  "planned_single_leg_spans": 168,
+  "queue_validation_fixture_only_expiry": "2026-11-25T00:00:00-08:00",
+  "seed_search": {
+    "minimum": 2026111444,
+    "maximum": 2026211443
+  },
+  "synthetic_only": true,
+  "one_cell_refusal": {
+    "exit_code": 1,
+    "output": "REFUSE legs[0].prefill_tokens: expected 19458, got 256"
+  },
+  "native_valid_wrong_order_refusal": {
+    "pinned_validator_ok": true,
+    "exit_code": 1,
+    "output": "REFUSE legs[1].prefill_tokens: expected 256, got 2000"
+  }
+}
