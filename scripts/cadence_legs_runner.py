@@ -183,9 +183,10 @@ class Deps:
     soak_cap_s: float
     mock: bool = False
     max_span_s: float | None = None                     # None: the launcher's ceiling less its reserves
+    workload_groups: list | None = None                 # one record per spawned soak or leg group
 
 
-def run_child(*, name, argv, cap_s, log_dir, feeds, work_remaining):
+def run_child(*, name, argv, cap_s, log_dir, feeds, work_remaining, workload_groups=None):
     """One child process group, bounded by ``cap_s`` and the work deadline, feeds polled meanwhile
     (``run_align_r1_smoke.part`` generalized: the same deadline enforcer and group teardown)."""
     from scripts import run_align_r1_smoke as smoke, run_night as night
@@ -199,6 +200,9 @@ def run_child(*, name, argv, cap_s, log_dir, feeds, work_remaining):
             with smoke.register_child_before_interrupt():
                 child = subprocess.Popen(argv, stdin=subprocess.DEVNULL, stdout=out, stderr=err,
                                          start_new_session=True, close_fds=True)
+                group = {"name": name, "pgid": child.pid, "proven_stopped": False}
+                if workload_groups is not None:
+                    workload_groups.append(group)
                 deadline_dir = log_dir / "deadlines" / name
                 deadline_dir.mkdir(parents=True)
                 deadline = smoke.PartDeadline(child, pgid=child.pid, night_dir=deadline_dir, plan=None,
@@ -225,10 +229,11 @@ def run_child(*, name, argv, cap_s, log_dir, feeds, work_remaining):
                     proven = fired["proven"]
                 else:
                     proven = night._terminate_process_group(child, evidence=proof)
+                group["proven_stopped"] = proven is True and proof.get("reaped") is True and proof.get("group_census") == []
             finally:
                 for s, handler in handlers.items():
                     signal.signal(s, handler)
-            if not proven:
+            if not group["proven_stopped"]:
                 raise SpanRefusal(f"{name} process group not proven stopped: {proof}")
     return {"rc": code, "argv": [str(a) for a in argv], "cap_s": cap_s, "group": proof, "proven_stopped": True}
 
@@ -341,6 +346,7 @@ def verify_frozen_production(kit):
 def production_deps(*, inputs, pmset_bin, output, scripted_ctl=False):
     from scripts import align_r1_rehearsal as r1, launch_align_r0 as launcher, run_align_r1_smoke as smoke
     leg_argv = leg_runtime_argv(inputs)
+    workload_groups = []
     if scripted_ctl:
         leg_argv.insert(3, "--scripted-ctl")
 
@@ -350,7 +356,7 @@ def production_deps(*, inputs, pmset_bin, output, scripted_ctl=False):
         soak_dir = Path(soak_dir)
         attempt = 1 + sum(1 for p in soak_dir.parent.iterdir() if p.name.startswith(soak_dir.name + ".rejected"))
         result = run_child(name="soak" if attempt == 1 else f"soak.a{attempt}", argv=argv, cap_s=cap_s,
-                           log_dir=output, feeds=feeds, work_remaining=work_remaining)
+                           log_dir=output, feeds=feeds, work_remaining=work_remaining, workload_groups=workload_groups)
         if result["rc"] == SOAK_REFUSED_RC:
             raise SoakRefusal(f"soak exit {result['rc']}: the idle soak failed its settle or quiet check")
         if result["rc"]:
@@ -369,7 +375,7 @@ def production_deps(*, inputs, pmset_bin, output, scripted_ctl=False):
         leg_dir = Path(attempt_dir).parent
         attempt = 1 + sum(1 for p in leg_dir.iterdir() if p.name.startswith(Path(attempt_dir).name + ".rejected"))
         result = run_child(name=f"{leg_dir.name}.a{attempt}", argv=argv, cap_s=cap_s, log_dir=leg_dir,
-                           feeds=feeds, work_remaining=work_remaining)
+                           feeds=feeds, work_remaining=work_remaining, workload_groups=workload_groups)
         if result["rc"]:
             raise LegRuntimeError(f"{Path(attempt_dir).parent.name}: leg runtime exit {result['rc']}")
         if not scripted_ctl:
@@ -384,7 +390,7 @@ def production_deps(*, inputs, pmset_bin, output, scripted_ctl=False):
     feeds = [smoke.AgentFeed(output), smoke.MeterFeed(output), smoke.VolumeFeed(output)]
     return Deps(clock=RealClock(), feeds=feeds, host=ProductionHost(pmset_bin), run_soak=run_soak,
                 run_leg=run_leg, verify_frozen=verify_frozen_production, load_verdict=load_verdict,
-                soak_cap_s=launcher.r1_soak_cap_s())
+                soak_cap_s=launcher.r1_soak_cap_s(), workload_groups=workload_groups)
 
 
 # --------------------------------------------------------------------------
@@ -505,6 +511,8 @@ def run_span(*, kit, kit_sha256, output, deadline, windows, deps, leg_ids=None,
               "roster": list(leg_ids) if leg_ids is not None else [leg["leg_id"] for leg in kit["legs"]],
               "batch_windows": [legsmod.format_window(w) for w in windows], "steps": [], "legs": [],
               "soak_attempts": [], "feeds": {}, "rc": 0, **authority}
+    if deps.workload_groups is not None:
+        record["workload_groups"] = deps.workload_groups
     if span_id is not None:
         record["span_id"] = span_id
     state = {"power_read": False, "plan": None, "summaries": [], "finished": 0, "fault": False, "redos": 0}

@@ -29,8 +29,10 @@ intervals require observed monotonic elapsed time, and CPU work also
 requires the requested thread CPU time. Tests advance synthetic time.
 
 Each leg has one G0, then its q0 history and its script, with one resident model
-and uninterrupted member sampling. The physical calls use the same step prompt
-and seed, freshly rendered for each call; there is no growing conversation.
+and uninterrupted member sampling. Each physical call renders the same step
+prompt afresh. The split and plain calls share the effective sampler seed.
+Extra-turn and CPU calls derive distinct effective seeds from successive
+logical turn indices.
 There is no G1 or type-T claim. Hidden work occurs after G0 and before the
 visible call. CPU work occurs between its two visible calls. Recovery follows
 the last decode **inside that member's active sampler**, before teardown.
@@ -122,10 +124,15 @@ attempt's exact receipt path. The CLI and ctl launch require that proof. They
 also refuse failed or contradictory shutdown evidence in the receipt, even
 when all four checks are supplied. A native cadence receipt must record a
 successful restore command and an integer AC Automatic readback of 0.
+The span receipt records the process-group ID and stop verdict of each
+spawned soak and leg attempt. The close verifier refuses any recorded
+unproven stop, including legacy receipts that carry the failure in a step
+error. It runs a fresh read-only census for every recorded process group ID
+and requires an empty result. The attestation is required independently.
 For ctl the launcher requires `--attempt-ledger`,
 `--previous-close-receipt`, `--span-id` and `--t0-not-before-ns`. Under the
 fence lock it re-proves that the receipt belongs to the latest attempt, its
-restore succeeded, and the receipt path and exact close time match the
+restore succeeded, the recorded groups are empty, and the receipt path and exact close time match the
 supplied proof. It publishes the successor attempt before bootstrap, and
 passes the verified queue digest to the child. The child refuses
 substituted bytes before creating production dependencies or output. It

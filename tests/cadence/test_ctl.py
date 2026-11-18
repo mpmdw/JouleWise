@@ -11,7 +11,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, call, patch
 
 from joulewise.cadence import ctl, kit as kits, legs, desk, queue
 from joulewise.align.apple import cadence_ctl, r1_runtime as rt, workload
@@ -355,6 +355,97 @@ class LaunchAuthorityTests(unittest.TestCase):
                             for feed in ("meter", "agents", "volumes")]],
                 "feeds": {feed: {"stop": {"rc": 0, "proven_stopped": True}}
                           for feed in ("meter", "agents", "volumes")}}
+
+    def test_workload_group_replay_refuses_failed_stop_despite_attestation(self):
+        from scripts import run_align_r1_smoke, run_night
+
+        predecessor = self.root / "previous-span"
+        clock = runner.FakeClock(self.now - 8000)
+        deps = runner.mock_deps(predecessor, clock)
+        deps.workload_groups = []
+        deps.host.restore_power = lambda _: {"rc": 0, "exit_code": 0, "observed": 0, "ok": True}
+        worker = Mock(pid=12345)
+        worker.poll.return_value = worker.wait.return_value = 0
+        deadline = Mock()
+        deadline.expired.return_value = False
+        deadline.cancel.return_value = None
+
+        def reap(process, *, evidence):
+            self.assertIs(process, worker)
+            evidence.update(reaped=True, group_census=["synthetic leg worker"])
+            return False
+
+        def run_leg(attempt_dir, *_args, **_kwargs):
+            runner.run_child(name="L001.a1", argv=["synthetic-no-process"], cap_s=10,
+                             log_dir=attempt_dir.parent, feeds=[], work_remaining=lambda: 1000,
+                             workload_groups=deps.workload_groups)
+            self.fail("leg continued after its group failed to stop")
+
+        deps.run_leg = run_leg
+        kit = v11_tests.v11_kit()
+        plan = legs.plan_span(kit, t0_epoch=clock.time(), windows=[], leg_ids=["L001"])
+        with (patch.object(runner.subprocess, "Popen", return_value=worker),
+              patch.object(run_align_r1_smoke, "PartDeadline", return_value=deadline),
+              patch.object(run_night, "_terminate_process_group", side_effect=reap)):
+            self.assertEqual(runner.run_span(
+                kit=kit, kit_sha256="a" * 64, output=predecessor, deadline=runner.launch_deadline(plan),
+                windows=[], deps=deps, leg_ids=["L001"], span_id="previous"), 2)
+        receipt = json.loads((predecessor / runner.RECEIPT_NAME).read_text())
+        failure = next(row for row in receipt["steps"] if row["name"] == "L001.a1")
+        self.assertIn("L001.a1 process group not proven stopped", failure["error"])
+        self.assertEqual(receipt["workload_groups"], [{"name": "L001.a1", "pgid": 12345, "proven_stopped": False}])
+        self.assertTrue(receipt["feeds"]["meter"]["stop"]["proven_stopped"])
+        self.proof[-1] = ("--t0-not-before-ns", str(receipt["ended"]["epoch_ns"]))
+        proof = ["close-proof", "--attempt-ledger", str(self.ledger)]
+        legacy = {key: value for key, value in receipt.items() if key not in {"workload_groups", "error"}}
+        with (patch.object(run_night, "_group_census", return_value=(True, [])) as census,
+              patch.object(launcher.base, "pid_alive", return_value=True),
+              patch.object(launcher.time, "time", return_value=self.now),
+              patch.object(runner.RealClock, "arm_anchor_ns", return_value=(self.close_ns, self.ns, self.ns)),
+              patch.object(launcher.subprocess, "run") as service):
+            for record in (receipt, legacy):
+                self.receipt.write_text(json.dumps(record))
+                with self.subTest(legacy=record is legacy), redirect_stderr(io.StringIO()) as stderr:
+                    self.assertEqual(launcher.main(proof), 2)
+                    self.assertIn("L001.a1 process group not proven stopped", stderr.getvalue())
+                    self.assertIn("L001.a1 process group not proven stopped", self.launch(self.proof))
+            census.assert_not_called()
+            service.assert_not_called()
+        self.assertIsNone(launcher.base.read_fence(self.fence_root))
+        self.assertEqual(json.loads(self.ledger.read_text())["attempts"], [self.prior])
+
+    def test_close_requires_attestation_and_fresh_census_under_launch_lock(self):
+        from scripts import run_night
+
+        receipt = self.native_close()
+        receipt["workload_groups"] = [{"name": "soak", "pgid": 12345, "proven_stopped": True},
+                                      {"name": "L001.a1", "pgid": 12346, "proven_stopped": True}]
+        self.receipt.write_text(json.dumps(receipt))
+        proof = ["close-proof", "--attempt-ledger", str(self.ledger)]
+        with (patch.object(run_night, "_group_census") as census,
+              patch.object(launcher.base, "pid_alive", return_value=True),
+              patch.object(launcher.time, "time", return_value=self.now),
+              patch.object(runner.RealClock, "arm_anchor_ns", return_value=(self.close_ns, self.ns, self.ns)),
+              patch.object(launcher.subprocess, "run") as service,
+              redirect_stdout(io.StringIO()), redirect_stderr(io.StringIO())):
+            census.return_value = (True, [])
+            with patch.dict(os.environ, {"GROUPS_ABSENT": "0"}):
+                self.assertEqual(launcher.main(proof), 2)
+                self.assertIn("receipt-bound", self.launch(self.proof))
+            census.assert_not_called()
+            self.assertEqual(launcher.main(proof), 0)
+            self.assertEqual(census.call_args_list, [call(12345), call(12346)])
+            for outcome in ((False, []), (False, ["synthetic leg worker"]), (True, ["synthetic leg worker"])):
+                # The prior successful CLI census cannot authorize the locked launch.
+                census.reset_mock()
+                census.side_effect = [(True, []), outcome, (True, []), outcome]
+                with self.subTest(outcome=outcome):
+                    self.assertIn("fresh census did not prove process group 12346 empty", self.launch(self.proof))
+                    self.assertEqual(launcher.main(proof), 2)
+                    self.assertEqual(census.call_args_list, [call(12345), call(12346)] * 2)
+            service.assert_not_called()
+        self.assertIsNone(launcher.base.read_fence(self.fence_root))
+        self.assertEqual(json.loads(self.ledger.read_text())["attempts"], [self.prior])
 
     def test_contradictory_restore_readback_refuses_cli_and_ctl_bootstrap(self):
         clean = self.native_close()

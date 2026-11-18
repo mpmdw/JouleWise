@@ -138,17 +138,35 @@ def verify_restore(result, *, native):
 
 def verify_shutdown(receipt, path, *, require_attestation, runner):
     """Check recorded restore and feed stops against the lead's RL-179 close attestation."""
+    pgids = set()
+
+    def record_pgid(pgid):
+        if type(pgid) is not int or pgid <= 1:
+            raise ValueError("invalid process group ID in close receipt")
+        pgids.add(pgid)
+
     def stopped(result):
         if not isinstance(result, dict) or result.get("proven_stopped") is not True:
             return False
         group = result.get("group")
-        return ("group" not in result or (isinstance(group, dict)
-                and group.get("reaped") is True and group.get("group_census") == []))
+        if "group" not in result:
+            return True
+        if not isinstance(group, dict) or group.get("reaped") is not True or group.get("group_census") != []:
+            return False
+        if "pgid" in group:
+            record_pgid(group["pgid"])
+        return True
+
+    def check_stop_error(row):
+        error = row.get("error")
+        if isinstance(error, str) and "not proven stopped" in error:
+            raise ValueError(f"{row.get('name', 'predecessor')} process group not proven stopped")
 
     stop_steps = {}
     restore_steps = 0
     native = receipt.get("schema") == runner.RECEIPT_SCHEMA
     for row in receipt.get("steps", []):
+        check_stop_error(row)
         name = row["name"]
         if name == "restore" or name.startswith(("stop-", "close-")):
             if type(row.get("rc")) is not int or row["rc"] != 0:
@@ -165,6 +183,16 @@ def verify_shutdown(receipt, path, *, require_attestation, runner):
                     or ("rc" in result and (type(result["rc"]) is not int or result["rc"] != 0))):
                 raise ValueError(f"{name} lacks a unique successful stop proof")
             stop_steps[feed] = {"rc": row["rc"], **result}
+        elif isinstance(row.get("result"), dict) and "group" in row["result"] and not stopped(row["result"]):
+            raise ValueError(f"{name} process group not proven stopped")
+    check_stop_error(receipt)
+    workload_groups = receipt.get("workload_groups", [])
+    if not isinstance(workload_groups, list):
+        raise ValueError("invalid workload group records")
+    for group in workload_groups:
+        if not isinstance(group, dict) or group.get("proven_stopped") is not True:
+            raise ValueError("workload process group not proven stopped")
+        record_pgid(group.get("pgid"))
     feeds = receipt.get("feeds", {})
     if native:
         if restore_steps != 1 or not {"agents", "meter", "volumes"} <= stop_steps.keys() or feeds.keys() != stop_steps.keys():
@@ -186,6 +214,13 @@ def verify_shutdown(receipt, path, *, require_attestation, runner):
         proofs = ("HOST_RESTORE_OK", "FEEDS_STOPPED", "GROUPS_ABSENT", "FOREIGN_PROCESSES_ABSENT")
         if os.environ.get("CLOSE_PROOF_RECEIPT") != path or any(os.environ.get(key) != "1" for key in proofs):
             raise ValueError("receipt-bound restore, feed stop, group absence and foreign process proof required")
+    if pgids:
+        from scripts import run_night
+
+        for pgid in sorted(pgids):
+            absent, members = run_night._group_census(pgid)
+            if absent is not True or members != []:
+                raise ValueError(f"fresh census did not prove process group {pgid} empty")
 
 
 def proven_close(ledger, runner, *, require_attestation=True):
