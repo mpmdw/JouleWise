@@ -1,0 +1,32 @@
+{
+  "schema": "joulewise.cadence_queue.v1",
+  "queue_id": "cq-cl-transfer-06",
+  "expires_at": "2026-11-18T00:00:00-08:00",
+  "halt": {
+    "by": "draft-builder",
+    "at": "2026-11-18T00:00:00-08:00",
+    "reason": "DRAFT: hold for effective freeze 2, registered manifest and dated lead issue"
+  },
+  "standing_notice": null,
+  "spans": [
+    {
+      "seq": 1,
+      "span_id": "cl-transfer-06-s01",
+      "block_id": "cl-transfer-06",
+      "kit": {
+        "path": "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/dated-transfer/kits/cl-transfer-06.v1.1.json",
+        "sha256": "d14b07bac7662feb7d33ef91d8152118fbaaa4db73279eb263e3942c555c94bb"
+      },
+      "legs": [
+        "L001",
+        "L002",
+        "L003",
+        "L004",
+        "L005",
+        "L006"
+      ],
+      "attempt": 1,
+      "not_before": "2026-11-18"
+    }
+  ]
+}

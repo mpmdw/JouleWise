@@ -1,0 +1,11 @@
+{
+  "schema": "joulewise.cadence_look_ledger.v1",
+  "looks": [
+    {
+      "look_id": "lm-transfer-01",
+      "manifest_path": "docs/process/cadence/looks/lm-transfer-01.json",
+      "sha256": "e63575eeb9614a417e0de07ca087df8eb7608d706b1fb30924be6ee92078c3a8",
+      "status": "draft"
+    }
+  ]
+}
