@@ -890,34 +890,16 @@ class MlxRuntimeAdapter:
                                 "position": position,
                             }
                         )
-                    if cache_accounting:
-                        # RL-182a: record both boundaries before constructing the events.
-                        prefill_end_s = self._clock.now()
-                        first_token_s = self._clock.now()
-                        events.extend((
-                            RuntimeEvent(prefill_end_s, "phase_end", "prefill",
-                                         "mlx prefill completed", prefill_end_metadata),
-                            RuntimeEvent(prefill_end_s, "phase_start", "decode",
-                                         "mlx decode started", decode_start_metadata),
-                        ))
-                    else:
-                        events.append(
-                            self._event(
-                                "phase_end",
-                                "prefill",
-                                "mlx prefill completed",
-                                prefill_end_metadata,
-                            )
-                        )
-                        events.append(
-                            self._event(
-                                "phase_start",
-                                "decode",
-                                "mlx decode started",
-                                decode_start_metadata,
-                            )
-                        )
-                timestamp_s = first_token_s if index == 0 and cache_accounting else self._clock.now()
+                    # RL-182a: record both boundaries before constructing the events.
+                    prefill_end_s = self._clock.now()
+                    first_token_s = self._clock.now()
+                    events.extend((
+                        RuntimeEvent(prefill_end_s, "phase_end", "prefill",
+                                     "mlx prefill completed", prefill_end_metadata),
+                        RuntimeEvent(prefill_end_s, "phase_start", "decode",
+                                     "mlx decode started", decode_start_metadata),
+                    ))
+                timestamp_s = first_token_s if index == 0 else self._clock.now()
                 text_parts.append(str(getattr(response, "text", "")))
                 finish_reason = getattr(response, "finish_reason", None)
                 if isinstance(finish_reason, str):

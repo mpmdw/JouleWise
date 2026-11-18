@@ -54,16 +54,9 @@ class AppleEndpointTests(unittest.TestCase):
         ))
         endpoint = MlxEndpoint(runtime, config, clock, episode_domain="synthetic.monotonic",
                                prepare_metadata={"mlx_version": "synthetic", "mlx_lm_version": "synthetic"})
-        event = runtime._event
-
-        def prefill_outside_turn(*args, **kwargs):
-            result = event(*args, **kwargs)
-            if (result.event_type, result.phase) == ("phase_end", "prefill"):
-                return replace(result, timestamp_s=result.timestamp_s - 1)
-            return result
-
         messages = [ChatMessage("user", "Reconcile the ledger.")]
-        with patch.object(runtime, "_event", prefill_outside_turn):
+        # The first turn's runtime clock reports a stamp before the endpoint's turn start.
+        with patch.object(runtime, "_clock", FakeClock(start=9)):
             result = endpoint.chat(messages, tools=(), max_tokens=2, temperature=0.0, seed=19)
         self.assertEqual(result.first_token_ns, result.start_ns)
         flag = "first_token_clock_outside_turn"
