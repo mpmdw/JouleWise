@@ -15,6 +15,11 @@ from subprocess import run
 LEDGER_NAME = "evidence_ledger.jsonl"
 MANIFEST_NAME = "runtime_custody.json"
 MANIFEST_SCHEMA = "joulewise.align.r1_runtime_custody.v1"
+SOAK_SEGMENT = "idle_soak"
+SOAK_DIRECTORY = "soak"
+SOAK_ROW = "soak_row.json"
+SOAK_REFERENCE = "soak_reference.json"
+SOAK_FILES = ("runtime_result.json", "sensors/align_thermal.jsonl", "load_journal.json")
 D = re.compile(r"[0-9a-f]{64}\Z")
 KINDS = {
     "capture-predecessor-30b": "capture_predecessor_30b",
@@ -146,20 +151,31 @@ def _hash_text(value):
 class EvidenceLedger:
     """Append the exact observed rows and keep the trusted copy in memory."""
 
-    def __init__(self, output, producer_revision, runtime_config, soak_reference):
+    def __init__(self, output, producer_revision, runtime_config, soak_reference=None, *,
+                 mode="native", soak=None):
         self.root = Path(output)
         self.path = self.root / LEDGER_NAME
         self.attempt = {"run": self.root.parent.name, "nonce": token_hex(16)}
         self._lines = []
         self._members = {}
         self._bound_members = {}
+        self.mode = mode
+        self._kinds = {"idle": SOAK_SEGMENT} if mode == "soak" else KINDS
         self.runtime_config = Path(runtime_config)
-        self.soak_reference = Path(soak_reference)
+        self._soak = soak
         self.config_sha = self._input_digest(self.runtime_config)
-        self.soak_sha = self._input_digest(self.soak_reference)
-        self._append({"attempt": self.attempt, "mode": "native", "producer_revision": producer_revision,
-                      "runtime_config": {"path": str(self.runtime_config), "sha256": self.config_sha},
-                      "soak_reference": {"path": str(self.soak_reference), "sha256": self.soak_sha}})
+        start = {"attempt": self.attempt, "mode": mode, "producer_revision": producer_revision,
+                 "runtime_config": {"path": str(self.runtime_config), "sha256": self.config_sha}}
+        if mode == "native":
+            self.soak_reference = Path(soak_reference)
+            self.soak_sha = self._input_digest(self.soak_reference)
+            start["soak_reference"] = {"path": str(self.soak_reference), "sha256": self.soak_sha}
+            if soak is not None:
+                if (self.config_sha, self.soak_sha) != (soak.config_sha, soak.reference_sha):
+                    raise EvidenceFailure("source_integrity", "idle", LEDGER_NAME)
+                start.update(soak_ledger={"path": str(soak.path), "sha256": soak.sha256},
+                             soak_attempt_nonce=soak.nonce)
+        self._append(start)
 
     @staticmethod
     def _input_digest(path):
@@ -201,15 +217,17 @@ class EvidenceLedger:
     def verify_inputs(self):
         self.verify_chain()
         if (self._input_digest(self.runtime_config) != self.config_sha
-                or self._input_digest(self.soak_reference) != self.soak_sha):
+                or (self.mode == "native" and self._input_digest(self.soak_reference) != self.soak_sha)):
             raise EvidenceFailure("source_integrity", "attempt", "issued_inputs")
+        if self._soak is not None:
+            self._soak.verify_reads()
 
     def member_return(self, kind, output, argv, *, process=None, error=None, spawned=None):
         """Bind a return before interpreting its streams or opening a member file."""
-        segment = KINDS.get(kind)
+        segment = self._kinds.get(kind)
         if segment is None or Path(output) != self.root / segment:
-            raise EvidenceFailure("sequence", kind if kind in KINDS else "attempt", LEDGER_NAME)
-        if tuple(self._members) != tuple(KINDS)[:list(KINDS).index(kind)]:
+            raise EvidenceFailure("sequence", kind if kind in self._kinds else "attempt", LEDGER_NAME)
+        if tuple(self._members) != tuple(self._kinds)[:list(self._kinds).index(kind)]:
             raise EvidenceFailure("sequence", kind, LEDGER_NAME)
         relative = f"{segment}/{MANIFEST_NAME}"
         unreadable = False
@@ -231,6 +249,8 @@ class EvidenceLedger:
         self._members[kind] = row
         if unreadable:
             raise EvidenceFailure("source_integrity", kind, MANIFEST_NAME)
+        if process is not None and (not isinstance(stdout, str) or not isinstance(stderr, str)):
+            raise EvidenceFailure("stdout_receipt", kind, "stdout", field="invalid")
 
     def member(self, kind):
         self.verify_chain()
@@ -279,6 +299,22 @@ class EvidenceLedger:
         if not self._lines or b'"verdict":' in self._lines[-1]:
             raise EvidenceFailure("verdict_binding", "attempt", LEDGER_NAME)
         self._append({"verdict": verdict, "emitted_sha256": dict(copies)})
+        self.verify_chain()
+
+    def finish_soak(self, outcome):
+        if self.mode != "soak" or len(self._lines) != 2 or outcome not in ("accepted", "refused"):
+            raise EvidenceFailure("evidence_unverifiable", "idle", LEDGER_NAME)
+        digests = {}
+        for file in (SOAK_ROW, SOAK_REFERENCE):
+            try:
+                digests[Path(file).stem + "_sha256"] = digest(read_regular(self.root, file))
+            except FileNotFoundError as error:
+                if outcome == "accepted":
+                    raise EvidenceFailure("evidence_unverifiable", "idle", file) from error
+                digests[Path(file).stem + "_sha256"] = "absent"
+        if outcome == "accepted":
+            self.verify_final_sources()
+        self._append({"outcome": outcome, **digests})
         self.verify_chain()
 
     def verify_final_sources(self):
@@ -341,3 +377,131 @@ class BoundMember:
         for relative, source in self._read_files.items():
             if digest(self._read(relative, source)) != self.files[relative]:
                 raise EvidenceFailure("source_integrity", self.kind, source)
+
+
+def _is_digest(value):
+    return isinstance(value, str) and D.fullmatch(value) is not None
+
+
+class BoundSoak:
+    """The launcher-bound soak observation required before the native row 0."""
+
+    def __init__(self, output, soak_reference, ledger_sha, producer_revision, runtime_config):
+        output = Path(output)
+        self.root = output.parent / SOAK_DIRECTORY
+        self.path = self.root / LEDGER_NAME
+        self.sha256 = ledger_sha
+
+        # 1. The launcher's digest must be present and must bind the ledger.
+        if not _is_digest(ledger_sha):
+            raise EvidenceFailure("evidence_unverifiable", "idle", LEDGER_NAME)
+        raw = self._read(LEDGER_NAME, ledger_sha, missing="evidence_unverifiable")
+
+        # 2. The three complete rows must show a successful idle invocation.
+        physical = raw.split(b"\n")
+        if len(physical) < 4:
+            raise EvidenceFailure("evidence_unverifiable", "idle", LEDGER_NAME, field="missing")
+        invalid = EvidenceFailure("fresh_soak", "idle", LEDGER_NAME, field="invalid")
+        if len(physical) != 4 or physical[-1]:
+            raise invalid
+        try:
+            start, returned, closed = (parse_json(row) for row in physical[:3])
+        except (ValueError, TypeError, RecursionError) as error:
+            raise invalid from error
+        shapes = (
+            {"attempt", "mode", "producer_revision", "runtime_config"},
+            {"attempt", "kind", "argv_sha256", "spawned", "exit_status",
+             "stdout_sha256", "stderr_sha256", "segment", "manifest"},
+            {"outcome", "soak_row_sha256", "soak_reference_sha256"},
+        )
+        for index, (row, shape) in enumerate(zip((start, returned, closed), shapes, strict=True)):
+            previous = digest(physical[index - 1] + b"\n") if index else None
+            if not isinstance(row, dict) or set(row) - {"previous_sha256"} != shape:
+                raise invalid
+            if "previous_sha256" not in row:
+                raise EvidenceFailure("evidence_unverifiable", "idle", LEDGER_NAME, index=index, field="missing")
+            if row["previous_sha256"] != previous:
+                raise EvidenceFailure("source_integrity", "idle", LEDGER_NAME, index=index)
+        if (start["mode"] != "soak" or returned["kind"] != "idle"
+                or returned["segment"] != SOAK_SEGMENT or closed["outcome"] != "accepted"
+                or returned["spawned"] is not True or type(returned["exit_status"]) is not int
+                or returned["exit_status"] != 0
+                or not all(_is_digest(returned[key]) for key in ("stdout_sha256", "stderr_sha256", "argv_sha256"))):
+            raise invalid
+
+        # 3. The kit and soak must refer to this attempt and these issued inputs.
+        self.config_sha = EvidenceLedger._input_digest(Path(runtime_config))
+        attempt = start["attempt"]
+        if (not isinstance(attempt, dict) or set(attempt) != {"run", "nonce"}
+                or attempt["run"] != output.parent.name or attempt != returned["attempt"]
+                or not isinstance(attempt["nonce"], str) or re.fullmatch(r"[0-9a-f]{32}", attempt["nonce"]) is None
+                or start["producer_revision"] != producer_revision
+                or start["runtime_config"] != {"path": str(runtime_config), "sha256": self.config_sha}
+                or output.name != "part-c" or soak_reference is None
+                or Path(soak_reference) != self.root / SOAK_REFERENCE):
+            raise EvidenceFailure("fresh_soak", "idle", LEDGER_NAME, field="disagrees", peer="issued_inputs")
+        self.nonce = attempt["nonce"]
+
+        # 4. Bind both outer files before parsing either one.
+        self.row_sha, self.reference_sha = closed["soak_row_sha256"], closed["soak_reference_sha256"]
+        outer_row = self._read(SOAK_ROW, self.row_sha)
+        outer_reference = self._read(SOAK_REFERENCE, self.reference_sha)
+
+        # 5. Bind the segment's manifest and each required file through it.
+        manifest = returned["manifest"]
+        if not isinstance(manifest, dict) or not _is_digest(manifest.get("sha256")):
+            raise EvidenceFailure("evidence_unverifiable", "idle", MANIFEST_NAME)
+        if set(manifest) != {"path", "sha256"} or manifest["path"] != f"{SOAK_SEGMENT}/{MANIFEST_NAME}":
+            raise EvidenceFailure("fresh_soak", "idle", MANIFEST_NAME, field="disagrees", peer=LEDGER_NAME)
+        self.member = BoundMember(self.root / SOAK_SEGMENT, "idle", self.config_sha,
+                                  manifest_sha=manifest["sha256"])
+        self.sources = {name: self.member.read(name, name) for name in SOAK_FILES}
+
+        # 6. The outer row, saved receipt and stdout must be the same observation.
+        self.row = self._object(outer_row, SOAK_ROW)
+        self.reference = self._object(outer_reference, SOAK_REFERENCE)
+        result = self._object(self.sources[SOAK_FILES[0]], SOAK_FILES[0])
+        segment = self.root / SOAK_SEGMENT
+        reported_output = self.row.get("output_dir")
+        if (self.row.get("name") != SOAK_SEGMENT or type(self.row.get("attempt")) is not int
+                or self.row["attempt"] != 0 or not isinstance(reported_output, str)
+                or Path(reported_output).resolve() != segment.resolve()
+                or self.reference.get("source_segment") != SOAK_SEGMENT
+                or self.reference.get("source_output") != reported_output
+                or type(self.reference.get("attempt")) is not int or self.reference["attempt"] != 0):
+            raise EvidenceFailure("fresh_soak", "idle", SOAK_ROW, field="disagrees", peer=SOAK_REFERENCE)
+        if canonical(self.row.get("result")) != canonical(result):
+            raise EvidenceFailure("receipt_pair", "idle", SOAK_ROW, field="disagrees", peer=SOAK_FILES[0])
+        line = json.dumps(result, sort_keys=True, allow_nan=False) + "\n"
+        if _hash_text(line) != returned["stdout_sha256"]:
+            raise EvidenceFailure("receipt_pair", "idle", SOAK_FILES[0], field="disagrees", peer="stdout")
+        self.verify_reads()
+
+    def _read(self, filename, expected, *, missing="source_integrity"):
+        if not _is_digest(expected):
+            raise EvidenceFailure("evidence_unverifiable", "idle", filename)
+        try:
+            raw = read_regular(self.root, filename)
+        except FileNotFoundError as error:
+            raise EvidenceFailure(missing, "idle", filename) from error
+        except (OSError, ValueError) as error:
+            raise EvidenceFailure("source_integrity", "idle", filename) from error
+        if digest(raw) != expected:
+            raise EvidenceFailure("source_integrity", "idle", filename)
+        return raw
+
+    @staticmethod
+    def _object(raw, source):
+        try:
+            result = parse_json(raw)
+        except (ValueError, TypeError, RecursionError) as error:
+            raise EvidenceFailure("fresh_soak", "idle", source, field="invalid") from error
+        if not isinstance(result, dict):
+            raise EvidenceFailure("fresh_soak", "idle", source, field="invalid")
+        return result
+
+    def verify_reads(self):
+        self._read(LEDGER_NAME, self.sha256, missing="evidence_unverifiable")
+        self._read(SOAK_ROW, self.row_sha)
+        self._read(SOAK_REFERENCE, self.reference_sha)
+        self.member.verify_reads()

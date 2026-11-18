@@ -9,6 +9,7 @@ import json
 import os
 from pathlib import Path
 import subprocess
+import sys
 import tempfile
 import time
 from types import SimpleNamespace
@@ -18,6 +19,7 @@ from unittest.mock import patch
 from joulewise.align.apple import r1_runtime as rt
 from scripts import align_r1_followup_kit as kit, align_r1_part_c as pc, launch_align_r0 as launcher
 from scripts import run_align_r1_smoke as smoke
+from tests.test_part_c_evidence_ledger import MARKER, SoakAttempt, hashed, json_bytes, write_terminal
 from tests.test_part_c_gate_evidence import (
     evaluation_inputs, member_record, step_record, synthetic_episode, write_predecessor, write_receipt,
 )
@@ -875,6 +877,274 @@ class RunnerPartCTests(unittest.TestCase):
         receipt = case.receipt()
         self.assertEqual((receipt['parts'], receipt['parts_requested'], receipt['rc']), ({'C': True}, 'C', 0))
         self.assertFalse(case.live)
+
+
+class SoakLauncherBindingTests(unittest.TestCase):
+    def setUp(self):
+        temp = tempfile.TemporaryDirectory()
+        self.addCleanup(temp.cleanup)
+        self.attempt = SoakAttempt(Path(temp.name))
+        self.attempt.config = kit.ROOT / kit.r1.DEFAULT_RUNTIME_CONFIG
+        self.attempt.config_sha = hashed(self.attempt.config.read_bytes())
+        self.attempt.revision = kit.r1.executed_commit(kit.ROOT)
+        self.runtime = ["synthetic-runtime", "--config", str(self.attempt.config)]
+
+    def make_idle(self):
+        n = 1800
+        times = [float(i) for i in range(n + 1)]
+        sensors = rt.load_config(self.attempt.config)[0]["sensors"]
+        fast, slow = sensors["s_fast"], sensors["s_slow"]
+        degrees = float(f"35.{MARKER}")
+        readings = {fast: degrees, slow: degrees}
+        load = {
+            "cpu_busy_cores": [0.1] * (n + 1), "cpu_busy_t_s": times,
+            "census": [{"label": "start", "t_s": 0.0,
+                        "processes": [{"pid": MARKER, "ppid": 0, "pcpu": 0.1, "comm": "synthetic"}]}],
+        }
+        receipt = self.attempt.receipt(
+            duration_s=float(n), sensor_roles=sensors, sensor_series_c={key: [value] * (n + 1)
+                                                                         for key, value in readings.items()},
+            sensor_series_t_s={key: times for key in readings}, sensor_series_end_t_s=float(n),
+            sensor_series_failed_reads={key: 0 for key in readings}, load_journal_errors=[],
+            battery={"private": MARKER}, **load)
+
+        def journal_row(kind, sequence, seconds, values):
+            ns = seconds * 1_000_000_000
+            stamps = {"wall_ns": ns, "monotonic_ns": ns, "monotonic_raw_ns": ns}
+            return {"kind": kind, "schema": "joulewise.align_thermal.v1", "module": "temperature",
+                    "session": "synthetic-soak", "seq": sequence, "started": stamps, "finished": stamps,
+                    "values": values, "raw": [], "error": None}
+
+        sample = {"source": "smc", "sensors": readings, "errors": {},
+                  "units": dict.fromkeys(readings, "C"),
+                  "readings": {key: {"value": value, "error": None} for key, value in readings.items()}}
+        rows = [journal_row("session_start", 1, 0, {"thermal": sensors})]
+        rows.extend(journal_row("reading", i + 2, i, sample) for i in range(n + 1))
+        rows.append(journal_row("session_end", n + 3, n, {"collector_error": None}))
+        return self.attempt.produce(receipt, **{
+            "sensors/align_thermal.jsonl": b"".join(map(json_bytes, rows)),
+            "load_journal.json": json_bytes({"exclude_roots": [MARKER], "errors": [], **load}),
+        })
+
+    def make_model_member(self, kind, segment):
+        from joulewise.align.records import Episode, Turn, to_jsonable
+
+        roles = {"capture-predecessor-30b": "predecessor", "step-d": "step-d",
+                 "d-bank-benign-s1": "d-bank", "x-g": "x-g"}
+        role = roles[kind]
+        native_mode = {"value": 0, "source": pc.POWERMODE_SOURCE, "observed_at": "episode_start"}
+        if role == "predecessor":
+            receipt = write_predecessor(segment)
+        elif role == "step-d":
+            member = step_record(segment.parent, STEP, 4096)["member"]
+            receipt = member["runtime"]
+            receipt.update(e_D_j_per_token=MARKER, thermometry={
+                "status": "captured", "classification_sha256": "a" * 64, "alias_groups": []})
+        else:
+            member = member_record(segment.parent, role, bank() if role == "d-bank" else XG)
+            receipt = member["runtime"]
+            receipt["deadman"]["phases_s"] = dict.fromkeys(rt.contract.DEADMAN_PHASES, 0.0)
+        receipt.update(schema=rt.RESULT_SCHEMA, kind=kind, backend="production", config_sha256=self.attempt.config_sha,
+                       ac_powermode=native_mode, energy_j=MARKER, battery_drain_pct_per_h=MARKER)
+        bundle = segment / receipt["bundle"]
+        out = bundle / "outputs"
+        out.mkdir(exist_ok=True)
+        template_name = ("align-pilot-v3-episodes-a-e01.json" if role in ("predecessor", "x-g")
+                         else "align-v4-episodes-a-e08.json")
+        template = kit.ROOT / "configs/campaigns/align_v4/stages/episodes-a" / template_name
+        config = json.loads(template.read_bytes())
+        config["run_id"] = bundle.name
+        (bundle / "config.json").write_bytes(json_bytes(config))
+        metadata = {"run_id": bundle.name, "config_sha256": hashed((bundle / "config.json").read_bytes()),
+                    "uncertainty_evidence": {"clock_anchor": {
+                        "status": "bounded", "wall_minus_monotonic_lower_s": 0, "wall_minus_monotonic_upper_s": 0,
+                        "effective_clock_anchor_bound_s": 0, "method": "synthetic"}},
+                    "synthetic_private": MARKER}
+        (bundle / "metadata.json").write_bytes(json_bytes(metadata))
+        (bundle / "summary_metrics.json").write_bytes(json_bytes({"status": "succeeded", "failure_reason": None}))
+        (bundle / "events.jsonl").write_bytes(json_bytes({"event_type": "run_finalized", "phase": "reduce",
+                                                        "timestamp_s": 1, "message": "", "metadata": {}}))
+        (bundle / "power_trace.csv").write_text("timestamp_s,power_w,source\n")
+        turns = [Turn(index=0, start_ns=1, end_ns=2, prefill_tokens=50, context_tokens=0, decode_tokens=1)]
+        hardware = {"ac_powermode": native_mode}
+        if role != "predecessor":
+            turns = [Turn(context_tokens=0, **{key: row[key] for key in
+                                                ("index", "start_ns", "end_ns", "prefill_tokens", "decode_tokens")})
+                     for row in member["turns"]]
+            gates = member["journal_intervals"]
+            hardware.update(thermal={"intervals": gates, "flags": []}, token_budget={"deadman_s": receipt["deadman"]["T_dead_s"]})
+            rows = [{"module": "temperature", "kind": "session_start", "values": {}}]
+            for gate, turn in zip(gates, turns, strict=True):
+                for timestamp in (gate["exit_sample_ns"], turn.start_ns + 1_000_000_000):
+                    stamp = {"wall_ns": timestamp, "monotonic_ns": timestamp}
+                    rows.append({"module": "temperature", "kind": "reading", "started": stamp, "finished": stamp,
+                                 "values": {"status": {"os_level": 0, "pm_state": "Nominal",
+                                                       "pm_observed_ns": timestamp}}})
+                rows.append({"module": "temperature", "kind": "align_thermal_gate",
+                             "values": {"state": "end", "gate": gate}})
+            rows.append({"module": "temperature", "kind": "session_end", "values": {"collector_error": None}})
+            (out / "align_thermal.jsonl").write_bytes(b"".join(map(json_bytes, rows)))
+        identity = synthetic_episode(role)
+        identity.pop("flags")
+        ep = Episode(**identity, episode_id="synthetic-member", endpoint="test",
+                     clock_domain="joulewise.monotonic:synthetic-member", start_ns=0,
+                     end_ns=turns[-1].end_ns, hardware={**hardware, "paired_clock_stamps_ns": [
+                         {"epoch_ns": 1, "monotonic_before_ns": 1, "monotonic_after_ns": 1,
+                          "wall_resolution_ns": 1, "monotonic_resolution_ns": 1}]}, turns=tuple(turns))
+        (out / "align_episode.json").write_bytes(json_bytes(to_jsonable(ep)))
+        (out / "align_turns.jsonl").write_bytes(b"".join(json_bytes({"turn": t.index}) for t in turns))
+        if role == "step-d":
+            (out / "align_window_reference.json").write_bytes(json_bytes({"status": "captured"}))
+            for relative in ("recovery/align_thermal.jsonl", "inventory/r1_classification.json"):
+                path = segment / relative
+                path.parent.mkdir()
+                path.write_bytes(json_bytes({"synthetic": True}))
+        if role != "predecessor":
+            from joulewise.align.apple.workload import read_episode_bundle
+            receipt["episode_flags"] = list(read_episode_bundle(bundle).flags)
+        return write_terminal(segment, kind, receipt, self.attempt.config_sha)
+
+    def run_launcher(self, *, idle_error=None, before_kit=None):
+        def transport(argv):
+            kind = argv[argv.index("--r1-kind") + 1]
+            output = Path(argv[argv.index("--output") + 1])
+            if kind == "idle" and idle_error is not None:
+                raise idle_error
+            return self.make_idle() if kind == "idle" else self.make_model_member(kind, output)
+
+        real_popen = subprocess.Popen
+
+        def child(argv, *args, stdout=None, stderr=None, **kwargs):
+            command = Path(argv[2]).name if len(argv) > 2 else ""
+            if command not in ("run_align_r1_smoke.py", "align_r1_followup_kit.py"):
+                return real_popen(argv, *args, stdout=stdout, stderr=stderr, **kwargs)
+            if command == "align_r1_followup_kit.py" and before_kit is not None:
+                before_kit()
+            with contextlib.redirect_stdout(io.TextIOWrapper(stdout, write_through=True)) as pipe, \
+                    contextlib.redirect_stderr(io.TextIOWrapper(stderr, write_through=True)) as errors:
+                try:
+                    rc = (smoke.main if command == "run_align_r1_smoke.py" else kit.main)(argv[3:])
+                except ValueError:
+                    rc = 2
+                finally:
+                    pipe.detach()
+                    errors.detach()
+            return SimpleNamespace(pid=90001, poll=lambda: rc, wait=lambda: rc)
+
+        with contextlib.ExitStack() as stack:
+            for name in ("night_agents", "ac_power", "condition13", "read_power", "display", "dwell", "restore_power"):
+                stack.enter_context(patch.object(smoke, name, return_value={"rc": 0}))
+            stack.enter_context(patch.object(smoke, "SIGNALS", ()))
+            stack.enter_context(patch.object(smoke.subprocess, "Popen", side_effect=child))
+            stack.enter_context(patch.object(smoke, "PartDeadline", return_value=SimpleNamespace(
+                start=lambda: None, cancel=lambda: None, expired=lambda: False)))
+            stack.enter_context(patch.object(smoke.night, "_terminate_process_group", return_value=True))
+            stack.enter_context(patch.object(kit.r1, "executed_commit", return_value=self.attempt.revision))
+            stack.enter_context(patch.object(kit.reg, "verify_r1_executed_sources"))
+            stack.enter_context(patch.object(kit.r1, "runtime_argv_from_inputs", return_value=self.runtime))
+            stack.enter_context(patch.object(kit.r1, "_run", side_effect=transport))
+            stack.enter_context(patch.object(kit.r1, "wait_outside_os_batch"))
+            args = SimpleNamespace(output=self.attempt.root, soak_reference=None, fresh_soak=True, parts="C",
+                                   pmset_bin="synthetic", deadline=time.time() + 90_000)
+            return smoke.run(args, feeds=[])
+
+    def test_native_launcher_passes_through_the_soak_and_member_ledgers(self):
+        rc = self.run_launcher()
+        output = self.attempt.output
+        self.assertTrue((output / "smoke.json").is_file(),
+                        (self.attempt.root / "runner_receipt.json").read_text())
+        record = json.loads((output / "smoke.json").read_bytes())
+        self.assertEqual(rc, 0, (record, (self.attempt.root / "part-c.stdout.log").read_text()))
+        self.assertTrue(record["evaluation"]["pass"])
+        self.assertEqual(record, json.loads((output / "smoke_part_c.json").read_bytes()))
+        soak = [json.loads(line) for line in self.attempt.ledger.read_bytes().splitlines()]
+        kit_rows = [json.loads(line) for line in (output / "evidence_ledger.jsonl").read_bytes().splitlines()]
+        self.assertEqual(len(soak), 3)
+        self.assertEqual(set(soak[0]), {"attempt", "mode", "producer_revision", "runtime_config", "previous_sha256"})
+        self.assertEqual(set(soak[2]), {"outcome", "soak_row_sha256", "soak_reference_sha256", "previous_sha256"})
+        self.assertEqual(len(kit_rows), 6)
+        handoff = hashed(self.attempt.ledger.read_bytes())
+        self.assertEqual(kit_rows[0]["soak_ledger"], {"path": str(self.attempt.ledger), "sha256": handoff})
+        self.assertEqual(kit_rows[0]["soak_attempt_nonce"], soak[0]["attempt"]["nonce"])
+        runner = json.loads((self.attempt.root / "runner_receipt.json").read_bytes())
+        self.assertEqual((runner["fresh_soak"], runner["parts_requested"], runner["parts"], runner["rc"]),
+                         (True, "C", {"C": True}, 0))
+        result = next(step["result"] for step in runner["steps"] if step["name"] == "soak")
+        self.assertEqual(result["soak_ledger_sha256"], handoff)
+        self.assertEqual(result["soak_reference_sha256"], hashed(self.attempt.reference.read_bytes()))
+        kit_run = next(step["result"] for step in runner["steps"] if step["name"] == "part-C")
+        self.assertEqual(kit_run["argv"][kit_run["argv"].index("--soak-ledger-sha256") + 1], handoff)
+        self.assertIn("Part C verdict: pass", (self.attempt.root / "part-c.stdout.log").read_text())
+
+    def test_idle_argv_matches_frozen_invoker_with_and_without_the_host_lock(self):
+        for held in (False, True):
+            with self.subTest(held=held), tempfile.TemporaryDirectory() as tmp:
+                attempt = SoakAttempt(Path(tmp))
+                attempt.directory.mkdir(parents=True)
+                writer = pc.EvidenceLedger(attempt.directory, attempt.revision, attempt.config, mode="soak")
+                rt_receipt = attempt.receipt(cpu_busy_cores=[], cpu_busy_t_s=[], census=[], sensor_series_c={},
+                                             sensor_series_t_s={}, sensor_series_end_t_s=0)
+                process = attempt.produce(rt_receipt)
+                lock = SimpleNamespace(held=held, pass_fds=lambda: (16,))
+                with patch.object(kit.r1, "_CHILD_HOST_LOCK", lock), patch.object(
+                        kit.r1, "_run", return_value=process) as call:
+                    arguments = (["runtime"], "idle", attempt.segment, 1800.0)
+                    kwargs = {"quiet": True, "contract_key": "idle_soak"}
+                    kit.r1._invoke(*arguments, **kwargs)
+                    pc.judged_invoke(*arguments, **kwargs, ledger=writer)
+                    self.assertEqual(call.call_args_list[0], call.call_args_list[1])
+
+    def test_real_child_stdout_matches_the_frozen_soak_receipt(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            attempt = SoakAttempt(Path(tmp))
+            issued = attempt.produce(attempt.receipt())
+            command = [sys.executable, "-c", f"import sys; sys.stdout.write({issued.stdout!r})"]
+            with patch.object(kit.r1, "_terminate", side_effect=AssertionError("no signals")):
+                actual = kit.r1._run(command)
+            self.assertEqual(actual.returncode, 0)
+            path_sha = attempt.close(process=actual)
+            self.assertEqual(attempt.binding(path_sha).row["result"], attempt.receipt())
+
+    def test_no_soak_values_leave_either_process_or_ledger(self):
+        rc = self.run_launcher()
+        self.assertEqual(rc, 0)
+        files = [self.attempt.ledger, self.attempt.output / "evidence_ledger.jsonl",
+                 self.attempt.output / "smoke.json", self.attempt.output / "smoke_part_c.json",
+                 self.attempt.root / "runner_receipt.json", *self.attempt.root.glob("part-*.log")]
+        for file in files:
+            with self.subTest(output=file.name):
+                self.assertNotIn(str(MARKER), file.read_text())
+
+    def test_changed_ledger_after_handoff_refuses_before_kit_row_zero(self):
+        def edit():
+            raw = self.attempt.ledger.read_bytes()
+            self.attempt.ledger.write_bytes(b" " + raw[1:])
+
+        self.assertEqual(self.run_launcher(before_kit=edit), 2)
+        self.assertFalse((self.attempt.output / "evidence_ledger.jsonl").exists())
+        record = json.loads((self.attempt.output / "smoke.json").read_bytes())
+        self.assertIs(record["evaluation"]["pass"], False)
+        self.assertEqual(record["evaluation"]["evidence_failures"], {"source_integrity": "source_integrity"})
+
+    def test_failed_soak_closes_its_ledger_and_starts_no_kit(self):
+        self.assertEqual(self.run_launcher(idle_error=OSError(str(MARKER))), 2)
+        rows = [json.loads(line) for line in self.attempt.ledger.read_bytes().splitlines()]
+        self.assertEqual(len(rows), 3)
+        self.assertEqual(rows[1]["exception"], "OSError")
+        self.assertEqual(rows[2]["outcome"], "refused")
+        self.assertEqual(rows[2]["soak_reference_sha256"], "absent")
+        self.assertFalse(self.attempt.output.exists())
+        self.assertNotIn(str(MARKER), (self.attempt.root / "part-soak.stdout.log").read_text())
+        self.assertNotIn(str(MARKER), (self.attempt.root / "part-soak.stderr.log").read_text())
+
+    def test_archive_cli_accepts_idle_custody_without_a_soak_ledger(self):
+        self.attempt.close()
+        self.attempt.ledger.unlink()
+        with contextlib.redirect_stdout(io.StringIO()) as out:
+            self.assertEqual(kit.main(["replay-archived", "--output", str(self.attempt.output),
+                                       "--runtime-config", str(self.attempt.config), "--kind", "idle"]), 0)
+        self.assertEqual(json.loads(out.getvalue()), {"binding": "archived_custody"})
+        self.assertFalse(self.attempt.output.exists())
 
 
 if __name__ == '__main__':

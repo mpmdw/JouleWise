@@ -458,7 +458,7 @@ PART_C_GATED_D = "D_bank_benign_s1_gated_held"      # r1_phase_table.GATED_D_RUN
 PART_C_X_G = "X_G_contrast"
 
 
-def smoke_part_c(output, runtime, config, *, soak_reference, invoke=None,
+def smoke_part_c(output, runtime, config, *, soak_reference, soak_ledger_sha256=None, invoke=None,
                  facts=None, step_facts=None, prints=None):
     """RL-145 step 3 / addendum section 6, Part C: a gated smoke on the final bytes.
 
@@ -471,7 +471,8 @@ def smoke_part_c(output, runtime, config, *, soak_reference, invoke=None,
     """
     from scripts import align_r1_part_c as part_c
     if facts is None and step_facts is None:
-        return part_c.run_bound_part_c(output, runtime, soak_reference=soak_reference)
+        return part_c.run_bound_part_c(output, runtime, soak_reference=soak_reference,
+                                       soak_ledger_sha256=soak_ledger_sha256, invoke=invoke)
     if facts is None or step_facts is None:
         raise ValueError("synthetic Part C requires both fact readers")
     invoke = invoke or part_c.judged_invoke
@@ -554,7 +555,7 @@ def smoke_part_c(output, runtime, config, *, soak_reference, invoke=None,
     return result
 
 
-def smoke(output, part, runtime, *, soak_reference, invoke=None):
+def smoke(output, part, runtime, *, soak_reference, soak_ledger_sha256=None, invoke=None):
     """Native only when explicitly run by the lead in an agent-free session.
 
     B runs the same admission followed by the D step, in one member. Its
@@ -570,7 +571,8 @@ def smoke(output, part, runtime, *, soak_reference, invoke=None):
         raise ValueError("condition 13: smoke config differs from the bound runtime config")
     config, _ = rt.load_config(config_path)
     if part == "C":
-        return smoke_part_c(output, runtime, config, soak_reference=soak_reference, invoke=invoke)
+        return smoke_part_c(output, runtime, config, soak_reference=soak_reference,
+                            soak_ledger_sha256=soak_ledger_sha256, invoke=invoke)
     invoke = invoke or r1._invoke
     output = Path(output)
     output.mkdir(parents=True, exist_ok=False)
@@ -619,11 +621,12 @@ def main(argv=None):
     p.add_argument("--output", type=Path, required=True)
     p.add_argument("--part", choices=("A", "B", "C"), required=True)
     p.add_argument("--soak-reference", type=Path, required=True)
+    p.add_argument("--soak-ledger-sha256")
     p.add_argument("--inputs", type=Path, default=ROOT / reg.REGISTRATION / "inputs.json")
     p = sub.add_parser("replay-archived", help="verify an authorized archived member binding")
     p.add_argument("--output", type=Path, required=True)
     p.add_argument("--runtime-config", type=Path, required=True)
-    p.add_argument("--kind", choices=("capture-predecessor-30b", "step-d", "d-bank-benign-s1", "x-g"),
+    p.add_argument("--kind", choices=("idle", "capture-predecessor-30b", "step-d", "d-bank-benign-s1", "x-g"),
                    required=True)
     p = sub.add_parser("desk")
     p.add_argument("--run-dir", type=Path, required=True)
@@ -643,7 +646,8 @@ def main(argv=None):
             handle.write(raw)
         print(hashlib.sha256(raw).hexdigest())
     elif args.command == "smoke":
-        smoke(args.output, args.part, r1.runtime_argv_from_inputs(args.inputs), soak_reference=args.soak_reference)
+        smoke(args.output, args.part, r1.runtime_argv_from_inputs(args.inputs), soak_reference=args.soak_reference,
+              soak_ledger_sha256=args.soak_ledger_sha256)
     elif args.command == "replay-archived":
         from scripts import align_r1_part_c as part_c
 

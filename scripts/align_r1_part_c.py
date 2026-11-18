@@ -43,7 +43,9 @@ D_bank line):
 from __future__ import annotations
 
 from collections import defaultdict
+from contextlib import redirect_stderr, redirect_stdout
 import hashlib
+from io import StringIO
 import json
 import math
 import os
@@ -52,7 +54,8 @@ from stat import S_ISDIR, S_ISREG
 import time
 
 from scripts.align_r1_part_c_evidence import (
-    BoundMember, EvidenceFailure, EvidenceLedger, KINDS, MANIFEST_NAME, canonical, digest,
+    BoundMember, BoundSoak, EvidenceFailure, EvidenceLedger, KINDS, MANIFEST_NAME,
+    SOAK_DIRECTORY, SOAK_FILES, SOAK_SEGMENT, canonical, digest,
     parse_json as parse_evidence_json, read_regular, stdout_payload,
 )
 
@@ -428,14 +431,19 @@ def judged_invoke(runtime, kind, output, duration=None, *, soak_reference=None, 
     from scripts import align_r1_rehearsal as r1
     from subprocess import TimeoutExpired
 
-    if watch is not None:
-        watch.check(f"before:{kind}:{Path(output).name}")
     argv = list(runtime) + ["--r1-kind", kind, "--output", str(output)]
     lock = r1._CHILD_HOST_LOCK
     if lock is not None and lock.held:
         argv += ["--host-lock-fd", str(lock.pass_fds()[0])]
     if duration is not None:
         argv += ["--duration-s", str(duration)]
+    if watch is not None:
+        try:
+            watch.check(f"before:{kind}:{Path(output).name}")
+        except BaseException as error:
+            if ledger is not None:
+                ledger.member_return(kind, output, argv, error=error, spawned=False)
+            raise
     if soak_reference is not None:
         argv += ["--soak-reference", str(soak_reference)]
     elif (contract_key or kind) in r1.contract.NEEDS_SOAK_REFERENCE:
@@ -445,7 +453,7 @@ def judged_invoke(runtime, kind, output, duration=None, *, soak_reference=None, 
         raise refusal
     try:
         process = r1._run(argv)
-    except Exception as error:
+    except BaseException as error:
         if ledger is not None:
             ledger.member_return(kind, output, argv, error=error)
         if not isinstance(error, (OSError, TimeoutExpired, UnicodeError)):
@@ -744,7 +752,7 @@ def _check_launch_refusal(segment):
         raise ValueError("X_G launch refusal conflicts with output in its segment")
 
 
-def _adjudicate(step, bank, contrast, launcher_refusal, n_chunk, lines, predecessor, runtime_error):
+def _adjudicate(step, bank, contrast, launcher_refusal, n_chunk, lines, predecessor, runtime_error, ledger):
     """The sole pass decision. Every required evidence check must succeed."""
     if runtime_error:
         return "other_failure", {"runtime_receipt": runtime_error}
@@ -777,7 +785,10 @@ def _adjudicate(step, bank, contrast, launcher_refusal, n_chunk, lines, predeces
             if role != "x-g" or member is not None:
                 require(f"{role}_receipt", _receipt_pair, member, root / SEGMENTS[role])
         if launcher_refusal and contrast is None:
-            require("x_g_launch", _check_launch_refusal, root / SEGMENTS["x-g"])
+            if ledger is None:
+                require("x_g_launch", _check_launch_refusal, root / SEGMENTS["x-g"])
+            else:
+                require("x_g_launch", ledger.refusal, "x-g")
 
     start, mechanics, x_line = (lines[key] for key in ("d_bank_start_state", "d_bank_mechanics", "x_g"))
     if start is not None and start["pass"] is not True and isinstance(bank, dict) and "evidence_error" not in bank:
@@ -795,7 +806,7 @@ def _adjudicate(step, bank, contrast, launcher_refusal, n_chunk, lines, predeces
 
 
 def evaluate(*, predecessor=None, step_d=None, d_bank=None, n_chunk=None, x_g=None, x_g_not_run_reason=None,
-             printed=None, runtime_error=None):
+             printed=None, runtime_error=None, ledger=None):
     """Return the Part C table with the verdict from the complete evidence check."""
     def mechanics_line():
         checks = d_bank_mechanics(d_bank, n_chunk)
@@ -809,7 +820,7 @@ def evaluate(*, predecessor=None, step_d=None, d_bank=None, n_chunk=None, x_g=No
                         and x_g_not_run_reason.kind == "x-g"
                         and x_g_not_run_reason.reason in ("no soak reference before launch", "native exit 2"))
     verdict, issues = _adjudicate(step_d if isinstance(step_d, dict) else {}, d_bank, x_g,
-                                  launcher_refusal, n_chunk, lines, predecessor, runtime_error)
+                                  launcher_refusal, n_chunk, lines, predecessor, runtime_error, ledger)
     # RL-152 section 1.4: the slot session's three-turn set clause is not applied here.
     log = [THREE_TURN_CLAUSE_LINE] if d_bank is not None else []
     if x_g is None and launcher_refusal and "x_g_launch" not in issues:
@@ -1134,7 +1145,13 @@ def _emit_part_c(output, started, table=None, *, failures=(), ledger=None):
         failure = error if isinstance(error, EvidenceFailure) else EvidenceFailure(
             "verdict_binding", "attempt", "smoke.json")
         # No passing publication survives an unavailable final binding.
-        evaluation, findings, _ = write(None, (*failures, failure), replace=True)
+        evaluation, findings, copies = write(None, (*failures, failure), replace=True)
+        if ledger is not None:
+            try:
+                ledger.finish(evaluation["verdict"], copies)
+            except EvidenceFailure:
+                # Preserve a damaged ledger rather than rewriting its history.
+                pass
     for finding in findings:
         print(canonical(finding).decode("ascii"))
     for line in evaluation["log"]:
@@ -1146,38 +1163,166 @@ def _emit_part_c(output, started, table=None, *, failures=(), ledger=None):
     return result
 
 
-def run_bound_part_c(output, runtime, *, soak_reference):
-    """Refuse native measurement when required soak evidence has no witness."""
+def _native_bundle(ledger, kind, receipt):
+    bound = ledger.member(kind)
+    bundle, data = _bound_member_files(bound, receipt)
+    for source, raw in data.items():
+        if source.endswith(".json"):
+            _object_from_bytes(raw, kind, source, "bundle_binding")
+        elif source.endswith(".jsonl"):
+            if not raw:
+                raise EvidenceFailure("bundle_binding", kind, source, field="missing")
+            for line in raw.splitlines():
+                _object_from_bytes(line, kind, source, "bundle_binding")
+    return bundle
+
+
+def _check_native_soak(soak, config_path):
+    """Reconcile the bound soak records with the unchanged producer reductions."""
+    from scripts import align_r1_rehearsal as r1
+    from joulewise.align.apple import r1_runtime as rt
+    from joulewise.align.apple.thermal_gates import sample_rows
+
+    row, reference = soak.row, soak.reference
+    receipt = row["result"]
+    if (receipt.get("schema") != rt.RESULT_SCHEMA or receipt.get("config_sha256") != soak.config_sha
+            or receipt.get("kind") != "idle" or receipt.get("backend") != "production"
+            or r1.contract.missing_fields("idle", receipt, quiet=True, contract_key="idle_soak")):
+        raise EvidenceFailure("receipt_contract", "idle", RECEIPT_NAME)
+    started, ended = row.get("started_ns"), row.get("ended_ns")
+    configured = _object_from_bytes(read_regular(config_path.parent, config_path.name),
+                                    "idle", "issued_inputs", "fresh_soak")
+    sensors = rt.sensors_policy(configured)
+    duration = next(seconds for name, _kind, seconds, _size in r1.phase_plan() if name == SOAK_SEGMENT)
+    if (row.get("class") != "light" or type(started) is not int or type(ended) is not int
+            or not 0 <= started <= ended or receipt.get("duration_s") != duration
+            or canonical(receipt.get("sensor_roles")) != canonical(sensors)
+            or canonical(reference.get("sensor_roles")) != canonical(sensors)):
+        raise EvidenceFailure("fresh_soak", "idle", "soak_row.json")
+    journal = "sensors/align_thermal.jsonl"
+    try:
+        entries = [_object_from_bytes(line, "idle", journal, "soak_readings")
+                   for line in soak.sources[journal].splitlines()]
+        if (len(entries) < 3 or entries[0]["kind"] != "session_start" or entries[-1]["kind"] != "session_end"
+                or canonical(entries[0]["values"]["thermal"]) != canonical(sensors)
+                or entries[-1]["values"]["collector_error"] is not None):
+            raise ValueError("invalid soak session boundaries")
+        session = entries[0]["session"]
+        if (not isinstance(session, str) or not session or any(
+                item["schema"] != "joulewise.align_thermal.v1" or item["module"] != "temperature"
+                or item["session"] != session or type(item["seq"]) is not int or item["seq"] != index
+                for index, item in enumerate(entries, 1)) or any(item["kind"] != "reading" for item in entries[1:-1])):
+            raise ValueError("invalid soak session order")
+        _reading_brackets(entries)
+        readings = sample_rows(entries)
+        first_ns = readings[0]["monotonic_ns"]
+        series, times, failed = {}, {}, {}
+        for key in (sensors["s_fast"], sensors["s_slow"]):
+            valid = rt.valid_series(readings, key)
+            series[key] = [value for _, value in valid]
+            times[key] = [(ns - first_ns) / 1e9 for ns, _ in valid]
+            failed[key] = len(readings) - len(valid)
+        end_time = (readings[-1]["monotonic_ns"] - first_ns) / 1e9
+        for key, expected in (("sensor_series_c", series), ("sensor_series_t_s", times),
+                              ("sensor_series_failed_reads", failed), ("sensor_series_end_t_s", end_time)):
+            if canonical(receipt[key]) != canonical(expected):
+                raise ValueError("soak readings disagree with their receipt")
+        derived = r1.soak_detrended(series, times, end_time)
+    except (ValueError, ArithmeticError, LookupError, TypeError) as error:
+        raise EvidenceFailure("soak_readings", "idle", journal, peer=RECEIPT_NAME) from error
+    if any(stat["settled"] is not True for stat in derived.values()):
+        raise EvidenceFailure("soak_unsettled", "idle", journal)
+    if (canonical(derived) != canonical(row.get("soak_detrended"))
+            or canonical(derived) != canonical(reference.get("detrended"))
+            or canonical({key: stat["mean_c"] for key, stat in derived.items()}) != canonical(reference.get("sensors_c"))
+            or reference.get("schema") != r1.SOAK_REFERENCE_SCHEMA or reference.get("window_s") != r1.SOAK_TAIL_S):
+        raise EvidenceFailure("fresh_soak", "idle", "soak_reference.json", peer=journal)
+    load_source = "load_journal.json"
+    load = _object_from_bytes(soak.sources[load_source], "idle", load_source, "soak_load")
+    try:
+        if (not isinstance(load["exclude_roots"], list) or any(type(pid) is not int for pid in load["exclude_roots"])
+                or not isinstance(load["errors"], list) or load["errors"]
+                or canonical(load["errors"]) != canonical(receipt["load_journal_errors"])
+                or any(canonical(load[key]) != canonical(receipt[key])
+                       for key in ("cpu_busy_cores", "cpu_busy_t_s", "census"))):
+            raise ValueError("soak load disagrees with its receipt")
+        load_verdict = r1.os_load_verdict(SOAK_SEGMENT, receipt, wall_s=(ended - started) / 1e9)
+        if load_verdict["redo"] is not False or canonical(load_verdict) != canonical(row["os_load"]):
+            raise ValueError("soak load is not clean")
+    except (ValueError, ArithmeticError, LookupError, TypeError) as error:
+        raise EvidenceFailure("soak_load", "idle", load_source, peer=RECEIPT_NAME) from error
+    soak.verify_reads()
+
+
+def _native_verdict(ledger, runtime, invoke):
+    receipts = {}
+    refusal = None
+    for kind, segment in KINDS.items():
+        try:
+            receipts[kind] = invoke(runtime, kind, ledger.root / segment,
+                                    soak_reference=ledger.soak_reference, ledger=ledger)
+        except RuntimeAdmissionRefusal as error:
+            if kind != "x-g":
+                raise EvidenceFailure("process_exit", kind, "stdout") from error
+            ledger.refusal(kind)
+            refusal = error
+            break
+        except RuntimeEvidenceError as error:
+            raise EvidenceFailure(error.reason, kind, "stdout") from error
+        if kind == "step-d":
+            slots = receipts[kind].get("slots")
+            if not isinstance(slots, dict) or type(slots.get("N_chunk")) is not int or slots["N_chunk"] <= 0:
+                raise EvidenceFailure("step_configuration", kind, RECEIPT_NAME, field="slots")
+    bundles = {kind: _native_bundle(ledger, kind, receipt) for kind, receipt in receipts.items()}
+    step_receipt = receipts["step-d"]
+    step = step_d_facts(bundles["step-d"], step_receipt)
+    bank = {**facts_from_bundle(bundles["d-bank-benign-s1"], role="d-bank"),
+            "runtime": receipts["d-bank-benign-s1"]}
+    contrast = ({**facts_from_bundle(bundles["x-g"], role="x-g"), "runtime": receipts["x-g"]}
+                if refusal is None else None)
+    verdict = evaluate(predecessor=receipts["capture-predecessor-30b"], step_d=step, d_bank=bank,
+                       n_chunk=step_receipt["slots"]["N_chunk"], x_g=contrast,
+                       x_g_not_run_reason=refusal, ledger=ledger)
+    ledger.verify_final_sources()
+    return verdict
+
+
+def run_bound_part_c(output, runtime, *, soak_reference, soak_ledger_sha256=None, invoke=None):
+    """Verify the launcher's soak handoff, then judge the native members in process."""
     from scripts import align_r1_rehearsal as r1
 
     output = Path(output)
     output.mkdir(mode=0o700, parents=True, exist_ok=False)
     started = time.monotonic()
     ledger = None
+    table, failures = None, ()
     try:
-        ledger = EvidenceLedger(output, r1.executed_commit(Path(__file__).resolve().parents[1]),
-                                r1.runtime_config_path(runtime), soak_reference)
+        revision = r1.executed_commit(Path(__file__).resolve().parents[1])
+        config = Path(r1.runtime_config_path(runtime))
+        soak = BoundSoak(output, soak_reference, soak_ledger_sha256, revision, config)
+        ledger = EvidenceLedger(output, revision, config, soak_reference, soak=soak)
+        with redirect_stdout(StringIO()), redirect_stderr(StringIO()):
+            _check_native_soak(soak, config)
+            table = _native_verdict(ledger, runtime, invoke or judged_invoke)
     except EvidenceFailure as error:
         failures = (error,)
-    except (OSError, ValueError, TypeError):
-        failures = (EvidenceFailure("evidence_unverifiable", "attempt", "issued_inputs"),)
-    else:
-        # The launcher has returned from a different process by the time
-        # this kit starts. The soak manifest is below idle_soak and no
-        # ledger field witnesses it, that process, or its parent's row.
-        failures = tuple(EvidenceFailure("evidence_unverifiable", "idle", source) for source in (
-            "soak/soak_row.json", "soak/idle_soak/runtime_custody.json", "soak/stdout",
-        ))
-    return _emit_part_c(output, started, failures=failures, ledger=ledger)
+    except Exception:
+        failures = (EvidenceFailure("evidence_unverifiable", "attempt", "evaluation"),)
+    return _emit_part_c(output, started, table, failures=failures, ledger=ledger)
 
 
 def archived_custody_member(output, runtime_config, kind):
     """Open exactly one archived member under RL-183 1.4, with no native ledger."""
-    segment = Path(output) / KINDS[kind]
+    output = Path(output)
+    segment = output.parent / SOAK_DIRECTORY / SOAK_SEGMENT if kind == "idle" else output / KINDS[kind]
     config_sha = digest(read_regular(Path(runtime_config).parent, Path(runtime_config).name))
     raw = read_regular(segment, MANIFEST_NAME, compressed=True)
     member = BoundMember(segment, kind, config_sha, manifest_sha=digest(raw), archived=True)
-    receipt = _object_from_bytes(member.read(RECEIPT_NAME, RECEIPT_NAME), kind, RECEIPT_NAME, "saved_receipt")
-    _bound_member_files(member, receipt)
+    if kind == "idle":
+        for name in SOAK_FILES:
+            member.read(name, name)
+    else:
+        receipt = _object_from_bytes(member.read(RECEIPT_NAME, RECEIPT_NAME), kind, RECEIPT_NAME, "saved_receipt")
+        _bound_member_files(member, receipt)
     member.verify_reads()
     return {"binding": "archived_custody"}

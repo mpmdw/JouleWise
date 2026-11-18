@@ -39,7 +39,8 @@ class Finding1PartCBlackoutTests(unittest.TestCase):
                     patch.object(smoke.r1, 'executed_commit', return_value='0' * 40), \
                     patch.object(smoke.r1, '_now_local', lambda: moment), \
                     patch.object(smoke.r1, 'runtime_argv_from_inputs', return_value=['runtime']), \
-                    patch.object(smoke.r1, '_invoke', side_effect=RuntimeError('reached the soak')):
+                    patch.object(smoke.r1, '_invoke', side_effect=RuntimeError('reached the soak')), \
+                    patch.object(smoke.r1, '_run', side_effect=RuntimeError('reached the soak')):
                 smoke.soak_child(out, Path(directory) / 'inputs.json', parts=parts)
 
     def test_a_0129_start_refuses_for_part_c_and_not_for_the_soak_alone(self):
