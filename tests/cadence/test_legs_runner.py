@@ -2,7 +2,7 @@
 synthetic backend, and the launcher registration. No model, sensor, host setting or energy is touched."""
 from __future__ import annotations
 
-from contextlib import redirect_stderr
+from contextlib import redirect_stderr, redirect_stdout
 from datetime import datetime
 import io
 import json
@@ -14,7 +14,7 @@ import sys
 import tempfile
 from types import SimpleNamespace
 import unittest
-from unittest.mock import patch
+from unittest.mock import call, patch
 
 from joulewise.cadence import desk, kit as kitmod, legs as legsmod
 from scripts import cadence_legs_runner as runner, launch_align_r0 as launcher, launch_cadence_span as cadence_launch
@@ -113,6 +113,37 @@ class T0AuthorityTests(unittest.TestCase):
             with self.subTest(wall_ns=wall_ns):
                 self.handoff(cutoff=cutoff, projected_ns=cutoff * self.ns, wall_ns=wall_ns, allowed=False)
 
+    def test_handoff_refuses_before_issue_observation_or_proven_close(self):
+        earliest = 1795111200
+        rolled_back_ns = (earliest - 1) * self.ns
+        self.handoff(earliest=earliest, projected_ns=rolled_back_ns, wall_ns=rolled_back_ns, allowed=False)
+        at_release_ns = earliest * self.ns
+        self.handoff(earliest=earliest, projected_ns=at_release_ns, wall_ns=at_release_ns, allowed=True)
+
+    def test_handoff_clock_counts_suspend_at_both_ends(self):
+        now = 1795111200
+        arm_ns = 999 * self.ns
+        # After 60 s suspended and 5 s awake, a wall correction says only 55 s elapsed.
+        clock_id = runner.time.CLOCK_MONOTONIC_RAW if sys.platform == "darwin" else runner.time.CLOCK_BOOTTIME
+        clock = runner.FakeClock(now + 55)
+        deps = runner.mock_deps(self.output, clock)
+        with (patch.object(runner.time, "clock_gettime_ns", side_effect=[arm_ns, arm_ns, arm_ns + 65 * self.ns]) as ticks,
+              patch.object(runner.time, "time_ns", side_effect=[now * self.ns, (now + 55) * self.ns]),
+              patch.object(runner.time, "monotonic_ns", return_value=arm_ns + 5 * self.ns),
+              patch.object(clock, "epoch_and_monotonic_ns", runner.RealClock.epoch_and_monotonic_ns),
+              patch.object(runner, "production_deps", return_value=deps), redirect_stderr(io.StringIO())):
+            with redirect_stdout(io.StringIO()) as anchor:
+                self.assertEqual(runner.main(["t0-anchor"]), 0)
+            authority = ["--authorized-t0-date", "2026-11-19", "--t0-not-before", str(now),
+                         "--t0-before", str(now + 60), "--t0-anchor", anchor.getvalue().strip()]
+            with patch.object(cadence_launch, "launch") as launch:
+                self.assertEqual(cadence_launch.main(self.launch + authority), 0)
+                child_argv = cadence_launch.runner_argv(launch.call_args.args[0])
+            self.assertEqual(runner.main(child_argv[2:]), 3)
+        self.assertEqual(ticks.call_args_list, [call(clock_id)] * 3)
+        self.assertFalse(self.output.exists())
+        self.assertEqual(deps.host.calls, [])
+
     def test_handoff_refuses_if_clock_sampling_delay_can_cross_cutoff(self):
         epoch_ns = self.midnight * self.ns - 1
         self.handoff(projected_ns=epoch_ns, wall_ns=epoch_ns, allowed=False, anchor_width_ns=5)
@@ -144,6 +175,7 @@ class T0AuthorityTests(unittest.TestCase):
         earliest = self.midnight - 3600
         epoch_ns = (earliest + 10) * self.ns
         receipt = self.handoff(earliest=earliest, projected_ns=epoch_ns, wall_ns=epoch_ns - self.ns, allowed=True)
+        self.assertEqual(receipt["started"]["continuous_ns"], 1000 * self.ns)
         self.assertEqual(receipt["t0_authority"], {"authorized_t0_date": "2026-11-19",
                                                    "t0_not_before": earliest, "t0_before": self.midnight})
 

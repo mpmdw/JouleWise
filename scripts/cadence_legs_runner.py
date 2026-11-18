@@ -144,12 +144,21 @@ class RealClock:
         return time.monotonic()
 
     @staticmethod
+    def continuous_ns():
+        # Darwin CLOCK_MONOTONIC_RAW uses mach_continuous_time, including sleep.
+        # CLOCK_MONOTONIC is realtime minus boot time in Apple's libc.
+        # https://developer.apple.com/documentation/driverkit/mach_continuous_time
+        # https://github.com/apple-oss-distributions/Libc/blob/main/gen/clock_gettime.c
+        clock_id = time.CLOCK_MONOTONIC_RAW if sys.platform == "darwin" else time.CLOCK_BOOTTIME
+        return time.clock_gettime_ns(clock_id)
+
+    @staticmethod
     def epoch_and_monotonic_ns():
-        return time.time_ns(), time.monotonic_ns()
+        return time.time_ns(), RealClock.continuous_ns()
 
     @staticmethod
     def arm_anchor_ns():
-        before_ns = time.monotonic_ns()
+        before_ns = RealClock.continuous_ns()
         epoch_ns, after_ns = RealClock.epoch_and_monotonic_ns()
         return epoch_ns, before_ns, after_ns
 
@@ -381,14 +390,14 @@ def validate_t0_authority(kit, authorized_date, t0_not_before, t0_before, t0_anc
 
 
 def _authorized_start(clock, authorized_date, t0_not_before, t0_before, anchor):
-    wall_ns, monotonic_ns = clock.epoch_and_monotonic_ns()
+    wall_ns, continuous_ns = clock.epoch_and_monotonic_ns()
     anchor_epoch_ns, before_ns, after_ns = anchor
-    if monotonic_ns < after_ns:
+    if continuous_ns < after_ns:
         return None
     # The arm wall read occurred somewhere between the two monotonic reads.
     # Require the full projected interval to fit even if the sampler was preempted.
-    earliest_ns = anchor_epoch_ns + monotonic_ns - after_ns
-    latest_ns = anchor_epoch_ns + monotonic_ns - before_ns
+    earliest_ns = anchor_epoch_ns + continuous_ns - after_ns
+    latest_ns = anchor_epoch_ns + continuous_ns - before_ns
     for epoch_ns in (earliest_ns, latest_ns, wall_ns):
         second = epoch_ns // NS_PER_SECOND
         if not t0_not_before <= second < t0_before:
@@ -401,7 +410,8 @@ def _authorized_start(clock, authorized_date, t0_not_before, t0_before, anchor):
     # Keep the legacy numeric seconds in the same whole second as the exact stamp.
     if math.floor(epoch_s) > t0_ns // NS_PER_SECOND:
         epoch_s = math.nextafter(epoch_s, -math.inf)
-    return {"epoch_s": epoch_s, "epoch_ns": t0_ns, "monotonic_ns": monotonic_ns}
+    return {"epoch_s": epoch_s, "epoch_ns": t0_ns, "continuous_ns": continuous_ns,
+            "monotonic_ns": int(clock.monotonic() * NS_PER_SECOND)}
 
 
 def run_span(*, kit, kit_sha256, output, deadline, windows, deps, leg_ids=None,
@@ -984,7 +994,12 @@ def main(argv=None):
     p.add_argument("kit", type=Path)
     p.add_argument("--commit", required=True)
     p.add_argument("--write", action="store_true")
+    sub.add_parser("t0-anchor", help="sample the wall epoch bracketed by sleep-inclusive monotonic readings")
     args = parser.parse_args(argv)
+
+    if args.command == "t0-anchor":
+        print(":".join(map(str, RealClock.arm_anchor_ns())))
+        return 0
 
     if args.command == "soak-child":
         try:
