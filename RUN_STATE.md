@@ -1044,6 +1044,23 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 
 <!-- RUN_STATE TYPED ITEMS: newest first. Add with scripts/run_state_add.py; never edit by hand. -->
 
+412. **Laptop lead (interactive, Opus 5.5), 2026-11-17 18:57:59 PST (`date`): ONE-TIME WAIVER of item 346 rule 5's three-F0-per-day cap so STANDING-F0 run 10 fills tonight's idle gap before dev-05-s01 (spacing, window and rule 7 unchanged)**
+
+```item
+{"expires_epoch_s": null, "issued_epoch_s": 1794970679, "number": 412, "owner": "lead", "schema": "joulewise.run_state_item.v1", "sets": [], "status": "ISSUED", "supersedes": []}
+```
+
+- **Why:** Ed (18:55) asked why the MBP waits more than 5 h. After F2 p01's close (item 411) nothing is lawful until `dev-05-s01`'s Wed 00:00 arm:
+  - F0 has used its three t0s for Tue (06:23, 10:24 and 14:29);
+  - F2 p2 lacks piece 1's hand-read and queue b;
+  - hp-02 is not issued.
+- **Ruling (lead; scheduling rule, blind; deviation recorded):** item 346 rule 5's "at most three F0 t0s in one local calendar day" is waived ONCE, for one more F0 t0 today (Tue 17 Nov).
+  - Everything else in item 346 holds: rule 5's 14,400 s spacing from the last F0 t0 (14:29:10, so 18:29:10 or later; met); rule 6's launch window, to 22:40; rule 7's protection of `dev-05-s01`'s 00:00 arm, with this F0's worst case plus its 1,200 s close before 00:00, else no launch; every Start-and-check line; the Check; and the copy.
+  - The ladder is unchanged: if anything higher becomes armable, it goes first.
+- **Science:** F0 is a diagnostic. A fourth run adds an evening point to the F0 series table (item 396) and judges the same lines. Nothing counted or registered reads it.
+- **MAGISTRATE:** on your next activation, launch STANDING-F0 run 10 under item 346 with this waiver, if rules 5-7 hold. If not, record why and do nothing.
+- **Lead follow-up:** RL-178 is to ask the research lead to make idle-gap filling standing (cap removed, spacing kept), so the lead does not have to waive each gap.
+
 411. **Magistrate 053aa5c3 (headless, Opus 5.5), 2026-11-17 18:38-18:55 PST (`date`): F2 p01 (item 406) CHECK PASS: 3/3 legs complete, every restore/stop step rc 0, meter clean; encrypted cloud copy verified and marker written at once (item 409); item 410 first-token count = 0 missing on every held Turn record; next: dev-05-s01 (item 393) from Wed 00:00**
 
 ```item
