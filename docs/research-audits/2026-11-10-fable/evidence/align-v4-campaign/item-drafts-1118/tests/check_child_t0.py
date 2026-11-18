@@ -16,39 +16,47 @@ sys.path.insert(0, str(args.source))
 
 from scripts import cadence_legs_runner as runner, launch_cadence_span as launcher
 
-date = '2026-11-22'
-midnight = int(datetime(2026, 11, 23, tzinfo=ZoneInfo('America/Los_Angeles')).timestamp())
+date = '2026-11-19'
+midnight = int(datetime(2026, 11, 20, tzinfo=ZoneInfo('America/Los_Angeles')).timestamp())
+ns = 1_000_000_000
+earliest = midnight - 3600
 leg_ids = 'L007,L008,L009,L010,L011,L012'
-for label, epoch, cutoff, allowed in (
-    ('last authorized fractional second', midnight - 0.25, midnight, True),
-    ('midnight during handoff', midnight, midnight, False),
-    ('different date before numeric cutoff', midnight, midnight + 3600, False),
-    ('item expires during handoff', midnight - 30, midnight - 30, False),
+for label, projected_ns, wall_ns, cutoff, allowed in (
+    ('last authorized nanosecond', midnight * ns - 1, midnight * ns - 1, midnight, True),
+    ('midnight during handoff', midnight * ns, midnight * ns, midnight, False),
+    ('different date before numeric cutoff', midnight * ns, midnight * ns, midnight + 3600, False),
+    ('watcher expiry during handoff', (midnight - 30) * ns, (midnight - 30) * ns - 1, midnight - 30, False),
+    ('rollback into batch hold', earliest * ns, earliest * ns - 250_000_000, midnight, False),
+    ('exact batch release', earliest * ns, earliest * ns, midnight, True),
 ):
     output = args.fixture / label
+    authority = ['--authorized-t0-date', date, '--t0-not-before', str(earliest), '--t0-before', str(cutoff),
+                 '--t0-anchor', f'{projected_ns - ns}:{999 * ns}:{999 * ns}']
     argv = [
         'launch', '--repo', str(args.source), '--python-bin', sys.executable,
         '--kit', str(args.kit), '--legs', leg_ids, '--output', str(output),
         '--disk-path', str(args.source), '--custody-root', str(args.fixture / 'synthetic-fence'),
-        '--magistrate-pid', '123', '--deadline', str(epoch + 29000),
-        '--authorized-t0-date', date, '--t0-before', str(cutoff),
+        '--magistrate-pid', '123', '--deadline', str(midnight + 29000), *authority,
     ]
     # The real launcher parser builds the exact runner argv serialized by launch().
     # Stub launch itself, so no LaunchAgent or process is started.
     with patch.object(launcher, 'launch') as mock_launch:
         assert launcher.main(argv) == 0
         child_argv = launcher.runner_argv(mock_launch.call_args.args[0])
-    assert child_argv[-4:] == ['--authorized-t0-date', date, '--t0-before', str(cutoff)]
+    assert child_argv[-len(authority):] == authority
 
-    deps = runner.mock_deps(output, runner.FakeClock(epoch))
+    clock = runner.FakeClock(wall_ns / ns)
+    deps = runner.mock_deps(output, clock)
     # The real child parser and run_span() execute with in-process synthetic
     # dependencies. No native host command or child process is called.
-    with patch.object(runner, 'production_deps', return_value=deps):
+    with (patch.object(runner, 'production_deps', return_value=deps),
+          patch.object(clock, 'epoch_and_monotonic_ns', return_value=(wall_ns, 1000 * ns))):
         rc = runner.main(child_argv[2:])
     if allowed:
         assert rc == 0, (label, rc)
         receipt = json.loads((output / 'runner_receipt.json').read_text())
-        assert receipt['started']['epoch_s'] == epoch
+        assert receipt['started']['epoch_ns'] == projected_ns
+        assert receipt['t0_authority'] == {'authorized_t0_date': date, 't0_not_before': earliest, 't0_before': cutoff}
     else:
         assert rc == 3, (label, rc)
         assert not output.exists()

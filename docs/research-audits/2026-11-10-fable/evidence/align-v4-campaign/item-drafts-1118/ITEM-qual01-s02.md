@@ -1,4 +1,4 @@
-TBD. **Laptop lead, drafted by Sol 6.1; ISSUED <LEAD FILLS: YYYY-MM-DD HH:MM:SS PST from `date`> (`date`): MAGISTRATE: arm the SECOND span of qualification block `qual-01`, span `qual-01-s02`, legs L007,L008,L009,L010,L011,L012, kit `cl-qual-01.v1.1` (sha256 `8d9ec7143d2e7b60d303a52ede374075bdaf807c4bbb214b418c269dba2dabbc`), runner kind `cadence-legs-v1.1`, frozen pin `0576ed76d3a74d20ce3c6b6b96711e360775a25f` checked out detached in a fresh staged worktree. A fresh soak, then six conditionless 27B legs, Automatic, band q0; L007 captures the span reference, the five other legs consume it. Short leg: L010 cap 3,724; all other caps 4,096. Expected 12310 s; work worst case 24750 s; launcher deadline reserve includes the additional 1,950 s soak retry and 560 s cleanup reserves. EARLIEST 2026-11-19 00:00:00 PST (epoch 1795075200), LIMIT 2026-11-19 23:59:59 PST (epoch 1795161599), shortened by 24 h after issue. HOLD_FOR_FIT_FREEZE until freeze 2 is committed and verified. Predecessor `qual-01-s01` must close clean or this item is VOID and is never skipped. The pinned runner takes no batch-window argument for qualification. The arm remains subject to RL-175 C.4. Launch is your LAST action; exit at once. Nothing else is authorized.**
+TBD. **Laptop lead, drafted by Sol 6.1; ISSUED <LEAD FILLS: YYYY-MM-DD HH:MM:SS PST from `date`> (`date`): MAGISTRATE: arm the SECOND span of qualification block `qual-01`, span `qual-01-s02`, legs L007,L008,L009,L010,L011,L012, kit `cl-qual-01.v1.1` (sha256 `d77768e391f5ea9f3d8cd92a3bc97f846cf05c09cf66494579481b75b2932236`), runner kind `cadence-legs-v1.1`, frozen pin `57ed7334ea7dbc24ed47dfbf70c29c41197c9f01` checked out detached in a fresh staged worktree. A fresh soak, then six conditionless 27B legs, Automatic, band q0; L007 captures the span reference, the five other legs consume it. Short leg: L010 cap 3,724; all other caps 4,096. Expected 12310 s; work worst case 24750 s; launcher deadline reserve includes the additional 1,950 s soak retry and 560 s cleanup reserves. EARLIEST 2026-11-19 00:00:00 PST (epoch 1795075200), LIMIT 2026-11-19 23:59:59 PST (epoch 1795161599), shortened by 24 h after issue. HOLD_FOR_FIT_FREEZE until freeze 2 is committed and verified. Predecessor `qual-01-s01` must close clean or this item is VOID and is never skipped. The pinned runner takes no batch-window argument for qualification. The arm remains subject to RL-175 C.4. Launch is your LAST action; exit at once. Nothing else is authorized.**
 
 ```pointer
 owner: magistrate
@@ -31,21 +31,21 @@ set -o pipefail
 cd /Users/edr/code/jw-wt/cadence-qual-01-s02
 REPO="$PWD"
 AUTH_REPO=/Users/edr/code/JouleWise
-PIN=0576ed76d3a74d20ce3c6b6b96711e360775a25f
+PIN=57ed7334ea7dbc24ed47dfbf70c29c41197c9f01
 test "$(git rev-parse HEAD)" = "$PIN" && test -z "$(git status --porcelain)" || exit 1
 git symbolic-ref -q HEAD >/dev/null && exit 1
 : "${PY:?pinned measurement-venv interpreter}"
 : "${MAGISTRATE_PID:?own magistrate process PID}"
-KIT=/Users/edr/campaign-out/kits/cl-qual-01.v1.1-0576ed76d.json
-KIT_SHA=8d9ec7143d2e7b60d303a52ede374075bdaf807c4bbb214b418c269dba2dabbc
+KIT=/Users/edr/campaign-out/kits/cl-qual-01.v1.1-57ed7334e.json
+KIT_SHA=d77768e391f5ea9f3d8cd92a3bc97f846cf05c09cf66494579481b75b2932236
 test "$(shasum -a 256 "$KIT" | cut -c1-64)" = "$KIT_SHA" || exit 1
 QUEUE_PATH=docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/item-drafts-1118/queues/cl-qual-01.queue.json
-QUEUE_SHA=c76e7cf394cfe5e9822aa3ed7bf82797e5dcd057c2bff858cc674b743297eb5a
+QUEUE_SHA=b1a64f48892df87822618ed1ae55fb62ad313aca37e99174c9a92e54a4f8e03b
 QUEUE_FILE=/Users/edr/campaign-out/queues/cl-qual-01.queue.json
 test "$(shasum -a 256 "$QUEUE_FILE" | cut -c1-64)" = "$QUEUE_SHA" || exit 1
 SPAN=qual-01-s02; CAMP=cl-qual-01; LEGS=L007,L008,L009,L010,L011,L012
 PRED_SPAN=qual-01-s01; PRED_CAMP=cl-qual-01; PRED_ROSTER=L001,L002,L003,L004,L005,L006
-PRED_KIT_SHA=8d9ec7143d2e7b60d303a52ede374075bdaf807c4bbb214b418c269dba2dabbc; PRED_PIN=0576ed76d3a74d20ce3c6b6b96711e360775a25f
+PRED_KIT_SHA=d77768e391f5ea9f3d8cd92a3bc97f846cf05c09cf66494579481b75b2932236; PRED_PIN=57ed7334ea7dbc24ed47dfbf70c29c41197c9f01
 T0_DATE=2026-11-19; WINDOW_START=1795075200; WINDOW_END=1795161599
 DAY_END=1795161599; FIRST_TO_SECOND_S=0
 EXPECTED_SPAN_S=12310
@@ -244,11 +244,16 @@ v4_gate() {
 day_gate() {
   "$PY" -I -B - /Users/edr/campaign-out "$(date +%s)" "$T0_DATE" "$QUAL_DATES" "$SPAN" "$CAMP" "$LEGS" <<'PY'
 import datetime as dt, json, math, os, re, sys
+from decimal import Decimal
 from pathlib import Path
 from zoneinfo import ZoneInfo
 root, now, wanted, dates, current, camp, legs = sys.argv[1:]
 def stop(s): sys.exit('REFUSE: day law ' + s)
-TZ=ZoneInfo('America/Los_Angeles'); day=dt.datetime.fromtimestamp(int(now),TZ).date().isoformat()
+TZ=ZoneInfo('America/Los_Angeles')
+EPOCH=dt.datetime(1970,1,1,tzinfo=dt.timezone.utc)
+def local_date(second):
+    return (EPOCH+dt.timedelta(seconds=second)).astimezone(TZ).date().isoformat()
+day=local_date(int(now))
 spans=[f'qual-{n:02d}-s{i:02d}' for n in (1,2,3) for i in (1,2)]
 def block(span): return span.rsplit('-',1)[0]
 def roster_for(span):
@@ -276,12 +281,20 @@ try:
             if not out.is_dir() or not out.name.startswith('cq-'): continue
             p=out/'runner_receipt.json'
             if not p.is_file(): stop('pending output without receipt '+str(out))
-            r=json.loads(p.read_text()); t=r['started']['epoch_s']; roster=r['roster']
-            if isinstance(t,bool) or not isinstance(t,(int,float)) or not math.isfinite(t) or t<=0: stop('bad t0 '+str(p))
+            r=json.loads(p.read_text(),parse_float=Decimal); started=r['started']; roster=r['roster']
+            if 'epoch_ns' in started:
+                t=started['epoch_ns']
+                if type(t) is not int or t<=0: stop('bad t0 '+str(p))
+                second=t//1_000_000_000
+            else:
+                t=started['epoch_s']
+                if (type(t) is not int and (not isinstance(t,Decimal) or not t.is_finite())) or t<=0:
+                    stop('bad t0 '+str(p))
+                second=math.floor(t)
             if (not isinstance(roster,list) or not roster
                     or not all(isinstance(x,str) and re.fullmatch('L[0-9]{3}',x) for x in roster)
                     or len(set(roster))!=len(roster)): stop('bad roster '+str(p))
-            actual=dt.datetime.fromtimestamp(t,TZ).date().isoformat()
+            actual=local_date(second)
             if family.name.startswith('cl-dev-'):
                 if actual in blocks_by_day: stop('development receipt on qualification date '+actual+' '+str(p))
             else:
@@ -375,9 +388,9 @@ window_gate() {
     || { echo 'REFUSE: outside item t0-date or LIMIT; follow missed-date recovery (RL-172 (a)5)'; return 1; }
 }
 arm_bound_gate() {
-  # Date/window end is inclusive to the printed second. Item and queue expiries are exclusive.
+  # Date/window end is inclusive to the printed second. Expiries are exclusive.
   ARM_BEFORE_EPOCH=$((WINDOW_END + 1))
-  for expires in "$EXPIRES_EPOCH" "$QUEUE_EXPIRES_EPOCH"; do
+  for expires in "$EXPIRES_EPOCH" "$QUEUE_EXPIRES_EPOCH" "$WATCH_UNTIL_EPOCH"; do
     if test "$expires" -lt "$ARM_BEFORE_EPOCH"; then ARM_BEFORE_EPOCH=$expires; fi
   done
   if test "$FIRST_TO_SECOND_S" -gt 0; then
@@ -393,23 +406,30 @@ arm_bound_gate() {
     if test "$pair_before" -lt "$ARM_BEFORE_EPOCH"; then ARM_BEFORE_EPOCH=$pair_before; fi
   fi
   test "$(date +%s)" -lt "$ARM_BEFORE_EPOCH" || {
-    echo "REFUSE: effective t0 cutoff $ARM_BEFORE_EPOCH (date, item/queue expiry, dependent span)"
+    echo "REFUSE: effective t0 cutoff $ARM_BEFORE_EPOCH (date, item/queue/watch expiry, dependent span)"
     return 1
   }
   echo "AUTHORIZED T0 $T0_DATE before $ARM_BEFORE_EPOCH"
 }
+t0_clock_anchor() {
+  "$PY" -I -B -c 'import time; before = time.monotonic_ns(); print(f"{time.time_ns()}:{before}:{time.monotonic_ns()}")'
+}
 batch_gate() {
-  # Fresh boot read at both Start and Run. Carry the next hold boundary to the child.
+  # Fresh boot and clock reads at both Start and Run.
+  local anchor bounds
   BATCH_BOOT="$(sysctl -n kern.boottime)" || { echo 'STOP: boot time unavailable (RL-175 C.4)'; return 1; }
-  ARM_BEFORE_EPOCH="$("$PY" -I -B - "$BATCH_BOOT" "$(date +%s)" "$EXPECTED_SPAN_S" "$ARM_BEFORE_EPOCH" <<'PY'
+  anchor="$(t0_clock_anchor)" || return 1
+  bounds="$("$PY" -I -B - "$BATCH_BOOT" "$anchor" "$EXPECTED_SPAN_S" "$WINDOW_START" "$ARM_BEFORE_EPOCH" <<'PY'
 import re, sys
-raw, now, expected, cutoff = sys.argv[1:]
+raw, anchor, expected, start, cutoff = sys.argv[1:]
 boot = re.fullmatch(r'\{\s*sec\s*=\s*([0-9]+),\s*usec\s*=\s*[0-9]+\s*\}.*',raw)
-if not boot or not all(v.isascii() and v.isdecimal() for v in (now,expected,cutoff)):
+stamp = re.fullmatch(r'([0-9]+):([0-9]+):([0-9]+)',anchor)
+if not boot or not stamp or not all(v.isascii() and v.isdecimal() for v in (expected,start,cutoff)):
     sys.exit('STOP: unreadable boot time or qualification plan (RL-175 C.4)')
-boot, now, expected, cutoff = int(boot[1]), int(now), int(expected), int(cutoff)
+boot, expected, start, cutoff = int(boot[1]), int(expected), int(start), int(cutoff)
+now = int(stamp[1])//1_000_000_000
 soak_s, cooldown_s, day_s = 1950, 27*60, 86400
-if not 0<boot<=now or not soak_s<=expected<day_s-cooldown_s or now>=cutoff:
+if int(stamp[2])>int(stamp[3]) or not 0<boot<=now or not soak_s<=expected<day_s-cooldown_s or not start<=now<cutoff:
     sys.exit('STOP: invalid boot time, span duration or t0 cutoff (RL-175 C.4)')
 # The existing prediction is anchored to boot, with the observed 48 s offset.
 first = boot + 43248
@@ -423,11 +443,15 @@ if held is None and upcoming<=expected_close:
 if held is not None:
     sys.exit(f'WAIT: RL-175 C.4 predicted OS batch {held}; arm at or after {held+cooldown_s}')
 before = min(cutoff,upcoming-expected)
+not_before = max(start,previous+cooldown_s) if previous is not None else start
 print(f'BATCH OK RL-175 C.4 boot {boot}; next OS batch {upcoming}; soak end {now+soak_s}; '
-      f'expected close {expected_close}; authorized t0 before {before}',file=sys.stderr)
-print(before)
+      f'expected close {expected_close}; authorized t0 [{not_before}, {before})',file=sys.stderr)
+print(not_before,before,anchor)
 PY
 )" || return 1
+  IFS=' ' read -r ARM_NOT_BEFORE_EPOCH ARM_BEFORE_EPOCH ARM_T0_ANCHOR <<EOF
+$bounds
+EOF
 }
 all_gates() {
   expiry_gate && watch_gate && freeze2_gate && qual_pin_gate && host_event_gate && v4_gate \
@@ -474,7 +498,7 @@ case "$OUT" in */restricted/*|*/night-*|"$REPO"/*|*/configs/campaigns/align_v4*)
 
 Lead/magistrate supplies the current observations listed in `evidence/record-shapes.md`. `CHECKLIST_OK=yes` is set only **after** every native read above and the kit's complete checklist passes; each call clears any supplied yes before running the checks. Disk, meter, process census, no halt/veto and all restore lines are mandatory.
 
-**Run (your last action).** Re-read stops, veto, watcher, typed desk/Q1 debt, host-state identity, v4 READY record and current boot time. Verify the current kit/queue hashes again and fetch refs before the last gate. Pass the date and tightened t0 cutoff from the fresh gates to the child. The pinned runner checks its native checklist and per-leg process census. The LaunchAgent holds the **shared desk fence** until close. The launch omits `--batch-window`.
+**Run (your last action).** Re-read stops, veto, watcher, typed desk/Q1 debt, host-state identity, v4 READY record and current boot time. Verify the current kit/queue hashes again and fetch refs before the last gate. Pass the authorized date, inclusive earliest start, exclusive cutoff and clock anchor to the child. Watcher expiry bounds the cutoff alongside the other expiry, window and batch limits. After a batch, the earliest start includes its cooldown. The pinned runner checks both clocks against this authority before creating the output directory and records the authority with its admitted t0. The runner then checks its native checklist and per-leg process census. The LaunchAgent holds the **shared desk fence** until close. The launch omits `--batch-window`.
 
 ```sh
 git -C "$AUTH_REPO" fetch -q origin audit/2026-11-10-fable main || exit 1
@@ -489,7 +513,8 @@ DEADLINE="$("$PY" -I -B -c 'import time; print(time.time()+28160)')"
   --repo "$REPO" --python-bin "$PY" --kit "$KIT" --legs "$LEGS" \
   --output "$OUT" --disk-path "$REPO" --custody-root "$CUSTODY" \
   --magistrate-pid "$MAGISTRATE_PID" --deadline "$DEADLINE" \
-  --authorized-t0-date "$T0_DATE" --t0-before "$ARM_BEFORE_EPOCH" \
+  --authorized-t0-date "$T0_DATE" --t0-not-before "$ARM_NOT_BEFORE_EPOCH" \
+  --t0-before "$ARM_BEFORE_EPOCH" --t0-anchor "$ARM_T0_ANCHOR" \
   --exit-wait-seconds 180 --start-wait-seconds 30 || exit 1
 echo "$OUT"
 ```
@@ -522,7 +547,7 @@ from pathlib import Path
 root=Path(sys.argv[1]); roster=sys.argv[2].split(',')
 r=json.loads((root/'runner_receipt.json').read_text())
 assert r['runner_kind']=='cadence-legs-v1.1' and r['roster']==roster
-assert r['kit']['sha256']=='8d9ec7143d2e7b60d303a52ede374075bdaf807c4bbb214b418c269dba2dabbc' and r['kit']['frozen_commit']=='0576ed76d3a74d20ce3c6b6b96711e360775a25f' and r['kit']['campaign_id']=='cl-qual-01'
+assert r['kit']['sha256']=='d77768e391f5ea9f3d8cd92a3bc97f846cf05c09cf66494579481b75b2932236' and r['kit']['frozen_commit']=='57ed7334ea7dbc24ed47dfbf70c29c41197c9f01' and r['kit']['campaign_id']=='cl-qual-01'
 assert r['batch_windows']==[] and r.get('mock') in (None,False)
 print({k:r.get(k) for k in ('rc','error','legs_planned','legs_finished','span_result','ended','soak_attempts')})
 print('steps',[(s['name'],s['rc']) for s in r['steps']])
@@ -603,4 +628,4 @@ zsh /Users/Shared/JouleWise/measurement-mode/measurement_mode.zsh verify
 
 Report SPAN/LEGS, six caps (short leg L010 cap 3,724), receipt/restore and feed-stop lines, named stops, admitted count and exclusions under the six fixed rules, each consumer's release or timeout against L007, whether the reference came from a redo/excluded leg, maintenance overlaps, retry count (`soak_refusals`: kind not recorded), Q1 print, close epoch/fence-gone time, verified copy/offload marker and all native readbacks. Do not print power or energy. No commit from OUT. The magistrate reports; it never decides.
 
-**After (the lead, at the desk; not the magistrate).** Use this kit and the frozen pin `0576ed76d3a74d20ce3c6b6b96711e360775a25f` for deterministic desk, off-host or controller-only during a clean close interval (RL-173 B). Check exact roster/attempt/reference/kit/plan identities and authenticated nonempty table (RL-172 (c)). Record desk FINAL and the separate typed Q1 completion in actual machine order before k+2; hand-read first kit/G0-shape group and every redo/exclusion/schema-change span (RL-173 E). First qualification close: compare soak operational fields/reference schema to dev-05 and record SAME before qual-01-s02 (RL-172a F1); difference goes to research lead. Mark retried soaks for sampled hand-read; no missing refusal-kind field is invented. Update ledger `qual-01` RUNNING/COLLECTED/DESK_FINAL. Next block under its own dated item. Qualification energy stays sealed for its separately frozen look; no change to fit coefficients or score is authorized.
+**After (the lead, at the desk; not the magistrate).** Use this kit and the frozen pin `57ed7334ea7dbc24ed47dfbf70c29c41197c9f01` for deterministic desk, off-host or controller-only during a clean close interval (RL-173 B). Check exact roster/attempt/reference/kit/plan identities and authenticated nonempty table (RL-172 (c)). Record desk FINAL and the separate typed Q1 completion in actual machine order before k+2; hand-read first kit/G0-shape group and every redo/exclusion/schema-change span (RL-173 E). First qualification close: compare soak operational fields/reference schema to dev-05 and record SAME before qual-01-s02 (RL-172a F1); difference goes to research lead. Mark retried soaks for sampled hand-read; no missing refusal-kind field is invented. Update ledger `qual-01` RUNNING/COLLECTED/DESK_FINAL. Next block under its own dated item. Qualification energy stays sealed for its separately frozen look; no change to fit coefficients or score is authorized.

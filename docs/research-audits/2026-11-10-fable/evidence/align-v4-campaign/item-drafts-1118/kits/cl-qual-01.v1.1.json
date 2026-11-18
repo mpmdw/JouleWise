@@ -7,7 +7,7 @@
   "authorizes_spans": true
  },
  "frozen": {
-  "commit": "0576ed76d3a74d20ce3c6b6b96711e360775a25f",
+  "commit": "57ed7334ea7dbc24ed47dfbf70c29c41197c9f01",
   "paths": {
    "configs/align/v4/qwen38-27b-8bit-hf-pins.json": "3a1835342b4576b53fb715eb18e53877b54de8e9d04b1f71854d302c9d3635b8",
    "configs/align/v4/r1_runtime.json": "272aecb8bc0d9e33defd7f686b129ea236b925fdfbf68137697120dd63232f46",
@@ -40,10 +40,10 @@
    "scripts/align_r1_rehearsal.py": "2806f9eae61210d457ae19a5484cfe7dc7ac70a31c20b1ca0a2856f32178a825",
    "scripts/align_r1_runtime.py": "7403e69d9aedb54887bfc4218a45db84faa653329ca977bcf97edf20af88f923",
    "scripts/cadence_leg_runtime.py": "345e9064015536f7e1454f42535d7a44d39acdc17494d26fc4200a25b31662f1",
-   "scripts/cadence_legs_runner.py": "81b488e695e553ec6294672651ac8a134009cf387c4d7cefe6654a55a63327d2",
+   "scripts/cadence_legs_runner.py": "6317b3c0d38793bd67077a876567cfdebf090d56af2e3f33e1011a5a3ded58b1",
    "scripts/km003c_monitor.py": "211a807f152e18b28b622f1d914fca115f308e5938c979269842e2df91601ef9",
    "scripts/launch_align_r0.py": "242cd7aa0bf5788786ca8630e6931abcaaa3e01dc3bf014255a6191b50c6e799",
-   "scripts/launch_cadence_span.py": "2c8980da8cc469cea554c9cbd430168b16ec6e0a6ddcacbd90374bc3e120c2b0",
+   "scripts/launch_cadence_span.py": "6d73f0c928fef54445e32684f867aa285352b5d02cec991b3c3c0664f6c1d1c7",
    "scripts/run_align_r0_launchagent.sh": "ac1dc2a223754cfc3295dd1352a838a3077671da140ffeeba484400e1bd249c6",
    "scripts/run_align_r1_smoke.py": "6f1fb9f4ac3109650b36b07012e24728c17e7112e7b59953e6557f2b5fdd35aa",
    "scripts/run_night.py": "b3c58c91125b8355a5269928cda3b30e26f362b9927b03cbebf71d71f1fb28c0"

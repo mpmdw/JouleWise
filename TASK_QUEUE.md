@@ -5,12 +5,13 @@ triage it here instead of assuming it should happen immediately.
 
 ## 2026-11-17 qualification t0 guard successor
 
-P1 [AGENT], user-selected Tier 2 on `audit/2026-11-10-fable`. Apply the
-lead-approved successor guard and rebind six unissued items. The
-[run report](docs/run_reports/2026-11-17-qual-pin-t0guard.md) tracks exact-pin
-admission. All six drafts carry the RL-175 C.3 span-date and C.4 batch
-gates. The named cold-seat confirmation, retry-reader disposition and
-freeze 2 remain issue prerequisites. No phase exit-checklist row closes.
+P1 [AGENT], user-selected Tier 2 to clear the PR #812 audit blocker before
+qualification issue. The six unissued items bind the repaired runner and
+carry the RL-175 C.3 span-date and C.4 batch gates. The lead owns exact-pin
+admission, review of the successor and the queue commit. The named cold-seat
+confirmation, retry-reader disposition and freeze 2 remain issue
+prerequisites. No phase exit-checklist row closes.
+[Audit-repair report](docs/run_reports/2026-11-17-pr812-audit-repair.md)
 
 ## 2026-11-17 user-directed Builder C draft repairs
 

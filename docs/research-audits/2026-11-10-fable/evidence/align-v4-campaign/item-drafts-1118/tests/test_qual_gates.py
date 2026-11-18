@@ -88,6 +88,8 @@ def run_item(item,shell):
         assignments='\n'.join('unset '+key if value is None else key+'='+quote(value) for key,value in vals.items())
         default_boot=quote(f'{{ sec = {now-21600}, usec = 0 }}')
         clock=f'''date() {{ echo {now if stamp is None else stamp}; }}
+synthetic_t0_clock_anchor() {{ echo {now if stamp is None else stamp}000000000:1000000000000:1000000000000; }}
+t0_clock_anchor() {{ synthetic_t0_clock_anchor; }}
 BATCH_DEFAULT_BOOT={default_boot}
 sysctl() {{
   test "$*" = '-n kern.boottime' && test "${{BATCH_SYSCTL_RC:-0}}" = 0 || return 1
@@ -115,6 +117,7 @@ sysctl() {{
     "-B scripts/cadence_queue.py checklist "*) echo MOCK_NATIVE_CHECKLIST; test "$NATIVE_RC" = 0;;
     "-B scripts/cadence_legs_runner.py plan "*) echo MOCK_PLAN;;
     "-B scripts/launch_cadence_span.py launch "*) echo MOCK_LAUNCH "$@";;
+    "-I -B -c "*time.time_ns*) synthetic_t0_clock_anchor;;
     *) {quote(sys.executable)} "$@";;
   esac
 }}
@@ -160,6 +163,17 @@ unset MAGISTRATE_WATCHDOG_CUSTODY_ROOT
     expected=item['expected_s']
     run('C.4 Run sends tightened cutoff to child',overrides={'NATIVE_RC':0},full_start=True,
         run_boot=boot_at(now+expected+1),contains=f'--t0-before {now+1}')
+    cutoff=min(now+10000,int(re.search(r'WINDOW_END=(\d+)',config)[1])+1)
+    run('C.4 Run forwards 27-minute release and clock anchor',overrides={'NATIVE_RC':0},full_start=True,
+        run_boot=boot_at(now-1620),
+        contains=f'--t0-not-before {now} --t0-before {cutoff} --t0-anchor {now}000000000:1000000000000:1000000000000')
+    run('Watch expiry one second away bounds the Run handoff',overrides={'NATIVE_RC':0},full_start=True,
+        run_boot=boot_at(now+expected+60),fill_changes={'WATCH_UNTIL_EPOCH':now+1},
+        contains=f'--t0-before {now+1} --t0-anchor')
+    run('Watch cutoff is exclusive even after watch_gate has passed',
+        stamp=now+1,fill_changes={'WATCH_UNTIL_EPOCH':now+1},
+        command=f'EXPIRES_EPOCH={now+86400}; QUEUE_EXPIRES_EPOCH={now+86400}; arm_bound_gate',
+        want=False,contains=f'effective t0 cutoff {now+1}')
     batch_only=f'ARM_BEFORE_EPOCH={now+86400}; batch_gate && echo "FINAL CUTOFF $ARM_BEFORE_EPOCH"'
     for label, batch, allow in (
         ('expected close one second before batch',now+expected+1,True),
@@ -270,6 +284,13 @@ unset MAGISTRATE_WATCHDOG_CUSTODY_ROOT
     revised={span:shift(day) if span>=item['block']+'-s02' else day for span,day in plan.items()}
     if item['span'].endswith('s02'):
         later=shift(item['date'])
+        midnight=epoch(later)-43200
+        run('C.3 legacy submicrosecond receipt remains on the prior local date',
+            setup=lambda:mutate(started={'epoch_s':midnight-0.0000002}),
+            command='day_gate',contains='DAY OK')
+        run('C.3 exact receipt nanoseconds remain on the prior local date',
+            setup=lambda:mutate(started={'epoch_ns':midnight*1_000_000_000-1,'epoch_s':midnight}),
+            command='day_gate',contains='DAY OK')
         run('C.3 missing s02 cannot use old-date item',stamp=epoch(later),
             command='day_gate',want=False,contains='outside this item t0-date')
         recovery={'T0_DATE':later,'QUAL_DATES':dates_arg(revised)}

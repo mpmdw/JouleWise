@@ -12,13 +12,13 @@ right after item 167 below. [`CANONICAL.md`](CANONICAL.md) is the tool map:
 the one current tool or document per job. [`docs/ARCHIVE.md`](docs/ARCHIVE.md)
 says how to get back files removed from `main` in the 2026-11-06 prune.
 
-**2026-11-17 qualification draft handoff [AGENT].** The lead approved the
-successor containing the recorded-t0 guard. The six unissued qualification
-items bind pin `0576ed76d3a74d20ce3c6b6b96711e360775a25f`, the
-re-pinned kit and queue hashes, and the RL-175 C.3 span-date and C.4
-predicted-batch gates. Qualification remains HOLD_FOR_FIT_FREEZE.
-See the [run report](docs/run_reports/2026-11-17-qual-pin-t0guard.md) for
-the two admission checks and remaining prerequisites.
+**2026-11-17 qualification draft handoff [AGENT].** The six unissued
+items bind the PR #812 audit-repair pin
+`57ed7334ea7dbc24ed47dfbf70c29c41197c9f01` and its re-pinned kits and queues.
+Run carries the RL-175 C.4 earliest start, all upper bounds and the arm
+clock anchor through to the child. The exact-pin reviews and lead issue
+gates remain open. Qualification remains HOLD_FOR_FIT_FREEZE.
+See the [audit-repair report](docs/run_reports/2026-11-17-pr812-audit-repair.md).
 
 **Block-5 history: the magistrate's hand-off of 2026-10-10 08:40 PDT (activation cbe4230e).** It was the step list for block-5 collection, which closed on 2026-10-12 (item 31). The numbered items below grew from it; the current state is the top numbered item, not this block.
 

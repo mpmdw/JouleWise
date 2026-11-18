@@ -71,7 +71,9 @@ class Round10(unittest.TestCase):
             with self.subTest(item=item.name):
                 run = re.findall(r'```sh\n(.*?)```', item.read_text(), re.S)[1]
                 self.assertIn('--authorized-t0-date "$T0_DATE"', run)
+                self.assertIn('--t0-not-before "$ARM_NOT_BEFORE_EPOCH"', run)
                 self.assertIn('--t0-before "$ARM_BEFORE_EPOCH"', run)
+                self.assertIn('--t0-anchor "$ARM_T0_ANCHOR"', run)
 
     def test_child_uses_same_stamp_before_work(self):
         sys.path.insert(0, str(HERE / 'tools'))
@@ -87,10 +89,12 @@ class Round10(unittest.TestCase):
                     )
                     self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
                     self.assertEqual(result.stdout.splitlines(), [
-                        'PASS pinned child last authorized fractional second',
+                        'PASS pinned child last authorized nanosecond',
                         'PASS pinned child midnight during handoff',
                         'PASS pinned child different date before numeric cutoff',
-                        'PASS pinned child item expires during handoff',
+                        'PASS pinned child watcher expiry during handoff',
+                        'PASS pinned child rollback into batch hold',
+                        'PASS pinned child exact batch release',
                     ])
 
     def test_maintenance_predicate(self):

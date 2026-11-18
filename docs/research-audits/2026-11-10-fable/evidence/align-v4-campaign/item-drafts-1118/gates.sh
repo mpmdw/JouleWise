@@ -192,11 +192,16 @@ v4_gate() {
 day_gate() {
   "$PY" -I -B - /Users/edr/campaign-out "$(date +%s)" "$T0_DATE" "$QUAL_DATES" "$SPAN" "$CAMP" "$LEGS" <<'PY'
 import datetime as dt, json, math, os, re, sys
+from decimal import Decimal
 from pathlib import Path
 from zoneinfo import ZoneInfo
 root, now, wanted, dates, current, camp, legs = sys.argv[1:]
 def stop(s): sys.exit('REFUSE: day law ' + s)
-TZ=ZoneInfo('America/Los_Angeles'); day=dt.datetime.fromtimestamp(int(now),TZ).date().isoformat()
+TZ=ZoneInfo('America/Los_Angeles')
+EPOCH=dt.datetime(1970,1,1,tzinfo=dt.timezone.utc)
+def local_date(second):
+    return (EPOCH+dt.timedelta(seconds=second)).astimezone(TZ).date().isoformat()
+day=local_date(int(now))
 spans=[f'qual-{n:02d}-s{i:02d}' for n in (1,2,3) for i in (1,2)]
 def block(span): return span.rsplit('-',1)[0]
 def roster_for(span):
@@ -224,12 +229,20 @@ try:
             if not out.is_dir() or not out.name.startswith('cq-'): continue
             p=out/'runner_receipt.json'
             if not p.is_file(): stop('pending output without receipt '+str(out))
-            r=json.loads(p.read_text()); t=r['started']['epoch_s']; roster=r['roster']
-            if isinstance(t,bool) or not isinstance(t,(int,float)) or not math.isfinite(t) or t<=0: stop('bad t0 '+str(p))
+            r=json.loads(p.read_text(),parse_float=Decimal); started=r['started']; roster=r['roster']
+            if 'epoch_ns' in started:
+                t=started['epoch_ns']
+                if type(t) is not int or t<=0: stop('bad t0 '+str(p))
+                second=t//1_000_000_000
+            else:
+                t=started['epoch_s']
+                if (type(t) is not int and (not isinstance(t,Decimal) or not t.is_finite())) or t<=0:
+                    stop('bad t0 '+str(p))
+                second=math.floor(t)
             if (not isinstance(roster,list) or not roster
                     or not all(isinstance(x,str) and re.fullmatch('L[0-9]{3}',x) for x in roster)
                     or len(set(roster))!=len(roster)): stop('bad roster '+str(p))
-            actual=dt.datetime.fromtimestamp(t,TZ).date().isoformat()
+            actual=local_date(second)
             if family.name.startswith('cl-dev-'):
                 if actual in blocks_by_day: stop('development receipt on qualification date '+actual+' '+str(p))
             else:
@@ -323,9 +336,9 @@ window_gate() {
     || { echo 'REFUSE: outside item t0-date or LIMIT; follow missed-date recovery (RL-172 (a)5)'; return 1; }
 }
 arm_bound_gate() {
-  # Date/window end is inclusive to the printed second. Item and queue expiries are exclusive.
+  # Date/window end is inclusive to the printed second. Expiries are exclusive.
   ARM_BEFORE_EPOCH=$((WINDOW_END + 1))
-  for expires in "$EXPIRES_EPOCH" "$QUEUE_EXPIRES_EPOCH"; do
+  for expires in "$EXPIRES_EPOCH" "$QUEUE_EXPIRES_EPOCH" "$WATCH_UNTIL_EPOCH"; do
     if test "$expires" -lt "$ARM_BEFORE_EPOCH"; then ARM_BEFORE_EPOCH=$expires; fi
   done
   if test "$FIRST_TO_SECOND_S" -gt 0; then
@@ -341,23 +354,30 @@ arm_bound_gate() {
     if test "$pair_before" -lt "$ARM_BEFORE_EPOCH"; then ARM_BEFORE_EPOCH=$pair_before; fi
   fi
   test "$(date +%s)" -lt "$ARM_BEFORE_EPOCH" || {
-    echo "REFUSE: effective t0 cutoff $ARM_BEFORE_EPOCH (date, item/queue expiry, dependent span)"
+    echo "REFUSE: effective t0 cutoff $ARM_BEFORE_EPOCH (date, item/queue/watch expiry, dependent span)"
     return 1
   }
   echo "AUTHORIZED T0 $T0_DATE before $ARM_BEFORE_EPOCH"
 }
+t0_clock_anchor() {
+  "$PY" -I -B -c 'import time; before = time.monotonic_ns(); print(f"{time.time_ns()}:{before}:{time.monotonic_ns()}")'
+}
 batch_gate() {
-  # Fresh boot read at both Start and Run. Carry the next hold boundary to the child.
+  # Fresh boot and clock reads at both Start and Run.
+  local anchor bounds
   BATCH_BOOT="$(sysctl -n kern.boottime)" || { echo 'STOP: boot time unavailable (RL-175 C.4)'; return 1; }
-  ARM_BEFORE_EPOCH="$("$PY" -I -B - "$BATCH_BOOT" "$(date +%s)" "$EXPECTED_SPAN_S" "$ARM_BEFORE_EPOCH" <<'PY'
+  anchor="$(t0_clock_anchor)" || return 1
+  bounds="$("$PY" -I -B - "$BATCH_BOOT" "$anchor" "$EXPECTED_SPAN_S" "$WINDOW_START" "$ARM_BEFORE_EPOCH" <<'PY'
 import re, sys
-raw, now, expected, cutoff = sys.argv[1:]
+raw, anchor, expected, start, cutoff = sys.argv[1:]
 boot = re.fullmatch(r'\{\s*sec\s*=\s*([0-9]+),\s*usec\s*=\s*[0-9]+\s*\}.*',raw)
-if not boot or not all(v.isascii() and v.isdecimal() for v in (now,expected,cutoff)):
+stamp = re.fullmatch(r'([0-9]+):([0-9]+):([0-9]+)',anchor)
+if not boot or not stamp or not all(v.isascii() and v.isdecimal() for v in (expected,start,cutoff)):
     sys.exit('STOP: unreadable boot time or qualification plan (RL-175 C.4)')
-boot, now, expected, cutoff = int(boot[1]), int(now), int(expected), int(cutoff)
+boot, expected, start, cutoff = int(boot[1]), int(expected), int(start), int(cutoff)
+now = int(stamp[1])//1_000_000_000
 soak_s, cooldown_s, day_s = 1950, 27*60, 86400
-if not 0<boot<=now or not soak_s<=expected<day_s-cooldown_s or now>=cutoff:
+if int(stamp[2])>int(stamp[3]) or not 0<boot<=now or not soak_s<=expected<day_s-cooldown_s or not start<=now<cutoff:
     sys.exit('STOP: invalid boot time, span duration or t0 cutoff (RL-175 C.4)')
 # The existing prediction is anchored to boot, with the observed 48 s offset.
 first = boot + 43248
@@ -371,11 +391,15 @@ if held is None and upcoming<=expected_close:
 if held is not None:
     sys.exit(f'WAIT: RL-175 C.4 predicted OS batch {held}; arm at or after {held+cooldown_s}')
 before = min(cutoff,upcoming-expected)
+not_before = max(start,previous+cooldown_s) if previous is not None else start
 print(f'BATCH OK RL-175 C.4 boot {boot}; next OS batch {upcoming}; soak end {now+soak_s}; '
-      f'expected close {expected_close}; authorized t0 before {before}',file=sys.stderr)
-print(before)
+      f'expected close {expected_close}; authorized t0 [{not_before}, {before})',file=sys.stderr)
+print(not_before,before,anchor)
 PY
 )" || return 1
+  IFS=' ' read -r ARM_NOT_BEFORE_EPOCH ARM_BEFORE_EPOCH ARM_T0_ANCHOR <<EOF
+$bounds
+EOF
 }
 all_gates() {
   expiry_gate && watch_gate && freeze2_gate && qual_pin_gate && host_event_gate && v4_gate \

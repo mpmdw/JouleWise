@@ -83,7 +83,7 @@ case "$OUT" in */restricted/*|*/night-*|"$REPO"/*|*/configs/campaigns/align_v4*)
 
 Lead/magistrate supplies the current observations listed in `evidence/record-shapes.md`. `CHECKLIST_OK=yes` is set only **after** every native read above and the kit's complete checklist passes; each call clears any supplied yes before running the checks. Disk, meter, process census, no halt/veto and all restore lines are mandatory.
 
-**Run (your last action).** Re-read stops, veto, watcher, typed desk/Q1 debt, host-state identity, v4 READY record and current boot time. Verify the current kit/queue hashes again and fetch refs before the last gate. Pass the date and tightened t0 cutoff from the fresh gates to the child. The pinned runner checks its native checklist and per-leg process census. The LaunchAgent holds the **shared desk fence** until close. The launch omits `--batch-window`.
+**Run (your last action).** Re-read stops, veto, watcher, typed desk/Q1 debt, host-state identity, v4 READY record and current boot time. Verify the current kit/queue hashes again and fetch refs before the last gate. Pass the authorized date, inclusive earliest start, exclusive cutoff and clock anchor to the child. Watcher expiry bounds the cutoff alongside the other expiry, window and batch limits. After a batch, the earliest start includes its cooldown. The pinned runner checks both clocks against this authority before creating the output directory and records the authority with its admitted t0. The runner then checks its native checklist and per-leg process census. The LaunchAgent holds the **shared desk fence** until close. The launch omits `--batch-window`.
 
 ```sh
 git -C "$AUTH_REPO" fetch -q origin audit/2026-11-10-fable main || exit 1
@@ -98,7 +98,8 @@ DEADLINE="$("$PY" -I -B -c 'import time; print(time.time()+@@DEADLINE_SECONDS@@)
   --repo "$REPO" --python-bin "$PY" --kit "$KIT" --legs "$LEGS" \
   --output "$OUT" --disk-path "$REPO" --custody-root "$CUSTODY" \
   --magistrate-pid "$MAGISTRATE_PID" --deadline "$DEADLINE" \
-  --authorized-t0-date "$T0_DATE" --t0-before "$ARM_BEFORE_EPOCH" \
+  --authorized-t0-date "$T0_DATE" --t0-not-before "$ARM_NOT_BEFORE_EPOCH" \
+  --t0-before "$ARM_BEFORE_EPOCH" --t0-anchor "$ARM_T0_ANCHOR" \
   --exit-wait-seconds 180 --start-wait-seconds 30 || exit 1
 echo "$OUT"
 ```
