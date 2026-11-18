@@ -70,3 +70,18 @@ Round 3 reviewed `687170eb2adcecbbbacc037f8a3c40407c35ad2c`, whose hosted CI pas
 | MED, a process observed between overlapping window endpoints could be omitted from one window. | For a contender whose birth is established inside the interval, count the largest observed cumulative CPU as a lower bound over the full window. Earlier births and below-threshold lower bounds remain outside this flag. | `test_window_flags_proven_cpu_from_worker_seen_only_at_an_interior_snapshot` | PASS |
 
 Both auditor probes passed with the repaired expectations. The exit-2 CLI reproduction and overlap regression passed 20 consecutive synthetic runs. Exact-candidate CI and the two-family spec-v3 review are tracked in draft PR #824. Issue #834 remains with the CI owner. [CI-owner issue #834](https://github.com/mpmdw/JouleWise/issues/834)
+
+## Lead-directed census repair after round 4
+
+Round 4 reviewed `caea9b23285d2d3fbadecaa316b78fc45b748e1c`. The lead directed one repair for the recurring filesystem failure class and retained the frozen sampler spec. Repair `e923cd3aa59a19e83365cd86ba3e6f34c7efc8c3` routes census filesystem operations through `census_fs`. The helper consumes directory listings inside its error boundary and raises `Refused` with the failed path and errno. R0 establishes optional absence from a successful parent listing. A listed entry that disappears while it is being inspected refuses. The shared census retains its optional absence and reconciliation policy for other callers.
+
+Both CLI modes return 2 on refusal. Inventory writes its requested file after final sampler verification. Check mode works in a private sibling directory and publishes at the requested path only after verification. On refusal it retains private diagnostics. The SMC redo remains independent. Its reported command records the path used for capture, and its published artifact location follows the completed directory.
+
+| Audit reproduction or requirement | Regression | Result on `e923cd3aa` |
+| --- | --- | --- |
+| `readlink` returns EIO or ENOENT during census root resolution. | `test_full_r0_refuses_every_census_filesystem_call_fault`, configured symlink with a low-level `readlink` fault | PASS |
+| A listed `chain.started` or active-campaigns entry disappears before its read. | `test_full_r0_refuses_every_census_filesystem_call_fault`, injected ENOENT on reads of both record kinds | PASS |
+| Inventory census aborts on a filesystem error and exits 2 without publishing. | `test_full_r0_refuses_every_census_filesystem_call_fault`, inventory mode, and `test_inventory_refuses_census_failure_at_eof` | PASS |
+| A raw filesystem call bypasses the common helper. | `test_census_filesystem_calls_are_confined_to_the_helper`, verified by injecting a raw `readlink` into a function called by the census | PASS |
+
+The quiet controls passed in both modes. Injecting EIO, ENOENT and EACCES at each observed helper call passed 198 check-mode cases and 99 inventory cases. The synthetic audit replays separately verified exit 2 with no publication for unreadable roots, disappearing chain and registry entries, and the inventory CLI. The original sampler dispositions and frozen test commits remain in force. Exact-candidate CI and two-family review are tracked on PR #824. NEEDS_SPEC has no entries.
