@@ -11,6 +11,7 @@ import plistlib
 import subprocess
 import sys
 import tempfile
+from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
@@ -435,13 +436,13 @@ class SeriesReleaseTests(unittest.TestCase):
             selected = series.selected(manifest, "C1")
             benign_ordinal = next(a["ordinal"] for a in selected["members"]
                                   if a["ordinal"] in series.FRESH_ORDINALS and a["condition"] == "benign")
-            permitted = f"runs/synthetic-C1-{benign_ordinal:02d}/{caller.DC_FILE}"
+            permitted = f"series/restored/C1/runs/synthetic-C1-{benign_ordinal:02d}/{caller.DC_FILE}"
 
             def observe(source_root, path):
                 self.assertFalse(path.endswith("power_trace.csv"), "generic bundle trace read")
                 if path.endswith(caller.DC_FILE):
                     self.assertEqual(path, permitted)
-                    self.assertEqual(source_root.name, "C1")
+                    self.assertEqual(source_root, root.resolve())
                     trace_opens.append(path)
                 return real(source_root, path)
 
@@ -511,6 +512,21 @@ class SeriesReleaseTests(unittest.TestCase):
                     caller.main(["--measurement-root", str(root), "--output", str(output)])
             self.assertEqual(refusal.exception.code, 1)
             self.assertFalse(output.exists())
+
+    def test_restored_mount_refuses_ancestor_symlink(self):
+        from scripts import align_v4_series_release as caller
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp).resolve()
+            outside = root / "outside"
+            (outside / "C1").mkdir(parents=True)
+            raw = b"synthetic projected input"
+            (outside / "C1/finalized_manifest.json").write_bytes(raw)
+            (root / "series").mkdir()
+            (root / "series/restored").symlink_to(outside, target_is_directory=True)
+            record = SimpleNamespace(window="C1", finalized_manifest_sha256=packet.digest(raw))
+            with self.assertRaises(OSError):
+                caller.RestoredFiles(root, record, {"trace_layout": caller.LAYOUT, "hazard_journal": None})
 
     def test_stored_series_through_787_and_release_script_s_signature_at_102_not_101_of_154(self):
         for wins, tail in ((102, 0.0109278936864), (101, 0.0140103456299)):

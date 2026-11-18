@@ -125,7 +125,8 @@ class RestoredFiles:
     def __init__(self, root, record, layout):
         packet.require(layout["trace_layout"] == LAYOUT, "no admitted rail-only file layout")
         self.root = root
-        raw = named_bytes(root, "finalized_manifest.json")
+        self.prefix = f"series/restored/{record.window}"
+        raw = named_bytes(root, f"{self.prefix}/finalized_manifest.json")
         packet.require(packet.digest(raw) == record.finalized_manifest_sha256,
                        "restored manifest differs from record digest")
         manifest = packet.decode(raw)
@@ -142,7 +143,7 @@ class RestoredFiles:
             return None
         row = self.entries[name]
         packet.require(set(row) == {"size", "sha256"}, "release input is not a bound regular file")
-        raw = named_bytes(self.root, name)
+        raw = named_bytes(self.root, f"{self.prefix}/{name}")
         packet.require(len(raw) == row["size"] and packet.digest(raw) == row["sha256"],
                        "restored file differs from record manifest")
         return raw
@@ -217,7 +218,7 @@ def final_roster(root, manifest, completion, ledger, chain):
         captured = record.captures()
         final = light_triage.member_eligibility(record.thermal()["members"], plan, captured=captured, final=True)
         harvest_codes = v4_contention.exclusion_map(exclusions["members_excluded"])
-        files = RestoredFiles(root / "series/restored" / record.window, record, layouts[record.window])
+        files = RestoredFiles(root, record, layouts[record.window])
         for frozen in selected["members"]:
             ordinal = frozen["ordinal"]
             if ordinal not in series.FRESH_ORDINALS:
