@@ -1113,6 +1113,127 @@ class R0SamplerAdmissionSpec(unittest.TestCase):
         self.assertEqual(published["contention"]["guard_flags"], 1)
         self.assertEqual([flag["interval"]["end_monotonic_s"] for flag in row["contention_flags"]], [45])
 
+    def test_cli_refuses_when_required_background_census_root_cannot_be_enumerated(self):
+        from contextlib import nullcontext
+        import threading
+        from joulewise.align import r0_runner
+        from joulewise.measurement_liveness import census
+        from tests.align.test_r0_checks import FakeBackend
+
+        iterdir = Path.iterdir
+        for mode in ("quiet", "before", "during", "transient"):
+            with self.subTest(mode=mode), tempfile.TemporaryDirectory() as tmp:
+                work = Path(tmp).resolve()
+                required = work / "required-parent"
+                required.mkdir()
+                detached = work / "detached-parent"
+                config = config_at(work)
+                config["custody_parents"] = [str(required)]
+                config_file = work / "config.json"
+                config_file.write_text(json.dumps(config))
+                output = work / "output"
+                guard, clock, _, _ = self.admission()
+                guard.SNAPSHOT_CADENCE_S = 0.001
+                ready = threading.Event()
+                sampled = threading.Event()
+                cycle, run = guard._background_snapshot, guard.run
+
+                def guarded_cycle():
+                    if ready.wait(3) and not sampled.is_set():
+                        cycle()
+                        sampled.set()
+
+                def fake_command(argv, **kwargs):
+                    if (mode == "during" and argv[0] == "/bin/launchctl"
+                            and threading.current_thread() is not threading.main_thread()):
+                        required.rename(detached)
+                    return run(argv, **kwargs)
+
+                def fixture_iterdir(directory):
+                    if mode == "transient" and directory == required and ready.is_set():
+                        required.rename(detached)
+                        try:
+                            yield from iterdir(directory)
+                        finally:
+                            detached.rename(required)
+                    else:
+                        yield from iterdir(directory)
+
+                def host():
+                    if mode == "before":
+                        required.rename(detached)
+                    clock.now = 45
+                    ready.set()
+                    self.assertTrue(sampled.wait(3))
+                    return {"status": "pass"}
+
+                def unexpected_identity(_):
+                    self.fail("unexpected process identity lookup")
+
+                def factory(parents):
+                    guard.parents = list(map(Path, parents))
+                    guard._background_snapshot = guarded_cycle
+                    guard.run = fake_command
+                    guard.inspect_custody = lambda *, parents: census(parents=parents, observer=unexpected_identity)
+                    return guard
+
+                with patch.object(Path, "iterdir", fixture_iterdir), \
+                        patch.object(r0_runner, "host_snapshot", side_effect=host), \
+                        patch.object(r0_runner, "deadline", return_value=nullcontext()), \
+                        patch.object(r0_runner, "command", return_value="synthetic-head"), \
+                        patch.object(r0_runner, "softwareupdate_scan_forecast", return_value={"status": "unknown"}):
+                    status = r0_runner.main(
+                        ["--config", str(config_file), "--output", str(output), "--checks", "host"],
+                        guard_factory=factory, backend_factory=FakeBackend, display_probe=None,
+                        lock_path=work / "lock")
+                published = json.loads((output / "report.json").read_text())
+                cycles = [entry for receipt in published["census"]
+                          for entry in receipt.get("background_census", ())]
+                outcome = (status, published["status"], published["checks"][0]["status"])
+                if mode == "quiet":
+                    self.assertEqual(outcome, (0, "pass", "pass"))
+                    self.assertEqual([entry["custody_clear"] for entry in cycles], [True])
+                else:
+                    self.assertEqual(outcome, (2, "refused", "refused"))
+                    reason = ("missing or not a directory" if mode == "before"
+                              else "required custody parent could not be enumerated")
+                    self.assertIn(reason, published["refusal"])
+                    self.assertEqual(cycles, [])
+
+    def test_window_flags_proven_cpu_from_worker_seen_only_at_an_interior_snapshot(self):
+        from datetime import datetime
+
+        for birth, cpu, flagged in ((35, "0:01.80", [45, 60]),
+                                    (20, "0:01.80", [45]),
+                                    (35, "0:01.40", [])):
+            with self.subTest(birth=birth, cpu=cpu), tempfile.TemporaryDirectory() as tmp:
+                guard, clock, advance, _ = self.admission()
+                run = guard.run
+                wall = datetime(2026, 11, 6, 18, 0).timestamp()
+                guard.wall_clock_ns = lambda: int((wall + clock.now) * 1e9)
+
+                def command(argv, **kwargs):
+                    if argv != contention.PS_ARGV:
+                        return run(argv, **kwargs)
+                    rows = []
+                    if clock.now == 45:
+                        rows.append((42, f"Fri Nov  6 18:00:{birth:02d} 2026", cpu, "mdworker_shared"))
+                    return subprocess.CompletedProcess(argv, 0, cpu_table(*rows), "")
+
+                def host():
+                    advance(45)
+                    advance(60)
+                    return {"status": "pass"}
+
+                guard.run = command
+                report = self.execute_host(guard, host, Path(tmp))
+                self.assertEqual(report["status"], "pass")
+                self.assertEqual([flag["interval"]["end_monotonic_s"] for flag in guard.contention_flags], flagged)
+                if 60 in flagged:
+                    evidence = guard.contention_flags[-1]["busy"][0]
+                    self.assertAlmostEqual(evidence["cpu_s_per_s"], 0.06)
+                    self.assertIn("lower bound", evidence["basis"])
+
 
 class R0QuietIntervalTest(unittest.TestCase):
     # CPU fixtures derive from the 0.05 CPU-s/s bar and 30 s interval:
