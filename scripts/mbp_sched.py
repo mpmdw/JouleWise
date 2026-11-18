@@ -1373,9 +1373,9 @@ def parse_power(output):
     source = re.search(r"Now drawing from '(AC|Battery) Power'", output)
     charge = re.search(r";\s*(not charging|charging|charged|discharging)\b", output)
     if source is None:
-        raise ValueError("pmset output did not identify a power source")
+        raise ValueError("battery summary did not identify a power source")
     if charge is None:
-        raise ValueError("pmset output did not identify a charging state")
+        raise ValueError("battery summary did not identify a charging state")
     return {"ac": source[1] == "AC", "charging": charge[1] == "charging"}
 
 
@@ -1390,12 +1390,12 @@ def parse_disk(output):
 def parse_labels(output):
     lines = output.strip().splitlines()
     if not lines or lines[0].split() != ["PID", "Status", "Label"]:
-        raise ValueError("launchctl output did not identify its columns")
+        raise ValueError("loaded job list did not identify its columns")
     labels = []
     for line in lines[1:]:
         fields = line.split(maxsplit=2)
         if len(fields) != 3 or not string(fields[2]):
-            raise ValueError("launchctl output has an unreadable label")
+            raise ValueError("loaded job list has an unreadable label")
         labels.append(fields[2])
     return sorted(labels)
 
@@ -1499,7 +1499,9 @@ def receipt_files(root, depth=1, *, dir_fd=None):
         os.close(fd)
 
 
-def probe_command(argv, parse, fact, errors):
+def probe_command(command, parse, fact, errors):
+    # Every probe command is a fixed, whitespace-separated native getter.
+    argv = command.split()
     try:
         child = subprocess.run(argv, capture_output=True, text=True, check=False,
                                timeout=15, env={**os.environ, "LC_ALL": "C"})
@@ -1554,12 +1556,12 @@ def maintenance_active(args, rules, errors):
 
 def probe(args, queue, rules, supplied):
     failures = {}
-    power = probe_command(["/usr/bin/pmset", "-g", "batt"], parse_power, "power", failures)
-    disk = probe_command(["/bin/df", "-g", "/"], parse_disk, "disk_free_gib", failures)
-    labels = probe_command(["/bin/launchctl", "list"], parse_labels, "labels_loaded", failures)
-    processes = probe_command(["/bin/ps", "-axo", "pid,ppid,comm"], parse_processes,
+    power = probe_command("/usr/bin/pmset -g batt", parse_power, "power", failures)
+    disk = probe_command("/bin/df -g /", parse_disk, "disk_free_gib", failures)
+    labels = probe_command("/bin/launchctl list", parse_labels, "labels_loaded", failures)
+    processes = probe_command("/bin/ps -axo pid,ppid,comm", parse_processes,
                               "foreign_processes", failures)
-    boot = probe_command(["/usr/sbin/sysctl", "-n", "kern.boottime"], parse_boot, "boot_epoch", failures)
+    boot = probe_command("/usr/sbin/sysctl -n kern.boottime", parse_boot, "boot_epoch", failures)
     now = time.time()
     quiet_rules = [row for row in rules.values() if row["test"] == "host_quiet" and row["status"] != "RETIRED"]
     foreign = None

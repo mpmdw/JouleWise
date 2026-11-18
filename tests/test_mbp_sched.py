@@ -285,9 +285,16 @@ class SchedulerTests(unittest.TestCase):
         out = self.directory / "probe.json"
         rule = next(row for row in self.rules if row["id"] == "host-quiet")
         rule["params"]["patterns"] = ["fixture-agent"]
-        with patch.object(sched.subprocess, "run", side_effect=probe_child), patch.object(
+        with patch.object(sched.subprocess, "run", side_effect=probe_child) as run, patch.object(
                 sched.time, "time", return_value=epoch()):
             self.call("probe", "--out", out, "--receipt-root", root, "--caller-pid", 10)
+            self.assertEqual([call.args[0] for call in run.call_args_list], [
+                ["/usr/bin/pmset", "-g", "batt"],
+                ["/bin/df", "-g", "/"],
+                ["/bin/launchctl", "list"],
+                ["/bin/ps", "-axo", "pid,ppid,comm"],
+                ["/usr/sbin/sysctl", "-n", "kern.boottime"],
+            ])
             initial = out.read_bytes()
             self.assertNotIn(b"SENTINEL", initial)
             facts = json.loads(initial)
