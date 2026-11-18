@@ -64,3 +64,14 @@ The audit ran against `bac0c4f6e`. Four findings were verified. The W1 deletion 
 | MED, RL-163 §1 publishing | Both operational runbooks direct the canonical manifest body and timing span to private state. The v4 record carries the digest, and the span is available for local timing use. | PASS |
 
 The 137-test focused run passed, including the ten-blob comparison against `b2e01464d`. A separate legacy run passed 105 checks and hit a workspace permission error creating the synthetic `restricted` directory in `test_git_and_restricted_members_refuse_without_entering`. GitHub CI covers the wider suite. The exporter blob is now `b35c94801a6700947e8c370e27b9d538e13404df` at `5a325b2ee`. Review that commit before step 4 and rerun step 4 at the signing pin if it used the earlier blob.
+
+## Audit round 2 delta
+
+Audit base `c4351fdca` treated an R1 manifest label as an exemption even for an explicit W1 window or authenticated v4 terminal plan. The identity check now requires the v4 manifest and pack when either post-R1 signal is present. The same check runs before packing, on resume, on the Air before verifying or refreshing a receipt, and before deletion. Genuine R1 and legacy inputs retain their existing format and release path.
+
+| Finding | Regression | Result |
+| --- | --- | --- |
+| HIGH, R1-format override | `test_audit_round2_r1_format_cannot_override_v4_window_or_plan_identity` covers the reported W1 recipe with both copies available on the old code, including each planted artifact. It also checks each identity signal independently and a conflicting `R1` command label. `test_audit_round2_cached_r1_format_v4_refuses_resume_verify_and_release` stages an old verified pack and checks that the corrected entry points refuse and preserve every original. The genuine R1 positive control still transfers. | PASS |
+| MED, cadence retry IDs | `test_audit_round2_retry_id_is_preserved_through_verify_and_release` verifies `C3#2` through transfer, second-copy verification, pushed finality and older-window release. `test_retry_grammar_refuses_other_hash_suffixes` pins the bounded grammar. | PASS |
+
+The seven fresh format-alias cases and the retry round-trip failed on the audit base and passed after the fix. The 212-test local suite covers the offload regressions and legacy controls, the U3 exporter, all ten frozen blobs, and documentation. The local run omitted two tests that send process signals and one test whose synthetic directory is blocked by workspace policy. The pin comparison and exporter check remain anchored to `b2e01464d` and `5a325b2ee`, respectively. Operator deployment and independent recheck remain with the lead.

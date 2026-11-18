@@ -75,7 +75,11 @@ SCHEMA_SSD = "joulewise.ssd_closed_record.v1"
 SCHEMA_CLOSED = "joulewise.closed_record.v1"
 SCHEMA_HARVEST = "joulewise.harvest_window.v1"
 GATE_VERSION = 2
-WINDOW_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]{0,127}\Z")
+SERIES_SLOT = r"[CTD][1-9][0-9]*"
+RETRY_SUFFIX = r"#[1-9][0-9]*"
+# Keep the offload namespace bounded. The only hash suffix is cadence's numbered series retry.
+WINDOW_ID = re.compile(rf"(?=.{{1,128}}\Z)(?:[A-Za-z0-9][A-Za-z0-9._-]*|{SERIES_SLOT}{RETRY_SUFFIX})\Z")
+SERIES_ATTEMPT = re.compile(rf"(?:W1|{SERIES_SLOT}(?:{RETRY_SUFFIX})?)\Z", re.IGNORECASE)
 PART_NAME = re.compile(r"(?:part-\d{4}\.tar\.(?:zst|gz)|payload\.tar\.zst)\Z")
 # The harvest-off lane's canonical pack of a v4 session root (joulewise/align/apple/harvest_offload.py on
 # origin/align/2026-11-08-harvest-off-fix): <dir>/payload.tar.zst + <dir>/MANIFEST.json. Kept under the same
@@ -248,13 +252,17 @@ def readlink_rel(root: Path, rel: str) -> str:
         os.close(dirfd)
 
 
-def hash_file(path: Path, nocache=False) -> tuple[str, int]:
-    digest, size = hashlib.sha256(), 0
+def open_read(path: Path, *, nocache=False):
     fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
     if nocache and hasattr(fcntl, "F_NOCACHE"):
         with contextlib.suppress(OSError):
             fcntl.fcntl(fd, fcntl.F_NOCACHE, 1)
-    with os.fdopen(fd, "rb") as stream:
+    return os.fdopen(fd, "rb")
+
+
+def hash_file(path: Path, nocache=False) -> tuple[str, int]:
+    digest, size = hashlib.sha256(), 0
+    with open_read(path, nocache=nocache) as stream:
         for chunk in iter(lambda: stream.read(4 * CHUNK), b""):
             digest.update(chunk)
             size += len(chunk)
@@ -893,14 +901,21 @@ def check_duplicate_roots(record_root: Path, roots) -> list[str]:
 
 
 def requires_final_record(manifest: dict) -> bool:
-    fmt = manifest.get("record_format")
-    if fmt == "finalized_manifest.v2" or manifest.get("pack_format") == SCHEMA_HARVEST_PACK:
+    """A post-R1 window or plan is v4 even if its manifest claims a legacy format."""
+    if manifest.get("record_format") == "finalized_manifest.v2" or manifest.get("pack_format") == SCHEMA_HARVEST_PACK:
         return True
-    if fmt == "r1_harvest_manifest.v1" or manifest.get("window_id") == "R1":
-        return False
-    plan_id = (manifest.get("terminal") or {}).get("plan_id", "")
-    return (str(plan_id).startswith("align-v4-")
-            or re.fullmatch(r"W1|[CDT][1-9][0-9]*", manifest.get("window_id", "")) is not None)
+    plan_id = str((manifest.get("terminal") or {}).get("plan_id", "")).casefold()
+    r1_plan = plan_id == "align-v4-r1" or plan_id.startswith("align-v4-r1-")
+    return (SERIES_ATTEMPT.fullmatch(manifest.get("window_id", "")) is not None
+            or (plan_id.startswith("align-v4-") and not r1_plan))
+
+
+def check_offload_format(manifest: dict, window_id: str, *, kind=Mismatch):
+    require(manifest.get("window_id") == window_id, "offload_manifest_window_mismatch", Mismatch)
+    require(not requires_final_record(manifest)
+            or (manifest.get("record_format") == "finalized_manifest.v2"
+                and manifest.get("pack_format") == SCHEMA_HARVEST_PACK),
+            "v4_window_needs_finalized_manifest_v2:use_--harvest-pack", kind)
 
 
 class PushedFinalRecords:
@@ -1016,8 +1031,8 @@ class Offload:
                                                           terminal)
         # Lead ruling 2026-11-08: one pack per window. A v4 session is packed once, by the harvest-off lane.
         require(env.fmt != "finalized_manifest.v2", "finalized_manifest_v2_is_packed_once_by_harvest_off:use_--harvest-pack")
-        require(not requires_final_record({"window_id": self.window_id, "record_format": env.fmt, "terminal": term}),
-                "v4_window_needs_finalized_manifest_v2:use_--harvest-pack")
+        check_offload_format({"window_id": self.window_id, "record_format": env.fmt, "terminal": term},
+                             self.window_id, kind=Refusal)
         files, parts, current, current_bytes = [], [], [], 0
         suffix = "zst" if codec["name"] == "zstd" else "gz"
         for rel in sorted(env.files):
@@ -1058,6 +1073,7 @@ class Offload:
             manifest = read_json(manifest_path)
             require(manifest["record_manifest_sha256"] == record_manifest_sha256
                     and manifest["record_root"] == str(plain_path(record_root)), "duplicate_run_conflict", Mismatch)
+            check_offload_format(manifest, self.window_id)
             return manifest
         plan = self.build_plan(Path(record_root), Path(record_manifest), record_manifest_sha256, codec,
                                part_bytes, duplicate_roots, terminal)
@@ -1109,6 +1125,7 @@ class Offload:
                     and manifest.get("pack_format") == SCHEMA_HARVEST_PACK
                     and manifest.get("local_parts_dir") == str(plain_path(harvest_pack)), "duplicate_run_conflict",
                     Mismatch)
+            check_offload_format(manifest, self.window_id)
             self.check_restorable(manifest)
             return manifest
         record_root, raw, env, infos, term = self.preflight(record_root, record_manifest, record_manifest_sha256,
@@ -1270,6 +1287,7 @@ class Offload:
         return reply
 
     def push(self, manifest: dict) -> dict:
+        check_offload_format(manifest, self.window_id)
         hello = self.call("hello")
         require(hello.get("gate_version") == GATE_VERSION, "gate_version_mismatch")
         status = self.call(f"stat {self.window_id}")
@@ -1305,6 +1323,7 @@ class Offload:
         return self.call(f"stat {self.window_id}")
 
     def verify(self, manifest: dict) -> dict:
+        check_offload_format(manifest, self.window_id)
         self.check_quiet_allowed()
         receipt = self.call(f"verify {self.window_id}")
         self.check_air_receipt(receipt, manifest)
@@ -1376,6 +1395,7 @@ class Offload:
             return
         raw = read_record_manifest(self.dir / RECORD_MANIFEST_NAME, manifest["record_manifest_sha256"])
         env = parse_record_manifest(raw, Path(manifest["record_root"]))
+        require(env.fmt == "finalized_manifest.v2", "harvest_pack_needs_finalized_manifest_v2", Mismatch)
         gaps = restore_gaps(env, manifest.get("externals", []))
         require(not gaps, f"not_restorable_from_the_copy:missing_external:{gaps[:1]}")
         require(not reserved_entries(env), "not_restorable_from_the_copy:reserved_transport_name")
@@ -1390,12 +1410,12 @@ class Offload:
         under disk pressure the policy is HOLD (lead ruling 2026-11-08)."""
         with state_lock(self.state_root):
             manifest = read_json(self.dir / MANIFEST_NAME)
+            check_offload_format(manifest, self.window_id)
             if os.path.lexists(self.dir / "released.json"):
                 return read_json(self.dir / "released.json")
             self.check_quiet_allowed()
             self.check_restorable(manifest)
             if requires_final_record(manifest):
-                require(manifest["window_id"] == self.window_id, "v4_release_window_mismatch", Mismatch)
                 require(self.pushed_records is not None, "v4_release_needs_final_pushed_record")
                 self.pushed_records.check(manifest)
             nonce = secrets.token_hex(16)
@@ -2295,13 +2315,14 @@ class Gate:
             receipt_path = wdir / AIR_RECEIPT
             manifest_raw = (inbox / MANIFEST_NAME).read_bytes()
             msha = sha_bytes(manifest_raw)
+            manifest = json.loads(manifest_raw)
+            require(isinstance(manifest, dict) and manifest.get("schema") == SCHEMA_MANIFEST
+                    and manifest.get("window_id") == window_id, "manifest_schema_or_window", Mismatch)
+            check_offload_format(manifest, window_id)
             if receipt_path.exists():
                 receipt = read_json(receipt_path)
                 require(receipt["offload_manifest_sha256"] == msha, "window_id_conflict_on_air", Mismatch)
                 return receipt
-            manifest = json.loads(manifest_raw)
-            require(manifest.get("schema") == SCHEMA_MANIFEST and manifest.get("window_id") == window_id,
-                    "manifest_schema_or_window", Mismatch)
             require(hash_file(inbox / RECORD_MANIFEST_NAME)[0] == manifest["record_manifest_sha256"],
                     "record_manifest_digest", Mismatch)
             files = {row["path"]: row for row in manifest["files"]}
@@ -2451,13 +2472,18 @@ class Gate:
         expected = {p["name"]: (p["sha256"], p["bytes"]) for p in body["parts"]}
         expected.update({x["name"]: (x["sha256"], x["bytes"]) for x in body.get("extra_objects", [])})
         for name in sorted([*expected, MANIFEST_NAME, RECORD_MANIFEST_NAME]):
-            got, size = hash_file(inbox / name, nocache=True)
-            if name in expected:
-                require((got, size) == expected[name], f"air_part_decayed:{name}", Mismatch)
-            elif name == MANIFEST_NAME:
+            if name == MANIFEST_NAME:
+                with open_read(inbox / name, nocache=True) as stream:
+                    raw = stream.read()
+                got, size = sha_bytes(raw), len(raw)
                 require(got == body["offload_manifest_sha256"], "air_manifest_decayed", Mismatch)
+                check_offload_format(json.loads(raw), window_id)
             else:
-                require(got == body["record_manifest_sha256"], "air_record_manifest_decayed", Mismatch)
+                got, size = hash_file(inbox / name, nocache=True)
+                if name in expected:
+                    require((got, size) == expected[name], f"air_part_decayed:{name}", Mismatch)
+                else:
+                    require(got == body["record_manifest_sha256"], "air_record_manifest_decayed", Mismatch)
             rechecked.append({"name": name, "sha256": got, "bytes": size})
         fresh = sealed({"schema": SCHEMA_FRESH, "window_id": window_id, "nonce": nonce,
                         "offload_manifest_sha256": body["offload_manifest_sha256"],

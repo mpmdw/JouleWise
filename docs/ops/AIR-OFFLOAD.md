@@ -70,6 +70,10 @@ append-only resumable `put`/`commit` transport, and the timing receipts `timing/
 
 ### 1a. finalized_manifest.v2 records: one pack, consumed (lead ruling 2026-11-08)
 
+An attempt ID or authenticated terminal plan identifying a post-R1 v4 window requires the v4 finalized manifest and
+harvest pack. An R1-format manifest with either identity is refused at pack, resume, Air verification, receipt refresh
+and release.
+
 The harvest-off pack directory (`$OUT/offload`: `payload.tar.zst` + `MANIFEST.json`, schema
 `joulewise.align_v4.harvest_offload.v1`) is the record's only pack. `run --harvest-pack $OUT/offload` does, with
 no raw or payload hashing on the MBP:
@@ -236,6 +240,9 @@ point, volume UUID, store id and free floor.
 
 ## 4. Per-window magistrate sequence
 
+Use the exact attempt ID from the record as `K`. Numbered series retries such as `C3#2` keep their suffix in the
+offload state and Air store. Retry IDs require the updated offload tool on both machines.
+
 | When | MBP step | Notes |
 |---|---|---|
 | Window terminal | v4: finalize to the private output directory and make the single pack. Carry digest `H` into the pushed record. R1 and legacy use their existing manifest publication procedure. | For v4 keep the canonical manifest body on the MBP and with the Air restore outside Git until release (RL-163 §1). Follow harvest-off runbook §1b–c. |
@@ -302,6 +309,7 @@ lease is the primary exclusion and the probe a second opinion. The contract (fro
 | 2 `window_armed` / `window_measuring` / `lease_*` / `loop_lock_busy` | Not in a clean cool-down | Do not offload now; the next turnaround retries |
 | 2 `envelope_*` / `terminal_*` / `record_is_not_terminal` / `record_manifest_unsupported` | The record is not a closed, terminal envelope | Fix the finalize manifest (lead); nothing was sent |
 | 2 `offload_already_running` | Another run holds the lock | Wait; triage refuses the arm until it ends |
+| 2 or 3 `v4_window_needs_finalized_manifest_v2` | A post-R1 v4 window or plan is paired with a legacy format | Retain the originals. Use the v4 pre-desk manifest and its harvest pack for that window. |
 | 2 `v4_release_*` | A matched pushed final record could not be established | Keep the pack and originals. After the desk is final and the record is pushed, refresh the records ref and retry release. |
 | 3 `*_mismatch`, `record_changed*`, `raw_digest:*`, `air_part_decayed:*`, `fresh_receipt_*`, `content_differs_*`, `type_or_link_changed:*`, `local_pack_changed:*`, `changed_during_deletion:*…:kept_at:<path>`, `quarantine_holds_unbound_object:*`, `window_id_conflict*` | Integrity failure; nothing unverified is deleted | Keep everything. A kept object is at its original path or in the named `.jw-offload-q-*` directory beside its root. Report to the lead with the span and `offload-journal.jsonl`. Do not retry blindly |
 | 4 `deadline:*`, `deadline_alarm`, `interrupted_sigterm` | Predicted or actual overrun, or killed | State kept; the next turnaround resumes |
