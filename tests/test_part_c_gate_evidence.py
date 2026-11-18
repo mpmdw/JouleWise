@@ -212,7 +212,7 @@ def evaluation_inputs(root, *, step_d=STEP, d_bank=None, x_g=None, n_chunk=4096)
 
 def evaluate_world(*, d_bank=None, x_g=None, step_d=STEP, **kwargs):
     with evaluator_world(), TemporaryDirectory() as tmp:
-        return pc.evaluate(
+        return pc._judge_observations(
             **evaluation_inputs(Path(tmp), step_d=step_d,
                                 d_bank=clean_facts() if d_bank is None else d_bank,
                                 x_g=clean_facts(contrast=True) if x_g is None else x_g),
@@ -339,11 +339,11 @@ class PartCEvidenceReconciliationTests(unittest.TestCase):
             inputs = evaluation_inputs(root, d_bank=clean_facts(), x_g=clean_facts(contrast=True))
             turns = inputs["d_bank"]["turns"]
             turns[2]["first_reading_after_start"]["os_level"] = 2
-            self.assertEqual(pc.evaluate(**inputs)["verdict"], "start_state_failed")
+            self.assertEqual(pc._judge_observations(**inputs)["verdict"], "start_state_failed")
             # Reproject the benign sample which the changed start would select.
             turns[2]["start_ns"] = turns[1]["start_ns"]
             turns[2]["first_reading_after_start"] = deepcopy(turns[1]["first_reading_after_start"])
-            result = pc.evaluate(**inputs)
+            result = pc._judge_observations(**inputs)
             self.assertEqual(result["verdict"], "other_failure")
             self.assertIn("overlaps", result["evidence_failures"]["d_bank"])
 
@@ -354,7 +354,7 @@ class PartCEvidenceReconciliationTests(unittest.TestCase):
             turn = bank["turns"][2]
             turn["start_ns"] = bank["intervals"][2]["end_ns"] - 1
             turn["first_reading_after_start"]["sample_ns"] = bank["intervals"][2]["exit_sample_ns"]
-            result = pc.evaluate(**inputs)
+            result = pc._judge_observations(**inputs)
             self.assertEqual(result["verdict"], "other_failure")
             self.assertIn("ends after turn 2 starts", result["evidence_failures"]["d_bank"])
 
@@ -371,7 +371,7 @@ class PartCEvidenceReconciliationTests(unittest.TestCase):
                     episode.write_text("{")
                 else:
                     shutil.rmtree(bundle)
-                result = pc.evaluate(**inputs)
+                result = pc._judge_observations(**inputs)
                 self.assertEqual(result["verdict"], "other_failure")
                 self.assertIn("predecessor_episode", result["evidence_failures"]["predecessor_receipt"])
 
@@ -395,7 +395,7 @@ class PartCEvidenceReconciliationTests(unittest.TestCase):
                 else:
                     receipt[field] = value
                 write_receipt(root / pc.SEGMENTS[role], receipt)
-                result = pc.evaluate(**inputs)
+                result = pc._judge_observations(**inputs)
                 self.assertEqual(result["verdict"], "other_failure")
                 self.assertIn(reason, " ".join(result["evidence_failures"].values()))
 
@@ -468,13 +468,13 @@ class PartCMutationTests(unittest.TestCase):
         with TemporaryDirectory() as tmp, evaluator_world():
             root = Path(tmp)
             control = evaluation_inputs(root, d_bank=bank, x_g=contrast)
-            self.assertTrue(pc.evaluate(**control)["pass"])
+            self.assertTrue(pc._judge_observations(**control)["pass"])
 
             def rejected(label, inputs=control):
                 nonlocal mutations
                 mutations += 1
                 with self.subTest(mutation=label):
-                    result = pc.evaluate(**inputs)
+                    result = pc._judge_observations(**inputs)
                     self.assertFalse(result["pass"], result)
                     self.assertIn(result["verdict"], ("other_failure", "start_state_failed",
                                                       "mechanics_gate_time_failed"))
@@ -519,5 +519,15 @@ class PartCMutationTests(unittest.TestCase):
                 for source in ("episode_flags", "raw_episode_flags", "thermal_flags", "journal_flags"):
                     at = (*member_at, source)
                     rejected(("insert cut flag", at), change_evidence(control, at, ["episode.time_guard:3"]))
-            self.assertTrue(pc.evaluate(**control)["pass"])
+            self.assertTrue(pc._judge_observations(**control)["pass"])
         print(f"Part C evidence mutations rejected: {mutations}")
+
+
+class PartCPublicVerdictTests(unittest.TestCase):
+    def test_passing_observations_cannot_bypass_native_binding(self):
+        with TemporaryDirectory() as tmp, evaluator_world():
+            observations = evaluation_inputs(Path(tmp), d_bank=clean_facts(), x_g=clean_facts(contrast=True))
+            self.assertIs(pc._judge_observations(**observations)["pass"], True)
+            verdict = pc.evaluate(**observations)
+        self.assertEqual((verdict["pass"], verdict["verdict"]), (False, "other_failure"))
+        self.assertEqual(verdict["evidence_failures"], {"evidence_unverifiable": "evidence_unverifiable"})
