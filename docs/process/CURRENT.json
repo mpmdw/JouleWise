@@ -7,12 +7,6 @@
       "item": 410,
       "owner": "lead",
       "status": "ISSUED"
-    },
-    {
-      "expires_epoch_s": 1794988799,
-      "item": 406,
-      "owner": "magistrate",
-      "status": "ARMED"
     }
   ],
   "owner": "magistrate",
