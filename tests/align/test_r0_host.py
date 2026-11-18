@@ -2185,8 +2185,11 @@ class R0QuietIntervalTest(unittest.TestCase):
 
     def test_background_census_summary_is_receipted_per_cycle(self):
         # Cold MEDIUM-3: what each daemon census saw reaches the next receipt.
+        from joulewise.measurement_liveness import census
+
         guard, clock, _ = self.guard([cpu_table()] * 4, driven=False,
                                      diagnostic="77 9.0 /System/Library/mdworker_shared\n")
+        guard.inspect_custody = census
         guard.check(force=True)
         self.tick(guard, clock, 45, 60)
         clock.now = 61
