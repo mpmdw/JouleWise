@@ -186,6 +186,51 @@ if __name__ == "__main__":
 """
 
 
+
+_DESCRIPTOR_WORKER = r"""
+from pathlib import Path
+import os
+import sys
+from joulewise.cadence_looks.transfer_release import HASHES, run_transfer_worker
+
+root, layout = Path(sys.argv[1]), sys.argv[2]
+if layout == "stdout-consumer-gone":
+    try:
+        os.write(1, b"fixture launcher")
+    except BrokenPipeError:
+        os.close(1)
+    else:
+        raise AssertionError("expected stdout pipe to have no reader")
+
+def preflight():
+    for fd in range(3):
+        os.fstat(fd)
+    if layout != "ordinary":
+        fd = 1 if layout == "stdout-consumer-gone" else int(layout)
+        assert os.path.samestat(os.fstat(fd), os.stat(os.devnull))
+    (root / "checked-stdio").touch()
+    return {key: "0" * 64 for key in HASHES}
+
+def score(mark_read):
+    with (root / "synthetic-input.json").open("rb") as source:
+        mark_read()
+        assert source.read() == b"fixture"
+    (root / "completed-read").touch()
+    (root / "public").rename(root / "moved")
+    return {}, "estimated"
+
+raise SystemExit(run_transfer_worker(
+    restricted=root / "private" / "synthetic-result",
+    public=root / "public" / "PUBLIC.json",
+    execution_host="fixture",
+    local_host="fixture",
+    ledger_status="stage1_committed",
+    preflight=preflight,
+    score=score,
+))
+"""
+
+
 class TransferReleaseTests(unittest.TestCase):
     def setUp(self):
         self.scratch = Path(self.enterContext(tempfile.TemporaryDirectory(prefix="rl183-transfer-")))
@@ -386,6 +431,38 @@ class TransferReleaseTests(unittest.TestCase):
         self.assertEqual(public[0].read_bytes(), public[1].read_bytes())
         scores = [root / "private" / "synthetic-result" / "scores.json" for root in roots]
         self.assertNotEqual(scores[0].read_bytes(), scores[1].read_bytes())
+
+    def test_transfer_preserves_notice_with_vacant_standard_descriptors(self):
+        for post_read in (False, True):
+            for layout in ("ordinary", "0", "1", "2", "stdout-consumer-gone"):
+                for unbuffered in (False, True):
+                    with self.subTest(post_read=post_read, layout=layout, unbuffered=unbuffered):
+                        root = self.fixture(f"{post_read}-{layout}-{unbuffered}", value=None)
+                        if post_read:
+                            (root / "synthetic-input.json").write_bytes(b"fixture")
+                        command = [sys.executable, "-B", "-c", _DESCRIPTOR_WORKER, str(root), layout]
+                        env = {**os.environ, "PYTHONUNBUFFERED": "1" if unbuffered else ""}
+                        if layout.isdecimal():
+                            close_fd = "import os, sys; os.close(int(sys.argv[1])); os.execv(sys.argv[2], sys.argv[2:])"
+                            command = [sys.executable, "-B", "-c", close_fd, layout, *command]
+
+                        if layout == "stdout-consumer-gone":
+                            reader, writer = os.pipe()
+                            os.close(reader)
+                            with os.fdopen(writer, "wb") as sink:
+                                result = subprocess.run(command, cwd=ROOT, env=env, stdout=sink,
+                                                        stderr=subprocess.PIPE, check=False)
+                        else:
+                            result = subprocess.run(command, cwd=ROOT, env=env, capture_output=True, check=False)
+                            self.assertEqual(result.stdout, b"")
+
+                        notice = b"stage2_error\nFileNotFoundError\n" if post_read else REFUSAL
+                        self.assertEqual((result.returncode, result.stderr),
+                                         (1 if post_read else 2, b"" if layout == "2" else notice))
+                        self.assertTrue((root / "checked-stdio").exists())
+                        self.assertEqual((root / "completed-read").exists(), post_read)
+                        self.assertFalse((root / "public" / "PUBLIC.json").exists())
+                        self.assertFalse((root / "moved" / "PUBLIC.json").exists())
 
     def test_existing_public_result_refuses_and_preserves_bytes(self):
         root = self.fixture("published")

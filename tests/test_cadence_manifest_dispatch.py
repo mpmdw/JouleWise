@@ -216,6 +216,62 @@ class VariantContractTests(unittest.TestCase):
                     result = cli_with_closed_consumer(*args, channel="stdout", unbuffered=unbuffered)
                     self.assertEqual((result.returncode, result.stderr), (2, b""))
 
+    def test_dispatch_notices_use_saved_stderr_with_vacant_standard_descriptors(self):
+        close_fd = "import os, sys; os.close(int(sys.argv[1])); os.execv(sys.argv[2], sys.argv[2:])"
+        script = """
+import fcntl
+import os
+from pathlib import Path
+import sys
+from unittest.mock import patch
+from joulewise.cadence_looks import manifest_dispatch as dispatch
+
+closed, marker = int(sys.argv[1]), Path(sys.argv[2])
+original = dispatch._dispatch
+
+def check_startup(argv, *, stderr_fd=None):
+    assert stderr_fd is not None and stderr_fd >= 10
+    assert fcntl.fcntl(stderr_fd, fcntl.F_GETFD) & fcntl.FD_CLOEXEC
+    for fd in range(3):
+        os.fstat(fd)
+    assert os.path.samestat(os.fstat(closed), os.stat(os.devnull))
+    with open(os.devnull, "wb") as sink:
+        os.dup2(sink.fileno(), 2)
+    marker.touch()
+    if argv == ["outer-failure"]:
+        raise RuntimeError("synthetic outer refusal")
+    return original(argv, stderr_fd=stderr_fd)
+
+with patch.object(dispatch, "_dispatch", check_startup):
+    dispatch.main(sys.argv[3:])
+"""
+        with tempfile.TemporaryDirectory() as tmp:
+            folder = Path(tmp)
+            candidate = folder / "unknown.json"
+            candidate.write_bytes(encode({"schema": "unknown"}))
+            interim = folder / "interim.json"
+            interim.write_bytes(encode({"schema": dispatch.V1, "look_kind": "interim", "look_id": "lm-interim-01"}))
+            tool = folder / "legacy.py"
+            tool.write_text("import sys\nprint('fixture legacy refusal', file=sys.stderr)\nraise SystemExit(1)\n")
+            for fd in ("0", "1", "2"):
+                for case, argv, notice in (
+                    ("parser", ["validate", "--bad-argument"], b"usage:"),
+                    ("validator", ["validate", candidate], b"REFUSE unknown cadence manifest schema ID\n"),
+                    ("legacy", ["validate", interim, "--v1-tool", tool], b"fixture legacy refusal\n"),
+                    ("outer", ["outer-failure"], b"REFUSE synthetic outer refusal\n"),
+                ):
+                    with self.subTest(fd=fd, case=case):
+                        marker = folder / f"{fd}-{case}"
+                        command = [sys.executable, "-B", "-c", close_fd, fd, sys.executable, "-B", "-c",
+                                   script, fd, str(marker), *map(str, argv)]
+                        result = subprocess.run(command, cwd=ROOT, capture_output=True, check=False)
+                        self.assertEqual((result.returncode, result.stdout), (2, b""))
+                        self.assertTrue(marker.is_file())
+                        if fd == "2":
+                            self.assertEqual(result.stderr, b"")
+                        else:
+                            self.assertIn(notice, result.stderr)
+
     def test_dispatch_exits_two_with_descriptor_exhaustion(self):
         script = """
 from contextlib import redirect_stdout
