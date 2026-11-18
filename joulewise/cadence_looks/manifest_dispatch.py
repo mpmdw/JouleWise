@@ -261,7 +261,13 @@ def _dispatch(argv, *, stderr_fd=None):
     return finish_notice(0, stdout=f"ok {doc['look_id']} ({doc['status']})\n")
 
 
-def main(argv=None) -> NoReturn:
+def main(argv=None) -> int:
+    warnings.simplefilter("ignore")
+    sys.warnoptions = []
+    return _dispatch(argv)
+
+
+def _cli(argv=None) -> NoReturn:
     stderr_fd = None
     try:
         warnings.simplefilter("ignore")
@@ -278,4 +284,4 @@ def main(argv=None) -> NoReturn:
 
 
 if __name__ == "__main__":
-    main()
+    _cli()
