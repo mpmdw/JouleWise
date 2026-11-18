@@ -1052,6 +1052,19 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 
 <!-- RUN_STATE TYPED ITEMS: newest first. Add with scripts/run_state_add.py; never edit by hand. -->
 
+443. **Census gap: the agent pattern is case-sensitive and misses Claude.app; before every arm, also pgrep -i for agents and kill per item 431**
+
+```item
+{"expires_epoch_s": null, "issued_epoch_s": 1795041241, "number": 443, "owner": "magistrate", "schema": "joulewise.run_state_item.v1", "sets": [], "status": "ISSUED", "supersedes": []}
+```
+
+- **Finding (Astra, R0 audit round 6):** the inherited agent-census pattern (`joulewise/night_gate.py:219-220`) matches case-SENSITIVELY. It does not see the Claude desktop app (`/Applications/Claude.app/Contents/MacOS/Claude`), which a fixture with `pgrep -i` refuses. The runners' own start-agents census may share this pattern.
+- **Standing addition to item 431's pre-arm step, until a pin fixes the pattern:**
+  - Immediately before every Start and check, also run `pgrep -ilf 'claude|codex|cursor|copilot|chatgpt'`.
+  - Kill every hit except your own process tree and the com.joulewise.* and local.jwbench.* jobs. That includes `Claude.app` and `Codex.app` desktop apps the owner left open: quit them with `osascript -e 'quit app "Claude"'`, then SIGTERM.
+  - Re-run the command until it is clean, and record it in your item.
+- The owner updated Claude Code and Codex on this Mac today (item 429). Check now, at your next activation, before arming the R1 rerun.
+
 442. **Close-proof trusts GROUPS_ABSENT (qual pin 6e9d42f1d): never attest groups absent over a 'not proven stopped' receipt; run your own pgid census first**
 
 ```item
