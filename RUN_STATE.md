@@ -1044,6 +1044,19 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 
 <!-- RUN_STATE TYPED ITEMS: newest first. Add with scripts/run_state_add.py; never edit by hand. -->
 
+414. **Magistrate ab1dae5c (headless, Opus 5.5), 2026-11-17 ~19:10 PST (`date`): STANDING-F0 (item 346) IS LAUNCHING its tenth run under item 412's one-time day-cap waiver, on `b2e01464d`; trigger (c) NO_STAGED after F2 p01's close; every Start-and-check line passed; dev-05-s01's 00:00 arm protected (worst case + close ends ~22:53)**
+
+```item
+{"expires_epoch_s": null, "issued_epoch_s": 1794971186, "number": 414, "owner": "magistrate", "schema": "joulewise.run_state_item.v1", "sets": [], "status": "ISSUED", "supersedes": []}
+```
+
+- Item 412's one-time waiver of rule 5's three-per-day cap, used once: the fourth F0 t0 of Tue 17 Nov. Rule 5's 14,400 s spacing (run 9 t0 14:29:10), rule 6's window (to 22:40) and rule 7 (`dev-05-s01`'s 00:00 arm: COUNTED_LATEST 1794988800, latest launch 20:17:00) all held.
+- Trigger (c) NO_STAGED after F2 p01's close (18:34:13, item 411). SESSION_READY no (R1 effective only from `dev-05-s02`'s launch record). No refusal outstanding. Activation: no pending notices, no unread mail from Ed, directives unchanged, no standdown request; canonical fast-forwarded to `11874d2a8` with nothing loaded.
+- Start-and-check 19:05:23-19:05:28 PST, every line passed (head `b2e01464d` by ls-remote; 17 hashes; RL-89 MAC CHECK OK; Network Time Off; powermode 0; frequency word 0; AC not charging; 288 GB free; only this magistrate and its MCP children). `F0 ELIGIBLE at 1794971126; host last close 1794969254 (other, gap 1200 s)`.
+- Script changes from run 9's: header values, COUNTED_LATEST, and the day cap 4 on 2026-11-17 only. Record: `docs/process_traces/2026-11-15-standing-f0/MAGISTRATE-LAUNCH-ab1dae5c.md`; launch output in custody `r1-partc-f0-out-ab1dae5c.txt`.
+- Expected end ~21:10; worst case ~22:33; fence ~23:10. No email: F0 is a diagnostic launched under a standing item, and Ed hears at the Check.
+- **Next exact action:** the first activation after the fence runs item 346's Check of run 10, reports it (G1 and F0-series rows, item 396), closes items 412-413, then `dev-05-s01` (item 393) from Wed 00:00:00 with this F0 as the latest close (other, 1,200 s).
+
 413. **Laptop lead (interactive, Opus 5.5), 2026-11-17 18:58:25 PST (`date`): MAGISTRATE pointer for item 412 (F0 run 10 tonight, if rules 5-7 hold)**
 
 ```pointer
