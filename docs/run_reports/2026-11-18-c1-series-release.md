@@ -34,8 +34,10 @@ eligible captured member contributes no S score.
 | Round-seven test head and tree | `56de7b49165633240a900d17158f69b5d8bed49d`, `2d45ad1d9dcb9f2d6fbe74fffe08f7b2c44553d7` |
 | Round-eight revised spec freeze | `c4acf71fdd177648f39c9de51e7e736ab13d3491` (draft replay `dc3020ea285cd75ba5a6c69fde382a7c5c57c240`) |
 | Revised spec private test head and tree | `1c70f484fb08e8df93253edc65857d91aada86cb`, `ff53b57846248a43f91f4361a814769d0ef2c675` |
-| Caller SHA-256 for signatory | `a845e18142193d9f7a33f0f664923fa539dcbd6d46feecb6480c94dcaf6f01d4` |
-| Draft code head and tree before report | `cd1ed56b9e2dfd51dc690396ab56b880a6dad509`, `3071559148f3f009b6cfd1050386d172c8374a0e` |
+| Astra v2 spec freeze | `a4b1d2a4cfd706f883a5aaf02187a18864a14926` (draft replay `826c85fab`) |
+| Astra v2 private test head and tree | `7c0f18ce9f915435d1883d6cea79ab651d03e38c`, `54aee772122934db71f0a8f54dcb6a97e5701603` |
+| Caller SHA-256 for signatory | `48ccae14cd5222fa8e2e6286cc5564e14c00e67637cf926fbfdd4ef5e261c169` |
+| Draft code head and tree before report | `f9096ecb77f758d8a7f5b566b3e12c87db6a10f0`, `6f5fc27a29beafe5f7147d9ca1f69d8122b84c02` |
 
 At the initial freeze the CLI tests failed with no script. At the RL-185
 freeze both stored worlds reached the provisional provider and refused.
@@ -65,8 +67,8 @@ the dependency landings. [Draft PR #836](https://github.com/mpmdw/JouleWise/pull
 | CLI and guard | Caller `build_report`, `main`, PR #813 `v4_desk_seal.py:351,418` and `rl176.py:611,622,633` | Snapshot the guard's named metadata, call the real guard and use the literal freeze flag in the scorer. |
 | Registration and history | Caller `require_executing_bindings`, `bound_history`, `final_roster`, `ReleasedInputs`, `v4_registration.py` `validate_receipt` and `require_registration`, and `scripts/align_v4_series.py:220,231,239,510` | Verify the C1 predecessor's receipt digest, verify the executing source inventory, and join the authorized history to the frozen manifest. |
 | Final records and A9 | PR #826 `scripts/align_v4_next_arm_packet.py:237,306,395` and `light_triage.py:79,163` | Use the shared RL-183b finality, including successor `previous_final`, and independently preserve final per-member reasons. |
-| Stored rows and complete manifest | Caller `manifest_inputs`, :343,411,619,638, `read_member`, PR #787 `s_rows.py:193,751,774`, PR #813 `workload.py:893` | Classify protected sources and aliases from the manifest. Verify unprotected byte bindings, internal links, and Git-mirror targets. Pass #787's row tuple directly. |
-| Roster, DC and coverage | Caller :664,832,890,999, `verify_score_inputs`, `verify_s_coverage`, PR #813 `rl176.py:200,291,352,379,527,550,628` | The eligible benign provider verifies its own DC bytes. Require the complete ledger and check registered S decode and fit contributor identities before any comparison. Check ledger completeness and the report's counts before publishing. |
+| Stored rows and complete manifest | Caller `manifest_inputs`, :343,417,434,474,616,673,692, `read_member`, PR #787 `s_rows.py:193,751,774`, PR #813 `workload.py:893` | Classify protected sources and aliases from the manifest. Verify directory membership, unprotected byte bindings, internal links, and Git-mirror targets. Pass #787's row tuple directly. |
+| Roster, DC and coverage | Caller :718,886,944,1053, `verify_score_inputs`, `verify_s_coverage`, PR #813 `rl176.py:200,291,352,379,527,550,628` | The eligible benign provider verifies its own DC bytes. Require the complete ledger and check registered S decode and fit contributor identities before any comparison. Check ledger completeness and the report's counts before publishing. |
 
 ## Resolved interfaces under RL-185 §3
 
@@ -432,6 +434,8 @@ All three remain open. [Published-head CI](https://github.com/mpmdw/JouleWise/ac
 
 ### Revised freeze and regression results
 
+The builder-edited predecessor described here was superseded by Astra v2.
+
 The lead resolved the frozen-control conflict by moving only its synthetic
 `benign_dc` link-mutation donor outside the measurement root. The canonical
 trace remains in the finalized inventory and retains its original
@@ -452,6 +456,40 @@ The verified module was run byte-for-byte from the recorded private tree.
 The protected source comparison and the release-only diff were rechecked
 against W1. Exact-head integrated sharded CI remains the post-landing
 gate. [Draft CI](https://github.com/mpmdw/JouleWise/pull/836/checks)
+
+## Astra v2 and finalized directory membership
+
+The lead replaced the builder-edited fixture with Astra's author-issued v2.
+The freeze commit copies the supplied file verbatim. The module has 254 cases
+and SHA-256 `1bbd2846bf5ccb47d87f0e85e10e6fd4b067816b7352c7204c15f3b7aa17a8e7`.
+It assigns the two canonical synthetic benign DC files to distinct eligible
+ordinals and finalizes an external calibration directory with an empty child.
+Any future conflict between the frozen cases and a rule returns to the lead
+and suite author for a ruling.
+
+The v2 red run at `a4b1d2a4c` accepted the intact world. Both mutation cases
+also exited 0 and wrote reports because the caller checked only that the
+external directory opened. `7c0f18ce9` (draft `f9096ecb7`) binds the exact child
+sets of every finalized directory into the input ledger. Directory-relative
+opens check spelling and refuse symlink traversal. Each listed regular file
+also needs its own digest binding. Protected paths stay closed to the general
+verifier. Parent directory listings can detect an extra name without opening it.
+
+| Regression | Result |
+|---|---|
+| `test_calibration_directory__listed_member_removed` | PASS. Removing the listed empty child directory produces a nonzero exit and no report. |
+| `test_calibration_directory__unlisted_file_added` | PASS. Adding an unlisted regular file produces a nonzero exit and no report. |
+| `test_linked_directory_checks_nested_digests_and_extra_protected_names` | PASS. An intact nested tree verifies. Same-size changed bytes and an extra protected name refuse. |
+| Astra v2 module | PASS. All 254 cases passed across ten shards with zero skips. The intact control produced `S INCONCLUSIVE` with 176 contributors, 22 strata, 11 windows, and 101 of 154 wins. All 253 mutations refused publication. |
+
+The retained listed-DC-copy regression, Git-mirror regression, protected-open
+observer, and both stored S decision worlds also passed. The pinned
+row, scorer, and registration suites recorded 94 passes and four opt-in skips.
+
+The caller and two test modules were byte-matched between the private test
+checkout and the release-only draft. The ten issued R1 source blobs still match
+W1. The #813, #787, and #826 landings and exact-head integrated CI remain gates.
+[Draft CI](https://github.com/mpmdw/JouleWise/pull/836/checks)
 
 ## Executed checks and Tier 2 dispositions
 
