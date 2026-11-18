@@ -2,6 +2,8 @@
 
 18 November 2026 · Tier 2 · synthetic output evidence
 
+[RL-187 follow-up](2026-11-18-c1-comparator-rl187.md)
+
 Mission M0 found no active stop card. The named worktree was clean and detached at
 `f1be75b21978da69fa20506640bcb76ec53f6df2`, equal to remote main. The remote
 search found the historical release-tools line and the four named component

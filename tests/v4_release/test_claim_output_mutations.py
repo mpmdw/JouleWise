@@ -37,7 +37,7 @@ def synthetic_census(prefix):
         identity = (pair, pos)
         ids = {name: leaf("u6_rows", identity, name, str, expected=value)
                for name, value in zip(IDENTITY_FIELDS, identity, strict=True)}
-        mean = leaf("u6_values", identity, "mean", float, "fixture units", absolute=1e-6)
+        mean = leaf("u6_values", identity, "mean", float, "fixture units", numeric_class="N3")
         count = leaf("u6_values", identity, "n", int, "count")
         judged = leaf("u6_values", identity, "judged", bool)
         left_pairs[pair][pos] = cmp.Object("u6_rows", {**ids, "n": count, "mean": mean, "judged": judged})
@@ -52,18 +52,18 @@ def synthetic_census(prefix):
             left_s[member] = cmp.Object(family, {"status": status, "reason": reason})
             right_s[member] = cmp.Object(family, {"state": status, "why": reason})
         else:
-            score = leaf(family, (member,), "score", float, absolute=1e-6)
+            score = leaf(family, (member,), "score", float, numeric_class="N5")
             left_s[member] = cmp.Object(family, {"score": score})
             right_s[member] = score
 
     unavailable = leaf("qualification", (), "unavailable", type(None), expected=None)
     commitment = leaf("commitment", (), "opaque", str, presence_only=True, pattern="[0-9a-f]{64}")
     empty = cmp.Sequence("empty_rows", (), empty_reason="the invented stratum has no contributors")
-    low = leaf("interval", (), "lower", float)
-    high = leaf("interval", (), "upper", float)
+    low = leaf("interval", (), "lower", float, numeric_class="N7")
+    high = leaf("interval", (), "upper", float, numeric_class="N7")
     numerator = leaf("exact_tail", (), "numerator", int)
     denominator = leaf("exact_tail", (), "denominator", int)
-    rounded = leaf("exact_tail", (), "display", float)
+    rounded = leaf("exact_tail", (), "display", float, numeric_class="N5")
     left = cmp.Object("report", {
         "claim": cmp.Object("claim", {"interpretation": claim, "rendered": claim}),
         "series_complete": complete,
@@ -165,12 +165,14 @@ def audit_cases(test, prefix):
             elif rule.expected is not cmp.UNSET:
                 operation = "state"
             else:
-                operation = "absolute" if rule.absolute is not None else "exact"
+                operation = rule.bar["operator"] if rule.bar else "exact"
         return {
             "mode": mode, "mutation_id": case, "wire_side": side, "pointer": path,
             "logical_key": key, "rule_source": binding.rule.source if binding else SOURCE,
             "operator": operation, "unit": binding.rule.unit if binding else None,
-            "absolute_bar": binding.rule.absolute if binding else None, "expected_exit": exit_code,
+            "numeric_class": binding.rule.numeric_class if binding else None,
+            "tolerance": binding.rule.bar["tolerance"] if binding and binding.rule.bar else None,
+            "expected_exit": exit_code,
             "actual_exit": outcome.exit_code, "expected_failures": sorted(expected),
             "actual_failures": sorted(actual),
         }
@@ -344,12 +346,10 @@ def evidence_index():
         run = f"{PLAN}/{'prefix' if prefix else 'full'}"
         card = {"prefix": prefix, "positions": fixture.TURN_POSITIONS, "members": fixture.MEMBERS,
                 "tail_denominator": DENOMINATOR}
-        bars = [(key.family, key.row, key.leaf, rule.absolute)
-                for key, rule in synthetic_census(prefix).rules.items() if rule.absolute is not None]
         print(json.dumps({
             "fixture_id": PLAN, "run": run, "evidence": "invented-json", "pins": pins,
             "input_card_sha256": sha256(json.dumps(card, sort_keys=True).encode()).hexdigest(),
-            "synthetic_bars_sha256": sha256(json.dumps(bars).encode()).hexdigest(),
+            "bars_sha256": sha256(cmp.BARS_PATH.read_bytes()).hexdigest(),
         }, sort_keys=True, separators=(",", ":")))
         for result in audit_cases(test, prefix):
             print(json.dumps({"run": run, **result},
