@@ -2,15 +2,12 @@
 
 from __future__ import annotations
 
-import ast
 import importlib
 import importlib.machinery
-import inspect
 import json
 import subprocess
 import sys
 import tempfile
-import textwrap
 import unittest
 from dataclasses import asdict
 from pathlib import Path
@@ -564,101 +561,6 @@ class MlxRuntimeTests(unittest.TestCase):
             "requested_tokens_emitted",
         )
 
-    def _assert_first_token_stamp_statements(self, source: str) -> tuple[ast.stmt, ast.stmt]:
-        nodes = list(ast.walk(ast.parse(textwrap.dedent(source))))
-        parents = {child: node for node in nodes for child in ast.iter_child_nodes(node)}
-        positions = {}
-        stamps = {("phase_end", "prefill"): [], ("token", "decode"): []}
-        unpaired_prefill = []
-        for node in nodes:
-            for _, body in ast.iter_fields(node):
-                if isinstance(body, list):
-                    for index, item in enumerate(body):
-                        if isinstance(item, ast.stmt):
-                            positions[item] = (id(body), index)
-            if not isinstance(node, ast.Call):
-                continue
-            match node.func:
-                case ast.Name(id="RuntimeEvent"):
-                    fields = dict(zip(("timestamp_s", "event_type", "phase"), node.args))
-                    fields.update((keyword.arg, keyword.value) for keyword in node.keywords)
-                    event = tuple(ast.literal_eval(fields[name]) for name in ("event_type", "phase"))
-                    if event in stamps:
-                        stamps[event].append(fields["timestamp_s"])
-                case ast.Attribute(value=ast.Name(id="self"), attr="_event"):
-                    event = tuple(ast.literal_eval(arg) for arg in node.args[:2])
-                    if event == ("phase_end", "prefill"):
-                        unpaired_prefill.append(parents[parents[node]])
-                    self.assertNotEqual(event, ("token", "decode"), "token stamp bypasses the pair")
-
-        self.assertEqual(len(unpaired_prefill), 1, "unpaired prefill stamp count changed")
-        empty_stream = unpaired_prefill[0]
-        self.assertIsInstance(empty_stream, ast.If)
-        self.assertEqual(ast.dump(empty_stream.test), ast.dump(ast.parse("not token_records", mode="eval").body))
-
-        exact_form = "stamp statement must match the exact clock-write form"
-
-        def plain_reference(expression, context):
-            match expression:
-                case ast.Name(id=name):
-                    return ast.Name(id=name, ctx=context)
-                case ast.Attribute(value=base, attr=attribute):
-                    return ast.Attribute(value=plain_reference(base, ast.Load()), attr=attribute, ctx=context)
-            self.fail(exact_form)
-
-        def writers(expression):
-            target = plain_reference(expression, ast.Store())
-            target_dump = ast.dump(target)
-            found = []
-            for node in nodes:
-                if not (isinstance(node, (ast.Name, ast.Attribute)) and isinstance(node.ctx, ast.Store)
-                        and ast.dump(node) == target_dump):
-                    continue
-                # A wrapped target still belongs to its containing statement.
-                writer = parents[node]
-                while writer not in positions and writer in parents:
-                    writer = parents[writer]
-                self.assertIn(writer, positions, "stamp must be written as a standalone statement")
-                found.append(writer)
-            self.assertTrue(found, f"no writes found for {ast.unparse(target)}")
-            return target, found
-
-        for event, expressions in stamps.items():
-            self.assertEqual(len(expressions), 1, f"stamp event count changed for {event}")
-        prefill_target, prefill = writers(stamps["phase_end", "prefill"][0])
-        _, token_selectors = writers(stamps["token", "decode"][0])
-        self.assertEqual(len(token_selectors), 1, "token stamp selector count changed")
-        selector = token_selectors[0]
-        self.assertIsNone(getattr(selector, "op", None), "token stamp selector must not be augmented")
-        token_choice = getattr(selector, "value", None)
-        self.assertIsInstance(token_choice, ast.IfExp)
-        self.assertEqual(ast.dump(token_choice.test), ast.dump(ast.parse("index == 0", mode="eval").body))
-        token_target, token = writers(token_choice.body)
-
-        clock_read = ast.parse("self._clock.now()", mode="eval").body
-        self.assertEqual(ast.dump(token_choice.orelse), ast.dump(clock_read))
-        for target, statements in ((prefill_target, prefill), (token_target, token)):
-            for statement in statements:
-                if isinstance(statement, ast.AnnAssign):
-                    annotation = statement.annotation
-                    if isinstance(annotation, ast.Constant):
-                        annotation = ast.Constant(value=annotation.value)
-                    else:
-                        annotation = plain_reference(annotation, ast.Load())
-                    allowed = ast.AnnAssign(target=target, annotation=annotation,
-                                            value=clock_read, simple=statement.simple)
-                else:
-                    allowed = ast.Assign(targets=[target], value=clock_read, type_comment=None)
-                self.assertEqual(ast.dump(statement), ast.dump(allowed), exact_form)
-
-        # Pair each stamp write with the next statement in its complete AST body.
-        # The body positions count every node, regardless of statement type.
-        required = {(body, index + 1) for body, index in map(positions.__getitem__, prefill)}
-        self.assertEqual(required, {positions[writer] for writer in token},
-                         "stamp writes must be consecutive in the same body")
-        self.assertEqual(len(prefill), 1, "number of stamp pairs changed")
-        return prefill[0], token[0]
-
     def _assert_episode_prefix_first_stamp_boundary(self) -> None:
         from tests.align import test_pilot3_cache
 
@@ -711,102 +613,7 @@ class MlxRuntimeTests(unittest.TestCase):
         check_stamps(item.events, "suite item")
 
     def test_first_yield_stamp_gap_is_two_clock_reads_without_model_work(self) -> None:
-        # RL-182a check 1: discover shared stamp writes and cover both cache outcomes.
-        self._assert_first_token_stamp_statements(inspect.getsource(MlxRuntimeAdapter._generate))
         self._assert_episode_prefix_first_stamp_boundary()
-
-    def test_first_yield_boundary_rejects_the_episode_prefix_audit_mutations(self) -> None:
-        original = MlxRuntimeAdapter._generate
-        source = textwrap.dedent(inspect.getsource(original))
-        prefill, token = self._assert_first_token_stamp_statements(source)
-        lines = source.splitlines(keepends=True)
-        indentation = " " * token.col_offset
-
-        def inserted(*statements):
-            return "".join(lines[:token.lineno - 1]
-                           + [indentation + statement + "\n" for statement in statements]
-                           + lines[token.lineno - 1:])
-
-        pair = "".join(lines[prefill.lineno - 1:token.end_lineno])
-        writes = pair.splitlines()
-        clean_arm = [line.strip() for line in writes]
-        annotated_hash = [
-            clean_arm[0].replace(" = ", ": float = ", 1),
-            'prefill_end_metadata["prompt"] = prompt_provenance(prompt)',
-            clean_arm[1].replace(" = ", ": float = ", 1),
-        ]
-
-        def split_pair(hit, miss):
-            statements = ['if cache_accounting and prefill_metadata["cached_tokens"]:']
-            statements += ["    " + line for line in hit]
-            statements += ["else:"] + ["    " + line for line in miss]
-            return source.replace(pair, "".join(indentation + line + "\n" for line in statements), 1)
-
-        token_id = "            token_id = _response_token_id(response)"
-        self.assertEqual(source.count(token_id), 1)
-        moved_extract = inserted(token_id.strip()).replace(
-            f"\n{token_id}\n", f"\n            if index != 0:\n    {token_id}\n",
-        )
-        for label, altered in (
-            ("extra clock read", inserted("self._clock.now()")),
-            ("extra stream request",
-             inserted("self._mlx_lm.stream_generate(self._model, self._tokenizer, prompt, max_tokens=1)")),
-            ("extra model call",
-             inserted("next(iter(self._mlx_lm.stream_generate(self._model, self._tokenizer, prompt, max_tokens=1)))")),
-            ("35 ms of work",
-             inserted("self._tokenizer.encode(response.text, add_special_tokens=False)", "self._clock.sleep(.035)")),
-            ("real 35 ms delay",
-             inserted("self._tokenizer.encode(response.text, add_special_tokens=False)",
-                      "__import__('time').sleep(.035)")),
-            ("moved token ID extraction", moved_extract),
-            ("prompt provenance", inserted("prompt_provenance(prompt)")),
-            ("annotated-assignment hashing on first turn", split_pair(clean_arm, annotated_hash)),
-            ("annotated-assignment hashing on cache hit", split_pair(annotated_hash, clean_arm)),
-        ):
-            with self.subTest(mutation=label), self.assertRaisesRegex(AssertionError, "must be consecutive"):
-                self._assert_first_token_stamp_statements(altered)
-
-        with self.assertRaisesRegex(AssertionError, "number of stamp pairs changed"):
-            self._assert_first_token_stamp_statements(split_pair(clean_arm, clean_arm))
-
-        hit_extra_read = inserted('if cache_accounting and prefill_metadata["cached_tokens"]:',
-                                  "    self._clock.now()")
-        scope = dict(original.__globals__)
-        exec(compile(hit_extra_read, "<synthetic extra cache-hit clock read>", "exec"), scope)
-        with patch.object(MlxRuntimeAdapter, "_generate", scope["_generate"]):
-            with self.assertRaisesRegex(AssertionError, "cache hit stamp gap must be exactly one tick"):
-                self._assert_episode_prefix_first_stamp_boundary()
-
-    def test_first_yield_stamp_requires_the_exact_clock_write_form(self) -> None:
-        source = textwrap.dedent(inspect.getsource(MlxRuntimeAdapter._generate))
-        prefill, token = self._assert_first_token_stamp_statements(source)
-        prefill_read = ast.get_source_segment(source, prefill)
-        token_read = ast.get_source_segment(source, token)
-        self.assertEqual(source.count(prefill_read), 1)
-        self.assertEqual(source.count(token_read), 1)
-
-        # Plain annotations and dotted attribute targets still have the allowed shape.
-        self._assert_first_token_stamp_statements(source.replace(prefill_read,
-                                                                  "prefill_end_s: float = self._clock.now()"))
-        self._assert_first_token_stamp_statements(source.replace("prefill_end_s", "stamps.prefill_end_s")
-                                                 .replace("first_token_s", "stamps.first_token_s"))
-
-        digest_key = 'prefill_end_metadata[prompt_provenance(prompt)["token_ids_sha256"]]'
-        for label, mutation in (
-            ("chained assignment", f"prefill_end_s = {digest_key} = self._clock.now()"),
-            ("compact chained assignment", f"prefill_end_s={digest_key}=self._clock.now()"),
-            ("walrus", "prefill_end_s = ((stamp := self._clock.now()), prompt_provenance(prompt))[0]"),
-            ("tuple target", f"(prefill_end_s, {digest_key}) = self._clock.now(), None"),
-            ("function argument", "prefill_end_s = self._clock.now(prompt_provenance(prompt))"),
-            ("default parameter",
-             "prefill_end_s = (lambda stamp=self._clock.now(), ignored=prompt_provenance(prompt): stamp)()"),
-        ):
-            with self.subTest(mutation=label), self.assertRaisesRegex(AssertionError, "exact clock-write form"):
-                self._assert_first_token_stamp_statements(source.replace(prefill_read, mutation, 1))
-
-        with self.assertRaisesRegex(AssertionError, "exact clock-write form"):
-            self._assert_first_token_stamp_statements(source.replace(token_read,
-                                                                      "first_token_s = self._clock.now() + 0", 1))
 
     def test_run_workload_event_shape_and_token_timeline(self) -> None:
         adapter, _ = self.prepared_adapter(["A", "B", "C"])

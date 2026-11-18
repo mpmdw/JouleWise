@@ -64,6 +64,19 @@ class MeasurementCoreBoundaryTests(unittest.TestCase):
         self.assertEqual(hashlib.sha256((before + after_marker + after).encode()).hexdigest(),
                          "0bd67dde60118ce722fd716d564b3ddc1748262b1ec32eac05a05c474e8ce829")
 
+    def test_mlx_first_yield_boundary_matches_rl182b_hash(self):
+        root = Path(__file__).resolve().parents[2]
+        lines = (root / "joulewise/adapters/mlx_runtime.py").read_bytes().splitlines(keepends=True)
+        start_line = b"                    # RL-182a: record both boundaries before constructing the events.\n"
+        end_line = b'                text_parts.append(str(getattr(response, "text", "")))\n'
+        self.assertEqual(lines.count(start_line), 1)
+        self.assertEqual(lines.count(end_line), 1)
+        start, end = lines.index(start_line), lines.index(end_line)
+        self.assertLess(start, end)
+        block = b"".join(lines[start:end])
+        self.assertEqual(hashlib.sha256(block).hexdigest(),
+                         "85ffe1a3cff318c6880d09d72b437c410a18f2dd92395ce62e08956d64c845c5")
+
     def test_disabled_checkpoint_anchor_runtime_bytes_match_pilot10_path(self):
         def pilot10_generate(runtime, stream, *args, **kwargs):
             # Reproduce the old endpoint dispatch against the unchanged core.
