@@ -10,24 +10,6 @@
     },
     {
       "expires_epoch_s": null,
-      "item": 414,
-      "owner": "magistrate",
-      "status": "ISSUED"
-    },
-    {
-      "expires_epoch_s": null,
-      "item": 413,
-      "owner": "lead",
-      "status": "ISSUED"
-    },
-    {
-      "expires_epoch_s": null,
-      "item": 412,
-      "owner": "lead",
-      "status": "ISSUED"
-    },
-    {
-      "expires_epoch_s": null,
       "item": 410,
       "owner": "lead",
       "status": "ISSUED"

@@ -1044,6 +1044,24 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 
 <!-- RUN_STATE TYPED ITEMS: newest first. Add with scripts/run_state_add.py; never edit by hand. -->
 
+416. **Magistrate e0552b22 (headless, Opus 5.5), 2026-11-17 21:08-21:20 PST (`date`): STANDING-F0 run 10 (item 346; pre-launch item 414, item 412 waiver) CHECK: RECEIPT OK, verdict pass, every judged line equal to run 9; restore lines pass; closes 412-414; next: dev-05-s01 (item 393) from Wed 00:00**
+
+```item
+{"expires_epoch_s": null, "issued_epoch_s": 1794978628, "number": 416, "owner": "magistrate", "schema": "joulewise.run_state_item.v1", "sets": [{"at_epoch_s": 1794978628, "item": 412, "status": "CLOSED"}, {"at_epoch_s": 1794978628, "item": 413, "status": "CLOSED"}, {"at_epoch_s": 1794978628, "item": 414, "status": "CLOSED"}], "status": "CLOSED", "supersedes": []}
+```
+
+- F0 standing notice: run 10, trigger (c) NO_STAGED `after-f2-p01-close-item412-waiver` (item 414), launched under item 412's one-time day-cap waiver. t0 19:07:01 PST (1794971221); receipt 21:05:43 PST (span 7,122 s). The align-r0 label and fence were gone; this activation spawned 21:08:54, after the receipt, so no agent was alive during the run.
+- Receipt rc 0; parts `{"C": true}`, `parts_requested` "C", fresh soak; every step rc 0; one `close-volumes`; every feed proven stopped and hash-checked: RECEIPT OK. Soak rc 0, sha256 `c7a8f3207ac4084624954bd17c13f0cf969ec5810fb967f07ccbc28d5cc9a0dd` (the receipt's soak result carries no band keys; as runs 8-9). Part-C rc 0.
+- smoke_part_c.json (evaluation only): verdict `pass`; disposition as printed ("Mechanics and start state hold. The no-hold TV1h design is adopted ..."). Lines, with run 9 (item 405) beside: `d_bank_mechanics` pass (run 9 pass), `d_bank_start_state` pass (pass), `step_d` pass (pass; g0_wait 200.69 s, slope -0.188 C/min), `x_g` pass (pass; X_G ran, no G1 timeout, no x7). `admitted_turns` not judged: "not_applicable: episode returned at turn 1" (own stop). gate_time 198.14 s of limit 393.93 s; no_g1_timeout pass (no turns); h_records match. Log: "three-turn clause not evaluated: one D run". N_chunk 4096; T_dead 984.829 s. No line differs from run 9, so nothing goes to the research lead under rule 10.
+- printed_not_judged (print only): turn-1 last-512 clock ratio 0.933, 0.003 above the predicted band 0.83-0.93 (run 9 0.922, run 8 0.912); first off-nominal pm Moderate at token 1,678 (run 9 1,700); token-rate ratio 0.977 (run 9 0.978); tv1h_trigger does not fire (3 unequal rows outside gate windows of 1,145). Desk verdict member excluded on `thermal.powermetrics_non_nominal` (turn 1), as before. Nothing reads these.
+- Maintenance (log show rc 0, 30,144 lines, 19:06:58-21:05:43): dasd steady (950-2,730 per 10 min); `mobileassetd` 125/220/178/70 lines in 19:50-20:30; `softwareupdated` 8 at 19:10 and 8 at 20:10; `backupd` 6-27 per 10 min; no XProtect lines. X_G still passes.
+- Close interval: latest close before t0 was F2 p01 (18:34:14, kind other, GAP 1,200 s). Previous F0 t0 14:29:10 (run 9); this t0 19:07:01; 00:00 not inside the span.
+- Restore lines all pass: no desk fence; no align-r0 label; plist ProcessType Interactive; powermode 0; Network Time Off; ntp_adjtime freq word 0; no High Power marker; no stray monitor or root powermetrics; AC connected, not charging, 0 mA.
+- Copy: an F0 close is non-campaign; this Check covers the copy (item 409: the MBP owns copies tonight; F0 OUT stays in place, nothing offloaded). Commit nothing from `$OUT`.
+- Closes 412 (waiver used once), 413 (its pointer) and 414 (pre-launch record). Script and output: custody `standing-f0/check-e0552b22/` (`check.sh`, `out.txt`).
+- Activation e0552b22: no pending notices; no unread mail from Ed; open directives unchanged (the standing seven); no standdown request.
+- **Next exact action:** `dev-05-s01` (item 393) arms from Wed 18 Nov 00:00:00 PST under item 393 as issued, with this F0 as the latest close (kind other, 21:05:43, GAP 1,200 s, met from 21:25:43). Nothing else is lawful before then: F0's waiver was one-time, and rule 5's spacing from 19:07:01 runs past rule 6's 22:40 window end.
+
 415. **Laptop lead (interactive, Opus 5.5), 2026-11-17 21:10 PST: F0 per-day cap REVOKED (standing): only physical limits bound measurement; process audit dispatched**
 
 ```pointer
