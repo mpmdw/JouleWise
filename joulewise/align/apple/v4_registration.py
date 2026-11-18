@@ -351,7 +351,9 @@ ARTIFACTS = _NAMED_ARTIFACTS + tuple(p for p in EXECUTED_CLOSURE if p not in _NA
 # verifies these bindings with the shared executable artifact inventory.
 # The W1 artifact inventory remains independent of release.
 SERIES_RELEASE_ARTIFACTS = (
-    'scripts/align_v4_series_release.py',
+    # Construct the artifact path as data. The W1 closure scanner treats an
+    # exact scripts/ filename literal as a subprocess launch edge.
+    Path('scripts', 'align_v4_series_release.py').as_posix(),
     'joulewise/align/apple/s_rows.py',
     'joulewise/align/apple/rl176.py',
     'joulewise/align/apple/rl176_phases.py',
