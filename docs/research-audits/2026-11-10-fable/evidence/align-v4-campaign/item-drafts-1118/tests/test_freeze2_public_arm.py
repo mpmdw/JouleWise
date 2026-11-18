@@ -256,6 +256,8 @@ class PublicHistory:
             report["twin_agrees"] = "no"
         if case == "bare-ruling":
             row["ruling"] = "RL-183"
+        if case == "changed-commitment":
+            report["coefficients_sha256"] = row["coefficients_sha256"] = OTHER
         for label, field, value in (
             ("not-evaluable", "twin_agrees", "not_evaluable"), ("bad-word", "twin_agrees", "maybe"),
             ("report-look", "look_id", QUAL), ("report-coefficient", "coefficients_sha256", OTHER),
@@ -324,7 +326,7 @@ def observer():
 
     def deny(detail):
         record("DENIED", detail)
-        raise PermissionError("test blocked a forbidden lookup")
+        raise SystemExit("test blocked a forbidden lookup")
 
     def file(path, operation):
         if isinstance(path, int) or path is None:
@@ -361,10 +363,13 @@ def observer():
         setattr(os, name, wrapped)
 
     payload = sys.stdin.read()
+    args_at = sys.argv.index("-")
+    flags = ["-I", "-B", "-S"] if "provider_commit =" in payload else ["-I", "-B"]
+    assert sys.argv[1:args_at] == flags
     sys.addaudithook(audit)
     for name in ("stat", "lstat", "access", "readlink"):
         watch_metadata(name)
-    sys.argv = ["-", *sys.argv[sys.argv.index("-") + 1:]]
+    sys.argv = ["-", *sys.argv[args_at + 1:]]
     exec(compile(payload, "<emitted freeze gate>", "exec"), {"__name__": "__main__"})
 
 
@@ -432,9 +437,10 @@ def red_boundary(root, probe, items):
         assert "Traceback" not in result.stderr and result.returncode in (0, 1), result.stderr
         if is_old:
             assert ["git", ["cat-file", "blob", audit + ":" + path]] in trace, result.stderr
+        diagnostics = [line for line in result.stderr.splitlines() if not line.startswith("OBSERVE ")]
+        detail = " / ".join([*result.stdout.splitlines(), *diagnostics])
         summary = (f"{Path(shell).name} ordinary audit-only note: exit {result.returncode}; "
-                   f"main {main}; audit {audit}; forbidden lookups {denied}; "
-                   f"{(result.stdout + result.stderr.split('OBSERVE ')[0]).strip()}")
+                   f"main {main}; audit {audit}; forbidden lookups {denied}; {detail}")
         print(summary, flush=True)
         if result.returncode == 0:
             failures.append(Path(shell).name)
@@ -547,8 +553,13 @@ def matrix(root, probe, items):
             else:
                 assert not any(line.endswith("_gate") or line.startswith("scripts/")
                                for line in result.stdout.splitlines()), result.stdout
-                if case in ("unfilled", "malformed-expected", "provider-held"):
-                    assert trace == [], (case, trace)
+                if case == "unfilled":
+                    assert not trace, (case, trace)
+                if case in ("malformed-expected", "provider-held"):
+                    assert not any(kind == "git" or where[1].startswith(rules["tmp"])
+                                   for kind, where in trace), (case, trace)
+                if case in ("missing-dependency", "symlink-dependency"):
+                    assert "requires a regular code blob" in result.stderr
         print(f"PASS {case} (bash, zsh)")
 
     key, other = object(), object()
@@ -562,12 +573,13 @@ def matrix(root, probe, items):
     unchanged = world.publish("yes", parent=world.main)
     newer = world.publish("no", parent=world.main)
     removed = world.publish("missing-report", parent=world.main)
+    different = world.publish("changed-commitment", parent=world.main)
     advance = ["git", "-C", str(world.publisher), "update-ref"]
     for item, (definitions, start, run) in zip(items, projections):
         data = with_test_pin(definitions, world.code)
         rules = public_rules(world, world.main, world.code)
         for shell in SHELLS:
-            for change in (unchanged, newer, removed, None):
+            for change in (unchanged, newer, removed, different, None):
                 world.set_heads(world.main)
                 args = [*advance, "refs/heads/main", change] if change else [
                     *advance, "-d", "refs/heads/main"]
@@ -593,6 +605,8 @@ def matrix(root, probe, items):
                     assert oid(world.auth, "rev-parse", MAIN) == change
                 else:
                     assert not trace[marker + 1:] and result.stdout.count("native_checks") == 1
+                if change == different:
+                    assert "issued coefficient digest" in result.stderr
         print(f"PASS {item.name} Start accepts; Run refreshes before accepting or refusing (bash, zsh)")
 
     world.set_heads(world.main)

@@ -5,7 +5,7 @@ These are builder-defined inputs to the draft's executable checks, implementing 
 | Input | Required observation / owner / authority |
 |---|---|
 | ISSUED_EPOCH | Lead: actual issue epoch, used as the earliest authorized t0. |
-| FREEZE2_COMMIT / COEF_PATH / COEF_SHA256 | Lead: full 40-char commit and 64-char hash of the coefficient file. Commit ancestor of fetched audit or main, contains exact hash. Coefficient contents are never printed. RL-165 §8.1; RL-173 E. |
+| FREEZE2_COEF_SHA256 | Lead fills the expected lowercase 64-hex coefficient commitment from the `lm-interim-01` public release. At Start and Run, record the reviewed verifier commit and public receipt with look ID, freshly fetched main commit, public report SHA-256, coefficient SHA-256 and decision source. A missing fill or refusal holds the item (RL-180 amendment 3; RL-183 §2.3). |
 | COLD_SEAT_RECORD; QUAL_COLD_SEAT=ADMIT; COLD_SEAT_KIT_SHA | Lead records cold-seat pointer per kit and exact kit hash; not the builder re-check. RL-149 §2.8 line 1 / RL-165 §8.1. |
 | FIRST_CAPTURE_CONFIRMED=yes | Cold seat's RL-167 Part B Q2 finding: own-shaped first G0 equals capture code; five consumers read it. |
 | LINE2_RECORD; LINE2_EQUAL=yes; LINE2_PIN; LINE2_BASE | Lead: full-suite frozen-byte equality and final red-set comparison test for test; pin=`6e9d42f1dd3d308bc9239143d0d634ab965e50e1`, base=c3f4bacd8... (the W1-line commit actually merged). RL-165 §8.1. |

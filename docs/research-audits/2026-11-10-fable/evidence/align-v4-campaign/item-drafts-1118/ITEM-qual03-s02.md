@@ -1,4 +1,4 @@
-TBD. **Laptop lead, drafted by Sol 6.2; ISSUED <LEAD FILLS: YYYY-MM-DD HH:MM:SS PST from `date`> (`date`): MAGISTRATE: arm the SECOND span of qualification block `qual-03`, span `qual-03-s02`, legs L007,L008,L009,L010,L011,L012, kit `cl-qual-03.v1.1` (sha256 `9c4396ea1cff66fc4bbcf944ee2142bfb8b18f3a8547269c163faee9a3e03e88`), runner kind `cadence-legs-v1.1`, frozen pin `6e9d42f1dd3d308bc9239143d0d634ab965e50e1` checked out detached in a fresh staged worktree. A fresh soak, then six conditionless 27B legs, Automatic, band q0; L007 captures the span reference, the five other legs consume it. Short leg: L010 cap 3,151; all other caps 4,096. Expected 12262 s; work worst case 24750 s; launcher deadline reserve includes the additional 1,950 s soak retry and 560 s cleanup reserves. EARLIEST 2026-11-22 00:00:00 PST (epoch 1795334400), LIMIT 2026-11-22 23:59:59 PST (epoch 1795420799). HOLD_FOR_FIT_FREEZE until freeze 2 is committed and verified. Predecessor `qual-03-s01` must close clean or this item is VOID and is never skipped. The pinned runner takes no batch-window argument for qualification. The arm remains subject to RL-175 C.4. Launch is your LAST action; exit at once. Nothing else is authorized.**
+TBD. **Laptop lead, drafted by Sol 6.2; ISSUED <LEAD FILLS: YYYY-MM-DD HH:MM:SS PST from `date`> (`date`): MAGISTRATE: arm the SECOND span of qualification block `qual-03`, span `qual-03-s02`, legs L007,L008,L009,L010,L011,L012, kit `cl-qual-03.v1.1` (sha256 `9c4396ea1cff66fc4bbcf944ee2142bfb8b18f3a8547269c163faee9a3e03e88`), runner kind `cadence-legs-v1.1`, frozen pin `6e9d42f1dd3d308bc9239143d0d634ab965e50e1` checked out detached in a fresh staged worktree. A fresh soak, then six conditionless 27B legs, Automatic, band q0; L007 captures the span reference, the five other legs consume it. Short leg: L010 cap 3,151; all other caps 4,096. Expected 12262 s; work worst case 24750 s; launcher deadline reserve includes the additional 1,950 s soak retry and 560 s cleanup reserves. EARLIEST 2026-11-22 00:00:00 PST (epoch 1795334400), LIMIT 2026-11-22 23:59:59 PST (epoch 1795420799). HOLD_FOR_FIT_FREEZE until the public freeze-2 decision for the issued hash is verified. Predecessor `qual-03-s01` must close clean or this item is VOID and is never skipped. The pinned runner takes no batch-window argument for qualification. The arm remains subject to RL-175 C.4. Launch is your LAST action; exit at once. Nothing else is authorized.**
 
 ```pointer
 owner: magistrate
@@ -11,7 +11,7 @@ next_observable: after fence disappearance, Check below reports operational rece
 - **Counted predecessor.** Predecessor `qual-03-s01` in `cl-qual-03`, roster L001,L002,L003,L004,L005,L006; `pred_gate` reads only its receipt and leg-summary projection. Absent receipt = WAIT; any unclean close = VOID, never skipped. The qualification predecessor chain is fixed; no automatic skip or override.
 - **Why (RL-149 §2.3; RL-155 §5.3; RL-165 §8.1; RL-167 Part B; RL-172 (a),(b)).** Qualification tests the committed fit on held-out dates. This law's 6 + 6 cut keeps each true type-L pair adjacent in one span and gives each span four A legs and one L pair. First leg own-shaped/capture, all five others span-shaped/consume; no T or M. The M slots are ordinary A legs at 19,458. No class A smoke: class B, a mock span, plan and diff check (RL-165 §8.1; RL-172a F1). At the first qualification arm cite RL-172a F1. The RL-172a F1 soak comparison with dev-05 may come from the first same-pin filler hand-read (RL-181 §4(a)); a difference goes to the research lead. The retry fires on slope or load refusal, once (RL-172a F2); the desk/look read `soak_attempts`, a retried soak forces the sampled hand table, and refusal kind prints "kind not recorded" until a later pin (RL-173 E).
 - **Config provenance (RL-167 Part B Q1; Mythos #794 F5).** Record both runtime-config hashes: development `bf2cb2e6503c46373b52b10f32642d95a66a6636a3d7caaad0ce8b2b756781df`, qualification `272aecb8bc0d9e33defd7f686b129ea236b925fdfbf68137697120dd63232f46`. Only the unused `d_n_chunk_status` label differs; `lm-qual-01` prints both and must not require equality for inclusion.
-- **Freeze and pin.** `freeze2_gate` implements RL-165 §8.1, RL-172 (i) row 9 and RL-173 E. Full commit/hash/path unfilled = WAIT/HOLD_FOR_FIT_FREEZE. The commit must be an ancestor of freshly fetched audit or main and contain that exact coefficient hash. No forecast or fit-code hash substitutes for it. `qual_pin_gate`: line 1 cold seat ADMIT **per kit**, including RL-167 Part B Q2's same-code capture/five-consumer confirmation; line 2 suite red set at the frozen bytes equals the merged W1-line commit `c3f4bacd8`, test for test, no added red (RL-165 §8.1). Record pointers remain lead fills. Later W1 merges do not move the qualification pin. The frozen child validates the authorized date and exclusive cutoff against its recorded start before span work. HOLD until both admission lines are recorded against the exact successor kit bytes. RL-175 C.4 also requires the separate predicted-batch check at each arm.
+- **Freeze and pin.** Copy the lowercase 64-hex public coefficient commitment for `lm-interim-01` into `FREEZE2_COEF_SHA256` at issue. The reviewed verifier checks the current committed public decision on freshly fetched main against that hash (RL-180 amendment 3; RL-183 §2.3). The item stays at HOLD_FOR_FIT_FREEZE while the issued hash or reviewed verifier pin is unfilled. A refusal in either phase stops before the plan or launch. Save the verifier revision and public receipt with the look ID, main commit, report and coefficient digests, and decision source. `qual_pin_gate`: line 1 cold seat ADMIT **per kit**, including RL-167 Part B Q2's same-code capture/five-consumer confirmation; line 2 suite red set at the frozen bytes equals the merged W1-line commit `c3f4bacd8`, test for test, no added red (RL-165 §8.1). Record pointers remain lead fills. Later W1 merges do not move the qualification pin. The frozen child validates the authorized date and exclusive cutoff against its recorded start before span work. HOLD until both admission lines are recorded against the exact successor kit bytes. RL-175 C.4 also requires the separate predicted-batch check at each arm.
 - **Day law (RL-174 B.3, RL-175 C.3).** Span dates: qual-01-s01=2026-11-20, qual-01-s02=2026-11-20, qual-02-s01=2026-11-21, qual-02-s02=2026-11-21, qual-03-s01=2026-11-22, qual-03-s02=2026-11-22. Each date holds spans from only one qualification block, with no development leg. Each whole block holds two L pairs. Sat 14–Wed 18 Nov are reserved development dates, and `day_gate` also checks moved development spans. Each span's recorded t0-date assigns all six legs even if it closes after midnight. The queues expire **2026-11-23T00:00:00-08:00**. A new expiry requires a new lead-committed queue.
 - **Dependent spans (WS 4 and QUEUE-SPEC D8).** The printed s01 LIMIT is 16:32:00 PST at the latest. Reserve 24,750 s for s01 work, 1,950 s for a possible soak retry and 560 s for cleanup. The latest s01 t0 moves earlier if the queue expires before the pair can fit. RL-179 F-2 allows s02 once the close is proven and the other gates pass.
 - **Missed-date recovery (RL-175 C.3).** **Untouched block:** move both spans together to an unused legal date. **Partially run block:** retain s01's recorded date and receipts, then schedule only the missing s02 once on the next unused legal date with the same legs and seeds and a fresh soak. Move later untouched blocks whole. Every qualification receipt's recorded date must match its own span entry. A span with an existing t0 cannot arm again. The lead commits the revised finite queue and issues fresh items for the remaining spans.
@@ -141,10 +141,8 @@ close_gate() {
   test "${LAST_CLOSE_KIND:-}" = "$actual" || { echo 'STOP: contradictory LAST_CLOSE_KIND'; return 1; }
   echo "CLOSE PROVEN $EFF_SPAN at $EFF_CLOSE_NS ns kind $actual"
 }
-# RL-165 §8.1; RL-172 (i) row 9; RL-173 E: freeze 2 is the committed coefficient hash.
-FREEZE2_COMMIT="<LEAD FILLS: FREEZE2_COMMIT>"
+# RL-165 §8.1; RL-180 amendment 3; RL-183 §2.3: public authorization for lm-interim-01.
 FREEZE2_COEF_SHA256="<LEAD FILLS: FREEZE2_COEF_SHA256>"
-FREEZE2_COEF_PATH="<LEAD FILLS: FREEZE2_COEF_PATH>"
 COLD_SEAT_RECORD="<LEAD FILLS: per-kit cold seat ADMIT and RL-167 Part B Q2 confirmation>"
 LINE2_RECORD="<LEAD FILLS: qual-pin suite red set equals c3f4bacd8 test for test>"
 HOST_EVENT_RECORD="<LEAD FILLS: four host-state lines under RL-174 C, with readback>"
@@ -155,22 +153,54 @@ filled() {
   case "${1:-}" in ''|*'<LEAD '*) return 1;; *) return 0;; esac
 }
 freeze2_gate() {
-  filled "$FREEZE2_COMMIT" && filled "$FREEZE2_COEF_SHA256" && filled "$FREEZE2_COEF_PATH" \
-    || { echo 'WAIT: HOLD_FOR_FIT_FREEZE (RL-165 §8.1; RL-172 (i)9; RL-173 E)'; return 1; }
-  "$PY" -I -B - "$AUTH_REPO" "$FREEZE2_COMMIT" "$FREEZE2_COEF_PATH" "$FREEZE2_COEF_SHA256" <<'PY'
-import hashlib, re, subprocess, sys
-repo, commit, path, sha = sys.argv[1:]
-def git(*args): return subprocess.check_output(['git','-C',repo,*args],stderr=subprocess.DEVNULL)
-def stop(s): sys.exit('STOP: freeze 2 ' + s)
-if not re.fullmatch('[0-9a-f]{40}',commit) or not re.fullmatch('[0-9a-f]{64}',sha): stop('full commit/hash required')
-if path.startswith('/') or any(p in ('..','restricted','campaign-out') or p.startswith('night-') for p in path.split('/')): stop('coefficient path not permitted')
+  filled "${FREEZE2_COEF_SHA256:-}" || { echo 'WAIT: HOLD_FOR_FIT_FREEZE'; return 1; }
+  "$PY" -I -B -S - "$AUTH_REPO" "$FREEZE2_COEF_SHA256" <<'PY'
+import os
+from pathlib import Path
+import re
+import subprocess
+import sys
+import tempfile
+
+repo, expected = sys.argv[1:]
+if not re.fullmatch(r"[0-9a-f]{64}", expected):
+    sys.exit("STOP: malformed issued freeze-2 public hash")
+
+# Bind the full reviewed PR #795 commit and its exact import closure here after owner delivery.
+# build_items.py renders these literals as part of the common gate in all six items.
+provider_commit = None
+provider_paths = ()
+cli = "scripts/cadence_look_manifest.py"
+if (not provider_commit or not re.fullmatch(r"[0-9a-f]{40}", provider_commit)
+        or cli not in provider_paths):
+    sys.exit("WAIT: HOLD_FOR_FIT_FREEZE (reviewed public verifier pin pending)")
+
+os.environ["GIT_NO_REPLACE_OBJECTS"] = "1"
+
+def git(*args):
+    return subprocess.check_output(["git", "-C", repo, *args], stderr=subprocess.DEVNULL)
+
 try:
-    refs = [git('rev-parse','--verify',r+'^{commit}').decode().strip() for r in ('origin/audit/2026-11-10-fable','origin/main')]
-    if not any(subprocess.run(['git','-C',repo,'merge-base','--is-ancestor',commit,r],capture_output=True).returncode==0 for r in refs): stop('commit is not ancestor of fetched audit or main')
-    blob = git('cat-file','blob',commit+':'+path)
-    if hashlib.sha256(blob).hexdigest() != sha: stop('coefficient sha256 mismatch')
-except (OSError,subprocess.CalledProcessError): stop('commit/ref/coefficient unreadable')
-print('FREEZE2 COMMITTED',commit,path,'sha256',sha)
+    if git("rev-parse", "--verify", provider_commit + "^{commit}").decode().strip() != provider_commit:
+        sys.exit("STOP: freeze-2 provider pin must identify a commit")
+    with tempfile.TemporaryDirectory(prefix="freeze2-code-") as stage:
+        for path in provider_paths:
+            entry = git("ls-tree", "-z", "--full-tree", provider_commit, "--", path)
+            if not re.fullmatch(rb"100(?:644|755) blob [0-9a-f]{40}\t" + re.escape(os.fsencode(path)) + b"\x00", entry):
+                sys.exit(f"STOP: freeze-2 provider requires a regular code blob at {path}")
+            dest = Path(stage, path)
+            dest.parent.mkdir(exist_ok=True, parents=True)
+            dest.write_bytes(git("cat-file", "blob", provider_commit + ":" + path))
+
+        script = Path(stage, cli)
+        print("FREEZE2_CODE", provider_commit, file=sys.stderr, flush=True)
+        sys.path.insert(0, stage)
+        sys.argv = [str(script), "authorize-freeze2", "--repo", repo, "--look-id", "lm-interim-01",
+                    "--expected-coefficients-sha256", expected]
+        exec(compile(script.read_bytes(), str(script), "exec"),
+             {"__name__": "__main__", "__file__": str(script)})
+except (ImportError, OSError, subprocess.CalledProcessError):
+    sys.exit("STOP: freeze-2 public verifier or its pinned dependencies unavailable")
 PY
 }
 qual_pin_gate() {
@@ -402,8 +432,10 @@ all_gates() {
 }
 # END TESTABLE GATES
 
-# Fresh refs for the hash/ancestry gate; repeat in Run. No network remains after launch.
-git -C "$AUTH_REPO" fetch -q origin audit/2026-11-10-fable main || exit 1
+# Fresh refs for public freeze 2 on main and queue authentication on audit. Repeat in Run.
+git -C "$AUTH_REPO" fetch -q --no-tags origin \
+  +refs/heads/main:refs/remotes/origin/main \
+  +refs/heads/audit/2026-11-10-fable:refs/remotes/origin/audit/2026-11-10-fable || exit 1
 CUSTODY="${MAGISTRATE_WATCHDOG_CUSTODY_ROOT:-/Users/edr/night-custody/magistrate}"
 native_checks() {
   unset CHECKLIST_OK
@@ -440,10 +472,12 @@ case "$OUT" in */restricted/*|*/night-*|"$REPO"/*|*/configs/campaigns/align_v4*)
 
 Lead/magistrate supplies the current observations listed in `evidence/record-shapes.md`. `CHECKLIST_OK=yes` is set only **after** every native read above and the kit's complete checklist passes; each call clears any supplied yes before running the checks. Disk, meter, process census, no halt/veto and all restore lines are mandatory.
 
-**Run (your last action).** Re-read stops, veto, host-state identity, v4 READY record and current boot time. Verify the current kit/queue hashes again and fetch refs before the last gate. Pass the authorized date, pinned clock anchor, whole-second window, issue, queue and batch bounds, and the exact close bound in epoch nanoseconds. The child applies both lower bounds to its wall sample and projected start interval. With the shared desk fence locked, the launcher rechecks the same proof and publishes the new attempt before bootstrap.
+**Run (your last action).** Re-read stops, veto, host-state identity, v4 READY record and current boot time. Verify the current kit/queue hashes again and refresh main and audit for a fresh public decision before the last gate. Pass the authorized date, pinned clock anchor, whole-second window, issue, queue and batch bounds, and the exact close bound in epoch nanoseconds. The child applies both lower bounds to its wall sample and projected start interval. With the shared desk fence locked, the launcher rechecks the same proof and publishes the new attempt before bootstrap.
 
 ```sh
-git -C "$AUTH_REPO" fetch -q origin audit/2026-11-10-fable main || exit 1
+git -C "$AUTH_REPO" fetch -q --no-tags origin \
+  +refs/heads/main:refs/remotes/origin/main \
+  +refs/heads/audit/2026-11-10-fable:refs/remotes/origin/audit/2026-11-10-fable || exit 1
 test "$(shasum -a 256 "$KIT" | cut -c1-64)" = "$KIT_SHA" || exit 1
 test "$(shasum -a 256 "$QUEUE_FILE" | cut -c1-64)" = "$QUEUE_SHA" || exit 1
 native_checks || exit 1
@@ -463,7 +497,7 @@ DEADLINE="$("$PY" -I -B -c 'import time; print(time.time()+28160)')"
 echo "$OUT"
 ```
 
-Require exit 0, `"next": "exit the magistrate session now"`, a claimed desk fence whose pid differs from MAGISTRATE_PID, and launch plan `batch_windows == []`. Record every gate print, all record pointers, date-rule reading, close proof and epochs, issue and queue expiry stamps, freeze-2 commit/path/hash, host-state identity, worktree HEAD, kit/queue commit/hash, six legs and their caps, OUT, DEADLINE, native readbacks and plan. Then exit at once. Report any refusal and await fresh authority before re-arming.
+Require exit 0, `"next": "exit the magistrate session now"`, a claimed desk fence whose pid differs from MAGISTRATE_PID, and launch plan `batch_windows == []`. Record every gate print, all record pointers, date-rule reading, close proof and epochs, issue and queue expiry stamps, freeze-2 public receipt and verifier commit, host-state identity, worktree HEAD, kit/queue commit/hash, six legs and their caps, OUT, DEADLINE, native readbacks and plan. Then exit at once. Report any refusal and await fresh authority before re-arming.
 
 **Check (next activation, after the fence is gone).** If the child refused its t0 authority at rc 3, the attempt was published but there is no runner receipt. Keep the attempt and its sequence. The lead verifies the refusal, fence disappearance, restore readbacks, stopped feeds and process absence, then writes that attempt’s identity-bound close Check with the exact close epoch. Under the shared desk fence lock, bind that row’s `close_receipt` to the Check and supply the matching close and copy proof. The successor stays held until that proof passes. The lead applies the applicable stop disposition and authorizes a new attempt only under the date and predecessor rules. See [record shapes](evidence/record-shapes.md).
 
