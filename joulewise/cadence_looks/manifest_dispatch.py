@@ -13,6 +13,7 @@ import subprocess
 import sys
 from tempfile import TemporaryDirectory
 from typing import NoReturn
+import warnings
 
 from . import qualification_manifest as schema_check
 
@@ -47,26 +48,36 @@ TRANSFER_PRINTS = (
 )
 
 
+def redirect_to_devnull(fd):
+    replacement = os.open(os.devnull, os.O_RDWR)
+    try:
+        os.dup2(replacement, fd)
+        if replacement == fd:
+            os.set_inheritable(fd, True)
+    finally:
+        if replacement != fd:
+            os.close(replacement)
+
+
 def save_public_stderr():
     """Fill vacant standard descriptors before reserving private redirections."""
-    for fd, name, mode in ((0, "stdin", "r"), (1, "stdout", "w"), (2, "stderr", "w")):
+    for fd in range(3):
         try:
             fcntl.fcntl(fd, fcntl.F_GETFD)
         except OSError as error:
             if error.errno != errno.EBADF:
                 raise
-            replacement = os.open(os.devnull, os.O_RDWR)
-            if replacement == fd:
-                os.set_inheritable(fd, True)
-            else:
-                try:
-                    os.dup2(replacement, fd)
-                finally:
-                    os.close(replacement)
-        # Python can leave its stream unset when the descriptor was closed at exec.
-        if getattr(sys, name) is None:
-            setattr(sys, name, os.fdopen(fd, mode, closefd=False))
+            redirect_to_devnull(fd)
     return fcntl.fcntl(2, fcntl.F_DUPFD_CLOEXEC, 10)
+
+
+def _write_notice(fd, message):
+    remaining = memoryview(message.encode("utf-8", errors="backslashreplace"))
+    while remaining:
+        count = os.write(fd, remaining)
+        if count == 0:
+            raise OSError("notice write made no progress")
+        remaining = remaining[count:]
 
 
 def finish_notice(status, *, stdout=None, stderr=None, stderr_fd=None, flush_streams=False):
@@ -74,23 +85,22 @@ def finish_notice(status, *, stdout=None, stderr=None, stderr_fd=None, flush_str
     failed = False
     if stderr_fd is not None and stderr is not None:
         try:
-            with os.fdopen(stderr_fd, "w", encoding="utf-8", errors="backslashreplace", closefd=False) as stream:
-                stream.write(stderr)
-                stream.flush()
+            _write_notice(stderr_fd, stderr)
         except BaseException:
             failed = True
         stderr = None
 
-    for stream, message in ((sys.stdout, stdout), (sys.stderr, stderr)):
+    for fd, stream, message in ((1, sys.stdout, stdout), (2, sys.stderr, stderr)):
         if message is None and not flush_streams:
             continue
-        if stream is None:
-            failed = True
-            continue
         try:
-            if message is not None:
-                stream.write(message)
-            stream.flush()
+            if stream is None:
+                if message is not None:
+                    _write_notice(fd, message)
+            else:
+                if message is not None:
+                    stream.write(message)
+                stream.flush()
         except BaseException:
             failed = True
 
@@ -125,8 +135,12 @@ class _NoticeArgumentParser(argparse.ArgumentParser):
             if status:
                 raise _ParserExit(status)
 
+    def error(self, message):
+        self.exit(PRE_READ_REFUSAL, f"{self.format_usage()}{self.prog}: error: {message}\n")
+
     def exit(self, status=0, message=None):
-        self._print_message(message, sys.stderr)
+        if message:
+            status = finish_notice(status, stderr=message, stderr_fd=self._stderr_fd)
         raise _ParserExit(status)
 
 
@@ -261,7 +275,8 @@ def _validate_legacy(tool, payload, final, *, stderr_fd=None):
     with TemporaryDirectory(prefix="cadence-v1-manifest-") as directory:
         manifest = Path(directory) / "manifest.json"
         manifest.write_bytes(payload)
-        command = [sys.executable, "-B", str(tool), "validate", str(manifest)]
+        # The pinned validator starts a fresh interpreter and inherits environment warning flags.
+        command = [sys.executable, "-B", "-W", "ignore", str(tool), "validate", str(manifest)]
         if final:
             command.append("--final")
         result = subprocess.run(command, check=False, capture_output=True, text=True,
@@ -372,7 +387,10 @@ def _dispatch(argv, *, stderr_fd=None):
 def main(argv=None) -> NoReturn:
     stderr_fd = None
     try:
+        warnings.simplefilter("ignore")
+        sys.warnoptions = []
         stderr_fd = save_public_stderr()
+        redirect_to_devnull(2)
         if _dispatch(argv, stderr_fd=stderr_fd):
             os._exit(PRE_READ_REFUSAL)
         if finish_notice(0, flush_streams=True):

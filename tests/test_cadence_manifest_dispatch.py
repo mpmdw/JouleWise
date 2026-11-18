@@ -230,10 +230,12 @@ closed, marker = int(sys.argv[1]), Path(sys.argv[2])
 original = dispatch._dispatch
 
 def check_startup(argv, *, stderr_fd=None):
+    assert sys.warnoptions == []
     assert stderr_fd is not None and stderr_fd >= 10
     assert fcntl.fcntl(stderr_fd, fcntl.F_GETFD) & fcntl.FD_CLOEXEC
     for fd in range(3):
         os.fstat(fd)
+    assert os.path.samestat(os.fstat(2), os.stat(os.devnull))
     assert os.path.samestat(os.fstat(closed), os.stat(os.devnull))
     with open(os.devnull, "wb") as sink:
         os.dup2(sink.fileno(), 2)
@@ -440,7 +442,7 @@ raise SystemExit(97)
 
             def delegate(command, *, check, capture_output, text, encoding, errors):
                 candidate.write_bytes(encode(dict(interim, look_id="lm-transfer-01")))
-                self.assertEqual(Path(command[4]).read_bytes(), payload)
+                self.assertEqual(Path(command[-1]).read_bytes(), payload)
                 self.assertTrue(capture_output)
                 return subprocess.CompletedProcess(command, 0)
 

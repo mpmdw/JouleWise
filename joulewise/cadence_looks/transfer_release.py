@@ -15,8 +15,15 @@ import re
 import sys
 import traceback
 from typing import NoReturn
+import warnings
 
-from .manifest_dispatch import PRE_READ_REFUSAL, exit_with_failure, finish_notice, save_public_stderr
+from .manifest_dispatch import (
+    PRE_READ_REFUSAL,
+    exit_with_failure,
+    finish_notice,
+    redirect_to_devnull,
+    save_public_stderr,
+)
 
 CUSTODY_NAMES = frozenset(("scores.json", "stdout", "stderr"))
 HASHES = ("manifest_sha256", "stage1_roster_sha256", "freeze2_sha256")
@@ -89,6 +96,9 @@ def _redirect(restricted):
             os.dup2(stream, fd)
         finally:
             os.close(stream)
+        # A missing Python stream can be recreated after its descriptor is private.
+        if getattr(sys, name) is None:
+            setattr(sys, name, os.fdopen(fd, "w", encoding="utf-8", closefd=False))
 
 
 def _failure_notice(error, read_started, redirected):
@@ -115,7 +125,10 @@ def run_transfer_worker(*, restricted: Path, public: Path, execution_host: str, 
     redirected = False
 
     try:
+        warnings.simplefilter("ignore")
+        sys.warnoptions = []
         original_stderr = save_public_stderr()
+        redirect_to_devnull(2)
         if finish_notice(0, flush_streams=True):
             raise OSError("worker streams could not be flushed")
 
