@@ -3,12 +3,13 @@
 
 MBP, at finalize:      finalize-manifest --session-root S --out M.json (commit M.json's sha256 with the record)
 MBP, after finalize:   pack    --session-root S --out O --finalized-manifest M.json (the window's one pack; zstd -3 -T4)
-Air, during cool-down: unpack  --offload O --finalized-manifest M.json --finalized-sha256 H (same path, record-bound)
+Air, during cool-down: unpack  --offload O --finalized-manifest M.json --finalized-sha256 H
+                               --window-id W --receipt-out U.json (same path, record-bound)
 The record binding is REQUIRED on pack and unpack (R17 review F2): without it they refuse.
                        triage  --session-root S --window-id W (light: thermal_escalation, member_eligibility)
 Air, next window:      desk    --session-root S --workers auto|N (unchanged harvest + full desk, timed)
                        sweep   --session-root S --out D       (harvest at 2/4/6/8/10 workers: wall, peak RSS)
-                       final   --session-root S --window-id W (final eligibility row from the desk's PILOT.json)
+                       final   --session-root S --window-id W --unpack-receipt U.json --finalized-sha256 H
                        reduce  --session-root S --out R --workers N (reduce-once columnar PM files, digest-bound)
 
 Every subcommand prints one JSON line. Exit 0 on success, 1 on refusal.
@@ -204,6 +205,14 @@ def cmd_unpack(args, run=subprocess.run):
     if hashlib.sha256(raw).hexdigest() != args.finalized_sha256:
         raise harvest_offload.OffloadRefused('finalized record manifest does not match the committed digest')
     _pack_inputs(finalized)
+    source = Path(finalized['source_root'])
+    receipt_out = args.receipt_out.resolve()
+    if receipt_out.is_relative_to(source.resolve()):
+        raise harvest_offload.OffloadRefused('unpack receipt must be outside the finalized source root')
+    if os.path.lexists(args.receipt_out):
+        raise harvest_offload.OffloadRefused('unpack receipt destination already exists')
+    if not args.window_id:
+        raise harvest_offload.OffloadRefused('unpack receipt needs a window id')
     mirror = ((finalized.get('closure') or {}).get('mirror') if isinstance(finalized, dict) else None)
     if not isinstance(mirror, dict) or not isinstance(mirror.get('root'), str):
         raise harvest_offload.OffloadRefused('finalized record manifest binds no measurement checkout mirror')
@@ -214,6 +223,21 @@ def cmd_unpack(args, run=subprocess.run):
     started = time.time()
     manifest = harvest_offload.unpack(offload, finalized=finalized, finalized_sha256=args.finalized_sha256,
                                       mirror_identity=here)
+    # Now the root exists, also refuse alternate spellings on a case-insensitive volume.
+    if any(parent.exists() and parent.samefile(source) for parent in receipt_out.resolve().parents):
+        raise harvest_offload.OffloadRefused('unpack receipt must be outside the finalized source root')
+    plan_id = _read(source / 'session.json')['session_id']
+    if not isinstance(plan_id, str) or not plan_id:
+        raise harvest_offload.OffloadRefused('unpack receipt needs a restored session_id')
+    receipt = {'schema': light_triage.UNPACK_RECEIPT_SCHEMA, 'window': args.window_id,
+               'plan_id': plan_id, 'finalized_manifest_sha256': args.finalized_sha256}
+    output = receipt_out.open('xb')
+    try:
+        with output:
+            output.write(harvest_offload._canonical_bytes(receipt))
+    except OSError:
+        receipt_out.unlink(missing_ok=True)
+        raise
     return {'restored': manifest['source_root'], 'files': manifest['files'], 'bytes': manifest['bytes'],
             'elapsed_s': round(time.time() - started, 3)}
 
@@ -275,7 +299,8 @@ def cmd_final(args, run=subprocess.run):
 
     Refuses unless ``light_triage.final_adjudication_error`` passes: a completed harvest (or, with no
     capture at all, no harvest needed), a completed desk adjudication, both of this session's plan,
-    and agreeing exclusions. The packet builder applies the same predicate to the committed sources.
+    and agreeing exclusions. RL-183b also requires the receipt of a captured window after R1.
+    The packet builder applies both predicates to the committed sources.
     """
     session, state, plan = _session(args.session_root)
     pilot = _read(args.pilot or session / 'PILOT.json')
@@ -286,17 +311,29 @@ def cmd_final(args, run=subprocess.run):
     exclusions_path = session / 'archive/derived/exclusions.json'
     exclusions = (_read(exclusions_path) if exclusions_path.is_file() else
                   {'members_excluded': desk.get('members_excluded', pilot.get('members_excluded', []))})
-    error = light_triage.final_adjudication_error(desk, pilot, exclusions, state.get('session_id'),
-                                                  captured=bool(captured))
+    plan_id = state['session_id']
+    error = light_triage.final_adjudication_error(desk, pilot, exclusions, plan_id, captured=bool(captured))
     if error is not None:
         raise ValueError('final eligibility refused: ' + error)
+    unpack_receipt = None
+    if args.window_id != 'R1':
+        if args.unpack_receipt is not None:
+            try:
+                unpack_receipt = args.unpack_receipt.read_bytes()
+            except OSError as exc:
+                raise ValueError('final eligibility refused: unpack receipt unreadable') from exc
+        error = light_triage.unpack_receipt_error(unpack_receipt, window=args.window_id, plan_id=plan_id,
+                                                 finalized_sha256=args.finalized_sha256, captured=bool(captured))
+        if error is not None:
+            raise ValueError('final eligibility refused: ' + error)
     thermal = pilot['extra_checks']['thermal']
     eligibility = light_triage.member_eligibility(thermal['members'], rows, captured=captured, final=True)
     return {'thermal_escalation': light_triage.thermal_escalation(thermal),
             'member_eligibility': eligibility,
             'calibration_row': light_triage.calibration_row(args.window_id, rows, eligibility),
             'pilot_status': pilot.get('status'), 'harvest_status': desk.get('harvest_status'),
-            'pilot_sha256': hashlib.sha256((Path(args.pilot or session / 'PILOT.json')).read_bytes()).hexdigest()}
+            'pilot_sha256': hashlib.sha256((Path(args.pilot or session / 'PILOT.json')).read_bytes()).hexdigest(),
+            'unpack_receipt_sha256': hashlib.sha256(unpack_receipt).hexdigest() if unpack_receipt is not None else None}
 
 
 def cmd_desk(args, run=subprocess.run):
@@ -601,6 +638,8 @@ def main(argv=None, run=subprocess.run):
     p.add_argument('--offload', type=Path, required=True)
     p.add_argument('--finalized-manifest', type=Path)
     p.add_argument('--finalized-sha256')
+    p.add_argument('--window-id', required=True)
+    p.add_argument('--receipt-out', type=Path, required=True)
     p = sub.add_parser('finalize-manifest')
     p.add_argument('--session-root', type=Path, required=True)
     p.add_argument('--out', type=Path, required=True)
@@ -615,6 +654,8 @@ def main(argv=None, run=subprocess.run):
     sub.choices['triage'].add_argument('--ladder-recorded', action='store_true')
     sub.choices['triage'].add_argument('--out', type=Path, help='write the light-triage record source (new file)')
     sub.choices['final'].add_argument('--pilot', type=Path)
+    sub.choices['final'].add_argument('--unpack-receipt', type=Path)
+    sub.choices['final'].add_argument('--finalized-sha256')
     p = sub.add_parser('reduce')
     p.add_argument('--session-root', type=Path, required=True)
     p.add_argument('--out', type=Path, required=True)

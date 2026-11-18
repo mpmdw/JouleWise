@@ -113,7 +113,7 @@ Steps 4-5 print two integers to stdout, `pairs` and `unavailable`, and nothing e
 ### W1 signing checklist additions
 
 - Run step 4 after R1 closes from a checkout containing the lead-reviewed RL-168 finding 1 commit and its test (RL-183 §2.5). At signing, compare the `scripts/align_v4_u3_export.py` blob with the one used for step 4. If it differs, run step 4 again at the signing pin.
-- Before signing, close the desk-seal successor under PR #826. Resolve the RL-163 §1 unpack-receipt ruling and confirm the digest-only record gate. Until the successor lands, hold v4 series-record commits.
+- Before signing, close the desk-seal successor under PR #826. Review the RL-183b unpack-receipt gate on direct and successor final sources and confirm the digest-only record format. Until the successor lands, hold v4 series-record commits.
 - Record C1(b) exclusions and tripwire evidence (register row 13, RL-163 §§2–3). The synthetic harvest must exercise a real exclusion and list each `members_excluded` row's keys. Confirm that the counted window-harvest codes and DC fit codes print without member observations or fit row counts. The lead owns the RL-163 §3 `calibration.refit_cache_miss` all-or-none check on the protected sessions. Refer any mixed result to Fable before signing.
 - Keep each window's offload pack and MBP originals until its desk is final and its record is pushed (RL-168 finding 3).
 

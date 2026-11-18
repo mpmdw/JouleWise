@@ -95,7 +95,8 @@ no raw or payload hashing on the MBP:
 
 **The harvest restore reads the verified copy in place.** The store keeps the harvest names, so on the Air:
 `$RUN unpack --offload /Volumes/JW-EXT/jw-offload/inbox/$K --finalized-manifest
-/Volumes/JW-EXT/jw-offload/inbox/$K/record-manifest.bin --finalized-sha256 $H`. This replaces the separate
+/Volumes/JW-EXT/jw-offload/inbox/$K/record-manifest.bin --finalized-sha256 $H
+--window-id "$K" --receipt-out "$OUT/unpack_receipt.json"`. This replaces the separate
 transfer of `$OUT/offload` in the harvest-off runbook's step 1d. Checked end to end with the real
 `harvest_offload.unpack` (§9).
 

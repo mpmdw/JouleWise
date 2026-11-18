@@ -675,7 +675,8 @@ class RunnerTests(unittest.TestCase):
                 pack = ['pack', '--session-root', str(session), '--out', str(out),
                         '--finalized-manifest', str(manifest)]
                 unpack = ['unpack', '--offload', str(out), '--finalized-manifest', str(manifest),
-                          '--finalized-sha256', runner.harvest_offload.manifest_sha256(landed)]
+                          '--finalized-sha256', runner.harvest_offload.manifest_sha256(landed),
+                          '--window-id', 'W1', '--receipt-out', str(root / 'receipt.json')]
                 with contextlib.redirect_stderr(io.StringIO()) as err:
                     self.assertEqual(runner.main(pack), 1)
                 self.assertIn('requires a pre-desk tree', err.getvalue())
@@ -694,7 +695,7 @@ class RunnerTests(unittest.TestCase):
                 self.assertIn('offload cannot carry', err.getvalue())
                 self.assertFalse(out.exists())
 
-    def test_pack_then_unpack_only_onto_an_identical_mirror(self):
+    def packed_session(self):
         import io
         from scripts import align_v4_harvest_off as runner
         root = Path(tempfile.mkdtemp(prefix='runner-', dir=REAL_TMP))
@@ -726,33 +727,71 @@ class RunnerTests(unittest.TestCase):
         packed = json.loads(out.getvalue())
         self.assertEqual(packed['external'], [str(ledger)])
         shutil.move(session, root / 'session.mbp')
+        return root, finalized['sha256']
+
+    def test_pack_then_unpack_only_onto_an_identical_mirror(self):
+        import io
+        from scripts import align_v4_harvest_off as runner
+        root, sha = self.packed_session()
+        session, receipt = root / 'session', root / 'receipt.json'
+        unpack = ['unpack', '--offload', str(root / 'o'), '--window-id', 'W1', '--receipt-out', str(receipt)]
+        binding = ['--finalized-manifest', str(root / 'M.json'), '--finalized-sha256', sha]
         with contextlib.redirect_stderr(io.StringIO()) as err:      # R17 review F2: the binding is required
-            self.assertEqual(runner.main(['unpack', '--offload', str(root / 'o')], run=self.fake_run('a' * 40)), 1)
+            self.assertEqual(runner.main(unpack, run=self.fake_run('a' * 40)), 1)
         self.assertIn('requires the record binding', err.getvalue())
         with contextlib.redirect_stderr(io.StringIO()) as err:
-            self.assertEqual(runner.main(['unpack', '--offload', str(root / 'o'), '--finalized-manifest',
-                                          str(root / 'M.json'), '--finalized-sha256', finalized['sha256']],
-                                         run=self.fake_run('b' * 40)), 1)
+            self.assertEqual(runner.main(unpack + binding, run=self.fake_run('b' * 40)), 1)
         self.assertIn('mirror differs', err.getvalue())
         self.assertFalse(session.exists())
         with contextlib.redirect_stderr(io.StringIO()) as err:
-            self.assertEqual(runner.main(['unpack', '--offload', str(root / 'o'), '--finalized-manifest',
-                                          str(root / 'M.json'), '--finalized-sha256', '0' * 64],
-                                         run=self.fake_run('a' * 40)), 1)
+            self.assertEqual(runner.main(unpack + binding[:-1] + ['0' * 64], run=self.fake_run('a' * 40)), 1)
         self.assertIn('committed digest', err.getvalue())
         noncanonical = root / 'noncanonical.json'
         noncanonical.write_bytes((root / 'M.json').read_bytes() + b'\n')
         with contextlib.redirect_stderr(io.StringIO()) as err:
-            self.assertEqual(runner.main(['unpack', '--offload', str(root / 'o'), '--finalized-manifest',
-                                          str(noncanonical), '--finalized-sha256', finalized['sha256']],
-                                         run=self.fake_run('a' * 40)), 1)
+            self.assertEqual(runner.main(unpack + ['--finalized-manifest', str(noncanonical),
+                                                  '--finalized-sha256', sha], run=self.fake_run('a' * 40)), 1)
         self.assertIn('not canonical JSON', err.getvalue())
         self.assertFalse(session.exists())
+        with contextlib.redirect_stderr(io.StringIO()) as err:
+            self.assertEqual(runner.main(unpack[:-1] + [str(session / 'receipt.json')] + binding,
+                                         run=self.fake_run('a' * 40)), 1)
+        self.assertIn('outside the finalized source root', err.getvalue())
+        self.assertFalse(session.exists())
+        self.assertFalse(receipt.exists())
         with contextlib.redirect_stdout(io.StringIO()):
-            self.assertEqual(runner.main(['unpack', '--offload', str(root / 'o'), '--finalized-manifest',
-                                          str(root / 'M.json'), '--finalized-sha256', finalized['sha256']],
-                                         run=self.fake_run('a' * 40)), 0)
+            self.assertEqual(runner.main(unpack + binding, run=self.fake_run('a' * 40)), 0)
         self.assertEqual(inventory(session), inventory(root / 'session.mbp'))
+        expected = {'schema': 'joulewise.align_v4.unpack_receipt.v1', 'window': 'W1',
+                    'plan_id': 'align-v4-synthetic', 'finalized_manifest_sha256': sha}
+        self.assertEqual(receipt.read_bytes(), json.dumps(expected, sort_keys=True, separators=(',', ':')).encode())
+        prior = receipt.read_bytes()
+        with contextlib.redirect_stderr(io.StringIO()) as err:
+            self.assertEqual(runner.main(unpack + binding, run=self.fake_run('a' * 40)), 1)
+        self.assertIn('destination already exists', err.getvalue())
+        self.assertEqual(receipt.read_bytes(), prior)
+        session.rename(root / 'first-restore')
+        receipt.rename(root / 'first-receipt.json')
+        with contextlib.redirect_stdout(io.StringIO()):
+            self.assertEqual(runner.main(unpack + binding, run=self.fake_run('a' * 40)), 0)
+        self.assertEqual(receipt.read_bytes(), prior)
+
+    def test_rl183b_failed_unpack_leaves_no_receipt(self):
+        import io
+        from scripts import align_v4_harvest_off as runner
+        root, sha = self.packed_session()
+        pack, receipt = root / 'o', root / 'receipt.json'
+        transport = json.loads((pack / runner.harvest_offload.MANIFEST).read_bytes())
+        (pack / transport['payload']['name']).write_bytes(b'changed synthetic payload')
+        with contextlib.redirect_stdout(io.StringIO()) as out, contextlib.redirect_stderr(io.StringIO()) as err:
+            status = runner.main(['unpack', '--offload', str(pack), '--window-id', 'W1', '--receipt-out', str(receipt),
+                                  '--finalized-manifest', str(root / 'M.json'), '--finalized-sha256', sha],
+                                 run=self.fake_run('a' * 40))
+        self.assertEqual(status, 1)
+        self.assertIn('payload digest mismatch', err.getvalue())
+        self.assertEqual(out.getvalue(), '')
+        self.assertFalse(receipt.exists())
+        self.assertFalse((root / 'session').exists())
 
 
 class FreshAirRestoreTests(unittest.TestCase):
@@ -796,6 +835,7 @@ class FreshAirRestoreTests(unittest.TestCase):
         (session / 'plan.json').write_text(json.dumps({'custody_root': str(custody),
                                                        'hazard_window': {'bindings': {'ledger_path': str(ledger)}}}))
         (session / 'session.json').write_text(json.dumps({'plan_path': str(session / 'plan.json'),
+                                                          'session_id': 'align-v4-synthetic',
                                                           'measurement_root': str(session / 'measurement'),
                                                           'source_measurement_root': str(checkout)}))
 
@@ -821,7 +861,7 @@ class FreshAirRestoreTests(unittest.TestCase):
         shutil.rmtree(custody)
         shutil.rmtree(root / 'external-dir')
         cli('unpack', '--offload', root / 'o', '--finalized-manifest', root / 'M.json',
-            '--finalized-sha256', printed['sha256'])
+            '--finalized-sha256', printed['sha256'], '--window-id', 'W1', '--receipt-out', root / 'receipt.json')
         self.assertEqual(inventory(session), before)
         self.assertEqual(off.verify_tree(session, json.loads((root / 'o' / off.MANIFEST).read_bytes())), [])
         self.assertEqual({name: hashlib.sha256(Path(name).read_bytes()).hexdigest() for name in bound}, digests)
@@ -1033,6 +1073,15 @@ class SyntheticV4SessionE2ETests(unittest.TestCase):
     def tearDownClass(cls):
         cls.tmp.cleanup()
 
+    @classmethod
+    def unpack_receipt(cls):
+        path = cls.root / 'synthetic-unpack-receipt.json'
+        digest = 'a' * 64
+        raw = {'schema': 'joulewise.align_v4.unpack_receipt.v1', 'window': 'C1', 'plan_id': 'v4-e2e',
+               'finalized_manifest_sha256': digest}
+        path.write_text(json.dumps(raw, sort_keys=True, separators=(',', ':')))
+        return path, digest
+
     def runner(self, argv, run=None):
         import io
         from scripts import align_v4_harvest_off as runner
@@ -1080,7 +1129,9 @@ class SyntheticV4SessionE2ETests(unittest.TestCase):
         self.assertGreaterEqual(desk['workers'], 1)
         self.assertEqual(desk['sizing']['peak_basis'], '8x_largest_plist')
         self.assertEqual(seen[0][-2:], ['--workers', str(desk['workers'])])
-        final = self.runner(['final', '--session-root', str(session), '--window-id', 'C1'])
+        receipt, digest = self.unpack_receipt()
+        final = self.runner(['final', '--session-root', str(session), '--window-id', 'C1',
+                             '--unpack-receipt', str(receipt), '--finalized-sha256', digest])
         self.assertEqual(final['member_eligibility']['stage'], 'final')
         self.assertLessEqual(set(final['member_eligibility']['eligible']), set(light['member_eligibility']['eligible']))
         self.assertFalse(final['member_eligibility']['members'][excluded]['eligible'])

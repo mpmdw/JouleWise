@@ -14,7 +14,7 @@ file instead.
 
 Draft PR #826 on the W1 line carries finding 1 at `2c0c766f9` and the independent desk-seal changes at `00da2d4e5`. The lead can review finding 1 separately. W1-BLOCKERS step 4 can run after R1 closes from the checkout containing that reviewed commit. Its exporter blob must match the signing pin.
 
-The synthetic Air desk reached `final` with captures and no unpack call. RL-163 §1 therefore sends the committed unpack-receipt form and finality check to Fable. Hold the digest-only record and packet cutover and the W1 signing gate for that ruling. See the [run report](docs/run_reports/2026-11-18-desk-seal-successor.md).
+RL-183b at audit head `26a9a306e` resolved the unpack-receipt ruling. The draft now carries the four-field receipt, digest-only records, and the direct and successor finality checks. Series-record commits and W1 signing wait for the successor's independent review and merge. See the [run report](docs/run_reports/2026-11-18-desk-seal-successor.md).
 
 **▶▶▶ HANDOFF 2026-10-10 08:40 PDT (magistrate activation cbe4230e, Opus 5.5, headless): BETA ATTEMPT 1 WAS COLLECTED AND IS NOT CLAIM-USABLE, AND STAYS SO. ERRATUM 2 IS ADMITTED. BETA ATTEMPT 2 IS NEXT. THIS BLOCK IS THE MAGISTRATE'S CURRENT STEP LIST. The block of 2026-10-09 15:45 below still gives the sealed objects, the fixed values and its eight numbered differences from the brief, all of which hold; where this block and that one differ, this block wins. The step-by-step authority is still the brief `docs/process_traces/2026-10-07-block5-seal/40-magistrate-brief.md`.**
 

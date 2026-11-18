@@ -667,7 +667,7 @@ T38c folds the six live follow-ups (including the existing bridge-baseline row) 
 
 | Work | Priority and lane | Status and next gate | Evidence |
 | --- | --- | --- | --- |
-| Desk-seal successor and U3 export repair | P1 Phase Gate [AGENT] | Draft PR #826. Lead review of finding 1 unblocks step 4 after R1 closes. Digest-only record and packet work awaits Fable's RL-163 §1 unpack-receipt ruling before W1 signing. | [Run report and clause map](docs/run_reports/2026-11-18-desk-seal-successor.md). Authority is RL-163, RL-168, RL-183 §2.5 and register row 13. |
+| Desk-seal successor and U3 export repair | P1 Phase Gate [AGENT] | Draft PR #826. Lead review of finding 1 unblocks step 4 after R1 closes. RL-183b implements the unpack receipt and digest-only records. Review both finality paths before merging and signing W1. | [Run report and clause map](docs/run_reports/2026-11-18-desk-seal-successor.md). Authority is RL-163, RL-168, RL-183 §2.5, RL-183b and register row 13. |
 
 ## Current Queue
 

@@ -119,7 +119,8 @@ class CustodyWitnesses(ReviewBase):
             if packed != 0:
                 return
             source.rename(self.root / 'kept')
-            restored = runner.main(['unpack', '--offload', str(self.root / 'offload')])
+            restored = runner.main(['unpack', '--offload', str(self.root / 'offload'), '--window-id', 'W1',
+                                    '--receipt-out', str(self.root / 'receipt.json')])
         self.assertNotEqual(restored, 0, 'CLI pack and unpack both succeeded with no record binding')
 
     def test_record_bound_serial_mbp_and_pooled_air_equal_all_177_files(self):
