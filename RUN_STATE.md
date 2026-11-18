@@ -17,8 +17,10 @@ date places bind one six-leg span each, outside the 132. Every draft is
 held for effective freeze 2 and scientific registration. Pinned kit,
 queue and plan validation passed, as did one synthetic span. RL-183 gives
 the final window its substitute close date and admits a closed transfer
-variant in v2. The look still awaits registration, final pins and Fable's
-cold pass. See the [RL-183 run report](docs/run_reports/2026-11-18-rl183-dated-transfer.md).
+variant in v2. Synthetic worker checks passed for success publication,
+read-boundary statuses and exclusive reservation. The look awaits
+registration, scorer integration, final pins and Fable's cold pass.
+See the [execution report](docs/run_reports/2026-11-18-rl183-transfer-execution.md).
 
 **2026-11-17 qualification draft handoff [AGENT].** The six unissued
 items bind the PR #812 delta-audit pin

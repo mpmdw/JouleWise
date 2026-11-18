@@ -2,7 +2,6 @@
 import argparse
 from hashlib import sha256
 import json
-import re
 import sys
 
 from build_kits import HERE, ROOT
@@ -10,12 +9,9 @@ from build_kits import HERE, ROOT
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 from joulewise.cadence_looks.manifest_dispatch import PRE_READ_REFUSAL, validate_v2
+from joulewise.cadence_looks.transfer_release import HASHES, HASH_PATTERN, WORDS
 
 LOOK_ID = "lm-transfer-01"
-WORDS = {"transfer_interval": ["estimated", "not_evaluable"], "stage2_error": ["no"]}
-HASHES = ["manifest_sha256", "stage1_roster_sha256", "freeze2_sha256"]
-HASH_PATTERN = "[0-9a-f]{64}"
-OUTPUT_FIELDS = set(WORDS) | set(HASHES)
 
 
 def require(condition, reason):
@@ -33,15 +29,6 @@ def unique_pairs(pairs):
 
 def load(path):
     return json.loads(path.read_bytes(), object_pairs_hook=unique_pairs)
-
-
-def validate_public(payload):
-    """Check the exact public success payload with the ruled closed fields."""
-    require(isinstance(payload, dict) and payload.keys() == OUTPUT_FIELDS, "unexpected public fields")
-    for field, allowed in WORDS.items():
-        require(type(payload[field]) is str and payload[field] in allowed, f"unexpected public word: {field}")
-    for field in HASHES:
-        require(type(payload[field]) is str and re.fullmatch(HASH_PATTERN, payload[field]), f"invalid hash: {field}")
 
 
 def verify_ref(ref, path):
@@ -74,7 +61,7 @@ def validate_draft(doc, manifest_path):
     require(schema["type"] == "object" and schema["additionalProperties"] is False and
             schema["required"] == [*WORDS, *HASHES], "public schema must be closed")
     require(schema["properties"] == {
-        **{field: {"type": "string", "enum": allowed} for field, allowed in WORDS.items()},
+        **{field: {"type": "string", "enum": list(allowed)} for field, allowed in WORDS.items()},
         **{field: {"type": "string", "pattern": f"^{HASH_PATTERN}$", "minLength": 64, "maxLength": 64}
            for field in HASHES},
     }, "public schema differs from the word and hash inventories")

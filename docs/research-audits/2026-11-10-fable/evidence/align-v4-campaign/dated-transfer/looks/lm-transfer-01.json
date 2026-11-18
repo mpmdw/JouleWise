@@ -253,6 +253,10 @@
     "schema_validator": {
       "path": "joulewise/cadence_looks/qualification_manifest.py",
       "sha256": "PENDING:CODE"
+    },
+    "release_boundary": {
+      "path": "joulewise/cadence_looks/transfer_release.py",
+      "sha256": "PENDING:CODE"
     }
   },
   "outputs": {

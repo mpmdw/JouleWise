@@ -30,15 +30,19 @@ and the lead will commit a fresh single-span queue with the actual date.
 The final window's close date replaces its t0-date if it holds the host
 past midnight and no transfer span started on the t0-date. Place 20 can
 therefore move to the close date. A transfer t0 on the original date
-uses the opportunity once.
+uses the opportunity once. If the substitute date expires unused, the
+date map gives that place the missed disposition.
 
 The closed v2 transfer variant and the new dispatch module validate the
 draft. Final transfer validation requires the exact registered bytes and
 allows changes only in the code hash slots. `scores.json`, `stdout` and
 `stderr` are the closed private success inventory. A pre-read refusal
-exits 2. A post-read failure exits 1 after the two-line notice. The
-look stays a draft for Fable. The scorer, shared freeze-2 reader,
-execution host and stage-1 pins are part of the later final admission.
+exits 2. A handled post-read failure exits 1 after the two-line notice.
+Synthetic worker tests exercise publication, confinement through process
+shutdown, and exclusive reservation. The look stays a draft for Fable.
+Final admission includes wiring the authenticated caller and scorer to
+the boundary and pinning the shared freeze-2 reader, execution host and
+stage-1 inputs.
 
 ## Reproduce
 
@@ -50,7 +54,7 @@ T=docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/dated-transfe
 python3.13 -B "$T/build_kits.py" validate-kit --seat-dir "$SEAT_DIR"
 python3.13 -B "$T/validate_look.py" validate
 python3.13 -B -m joulewise.cadence_looks.manifest_dispatch validate "$T/looks/lm-transfer-01.json"
-python3.13 -B -m unittest tests.test_cadence_manifest_dispatch
+TMPDIR="$SEAT_DIR" python3.13 -B -m unittest tests.test_cadence_manifest_dispatch tests.test_cadence_transfer_release
 python3.13 -B -m unittest discover -s "$T/tests"
 python3.13 -B "$T/build_kits.py" mock --seat-dir "$SEAT_DIR"
 ```

@@ -85,6 +85,17 @@ def permits_t0(epoch, bounds):
     return bounds[0] <= epoch < bounds[1]
 
 
+def date_dispositions(places, transfer_t0s, *, as_of):
+    """Give each eligible date its place, source attempts and as-of disposition."""
+    served = {local_day(t0) for t0 in transfer_t0s if t0 <= as_of}
+    today = local_day(as_of)
+    result = {}
+    for day, (place, attempts) in places.items():
+        status = "served" if day in served else ("missed" if day < today else "pending")
+        result[day] = {"place": place, "window_attempts": attempts, "status": status}
+    return result
+
+
 def lower_priority_fits(available_at, projected_span_and_close, pending):
     """Use worst-case availability after lower work and each span's full close overhead.
 

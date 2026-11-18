@@ -725,7 +725,8 @@
             "output_schema",
             "predictor_equivalence",
             "validator",
-            "schema_validator"
+            "schema_validator",
+            "release_boundary"
           ],
           "properties": {
             "predictor": {"$ref": "#/$defs/codePin"},
@@ -736,7 +737,8 @@
             "output_schema": {"$ref": "#/$defs/codePin"},
             "predictor_equivalence": {"$ref": "#/$defs/text"},
             "validator": {"$ref": "#/$defs/codePin"},
-            "schema_validator": {"$ref": "#/$defs/codePin"}
+            "schema_validator": {"$ref": "#/$defs/codePin"},
+            "release_boundary": {"$ref": "#/$defs/codePin"}
           }
         },
         "outputs": {

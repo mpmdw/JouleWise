@@ -23,10 +23,10 @@ issue queue after all applicable gates pass.
    Count that window once (RL-183 §3.1).
 3. Record the date and opportunity status in ordinal order, including
    misses, and retain the supporting window attempt IDs. An unserved
-   eligible date spends its place. Close the series at the 20th place or
-   with the last date that the series' last window makes eligible. The
-   span's effective t0 itself sets its
-   analysis date. A span that took t0 on its date may finish after midnight.
+   eligible date spends its place at midnight, including an unused
+   substitute close date. Close the series at the 20th place or with the
+   last date that the series' last window makes eligible. The span's
+   effective t0 sets its analysis date. Close may cross midnight.
 4. Fill the issue identity, timestamp and Check pointer. Bind the exact
    latest predecessor and authenticated proven close, kit path/hash, the
    six IDs, sequence, attempt, immutable runner pin and future committed

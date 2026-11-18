@@ -8,9 +8,10 @@ import unittest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from build_kits import HERE, pair_layout, registered_seeds, validate_layout
-from date_rules import (CountedClose, Window, arm_bounds, counted_batch_hold, date_places,
+from date_rules import (CountedClose, Window, arm_bounds, counted_batch_hold, date_dispositions, date_places,
                         lower_priority_fits, midnight, permits_t0)
-from validate_look import HASHES, LOOK_ID, load, validate_draft, validate_public
+from validate_look import HASHES, LOOK_ID, load, validate_draft
+from joulewise.cadence_looks.transfer_release import validate_public
 
 
 class LayoutTests(unittest.TestCase):
@@ -105,6 +106,12 @@ class DateTests(unittest.TestCase):
         self.assertEqual(list(rolled), [*dates[:19], close_day])
         self.assertEqual(rolled[close_day], (20, ("T-final",)))
         self.assertNotIn(start_day, rolled)
+
+        expiry = midnight(close_day + timedelta(days=1))
+        self.assertEqual(date_dispositions(rolled, (), as_of=expiry - 1)[close_day]["status"], "pending")
+        self.assertEqual(date_dispositions(rolled, (), as_of=expiry)[close_day],
+                         {"place": 20, "window_attempts": ("T-final",), "status": "missed"})
+        self.assertEqual(date_dispositions(rolled, (boundary + 91,), as_of=expiry)[close_day]["status"], "served")
 
         served = date_places(windows, (boundary - 300,), freeze_date=self.day, as_of=boundary + 90)
         self.assertEqual(served[start_day], (20, ("T-final",)))
