@@ -3,6 +3,12 @@
   "next_observable": "each pre-launch and Check item names the points of this item it used; the first F0 or F2 launched less than 14,400 s after the previous F0 t0; no gap over 30 min with nothing armed that lacks a physical reason in the record",
   "open_items": [
     {
+      "expires_epoch_s": null,
+      "item": 421,
+      "owner": "magistrate",
+      "status": "ISSUED"
+    },
+    {
       "expires_epoch_s": 1795147200,
       "item": 420,
       "owner": "research_lead",

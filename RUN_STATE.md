@@ -1044,6 +1044,20 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 
 <!-- RUN_STATE TYPED ITEMS: newest first. Add with scripts/run_state_add.py; never edit by hand. -->
 
+421. **Magistrate c047c9dc (headless, Opus 5.5), 2026-11-17 22:02 PST (`date`): STANDING-F0 run 11 pre-launch under item 418 (a), (f), (h): spacing deleted; rule 7 bound to dev-05's Wed date; Start and check rc 0; launch follows; next: Check, then dev-05-s01**
+
+```item
+{"expires_epoch_s": null, "issued_epoch_s": 1794981725, "number": 421, "owner": "magistrate", "schema": "joulewise.run_state_item.v1", "sets": [], "status": "ISSUED", "supersedes": []}
+```
+
+- Relaunch at 21:59 PST: notice_pending []; no unread owner mail; directives #587, #422, #421, #417, #416, #408, #405 unchanged (nothing new). Canonical ff'd 344473346 -> 7aa674717 (items 418-420; no night label loaded, no night plist on disk).
+- **Item 418 points used: (a), (f), (h).** (a): rule 5 spacing deleted from the scripts (last F0 t0 1794971221 printed only), the W1-head VOID and the age expiry made print-only. (f): without this F0 the Mac sat idle ~2 h to dev-05-s01's 00:00 earliest with no physical reason. No higher item can arm now: dev-05-s01 not before 00:00 Wed; F2 p02-p04 and hp-02 are not issued and cannot be filled before rule 6's 22:40 end.
+- Scripts: custody `f0-startcheck-c047c9dc.sh`, `f0-run-c047c9dc.sh` = e0552b22's cap-free templates with the three item-418 (a) edits and the header (MAGISTRATE_PID 45571, TRIGGER not_ready, TRIGGER_SPAN dev-05-s01-not-before-wed-0000-item418, OUTSTANDING_REFUSAL none, HOST_RESTORE_OK 1, UNPROVEN_GROUP 0, HOLDING_STOP none, OTHER_CLOSE_EPOCH 0, LAST_CLOSE_KIND other, SESSION_READY no (item 397: READY only from dev-05-s02's launch record), RESTART_PENDING no).
+- **Rule 7, COUNTED_LATEST = 1795050149 (Wed 18 Nov 17:02:29 PST).** Derivation: rule 7's text binds the latest legal t0 of a counted span; dev-05's date window ends 1795075199 (Wed 23:59:59, item 393 LIMIT; item 418 (e) makes that the expiry); minus dev-05-s01 worst case 24,750 s and the 300 s campaign close gap gives the latest s01 t0 that still leaves dev-05-s02 a Wed t0. Item 412's stricter "before 00:00" reading belonged to that waiver, which item 418 supersedes. Cost: dev-05-s01 starts at this F0's close + 1,200 s instead of 00:00 (expected ~00:20, worst ~01:45 Wed); s01 worst end ~08:40, s02 and R1 (window to Sat 21 Nov) keep their dates.
+- Start and check 22:01:24-22:01:29 PST, rc 0: W1-line head b2e01464d unchanged; 17 hashes match; verify_r1_executed_sources = b2e01464d...; RL-89 Mac check OK (60/16/44); launcher test OK; census 26 receipts, newest = F0 run 10 receipt (1794978344, other, gap 1,200 s met); copy gate non-campaign; night.lock no holder; sudo kill rc 0; no r12, no campaign span, no stray monitor, no root powermetrics; only agent processes are this session and its own codex MCP adapter children (in tree 45571, NOTE 1); Network Time Off; powermode 0; preflight ac_power true, free 285.7 GB; ntp_adjtime offset 0, rate +0.743 ppm; battery ExternalConnected Yes, IsCharging No, InstantAmperage 0. Batch print: next OS batch Wed 02:08:39 PST. Output `f0-startcheck-out-c047c9dc.txt`.
+- Launch follows this commit as the last act (Run re-checks eligibility); its output goes to `r1-partc-f0-out-c047c9dc.txt` and the ledger. No email: item 418 (g) (no mail per F0 run) and no notice pending.
+- **Next exact action:** after the fence is gone, the next activation runs F0 run 11's Check (item 346) and records it; then `dev-05-s01` (item 393) at the later of 00:00:00 Wed and this F0's close + 1,200 s (LAST_CLOSE_KIND other), with item 418 (e) if the 24 h line is the only failing line.
+
 420. **Laptop lead (interactive, Opus 5.5), 2026-11-17 21:54:08 PST: eleven process questions plus PR #795's release rule to the research lead as one batch (RL-179); F-5 to F-11 take effect Thu 19 Nov 20:00 unless RL-179 objects; nothing on the MBP waits**
 
 ```item
