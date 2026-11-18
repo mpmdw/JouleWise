@@ -116,10 +116,15 @@ class VariantContractTests(unittest.TestCase):
                 result = cli("--final", candidate, *options)
                 self.assertEqual(result.returncode, 0, result.stderr)
                 for marker in ("PENDING:CODE", "OPEN-19"):
+                    list_trial = json.loads(valid)
+                    output_list = "energy_dependent_words" if source == QUALIFICATION else "custody_names"
+                    list_trial["outputs"][output_list].append(marker)
+                    key_trial = json.loads(valid)
+                    key_trial["outputs"][marker] = "synthetic"
                     changed = (
                         dict(json.loads(valid), title=f"before {marker} after"),
-                        dict(json.loads(valid), rulings=[marker]),
-                        dict(json.loads(valid), **{marker: "synthetic"}),
+                        list_trial,
+                        key_trial,
                     )
                     for index, trial in enumerate(changed):
                         with self.subTest(source=source.name, marker=marker, index=index):
@@ -157,11 +162,26 @@ class VariantContractTests(unittest.TestCase):
                 lambda doc: doc.update(freeze1={}),
                 lambda doc: doc["outputs"].update(words=[]),
                 lambda doc: doc["outputs"]["custody_names"].remove("stderr"),
+                lambda doc: doc["kits"].pop(),
+                lambda doc: doc.update(kit_index_path="f2-stab/KITS.json"),
             ):
                 trial = deepcopy(document)
                 mutate(trial)
                 with self.subTest(source=source.name, trial=mutate), self.assertRaises(dispatch.ManifestError):
                     dispatch.validate_v2(encode(trial))
+
+        later = json.loads(STABILITY.read_bytes())
+        later.update(look_id="lm-stab-02", status="committed")
+        for pin in later["code_pins"].values():
+            pin["sha256"] = H
+        with self.assertRaisesRegex(dispatch.ManifestError, "rail_sum columns"):
+            dispatch.validate_v2(encode(later), final=True)
+        later["rail_sum_columns"] = ["synthetic_gpu", "synthetic_cpu"]
+        with self.assertRaisesRegex(dispatch.ManifestError, "KITS.json index"):
+            dispatch.validate_v2(encode(later), final=True)
+        later["kit_index_path"] = "f2-stab/KITS.json"
+        self.assertEqual(dispatch.validate_v2(encode(later), final=True)["outputs"]["custody_names"],
+                         CUSTODY[STABILITY])
 
     def test_registered_bytes_unchanged(self):
         self.assertEqual(

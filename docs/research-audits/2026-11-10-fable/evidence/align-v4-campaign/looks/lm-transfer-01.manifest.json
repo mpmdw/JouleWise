@@ -1,0 +1,318 @@
+{
+  "schema": "joulewise.cadence_look_manifest.v2",
+  "look_kind": "transfer",
+  "look_id": "lm-transfer-01",
+  "status": "draft",
+  "title": "DRAFT for Fable's cold pass. No issue before effective freeze 2 and scientific registration.",
+  "rulings": [
+    "RL-149 §2.4",
+    "RL-166 Q3",
+    "RL-175 B.4",
+    "RL-179 F-12 and rows 7, 26–28",
+    "RL-180 rows 3–8 and 10",
+    "RL-181 §§1.0, 1.2, 1.5, 3 and register rows 1, 4, 5, 7, 13–15",
+    "RL-183 §3 and register rows 13–14"
+  ],
+  "registered_paths": {
+    "manifest": "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/looks/lm-transfer-01.manifest.json",
+    "ledger": "docs/process/cadence/looks/LOOKS.json"
+  },
+  "registration": {
+    "before": "On main with ledger status registered before the first transfer arm.",
+    "final": "On main before reservation. Preserve the exact registration bytes outside its code hash slots.",
+    "review": "One cold pass by Fable before the terminal read."
+  },
+  "reads": {
+    "planned_date_places": {
+      "path": "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/dated-transfer/date-place-roster.json",
+      "sha256": "173f75c45475ab2c2cd01402d570d5c8740cbf8c24fa85c5127b76b22dc4e01f"
+    },
+    "kits": [
+      {
+        "kit_id": "cl-transfer-01",
+        "path": "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/dated-transfer/kits/cl-transfer-01.v1.1.json",
+        "sha256": "a018bf05c67e0417cb2a3e5cf0f8a3073a7fac9502670f823b10d868539cefd3"
+      },
+      {
+        "kit_id": "cl-transfer-02",
+        "path": "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/dated-transfer/kits/cl-transfer-02.v1.1.json",
+        "sha256": "54b4719d29e8d14dad6c0cefbbdfcda05eb4206077e303f99c30649919d31ed6"
+      },
+      {
+        "kit_id": "cl-transfer-03",
+        "path": "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/dated-transfer/kits/cl-transfer-03.v1.1.json",
+        "sha256": "281aa82f348e1270ac3162ffd4c933185b3ce78c8be38daaf3b9fbf560ab4054"
+      },
+      {
+        "kit_id": "cl-transfer-04",
+        "path": "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/dated-transfer/kits/cl-transfer-04.v1.1.json",
+        "sha256": "017f702b5596e082eca1734ad9667339c540054c5cb2fbdfe7f58027e6bdc00a"
+      },
+      {
+        "kit_id": "cl-transfer-05",
+        "path": "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/dated-transfer/kits/cl-transfer-05.v1.1.json",
+        "sha256": "a0c4f719d86f91ff451074df2f8260f105cfdabc566586e7c2efa5fe69a0e0bb"
+      },
+      {
+        "kit_id": "cl-transfer-06",
+        "path": "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/dated-transfer/kits/cl-transfer-06.v1.1.json",
+        "sha256": "d14b07bac7662feb7d33ef91d8152118fbaaa4db73279eb263e3942c555c94bb"
+      },
+      {
+        "kit_id": "cl-transfer-07",
+        "path": "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/dated-transfer/kits/cl-transfer-07.v1.1.json",
+        "sha256": "5b32779bea3acf458035a9952bc1f9cee8834b3bd487df6ef99dda7b9c79dde0"
+      },
+      {
+        "kit_id": "cl-transfer-08",
+        "path": "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/dated-transfer/kits/cl-transfer-08.v1.1.json",
+        "sha256": "21604ddc5fafce3986b7bf626b70fa73ab81d2f5c59cc99d607d4113e4fff7c0"
+      },
+      {
+        "kit_id": "cl-transfer-09",
+        "path": "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/dated-transfer/kits/cl-transfer-09.v1.1.json",
+        "sha256": "03aa6cde0c57e1fd0a1697922bb960df42866db822f1907fb14b63caac46e750"
+      },
+      {
+        "kit_id": "cl-transfer-10",
+        "path": "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/dated-transfer/kits/cl-transfer-10.v1.1.json",
+        "sha256": "6aafd694d784b645aeb52d35502e5a2b8242f4fa306b844bf6190744a782e40b"
+      },
+      {
+        "kit_id": "cl-transfer-11",
+        "path": "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/dated-transfer/kits/cl-transfer-11.v1.1.json",
+        "sha256": "44e535ccbadcf18241b187499c8a9c0eb1c554bace87cf430ea8429b0676531b"
+      },
+      {
+        "kit_id": "cl-transfer-12",
+        "path": "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/dated-transfer/kits/cl-transfer-12.v1.1.json",
+        "sha256": "ea43cb68e0619443101afdd738fcb359f96b9e031eeef00006afb3e09a890e5f"
+      },
+      {
+        "kit_id": "cl-transfer-13",
+        "path": "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/dated-transfer/kits/cl-transfer-13.v1.1.json",
+        "sha256": "fff6daf0bb33f00c74045a092a6f874822c819e37b39f9ad41eb505e253898c2"
+      },
+      {
+        "kit_id": "cl-transfer-14",
+        "path": "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/dated-transfer/kits/cl-transfer-14.v1.1.json",
+        "sha256": "7a6b13750fd4cee7c5bbb063070163135c1f20663f93ed28efdb72ac7e5474cd"
+      },
+      {
+        "kit_id": "cl-transfer-15",
+        "path": "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/dated-transfer/kits/cl-transfer-15.v1.1.json",
+        "sha256": "b2589cb1dd0f19a55d6fb7a15199bf72338064c59a7dc83c46b67b0e0ca8df17"
+      },
+      {
+        "kit_id": "cl-transfer-16",
+        "path": "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/dated-transfer/kits/cl-transfer-16.v1.1.json",
+        "sha256": "5626da9346676158484d557ac2c86474ac66cfc04485c3485690982f704924ee"
+      },
+      {
+        "kit_id": "cl-transfer-17",
+        "path": "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/dated-transfer/kits/cl-transfer-17.v1.1.json",
+        "sha256": "b52de0d5172f95bb62279aab9a44475074dff1ac350afafdcafe40a44257ce4b"
+      },
+      {
+        "kit_id": "cl-transfer-18",
+        "path": "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/dated-transfer/kits/cl-transfer-18.v1.1.json",
+        "sha256": "f38541efee926c54b329ab915f0d98bb88530e751545e14bd7b2231c8ed8aa28"
+      },
+      {
+        "kit_id": "cl-transfer-19",
+        "path": "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/dated-transfer/kits/cl-transfer-19.v1.1.json",
+        "sha256": "6ebd03e473f20ad4003e9facf51f603507046886e6e90090a370cbd4ee7de828"
+      },
+      {
+        "kit_id": "cl-transfer-20",
+        "path": "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/dated-transfer/kits/cl-transfer-20.v1.1.json",
+        "sha256": "7700a96872ef766c6f4926eedc28acea674134683c338991b9e5d2fa7f51f80c"
+      }
+    ],
+    "timezone": "America/Los_Angeles",
+    "max_dates": 20,
+    "max_legs": 120,
+    "leg_budget": "Transfer only. No replacements or reserve legs. Campaign cap remains 132.",
+    "opportunity": "First distinct local dates of authenticated W1/C/T starts from effective freeze 2, including re-arms and reserves. An abort after t0 counts. A midnight-crossing window that still holds the host and had no transfer t0 on its start date contributes its actual close date in place of the start date. One window gives at most one block and two windows on a date give one block. This substitution also applies to the final window.",
+    "stop": "End at the 20th place or with the last date that the series' last W1, C or T window makes eligible under RL-181 §3.2 as amended by RL-183 §3.1. Misses spend their ordinal and are never made up.",
+    "when": "One terminal read after the last place is served or expired and the required desks, hand-table sample and Q1 records are final.",
+    "stage1": "Commit an operational-only date map keyed by roster ordinal. Carry every eligible date, structural window authority, actual span t0-date, kit/roster identity, served or missed status, and each leg attempt disposition. Authenticate the committed stage-1 roster by SHA-256 before stage 2.",
+    "freeze2": {
+      "look_id": "lm-interim-01",
+      "hash_key": "freeze2_sha256",
+      "authority": "Use the shared freeze-2 reader under RL-183 §2.3. It authenticates the main-branch public hash and effective twin word or named ruling before returning the in-place coefficient bytes."
+    }
+  },
+  "inclusion": {
+    "stage1": "Use receipt and leg projections only. Match the date-place roster and accepted leg attempt, per-leg cap, G0 and verified reference, load-redo disposition and Automatic mode. Record excluded attempts and reasons. Require RL-179 row 7 records.",
+    "stage2": "Apply RL-149 §2.4 rules 3 and 4 using pinned inclusion code. Require at least 99% coverage with no gap over 2 s, rail gaps within U1, and present clean DC-in. Score hot decode blocks of every included A and L leg only. No exclusion by value or residual.",
+    "short_legs": [
+      {
+        "decode_cap": 3724,
+        "closing_stamp": 3583,
+        "last_token_stamp": 3723,
+        "gaps": 140
+      },
+      {
+        "decode_cap": 3151,
+        "closing_stamp": 3071,
+        "last_token_stamp": 3150,
+        "gaps": 79
+      }
+    ],
+    "tail_rule": "Score one terminal segment once on each of the measured and predicted sides, using the predictor's R-2/R-3 gap count and c = P + (first + last) / 2."
+  },
+  "estimate": {
+    "channels": [
+      "gpu_rail",
+      "dc_in"
+    ],
+    "daily_error": "(sum(predicted) - sum(measured)) / sum(measured)",
+    "minimum_hot_legs_per_date": 3,
+    "denominator": "Positive and finite within date and channel.",
+    "across_dates": "Equal-weight mean of signed daily errors, by channel. Describe observed evaluable dates.",
+    "interval": {
+      "series": "signed_daily_error",
+      "level": 0.9,
+      "quantile": 0.95,
+      "ddof": 1,
+      "formula": "mean(e) ± t(0.95, D - 1) × SD(e, ddof=1) / sqrt(D)",
+      "minimum_dates": 2
+    },
+    "support": "Zero evaluable dates gives neither point nor interval. One date gives the point only.",
+    "comparison_only_abs_error_cutoff": 0.02,
+    "restricted_prints": [
+      {
+        "id": "daily_errors",
+        "description": "daily signed and absolute errors",
+        "destination": "scores.json"
+      },
+      {
+        "id": "evaluable_dates",
+        "description": "evaluable date count",
+        "destination": "scores.json"
+      },
+      {
+        "id": "largest_absolute_daily_error",
+        "description": "largest absolute daily error",
+        "destination": "scores.json"
+      },
+      {
+        "id": "days_within_comparison_cutoff",
+        "description": "count of absolute daily errors at or below 0.02",
+        "destination": "scores.json"
+      },
+      {
+        "id": "mean_signed_error_and_interval",
+        "description": "mean of signed daily errors and its interval",
+        "destination": "scores.json"
+      },
+      {
+        "id": "pooled_signed_error",
+        "description": "pooled signed error over every included hot block on every date",
+        "destination": "scores.json"
+      },
+      {
+        "id": "date_map",
+        "description": "date map including misses and non-evaluable dates",
+        "destination": "scores.json"
+      }
+    ],
+    "pair_description": "Pair contrasts are descriptive. Span position was constant."
+  },
+  "code_pins": {
+    "predictor": {
+      "path": "joulewise/cadence_looks/fit_interim.py",
+      "sha256": "PENDING:CODE"
+    },
+    "inclusion": {
+      "path": "joulewise/cadence_looks/inclusion_34.py",
+      "sha256": "PENDING:CODE"
+    },
+    "scorer": {
+      "path": "joulewise/cadence_looks/transfer_score.py",
+      "sha256": "PENDING:CODE"
+    },
+    "manifest_schema": {
+      "path": "docs/process/cadence/looks/look_manifest.v2.schema.json",
+      "sha256": "PENDING:CODE"
+    },
+    "stage1_schema": {
+      "path": "docs/process/cadence/looks/lm-transfer-01.stage1.schema.json",
+      "sha256": "PENDING:CODE"
+    },
+    "output_schema": {
+      "path": "docs/process/cadence/looks/lm-transfer-01.output.schema.json",
+      "sha256": "PENDING:CODE"
+    },
+    "predictor_equivalence": "If the predict path hash differs from the admitted interim pin, the lead commits and pins evidence that type-A predictions are byte equal on every interim-scored segment, with one generated coefficient set. Any difference returns to Fable before stage 2.",
+    "validator": {
+      "path": "joulewise/cadence_looks/manifest_dispatch.py",
+      "sha256": "PENDING:CODE"
+    },
+    "schema_validator": {
+      "path": "joulewise/cadence_looks/qualification_manifest.py",
+      "sha256": "PENDING:CODE"
+    },
+    "release_boundary": {
+      "path": "joulewise/cadence_looks/transfer_release.py",
+      "sha256": "PENDING:CODE"
+    }
+  },
+  "outputs": {
+    "public_file": "PUBLIC.json",
+    "audit_output_schema": {
+      "path": "docs/process/cadence/looks/lm-transfer-01.output.schema.json",
+      "sha256": "aa565efbc55e9caf8e023606e9cfa19a5e4c04106d2c7532913ab150ad18a207"
+    },
+    "words": {
+      "transfer_interval": [
+        "estimated",
+        "not_evaluable"
+      ],
+      "stage2_error": [
+        "no"
+      ]
+    },
+    "hashes": [
+      "manifest_sha256",
+      "stage1_roster_sha256",
+      "freeze2_sha256"
+    ],
+    "interval_status_rule": "estimated exactly when the primary GPU-rail interval is available, otherwise not_evaluable. The 0.02 comparison contributes no word.",
+    "custody_names": [
+      "scores.json",
+      "stdout",
+      "stderr"
+    ],
+    "after_read_failure": {
+      "stderr_lines": [
+        "stage2_error",
+        "<allowed error type or OtherError>"
+      ],
+      "type_allowlist": [
+        "builtins",
+        "numpy.linalg.LinAlgError",
+        "json.JSONDecodeError",
+        "OtherError"
+      ],
+      "exit_status": 1,
+      "behavior": "Exactly two newline-terminated lines on original stderr. Stdout empty. No public file on failure. Lead records failed status and error_type in the ledger."
+    },
+    "pre_read_refusal_exit_status": 2
+  },
+  "reservation": {
+    "host": "Bind execution_host in the committed ledger and check local host before reservation.",
+    "preflight": "Authenticate registered scientific bytes and final code pins, terminal roster and date map, effective freeze 2, Fable cold pass, and stage-1 and desk commitments before any scoring input opens.",
+    "exclusive": "Create RESTRICTED exclusively after preflight and before the first scoring input opens. Redirect the process tree's stdout and stderr there before that open. Only the named public success file may be emitted outside it on success.",
+    "spent_id": "Existing RESTRICTED or PUBLIC.json, failure, or unknown read status spends the ID. No automatic retry; a new ID needs a named ruling under RL-180 row 7."
+  },
+  "cold_pass_checks": [
+    "Synthetic wrong-type and extra-key refusal via closed public shape.",
+    "Masked-hash invariance: precommitted roster stays fixed and identical public enums with pinned hashes give byte-identical public output when restricted numbers change.",
+    "Signed daily interval, equal date weight, one/zero-date support, both native L tails and channel-specific guards.",
+    "Exact post-read stderr bytes with Leak_123_456 mapped to OtherError. No stdout or public file.",
+    "Wrong host, concurrent reservation and spent-ID refusal before the first scoring input open.",
+    "A refusal before the first read exits 2; post-read status 1 follows only the two-line notice."
+  ]
+}

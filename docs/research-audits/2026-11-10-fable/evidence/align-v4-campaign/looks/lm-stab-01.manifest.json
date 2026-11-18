@@ -1,0 +1,157 @@
+{
+  "schema": "joulewise.cadence_look_manifest.v2",
+  "look_id": "lm-stab-01",
+  "look_kind": "description",
+  "status": "draft",
+  "title": "Standing stability series, first preregistered read",
+  "rulings": [
+    "RL-179 F-4(b), RLD:18718-18732",
+    "RL-180 section 3, RLD:19166-19173",
+    "RL-180 row 9, RLD:19224",
+    "RL-179 F-12, rows 26-28",
+    "RL-180 section 1 and rows 1-7,9",
+    "RL-181 sections 1.5 and 2"
+  ],
+  "kits": [
+    {
+      "kit_id": "f2-stab-01",
+      "sha256": "dbad9c7b79088bb6f06aac1c1148c3631a0c616fd2ece596bab0f56657ce70fe"
+    },
+    {
+      "kit_id": "f2-stab-02",
+      "sha256": "1fe8dd1d0fb60fe1d481ecb0d4358fda595668c1e889a35a75695e290fcad505"
+    },
+    {
+      "kit_id": "f2-stab-03",
+      "sha256": "ac4b303e228233765efda120b2d63f2f6e59d7f8565c4b913880c4a1aa1dc404"
+    },
+    {
+      "kit_id": "f2-stab-04",
+      "sha256": "494739dedbc07f2ee3a02b1e5f9561bb4812d765c7630e6931c24ea138525bff"
+    },
+    {
+      "kit_id": "f2-stab-05",
+      "sha256": "023febe9afc8532b8f06bb40dfe32dd64a933c99e8e080a51e2686e888246b11"
+    },
+    {
+      "kit_id": "f2-stab-06",
+      "sha256": "a02d18bafca780c580ae7dfe970e3a81e3e12b4051b269699db329f02c33172c"
+    },
+    {
+      "kit_id": "f2-stab-07",
+      "sha256": "fb22cadce8be3c7d7642c9b55802aa0bd4ea90e41c7c0e9a5038e7a8dc88746d"
+    },
+    {
+      "kit_id": "f2-stab-08",
+      "sha256": "aaba2ad04cbc88e9872c292699dfa9f98dfb15ad9f7e0af23a1faf0091bebf00"
+    },
+    {
+      "kit_id": "f2-stab-09",
+      "sha256": "9a2b863f7abbffdc2d33a3af6bee7d8381d0c54883dbb4a7cac41378572c5ce8"
+    },
+    {
+      "kit_id": "f2-stab-10",
+      "sha256": "bb54fdaff1292ab24f53204698649d0925fa00beedca70604f760a340c9ee926"
+    },
+    {
+      "kit_id": "f2-stab-11",
+      "sha256": "e8cb23471f556d21514fb5ba37ffa409b9b697cfbd2519d3c2ab0c6922ed36fe"
+    },
+    {
+      "kit_id": "f2-stab-12",
+      "sha256": "7a0440d3f15823760179782f85cad560e8ca917bf66201c02b1b911d79af35f9"
+    },
+    {
+      "kit_id": "f2-stab-13",
+      "sha256": "47c3d2f5f6133112e7a209c9522e48bb3388c7fa27f56e5ffdf86962d95f7de3"
+    },
+    {
+      "kit_id": "f2-stab-14",
+      "sha256": "73fe743e013cddd6d5294e95e076c64933a81eb95933fb4aa5dfb85471b9402d"
+    }
+  ],
+  "channels": [
+    "gpu_rail",
+    "rail_sum",
+    "dc_in"
+  ],
+  "when": "Due at the first proven close after stage 1 counts 14 distinct local t0-dates with a qualified stability leg. Require effective freeze 2 on main and the cold pass. Commit both stability manifests before reserving lm-stab-01 and run each when its preconditions hold on or after its due event. The second ID is due when the lead commits paper1_data_lock. If that comes first, run lm-stab-01 then and mark lm-stab-02 coalesced. The later ID has the same fourteen named kits plus the kits in f2-stab/KITS.json whose rows were committed before their first receipts. The later manifest pins the path and stage 1 pins its hash. Each read takes the legs closed at its stage-1 hash. The second read is a separate ID. No third read without a ruling.",
+  "stage1": "Commit the receipt-bound roster, each planned position's disposition and exact public counts before reservation. Authenticate kit IDs and digests, the closed receipt and the applicable hand table, Q1 and desk-final. Use only leg_record.json and runner_receipt.json to decide leg disposition: leg_status, g0_outcome, quiet span of at least 600 s, decode_tokens against the kit cap, decode_cap_reached, power mode and loaded flag. Carry loaded flags and keep short, unreleased-G0 and other failed legs in the accounting. n_legs counts qualified legs. Use one leg per span and count its distinct eligible t0-date for n_local_dates. Verify positional equivalence with f2-inst-01 in count, nominal prompt, decode cap, G0 shape, band and power mode. The differing base-to-stability fields are /campaign_id, /ruling/id, /seed_law/master_seed, /legs/*/seed. Between stability kits they are /campaign_id, /seed_law/master_seed (can coincide), /legs/*/seed. Bind actual kit digests. Commit the energy-blind token table using authenticated leg_record fields: kit_id, kit_sha256, span_id, leg_id, position, attempt, nominal_prefill_tokens, decode_cap, realised_prefill_tokens, realised_decode_tokens, local_t0_date, leg_status, decode_cap_reached, loaded_flag, disposition, missing_count_reason. The paper uses the same work only if the committed table shows exactly one realised (prefill, decode) pair at every position across all contributors. Otherwise it uses the same cell of work.",
+  "stage2": "Use the authenticated committed stage-1 roster. On each print's interval, check sidecar coverage, rail gaps against U1 and clean DC-in from timestamps and sample counts before reading any values on that interval. A failed check makes that print null with its reason and preserves the roster and public counts. Keep the RL-180 once-per-ID reservation and failure channel. Set the rail_sum_columns from the pinned step-3 loader for the bound host before finalization.",
+  "prints": [
+    {
+      "description": "hold_mean, hold_sd_window_means_10s, hold_sd_window_means_40s, hold_sd_window_means_128s. Use the recorded quiet span from its start for 600 s. Hold mean is energy divided by duration. Take contiguous 10, 40 and 128 s windows from the start (60, 15 and 4 full windows), discarding an incomplete final window. Drop and count windows with a gap over U1. Use sample SD (ddof 1) of window means, with null and reason under two windows. Use RL-166 Q2's pinned step-3 loader and Trace for GPU rail, sum the named rail columns sample by sample (a missing column is a gap), and use the trapezoid between consecutive KM003C samples clipped to the interval for DC-in. Use the interim clock mapping.",
+      "destination": "hold.json"
+    },
+    {
+      "description": "turn_energy_above_own_hold_through_decode_end_plus_1s. Integrate P minus the leg's hold mean from turn_start_s through last_token_s plus 1.000 s. Label the DC-in tail cut.",
+      "destination": "turn.json"
+    },
+    {
+      "description": "within_date_sd, sd_of_date_means. Within each prompt-size cell and channel, for each of the five measures, report each date's sample SD, the sample SD of the date means and pooled within-date SD (the square root of within-date variances weighted by their degrees of freedom). Count singleton dates and give their SD as null. Under two dates the SD of date means is null.",
+      "destination": "date_spreads.json"
+    },
+    {
+      "description": "by_local_hour, by_predecessor_kind_and_seconds_since_close. For each of the same five measures within a prompt-size cell and channel, use the span's local t0-hour and tag the immediately preceding proven close of the host, of any kind. Compute the gap from that close to t0 in elapsed seconds. Print an unknown predecessor or negative gap as such.",
+      "destination": "context.json"
+    }
+  ],
+  "code_pins": {
+    "reader": {
+      "path": "joulewise/cadence_looks/description.py",
+      "sha256": "PENDING:CODE"
+    },
+    "manifest_schema": {
+      "path": "docs/process/cadence/looks/look_manifest.v2.schema.json",
+      "sha256": "PENDING:CODE"
+    },
+    "stage1_schema": {
+      "path": "docs/process/cadence/looks/lm-stab-01.stage1.schema.json",
+      "sha256": "PENDING:CODE"
+    },
+    "output_schema": {
+      "path": "docs/process/cadence/looks/lm-stab-01.output.schema.json",
+      "sha256": "PENDING:CODE"
+    },
+    "restricted_schema": {
+      "path": "docs/process/cadence/looks/lm-stab-01.restricted.schema.json",
+      "sha256": "PENDING:CODE"
+    },
+    "validator": {
+      "path": "joulewise/cadence_looks/manifest_dispatch.py",
+      "sha256": "PENDING:CODE"
+    },
+    "schema_validator": {
+      "path": "joulewise/cadence_looks/qualification_manifest.py",
+      "sha256": "PENDING:CODE"
+    }
+  },
+  "outputs": {
+    "public_file": "PUBLIC.json",
+    "hashes": [
+      "manifest_sha256",
+      "stage1_sha256"
+    ],
+    "identifiers": [
+      "look_id",
+      "commit"
+    ],
+    "counts": [
+      "n_legs",
+      "n_local_dates"
+    ],
+    "custody_names": [
+      "hold.json",
+      "turn.json",
+      "date_spreads.json",
+      "context.json",
+      "stdout",
+      "stderr"
+    ]
+  },
+  "freeze2": {
+    "look_id": "lm-interim-01",
+    "hash_key": "freeze2_sha256",
+    "authority": "Authenticate the effective freeze-2 commitment on main under RL-180 row 3 and RL-183 section 2.3."
+  }
+}
