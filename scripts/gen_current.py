@@ -18,7 +18,7 @@ import tempfile
 
 
 ROOT = Path(__file__).resolve().parents[1]
-SCHEMA = "joulewise.current_pointer.v1"
+SCHEMA = "joulewise.current_pointer.v2"
 OBSERVABLES = frozenset({
     "result_json_exists", "results_branch_exists", "watchdog_status_state",
     "pr_merged", "ruling_recorded", "none",
@@ -118,6 +118,15 @@ def render(run_state_text: str) -> bytes:
     Other fenced code suppresses recognition of headings and pointer fences.
     Quoted and indented pointer fences are examples, never declarations.
     """
+    if __package__:
+        from . import run_state_items
+    else:
+        import run_state_items
+
+    parsed = run_state_items.parse(run_state_text)
+    errors = run_state_items.validate(parsed)
+    if errors:
+        raise PointerError("\n".join(map(str, errors)))
     candidates = []
     item = heading = None
     eligible = seen = False
@@ -162,6 +171,7 @@ def render(run_state_text: str) -> bytes:
     pointer = (max(candidates, key=lambda candidate: candidate[0])[1] if candidates else
                {"schema": SCHEMA, "source_item": None, "source_item_heading_date": None,
                 "owner": None, "armed": None, "wait": None, "next_observable": None})
+    pointer["open_items"] = run_state_items.open_items(parsed)
     return (json.dumps(pointer, indent=2, sort_keys=True, ensure_ascii=False) + "\n").encode("utf-8")
 
 
@@ -205,12 +215,31 @@ def _number(value: object, name: str) -> None:
 
 def validate(pointer: object) -> None:
     """Validate the generated schema; malformed output is invalid, not drift."""
+    if __package__:
+        from . import run_state_items
+    else:
+        import run_state_items
+
     _keys(pointer, {"schema", "source_item", "source_item_heading_date", "owner",
-                    "armed", "wait", "next_observable"}, "pointer")
+                    "armed", "wait", "next_observable", "open_items"}, "pointer")
     if pointer["schema"] != SCHEMA:
         raise ValueError(f"schema must be {SCHEMA}")
+    if not isinstance(pointer["open_items"], list):
+        raise ValueError("open_items must be an array")
+    previous = None
+    for entry in pointer["open_items"]:
+        _keys(entry, {"item", "status", "owner", "expires_epoch_s"}, "open_items entry")
+        number = entry["item"]
+        if type(number) is not int or number < 1 or (previous is not None and number >= previous):
+            raise ValueError("open_items item numbers must be positive integers in descending order")
+        if entry["status"] not in run_state_items.OPEN or entry["owner"] not in run_state_items.OWNERS:
+            raise ValueError("open_items entry has an invalid status or owner")
+        expiry = entry["expires_epoch_s"]
+        if expiry is not None and not run_state_items.valid_epoch(expiry):
+            raise ValueError("open_items expires_epoch_s must be null or integer seconds within the epoch bounds")
+        previous = number
     if pointer["source_item"] is None:
-        if any(pointer[key] is not None for key in pointer if key != "schema"):
+        if any(pointer[key] is not None for key in pointer if key not in {"schema", "open_items"}):
             raise ValueError("no-pointer document must have all declaration fields null")
         return
     if not isinstance(pointer["source_item"], str) or re.fullmatch(r"[1-9][0-9]*[a-z]?", pointer["source_item"]) is None:
@@ -273,7 +302,8 @@ def show(pointer: dict) -> str:
     wait_text = (f"{wait['observable']} deadline={wait['deadline_epoch_s']} on_early_or_refused={wait['on_early_or_refused']}"
                  if wait else "none")
     return (f"item={pointer['source_item']} date={pointer['source_item_heading_date']} "
-            f"owner={pointer['owner']} armed={arm_text} wait={wait_text} next={pointer['next_observable']}")
+            f"owner={pointer['owner']} armed={arm_text} wait={wait_text} next={pointer['next_observable']} "
+            f"open={len(pointer['open_items'])}")
 
 
 def main(argv=None) -> int:

@@ -259,7 +259,8 @@ class StateOnlyWorkflowTests(unittest.TestCase):
     """The workflow runs the BASE commit's classifier; a state-only range keeps the quick tier."""
 
     # The modules that read the live RUN_STATE.md, TASK_QUEUE.md or CURRENT.json content.
-    LIVE_STATE_READERS = ("tests.test_gen_state", "tests.test_gen_current", "tests.test_docs_freshness")
+    LIVE_STATE_READERS = ("tests.test_gen_state", "tests.test_gen_current", "tests.test_docs_freshness",
+                          "tests.test_run_state_items")
 
     def test_workflow_wires_the_classifier_into_the_quick_job(self):
         text = WORKFLOW.read_text(encoding="utf-8")
