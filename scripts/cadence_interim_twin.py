@@ -50,14 +50,6 @@ METER_PERIODS = {0: 0.5, 1: 0.1, 2: 0.02, 3: 0.001}
 SQRT_TWO = math.sqrt(2)
 LOG_SQRT_TWO_PI = math.log(2 * math.pi) / 2
 
-# Census defaults pending RL-184.
-PRESERVE_BUNDLE_PATH_SPELLING = True  # F01
-ALLOW_EMPTY_SOAK_ATTEMPTS = True  # F02
-ALLOW_MISSING_SOAK_MEMBERS = True  # F03
-VALIDATE_SOAK_HISTORY = True  # F04
-FALL_BACK_ON_UNKNOWN_LEGACY_SOAK_KIND = True  # F05
-HOT_ERROR_FOR_VERDICT = float  # F08
-
 
 @dataclass(frozen=True)
 class FitLeg:
@@ -395,7 +387,7 @@ def interim_verdict(day_hot_totals):
             errors.append(abs(predicted - measured) / measured)
     if len(errors) < 3:
         return "not_evaluable"
-    return "passes" if HOT_ERROR_FOR_VERDICT(max(errors)) <= 0.02 else "fails"
+    return "passes" if max(errors) <= 0.02 else "fails"
 
 
 class _ArgumentParser(argparse.ArgumentParser):
@@ -614,10 +606,6 @@ def relative_differences(left, right):
             yield abs(left / scale - right / scale)
 
 
-COEFFICIENT_DIFFERENCES = relative_differences  # F06
-CENSORED_FIT_DIFFERENCES = relative_differences  # F07
-
-
 def comparison_frame(primary, twin):
     def pair(primary_values, twin_values):
         return {"primary": primary_values, "twin": twin_values}
@@ -627,13 +615,11 @@ def comparison_frame(primary, twin):
         frame[field] = {c: pair(primary[field][c], twin[field][c]) for c in sorted(CHANNELS)}
     for field in ("censored_fit", "verdicts", "soak_retries"):
         frame[field] = pair(primary[field], twin[field])
-    differences = {
-        channel: max(COEFFICIENT_DIFFERENCES(values["primary"], values["twin"]), default=None)
-        for channel, values in frame["coefficients"].items()
+    numeric = frame["coefficients"] | {"censored_fit": frame["censored_fit"]}
+    frame["max_relative_difference"] = {
+        field: max(relative_differences(values["primary"], values["twin"]), default=None)
+        for field, values in numeric.items()
     }
-    differences["censored_fit"] = max(CENSORED_FIT_DIFFERENCES(primary["censored_fit"], twin["censored_fit"]),
-                                      default=None)
-    frame["max_relative_difference"] = differences
     return frame
 
 
@@ -1047,71 +1033,69 @@ def responses_for_leg(record, gpu, dc_segment_reader):
 
 
 SOAK_KINDS = ("slope", "load", "kind not recorded")
+SOAK_RETRIES = 1  # 6e9d42f1d:scripts/cadence_legs_runner.py:84
+SOAK_ATTEMPT_FIELDS = {"attempt", "started_epoch_s", "refused", "output_dir"}
 
 
 def span_soak(receipt):
-    structured = receipt.get("soak_refusals", [])
-    if ALLOW_MISSING_SOAK_MEMBERS and structured is None:
-        structured = []
-    if not isinstance(structured, list):
-        raise ValueError("invalid structured soak refusals")
+    """Project only the soak records admitted by RL-184 §3.3."""
+    # None of the three rostered writer pins emits a structured refusal array.
+    if "soak_refusals" in receipt:
+        raise ValueError("structured soak refusals are not emitted by the rostered writers")
+
+    steps = receipt.get("steps")
+    if not isinstance(steps, list):
+        raise ValueError("invalid runner receipt steps")
+    soak_steps = []
+    waits = set()
+    for step in steps:
+        if not isinstance(step, dict) or not isinstance(step.get("name"), str) or not step["name"]:
+            raise ValueError("invalid runner step")
+        name = step["name"]
+        if name in ("soak-blackout-wait", "soak.a2-blackout-wait"):
+            prior_attempts = int(name == "soak.a2-blackout-wait")
+            if name in waits or len(soak_steps) != prior_attempts:
+                raise ValueError("invalid soak wait order")
+            waits.add(name)
+            continue
+        if name == "soak" or name.startswith("soak.a"):
+            rc = step.get("rc")
+            if rc is not None and type(rc) is not int:
+                raise ValueError("invalid soak step return code")
+            soak_steps.append((name, rc))
+
     if "soak_attempts" not in receipt:
-        if VALIDATE_SOAK_HISTORY and structured:
-            raise ValueError("structured refusal without a recorded attempt")
+        if "soak.a2-blackout-wait" in waits or [name for name, _ in soak_steps] not in ([], ["soak"]):
+            raise ValueError("invalid legacy soak history")
         return {"attempts": 1, "field_present": False, "accepted": True, "retried": []}
+
     attempts = receipt["soak_attempts"]
-    if not isinstance(attempts, list) or (not attempts and not ALLOW_EMPTY_SOAK_ATTEMPTS):
+    if not isinstance(attempts, list) or len(attempts) > SOAK_RETRIES + 1:
         raise ValueError("invalid soak attempts")
-    numbers = range(1, len(attempts) + 1)
-    if [row["attempt"] for row in attempts] != list(numbers):
-        raise ValueError("invalid soak attempt order")
-    refused = [row.get("refused") if ALLOW_MISSING_SOAK_MEMBERS else row["refused"] for row in attempts]
-    names = ["soak" if number == 1 else f"soak.a{number}" for number in numbers]
-    if VALIDATE_SOAK_HISTORY:
-        steps = []
-        for step in receipt.get("steps") or []:
-            name = step.get("name") if isinstance(step, dict) else None
-            if isinstance(name, str) and (name == "soak" or name.startswith("soak.a")):
-                steps.append(step)
-        if [step["name"] for step in steps] != names:
-            raise ValueError("invalid soak step order")
-        for number, (reason, step) in enumerate(zip(refused, steps, strict=True), 1):
-            rc = step.get("rc") if ALLOW_MISSING_SOAK_MEMBERS else step["rc"]
-            if reason is not None and (not isinstance(reason, str) or rc == 0):
-                raise ValueError("invalid refused soak attempt")
-            if number < len(attempts) and (not reason or rc is None):
-                raise ValueError("retry without a failed soak step")
-    else:
-        steps = [step for step in receipt.get("steps", []) if names and step["name"] == names[-1]]
-        if names and len(steps) != 1:
-            raise ValueError("missing or repeated final soak step")
-    distinct = {}
-    for row in structured:
-        if VALIDATE_SOAK_HISTORY and (not isinstance(row, dict) or row.keys() != {"attempt", "kind"}):
-            raise ValueError("invalid structured soak refusal fields")
-        number, kind = row["attempt"], row["kind"]
-        if VALIDATE_SOAK_HISTORY and (type(number) is not int or not 1 <= number <= len(attempts)
-                                      or not refused[number - 1]):
-            raise ValueError("structured refusal without a matching refused attempt")
-        if number in distinct or kind not in SOAK_KINDS[:2] or not 1 <= number <= len(attempts):
-            raise ValueError("invalid soak refusal")
-        distinct[number] = kind
-    retried = []
-    for number, row in enumerate(attempts[:-1], 1):
-        legacy_kind = row.get("refusal_kind")
-        if number in distinct:
-            kind, source = distinct[number], "receipt soak_refusals[].kind"
-        elif legacy_kind in SOAK_KINDS[:2] or (legacy_kind is not None and not FALL_BACK_ON_UNKNOWN_LEGACY_SOAK_KIND):
-            kind, source = legacy_kind, "receipt soak_attempts[].refusal_kind"
-        else:
-            kind, source = "kind not recorded", None
-        if kind not in SOAK_KINDS:
-            raise ValueError("unknown soak refusal kind")
-        retried.append({"attempt": number, "kind": kind, "read_from": source})
-    accepted = False
-    if attempts:
-        final_rc = steps[-1].get("rc") if ALLOW_MISSING_SOAK_MEMBERS else steps[-1]["rc"]
-        accepted = refused[-1] is None and final_rc == 0
+    expected_names = ["soak", "soak.a2"][:len(attempts)]
+    if [name for name, _ in soak_steps] != expected_names:
+        raise ValueError("invalid soak step order")
+
+    for number, (row, (_, rc)) in enumerate(zip(attempts, soak_steps, strict=True), 1):
+        if not isinstance(row, dict) or row.keys() != SOAK_ATTEMPT_FIELDS:
+            raise ValueError("invalid soak attempt fields")
+        if type(row["attempt"]) is not int or row["attempt"] != number:
+            raise ValueError("invalid soak attempt order")
+        if type(row["started_epoch_s"]) not in (int, float) or not math.isfinite(row["started_epoch_s"]):
+            raise ValueError("invalid soak attempt time")
+        reason = row["refused"]
+        if reason is not None and (not isinstance(reason, str) or not reason or rc == 0):
+            raise ValueError("invalid refused soak attempt")
+        if number < len(attempts) and (reason is None or rc is None):
+            raise ValueError("retry without a failed soak step")
+        if row["output_dir"] != "soak" and (number != 1 or reason is None or row["output_dir"] != "soak.rejected1"):
+            raise ValueError("invalid soak attempt directory")
+
+    if "soak.a2-blackout-wait" in waits and (attempts[0]["refused"] is None or soak_steps[0][1] is None):
+        raise ValueError("retry wait without a failed soak step")
+    retried = [{"attempt": number, "kind": "kind not recorded", "read_from": None}
+               for number in range(1, len(attempts))]
+    accepted = bool(attempts and attempts[-1]["refused"] is None and soak_steps[-1][1] == 0)
     return {"attempts": len(attempts), "field_present": True, "accepted": accepted, "retried": retried}
 
 
@@ -1438,21 +1422,20 @@ def span_identities(span):
             continue
         record = decode_json(record_path.read_bytes())
         bundle = (record.get("result") or {}).get("bundle")
-        if not bundle or record.get("spec", {}).get("leg_type") == "T":
+        if bundle is None:
             continue
-        bundle_path = Path(bundle)
-        runtime = Path(prefix) / "runtime"
-        resolved = (span / runtime / bundle_path).resolve()
+        # Check the literal spelling before any pathlib normalization.
+        if not isinstance(bundle, str) or "\0" in bundle or any(
+                part in ("", ".", "..") for part in bundle.split("/")):
+            raise ValueError("invalid runtime bundle path")
+        if record.get("spec", {}).get("leg_type") == "T":
+            continue
+        runtime = f"{prefix}/runtime"
+        relative = f"{runtime}/{bundle}"
+        resolved = (span / relative).resolve()
         # Missing bundles remain eligible for Step 3's per-leg absence handling.
-        if not resolved.is_relative_to(span / runtime):
+        if resolved == span / runtime or not resolved.is_relative_to(span / runtime):
             raise ValueError("bundle escapes the leg runtime directory")
-        if PRESERVE_BUNDLE_PATH_SPELLING:
-            relative = (bundle_path.relative_to(span).as_posix() if bundle_path.is_absolute()
-                        else f"{runtime.as_posix()}/{bundle}")
-        else:
-            if bundle_path.is_absolute() or not bundle_path.parts or ".." in bundle_path.parts:
-                raise ValueError("invalid runtime bundle path")
-            relative = (runtime / bundle_path).as_posix()
         bundles[leg] = relative
         names.update(f"{relative}/{suffix}" for suffix in OPERATIONAL_BUNDLE_FILES)
 
@@ -1466,7 +1449,7 @@ def span_identities(span):
         rich = present_file(span, f"{relative}/rich_telemetry.jsonl")
         native = present_file(span, f"{relative}/raw/powermetrics.plist")
         if rich is not None and native is not None:
-            native_time[relative.rstrip("/")] = native_time_digest(rich.read_bytes(), native.read_bytes())
+            native_time[relative] = native_time_digest(rich.read_bytes(), native.read_bytes())
     return receipt, bundles, raw_files, native_time
 
 
@@ -1494,7 +1477,7 @@ def verified_span_inputs(span, identity, inventory):
 
 
 def inventory_path(root, spans, path):
-    if not PRESERVE_BUNDLE_PATH_SPELLING and ".." in path.parts:
+    if ".." in path.parts:
         raise ValueError("parent traversal in comparison input")
     if path.is_absolute():
         # An inventory may already name the selected physical span directory.
@@ -1545,6 +1528,7 @@ def recompute_bundle(args, stage1, fit_identity, step3_identity, decoder_pin, th
     receipts, bundle_paths, streams = {}, {}, {}
     for key, row in span_records.items():
         receipts[key], bundle_paths[key], streams[key] = verified_span_inputs(directories[key], row["custody"], inventory)
+    soak = soak_summary(receipts)
     parse = meter_decoder(decoder_pin, (stream for inputs in streams.values() for stream in inputs))
     fit_legs = [row for row in stage1["legs"] if row["in_energy_fit"]]
     step3_legs = [row for row in stage1["legs"] if row["included"] and row["role"] == "fit" and row["leg_type"] == "A"]
@@ -1579,7 +1563,7 @@ def recompute_bundle(args, stage1, fit_identity, step3_identity, decoder_pin, th
         responses.append(responses_for_leg(row, gpu, dc_readers[key]))
     marked = {key for key, row in span_records.items() if row["marks"]}
     fit = recompute_fit(stage1, fit_legs, responses, marked)
-    fit["soak_retries"] = soak_summary(receipts)
+    fit["soak_retries"] = soak
 
     def read_step3_leg(row):
         relative = known_bundles[row["leg_key"]]

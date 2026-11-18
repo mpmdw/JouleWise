@@ -58,8 +58,12 @@ def parent_agreement(frame):
     return "yes" if all(equal(p["primary"], p["twin"], t) for p, t in pairs) else "no"
 
 
+def soak_attempt(number, refused=None, output_dir="soak"):
+    return {"attempt": number, "started_epoch_s": 100.0 + number, "refused": refused, "output_dir": output_dir}
+
+
 class ComparisonTests(unittest.TestCase):
-    def test_census_f06_f07_relative_metrics_remain_separate(self):
+    def test_rl184_f06_f07_near_zero_still_returns_no(self):
         from copy import deepcopy
         from scripts.cadence_interim_twin import comparison_frame, projections
 
@@ -415,13 +419,19 @@ class FitTests(unittest.TestCase):
 
 
 class DiagnosticsTests(unittest.TestCase):
-    def test_census_f08_unrounded_inclusive_hot_cutoff(self):
-        from scripts.cadence_interim_twin import interim_verdict
+    def test_rl184_f08_unrounded_inclusive_hot_cutoff_and_exact_words(self):
+        from copy import deepcopy
+        from scripts.cadence_interim_twin import comparison_frame, interim_verdict, projections
 
         for predicted, expected in ((math.nextafter(49.0, -math.inf), "passes"),
                                     (49.0, "passes"), (math.nextafter(49.0, math.inf), "fails")):
             with self.subTest(predicted=predicted):
                 self.assertEqual(interim_verdict(dict.fromkeys("abc", [(predicted, 48), (1, 1), (1, 1)])), expected)
+        baseline = projections(*example_outputs())
+        changed = deepcopy(baseline)
+        word = next(key for key in changed["verdicts"] if key.endswith("/lodo/hot/verdict"))
+        changed["verdicts"][word] = "fails"
+        self.assertEqual(parent_agreement(comparison_frame(baseline, changed)), "no")
 
     def test_hand_derived_trapezoid_and_coverage(self):
         from scripts.cadence_interim_twin import dc_segment, trace_coverage
@@ -446,31 +456,37 @@ class DiagnosticsTests(unittest.TestCase):
 
 
 class ReaderTests(unittest.TestCase):
-    def test_census_f01_preserves_operation_keys_and_trims_native_suffix(self):
+    def test_rl184_f01_admits_only_literal_relative_posix_paths(self):
         from scripts.cadence_interim_twin import inventory_path, span_identities
 
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp).resolve()
             span = root / "staged-span"
             runtime = span / "legs/a/runtime"
-            bundle = runtime / "runs/cadence-leg"
-            (bundle / "raw").mkdir(parents=True)
-            for name in ("events.jsonl", "rich_telemetry.jsonl", "raw/powermetrics.plist"):
-                (bundle / name).touch()
-            (span / "runner_receipt.json").write_text('{"roster":["a"]}')
+            (span / "runner_receipt.json").parent.mkdir()
+            (span / "runner_receipt.json").write_text('{"roster":["a"],"steps":[]}')
             record = runtime.parent / "leg_record.json"
-            for spelling in ("./runs/./cadence-leg", "runs//cadence-leg", "runs/cadence-leg/",
-                             "runs/../runs/cadence-leg", str(bundle)):
+            for spelling in ("leaf", "runs/cadence-leg"):
                 with self.subTest(spelling=spelling):
+                    bundle = runtime / spelling
+                    (bundle / "raw").mkdir(parents=True)
+                    for name in ("events.jsonl", "rich_telemetry.jsonl", "raw/powermetrics.plist"):
+                        (bundle / name).touch()
                     record.write_text(json.dumps({"result": {"bundle": spelling}}))
                     _, bundles, operations, native = span_identities(span)
-                    expected = (bundle.relative_to(span).as_posix() if spelling == str(bundle)
-                                else f"legs/a/runtime/{spelling}")
+                    expected = f"legs/a/runtime/{spelling}"
                     self.assertEqual(bundles, {"a": expected})
                     self.assertIn(f"{expected}/events.jsonl", operations)
-                    self.assertEqual(set(native), {expected.rstrip("/")})
+                    self.assertEqual(set(native), {expected})
                     self.assertEqual(inventory_path(root, {"s": span}, Path(f"s/{expected}/events.jsonl")),
                                      bundle / "events.jsonl")
+            record.write_text('{"result":{"bundle":null}}')
+            self.assertEqual(span_identities(span)[1], {})
+            for spelling in ("./runs/./cadence-leg", "runs//cadence-leg", "runs/cadence-leg/", "",
+                             "runs/../runs/cadence-leg", str(bundle), ".", "contains\0null", False):
+                with self.subTest(spelling=spelling), self.assertRaisesRegex(ValueError, "runtime bundle path"):
+                    record.write_text(json.dumps({"result": {"bundle": spelling}}))
+                    span_identities(span)
 
     def test_inventory_uses_the_selected_span_for_logical_paths(self):
         from scripts.cadence_interim_twin import check_custody_inventory, digest, span_dirs
@@ -686,65 +702,91 @@ def parse(path):
     def test_soak_retries_read_legacy_and_current_receipts(self):
         from scripts.cadence_interim_twin import soak_summary
 
-        receipts = {"a": {}, "b": {
-            "steps": [{"name": "soak", "rc": 1}, {"name": "soak.a2", "rc": 1}, {"name": "soak.a3", "rc": 0}],
-            "soak_attempts": [{"attempt": 1, "refused": "refused", "refusal_kind": "load"},
-                              {"attempt": 2, "refused": "refused", "refusal_kind": "load"},
-                              {"attempt": 3, "refused": None}],
-            "soak_refusals": [{"attempt": 1, "kind": "slope"}],
+        receipts = {"a": {"steps": [{"name": "soak", "rc": 0}]}, "b": {
+            "steps": [{"name": "soak", "rc": 1}, {"name": "soak.a2-blackout-wait", "rc": 0},
+                      {"name": "soak.a2", "rc": 0}],
+            "soak_attempts": [soak_attempt(1, "refused", "soak.rejected1"), soak_attempt(2)],
         }, "c": {"steps": [{"name": "soak", "rc": 1}, {"name": "soak.a2", "rc": 1}],
-                   "soak_attempts": [{"attempt": 1, "refused": "refused"},
-                                     {"attempt": 2, "refused": "refused"}]}}
+                   "soak_attempts": [soak_attempt(1, "refused"), soak_attempt(2, "refused")]}}
         summary = soak_summary(receipts)
         self.assertEqual(summary["spans"]["a"], {"attempts": 1, "field_present": False,
                                                 "accepted": True, "retried": []})
         self.assertEqual(summary["spans"]["b"]["retried"], [
-            {"attempt": 1, "kind": "slope", "read_from": "receipt soak_refusals[].kind"},
-            {"attempt": 2, "kind": "load", "read_from": "receipt soak_attempts[].refusal_kind"},
+            {"attempt": 1, "kind": "kind not recorded", "read_from": None},
         ])
         self.assertEqual(summary["spans"]["c"]["retried"], [
             {"attempt": 1, "kind": "kind not recorded", "read_from": None},
         ])
         self.assertEqual(summary["spans_with_retry"], 2)
-        self.assertEqual(summary["retried_by_kind"], {"slope": 1, "load": 1, "kind not recorded": 1})
+        self.assertEqual(summary["retried_by_kind"], {"slope": 0, "load": 0, "kind not recorded": 2})
         self.assertEqual(summary["accepted_after_retry"], 1)
         self.assertEqual(summary["stopped_by_soak"], 1)
 
-    def test_census_f02_through_f05_current_receipt_defaults(self):
+    def test_rl184_f02_empty_attempts_and_f03_incomplete_soak(self):
         from copy import deepcopy
         from scripts.cadence_interim_twin import soak_summary, span_soak
 
-        empty = soak_summary({"s": {"soak_attempts": [], "steps": []}})
+        empty_receipt = {"soak_attempts": [], "steps": [{"name": "soak-blackout-wait", "rc": 0}]}
+        empty = soak_summary({"s": empty_receipt})
         self.assertEqual(empty["spans"]["s"], {"attempts": 0, "field_present": True,
                                                "accepted": False, "retried": []})
         self.assertEqual(empty["stopped_by_soak"], 0)
-        with self.assertRaises(ValueError):
-            span_soak({"soak_attempts": None})
+        with self.assertRaisesRegex(ValueError, "invalid soak attempts"):
+            span_soak({**empty_receipt, "soak_attempts": None})
+        with self.assertRaisesRegex(ValueError, "invalid soak step order"):
+            span_soak({**empty_receipt, "steps": [{"name": "soak", "rc": 0}]})
 
-        base = {"soak_attempts": [{"attempt": 1, "refused": "synthetic"}, {"attempt": 2}],
-                "steps": [None, {}, {"name": "soak", "rc": 1}, {"name": "soak.a2", "rc": 0}],
-                "soak_refusals": None}
-        self.assertTrue(span_soak(base)["accepted"])
+        base = {"soak_attempts": [soak_attempt(1)], "steps": [{"name": "soak", "rc": 0}]}
         no_rc = deepcopy(base)
         del no_rc["steps"][-1]["rc"]
         self.assertFalse(span_soak(no_rc)["accepted"])
+        self.assertFalse(span_soak({**base, "steps": [{"name": "soak", "rc": None}]})["accepted"])
+        self.assertFalse(span_soak({**base, "steps": [{"name": "soak", "rc": 130}]})["accepted"])
+        interrupted = {"soak_attempts": [soak_attempt(1, "refused", "soak.rejected1")],
+                       "steps": [{"name": "soak", "rc": 1}, {"name": "soak.a2-blackout-wait", "rc": 130}]}
+        self.assertEqual(span_soak(interrupted), {"attempts": 1, "field_present": True,
+                                                 "accepted": False, "retried": []})
+        del no_rc["soak_attempts"][0]["refused"]
+        with self.assertRaisesRegex(ValueError, "soak attempt fields"):
+            span_soak(no_rc)
+        with self.assertRaises(ValueError):
+            span_soak({**base, "soak_refusals": None})
+
+    def test_rl184_f04_f05_refuse_contradictory_history_and_unknown_kinds(self):
+        from scripts.cadence_interim_twin import span_soak
+
+        base = {"soak_attempts": [soak_attempt(1, "synthetic"), soak_attempt(2)],
+                "steps": [{"name": "soak", "rc": 1}, {"name": "soak.a2", "rc": 0}]}
         histories = [
-            {"soak_attempts": [{"attempt": 1, "refused": None}, {"attempt": 2}]},
+            {"soak_attempts": [soak_attempt(1), soak_attempt(2)]},
+            {"soak_attempts": [soak_attempt(True, "synthetic"), soak_attempt(2)]},
+            {"soak_attempts": [soak_attempt(1, "synthetic"), soak_attempt(2, output_dir="soak.rejected2")]},
+            {"soak_attempts": [soak_attempt(1, "synthetic"), soak_attempt(2, "synthetic"), soak_attempt(3)],
+             "steps": [{"name": "soak", "rc": 1}, {"name": "soak.a2", "rc": 1}, {"name": "soak.a3", "rc": 0}]},
             {"steps": [{"name": "soak", "rc": 0}, {"name": "soak.a2", "rc": 0}]},
+            {"steps": [{"name": "soak"}, {"name": "soak.a2", "rc": 0}]},
             {"steps": [{"name": "soak.a2", "rc": 0}]},
             {"steps": list(reversed(base["steps"]))},
             {"steps": [*base["steps"], {"name": "soak.a3", "rc": 0}]},
+            {"steps": [None, *base["steps"]]},
+            {"steps": [{}, *base["steps"]]},
+            {"steps": [{"name": "soak.a2-blackout-wait", "rc": 0}, *base["steps"]]},
             *[{"soak_refusals": [{"attempt": n, "kind": "load"}]} for n in (True, 1.0, 2, 3)],
             {"soak_refusals": [{"attempt": 1, "kind": "load", "extra": 1}]},
         ]
         for overrides in histories:
             with self.subTest(overrides=overrides), self.assertRaises(ValueError):
                 span_soak({**base, **overrides})
-        for kind in ("other", "kind not recorded"):
-            with self.subTest(legacy_kind=kind):
-                base["soak_attempts"][0]["refusal_kind"] = kind
-                self.assertEqual(span_soak(base)["retried"],
-                                 [{"attempt": 1, "kind": "kind not recorded", "read_from": None}])
+        for kind in ("other", "kind not recorded", "load"):
+            with self.subTest(legacy_kind=kind), self.assertRaisesRegex(ValueError, "soak attempt fields"):
+                attempts = [dict(base["soak_attempts"][0], refusal_kind=kind), soak_attempt(2)]
+                span_soak({**base, "soak_attempts": attempts})
+        attempt_with_phantom_kind = dict(base["soak_attempts"][0], soak_refusals_kind="load")
+        with self.assertRaisesRegex(ValueError, "soak attempt fields"):
+            span_soak({**base, "soak_attempts": [attempt_with_phantom_kind, soak_attempt(2)]})
+        for structured in ([], [{"attempt": 1, "kind": "load"}]):
+            with self.subTest(structured=structured), self.assertRaisesRegex(ValueError, "rostered writers"):
+                span_soak({**base, "soak_refusals": structured})
 
     def test_step3_fixed_effect_and_tripwire_against_hand_fit(self):
         from scripts.cadence_interim_twin import mean_centered_slope, step3_projection
@@ -1097,7 +1139,8 @@ class RawBundleTests(unittest.TestCase):
                 operational = {}
                 native_identity = {}
                 roster = ["a", "b", "c"] + (["d"] if index == 0 else [])
-                operational["runner_receipt.json"] = write(span / "runner_receipt.json", json_bytes({"roster": roster}))
+                operational["runner_receipt.json"] = write(span / "runner_receipt.json",
+                                                           json_bytes({"roster": roster, "steps": []}))
                 header = {"k": "h", "schema": "synthetic", "status": "streaming", "rate_idx": 0, "sps": 2,
                           "poll_s": 0.5, "start_raw_ns": 10**10, "start_real_ns": 0, "start_mono_ns": 10**10}
                 polls, poll_preimages = [], []
@@ -1199,6 +1242,15 @@ class RawBundleTests(unittest.TestCase):
                         inventory_path = Path(day) / path.relative_to(span) if index == 0 else path
                         fixture_files.append({"path": str(inventory_path), "sha256": sha(path.read_bytes())})
 
+            empty_span = "2026-01-04"
+            empty_receipt = custody / empty_span / "runner_receipt.json"
+            empty_digest = write(empty_receipt, json_bytes({"roster": [], "soak_attempts": [],
+                                "steps": [{"name": "deadline", "rc": 130}, {"name": "restore", "rc": 0}]}))
+            fixture_files.append({"path": str(empty_receipt), "sha256": empty_digest})
+            spans.append({"span_id": empty_span, "role": "describe", "marks": [],
+                          "t0_local_date": empty_span, "custody": {"files_sha256": {"runner_receipt.json": empty_digest},
+                              "meter_time_sha256": None, "native_pm_sha256": {}}})
+
             local_script = root / "scripts" / SCRIPT.name
             local_script.parent.mkdir()
             shutil.copyfile(SCRIPT, local_script)
@@ -1224,6 +1276,7 @@ class RawBundleTests(unittest.TestCase):
             soak = {"spans": {day: {"attempts": 1, "field_present": False, "accepted": True, "retried": []}
                               for day in days}, "spans_with_retry": 0, "accepted_after_retry": 0, "stopped_by_soak": 0,
                     "retried_by_kind": {"slope": 0, "load": 0, "kind not recorded": 0}}
+            soak["spans"][empty_span] = {"attempts": 0, "field_present": True, "accepted": False, "retried": []}
             stage1.update({"look_id": "lm-interim-01", "manifest_sha256": mh, "numpy_version": np.__version__,
                 "synthetic": True, "rates": {"r_p": 14 / 24, "r_d": 1024 / 40}, "centring": readings,
                 "active_readings": {name: {"active": False} for name in readings}, "calibrated_range": {},
