@@ -1,9 +1,8 @@
 #!/usr/bin/env python3
 """Independent lm-interim-01 arithmetic and isolated child output boundary.
 
-The functions below take decoded values. The parent-to-child argument and
-record layout needs a published synthetic spec before the direct entry point
-can evaluate a bundle. See the run report for the missing interface clauses.
+The parent owns reservation, descriptor capture, the comparison decision,
+and all result files. This child only opens inputs and emits one frame.
 """
 
 from __future__ import annotations
@@ -13,25 +12,37 @@ import sys
 if __name__ == "__main__":
     sys.dont_write_bytecode = True
 
+import argparse
 from bisect import bisect_right
+import builtins
 from collections import Counter
-from dataclasses import dataclass
+import csv
+from dataclasses import dataclass, replace
+import hashlib
+import io
 import json
 import math
 import os
 from pathlib import Path
+import plistlib
+import re
+import struct
 
 
 CHANNELS = {"gpu_rail", "dc_in"}
 BASE_COLUMNS = ("p1", "p2", "a0", "a1", "a2")
-COMPARISONS = {
-    "coefficients": 1e-8,
-    "censored_fit": 1e-6,
-    "verdicts": 0,
-    "trace_coverage": 0,
-    "soak_retries": 0,
+COMPARISON_SCHEMA = "joulewise.cadence_twin_comparison.v1"
+TRIPWIRES = ("dev_included_below_45", "days_below_4", "cell_below_10",
+             "start_reading_invalid_over_10pct", "hp01_below_9")
+READINGS = {"tf08_c": "k_tf08", "fan_rpm": "k_fan", "tv0h_excess_c": "k_tv0h"}
+COEFFICIENT_KEYS = {
+    "schema", "look_id", "synthetic", "manifest_sha256", "stage1_sha256", "fit_sha256",
+    "code_sha256", "numpy_version", "block_tokens", "prefix", "rates", "centring",
+    "calibrated_range", "active_readings", "onset", "delta_column", "channels",
+    "qualified_interim_half",
 }
-WORDS = {word: (word + "\n").encode("ascii") for word in ("yes", "no", "not_evaluable")}
+BUILTIN_ERRORS = {value: name for name, value in vars(builtins).items()
+                  if isinstance(value, type) and issubclass(value, BaseException) and name == value.__name__}
 SQRT_TWO = math.sqrt(2)
 LOG_SQRT_TWO_PI = math.log(2 * math.pi) / 2
 
@@ -69,6 +80,10 @@ class OnsetRow:
     prefill_s: float
     end_s: float
     observed: bool
+
+
+class RankDeficient(ValueError):
+    """A sensitivity fit can be unavailable even with valid inputs."""
 
 
 def token_rates(legs):
@@ -146,14 +161,16 @@ def fit_channel(columns, design, response):
     response = np.asarray(response, dtype=float)
     if matrix.shape != (len(response), len(columns)) or response.ndim != 1:
         raise ValueError("inconsistent energy design")
-    if matrix.shape[0] < matrix.shape[1] or not np.isfinite(matrix).all() or not np.isfinite(response).all():
-        raise ValueError("insufficient or invalid energy rows")
+    if not np.isfinite(matrix).all() or not np.isfinite(response).all():
+        raise ValueError("invalid energy rows")
+    if matrix.shape[0] < matrix.shape[1]:
+        raise RankDeficient("insufficient energy rows")
     scales = np.sqrt(np.mean(matrix**2, axis=0))
     if np.any(scales == 0):
-        raise ValueError("empty energy column")
+        raise RankDeficient("empty energy column")
     left, singular, right = np.linalg.svd(matrix / scales, full_matrices=False)
     if singular[-1] < 1e-10 * singular[0]:
-        raise ValueError("rank-deficient energy design")
+        raise RankDeficient("rank-deficient energy design")
     solution = right.T @ ((left.T @ response) / singular)
     return dict(zip(columns, (float(value) for value in solution / scales), strict=True))
 
@@ -262,12 +279,12 @@ def censored_normal(design, end_s, observed):
     return OnsetFit(tuple(float(value) for value in sigma * point[:-1] / x_scale), sigma)
 
 
-def fit_onset(rows, *, held_out_day=None):
+def fit_onset(rows, *, held_out_day=None, sensitivity=False):
     """Apply the main or leave-one-day-out onset gate (B-3 and B-4)."""
     training = [row for row in rows if row.day != held_out_day]
     observed = [row for row in training if row.observed]
     cells = Counter(row.cell for row in observed)
-    if held_out_day is None:
+    if held_out_day is None and not sensitivity:
         enough = (len(observed) >= 12 and len({row.day for row in observed}) >= 3
                   and sum(count >= 4 for count in cells.values()) >= 2)
     else:
@@ -352,71 +369,667 @@ def interim_verdict(day_hot_totals):
     return "passes" if max(errors) <= 0.02 else "fails"
 
 
-def _equal(left, right, tolerance):
+class _ArgumentParser(argparse.ArgumentParser):
+    def error(self, message):
+        raise ValueError("invalid child arguments")
+
+
+def child_arguments(argv):
+    parser = _ArgumentParser(add_help=False, allow_abbrev=False)
+    for role in ("manifest", "stage1", "custody", "coefficients", "fit", "step3"):
+        parser.add_argument(f"--{role}", type=Path, required=True)
+    for role in ("manifest", "stage1", "coefficients"):
+        parser.add_argument(f"--{role}-sha256", required=True)
+    parser.add_argument("--ledger-commit", required=True)
+    parser.add_argument("--span-dir", action="append", default=[])
+    args = parser.parse_args(argv)
+    if not re.fullmatch(r"[0-9a-f]{40}", args.ledger_commit):
+        raise ValueError("invalid ledger commit identity")
+    return args
+
+
+def unique_object(pairs):
+    result = {}
+    for key, value in pairs:
+        if key in result:
+            raise ValueError("duplicate input field")
+        result[key] = value
+    return result
+
+
+def finite(value):
+    number = float(value)
+    if not math.isfinite(number):
+        raise ValueError("non-finite input")
+    return number
+
+
+def decode_json(data):
+    return json.loads(data, object_pairs_hook=unique_object, parse_float=finite, parse_constant=finite)
+
+
+def digest(data):
+    return hashlib.sha256(data).hexdigest()
+
+
+def read_bound(path, sha256):
+    data = path.read_bytes()
+    if digest(data) != sha256:
+        raise ValueError("input digest mismatch")
+    return data
+
+
+def child_path(directory, relative):
+    if Path(relative).is_absolute():
+        raise ValueError("absolute child path")
+    resolved = (directory / relative).resolve(strict=True)
+    if not resolved.is_relative_to(directory):
+        raise ValueError("input escapes its declared directory")
+    return resolved
+
+
+def verify_pins(manifest, code_path):
+    repository = code_path.parents[1]
+    fit = manifest["fit"]
+    pins = [fit["twin"], *fit["code"], *fit["dependencies"], fit["step3"]["code"],
+            fit["step3"]["adapter"], manifest["stages"]["stage1"]["schema"],
+            manifest["freeze2"]["schema"], manifest["outputs"]["schema"]]
+    if child_path(repository, fit["twin"]["path"]) != code_path:
+        raise ValueError("manifest names another twin")
+    for pin in pins:
+        read_bound(child_path(repository, pin["path"]), pin["sha256"])
+
+
+def select_paths(view, prefix, fields):
+    result = {}
+    for field in fields:
+        value = view
+        for key in field.split("/"):
+            value = value[key]
+        result[f"{prefix}/{field}"] = value
+    return result
+
+
+def channel_projections(c, f, channel):
+    x, z = f"F#/channels/{channel}", f"C#/channels/{channel}"
+    vectors = ("columns", "coefficients", "fold_coefficients")
+    fit_fields = (*vectors, "fold_coefficients_no_heat")
+    verdict_fields = ("lodo/hot/verdict", "lodo/no_heat/hot/verdict", "lodo/folds_delta_dropped")
+    coefficients = select_paths(c, z, vectors) | select_paths(f, x, fit_fields)
+    coefficients.update(select_paths(f, x, ("marked_sensitivity/coefficients_without",)))
+    verdicts = select_paths(f, x, ("qualified", *verdict_fields))
+    coverage = select_paths(f, x, ("trace_coverage",))
+    marked = f["marked_sensitivity"]["fit_without"]
+    if marked is not None:
+        y = f"{x}/marked_sensitivity/fit_without"
+        coefficients.update(select_paths(marked, y, fit_fields))
+        verdicts.update(select_paths(marked, y, verdict_fields))
+        coverage.update(select_paths(marked, y, ("trace_coverage",)))
+    return coefficients, verdicts, coverage
+
+
+def projections(stage1, c, f, step3):
+    coefficients, coverage = {}, {}
+    verdicts = select_paths(c, "C#", ("delta_column", "qualified_interim_half/verdict"))
+    verdicts.update(select_paths(f, "F#", ("qualified_interim_half/verdict",)))
+    verdicts.update(select_paths(step3, "D#", ("tripwire/decision", "tripwire/trips")))
+    verdicts.update(select_paths(stage1, "S1#", (f"tripwires/{key}/trips" for key in TRIPWIRES)))
+    for channel in sorted(CHANNELS):
+        coefficients[channel], words, coverage[channel] = channel_projections(
+            c["channels"][channel], f["channels"][channel], channel,
+        )
+        verdicts.update(words)
+    cells = {}
+    for cell in step3["cells"]:
+        key = str(cell["prompt_tokens"])
+        if key in cells:
+            raise ValueError("duplicate Step 3 cell")
+        cells[key] = {field: cell[field] for field in ("status", "gamma_estimable")}
+    verdicts["D#/cells"] = cells
+    return {
+        "coefficients": coefficients,
+        "censored_fit": {"C#/onset": c["onset"]},
+        "verdicts": verdicts,
+        "trace_coverage": coverage,
+        "soak_retries": {"F#/soak_retries": f["soak_retries"], "S1#/soak_retries": stage1["soak_retries"]},
+    }
+
+
+def relative_differences(left, right):
     if type(left) is dict and type(right) is dict:
-        return left.keys() == right.keys() and all(_equal(left[k], right[k], tolerance) for k in left)
-    if type(left) is list and type(right) is list:
-        return len(left) == len(right) and all(_equal(a, b, tolerance) for a, b in zip(left, right))
-    if type(left) in (int, float) and type(right) in (int, float):
-        return math.isclose(left, right, rel_tol=tolerance, abs_tol=0) if tolerance else left == right
-    return type(left) is type(right) and left == right
+        for key in left.keys() & right.keys():
+            yield from relative_differences(left[key], right[key])
+    elif type(left) is list and type(right) is list:
+        for a, b in zip(left, right):
+            yield from relative_differences(a, b)
+    elif type(left) in (int, float) and type(right) in (int, float):
+        scale = max(abs(left), abs(right))
+        difference = abs(left - right)
+        if not scale:
+            yield 0.0
+        elif math.isfinite(difference):
+            yield difference / scale
+        else:
+            yield abs(left / scale - right / scale)
 
 
-def compare(twin, primary):
-    """Compare normalized values under RL-180 amendment 2."""
-    try:
-        def normalize(record):
-            for field in ("coefficients", "trace_coverage", "verdicts"):
-                if not CHANNELS <= record[field].keys():
-                    raise ValueError("missing channel")
-            # Reject non-finite numbers and use the same representation for
-            # arrays read from JSON and tuples returned by the calculations.
-            return json.loads(json.dumps({field: record[field] for field in COMPARISONS}, allow_nan=False))
+def comparison_frame(primary, twin):
+    def pair(primary_values, twin_values):
+        return {"primary": primary_values, "twin": twin_values}
 
-        left, right = normalize(twin), normalize(primary)
-        matches = all(_equal(left[field], right[field], tolerance)
-                      for field, tolerance in COMPARISONS.items())
-    except (AttributeError, KeyError, OverflowError, TypeError, ValueError):
-        return "not_evaluable"
-    return "yes" if matches else "no"
+    frame = {"schema": COMPARISON_SCHEMA}
+    for field in ("coefficients", "trace_coverage"):
+        frame[field] = {c: pair(primary[field][c], twin[field][c]) for c in sorted(CHANNELS)}
+    for field in ("censored_fit", "verdicts", "soak_retries"):
+        frame[field] = pair(primary[field], twin[field])
+    numeric = frame["coefficients"] | {"censored_fit": frame["censored_fit"]}
+    frame["max_relative_difference"] = {
+        field: max(relative_differences(values["primary"], values["twin"]), default=None)
+        for field, values in numeric.items()
+    }
+    return frame
 
 
-def _write_result(restricted, twin, word):
-    payload = (json.dumps({"agreement": word, "twin": twin}, allow_nan=False,
-                          sort_keys=True, separators=(",", ":")) + "\n").encode("utf-8")
-    directory = os.open(restricted, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
-    try:
-        fd = os.open("twin.json", os.O_WRONLY | os.O_CREAT | os.O_EXCL | os.O_NOFOLLOW,
-                     0o600, dir_fd=directory)
-        with os.fdopen(fd, "wb") as stream:
-            stream.write(payload)
-    finally:
-        os.close(directory)
+def failure_name(error):
+    cls = type(error)
+    if cls is json.JSONDecodeError:
+        return "JSONDecodeError"
+    linear_algebra = sys.modules.get("numpy.linalg")
+    if cls is getattr(linear_algebra, "LinAlgError", None):
+        return "LinAlgError"
+    return BUILTIN_ERRORS.get(cls, "OtherError")
 
 
-def run_child(restricted: Path, evaluate):
-    """Run a child evaluator behind a file-descriptor boundary and exit."""
+def run_child(evaluate):
+    """Suppress incidental writes and send one protocol frame to the parent."""
     sys.dont_write_bytecode = True
-    output = os.dup(1)
-    discard = os.open(os.devnull, os.O_WRONLY)
-    os.dup2(discard, 1)
-    os.dup2(discard, 2)
-    os.close(discard)
-    word = "not_evaluable"
+    output, error = os.dup(1), os.dup(2)
+    with open(os.devnull, "wb") as discard:
+        os.dup2(discard.fileno(), 1)
+        os.dup2(discard.fileno(), 2)
     try:
-        if sys.flags.isolated:
-            twin, primary = evaluate()
-            word = compare(twin, primary)
-            if word != "not_evaluable":
-                _write_result(restricted, twin, word)
-    except BaseException:
-        word = "not_evaluable"
-    try:
-        os.write(output, WORDS[word])
-    finally:
-        # Standard descriptors stay muted through interpreter shutdown.
-        os._exit(0)
+        if not sys.flags.isolated:
+            raise ValueError("isolated interpreter required")
+        frame = json.dumps(evaluate(), allow_nan=False, sort_keys=True, separators=(",", ":"))
+        with os.fdopen(output, "wb") as stream:
+            stream.write(frame.encode("utf-8") + b"\n")
+    except BaseException as exc:
+        os.write(error, f"stage2_error\n{failure_name(exc)}\n".encode("ascii"))
+        os._exit(1)
+    os._exit(0)
+
+
+def fit_leg(record, active, centring):
+    start = record["start"]
+    segments = record["segments"]
+    return FitLeg(
+        record["day"], record["prefill_tokens"],
+        tuple(start[name] - centring[name] for name in active),
+        segments[0]["wall_start_s"], segments[0]["wall_end_s"], record["decode_tokens"],
+        segments[-1]["wall_end_s"], start["state"] == "start_out_of_state",
+    )
+
+
+def onset_roster(records, legs, rates):
+    rows = []
+    for record, leg in zip(records, legs, strict=True):
+        state = record["state"]
+        use = state["onset_use"]
+        if use in ("uncensored", "censored"):
+            observed = use == "uncensored"
+            rows.append(OnsetRow(leg.day, record["cell_prompt_tokens"], leg.readings,
+                                 leg.prompt_tokens / rates[0],
+                                 state["first_off_s" if observed else "censored_at_s"], observed))
+    return rows
+
+
+def onset_projection(rows, days, active, model, folds):
+    predictors = ["intercept", *active, "t_p_s"]
+
+    def serialize(value):
+        if value is None:
+            return None
+        return {"coefficients": dict(zip(predictors, value.coefficients, strict=True)), "sigma_s": value.sigma_s}
+
+    errors = []
+    if model is not None:
+        for row in rows:
+            estimate = folds[row.day]
+            if row.observed and estimate is not None:
+                tau = max(0.0, estimate.mean(row.readings, row.prefill_s))
+                errors.append((tau - row.end_s)**2)
+    rms = math.sqrt(math.fsum(errors) / len(errors)) if errors else None
+    cut = ({"form": "fixed_116_s", "fixed_s": 116.0, "offset_s": None} if rms is None else
+           {"form": "tau_hat_minus_2rms", "fixed_s": None, "offset_s": 2 * rms})
+    return {
+        "status": "estimable" if model is not None else "not_estimable",
+        "predictors": predictors,
+        **(serialize(model) or {"coefficients": None, "sigma_s": None}),
+        "folds": {day: serialize(folds[day]) for day in days},
+        "lodo_rms_s": rms,
+        "count_only_cut": cut,
+    }
+
+
+def hot_totals(predictions, response, segments):
+    selected = [(prediction, measured) for prediction, measured, segment in
+                zip(predictions, response, segments, strict=True) if segment["hot"]]
+    if not selected:
+        return None
+    return tuple(math.fsum(values) for values in zip(*selected, strict=True))
+
+
+def fit_projection(records, readings, centring, rates, days, response_records, *, sensitivity=False):
+    legs = [fit_leg(record, readings, centring) for record in records]
+    active = tuple(READINGS[reading] for reading in readings)
+    onset_rows = onset_roster(records, legs, rates)
+    main = fit_onset(onset_rows, sensitivity=sensitivity)
+    onsets = {day: fit_onset(onset_rows, held_out_day=day) for day in days}
+    responses = {channel: [data[channel]["segments"] for data in response_records] for channel in sorted(CHANNELS)}
+    full = fit_channels(legs, rates, active, responses, main)
+    base_legs = [replace(leg, readings=()) for leg in legs]
+    folds, base = {}, {}
+    with_heat, no_heat = {c: {} for c in CHANNELS}, {c: {} for c in CHANNELS}
+    for day in days:
+        folds[day] = fit_channels(legs, rates, active, responses, onsets[day], exclude_day=day)
+        base[day] = fit_channels(base_legs, rates, (), responses, None, exclude_day=day)
+        for channel in CHANNELS:
+            hot, baseline = [], []
+            for index, leg in enumerate(legs):
+                if leg.day != day:
+                    continue
+                segments = records[index]["segments"]
+                response = responses[channel][index]
+                prediction = predict(leg, rates, active, folds[day][channel], onsets[day])[1]
+                base_prediction = predict(base_legs[index], rates, (), base[day][channel])[1]
+                total = hot_totals(prediction, response, segments)
+                if total is not None:
+                    hot.append(total)
+                    baseline.append(hot_totals(base_prediction, response, segments))
+            with_heat[channel][day], no_heat[channel][day] = hot, baseline
+
+    channels = {}
+    for channel in CHANNELS:
+        low, count = trace_coverage(data[channel]["coverage_min"] for data in response_records)
+        channels[channel] = {
+            "columns": list(full[channel]), "coefficients": full[channel],
+            "fold_coefficients": {day: folds[day][channel] for day in days},
+            "fold_coefficients_no_heat": {day: base[day][channel] for day in days},
+            "qualified": "not_run",
+            "lodo": {
+                "hot": {"verdict": interim_verdict(with_heat[channel])},
+                "no_heat": {"hot": {"verdict": interim_verdict(no_heat[channel])}},
+                "folds_delta_dropped": [day for day in days if onsets[day] is None],
+            },
+            "trace_coverage": {"min": low, "n_legs_under_0_99": count},
+        }
+    return {
+        "channels": channels,
+        "onset": onset_projection(onset_rows, days, readings, main, onsets),
+        "delta_column": "kept" if main is not None else "dropped_onset_not_estimable",
+        "qualified_interim_half": channels["gpu_rail"]["lodo"]["hot"],
+    }
+
+
+def recompute_fit(stage1, fit_records, response_records, marked_spans):
+    active = tuple(name for name in READINGS if stage1["active_readings"][name]["active"])
+    rates = stage1["rates"]["r_p"], stage1["rates"]["r_d"]
+    centring = stage1["centring"]
+    fit = fit_projection(fit_records, active, centring, rates, stage1["roster"]["fit_days"], response_records)
+    unmarked = [(record, response) for record, response in zip(fit_records, response_records, strict=True)
+                if record["span_id"] not in marked_spans]
+    without = None
+    if 0 < len(unmarked) < len(fit_records):
+        kept_records, responses = zip(*unmarked, strict=True)
+        days = [day for day in stage1["roster"]["fit_days"] if any(r["day"] == day for r in kept_records)]
+        if len(days) > 1:
+            try:
+                without = fit_projection(kept_records, active, centring, rates, days, responses, sensitivity=True)
+            except RankDeficient:
+                pass
+    for channel in CHANNELS:
+        variant = without["channels"][channel] if without is not None else None
+        fit["channels"][channel]["marked_sensitivity"] = {
+            "coefficients_without": variant["coefficients"] if variant is not None else None,
+            "fit_without": variant,
+        }
+    return fit
+
+
+def span_dirs(root, overrides, spans):
+    root = root.resolve(strict=True)
+    requested = {}
+    for raw in overrides:
+        key, has_equal, value = raw.partition("=")
+        if not has_equal or not value or key in requested or key not in spans:
+            raise ValueError("invalid span override")
+        requested[key] = Path(value).resolve(strict=True)
+    return {span: requested[span] if span in requested else child_path(root, span) for span in spans}
+
+
+def json_lines(data):
+    return [decode_json(line) for line in data.splitlines() if line.strip()]
+
+
+def bundle_directory(span_dir, leg_id, read):
+    if not leg_id or Path(leg_id).name != leg_id or leg_id in (".", ".."):
+        raise ValueError("invalid leg identity")
+    leg = child_path(span_dir, Path("legs") / leg_id)
+    result = decode_json(read(child_path(leg, "leg_record.json")))["result"]
+    return child_path(child_path(leg, "runtime"), result["bundle"])
+
+
+def gpu_rows(data):
+    rows = []
+    for row in csv.DictReader(io.StringIO(data.decode("utf-8"))):
+        if row["source"] == "powermetrics" and row["rail"] == "gpu_power":
+            left, right, stamp, power = (finite(row[k]) for k in
+                                        ("interval_start_s", "interval_end_s", "timestamp_s", "power_w"))
+            if left >= right:
+                raise ValueError("invalid GPU support interval")
+            rows.append((left, right, stamp, power))
+    if not rows:
+        raise ValueError("GPU trace is empty")
+    return sorted(rows)
+
+
+def power_intervals(rows, start, end):
+    """Cut recorded GPU intervals at the segment's wall-clock bounds."""
+    if start >= end:
+        raise ValueError("invalid wall-clock segment")
+    pieces = []
+    width, rightmost = 0.0, start
+    for left, right, _, power in rows:
+        if right <= start:
+            continue
+        if left >= end:
+            break
+        left, right = max(left, start), min(right, end)
+        if left - rightmost > 2:
+            raise ValueError("GPU trace hole")
+        # Intersect with the uncovered support, so no sample interval is counted twice.
+        overlap = right - max(left, rightmost)
+        if overlap > 0:
+            pieces.append(power * overlap)
+            width += overlap
+            rightmost = right
+    if end - rightmost > 2 or not pieces:
+        raise ValueError("GPU trace does not support the segment")
+    return math.fsum(pieces), min(1.0, width / (end - start))
+
+
+METER_SAMPLE = struct.Struct("<HHiiHHHH")
+
+
+def meter_records(data):
+    rows = json_lines(data)
+    if len(rows) < 3 or rows[0]["k"] != "h" or rows[-1]["k"] != "t":
+        raise ValueError("meter header or trailer absent")
+    header, trailer = rows[0], rows[-1]
+    if header["status"] != "streaming" or finite(header["sps"]) <= 0:
+        raise ValueError("invalid meter header")
+    polls = []
+    for row in rows[1:-1]:
+        if row["k"] != "b" or type(row["n"]) is not int or row["n"] < 0:
+            raise ValueError("invalid meter poll")
+        payload = bytes.fromhex(row["p"])
+        if len(payload) != row["n"] * METER_SAMPLE.size:
+            raise ValueError("meter poll count differs from payload")
+        samples = [(tick, microvolts * microamps * 1e-12)
+                   for tick, _, microvolts, microamps, *_ in METER_SAMPLE.iter_unpack(payload)]
+        polls.append((row, samples))
+    return header, polls, trailer
+
+
+def responses_for_leg(record, gpu, dc_segment_reader):
+    output = {}
+    for channel, measure in (("gpu_rail", lambda u, v: power_intervals(gpu, u, v)),
+                             ("dc_in", dc_segment_reader)):
+        samples = [measure(segment["wall_start_s"], segment["wall_end_s"]) for segment in record["segments"]]
+        tails = {str(tail["prefix_len"]): measure(tail["wall_start_s"], tail["wall_end_s"])[0]
+                 for tail in record["prefix_tails"]}
+        output[channel] = {"segments": [energy for energy, _ in samples], "prefix_tails": tails,
+                           "coverage_min": min(coverage for _, coverage in samples)}
+    return output
+
+
+SOAK_KINDS = ("slope", "load", "kind not recorded")
+
+
+def span_soak(receipt):
+    if "soak_attempts" not in receipt:
+        return {"attempts": 1, "field_present": False, "accepted": True, "retried": []}
+    attempts = receipt["soak_attempts"]
+    if not attempts or [row["attempt"] for row in attempts] != list(range(1, len(attempts) + 1)):
+        raise ValueError("invalid soak attempts")
+    distinct = {}
+    for row in receipt.get("soak_refusals", []):
+        number, kind = row["attempt"], row["kind"]
+        if number in distinct or kind not in SOAK_KINDS[:2] or not 1 <= number <= len(attempts):
+            raise ValueError("invalid soak refusal")
+        distinct[number] = kind
+    retried = []
+    for row in attempts[:-1]:
+        number = row["attempt"]
+        if number in distinct:
+            kind, source = distinct[number], "receipt soak_refusals[].kind"
+        elif row.get("refusal_kind") is not None:
+            kind, source = row["refusal_kind"], "receipt soak_attempts[].refusal_kind"
+        else:
+            kind, source = "kind not recorded", None
+        if kind not in SOAK_KINDS:
+            raise ValueError("unknown soak refusal kind")
+        retried.append({"attempt": number, "kind": kind, "read_from": source})
+    final = attempts[-1]
+    name = "soak" if len(attempts) == 1 else f"soak.a{len(attempts)}"
+    steps = [step for step in receipt["steps"] if step["name"] == name]
+    if len(steps) != 1:
+        raise ValueError("missing or repeated final soak step")
+    accepted = final["refused"] is None and steps[0]["rc"] == 0
+    return {"attempts": len(attempts), "field_present": True, "accepted": accepted, "retried": retried}
+
+
+def soak_summary(receipts):
+    spans = {key: span_soak(value) for key, value in receipts.items()}
+    counts = Counter(row["kind"] for span in spans.values() for row in span["retried"])
+    return {
+        "spans": spans,
+        "spans_with_retry": sum(bool(span["retried"]) for span in spans.values()),
+        "retried_by_kind": {kind: counts[kind] for kind in SOAK_KINDS},
+        "accepted_after_retry": sum(bool(span["retried"]) and span["accepted"] for span in spans.values()),
+        "stopped_by_soak": sum(not span["accepted"] for span in spans.values()),
+    }
+
+
+def mean_centered_slope(legs):
+    """Step 3(ii), eliminate the block-index fixed effects before fitting gamma."""
+    by_block = {}
+    for leg in legs:
+        for block, temperature, joules in leg:
+            by_block.setdefault(block, []).append((temperature, math.log(joules)))
+    matched = [rows for rows in by_block.values() if len(rows) > 1]
+    if not any(max(t for t, _ in rows) - min(t for t, _ in rows) >= 2 for rows in matched):
+        return None
+    numerators, denominators = [], []
+    for rows in matched:
+        mean_temp, mean_log = (math.fsum(values) / len(rows) for values in zip(*rows, strict=True))
+        for temp, log_joules in rows:
+            numerators.append((temp - mean_temp) * (log_joules - mean_log))
+            denominators.append((temp - mean_temp)**2)
+    return math.fsum(numerators) / math.fsum(denominators)
+
+
+def step3_drift(legs):
+    """Largest absolute eligible gamma times the median Automatic TV0h rise."""
+    from statistics import median
+
+    main = mean_centered_slope([rows for _, _, rows in legs])
+    if main is None:
+        return False, None
+    automatic = [(rise, rows) for high_power, rise, rows in legs if not high_power]
+    if not automatic:
+        return True, None
+    slopes = [main, mean_centered_slope([rows for _, rows in automatic])]
+    for i in range(len(legs)):
+        slopes.append(mean_centered_slope([rows for _, _, rows in (*legs[:i], *legs[i + 1:])]))
+    return True, max(abs(value) for value in slopes if value is not None) * median(rise for rise, _ in automatic)
+
+
+def step3_projection(cells, threshold):
+    rows, drifts = [], []
+    for cell, measurements in sorted(cells.items()):
+        failures, legs = measurements
+        if failures > 2:
+            rows.append({"prompt_tokens": cell, "status": "not_run", "gamma_estimable": None})
+            continue
+        estimable, drift = step3_drift(legs)
+        rows.append({"prompt_tokens": cell, "status": "ok", "gamma_estimable": estimable})
+        if drift is not None and estimable:
+            drifts.append(drift)
+    trips = max(drifts) > threshold if drifts else None
+    decision = "not_evaluable" if trips is None else "to the research lead" if trips else "within"
+    return {"cells": rows, "tripwire": {"decision": decision, "trips": trips}}
+
+
+def primary_identity(c, args, stage1):
+    if c.keys() != COEFFICIENT_KEYS or c["channels"].keys() != CHANNELS:
+        raise ValueError("coefficient object differs from its registered fields")
+    if (c["look_id"], c["manifest_sha256"], c["stage1_sha256"], c["numpy_version"], c["synthetic"]) != (
+        stage1["look_id"], args.manifest_sha256, args.stage1_sha256, stage1["numpy_version"], stage1["synthetic"],
+    ):
+        raise ValueError("coefficient object belongs to another look")
+    expected_onset = stage1["onset"]
+    for key in ("status", "predictors", "coefficients", "sigma_s", "count_only_cut"):
+        if c["onset"][key] != expected_onset[key]:
+            raise ValueError("coefficient onset does not match committed stage 1")
+    lodo = expected_onset["lodo"]
+    if c["onset"]["lodo_rms_s"] != (lodo["rms_s"] if lodo is not None else None):
+        raise ValueError("coefficient onset error does not match committed stage 1")
+
+
+def child_frame(args, recompute):
+    import numpy as np
+
+    manifest = decode_json(read_bound(args.manifest, args.manifest_sha256))
+    stage1 = decode_json(read_bound(args.stage1, args.stage1_sha256))
+    verify_pins(manifest, Path(__file__).resolve())
+    if manifest["look_id"] != "lm-interim-01" or stage1["look_id"] != manifest["look_id"]:
+        raise ValueError("wrong look identity")
+    if stage1["manifest_sha256"] != args.manifest_sha256 or stage1["numpy_version"] != np.__version__:
+        raise ValueError("stage-1 inputs or interpreter differ from the committed look")
+    coefficient_bytes = read_bound(args.coefficients, args.coefficients_sha256)
+    fit = decode_json(args.fit.read_bytes())
+    step3 = decode_json(args.step3.read_bytes())
+    own_fit, own_step3 = recompute(args, manifest, stage1, fit["custody"], step3["custody"])
+    coefficients = decode_json(coefficient_bytes)
+    primary_identity(coefficients, args, stage1)
+    primary_projection = projections(stage1, coefficients, fit, step3)
+    own_stage1 = {**stage1, "soak_retries": own_fit["soak_retries"]}
+    twin_projection = projections(own_stage1, own_fit, own_fit, own_step3)
+    return comparison_frame(primary_projection, twin_projection)
+
+
+def step3_records(events_data, turns_data, journal_data, rich_data, native_data):
+    """Decode the independent Step 3 inputs without retaining synthetic token IDs."""
+    (turn,) = json_lines(turns_data)
+    start, end = turn["start_stamp"]["epoch_s"], turn["end_stamp"]["epoch_s"]
+    count = len(turn["generation"]["output_token_ids"])
+    tokens = {}
+    for row in json_lines(events_data):
+        metadata = row.get("metadata", {})
+        if "index" not in metadata or "align_turn_index" not in metadata:
+            continue
+        index = metadata["index"]
+        if type(index) is not int or not 0 <= index < count or index in tokens:
+            raise ValueError("invalid Step 3 token index")
+        tokens[index] = row["timestamp_s"]
+    token_times = [tokens[i] for i in range(count)]
+    if not token_times or not start <= token_times[0] <= token_times[-1] <= end or any(
+        a >= b for a, b in zip(token_times, token_times[1:])
+    ):
+        raise ValueError("invalid Step 3 token times")
+
+    journal = []
+    for row in json_lines(journal_data):
+        if row.get("error") is not None or not row.get("values"):
+            continue
+        journal.append((row["finished"]["wall_ns"] / 1e9, row["started"]["monotonic_ns"],
+                        row["values"]["sensors"].get("TV0h"), row["values"]["status"]))
+    native = [plistlib.loads(frame) for frame in native_data.split(b"\0") if frame.strip()]
+    power_state = []
+    for frame, raw in zip(json_lines(rich_data), native, strict=True):
+        if frame["elapsed_ns"] != raw["elapsed_ns"]:
+            raise ValueError("Step 3 telemetry intervals disagree")
+        states = [(state["freq"], state["used_ns"]) for state in frame["gpu"]["dvfm_states"]]
+        power_state.append((frame["timestamp_s"], frame["elapsed_ns"], raw["thermal_pressure"], states))
+    if not journal or not power_state:
+        raise ValueError("Step 3 telemetry is empty")
+    return start, end, token_times, sorted(journal, key=lambda row: row[0]), power_state
+
+
+def step3_cut(start, token_times, journal, power_state):
+    """RL-150 §1.3 guard, with the endpoint snapped to a stamped token."""
+    end = token_times[-1]
+
+    def fresh(row):
+        _, started, _, status = row
+        observed = status["pm_observed_ns"]
+        return (type(status["os_level"]) is int and status["pm_state"] not in (None, "Unknown")
+                and type(observed) is int and 0 <= started - observed <= 2_000_000_000)
+
+    def off(status):
+        return (type(status["os_level"]) is int and status["os_level"] > 0
+                or status["pm_state"] not in (None, "Nominal", "Unknown"))
+
+    carry = next((row for row in reversed(journal) if row[0] <= start), None)
+    if carry is None or start - carry[0] > 2 or not fresh(carry) or off(carry[3]):
+        return None
+    anchors = [carry[0], *(row[0] for row in journal if start < row[0] <= end and fresh(row)), end]
+    cuts = [end]
+    gap = next((a for a, b in zip(anchors, anchors[1:]) if b - a > 2), None)
+    if gap is not None:
+        cuts.append(gap)
+    off_time = min((*(row[0] for row in journal if start < row[0] <= end and off(row[3])),
+                    *(row[0] for row in power_state if start < row[0] <= end
+                      and row[2] not in (None, "Nominal", "Unknown"))), default=None)
+    if off_time is not None:
+        last_nominal = max(row[0] for row in journal if row[0] < off_time and fresh(row) and not off(row[3]))
+        cuts.append(min(last_nominal, off_time - 2))
+
+    # Apply the e20 rule only to windows beginning at least 10 s into decode.
+    # Scale active time by each row's overlap with the window.
+    reference = max((freq for _, _, _, states in power_state for freq, used in states if used > 0), default=0)
+    intervals = []
+    for right, elapsed, _, states in sorted(power_state, key=lambda row: row[0]):
+        if elapsed <= 0:
+            raise ValueError("invalid Step 3 sampling period")
+        left = right - elapsed / 1e9
+        intervals.append((left, right, math.fsum(used for _, used in states),
+                          math.fsum(freq * used for freq, used in states)))
+        begin = right - 10
+        if not token_times[0] + 10 <= begin < right <= end:
+            continue
+        weights, numerators = [], []
+        for lo, hi, used, frequency_time in reversed(intervals):
+            if hi <= begin:
+                break
+            scale = (hi - max(lo, begin)) / (hi - lo)
+            weights.append(scale * used)
+            numerators.append(scale * frequency_time)
+        total = math.fsum(weights)
+        if total and math.fsum(numerators) < 0.97 * reference * total:
+            cuts.append(begin)
+            break
+    index = bisect_right(token_times, min(cuts)) - 1
+    return token_times[index] if index >= 0 else None
+
+
+def recompute_bundle(args, manifest, stage1, fit_identity, step3_identity):
+    # A layout using the right field names can still produce different energies
+    # when poll timestamps are aligned differently. Stop before opening any raw
+    # stream until the registered clock and identity definitions are supplied.
+    raise NotImplementedError("raw stream clock and identity contract required")
 
 
 if __name__ == "__main__":
-    os.write(1, WORDS["not_evaluable"])
+    run_child(lambda: child_frame(child_arguments(sys.argv[1:]), recompute_bundle))
