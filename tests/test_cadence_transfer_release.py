@@ -21,6 +21,7 @@ REFUSAL = b"REFUSE transfer look before read\n"
 _WORKER = r"""
 import argparse
 import atexit
+from contextlib import nullcontext
 from hashlib import sha256
 import json
 import os
@@ -28,13 +29,34 @@ from pathlib import Path
 import subprocess
 import sys
 import time
+from unittest.mock import patch
 
+from joulewise.cadence_looks import transfer_release as release
 from joulewise.cadence_looks.manifest_dispatch import validate_v2
 from joulewise.cadence_looks.transfer_release import HASHES, run_transfer_worker
 
 root, mode, draft = Path(sys.argv[1]), sys.argv[2], Path(sys.argv[3])
+step = mode.removeprefix("inject-") if mode.startswith("inject-") else None
+
+
+class InjectedFailure(BaseException):
+    pass
+
+
+def fail(*args, **kwargs):
+    raise InjectedFailure("synthetic injected failure")
+
+
+def fail_when(original, predicate):
+    def inject(*args, **kwargs):
+        if predicate(*args, **kwargs):
+            fail()
+        return original(*args, **kwargs)
+    return inject
 
 def preflight():
+    if step == "preflight":
+        fail()
     if mode == "pre-systemexit":
         sys.exit(1)
     if mode == "pre-custom-base":
@@ -56,10 +78,16 @@ def score(mark_read):
     if mode == "empty":
         return {"synthetic": None}, "not_evaluable"
     print("buffered fixture output", end="")
+    if step == "score-before-read":
+        fail()
     with (root / "synthetic-input.json").open("rb") as source:
         mark_read()
+        (root / "saw-read").touch()
+        if step == "consume":
+            fail()
         value = json.load(source)
-    (root / "saw-read").touch()
+    if step == "score-after-read":
+        fail()
     os.write(2, b"fixture diagnostic\n")
     atexit.register(os.write, 1, b"fixture shutdown\n")
     if mode == "post-systemexit":
@@ -89,19 +117,50 @@ def score(mark_read):
                         "import os; os.write(2, b'fixture child\\n')"], check=True)
     return {"synthetic": value}, "estimated"
 
+
+def fault_context():
+    notice = release.finish_notice
+    public_record = release._public_record
+    write_json = release._write_json
+    lexists = os.path.lexists
+
+    def opened(*args, **kwargs):
+        return (root / "saw-read").exists()
+
+    fault = {
+        "startup-flush": (release, "finish_notice", fail),
+        "save-stderr": (os, "dup", fail),
+        "spent-check": (os.path, "lexists", fail),
+        "filesystem": (Path, "stat", fail),
+        "preflight-hashes": (release, "_public_record", fail),
+        "reserve": (Path, "mkdir", fail),
+        "redirect": (release, "_redirect", fail),
+        "sync": (release, "_sync_directory", fail),
+        "result-validation": (release, "_public_record", fail_when(public_record, opened)),
+        "scores-write": (release, "_write_json", fail_when(write_json, lambda p, _: p.name == "scores.json")),
+        "inventory": (Path, "iterdir", fail),
+        "result-staging": (release, "_write_json", fail_when(write_json, lambda p, _: p.name == ".publication")),
+        "final-spent-check": (os.path, "lexists", fail_when(lexists, opened)),
+        "success-flush": (release, "finish_notice", fail_when(notice, opened)),
+        "publish": (Path, "rename", fail),
+    }.get(step)
+    return patch.object(*fault) if fault is not None else nullcontext()
+
+
 if __name__ == "__main__":
     ledger = {"draft-ledger": "draft", "spent-ledger": "failed"}.get(mode, "stage1_committed")
     if mode == "buffered-stderr":
         sys.stderr = os.fdopen(2, "w", encoding="utf-8", closefd=False)
         sys.stderr.write("buffered fixture stderr")
         ledger = "draft"
-    status = run_transfer_worker(
-        restricted=root / "private" / "synthetic-result",
-        public=root / "public" / "PUBLIC.json",
-        execution_host="synthetic-authority",
-        local_host="synthetic-other" if mode == "wrong-host" else "synthetic-authority",
-        ledger_status=ledger, preflight=preflight, score=score,
-    )
+    with fault_context():
+        status = run_transfer_worker(
+            restricted=root / "private" / "synthetic-result",
+            public=root / "public" / "PUBLIC.json",
+            execution_host="synthetic-authority",
+            local_host="synthetic-other" if mode == "wrong-host" else "synthetic-authority",
+            ledger_status=ledger, preflight=preflight, score=score,
+        )
     (root / "worker-returned").write_text(str(status))
     raise SystemExit(status)
 """
@@ -152,7 +211,8 @@ class TransferReleaseTests(unittest.TestCase):
         self.assertEqual({item.name for item in restricted.iterdir()}, CUSTODY_NAMES)
         self.assertEqual(json.loads((restricted / "scores.json").read_bytes()), {"synthetic": 123.456})
         self.assertIn(b"buffered fixture output", (restricted / "stdout").read_bytes())
-        self.assertIn(b"fixture shutdown\n", (restricted / "stdout").read_bytes())
+        self.assertNotIn(b"fixture shutdown\n", (restricted / "stdout").read_bytes())
+        self.assertFalse((root / "worker-returned").exists())
         self.assertIn(b"fixture child\n", (restricted / "stderr").read_bytes())
         public = root / "public"
         self.assertEqual([item.name for item in public.iterdir()], ["PUBLIC.json"])
@@ -187,7 +247,7 @@ class TransferReleaseTests(unittest.TestCase):
                             root, mode, connected=connected, unbuffered=unbuffered
                         )
                         self.assertEqual((result.returncode, result.stdout), (status, b""))
-                        self.assertEqual((root / "worker-returned").read_text(), str(status))
+                        self.assertFalse((root / "worker-returned").exists())
                         self.assertEqual(delivered, notice if connected else None)
                         self.assertEqual((root / "score-entered").exists(), entered)
                         self.assertEqual((root / "saw-read").exists(), read_started)
@@ -204,6 +264,25 @@ class TransferReleaseTests(unittest.TestCase):
                 self.assertEqual((result.returncode, result.stdout, delivered), (2, b"", None))
                 self.assertFalse((root / "score-entered").exists())
                 self.assertEqual(list((root / "public").iterdir()), [])
+
+    def test_transfer_boundary_contains_arbitrary_exceptions_at_each_step(self):
+        steps_by_status = {
+            2: ("startup-flush", "save-stderr", "spent-check", "filesystem", "preflight",
+                "preflight-hashes", "reserve", "redirect", "sync", "score-before-read"),
+            1: ("consume", "score-after-read", "result-validation", "scores-write", "inventory",
+                "result-staging", "final-spent-check", "success-flush", "publish"),
+        }
+        for status, steps in steps_by_status.items():
+            for step in steps:
+                with self.subTest(step=step, status=status):
+                    mode = f"inject-{step}"
+                    root = self.fixture(mode)
+                    result = self.worker(root, mode)
+                    notice = REFUSAL if status == 2 else b"stage2_error\nOtherError\n"
+                    self.assertEqual((result.returncode, result.stdout, result.stderr), (status, b"", notice))
+                    self.assertFalse((root / "worker-returned").exists())
+                    self.assertEqual((root / "saw-read").exists(), status == 1)
+                    self.assertEqual(list((root / "public").iterdir()), [])
 
     def test_transfer_python_exits_follow_first_read(self):
         for mode in ("pre-systemexit", "pre-custom-base"):

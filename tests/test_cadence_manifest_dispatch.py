@@ -55,21 +55,29 @@ def cli(*args):
     )
 
 
-def cli_with_closed_consumer(*args, channel, unbuffered):
+def _buffering_environment(unbuffered):
     environment = os.environ.copy()
     if unbuffered:
         environment["PYTHONUNBUFFERED"] = "1"
     else:
         environment.pop("PYTHONUNBUFFERED", None)
+    return environment
+
+
+def run_with_closed_consumer(command, *, channel, unbuffered):
     reader, writer = os.pipe()
     os.close(reader)
     with os.fdopen(writer, "wb") as sink:
         streams = {"stdout": subprocess.PIPE, "stderr": subprocess.PIPE}
         streams[channel] = sink
         return subprocess.run(
-            [sys.executable, "-B", "-m", "joulewise.cadence_looks.manifest_dispatch", *map(str, args)],
-            cwd=ROOT, env=environment, check=False, **streams,
+            command, cwd=ROOT, env=_buffering_environment(unbuffered), check=False, **streams,
         )
+
+
+def cli_with_closed_consumer(*args, channel, unbuffered):
+    command = [sys.executable, "-B", "-m", "joulewise.cadence_looks.manifest_dispatch", *map(str, args)]
+    return run_with_closed_consumer(command, channel=channel, unbuffered=unbuffered)
 
 
 def object_paths(value, path=()):
@@ -154,6 +162,107 @@ class VariantContractTests(unittest.TestCase):
                 with self.subTest(args=args, unbuffered=unbuffered):
                     result = cli_with_closed_consumer(*args, channel="stdout", unbuffered=unbuffered)
                     self.assertEqual((result.returncode, result.stderr), (2, b""))
+
+    def test_dispatch_exits_two_with_descriptor_exhaustion(self):
+        script = """
+from contextlib import redirect_stdout
+from io import StringIO
+import resource
+import sys
+from joulewise.cadence_looks import manifest_dispatch
+
+prime = getattr(manifest_dispatch, "_dispatch", manifest_dispatch.main)
+with redirect_stdout(StringIO()):
+    assert prime(["validate", sys.argv[1]]) == 0
+_, hard = resource.getrlimit(resource.RLIMIT_NOFILE)
+resource.setrlimit(resource.RLIMIT_NOFILE, (3, hard))
+raise SystemExit(manifest_dispatch.main(["validate", "--final", sys.argv[1]]))
+"""
+        command = [sys.executable, "-B", "-c", script, str(DRAFT)]
+        for unbuffered in (False, True):
+            with self.subTest(unbuffered=unbuffered):
+                connected = subprocess.run(command, cwd=ROOT, env=_buffering_environment(unbuffered),
+                                           capture_output=True, check=False)
+                self.assertEqual((connected.returncode, connected.stdout), (2, b""))
+                self.assertIn(b"Too many open files", connected.stderr)
+                disconnected = run_with_closed_consumer(command, channel="stderr", unbuffered=unbuffered)
+                self.assertEqual((disconnected.returncode, disconnected.stdout), (2, b""))
+
+    def test_oversized_json_integer_refuses_before_read(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            candidate = Path(tmp) / "numeric.json"
+            draft = DRAFT.read_bytes()
+            field = b'"max_dates": 20'
+            self.assertEqual(draft.count(field), 1)
+            environment = os.environ.copy()
+            environment.pop("PYTHONINTMAXSTRDIGITS", None)
+            limit = sys.int_info.default_max_str_digits
+            for digits in (limit, limit + 1):
+                candidate.write_bytes(draft.replace(field, b'"max_dates": ' + b"1" * digits))
+                command = [sys.executable, "-B", "-m", "joulewise.cadence_looks.manifest_dispatch",
+                           "validate", "--final", str(candidate)]
+                with self.subTest(digits=digits):
+                    result = subprocess.run(command, env=environment, cwd=ROOT, capture_output=True, check=False)
+                    self.assertEqual((result.returncode, result.stdout), (2, b""))
+                    self.assertTrue(result.stderr.startswith(b"REFUSE "))
+
+    def test_dispatch_boundary_contains_arbitrary_pre_read_exceptions(self):
+        script = """
+from pathlib import Path
+import sys
+from unittest.mock import patch
+from joulewise.cadence_looks import manifest_dispatch as dispatch
+
+class InjectedFailure(BaseException):
+    pass
+
+def fail(*args, **kwargs):
+    raise InjectedFailure("synthetic injected failure")
+
+step, candidate, registration = sys.argv[1:]
+read_bytes = Path.read_bytes
+
+def fail_registration(path):
+    if path == Path(registration):
+        fail()
+    return read_bytes(path)
+
+target, name, inject = {
+    "parser": (dispatch, "_NoticeArgumentParser", fail),
+    "candidate-open": (Path, "read_bytes", fail),
+    "decode": (dispatch.schema_check, "_decode", fail),
+    "validate": (dispatch, "_validate_v2_document", fail),
+    "registration-open": (Path, "read_bytes", fail_registration),
+    "legacy-delegation": (dispatch, "_validate_legacy", fail),
+    "success-notice": (dispatch, "finish_notice", fail),
+}[step]
+argv = ["validate", candidate]
+if step == "registration-open":
+    argv += ["--final", "--registration", registration]
+with patch.object(target, name, inject):
+    raise SystemExit(dispatch.main(argv))
+"""
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            registration = root / "registered.json"
+            registration.write_bytes(registered_fixture())
+            final = root / "final.json"
+            final.write_bytes(registration.read_bytes().replace(
+                dispatch.REGISTRATION_PLACEHOLDER, json.dumps(H).encode()
+            ))
+            interim = root / "interim.json"
+            interim.write_bytes(encode({"schema": dispatch.V1, "look_id": "lm-interim-01"}))
+            for step, source in (
+                ("parser", DRAFT), ("candidate-open", DRAFT), ("decode", DRAFT),
+                ("validate", DRAFT), ("registration-open", final),
+                ("legacy-delegation", interim), ("success-notice", DRAFT),
+            ):
+                with self.subTest(step=step):
+                    result = subprocess.run([sys.executable, "-B", "-c", script, step,
+                                             str(source), str(registration)], cwd=ROOT,
+                                            capture_output=True, check=False)
+                    self.assertEqual((result.returncode, result.stdout), (2, b""))
+                    self.assertNotIn(b"Traceback", result.stderr)
 
     def test_v1_refuses_v2_look_ids_and_final_markers_before_delegating(self):
         with tempfile.TemporaryDirectory() as tmp:
