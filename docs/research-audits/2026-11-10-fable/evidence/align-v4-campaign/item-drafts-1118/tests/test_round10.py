@@ -92,7 +92,7 @@ class Round10(unittest.TestCase):
                         'PASS pinned child last authorized nanosecond',
                         'PASS pinned child midnight during handoff',
                         'PASS pinned child different date before numeric cutoff',
-                        'PASS pinned child watcher expiry during handoff',
+                        'PASS pinned child queue cutoff during handoff',
                         'PASS pinned child rollback into batch hold',
                         'PASS pinned child exact batch release',
                     ])

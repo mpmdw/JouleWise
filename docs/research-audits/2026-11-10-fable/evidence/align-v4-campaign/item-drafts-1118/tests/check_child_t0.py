@@ -25,7 +25,7 @@ for label, projected_ns, wall_ns, cutoff, allowed in (
     ('last authorized nanosecond', midnight * ns - 1, midnight * ns - 1, midnight, True),
     ('midnight during handoff', midnight * ns, midnight * ns, midnight, False),
     ('different date before numeric cutoff', midnight * ns, midnight * ns, midnight + 3600, False),
-    ('watcher expiry during handoff', (midnight - 30) * ns, (midnight - 30) * ns - 1, midnight - 30, False),
+    ('queue cutoff during handoff', (midnight - 30) * ns, (midnight - 30) * ns - 1, midnight - 30, False),
     ('rollback into batch hold', earliest * ns, earliest * ns - 250_000_000, midnight, False),
     ('exact batch release', earliest * ns, earliest * ns, midnight, True),
 ):

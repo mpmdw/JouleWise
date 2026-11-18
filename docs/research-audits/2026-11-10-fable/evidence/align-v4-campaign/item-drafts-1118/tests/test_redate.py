@@ -41,10 +41,10 @@ try:
     assert all(i['date']==meta['dates'][i['span']] for i in meta['items'])
     print('PASS one argument re-dates all six items, queue lower bounds and plan t0s to Fri/Sat/Sun')
 
-    split='qual-01-s02=2026-11-20,qual-02=2026-11-21,qual-03=2026-11-22'
-    call('--dates',split)
+    split='qual-01-s02=2026-11-21,qual-02=2026-11-22,qual-03=2026-11-23'
+    call('--dates',split,'--queue-expiry','2026-11-24T00:00:00-08:00')
     meta=metadata()
-    assert meta['dates']['qual-01-s01']=='2026-11-19' and meta['dates']['qual-01-s02']=='2026-11-20'
+    assert meta['dates']['qual-01-s01']==default['dates']['qual-01-s01'] and meta['dates']['qual-01-s02']=='2026-11-21'
     for old,item in zip(default['items'],meta['items'],strict=True):
         for key in ('span','legs','kit_sha','seed','predecessor_kit_sha','predecessor_pin'):
             assert item[key]==old[key],(item['span'],key)
@@ -65,7 +65,7 @@ try:
     call('--dates','qual-01=2026-11-18',ok=False)
     call('--dates','qual-03=2026-11-24',ok=False)
     call('--dates','qual-02=2026-11-20,qual-02-s02=2026-11-21',ok=False)
-    call('--dates','qual-01-s01=2026-11-20',ok=False)
+    call('--dates','qual-01-s01=2026-11-21',ok=False)
     print('PASS one-date, known development-date and expired queue plans refused')
 finally:
     call()

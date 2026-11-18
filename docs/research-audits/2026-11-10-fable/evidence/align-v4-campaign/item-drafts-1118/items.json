@@ -1,8 +1,8 @@
 {
   "source": "6010985a3312c77bb8e4bb4bf5c920c4d49b8512",
-  "pin": "0d03cb7833bb8b15bc391127a7fe5519b7d98602",
+  "pin": "6e9d42f1dd3d308bc9239143d0d634ab965e50e1",
   "merged_w1": "c3f4bacd8013ca98c19cf8d41f830c701930cd41",
-  "source_audit": "61377dc45e9be3163466ef33e57dc0281423fdbc",
+  "source_audit": "fa9e4c24e0ea701773830365d2e1335971447234",
   "queue_scan": [
     "docs/process/cadence/BLOCK-QUEUE.json",
     "docs/process/cadence/kits/cl-dev-01.json",
@@ -16,12 +16,12 @@
     "docs/process/cadence/kits/cl-qual-03.v1.1.json"
   ],
   "dates": {
-    "qual-01-s01": "2026-11-19",
-    "qual-01-s02": "2026-11-19",
-    "qual-02-s01": "2026-11-20",
-    "qual-02-s02": "2026-11-20",
-    "qual-03-s01": "2026-11-21",
-    "qual-03-s02": "2026-11-21"
+    "qual-01-s01": "2026-11-20",
+    "qual-01-s02": "2026-11-20",
+    "qual-02-s01": "2026-11-21",
+    "qual-02-s02": "2026-11-21",
+    "qual-03-s01": "2026-11-22",
+    "qual-03-s02": "2026-11-22"
   },
   "queue_expiry": "2026-11-23T00:00:00-08:00",
   "items": [
@@ -30,7 +30,7 @@
       "span": "qual-01-s01",
       "block": "qual-01",
       "camp": "cl-qual-01",
-      "date": "2026-11-19",
+      "date": "2026-11-20",
       "legs": [
         "L001",
         "L002",
@@ -41,11 +41,11 @@
       ],
       "kit_path": "docs/process/cadence/kits/cl-qual-01.v1.1.json",
       "kit_file": "kits/cl-qual-01.v1.1.json",
-      "kit_sha": "35ded7c83290f24306a646a503647a2af6e3f725708507f27e7502fa4d06fdd2",
+      "kit_sha": "ce5c16d221f838ca8f06af68aa7380a4cb0d6fb4b5b5825444db6c7433fd40c7",
       "seed": 2026111422,
       "queue_file": "queues/cl-qual-01.queue.json",
       "queue_path": "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/item-drafts-1118/queues/cl-qual-01.queue.json",
-      "queue_sha": "8c33da441d1b4437db0526d708eec08063c057474d98322d62d3faa02fca2e2e",
+      "queue_sha": "c972a8b91449c2edcc8d4a3be51d216fb75f933b24086286155c6509742a4d5a",
       "predecessor": "dev-05-s02",
       "predecessor_camp": "cl-dev-05",
       "predecessor_legs": [
@@ -77,7 +77,7 @@
       "span": "qual-01-s02",
       "block": "qual-01",
       "camp": "cl-qual-01",
-      "date": "2026-11-19",
+      "date": "2026-11-20",
       "legs": [
         "L007",
         "L008",
@@ -88,11 +88,11 @@
       ],
       "kit_path": "docs/process/cadence/kits/cl-qual-01.v1.1.json",
       "kit_file": "kits/cl-qual-01.v1.1.json",
-      "kit_sha": "35ded7c83290f24306a646a503647a2af6e3f725708507f27e7502fa4d06fdd2",
+      "kit_sha": "ce5c16d221f838ca8f06af68aa7380a4cb0d6fb4b5b5825444db6c7433fd40c7",
       "seed": 2026111422,
       "queue_file": "queues/cl-qual-01.queue.json",
       "queue_path": "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/item-drafts-1118/queues/cl-qual-01.queue.json",
-      "queue_sha": "8c33da441d1b4437db0526d708eec08063c057474d98322d62d3faa02fca2e2e",
+      "queue_sha": "c972a8b91449c2edcc8d4a3be51d216fb75f933b24086286155c6509742a4d5a",
       "predecessor": "qual-01-s01",
       "predecessor_camp": "cl-qual-01",
       "predecessor_legs": [
@@ -103,8 +103,8 @@
         "L005",
         "L006"
       ],
-      "predecessor_kit_sha": "35ded7c83290f24306a646a503647a2af6e3f725708507f27e7502fa4d06fdd2",
-      "predecessor_pin": "0d03cb7833bb8b15bc391127a7fe5519b7d98602",
+      "predecessor_kit_sha": "ce5c16d221f838ca8f06af68aa7380a4cb0d6fb4b5b5825444db6c7433fd40c7",
+      "predecessor_pin": "6e9d42f1dd3d308bc9239143d0d634ab965e50e1",
       "short_leg": {
         "leg_id": "L010",
         "seed": 163257201,
@@ -124,7 +124,7 @@
       "span": "qual-02-s01",
       "block": "qual-02",
       "camp": "cl-qual-02",
-      "date": "2026-11-20",
+      "date": "2026-11-21",
       "legs": [
         "L001",
         "L002",
@@ -135,11 +135,11 @@
       ],
       "kit_path": "docs/process/cadence/kits/cl-qual-02.v1.1.json",
       "kit_file": "kits/cl-qual-02.v1.1.json",
-      "kit_sha": "69ba7cfe616f3d273f34dcd98a2ab7ce8b3c73609256b441cc73ea362eaa32c5",
+      "kit_sha": "f421d6a4c9a7214a1c220e4009619c7ea02590031a25122b6f379dab8fec7f75",
       "seed": 2026111423,
       "queue_file": "queues/cl-qual-02.queue.json",
       "queue_path": "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/item-drafts-1118/queues/cl-qual-02.queue.json",
-      "queue_sha": "49e00b213d87f0c62e8028417a806298b823cc9576637c3e0cc0a7f3e3892ebc",
+      "queue_sha": "09d59241b18675c67d9e2207a8ca50180b70d79fd352e524d01aff8f8aad0a01",
       "predecessor": "qual-01-s02",
       "predecessor_camp": "cl-qual-01",
       "predecessor_legs": [
@@ -150,8 +150,8 @@
         "L011",
         "L012"
       ],
-      "predecessor_kit_sha": "35ded7c83290f24306a646a503647a2af6e3f725708507f27e7502fa4d06fdd2",
-      "predecessor_pin": "0d03cb7833bb8b15bc391127a7fe5519b7d98602",
+      "predecessor_kit_sha": "ce5c16d221f838ca8f06af68aa7380a4cb0d6fb4b5b5825444db6c7433fd40c7",
+      "predecessor_pin": "6e9d42f1dd3d308bc9239143d0d634ab965e50e1",
       "short_leg": {
         "leg_id": "L003",
         "seed": 357010911,
@@ -171,7 +171,7 @@
       "span": "qual-02-s02",
       "block": "qual-02",
       "camp": "cl-qual-02",
-      "date": "2026-11-20",
+      "date": "2026-11-21",
       "legs": [
         "L007",
         "L008",
@@ -182,11 +182,11 @@
       ],
       "kit_path": "docs/process/cadence/kits/cl-qual-02.v1.1.json",
       "kit_file": "kits/cl-qual-02.v1.1.json",
-      "kit_sha": "69ba7cfe616f3d273f34dcd98a2ab7ce8b3c73609256b441cc73ea362eaa32c5",
+      "kit_sha": "f421d6a4c9a7214a1c220e4009619c7ea02590031a25122b6f379dab8fec7f75",
       "seed": 2026111423,
       "queue_file": "queues/cl-qual-02.queue.json",
       "queue_path": "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/item-drafts-1118/queues/cl-qual-02.queue.json",
-      "queue_sha": "49e00b213d87f0c62e8028417a806298b823cc9576637c3e0cc0a7f3e3892ebc",
+      "queue_sha": "09d59241b18675c67d9e2207a8ca50180b70d79fd352e524d01aff8f8aad0a01",
       "predecessor": "qual-02-s01",
       "predecessor_camp": "cl-qual-02",
       "predecessor_legs": [
@@ -197,8 +197,8 @@
         "L005",
         "L006"
       ],
-      "predecessor_kit_sha": "69ba7cfe616f3d273f34dcd98a2ab7ce8b3c73609256b441cc73ea362eaa32c5",
-      "predecessor_pin": "0d03cb7833bb8b15bc391127a7fe5519b7d98602",
+      "predecessor_kit_sha": "f421d6a4c9a7214a1c220e4009619c7ea02590031a25122b6f379dab8fec7f75",
+      "predecessor_pin": "6e9d42f1dd3d308bc9239143d0d634ab965e50e1",
       "short_leg": {
         "leg_id": "L011",
         "seed": 112350110,
@@ -218,7 +218,7 @@
       "span": "qual-03-s01",
       "block": "qual-03",
       "camp": "cl-qual-03",
-      "date": "2026-11-21",
+      "date": "2026-11-22",
       "legs": [
         "L001",
         "L002",
@@ -229,11 +229,11 @@
       ],
       "kit_path": "docs/process/cadence/kits/cl-qual-03.v1.1.json",
       "kit_file": "kits/cl-qual-03.v1.1.json",
-      "kit_sha": "d7e6fda18d3213678931b29fc7fa12b0710204c627ea07d3cf456d8e4150e021",
+      "kit_sha": "9c4396ea1cff66fc4bbcf944ee2142bfb8b18f3a8547269c163faee9a3e03e88",
       "seed": 2026111428,
       "queue_file": "queues/cl-qual-03.queue.json",
       "queue_path": "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/item-drafts-1118/queues/cl-qual-03.queue.json",
-      "queue_sha": "e5248c077cef52c834f855e18564f58fe7c4092e7885b7f602e8e748fe8eeee7",
+      "queue_sha": "c0624fa008cd2d45fd9460ec700aebde645449b186b6c130181f0893a376d35a",
       "predecessor": "qual-02-s02",
       "predecessor_camp": "cl-qual-02",
       "predecessor_legs": [
@@ -244,8 +244,8 @@
         "L011",
         "L012"
       ],
-      "predecessor_kit_sha": "69ba7cfe616f3d273f34dcd98a2ab7ce8b3c73609256b441cc73ea362eaa32c5",
-      "predecessor_pin": "0d03cb7833bb8b15bc391127a7fe5519b7d98602",
+      "predecessor_kit_sha": "f421d6a4c9a7214a1c220e4009619c7ea02590031a25122b6f379dab8fec7f75",
+      "predecessor_pin": "6e9d42f1dd3d308bc9239143d0d634ab965e50e1",
       "short_leg": {
         "leg_id": "L003",
         "seed": 2956697698,
@@ -265,7 +265,7 @@
       "span": "qual-03-s02",
       "block": "qual-03",
       "camp": "cl-qual-03",
-      "date": "2026-11-21",
+      "date": "2026-11-22",
       "legs": [
         "L007",
         "L008",
@@ -276,11 +276,11 @@
       ],
       "kit_path": "docs/process/cadence/kits/cl-qual-03.v1.1.json",
       "kit_file": "kits/cl-qual-03.v1.1.json",
-      "kit_sha": "d7e6fda18d3213678931b29fc7fa12b0710204c627ea07d3cf456d8e4150e021",
+      "kit_sha": "9c4396ea1cff66fc4bbcf944ee2142bfb8b18f3a8547269c163faee9a3e03e88",
       "seed": 2026111428,
       "queue_file": "queues/cl-qual-03.queue.json",
       "queue_path": "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/item-drafts-1118/queues/cl-qual-03.queue.json",
-      "queue_sha": "e5248c077cef52c834f855e18564f58fe7c4092e7885b7f602e8e748fe8eeee7",
+      "queue_sha": "c0624fa008cd2d45fd9460ec700aebde645449b186b6c130181f0893a376d35a",
       "predecessor": "qual-03-s01",
       "predecessor_camp": "cl-qual-03",
       "predecessor_legs": [
@@ -291,8 +291,8 @@
         "L005",
         "L006"
       ],
-      "predecessor_kit_sha": "d7e6fda18d3213678931b29fc7fa12b0710204c627ea07d3cf456d8e4150e021",
-      "predecessor_pin": "0d03cb7833bb8b15bc391127a7fe5519b7d98602",
+      "predecessor_kit_sha": "9c4396ea1cff66fc4bbcf944ee2142bfb8b18f3a8547269c163faee9a3e03e88",
+      "predecessor_pin": "6e9d42f1dd3d308bc9239143d0d634ab965e50e1",
       "short_leg": {
         "leg_id": "L010",
         "seed": 2588091677,

@@ -2,11 +2,11 @@
  "batch_windows": [],
  "blackout_clear": true,
  "campaign_id": "cl-qual-03",
- "deadline_epoch_s": 1795272750.0,
+ "deadline_epoch_s": 1795359150.0,
  "expected_s": 12262,
  "fixed_overhead_s": 1200,
- "kit_sha256": "d7e6fda18d3213678931b29fc7fa12b0710204c627ea07d3cf456d8e4150e021",
- "launch_deadline_epoch_s": 1795275260.0,
+ "kit_sha256": "9c4396ea1cff66fc4bbcf944ee2142bfb8b18f3a8547269c163faee9a3e03e88",
+ "launch_deadline_epoch_s": 1795361660.0,
  "leg_cap_s": 2700,
  "legs": [
   {
@@ -97,7 +97,7 @@
  "schema": "joulewise.cadence_span_plan.v1",
  "soak_retry_budget_s": 1950,
  "soak_s": 1950,
- "t0_epoch_s": 1795248000.0,
+ "t0_epoch_s": 1795334400.0,
  "time_model": {
   "decode_tokens_per_s": 12.03,
   "fixed_s": 500.0,

@@ -4,64 +4,65 @@ These are builder-defined inputs to the draft's executable checks, implementing 
 
 | Input | Required observation / owner / authority |
 |---|---|
-| ISSUED_EPOCH; WATCH_UNTIL_EPOCH | Lead: actual issue stamp; hand watcher observation +86400, re-read every arm; RL-173 D.5/C.5. An Actions watcher needs a new C.4 read path, not this stamp. |
+| ISSUED_EPOCH | Lead: actual issue epoch, used as the earliest authorized t0. |
 | FREEZE2_COMMIT / COEF_PATH / COEF_SHA256 | Lead: full 40-char commit and 64-char hash of the coefficient file. Commit ancestor of fetched audit or main, contains exact hash. Coefficient contents are never printed. RL-165 §8.1; RL-173 E. |
 | COLD_SEAT_RECORD; QUAL_COLD_SEAT=ADMIT; COLD_SEAT_KIT_SHA | Lead records cold-seat pointer per kit and exact kit hash; not the builder re-check. RL-149 §2.8 line 1 / RL-165 §8.1. |
 | FIRST_CAPTURE_CONFIRMED=yes | Cold seat's RL-167 Part B Q2 finding: own-shaped first G0 equals capture code; five consumers read it. |
-| LINE2_RECORD; LINE2_EQUAL=yes; LINE2_PIN; LINE2_BASE | Lead: full-suite frozen-byte equality and final red-set comparison test for test; pin=0576ed76d3..., base=c3f4bacd8... (the W1-line commit actually merged). RL-165 §8.1. |
+| LINE2_RECORD; LINE2_EQUAL=yes; LINE2_PIN; LINE2_BASE | Lead: full-suite frozen-byte equality and final red-set comparison test for test; pin=`6e9d42f1dd3d308bc9239143d0d634ab965e50e1`, base=c3f4bacd8... (the W1-line commit actually merged). RL-165 §8.1. |
 | HOST_EVENT_RECORD; HOST_EVENT_DISPOSITION | Lead: readback of RL-174 C’s four lines, with done / waived / deferred describing the historical attempt. No new hygiene action, restart or visit is a gate. An unplanned restart is recorded and the next arm refreshes the lines. |
 | HOST_STATE_ID; FREEZE2_HOST_STATE_ID; CURRENT_HOST_STATE_ID | Lead records the hygiene settings at freeze 2; magistrate confirms them. The identity excludes boot time: RL-174 C permits an unplanned restart with an event and fresh four lines, without a restart hold. No hygiene setting changes through qual-03 close. |
 | INCLUSION_RECORD; QUAL_INCLUSION_UNCHANGED=yes | Filled by RL-174 B.5 at `ebff15ad27e831499dd65796b3727d8c5d451e21`: six rules unchanged, overlaps print-only. By-job counts through dev-05 are appended after desk-final and gate nothing. A changed rule is outside this draft. |
-| QUEUE_COMMIT | Lead records authenticated audit commit containing the exact queue bytes. Gate binds hash, roster, kit, attempt 1, span date, ancestor and finite expiry ≤7 days from that commit. The default queue expires Nov23 00:00 PST. |
+| QUEUE_COMMIT | Lead records authenticated audit commit containing the exact queue bytes. Gate binds hash, roster, kit, attempt 1, span date, ancestor and the queue’s finite expiry. The default queue expires Nov23 00:00 PST. |
 | QUAL_DATES | Six span-to-local-date entries. Every recorded qualification t0 must match its own entry. On recovery, preserve s01's date, re-date missing s02 and move later untouched blocks whole. |
 | BATCH OK / RL-175 C.4 | Record fresh boot and predicted batch epochs, planned soak end, expected close and both bounds from Start and Run. A held arm waits until batch start plus 27 minutes. Run hands the bounds and sleep-inclusive clock anchor to the child. Its receipt carries `started.epoch_ns`, `started.continuous_ns` and the date and bounds in `t0_authority`. |
 | LINE6_RECORD; STOPS_CLEAR=yes | Lead: all applicable stops disposed under RL-149 §2.4/§2.8 line 6. Re-read before launch. |
 | VETO_RECORD; VETO_CLEAR=yes | Magistrate: current halt/veto and directive-notice read, not an old no-veto answer. RL-149 §2.8 lines 5/6. |
 | CHECKLIST_RECORD; CHECKLIST_OK=yes; CHECKLIST_OBSERVATIONS | Magistrate: every native kit checklist line and measurement_mode exception checked, record path and fresh observations JSON; pinned `checklist` executes in Start and Run. Native failure stops regardless of a prior yes. |
 | PILOT_PASSED=yes | Lead: development pilot gate already passed under RL-149 §2.8 line 8; class B qualification has no class A smoke. |
-| SAMPLE_HAND_RECORD; SAMPLE_HAND_CLEAR=yes | Lead: RL-172 (c)/RL-173 E sampled hand table completed where due; disagreement holds the next arm. |
+| SAMPLE_HAND_RECORD; SAMPLE_HAND_CLEAR=yes | Lead: RL-172 (c)/RL-173 E sampled hand table completed where due; a disagreement holds the affected kit (RL-179 F-3). |
 | COPY_KEY_SAFE=yes; OFFLOAD_CLEAR=yes | Lead: encryption key in a second off-MBP place; no failed/unverified offload. Gate requires the campaign marker or an exact latest non-campaign Check/copy proof. RL-173 A. |
 | ATTEMPT_LEDGER | Lead supplies the complete host launch/start-plan ledger described below. Include launches outside these items and attempts without a receipt. |
 | CLOSE_PROOF_RECEIPT; HOST_RESTORE_OK=1; FEEDS_STOPPED=1; GROUPS_ABSENT=1; FOREIGN_PROCESSES_ABSENT=1 | The magistrate binds the Check's shutdown evidence to the selected attempt's own receipt. The gate also checks the restore result in that receipt. |
 | LAST_CLOSE_KIND | Campaign or other, according to the selected receipt. |
 | NONCAMPAIGN_COPY_OK=yes; NONCAMPAIGN_COPY_RECEIPT; NONCAMPAIGN_COPY_CLOSE_NS; NONCAMPAIGN_COPY_RECORD | The non-campaign Check binds copy proof to the exact selected receipt path and close epoch in nanoseconds. RL-173 A. |
-
-The operational attempt ledger is a JSON object with an `attempts` list.
-Every row carries `span_id` and the absolute `close_receipt` path reserved
-for that attempt. Either every row has a unique positive integer `sequence`,
-or the rows use `boot_id` and integer `monotonic_ns`. For multiple boots,
-`boot_order` lists boot ids from oldest to newest. A single attempt in
-the latest boot needs no monotonic tie-break. Multiple attempts in that boot
-need distinct monotonic readings. Include all starts, using the shared desk
-fence lock for writers to this ledger. The launcher requires a ledger path,
-previous close receipt, span id and exact close bound for every qualification
-kit. It preserves prior rows and publishes its own row before bootstrap,
-even if bootstrap fails.
-
-The selected receipt must carry the row's exact `span_id` and
-`ended.epoch_ns`, or an exact nanosecond-representable `ended.epoch_s`.
-New qualification runner receipts carry the id, nanoseconds and their
-successful restore step with affirmative readback. For earlier or other
-producers, the lead supplies the attempt's identity-bound close Check with
-the exact end stamp and a nonempty `restore_readbacks` object of named
-boolean results. Every readback must be true. Preserve the source receipts.
-Use the reserved path for each attempt, including retries.
 | SESSION_READY; SESSION_RECORD | Lead's current READY census record pointer and yes/no. yes immediately cedes; unknown holds. RL-172 (f). |
-| QUAL01_SOAK_HAND_READ=SAME; QUAL01_SOAK_RECORD | Lead: first qualification soak's fields/reference schema hand-compared to dev-05; required before any later span in these conservative drafts. Difference goes to research lead. RL-172a F1. |
-| LINE9_RECORD | Lead: path to the typed debt record below, updated in actual machine order, across every campaign queue; F0/F2/Part C/v4 excluded. RL-165 §6; RL-172 (c); RL-173 E Q1. |
+| Registered `lm-qual-01` manifest and ledger row | Lead confirms both on main with the exact qualification kit hashes before qual-01-s01 arms (RL-181 §1.0). |
+| QUAL01_SOAK_HAND_READ=SAME; QUAL01_SOAK_RECORD | Before qual-01-s02, record the comparison of soak fields and reference schema with dev-05. The first same-pin filler hand-read may supply it. A difference goes to the research lead (RL-172a F1; RL-181 §4(a)). |
+| QUAL01_TYPES_HAND_READ=PASS; QUAL01_TYPES_HAND_RECORD | Before qual-01-s02, record the RL-181 §4(a) hand-read covering capture G0, each consumer’s release and wait, and each decode count against its cap. Name qual-01-s01 or the earlier passing q0 capture-and-consumer filler or pilot, and bind the record to the exact pin. If it has not passed by s02’s latest t0, re-date under RL-175 C.3. |
 
-The typed debt file is a lead-produced **operational record**, not a new repository schema or a substitute for authentication. Include the full machine-order census up to the named predecessor. For every entry through k−2, `desk_final_record` points to the authenticated final table with exact leg order/count/attempt/kit/plan/reference identity, no missing/duplicate record and no empty table. Each v1.1 entry through k−2 also needs the separate typed `q1_complete_record`. RL-174 E.5 additionally names dev-05-s01’s desk-final/Q1 records for qual-01-s01 and dev-05-s02’s for qual-01-s02; an omitted named row cannot pass. The immediate predecessor's clean close is a separate gate; its desk/Q1 may remain pending until k+2. Example shape (unfilled, not usable):
+Seed the operational attempt ledger's JSON `attempts` list in actual launch
+order starting with `sequence: 1`. Every row carries a unique positive integer
+`sequence`, the `span_id`, and an absolute `close_receipt` path unique to
+that attempt. Include starts outside these items and attempts without receipts.
+All writers use the shared desk fence lock. The launcher selects the highest
+sequence and publishes the next row before bootstrap, even if bootstrap
+later fails.
 
-```json
-{
-  "next_span": "qual-01-s01",
-  "authenticated_roster_identity_checks": "RL-172 (c)",
-  "machine_order": [
-    {"span_id": "<LEAD FILLS: every prior campaign span in order>", "runner_kind": "cadence-legs-v1", "desk_final_record": "<LEAD FILLS: authenticated FINAL pointer>"},
-    {"span_id": "dev-05-s01", "runner_kind": "cadence-legs-v1.1", "desk_final_record": "<LEAD FILLS: FINAL>", "q1_complete_record": "<LEAD FILLS: typed Q1 completion>"},
-    {"span_id": "dev-05-s02", "runner_kind": "cadence-legs-v1.1"}
-  ]
-}
-```
+Before qual-01-s01, the lead supplies the latest pre-qualification attempt's
+**identity-bound close Check**, for dev-05-s02 or for a more recent filler on
+an older pin. Its older runner receipt lacks `span_id`, which the pinned
+`close-proof` command requires. Preserve the original receipt and point that
+attempt's ledger row to the close Check. It carries the row's exact `span_id`,
+the observed `ended.epoch_ns` (or exact nanosecond-representable `ended.epoch_s`),
+and a nonempty `restore_readbacks` object with each named restore result set
+to true after verification. Keep the source attempt identity with the Check.
+Keep newly written Checks outside immutable run bundles. The gate uses
+`LAST_CLOSE_KIND=other` for a Check staged outside a recognized campaign
+output. Supply the separate copy proof with the exact Check path and close
+stamp and retain the original attempt’s copy evidence. An existing Check
+at a recognized campaign output path uses the verified campaign copy marker.
+New qualification runner receipts carry their own span id and passing
+restore step.
+
+**rc 3 recovery.** The child refuses before creating the output directory or
+a runner receipt. The published ledger row still blocks every successor.
+The lead verifies the refusal and that the fence is gone, restore is proven,
+feeds are stopped and the process group and foreign processes are absent.
+Write the identity-bound close Check above outside the counted-output census,
+keep the original reserved output identity with the Check, and bind only
+that row's `close_receipt` to the Check under the shared desk fence lock.
+Keep the row and its sequence. Supply the separate copy proof with that exact
+Check path and epoch. Re-run `close-proof` before the next arm. A new attempt
+still needs lead authority under the applicable stop, date and predecessor rules.
 
 The current kit's native observation JSON uses the pinned validator's existing keys: `measurement_head`, `frozen_path_sha256`, `kit_sha256`, `ac_power`, `powermode`, `network_time`, `freq_word`, `stray_monitors`, `other_agents`, `night_labels_loaded`, `high_power_marker`, `sudo_kill_rc`, `km003c_ready`, `disk_free_gb`, `previous_span`, `halts`, `t0_epoch_s`, `end_by_epoch_s`. Populate from actual readbacks; no synthetic template is an arm record. RL-167 Part B Q8 requires the observed HEAD beside the kit's frozen.commit. All six caps are listed by item; its one short leg is intentional (Q6).

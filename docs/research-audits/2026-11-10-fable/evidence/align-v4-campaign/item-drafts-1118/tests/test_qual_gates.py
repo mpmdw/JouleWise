@@ -41,7 +41,7 @@ def run_item(item,shell,source_tree):
     for i in META['items']:
         p=auth/i['queue_path']; p.parent.mkdir(parents=True,exist_ok=True); p.write_bytes((HERE/i['queue_file']).read_bytes())
     git(auth,'add','.')
-    env=dict(os.environ,GIT_AUTHOR_NAME='Synthetic fixture',GIT_AUTHOR_EMAIL='fixture@invalid',GIT_COMMITTER_NAME='Synthetic fixture',GIT_COMMITTER_EMAIL='fixture@invalid',GIT_AUTHOR_DATE='2026-11-16T12:00:00-08:00',GIT_COMMITTER_DATE='2026-11-16T12:00:00-08:00')
+    env=dict(os.environ,GIT_AUTHOR_NAME='Synthetic fixture',GIT_AUTHOR_EMAIL='fixture@invalid',GIT_COMMITTER_NAME='Synthetic fixture',GIT_COMMITTER_EMAIL='fixture@invalid',GIT_AUTHOR_DATE='2026-11-12T12:00:00-08:00',GIT_COMMITTER_DATE='2026-11-12T12:00:00-08:00')
     git(auth,'commit','-q','-m','Synthetic coefficients and queues, never published',env=env)
     commit=git(auth,'rev-parse','HEAD')
     git(auth,'update-ref','refs/remotes/origin/audit/2026-11-10-fable',commit); git(auth,'update-ref','refs/remotes/origin/main',commit)
@@ -52,7 +52,6 @@ def run_item(item,shell,source_tree):
     ledger=home/'synthetic-attempts.json'
     previous={'sequence':1,'span_id':item['predecessor'],'close_receipt':str(predout/'runner_receipt.json')}
     recent={'sequence':2,'span_id':'f0-synthetic','close_receipt':str(latest_receipt)}
-    debt=home/'synthetic-debt.json'
     staged=home/'staged'; staged.mkdir()
     gates=gates.replace('/Users/edr/campaign-out',str(root)).replace('/Users/edr/code/jw-wt',str(wt)).replace('/Users/Shared/JouleWise/desk-copy',str(markers))
     defaults=dict(REPO=str(source_tree),AUTH_REPO=str(auth),PIN=META['pin'],KIT_SHA=item['kit_sha'],QUEUE_PATH=item['queue_path'],QUEUE_SHA=item['queue_sha'],
@@ -61,10 +60,10 @@ def run_item(item,shell,source_tree):
         QUEUE_COMMIT_EPOCH=now-300,EFF_CLOSE_NS=(now-1200)*NS,ARM_NOT_BEFORE_EPOCH=now-1200,
         QUAL_COLD_SEAT='ADMIT',LINE2_EQUAL='yes',LINE2_PIN=META['pin'],LINE2_BASE=META['merged_w1'],COLD_SEAT_KIT_SHA=item['kit_sha'],FIRST_CAPTURE_CONFIRMED='yes',
         HOST_EVENT_DISPOSITION='done',CURRENT_HOST_STATE_ID='synthetic-host',FREEZE2_HOST_STATE_ID='synthetic-host',HOST_EVENT_BEFORE_FREEZE2='yes',QUAL_INCLUSION_UNCHANGED='yes',
-        S02_ISSUED_EPOCH='unissued',SESSION_READY='no',SESSION_RECORD='synthetic fresh READY census',STOPS_CLEAR='yes',VETO_CLEAR='yes',CHECKLIST_OK='yes',PILOT_PASSED='yes',SAMPLE_HAND_CLEAR='yes',COPY_KEY_SAFE='yes',OFFLOAD_CLEAR='yes',
+        SESSION_READY='no',SESSION_RECORD='synthetic fresh READY census',STOPS_CLEAR='yes',VETO_CLEAR='yes',CHECKLIST_OK='yes',PILOT_PASSED='yes',SAMPLE_HAND_CLEAR='yes',COPY_KEY_SAFE='yes',OFFLOAD_CLEAR='yes',
         LINE6_RECORD='synthetic stops clear',CHECKLIST_RECORD='synthetic native checklist',VETO_RECORD='synthetic veto census',SAMPLE_HAND_RECORD='synthetic sampled hand pass',
-        QUAL01_SOAK_HAND_READ='SAME',QUAL01_SOAK_RECORD='synthetic RL172a soak comparison',LINE9_RECORD=str(debt))
-    fills=dict(ISSUED_EPOCH=now-100,WATCH_UNTIL_EPOCH=now+10000,FREEZE2_COMMIT=commit,FREEZE2_COEF_SHA256=coefsha,FREEZE2_COEF_PATH='coefficients.json',COLD_SEAT_RECORD='synthetic cold seat pointer',LINE2_RECORD='synthetic test-for-test red comparison',HOST_EVENT_RECORD='synthetic pre-freeze event/readback',HOST_STATE_ID='synthetic-host',INCLUSION_RECORD='synthetic research-lead unchanged inclusion ruling',QUEUE_COMMIT=commit)
+        QUAL01_SOAK_HAND_READ='SAME',QUAL01_SOAK_RECORD='synthetic RL172a soak comparison',QUAL01_TYPES_HAND_READ='PASS',QUAL01_TYPES_HAND_RECORD='synthetic same-pin q0 capture and consumer comparison')
+    fills=dict(ISSUED_EPOCH=now-100,FREEZE2_COMMIT=commit,FREEZE2_COEF_SHA256=coefsha,FREEZE2_COEF_PATH='coefficients.json',COLD_SEAT_RECORD='synthetic cold seat pointer',LINE2_RECORD='synthetic test-for-test red comparison',HOST_EVENT_RECORD='synthetic pre-freeze event/readback',HOST_STATE_ID='synthetic-host',INCLUSION_RECORD='synthetic research-lead unchanged inclusion ruling',QUEUE_COMMIT=commit)
     def fixture():
         for d in (root,wt,markers): shutil.rmtree(d,ignore_errors=True); d.mkdir()
         source=BASE/'mock'/item['predecessor']
@@ -77,10 +76,6 @@ def run_item(item,shell,source_tree):
         write_close(latest_receipt,recent['span_id'],now-1200)
         dump(ledger,{'attempts':[previous,recent]})
         (markers/'f0-synthetic.ok').write_text('SYNTHETIC verified hashes, size, provider upload completion\n')
-        # Minimal but typed k+2 proof: prior two entries only stand for the full census in this test.
-        dump(debt,{'next_span':item['span'],'authenticated_roster_identity_checks':'RL-172 (c)','machine_order':[
-            {'span_id':'dev-05-s01' if item['span']=='qual-01-s01' else 'dev-05-s02' if item['span']=='qual-01-s02' else 'synthetic-k-minus-2','runner_kind':'cadence-legs-v1.1','desk_final_record':'synthetic authenticated FINAL','q1_complete_record':'synthetic typed Q1 completion'},
-            {'span_id':item['predecessor'],'runner_kind':'cadence-legs-v1.1'}]})
     def close_stamp(path, epoch):
         r=json.loads(path.read_text()); r['ended']={'epoch_s':epoch}; dump(path,r)
     def write_close(path, span, epoch):
@@ -95,8 +90,6 @@ def run_item(item,shell,source_tree):
         p=predout/'runner_receipt.json'; r=json.loads(p.read_text()); r.update(kw); dump(p,r); os.utime(p,(now-4000,now-4000))
     def summary(leg,**kw):
         p=predout/'desk-bundle'/'legs'/leg/'leg_summary.json'; r=json.loads(p.read_text()); r.update(kw); dump(p,r)
-    def debt_change(key,value):
-        r=json.loads(debt.read_text()); r['machine_order'][0][key]=value; dump(debt,r)
     def run(name,setup=lambda:None,overrides=None,fill_changes=None,want=True,command='all_gates',stamp=None,
             contains=None,full_start=False,run_boot=None,run_anchor=None,anchor_ns=None,run_anchor_ns=None):
         global checks,failures
@@ -190,31 +183,29 @@ unset MAGISTRATE_WATCHDOG_CUSTODY_ROOT
     expected=item['expected_s']
     run('C.4 Run sends tightened cutoff to child',overrides={'NATIVE_RC':0},full_start=True,
         run_boot=boot_at(now+expected+1),contains=f'--t0-before {now+1}')
-    cutoff=min(now+10000,int(re.search(r'WINDOW_END=(\d+)',config)[1])+1)
+    window_end=int(re.search(r'WINDOW_END=(\d+)',config)[1])
+    pair_end=now+43200-int(item['launch_minimum_s']) if item['span'].endswith('s01') else window_end+1
+    cutoff=min(window_end+1,pair_end)
     run('C.4 Run forwards 27-minute release and clock anchor',overrides={'NATIVE_RC':0},full_start=True,
         run_boot=boot_at(now-1620),
         contains=f'--t0-not-before {now} --t0-not-before-ns {(now-1200)*NS} '
                  f'--t0-before {cutoff} --t0-anchor {now*NS}:1000000000000:1000000000000')
-    run('Watch expiry one second away bounds the Run handoff',overrides={'NATIVE_RC':0},full_start=True,
-        run_boot=boot_at(now+expected+60),fill_changes={'WATCH_UNTIL_EPOCH':now+1},
-        contains=f'--t0-before {now+1} --t0-anchor')
-    run('Watch cutoff is exclusive even after watch_gate has passed',
-        stamp=now+1,fill_changes={'WATCH_UNTIL_EPOCH':now+1},
-        command=f'EXPIRES_EPOCH={now+86400}; QUEUE_EXPIRES_EPOCH={now+86400}; arm_bound_gate',
-        want=False,contains=f'effective t0 cutoff {now+1}')
+    run('RL-179 retired arm inputs do not constrain Run',
+        overrides={'NATIVE_RC':0,'WATCH_UNTIL_EPOCH':now-1,'LINE9_RECORD':'missing',
+                   'S02_ISSUED_EPOCH':now-86400},fill_changes={'ISSUED_EPOCH':now-86400},
+        full_start=True,run_boot=boot_at(now+expected+60),contains=f'--t0-before {now+60} --t0-anchor')
     proven_now={'NATIVE_RC':0,'NONCAMPAIGN_COPY_CLOSE_NS':now*NS}
-    issue_now={'ISSUED_EPOCH':now,'WATCH_UNTIL_EPOCH':now+86400}
-    run('Delta audit: rollback after Run gates refuses before issue, watch and proven close',
+    issue_now={'ISSUED_EPOCH':now}
+    run('Delta audit: rollback after Run gates refuses before issue and proven close',
         setup=lambda:close_stamp(latest/'runner_receipt.json',now),overrides=proven_now,fill_changes=issue_now,
         full_start=True,run_boot=boot_at(now+expected+60),run_anchor=now-2,
         want=False,contains=f'arm clock before earliest authorized t0 {now}')
-    run('Run forwards the exact latest close, issue and observation bound',
+    run('Run forwards the exact latest close and issue bound',
         setup=lambda:close_stamp(latest/'runner_receipt.json',now),overrides=proven_now,fill_changes=issue_now,
         full_start=True,run_boot=boot_at(now+expected+60),contains=f'--t0-not-before-ns {now*NS}')
-    for lower in ('ISSUED_EPOCH','WATCH_UNTIL_EPOCH','QUEUE_COMMIT_EPOCH'):
-        opening=now+86400 if lower=='WATCH_UNTIL_EPOCH' else now
-        run('inclusive start from '+lower,command=f'EXPIRES_EPOCH={now+86400}; QUEUE_EXPIRES_EPOCH={now+86400}; '
-            f'{lower}={opening}; arm_bound_gate && echo "LOWER $ARM_NOT_BEFORE_EPOCH"',contains=f'LOWER {now}')
+    for lower in ('ISSUED_EPOCH','QUEUE_COMMIT_EPOCH'):
+        run('inclusive start from '+lower,command=f'QUEUE_EXPIRES_EPOCH={now+86400}; '
+            f'{lower}={now}; arm_bound_gate && echo "LOWER $ARM_NOT_BEFORE_EPOCH"',contains=f'LOWER {now}')
     batch_only=f'ARM_BEFORE_EPOCH={now+86400}; batch_gate && echo "FINAL CUTOFF $ARM_BEFORE_EPOCH"'
     for label, batch, allow in (
         ('expected close one second before batch',now+expected+1,True),
@@ -254,17 +245,24 @@ unset MAGISTRATE_WATCHDOG_CUSTODY_ROOT
     run('v4 record unfilled WAIT',overrides={'SESSION_RECORD':''},want=False,contains='WAIT')
     for key in ('STOPS_CLEAR','VETO_CLEAR','CHECKLIST_OK','PILOT_PASSED','SAMPLE_HAND_CLEAR','COPY_KEY_SAFE','OFFLOAD_CLEAR'):
         run('native/admission '+key,overrides={key:'no'},want=False,contains='WAIT')
-    run('soak handread absent',overrides={'QUAL01_SOAK_HAND_READ':'pending'},want=item['span']=='qual-01-s01',contains=None if item['span']=='qual-01-s01' else 'WAIT')
+    owes_reads=item['span']=='qual-01-s02'
+    for key,value,message in (
+        ('QUAL01_SOAK_HAND_READ','pending','RL-172a F1'),
+        ('QUAL01_SOAK_RECORD','<LEAD FILLS: soak record>','RL-172a F1'),
+        ('QUAL01_TYPES_HAND_READ','pending','RL-181 §4(a)'),
+        ('QUAL01_TYPES_HAND_RECORD',None,'RL-181 §4(a)'),
+    ):
+        run('admission missing '+key,overrides={key:value},want=not owes_reads,
+            contains=message if owes_reads else 'AUTHORIZED T0')
+    if owes_reads:
+        run('RL-181 prior same-pin pilot hand-read satisfies s02',
+            overrides={'QUAL01_TYPES_HAND_RECORD':'synthetic prior same-pin q0 pilot hand-read'})
     run('queue commit unfilled WAIT',fill_changes={'QUEUE_COMMIT':None},want=False,contains='WAIT')
     run('queue wrong hash STOP',overrides={'QUEUE_SHA':'0'*64},want=False,contains='STOP')
-    run('C.3 queue date binding STOP',overrides={'T0_DATE':'2026-11-22'},command='queue_gate',want=False,contains='span date')
+    run('C.3 queue date binding STOP',overrides={'T0_DATE':'2026-11-24'},command='queue_gate',want=False,contains='span date')
     run('C.3 queue kit binding STOP',overrides={'KIT_SHA':'0'*64},command='queue_gate',want=False,contains='kit')
     run('queue expired STOP',stamp=1795420800,command='queue_gate',want=False,contains='STOP')
-    run('Q1 debt unpaid WAIT',setup=lambda:debt_change('q1_complete_record',''),want=False,contains='WAIT')
-    run('desk debt unpaid WAIT',setup=lambda:debt_change('desk_final_record',''),want=False,contains='WAIT')
-    run('Q1 debt unfilled WAIT',setup=lambda:debt_change('q1_complete_record','<LEAD FILLS: Q1>'),want=False,contains='WAIT')
-    if item['span'].startswith('qual-01-'):
-        run('named dev-05 debt omitted WAIT',setup=lambda:debt_change('span_id','unrelated-paid-span'),command='debt_gate',want=False,contains='WAIT')
+    run('RL-179 queue lifetime above seven days accepted',command='queue_gate',contains='QUEUE COMMITTED')
     run('no predecessor WAIT',setup=lambda:shutil.rmtree(predout),want=False,contains='WAIT')
     run('pending predecessor WAIT',setup=lambda:(predout/'runner_receipt.json').unlink(),want=False,contains='WAIT')
     run('lookalike predecessor WAIT',setup=lambda:predout.rename(predout.with_name(predout.name.replace('-a1-','b-a1-'))),want=False,contains='WAIT')
@@ -274,13 +272,8 @@ unset MAGISTRATE_WATCHDOG_CUSTODY_ROOT
     run('two overtime STOP',setup=lambda:[summary(leg,wall_s=99999) for leg in item['predecessor_legs'][:2]],want=False,contains='LEG_OVERTIME')
     run('one overtime allowed',setup=lambda:summary(item['predecessor_legs'][0],wall_s=99999))
     run('three contaminated STOP',setup=lambda:summary(item['predecessor_legs'][0],contaminated_redos=3),want=False,contains='CONTAMINATED_REDOS')
-    run('issue unfilled WAIT',fill_changes={'ISSUED_EPOCH':None},want=False,contains='WAIT')
-    run('issue future VOID',fill_changes={'ISSUED_EPOCH':now+1},want=False,contains='VOID')
-    run('24h expired VOID',fill_changes={'ISSUED_EPOCH':now-86400},want=False,contains='VOID')
-    run('24h minus second valid',fill_changes={'ISSUED_EPOCH':now-86399})
-    run('watch unfilled WAIT',fill_changes={'WATCH_UNTIL_EPOCH':None},want=False,contains='WAIT')
-    run('watch stale STOP',fill_changes={'WATCH_UNTIL_EPOCH':now},want=False,contains='STOP')
-    run('watch future STOP',fill_changes={'WATCH_UNTIL_EPOCH':now+86401},want=False,contains='STOP')
+    run('issue unfilled STOP',fill_changes={'ISSUED_EPOCH':None},want=False,contains='start bound missing')
+    run('issue future REFUSE',fill_changes={'ISSUED_EPOCH':now+1},want=False,contains='before earliest authorized t0')
     run('noncampaign copy missing WAIT',overrides={'NONCAMPAIGN_COPY_OK':'no'},want=False,contains='WAIT')
     run('stale noncampaign close copy proof WAIT',overrides={'NONCAMPAIGN_COPY_CLOSE_NS':(now-5000)*NS},want=False,contains='WAIT')
     run('other noncampaign receipt copy proof WAIT',overrides={'NONCAMPAIGN_COPY_RECEIPT':'old-F0-receipt'},want=False,contains='WAIT')
@@ -309,6 +302,38 @@ unset MAGISTRATE_WATCHDOG_CUSTODY_ROOT
     run('R3 missing latest receipt refuses and names the span despite valid older proof',
         setup=pending_attempt,overrides={'NATIVE_RC':0},full_start=True,want=False,
         contains='latest attempt hp-01-s04 has no close receipt')
+
+    if item['span']=='qual-01-s01':
+        old_receipt=predout/'runner_receipt.json'
+        old_check=home/'synthetic-prequalification-close-check.json'
+        def older_pin_close():
+            p=json.loads(old_receipt.read_text())
+            p.pop('span_id',None)
+            dump(old_receipt,p)
+            dump(ledger,{'attempts':[previous]})
+        def older_pin_check():
+            older_pin_close()
+            write_close(old_check,item['predecessor'],now-4000)
+            dump(ledger,{'attempts':[{**previous,'close_receipt':str(old_check)}]})
+        run('first arm rejects older-pin receipt without span identity',
+            setup=older_pin_close,want=False,contains='close receipt span id differs')
+        run('first arm accepts sequenced older-pin identity-bound close Check',
+            setup=older_pin_check,overrides=other_proof(old_check,(now-4000)*NS),
+            contains=f"CLOSE PROVEN {item['predecessor']}")
+        refused_out=root/item['camp']/f"cq-{item['span']}-a1-20261120T103000Z"
+        def refused_child():
+            next_attempt(item['span'],refused_out/'runner_receipt.json')
+        def refused_child_check():
+            refused_child()
+            write_close(outside,item['span'],now-30)
+            rec=json.loads(ledger.read_text())
+            rec['attempts'][0]['close_receipt']=str(outside)
+            dump(ledger,rec)
+            assert not refused_out.exists()
+        run('rc 3 pending attempt blocks successor',setup=refused_child,want=False,
+            contains='latest attempt qual-01-s01 has no close receipt')
+        run('rc 3 close Check recovers without creating a recorded t0',
+            setup=refused_child_check,overrides=other_proof(outside,(now-30)*NS),contains='DAY OK')
 
     def rolled_back_close():
         write_close(outside,'f0-after-rollback',now-1300)
@@ -369,7 +394,7 @@ unset MAGISTRATE_WATCHDOG_CUSTODY_ROOT
     run('development receipt on qual date REFUSE',
         setup=lambda:date_receipt('cl-dev-99','dev-99-s01',item['date'],['L001']),
         command='day_gate',want=False,contains='development receipt')
-    run('one block with declared cap applies',command='day_gate',contains='cap applies')
+    run('one qualification block under F-1',command='day_gate',contains='one qualification block')
     plan=META['dates']
     def dates_arg(dates):
         return ','.join(k+'='+v for k,v in dates.items())
@@ -410,6 +435,7 @@ unset MAGISTRATE_WATCHDOG_CUSTODY_ROOT
         queue_path=auth/item['queue_path']
         queue=json.loads(queue_path.read_bytes())
         next(entry for entry in queue['spans'] if entry['span_id']==item['span'])['not_before']=later
+        queue['expires_at']='2026-11-25T00:00:00-08:00'
         dump(queue_path,queue)
         git(auth,'add',item['queue_path'])
         git(auth,'commit','-q','-m','Synthetic half-run queue',env=env)
@@ -418,8 +444,7 @@ unset MAGISTRATE_WATCHDOG_CUSTODY_ROOT
         later_noon=epoch(later)
         run('C.3 full recovery with authenticated later queue and original s01',stamp=later_noon,
             overrides={**recovery,'QUEUE_SHA':hashlib.sha256(queue_path.read_bytes()).hexdigest(),
-                       'WINDOW_START':later_noon-43200,'WINDOW_END':later_noon+43199,
-                       'WATCH_UNTIL_EPOCH':later_noon+10000},
+                       'WINDOW_START':later_noon-43200,'WINDOW_END':later_noon+43199},
             fill_changes={'QUEUE_COMMIT':recovery_commit,'ISSUED_EPOCH':later_noon-100},
             contains='BATCH OK')
     else:
@@ -427,13 +452,12 @@ unset MAGISTRATE_WATCHDOG_CUSTODY_ROOT
             command='day_gate',want=False,contains='must move whole')
     if item['span'].endswith('s01'):
         pair_budget=int(item['launch_minimum_s'])
-        # If s02's item expires at exactly the backed-out handoff, s01 is too late.
-        run('WS 4 s02 item expiry binds s01', overrides={'S02_ISSUED_EPOCH': now+pair_budget-86400},
-            want=False, contains='effective t0 cutoff')
-        run('WS 4 s02 cutoff exact last second', overrides={'S02_ISSUED_EPOCH': now+pair_budget+1-86400})
         run('WS 4 s02 queue expiry binds s01',
-            command=f'EXPIRES_EPOCH={now+86400}; QUEUE_EXPIRES_EPOCH={now+pair_budget}; arm_bound_gate',
+            command=f'QUEUE_EXPIRES_EPOCH={now+pair_budget}; arm_bound_gate',
             want=False, contains='effective t0 cutoff')
+        run('WS 4 s02 queue cutoff exact last second',
+            command=f'QUEUE_EXPIRES_EPOCH={now+pair_budget+1}; arm_bound_gate',
+            contains='AUTHORIZED T0')
     day_start=epoch(item['date'])-43200
     limit=day_start+(16*3600+32*60 if item['span'].endswith('s01') else 86399)
     for t in (day_start,limit):

@@ -1,68 +1,44 @@
-# Qualification and STANDING-F0 r2 drafts — 2026-11-16 PST
+# Qualification drafts at the PR #812 merge pin
 
-**DRAFT / HOLD_FOR_FIT_FREEZE. Nothing issued.** These six items carry the PR #812 pipeline repair pin and the frozen attempt-order close-proof rule. The [original admission record](../qual-lines-794/LINES.md) and [earlier successor report](../../../../../run_reports/2026-11-17-qual-pin-t0guard.md) document their respective pins. The [ledger authority report](../../../../../run_reports/2026-11-18-pr812-ledger-required.md) records the checks on this pin.
+**DRAFT / HOLD_FOR_FIT_FREEZE.** The qualification pin is
+`6e9d42f1dd3d308bc9239143d0d634ab965e50e1`. Its 38 frozen path entries
+match PR #812’s reviewed head `0d03cb7833bb8b15bc391127a7fe5519b7d98602`.
+The three kits use the PR #794 source and the merged runner’s `pin-kit`.
+W1-line comparison baseline remains `c3f4bacd8013ca98c19cf8d41f830c701930cd41`.
 
-The forecast below predates C.4. Recompute arm and close times at issue using the fresh boot prediction. With a 02:08:39 batch, the forecast midnight arm holds until 02:35:39.
-
-| Item | t0-date window, PST (00:00:00–23:59:59) | Forecast t0: freeze Thu19 12:00 / slip Fri20 12:00 | Expected / work-worst close at those forecast starts | Exactly missing before issue; owner |
-|---|---|---|---|---|
-| qual01-s01 | Thu19; slip requires Fri20 re-date | Thu19 12:00 / Fri20 12:00 | Thu15:24:22 / Thu18:52:30; slip Fri same times | Lead: freeze2 commit/coefficient path/hash, per-kit admission pointers and exact line2 equality, four host-state lines/readback, queue commit/staging, prior dev-05-s02 confirmation, lines6/7/9 and issue fills. INCLUSION_RECORD filled by RL-174 B.5; dev-05-s01 desk-final + typed Q1 record required (RL-174 E.5). Magistrate: live arm observations. Builder: no remaining prerequisite after verification. |
-| qual01-s02 | Thu19; slip Fri20 | Thu19 15:24:22 / Fri20 15:24:22 | Thu18:49:32 / Thu22:16:52; slip Fri same times | Same shared prerequisites; dev-05-s02 desk-final + typed Q1 record required (RL-174 E.5); lead also records qual01-s01 soak/reference-schema hand comparison SAME against dev-05 (RL-172a F1), then issues inside three-ahead/24 h limits. Magistrate checks predecessor clean at arm. |
-| qual02-s01 | Fri20; slip Sat21 | Fri20 00:00 / Sat21 00:00 | Fri03:24:22 / Fri06:52:30; slip Sat same times | Shared prerequisites, qual01 soak hand record, qual-02 cold seat pointer, dated queue/staging and own issue/watch fills (lead). Predecessor qual01-s02 clean at arm (magistrate); actual k−2 desk + typed Q1 debt paid (lead). |
-| qual02-s02 | Fri20; slip Sat21 | Fri20 03:24:22 / Sat21 03:24:22 | Fri06:49:32 / Fri10:16:52; slip Sat same times | Same, with predecessor qual02-s01; own issue/watch fills and actual cross-block debt (lead); all fresh operational checks (magistrate). |
-| qual03-s01 | Sat21; slip Sun22 | Sat21 00:00 / Sun22 00:00 | Sat03:25:10 / Sat06:52:30; slip Sun same times | Shared prerequisites, qual01 soak hand record, qual-03 cold seat pointer, dated queue/staging and own issue/watch fills (lead); predecessor qual02-s02 and fresh checks (magistrate); actual k−2 desk/Q1 debt (lead). |
-| qual03-s02 | Sat21; slip Sun22 | Sat21 03:25:10 / Sun22 03:25:10 | Sat06:49:32 / Sat10:17:40; slip Sun same times | Same, with predecessor qual03-s01; own issue/watch fills and actual cross-block debt (lead); fresh checks (magistrate). |
-| STANDING-F0-r2 | Opens Sun22 11:51:24; outer expiry Sun29 11:51:24; daily launch 02:35–22:40 | ≥Sun22 11:51:24 in either case, subject to live ladder/ledger | At that start: ~13:51:24 / 15:14:24; shared desk deadline 15:51:24 | Lead can issue ahead for activation at the planned start (later issue needs re-dating), rechecks current W1 head/hash qualification and any hold; magistrate checks all standing triggers/spacing/day/restore/copy/READY gates. Optional hold is inactive until lead issues it. |
-
-Forecast assumptions: dev-05-s02 closes Wed18 ~07:00; all operational/desk/admission records ready at the assumed freeze; no intervening F0/F2/v4 occupation. Expected successors assume immediate close proof at expected close. Worst-close cells are **each span's work bound from its forecast start**, not a promise all six start at those times under worst cases. qual01-s02 after both first spans' work-worst durations could instead start Thu18:52:30 and close Fri01:45:00, before any delay for actual close proof or other gates. Qual02-s01 then needs the latest close proof. Actual fence disappearance and every gate govern.
-
-Planner expected sums: 24,572 s per block, 73,716 s (20:28:36) over six spans, plus proof, gate and date waits. Each work bound is 24,750 s (6:52:30); **launcher minimum 27,260 s** adds 1,950 s retry +560 s reserves; items allow +900 s start slack (28,160 s desk deadline). A shared desk fence remains. The pinned runner has no batch-window fence. `evidence/plan-*.json` contains the six actual pinned plans.
-
-## Frozen facts and admission
-
-| Block | Exact kit SHA-256 | Law spans / short leg | Expected s, s01 / s02 |
+| Block | t0-date (PST) | Kit SHA-256 | Expected seconds s01 / s02 |
 |---|---|---|---|
-| qual-01 | 35ded7c83290f24306a646a503647a2af6e3f725708507f27e7502fa4d06fdd2 | L001–L006 / L007–L012; L004=3151, L010=3724 | 12262 / 12310 |
-| qual-02 | 69ba7cfe616f3d273f34dcd98a2ab7ce8b3c73609256b441cc73ea362eaa32c5 | L001–L006 / L007–L012; L003=3151, L011=3724 | 12262 / 12310 |
-| qual-03 | d7e6fda18d3213678931b29fc7fa12b0710204c627ea07d3cf456d8e4150e021 | L001–L006 / L007–L012; L003=3724, L010=3151 | 12310 / 12262 |
+| qual-01 | Fri 20 Nov | `ce5c16d221f838ca8f06af68aa7380a4cb0d6fb4b5b5825444db6c7433fd40c7` | 12262 / 12310 |
+| qual-02 | Sat 21 Nov | `f421d6a4c9a7214a1c220e4009619c7ea02590031a25122b6f379dab8fec7f75` | 12262 / 12310 |
+| qual-03 | Sun 22 Nov | `9c4396ea1cff66fc4bbcf944ee2142bfb8b18f3a8547269c163faee9a3e03e88` | 12310 / 12262 |
 
-The three kit documents in this folder derive from #794's kit source `6010985a3312c77bb8e4bb4bf5c920c4d49b8512` using the successor's `pin-kit`. Frozen checkout **`0d03cb7833bb8b15bc391127a7fe5519b7d98602`**, runner `cadence-legs-v1.1`. W1-line baseline **`c3f4bacd8013ca98c19cf8d41f830c701930cd41`**. Seeds 2026111422/23/28. Every span captures at its first own-shaped leg (L001/L007), with five span-shaped consumers, one A cell at 2k, one at 10k, two at 19458 and an adjacent 19458 L pair. The items omit `--batch-window`. Plan and launcher-plan probes include the retired midday and night boundaries.
+Each span has a 24,750 s work bound and 2,510 s of retry and cleanup
+reserve. The launcher minimum is 27,260 s and the item adds a 900 s
+margin. The finite queues expire Mon 23 Nov at 00:00 PST. The predicted
+batch, including overlap during soak, can tighten that window at arm.
 
-No qualification span queues are on #794's source branch; `BLOCK-QUEUE.json` is a block ledger, not a span queue. Three finite queues are drafted **only here** and validated against the pinned law. Their expiry is Nov23 00:00 PST, ≤7 days after a Nov16 commit, checked against the authenticated queue commit at arm (RL-149 §2.8 line3). They grant no authority. No builder writes a READY/cold-seat/CI admission stamp; those record pointers remain lead fills. Full placeholder and observation shapes: [record-shapes.md](evidence/record-shapes.md).
+The lead stages the kit and authenticated queue, supplies freeze 2 and the
+per-kit exact-pin admission records, and verifies the fresh host readbacks
+and applicable stops. Before qual-01-s01, the registered `lm-qual-01`
+manifest and its ledger row belong on main with the exact kit hashes. The
+lead seeds the sequenced attempt ledger and stages the latest predecessor’s
+identity-bound close Check if its older receipt lacks a span id. Before
+qual-01-s02 the RL-172a soak comparison and RL-181 §4(a) hand-read must
+pass. See [record shapes](evidence/record-shapes.md) for prior same-pin q0
+evidence or recovery after a child t0 refusal. The first native run on this
+pin is a separate lead-controlled prerequisite under RL-179 F-11.
+[Same-pin filler drafts](../f2-stab/qual-pin/README.md)
 
-Historical standing-F0 draft: item346 ISSUED Nov15 11:51:24 +7 days = **Nov22 11:51:24 PST, epoch1795377084**. Planned renewal ends Nov29 11:51:24, epoch1795981884. Fetched W1 head remains **`b2e01464d6d4fbf2901ff4d4154df9455104a12a`**; main's item346 still names it. Pin/hash table/launch/Check rules carry unchanged; four-hour spacing, three per date, 02:35–22:40 latest-launch rule and the former 1,200 s after F0 were recorded in that draft. RL-179 F-2 supersedes the timed close gate. Existing ledger continues across renewal. Current derivative: [standing-f0-r2.diff](../qual-lines-794/verification/rebased-final/standing-f0-r2.diff); historical diff captures stay unchanged. The optional item374-form hold uses lead fills; item374's Mon16-only hold is not carried forward.
-
-## RL-174 dispositions and remaining gates
-
-**Former Q1 is ruled by RL-174 B.3.** Three distinct t0-dates, one qualification block each; two L pairs per block. The two-block/24-leg/10 h cap applies, is unused by this plan and is never a slip remedy. The generator and runtime gate reject a shared-date plan. Fewer than three pair-days gives `not_evaluable` for the ±0.10 word (RL-166b §4); more legs on another date cannot create a missing day.
-
-**Former Q2 is ruled by RL-174 B.5.** `INCLUSION_RECORD` is filled with that ruling and its full audit commit. Six rules unchanged; maintenance overlaps print-only. `lm-qual-01` prints flagged/unflagged errors side by side and by-job counts, description only with no word. The lead appends the by-job count through dev-05 after its desk is final; the count gates nothing. No kit bytes or frozen path change.
-
-**Host action is not a freeze-2 gate (RL-174 C).** Qualification runs on the host as it is. Each arm records service present/absent, corespotlightd present, indexing off, Time Machine destination none. The hygiene-state identity excludes boot time; an unplanned restart needs an event and refreshed four lines, with no restart hold. The maintenance print dates the spotlightknowledged stop to Sun15 15:32. Nobody changes hygiene settings from freeze 2 through qual-03 close.
-
-**Expiry and debt.** All three queues already expire **Mon23 00:00 PST**, epoch 1795420800; those bytes are unchanged. The Fri20/Sat21/Sun22 slip leaves qual-03 no margin: a missed t0-date invokes the recovery instructions below. qual-01-s01 needs dev-05-s01’s desk-final and typed Q1 records, and qual-01-s02 needs dev-05-s02’s. Those named debts are checked in addition to k−2 debt across queues; a census that omits dev-05 cannot discharge them.
-
-**Admission remains lead-owned.** RL-175 C.1 closes M0-F7 for all kits. Line 1 still needs the named Mythos Q2 confirmation and the lead's retry-reader evidence and signoff (LQ1/LQ2). Line 2 needs the exact-pin test comparison for this successor. Freeze 2’s coefficient commit/path/hash, queue commit/staging, actual desk/Q1/soak-hand records, current operational checks and issue stamps remain required. If #794 is integrated into W1 and moves its head, item346 and this same-pin F0 renewal are void and must be reissued (RL-174 E.2).
-
-## Verification and reproduction
-
-The earlier pin `0576ed76d` passed 21 CI jobs and matched the merged W1 baseline's empty failing-test set. Its draft wrappers passed 1,336 gate checks and 91 pinned checks. The audit-repair pin has its own verification record. [Earlier successor report](../../../../../run_reports/2026-11-17-qual-pin-t0guard.md) · [Audit-repair report](../../../../../run_reports/2026-11-17-pr812-audit-repair.md)
-
-Original `80969605d` verification (before RL-174): **1092 gate, 91 pinned, 21 F0, 6 generator, 74 shell syntax and 60 Python compile checks; all pass**. These historical logs are preserved. Current RL-174 verification and its limits are in [LINES.md](../qual-lines-794/LINES.md) and `../qual-lines-794/verification/`. This update changes draft tooling and records only; production runner, kit and frozen paths are unchanged. Original logs: `evidence/lint.log`, `pinned-checks.log`, `gates.log`, `standing-f0-tests.log`, `redate-tests.log`; pinned re-check detail in `kit-recheck.json`. Read-only fresh peer review and lead disposition are recorded in `evidence/review.md`; this builder retains final diff/verification responsibility.
-
-```sh
-cd docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/item-drafts-1118
-python3 -B build_items.py
-bash tests/run_all_gates.sh
-```
-
-For a freeze-2 slip before any qualification t0, the lead regenerates all six items/queues/plans with one argument, commits the new bytes and issues fresh items:
+The build and regression suite operate on pinned source, configs and
+synthetic fixtures. Run from this folder with a seat-local evidence directory.
 
 ```sh
 python3 -B build_items.py --dates qual-01=2026-11-20,qual-02=2026-11-21,qual-03=2026-11-22
+bash tests/run_all_gates.sh
 ```
 
-Fetch the source refs first if absent. The generator extracts allowlisted Python and shell source and two configs into a disposable directory inside this folder. Runner tests create labeled synthetic Git coefficients, queues and mock spans there, then remove them. Run the wrapper under both bash and zsh with a fresh `JW_DRAFT_EVIDENCE_DIR` for each. The lead obtains the remaining line 1 records, records both lines against the exact kit hashes and supplies the live prerequisites before issuing any span. The renewal names the item 377 verified R0 path and treats check failure as fatal (LQ5). The source digest and 60-key checks remain required.
+[Qualification handoff and verification](../../../../../run_reports/2026-11-18-qual-items-merged.md)
+· [PR #812 ledger authority](../../../../../run_reports/2026-11-18-pr812-ledger-required.md)
 
 ## Close-census repair — 2026-11-16
 
@@ -73,8 +49,8 @@ New tests execute the embedded functions in bash and zsh, keeping an older recei
 ## Round 10 (Astra audit)
 
 - **Preflight.** Start and Run perform the native checklist before the gate consumes `CHECKLIST_OK`. Each call clears any supplied flag. The full Start regression runs with it unset and stubs the native commands.
-- **Pair cutoff.** Each s01 prints the D8 ceiling of 16:32:00 PST. With the 24,750 s work bound, 1,950 s soak retry, 560 s cleanup reserve, a 23:59:59 s02 deadline yields an effective s01 last second of **16:25:39**. Earlier item or queue expiry moves it earlier still. The actual desk fence, verified copy, soak comparison and READY checks still govern.
-- **Recorded t0.** The six launch blocks pass the armed date and exclusive earliest effective expiry to the child. The successor validates the exact receipt epoch before span work. The regression suite executes the successor bytes against all three kits.
+- **Pair cutoff.** Each s01 prints the D8 ceiling of 16:32:00 PST. For a full date and no tighter queue or batch bound, backing 27,260 s out of s02’s 23:59:59 latest t0 yields an effective s01 last second of **16:25:39**.
+- **Recorded t0.** The launch blocks pass the authorized date and exclusive cutoff to the pinned child, which validates the exact start before span work.
 - **F0 renewal.** Opens at item 346's expiry and can be issued ahead. RL-165 §3 rule 2 still expires it seven days after actual issue, so early issue shortens the new active interval. The renewal follows RL-174's ladder and removes the retired restart hold. [Current derivative comparison](evidence/round10/standing-f0-r2.diff).
 - **Maintenance.** The pending F0 and twelve F2 checks share qualification's process predicate. For checks previously captured without it, `bird`, `cloudd` and `fileproviderd` are **unobserved**. Dev-05's variant B was already issued as main items 393–394. The counts remain print-only.
 
