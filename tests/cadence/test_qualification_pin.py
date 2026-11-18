@@ -158,12 +158,16 @@ class QualificationPinEquivalence(unittest.TestCase):
             "651d1815ca87ee23640a8db1483d4ecaf42d70d029855ad03c14bfa076116f2b"), [
                 [f"L{i:03}"] for i in range(4, 13)]
 
-    def cli(self, repo, script, *args):
+    def cli(self, repo, cache_prefix, script, *args):
         env = {**os.environ, "TZ": "UTC"}
-        command = [sys.executable, "-I", "-B", f"scripts/{script}.py", *map(str, args)]
+        # Compare fresh source on both sides, even if the working checkout has compiled caches.
+        command = [sys.executable, "-I", "-B", "-X", f"pycache_prefix={cache_prefix}",
+                   f"scripts/{script}.py", *map(str, args)]
         result = subprocess.run(command, cwd=repo, env=env, capture_output=True, timeout=60)
         self.assertEqual(result.returncode, 0, (command, result.stdout, result.stderr))
-        return result.stdout, result.stderr
+        # Python 3.14 includes the absolute source path in compiler warnings.
+        stderr = result.stderr.replace(os.fsencode(repo) + b"/", b"<CHECKOUT>/")
+        return result.stdout, stderr
 
     def test_non_ctl_kits_equal_qualification_pin(self):
         scratch = Path(self.enterContext(tempfile.TemporaryDirectory())).resolve()
@@ -187,21 +191,22 @@ class QualificationPinEquivalence(unittest.TestCase):
                                                   "expires_at": "2026-11-20T00:00:00Z",
                                                   "halt": None, "standing_notice": None, "spans": spans}))
                 for args in (("validate-kit", kit), ("validate-queue", queue_path, "--kits-root", scratch)):
-                    self.assertEqual(self.cli(ROOT, "cadence_queue", *args),
-                                     self.cli(base, "cadence_queue", *args))
+                    self.assertEqual(self.cli(ROOT, scratch / "pycache", "cadence_queue", *args),
+                                     self.cli(base, scratch / "pycache", "cadence_queue", *args))
                 for index, roster in enumerate(rosters, 1):
                     with self.subTest(span=index):
                         self.compare_span(scratch, base, kit, name, index, roster)
 
     def compare_span(self, scratch, base, kit, name, index, roster):
         common = ("--kit", kit, "--legs", ",".join(roster))
-        self.assertEqual(self.cli(ROOT, "cadence_legs_runner", "plan", *common, "--t0", T0),
-                         self.cli(base, "cadence_legs_runner", "plan", *common, "--t0", T0))
+        cache_prefix = scratch / "pycache"
+        self.assertEqual(self.cli(ROOT, cache_prefix, "cadence_legs_runner", "plan", *common, "--t0", T0),
+                         self.cli(base, cache_prefix, "cadence_legs_runner", "plan", *common, "--t0", T0))
         evidence = []
         for tag, repo in (("candidate", ROOT), ("pin", base)):
             output = scratch / tag / f"{name}-s{index:02}"
             output.parent.mkdir(exist_ok=True)
-            streams = self.cli(repo, "cadence_legs_runner", "mock", *common,
+            streams = self.cli(repo, cache_prefix, "cadence_legs_runner", "mock", *common,
                                "--t0-local", T0_LOCAL, "--output", output)
             # The CLI mock's receipt/table paths and the span receipt's feed/step paths are absolute.
             # Replace the differing output directory only; all synthetic timestamps stay in the comparison.
