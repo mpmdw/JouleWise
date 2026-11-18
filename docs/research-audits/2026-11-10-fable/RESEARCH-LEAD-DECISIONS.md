@@ -20685,3 +20685,268 @@ Rows for the lead to commit to `RULES.json`. Owner is `research_lead` for all fo
 **What comes back to me.** A runtime result the two checks of 2.1 refuse on a clean run, with the kind and no value. A source the spec requires that has neither a manifest entry nor a ledger field. A failed Part C whose reason names do not explain it. Nothing else.
 
 **Blind status.** Blind. This ruling rests on rulings, a spec, three reports and code.
+
+# RL-185. The Part C soak is bound by a ledger the soak child writes and a digest the launcher carries to the kit. A `Q SHIFT` with no defined percentage says which way the ranks went and gives no number. B7's five scalars are computed only for members with every turn stamped. An assignment with no captured episode is an excluded roster entry, never a `FreshMember` and never a zero in Q. The rail sum is CPU + GPU + ANE, and RL-181 2.4 named the wrong source for it
+
+Research lead (Fable 5.2), Wed Nov 18 04:53 PST 2026 (from `date`). One ruling on four items: PR #809's soak binding, the Sol attack's two questions on PR #813, the C1 release gate's open list and release-script questions, and the rail-sum columns of the two description looks. Freeze 2, qualification and #826 are RL-184's and are not touched here. Nothing here is needed before W1.
+
+**Cites.**
+- `RLD:n` is `RESEARCH-LEAD-DECISIONS.md` on the audit branch at `6c1076f25`. `P4:n` is `docs/align/pilot_protocol_v4.md` at `b2e01464d`.
+- Under `/Volumes/JW-EXT/scratch/`: `R2:n` is `pl-809/resolve-2/FINAL-MESSAGE.md`, `AT:n` is `d-sol-attack-813/ATTACK.md`, `OP:n` is a row of `d-c1-release-gate-spec/OPEN.md`, `RB:n` is `pl-d-c1-release-script/resolve-1/FINAL-MESSAGE.md`, `LK:n` is `pl-d-looks-v2-integration/resolve-1/FINAL-MESSAGE.md`.
+- At the R1 pin `b2e01464d`: `SM:n` is `scripts/run_align_r1_smoke.py`, `RH:n` is `scripts/align_r1_rehearsal.py`, `VR:n` is `joulewise/align/apple/v4_registration.py`.
+- At #809's W1-line candidate `e6634345c`: `PC:n` is `scripts/align_r1_part_c.py`, `PE:n` is `scripts/align_r1_part_c_evidence.py`.
+- `RK:n` is `joulewise/align/apple/rl176.py` at `7ccbb4871`. `S3:n` is `joulewise/cadence_looks/step3_energy_ratios.py` at `2c9bac1a2`. `PM:n` is `joulewise/adapters/powermetrics.py` at `e13d100b9`.
+
+**Read.** R2, RB and LK in full. AT in full. OP in full. RL-183c in full; RL-183 sections 1, 2.1 to 2.3, 2.7, 2.8 and its register; RL-182 sections 1.3 (E10, E12, E16, E17), 1.4, 1.5 and its register; RL-176 A.1, B.1 and E.2; RL-177 F and G; RL-181 section 2.1 to 2.4. SM:303-349 and SM:490-500, RH:525-554, RH:1074-1084, VR:489-511, PC:425-470, PC:1149-1171, PE:146-215, RK:57-79, S3:194-224, PM:52-58, PM:1432-1444, PM:1790-1808, PM:2008-2020. P4:876-892, 1004-1022, 1174-1184.
+
+**Not checked.**
+- I ran nothing. Every statement about behaviour is from reading source or from a seat's report.
+- That re-serialising a parsed receipt reproduces the frozen runtime's line byte for byte (1.3 item 6). It follows from the serializer's documented behaviour. Test 5 makes it a tested fact.
+- `C1-GATE.md` beyond the rows OPEN cites. RLD:428-457, 2763-2765, 3451-3453, 3780-3788 and 4352-4361, which OP row 9 cites. I ruled row 9 from P4 and from RL-183b.
+- The definitions of ‹y› and ‹z› in Q's sentence. Section 2.1 is written so that it does not matter.
+- Whether the F2 bundles on the bound host were written by the adapter at `PM`. Section 4 has the check that stops if they were not.
+- Which reader the release script would use for a member's rails, and whether a stored bundle keeps DC-in in the same file as the rails. Section 3.2 says what happens in each case.
+- No custody, energy, power, meter, transcript, slot, hazard, sealed or restricted file was opened.
+
+**Not done.** No commit, push, comment, run or SSH. The only file written is this one.
+
+---
+
+## 0. The answers
+
+| Item | Answer |
+|---|---|
+| #809, the soak | The soak child becomes a judged invoker with its own three-row chained ledger. The launcher hashes that ledger when the child exits and hands the digest to the kit by argument. The kit checks six things before row 0 (1.3). None of the ten frozen sources changes |
+| #813 (a), `Q SHIFT` with no number | The sentence says which way the ranks went, gives the exact p and says why there is no percentage. The word never changes and nothing is imputed. Exact text in 2.1. It does not hold W1's signature |
+| #813 (b), B7's scalars | The head's behaviour is adopted: a member with any unstamped turn enters none of the five scalar ranks. One sentence and one count are added (2.2) |
+| C1, uncaptured assignment | An excluded roster entry with its A9 reason. No `FreshMember`, no S, no Q, no zero (3.1) |
+| C1, completion record and final-record mapping | The lead's and the series owner's, inside four constraints (3.3) |
+| C1, rail-only loading | Separation is by which file is opened, never by a filter after the open. The property is mine and the path pins are the desk owner's (3.2) |
+| C1, the 15 open rows | Table in 3.4. Six are the lead's outright |
+| Looks, `rail_sum_columns` | `["cpu_power", "gpu_power", "ane_power"]`, from `PM:57`. `["gpu_power"]` is not intended. RL-181 2.4's source sentence was my error (4) |
+
+---
+
+## 1. #809: binding the idle soak
+
+### 1.1 The facts
+
+- **The soak runs in its own process, before the kit exists.** The launcher starts a soak child (SM:344-347). The child calls the frozen `_invoke` for kind `idle`, writes `soak_row.json` and the soak reference, and exits (SM:308-341). The kit starts afterwards with only the reference's path (SM:348-349).
+- **The frozen `_invoke` returns the parsed result and discards the exit status and the stdout text** (RH:542-554). So nobody observes the soak's process outcome in the form RL-183c 1.3 binds.
+- **The launcher is not one of the ten.** `scripts/run_align_r1_smoke.py` is absent from `R1_EXECUTED_SOURCES` (VR:489-496). So are the kit and both evaluator files.
+- **The launcher's parent process is alive from before the soak until after the kit.** It already hashes the soak reference when the child exits (SM:490-500).
+
+### 1.2 What the soak child records
+
+**For `--parts C` the soak child calls the judged invoker of RL-183 1.2 in place of the frozen `_invoke`, with a ledger of its own.** Parts A and B keep the frozen call.
+
+The ledger is `soak/evidence_ledger.jsonl`, beside the `idle_soak` segment and outside it. It is chained, flushed and synced as RL-183c 1.3 has it, and it has exactly three rows.
+
+| Row | Written | Fields |
+|---|---|---|
+| 0 | At the child's start, before the launch | `attempt` (the run root's unique segment and a nonce drawn then), mode `soak`, producer revision, runtime-config path and sha256 |
+| 1 | When the frozen `_run` returns or raises, before any file of the segment is opened | RL-183c 1.3's member row unchanged: `attempt`, kind `idle`, sha256 of the argument list, the exit outcome, sha256 of the returned stdout text and of stderr, the segment's relative path, and the path and sha256 of `idle_soak/runtime_custody.json`, or `absent` |
+| 2 | After `soak_row.json` and the soak reference are written, or after the refusal | The outcome word, `accepted` or `refused`; the sha256 of `soak_row.json`'s bytes; the sha256 of `soak_reference.json`'s bytes, or `absent` |
+
+- **The child applies RL-183c 2.1's two shape checks to the stdout text** and compares the parsed payload with `runtime_result.json`, as the judged invoker does for every member (PC:462-470).
+- **Everything else in the child stays as it is:** the blackout check, `os_load_verdict`, `soak_detrended`, the two refusals and `write_soak_reference`, each a call into frozen code (SM:320-341, RH:1074-1084).
+- **The launcher, when the child exits with status 0,** hashes the ledger file beside the reference it already hashes, keeps both digests in its own memory and its step record, and adds `--soak-ledger-sha256 <digest>` to the kit's argument list. A child that exits non-zero starts no kit, as today.
+
+### 1.3 What the kit verifies at startup
+
+In this order, before row 0 is written and before any launch. The kit is handed the reference's path and the ledger's digest.
+
+1. **The ledger is the one the launcher saw.** Its bytes hash to the argument's digest. Unequal is `source_integrity`. No argument in native mode is `evidence_unverifiable`.
+2. **The chain is whole.** Three rows, each carrying the digest of the one before, modes and kinds as in 1.2, outcome `accepted`, exit status 0.
+3. **It is the same attempt.** The soak row 0's run-root segment equals the kit's own. The ledger sits at `<run root>/soak/` and the kit's output at `<run root>/part-c/`. The producer revision and the runtime-config path and sha256 equal the kit's. The reference path the kit was handed is `<run root>/soak/soak_reference.json`.
+4. **The outer files are the ones the child wrote.** `soak_row.json` and `soak_reference.json` hash to row 2's digests, before the parse and after the last read.
+5. **The runtime manifest is the one the child saw.** `idle_soak/runtime_custody.json` hashes to row 1's digest. Every file the kit opens in the segment is bound through that manifest's `files` map, by RL-183c 1.3's rules.
+6. **The row, the receipt and the stdout are one observation.**
+   - `soak_row.json` names segment `idle_soak` at attempt 0, and its `output_dir` resolves to row 1's segment. The reference's `source_segment`, `source_output` and `attempt` agree with it (RH:1079-1080).
+   - The row's `result` equals the parsed `runtime_result.json`, whole payload against whole payload.
+   - `sha256(json.dumps(result, sort_keys=True, allow_nan=False) + "\n")` equals row 1's stdout digest. The frozen runtime writes exactly that line (RLD:20623), and under the two shape checks the returned text is that line.
+
+**Then the kit's row 0 gains two fields:** the soak ledger's path and sha256, and the soak attempt's nonce. RL-183c 1.3's row 0 is otherwise unchanged.
+
+**Failure words.** A digest that does not match is `source_integrity`. A missing ledger, argument or row is `evidence_unverifiable`. A disagreement under item 3 or 6 takes the spec's existing cross-source reason for the idle role. No new reason name is made. The three unconditional failures at PC:1166-1170 go.
+
+### 1.4 Why this binds, and what it does not
+
+- **The chain of custody has no gap longer than the one RL-183c accepted.** The child holds its rows in memory and writes them at the member's return. The launcher's live process reads the ledger at the child's exit and holds the digest until it starts the kit. The kit records it in its own chained row 0. An edit to any soak source after the child's exit changes a digest somewhere on that path.
+- **The stdout is bound without storing it.** The text's digest is in row 1, and item 6 ties the row's `result` to that digest. A soak row whose result is not what the runtime printed fails.
+- **Blinding is unchanged.** The soak ledger holds digests, exit statuses and names, which is RL-183c 1.2 item 3. The kit reads the soak sources in place on the measurement host under RL-183c 1.1. No value and no exception text leaves the process.
+- **The pin is unchanged.** The edits are in the launcher, the kit and the two evaluator files. `git diff b2e01464d -- <the ten paths>` stays empty.
+- **What it does not prove,** as in RL-183c 1.3: that the runtime wrote a true file before its own close. The cross-checks are for that.
+
+### 1.5 Tests owed
+
+1. **The native passing control.** The normal launcher with a stubbed `_run` runs the soak child and then the kit, and the verdict is `pass`. This is the control R2 reports as blocked.
+2. **Argument list.** With `_run` stubbed to record, the judged invoker and the frozen `_invoke` give equal argument lists for kind `idle` with contract key `idle_soak`, with the host lock held and not held.
+3. **After the child exits,** a one-byte change to `soak_row.json`, to `soak_reference.json`, to the soak manifest, to each required segment file and to the ledger each gives `source_integrity`. Removing, reordering or editing a ledger row is refused.
+4. **Another attempt's soak is refused:** a ledger with a different run root, a different runtime-config digest or a different producer revision, and a reference at any other path.
+5. **Stdout.** A soak row whose `result` differs from the runtime's line in one value fails item 6. A clean synthetic receipt through a real child and the frozen `_run` passes it.
+6. **No leak.** RL-183c's test 3 extended to the soak: a marker planted in every protected soak field appears in no output and in neither ledger.
+7. **The replay is untouched.** An archived attempt with no soak ledger runs only in replay mode and binds the soak to its archived custody.
+
+---
+
+## 2. #813: the Sol attack's two questions
+
+### 2.1 (a) `Q SHIFT` when a figure of its sentence is undefined
+
+**The seat is right** (AT:13, AT:74, AT:87). The word comes from the exact rank test, which counts a member at zero (RLD:18294). The percentage is a mean of log ratios, which a zero removes (RLD:17966, RLD:19724). So the word can exist with no percentage, no interval or no fitted-context figure, and RL-177 F's sentence has no form for that (RLD:18299).
+
+**Three principles.** The word is never changed by a missing estimate. Nothing is imputed: no small constant, no `Q_total` in its place, no single-session figure. The sentence then says only what the rank test showed, and why there is no number.
+
+**Terms.** K is the pair's entering strata. K⁺ is the strata in which every entering member's outcome is positive. The direction of the test is the tail with the smaller exact p: `higher` for the upper tail, `lower` for the lower.
+
+**Text for P4 B2a, after E10's addition (RLD:19726). Call it E18.**
+
+> **Q's sentence when a figure is undefined.**
+>
+> *The effect clause.* The clause "instructed episodes used ‹x› % ‹more, less› than benign episodes of the same session (95 % interval ‹›; exact two-sided p = ‹›, Holm over two tasks)" is used only when K⁺ is at least 2, ‹x› and its interval are finite, and the sign of ‹x› agrees with the direction of the test. When K⁺ is less than K it is followed by: "The percentage is over ‹K⁺› of ‹K› sessions; in the others an episode produced no first token and a ratio is undefined."
+>
+> Otherwise the clause reads: "instructed episodes ranked ‹higher, lower› in energy than benign episodes of the same session (exact two-sided p = ‹›, Holm over two tasks). No percentage is given: ‹reason›." The reason is one of two, in these words:
+> - K⁺ under 2: "in ‹K − K⁺› of ‹K› sessions an episode produced no first token, and a ratio is undefined there."
+> - Signs disagree: "the mean log ratio over ‹K⁺› of ‹K› sessions is ‹x› % (95 % interval ‹›), opposite in sign to the rank test."
+>
+> *The token sentence.* In "They decoded ‹y› % ‹more, fewer› tokens in ‹z› ‹more, fewer› turns", a half whose figure is undefined is left out. If both are undefined the sentence is left out.
+>
+> *The context clause.* Let n be the number of the pair's windows with a defined context share, of W.
+> - n at least 1 and less than W: "its presence in context accounts for about ‹c› % at the series' fitted costs (median of ‹n› of ‹W› sessions, range ‹›)". With n = 1, "range ‹›" reads "one session".
+> - n = 0: the clause and the words before it read "Reading the instructed prompt, which is ‹Δ› tokens longer, is not counted. The cost of its presence in context could not be fitted in this series and is not estimated."
+> - The remark that |x| is not larger than c is made only when the registered effect clause is in use and c is defined.
+>
+> *`Q NO SHIFT SHOWN`.* With K⁺ under 2, "(estimate ‹›, interval ‹›)" reads "(no estimate: a ratio is undefined in ‹K − K⁺› of ‹K› sessions)". With K⁺ at least 2 and less than K, the sentence of the effect clause on ‹K⁺› of ‹K› sessions follows it.
+>
+> The outcome word is unaffected by any of this.
+
+- **Why the sign rule.** The percentage is taken over a subset of the strata the test ranks. If the two disagree in sign, "used ‹x› % more" would describe the opposite of what was shown.
+- **Why K⁺ at least 2.** The interval needs two strata. A percentage with no interval, from one session, is not a figure the sentence should carry.
+- **The `Q SHIFT` with `S EQUIVALENT` sentence** has no figure and stands (RLD:18318).
+- **Its standing.** E18 adds words for cases in which the registered sentence cannot be filled. It changes no statistic, level, population or outcome word. It is blind: no series member exists and every Q leaf is withheld until release (RLD:17968).
+- **It does not hold W1's signature.** RL-182 row 1 lists E1 to E17 and that list is not extended. The seat's BLOCK is answered by this ruling. E18 lands on #813 if the head is still open, and otherwise with C1's re-signed receipt, before any series member exists.
+- **Test.** The seat's three worlds (K⁺ = 0, K⁺ = 1, and a rank-deficient context fit in every window) and one sign-disagreement world each give the exact strings above from whatever fills the sentence. If the sentence is filled by hand, the three worlds go into the release checklist as its cases.
+
+### 2.2 (b) B7's tool-plus-other scalar when a turn has no stamp
+
+**The head's behaviour is adopted** (AT:16, AT:75). A member with any turn lacking a first-token stamp enters none of the five scalar ranks. It stays in the phase table, with that turn under other ungated time as E12 says (RLD:19731).
+
+- **Why not admit the one finite scalar.** For such a member "tool plus other" holds a model turn: a prefill, and whatever decode ran before the failure. It is finite and it closes, and it is a different quantity from the same scalar on a fully stamped member. A missing stamp can also follow condition, since a turn that raised is not label-blind by construction. Ranked in, the scalar would partly be a count of missing stamps.
+- **Why one population for all five.** The five are read side by side (RLD:18002). Five ranks on five different member sets cannot be read that way.
+- **What is added, as E19, to P4 B7 item 9 after E12's sentence:**
+
+> The five scalars are computed for members whose every turn has a first-token stamp. A member with an unstamped turn is in the phase table and in no scalar rank. The number of members left out, and of strata that leave a rank for that reason, prints by condition and pair.
+
+- The count of 54 is unchanged (RLD:19598). E19 has E18's standing and lands with it.
+- **F2 and F3 are the lead's.** F2 is a defect in the twin, and the twin must return "undefined" on a degenerate fold before its agreement is used as evidence of anything. F3 is the caller boundary RL-182 1.5 already assigns to C1's release script.
+
+---
+
+## 3. The C1 release gate
+
+### 3.1 A finalized assignment with no captured episode (RB:3, OP row 2)
+
+**It is an excluded roster entry. It is not a `FreshMember`, and it is in no stratum of S, Q, a mechanism print or B7.**
+
+- **Why it is not a zero.** RL-177 F's zero is for a member whose record shows turn 0 produced no first token: "it produced nothing" (RLD:18294). That is an observation. An assignment with no record is the absence of one. Entering it at zero would write a datum nobody measured, at the bottom of a rank.
+- **Why it is not a `FreshMember`.** The type requires an `Episode` (RK:57-62), and a placeholder episode is a fabricated record inside a module the receipt binds. RL-182 1.5's "one `FreshMember` for every fresh C and T member of the finalized roster" (RLD:19790) reads: one for every member with a captured episode.
+- **The representation** is a roster entry beside the members, built by the release script, with five fields: window, pair, manifest ordinal, the A9 decision `excluded`, and A9's reason word from the final record. Condition is not a field. It is looked up from the series manifest by ordinal at release, like every other use of condition in the script.
+- **Where it shows.** In the attrition table at release, by condition and pair, under its reason. In S's and Q's stratum accounting: a stratum whose instructed member is such an entry does not enter (P4:1178-1181), and it is counted among the strata that did not enter, with the reason. A benign entry reduces its stratum's benign count by one.
+- **The distinguishing synthetic case.** Two worlds that differ in one benign member M of one stratum.
+  - World 1: M is finalized, excluded, no captured episode.
+  - World 2: M is captured and eligible, with zero S rows.
+  - In world 2, M enters Q with its outcome and is counted "eligible, no S score". In world 1, M is in neither and the attrition table names the reason. The test asserts Q's entering-member count for that stratum differs by exactly one, that the exact p of Q differs, and that S's stratum membership is the same in both.
+  - The same pair of worlds with M the instructed member: world 1 loses the stratum from S and from Q; world 2 loses it from S only.
+- **If A9's frozen union has no reason word that covers an absent capture,** that comes to me before C1 arms. I did not find the word list in the lines I read.
+
+### 3.2 A rail-only projection that opens no DC-in trace (RB:5, OP row 4)
+
+**The seal is on the open, so separation is by file.** RL-182 row 4 says the script "loads none" (RLD:19925). A reader that opens a member's meter stream and then discards it has loaded it.
+
+- **Member loading** opens, for every member, the episode record and the powermetrics rail trace, and nothing else that holds power. It does so by name through the member's custody manifest, never by a directory walk and never by a reader that opens every trace of a bundle.
+- **If the stored bundle reader opens the meter stream as part of reading an episode,** the script does not call it. It calls the lower-level functions #787's builder needs, on the files named above.
+- **If rails and DC-in are stored in one file,** no rail-only open exists. That comes back to me, with the layout and no content.
+- **The DC provider is a second function, called only after member loading has finished.** Its key is (window, pair, manifest ordinal). It reads the bound series manifest, confirms the ordinal is benign there, and only then resolves a path. It never reads the condition field of a record, and it is never handed one.
+- **The test.** A synthetic layout in which the instructed member's record says benign, and in which every instructed member's DC-in file is a path that fails the test if opened. The release run completes, the opener's log shows zero opens of any instructed DC-in path, and the benign DC prints are present. A second case hands the provider an instructed ordinal directly and gets a refusal before any path is resolved.
+- **The path and function pins are the desk owner's.** The property above is what the audit checks them against.
+
+### 3.3 The completion record and the final-record mapping (RB:4)
+
+**The lead's and the series owner's.** These are interface pins and I rule no new mechanism. Four constraints bound the answer.
+
+1. **No new authentication.** The completion record is authenticated the way an arm already authenticates history: from the hash-chained window records (P4:1020-1021). `record_commit` is a commit of the input repository at which the record's path holds the blob the chain names.
+2. **Finality is RL-183b's one predicate.** A window's final evidence is its own record or its successor's `previous_final`, under the shared check RL-183b put in `cmd_final` and `WindowRecord.final_evidence` (RLD:20447). The release script calls it and writes no second version.
+3. **Identity is (window id, manifest ordinal).** A zero-capture re-arm reuses the same seeds (P4:1013-1014), so a retry is the same assignment with a later attempt. A held or barred window contributes no assignment (P4:1179). An admitted reserve window enters under its own id.
+4. **Ambiguity refuses.** Two final records for one assignment, or none, stops the release run before any loader opens.
+
+What comes to me: two admitted records that disagree on an A9 decision. Nothing else from this question.
+
+### 3.4 The 15 open rows
+
+| OP row | Whose | Answer |
+|---|---|---|
+| 1. Producers of `S_a4`, S_w and the benign-only slope | Lead's for the pins. Mine for the contract | The contract exists: RL-151 1.2 (RLD:13304-13314), S_w's one form (RLD:13364-13368) and RL-177's added row (RLD:18249). Each is a print with an exact p and no word. **They do not hold C1's arm,** whose receipt has four bindings (RLD:19923). Each producer is bound by a receipt before the release run opens any S leaf. One that is not prints `not_computed` with that reason. `S_pf`, the simulation or a fresh regression is never put in its place |
+| 2. The A9 crosswalk | Mine | 3.1 and 3.3. The authority is the final record of P4's `member_eligibility` row (P4:884) |
+| 3. The looks accessor for S_w | Lead's | RL-183 2.3 stands (RLD:20198-20216). If the accessor raises, S_w prints `not_computed: look_not_authorised`. `qualified` stays a description and selects nothing (RLD:13339) |
+| 4. Rail-only projection and DC provider | Mine for the property, lead's for the pins | 3.2 |
+| 5. E17's numeric field | Mine | **The null path.** A field is named only if it is in the evaluator's frozen output today and the signatory names it in C1's receipt. After that receipt, null stays null (RLD:19751, RLD:19929) |
+| 6. #787's reviewers, the A/B seat and its interval | Lead's | |
+| 7. Authority to land the design-origin PRs | Lead's, under Ed's rule as Ed now states it (RLD:20195) | No further round from me is owed on #813 |
+| 8. The four-binding predicate and who carries its proof | Lead's | Either path of RL-182 1.5 is sound. W1 does not wait (RLD:19787) |
+| 9. RL-21's acceptance, the analysis seal, held windows | Lead's to collect | Held and barred windows never enter (P4:1179), under the representation the committed records already carry. It comes to me only if the owner shows no committed representation exists |
+| 10. W1's t0, kit, notice, restore, READY | Lead's, the magistrate's and Ed's | |
+| 11. An unclean A/B row | Mine, when triggered | RL-183 2.1 stands (RLD:20172-20177) |
+| 12. A missing `first_token_ns` or a gap over 10 ms | Mine, when triggered | RL-182a stands. An empty pairing population reports "not reportable, n = 0" and comes to me. It is never reported as zero |
+| 13. A third Pydantic version | Mine, when triggered | RL-182 row 9 stands (RLD:19930) |
+| 14. A Sol finding on S's or Q's words | Mine | Section 2 disposes F1 and F4. F2 and F3 are the lead's. Nothing else in AT changes arithmetic, level or population |
+| 15. W1's desk, close or a policy change | Lead's and the magistrate's | Mine only for the named returns: a D G1 timeout rate over 10 %, and a held reason |
+
+RB's other three questions are rows 1, 3 and 5.
+
+---
+
+## 4. The description looks: `rail_sum_columns`
+
+**`["gpu_power"]` is not intended. The list is `["cpu_power", "gpu_power", "ane_power"]`, for both `lm-inst-01` and `lm-stab-01`.**
+
+- **The builder read the ruling correctly and the ruling was wrong.** RL-181 2.4 defines the rail sum as "every rail column that loader returns for the host" (RLD:19414). The pinned loader returns one: it keeps the rows whose rail is `gpu_power` from source `powermetrics` and counts the rest as other (S3:194-204). On that text the rail sum equals the GPU rail, and the two prints that need it, the plateau gain against rail sum and the idle gap (RLD:19421-19422), would say nothing the GPU rail does not. I named the wrong source.
+- **The pinned source that gives the list** is the adapter that writes the rows the loader filters. `RAIL_MANIFEST = ["cpu_power", "gpu_power", "ane_power"]` (PM:57). It writes one row for each of those rails for each sample (PM:2014-2020), and it records the list and the boundary, "Apple SoC CPU + GPU + ANE package power", in the bundle's metadata as `rail_manifest` (PM:1441-1442).
+- **The step-3 module is not edited.** It is byte-pinned by the interim manifest. The GPU rail still goes through `load_gpu_trace` and `Trace`. The rail sum has its own reader in the description look's code: the same file, the same row parse, source `powermetrics`, rail in the manifest's list, summed over rows that share `interval_start_s` and `interval_end_s`. An interval missing any listed rail is a gap, as RL-181 2.4 already says.
+- **Two checks.**
+  - On the synthetic hand table, the reader's `gpu_power` rows equal `load_gpu_trace`'s rows exactly.
+  - At stage 2, before any value on an interval is read, the bundle's recorded `rail_manifest` equals the manifest's list. If it does not, the rail-sum prints are null with that reason and it comes to me. This is metadata, in the class of sample counts and time stamps RL-181 2.3 already lets stage 2 read first (RLD:19402).
+
+---
+
+## Amends
+
+- **RL-183c 1.3** (RLD:20589): row 0 gains the soak ledger's path and sha256 and the soak attempt's nonce. For a native Part C the soak sources are bound by section 1 of this ruling.
+- **RL-183 1.2** (RLD:20104): the judged invoker also serves the soak child for `--parts C`.
+- **RL-182 1.3:** E18 and E19 are added (2.1, 2.2). RL-182 row 1's list for W1's signature stays E1 to E17.
+- **RL-177 F** (RLD:18299) and **RL-176 E.2** (RLD:18091-18092): Q's two sentences are read with E18.
+- **RL-182 1.5** (RLD:19790): "one `FreshMember` for every fresh C and T member" reads "for every such member with a captured episode; one excluded roster entry for every other" (3.1).
+- **RL-182 1.5** (RLD:19794): the three companion prints are bound before the release run and do not hold C1's arm (3.4 row 1).
+- **RL-181 2.4** (RLD:19414): the rail sum's row reads "The sample-by-sample sum of the `powermetrics` rows whose rail is in the manifest's list. The list is the writing adapter's `RAIL_MANIFEST`. A sample missing a listed rail is a gap."
+- **Stand unchanged:** the ten frozen sources and the pin `b2e01464d`, every statistic, level, population and outcome word of S and Q, the count of 54, and RL-183c sections 1.1, 1.2, 1.4 and 2.
+
+## Register
+
+Rows for the lead to commit to `RULES.json`. Owner is `research_lead` for all eight.
+
+| # | Clause | Class | Protects | Scope | Ends | Test |
+|---|---|---|---|---|---|---|
+| 1 | For a native Part C the soak child writes a three-row chained ledger through the judged invoker, the launcher carries its digest to the kit, and the kit makes the six checks of 1.3 before its row 0 (1.2, 1.3) | VALIDITY (prereg) | No soak source edited after the soak child's exit can pass | Every native Part C on the W1 line | The last Part C of the series | 1.5 tests 1 to 5 and 7 |
+| 2 | The soak ledger holds digests, exit statuses and names; no soak value or exception text leaves the kit's process (1.4) | VALIDITY (blinding) | The soak's readings are seen by nobody | The soak child and the kit | The last Part C of the series | 1.5 test 6 |
+| 3 | The soak binding changes none of the ten condition-13 paths, and the soak child's argument list equals the frozen `_invoke`'s (1.2) | VALIDITY (prereg) | Part C soaks as R1 and W1 do | The W1 line | With RL-183 row 1 | 1.5 test 2; PR #823's comparator at 10 of 10 |
+| 4 | A Q sentence whose percentage, interval or context figure is undefined, or whose percentage is opposite in sign to the test, takes E18's words; the outcome word is unchanged and nothing is imputed (2.1) | VALIDITY (prereg) | No Q sentence is composed after release | Q's two sentences | The v4 release | The four synthetic worlds of 2.1 give the exact strings |
+| 5 | B7's five scalars are ranked over members with every turn stamped; the members and strata left out print by condition and pair (2.2, E19) | VALIDITY | The five scalars are one quantity on one population | B7 item 9 | The v4 release | The seat's `disclosures` replay with the count asserted |
+| 6 | A finalized assignment with no captured episode is an excluded roster entry with its A9 reason; it is no `FreshMember`, enters no stratum and is never a zero (3.1) | VALIDITY | Q's zero means a recorded member that produced nothing | The release script | The v4 release | The two pairs of worlds of 3.1 |
+| 7 | Member loading opens no DC-in file; DC-in is reached only through a provider called afterwards, keyed by window, pair and manifest ordinal, that checks the bound manifest before resolving a path (3.2). Read with RL-182 row 4 | VALIDITY (blinding) | "Their DC-in rows stay sealed (hash only) for v5" | The release run | v5's opening of the seal | The spoofed-label layout shows zero opens; the direct instructed ordinal is refused |
+| 8 | `rail_sum_columns` is `["cpu_power", "gpu_power", "ane_power"]`; stage 2 checks the bundle's `rail_manifest` against it before reading a value (4) | VALIDITY | The rail sum is the SoC's three rails, and differs from the GPU rail | `lm-inst-01`, `lm-stab-01` | The paper's data release | The hand table's `gpu_power` equality; a synthetic bundle with a different `rail_manifest` gives null prints |
+
+**Rows closed or changed by this ruling.** RL-183c row 3 is read with rows 1 to 3. RL-182 row 4 is read with row 7. RL-181's rail-sum convention is replaced by row 8. R2's, AT's and LK's NEEDS_SPEC items are answered. RB's six are answered or assigned.
+
+**What comes back to me.** A clean synthetic or native soak that fails 1.3 item 6. A stored bundle that keeps rails and DC-in in one file. An A9 union with no reason word for an absent capture. Two admitted records that disagree on an A9 decision. A bundle whose `rail_manifest` is not the three rails. The triggered rows 11 to 13 of 3.4. Nothing else in this ruling returns.
+
+**Blind status.** Blind. This ruling rests on rulings, five seat reports and code. No series member exists and W1 is not signed. E18 and E19 add words and one count; they change no estimator, level, threshold or inclusion rule.
