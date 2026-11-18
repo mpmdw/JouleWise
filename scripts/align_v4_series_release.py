@@ -17,6 +17,7 @@ from pathlib import Path
 from stat import S_ISREG
 import sys
 from tempfile import TemporaryDirectory
+from types import SimpleNamespace
 
 ROOT = Path(__file__).resolve().parents[1]
 _CALLER_CODE = sys._getframe().f_code
@@ -257,8 +258,79 @@ class Assignment:
 @dataclass(frozen=True)
 class BoundInput:
     path: str
-    size: int
+    size: int | None
     sha256: str
+
+
+def manifest_inputs(manifest, root, prefix):
+    """Collect keyed file tables and explicit descriptors at any depth."""
+    bindings = {}
+
+    def relative_path(name):
+        packet.require(isinstance(name, str), "manifest input path is missing")
+        path = Path(name)
+        if path.is_absolute():
+            packet.require(path.as_posix() == name and path.is_relative_to(root),
+                           "manifest input is outside the authenticated measurement root")
+            relative = path.relative_to(root).as_posix()
+        else:
+            input_parts(name)
+            relative = f"{prefix}/{name}"
+        input_parts(relative)
+        return relative
+
+    def add(name, descriptor):
+        relative = relative_path(name)
+        sha256 = descriptor.get("sha256", descriptor.get("digest"))
+        size = descriptor.get("size")
+        packet.require(v4_registration.is_digest(sha256) and descriptor.get("digest", sha256) == sha256
+                       and (size is None or type(size) is int and size >= 0), "invalid manifest file binding")
+        if relative in bindings:
+            previous = bindings[relative]
+            packet.require(previous.sha256 == sha256 and (size is None or previous.size in (None, size)),
+                           "manifest file bindings disagree")
+            size = previous.size if size is None else size
+        bindings[relative] = BoundInput(relative, size, sha256)
+
+    closure = manifest["closure"]
+    for table in (manifest["entries"], closure["files"], closure["ignored"]):
+        for name, row in table.items():
+            if "sha256" in row or "digest" in row:
+                add(name, row)
+    pending = [manifest]
+    while pending:
+        node = pending.pop()
+        if isinstance(node, dict):
+            if "path" in node and ("sha256" in node or "digest" in node):
+                add(node["path"], node)
+            pending.extend(node.values())
+        elif isinstance(node, list):
+            pending.extend(node)
+    for name, declared in closure["inputs"].items():
+        packet.require(Path(name).is_absolute() and declared["real"] == name and relative_path(name) in bindings,
+                       "declared input does not name a byte-bound regular path")
+    return bindings
+
+
+def bound_bytes(root, bound):
+    raw = named_bytes(root, bound.path)
+    packet.require((bound.size is None or len(raw) == bound.size) and packet.digest(raw) == bound.sha256,
+                   "restored file differs from record manifest")
+    return raw
+
+
+def verify_ancillary_input(root, bound):
+    """Verify a listed ancillary input in an admitted plain representation."""
+    path = bound.path
+    stems = {part.partition(".")[0].replace("-", "_") for part in path.casefold().split("/")}
+    packet.require(not stems.intersection({"power_trace", "align_dc_in", "dc_in", "system_total",
+                                          "transcript", "transcripts", "restricted", "custody", "night_custody",
+                                          "night_archive", "sealed"}), "manifest input has no authorized release reader")
+    packet.require(Path(path).suffix.casefold() not in {".zst", ".gz", ".bz2", ".xz", ".zip", ".lz4", ".7z"},
+                   "manifest lists a compressed file")
+    text = bound_bytes(root, bound).decode("utf-8")
+    packet.require(all(not (ord(char) < 32 or ord(char) == 127) or char in "\t\n\r" for char in text),
+                   "manifest file has no admitted plain representation")
 
 
 def plain_input(name, raw):
@@ -302,6 +374,8 @@ class RestoredFiles:
         manifest = packet.decode(raw)
         harvest_offload._validate_finalized(manifest)
         self.entries = manifest["entries"]
+        self.listed = manifest_inputs(manifest, root, self.prefix)
+        self.read_inputs = set()
         self.stems = defaultdict(set)
         for name in self.entries:
             input_parts(name)
@@ -352,10 +426,17 @@ class RestoredFiles:
         return BoundInput(name, row["size"], row["sha256"])
 
     def read_bound(self, bound):
-        raw = named_bytes(self.root, f"{self.prefix}/{bound.path}")
-        packet.require(len(raw) == bound.size and packet.digest(raw) == bound.sha256,
-                       "restored file differs from record manifest")
-        return raw, plain_input(bound.path, raw)
+        relative = f"{self.prefix}/{bound.path}"
+        listed = self.listed[relative]
+        raw = bound_bytes(self.root, listed)
+        parsed = plain_input(bound.path, raw)
+        self.read_inputs.add(relative)
+        return raw, parsed
+
+    def verify_listed_inputs(self):
+        for path, bound in self.listed.items():
+            if path not in self.read_inputs:
+                verify_ancillary_input(self.root, bound)
 
     def bind_bundle(self, run_id, name, *, optional=False):
         packet.require(Path(run_id).name == run_id and run_id not in ("", ".", ".."),
@@ -413,6 +494,7 @@ def final_roster(root, manifest, completion, ledger, chain):
                    "completion disagrees with admitted test history")
 
     assignments = {}
+    restored = []
     run_ids = set()
     for record, window, selected, exclusions in admitted:
         plan = record.roster()
@@ -431,6 +513,7 @@ def final_roster(root, manifest, completion, ledger, chain):
         final = light_triage.member_eligibility(record.thermal()["members"], plan, captured=captured, final=True)
         harvest_codes = v4_contention.exclusion_map(exclusions["members_excluded"])
         files = RestoredFiles(root, record, layouts[record.window])
+        restored.append(files)
         for frozen in selected["members"]:
             ordinal = frozen["ordinal"]
             if ordinal not in series.FRESH_ORDINALS:
@@ -456,7 +539,7 @@ def final_roster(root, manifest, completion, ledger, chain):
             packet.require(identity not in assignments and run_id not in run_ids, "ambiguous final assignment")
             assignments[identity] = assignment
             run_ids.add(run_id)
-    return assignments.values()
+    return assignments.values(), restored
 
 
 def read_member(assignment, condition, bindings):
@@ -503,7 +586,8 @@ class ReleasedInputs:
         self.registration_receipt = v4_registration.require_registration(root, series_release=True)
         packet.require(self.registration_receipt == packet.decode(registered), "registration receipt changed")
         require_executing_bindings(self.registration_receipt)
-        self.assignments = {a.key: a for a in final_roster(root, self.manifest, completion, ledger, chain)}
+        assignments, self.restored = final_roster(root, self.manifest, completion, ledger, chain)
+        self.assignments = {a.key: a for a in assignments}
         captured = [a for a in self.assignments.values() if a.files is not None]
         self.member_inputs = {a.key: a.files.member_inputs(a.run_id) for a in captured}
         self.expected_members = {
@@ -553,7 +637,31 @@ class ReleasedInputs:
                   for m in members if m.eligible and m.episode.condition == "benign"}
         self.dc_inputs = {key: self.bind_benign_dc(key) for key in benign}
         self.dc_results = {episode.episode_id: self.read_benign_dc(episode, key) for key, episode in benign.items()}
+        for files in self.restored:
+            files.verify_listed_inputs()
+        self.verify_score_inputs(members)
         return members
+
+    def verify_score_inputs(self, members):
+        # Prepare the registered S inputs without forming a rank or a tail.
+        # In particular, valid rows can still leave a held-out fit undefined.
+        groups = defaultdict(list)
+        contributors = {}
+        for member in members:
+            if member.eligible:
+                episode = member.episode
+                rows = rl176._decode_rows(member)
+                if rows:
+                    disposition = self.expected_members[episode.episode_id]
+                    contributors[episode.episode_id] = disposition
+                    groups[disposition[:2]].append(SimpleNamespace(episode=episode, decode_rows=rows))
+        expected = {run_id: member for run_id, member in self.expected_members.items() if member[3]}
+        packet.require(contributors == expected, "S contributors differ from the bound roster")
+        packet.require(paired_strata(contributors.values()) == self.expected_strata,
+                       "S input strata differ from the bound roster")
+        for group in groups.values():
+            packet.require(rl176._decode_scores(group).keys() == {m.episode.episode_id for m in group},
+                           "S contributor fit is undefined")
 
     def benign_assignment(self, key):
         packet.require(self.members is not None and self.condition(key) == "benign",

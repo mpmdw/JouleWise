@@ -365,11 +365,13 @@ def stored_series(root, *, wins=102, different=None, no_rows=False, spoof=False,
                 (bundle / "outputs/align_soc_rails.csv").write_bytes((bundle / "power_trace.csv").read_bytes())
                 if not (omit_first_pm and window == "C1" and ordinal == series.FRESH_ORDINALS[0]):
                     write_json(bundle / "outputs/align_s_pm_rows.json", s_rows.pm_rows_with_states(bundle, episode))
+                # The release layout carries the split rail and state inputs.
+                # Native working sources are outside its finalized inventory.
+                (bundle / "power_trace.csv").unlink()
+                (bundle / "raw/powermetrics.plist").unlink()
                 if spoof:
                     dc_file = bundle / "outputs/align_dc_in.json"
-                    if condition == "sabotage":
-                        dc_file.write_bytes(b"forbidden instructed fixture")
-                    elif window == "C1" and ordinal == next(a["ordinal"] for a in selected["members"]
+                    if window == "C1" and ordinal == next(a["ordinal"] for a in selected["members"]
                             if a["ordinal"] in series.FRESH_ORDINALS and a["condition"] == "benign"):
                         dc = replace(episode.power_traces[0], source="wall_meter", channel="dc_in")
                         write_json(dc_file, {"trace": json.loads(to_json(dc)),
@@ -483,7 +485,7 @@ class SeriesReleaseTests(unittest.TestCase):
 
             targets = set(listed_files(manifest))
             self.assertEqual(targets, {ledger, ignored, nested, journal})
-            files.verify_listed_inputs(set())
+            files.verify_listed_inputs()
             for target in targets:
                 original = target.read_bytes()
                 for mode in ("absent", "digest-mismatch", "compressed-only", "unreadable"):
@@ -500,7 +502,7 @@ class SeriesReleaseTests(unittest.TestCase):
                             else:
                                 target.chmod(0)
                             with self.assertRaises((ValueError, OSError)):
-                                files.verify_listed_inputs(set())
+                                files.verify_listed_inputs()
                         finally:
                             if target.is_file():
                                 target.chmod(0o600)
@@ -531,6 +533,10 @@ class SeriesReleaseTests(unittest.TestCase):
             journal = root / "series/restored/C8" / journal_name
             ledger_data = json.loads((root / packet.SERIES_PATH).read_bytes())
             self.assertIsNone(ledger_data["release_layouts"]["C8"]["hazard_journal"])
+            control = root / "control.json"
+            accepted = invoke(root, control)
+            self.assertEqual(accepted.returncode, 0, accepted.stderr)
+            self.assertEqual(json.loads(control.read_bytes())[seal.RL176]["S"]["words"], ["S SIGNATURE"])
             for target in (ledger, journal):
                 with self.subTest(path=target.name):
                     original = target.read_bytes()
@@ -545,7 +551,7 @@ class SeriesReleaseTests(unittest.TestCase):
                     finally:
                         target.write_bytes(original)
 
-    def test_pre_rank_coverage_refuses_zero_rows_and_unidentified_fits(self):
+    def test_pre_rank_coverage_refuses_zero_rows(self):
         from scripts import align_v4_series_release as caller
         from tests.align import test_c1_release_input_completeness as frozen
 
@@ -559,6 +565,52 @@ class SeriesReleaseTests(unittest.TestCase):
                     caller.main(["--measurement-root", str(root), "--output", str(output)])
                 self.assertEqual(refusal.exception.code, 1)
                 self.assertFalse(output.exists())
+
+    def test_pre_rank_coverage_refuses_nonempty_rows_with_an_undefined_fit(self):
+        from scripts import align_v4_series_release as caller
+
+        finalize = harvest_offload.finalized_manifest
+
+        def with_degenerate_fit(window):
+            if window.name == "C8":
+                rails = sorted((window / "runs").glob("*/" + caller.RAIL_FILE))
+                self.assertEqual(len(rails), 16)
+                raw = rails[0].read_bytes()
+                for path in rails[1:]:
+                    path.write_bytes(raw)
+            return finalize(window)
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp).resolve()
+            with patch.object(harvest_offload, "finalized_manifest", with_degenerate_fit):
+                stored_series(root)
+            output = root / "report.json"
+            with patch.object(rl176, "_tail_test", side_effect=AssertionError("ranked an unidentified fit")), \
+                    patch.object(rl176, "_decode_scores", wraps=rl176._decode_scores) as fits, \
+                    redirect_stderr(StringIO()), self.assertRaises(SystemExit) as refusal:
+                caller.main(["--measurement-root", str(root), "--output", str(output)])
+            self.assertTrue(fits.call_args)
+            self.assertTrue(all(m.decode_rows for m in fits.call_args.args[0]))
+            self.assertEqual(refusal.exception.code, 1)
+            self.assertFalse(output.exists())
+
+    def test_unadmitted_listed_trace_refuses_without_opening_it(self):
+        from scripts import align_v4_series_release as caller
+
+        for name in ("power_trace.csv", caller.DC_FILE):
+            with self.subTest(name=name), tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp).resolve()
+                store = root / "series/restored/C8"
+                trace = store / "runs/synthetic-instructed" / name
+                trace.parent.mkdir(parents=True)
+                trace.write_bytes(b"forbidden synthetic trace")
+                manifest = describe(store, "finalized_manifest.json", harvest_offload.finalized_manifest(store),
+                                    canonical=True)
+                record = SimpleNamespace(window="C8", finalized_manifest_sha256=manifest["sha256"])
+                files = caller.RestoredFiles(root, record, {"trace_layout": caller.LAYOUT, "hazard_journal": None})
+                with patch.object(caller, "named_bytes", side_effect=AssertionError("opened an unadmitted trace")), \
+                        self.assertRaisesRegex(ValueError, "no authorized release reader"):
+                    files.verify_listed_inputs()
 
     def test_receipt_from_after_t3_cannot_replace_the_c1_predecessors_receipt(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -726,21 +778,17 @@ class SeriesReleaseTests(unittest.TestCase):
             root = Path(tmp)
             stored_series(root, history=True)
             originals = []
-            reports = []
-            real = rl176.series_release_prints
+            real = caller.ReleasedInputs.load_members
 
-            def observe(state, *, load_members, **kwargs):
-                def load():
-                    originals.extend(load_members())
-                    return originals
-                report = real(state, load_members=load, **kwargs)
-                reports.append(report)
-                return report
+            def observe(inputs):
+                members = real(inputs)
+                originals.extend(members)
+                return members
 
-            with patch.object(rl176, "series_release_prints", side_effect=observe), \
+            with patch.object(caller.ReleasedInputs, "load_members", observe), \
+                    patch.object(rl176, "_tail_test", side_effect=AssertionError("ranked before S verification")), \
                     self.assertRaisesRegex(ValueError, "S contributors differ from the bound roster"):
                 caller.build_report(root)
-            report = reports[0][seal.RL176]
             self.assertEqual(len(originals), 176)
             self.assertEqual(len({m.episode.episode_id for m in originals}), 176)
             self.assertNotIn("C3", {m.window for m in originals})
@@ -754,16 +802,17 @@ class SeriesReleaseTests(unittest.TestCase):
                 run_id = member.episode.episode_id
                 attempt = run_id.split("-")[1]
                 bundle = root / "series/restored" / attempt / "runs" / run_id
-                expected, _ = s_rows.read_member_rows(bundle, s_rows.REGISTERED)
+                with tempfile.TemporaryDirectory() as tmp:
+                    projection = Path(tmp) / "member"
+                    shutil.copytree(bundle, projection)
+                    (projection / "power_trace.csv").write_bytes((bundle / caller.RAIL_FILE).read_bytes())
+                    pm_rows = json.loads((bundle / caller.PM_ROWS).read_bytes())
+                    expected, _ = s_rows.read_member_rows(projection, s_rows.REGISTERED, pm_rows=pm_rows)
                 self.assertEqual(member.s_rows, expected.rows)
                 cut |= any(row.cut for row in expected.rows)
                 empty |= not expected.rows and member.eligible
                 truncated |= expected.truncated and member.eligible
             self.assertTrue(cut and empty and truncated)
-            self.assertEqual(sum(
-                row["assigned"] for conditions in report["S"]["attrition"]["by_pair_and_condition"].values()
-                for row in conditions.values()
-            ), 176)
 
     def test_no_member_loader_opens_dc_and_provider_keys_on_manifest_benign_ordinals(self):
         from scripts import align_v4_series_release as caller
