@@ -1052,6 +1052,20 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 
 <!-- RUN_STATE TYPED ITEMS: newest first. Add with scripts/run_state_add.py; never edit by hand. -->
 
+442. **Close-proof trusts GROUPS_ABSENT (qual pin 6e9d42f1d): never attest groups absent over a 'not proven stopped' receipt; run your own pgid census first**
+
+```item
+{"expires_epoch_s": null, "issued_epoch_s": 1795039939, "number": 442, "owner": "magistrate", "schema": "joulewise.run_state_item.v1", "sets": [], "status": "ISSUED", "supersedes": []}
+```
+
+- **Finding (Astra, executing audit of the ctl-01 runner, which reproduces on the merged qualification pin `6e9d42f1d`):** `close-proof` accepts `GROUPS_ABSENT=1` even when the predecessor's runner receipt says `process group not proven stopped`. A successor could then launch while the old workload group is still alive.
+- **Standing rule for the magistrate, until the next pin fixes the code:**
+  - Never set `GROUPS_ABSENT=1` if any stop line in the predecessor's receipt reads `not proven stopped`.
+  - Before setting it, run your own census of the predecessor's recorded process-group IDs (for example `ps -o pid,pgid,command -g <pgid>` for each recorded pgid). Set it only if every census is empty.
+  - Record the census lines in your item.
+  - If any group is alive, kill it per item 431, re-run the census, and only then set the attestation.
+- **Applies to every span on `6e9d42f1d`:** f2-stab-15 and -16, and the six qualification items.
+
 441. **At f2-stab-15-l001's close, before R1's pre-arm: push 4 raw dev trees to the Air (rsync over Tailscale, at most 600 s, never hold R1)**
 
 ```item
