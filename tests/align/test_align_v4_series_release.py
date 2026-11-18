@@ -11,7 +11,6 @@ import plistlib
 import subprocess
 import sys
 import tempfile
-from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
@@ -39,17 +38,36 @@ import sys
 
 allowed = set(sys.argv.pop(1).split(os.pathsep))
 script, _, root, _, _ = sys.argv[1:]
+root = os.path.realpath(root)
+directory_fds = {}
+real_open, real_close = os.open, os.close
 
-def observe(event, args):
-    if event == "subprocess.Popen":
-        raise AssertionError("release tried to resolve a repository")
-    if event != "open" or not isinstance(args[0], (str, bytes)):
-        return
-    path = os.path.abspath(os.fsdecode(args[0]))
+def check_open(path):
     relative = os.path.relpath(path, root)
     if relative not in (".", "..") and not relative.startswith("../") and relative not in allowed:
         raise AssertionError("protected read: " + relative)
 
+def observed_open(path, flags, mode=0o777, *, dir_fd=None):
+    absolute = os.path.abspath(os.path.join(directory_fds.get(dir_fd, ""), os.fsdecode(path)))
+    if not flags & os.O_DIRECTORY:
+        check_open(absolute)
+    fd = real_open(path, flags, mode, dir_fd=dir_fd)
+    if flags & os.O_DIRECTORY:
+        directory_fds[fd] = absolute
+    return fd
+
+def observed_close(fd):
+    directory_fds.pop(fd, None)
+    real_close(fd)
+
+def observe(event, args):
+    if event == "subprocess.Popen":
+        raise AssertionError("release tried to resolve a repository")
+    if event != "open" or not isinstance(args[0], (str, bytes)) or args[2] & os.O_DIRECTORY:
+        return
+    check_open(os.path.abspath(os.fsdecode(args[0])))
+
+os.open, os.close = observed_open, observed_close
 sys.addaudithook(observe)
 sys.argv = sys.argv[1:]
 runpy.run_path(script, run_name="__main__")
@@ -517,16 +535,24 @@ class SeriesReleaseTests(unittest.TestCase):
         from scripts import align_v4_series_release as caller
 
         with tempfile.TemporaryDirectory() as tmp:
-            root = Path(tmp).resolve()
-            outside = root / "outside"
-            (outside / "C1").mkdir(parents=True)
-            raw = b"synthetic projected input"
-            (outside / "C1/finalized_manifest.json").write_bytes(raw)
-            (root / "series").mkdir()
-            (root / "series/restored").symlink_to(outside, target_is_directory=True)
-            record = SimpleNamespace(window="C1", finalized_manifest_sha256=packet.digest(raw))
-            with self.assertRaises(OSError):
-                caller.RestoredFiles(root, record, {"trace_layout": caller.LAYOUT, "hazard_journal": None})
+            root = Path(tmp) / "input"
+            root.mkdir()
+            stored_series(root)
+            restored = root / "series/restored"
+            outside = Path(tmp) / "outside"
+            restored.rename(outside)
+            restored.symlink_to(outside, target_is_directory=True)
+            output = root / "report.json"
+            real_open = caller.os.open
+
+            def observe(path, *args, **kwargs):
+                self.assertNotEqual(path, "finalized_manifest.json", "opened an outside manifest")
+                return real_open(path, *args, **kwargs)
+
+            with patch.object(caller.os, "open", side_effect=observe), self.assertRaises(SystemExit) as refusal:
+                caller.main(["--measurement-root", str(root), "--output", str(output)])
+            self.assertEqual(refusal.exception.code, 1)
+            self.assertFalse(output.exists())
 
     def test_stored_series_through_787_and_release_script_s_signature_at_102_not_101_of_154(self):
         for wins, tail in ((102, 0.0109278936864), (101, 0.0140103456299)):
