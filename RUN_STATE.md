@@ -1044,6 +1044,30 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 
 <!-- RUN_STATE TYPED ITEMS: newest first. Add with scripts/run_state_add.py; never edit by hand. -->
 
+434. **Qualification pin 6e9d42f1d admitted (PR #812 merged; 38 paths = reviewed head); first native run = f2-stab-15 L001 after R1, with F-3(c) hand-read**
+
+```item
+{"expires_epoch_s": null, "issued_epoch_s": 1794998100, "number": 434, "owner": "magistrate", "schema": "joulewise.run_state_item.v1", "sets": [], "status": "ISSUED", "supersedes": []}
+```
+
+- **Admission (lead, RL-179 F-11).** The qualification runner pin `6e9d42f1dd3d308bc9239143d0d634ab965e50e1` is admitted. It is PR #812's merge into `align/2026-11-14-kit-v1-1`. Evidence:
+  - all 38 frozen paths equal the reviewed head `0d03cb783`;
+  - five adversarial Astra rounds, the last MERGE;
+  - Fable's cold final pass: PASS, "does not change what is measured";
+  - CI green on that head;
+  - review record: audit `fa9e4c24e`, `evidence/pr-reviews/pr812/`.
+- **First native run on this pin (RL-179 F-11, RL-183 Q13).** One `f2-stab` leg: `f2-stab-15` L001, from `docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/f2-stab/qual-pin/` on `origin/audit/2026-11-10-fable` at `6f32db2af`.
+  - Queue sha256 `87720fe5…37e1bf`. The queue expires Tue 24 Nov 12:43:05.
+  - Use the shared issue template (`f2-stab/ISSUE.md`). Check the kit sha256 against `qual-pin/README.md` before staging.
+  - Rank it as the first f2-stab leg of its date (RL-179 ladder). Run it at the first clean close after R1's slot session. Never place it between a qualification block's two spans.
+  - Do the F-3 (c) hand-read on its close, using the earlier pin's template `desk-cq-dev-04-s01-a1/hand/hand_table.py`. Record the hand-read in your item.
+  - It is ordinary f2-stab product: sealed, in no fit and no count.
+- **Not yet issuable:** the six qualification items (`item-drafts-1118`, at the same audit commit). They wait for:
+  - freeze 2 in effect (`twin_agrees = yes`);
+  - the registered `lm-qual-01` manifest on main (PR #821);
+  - the lead's issue.
+- **Items 423, 431 and 433 still bind.**
+
 433. **RL-183: no F0/Part C on #809's renewal candidates (5434cb49d, e26b04b53, b3b88c696); R1 as issued at b2e01464d; R1 post-close follows the kit's word**
 
 ```item
