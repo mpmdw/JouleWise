@@ -4,9 +4,9 @@
 CLI ran both complete stored worlds. At 102 of 154 wins it printed
 `S SIGNATURE` with `p_sup ≈ 0.0109278936864`. At 101 wins the signature
 was absent with `p_sup ≈ 0.0140103456299`. Both worlds used 22 untied
-strata, 11 windows and 176 members. Both additional pairs of synthetic
-worlds distinguished an uncaptured assignment from a Q-eligible capture
-with zero S rows.
+strata, 11 windows and 176 members. The latest completeness gate preserves
+uncaptured roster dispositions and refuses to publish a report when an
+eligible captured member contributes no S score.
 
 ## Parents, spec and publication
 
@@ -26,7 +26,9 @@ with zero S rows.
 | Pipeline round-three test head and tree | `25a906a71716f874156e2f318c97df2fe567ce69`, `1352dc01b312551d97d5a6d6cec2dc6f17fcfe8a` |
 | Lead's structural spec freeze | `1e550ca36c51f7b8f9d1e930dea5d58909eca57c` |
 | Structural spec test head and tree | `1f00d3789aad10fa842a84762d7843fac9f6f09c`, `e9656d50dd08fec04d433095cd48c3cb6b049ba2` |
-| Caller SHA-256 for signatory | `bbd074f12d265f3241e9e95a1f2803d35f32fde77c775d685edd2cc1b3ba7a6d` |
+| Frozen Astra acceptance module commit | `21b26ba78` |
+| Exact completeness test head and tree | `64b36cd64d154b15d4765c4c0d39f0892c195940`, `31f9a6cb2008beda1bc7707bff4a01264a675dfa` |
+| Caller SHA-256 for signatory | `a5115ac949821dd702e3474c10cc784c27be4e2156112df2fd0ad6705dd20753` |
 | Draft code head and tree before report | `b7a0440a00442151c5b18a73a7b48fb5beeb72ec`, `77c7065e57a5bc17cb436adc041f6ff45bfdb175` |
 
 At the initial freeze the CLI tests failed with no script. At the RL-185
@@ -35,9 +37,9 @@ During build, an eager selection fixed the fixture's last-stratum offsets
 so both worlds have no ties, and the fixtures gained bound, named PM and
 rail projections.
 
-Handoff found PR #813 at `07ebee6c8a58eb9f4d444335bf79456217c45ddb`,
-which updates the first-token path and its boundary tests from
-`5765be0437816f0832d429ecaff34258ca30cd37`.
+Handoff found PR #813 at `6093a7454d181c87ae6fcb2e3d30c25fb1e97cce`,
+which extends the first-token boundary checks since
+`07ebee6c8a58eb9f4d444335bf79456217c45ddb`.
 The private synthetic tests use the original pinned sources in the table.
 PR #787 remains at its pin. PR #826 advanced to
 `1fc28324d51f8057fa6228e6e7d42b5ea331d52c` with test changes only since the
@@ -55,11 +57,11 @@ the dependency landings. [Draft PR #836](https://github.com/mpmdw/JouleWise/pull
 
 | Stage | File and line | Evidence |
 |---|---|---|
-| CLI and guard | Caller :620,651, PR #813 `v4_desk_seal.py:351,418` and `rl176.py:611,622,633` | Snapshot the guard's named metadata, call the real guard and use the literal freeze flag in the scorer. |
-| Registration and history | Caller :140,187,347,466, `v4_registration.py` `validate_receipt` and `require_registration`, and `scripts/align_v4_series.py:220,231,239,510` | Verify the C1 predecessor's receipt digest, verify the executing source inventory, and join the authorized history to the frozen manifest. |
+| CLI and guard | Caller :669,701, PR #813 `v4_desk_seal.py:351,418` and `rl176.py:611,622,633` | Snapshot the guard's named metadata, call the real guard and use the literal freeze flag in the scorer. |
+| Registration and history | Caller :151,198,376,497, `v4_registration.py` `validate_receipt` and `require_registration`, and `scripts/align_v4_series.py:220,231,239,510` | Verify the C1 predecessor's receipt digest, verify the executing source inventory, and join the authorized history to the frozen manifest. |
 | Final records and A9 | PR #826 `scripts/align_v4_next_arm_packet.py:237,306,395` and `light_triage.py:79,163` | Use the shared RL-183b finality, including successor `previous_final`, and independently preserve final per-member reasons. |
-| Stored rows | Caller :120,253,311,325,433, PR #787 `s_rows.py:193,751,774`, PR #813 `workload.py:893` | Bind every relevant file to its canonical path and digest. Give #787 the isolated rail-only projection and registered PM rows, then pass the returned tuple directly. |
-| Pre-scoring roster and DC | Caller :458,506,535,558,585, PR #813 `rl176.py:459,468,527,550,628` | Compare the loaded stratum and member identities to the bound roster, then verify the separately authorized benign DC bytes before scoring. |
+| Stored rows | Caller :121,137,264,323,340,354,462, PR #787 `s_rows.py:193,751,774`, PR #813 `workload.py:893` | Verify the exact directory-entry inventory and bind scoring files to plain canonical paths and digests. Pass #787's row tuple directly. |
+| Roster, DC and coverage | Caller :537,583,669, PR #813 `rl176.py:352,379,527,550,628` | Compare loaded identities, verify authorized benign DC bytes, then match the registered S scorer's ranked strata and contributor counts before publishing. |
 
 ## Resolved interfaces under RL-185 §3
 
@@ -268,12 +270,43 @@ lossless Zstandard reproductions remain regression checks.
 [Round-three CI](https://github.com/mpmdw/JouleWise/actions/runs/44334196623) ·
 [Current draft checks](https://github.com/mpmdw/JouleWise/pull/836/checks)
 
+## Frozen Astra input-completeness acceptance
+
+`test_c1_release_input_completeness.py` was copied byte-for-byte and
+committed before changing the caller. Its SHA-256 is
+`4d20a378775680182baf7679305fcdafb9434974f258b9445398add15cb0e02e`.
+Astra measured 176 refusals and 67 erroneous reports across the 243
+mutated worlds at `37ab9628b`, including 26 false `S SIGNATURE` words.
+The local red run independently reproduced a case-only rename, an
+unlisted extra, and a benign zero-row case that still ranked all 22
+strata with only 175 contributors. The intact 22-stratum control passed.
+
+The caller now compares exact directory-entry names with each finalized
+restore manifest without opening or following unprojected files. Case
+folding is used to identify alternate bound names, and exact spelling is
+required when opening an authorized path. Named scoring inputs still
+require regular, readable, unlinked plain files with matching digests.
+Manifest-bound streams and the separately authorized benign DC trace
+must contain records. A genuinely absent optional input remains distinct
+in the manifest.
+
+Before writing a report, the caller checks the registered S scorer's
+ranked stratum identities and counts against the frozen roster and final
+A9 decisions. The scorer's per-condition `with_score` counts must cover
+every eligible captured member. This catches a missing benign member
+even if both arms still rank. An uncaptured member remains a roster
+disposition. The existing roster and uncaptured tests now expect a
+refusal for otherwise eligible captures with no S rows. Registered S/Q
+calculation and the authenticated C1 predecessor receipt check are
+unchanged. The exact checkout and suite totals are recorded on the draft.
+[Draft verification](https://github.com/mpmdw/JouleWise/pull/836)
+
 ## Executed checks and Tier 2 dispositions
 
 | Regression | Result |
 |---|---|
 | `test_stored_series_through_787_and_release_script_s_signature_at_102_not_101_of_154` | PASS. Both CLI worlds and the frozen Q leaf. |
-| `test_uncaptured_and_captured_without_s_rows_form_two_distinct_world_pairs` | PASS. Benign Q count 7 → 8 with the same S and Q strata. Instructed Q count 0 → 8 with one additional Q stratum and unchanged S membership. Both pairs change exact Q p. |
+| `test_uncaptured_and_captured_without_s_rows_form_two_distinct_world_pairs` | Uncaptured assignments remain disclosed. A captured eligible member with zero S rows now makes the CLI refuse without publishing the report. |
 | `test_final_roster_emits_one_fresh_member_per_assignment_with_a9_and_unmodified_787_rows` | PASS for reserve, retry, barred attempt, successor finality, X5 exclusions, row parity, truncation, missing stamps and hot cut. |
 | `test_no_member_loader_opens_dc_and_provider_keys_on_manifest_benign_ordinals` | PASS for the spoofed label, one benign DC open, direct ordinal refusals and corrupted rail bytes, with no partial report. |
 | `test_post_release_terminal_authority_refuses_before_member_loading` | PASS for a missing ref, stale terminal binding, wrong digest, unreachable commit and simultaneous direct and successor evidence. The release guard recognizes the synthetic authorization in each case. The member loader stays closed and no report is created. |
