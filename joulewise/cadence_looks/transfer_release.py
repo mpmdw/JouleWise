@@ -7,6 +7,7 @@ This module has no command line or way to discover real scoring inputs.
 from __future__ import annotations
 
 import builtins
+from contextlib import suppress
 import json
 import os
 from pathlib import Path
@@ -82,6 +83,40 @@ def _redirect(restricted):
             os.close(stream)
 
 
+def _discard_output(fd):
+    # Python may flush buffered streams again during interpreter shutdown.
+    with suppress(OSError):
+        sink = os.open(os.devnull, os.O_WRONLY)
+        if sink != fd:
+            try:
+                os.dup2(sink, fd)
+            finally:
+                os.close(sink)
+
+
+def _flush_worker_streams():
+    healthy = True
+    for fd, stream in ((1, sys.stdout), (2, sys.stderr)):
+        try:
+            stream.flush()
+        except BaseException:
+            healthy = False
+            _discard_output(fd)
+    return healthy
+
+
+def _deliver_notice(fd, notice):
+    try:
+        while notice:
+            written = os.write(fd, notice)
+            if not written:
+                return False
+            notice = notice[written:]
+    except OSError:
+        return False
+    return True
+
+
 def run_transfer_worker(*, restricted: Path, public: Path, execution_host: str, local_host: str,
                         ledger_status: str, preflight, score) -> int:
     """Run one look boundary in a worker whose process exits with the returned status.
@@ -93,9 +128,9 @@ def run_transfer_worker(*, restricted: Path, public: Path, execution_host: str, 
     including when the shared coefficient reader opens that input. Nothing else may open
     scoring inputs. Once reserved, the worker keeps its streams confined through shutdown.
     """
+    if not _flush_worker_streams():
+        return PRE_READ_REFUSAL
     try:
-        sys.stdout.flush()
-        sys.stderr.flush()
         original_stderr = os.dup(2)
     except BaseException:
         return PRE_READ_REFUSAL
@@ -145,11 +180,12 @@ def run_transfer_worker(*, restricted: Path, public: Path, execution_host: str, 
                 traceback.print_exc()
             except BaseException:
                 pass
-        if read_started:
-            notice = f"stage2_error\n{_failure_type(error)}\n".encode("ascii")
-            os.write(original_stderr, notice)
-            return POST_READ_FAILURE
-        os.write(original_stderr, _REFUSAL)
-        return PRE_READ_REFUSAL
+        status = POST_READ_FAILURE if read_started else PRE_READ_REFUSAL
+        notice = f"stage2_error\n{_failure_type(error)}\n".encode("ascii") if read_started else _REFUSAL
+        if not _deliver_notice(original_stderr, notice) and not redirected:
+            _discard_output(2)
+        _flush_worker_streams()
+        return status
     finally:
-        os.close(original_stderr)
+        with suppress(OSError):
+            os.close(original_stderr)
