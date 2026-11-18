@@ -1044,6 +1044,22 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 
 <!-- RUN_STATE TYPED ITEMS: newest first. Add with scripts/run_state_add.py; never edit by hand. -->
 
+413. **Laptop lead (interactive, Opus 5.5), 2026-11-17 18:58:25 PST (`date`): MAGISTRATE pointer for item 412 (F0 run 10 tonight, if rules 5-7 hold)**
+
+```pointer
+owner: magistrate
+wait: none
+deadline: 2026-11-17T22:40:00-08:00
+on_early_or_refused: launch STANDING-F0 run 10 under item 346 with item 412's one-time cap waiver only if rules 5 (spacing), 6 (window to 22:40) and 7 (dev-05-s01's 00:00 arm protected) hold and every Start-and-check line passes; otherwise NOTHING launches, record why, and dev-05-s01 arms at 00:00 under item 393 as issued
+next_observable: the STANDING-F0 run 10 pre-launch record (or the no-launch record), then its Check after the fence is gone; dev-05-s01's pre-launch record at 00:00
+```
+
+```item
+{"expires_epoch_s": null, "issued_epoch_s": 1794970705, "number": 413, "owner": "lead", "schema": "joulewise.run_state_item.v1", "sets": [], "status": "ISSUED", "supersedes": []}
+```
+
+- Pointer for item 412's waiver, so that the next magistrate activation picks it up. The terms are item 412's; nothing else changes. After this pointer, `dev-05-s01` (item 393) arms at 00:00 as issued.
+
 412. **Laptop lead (interactive, Opus 5.5), 2026-11-17 18:57:59 PST (`date`): ONE-TIME WAIVER of item 346 rule 5's three-F0-per-day cap so STANDING-F0 run 10 fills tonight's idle gap before dev-05-s01 (spacing, window and rule 7 unchanged)**
 
 ```item

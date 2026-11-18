@@ -1,7 +1,13 @@
 {
   "armed": null,
-  "next_observable": "after the fence is gone, Check below reports operational receipt/leg records, feeds, restore and copy; piece 1's hand-read is lead-owned",
+  "next_observable": "the STANDING-F0 run 10 pre-launch record (or the no-launch record), then its Check after the fence is gone; dev-05-s01's pre-launch record at 00:00",
   "open_items": [
+    {
+      "expires_epoch_s": null,
+      "item": 413,
+      "owner": "lead",
+      "status": "ISSUED"
+    },
     {
       "expires_epoch_s": null,
       "item": 412,
@@ -17,11 +23,11 @@
   ],
   "owner": "magistrate",
   "schema": "joulewise.current_pointer.v2",
-  "source_item": "406",
+  "source_item": "413",
   "source_item_heading_date": "2026-11-17",
   "wait": {
-    "deadline_epoch_s": 1794988799,
+    "deadline_epoch_s": 1794984000,
     "observable": "none",
-    "on_early_or_refused": "WAIT if predecessor has not closed or a higher rung can arm; VOID if predecessor is not clean, the date window is missed, or 24 h has elapsed since issue. No retry after a launcher/runner refusal; report to the lead. Never skip a predecessor, reuse OUT, re-run a leg, or queue another piece on this item's authority"
+    "on_early_or_refused": "launch STANDING-F0 run 10 under item 346 with item 412's one-time cap waiver only if rules 5 (spacing), 6 (window to 22:40) and 7 (dev-05-s01's 00:00 arm protected) hold and every Start-and-check line passes; otherwise NOTHING launches, record why, and dev-05-s01 arms at 00:00 under item 393 as issued"
   }
 }
