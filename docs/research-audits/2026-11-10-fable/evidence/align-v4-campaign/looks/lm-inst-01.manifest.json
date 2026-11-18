@@ -10,7 +10,8 @@
     "RL-174 B rows 2 and 4, RLD:17575-17584",
     "RL-179 F-12, rows 26-28",
     "RL-180 section 1 and rows 1-7,9",
-    "RL-181 sections 1.5 and 2"
+    "RL-181 sections 1.5 and 2",
+    "RL-185 section 4"
   ],
   "kits": [
     {
@@ -31,12 +32,17 @@
     "rail_sum",
     "dc_in"
   ],
+  "rail_sum_columns": [
+    "cpu_power",
+    "gpu_power",
+    "ane_power"
+  ],
   "when": "One read after all 36 planned positions have receipt-backed closes or documented terminal dispositions. Require effective freeze 2 on main, the research lead's cold pass and a prior commit naming all three kits before their first energy read. The research lead's reading of the output precedes the ctl-01 kit freeze.",
   "stage1": "Commit the receipt-bound roster, each planned position's disposition and exact public counts before reservation. Authenticate kit IDs and digests, the closed receipt and the applicable hand table, Q1 and desk-final. Use only leg_record.json and runner_receipt.json to decide leg disposition: leg_status, g0_outcome, quiet span of at least 600 s, decode_tokens against the kit cap, decode_cap_reached, power mode and loaded flag. Carry loaded flags and keep short, unreleased-G0 and other failed legs in the accounting. n_legs counts qualified legs. This is a 12-position-per-kit, one-attempt census by authenticated named kit.",
-  "stage2": "Use the authenticated committed stage-1 roster. On each print's interval, check sidecar coverage, rail gaps against U1 and clean DC-in from timestamps and sample counts before reading any values on that interval. A failed check makes that print null with its reason and preserves the roster and public counts. Keep the RL-180 once-per-ID reservation and failure channel. Set the rail_sum_columns from the pinned step-3 loader for the bound host before finalization.",
+  "stage2": "Use the authenticated committed stage-1 roster. On each print's interval, check sidecar coverage, rail gaps against U1 and clean DC-in from timestamps and sample counts before reading any values on that interval. A failed check makes that print null with its reason and preserves the roster and public counts. Keep the RL-180 once-per-ID reservation and failure channel. Take rail_sum_columns from RAIL_MANIFEST in joulewise/adapters/powermetrics.py. Before reading any value on an interval, compare the bundle's recorded rail_manifest with that list in order. A mismatch gives null rail-sum prints with that reason and goes to the research lead.",
   "prints": [
     {
-      "description": "hold_mean, hold_sd_window_means_10s, hold_sd_window_means_40s, hold_sd_window_means_128s, hold_drift. Use the recorded quiet span from its start for 600 s. Hold mean is energy divided by duration. Take contiguous 10, 40 and 128 s windows from the start (60, 15 and 4 full windows), discarding an incomplete final window. Drop and count windows with a gap over U1. Use sample SD (ddof 1) of window means, with null and reason under two windows. Use RL-166 Q2's pinned step-3 loader and Trace for GPU rail, sum the named rail columns sample by sample (a missing column is a gap), and use the trapezoid between consecutive KM003C samples clipped to the interval for DC-in. Use the interim clock mapping. Use the least-squares slope of the 10 s window means at their midpoints, in W per 600 s.",
+      "description": "hold_mean, hold_sd_window_means_10s, hold_sd_window_means_40s, hold_sd_window_means_128s, hold_drift. Use the recorded quiet span from its start for 600 s. Hold mean is energy divided by duration. Take contiguous 10, 40 and 128 s windows from the start (60, 15 and 4 full windows), discarding an incomplete final window. Drop and count windows with a gap over U1. Use sample SD (ddof 1) of window means, with null and reason under two windows. Use the pinned step-3 load_gpu_trace and Trace for GPU rail. The rail sum uses a separate description reader with the same file and row parsing: select source powermetrics and the named rails, and sum rows with identical interval_start_s and interval_end_s. A missing named rail is a gap. On the synthetic hand table, the reader's gpu_power rows must equal load_gpu_trace's rows exactly. Use the trapezoid between consecutive KM003C samples clipped to the interval for DC-in. Use the interim clock mapping. Use the least-squares slope of the 10 s window means at their midpoints, in W per 600 s.",
       "destination": "hold.json"
     },
     {

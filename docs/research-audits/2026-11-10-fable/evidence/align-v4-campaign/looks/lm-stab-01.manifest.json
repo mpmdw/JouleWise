@@ -10,7 +10,8 @@
     "RL-180 row 9, RLD:19224",
     "RL-179 F-12, rows 26-28",
     "RL-180 section 1 and rows 1-7,9",
-    "RL-181 sections 1.5 and 2"
+    "RL-181 sections 1.5 and 2",
+    "RL-185 section 4"
   ],
   "kits": [
     {
@@ -75,12 +76,17 @@
     "rail_sum",
     "dc_in"
   ],
+  "rail_sum_columns": [
+    "cpu_power",
+    "gpu_power",
+    "ane_power"
+  ],
   "when": "Due at the first proven close after stage 1 counts 14 distinct local t0-dates with a qualified stability leg. Require effective freeze 2 on main and the cold pass. Commit both stability manifests before reserving lm-stab-01 and run each when its preconditions hold on or after its due event. The second ID is due when the lead commits paper1_data_lock. If that comes first, run lm-stab-01 then and mark lm-stab-02 coalesced. The later ID has the same fourteen named kits plus the kits in f2-stab/KITS.json whose rows were committed before their first receipts. The later manifest pins the path and stage 1 pins its hash. Each read takes the legs closed at its stage-1 hash. The second read is a separate ID. No third read without a ruling.",
   "stage1": "Commit the receipt-bound roster, each planned position's disposition and exact public counts before reservation. Authenticate kit IDs and digests, the closed receipt and the applicable hand table, Q1 and desk-final. Use only leg_record.json and runner_receipt.json to decide leg disposition: leg_status, g0_outcome, quiet span of at least 600 s, decode_tokens against the kit cap, decode_cap_reached, power mode and loaded flag. Carry loaded flags and keep short, unreleased-G0 and other failed legs in the accounting. n_legs counts qualified legs. Use one leg per span and count its distinct eligible t0-date for n_local_dates. Verify positional equivalence with f2-inst-01 in count, nominal prompt, decode cap, G0 shape, band and power mode. The differing base-to-stability fields are /campaign_id, /ruling/id, /seed_law/master_seed, /legs/*/seed. Between stability kits they are /campaign_id, /seed_law/master_seed (can coincide), /legs/*/seed. Bind actual kit digests. Commit the energy-blind token table using authenticated leg_record fields: kit_id, kit_sha256, span_id, leg_id, position, attempt, nominal_prefill_tokens, decode_cap, realised_prefill_tokens, realised_decode_tokens, local_t0_date, leg_status, decode_cap_reached, loaded_flag, disposition, missing_count_reason. The paper uses the same work only if the committed table shows exactly one realised (prefill, decode) pair at every position across all contributors. Otherwise it uses the same cell of work.",
-  "stage2": "Use the authenticated committed stage-1 roster. On each print's interval, check sidecar coverage, rail gaps against U1 and clean DC-in from timestamps and sample counts before reading any values on that interval. A failed check makes that print null with its reason and preserves the roster and public counts. Keep the RL-180 once-per-ID reservation and failure channel. Set the rail_sum_columns from the pinned step-3 loader for the bound host before finalization.",
+  "stage2": "Use the authenticated committed stage-1 roster. On each print's interval, check sidecar coverage, rail gaps against U1 and clean DC-in from timestamps and sample counts before reading any values on that interval. A failed check makes that print null with its reason and preserves the roster and public counts. Keep the RL-180 once-per-ID reservation and failure channel. Take rail_sum_columns from RAIL_MANIFEST in joulewise/adapters/powermetrics.py. Before reading any value on an interval, compare the bundle's recorded rail_manifest with that list in order. A mismatch gives null rail-sum prints with that reason and goes to the research lead.",
   "prints": [
     {
-      "description": "hold_mean, hold_sd_window_means_10s, hold_sd_window_means_40s, hold_sd_window_means_128s. Use the recorded quiet span from its start for 600 s. Hold mean is energy divided by duration. Take contiguous 10, 40 and 128 s windows from the start (60, 15 and 4 full windows), discarding an incomplete final window. Drop and count windows with a gap over U1. Use sample SD (ddof 1) of window means, with null and reason under two windows. Use RL-166 Q2's pinned step-3 loader and Trace for GPU rail, sum the named rail columns sample by sample (a missing column is a gap), and use the trapezoid between consecutive KM003C samples clipped to the interval for DC-in. Use the interim clock mapping.",
+      "description": "hold_mean, hold_sd_window_means_10s, hold_sd_window_means_40s, hold_sd_window_means_128s. Use the recorded quiet span from its start for 600 s. Hold mean is energy divided by duration. Take contiguous 10, 40 and 128 s windows from the start (60, 15 and 4 full windows), discarding an incomplete final window. Drop and count windows with a gap over U1. Use sample SD (ddof 1) of window means, with null and reason under two windows. Use the pinned step-3 load_gpu_trace and Trace for GPU rail. The rail sum uses a separate description reader with the same file and row parsing: select source powermetrics and the named rails, and sum rows with identical interval_start_s and interval_end_s. A missing named rail is a gap. On the synthetic hand table, the reader's gpu_power rows must equal load_gpu_trace's rows exactly. Use the trapezoid between consecutive KM003C samples clipped to the interval for DC-in. Use the interim clock mapping.",
       "destination": "hold.json"
     },
     {

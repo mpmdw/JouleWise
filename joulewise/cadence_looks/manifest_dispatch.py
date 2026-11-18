@@ -50,9 +50,8 @@ def _validate_description(document):
     channels = document["channels"]
     if len(set(channels)) != len(channels):
         raise ManifestError("description channels must be distinct")
-    columns = document.get("rail_sum_columns", [])
-    if len(set(columns)) != len(columns):
-        raise ManifestError("rail_sum column names must be distinct")
+    if "rail_sum" in channels and "rail_sum_columns" not in document:
+        raise ManifestError("a description with rail_sum requires rail_sum_columns")
     kit_index = document.get("kit_index_path")
     if kit_index is not None and (
         document["look_id"] != "lm-stab-02" or Path(kit_index).parts[-2:] != ("f2-stab", "KITS.json")
@@ -130,11 +129,8 @@ def validate_v2(payload: bytes, *, final=False, registration: bytes | None = Non
         raise ManifestError("a draft cannot pass final validation")
     if kind == "transfer":
         _transfer_final(registration, payload, pins, definitions)
-    else:
-        if "rail_sum" in document["channels"] and not document.get("rail_sum_columns"):
-            raise ManifestError("final description must name the rail_sum columns")
-        if document["look_id"] == "lm-stab-02" and "kit_index_path" not in document:
-            raise ManifestError("final lm-stab-02 must name the f2-stab/KITS.json index")
+    elif document["look_id"] == "lm-stab-02" and "kit_index_path" not in document:
+        raise ManifestError("final lm-stab-02 must name the f2-stab/KITS.json index")
     return document
 
 

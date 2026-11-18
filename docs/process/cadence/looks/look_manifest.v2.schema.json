@@ -498,11 +498,7 @@
         "when": {"$ref": "#/$defs/text"},
         "stage1": {"$ref": "#/$defs/text"},
         "stage2": {"$ref": "#/$defs/text"},
-        "rail_sum_columns": {
-          "type": "array",
-          "minItems": 1,
-          "items": {"$ref": "#/$defs/text"}
-        },
+        "rail_sum_columns": {"const": ["cpu_power", "gpu_power", "ane_power"]},
         "kit_index_path": {"$ref": "#/$defs/path"},
         "prints": {
           "type": "array",
