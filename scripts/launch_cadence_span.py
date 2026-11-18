@@ -120,7 +120,7 @@ def latest_attempt(ledger, span_pattern):
 
 
 def verify_shutdown(receipt, path, *, require_attestation, runner):
-    """Check the receipt's shutdown evidence and the lead's RL-179 close attestation."""
+    """Check recorded restore and feed stops against the lead's RL-179 close attestation."""
     def stopped(result):
         if not isinstance(result, dict) or result.get("proven_stopped") is not True:
             return False
@@ -156,7 +156,7 @@ def verify_shutdown(receipt, path, *, require_attestation, runner):
                 or (name in stop_steps and stop != stop_steps[name])):
             raise ValueError(f"feed {name} has incomplete or contradictory stop evidence")
     if "meter" in receipt and receipt["meter"].get("proven_stopped") is not True:
-        raise ValueError("meter shutdown was not proven")
+        raise ValueError("meter stop was not proven")
     if require_attestation:
         proofs = ("HOST_RESTORE_OK", "FEEDS_STOPPED", "GROUPS_ABSENT", "FOREIGN_PROCESSES_ABSENT")
         if os.environ.get("CLOSE_PROOF_RECEIPT") != path or any(os.environ.get(key) != "1" for key in proofs):
