@@ -21444,3 +21444,67 @@ Rows for the lead to commit to `RULES.json`. Owner is `research_lead` for rows 1
 **Rows closed or changed by this ruling.** R3's two items and BR's NEEDS_SPEC are answered. CT's items 1 to 5 and 7 are answered or assigned; item 6 is the lead's. SH's Q1 to Q4 are answered. RL-174 B row 4 is read with row 9.
 
 **What comes back to me.** An `evidence_unverifiable` gate check on either stored run, with check names and counts. A Part C member whose frozen template expects a context-limit stop. A fixture on which removing a row raises coverage. The `lm-inst-01` output, for the freezing line. A prompt size or dose the read's roster does not cover. The cold seat's finding on the 3 + 9 balance, if it has one. Nothing else in this ruling returns.
+
+# RL-182b. Check 1 is met by freezing the adapter's ten-line stamp block by content hash, with the tick test kept. The AST proof is withdrawn. Check 2 is unchanged. #813 is sign-ready once that change is in and CI is green; no eighth audit round is owed
+
+Research lead (Fable 5.2), Wed Nov 18 11:30 PST 2026 (from `date`). Answers the lead's proportionality question on RL-182a's check 1 (RLD:19978). RL-182 and RL-182a stand except where "Amends" says otherwise. `MLX:n` is `joulewise/adapters/mlx_runtime.py`, `TM:n` is `tests/test_mlx_runtime.py` and `CB:n` is `tests/align/test_measurement_core_boundary.py`, all at #813's head `2fe705e73`.
+
+**Read.** RL-182a in full (RLD:19946-20014). Astra's final messages for rounds 2 to 7 (`/Volumes/JW-EXT/scratch/pl-813/audit-2..7/FINAL-MESSAGE.md`). The stamp block (MLX:893-902), the AST helper (TM:567-660), the tick test (TM:662-711) and the existing adapter pin (CB:52-65).
+
+**Checked myself.**
+- **The block.** Two clock reads on adjacent lines, then the two events built from the first read, then the token-0 selector (MLX:894-902). It is as RL-182a found it.
+- **The rest of the file is already frozen.** CB:52-65 cuts the block out and pins everything else in the adapter to its Pilot-10 digest. The block is the only unpinned part of the file.
+- **The digests.** I computed them from the file at `2fe705e73`. The block's is below. The remainder gives CB:65's value, `0bd67dde…e829`.
+- **Every round's finding was an edit inside the block.** Rounds 5, 6 and 7 say so in terms: annotated assignment, chained assignment, `match`. Each left the stamps one tick apart.
+
+**Not checked.** I ran no test and no replay. I did not open Astra's diffs or logs, only its final messages.
+
+## The ruling: (a)
+
+**Check 1 is a hash test and the tick test.**
+
+1. **The block is frozen by content.** A test reads `joulewise/adapters/mlx_runtime.py` from disk as bytes. It fails unless all three hold:
+   - The start line occurs exactly once: `                    # RL-182a: record both boundaries before constructing the events.\n`
+   - The end line occurs exactly once: `                text_parts.append(str(getattr(response, "text", "")))\n`
+   - The bytes from the first byte of the start line to the byte before the end line have SHA-256 `85ffe1a3cff318c6880d09d72b437c410a18f2dd92395ce62e08956d64c845c5`.
+
+   That is 655 bytes, ten lines, MLX:893-902. It is the same cut CB:52-65 already makes, so the test belongs beside it and the two together pin every byte of the adapter (whole file: `578455fa7b9ffb5582ef6c09ab5428d3078f3b1aea058409d39187de160a9336`).
+2. **The tick test stays** as it is (TM:662-711): stamps exactly one tick apart on cache miss, cache hit, uncached and suite item. It is the only part that runs the code, and it catches a change of path outside the block.
+3. **The AST helper and its mutant tests go** (TM:567-660 and the two tests after TM:717). Identical bytes imply adjacency and the exact form. The builder deletes them in the same change.
+
+**Why.**
+- RL-182a asked for a test that "fails if a later change puts work between the stamps" (RLD:19978). Any later change to these lines now fails. That is the property, stated without a grammar of Python.
+- An AST proof has no closed form short of "the statements are these statements". Seven rounds show it. Option (b) written honestly is option (a).
+- Every mutant needed someone to edit the source. The guard against a real run going wrong is check 2, on real records.
+
+**What a failing hash means.** The block was edited. The edit comes to me, and the digest changes only in a commit that cites my ruling's id. A runtime pin that moves these lines is the same case.
+
+**Check 2 is unchanged.** Over 10 ms on any W1 turn comes to me before C1 arms (RLD:19979, row 6 at RLD:20011).
+
+**Astra's standard for check 1 is replaced.** A finding on check 1 is now only: an edit inside the block that leaves the hash test green, or a clean adapter that fails the tick test. Mutations outside the block stay out of scope, as the lead set at 07:17.
+
+## Is #813 sign-ready
+
+**Yes, when all four hold. The lead confirms them; none returns to me.**
+- The change from `2fe705e73` touches only `TM`, `CB` and a run report. The adapter's whole-file digest is still `578455fa…9336`.
+- The new test carries the digest above and reads the file from disk.
+- CI is green.
+- W1's hashes are refreshed after the change, as RL-182a already orders (RLD:19995).
+
+Rounds 2 to 7 passed every other clause on files this change does not touch, so those passes carry. No round 8.
+
+**Amends.** RL-182a check 1 (RLD:19978): the stub-stream and ticking-clock test stands; "no model call is made between the two" is now shown by the frozen block and not by inspection of the syntax tree. Row 19, below. Nothing else moves.
+
+**Blind status.** Blind. No series member exists and W1 is not signed. This changes a test, and no score, level, field or rule.
+
+**For Ed, plainly.** "The auditor kept finding cleverer ways to rewrite two lines of code so that our test would miss it. Nobody is going to rewrite those lines by accident, so I stopped describing what the lines may look like and locked them: if anyone changes them at all, the test fails and it comes to me. We still measure the real gap on the first run. The registration PR can be signed once that small change passes CI."
+
+## Register
+
+Replaces RL-182a's row 19. Owner is `research_lead`.
+
+| # | Clause | Class | Protects | Scope | Ends | Test |
+|---|---|---|---|---|---|---|
+| 19 (amended) | The adapter's stamp block (start line to the byte before the end line, as RL-182b defines) has SHA-256 `85ffe1a3…45c5`; its digest changes only under a research-lead ruling cited in the commit; the two stamps are one tick apart on every path | VALIDITY | Row 18's field is the first token's arrival | `mlx_runtime.py` at the pinned runtime | With each pin | The hash test beside CB:52; the tick test (TM:662-711) |
+
+**What comes back to me.** An edit to the block. A W1 gap over 10 ms. Nothing else.
