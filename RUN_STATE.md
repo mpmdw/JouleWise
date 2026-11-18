@@ -1044,6 +1044,28 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 
 <!-- RUN_STATE TYPED ITEMS: newest first. Add with scripts/run_state_add.py; never edit by hand. -->
 
+430. **dev-05-s02 re-issued for Wed: pred_gate reads a2, day_gate counts measured legs only (a1 zero-capture = 0); standing pre-arm codex daemon stop**
+
+```item
+{"expires_epoch_s": null, "issued_epoch_s": 1794990930, "number": 430, "owner": "magistrate", "schema": "joulewise.run_state_item.v1", "sets": [], "status": "ISSUED", "supersedes": []}
+```
+
+- **dev-05-s02 (item 394) is re-issued for Wed 18 Nov, as issued, with two input corrections and nothing else.** a1 (`cq-dev-05-s01-a1-20261118T082155Z`) was a zero-capture `start-agents` refusal: 0 of 6 legs, nothing measured (item 429).
+  1. **`pred_gate`:** dev-05-s01's output is the a2 directory. a1's directory is a refused attempt, not a second run, so ignore it. s01 counts as CLEAN only if a2's Check is clean.
+  2. **`day_gate`:** count legs that started measuring. A zero-capture refused attempt contributes 0. a1 contributes 0 of its 6, so Wed's count is a2's 6 plus s02's 6, which is 12 of 12.
+- **Authority:**
+  - Ed's standing ruling of 2026-09-16: zero-capture `agent_present` refusals are retry class.
+  - RL-179 row 21: a refusal holds a kit only until its input changes.
+  - The day rule protects the number of development legs measured on a date (validity). A leg that never started is not measured.
+
+  This is the lead's bookkeeping call. It goes to the research lead in the next batch for the record, and no wait is attached.
+- **Window:** Wed 18 Nov, as item 394 states. Launch at a2's close proven (RL-179 F-2: no timed gap). Then R1 as issued (items 397 and 398).
+- **New standing pre-arm step (SAFETY: the agent census; item 429's cause).** Codex 0.170 starts a managed app-server daemon (`codex app-server ... --managed-daemon` plus a `pid-update-loop`) whenever codex runs on this Mac. Immediately before every Start and check, run:
+  - `codex app-server daemon stop 2>/dev/null`;
+  - then `pgrep -lf '[c]odex app-server'`. If anything is still listed, SIGTERM it and check again.
+
+  Record the result in the item. This replaces nothing; the runner's own census still decides.
+
 429. **Magistrate 2c5d1d02 (headless, Opus 5.5), 2026-11-18 00:29-00:40 PST (`date`): dev-05-s01 attempt 1 REFUSED at start (agent census: Codex 0.170 managed daemon left by the owner update; 0/6 legs, zero capture); daemon stopped; a1 copied; ATTEMPT 2 Start and check rc 0 and launches as the last act; dev-05-s02 needs a lead re-issue**
 
 ```item
