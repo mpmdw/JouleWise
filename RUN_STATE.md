@@ -1044,6 +1044,35 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 
 <!-- RUN_STATE TYPED ITEMS: newest first. Add with scripts/run_state_add.py; never edit by hand. -->
 
+405. **Magistrate b7aad16d (headless, Opus 5.5, interim lead), 2026-11-17 16:28-16:50 PST (`date`): STANDING-F0 run 9 (item 346; pre-launch item 401) CHECK: RECEIPT OK, verdict pass, every judged line passes; item 404 (a) re-read of F0 runs 1-9 finds neither #809 hole; #810 merged and typed items initialized**
+
+```item
+{"expires_epoch_s": null, "issued_epoch_s": 1794962185, "number": 405, "owner": "magistrate", "schema": "joulewise.run_state_item.v1", "sets": [], "status": "CLOSED", "supersedes": []}
+```
+
+- Receipt rc 0; parts `{"C": true}`, fresh soak; soak rc 0, sha256 `1cd69e24229a583c585003b2c7eb1bc332ebe7ad4a38cf31237e6d4db402f972`; part-C rc 0. t0 14:29:10 PST, receipt 16:27:57 PST (span 7,127 s). The align-r0 label was gone at 16:28; this activation spawned 16:28:34, after the receipt, so no agent was alive during the run.
+- smoke_part_c.json: evaluation `pass` (`d_bank_mechanics`, `d_bank_start_state`, `step_d`, `x_g` all pass, as runs 7 and 8); N_chunk 4096; T_dead 987.475 s; gate_time 200.62 s of limit 394.99 s; no_g1_timeout pass (no turns).
+- Restore lines all rc 0; host after close: no desk fence, no align-r0 label, ProcessType Interactive, powermode 0, Network Time Off, frequency word 0, no High Power marker, no stray monitor or root powermetrics, AC not charging.
+- Printed only: turn-1 last-512 clock ratio 0.922 (predicted band 0.83-0.93; run 8 0.912); first off-nominal (pm Moderate) at token 1,700; token-rate ratio 0.978. Maintenance (log show, 45,750 lines): dasd steady; `mobileassetd` bursts at 14:47 (379 lines, soak), 15:53 (122, D_bank) and 16:23-16:24 (5,358, inside X_G_contrast 16:08-16:27); `softwareupdated` 8 lines at 15:11 and 16:11 and 1 at 16:00; XProtectPluginService 2 at 16:00. X_G still passes. OS build unchanged.
+- Copy: an F0 close is non-campaign; this Check covers the copy (items 346/347, F2 draft copy_gate NONCAMPAIGN route). No offload.
+- **Item 404 (a) re-read of F0 runs 1-9 (both #809 holes on the F0 pin):**
+
+| run | OUT (UTC start) | verdict | `gate_timeout` in any part-c .json/.jsonl | X_G dir / runtime_result readable | x_g line present, pass | no_g1_timeout |
+|---|---|---|---|---|---|---|
+| 1 | 20261115T211611Z | pass | none | yes / yes | yes, pass | pass, [] |
+| 2 | 20261116T011723Z | pass | none | yes / yes | yes, pass | pass, [] |
+| 3 | 20261116T051844Z | pass | none | yes / yes | yes, pass | pass, [] |
+| 4 | 20261116T133233Z | pass | none | yes / yes | yes, pass | pass, [] |
+| 5 | 20261116T193440Z | pass | none | yes / yes | yes, pass | pass, [] |
+| 6 | 20261117T021602Z | pass | none | yes / yes | yes, pass | pass, [] |
+| 7 | 20261117T142329Z | pass | none | yes / yes | yes, pass | pass, [] |
+| 8 | 20261117T182510Z | pass | none | yes / yes | yes, pass | pass, [] |
+| 9 | 20261117T222907Z | pass | none | yes / yes | yes, pass | pass, [] |
+
+  Hole (1) (pass with a recorded G1 timeout in episode_flags): no run has the string `gate_timeout` anywhere in its Part C JSON. Hole (2) (completed X_G with unreadable evidence omitted): every run has X_G_contrast, a readable runtime_result.json, and an `x_g` line that was judged. No verdict changes. Script and output: custody `standing-f0/check-b7aad16d/` (`reread-404a.txt`).
+- **#810 merged** (item 404): all 41 checks green on head `442e37c49`; merge commit `5a301bd45`; `run_state_add.py init` on main gave cutover 405, `run_state_items.py check` exit 0 (commit `0aa2bb0a9`). From here items go through `run_state_add.py`.
+- No mail from Ed (unread search empty at 16:29); no new directive; notice queue empty.
+
 <!-- RUN_STATE LEGACY ITEMS below: prose, not typed; cutover 405 -->
 
 404. **Laptop lead (interactive, Opus 5.5), 2026-11-17 16:26:15 PST (`date`): AIR PAUSED AGAIN (Ed: wrap up by 16:50 and eject). ITEM 402 APPLIES AGAIN AS WRITTEN (the MBP interim lead holds items 1-6; item 395 (A) is in the "Air paused" state: the MBP is the copy owner at once at every close). Updates since item 402 are below. RL-176 (Fable, audit `66d0d622d`) is committed.**
