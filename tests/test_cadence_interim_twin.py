@@ -1204,7 +1204,7 @@ class CensusStep3Tests(unittest.TestCase):
         ]
         for clause, name, option, count, expected in cases:
             with self.subTest(clause=clause, case=name, option=option), tempfile.TemporaryDirectory() as tmp:
-                entrants = [(2000, lambda i=i: self.measurements(Path(tmp) / str(i), i, (name, option)))
+                entrants = [(2000, f"fixture/leg-{i}", lambda i=i: self.measurements(Path(tmp) / str(i), i, (name, option)))
                             for i in range(count)]
                 result = step3_cells(entrants, 0.08)
                 cell, = result["cells"]
@@ -1235,7 +1235,7 @@ class CensusStep3Tests(unittest.TestCase):
         ]
         for clause, name, expected in cases:
             with self.subTest(clause=clause, case=name), tempfile.TemporaryDirectory() as tmp:
-                entrants = [(2000, lambda i=i: self.measurements(Path(tmp) / str(i), i, (name, None)))
+                entrants = [(2000, f"fixture/leg-{i}", lambda i=i: self.measurements(Path(tmp) / str(i), i, (name, None)))
                             for i in range(3)]
                 result = step3_cells(entrants, 0.08)
                 cell, = result["cells"]
@@ -1246,6 +1246,7 @@ class CensusStep3Tests(unittest.TestCase):
         from scripts.cadence_interim_twin import step3_cells
 
         within = ("within", False, "ok", True)
+        not_run = ("not_evaluable", None, "not_run", None)
         unestimable = ("not_evaluable", None, "ok", False)
         cases = [
             ("T05", "hold_overflow", None, within),
@@ -1254,12 +1255,17 @@ class CensusStep3Tests(unittest.TestCase):
             ("T11", "native_bad_date", None, within),
             ("T11", "rich_elapsed_fraction", None, within),
             ("T12", "pressure_registered_output_key", "slope", within),
+            ("T12", "pressure_registered_output_key", "gamma_estimability", within),
+            ("T12", "pressure_registered_output_key", "gamma_estimable", not_run),
+            ("T12", "pressure_registered_output_key", "SLOPE", not_run),
+            ("T12", "pressure_registered_output_key", "UnregisteredState", not_run),
+            ("T12", "pressure_at_start", None, within),
             ("T13", "clock_exact_boundary", (7_000_000_001, 3), unestimable),
             ("T14", "gpu_energy_beyond_rich_window", None, within),
         ]
         for clause, name, option, expected in cases:
             with self.subTest(clause=clause, case=name, option=option), tempfile.TemporaryDirectory() as tmp:
-                entrants = [(2000, lambda i=i: self.measurements(Path(tmp) / str(i), i, (name, option)))
+                entrants = [(2000, f"fixture/leg-{i}", lambda i=i: self.measurements(Path(tmp) / str(i), i, (name, option)))
                             for i in range(3)]
                 result = step3_cells(entrants, 0.08)
                 cell, = result["cells"]
@@ -1304,13 +1310,60 @@ class CensusStep3Tests(unittest.TestCase):
         ]
         for clause, name, option, primary in cases:
             with self.subTest(clause=clause, case=name, option=option), tempfile.TemporaryDirectory() as tmp:
-                entrants = [(2000, lambda i=i: self.measurements(Path(tmp) / str(i), i, (name, option)))
+                entrants = [(2000, f"fixture/leg-{i}", lambda i=i: self.measurements(Path(tmp) / str(i), i, (name, option)))
                             for i in range(3)]
                 result = step3_cells(entrants, 0.08)
                 cell, = result["cells"]
                 self.assertEqual(cell["prompt_tokens"], 2000)
                 self.assertEqual((result["tripwire"]["decision"], result["tripwire"]["trips"],
                                   cell["status"], cell["gamma_estimable"]), primary)
+
+    def test_t12_registered_histogram_key_table(self):
+        import hashlib
+        from scripts.cadence_interim_twin import STEP3_FIXED_OUTPUT_KEYS, step3_histogram_key_allowed
+
+        ordered = sorted(key.encode("ascii") for key in STEP3_FIXED_OUTPUT_KEYS)
+        self.assertEqual(len(ordered), 91)
+        self.assertEqual(hashlib.sha256(b"\n".join(ordered) + b"\n").hexdigest(),
+                         "4e20f7dd300b9b45de4854b9932420a98a8a9a221829591432c791339955f02e")
+        states = ("Nominal", "Moderate", "Heavy", "Trapping", "Sleeping", "Unknown", "None", "not_read")
+        for key in (*sorted(STEP3_FIXED_OUTPUT_KEYS), *states):
+            with self.subTest(key=key):
+                self.assertTrue(step3_histogram_key_allowed(key, set()))
+        for key in ("title-Joule", "Watt-total", "tag_POWER_W_x", "tag_GPU_POWER_x", "tag_ENERGY_J_x",
+                    "tag_MJ_x", "tag_WH_x", "leg_J", "leg_W", "E"):
+            with self.subTest(key=key):
+                self.assertFalse(step3_histogram_key_allowed(key, {key}))
+
+        with tempfile.TemporaryDirectory() as tmp:
+            directory = Path(tmp)
+            for index, case in enumerate((("control", None), ("pressure", False))):
+                _, histogram = self.measurements(directory / str(index), index, case)
+                self.assertEqual(histogram, {"None"})
+
+    def test_t12_bound_leg_ids_are_local_to_the_surviving_cell(self):
+        from scripts.cadence_interim_twin import step3_cells
+
+        def entrant(size, leg_id, temperature, key):
+            return size, leg_id, lambda: ((False, 0, [(1, temperature, 1)]), {key})
+
+        valid_cell = {"prompt_tokens": 2000, "status": "ok", "gamma_estimable": True}
+        failed_cell = {"prompt_tokens": 2000, "status": "not_run", "gamma_estimable": None}
+        for key, expected in (("fixture/leg-b", valid_cell), ("fixture/leg-c", failed_cell),
+                              ("fixture/leg_W", failed_cell)):
+            with self.subTest(key=key):
+                entrants = [
+                    entrant(2000, "fixture/leg-a", 30, key),
+                    entrant(2000, "fixture/leg-b", 33, "Nominal"),
+                    entrant(2000, "fixture/leg_W", 36, "Nominal"),
+                    entrant(10000, "fixture/leg-c", 30, "Nominal"),
+                    entrant(10000, "fixture/leg-d", 33, "Nominal"),
+                ]
+                result = step3_cells(entrants, 0.08)
+                self.assertEqual(result["cells"], [
+                    {"prompt_tokens": 10000, "status": "ok", "gamma_estimable": True}, expected,
+                ])
+                self.assertEqual(result["tripwire"], {"decision": "within", "trips": False})
 
 
 FIXTURE_DECODER = '''
@@ -1475,11 +1528,18 @@ class RawBundleTests(unittest.TestCase):
                     rich_times = list(range(wall + 1, wall + 49))
                     rich = lines({"timestamp_s": t, "elapsed_ns": 10**9, "gpu": {"gpu_energy": 0,
                                   "dvfm_states": [{"freq": 1000, "used_ns": 1000}]}} for t in rich_times)
-                    native = b"\0".join(plistlib.dumps({"elapsed_ns": 10**9}) for _ in rich_times)
+                    native_frames = [{"elapsed_ns": 10**9} for _ in rich_times]
+                    pressures = [None] * len(rich_times)
+                    if leg_index == 0:
+                        # The bound child must admit the cell's full stage-1 leg key.
+                        leg_id = f"{day}/{leg}"
+                        native_frames[39]["thermal_pressure"] = leg_id
+                        pressures[39] = leg_id.encode("ascii").hex()
+                    native = b"\0".join(map(plistlib.dumps, native_frames))
                     write(span / bundle / "rich_telemetry.jsonl", rich)
                     write(span / bundle / "raw/powermetrics.plist", native)
                     native_identity[bundle] = sha(json_bytes([[[str(t), "1000000000"] for t in rich_times],
-                                                             [["1000000000", None] for _ in rich_times],
+                                                             [["1000000000", pressure] for pressure in pressures],
                                                              len(rich_times)]))
                     records.append({"leg_key": f"{day}/{leg}", "day": day, "span_id": day, "role": "fit",
                                     "leg_type": "A", "included": True, "in_energy_fit": True,

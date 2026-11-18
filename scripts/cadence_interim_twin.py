@@ -1425,15 +1425,37 @@ def step3_observations(start, tokens, journal, power, gpu):
     return False, rise, observations
 
 
-# The histogram goes through the registered Step 3 output-key check.
-STEP3_HISTOGRAM_KEYS = {
-    None, "None", "Nominal", "Moderate", "Heavy", "Trapping", "Sleeping", "Unknown", "not_read",
-    "slope", "gamma_estimable", "drift_fraction_linear",
-}
+# Code-blind key handoff for the Step 3 source pinned by RL-166 Q6.
+STEP3_FIXED_OUTPUT_KEYS = frozenset("""
+schema disclosure legs leg_id night leg class decode_tokens prefill_s decode_s start_state row_end_reason
+row_end_s_after_first_token row_end_token_index row_decode_tokens row_share_of_decode
+state_first_off_s_after_first_token state_cut_kind journal_only_state_first_off_s_after_first_token
+clock_cut_window_start_s_after_first_token clock_reference_mhz tv0h_at_first_token_c tv0h_at_row_end_c
+tv0h_rise_first_token_to_row_end_c n_precut_full_blocks_k_ge_1 thermal_holds_in_turn native_pm_states_in_turn_counts
+checks trace_rows rich_rows plist_frames trace_vs_rich_end_stamp_max_abs_s
+trace_coverage_min_over_blocks trace_coverage_max_over_blocks decode_trace_to_rich_counter_ratio
+i_block_ratio_to_median_blocks_1_3 block_tv0h_c block_clock_mhz block_load_s_at_end block_precut
+iv_jpt_after_over_before ii_gamma_per_degC all_nine_legs leave_one_leg_out without_two_high_power_legs
+original_eight_legs_record_only max_abs_over_reported slope se n_obs n_groups n_groups_with_2plus
+gamma_estimability precut_matched_block_tv0h_ranges block n_legs tv0h_range_c max_range_c threshold_c estimable
+iii_precut_drift median_tv0h_rise_c six_automatic_legs seven_automatic_legs_incl_partc drift_fraction_linear
+drift_fraction_exp_form rule_threshold_fraction per_leg automatic_median automatic_min automatic_max
+v_block_ratio_spread automatic_legs load_s_at_end_median load_s_at_end_min load_s_at_end_max ratio_min ratio_max
+ratio_range ratio_sd cum_mean_ratio_blocks_1_to_k_min cum_mean_ratio_blocks_1_to_k_max
+cum_mean_ratio_blocks_1_to_k_range vi_slope_lnE_on_lnclock all_blocks_k_ge_1_all_nine_legs
+all_blocks_leave_one_leg_out all_blocks_automatic_legs precut_blocks_all_nine_legs rule_0_5_percent applies_to pass
+""".split())
+STEP3_PRESSURE_STATE_NAMES = frozenset({
+    "Nominal", "Moderate", "Heavy", "Trapping", "Sleeping", "Unknown", "None", "not_read",
+})
+STEP3_FORBIDDEN_KEY_PARTS = ("joule", "watt", "power_w", "gpu_power", "energy_j", "_mj", "_wh")
 
 
-class Step3CellFailure(ValueError):
-    """A surviving leg's diagnostics cannot be used in the cell output."""
+def step3_histogram_key_allowed(key, leg_ids):
+    lower = key.lower()
+    if lower == "e" or lower.endswith(("_j", "_w")) or any(part in lower for part in STEP3_FORBIDDEN_KEY_PARTS):
+        return False
+    return key in STEP3_FIXED_OUTPUT_KEYS or key in STEP3_PRESSURE_STATE_NAMES or key in leg_ids
 
 
 def step3_measurements(bundle):
@@ -1442,25 +1464,30 @@ def step3_measurements(bundle):
     start, _, tokens, journal, power = step3_records(*(child_path(bundle, name).read_bytes() for name in sources))
     gpu = gpu_rows(child_path(bundle, "power_trace.csv").read_bytes())
     observations = step3_observations(start, tokens, journal, power, gpu)
-    if any(state not in STEP3_HISTOGRAM_KEYS for stamp, _, state, _ in power if start < stamp <= tokens[-1]):
-        raise Step3CellFailure("unregistered Step 3 pressure state")
-    return observations
+    histogram_keys = {state if isinstance(state, str) else "None"
+                      for stamp, _, state, _ in power if start < stamp <= tokens[-1]}
+    return observations, histogram_keys
 
 
 def step3_cells(entrants, threshold):
     cells = {}
-    invalid_cells = set()
-    for size, read_leg in entrants:
+    for size, leg_id, read_leg in entrants:
         failures, legs = cells.setdefault(size, (0, []))
         try:
-            legs.append(read_leg())
-        except Step3CellFailure:
-            invalid_cells.add(size)
+            observations, histogram_keys = read_leg()
         except (OSError, KeyError, TypeError, IndexError, ValueError, ArithmeticError):
             cells[size] = (failures + 1, legs)
-    for size in invalid_cells:
-        cells[size] = (1, [])
-    return step3_projection(cells, threshold)
+        else:
+            legs.append((leg_id, observations, histogram_keys))
+
+    projected = {}
+    for size, (failures, legs) in cells.items():
+        leg_ids = {leg_id for leg_id, _, _ in legs}
+        if any(not step3_histogram_key_allowed(key, leg_ids) for _, _, keys in legs for key in keys):
+            projected[size] = (1, [])
+        else:
+            projected[size] = (failures, [observations for _, observations, _ in legs])
+    return step3_projection(projected, threshold)
 
 
 
@@ -1649,7 +1676,7 @@ def recompute_bundle(args, stage1, fit_identity, step3_identity, decoder_pin, th
             raise ValueError("no accepted Step 3 bundle")
         return step3_measurements(child_path(directories[row["span_id"]], relative))
 
-    entrants = ((row["cell_prompt_tokens"], lambda row=row: read_step3_leg(row)) for row in step3_legs)
+    entrants = ((row["cell_prompt_tokens"], row["leg_key"], lambda row=row: read_step3_leg(row)) for row in step3_legs)
     return fit, step3_cells(entrants, threshold)
 
 
