@@ -42,6 +42,7 @@ D_bank line):
 """
 from __future__ import annotations
 
+from bisect import bisect_left, bisect_right
 from collections import defaultdict
 from contextlib import redirect_stderr, redirect_stdout
 import hashlib
@@ -51,6 +52,7 @@ import math
 import os
 from pathlib import Path
 from stat import S_ISDIR, S_ISREG
+from types import SimpleNamespace
 import time
 
 from scripts.align_r1_part_c_evidence import (
@@ -63,6 +65,12 @@ MAX_TOKENS = 4096                  # frozen turn cap (D-17a); no hold fires at o
 G0_LIMIT_S = 1200.0
 STEP_D_BAND_C = 1.0
 STEP_D_SLOPE_C_PER_MIN = 0.2
+NS = 1_000_000_000
+# RL-186 §1.3. The release stamp can follow consumption by one visibility window.
+GATE_VISIBILITY_NS = 250_000_000
+GATE_CONSUMPTION_NS = 1_500_000_000
+GATE_POLL_GAP_NS = GATE_CONSUMPTION_NS - GATE_VISIBILITY_NS
+GATE_HISTORY_ROWS = 3600  # The frozen Sidecar's retained reading deque.
 STAMP_MAX_AGE_S = 2.0
 MIN_ADMITTED_TURNS = 3
 GATE_SHARE_OF_T_DEAD = 0.40
@@ -755,7 +763,8 @@ def _check_launch_refusal(segment):
         raise ValueError("X_G launch refusal conflicts with output in its segment")
 
 
-def _adjudicate(step, bank, contrast, launcher_refusal, n_chunk, lines, predecessor, runtime_error, ledger):
+def _adjudicate(step, bank, contrast, launcher_refusal, n_chunk, lines, predecessor, runtime_error, ledger,
+                *, archived=False):
     """The sole pass decision. Every required evidence check must succeed."""
     if runtime_error:
         return "other_failure", {"runtime_receipt": runtime_error}
@@ -778,20 +787,21 @@ def _adjudicate(step, bank, contrast, launcher_refusal, n_chunk, lines, predeces
             issues["x_g_launch"] = "X_G has both a completed record and a launch refusal"
     elif not launcher_refusal:
         issues["x_g"] = "missing X_G evidence or explicit launcher refusal"
-    try:
-        root = _run_directory(step)
-    except (AttributeError, LookupError, TypeError, ValueError) as error:
-        issues["receipts"] = f"{type(error).__name__}: {error}"
-    else:
-        require("predecessor_receipt", _predecessor_receipt, root, predecessor)
-        for role, member in (("step-d", step_member), ("d-bank", bank), ("x-g", contrast)):
-            if role != "x-g" or member is not None:
-                require(f"{role}_receipt", _receipt_pair, member, root / SEGMENTS[role])
-        if launcher_refusal and contrast is None:
-            if ledger is None:
-                require("x_g_launch", _check_launch_refusal, root / SEGMENTS["x-g"])
-            else:
-                require("x_g_launch", ledger.refusal, "x-g")
+    if not archived:
+        try:
+            root = _run_directory(step)
+        except (AttributeError, LookupError, TypeError, ValueError) as error:
+            issues["receipts"] = f"{type(error).__name__}: {error}"
+        else:
+            require("predecessor_receipt", _predecessor_receipt, root, predecessor)
+            for role, member in (("step-d", step_member), ("d-bank", bank), ("x-g", contrast)):
+                if role != "x-g" or member is not None:
+                    require(f"{role}_receipt", _receipt_pair, member, root / SEGMENTS[role])
+            if launcher_refusal and contrast is None:
+                if ledger is None:
+                    require("x_g_launch", _check_launch_refusal, root / SEGMENTS["x-g"])
+                else:
+                    require("x_g_launch", ledger.refusal, "x-g")
 
     start, mechanics, x_line = (lines[key] for key in ("d_bank_start_state", "d_bank_mechanics", "x_g"))
     if start is not None and start["pass"] is not True and isinstance(bank, dict) and "evidence_error" not in bank:
@@ -809,7 +819,7 @@ def _adjudicate(step, bank, contrast, launcher_refusal, n_chunk, lines, predeces
 
 
 def _judge_observations(*, predecessor=None, step_d=None, d_bank=None, n_chunk=None, x_g=None,
-                        x_g_not_run_reason=None, printed=None, runtime_error=None, ledger=None):
+                        x_g_not_run_reason=None, printed=None, runtime_error=None, ledger=None, archived=False):
     """Judge observations after the native verifier establishes their binding."""
     def mechanics_line():
         checks = d_bank_mechanics(d_bank, n_chunk)
@@ -823,7 +833,8 @@ def _judge_observations(*, predecessor=None, step_d=None, d_bank=None, n_chunk=N
                         and x_g_not_run_reason.kind == "x-g"
                         and x_g_not_run_reason.reason in ("no soak reference before launch", "native exit 2"))
     verdict, issues = _adjudicate(step_d if isinstance(step_d, dict) else {}, d_bank, x_g,
-                                  launcher_refusal, n_chunk, lines, predecessor, runtime_error, ledger)
+                                  launcher_refusal, n_chunk, lines, predecessor, runtime_error, ledger,
+                                  archived=archived)
     # RL-152 section 1.4: the slot session's three-turn set clause is not applied here.
     log = [THREE_TURN_CLAUSE_LINE] if d_bank is not None else []
     if x_g is None and launcher_refusal and "x_g_launch" not in issues:
@@ -979,8 +990,12 @@ def _episode_payload(text, role):
 
 def _bundle_evidence(bundle, role, *, native=False):
     ep, raw_episode = read_checked_episode(bundle, role)
-    thermal = ep.hardware["thermal"]
     rows, journal_intervals, journal_flags = _journal(bundle)
+    return _project_bundle(bundle, role, ep, raw_episode, rows, journal_intervals, journal_flags, native=native)
+
+
+def _project_bundle(bundle, role, ep, raw_episode, rows, journal_intervals, journal_flags, *, native):
+    thermal = ep.hardware["thermal"]
     by_ns = {r["monotonic_ns"]: r for r in rows}
     out_intervals = []
     for r in thermal["intervals"]:
@@ -1030,7 +1045,10 @@ def read_checked_episode(bundle, role):
 
 def step_d_facts(bundle, fields):
     """Step-D's G0 line inputs: the G0 interval's reference, release and slope, and the result's wait/outcome."""
-    facts = facts_from_bundle(bundle, role="step-d")
+    return _project_step(facts_from_bundle(bundle, role="step-d"), fields)
+
+
+def _project_step(facts, fields):
     intervals = [row for row in facts.get("intervals", []) if row["kind"] == "G0"]
     g0 = intervals[0] if len(intervals) == 1 else {}
     outcome, wait = fields.get("g0_outcome"), fields.get("g0_wait_s")
@@ -1191,6 +1209,13 @@ def _strings(value):
     return isinstance(value, list) and all(isinstance(item, str) and item for item in value)
 
 
+def _reject_cuts(flags, cut, kind, source, index=None):
+    names = {flag.partition(":")[0] for flag in flags}
+    _required("episode.context_limit" not in names, "evidence_unverifiable", kind, source,
+              field="rejected_context_check", index=index)
+    _required(not names & cut, "member_cut", kind, source, index=index)
+
+
 def _jsonl_objects(raw, kind, source, reason):
     rows = [_object_from_bytes(line, kind, source, reason) for line in raw.splitlines()]
     _required(bool(rows), reason, kind, source, field="missing")
@@ -1259,9 +1284,11 @@ def _validate_sidecar(rows, sensors, kind, source, *, gated=False):
     check(canonical(counter.report(span[1])) == canonical(coverage), "coverage")
 
 
-def _check_member_records(kind, bundle, receipt, data, configured, gate_inputs):
+def _check_member_records(kind, bundle, receipt, data, configured, gate_inputs, *, gate_counts=None):
     from joulewise.align.apple import r1_runtime as rt
+    from joulewise.align.apple.budget import budget_record
     from joulewise.align.apple.stop_precedence import primary_stop
+    from joulewise.align.records import Episode, from_json
 
     role = {"capture-predecessor-30b": "predecessor", "step-d": "step-d",
             "d-bank-benign-s1": "d-bank", "x-g": "x-g"}[kind]
@@ -1393,8 +1420,7 @@ def _check_member_records(kind, bundle, receipt, data, configured, gate_inputs):
             require(isinstance(ids, list) and len(ids) == count and all(map(_uint, ids)),
                     "token_accounting", turns_name, field=key, index=index, peer=episode_name)
         require(_strings(record.get("flags")), "flag_source", turns_name, index=index)
-        require(not any(flag.partition(":")[0] in cut for flag in record["flags"]),
-                "member_cut", turns_name, index=index)
+        _reject_cuts(record["flags"], cut, kind, turns_name, index=index)
         decode += counts[0]
         prefill += counts[1]
         context += counts[2]
@@ -1414,22 +1440,33 @@ def _check_member_records(kind, bundle, receipt, data, configured, gate_inputs):
     if thermal is not None:
         all_flags.extend((thermal["flags"], receipt["episode_flags"]))
     require(all(_strings(flags) for flags in all_flags), "flag_source", episode_name)
-    require(not any(flag.partition(":")[0] in cut for flags in all_flags for flag in flags),
-            "member_cut", episode_name)
+    _reject_cuts((flag for flags in all_flags for flag in flags), cut, kind, episode_name)
     intervals = () if thermal is None else thermal["intervals"]
+    parsed_episode = from_json(Episode, data[episode_name])
+    execution = _recompute_execution_limits(kind, receipt, prompt, spec, configured, gate_inputs)
+    _recompute_turn_boundaries(kind, parsed_episode, witnessed, events, intervals, execution.max_tokens)
+    if role == "step-d":
+        require(not rt.incomplete_member_reasons(SimpleNamespace(
+                    ep=parsed_episode, status=summary["status"], failure_reason=summary["failure_reason"])),
+                "member_cut", episode_name)
     stop = primary_stop(episode["flags"], thermal_intervals=intervals)
     require(outcome.get("stop_condition") == stop, "stop_evidence", metadata_name, peer=episode_name)
-    if role != "predecessor" or "token_budget" in hardware or "token_budget" in outcome:
-        budget = hardware.get("token_budget")
-        require(isinstance(budget, dict) and canonical(budget) == canonical(outcome.get("token_budget"))
-                and budget.get("incomplete") is False
-                and isinstance(budget.get("stop_reason"), str)
-                and budget["stop_reason"].partition(":")[0] == stop,
-                "stop_evidence", episode_name, peer=metadata_name)
-        for key, total in (("decode_tokens_used", decode), ("prefill_tokens_used", prefill),
-                           ("cached_context_tokens_used", context)):
-            require(type(budget.get(key)) is int and budget[key] == total,
-                    "token_accounting", episode_name, field=key)
+    budget = hardware.get("token_budget")
+    limits = hardware.get("context_limits")
+    reason = next((flag for flag in reversed(episode["flags"]) if flag.startswith(stop + ":")), stop)
+    effective_context_cap = _recompute_admissions(kind, execution, parsed_episode, witnessed, limits, budget)
+    expected_budget = budget_record(execution, parsed_episode.turns, reason,
+                                    effective_context_cap=effective_context_cap).get("token_budget")
+    if expected_budget is None:
+        require("token_budget" not in hardware and "token_budget" not in outcome,
+                "episode_budget_recompute", episode_name, peer=metadata_name)
+    else:
+        require(isinstance(limits, dict) and "max_context_tokens" in limits
+                and isinstance(budget, dict) and canonical(budget) == canonical(outcome.get("token_budget")),
+                "episode_budget_recompute", episode_name, peer=metadata_name)
+        for key, value in expected_budget.items():
+            require(key in budget and canonical(budget[key]) == canonical(value),
+                    "episode_budget_recompute", episode_name, field=key, peer="config.json")
 
     if role == "predecessor":
         require(not _thermal_events(events), "gate_journal_disagreement", events_name, peer=episode_name)
@@ -1439,11 +1476,210 @@ def _check_member_records(kind, bundle, receipt, data, configured, gate_inputs):
     journal = rows(THERMAL_SOURCE, "journal_session")
     _validate_sidecar(journal, sensors, kind, THERMAL_SOURCE, gated=True)
     _check_gate_boundaries(intervals, journal, events, kind)
+    _check_deadline_origin(kind, budget, parsed_episode, journal, execution)
     if role == "step-d":
-        _check_step_sources(receipt, doc, rows, require, sensors, journal, bundle, config_sha, configured)
+        _check_step_sources(receipt, doc, rows, require, sensors, journal, bundle, config_sha, configured,
+                            parsed_episode, gate_inputs[1:])
     else:
         _check_phase_accounting(kind, receipt, data[episode_name], budget)
-    _check_release_evidence(kind, receipt, thermal, episode["flags"], journal, spec, configured, gate_inputs)
+    _check_release_evidence(kind, receipt, thermal, episode["flags"], journal, spec, configured,
+                            gate_inputs, budget["deadline_ns"], counts=gate_counts)
+
+
+def _recompute_execution_limits(kind, receipt, prompt, spec, configured, gate_inputs):
+    from joulewise.align.apple import r1_runtime as rt
+    from joulewise.align.apple.workload import EpisodeSpec
+
+    template_key = {"capture-predecessor-30b": "model_30b", "step-d": "d_spam",
+                    "d-bank-benign-s1": "d_bank", "x-g": "x_g"}[kind]
+    source = "config.json"
+    try:
+        template_config, template = rt.read_template(rt.resolve(configured["templates"][template_key]))
+        expected = dict(template)
+        if kind == "step-d":
+            step = configured["step"]
+            expected = rt.step_spec(template, step, spec["thermal"], deadman_s=step["deadman_s"])
+        elif kind == "d-bank-benign-s1":
+            t_dead, budget = rt.gated_budget(gate_inputs[0]["slots"])
+            expected.update(deadman_s=t_dead, max_episode_decode_tokens=budget)
+        planned_prompt = json.dumps(expected)
+        if kind != "capture-predecessor-30b":
+            expected.update(thermal=spec["thermal"], warmup_condition="benign")
+            planned_prompt = rt.member_config(template_config, expected, run_id=kind, kind=kind)[
+                "workload_profile"]["prompt_text"]
+        actual = EpisodeSpec.from_text(prompt)
+        planned = EpisodeSpec.from_text(planned_prompt)
+    except Exception as error:
+        raise EvidenceFailure("execution_limits_recompute", kind, source) from error
+    for field in ("max_tokens", "max_turns", "max_context_tokens", "max_episode_seconds",
+                  "max_episode_decode_tokens", "deadman_s"):
+        _required(canonical(getattr(actual, field)) == canonical(getattr(planned, field)),
+                  "execution_limits_recompute", kind, source, field=field)
+    if kind == "d-bank-benign-s1":
+        for field, value in (("turn_cap_tokens", planned.max_tokens), ("B_D", budget)):
+            _required(type(receipt.get(field)) is int and receipt[field] == value,
+                      "execution_limits_recompute", kind, RECEIPT_NAME, field=field, peer=source)
+        deadman = receipt.get("deadman", {})
+        claimed = deadman.get("T_dead_s")
+        _required(_finite(claimed) and claimed == t_dead, "execution_limits_recompute",
+                  kind, RECEIPT_NAME, field="deadman.T_dead_s", peer=source)
+    return actual
+
+
+def _recompute_admissions(kind, execution, episode, witnessed, limits, budget):
+    source = "outputs/align_episode.json"
+
+    def check(ok, field, index=None):
+        _required(ok, "admission_recompute", kind, source, field=field, index=index, peer="config.json")
+
+    position_cap = limits.get("max_position_embeddings") if isinstance(limits, dict) else None
+    check(_uint(position_cap) and position_cap > 0, "context_limits.max_position_embeddings")
+    context_cap = min(position_cap, execution.max_context_tokens or position_cap)
+    if execution.deadman_s is not None or execution.max_episode_decode_tokens is not None:
+        context_cap = min(context_cap, 40960)
+    check(type(limits.get("max_context_tokens")) is int and limits["max_context_tokens"] == context_cap,
+          "context_limits.max_context_tokens")
+    check(len(episode.turns) <= execution.max_turns, "max_turns")
+    deadline = budget.get("deadline_ns") if isinstance(budget, dict) else None
+    if execution.deadman_s is not None:
+        check(_uint(deadline), "token_budget.deadline_ns")
+    tokens_used = 0
+    previous = episode.start_ns
+    for turn, record in zip(episode.turns, witnessed, strict=True):
+        index = turn.index
+        check(turn.decode_tokens <= execution.max_tokens, "max_tokens", index)
+        check(execution.max_episode_decode_tokens is None or tokens_used < execution.max_episode_decode_tokens,
+              "max_episode_decode_tokens", index)
+        tokens_used += turn.decode_tokens
+        rendered_tokens = len(record["generation"]["prompt_token_ids"])
+        check(rendered_tokens + execution.max_tokens <= context_cap,
+              "max_context_tokens", index)
+        if execution.deadman_s is not None:
+            _check_clock_decision(kind, previous, turn.start_ns, deadline, "deadman.admission", index)
+            tool_end = turn.end_ns
+            for call in turn.tool_calls:
+                _check_clock_decision(kind, tool_end, call.start_ns, deadline, "deadman.tool", index)
+                _check_clock_decision(kind, call.start_ns, call.end_ns, deadline, "deadman.tool", index)
+                tool_end = call.end_ns
+            # After the last call the workload checks again before it can
+            # enter the next admission or finish the episode.
+            after = episode.turns[index + 1].start_ns if index + 1 < len(episode.turns) else episode.end_ns
+            _check_clock_decision(kind, tool_end, after, deadline, "deadman.return", index)
+        if execution.max_episode_seconds is not None:
+            cutoff = episode.start_ns + round(execution.max_episode_seconds * NS)
+            _check_clock_decision(kind, previous, turn.start_ns, cutoff, "time_guard", index)
+        previous = max([turn.end_ns, *(call.end_ns for call in turn.tool_calls)])
+    return context_cap
+
+
+def _check_clock_decision(kind, before, after, deadline, field, index=None, *, expired=False):
+    from joulewise.align.apple.budget import EpisodeDeadman
+    from joulewise.clock import ClockStamp
+
+    _required(_uint(before) and _uint(after) and _uint(deadline) and before <= after, "evidence_unverifiable",
+              kind, "outputs/align_episode.json", field=field, index=index)
+
+    def reached(instant):
+        # Relative to the deadline avoids converting a large native clock
+        # value back to float. The frozen predicate checks a zero threshold.
+        seconds = (instant - deadline) / NS
+        stamp = ClockStamp(seconds, seconds, seconds, 1e-9, 1e-9)
+        return EpisodeDeadman(SimpleNamespace(stamp=lambda: stamp), ClockStamp(0, 0, 0, 1e-9, 1e-9), 0).expired()
+
+    first, last = reached(before), reached(after)
+    if expired:
+        ok = not first and last
+        reason = "admission_recompute"
+    else:
+        ok = not last
+        reason = "admission_recompute" if first else "evidence_unverifiable"
+    _required(ok, reason, kind, "outputs/align_episode.json", field=field, index=index)
+
+
+def _check_deadline_origin(kind, budget, episode, journal, execution):
+    from joulewise.align.apple import r1_runtime as rt
+
+    g0 = episode.hardware["thermal"]["intervals"][0]
+    if kind == "step-d":
+        # The quiet period starts after G0. The work clock starts after
+        # re-arm. These stamps bracket the hook on the same monotonic clock.
+        lower, upper = g0["end_ns"] + round(rt.STEP_QUIET_S * NS), episode.start_ns
+        origin = "R1_after_G0_release_and_quiet"
+    else:
+        lower, upper = journal[0]["started"]["monotonic_ns"], g0["start_ns"]
+        origin = "G0_entry"
+    _required(isinstance(budget, dict) and _uint(budget.get("deadline_ns"))
+              and budget.get("deadline_origin") == origin
+              and type(budget.get("planned_g0_allowance_s")) is int and budget["planned_g0_allowance_s"] == 0
+              and lower <= budget["deadline_ns"] - round(execution.deadman_s * NS) <= upper,
+              "evidence_unverifiable", kind, "outputs/align_episode.json", field="deadline_origin")
+
+
+def _recompute_turn_boundaries(kind, episode, witnessed, events, intervals, turn_cap):
+    from joulewise.align.apple.sampler import monotonic_ns, seconds_ns, stamp_mapping
+    from joulewise.align.apple.thermal_gates import split_decode_events
+    from joulewise.clock import ClockStamp
+    from joulewise.interfaces import RuntimeEvent
+
+    source = "events.jsonl"
+    by_turn = defaultdict(list)
+    previous_turn = 0
+    for event in events:
+        phase, event_type = event["phase"], event["event_type"]
+        if phase not in ("prefill", "decode") or event_type not in ("phase_start", "phase_end", "token"):
+            continue
+        index = event["metadata"].get("align_turn_index")
+        _required(_uint(index) and previous_turn <= index < len(episode.turns), "turn_boundary_recompute",
+                  kind, source, field="align_turn_index")
+        previous_turn = index
+        by_turn[index].append(RuntimeEvent(**event))
+    for turn, record in zip(episode.turns, witnessed, strict=True):
+        index = turn.index
+
+        def check(ok, field):
+            _required(ok, "turn_boundary_recompute", kind, source, field=field, index=index,
+                      peer="outputs/align_turns.jsonl")
+
+        phase = by_turn[index]
+        boundaries = [event for event in phase if event.event_type != "token"]
+        check(len(boundaries) >= 4 and [event.phase for event in boundaries[:4]] ==
+              ["prefill", "prefill", "decode", "decode"], "phase_sequence")
+        prefill_start, prefill_end, first_decode = boundaries[:3]
+        final_decode = boundaries[-1]
+        try:
+            start, end = (ClockStamp(**record[field]) for field in ("start_stamp", "end_stamp"))
+            mapping, _ = stamp_mapping((start, end), episode_domain=episode.clock_domain)
+            holds = [row for row in intervals if row["kind"] == "H" and row["turn"] == index]
+            expected = split_decode_events((prefill_start, prefill_end, first_decode, final_decode), holds)
+            prefill_ns = seconds_ns(prefill_end.timestamp_s) + mapping.offset_ns
+        except Exception as error:
+            raise EvidenceFailure("turn_boundary_recompute", kind, source, index=index) from error
+        check(canonical(record.get("clock_mapping")) == canonical(mapping.__dict__)
+              and monotonic_ns(start) == turn.start_ns and monotonic_ns(end) == turn.end_ns
+              and prefill_ns == turn.first_token_ns, "paired_clock")
+        check(prefill_start.event_type == "phase_start" and prefill_end.event_type == "phase_end"
+              and first_decode.event_type == "phase_start" and final_decode.event_type == "phase_end"
+              and all(event.phase == "decode" for event in boundaries[2:])
+              and [(event.event_type, event.phase, event.timestamp_s) for event in boundaries] ==
+                  [(event.event_type, event.phase, event.timestamp_s) for event in expected],
+              "phase_sequence")
+        check(start.epoch_s <= prefill_start.timestamp_s
+              and final_decode.timestamp_s <= end.epoch_s
+              and all(left.timestamp_s <= right.timestamp_s for left, right in zip(phase, phase[1:])),
+              "phase_order")
+        check(type(final_decode.metadata.get("emitted_tokens")) is int
+              and final_decode.metadata["emitted_tokens"] == turn.decode_tokens
+              and type(first_decode.metadata.get("max_tokens")) is int
+              and type(final_decode.metadata.get("requested_output_tokens")) is int
+              and first_decode.metadata["max_tokens"] == final_decode.metadata["requested_output_tokens"] == turn_cap,
+              "decode_accounting")
+        tokens = [event for event in phase if event.event_type == "token"]
+        check(len(tokens) == turn.decode_tokens and all(
+            event.phase == "decode" and type(event.metadata.get("index")) is int and event.metadata["index"] == ordinal
+            and first_decode.timestamp_s <= event.timestamp_s <= final_decode.timestamp_s
+            for ordinal, event in enumerate(tokens)), "token_events")
+        check(bool(tokens) and tokens[-1].timestamp_s <= final_decode.timestamp_s <= end.epoch_s,
+              "decode_end_bracket")
 
 
 GATE_JOURNALS = ("align_thermal_gate", "align_thermal_hold")
@@ -1477,7 +1713,8 @@ def _check_gate_boundaries(intervals, journal, events, kind):
                   and (_uint(token) and token > 0 if gate == "H" else token is None)
                   and _uint(start) and _uint(end) and previous_end <= start <= end
                   and (gate, turn, token) not in seen and interval.get("clock") == "episode_monotonic_ns"
-                  and isinstance(interval.get("entry_sensors"), dict) and isinstance(interval.get("reference"), dict)
+                  and isinstance(interval.get("entry_sensors"), dict) and "reference" in interval
+                  and (isinstance(interval["reference"], dict) or gate != "G0" and interval["reference"] is None)
                   and isinstance(release, dict) and set(release) == set(TEMPERATURE_KEYS)
                   and all(value is None or _finite(value) for value in release.values())
                   and all(key in interval and (interval[key] is None or _finite(interval[key]))
@@ -1535,154 +1772,324 @@ def _check_phase_accounting(kind, receipt, raw_episode, budget):
                   "phase_accounting", kind, RECEIPT_NAME, field=f"phases_s.{phase}", peer="outputs/align_episode.json")
 
 
-def _check_release_evidence(kind, receipt, thermal, episode_flags, journal, spec, configured, gate_inputs):
-    from joulewise.align.apple import r1_runtime as rt, thermal_gates as gates
+def _check_release_evidence(kind, receipt, thermal, episode_flags, journal, spec, configured, gate_inputs,
+                            deadline, *, counts=None):
+    from joulewise.align.apple import r1_runtime as rt
 
-    step, bands = gate_inputs
+    step, bands, _ = gate_inputs
     slots, reference = step["slots"], step["operating_reference"]
     capture = kind == "step-d"
     heavy = kind == "d-bank-benign-s1"
     _required(_finite(slots.get("S7")) and _uint(slots.get("N_chunk")),
               "gate_policy", kind, RECEIPT_NAME, field="slots")
     sensors = rt.sensors_policy(configured)
-    policy = rt.gate_policy(sensors, bands, turn_cap_s=300 if capture else min(300.0, max(1.0, slots["S7"])),
-                            chunk_tokens=slots["N_chunk"] if heavy else 256, heavy=heavy,
-                            per_turn=not capture, g0_cap_s=configured["g0_timeout_s"])
+    if capture:
+        policy = rt.gate_policy(sensors, bands, turn_cap_s=300, chunk_tokens=256, heavy=False, per_turn=False,
+                                g0_cap_s=configured["g0_timeout_s"])
+    else:
+        segment = SimpleNamespace(sensors=sensors, bands=lambda: bands, g0_cap_s=configured["g0_timeout_s"])
+        policy = rt.Segment.gated_policy(segment, slots, heavy=heavy, per_turn=True,
+                                        chunk_tokens=slots["N_chunk"] if heavy else 256)
     _required(canonical(thermal.get("policy")) == canonical(spec.get("thermal")) == canonical(policy)
               and canonical(receipt.get("bands_c")) == canonical(bands),
               "gate_policy", kind, "outputs/align_episode.json", peer="config.json")
 
-    intervals = thermal["intervals"]
-    first, *remaining = intervals
-    _required(first["kind"] == "G0" and first["turn"] == 0 and first["outcome"] == "released"
-              and all(interval["kind"] != "G0" for interval in remaining),
+    first, *remaining = thermal["intervals"]
+    _required(first["kind"] == "G0" and first["turn"] == 0 and all(row["kind"] != "G0" for row in remaining),
               "gate_cardinality", kind, "outputs/align_episode.json")
-    episode_reference = first.get("release")
-    _required(_temperatures(reference) and _temperatures(episode_reference)
-              and canonical(thermal.get("window_reference")) == canonical(reference) == canonical(first.get("reference"))
+    for field, value in rt.g0_wait_fields(first, configured["g0_timeout_s"]).items():
+        _required(_finite(receipt.get(field)) and receipt[field] == value,
+                  "gate_summary", kind, RECEIPT_NAME, field=field)
+    episode_reference = first["release"] if first["outcome"] == "released" else None
+    _required(_temperatures(reference)
+              and canonical(thermal.get("window_reference")) == canonical(reference) == canonical(first["reference"])
               and canonical(thermal.get("episode_reference")) == canonical(episode_reference)
               and (capture or canonical(receipt.get("reference_custody")) == canonical(reference)),
               "gate_reference", kind, "outputs/align_episode.json", peer=RECEIPT_NAME)
+    flags = (thermal["flags"], episode_flags, receipt["episode_flags"])
+    findings = _gate_findings(kind, journal, thermal["intervals"], (reference, episode_reference),
+                              policy, deadline, counts=counts)
+    if findings:
+        definite = [error for error in findings if error.reason != "evidence_unverifiable"]
+        words = [error for error in findings if (error.field or "").startswith("U")]
+        raise (definite or words or findings)[0]
+    for index, interval in enumerate(thermal["intervals"]):
+        unobserved = kind == "x-g" and interval["kind"] == "G1" and interval["outcome"] == "unobserved"
+        _required(interval["outcome"] == "released" or (
+                    unobserved and all("thermal.state_unobserved" in source for source in flags)),
+                  "gate_outcome", kind, THERMAL_SOURCE, index=index)
 
-    samples = gates.sample_rows(journal)
-    reading_index = {sample["monotonic_ns"]: index for index, sample in enumerate(samples)}
-    keys = sensors["s_fast"], sensors["s_slow"]
+
+class _GateReadings:
+    """Frozen reducers over possibly and surely visible prefixes (RL-186 §1.4)."""
+
+    def __init__(self, journal, keys):
+        from joulewise.align.apple.thermal_gates import sample_rows
+
+        self.rows = sample_rows(journal)
+        self.starts = [row["monotonic_ns"] for row in self.rows]
+        self.finishes = [row["finished"]["monotonic_after_ns"] for row in self.rows]
+        self.index = {ns: index for index, ns in enumerate(self.starts)}
+        self.keys = keys
+
+    def visible_count(self, instant, delay=0):
+        return bisect_right(self.finishes, instant - delay)
+
+    def window(self, instant, count):
+        # Keep the first row, which establishes the frozen reducer's grid,
+        # and the complete range that the coverage and slope reducers inspect.
+        retained = max(0, count - GATE_HISTORY_ROWS)
+        first = bisect_left(self.starts, instant - 61 * NS, lo=retained, hi=count)
+        last = bisect_right(self.starts, instant + NS, lo=first, hi=count)
+        rows = self.rows[first:last]
+        return [self.rows[retained], *rows] if first > retained else rows
+
+    def observed(self, instant, *, possible=False):
+        from joulewise.align.apple.thermal_gates import _window_coverage
+
+        def observed(count):
+            fraction = _window_coverage(self.window(instant, count), instant, self.keys)["sample_fraction"]
+            return fraction is not None and fraction >= .9
+
+        sure, maybe = self.visible_count(instant, GATE_VISIBILITY_NS), self.visible_count(instant)
+        if max(0, sure - GATE_HISTORY_ROWS) == max(0, maybe - GATE_HISTORY_ROWS):
+            return observed(maybe if possible else sure)
+        # An eviction can change the reducer's grid. Check every prefix
+        # when the certainly and possibly visible grids may differ.
+        return (any if possible else all)(observed(count) for count in range(sure, maybe + 1))
+
+    def instants(self, start, end):
+        from joulewise.align.apple.thermal import Coverage
+
+        left = bisect_left(self.starts, start - 61 * NS)
+        right = bisect_right(self.starts, end)
+        points = {start, end}
+        for row_start, finish in zip(self.starts[left:right], self.finishes[left:right], strict=True):
+            for event in (row_start, finish, finish + GATE_VISIBILITY_NS):
+                points.update((event, event + 60 * NS, event + 61 * NS))
+        tol = Coverage.tolerance_ns
+        first_grid = max(0, self.visible_count(start, GATE_VISIBILITY_NS) - GATE_HISTORY_ROWS)
+        last_grid = max(0, self.visible_count(end) - GATE_HISTORY_ROWS)
+        for index in range(first_grid, min(last_grid + 1, len(self.starts))):
+            grid = self.starts[index]
+            lower = max(start, self.finishes[GATE_HISTORY_ROWS + index - 1]) if index else start
+            following = GATE_HISTORY_ROWS + index
+            upper = min(end, self.finishes[following] + GATE_VISIBILITY_NS) if following < len(self.finishes) else end
+            for tick in range((lower - grid) // NS, (upper - grid) // NS + 2):
+                edge = grid + tick * NS
+                points.update((edge - tol, edge, edge + tol))
+        return sorted({at + offset for at in points for offset in (-1, 0, 1) if start <= at + offset <= end})
+
+    def slope(self, instant, count):
+        from joulewise.align.apple.thermal_gates import slow_slope
+
+        return slow_slope(self.window(instant, count), instant, self.keys[1])
+
+    def temperatures(self, index):
+        return {name: self.rows[index]["sensors"][key]
+                for name, key in zip(TEMPERATURE_KEYS, self.keys, strict=True)}
+
+
+def _gate_findings(kind, journal, intervals, references, policy, deadline, *, counts=None):
+    """Return structural findings. Only callers implementing replay emit counts."""
+    keys = tuple(policy["sensors"][key] for key in ("s_fast", "s_slow"))
+    readings = _GateReadings(journal, keys)
+    findings = []
     for index, interval in enumerate(intervals):
-        expected = reference if index == 0 else episode_reference
-        _required(canonical(interval.get("reference")) == canonical(expected),
-                  "gate_reference", kind, THERMAL_SOURCE, index=index)
-        entry = next((sample["sensors"] for sample in reversed(samples)
-                      if sample["monotonic_ns"] <= interval["start_ns"]
-                      and sample["finished"]["monotonic_after_ns"] <= interval["end_ns"]), {})
-        _required(canonical(interval["entry_sensors"]) == canonical(entry),
-                  "interval_shape", kind, THERMAL_SOURCE, index=index, field="entry_sensors")
-        if interval["outcome"] == "unobserved":
-            _check_unobserved_gate(kind, interval, index, samples, reading_index, keys, policy,
-                                   (thermal["flags"], episode_flags, receipt["episode_flags"]))
-        else:
-            _required(interval["outcome"] == "released", "gate_outcome", kind, THERMAL_SOURCE, index=index)
-            _check_released_gate(kind, interval, index, samples, reading_index, keys, expected, policy)
+        gate = interval["kind"]
+        terms = {"U1": 0, "N4": 0}
+        try:
+            findings.extend(_gate_witnesses(kind, index, interval, readings,
+                                           references[gate != "G0"], policy,
+                                           None if kind == "step-d" and gate == "G0" else deadline, counts=terms))
+        except EvidenceFailure as error:
+            findings.append(error)
+        except Exception:
+            findings.append(EvidenceFailure("evidence_unverifiable", kind, THERMAL_SOURCE,
+                                            index=index, field="gate_recompute"))
+        if counts is not None:
+            counts.append({"role": kind, "gate_index": index, "gate": gate, **terms})
+    return findings
 
 
-def _gate_window_observed(samples, ns, keys):
-    from joulewise.align.apple.thermal_gates import _window_coverage
+def _gate_witnesses(kind, index, interval, readings, reference, policy, deadline, *, counts=None):
+    from joulewise.align.apple.thermal_gates import G0_UNOBSERVED_LIMIT_S, _status_observed
+    from joulewise.align.apple.thermal import valid_value
 
-    fraction = _window_coverage(samples, ns, keys)["sample_fraction"]
-    return fraction is not None and fraction >= .9
+    findings = []
 
+    def check(ok, field, reason="release_conditions"):
+        if not ok:
+            findings.append(EvidenceFailure(reason, kind, THERMAL_SOURCE, index=index, field=field))
 
-def _sample_values(sample, keys):
-    return {name: sample["sensors"][key] for name, key in zip(TEMPERATURE_KEYS, keys, strict=True)}
-
-
-def _check_released_gate(kind, interval, index, samples, reading_index, keys, reference, policy):
-    from joulewise.align.apple.thermal_gates import NS, slow_slope
-
+    gate, word = interval["kind"], interval["outcome"]
     start, end = interval["start_ns"], interval["end_ns"]
-    gate = interval["kind"]
-    if gate == "H":
-        met = interval.get("condition_met_stamp")
-        _required(isinstance(met, dict) and _uint(met.get("monotonic_before_ns"))
-                  and _uint(met.get("monotonic_after_ns")),
-                  "interval_clock", kind, THERMAL_SOURCE, index=index, field="condition_met_stamp")
-        decision = round((met["monotonic_before_ns"] + met["monotonic_after_ns"]) / 2)
-        _required(start <= decision <= end and _paired_stamp(met, decision),
-                  "interval_clock", kind, THERMAL_SOURCE, index=index, field="condition_met_stamp")
-    else:
-        decision = end
+    if gate == "H" and word in ("released", "unobserved"):
+        stamp = interval.get("condition_met_stamp") or {}
+        before, after = stamp.get("monotonic_before_ns"), stamp.get("monotonic_after_ns")
+        decision = before + (after - before) // 2 if _uint(before) and _uint(after) else -1
+        if not (start <= decision <= end and _paired_stamp(stamp, decision)):
+            check(False, "condition_met_stamp", "interval_clock")
+            return findings
+        end = decision
+    cap = round(policy["g0_cap_s" if gate == "G0" else "turn_cap_s"] * NS)
+    check(canonical(interval.get("reference")) == canonical(reference), "reference", "gate_reference")
+    check(end - start <= cap + GATE_CONSUMPTION_NS, "cap", "gate_outcome")
+    if findings:
+        return findings
 
-    exit_sample = interval.get("exit_sample_ns")
-    at = reading_index.get(exit_sample) if _uint(exit_sample) else None
-    _required(at is not None and start <= exit_sample <= decision
-              and samples[at]["finished"]["monotonic_after_ns"] <= decision
-              and decision - exit_sample <= 2 * NS,
-              "release_sample", kind, THERMAL_SOURCE, index=index, peer="outputs/align_episode.json")
-    release = _sample_values(samples[at], keys)
-    _required(_temperatures(release) and canonical(release) == canonical(interval.get("release")),
-              "release_sample", kind, THERMAL_SOURCE, index=index, peer="outputs/align_episode.json")
+    if word == "deadman":
+        check(_uint(deadline) and start < deadline <= end, "deadline", "gate_outcome")
+        return findings
+    if deadline is not None:
+        check(deadline > end, "U4", "gate_outcome" if deadline <= start else "evidence_unverifiable")
 
-    length = 10 if gate == "G0" else 5
-    first = at - length + 1
-    _required(first >= 0, "release_conditions", kind, THERMAL_SOURCE, index=index, field="streak")
-    # The first poll can take its most recent pre-entry sample. Older rows
-    # can contribute to the coverage window but cannot count toward release.
-    earliest = samples[first]["monotonic_ns"]
-    _required(earliest >= start or (start - earliest <= 2 * NS and samples[first + 1]["monotonic_ns"] >= start),
-              "release_conditions", kind, THERMAL_SOURCE, index=index, field="streak")
-    previous = samples[first - 1]["monotonic_ns"] if first and samples[first - 1]["monotonic_ns"] >= start else None
-    for sample in samples[first:at + 1]:
-        ns = sample["monotonic_ns"]
-        observed = _sample_values(sample, keys)
-        _required((previous is None or 0 < ns - previous <= 2 * NS)
-                  and not set(keys).intersection(sample["errors"]) and _temperatures(observed)
-                  and observed["fast_c"] <= reference["fast_c"] + policy["delta_fast_c"]
-                  and observed["slow_c"] <= reference["slow_c"] + policy["delta_slow_c"]
-                  and _gate_window_observed(samples, max(ns, start), keys),
-                  "release_conditions", kind, THERMAL_SOURCE, index=index, field="streak")
-        if gate == "G0":
-            status = sample["status"]
-            _required(isinstance(status, dict), "release_conditions", kind, THERMAL_SOURCE,
-                      index=index, field="G0_status_or_slope")
-            pm_ns = status.get("pm_observed_ns")
-            status_ns = status.get("monotonic_ns")
-            finished = sample["finished"]["monotonic_after_ns"]
-            slope = slow_slope(samples, ns, keys[1])
-            _required(status.get("error") is None and type(status.get("os_level")) is int and status["os_level"] == 0
-                      and status.get("pm_state") == "Nominal" and _uint(pm_ns) and _uint(status_ns)
-                      and pm_ns <= status_ns and finished <= status_ns
-                      and max(start, status_ns) <= min(decision, ns + 2 * NS, pm_ns + 2 * NS)
-                      and _finite(slope) and abs(slope) <= STEP_D_SLOPE_C_PER_MIN,
-                      "release_conditions", kind, THERMAL_SOURCE, index=index, field="G0_status_or_slope")
-        previous = ns
-    _required(_gate_window_observed(samples, decision, keys),
-              "release_conditions", kind, THERMAL_SOURCE, index=index, field="coverage")
+    sure, possible = (readings.visible_count(start, lag) for lag in (GATE_VISIBILITY_NS, 0))
+    entry_views = range(sure, possible + 1)
+    check(any(canonical(interval["entry_sensors"]) ==
+              canonical(readings.rows[count - 1]["sensors"] if count else {}) for count in (sure, possible)),
+          "N5.entry_sensors", "evidence_unverifiable")
+    check(any(interval["entry_slope_c_per_min"] == readings.slope(start, count) for count in (sure, possible)),
+          "N5.entry_slope", "evidence_unverifiable")
+
+    def status_fault(count):
+        prior = readings.rows[bisect_left(readings.starts, start - 10 * NS, hi=count):count]
+        return bool(prior) and not any(_status_observed(row.get("status")) for row in prior)
+
     if gate == "G0":
-        slope = interval.get("slope_c_per_min")
-        _required(_finite(slope) and abs(slope) <= STEP_D_SLOPE_C_PER_MIN,
-                  "release_conditions", kind, THERMAL_SOURCE, index=index, field="slope_c_per_min")
+        faults = tuple(map(status_fault, entry_views))
+        check(not any(faults), "U2", "release_conditions" if all(faults) else "evidence_unverifiable")
+
+    needed = 10 if gate == "G0" else 5
+    first = max(0, sure - 1)
+    last = readings.visible_count(end)
+
+    def row_terms(at, previous):
+        row = readings.rows[at]
+        ns, finish = readings.starts[at], readings.finishes[at]
+        onset, limit = max(start, finish), min(ns + 2 * NS, finish + GATE_CONSUMPTION_NS, end)
+        fixed = (reference is not None
+                 and (previous is None or 0 < ns - readings.starts[previous] <= 2 * NS)
+                 and all(key not in row["errors"] and valid_value(key, row["sensors"].get(key))
+                         and row["sensors"][key] <= reference[f"{name}_c"] + policy[f"delta_{name}_c"]
+                         for name, key in zip(("fast", "slow"), readings.keys, strict=True)))
+        if gate == "G0":
+            status = row.get("status") or {}
+            pm = status.get("pm_observed_ns")
+            slope = readings.slope(ns, at + 1)
+            fixed = (fixed and status.get("error") is None and type(status.get("os_level")) is int
+                     and status["os_level"] == 0 and status.get("pm_state") == "Nominal"
+                     and _finite(slope) and abs(slope) <= STEP_D_SLOPE_C_PER_MIN and _uint(pm))
+            if _uint(pm):
+                onset, limit = max(onset, pm), min(limit, pm + 2 * NS)
+        return fixed, onset, limit
+
+    def earliest_release():
+        streak = 0
+        available = start
+        for at in range(first, last):
+            fixed, onset, limit = row_terms(at, at - 1 if at > first else None)
+            available = max(onset, available)
+            if fixed and available <= limit:
+                streak += 1
+            else:
+                available, streak = onset, 0
+            if streak == needed:
+                return readings.finishes[at]
+        return None
+
+    def low_stretch(until):
+        since = None
+        for instant in readings.instants(start, until):
+            if readings.observed(instant, possible=True):
+                since = None
+            else:
+                since = instant if since is None else since
+                if instant - since >= GATE_POLL_GAP_NS:
+                    return True
+        return False
+
+    instants = readings.instants(start, end)
+    if word in ("released", "timeout"):
+        gaps = sum(not readings.observed(instant) for instant in instants)
+        if counts is not None:
+            counts["U1"] = gaps
+        if gaps:
+            earliest = earliest_release()
+            certain = low_stretch(end if earliest is None else earliest)
+            check(False, "U1", "release_conditions" if certain else "evidence_unverifiable")
+
+    if word == "timeout":
+        check(end - start >= cap and earliest_release() is None, "timeout", "gate_outcome")
+        return findings
+    if word == "unobserved":
+        earliest = earliest_release()
+        check(reference is None or low_stretch(end if earliest is None else earliest),
+              "unobserved", "evidence_unverifiable")
+        required = min(cap, G0_UNOBSERVED_LIMIT_S * NS) if gate == "G0" else cap
+        check(end - start >= required, "unobserved_cap", "gate_outcome")
+        at = readings.index.get(interval["exit_sample_ns"])
+        if at is None:
+            check(interval["exit_sample_ns"] is None and not readings.visible_count(end, GATE_VISIBILITY_NS)
+                  and canonical(interval["release"]) == canonical(dict.fromkeys(TEMPERATURE_KEYS)),
+                  "unobserved_sample", "release_sample")
+        else:
+            check(max(0, readings.visible_count(end, GATE_VISIBILITY_NS) - 1) <= at < last
+                  and canonical(interval["release"]) == canonical(readings.temperatures(at)),
+                  "unobserved_sample", "release_sample")
+        return findings
+
+    if word != "released":
+        check(False, "outcome", "gate_outcome")
+        return findings
+    at = readings.index.get(interval["exit_sample_ns"])
+    if at is None:
+        check(False, "N1.exit_sample", "release_sample")
+        return findings
+    finish = readings.finishes[at]
+    check(finish + GATE_CONSUMPTION_NS - start < cap, "U3",
+          "gate_outcome" if finish - start >= cap else "evidence_unverifiable")
+    check(finish <= end <= finish + GATE_CONSUMPTION_NS + GATE_VISIBILITY_NS
+          and _temperatures(readings.temperatures(at))
+          and canonical(interval["release"]) == canonical(readings.temperatures(at)), "N1", "release_sample")
+    streak_start = at - needed + 1
+    if streak_start < first or at >= last:
+        check(False, "N2", "evidence_unverifiable")
+        return findings
+    available = start
+    for current in range(streak_start, at + 1):
+        fixed, onset, limit = row_terms(current, current - 1 if current > first else None)
+        available = max(available, onset)
+        fresh = available <= limit
+        check(fixed, "N3")
+        check(fresh, "N4", "evidence_unverifiable")
+        if counts is not None and not fresh:
+            counts["N4"] += 1
+    if available <= limit:
+        check(_gate_exit_slope(interval["slope_c_per_min"], readings, available, limit, at + 1),
+              "N5.exit_slope", "evidence_unverifiable")
+    return findings
 
 
-def _check_unobserved_gate(kind, interval, index, samples, reading_index, keys, policy, flags):
-    start, end = interval["start_ns"], interval["end_ns"]
-    _required(kind == "x-g" and interval["kind"] == "G1"
-              and interval["duration_s"] >= policy["turn_cap_s"]
-              and all("thermal.state_unobserved" in source for source in flags),
-              "gate_outcome", kind, THERMAL_SOURCE, index=index)
-    timestamps = [sample["monotonic_ns"] for sample in samples if start < sample["monotonic_ns"] < end]
-    _required(any(not _gate_window_observed(samples, ns, keys) for ns in (start, *timestamps, end)),
-              "release_conditions", kind, THERMAL_SOURCE, index=index, field="coverage")
-    sample_ns = interval["exit_sample_ns"]
-    at = reading_index.get(sample_ns) if _uint(sample_ns) else None
-    expected = dict.fromkeys(TEMPERATURE_KEYS)
-    if sample_ns is not None:
-        _required(at is not None and samples[at]["finished"]["monotonic_after_ns"] <= end,
-                  "release_sample", kind, THERMAL_SOURCE, index=index)
-        expected = _sample_values(samples[at], keys)
-    _required(canonical(interval.get("release")) == canonical(expected),
-              "release_sample", kind, THERMAL_SOURCE, index=index)
+def _gate_exit_slope(claim, readings, start, end, required):
+    """A number needs an actual witness. Check each cell and interior stamps."""
+    points = readings.instants(start, end)
+
+    def witnesses(instant):
+        sure = readings.visible_count(instant, GATE_VISIBILITY_NS)
+        possible = readings.visible_count(instant)
+        return sure <= required <= possible and claim == readings.slope(instant, required)
+
+    if any(map(witnesses, points)):
+        return True
+    # The OLS value is constant within a cell in real arithmetic. The frozen
+    # reducer rounds intermediate results, so try interior stamps as well.
+    return any(witnesses(left + (right - left) * part // 32)
+               for left, right in zip(points, points[1:]) if right - left > 1 for part in range(1, 32))
 
 
-def _check_step_sources(receipt, doc, rows, require, sensors, journal, bundle, config_sha, configured):
+def _check_step_sources(receipt, doc, rows, require, sensors, journal, bundle, config_sha, configured,
+                        episode, bands):
     from statistics import median
     from joulewise.align.apple import r1_runtime as rt, thermal_gates as gates
 
@@ -1726,7 +2133,10 @@ def _check_step_sources(receipt, doc, rows, require, sensors, journal, bundle, c
         "reference_values", RECEIPT_NAME, peer=REFERENCE_SOURCE)
 
     recovery_file, classification_file = STEP_SOURCES
-    _validate_sidecar(rows(recovery_file, "step_configuration"), sensors, "step-d", recovery_file)
+    recovery_rows = rows(recovery_file, "step_configuration")
+    _validate_sidecar(recovery_rows, sensors, "step-d", recovery_file)
+    _check_step_derivation(receipt, episode, sensors, samples + gates.sample_rows(recovery_rows), configured,
+                           bands, require)
     inventory = doc(classification_file, "step_configuration")
     classification, thermometry = inventory["classification"], receipt["thermometry"]
     stated = classification.get("classification_sha256")
@@ -1741,6 +2151,45 @@ def _check_step_sources(receipt, doc, rows, require, sensors, journal, bundle, c
             and all(_strings(group) for group in classification["alias_groups"])
             and classification["alias_groups"] == thermometry.get("alias_groups"),
             "step_configuration", classification_file, peer=RECEIPT_NAME)
+
+
+def _check_step_derivation(receipt, episode, sensors, readings, configured, bands, require):
+    from joulewise.align.apple import r1_runtime as rt
+
+    detail, slots = receipt["slot_detail"], receipt["slots"]
+    turn, = episode.turns
+    g0 = episode.hardware["thermal"]["intervals"][0]
+    wall = detail.get("member_wall_s")
+    span = (episode.end_ns - g0["start_ns"]) / NS
+    require(_finite(wall) and 0 <= wall - span < 1750, "step_wall_bracket", RECEIPT_NAME, field="member_wall_s")
+    declared = receipt.get("t_decline_status")
+    decline = receipt.get("t_decline_s")
+    require("t_decline_s" in receipt and (
+                declared == "no_decline" and decline is None
+                or declared == "declined" and _finite(decline) and 0 <= decline <= span),
+            "step_phase_accounting", RECEIPT_NAME, field="t_decline_status")
+    try:
+        readings = sorted(readings, key=lambda row: row["monotonic_ns"])
+        responses = {role: rt.step_response(readings, sensors[role], episode.start_ns, episode.end_ns)
+                     for role in ("s_fast", "s_slow")}
+        recovery, censored = rt.recovery_time(readings, sensors, receipt["operating_reference"], bands[0],
+                                              responses["s_slow"]["peak_ns"])
+        expected_slots, expected_detail = rt.derive_step_d_slots(
+            ep=episode, turn=turn, wall_s=wall, responses=responses, recovery_s=recovery,
+            recovery_censored=censored, bands=bands[0], s5_bands=bands[1], t_decline_s=decline,
+            t_decline_status=declared, d_class=configured.get("d_class", "heavy"),
+            n_chunk_config=rt.configured_n_chunk(configured))
+        rt.gated_budget(expected_slots)
+    except Exception as error:
+        raise EvidenceFailure("step_phase_accounting", "step-d", RECEIPT_NAME, field="slot_derivation") from error
+    for key, value in expected_slots.items():
+        require(key in slots and canonical(slots[key]) == canonical(value), "step_phase_accounting",
+                RECEIPT_NAME, field=f"slots.{key}")
+    # Production replaces S6_tuning with its own registered provenance record.
+    for key, value in expected_detail.items():
+        if key != "S6_tuning":
+            require(key in detail and canonical(detail[key]) == canonical(value), "step_phase_accounting",
+                    RECEIPT_NAME, field=f"slot_detail.{key}")
 
 
 def _native_bundle(ledger, kind, receipt, configured, gate_inputs):
@@ -1838,7 +2287,7 @@ def _check_native_soak(soak, config_path):
 
 
 def _native_verdict(ledger, runtime, invoke, configured, soak_reference):
-    from joulewise.align.apple.r1_runtime import bands_c, sensors_policy
+    from joulewise.align.apple.r1_runtime import BAND_FLOOR_C, bands_c, sensors_policy
 
     receipts = {}
     refusal = None
@@ -1859,8 +2308,10 @@ def _native_verdict(ledger, runtime, invoke, configured, soak_reference):
             if not isinstance(slots, dict) or type(slots.get("N_chunk")) is not int or slots["N_chunk"] <= 0:
                 raise EvidenceFailure("step_configuration", kind, RECEIPT_NAME, field="slots")
     step_receipt = receipts["step-d"]
-    bands = bands_c(soak_reference, sensors_policy(configured), slow_floor=configured["slow_band_floor_c"])
-    bundles = {kind: _native_bundle(ledger, kind, receipt, configured, (step_receipt, bands))
+    sensors = sensors_policy(configured)
+    bands = bands_c(soak_reference, sensors, slow_floor=configured["slow_band_floor_c"])
+    s5_bands = bands_c(soak_reference, sensors, slow_floor=BAND_FLOOR_C)
+    bundles = {kind: _native_bundle(ledger, kind, receipt, configured, (step_receipt, bands, s5_bands))
                for kind, receipt in receipts.items()}
     step = step_d_facts(bundles["step-d"], step_receipt)
     bank = {**facts_from_bundle(bundles["d-bank-benign-s1"], role="d-bank", native=True),
@@ -1900,11 +2351,7 @@ def run_bound_part_c(output, runtime, *, soak_reference, soak_ledger_sha256=None
 
 def archived_custody_member(output, runtime_config, kind):
     """Open exactly one archived member under RL-183 1.4, with no native ledger."""
-    output = Path(output)
-    segment = output.parent / SOAK_DIRECTORY / SOAK_SEGMENT if kind == "idle" else output / KINDS[kind]
-    config_sha = digest(read_regular(Path(runtime_config).parent, Path(runtime_config).name))
-    raw = read_regular(segment, MANIFEST_NAME, compressed=True)
-    member = BoundMember(segment, kind, config_sha, manifest_sha=digest(raw), archived=True)
+    member = _archived_member(output, runtime_config, kind)
     if kind == "idle":
         for name in SOAK_FILES:
             member.read(name, name)
@@ -1913,3 +2360,119 @@ def archived_custody_member(output, runtime_config, kind):
         _bound_member_files(member, receipt)
     member.verify_reads()
     return {"binding": "archived_custody"}
+
+
+def _archived_member(output, runtime_config, kind):
+    output = Path(output)
+    segment = output.parent / SOAK_DIRECTORY / SOAK_SEGMENT if kind == "idle" else output / KINDS[kind]
+    config_sha = digest(read_regular(Path(runtime_config).parent, Path(runtime_config).name))
+    raw = read_regular(segment, MANIFEST_NAME, compressed=True)
+    return BoundMember(segment, kind, config_sha, manifest_sha=digest(raw), archived=True)
+
+
+def _archived_episode(data):
+    """Reconstruct the frozen reader's flag projection from authenticated bytes."""
+    from csv import DictReader
+    from dataclasses import replace
+
+    from joulewise.align.apple.sampler import _restore_stamp, power_records, stamp_mapping
+    from joulewise.align.records import Episode, from_json
+    from joulewise.interfaces import PowerSample
+
+    episode = from_json(Episode, data["outputs/align_episode.json"])
+    metadata = parse_evidence_json(data["metadata.json"])
+    config = parse_evidence_json(data["config.json"])
+    evidence = metadata.get("uncertainty_evidence")
+    stamps = tuple(map(_restore_stamp, episode.hardware["paired_clock_stamps_ns"]))
+    _, clock_flags = stamp_mapping(stamps, episode_domain=episode.clock_domain, evidence=evidence)
+    rows = DictReader(StringIO(data["power_trace.csv"].decode("utf-8"), newline=""))
+    samples = [
+        PowerSample(timestamp_s=float(row["timestamp_s"]), power_w=float(row["power_w"]),
+                    source=row.get("source", "mock"), rail=row.get("rail") or None,
+                    interval_start_s=float(row["interval_start_s"]) if row.get("interval_start_s") else None,
+                    interval_end_s=float(row["interval_end_s"]) if row.get("interval_end_s") else None)
+        for row in rows
+    ]
+    traces, trace_flags = power_records(samples, nominal_interval_ns=round(NS / config["sampling"]["power_hz"]),
+                                        evidence=evidence)
+    flags = [flag for flag in episode.flags if flag != "power_trace_join_in_run_bundle"]
+    flags.extend(clock_flags)
+    flags.extend(trace_flags)
+    if not traces:
+        flags.append("power_unavailable:no_bundle_trace")
+    return replace(episode, flags=tuple(dict.fromkeys(flags)))
+
+
+def replay_archived(output, runtime_config):
+    """Evaluate authorized archive records in place. Release words, names and counts."""
+    from joulewise.align.apple import r1_runtime as rt, thermal_gates
+    from scripts import align_r1_rehearsal as r1
+
+    counts = []
+    result = {"binding": "archived_custody", "verdict": "other_failure", "failing_checks": [],
+              "gate_counts": counts}
+    kind = "idle"
+    try:
+        configured, config_sha = rt.load_config(runtime_config)
+        idle = _archived_member(output, runtime_config, kind)
+        soak = _object_from_bytes(idle.read(RECEIPT_NAME, RECEIPT_NAME), kind, RECEIPT_NAME, "saved_receipt")
+        _required(soak.get("schema") == rt.RESULT_SCHEMA and soak.get("kind") == kind
+                  and soak.get("backend") == "production" and soak.get("config_sha256") == config_sha
+                  and not r1.contract.missing_fields(kind, soak, quiet=True, contract_key=SOAK_SEGMENT),
+                  "receipt_contract", kind, RECEIPT_NAME)
+        detrended = r1.soak_detrended(soak["sensor_series_c"], soak["sensor_series_t_s"],
+                                     soak["sensor_series_end_t_s"])
+        idle.verify_reads()
+        sensors = rt.sensors_policy(configured)
+        bands = rt.bands_c({"detrended": detrended}, sensors, slow_floor=configured["slow_band_floor_c"])
+        s5_bands = rt.bands_c({"detrended": detrended}, sensors, slow_floor=rt.BAND_FLOOR_C)
+        receipt, projected, failures = {}, {}, []
+        roles = {"step-d": "step-d", "d-bank-benign-s1": "d-bank", "x-g": "x-g"}
+        for kind in KINDS:
+            try:
+                member = _archived_member(output, runtime_config, kind)
+                row = _object_from_bytes(member.read(RECEIPT_NAME, RECEIPT_NAME), kind, RECEIPT_NAME,
+                                         "saved_receipt")
+                _required(row.get("schema") == rt.RESULT_SCHEMA and row.get("kind") == kind
+                          and row.get("backend") == "production" and row.get("config_sha256") == config_sha
+                          and not r1.contract.missing_fields(kind, row, quiet=False),
+                          "receipt_contract", kind, RECEIPT_NAME)
+                receipt[kind] = row
+                bundle, data = _bound_member_files(member, row)
+                _check_member_records(kind, bundle, row, data, configured,
+                                      (receipt.get("step-d"), bands, s5_bands), gate_counts=counts)
+                if kind in roles:
+                    raw = data["outputs/align_episode.json"]
+                    journal = _jsonl_objects(data[THERMAL_SOURCE], kind, THERMAL_SOURCE, "journal_session")
+                    intervals = [record["values"]["gate"] for record in journal
+                                 if record["kind"] in GATE_JOURNALS and record["values"]["state"] == "end"]
+                    projected[kind] = {**_project_bundle(
+                        bundle, roles[kind], _archived_episode(data), parse_evidence_json(raw),
+                        thermal_gates.sample_rows(journal), intervals, [], native=kind != "step-d"),
+                        "runtime": row}
+                member.verify_reads()
+            except EvidenceFailure as error:
+                failures.append(error.reason)
+                if error.field is not None:
+                    failures.append(error.field)
+            except Exception:
+                failures.append("evidence_unverifiable")
+        if failures:
+            result["failing_checks"] = sorted(set(failures))
+            return result
+        step = receipt["step-d"]
+        table = _judge_observations(step_d=_project_step(projected["step-d"], step),
+                                    d_bank=projected["d-bank-benign-s1"], x_g=projected["x-g"],
+                                    n_chunk=step["slots"]["N_chunk"], archived=True)
+        config = Path(runtime_config)
+        _required(digest(read_regular(config.parent, config.name)) == config_sha,
+                  "source_integrity", "attempt", "runtime_config")
+        result.update(verdict=table["verdict"],
+                      failing_checks=sorted(set(table["evidence_failures"]) |
+                                            {key for key, value in table["lines"].items()
+                                             if value is not None and value["pass"] is not True}))
+    except EvidenceFailure as error:
+        result["failing_checks"] = sorted({value for value in (error.reason, error.field) if value is not None})
+    except Exception:
+        result["failing_checks"] = ["evidence_unverifiable"]
+    return result

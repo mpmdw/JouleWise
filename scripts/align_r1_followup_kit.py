@@ -533,11 +533,10 @@ def main(argv=None):
     p.add_argument("--soak-reference", type=Path, required=True)
     p.add_argument("--soak-ledger-sha256")
     p.add_argument("--inputs", type=Path, default=ROOT / reg.REGISTRATION / "inputs.json")
-    p = sub.add_parser("replay-archived", help="verify an authorized archived member binding")
+    p = sub.add_parser("replay-archived", help="judge an authorized archive or verify one member binding")
     p.add_argument("--output", type=Path, required=True)
     p.add_argument("--runtime-config", type=Path, required=True)
-    p.add_argument("--kind", choices=("idle", "capture-predecessor-30b", "step-d", "d-bank-benign-s1", "x-g"),
-                   required=True)
+    p.add_argument("--kind", choices=("idle", "capture-predecessor-30b", "step-d", "d-bank-benign-s1", "x-g"))
     p = sub.add_parser("desk")
     p.add_argument("--run-dir", type=Path, required=True)
     p = sub.add_parser("regenerate-table", help="RL-122: re-derive (not re-measure) the Part B selection")
@@ -561,6 +560,10 @@ def main(argv=None):
     elif args.command == "replay-archived":
         from scripts import align_r1_part_c as part_c
 
+        if args.kind is None:
+            result = part_c.replay_archived(args.output, args.runtime_config)
+            print(json.dumps(result, sort_keys=True))
+            return 0 if result["verdict"] == "pass" else 1
         try:
             result = part_c.archived_custody_member(args.output, args.runtime_config, args.kind)
         except part_c.EvidenceFailure as error:

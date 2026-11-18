@@ -1118,7 +1118,11 @@ class SoakLauncherBindingTests(unittest.TestCase):
 
     def make_model_member(self, kind, segment):
         from joulewise.align.apple import thermal_gates as tg
+        from joulewise.align.apple.budget import budget_record
+        from joulewise.align.apple.sampler import stamp_mapping
+        from joulewise.align.apple.workload import EpisodeSpec
         from joulewise.align.records import Episode, Turn, to_jsonable
+        from joulewise.clock import ClockStamp
         from joulewise.schemas import BenchmarkConfig
 
         ns = 1_000_000_000
@@ -1133,6 +1137,7 @@ class SoakLauncherBindingTests(unittest.TestCase):
         native_mode = {"value": 0, "source": pc.POWERMODE_SOURCE, "observed_at": "episode_start"}
         hardware = {"ac_powermode": native_mode}
         flags, gate_events = [], []
+        episode_start = 1
         if role == "predecessor":
             receipt = write_predecessor(segment, {"bundle": f"runs/{config['run_id']}", "ac_powermode": native_mode,
                                                    "admitted_turns": 1})
@@ -1144,6 +1149,11 @@ class SoakLauncherBindingTests(unittest.TestCase):
                           context_tokens=0, decode_tokens=1)]
         else:
             source = bank() if role == "d-bank" else deepcopy(XG)
+            if role == "d-bank":
+                for gate in source["intervals"]:
+                    if gate["kind"] == "G1":
+                        duration = min(gate["duration_s"], 50.0)
+                        gate.update(duration_s=duration, end_ns=gate["start_ns"] + round(duration * ns))
             if role == "x-g":
                 for gate in source["intervals"]:
                     if gate["outcome"] == "unobserved":
@@ -1152,27 +1162,34 @@ class SoakLauncherBindingTests(unittest.TestCase):
             member = (step_record(segment.parent, STEP, 4096)["member"] if role == "step-d"
                       else member_record(segment.parent, role, source))
             receipt = member["runtime"]
-            spec.update(warmup_condition="benign")
-            if role == "step-d":
-                spec.update(condition="benign", seed=1)
-                receipt["candidate_only"] = False
-                receipt["slots"].update(S7=60.0, S8=4096.0)
-                receipt["slot_detail"] = {"N_chunk_formula": 2048, "N_chunk_source": "config.d_n_chunk"}
-            if role == "d-bank":
-                receipt["failure_reason"] = None
             bands = {"delta_fast_c": 1.0, "delta_slow_c": 1.0}
             policy = rt.gate_policy(sensors, bands, turn_cap_s=300 if role == "step-d" else 60.0,
                                     chunk_tokens=4096 if role == "d-bank" else 256, heavy=role == "d-bank",
                                     per_turn=role != "step-d", g0_cap_s=configured["g0_timeout_s"])
-            spec["thermal"] = policy
+            if role == "step-d":
+                step = configured["step"]
+                spec = rt.step_spec(spec, step, policy, deadman_s=step["deadman_s"])
+                receipt["candidate_only"] = False
+                receipt.update(t_decline_s=None, t_decline_status="no_decline")
+            elif role == "d-bank":
+                spec.update(deadman_s=1000.0, max_episode_decode_tokens=6144)
+                receipt.update(failure_reason=None, B_D=6144, turn_cap_tokens=spec["max_tokens"])
+            spec.update(thermal=policy, warmup_condition="benign")
+            spec.pop("max_episode_seconds", None)
             receipt["bands_c"] = bands
             config["workload_profile"]["prompt_text"] = json.dumps(spec, sort_keys=True)
             shift = 120 * ns
             turns = []
             for row in member["turns"]:
-                turns.append(Turn(index=row["index"], start_ns=row["start_ns"] + shift,
-                                  first_token_ns=row["start_ns"] + shift + 2 * ns,
-                                  end_ns=row["end_ns"] + shift, prefill_tokens=row["prefill_tokens"],
+                offset = shift - row["index"] * 9700 * ns
+                start = row["start_ns"] + offset
+                duration = row["end_ns"] - row["start_ns"]
+                if role == "step-d":
+                    start += 300 * ns
+                    episode_start = start - ns
+                    duration = 252 * ns
+                turns.append(Turn(index=row["index"], start_ns=start, first_token_ns=start + 2 * ns,
+                                  end_ns=start + duration, prefill_tokens=row["prefill_tokens"],
                                   context_tokens=0, decode_tokens=row["decode_tokens"]))
             gates = member["journal_intervals"]
             reference = {"fast_c": 35.0, "slow_c": 35.0, "source_member": "member", "span_ns": [0, 60 * ns]}
@@ -1182,11 +1199,10 @@ class SoakLauncherBindingTests(unittest.TestCase):
             events = [("reading", i * ns, (35.0, 35.0)) for i in range(60)] if role == "step-d" else []
             for gate, turn in zip(gates, turns, strict=True):
                 for key in ("start_ns", "end_ns", "exit_sample_ns"):
-                    gate[key] += shift
+                    gate[key] += shift - turn.index * 9700 * ns
                 start, end = gate["start_ns"], gate["end_ns"]
                 gate.update(entry_stamp=self.paired_stamp(start), exit_stamp=self.paired_stamp(end),
                             entry_epoch_s=start / ns, exit_epoch_s=end / ns, clock="episode_monotonic_ns",
-                            entry_slope_c_per_min=0.0,
                             reference=reference if gate["kind"] == "G0" else episode_reference)
                 gate_phase = "align_thermal_hold" if gate["kind"] == "H" else "align_thermal_gate"
                 events.append((gate_phase, start,
@@ -1202,6 +1218,9 @@ class SoakLauncherBindingTests(unittest.TestCase):
                     for tick in ticks:
                         events.append(("reading", tick, release if end - tick < count * ns else hot))
                 events.append((gate_phase, end, {"state": "end", "gate": gate}))
+                if role == "step-d":
+                    events.extend(("reading", tick, (35.4, 35.4))
+                                  for tick in range(end + ns, turn.start_ns + ns, ns))
                 events.append(("reading", turn.start_ns + ns, (35.4, 35.4)))
                 gate_events.extend({"timestamp_s": gate[f"{clock}_epoch_s"], "event_type": f"phase_{direction}",
                                     "phase": gate_phase, "message": gate["kind"], "metadata": gate}
@@ -1213,17 +1232,22 @@ class SoakLauncherBindingTests(unittest.TestCase):
             journal = self.journal(sensors, events)
             samples = tg.sample_rows(journal)
             for gate in gates:
+                if gate["outcome"] == "released":
+                    latest = [row for row in samples if row["monotonic_ns"] <= gate["end_ns"]]
+                    gate["slope_c_per_min"] = tg.slow_slope(latest, gate["end_ns"], sensors["s_slow"])
+                gate["entry_slope_c_per_min"] = tg.slow_slope(
+                    samples, gate["start_ns"], sensors["s_slow"])
                 gate["entry_sensors"] = next((row["sensors"] for row in reversed(samples)
                                                if row["monotonic_ns"] <= gate["start_ns"]), {})
-            deadline = turns[-1].end_ns + ns
+            arm = episode_start if role == "step-d" else gates[0]["start_ns"]
+            deadline = arm + round(spec["deadman_s"] * ns)
+            origin = "R1_after_G0_release_and_quiet" if role == "step-d" else "G0_entry"
+            budget = budget_record(EpisodeSpec.from_text(config["workload_profile"]["prompt_text"]),
+                                   turns, "episode_returned", effective_context_cap=40960)["token_budget"]
             hardware.update(thermal={"intervals": gates, "flags": flags, "policy": policy,
                                      "window_reference": reference, "episode_reference": episode_reference},
-                            token_budget={
-                "deadman_s": receipt["deadman"]["T_dead_s"], "stop_reason": "episode_returned", "incomplete": False,
-                "decode_tokens_used": sum(turn.decode_tokens for turn in turns),
-                "prefill_tokens_used": sum(turn.prefill_tokens for turn in turns), "cached_context_tokens_used": 0,
-                "deadline_ns": deadline,
-            })
+                            token_budget={**budget, "deadline_ns": deadline, "deadline_origin": origin,
+                                          "planned_g0_allowance_s": 0})
             if role == "d-bank":
                 receipt["deadman"]["deadline_ns"] = deadline
         receipt.update(schema=rt.RESULT_SCHEMA, kind=kind, backend="production", config_sha256=self.attempt.config_sha,
@@ -1237,11 +1261,12 @@ class SoakLauncherBindingTests(unittest.TestCase):
         (bundle / "config.json").write_bytes(config_raw)
         end_ns = turns[-1].end_ns
         hardware.update(run_bundle_id=bundle.name,
-                        paired_clock_stamps_ns=[self.paired_stamp(1), self.paired_stamp(end_ns)])
+                        context_limits={"max_context_tokens": 40960, "max_position_embeddings": 40960},
+                        paired_clock_stamps_ns=[self.paired_stamp(episode_start), self.paired_stamp(end_ns)])
         identity = synthetic_episode(role)
         identity.pop("flags")
         ep = Episode(**identity, episode_id=bundle.name, endpoint="test",
-                     clock_domain=f"joulewise.monotonic:{bundle.name}", start_ns=1,
+                     clock_domain=f"joulewise.monotonic:{bundle.name}", start_ns=episode_start,
                      end_ns=end_ns, hardware=hardware, turns=tuple(turns), flags=tuple(flags))
         if role == "d-bank":
             receipt["deadman"]["phases_s"] = rt.episode_phases(ep)
@@ -1254,11 +1279,28 @@ class SoakLauncherBindingTests(unittest.TestCase):
             return {"epoch_s": seconds, "monotonic_before_s": seconds, "monotonic_after_s": seconds,
                     "wall_resolution_s": 1e-9, "monotonic_resolution_s": 1e-9}
 
-        (out / "align_turns.jsonl").write_bytes(b"".join(json_bytes({
-            "turn": t.index, "flags": [], "start_stamp": clock(t.start_ns), "end_stamp": clock(t.end_ns),
-            "generation": {"output_token_ids": [20] * t.decode_tokens,
-                           "prompt_token_ids": [30] * (t.prefill_tokens + t.context_tokens)},
-        }) for t in turns))
+        turn_records = []
+        for turn in turns:
+            start_stamp, end_stamp = clock(turn.start_ns), clock(turn.end_ns)
+            mapping, _ = stamp_mapping((ClockStamp(**start_stamp), ClockStamp(**end_stamp)),
+                                        episode_domain=ep.clock_domain)
+            turn_records.append({
+                "turn": turn.index, "flags": [], "start_stamp": start_stamp, "end_stamp": end_stamp,
+                "clock_mapping": mapping.__dict__,
+                "generation": {"output_token_ids": [20] * turn.decode_tokens,
+                               "prompt_token_ids": [30] * (turn.prefill_tokens + turn.context_tokens)},
+            })
+            for phase, event, when, detail in (
+                ("prefill", "phase_start", turn.start_ns, {}),
+                ("prefill", "phase_end", turn.first_token_ns, {}),
+                ("decode", "phase_start", turn.first_token_ns, {"max_tokens": spec["max_tokens"]}),
+                *(("decode", "token", turn.first_token_ns, {"index": i}) for i in range(turn.decode_tokens)),
+                ("decode", "phase_end", turn.end_ns,
+                 {"emitted_tokens": turn.decode_tokens, "requested_output_tokens": spec["max_tokens"]}),
+            ):
+                gate_events.append({"timestamp_s": when / ns, "event_type": event, "phase": phase,
+                                    "message": "synthetic", "metadata": {"align_turn_index": turn.index, **detail}})
+        (out / "align_turns.jsonl").write_bytes(b"".join(map(json_bytes, turn_records)))
         decode, prefill = sum(t.decode_tokens for t in turns), sum(t.prefill_tokens for t in turns)
         metadata = {"run_id": bundle.name, "config_sha256": hashed(config_raw),
                     "uncertainty_evidence": {"clock_anchor": {
@@ -1274,6 +1316,7 @@ class SoakLauncherBindingTests(unittest.TestCase):
         (bundle / "summary_metrics.json").write_bytes(json_bytes({"status": "succeeded", "failure_reason": None}))
         final = {"event_type": "run_finalized", "phase": "run", "timestamp_s": end_ns / ns + 1,
                  "message": "bundle finalized", "metadata": {}}
+        gate_events.sort(key=lambda event: event["timestamp_s"])
         (bundle / "events.jsonl").write_bytes(b"".join(map(json_bytes, [*gate_events, final])))
         (bundle / "power_trace.csv").write_text("timestamp_s,power_w,source\n")
         if role != "predecessor":
@@ -1306,11 +1349,20 @@ class SoakLauncherBindingTests(unittest.TestCase):
                 "night_confirmation": confirmation, "inventory": {},
             }))
             receipt.update(e_D_j_per_token=MARKER, thermometry={**classification, "night_confirmation": confirmation})
-            receipt["slot_detail"]["thermometry_classification_sha256"] = classification["classification_sha256"]
             recovery = segment / "recovery"
             recovery.mkdir()
-            rec = self.journal(sensors, [("reading", end_ns + ns, (35.4, 35.4))], start=end_ns)
+            rec = self.journal(sensors, [("reading", end_ns + i * ns, (38.0, 38.0) if i <= 20 else (35.4, 35.4))
+                                         for i in range(1, 22)], start=end_ns)
             (recovery / "align_thermal.jsonl").write_bytes(b"".join(map(json_bytes, rec)))
+            rows = sample_rows + tg.sample_rows(rec)
+            responses = {key: rt.step_response(rows, sensors[key], ep.start_ns, ep.end_ns)
+                         for key in ("s_fast", "s_slow")}
+            wall = (ep.end_ns - gates[0]["start_ns"]) / ns + (1750 - 1000 * rt.DEADMAN_FACTOR)
+            receipt["slots"], receipt["slot_detail"] = rt.derive_step_d_slots(
+                ep=ep, turn=turns[0], wall_s=wall, responses=responses, recovery_s=20.0, recovery_censored=False,
+                bands=bands, t_decline_s=None, t_decline_status="no_decline", d_class=configured["d_class"],
+                n_chunk_config=configured["d_n_chunk"])
+            receipt["slot_detail"]["thermometry_classification_sha256"] = classification["classification_sha256"]
         return write_terminal(segment, kind, receipt, self.attempt.config_sha)
 
     @staticmethod
@@ -1686,10 +1738,331 @@ class SoakLauncherBindingTests(unittest.TestCase):
         expected = "pass" if expected_reason is None else "other_failure"
         accepted = expected == "pass"
         self.assertEqual(primary, secondary)
+        for path in (output / "smoke_part_c.json", output / "smoke.json", root / "part-c.stdout.log"):
+            self.assertNotIn(str(MARKER), path.read_text())
         self.assertEqual((primary["verdict"], final_row["verdict"], primary["pass"]), (expected, expected, accepted))
         self.assertEqual((rc, runner["rc"], runner["parts"]), (0 if accepted else 2, rc, {"C": accepted}))
         if expected_reason is not None:
             self.assertIn(expected_reason, primary["evidence_failures"])
+
+    @staticmethod
+    def remove_gate_entry_readings(bundle, count, gate_kind="G0"):
+        from joulewise.align.apple.thermal import Coverage, keys
+
+        journal = bundle / "outputs/align_thermal.jsonl"
+        rows = [json.loads(line) for line in journal.read_bytes().splitlines()]
+        gate = next(row["values"]["gate"] for row in rows if row["kind"] == "align_thermal_gate"
+                    and row["values"]["state"] == "end" and row["values"]["gate"]["kind"] == gate_kind)
+        omit = {gate["start_ns"] - i * 1_000_000_000 for i in range(10, 10 + count)}
+        kept = [row for row in rows if row["kind"] != "reading" or row["started"]["monotonic_ns"] not in omit]
+        assert len(rows) - len(kept) == count
+        counter = Coverage(kept[0]["started"]["monotonic_ns"], keys(kept[0]["values"]["thermal"]))
+        for seq, row in enumerate(kept, 1):
+            row["seq"] = seq
+            if row["kind"] == "reading":
+                counter.observe(row["started"]["monotonic_ns"], row["finished"]["monotonic_ns"], row["values"])
+        end = kept[-1]["values"]["coverage"]["span_ns"][1]
+        kept[-1]["values"]["coverage"] = counter.report(end)
+        journal.write_bytes(b"".join(map(json_bytes, kept)))
+
+    @staticmethod
+    def edit_decode_end(bundle, operation):
+        path = bundle / "events.jsonl"
+        rows = [json.loads(line) for line in path.read_bytes().splitlines()]
+        index = next(i for i, row in enumerate(rows) if row["phase"] == "decode"
+                     and row["event_type"] == "phase_end" and row["metadata"]["align_turn_index"] == 1)
+        if operation == "delete":
+            del rows[index]
+        elif operation == "duplicate":
+            rows.insert(index, deepcopy(rows[index]))
+        elif operation == "identity":
+            rows[index]["metadata"]["align_turn_index"] = 0
+        elif operation == "reorder":
+            rows[index - 1:index + 1] = reversed(rows[index - 1:index + 1])
+        elif operation == "shift":
+            rows[index]["timestamp_s"] += 1
+        elif operation == "truncate":
+            rows[index] = {"event_type": "phase_end"}
+        path.write_bytes(b"".join(map(json_bytes, rows)))
+
+    def test_audit3_gate_entry_coverage(self):
+        for count, reason in ((4, None), (6, "evidence_unverifiable"), (7, "release_conditions")):
+            with self.subTest(count=count):
+                self.audit_case(lambda case: self.run_gate_regression(
+                    case, "d-bank-benign-s1", lambda bundle, _: self.remove_gate_entry_readings(bundle, count),
+                    reason))
+
+    def test_audit3_receipt_fields(self):
+        for role, field, reason in (
+            ("d-bank-benign-s1", "turn_cap_tokens", "execution_limits_recompute"),
+            ("d-bank-benign-s1", "B_D", "execution_limits_recompute"),
+            ("step-d", "prefill_s", "step_phase_accounting"),
+        ):
+            for operation in ("delete", "null", "string", "plus", "minus"):
+                def edit(_bundle, receipt):
+                    holder = receipt["slot_detail"] if role == "step-d" else receipt
+                    if operation == "delete":
+                        del holder[field]
+                    else:
+                        value = holder[field]
+                        holder[field] = {"null": None, "string": str(value), "plus": value + 1, "minus": value - 1}[
+                            operation]
+
+                with self.subTest(field=field, operation=operation):
+                    self.audit_case(lambda case: self.run_gate_regression(case, role, edit, reason))
+
+    def test_audit3_decode_ends_are_ordered_and_attributed(self):
+        for operation in ("delete", "duplicate", "identity", "reorder", "shift", "truncate"):
+            with self.subTest(operation=operation):
+                self.audit_case(lambda case: self.run_gate_regression(
+                    case, "d-bank-benign-s1", lambda bundle, _: self.edit_decode_end(bundle, operation),
+                    "bundle_binding" if operation == "truncate" else "turn_boundary_recompute"))
+
+    def test_recomputed_decisions_require_their_raw_inputs(self):
+        def field_edit(source, keys, operation, transform=None):
+            def edit(bundle, _):
+                path = bundle / source
+                is_lines = path.suffix == ".jsonl"
+                records = [json.loads(line) for line in path.read_bytes().splitlines()] if is_lines else [
+                    json.loads(path.read_bytes())]
+                parent = records[0]
+                for key in keys[:-1]:
+                    parent = parent[key]
+                field = keys[-1]
+                if operation == "delete":
+                    del parent[field]
+                else:
+                    parent[field] = transform(parent[field])
+                path.write_bytes(b"".join(map(json_bytes, records)))
+            return edit
+
+        def budget_edit(field, operation, perturb):
+            def edit(bundle, receipt):
+                field_edit("outputs/align_episode.json", ("hardware", "token_budget", field),
+                           operation, perturb)(bundle, receipt)
+                field_edit("metadata.json", ("workload_provenance", "episode_outcome", "token_budget", field),
+                           operation, perturb)(bundle, receipt)
+            return edit
+
+        bank_kind = "d-bank-benign-s1"
+        episode = "outputs/align_episode.json"
+        observations = (
+            ("turn clock", "outputs/align_turns.jsonl", ("clock_mapping", "offset_ns"), lambda value: value + 1,
+             "turn_boundary_recompute"),
+            ("admission limit", episode, ("hardware", "context_limits", "max_position_embeddings"),
+             lambda value: 1, "admission_recompute"),
+            ("deadman at turn return", episode, ("hardware", "token_budget", "deadline_ns"),
+             lambda _: 1, "admission_recompute"),
+        )
+        for decision, source, keys, perturb, reason in observations:
+            for operation in ("delete", "perturb"):
+                with self.subTest(decision=decision, operation=operation):
+                    self.audit_case(lambda case: self.run_gate_regression(
+                        case, bank_kind, field_edit(source, keys, operation, perturb), reason))
+        for field, perturb in (("decode_tokens_used", lambda value: value + 1),
+                               ("stop_reason", lambda _: "episode_returned:3")):
+            for operation in ("delete", "perturb"):
+                with self.subTest(field=field, operation=operation):
+                    self.audit_case(lambda case: self.run_gate_regression(
+                        case, bank_kind, budget_edit(field, operation, perturb), "episode_budget_recompute"))
+        self.audit_case(lambda case: self.run_gate_regression(
+            case, bank_kind, lambda bundle, _: self.remove_gate_entry_readings(bundle, 7, "G1"),
+            "release_conditions"))
+
+    def rl186_gate(self, *, missing=()):
+        from joulewise.align.apple import thermal_gates as gates
+
+        ns = pc.NS
+        configured = rt.load_config(self.attempt.config)[0]
+        sensors = rt.sensors_policy(configured)
+        start, end = 60 * ns, 69 * ns
+        journal = self.journal(sensors, [("reading", t * ns, (35.0, 35.0)) for t in range(400)
+                                         if t not in missing])
+        samples = gates.sample_rows(journal)
+        interval = {
+            "kind": "G0", "outcome": "released", "start_ns": start, "end_ns": end,
+            "exit_sample_ns": end, "release": dict(fast_c=35.0, slow_c=35.0),
+            "reference": dict(fast_c=35.0, slow_c=35.0),
+            "entry_sensors": samples[next(i for i, row in enumerate(samples) if row["monotonic_ns"] == start)][
+                "sensors"],
+            "entry_slope_c_per_min": 0.0, "slope_c_per_min": 0.0,
+        }
+        policy = {"sensors": sensors, "delta_fast_c": 1.0, "delta_slow_c": 1.0,
+                  "g0_cap_s": 1200, "turn_cap_s": 30}
+        return journal, interval, policy
+
+    @staticmethod
+    def rl186_findings(journal, interval, policy, deadline=None):
+        return {(row.field, row.reason) for row in pc._gate_findings(
+            "d-bank-benign-s1", journal, [interval], (interval["reference"], interval["reference"]),
+            policy, deadline)}
+
+    def test_rl186_gate_word_counterexample_and_coverage_monotonicity(self):
+        ns = pc.NS
+        journal, interval, policy = self.rl186_gate(missing=range(7, 13))
+        findings = self.rl186_findings(journal, interval, policy)
+        self.assertIn(("U1", "evidence_unverifiable"), findings)
+        good, _, _ = self.rl186_gate(missing=range(7, 11))
+        self.assertFalse(self.rl186_findings(good, interval, policy))
+        damaged, _, _ = self.rl186_gate(missing=range(7, 14))
+        self.assertIn(("U1", "release_conditions"), self.rl186_findings(damaged, interval, policy))
+        from joulewise.align.apple.thermal_gates import _window_coverage, sample_rows
+
+        keys = tuple(policy["sensors"][role] for role in ("s_fast", "s_slow"))
+        for source in (journal, good, damaged):
+            reads = sample_rows(source)
+            for instant in (60 * ns, 60 * ns + 200_000_000, 69 * ns):
+                visible = [row for row in reads if row["monotonic_ns"] <= instant]
+                full = _window_coverage(visible, instant, keys)["sample_fraction"]
+                for index in range(len(visible)):
+                    fewer = visible[:index] + visible[index + 1:]
+                    self.assertLessEqual(_window_coverage(fewer, instant, keys)["sample_fraction"], full)
+
+    def test_rl186_release_witness_mutations(self):
+        ns = pc.NS
+        journal, interval, policy = self.rl186_gate()
+        deadline = 100 * ns
+        self.assertFalse(self.rl186_findings(journal, interval, policy, deadline))
+
+        def change_status(rows, begin, end, edit):
+            for row in rows:
+                instant = row["started"]["monotonic_ns"]
+                if row["kind"] == "reading" and begin * ns <= instant <= end * ns:
+                    edit(row["values"]["status"])
+
+        operations = (
+            ("U2", "evidence_unverifiable",
+             lambda j, i, p: change_status(j, 50, 59, lambda status: status.clear()), deadline),
+            ("U3", "evidence_unverifiable", lambda j, i, p: p.update(g0_cap_s=10), deadline),
+            ("U4", "evidence_unverifiable", lambda j, i, p: None, 65 * ns),
+            ("N1", "release_sample", lambda j, i, p: i["release"].update(fast_c=MARKER), deadline),
+            ("N2", "evidence_unverifiable", lambda j, i, p: i.update(exit_sample_ns=67 * ns), deadline),
+            ("N3", "release_conditions",
+             lambda j, i, p: change_status(j, 64, 64, lambda status: status.update(os_level=MARKER)), deadline),
+            ("N4", "evidence_unverifiable",
+             lambda j, i, p: change_status(j, 64, 64, lambda status: status.update(pm_observed_ns=61 * ns)), deadline),
+            ("N5.exit_slope", "evidence_unverifiable",
+             lambda j, i, p: i.update(slope_c_per_min=MARKER), deadline),
+            ("N5.entry_slope", "evidence_unverifiable",
+             lambda j, i, p: i.update(entry_slope_c_per_min=MARKER), deadline),
+            ("N5.entry_sensors", "evidence_unverifiable",
+             lambda j, i, p: i.update(entry_sensors={}), deadline),
+        )
+        for clause, reason, mutate, due in operations:
+            with self.subTest(clause=clause):
+                changed_journal, changed_interval, changed_policy = deepcopy((journal, interval, policy))
+                mutate(changed_journal, changed_interval, changed_policy)
+                findings = pc._gate_findings(
+                    "d-bank-benign-s1", changed_journal, [changed_interval],
+                    (interval["reference"], interval["reference"]), changed_policy, due)
+                self.assertIn((clause, reason), {(e.field, e.reason) for e in findings})
+                self.assertNotIn(str(MARKER), json.dumps([e.finding() for e in findings]))
+        change_status(journal, 64, 64, lambda status: status.update(pm_observed_ns=62 * ns))
+        self.assertFalse(self.rl186_findings(journal, interval, policy, deadline))
+
+    def test_rl186_other_gate_words_and_clock_brackets(self):
+        ns = pc.NS
+        journal, interval, policy = self.rl186_gate()
+        bad = {**interval, "outcome": "unobserved", "end_ns": 360 * ns, "exit_sample_ns": 360 * ns}
+        self.assertIn(("unobserved", "evidence_unverifiable"), self.rl186_findings(journal, bad, policy))
+        missing, _, _ = self.rl186_gate(missing=range(7, 14))
+        bad["entry_slope_c_per_min"] = None
+        self.assertFalse(self.rl186_findings(missing, bad, policy))
+        self.assertIn(("unobserved_cap", "gate_outcome"),
+                      self.rl186_findings(missing, {**bad, "end_ns": 359 * ns}, policy))
+        shortened = {**policy, "g0_cap_s": 9.0}
+        timeout = {**interval, "outcome": "timeout"}
+        self.assertIn(("timeout", "gate_outcome"), self.rl186_findings(journal, timeout, shortened))
+        hot = deepcopy(journal)
+        sensor = policy["sensors"]["s_fast"]
+        for row in hot:
+            if row["kind"] == "reading":
+                row["values"]["sensors"][sensor] = 42.0
+        self.assertFalse(self.rl186_findings(hot, {**timeout, "entry_sensors": hot[61]["values"]["sensors"]},
+                                             shortened))
+        deadman = {**interval, "outcome": "deadman"}
+        self.assertFalse(self.rl186_findings(journal, deadman, policy, 65 * ns))
+        self.assertIn(("deadline", "gate_outcome"), self.rl186_findings(journal, deadman, policy, 70 * ns))
+        for start, end, expired, verdict in (
+            (1, 9, False, None), (1, 10, False, "evidence_unverifiable"),
+            (10, 11, False, "admission_recompute"), (1, 10, True, None), (1, 9, True, "admission_recompute"),
+        ):
+            with self.subTest(start=start, end=end, expired=expired):
+                if verdict:
+                    with self.assertRaisesRegex(pc.EvidenceFailure, verdict):
+                        pc._check_clock_decision("step-d", start, end, 10, "deadman", expired=expired)
+                else:
+                    pc._check_clock_decision("step-d", start, end, 10, "deadman", expired=expired)
+
+    def test_rl186_step_wall_rearm_context_and_gate_stamps(self):
+        def mutate_gate_stamp(bundle, _):
+            path = bundle / "events.jsonl"
+            rows = [json.loads(line) for line in path.read_bytes().splitlines()]
+            event = next(row for row in rows if row["phase"] == "align_thermal_gate")
+            event["metadata"]["entry_stamp"]["monotonic_before_ns"] += 1
+            path.write_bytes(b"".join(map(json_bytes, rows)))
+
+        def rearm(bundle, _):
+            for name, keys in (("outputs/align_episode.json", ("hardware", "token_budget")),
+                               ("metadata.json", ("workload_provenance", "episode_outcome", "token_budget"))):
+                path = bundle / name
+                record = json.loads(path.read_bytes())
+                budget = record
+                for key in keys:
+                    budget = budget[key]
+                budget["deadline_origin"] = "G0_entry"
+                path.write_bytes(json_bytes(record))
+
+        def reject_context(bundle, receipt):
+            for name, keys in (("outputs/align_episode.json", ()),
+                               ("metadata.json", ("workload_provenance",))):
+                path = bundle / name
+                record = json.loads(path.read_bytes())
+                target = record
+                for key in keys:
+                    target = target[key]
+                target["flags"].append("episode.context_limit:1")
+                path.write_bytes(json_bytes(record))
+            receipt["episode_flags"].append("episode.context_limit:1")
+
+        cases = (
+            ("wall", lambda b, r: r["slot_detail"].update(member_wall_s=0), "step_wall_bracket"),
+            ("wall_derived", lambda b, r: r["slot_detail"].update(
+                member_wall_s=r["slot_detail"]["member_wall_s"] + 1), "step_phase_accounting"),
+            ("budget", lambda b, r: r["slots"].update(B_D=r["slots"]["B_D"] + 1024), "step_phase_accounting"),
+            ("rearm", rearm, "evidence_unverifiable"),
+            ("rejected_context", reject_context, "evidence_unverifiable"),
+            ("N6", mutate_gate_stamp, "gate_journal_disagreement"),
+        )
+        for case, mutate, reason in cases:
+            with self.subTest(case=case):
+                self.audit_case(lambda test: self.run_gate_regression(test, "step-d", mutate, reason))
+
+    def test_rl186_archive_replays_with_names_and_counts(self):
+        self.assertEqual(self.run_launcher(), 0)
+        output = self.attempt.output
+        before = (output / "evidence_ledger.jsonl").read_bytes()
+        reported = pc.replay_archived(output, self.attempt.config)
+        self.assertEqual(reported["binding"], "archived_custody")
+        self.assertEqual((reported["verdict"], reported["failing_checks"]), ("pass", []), reported)
+        self.assertEqual(len(reported["gate_counts"]), 6)
+        self.assertTrue(all(gate["U1"] == gate["N4"] == 0 for gate in reported["gate_counts"]))
+        self.assertNotIn(str(MARKER), json.dumps(reported))
+        self.assertEqual((output / "evidence_ledger.jsonl").read_bytes(), before)
+
+        def damaged(test):
+            self.run_gate_regression(test, "d-bank-benign-s1",
+                                     lambda bundle, _: self.remove_gate_entry_readings(bundle, 6),
+                                     "evidence_unverifiable")
+            report = pc.replay_archived(test.attempt.output, test.attempt.config)
+            self.assertEqual(report["verdict"], "other_failure")
+            self.assertEqual(report["failing_checks"], ["U1", "evidence_unverifiable"])
+            bank_g0 = next(gate for gate in report["gate_counts"]
+                           if gate["role"] == "d-bank-benign-s1" and gate["gate"] == "G0")
+            self.assertGreater(bank_g0["U1"], 0)
+            self.assertNotIn(str(MARKER), json.dumps(report))
+
+        self.audit_case(damaged)
 
     def test_sealed_phase_receipts_must_match_frozen_reduction_on_d_and_x(self):
         operations = ("control", "missing", "empty", "null", "wrong-type", "plus", "minus")
