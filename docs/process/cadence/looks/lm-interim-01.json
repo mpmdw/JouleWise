@@ -37,7 +37,9 @@
     "RL-172a",
     "RL-174",
     "RL-179 F12",
-    "RL-180"
+    "RL-180",
+    "RL-181 §5",
+    "RL-183 §2.4"
   ],
   "when": {
     "after_desk_final": [
@@ -505,7 +507,7 @@
     "code": [
       {
         "path": "joulewise/cadence_looks/fit_interim.py",
-        "sha256": "f67038cc7d829065f14edf665c56c39b0f2bffff07a3a5cf5ac2846016058ad5"
+        "sha256": "dfec361edbc7497f16ae3a1b0f2b6bd474baa64b3b2454751541aa52d1cc36ca"
       },
       {
         "path": "joulewise/cadence_looks/inclusion_34.py",
@@ -525,11 +527,11 @@
       },
       {
         "path": "scripts/cadence_look_run.py",
-        "sha256": "4a7448d0b8fa94fcf5fdd4fd0b0c01cd83a6f2fe88c8189501825096855bca5e"
+        "sha256": "0846a8a32a43aaefb3ab745840ffa4eb192299408b785c34de5b1cef434694ab"
       },
       {
         "path": "scripts/cadence_look_manifest.py",
-        "sha256": "f3943ca6312f782fb4cdac031e0ef933323423fa8b4b44fb2041febbb6f976cf"
+        "sha256": "797fe60a014e9300652545a51831fedb63dd2935382c7ccb856ffc001ed8a40d"
       },
       {
         "path": "joulewise/cadence_looks/schema_check.py",
@@ -537,7 +539,11 @@
       },
       {
         "path": "joulewise/cadence_looks/interim_release.py",
-        "sha256": "eab58aa65560c9c1784ed86baadab7add051e7e4fe5726ff2cf4e68f10785de5"
+        "sha256": "b8211466f22315b8e5e4136f0fab9dc9b9e54ea87811cc55cb95b065f1ed9d02"
+      },
+      {
+        "path": "joulewise/cadence_looks/interim_twin.py",
+        "sha256": "e599993f3540b00d9737413bf364f5ba466f779d9008a516a7aa3a50b74c52b6"
       }
     ],
     "runtime": "Python standard library plus numpy, no scipy, run with -I. Stage 2 refuses, before the first energy read, unless its numpy version equals the one in the committed stage-1 output.",
@@ -832,7 +838,7 @@
       },
       {
         "path": "joulewise/cadence_looks/manifest.py",
-        "sha256": "16703ef25daed6aaf1f4c655a1abc2a8db7ce40a9e82a19557b004783fbe2b02"
+        "sha256": "e59920c39c1a834e988f67a0536d8fb5de3e222948ea5b0a60d883589a4a9bb1"
       },
       {
         "path": "joulewise/desk_compress.py",
@@ -878,7 +884,10 @@
         "RL-173"
       ]
     },
-    "twin": null
+    "twin": {
+      "path": "scripts/cadence_interim_twin.py",
+      "sha256": "aa041772d45bc955aba999721cfdea4b9776875ca635449fd0ff60593a5ba22a"
+    }
   },
   "inclusion": {
     "rules": [
@@ -1247,7 +1256,7 @@
     "seats": 1,
     "lead_checks_output_against_schema": true,
     "custody_copy": "One verified custody copy of the roster's spans by the existing offload tooling, made while the MBP is unarmed; the look runs on that copy, never on the MBP's measurement root.",
-    "host": "The committed LOOKS.json row binds one execution_host using the campaign receipt host id. A host change requires a new ledger row and confirmation that the first host has no reservation.",
+    "host": "The committed LOOKS.json row binds one execution_host using the campaign receipt host id. Non-synthetic stage 2 refuses pending confirmation of the receipt identifier and local derivation at the RL-183 manifest cold pass. A host change requires a new ledger row and confirmation that the first host has no reservation.",
     "no_import_by": [
       "scripts/cadence_legs_runner.py",
       "scripts/cadence_leg_runtime.py",
@@ -1269,7 +1278,7 @@
       "RL-179 F12",
       "RL-180 §1"
     ],
-    "pin_check": "Stage 1 and stage 2 verify the repository pins, stage-1 roster and verdict commitments, and the committed LOOKS.json row. Stage 2 checks its host, both registered roots, the hold rulings, prior execution history and the twin pins before reserving RESTRICTED/ by exclusive mkdir. Stage 2 redirects stdout and stderr into RESTRICTED/ before opening a response file. An interrupted reservation spends the id. Only PUBLIC.json leaves custody; a failed execution emits the two-line RL-180 notice."
+    "pin_check": "Stage 1 and stage 2 verify the repository pins, stage-1 roster and verdict commitments, and the committed LOOKS.json row. Stage 2 checks its host, both registered roots, the hold rulings, prior execution history and the twin pins before reserving RESTRICTED/ by exclusive mkdir. Stage 2 redirects stdout and stderr into RESTRICTED/ before opening a response file. An interrupted reservation spends the id and is recorded as interrupted with error_type none_recorded (RL-183). The parent captures both streams from the pinned isolated twin and adjudicates the stdout frame after writing the coefficient file (RL-181). A delivered RL-180 failure notice is recorded as failed with its closed type."
   },
   "review": {
     "cold_seat": "Mythos 5.2: the design attack on RL-166 Q1 to Q4 (Sun 10:00), then a fresh Mythos seat's cold review of the manifest, rules 3 and 4, the step 3 adapter and the fit code against RL-149 §2.6 and §2.7 as amended, with Q6's and Q11's checks (Mon 14:00). Neither wrote any of the code.",

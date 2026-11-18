@@ -1,5 +1,11 @@
 # JouleWise Run State
 
+PR #795 twin adoption (2026-11-18) installs the #816 reader pin and the
+RL-181 parent handshake. The spent-ID ledger records RL-183 interruptions.
+Production admission awaits host-identifier confirmation, and the pinned
+reader needs review against the runner's nested bundle locators. The next
+step is the Astra cold audit. [Adoption report](docs/run_reports/2026-11-18-pr795-twin-adoption.md).
+
 PR #795 frozen-spec build (2026-11-18) applies RL-179 F-12 and RL-180 to
 `lm-interim-01`. Stage 2 has one reservation and a closed public report.
 An independent cadence twin is still needed before the manifest can be

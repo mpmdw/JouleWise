@@ -1,5 +1,11 @@
 [
   {
+    "file": "joulewise/cadence_looks/interim_twin.py",
+    "locator": "run:35d6d8c5fa38fb6b",
+    "command": "python-isolated",
+    "seam": "The stage-2 preflight verifies the twin path and hash. Synthetic release tests run the pinned reader on generated inputs and inject child failures through subprocess.run."
+  },
+  {
     "file": "scripts/run_align_r1_smoke.py",
     "locator": "ac_power:541443a289d468bd",
     "command": "pmset",

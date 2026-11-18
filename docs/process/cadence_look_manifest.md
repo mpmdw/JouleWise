@@ -6,7 +6,7 @@ Branch `align/2026-11-14-look-manifest`, off `align/2026-11-14-kit-v1-1` at `9cb
 
 The look manifest is a draft. RL-166 ruled the first draft's twenty open questions in one
 batch; RL-166a to RL-166c and RL-167 followed; RL-179 F-12 and RL-180 define the release contract. The manifest `lm-interim-01` carries every value those
-rulings fixed. The checked-in code and schemas are pinned. The independent cadence twin still needs a path and hash.
+rulings fixed. The checked-in code and schemas are pinned, including the independently authored reader from PR #816.
 The validator refuses a committed manifest (`status: committed`) that still carries a placeholder. The form may change
 until the manifest is committed (RL-166 §2 item 11, Tue 06:00). After that, any change needs a ruling and a
 new manifest id.
@@ -229,20 +229,22 @@ The committed `LOOKS.json` row supplies `execution_host`, `public_root`
 (repository-relative), `custody_root` (absolute), and any `holds_cleared` ruling
 ids. Establish the two look directories before running. They must be on the
 same filesystem so stage 2 can publish the complete report by atomic rename
-without creating a public temporary file. The operator compares the host
-binding with the campaign receipt identity before registering it.
+without creating a public temporary file. The lead must confirm the campaign receipt field and its local derivation at the
+manifest cold pass. Production admission stays closed while this confirmation is pending.
 
 Stage 2 checks pins, host, stage-1 commitments, hold clearances, rank, and prior
 execution history. Its exclusive creation of `RESTRICTED/` consumes the id.
-The primary fit, Step 3 and the twin share this reservation. An existing
+The primary fit, Step 3 and the pinned isolated twin share this reservation. The parent derives the comparison word from the child frame and the stored primary artifacts. An existing
 reservation or report prevents another execution. After an interruption, a
 successor manifest needs a named research-lead ruling.
 
 `cadence_look_manifest.py row --output` reads the registered `PUBLIC.json` and
 records its digest and the coefficient commitment. `row --error-type` records
-the closed error word from the fixed failure notice. Both operations use
-public records only. The evidence and six fixed private names are described
-in the [fit interface](cadence_look_fit_interface.md#4-stage-2-fit-and-public-report).
+the closed error word from the fixed failure notice. After confirming a
+reservation ended without a notice or completed report, the lead uses
+`row --interrupted` to record `interrupted` and `none_recorded`. These
+operations use public records only. See the six private names in the
+[fit interface](cadence_look_fit_interface.md#4-stage-2-fit-and-public-report).
 
 ## 6. RL-166b (the Mythos attack on the fit form), as the manifest carries it
 
@@ -275,7 +277,8 @@ in the [fit interface](cadence_look_fit_interface.md#4-stage-2-fit-and-public-re
 
 ## 7. Remaining authorization
 
-The manifest remains draft. A separate independent cadence twin that reads
-the campaign layout needs to be specified, pinned and audited. The
-research lead confirms the host binding and runs the cold pass after the
-synthetic build. The prior round reports preserve the development history.
+The manifest remains draft. The research lead confirms the host binding at
+the cold pass. The pinned reader accepts a one-component bundle locator and
+refuses a nested locator under `runs/`. The custody-layout check needs a
+reviewed reader and corresponding pin that support the producer's layout.
+The prior round reports preserve the development history.

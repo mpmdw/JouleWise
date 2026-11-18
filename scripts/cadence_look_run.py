@@ -45,7 +45,7 @@ import sys
 import tempfile
 import uuid
 import socket
-import traceback
+import time
 
 sys.dont_write_bytecode = True
 # An unused cache prefix forces source compilation, and -B prevents writes there.
@@ -945,12 +945,13 @@ def cmd_stage2(a, *, keep_redirected=False):
     prepared = F.stage2_preflight(s1)
     stage2_energy_preflight(s1, a)
     validate_execution_row(row, s1, a.custody)
-    twin = require_twin_runner(doc)
+    twin_path = require_twin_runner(doc)
     try:
         restricted, public = release.destinations(ROOT, row)
     except (OSError, ValueError) as exc:
         raise F.LookInputError(str(exc)) from None
-    sdir_of = span_dirs(a.custody, a.span_dir) if a.custody else None
+    overrides = stage2_overrides(a.span_dir, s1)
+    sdir_of = span_dirs(a.custody, (f"{sid}={path}" for sid, path in overrides)) if a.custody else None
     if sdir_of is not None:
         ids = [leg["span_id"] for leg in s1["legs"] if leg["included"] and leg["role"] == "fit" and
                leg["leg_type"] == "A"]
@@ -963,8 +964,10 @@ def cmd_stage2(a, *, keep_redirected=False):
 
     def execute():
         finish_stage2(a, s1, prepared, doc, commit, manifest_sha, restricted, public, public_schema,
-                      coefficients_schema, sdir_of, twin, ledger_gate=ledger_gate)
+                      coefficients_schema, sdir_of, twin_path, ledger_gate=ledger_gate, overrides=overrides,
+                      deadline=deadline)
 
+    deadline = time.monotonic() + doc["stages"]["stage2"]["time_budget_s"]
     try:
         return release.run_reserved(restricted, execute, linear_algebra_error=F.np.linalg.LinAlgError,
                                     keep_redirected=keep_redirected)
@@ -973,8 +976,12 @@ def cmd_stage2(a, *, keep_redirected=False):
 
 
 def validate_execution_row(row, stage1, custody):
+    if stage1["synthetic"] is not True:
+        raise F.LookInputError("stage 2: production host identity awaits the manifest cold pass (RL-183)")
     host = row.get("execution_host")
-    if not host or host != socket.gethostname():
+    if not host:
+        raise F.LookInputError("stage 2: register the execution_host before reservation")
+    if host != socket.gethostname():
         raise F.LookInputError("stage 2: execution_host does not match this host")
     if not row.get("custody_root") or not row.get("public_root"):
         raise F.LookInputError("stage 2: register both look roots in the ledger")
@@ -986,15 +993,56 @@ def validate_execution_row(row, stage1, custody):
         raise F.LookInputError("stage 2: the committed stage-1 flags and ledger clearing rulings differ")
 
 
+def stage2_overrides(pairs, stage1):
+    registered = {span["span_id"] for span in stage1["roster"]["spans"]}
+    overrides = {}
+    for pair in pairs:
+        sid, separator, location = pair.partition("=")
+        if not separator or not location or sid not in registered or sid in overrides:
+            raise F.LookInputError("stage 2: each span override must name a distinct roster span and directory")
+        overrides[sid] = Path(location).resolve()
+    if len(set(overrides.values())) != len(overrides):
+        raise F.LookInputError("stage 2: span overrides must identify distinct directories")
+    return tuple(sorted(overrides.items()))
+
+
 def require_twin_runner(doc):
-    """Refuse before reservation until the independent cadence reader and its adapter are specified."""
-    if not doc["fit"].get("twin"):
+    """Bind the child to the exact repository path and manifest digest before reservation."""
+    pin = doc["fit"].get("twin")
+    if not pin:
         raise F.LookInputError("stage 2: RL-180 requires the independent twin path and sha256")
-    raise F.LookInputError("stage 2: NEEDS_SPEC for the pinned cadence twin's invocation and result contract")
+    path = ROOT / pin["path"]
+    if path.resolve() != path or not path.is_relative_to(ROOT) or not path.is_file():
+        raise F.LookInputError("stage 2: the pinned twin script is missing from its canonical repository path")
+    if sha256_file(path) != pin["sha256"]:
+        raise F.LookInputError("stage 2: the twin sha256 differs from the manifest pin")
+    return path
+
+
+def _bind_override_files(inventory, overrides):
+    """Use the same overridden spans in the child's inventory and its reader."""
+    for entry in inventory["files"]:
+        sid, _, relative = entry["path"].partition("/")
+        if sid in overrides:
+            entry["path"] = str(overrides[sid] / relative)
+
+
+def run_twin(twin_path, a, stage1, fit, step3, coefficients, *, doc, commit, manifest_sha, coefficient_sha,
+             restricted, deadline, overrides):
+    from joulewise.cadence_looks import interim_twin
+
+    if fit["custody"] is None:
+        return {"agreement": "not_evaluable"}  # the synthetic level-E fixture has no raw inputs for the twin
+    if twin_path.resolve() != twin_path or not twin_path.is_file() or sha256_file(twin_path) != doc["fit"]["twin"]["sha256"]:
+        return {"agreement": "not_evaluable"}
+    return interim_twin.run(twin_path, manifest=a.manifest, manifest_sha=manifest_sha, commit=commit,
+                            stage1_path=a.stage1, stage1_sha=a.stage1_sha256, custody=a.custody, overrides=overrides,
+                            restricted=restricted, coefficient_sha=coefficient_sha, deadline=deadline,
+                            stage1=stage1, coefficients=coefficients, fit=fit, step3=step3)
 
 
 def finish_stage2(a, stage1, prepared, doc, commit, manifest_sha, restricted, public, public_schema,
-                  coefficients_schema, sdir_of, twin, *, ledger_gate=None):
+                  coefficients_schema, sdir_of, twin_path, *, ledger_gate=None, overrides=(), deadline=None):
     """The fit, Step 3, coefficient commitment, and comparison share the same reservation."""
     from joulewise.cadence_looks import step3_roster as S3
 
@@ -1009,8 +1057,9 @@ def finish_stage2(a, stage1, prepared, doc, commit, manifest_sha, restricted, pu
         energy, files = read_segment_energy(stage1, sdir_of, gpu_max_gap_s=gpu_gap_rule(doc), span_times=span_times)
         custody = {"root": str(Path(a.custody).resolve()),
                    "span_dirs": [{"span_id": sid, "path": str(Path(path).resolve())}
-                                 for sid, path in sorted(x.split("=", 1) for x in a.span_dir or [])],
+                                 for sid, path in overrides],
                    "files": files}
+        _bind_override_files(custody, dict(overrides))
     fit = F.stage2(stage1, a.stage1_sha256, energy, code_hashes(), _prepared=prepared)
     fit.update(custody=custody, soak_retries=stage1["soak_retries"], manifest_sha256=manifest_sha,
                allow_draft=ledger_gate is None, ledger_gate=ledger_gate)
@@ -1020,6 +1069,7 @@ def finish_stage2(a, stage1, prepared, doc, commit, manifest_sha, restricted, pu
     step3 = S3.run_roster(entries, threshold=threshold)
     if sdir_of is not None:
         step3["custody"] = S3.custody_record(a.custody, a.span_dir, entries, sdir_of, stage1)
+        _bind_override_files(step3["custody"], dict(overrides))
         step3_files = {entry["path"]: entry["sha256"] for entry in step3["custody"]["files"]}
         for entry in custody["files"]:
             path = entry["path"]
@@ -1034,24 +1084,17 @@ def finish_stage2(a, stage1, prepared, doc, commit, manifest_sha, restricted, pu
     coefficient_sha = sha256_file(coefficient_path)
     verdict = fit["qualified_interim_half"]["verdict"]
     drift = step3["tripwire"]["decision"]
-    try:
-        comparison = twin(a, stage1, fit, step3, coefficients)
-        agreement = comparison["agreement"]
-        if agreement not in release.THREE_WAY:
-            raise ValueError("invalid twin comparison")
-        comparison_bytes = F.dump(comparison)
-    except Exception:
-        traceback.print_exc()
-        agreement = "not_evaluable"
-        comparison_bytes = F.dump({"agreement": agreement})
-    release.write_private(restricted / "twin.json", comparison_bytes)
+    comparison = run_twin(twin_path, a, stage1, fit, step3, coefficients, doc=doc, commit=commit,
+                          manifest_sha=manifest_sha, coefficient_sha=coefficient_sha, restricted=restricted,
+                          deadline=deadline, overrides=overrides)
     if sha256_file(coefficient_path) != coefficient_sha:
         raise F.LookInputError("the stored coefficient bytes changed during the twin comparison")
+    release.write_private(restricted / "twin.json", F.dump(comparison))
     if {child.name for child in restricted.iterdir()} != release.PRIVATE_NAMES:
         raise F.LookInputError("stage 2: unexpected private artifact names")
     release.sync_directory(restricted)
     expected = release.public_record(doc["look_id"], manifest_sha, commit, stage1, a.stage1_sha256, coefficient_sha,
-                                     verdict, drift, agreement)
+                                     verdict, drift, comparison["agreement"])
     release.write_public(public, restricted, expected, public_schema, expected=expected)
 
 
@@ -1074,7 +1117,7 @@ def stage2_energy_preflight(s1, a):
     problems = M.stage1_problems(ROOT, doc, s1, sha256_file(mpath), allow_draft=a.allow_draft)
     if problems:
         raise F.LookInputError("the stage-1 file: " + "; ".join(problems))
-    if a.allow_draft and a.custody:
+    if s1["synthetic"] is True and a.custody:
         sdir_of = span_dirs(a.custody, a.span_dir)
         for sp in s1["roster"]["spans"]:
             if _json(sdir_of(sp["span_id"]) / "runner_receipt.json").get("synthetic") is not True:
@@ -1082,6 +1125,7 @@ def stage2_energy_preflight(s1, a):
     importlib.import_module("joulewise.external.km003c_parse")
     importlib.import_module("joulewise.cadence_looks.step3_energy_ratios")
     importlib.import_module("joulewise.cadence_looks.step3_roster")
+    importlib.import_module("joulewise.cadence_looks.interim_twin")
     _guard_loaded(doc)
 
 

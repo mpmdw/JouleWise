@@ -29,7 +29,7 @@ BUILTIN_ERRORS = {cls: name for name, cls in vars(builtins).items()
                   if isinstance(cls, type) and issubclass(cls, BaseException)
                   and cls.__module__ == "builtins" and cls.__name__ == name}
 ERROR_TYPES = frozenset((*BUILTIN_ERRORS.values(), "LinAlgError", "JSONDecodeError", "OtherError"))
-SPENT_STATUSES = frozenset(("run", "frozen", "failed"))
+SPENT_STATUSES = frozenset(("run", "frozen", "failed", "interrupted"))
 FAILURE_STATUS = 1
 PRIVATE_NAMES = frozenset(("coefficients.json", "fit.json", "step3.json", "twin.json", "stdout", "stderr"))
 

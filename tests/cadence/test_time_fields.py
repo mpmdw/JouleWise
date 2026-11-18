@@ -973,10 +973,14 @@ class CustodyBinding(unittest.TestCase):
                 want.add(f"{L['span_id']}/hazards/meter/stream-0001.jsonl")
         for sid in {L["span_id"] for L in self.s1["legs"] if L["in_energy_fit"]}:
             want.update(f"{sid}/{rel}" for rel in M.nonenergy_files(sdir_of(sid)))
-        self.assertEqual({f["path"] for f in cust["files"]}, want)
-        for f in cust["files"]:
-            sid, rest = f["path"].split("/", 1)
-            self.assertEqual(f["sha256"], R.sha256_file(sdir_of(sid) / rest))
+        recorded = {Path(f["path"]): f["sha256"] for f in cust["files"]}
+        expected = {}
+        for path in want:
+            sid, rest = path.split("/", 1)
+            source = sdir_of(sid) / rest
+            key = source if sid == "dev-01-s02" else Path(path)
+            expected[key] = R.sha256_file(source)
+        self.assertEqual(recorded, expected)
 
     def test_changed_operational_sources_refuse_before_later_readers(self):
         lid = self.L["leg_key"].split("/")[1]

@@ -444,8 +444,13 @@ status.
 
 The private fit retains every day's diagnostics and pooled errors. Residual
 arrays follow stage-1 roster order for the relevant fit. The primary fit and
-Step 3 complete before stage 2 stores and hashes the coefficient bytes. The
-independent twin is pending and stage 2 refuses without it.
+Step 3 complete before stage 2 stores and hashes the coefficient bytes. The parent launches the verified independent reader once with `-I -B` and
+the registered inputs. It authenticates the frame's primary projection,
+recomputes agreement and the relative maxima, and rechecks the coefficient
+hash before publication. Captured stdout, stderr and the comparison stay in
+custody. A child failure or incomplete frame yields `not_evaluable` on a
+completed primary report. Production admission awaits the receipt-host
+confirmation and the reader's nested-locator check.
 
 RL-175 B.4 weights the standardized day means equally for the prefix-bias
 estimate and its 90% t interval.

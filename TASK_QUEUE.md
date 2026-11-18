@@ -1,5 +1,10 @@
 # JouleWise Task Queue
 
+PR #795 follow-up (2026-11-18), [AGENT]. Audit the pinned parent-child
+handshake and the interruption ledger. The manifest cold pass owns
+confirmation of the campaign host identifier and the nested-locator reader
+compatibility work. [Adoption report](docs/run_reports/2026-11-18-pr795-twin-adoption.md).
+
 PR #795 frozen-spec disposition (2026-11-18), [AGENT]. Review the
 draft head with Astra. The independent cadence twin and its pinned interface
 remain with the research lead before final manifest validation or execution.

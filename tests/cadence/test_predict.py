@@ -258,6 +258,7 @@ class Document(unittest.TestCase):
         co = F.write_coefficients(s1, s1_sha, fit, MANIFEST_SHA)
         fit["custody"]["root"] = "/relocated"
         fit["custody"]["span_dirs"] = [{"span_id": "span", "path": "/copy"}]
+        fit["custody"]["files"][0]["path"] = "/copy/source"
         fit["ledger_gate"] = {"commit": "later"}
         self.assertEqual(F.dump(co), F.dump(F.write_coefficients(s1, s1_sha, fit, MANIFEST_SHA)))
         fit["custody"]["files"][0]["sha256"] = "de" * 32

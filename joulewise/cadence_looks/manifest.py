@@ -44,7 +44,7 @@ SCHEMA = "joulewise.cadence_look_manifest.v1"
 LEDGER_SCHEMA = "joulewise.cadence_span_ledger.v1"
 LOOK_LEDGER_SCHEMA = "joulewise.cadence_look_ledger.v1"
 LOOK_LEDGER_PATH = "docs/process/cadence/looks/LOOKS.json"
-LOOK_LEDGER_STATUSES = ("draft", "committed", "stage1_committed", "run", "frozen", "superseded", "failed")
+LOOK_LEDGER_STATUSES = ("draft", "committed", "stage1_committed", "run", "frozen", "superseded", "failed", "interrupted")
 # What each status needs recorded, so that "committed" is checkable (Mythos cold seat 8).
 # verdicts_sha256: inclusion_34.py's verdict file, committed with the roster's hash before stage 1 runs, so stage 1
 # can authenticate both inputs (Mythos round-3 N8).
@@ -53,7 +53,7 @@ PUBLIC_RELEASE_STATEMENT = ("No number computed from energy is public before the
                             "The public outputs are at most sixteen words, counts that hold no energy, and hashes.")
 INTERIM_PREFIX_STATISTIC = "the mean of the day means; its 90 % t interval uses the same equal-day weights"
 _STAGE1_HASHES = ("roster_sha256", "verdicts_sha256", "stage1_sha256")
-LOOK_ROW_REQUIRES = {"stage1_committed": _STAGE1_HASHES, "failed": _STAGE1_HASHES,
+LOOK_ROW_REQUIRES = {"stage1_committed": _STAGE1_HASHES, "failed": _STAGE1_HASHES, "interrupted": _STAGE1_HASHES,
                      "run": (*_STAGE1_HASHES, "output_sha256", "coefficients_sha256"),
                      "frozen": (*_STAGE1_HASHES, "output_sha256", "coefficients_sha256")}
 
@@ -78,7 +78,7 @@ STEP3_SHA256 = "84a1a5530ab06e688b000c84f248b2c4e561e8330f37d3132ec47aa2572eb173
 STEP3_ADAPTER_PATH = "joulewise/cadence_looks/step3_roster.py"
 REQUIRED_CODE_PATHS = {"interim": {"joulewise/cadence_looks/fit_interim.py", "joulewise/cadence_looks/inclusion_34.py",
                                    STEP3_PATH, STEP3_ADAPTER_PATH, "scripts/cadence_look_run.py",
-                                   "joulewise/cadence_looks/interim_release.py",
+                                   "joulewise/cadence_looks/interim_release.py", "joulewise/cadence_looks/interim_twin.py",
                                    "scripts/cadence_look_manifest.py",
                                    "joulewise/cadence_looks/schema_check.py",
                                    "joulewise/cadence_looks/time_fields.py"}}   # RL-166 Q1; Sol N3; RL-173 E.1
@@ -1161,8 +1161,8 @@ def _relative_directory(path):
 def require_successor_ruling(doc, ledger):
     if "supersedes" in doc:
         failed = _look_row(ledger, doc["supersedes"])
-        if failed.get("status") != "failed" or not failed.get("ruling"):
-            raise ManifestError(["supersedes: the prior look needs a failed row and a research-lead ruling id"])
+        if failed.get("status") not in ("failed", "interrupted") or not failed.get("ruling"):
+            raise ManifestError(["supersedes: the prior look needs a failed or interrupted row and a research-lead ruling id"])
 
 
 def validate_look_ledger(doc, repo=None):
@@ -1207,10 +1207,13 @@ def validate_look_ledger(doc, repo=None):
         if st == "failed":
             if not isinstance(row.get("error_type"), str) or row["error_type"] not in release.ERROR_TYPES:
                 problems.append(f"{where}.error_type: the fixed RL-180 exception vocabulary")
-            if row.get("output_sha256") or row.get("coefficients_sha256"):
-                problems.append(f"{where}: a failed look has no output or coefficient commitment")
+        elif st == "interrupted":
+            if row.get("error_type") != "none_recorded":
+                problems.append(f"{where}.error_type: an interrupted look records none_recorded (RL-183)")
         elif "error_type" in row:
-            problems.append(f"{where}.error_type: only on a failed row")
+            problems.append(f"{where}.error_type: only on a failed or interrupted row")
+        if st in ("failed", "interrupted") and (row.get("output_sha256") or row.get("coefficients_sha256")):
+            problems.append(f"{where}: {st} look has no output or coefficient commitment")
         if "ruling" in row and (not isinstance(row["ruling"], str) or not RULING_ID_RE.fullmatch(row["ruling"])):
             problems.append(f"{where}.ruling: a ruling id")
         if not (isinstance(lid, str) and LOOK_ID_RE.fullmatch(lid)) or lid in seen:
@@ -1820,7 +1823,9 @@ def verify_pins(manifest_path, repo, *, allow_draft=False, running=(), ledger_re
             require_successor_ruling(doc, ledger)
             if row.get("sha256") != hashlib.sha256(raw).hexdigest():
                 problems.append("LOOKS.json does not name this manifest's sha256")
-            if row.get("status") not in COMMITTED_STATUSES:                 # Mythos N5
+            if row.get("status") in ("failed", "interrupted"):
+                problems.append(f"this manifest id is already spent ({row['status']})")
+            elif row.get("status") not in COMMITTED_STATUSES:                # Mythos N5
                 problems.append(f"LOOKS.json lists this look as {row.get('status')!r}, not committed")
         except (OSError, ValueError, ManifestError) as error:
             problems += [f"LOOKS.json: {p}" for p in getattr(error, "problems", [type(error).__name__])]
@@ -1830,6 +1835,9 @@ def verify_pins(manifest_path, repo, *, allow_draft=False, running=(), ledger_re
             continue
         pinned[path] = sha
         f = repo / path
+        if where == "fit.twin" and f.resolve() != f:
+            problems.append(f"{where}: {path} is not at its canonical repository path")
+            continue
         if not (isinstance(sha, str) and SHA_RE.fullmatch(sha)):
             problems.append(f"{where}: {path} has no pin")
         elif not f.is_file():

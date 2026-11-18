@@ -5,7 +5,8 @@
         [--repo DIR [--kit KIT.json ...]] [--span-ledger LEDGER.json [--roster-out ROSTER.json]] [--looks LOOKS.json]
     python3 -B scripts/cadence_look_manifest.py pin MANIFEST.json --repo DIR [--write]
     python3 -B scripts/cadence_look_manifest.py row --manifest MANIFEST.json --repo DIR
-        (--roster ROSTER.json --verdicts VERDICTS.json | --stage1 STAGE1.json) [--write]
+        (--roster ROSTER.json --verdicts VERDICTS.json | --stage1 STAGE1.json
+         | --output | --error-type TYPE | --interrupted) [--write]
 
 validate:
 * structure and ruling invariants always; ``--final`` treats it as committed (no placeholder left);
@@ -20,7 +21,8 @@ pin (draft manifests only): set the sha256 of every pinned file that exists in t
 the manifest's row in LOOKS.json. Prints the changes; writes only with ``--write``. A committed manifest
 is never re-pinned: it changes only by a ruling and a new manifest id (RL-166 section 2).
 
-row can also record the registered PUBLIC.json or the fixed RL-180 failure type.
+row records an execution from its public report or the delivered RL-180 failure type.
+Use --interrupted after confirming a reservation ended without a notice or completed report (RL-183).
 
 Exit 0 valid (a draft prints its open placeholders), 1 refused (every problem printed), 2 usage.
 """
@@ -29,6 +31,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 from pathlib import Path
 import sys
 
@@ -162,11 +165,17 @@ def row(args):
     elif r.get("sha256") != lm.sha256_file(args.manifest):
         problems.append("LOOKS.json's row does not name this manifest's sha256")
     changes = {}
-    if not problems and (args.output or args.error_type):
+    if not problems and (args.output or args.error_type or args.interrupted):
         if r.get("status") != "stage1_committed" or lm.look_spent(repo, doc["look_id"], "HEAD"):
             problems.append("only an unspent stage-1 commitment can record an execution outcome")
         elif args.error_type:
             changes = {"status": "failed", "error_type": args.error_type}
+        elif args.interrupted:
+            public_root = r.get("public_root")
+            if not public_root or os.path.lexists(repo / public_root / r["look_id"] / "PUBLIC.json"):
+                problems.append("an interrupted look needs a registered public root with no completed report")
+            else:
+                changes = {"status": "interrupted", "error_type": "none_recorded"}
         else:
             try:
                 changes = public_row(repo, r)
@@ -247,6 +256,7 @@ def main(argv=None):
     g.add_argument("--roster")
     g.add_argument("--output", action="store_true", help="record the registered public report and coefficient commitment")
     g.add_argument("--error-type", choices=sorted(release.ERROR_TYPES), help="record the second line of the fixed failure notice")
+    g.add_argument("--interrupted", action="store_true", help="attest a spent reservation with no notice or report")
     rw.add_argument("--verdicts")
     rw.add_argument("--write", action="store_true")
     args = p.parse_args(argv)

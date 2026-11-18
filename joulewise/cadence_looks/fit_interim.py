@@ -1537,8 +1537,17 @@ def fit_reproduction(fit_out):
     doc = _plain(fit_out)
     doc.pop("ledger_gate", None)
     if isinstance(doc.get("custody"), dict):
-        doc["custody"].pop("root", None)
-        doc["custody"].pop("span_dirs", None)
+        custody = doc["custody"]
+        custody.pop("root", None)
+        overrides = sorted(custody.pop("span_dirs", ()),
+                           key=lambda row: len(Path(row["path"]).parts), reverse=True)
+        for file in custody["files"]:
+            path = Path(file["path"])
+            for override in overrides:
+                span = Path(override["path"])
+                if path.is_absolute() and path.is_relative_to(span):
+                    file["path"] = f'{override["span_id"]}/{path.relative_to(span).as_posix()}'
+                    break
     return doc
 
 

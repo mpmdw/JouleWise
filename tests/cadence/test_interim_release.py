@@ -299,9 +299,17 @@ class LookExecution(unittest.TestCase):
         self.ledger.write_bytes(C.dump({"schema": M.LOOK_LEDGER_SCHEMA, "looks": [self.row]}))
 
     def stage2(self):
-        return MR.py(self.mini, "scripts/cadence_look_run.py", "stage2", "--stage1", self.stage1_path,
-                     "--stage1-sha256", self.stage1_sha, "--manifest", self.manifest_path, "--allow-draft",
-                     "--looks", self.ledger, "--energy", self.root / "must-not-be-opened")
+        from tests.cadence import test_look_run as cli_fixture
+
+        responses = self.root / "must-not-be-opened"
+        args = ["stage2", "--stage1", self.stage1_path, "--stage1-sha256", self.stage1_sha,
+                "--manifest", self.manifest_path, "--allow-draft", "--looks", self.ledger, "--energy", responses]
+        with cli_fixture.spy_opens() as opened:
+            code, stdout, stderr = cli_fixture._cli_subprocess(args, repo=self.mini)
+        self.assertNotIn(str(responses), opened)
+        self.assertFalse(self.private.exists())
+        self.assertFalse(self.public.exists())
+        return subprocess.CompletedProcess(args, code, stdout, stderr)
 
     def test_missing_twin_and_wrong_host_refuse_before_reservation(self):
         result = self.stage2()
@@ -313,13 +321,102 @@ class LookExecution(unittest.TestCase):
             draft["fit"]["twin"] = pin
             with self.assertRaisesRegex(M.ManifestError, "fit.twin"):
                 M.validate_manifest(draft, final=True)
-        self.row["execution_host"] = socket.gethostname() + "-mismatch"
+        for host, reason in ((None, "register the execution_host"), ("synthetic-wrong-host", "does not match")):
+            with self.subTest(host=host):
+                self.row.pop("execution_host", None)
+                if host is not None:
+                    self.row["execution_host"] = host
+                self.save_ledger()
+                result = self.stage2()
+                self.assertEqual(result.returncode, 2)
+                self.assertIn(reason, result.stderr)
+
+    def test_unconfirmed_production_host_cannot_reserve(self):
+        with self.assertRaisesRegex(R.F.LookInputError, "production host identity awaits"):
+            R.validate_execution_row(self.row, dict(self.stage1, synthetic=False), self.row["custody_root"])
+
+    def test_missing_and_one_byte_twin_script_refuse_before_reservation(self):
+        pin = M.load_json(REPO / MR.MANIFEST)["fit"]["twin"]
+        script = self.mini / pin["path"]
+        original = script.read_bytes()
+        self.manifest["fit"]["twin"] = pin
+        self.manifest_path.write_bytes(C.dump(self.manifest))
+        self.stage1["manifest_sha256"] = digest(self.manifest_path.read_bytes())
+        self.stage1_path.write_bytes(C.dump(self.stage1))
+        self.stage1_sha = self.row["stage1_sha256"] = digest(self.stage1_path.read_bytes())
         self.save_ledger()
+        script.unlink()
         result = self.stage2()
         self.assertEqual(result.returncode, 2)
-        self.assertIn("execution_host does not match", result.stderr)
+        self.assertIn("fit.twin:", result.stderr)
+        self.assertIn("not in the repository", result.stderr)
+        script.write_bytes(original[:-1] + b" ")
+        result = self.stage2()
+        self.assertEqual(result.returncode, 2)
+        self.assertIn("fit.twin:", result.stderr)
+        self.assertIn("sha256 differs from the pin", result.stderr)
+
+    def test_interrupted_ledger_spends_id_in_a_fresh_checkout(self):
+        from tests.cadence import test_look_run as cli_fixture
+
+        MR.commit(self.mini, stage1_sha256=self.stage1_sha)
+        path = self.mini / M.LOOK_LEDGER_PATH
+        self.row["sha256"] = digest(self.manifest_path.read_bytes())
+        self.stage1["manifest_sha256"] = self.row["sha256"]
+        self.stage1_path.write_bytes(C.dump(self.stage1))
+        self.row["stage1_sha256"] = digest(self.stage1_path.read_bytes())
+        ledger = {"schema": M.LOOK_LEDGER_SCHEMA, "looks": [self.row]}
+        path.write_bytes(C.dump(ledger))
+        MR.git_commit(self.mini, "register synthetic stage 1")
+        args = ["row", "--manifest", self.manifest_path, "--repo", self.mini, "--write"]
+        # The lead records the outcome after observing a reservation. The row command
+        # uses only public records, so it also works in a checkout without that directory.
+        with cli_fixture.spy_opens() as opened:
+            rc, _, err = cli_fixture._cli_subprocess([*args, "--interrupted"], repo=self.mini,
+                                                    extra={"entry": "manifest"})
+        self.assertEqual(rc, 0, err)
+        self.assertFalse(any(p.startswith(str(self.private.parent.parent)) for p in opened))
+        spent = M.load_json(path)["looks"][0]
+        self.assertEqual((spent["status"], spent["error_type"]), ("interrupted", "none_recorded"))
+        self.assertNotIn("output_sha256", spent)
+        self.assertNotIn("coefficients_sha256", spent)
+        MR.git_commit(self.mini, "spend synthetic id")
+        fresh = self.root / "fresh"
+        MR.git(self.mini, "clone", "--no-local", str(self.mini), str(fresh))
+        with cli_fixture.spy_opens() as opened:
+            rc, _, err = cli_fixture._cli_subprocess(
+                ["stage2", "--manifest", fresh / MR.MANIFEST, "--stage1", self.stage1_path,
+                 "--stage1-sha256", self.row["stage1_sha256"], "--custody", self.row["custody_root"]], repo=fresh)
+        self.assertEqual(rc, 2, err)
+        self.assertIn("already spent (interrupted)", err)
+        self.assertFalse(any(p.startswith(self.row["custody_root"]) for p in opened))
         self.assertFalse(self.private.exists())
-        self.assertFalse(self.public.exists())
+
+    def test_interruption_vocabulary_and_completed_report_guard(self):
+        MR.commit(self.mini, stage1_sha256=self.stage1_sha)
+        path = self.mini / M.LOOK_LEDGER_PATH
+        self.row["sha256"] = digest(self.manifest_path.read_bytes())
+        ledger = {"schema": M.LOOK_LEDGER_SCHEMA, "looks": [self.row]}
+        path.write_bytes(C.dump(ledger))
+        MR.git_commit(self.mini, "register synthetic execution")
+        self.public.write_bytes(C.dump(report()))
+        result = MR.py(self.mini, "scripts/cadence_look_manifest.py", "row", "--manifest", self.manifest_path,
+                       "--repo", self.mini, "--write", "--interrupted")
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("no completed report", result.stdout)
+        self.assertEqual(M.load_json(path), ledger)
+        for state, error in (("interrupted", "RuntimeError"), ("failed", "none_recorded")):
+            altered = {"schema": M.LOOK_LEDGER_SCHEMA, "looks": [dict(self.row, status=state, error_type=error)]}
+            with self.assertRaisesRegex(M.ManifestError, "error_type"):
+                M.validate_look_ledger(altered)
+
+    def test_failure_ledger_keeps_the_delivered_type(self):
+        MR.commit(self.mini, stage1_sha256=self.stage1_sha)
+        result = MR.py(self.mini, "scripts/cadence_look_manifest.py", "row", "--manifest", self.manifest_path,
+                       "--repo", self.mini, "--write", "--error-type", "RuntimeError")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        row = M.load_json(self.mini / M.LOOK_LEDGER_PATH)["looks"][0]
+        self.assertEqual((row["status"], row["error_type"]), ("failed", "RuntimeError"))
 
     def test_wrong_numpy_refuses_before_reservation(self):
         self.stage1["numpy_version"] = "0.0.0"
@@ -401,15 +498,10 @@ class LookExecution(unittest.TestCase):
             def step3(*_args, **_kwargs):
                 total = sum(sum(leg["gpu_rail"]["segments"]) for leg in energy["legs"].values())
                 return {"tripwire": {"decision": "within", "value": total}}
-            def twin(_args, _stage1, _fit, step3_result, coefficients):
-                self.assertEqual(digest((private / "coefficients.json").read_bytes()), digest(C.dump(coefficients)))
-                if name == "base":
-                    raise TimeoutError("synthetic twin canary")
-                return {"agreement": "not_evaluable", "fixture_value": step3_result["tripwire"]["value"]}
             with mock.patch.object(R, "code_hashes", return_value={}), mock.patch.object(s3, "run_roster", side_effect=step3):
                 rc = C.run_reserved(private, lambda: R.finish_stage2(
                     args, self.stage1, prepared, self.manifest, self.commit, self.manifest_sha, private, public,
-                    SCHEMA, coefficient_schema, None, twin), linear_algebra_error=R.F.np.linalg.LinAlgError)
+                    SCHEMA, coefficient_schema, None, None), linear_algebra_error=R.F.np.linalg.LinAlgError)
             self.assertEqual(rc, 0, (private / "stderr").read_text())
             self.assertEqual({p.name for p in private.iterdir()}, C.PRIVATE_NAMES)
             raw = public.read_bytes()
@@ -439,3 +531,183 @@ class LookExecution(unittest.TestCase):
               file=sys.stderr)
         self.assertEqual(compared + skipped, len(self.energy["legs"]))
         self.assertGreater(compared, 0)
+
+
+TWIN_DRIVER = r'''
+import json, os, subprocess, sys
+from pathlib import Path
+repo, basename, fault = Path(sys.argv[1]), sys.argv[2], sys.argv[3]
+sys.path.insert(0, str(repo))
+from scripts import cadence_look_run as look
+from joulewise.cadence_looks import interim_twin
+
+original_destinations = look.release.destinations
+def destinations(repo, row):
+    private, public = original_destinations(repo, row)
+    assert private.name == "RESTRICTED"
+    return private.with_name(basename), public
+look.release.destinations = destinations
+
+original_run = subprocess.run
+attempts = []
+def run(argv, *args, **kwargs):
+    if Path(argv[0]) != Path(sys.executable) or argv[1:4] != ["-I", "-B", str(repo / "scripts/cadence_interim_twin.py")]:
+        return original_run(argv, *args, **kwargs)
+    attempts.append(argv)
+    assert len(attempts) == 1 and not kwargs.get("shell")
+    assert kwargs["stdout"] == subprocess.PIPE and kwargs.get("stderr") is None
+    path = Path(argv[argv.index("--coefficients") + 1])
+    assert path.parent.name == basename and path.parent.is_dir()
+    assert path.with_name("fit.json").is_file() and path.with_name("step3.json").is_file()
+    before = path.read_bytes()
+    assert look.sha256_file(path) == argv[argv.index("--coefficients-sha256") + 1]
+    if fault == "timeout":
+        raise subprocess.TimeoutExpired(argv, kwargs["timeout"], output=b"synthetic partial frame")
+    if fault == "nonzero":
+        argv = list(argv)
+        argv[argv.index("--coefficients-sha256") + 1] = "0" * 64
+    result = original_run(argv, *args, **kwargs)
+    assert path.read_bytes() == before
+    if fault == "nonzero":
+        assert result.returncode == 1 and result.stdout == b""
+        return result
+    assert result.returncode == 0, result.returncode
+    if fault == "malformed":
+        result.stdout = b"not a frame\n"
+    elif fault == "coefficient_change":
+        path.write_bytes(before[:-1] + b" ")
+    elif fault in ("numeric", "omitted_fold", "forged_primary"):
+        frame = json.loads(result.stdout)
+        pair = frame["coefficients"]["gpu_rail"]
+        key = "C#/channels/gpu_rail/fold_coefficients"
+        side = pair["primary" if fault == "forged_primary" else "twin"]
+        first_fold = side[key][sorted(side[key])[0]]
+        if fault == "omitted_fold":
+            first_fold.pop("p1")
+        else:
+            first_fold["p1"] *= 1.1
+            frame["max_relative_difference"]["gpu_rail"] = 0.0
+        result.stdout = json.dumps(frame, sort_keys=True, separators=(",", ":")).encode() + b"\n"
+    return result
+interim_twin.subprocess.run = run
+status = look.main(sys.argv[4:], keep_redirected=True)
+assert len(attempts) == 1, len(attempts)
+sys.exit(status)
+'''
+
+
+@unittest.skipIf(R is None, "numpy is required")
+class TwinThroughCLI(unittest.TestCase):
+    def setUp(self):
+        import plistlib
+
+        tmp = tempfile.TemporaryDirectory(prefix="jw-parent-twin-")
+        self.addCleanup(tmp.cleanup)
+        self.root = Path(tmp.name).resolve()
+        self.mini = MR.mini_repo(self)
+        self.manifest = self.mini / MR.MANIFEST
+        draft = M.load_json(self.manifest)
+        pin = M.load_json(REPO / MR.MANIFEST)["fit"]["twin"]
+        self.assertEqual(digest((self.mini / pin["path"]).read_bytes()),
+                         "aa041772d45bc955aba999721cfdea4b9776875ca635449fd0ff60593a5ba22a")
+        draft["fit"]["twin"] = pin
+        self.manifest.write_bytes(C.dump(draft))
+        tokens = {}
+        look_input, energy, _ = S.build("exact", tokens=tokens)
+        source = self.root / "generated-bundles"
+        locators = S.write_custody(source, look_input, energy, tokens)
+        # The accepted #816 pin accepts a single component per receipt locator.
+        # Generate that layout before stage 1 binds the fixture's record bytes.
+        for path in source.glob("*/legs/*/leg_record.json"):
+            record = M.load_json(path)
+            if record["result"]["bundle"]:
+                runtime = path.parent / "runtime"
+                (runtime / record["result"]["bundle"]).rename(runtime / "mock-bundle")
+                record["result"]["bundle"] = "mock-bundle"
+                path.write_bytes(C.dump(record))
+        # Use complete Step 3 telemetry so both implementations evaluate three
+        # cells on the same generated native state and clock frames.
+        for rich in source.glob("*/legs/*/runtime/mock-bundle/rich_telemetry.jsonl"):
+            rows = [json.loads(line) for line in rich.read_bytes().splitlines()]
+            for item in rows:
+                item["gpu"]["dvfm_states"] = [{"freq": 1000, "used_ns": 10**9}]
+            rich.write_bytes(b"".join(C.dump(item) for item in rows))
+            native = rich.parent / "raw/powermetrics.plist"
+            frames = [plistlib.loads(item) for item in native.read_bytes().split(b"\0") if item]
+            for item in frames:
+                item.setdefault("thermal_pressure", "Unknown")
+            native.write_bytes(b"".join(plistlib.dumps(item) + b"\0" for item in frames))
+        self.stage1 = self.root / "stage1.json"
+        stage1 = MR.py(self.mini, "scripts/cadence_look_run.py", "stage1", "--roster", locators["roster.json"],
+                       "--rules-3-4", locators["rules_3_4.json"], "--custody", source, "--out", self.stage1,
+                       "--manifest", self.manifest, "--allow-draft")
+        self.assertEqual(stage1.returncode, 0, stage1.stderr)
+        doc = M.load_json(self.stage1)
+        self.response_sha = digest(self.stage1.read_bytes())
+        self.overrides = [(row["span_id"], source / row["span_id"]) for row in doc["roster"]["spans"]]
+        self.row = {"look_id": LOOK, "manifest_path": MR.MANIFEST, "sha256": digest(self.manifest.read_bytes()),
+                    "stage1_sha256": self.response_sha, "status": "stage1_committed",
+                    "roster_sha256": doc["code_sha256"]["input:roster_sha256"],
+                    "verdicts_sha256": doc["code_sha256"]["input:rules_3_4_sha256"],
+                    "execution_host": socket.gethostname(),
+                    "holds_cleared": {flag: "RL-999" for flag in M.STAGE2_HOLD_FLAGS["interim"]
+                                      if doc[flag.split(".")[0]].get(flag.split(".")[1]) is True}}
+        self.driver = self.root / "run.py"
+        self.driver.write_text(TWIN_DRIVER)
+        self.basename = MR.synthetic_reservation_name(self.root)
+
+    def trial(self, fault):
+        private_root = self.root / fault
+        private = private_root / LOOK / self.basename
+        public_rel = f"generated-{fault}"
+        public = self.mini / public_rel / LOOK / "PUBLIC.json"
+        private.parent.mkdir(parents=True)
+        public.parent.mkdir(parents=True)
+        ledger = private_root / "ledger.json"
+        row = dict(self.row, custody_root=str(private_root), public_root=public_rel)
+        ledger.write_bytes(C.dump({"schema": M.LOOK_LEDGER_SCHEMA, "looks": [row]}))
+        argv = [sys.executable, "-I", "-B", self.driver, self.mini, self.basename, fault,
+                "stage2", "--manifest", self.manifest, "--stage1", self.stage1, "--stage1-sha256", self.response_sha,
+                "--looks", ledger, "--allow-draft", "--custody", private_root]
+        for sid, path in self.overrides:
+            argv.extend(("--span-dir", f"{sid}={path}"))
+        result = subprocess.run(argv, cwd=self.root, capture_output=True, timeout=180)
+        return result, private, public
+
+    def test_actual_parent_child_handshake_and_failure_channels(self):
+        for fault, agreement in (("match", "yes"), ("numeric", "no"), ("omitted_fold", "not_evaluable"),
+                                 ("forged_primary", "not_evaluable"), ("nonzero", "not_evaluable"),
+                                 ("malformed", "not_evaluable"), ("timeout", "not_evaluable")):
+            with self.subTest(fault=fault):
+                run, private, public = self.trial(fault)
+                self.assertEqual((run.returncode, run.stdout, run.stderr), (0, b"", b""),
+                                 (private / "stderr").read_bytes() if private.exists() else run.stderr)
+                self.assertEqual({path.name for path in private.iterdir()}, C.PRIVATE_NAMES)
+                row = C.read_public(public.read_bytes(), SCHEMA)
+                comparison = M.load_json(private / "twin.json")
+                self.assertEqual((row["twin_agrees"], row["stage2_error"], comparison["agreement"]),
+                                 (agreement, "no", agreement))
+                coefficients = (private / "coefficients.json").read_bytes()
+                self.assertEqual(row["coefficients_sha256"], digest(coefficients))
+                frame = (private / "stdout").read_bytes()
+                if fault == "match":
+                    self.assertTrue(json.loads(frame)["schema"].endswith(".v1"))
+                    self.assertTrue(all(cell["status"] == "ok" for cell in M.load_json(private / "step3.json")["cells"]))
+                    original = dict(row, twin_agrees=None)
+                    original_coefficients = coefficients
+                else:
+                    self.assertEqual(dict(row, twin_agrees=None), original)
+                    self.assertEqual(coefficients, original_coefficients)
+                if fault == "numeric":
+                    self.assertEqual(json.loads(frame)["max_relative_difference"]["gpu_rail"], 0)
+                    self.assertGreater(comparison["max_relative_difference"]["gpu_rail"], 1e-8)
+                if fault == "nonzero":
+                    self.assertEqual((private / "stderr").read_bytes(), b"stage2_error\nValueError\n")
+                if fault == "malformed":
+                    self.assertEqual(frame, b"not a frame\n")
+                if fault == "timeout":
+                    self.assertEqual(frame, b"synthetic partial frame")
+        run, private, public = self.trial("coefficient_change")
+        self.assertEqual((run.returncode, run.stdout, run.stderr), (C.FAILURE_STATUS, b"", b"stage2_error\nOtherError\n"))
+        self.assertTrue(private.is_dir())
+        self.assertFalse(public.exists())

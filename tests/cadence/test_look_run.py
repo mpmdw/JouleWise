@@ -496,7 +496,9 @@ if opts["exports"]:
                       public_root="fixture", holds_cleared=holds)
         return real_validate(record, stage1, custody)
     R.validate_execution_row = validate
-    R.require_twin_runner = lambda doc: lambda *args: {"agreement": "not_evaluable"}
+    if not opts.get("real_twin"):
+        R.require_twin_runner = lambda doc: None
+        R.run_twin = lambda *args, **kwargs: {"agreement": "not_evaluable"}
     if not (R.ROOT / ".git").exists():
         git = R.M._git
         R.M._git = lambda repo, *args: ((0, b"f" * 40, "") if args == ("rev-parse", "HEAD") else git(repo, *args))
@@ -507,13 +509,17 @@ if opts.get("mock_stage2"):
     R.F.stage2 = _stage2
 rc = None
 try:
-    rc = R.main(argv)
+    if opts.get("entry") == "manifest":
+        from scripts import cadence_look_manifest as manifest_cli
+        rc = manifest_cli.main(argv)
+    else:
+        rc = R.main(argv)
 finally:
     private_stderr = ""
     if private is not None:
         if rc == 0:
             for name, path in opts["exports"].items():
-                shutil.copyfile(private / name, path)
+                shutil.copyfile(public if name == "PUBLIC.json" else private / name, path)
         if (private / "stderr").exists():
             private_stderr = (private / "stderr").read_text()
         shutil.rmtree(private.parent)
@@ -553,7 +559,7 @@ def _cli_subprocess(argv, trap=False, mock_stage2=False, repo=None, extra=None):
                 i = argv.index(flag)
                 exports[name] = argv[i + 1]
                 del argv[i:i + 2]
-    opts = {"repo": str(repo), "spy": bool(_SPIES), "trap": trap, "mock_stage2": mock_stage2, "report": report, "exports": exports,
+    opts = {"repo": str(repo), "spy": bool(_SPIES), "trap": trap, "mock_stage2": mock_stage2, "report": report, "exports": exports | (extra or {}).get("artifacts", {}),
             **(extra or {})}
     r = subprocess.run([sys.executable, "-I", "-B", _HARNESS, json.dumps(opts), *argv], cwd=repo,
                        capture_output=True, text=True, timeout=900)
