@@ -84,6 +84,8 @@ class QuietGuard:
     window and no stretch of time escapes judgement). A stored failure, a
     stalled sampler or a window longer than MAX_WINDOW_S refuses.
     Under R0-L3, contention in a judged window is recorded and flagged.
+    finish() stops sampling and judges the final state before success can
+    be published. An unfinished census at the join bound is indeterminate.
     """
 
     # The daemon's cadence, the only place it is set.
@@ -126,7 +128,7 @@ class QuietGuard:
 
     @staticmethod
     def _empty_pending():
-        return {"regressed_counters": [], "wall_clock_backwards": False, "cycles": [], "census": []}
+        return {"regressed_counters": [], "wall_clock_backwards": False, "census": []}
 
     def _now(self):
         with self._clock_lock:
@@ -136,7 +138,7 @@ class QuietGuard:
             self._clock_last = now
             return now
 
-    def _cpu_snapshot(self):
+    def _cpu_snapshot(self, *, census_summary=None):
         started = self._now()
         wall = self.wall_clock_ns()
         host = host_error = None
@@ -192,6 +194,10 @@ class QuietGuard:
                             "contaminant": rows[identity]["contaminant"] or previous.rows[identity]["contaminant"]})
             self._pending["wall_clock_backwards"] |= backwards
             self._snapshots.append(snapshot)
+            if census_summary is not None:
+                # A consumer sees the snapshot and its census together.
+                self._pending["census"].append({
+                    "monotonic_s": snapshot.midpoint_ns / 1e9, **census_summary})
         return snapshot
 
     def _census(self, receipt):
@@ -247,11 +253,9 @@ class QuietGuard:
         try:
             seen = {"resolved_custody_parents": []}
             self._census(seen)
-            snapshot = self._cpu_snapshot()
             # What this cycle's census saw, compactly (#691 receipted it per
             # check); every verdict here passed, or the cycle would have failed.
             summary = {
-                "monotonic_s": snapshot.midpoint_ns / 1e9,
                 "resolved_custody_parents": seen["resolved_custody_parents"],
                 "installed_night_agents": seen["installed_night_agents"],
                 "launchctl_exit_code": seen["launchctl"]["exit_code"],
@@ -261,12 +265,11 @@ class QuietGuard:
                 "custody_warnings": seen["custody"]["warnings"],
                 "chains": seen["chains"],
                 "pcpu_diagnostic": seen["pcpu_diagnostic"]}
-            with self._snapshot_lock:
-                self._pending["cycles"].append(snapshot.midpoint_ns / 1e9)
-                self._pending["census"].append(summary)
+            self._cpu_snapshot(census_summary=summary)
         except Exception as exc:
             # Fail closed: the next check() refuses with this reason.
-            self._background_failure = f"{type(exc).__name__}: {exc}"
+            with self._snapshot_lock:
+                self._background_failure = f"{type(exc).__name__}: {exc}"
             self._stop_sampler.set()
 
     def _sampler_main(self):
@@ -287,6 +290,27 @@ class QuietGuard:
         if sampler is not None and sampler is not threading.current_thread():
             sampler.join(self.JOIN_TIMEOUT_S)
 
+    def finish(self):
+        """Stop and drain the sampler before an entry point publishes success."""
+        if self.failure:
+            raise Refused(self.failure)
+        receipt = {"resolved_custody_parents": []}
+        try:
+            self.close()
+            if self._sampler is None:
+                raise Refused("census indeterminate: background sampler never started")
+            # Establish whether the join succeeded before reading the final
+            # state. A later exit cannot validate an earlier copy of it.
+            stopped = not self._sampler.is_alive()
+            if stopped:
+                receipt["monotonic_s"] = self._now()
+            self.receipts.append(receipt)
+            self._cpu_interval(receipt)
+            if not stopped:
+                raise Refused("census indeterminate: background sampler did not stop within the join bound")
+        except Exception as exc:
+            raise self._record_refusal(receipt, exc) from exc
+
     def __enter__(self):
         return self
 
@@ -301,8 +325,9 @@ class QuietGuard:
         with self._snapshot_lock:
             snapshots = list(self._snapshots)
             pending, self._pending = self._pending, self._empty_pending()
-        if pending["cycles"]:
-            receipt["background_snapshots_monotonic_s"] = pending["cycles"]
+            background_failure = self._background_failure
+        if pending["census"]:
+            receipt["background_snapshots_monotonic_s"] = [row["monotonic_s"] for row in pending["census"]]
             receipt["background_census"] = pending["census"]
         if pending["wall_clock_backwards"]:
             receipt["wall_clock_backwards"] = True
@@ -359,6 +384,13 @@ class QuietGuard:
             with self._snapshot_lock:
                 del self._snapshots[:opening]
             self._judged_end -= opening
+        # Completed windows precede a later failed census or stale tail.
+        if background_failure:
+            raise Refused(f"census refused or indeterminate in the background sampler: {background_failure}")
+        if snapshots and "monotonic_s" in receipt:
+            lag = receipt["monotonic_s"] - snapshots[-1].finished.monotonic_ns / 1e9
+            if lag > self.MAX_WINDOW_S:
+                raise Refused(f"census indeterminate: background snapshots stalled ({lag:.1f} s since the last)")
         return busy
 
     def _judge_cpu_interval(self, opening, current, details):
@@ -410,16 +442,20 @@ class QuietGuard:
             row for row in measured["exited_over_limit"] if contaminant(row)]
         return busy
 
+    def _record_refusal(self, receipt, error):
+        if not any(item is receipt for item in self.receipts):
+            self.receipts.append(receipt)
+        self.failure = str(error)
+        receipt["refusal"] = self.failure
+        return Refused(self.failure)
+
     def check(self, *, force=False):
         if self.failure:
             raise Refused(self.failure)
         receipt = {"resolved_custody_parents": []}
         try:
-            if self._background_failure:
-                raise Refused(f"census refused or indeterminate in the background sampler: "
-                              f"{self._background_failure}")
             now = self._now()
-            if not force and now - self.last < 15:
+            if not force and now - self.last < 15 and not self._stop_sampler.is_set():
                 return
             receipt["monotonic_s"] = now
             self.receipts.append(receipt)
@@ -437,26 +473,13 @@ class QuietGuard:
                     # Preserve the first forced call's full baseline wait.
                     if self._snapshots[-1].midpoint_ns - first.midpoint_ns < prewindow.INTERVAL_S * 1e9:
                         raise Refused("census indeterminate: initial CPU baseline shorter than 30 s")
-            else:
-                # Admission completed: the caller only consumes the daemon's
-                # stored census results and snapshots. It never sleeps or
-                # launches a process, and a silent daemon fails closed.
-                with self._snapshot_lock:
-                    newest = self._snapshots[-1]
-                lag = now - newest.finished.monotonic_ns / 1e9
-                if lag > self.MAX_WINDOW_S:
-                    raise Refused(f"census indeterminate: background snapshots stalled "
-                                  f"({lag:.1f} s since the last)")
             self._cpu_interval(receipt)
             self.last = self._now()
             self._start_sampler()
         except Exception as exc:
-            if not any(item is receipt for item in self.receipts):
-                self.receipts.append(receipt)
-            self.failure = str(exc)
-            receipt["refusal"] = self.failure
+            refusal = self._record_refusal(receipt, exc)
             self.close()
-            raise Refused(self.failure) from exc
+            raise refusal from exc
 
 
 # Keep the install log read bounded (cold LOW-4).

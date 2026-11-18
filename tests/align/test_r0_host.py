@@ -849,6 +849,169 @@ class R0SamplerAdmissionSpec(unittest.TestCase):
                 self.assertEqual(json.loads((root / "report.json").read_text())["status"], status)
                 self.assertTrue(guard._stop_sampler.is_set())
 
+    def execute_host(self, guard, host, output):
+        from contextlib import nullcontext
+        from joulewise.align import r0_runner
+        from tests.align.test_r0_checks import FakeBackend
+
+        with patch.object(r0_runner, "host_snapshot", side_effect=host), \
+                patch.object(r0_runner, "deadline", return_value=nullcontext()), \
+                patch.object(r0_runner, "command", return_value="synthetic-head"), \
+                patch.object(r0_runner, "softwareupdate_scan_forecast", return_value={"status": "unknown"}):
+            return r0_runner.execute(config_at(output), output, ["host"], ["D"],
+                                     guard=guard, backend_factory=FakeBackend)
+
+    def test_execute_refuses_census_failure_during_final_check(self):
+        import threading
+
+        guard, clock, _, _ = self.admission()
+        guard.SNAPSHOT_CADENCE_S = 0.001
+        host_started = threading.Event()
+        probing = threading.Event()
+        finish_probe = threading.Event()
+        self.addCleanup(finish_probe.set)
+        run = guard.run
+
+        def invalid_census(argv, **kwargs):
+            if argv[0] == "/bin/launchctl" and threading.current_thread() is not threading.main_thread():
+                self.assertTrue(host_started.wait(3))
+                probing.set()
+                self.assertTrue(finish_probe.wait(3))
+                return subprocess.CompletedProcess(argv, 1, "", "invalid synthetic census")
+            return run(argv, **kwargs)
+
+        def host():
+            clock.now = 45
+            host_started.set()
+            self.assertTrue(probing.wait(3))
+            return {"status": "pass"}
+
+        def release_at_final_check():
+            if threading.current_thread() is threading.main_thread() and host_started.is_set():
+                finish_probe.set()
+                self.assertTrue(guard._stop_sampler.wait(3))
+            return clock()
+
+        guard.run = invalid_census
+        guard.clock = release_at_final_check
+        with tempfile.TemporaryDirectory() as tmp:
+            output = Path(tmp)
+            report = self.execute_host(guard, host, output)
+            published = json.loads((output / "report.json").read_text())
+        self.assertEqual(report["status"], "refused")
+        self.assertEqual(published["status"], "refused")
+        self.assertEqual(published["checks"][0]["status"], "refused")
+        self.assertIn("LaunchAgent census indeterminate", published["refusal"])
+        self.assertFalse(published["complete_r0"])
+
+    def test_execute_finishes_inflight_census_before_publishing(self):
+        import threading
+
+        for outcome in ("valid", "invalid", "stalled"):
+            with self.subTest(outcome=outcome), tempfile.TemporaryDirectory() as tmp:
+                guard, clock, _, _ = self.admission()
+                guard.SNAPSHOT_CADENCE_S = 0.001
+                guard.JOIN_TIMEOUT_S = 0.05 if outcome == "stalled" else 1.0
+                host_started = threading.Event()
+                probing = threading.Event()
+                release = threading.Event()
+                run = guard.run
+
+                def census(argv, **kwargs):
+                    if threading.current_thread() is not threading.main_thread():
+                        if argv[0] == "/bin/launchctl":
+                            if not host_started.wait(3):
+                                raise AssertionError("fixture host never started")
+                            probing.set()
+                            ready = release if outcome == "stalled" else guard._stop_sampler
+                            if not ready.wait(3):
+                                raise AssertionError("fixture census never released")
+                            if outcome == "invalid":
+                                return subprocess.CompletedProcess(argv, 1, "", "invalid synthetic census")
+                        if argv == contention.PS_ARGV:
+                            return subprocess.CompletedProcess(
+                                argv, 0, cpu_table((42, OLD_START, "0:01.80", "mdworker_shared")), "")
+                    return run(argv, **kwargs)
+
+                def host():
+                    clock.now = 45
+                    host_started.set()
+                    self.assertTrue(probing.wait(3))
+                    return {"status": "pass"}
+
+                guard.run = census
+                output = Path(tmp)
+                try:
+                    self.execute_host(guard, host, output)
+                    published = json.loads((output / "report.json").read_text())
+                finally:
+                    release.set()
+                    guard.close()
+                row = published["checks"][0]
+                if outcome == "valid":
+                    self.assertEqual((published["status"], row["status"]), ("pass", "pass"))
+                    self.assertEqual([flag["interval"]["end_monotonic_s"]
+                                      for flag in row.get("contention_flags", ())], [45])
+                    self.assertEqual(published["census"][-1]["background_census"][0]["monotonic_s"], 45)
+                else:
+                    self.assertEqual((published["status"], row["status"]), ("refused", "refused"))
+                    message = ("LaunchAgent census indeterminate" if outcome == "invalid"
+                               else "background sampler did not stop")
+                    self.assertIn(message, published["refusal"])
+                    self.assertFalse(published["complete_r0"])
+
+    def test_inventory_refuses_census_failure_at_eof(self):
+        from contextlib import contextmanager
+        from joulewise.align.r0_runner import main
+
+        guard, _, advance, _ = self.admission()
+        with tempfile.TemporaryDirectory() as tmp:
+            work = Path(tmp)
+            inputs = work / "inputs"
+            inputs.mkdir()
+            payload = inputs / "blob"
+            payload.write_bytes(b"fixture")
+            config = work / "config.json"
+            config.write_text(json.dumps(config_at(work)))
+            published = work / "inventory.json"
+            open_path = Path.open
+
+            @contextmanager
+            def inventory_input():
+                with open_path(payload, "rb") as handle:
+                    class DelayedEOF:
+                        def read(self, size):
+                            chunk = handle.read(size)
+                            if not chunk:
+                                advance(45, census_ok=False)
+                            return chunk
+                    yield DelayedEOF()
+
+            def fixture_open(path, *args, **kwargs):
+                return inventory_input() if path == payload else open_path(path, *args, **kwargs)
+
+            with patch.object(Path, "open", fixture_open):
+                with self.assertRaisesRegex(Refused, "LaunchAgent census indeterminate"):
+                    main(["--config", str(config), "--output", str(published), "--inventory", str(inputs)],
+                         guard_factory=lambda _: guard, lock_path=work / "lock")
+            self.assertFalse(published.exists())
+
+    def test_queued_contention_survives_census_failure_or_stall(self):
+        for reason, message in (("census", "LaunchAgent census indeterminate"),
+                                ("stall", "background snapshots stalled")):
+            with self.subTest(reason=reason):
+                guard, clock, advance, _ = self.admission()
+                guard.check(force=True)
+                advance(45)
+                if reason == "census":
+                    advance(60, census_ok=False)
+                else:
+                    clock.now = 96
+                with self.assertRaisesRegex(Refused, message):
+                    guard.check(force=True)
+                self.assertEqual([flag["interval"]["end_monotonic_s"] for flag in guard.contention_flags], [45])
+                self.assertIn("contention_flag", guard.receipts[-1])
+
 
 class R0QuietIntervalTest(unittest.TestCase):
     # CPU fixtures derive from the 0.05 CPU-s/s bar and 30 s interval:

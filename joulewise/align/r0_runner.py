@@ -107,6 +107,13 @@ def save_report(output, report):
         temp.replace(output / name)
 
 
+def _end_guard(guard, *, verify=False):
+    finish = getattr(guard, "finish", None) if verify else None
+    end = finish if finish is not None else getattr(guard, "close", None)
+    if end is not None:
+        end()
+
+
 DISPLAY_PREP_ENV = "JOULEWISE_R0_DISPLAY_PREP"
 
 
@@ -329,9 +336,16 @@ def execute(config, output, checks, models, *, guard, backend_factory, per_check
     except Exception as exc:
         report.update(status="fail", error=f"{type(exc).__name__}: {exc}")
     finally:
-        close_guard = getattr(guard, "close", None)
-        if close_guard is not None:
-            close_guard()
+        flags_before = len(getattr(guard, "contention_flags", []))
+        try:
+            _end_guard(guard, verify=report["status"] == "pass")
+        except Refused as exc:
+            report.update(status="refused", refusal=str(exc), complete_r0=False)
+            if report["checks"]:
+                report["checks"][-1].update(status="refused", refusal=str(exc))
+        flags = getattr(guard, "contention_flags", [])[flags_before:]
+        if flags and report["checks"]:
+            report["checks"][-1].setdefault("contention_flags", []).extend(flags)
         report["decisions_pending_lead_action"] = [
             {"check": row["check"], "model": row.get("model"), "outcome": row["status"]}
             for row in report["checks"] if row["status"] in {"required", "fallback"}]
@@ -382,11 +396,10 @@ def main(argv=None, *, backend_factory=None, guard_factory=QuietGuard, lock_path
             try:
                 guard.check(force=True)
                 rows = inventory(_path(str(args.inventory)), guard.check)
-            finally:
-                # The one caller outside execute(): stop the guard's daemon.
-                close_guard = getattr(guard, "close", None)
-                if close_guard is not None:
-                    close_guard()
+            except BaseException:
+                _end_guard(guard)
+                raise
+            _end_guard(guard, verify=True)
             with args.output.open("x") as handle:
                 json.dump(rows, handle, indent=2, sort_keys=True)
                 handle.write("\n")
