@@ -19,6 +19,7 @@ DRAFT = ROOT / (
 REFUSAL = b"REFUSE transfer look before read\n"
 
 _WORKER = r"""
+import argparse
 import atexit
 from hashlib import sha256
 import json
@@ -34,6 +35,10 @@ from joulewise.cadence_looks.transfer_release import HASHES, run_transfer_worker
 root, mode, draft = Path(sys.argv[1]), sys.argv[2], Path(sys.argv[3])
 
 def preflight():
+    if mode == "pre-systemexit":
+        sys.exit(1)
+    if mode == "pre-custom-base":
+        raise type("FixturePrivateExit", (BaseException,), {})("fixture private exit")
     if mode == "draft":
         validate_v2(draft.read_bytes(), final=True)
     if mode == "contended":
@@ -53,8 +58,17 @@ def score(mark_read):
     with (root / "synthetic-input.json").open("rb") as source:
         mark_read()
         value = json.load(source)
+    (root / "saw-read").touch()
     os.write(2, b"fixture diagnostic\n")
     atexit.register(os.write, 1, b"fixture shutdown\n")
+    if mode == "post-systemexit":
+        sys.exit(2)
+    if mode == "post-argparse":
+        argparse.ArgumentParser(prog="synthetic-scorer").parse_args(["--unknown"])
+    if mode == "post-keyboardinterrupt":
+        raise KeyboardInterrupt("fixture interruption without a signal")
+    if mode == "post-custom-base":
+        raise type("FixturePrivateExit", (BaseException,), {})("fixture private exit")
     if mode == "builtin":
         raise RuntimeError("fixture canary 123.456")
     if mode in ("unlisted", "impostor"):
@@ -131,6 +145,38 @@ class TransferReleaseTests(unittest.TestCase):
     def test_transfer_exit_statuses(self):
         self.check_pre_read_refusals_exit_two()
         self.check_read_failures_emit_exact_notice()
+
+    def test_transfer_python_exits_follow_first_read(self):
+        for mode in ("pre-systemexit", "pre-custom-base"):
+            with self.subTest(mode=mode):
+                root = self.fixture(mode)
+                output = self.worker(root, mode)
+                self.assertEqual((output.returncode, output.stdout, output.stderr), (2, b"", REFUSAL))
+                self.assertFalse((root / "saw-read").exists())
+                self.assertEqual(list((root / "private").iterdir()), [])
+                self.assertEqual(list((root / "public").iterdir()), [])
+
+        for mode, error_type in (
+            ("post-systemexit", "SystemExit"),
+            ("post-argparse", "SystemExit"),
+            ("post-keyboardinterrupt", "KeyboardInterrupt"),
+            ("post-custom-base", "OtherError"),
+        ):
+            with self.subTest(mode=mode):
+                root = self.fixture(mode)
+                output = self.worker(root, mode)
+                notice = f"stage2_error\n{error_type}\n".encode("ascii")
+                self.assertEqual((output.returncode, output.stdout, output.stderr), (1, b"", notice))
+                self.assertTrue((root / "saw-read").exists())
+                self.assertEqual(list((root / "public").iterdir()), [])
+                restricted = root / "private" / "synthetic-result"
+                stderr = (restricted / "stderr").read_bytes()
+                self.assertIn(b"fixture diagnostic", stderr)
+                if mode == "post-argparse":
+                    self.assertIn(b"unrecognized arguments: --unknown", stderr)
+                retry = self.worker(root, mode)
+                self.assertEqual((retry.returncode, retry.stdout, retry.stderr), (2, b"", REFUSAL))
+                self.assertEqual((restricted / "stderr").read_bytes(), stderr)
 
     def check_pre_read_refusals_exit_two(self):
         for mode in ("draft", "draft-ledger", "wrong-host", "spent-ledger", "missing-input"):

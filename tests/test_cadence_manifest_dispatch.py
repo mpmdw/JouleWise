@@ -282,6 +282,64 @@ class VariantContractTests(unittest.TestCase):
                     self.assertEqual(status, 2)
                     self.assertIn("--registration", stderr.getvalue())
 
+    def test_qualification_span_commitments_refuse_altered_registration(self):
+        authentic = QUALIFICATION.read_bytes()
+        original = json.loads(authentic)
+        for spans in (
+            ["f2-inst-01-l004", "f2-inst-01-l005"],
+            original["reads"]["blocks"][1]["spans"],
+            [original["reads"]["blocks"][0]["spans"][0]] * 2,
+        ):
+            trial = deepcopy(original)
+            trial["reads"]["blocks"][0]["spans"] = spans
+            registration = encode(trial)
+            final = registration.replace(dispatch.REGISTRATION_PLACEHOLDER, json.dumps(H).encode())
+            with self.subTest(spans=spans, status="registered"), self.assertRaisesRegex(
+                dispatch.ManifestError, "qual-01.*span commitment"
+            ):
+                dispatch.validate_v2(registration)
+            for trusted in (registration, authentic):
+                with self.subTest(spans=spans, status="final"), self.assertRaisesRegex(
+                    dispatch.ManifestError, "qual-01.*span commitment"
+                ):
+                    dispatch.validate_v2(final, final=True, registration=trusted)
+
+    def test_rejects_invalid_final_candidate_before_registration_open(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            candidate = Path(tmp) / "final.json"
+            registration = Path(tmp) / "RESTRICTED" / "coefficients.json"
+            read_bytes = Path.read_bytes
+
+            def guard(path):
+                if path == registration:
+                    raise AssertionError("invalid final candidate reached registration open")
+                return read_bytes(path)
+
+            for source in (QUALIFICATION, DRAFT):
+                original = json.loads(source.read_bytes())
+                original["status"] = "registered"
+                pending = encode(original)
+                valid = pending.replace(dispatch.REGISTRATION_PLACEHOLDER, json.dumps(H).encode())
+                substituted = json.loads(valid)
+                kits = substituted["reads"]
+                if source == QUALIFICATION:
+                    kits["blocks"][0]["spans"] = ["f2-inst-01-l004", "f2-inst-01-l005"]
+                else:
+                    kits["kits"][0]["sha256"] = H
+                for defect, payload in (
+                    ("pending", pending),
+                    ("open marker", encode(dict(json.loads(valid), title="OPEN-19"))),
+                    ("unknown field", encode(dict(json.loads(valid), extra=True))),
+                    ("substituted identity", encode(substituted)),
+                ):
+                    candidate.write_bytes(payload)
+                    with self.subTest(source=source.name, defect=defect), patch.object(Path, "read_bytes", guard):
+                        with redirect_stderr(StringIO()) as stderr:
+                            status = dispatch.main(["validate", str(candidate), "--final",
+                                                    "--registration", str(registration)])
+                        self.assertEqual(status, 2)
+                        self.assertIn("REFUSE", stderr.getvalue())
+
     def test_description_shape(self):
         for source, custody in CUSTODY.items():
             document = dispatch.validate_v2(source.read_bytes())
