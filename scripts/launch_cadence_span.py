@@ -51,13 +51,13 @@ BATCH_WINDOW_PATTERN = re.compile(r"(?:[01]\d|2[0-3]):[0-5]\d-(?:[01]\d|2[0-3]):
 RUNNER = "scripts/cadence_legs_runner.py"
 
 
-def cadence_plan(kit: Path, legs: str | None = None, batch_window: str | None = None,
+def cadence_plan(kit: Path | dict, legs: str | None = None, batch_window: str | None = None,
                  t0: float | None = None) -> dict:
     """The campaign runner's plan for this span (kit roster and template; no host contact)."""
     from joulewise.cadence import kit as kitmod, legs as legsmod
     from scripts import cadence_legs_runner as runner
 
-    loaded, _sha = kitmod.load_kit(kit)
+    loaded = kit if isinstance(kit, dict) else kitmod.load_kit(kit)[0]
     # The job kind (RUNNER_KIND, the runner spec this launcher writes) is one: the same runner entry runs
     # v1 kits and v1.1 kits (design doc section 14). The kit's own runner kind must be one it executes.
     if loaded["runner"]["kind"] not in legsmod.RUNNER_KINDS:
@@ -206,6 +206,23 @@ def runner_argv(args) -> list[str]:
 
 def launch(args) -> None:
     """``launch_align_r0.launch`` for this runner kind: refuse, publish the fence, bootstrap once."""
+    from joulewise.cadence import kit as kitmod
+    from scripts import cadence_legs_runner as span_runner
+
+    if args.kit is None or not args.kit.is_file():
+        raise ValueError("cadence-legs-v1 requires an existing --kit")
+    kit, _ = kitmod.load_kit(args.kit)
+    ledger_path = getattr(args, "attempt_ledger", None)
+    previous_receipt = getattr(args, "previous_close_receipt", None)
+    span_id = getattr(args, "span_id", None)
+    close_bound = getattr(args, "t0_not_before_ns", None)
+    if span_id is not None and not span_runner.SPAN_ID_PATTERN.fullmatch(span_id):
+        raise ValueError("invalid --span-id")
+    if (kit["seed_law"]["method"] == span_runner.QUAL_LAW
+            or ledger_path is not None or previous_receipt is not None):
+        if ledger_path is None or not previous_receipt or span_id is None or close_bound is None:
+            raise ValueError("ledger-backed launch requires --attempt-ledger, --previous-close-receipt, "
+                             "--span-id and --t0-not-before-ns")
     if (args.magistrate_pid <= 1 or not base.pid_alive(args.magistrate_pid)
             or not math.isfinite(args.deadline) or args.deadline <= time.time()):
         raise ValueError("live magistrate PID and future finite epoch deadline required")
@@ -213,13 +230,11 @@ def launch(args) -> None:
         raise ValueError(f"desk deadline is more than {base.MAX_DESK_SECONDS} s ahead")
     if args.output.exists():
         raise ValueError("campaign output must be a new record directory")
-    if args.kit is None or not args.kit.is_file():
-        raise ValueError("cadence-legs-v1 requires an existing --kit")
     if args.legs is not None and not LEG_IDS_PATTERN.fullmatch(args.legs):
         raise ValueError("--legs must be comma-separated kit leg ids (L001,L002,...)")
     if args.batch_window is not None and not BATCH_WINDOW_PATTERN.fullmatch(args.batch_window):
         raise ValueError("--batch-window must be HH:MM-HH:MM")
-    plan = cadence_plan(args.kit, args.legs, args.batch_window)
+    plan = cadence_plan(kit, args.legs, args.batch_window)
     if args.deadline - time.time() < cadence_minimum_seconds(plan):
         raise ValueError("cadence-legs-v1 deadline cannot fit the span's worst case, work reserve and cleanup grace")
     runner = Path(runner_argv(args)[1])
@@ -256,14 +271,12 @@ def launch(args) -> None:
         current = base.read_fence(root)
         if current and current["deadline"] > time.time() and base.pid_alive(current["pid"]):
             raise ValueError("an active desk fence already exists")
-        ledger_path = getattr(args, "attempt_ledger", None)
         if ledger_path is not None:
-            from scripts import cadence_legs_runner as span_runner
             ledger = json.loads(ledger_path.read_text())
             previous, close_ns = proven_close(ledger, span_runner)
-            if previous["close_receipt"] != args.previous_close_receipt or close_ns != args.t0_not_before_ns:
+            if previous["close_receipt"] != previous_receipt or close_ns != close_bound:
                 raise ValueError(f"close proof changed before launch for {previous['span_id']}")
-            append_attempt(ledger_path, ledger, previous, args.span_id, args.output / span_runner.RECEIPT_NAME,
+            append_attempt(ledger_path, ledger, previous, span_id, args.output / span_runner.RECEIPT_NAME,
                            span_runner.SPAN_ID_PATTERN)
         base.write_fence(root, {"purpose": purpose, "pid": args.magistrate_pid, "deadline": args.deadline})
     try:
@@ -342,8 +355,8 @@ def main(argv=None) -> int:
     start.add_argument("--magistrate-pid", type=int, required=True)
     start.add_argument("--deadline", type=float, required=True)
     start.add_argument("--span-id", help="span identity carried into its close receipt")
-    start.add_argument("--attempt-ledger", type=Path, help="shared launch/start-plan ledger")
-    start.add_argument("--previous-close-receipt", help="receipt proved by the item before launch")
+    start.add_argument("--attempt-ledger", type=Path, help="shared launch/start-plan ledger, required for qualification")
+    start.add_argument("--previous-close-receipt", help="proved close receipt, required for qualification")
     runner.add_t0_authority_arguments(start)
     start.add_argument("--launchctl-bin", default="/bin/launchctl")
     start.add_argument("--pmset-bin", default="/usr/bin/pmset")
@@ -371,12 +384,6 @@ def main(argv=None) -> int:
         if args.command == "launch":
             kit, _ = kitmod.load_kit(args.kit)
             try:
-                if args.span_id is not None and not runner.SPAN_ID_PATTERN.fullmatch(args.span_id):
-                    raise ValueError("invalid --span-id")
-                if args.attempt_ledger is not None or args.previous_close_receipt is not None:
-                    if any(value is None for value in (args.attempt_ledger, args.previous_close_receipt,
-                                                       args.span_id, args.t0_not_before_ns)):
-                        raise ValueError("ledger launch requires span id, previous close receipt and exact close bound")
                 runner.validate_t0_authority(kit, args.authorized_t0_date, args.t0_not_before,
                                              args.t0_before, args.t0_anchor, require_anchor=False,
                                              t0_not_before_ns=args.t0_not_before_ns)

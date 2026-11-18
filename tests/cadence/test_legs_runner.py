@@ -195,6 +195,70 @@ class T0AuthorityTests(unittest.TestCase):
         self.assertEqual(receipt["t0_authority"], {"authorized_t0_date": "2026-11-19",
                                                    "t0_not_before": earliest, "t0_before": self.midnight})
 
+    def test_qualification_bootstrap_requires_ledger_and_retains_failed_attempt(self):
+        now = 1795118400
+        old_close = self.root / "a.close.json"
+        close_ns = (now - 1200) * self.ns
+        old_close.write_text(json.dumps({"span_id": "attempt-a", "ended": {"epoch_ns": close_ns},
+                                         "restore_readbacks": {"automatic": True}}))
+        ledger = self.root / "attempts.json"
+        previous = {"sequence": 1, "span_id": "attempt-a", "close_receipt": str(old_close)}
+        ledger.write_text(json.dumps({"attempts": [previous]}))
+        ledger_arg = ["--attempt-ledger", str(ledger)]
+        receipt_arg = ["--previous-close-receipt", str(old_close)]
+        bootstrap_calls = []
+
+        def service_command(command, **_kwargs):
+            self.assertEqual(command[0], "synthetic-launchctl")
+            if command[1] == "bootstrap":
+                bootstrap_calls.append(command[1])
+                raise subprocess.CalledProcessError(19, command)
+            self.assertEqual(command[1], "bootout")
+            return subprocess.CompletedProcess(command, 0, b"", b"")
+
+        def launch_span(span, roster, proof_args):
+            argv = self.launch.copy()
+            for flag, value in (("--repo", runner.ROOT), ("--deadline", now + 28160),
+                                ("--output", self.root / span), ("--legs", roster)):
+                argv[argv.index(flag) + 1] = str(value)
+            argv += ["--launchctl-bin", "synthetic-launchctl", "--span-id", span,
+                     "--authorized-t0-date", "2026-11-19", "--t0-not-before", str(now - 100),
+                     "--t0-before", str(now + 600), "--t0-not-before-ns", str(close_ns),
+                     "--t0-anchor", f"{now * self.ns}:{1000 * self.ns}:{1000 * self.ns}", *proof_args]
+            with redirect_stderr(io.StringIO()) as stderr:
+                self.assertEqual(cadence_launch.main(argv), 2)
+            self.assertFalse((self.root / span).exists())
+            return stderr.getvalue()
+
+        with (patch.object(cadence_launch.base, "pid_alive", return_value=True),
+              patch.object(cadence_launch.time, "time", return_value=now),
+              patch.object(cadence_launch.subprocess, "run", side_effect=service_command)):
+            first_roster = "L001,L002,L003,L004,L005,L006"
+            for proof_args in ([], ledger_arg, receipt_arg):
+                with self.subTest(proof_args=proof_args):
+                    refusal = launch_span("qual-01-s01", first_roster, proof_args)
+                    self.assertIn("--attempt-ledger", refusal)
+                    self.assertIn("--previous-close-receipt", refusal)
+                    self.assertEqual(bootstrap_calls, [])
+                    self.assertEqual(json.loads(ledger.read_text())["attempts"], [previous])
+            self.assertFalse((self.root / "synthetic-fence").exists())
+
+            launch_span("qual-01-s01", first_roster, ledger_arg + receipt_arg)
+            self.assertEqual(bootstrap_calls, ["bootstrap"])
+            first_receipt = self.root.resolve() / "qual-01-s01" / runner.RECEIPT_NAME
+            self.assertEqual(json.loads(ledger.read_text())["attempts"], [
+                previous,
+                {"sequence": 2, "span_id": "qual-01-s01", "close_receipt": str(first_receipt)},
+            ])
+
+            refusal = launch_span("qual-01-s02", "L007,L008,L009,L010,L011,L012", ledger_arg + receipt_arg)
+            self.assertIn("latest attempt qual-01-s01 has no close receipt", refusal)
+            self.assertEqual(bootstrap_calls, ["bootstrap"])
+
+    def test_qualification_launch_function_requires_ledger(self):
+        with self.assertRaisesRegex(ValueError, "--attempt-ledger"):
+            cadence_launch.launch(SimpleNamespace(kit=self.kit))
+
 
 # --------------------------------------------------------------------------
 # Library
