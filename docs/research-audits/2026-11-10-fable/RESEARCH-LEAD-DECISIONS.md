@@ -18588,3 +18588,353 @@ The equivalence column and `claim_b_power.py` do not change. A mismatch in the s
 **Blind status.** Blind. No v4 outcome exists and no series member exists. Nothing sealed or measured was opened. The level was chosen on synthetic replicates 0 to 9,999, written down with its bars, and then checked on replicates 10,000 to 19,999. I tried five fits and six levels on the first set before choosing; the tables for all of them are in `MINE/runA.json`. The change lowers the level of a registered test before W1 is signed.
 
 **For Ed, plainly.** "The check on the new version of the test came back just over the line. With the test starting at the first token the model writes, the longer sabotage prompt still nudges it: the model starts writing a few seconds later and with more text in memory, and if sabotage runs also write more, that nudges it the same way. In simulation the chance of a false 'signature' rose from the intended 2.5 % to a little under 4 %. I looked at fancier fits and at padding the harmless prompt, and the cleanest fix is the dullest one: keep the test exactly as it is and make it twice as hard to pass. A signature now needs odds of 1 in 80 where it needed 1 in 40. With that, the simulated false-alarm rate is back under 2.5 % in every case we listed, and about 3.5 % only if three things go wrong together, which the paper will say. The price is that a real but small effect is a bit harder to see: a half-percent effect would be caught 57 % of the time where it was 68 %. The result we actually predict, 'no difference beyond the margin', is not affected. Nothing changes on the laptop and nothing in the running schedule moves; one 25-minute re-run by a second seat and my review stand between this and the signed registration."
+
+# RL-179. The process audit's batch: the date rules bind only the counted spans they name and a block may start at any hour of its date; the calendar date stays the unit of independence and no hours rule is given; the 300 s and 1,200 s close gaps protect nothing the soak does not test and become "close proven"; hand gates leave the arm path; F0 retires after R1 and an instrument-stability series is the standing filler; the copy waits a bounded time and never holds an arm past it; named stops hold what they concern. The interim look publishes words and hashes and no number computed from energy; freeze 2 is a hash and the coefficient file stays in custody
+
+Research lead (Fable 5.2), Tue Nov 17 22:04 PST 2026 (from `date`). Answers RUN_STATE item 420's batch: F-1 to F-11 of the Mythos 5.2 process audit, and F-12, added by the lead. RL-178 (the S decode-only cells) is another seat's and nothing here rules on S.
+
+**The standard, from Ed (item 415):** a rule stays only if it names a physical limit, the claim it protects, or the data it saves. I applied it to my own rulings first. Most of the rules retired below were mine.
+
+**Cites.** `RLD:n` is `RESEARCH-LEAD-DECISIONS.md` on the audit branch at `aeadb9122`. `RS:n` is `RUN_STATE.md` on `origin/main` at `7aa674717` (item 420); the audit's own `RS` cites are at `2e07ef699`, about 67 lines lower. `CUT:n`, `STR:n` and rule ids (F0-13, D-01) are the audit's `CUT.md`, `STRUCTURE.md` and `RULES.md`. `AST:n` is `/Volumes/JW-EXT/scratch/astra-audit-795r10/FINAL-MESSAGE.md`. `PL:n` is `docs/process/PIPELINE.md` on main.
+
+**Read.**
+- `CUT.md` and `STRUCTURE.md` in full; `RULES.md` sections 0 to 3.1 and the D, H, S, C-01, C-04, C-07, I-02 to I-09, X-03, X-10 and M-09 rows; the audit's brief and final message.
+- RUN_STATE items 415 and 418 to 420 (RS:1047-1140).
+- My RL-149 §2.3, §2.4, §2.8 and §2.9; RL-165's ladder; RL-166 Q2 to Q20; RL-169 §1 to §5; RL-171; RL-172 and RL-172a; RL-173 A to E; RL-174 B to D; RL-175 A to E.
+- Astra's round-10 final message on PR #795 in full. PIPELINE.md §1 to §5.
+
+**Checked myself.**
+- The soak's settle test at pin `2d347f721`: `scripts/align_r1_rehearsal.py:130-131` (`SOAK_TAIL_S = 1200`, `SOAK_MAX_SLOPE_C_PER_MIN = 0.2`), `:900` (settled when the slope is at or under that), `:1047-1048` (an unsettled soak raises "idle soak has unresolved slope"). The campaign runner turns a soak failure into a span refusal (`scripts/cadence_legs_runner.py:279`).
+- Q1 records exist on the audit branch for six spans, four of them on v1.1 pins (`evidence/cadence-standing/q1/cq-dev-03-s01`, `-03-s02`, `-04-s01`, `-04-s02`). I read one record's keys, not its values.
+- The Check item's Q1 print is already a script (RS:2402-2405), and the desk record says every value agreed with it on dev-04's two spans (RS:3068).
+
+**Not checked.**
+- I ran nothing. The audit's hour ledger and costs are taken as written. Its own limits section says its cites into pinned code were not spot-checked; I checked only the soak lines above.
+- `MIGRATION.md` beyond its research-lead lines, the five builder briefs, the three item bodies and the appendix.
+- Astra's reproductions. I take the four VERIFIED findings as reported and did not open PR #795's code.
+- I did not compare the scripted Q1 print with the hand print value by value. F-3 (a) rests on RS:3068's sentence.
+- Whether the kit validator admits a second kit with `f2-inst-01`'s seed (F-4), and whether stage 2 of the look writes anything outside its two output files (F-12). Both are builder checks named below.
+- No SSH. No custody, energy, power, meter, transcript, slot, hazard, sealed or restricted file was opened.
+
+**Not done.** No commit, push, comment or run. The only file written is this one.
+
+---
+
+## 0. The answers
+
+| # | Answer | In one line |
+|---|---|---|
+| F-1 | **ADOPT** part 1, with text. Part 2: **the date stands; no N** | Date rules are predicates on counted spans only. Any hour of the date. Re-dating is by rule, not by a person |
+| F-2 | **ADOPT**: "close proven" | No quantity exists beyond the soak's own slope test, which is in the pinned code |
+| F-3 | (a) **ADOPT**, (b) **ADOPT**, (c) **AMEND** | Hand-read on the first native run of a new runner pin or a new leg type |
+| F-4 | (a) **ADOPT**, (b) **AMEND**, (c) the ranked list | F0 retires at R1's close. The standing filler is a stability series on new data-only kits |
+| F-5 | **AMEND** | The arm waits a bounded time for the copy. No 24 h hold |
+| F-6 | **ADOPT**, with the list of stops | Three conditions stop all work; one holds counted and v4 work; the rest hold a kit |
+| F-7 | **ADOPT** | No change |
+| F-8 | (a) **AMEND**, (b) **ADOPT**, (c) **ADOPT** | Earlier protected clauses stay in force until their rows are ported |
+| F-9 | **ADOPT** | High Power spans at any hour |
+| F-10 | **ADOPT** | RL-175 A.3 is withdrawn |
+| F-11 | **AMEND** | The first native run on a new pin is a filler or a counted pilot; no three-hour threshold |
+| F-12 | **RULED** | Words and hashes only. The coefficient file is restricted |
+
+Everything adopted or amended takes effect when the lead commits its register rows. Nothing waits for Thu 19 Nov 20:00. Items 393, 394, 397 and 398 (dev-05 and R1) run as issued (RS:1075, item 418).
+
+---
+
+## F-1. The date rules
+
+**Part 1: ADOPT.** The text the scheduler implements:
+
+1. **Scope.** RL-172 (a) rules 1 to 3 (RLD:17229-17231), RL-174 B row 3 (RLD:17576) and RL-175 C.3 (RLD:17807-17813) are predicates on development and qualification spans. No other entry has a date predicate: fillers, product work, v4 sessions and maintenance run on any date, before or after a counted span.
+2. **Any hour.** A counted span takes any t0 on its date at which its other predicates hold. 00:00 has no standing; it was the first second of the date and nothing more.
+3. **Contention.** A lower-priority entry may arm only if, after its worst case and its close, every span still to run of each dated block can take its t0 by 23:59:59 local on that date. The latest start is worked back from the end of the date through the block's earlier spans. A span's date is its t0-date (RLD:17228), so a span may close after midnight.
+4. **Re-dating is by rule.** RL-172 (a) 5 said "re-dated by the lead" (RLD:17233). It becomes: a span that misses its date takes the next date on which rules 1 to 3 hold, computed by the predicate. It never doubles up. The lead is told. RL-175 C.3 item 6's "the lead issues the second span's item by hand" (RLD:17813) ends when the queue entry carries the window.
+5. **Retired:** qualification's unused allowance of two blocks on a date with starts 10 h apart (RLD:17576). The plan is one block a date and the allowance was "not a slip remedy". An unused permission is clutter.
+6. **Retired:** hp-02's "never arms on a date before a counted span that is still to run that date" and its 1,200 s (RLD:17860). They were a start-history rule. F-2 answers it.
+
+**What the date rule protects.** The claim "the frozen fit's error on a day it has not seen is at most X". That number is the leave-one-day-out error, it becomes SD_j, and `qualified` reads it (RLD:15862-15864). It is honest only if two folds never share one realisation of a day-level nuisance.
+
+**Part 2: the date stands, and I give no N.**
+- **For development and qualification** it is registered, it was fixed before any development energy was read (RLD:17343), and the look keys its folds on the receipt's date. It does not change.
+- **For kits designed from now on,** the two nuisances with a known period are the ambient cycle and the OS batch, and both have a period of 24 h (RLD:17312). A separation rule with N under 24 h, t0 to t0, would cut one cycle into two folds and understate the error. A rule with N of 24 h or more gives no more blocks a week than dates do. So an hours rule either weakens the claim or gains nothing.
+- **No measurement supports a smaller N.** Development energy is sealed, and nothing on record gives the correlation of residuals against separation in time.
+- **What would change this:** F-4's stability series prints the spread within a date beside the spread between dates for one fixed workload. If the between-date part cannot be told from zero, the table comes to me and I rule N then. No rule is written now and nothing is built for it.
+
+---
+
+## F-2. The close gaps: ADOPT "close proven"
+
+**No physical quantity is protected by the 300 s or the 1,200 s that the soak does not already test.**
+
+- **The quantity has a name and a threshold, and they are in the pinned code.** A soak is accepted only if every start sensor's slope over its last 1,200 s is at or under 0.2 °C a minute; otherwise it refuses and no leg runs (`align_r1_rehearsal.py:130-131, 900, 1047-1048` at `2d347f721`). Every leg then releases at G0 against that soak's own reference.
+- **I already ruled what this means.** "The accepted soak meets the same slope and load criteria on either path. It does not change the reference population" (RLD:17367). That sentence was about a retried soak. It is equally true of a soak that starts two minutes after a close.
+- **My reason for keeping 20 minutes was the absence of a test** (RLD:17270), which is precedent and not a reason. The one excursion on record was not explained by elapsed cooling (RLD:17841).
+- **The gap never restored development's start history either.** Most development spans started after hours of idle. On a host that never idles, every counted span follows a filler closely with or without 15 more minutes. Qualification is meant to test the fit on the population the v4 windows will run in (RLD:17595), and that population is this host.
+
+**The rule.** A successor arms when the close is proven: receipt present, every restore line read back, every feed stopped, the process group gone, and no foreign process alive (STR:53-64, H4 and H5). The same holds after a look that ran on the MBP: RL-175 B.1's "1,200 s before the next arm" (RLD:17737) becomes "the look's process has exited".
+
+**Retired with it:** RL-171 §6.1's 5 min floor and its "kept at 20 min" line (RLD:17153-17155); RL-172 (d) (RLD:17268-17272); F2's "30 minutes before a counted t0" (RLD:16427).
+
+**What the lead should expect, and owns.** Arming sooner after a heavy load can make a soak refuse on slope. That costs time, never validity, because a refused soak takes no data.
+- On the qualification pin a slope refusal gets one retry (RLD:17365), so the cost is one soak.
+- The receipt records the refusal kind from the next runner pin (RLD:17489), and the ledger records the gap.
+- If slope refusals follow short gaps for some predecessor kind, the lead adds a settle time for dated entries from that record. It is a PHYSICS row with a measured number and does not come to me.
+
+**v4 sessions** keep whatever their registered arming procedure states.
+
+---
+
+## F-3. Hand gates and desk-final
+
+**(a) ADOPT.** The Q1 reference print and the L002 and L005 consumer read are made by the close script. RL-172 (c) sent this to me (RLD:17262); this is that ruling.
+- **Basis:** the Check's print is already a script (RS:2402), and the hand desk agreed with it on every value for dev-04's two spans (RS:3068). Four v1.1 spans have Q1 records.
+- **One acceptance test for Brief B, off the MBP:** the close script reproduces the committed Q1 records of dev-03-s02, dev-04-s01 and dev-04-s02. It is a test of new code and gates no span.
+- **Kept, as a machine gate:** a first consumer leg that does not release against the span reference makes that kit's later spans ineligible, and the print comes to me (RLD:14851). It saves five legs that would each wait 1,200 s and be excluded.
+
+**(b) ADOPT.** The hand table, the Q1 record and desk-final are owed before a look reads span k. They are not owed before span k+2 arms.
+- **What line 9 was for.** A fault in a span's records should be found before more spans carry it. The automatic desk in the close does that one span sooner than k+2 did: its failure makes the same kit's later spans ineligible (STR:131).
+- **The sampled hand table stays** (RLD:17264). A disagreement is a finding about the desk code. It holds that kit and nothing else, and it comes to me before the look.
+- **Retired:** RL-149 §2.8 line 9 (RLD:12655); RL-172 (g) item 2 (RLD:17297); RL-173 E's "before span k+2 arms" (RLD:17497).
+
+**(c) AMEND.** Mythos proposed the first span on a new runner pin. The text is:
+
+> A hand-read is owed on the first native run on a new runner pin, and on the first native run of a leg type that has not run on that pin. A leg type is a combination of the fields the runner branches on: G0 shape, band and power mode. Prompt size, decode cap and seed are data and make no new type. Until the read passes, later spans of kits that use that pin or that type are ineligible. Nothing else is held.
+
+- **What it protects:** that new measured bytes, or a path never executed, measure correctly before counted data rests on them. A kit of ruled types on an admitted pin is data and gets no read (RLD:17327).
+- **"Hand" means an independent seat working from the template** on the authorised source (RLD:17875). It never needs the laptop lead. The magistrate as interim lead may do it in a close interval, as item 418 (d) already allows (RS:1075).
+- **RL-172a's condition** (the first qualification span's soak record compared with dev-05's, RLD:17360) is this read. With F-11 it lands on a filler, so qualification does not wait for it.
+
+---
+
+## F-4. F0, and what fills an empty hour
+
+**I withdraw a sentence of mine.** "An idle hour is not a defect" (RLD:17570). An idle hour while a ruled, product-bearing entry exists is a defect of the queue.
+
+**(a) ADOPT.** F0 stays the last rung until R1's post-close Check, without spacing, as item 418 has it. Then it leaves the ladder.
+- **Kept:** one Part C at each W1-line pin change. It is that pin's registered smoke (RL-156 §4.1, cited at RLD:17126).
+- **RL-175 D.1's watch** (RLD:17844) ends with the last run. The table of runs still goes in the freeze-2 packet and gates nothing.
+- **Brief E is not needed for F0.** One Part C fits inside the window the bytes allow. No W1-line PR is made to remove a window nothing will hit.
+
+**(b) AMEND.** `f2-inst-01`, `-02` and `-03` are not repeated. Their pieces "run once" (RLD:16397) because `lm-inst-01` reads a fixed roster. They may be cut into spans of one or two legs (RLD:17160). The repeated series is a new kit family:
+
+| | `f2-stab-NN` |
+|---|---|
+| Kit | Equal to `f2-inst-01` in every field except the name and the ruling (`RL-179`). The same seed, so each repeat is the same workload. If the validator refuses a repeated seed, a new seed for each kit, with no word from me; the manifest says which. If it refuses anything else, the builder stops and tells me |
+| Pin | Any admitted runner pin. Data only, class B, tier 0 (CI `validate-kit` and a mock span) |
+| Unit | One leg as its own span: about 1 h, worst case 5,850 s (RLD:17159). This is the short filler |
+| Standing | The lead mints kits ahead. No cap, no expiry by age |
+| Order | The first stability leg of each local date ranks above the finite fillers. Further ones that date rank last. The between-date spread needs dates more than it needs legs |
+| Sealed | Until freeze 2 is committed and `lm-stab-01` has had my cold pass. RL-169 §3 applies (RLD:16409-16421): no leg is campaign data, enters a fit or counts anywhere |
+| Read | By frozen code, at reads the manifest names in advance. A read takes the legs closed at its stage-1 hash. No read stops or changes the series. Description only, no word |
+| Prints | Per prompt size and channel (GPU rail, rail sum, DC-in): the hold's mean and window SDs as `lm-inst-01` has them; the turn's energy above baseline; each one's SD within a date and SD of date means; by hour of day; against predecessor kind and seconds since the predecessor's close. The last print is F-2's evidence and the date split is F-1's |
+| Release | F-12's rule |
+
+**What it is for.** The paper's validation section needs one number before any other: how far the same work reads differently on the two channels from hour to hour and from day to day. No campaign leg gives it, because no campaign leg repeats.
+
+**(c) The ranked list.** The lead queues the first group without coming back.
+
+| Rank | Entry | Kind | Condition |
+|---|---|---|---|
+| 1 | The first `f2-stab` leg of each local date | product filler | Above |
+| 2 | `f2-inst-01`'s remaining legs, then `f2-inst-02` and `-03` | product filler, finite | As ruled (RLD:17580-17584), less the seven-day void. They lead to `lm-inst-01`, and ctl-01's kit waits on it |
+| 3 | `hp-02` | product filler, finite | As ruled (RLD:17586-17590): only if `lm-hp-01` has not run |
+| 4 | Further `f2-stab` legs | standing | This is the entry the queue invariant needs (STR:120) |
+| last, until R1 closes | F0 | diagnostic | (a) |
+
+**Worth more than any of these, and each needs one thing first:**
+
+| Entry | What it needs | Why it ranks high |
+|---|---|---|
+| The dated transfer block (RLD:17278-17283) | The one-page design, to me before freeze 2 | It is counted and dated. It tests the frozen fit on the dates the v4 windows run |
+| ctl-01 | Its runner (RLD:17577), then my reading of `lm-inst-01`, then its kit | Counted. The controls for calibrated sensitivity |
+| Flash-Next on real weights (RLD:14394) | One page to me (RLD:12720): the question, the legs, what is read and when. The MBP has the disk. The weights arrive by a `maintenance` entry with nothing armed. The model hook is on an admitted pin, or a new pin under F-11 | A second model on the same instrument. It is the first test outside one model of "the meter reads how much the model did" |
+| AGENDA experiment 3's collector | Its page (RLD:17574) | Unchanged |
+
+**Refused as a filler: extra development-shaped legs.** Before freeze 2 they would extend the registered roster after spans were seen (RL-166 Q12, RLD:15911). After it they are test legs with no registered read, which is the sentinel I refused (RLD:17276). The dated transfer block is the registered form.
+
+---
+
+## F-5. The copy: AMEND
+
+**Mythos proposed a debt with a page at 2 h and a hold on counted work at 24 h. Two changes.**
+
+1. **The arm waits for the copy, for a bounded time.** A copy can run only between a close and the next soak, because an upload beside a soak is a foreign load (RLD:17452). With the close gap gone, a copy that is merely "started" would be stopped at every arm and never finish. So the next arm waits until the copy verifies or a bound passes, whichever comes first. When the bound passes the arm proceeds, whatever the provider says.
+   - **The bound is the lead's number,** taken from recorded copy times, and it sits in the register in seconds. Until measured: 600 s (RLD:17156 expected the checks and the copy inside 5 min). It may be longer after a v4 session or a qualification span, whose data cannot be taken again.
+   - **Retired:** "a failed or unverified offload holds the next arm" (RLD:17458) and the 90-minute poll that stops everything (C-04). A provider outage no longer stops the instrument.
+2. **No 24 h hold on counted work: REJECTED.** It would lose a dated span for certain to guard against a loss of the MBP that is very unlikely on any one day. The physical bound on copy debt is the disk floor, which is already a host stop.
+   - **Kept:** the page at 2 h uncopied, repeated daily while the debt stands.
+
+**Kept, each with what it saves.**
+- No original is deleted until two verified copies exist off the MBP (RLD:17626-17633). Deletion is the only irreversible step.
+- The key exists in a second place off the MBP (RLD:17450). A copy whose only key is on the MBP is lost with it.
+- dev-01 to dev-05 originals stay raw until `lm-interim-01` has finished (RLD:17741).
+
+---
+
+## F-6. Expiry, issue caps and named stops: ADOPT
+
+**Dropped: the three-ahead cap (RLD:17479), the 24 h item expiry (RLD:17483) and the seven-day queue expiry (RLD:12647, RLD:17298, RLD:17584).** They bounded how far a prose item could drift from a ruling. An entry is valid while its pin, kit hash and queue hash are on the admitted list. A ruling that changes a design removes the hash.
+- **Where pinned bytes enforce seven days** (`queue.py:252-254` at the campaign pins, the audit's cite), the lead commits a fresh queue as data (RLD:17812). The check leaves the code at the next runner pin. No re-pin is made for it.
+
+**Which stop must still stop unrelated work, and what it protects.** RL-149 §2.4's table (RLD:12515-12522) is replaced by this one.
+
+| Stop | Scope | Protects | Cleared by |
+|---|---|---|---|
+| Restore unproven, or a High Power marker with no owner | **All work** | Every later measurement would run on an unknown host state | Proof: the pinned restore command run again and every line read back equal. The machine does this once (F-9). If it fails, the host halts and pages |
+| Disk under the floor | **All work** | A span that runs out of disk is lost whole | Evicting uploaded archives, then a re-check |
+| Meter absent or not polling; a collector that will not start | **All measured work** | Every leg is analysed on DC-in (inclusion rule 4, RLD:12505) | The launcher's own instrument check passing. I am told; I no longer sign the clearance |
+| CONTAMINATED_REDOS, three in a span | **Counted and v4 entries. Not fillers** | Registered legs are finite and a reserve of twelve replaces exclusions (RLD:12525). It is a fact about the host, so holding one kit would be the wrong scope | One later span on the host closing with no load redo and no load flag. A filler is the probe |
+| LEG_OVERTIME; a non-clean close; a refusal by the launcher; a desk failure; a consumer gate | **The kit or block that raised it** | Later spans of the same design would repeat the fault | A changed input (STR:79, E6) |
+| Watcher down | **Nothing** | It is an alarm (RLD:12667) and stays one, off the arm path | - |
+
+- **Inside a block, I-04 stands:** if the first span did not close clean, the second does not arm, and F-1 rule 4 re-dates it.
+- **A kit path change** is an entry whose hash has left the admitted list. It needs no stop.
+- **From freeze 2's commit to qual-03's close nobody changes a hygiene setting** (RLD:17612). That stands. An unplanned restart holds nothing (RLD:17613).
+
+---
+
+## F-7. The qualification batch rule: ADOPT
+
+**It is a predicate on qualification spans only, and its 2 h 35 min is filled** (RLD:17822-17825). A stability leg fits.
+- **What it protects:** the ±0.10 word. Each ratio has three pairs, no leg is re-run to mend one, and fewer than three pair-days prints `not_evaluable` (RLD:17576, RLD:17821).
+- **The physical cause** is the macOS daily batch, 12 h after boot. The predicate reads the boot time; it is not a clock rule.
+- **It ends at qual-03's close.**
+
+---
+
+## F-8. How rulings are written
+
+**(a) AMEND.** From this ruling on, each ruling of mine ends with a Register block, and an operational clause of RL-179 or later with no row is commentary. One addition:
+
+> For rulings before RL-179, a clause that protects blinding, a registration, an inclusion rule, custody or a registered estimand stays in force until its row is in `RULES.json`, whether or not anything executes it yet. The lead sends me the ported rows once, as one list beside the clauses they come from. I check that none is missing. That is one pass and it gates no span.
+
+- **Why.** "A paragraph with no row is not executed" (item 419, RS:1059) must not delete a protected rule by omission. "No qualification span before the freeze-2 hash is on main" (RLD:12659) is the example.
+
+**(b) ADOPT.** Spacing, gaps, issue caps, bounds in seconds and who posts a record are the lead's wherever they protect no claim. Sections F-2 and F-5 hand over three such numbers.
+
+**(c) ADOPT,** as PIPELINE states it: a ruling that lands during a build goes to the next spec version "unless it concerns safety or blinding" (PL:40-41). F-12 is a blinding ruling and applies now. I will send rulings for a phase as one batch before its build starts.
+
+---
+
+## F-9. High Power at any hour: ADOPT
+
+**RL-171's kept line, "worst case by 00:30" (RLD:17080), is retired.** It kept a person nearby. It named no physical limit.
+- A restore that cannot be proven is the first row of F-6's table. The machine runs the pinned restore command once more and reads back; a second failure halts the host and pages Ed and the lead.
+- hp-01 restored at the first attempt on all three spans (CUT:120).
+
+---
+
+## F-10. READY and the pre-notice: ADOPT
+
+- **A READY session whose arm refuses releases the ladder at once.** RL-172 (f)'s priority (RLD:17288) gives the session the next clean close. It never meant an empty host.
+- **RL-175 A.3 is withdrawn** (RLD:17721-17727). A pre-notice is a hint for choosing a short filler. A one-hour stability leg is what bounds the inversion.
+- **Kept:** no READY record takes effect between the two spans of a qualification block (RLD:17715). It follows from the date design and ends at qual-03's close.
+- **Kept:** a v4 session arms only through its registered route, with Ed's notice and veto.
+
+---
+
+## F-11. Smokes and cold seats: AMEND
+
+**Smokes.** Mythos proposed: only on a runner-pin change, ahead of a session over three hours. The three hours protect nothing, so the text is:
+
+> After a runner-pin change, the first native run on the new pin is a product filler, a registered counted pilot (RLD:12676), or on the W1 line a Part C. It is never a v4 session and never a dated counted span that is not a pilot. That run closing clean, with the automatic desk passing and F-3 (c)'s read, is the smoke. A change to kit data, or to code off the measured path, needs none.
+
+- **What it protects:** a session that cannot be taken again must not be the first native run of new bytes.
+- **It costs no machine time,** because the first run is product.
+- **RL-172 (i) row 5 stays** (RLD:17331): a release candidate passes a full synthetic launch-to-close run in CI.
+
+**Cold seats.** A cold seat is owed on a kit with an unruled leg type (RLD:12720), **and** on a counted or v4 kit whose layout or estimand is not a ruled one with new seeds.
+- **Why the second clause.** RL-175 C.2 (RLD:17788-17803): the order and span alias in the qualification kits was a design fault that no validator caught and I missed on the margins. A validator proves a kit is well formed. It does not prove the estimand is identified.
+- **Where a design requirement can be stated as a test** (full rank for intercept, order and span, RLD:17803), it goes into `validate-kit` and replaces the seat for that property.
+- **Fillers and description-only kits on an admitted pin:** none.
+
+---
+
+## F-12. What the interim look may release
+
+**RL-175 B.3's split failed, and the fault was in my ruling.**
+- **I published the coefficients and tried to hide residuals.** Two public fits over rosters that differ by one day reveal that day's sums, and a day with one contributor is a leg (AST:5-7).
+- **The test I ordered was ill-posed** (RLD:17765). A fit that qualifies predicts most legs within 1 % from public coefficients alone (AST:10). "Cannot recover a leg within 1 %" is therefore false for any good fit and says nothing about disclosure.
+- **This is round 11 with findings not decaying.** The root cause is `spec-gap`. Under PL:47-50 it returns to spec, and the paragraph below is that spec's release section.
+
+**The rule, for the builder:**
+
+> Stage 2 writes two files and nothing else. **`PUBLIC.json` has a closed schema. Every field is one of four kinds: a word from a list fixed in the manifest; a sha256; an integer or identifier copied from the committed stage-1 output; the look id, manifest hash or commit. It holds no float, no free text, and no list whose length depends on energy.** At most sixteen words depend on energy, each is computed on the full included roster, and the manifest lists them before stage 2 runs: `qualified_interim` (`yes`, `no`, `not_evaluable`), one word for each registered tripwire, `twin_agrees`, and `stage2_error`. **`RESTRICTED/` holds everything else and is campaign energy:** every coefficient (the full fit, each fold, the marked-span fit), every error, residual, mean, interval and difference, the coefficient file itself, and the process's standard output and error. **Freeze 2 is the sha256 of the coefficient file,** printed in `PUBLIC.json` and committed on main. Once the process has opened its first energy file it writes only fixed strings outside `RESTRICTED/`, and a failure prints `stage2_error` and the exception's type name. Stage 2 refuses to run if a `PUBLIC.json` already exists for its manifest id.
+
+**Tests, which replace the reconstruction test and the release checker.**
+1. **Type.** The public writer accepts only the four kinds and raises on a float or an unlisted string.
+2. **Invariance.** On the `noisy` world, for every leg in turn, a run with that leg's energy scaled by 1.005 gives a `PUBLIC.json` byte-equal to the base run once the sha256 fields are masked. A scaling that flips a word is skipped and counted.
+3. **Failure.** A fault injected after the first energy read leaves only the fixed line and the type name outside `RESTRICTED/`.
+4. **Once.** A second run on the same manifest id refuses.
+
+**Why this and not a threshold on contributors.** A rule of "at least k contributors" needs a checker that reasons about every pair of published sets, and that reasoning is what failed for ten rounds. Here no number computed from energy leaves custody, so no combination of public outputs can be differenced. A word is one bit about the whole roster.
+
+**What follows.**
+- **Classification is by process.** Stage 1 never opens energy, and a spy test already shows it (RLD:15896). Its output stays public: the roster, the day map, the rates, the onset fit and its fold parameters, the redo tables. A quantity wanted in public is computed in stage 1 or it is not public. `prefix_bias`, the per-day and pooled errors and `trace_coverage`, where stage 2 computes it, become restricted. This replaces B.3's table (RLD:17757-17761).
+- **Who reads the coefficient file.** The predict path, `lm-qual-01`'s scorer and the v4 scoring code read it in custody and check it against the freeze-2 hash. Nobody needs its values in the repository. A hash is the commitment a registration needs.
+- **Who reads `RESTRICTED/`.** I do, under a named ruling, after the freeze-2 hash is on main (RLD:17760). No lead, magistrate or seat opens it. If a number is needed for a design decision, I release that number by a ruling that names it and its contributor set.
+- **The blind statement becomes:** "No number computed from energy is public before the data release. The public outputs are at most sixteen words, counts that hold no energy, and hashes." B.3's sentence about day totals (RLD:17763-17764) is withdrawn; they are no longer recoverable.
+- **The twin's comparison** prints `twin_agrees` at the registered tolerance, not the largest difference (RLD:17760).
+- **Deleted from #795:** the split tool, the release checker and the "zero recovered" test. The arithmetic does not change; only where it is written does.
+- **Every later look's manifest takes this rule by default,** `lm-qual-01` (the ±0.10 result is a word), `lm-inst-01` and `lm-stab-01` included, unless its own ruling says otherwise.
+- **Astra's MED finding** (the U+2028 line in `tests/cadence/test_time_fields.py`, AST:8) is the builder's and needs nothing from me.
+- **The four checks Astra refuted** (AST:14-17) are closed. The new spec does not reopen them.
+
+---
+
+## Amends and retirements
+
+- **RL-149:** §2.4's stop table, by F-6. §2.8 line 3's seven days, line 7 as an arm gate (the lead's CUT-10; I do not object) and line 9. §2.9 item 3's hand-read, by F-3 (c).
+- **RL-169 §4:** the 30 minutes before a counted t0. "Each runs once" stands for the three `f2-inst` kits.
+- **RL-171:** §2's kept hp line; §6.1's floor and 20 minutes; §6.4's "F0's spacing and cap stand" (RLD:17172), which item 418 removed and I confirm.
+- **RL-172:** (a) rule 5's "by the lead"; (c)'s gating of the hand gates; (d); (g) items 2, 3 and 9; (i) row 9's "a higher F0 cap". (i) row 4 stands: while a span is armed the MBP runs the measurement only.
+- **RL-173:** A.7; D.1, D.2 across blocks and D.5; E's k+2 line for Q1.
+- **RL-174:** B's "an idle hour is not a defect" and its ladder order; B row 3's two-block allowance; the seven-day void on `f2-inst-02` and `-03`; hp-02's ordering clause.
+- **RL-175:** A.3; B.1's 1,200 s after a look; B.3's table, test and blind sentence; D.1's trigger once F0 retires; D.3's ordering clause and its 24 h expiry.
+- **Stand unchanged:** every inclusion rule; "no stop ends a running span" (RLD:12513); RL-171's process-based quiet; the date rules as registered; the qualification batch rule; RL-175 A.2, C.1 to C.5 and E; everything in RL-176 and RL-177.
+
+**Blind status.** Blind. No v4 outcome exists, no campaign or F2 energy has been read under any look, and nothing sealed or measured was opened for this ruling. Every change above is to scheduling, to who checks what and when, or to what a look writes in public; none changes an estimator, an inclusion rule, a threshold or a date already run. F-12 narrows what is public before stage 2 has run on real data.
+
+**For Ed, plainly.** "The audit was right, and most of the rules it cut were mine. The laptop now waits only for things it can measure: power, disk, the meter, a clean shutdown of the last run, and nobody else using it. The 5 and 20 minute pauses between runs are gone, because each run already tests for itself that the machine has settled. The one calendar rule I kept is that each test block gets its own day, because our error bars are computed by leaving out a day at a time; it only decides when those blocks run, and other work fills the rest. The repeating diagnostic is replaced by a one-hour run of the same task again and again, which gives the paper its repeatability number. Separately, the first results check will publish only pass or fail and file fingerprints until the paper, because an auditor showed the published numbers could be worked back to single measurements."
+
+---
+
+## Register
+
+Rows for the lead to commit to `RULES.json`. Owner is `research_lead` for every VALIDITY row and for rows 15 and 16; the lead owns the rest.
+
+| # | Clause | Class | Protects | Scope | Ends |
+|---|---|---|---|---|---|
+| 1 | A counted span's t0-date obeys RL-172 (a) 1 to 3, RL-174 B row 3 and RL-175 C.3; a missed date is re-dated by the same rule (F-1) | VALIDITY | The leave-one-day-out error as the error on an unseen day; SD_j and `qualified` | Development and qualification spans only | Development: freeze 2's commit. Qualification: qual-03's close |
+| 2 | A lower-priority entry arms only if every span of each dated block can still take its t0 on its date (F-1 rule 3) | PHYSICS (contention) | Row 1's dates | Fillers and maintenance while a dated block is pending | With row 1 |
+| 3 | A kit designed from now on that reports a per-day error uses the local t0-date as its day (F-1 part 2) | VALIDITY | The same claim for later kits | ctl-01, reserve-01, the transfer block, the next campaign | When I rule on the stability series' date table |
+| 4 | A successor arms when the close is proven and no foreign process is alive. No timed gap (F-2) | SAFETY and PHYSICS | Host state known at each arm; no outside load in a soak | Every entry | Standing; reviewed at each runner pin |
+| 5 | The soak's slope test and the G0 release, as the pinned bytes have them | VALIDITY | The start state of every leg | Every span | With each pin. Listed so that nothing is added on top of it |
+| 6 | An automatic desk failure or a failed consumer gate makes the same kit's later spans ineligible; a consumer failure comes to me (F-3 a, b) | SAFETY | Machine hours and registered legs on a faulty kit | The kit | End of the campaign |
+| 7 | The hand table sample, the Q1 record and desk-final exist before a look reads the span (F-3 b) | VALIDITY | A look includes only checked spans; the reference source is the one the runner verified | Spans in a look's roster | At that look |
+| 8 | A hand-read on the first native run of a new runner pin or leg type; later spans on that pin or type wait for it (F-3 c) | VALIDITY | New measured bytes measure correctly before counted data rests on them | Kits on that pin or with that type | When the read passes |
+| 9 | The first native run on a new runner pin is a product filler, a counted pilot or a Part C (F-11) | SAFETY | A session that cannot be taken again | New runner pins | When that run closes clean |
+| 10 | A cold seat on a kit with an unruled leg type, or a counted or v4 kit with a new layout or estimand (F-11) | VALIDITY | The registered estimand is identified | Such kits | When the property is a `validate-kit` test |
+| 11 | One Part C at each W1-line pin change; F0 is the last rung until R1's post-close Check and then leaves the queue (F-4 a) | VALIDITY | The W1 line's registered smoke | The W1 line | End of the v4 series |
+| 12 | `f2-stab` energy is sealed until freeze 2 is committed and `lm-stab-01` has my cold pass; description only; in no fit or count (F-4 b) | VALIDITY (blinding) | No conditionless leg's energy is read outside a registered look before the fit is frozen | `f2-stab-*` | The paper's data release |
+| 13 | The first `f2-stab` leg of a local date ranks above the finite fillers (F-4 b) | VALIDITY | The series' between-date estimate | The filler ladder | When `lm-stab-01`'s last named read has run |
+| 14 | The copy stops before the next soak; the arm waits for it up to the registered bound and then proceeds; page at 2 h uncopied and daily after (F-5) | PHYSICS (the stop) and SAFETY (the wait and the page) | No upload beside a soak; the closed span's data exists in two places | Every close | Standing; the bound is reviewed from the ledger |
+| 15 | No original is deleted until two verified copies exist off the MBP, and the key exists off the MBP (F-5) | SAFETY | The only irreversible step | Every tool and person | Standing |
+| 16 | dev-01 to dev-05 originals stay raw until `lm-interim-01` has finished (F-5) | VALIDITY | The look reads the files the spans wrote | Those spans | When the look's `PUBLIC.json` is on main |
+| 17 | Restore unproven or an unowned High Power marker stops all work; one machine retry of the pinned restore; then halt and page (F-6, F-9) | SAFETY | Every later measurement's host state | The host | Standing |
+| 18 | Disk under the floor stops all work (F-6) | PHYSICS | A span that runs out of disk is lost whole | The host | Standing |
+| 19 | Meter absent or a collector that will not start stops measured work until the launcher's check passes (F-6) | PHYSICS | Every leg is analysed on DC-in | The host | Standing |
+| 20 | CONTAMINATED_REDOS holds counted and v4 entries until one later span closes with no load redo or flag (F-6) | VALIDITY | The finite registered legs and the reserve of twelve | Counted and v4 entries | End of the campaign |
+| 21 | LEG_OVERTIME, a non-clean close, a launcher refusal: the kit or block that raised it is ineligible until an input changes (F-6) | SAFETY | Later spans of the same design repeating a fault | That kit or block | End of the campaign |
+| 22 | A qualification span does not arm while the predicted OS batch lies between its soak end and its expected close (F-7) | VALIDITY | The ±0.10 word: three pairs a ratio, none re-run | Qualification spans | qual-03's close |
+| 23 | No READY record takes effect between the two spans of a qualification block (F-10) | VALIDITY | Row 1: a block is not split across dates | v4 READY records | qual-03's close |
+| 24 | A v4 session arms only by its registered route, with Ed's notice and veto (F-10) | VALIDITY | The registration's own arming procedure | v4 sessions | End of the v4 series |
+| 25 | From freeze 2's commit to qual-03's close nobody changes a hygiene setting (F-6) | VALIDITY | Qualification runs on one host state | The host | qual-03's close |
+| 26 | A process that has opened energy writes outside custody only `PUBLIC.json`: listed words, hashes, stage-1 integers and identifiers; no float (F-12) | VALIDITY (blinding) | "No number computed from energy is public before the data release" | `lm-interim-01` and every later look | The paper's data release, or my ruling naming a number and its contributors |
+| 27 | Freeze 2 is the coefficient file's sha256 on main; the file is restricted and read in custody against that hash (F-12) | VALIDITY (prereg and blinding) | The fit is frozen before the data that tests it, without publishing it | The interim look, `lm-qual-01`, v4 scoring | The paper's data release |
+| 28 | Stage 2 runs once for a manifest id; `RESTRICTED/` is opened only by me under a named ruling after the freeze-2 hash is on main (F-12) | VALIDITY (blinding) | No repeated query narrows a word into a number; nobody who writes `lm-qual-01` holds per-leg development energy | The look and its restricted output | The paper's data release |
+| 29 | A protected clause of a ruling before RL-179 stays in force until its row is ported and I have checked the list (F-8) | VALIDITY | No registered rule is deleted by omission | RL-1 to RL-178 | When I accept the ported list |
+
+**Rows retired by this ruling.** The 300 s and 1,200 s close gaps and every restatement of them. The k+2 desk debt. The three-ahead cap, the 24 h item expiry and the seven-day queue expiry. The copy as an arm gate and the 90-minute poll. The watcher as an arm gate. hp "worst case by 00:30". The pre-notice hold. hp-02's ordering clause. Qualification's two-block allowance. F0 as a standing filler, after R1. RL-175 B.3's public and restricted table and its reconstruction test.
+
+**What comes back to me.** The ported list of earlier protected rows (row 29). `lm-stab-01` before any read. The transfer block's page and the Flash-Next page. A consumer-gate failure. A hand-table disagreement before a look. PR #795's new spec, once, before its build starts.
