@@ -1,14 +1,21 @@
 {
   "armed": null,
-  "next_observable": "before install: the READY record and this item on main, the native record, the ordinary notice, PKT_SHA, the actual arm.json, plan digest, t0, end and dead-man, fresh host and no-veto reads. On the next post-fence activation: the registered R1 terminal status plus chain exit, restore and process-absence Check; the lead handles results and slot fills under the owning procedure.",
-  "open_items": [],
+  "next_observable": "after the fence is gone, Check below reports operational receipt/leg records, feeds, restore and copy; piece 1's hand-read is lead-owned",
+  "open_items": [
+    {
+      "expires_epoch_s": 1794988799,
+      "item": 406,
+      "owner": "magistrate",
+      "status": "ISSUED"
+    }
+  ],
   "owner": "magistrate",
   "schema": "joulewise.current_pointer.v2",
-  "source_item": "398",
-  "source_item_heading_date": "2026-11-16",
+  "source_item": "406",
+  "source_item_heading_date": "2026-11-17",
   "wait": {
-    "deadline_epoch_s": 1795209227,
+    "deadline_epoch_s": 1794988799,
     "observable": "none",
-    "on_early_or_refused": "any missing or open checklist line, a READY record that is not yet effective or is VOID, a stop or veto, an unproven restore or process group, a failed or unverified offload, a stale authorization, or a failed prepare or install: NOTHING arms; preserve outputs and report to the lead by the existing authorized route. Do not retry a measured session, skip a hold, extend a queue, reuse S, or erase recovery markers. A refused arm makes the READY record VOID (its clause 6), so STANDING-F0's rule 4 applies. A new t0 for time only goes through the same route. A running lower-priority span finishes."
+    "on_early_or_refused": "WAIT if predecessor has not closed or a higher rung can arm; VOID if predecessor is not clean, the date window is missed, or 24 h has elapsed since issue. No retry after a launcher/runner refusal; report to the lead. Never skip a predecessor, reuse OUT, re-run a leg, or queue another piece on this item's authority"
   }
 }
