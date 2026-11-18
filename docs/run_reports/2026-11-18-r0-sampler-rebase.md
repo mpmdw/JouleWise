@@ -37,3 +37,14 @@ The prior PR #694 Fable review applied to its earlier head. Its repairs were rep
 The focused suite covered `tests.align.test_r0_host`, `tests.align.test_r0_checks`, `tests.hazards.test_contention`, `tests.align.test_smc_classifier_v4`, `tests.align.test_smc_quiet` and `tests.hazards.test_smc_enumeration`. It passed 241 tests with four skips under synthetic inputs and host-command fakes. The harness rejected unexpected commands and signals. The inventory boundary test used a fake directory entry after local filesystem policy blocked creating its sentinel directory.
 
 The draft PR carries the exact candidate SHA and the repository sharded CI run. The lead routes the Tier 2 delta to one executing reviewer from each family. Integration owner acceptance and lead acceptance remain pending. The integration owner determines where to carry the admitted bytes. Future first-native evidence follows RL-179 F-11 and the applicable pin-change requirements. NEEDS_SPEC has no entries.
+
+## Delta audit round 1
+
+Round 1 reviewed `cde215aff2def5b80b0f76bc26a5730279d8664c`. It verified one HIGH and one MED, both implementation bugs in consuming sampler state. The original frozen spec stays at `cb341a793`. The new regressions produced seven failing cases on the reviewed head and pass on repair `0ecd9c5121869b59d33ed7cc5501a31dfc86d162`.
+
+| Verified finding | Repair | Regression | Final |
+| --- | --- | --- | --- |
+| HIGH, a late failed census could let the report pass or let the inventory publish. | Bounded sampler shutdown and final drain precede both success paths. A sampler still running at the join bound refuses. The final report records the refusal on the last check. | `test_execute_refuses_census_failure_during_final_check`, `test_execute_finishes_inflight_census_before_publishing`, `test_inventory_refuses_census_failure_at_eof` | PASS |
+| MED, a failed census or stale sampler could discard a queued contention flag. | Drain completed windows in order before applying the later failure or freshness refusal. Publish each background snapshot with its census evidence. | `test_queued_contention_survives_census_failure_or_stall` | PASS |
+
+Both threaded regressions passed 20 consecutive synthetic fixture runs. The existing sharded CI blocker in `tests/test_agent_identity.py` remains with the CI owner. The draft records hosted CI for the repaired candidate and requests the follow-up delta review. [CI-owner issue #834](https://github.com/mpmdw/JouleWise/issues/834)
