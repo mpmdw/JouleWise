@@ -11,7 +11,6 @@ import os
 from pathlib import Path
 import re
 import shutil
-import stat
 import subprocess
 import threading
 import time
@@ -67,12 +66,13 @@ def command(argv):
 def _installed_night_agents():
     fs = measurement_liveness.census_fs
     directory = fs(Path("~"), "home")
-    for name in ("Library", "LaunchAgents"):
-        if not any(entry.name == name for entry in fs(directory, "list")):
+    entries = measurement_liveness.census_entries
+    for name in ("library", "launchagents"):
+        directory = entries(directory).get(name)
+        if directory is None:
             return []
-        directory /= name
-    return sorted(str(entry) for entry in fs(directory, "list")
-                  if fnmatchcase(entry.name, "com.joulewise.night*.plist"))
+    return sorted(str(entry) for key, entry in entries(directory).items()
+                  if fnmatchcase(key, "com.joulewise.night*.plist"))
 
 
 def _interior_exit_evidence(opening, current, intermediate, elapsed_s, limit):
@@ -242,13 +242,8 @@ class QuietGuard:
             raise Refused("additional custody parents must be a JSON array of paths")
         parents = [custody_parent(), *(fs(Path(p), "expanduser") for p in extra), *self.parents]
         for parent in parents:
-            if not parent.is_absolute() or "restricted" in parent.parts or ".." in parent.parts:
+            if not parent.is_absolute() or {part.casefold() for part in parent.parts} & {"..", "restricted"}:
                 raise Refused(f"invalid custody parent: {parent}")
-        parents = list(dict.fromkeys(fs(p, "resolve") for p in parents))
-        receipt["resolved_custody_parents"] = [str(p) for p in parents]
-        for parent in parents:
-            if "restricted" in parent.parts or not stat.S_ISDIR(fs(parent, "stat").st_mode):
-                raise Refused(f"custody parent missing or not a directory: {parent}")
         installed = _installed_night_agents()
         receipt["installed_night_agents"] = installed
         if installed:
@@ -266,6 +261,7 @@ class QuietGuard:
             return ProbeResult(argv, r.returncode, r.stdout, r.stderr, time.monotonic_ns())
         agent, refusal = agent_census(SimpleNamespace(run=probe, monotonic_ns=time.monotonic_ns))
         custody = self.inspect_custody(parents=parents, strict=True)
+        receipt["resolved_custody_parents"] = custody.resolved_parents
         table = probe(PS_ARGV)
         if table.exit_code != 0:
             raise Refused("process table unavailable")
@@ -279,7 +275,7 @@ class QuietGuard:
             pid, _, argv = line.split(None, 2)
             if int(pid) != os.getpid() and pattern.search(argv):
                 chains.append(line)
-        receipt.update(agent=asdict(agent), custody=asdict(custody),
+        receipt.update(agent=asdict(agent), custody={"refusals": custody.refusals, "warnings": custody.warnings},
                        pcpu_diagnostic=diagnostic, chains=chains)
         if refusal or not custody.clear or chains:
             raise Refused(f"machine occupied or census indeterminate: {receipt}")

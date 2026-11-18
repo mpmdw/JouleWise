@@ -8,6 +8,7 @@ JOULEWISE_CUSTODY_PARENT in measurement and publication environments.
 """
 from __future__ import annotations
 
+from contextlib import contextmanager
 from dataclasses import dataclass, field
 import errno
 import json
@@ -143,6 +144,7 @@ def publish_campaign(runs_root: Path, nonce: str, *, pid: int | None = None,
 class Census:
     refusals: list[str] = field(default_factory=list)
     warnings: list[str] = field(default_factory=list)
+    resolved_parents: list[str] = field(default_factory=list)
 
     @property
     def clear(self) -> bool:
@@ -162,36 +164,69 @@ class Refused(RuntimeError):
         super().__init__(reason)
 
 
-def census_fs(path: Path, operation: str):
+def census_fs(path: Path, operation: str, *, dir_fd: int | None = None):
     """Perform one census filesystem operation, including iterator consumption."""
-    try:
+    target = path if dir_fd is None else path.name
+
+    @contextmanager
+    def observation():
+        try:
+            yield
+        except OSError as exc:
+            number = exc.errno
+            if number is None and isinstance(exc, FileNotFoundError):
+                number = errno.ENOENT
+            failed_path = Path(os.fsdecode(exc.filename)) if exc.filename else path
+            raise Refused(failed_path if failed_path.is_absolute() else path,
+                          number, operation=operation) from exc
+
+    @contextmanager
+    def directory():
+        with observation():
+            fd = os.open(target, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW, dir_fd=dir_fd)
+            try:
+                yield fd
+            finally:
+                os.close(fd)
+
+    def open_marker(name, flags):
+        return os.open(name, flags | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=dir_fd)
+
+    if operation == "directory":
+        return directory()
+    with observation():
         match operation:
             case "list":
-                return list(path.iterdir())
+                if dir_fd is None:
+                    return list(path.iterdir())
+                with os.scandir(dir_fd) as entries:
+                    return [path / entry.name for entry in entries]
             case "stat":
-                return path.stat()
+                if dir_fd is None:
+                    return path.stat()
+                info = os.stat(target, dir_fd=dir_fd, follow_symlinks=False)
+                if stat.S_ISLNK(info.st_mode):
+                    raise OSError(errno.ELOOP, "census entry is a symlink", target)
+                return info
             case "lstat":
-                return path.lstat()
+                return path.lstat() if dir_fd is None else os.lstat(target, dir_fd=dir_fd)
             case "read":
-                return path.read_text(encoding="utf-8")
+                if dir_fd is None:
+                    return path.read_text(encoding="utf-8")
+                with open(target, encoding="utf-8", opener=open_marker) as handle:
+                    return handle.read()
             case "resolve":
-                return path.resolve(strict=True)
+                return Path(os.path.realpath(path, strict=True))
             case "expanduser":
                 return path.expanduser()
             case "home":
                 return Path.home()
             case _:
                 raise ValueError(f"unsupported census filesystem operation: {operation}")
-    except OSError as exc:
-        number = exc.errno
-        if number is None and isinstance(exc, FileNotFoundError):
-            number = errno.ENOENT
-        failed_path = Path(os.fsdecode(exc.filename)) if exc.filename else path
-        raise Refused(failed_path, number, operation=operation) from exc
 
 
-def _read_marker(path: Path) -> dict:
-    value = json.loads(census_fs(path, "read"))
+def _read_marker(path: Path, *, dir_fd: int | None = None) -> dict:
+    value = json.loads(census_fs(path, "read", dir_fd=dir_fd))
     if not isinstance(value, dict):
         raise ValueError(f"not an object: {path}")
     return value
@@ -207,17 +242,24 @@ def _exists(path: Path) -> bool:
         return False
 
 
-def _is_symlink(path: Path, *, required=False) -> bool:
+def _is_symlink(path: Path, *, dir_fd: int | None = None) -> bool:
     try:
-        return stat.S_ISLNK(census_fs(path, "lstat").st_mode)
+        return stat.S_ISLNK(census_fs(path, "lstat", dir_fd=dir_fd).st_mode)
     except Refused as exc:
-        if required or exc.errno != errno.ENOENT:
+        if dir_fd is not None or exc.errno != errno.ENOENT:
             raise
         return False
 
 
-def _listed_names(path: Path) -> set[str]:
-    return {entry.name for entry in census_fs(path, "list")}
+def census_entries(path: Path, *, dir_fd: int | None = None) -> dict[str, Path]:
+    """Index one complete listing by folded name while preserving its spelling."""
+    names = {}
+    for entry in census_fs(path, "list", dir_fd=dir_fd):
+        key = entry.name.casefold()
+        if key in names:
+            raise Refused(f"case-folded name collision at {path}: {names[key].name!r} and {entry.name!r}")
+        names[key] = entry
+    return names
 
 
 def _valid_exit(record: dict) -> bool:
@@ -227,7 +269,7 @@ def _valid_exit(record: dict) -> bool:
             and type(record.get("monotonic_ns")) is int)
 
 
-def _started_after_written(start: str, path: Path) -> bool:
+def _started_after_written(start: str, path: Path, *, dir_fd: int | None = None) -> bool:
     """True when the ``lstart`` token (UTC, 1 s precision) is more than 1 s after ``path``'s mtime."""
     import calendar
     import time
@@ -236,12 +278,12 @@ def _started_after_written(start: str, path: Path) -> bool:
         started = calendar.timegm(time.strptime(start, "%a %b %d %H:%M:%S %Y"))
     except (ValueError, OverflowError):
         return False
-    written = census_fs(path, "stat").st_mtime
+    written = census_fs(path, "stat", dir_fd=dir_fd).st_mtime
     return started > written + 1
 
 
 def _inspect_identity(record: dict, path: Path, result: Census,
-                      observer: Callable[[int], Identity]) -> None:
+                      observer: Callable[[int], Identity], *, dir_fd: int | None = None) -> None:
     pid = record.get("pid")
     if type(pid) is not int or pid <= 0:
         raise ValueError(f"invalid PID: {path}")
@@ -252,7 +294,7 @@ def _inspect_identity(record: dict, path: Path, result: Census,
     token = _start_token(record.get("start_time"))
     observed = _start_token(identity.start_time)
     if identity.state == "LIVE" and token is None and observed is not None \
-            and _started_after_written(observed, path):
+            and _started_after_written(observed, path, dir_fd=dir_fd):
         # An entry published without a start time (publish_campaign, probe
         # UNKNOWN): a live process that started after the entry was written
         # cannot be its writer, so the pid was reused.
@@ -271,21 +313,23 @@ def _pending_present(path: Path) -> bool:
     return _exists(path) or _is_symlink(path)
 
 
-def _present(path: Path, names: set[str] | None, *, include_dangling=False) -> bool:
+def _marker(path: Path, names: dict[str, Path] | None, *, include_dangling=False) -> Path | None:
     if names is not None:
-        return path.name in names
-    return _pending_present(path) if include_dangling else _exists(path)
+        return names.get(path.name.casefold())
+    present = _pending_present(path) if include_dangling else _exists(path)
+    return path if present else None
 
 
-def pending_launch_closed(night: Path, *, names: set[str] | None = None) -> bool:
+def pending_launch_closed(night: Path, *, names: dict[str, Path] | None = None,
+                          dir_fd: int | None = None) -> bool:
     """Read durable closure before probing a historical, reusable group number."""
     for name in ("chain.exited", "launch.resolved"):
-        path = night / name
-        if not _present(path, names, include_dangling=True):
+        path = _marker(night / name, names, include_dangling=True)
+        if path is None:
             continue
-        if _is_symlink(path, required=names is not None):
+        if _is_symlink(path, dir_fd=dir_fd):
             raise ValueError(f"launcher closure is a symlink: {path}")
-        record = _read_marker(path)
+        record = _read_marker(path, dir_fd=dir_fd)
         if name == "chain.exited":
             valid = _valid_exit(record)
         else:
@@ -312,14 +356,16 @@ def _pending_group_gone(pgid: int, marker: Path) -> bool:
 
 
 def _inspect_pending(path: Path, result: Census,
-                     observer: Callable[[int], Identity], *, names: set[str] | None = None) -> None:
-    if not _present(path, names, include_dangling=True):
+                     observer: Callable[[int], Identity], *, names: dict[str, Path] | None = None,
+                     dir_fd: int | None = None) -> None:
+    path = _marker(path, names, include_dangling=True)
+    if path is None:
         return
-    if pending_launch_closed(path.parent, names=names):
+    if pending_launch_closed(path.parent, names=names, dir_fd=dir_fd):
         return
-    if _is_symlink(path, required=names is not None):
+    if _is_symlink(path, dir_fd=dir_fd):
         raise ValueError(f"pending launcher identity is a symlink: {path}")
-    record = _read_marker(path)
+    record = _read_marker(path, dir_fd=dir_fd)
     pid, pgid = record.get("pid"), record.get("pgid")
     if type(pid) is not int or pid <= 1 or type(pgid) is not int or pgid <= 1:
         raise ValueError(f"invalid pending launcher identity: {path}")
@@ -333,61 +379,79 @@ def _inspect_pending(path: Path, result: Census,
         return
     # A dead leader cannot disprove surviving members of an unresolved group.
     refusal_count = len(result.refusals)
-    _inspect_identity(record, path, result, lambda pid: identity)
+    _inspect_identity(record, path, result, lambda pid: identity, dir_fd=dir_fd)
     if len(result.refusals) == refusal_count:
         result.refusals.append(f"live measurement owner process group: {path}")
 
 
 def _inspect_started_chain(night: Path, result: Census,
-                           observer: Callable[[int], Identity], *, names: set[str] | None = None) -> None:
-    started, exited = night / "chain.started", night / "chain.exited"
-    if not _present(started, names):
+                           observer: Callable[[int], Identity], *, names: dict[str, Path] | None = None,
+                           dir_fd: int | None = None) -> None:
+    started = _marker(night / "chain.started", names)
+    if started is None:
         return
-    if _present(exited, names):
-        if not _valid_exit(_read_marker(exited)):
-            raise ValueError(f"invalid exit marker: {exited}")
-        return
-    record = _read_marker(started)
-    # Reconcile an exit published while reading the start marker.
-    if _present(exited, _listed_names(night) if names is not None else None):
-        if not _valid_exit(_read_marker(exited)):
+    exited = _marker(night / "chain.exited", names)
+    if exited is None:
+        record = _read_marker(started, dir_fd=dir_fd)
+        # Reconcile an exit published while reading the start marker.
+        current = census_entries(night, dir_fd=dir_fd) if names is not None else None
+        exited = _marker(night / "chain.exited", current)
+    if exited is not None:
+        if not _valid_exit(_read_marker(exited, dir_fd=dir_fd)):
             raise ValueError(f"invalid exit marker: {exited}")
         return
     if _start_token(record.get("start_time")) is None:
         raise ValueError(f"chain start identity unavailable: {started}")
-    _inspect_identity(record, started, result, observer)
+    _inspect_identity(record, started, result, observer, dir_fd=dir_fd)
 
 
 def _inspect_chain(night: Path, result: Census, observer: Callable[[int], Identity],
-                   *, names: set[str] | None = None) -> None:
+                   *, dir_fd: int | None = None) -> None:
+    names = census_entries(night, dir_fd=dir_fd) if dir_fd is not None else None
     pending = Census()
-    _inspect_pending(night / "launch.pending", pending, observer, names=names)
-    _inspect_started_chain(night, pending, observer, names=names)
+    _inspect_pending(night / "launch.pending", pending, observer, names=names, dir_fd=dir_fd)
+    _inspect_started_chain(night, pending, observer, names=names, dir_fd=dir_fd)
     # Commit diagnostics only after both reads, so reconciliation cannot duplicate them.
     result.refusals.extend(pending.refusals)
     result.warnings.extend(pending.warnings)
 
 
-def _inspect_campaign(path: Path, result: Census, observer: Callable[[int], Identity]) -> None:
-    record = _read_marker(path)
+def _inspect_campaign(path: Path, result: Census, observer: Callable[[int], Identity],
+                      *, dir_fd: int | None = None) -> None:
+    record = _read_marker(path, dir_fd=dir_fd)
     if (record.get("schema") != REGISTRY_SCHEMA
             or not isinstance(record.get("nonce"), str) or not record["nonce"]
             or not isinstance(record.get("runs_root"), str)
             or not Path(record["runs_root"]).is_absolute()):
         raise ValueError(f"invalid registry marker: {path}")
     # The entry itself governs; a missing referenced campaign.lock does not clear it.
-    _inspect_identity(record, path, result, observer)
+    _inspect_identity(record, path, result, observer, dir_fd=dir_fd)
 
 
-def _reconciled(action: Callable[[], None], present: Callable[[], bool], *, strict: bool) -> None:
+def _reconciled(action: Callable[[], None], present: Callable[[], bool]) -> None:
     try:
         action()
     except Refused as exc:
-        if strict or exc.errno != errno.ENOENT or exc.operation == "stat":
+        if exc.errno != errno.ENOENT or exc.operation == "stat":
             raise
         # Exactly one reread/reconciliation; repeated disappearance is uncertain.
         if present():
             action()
+
+
+def _inspect_resolved_root(parent: Path, result: Census, observer: Callable[[int], Identity]) -> None:
+    with census_fs(parent, "directory") as root_fd:
+        for key, child in census_entries(parent, dir_fd=root_fd).items():
+            if key == "active-campaigns":
+                with census_fs(child, "directory", dir_fd=root_fd) as registry_fd:
+                    for entry in census_entries(child, dir_fd=registry_fd).values():
+                        _inspect_campaign(entry, result, observer, dir_fd=registry_fd)
+            elif stat.S_ISDIR(census_fs(child, "stat", dir_fd=root_fd).st_mode):
+                with census_fs(child, "directory", dir_fd=root_fd) as plan_fd:
+                    night = census_entries(child, dir_fd=plan_fd).get("night")
+                    if night is not None:
+                        with census_fs(night, "directory", dir_fd=plan_fd) as night_fd:
+                            _inspect_chain(night, result, observer, dir_fd=night_fd)
 
 
 def census(*, parents: list[Path] | None = None,
@@ -401,12 +465,23 @@ def census(*, parents: list[Path] | None = None,
             if not isinstance(extra, list) or any(not isinstance(p, str) or not p for p in extra):
                 raise ValueError("additional custody parents must be a JSON array of paths")
             parents = [custody_parent(), *(census_fs(Path(p), "expanduser") for p in extra)]
+        resolved = set()
         for parent in dict.fromkeys(parents):
-            # Only legacy callers allow an absent parent.
+            if strict:
+                if not parent.is_absolute() or {part.casefold() for part in parent.parts} & {"..", "restricted"}:
+                    raise Refused(f"invalid custody parent: {parent}")
+                parent = census_fs(parent, "resolve")
+                if any(part.casefold() == "restricted" for part in parent.parts):
+                    raise Refused(f"invalid resolved custody parent: {parent}")
+                if parent not in resolved:
+                    resolved.add(parent)
+                    _inspect_resolved_root(parent, result, observer)
+                    result.resolved_parents.append(str(parent))
+                continue
             try:
                 children = census_fs(parent, "list")
             except Refused as exc:
-                if strict or exc.errno != errno.ENOENT:
+                if exc.errno != errno.ENOENT:
                     raise
                 continue
             for child in children:
@@ -415,26 +490,22 @@ def census(*, parents: list[Path] | None = None,
                         pending = Census()
                         for path in census_fs(child, "list"):
                             _reconciled(lambda: _inspect_campaign(path, pending, observer),
-                                        lambda: _exists(path), strict=strict)
+                                        lambda: _exists(path))
                         result.refusals.extend(pending.refusals)
                         result.warnings.extend(pending.warnings)
-                    _reconciled(inspect_registry, lambda: _exists(child), strict=strict)
+                    _reconciled(inspect_registry, lambda: _exists(child))
                 else:
                     try:
                         is_dir = stat.S_ISDIR(census_fs(child, "stat").st_mode)
                     except Refused as exc:
-                        if strict or exc.errno != errno.ENOENT:
+                        if exc.errno != errno.ENOENT:
                             raise
                         continue
                     if is_dir:
                         night = child / "night"
-                        if strict:
-                            if night.name in _listed_names(child):
-                                _inspect_chain(night, result, observer, names=_listed_names(night))
-                        else:
-                            _reconciled(lambda: _inspect_chain(night, result, observer),
-                                        lambda: (_exists(night / "chain.started")
-                                                 or _pending_present(night / "launch.pending")), strict=False)
+                        _reconciled(lambda: _inspect_chain(night, result, observer),
+                                    lambda: (_exists(night / "chain.started")
+                                             or _pending_present(night / "launch.pending")))
     except Refused as exc:
         if strict:
             raise

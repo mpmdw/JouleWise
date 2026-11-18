@@ -103,7 +103,7 @@ class R0HostTest(unittest.TestCase):
 
     def test_missing_configured_parent_refuses_with_path_and_errno(self):
         missing = self.default_parent / "typo"
-        guard = QuietGuard([missing], run=self.runner, inspect_custody=lambda **kw: Census())
+        guard = QuietGuard([missing], run=self.runner)
         with self.assertRaises(Refused):
             guard.check(force=True)
         self.assertIn(str(missing), guard.receipts[-1]["refusal"])
@@ -1121,12 +1121,13 @@ class R0SamplerAdmissionSpec(unittest.TestCase):
 
     def test_cli_refuses_when_required_background_census_root_cannot_be_enumerated(self):
         from contextlib import nullcontext
+        import os
         import threading
         from joulewise.align import r0_runner
         from joulewise.measurement_liveness import census
         from tests.align.test_r0_checks import FakeBackend
 
-        iterdir = Path.iterdir
+        open_directory = os.open
         for mode in ("quiet", "before", "during", "transient"):
             with self.subTest(mode=mode), tempfile.TemporaryDirectory() as tmp:
                 work = Path(tmp).resolve()
@@ -1155,15 +1156,14 @@ class R0SamplerAdmissionSpec(unittest.TestCase):
                         required.rename(detached)
                     return run(argv, **kwargs)
 
-                def fixture_iterdir(directory):
-                    if mode == "transient" and directory == required and ready.is_set():
+                def fixture_open(directory, flags, *, dir_fd=None):
+                    if mode == "transient" and Path(directory) == required and ready.is_set():
                         required.rename(detached)
                         try:
-                            yield from iterdir(directory)
+                            return open_directory(directory, flags, dir_fd=dir_fd)
                         finally:
                             detached.rename(required)
-                    else:
-                        yield from iterdir(directory)
+                    return open_directory(directory, flags, dir_fd=dir_fd)
 
                 def host():
                     if mode == "before":
@@ -1183,7 +1183,7 @@ class R0SamplerAdmissionSpec(unittest.TestCase):
                     guard.inspect_custody = lambda **kw: census(**kw, observer=unexpected_identity)
                     return guard
 
-                with patch.object(Path, "iterdir", fixture_iterdir), \
+                with patch.object(os, "open", fixture_open), \
                         patch.object(r0_runner, "host_snapshot", side_effect=host), \
                         patch.object(r0_runner, "deadline", return_value=nullcontext()), \
                         patch.object(r0_runner, "command", return_value="synthetic-head"), \
@@ -1288,6 +1288,8 @@ class R0SamplerAdmissionSpec(unittest.TestCase):
         return status, output.exists(), stderr.getvalue()
 
     def test_background_census_resolves_configured_alias_at_scan_time(self):
+        import os
+
         for mode, reason in (("quiet", ""), ("removed", "errno 2"), ("retargeted", "live measurement owner")):
             with self.subTest(mode=mode), tempfile.TemporaryDirectory() as tmp:
                 work = Path(tmp).resolve()
@@ -1304,10 +1306,44 @@ class R0SamplerAdmissionSpec(unittest.TestCase):
                     if mode == "retargeted":
                         configured.symlink_to(active, target_is_directory=True)
 
-                rc, published, diagnostic = self.run_background_census(
-                    configured, lambda: None, just_before_census=swap)
+                with patch.object(os.path, "realpath", wraps=os.path.realpath) as resolve:
+                    rc, published, diagnostic = self.run_background_census(
+                        configured, lambda: None, just_before_census=swap)
                 self.assertEqual((rc, published), (0, True) if mode == "quiet" else (2, False), diagnostic)
                 self.assertIn(reason, diagnostic)
+                configured_calls = [call for call in resolve.call_args_list if Path(call.args[0]) == configured]
+                self.assertEqual([call.kwargs for call in configured_calls], [{"strict": True}] * 2)
+
+    def test_background_census_refuses_symlink_substituted_before_root_open(self):
+        import os
+
+        with tempfile.TemporaryDirectory() as tmp:
+            work = Path(tmp).resolve()
+            configured, original, moved = (work / name for name in ("configured", "original", "moved"))
+            original.mkdir()
+            configured.symlink_to(original, target_is_directory=True)
+            replaced = False
+            ready = False
+            open_path = os.open
+
+            def before_open(path, flags, *, dir_fd=None):
+                nonlocal replaced
+                if Path(path) == original and ready and not replaced:
+                    original.rename(moved)
+                    original.symlink_to(moved, target_is_directory=True)
+                    replaced = True
+                    self.assertEqual(flags, os.O_RDONLY | os.O_DIRECTORY | os.O_NOFOLLOW)
+                return open_path(path, flags, dir_fd=dir_fd)
+
+            def prepare():
+                nonlocal ready
+                ready = True
+
+            with patch.object(os, "open", side_effect=before_open):
+                rc, published, diagnostic = self.run_background_census(configured, prepare)
+            self.assertTrue(replaced)
+            self.assertEqual((rc, published), (2, False), diagnostic)
+            self.assertIn(f"{original} (errno ", diagnostic)
 
     def test_background_census_keeps_open_root_when_its_path_is_replaced(self):
         import os
@@ -1393,7 +1429,7 @@ class R0SamplerAdmissionSpec(unittest.TestCase):
         from joulewise.align import r0_host
 
         raw = {
-            "access", "exists", "expanduser", "fstat", "glob", "home", "iglob", "is_dir",
+            "access", "exists", "expanduser", "fdopen", "fstat", "fwalk", "glob", "home", "iglob", "is_dir",
             "is_file", "is_symlink", "isdir", "isfile", "islink", "iterdir", "lexists",
             "listdir", "lstat", "open", "read", "read_bytes", "read_text", "readlink",
             "realpath", "resolve", "rglob", "samefile", "scandir", "stat", "walk",
@@ -1431,7 +1467,7 @@ class R0SamplerAdmissionSpec(unittest.TestCase):
                         self.assertFalse(caught & filesystem_errors, location)
 
     def test_full_r0_refuses_every_census_filesystem_call_fault(self):
-        from contextlib import nullcontext, redirect_stderr, redirect_stdout
+        from contextlib import contextmanager, nullcontext, redirect_stderr, redirect_stdout
         import errno
         from io import StringIO
         import os
@@ -1441,8 +1477,9 @@ class R0SamplerAdmissionSpec(unittest.TestCase):
 
         patch_references(self)
         (self.default_parent / "Library" / "LaunchAgents").mkdir(parents=True)
-        operations = {"expanduser": "expanduser", "home": "home", "lstat": "lstat",
-                      "list": "iterdir", "read": "read_text", "resolve": "resolve", "stat": "stat"}
+        path_operations = {"expanduser": "expanduser", "home": "home", "lstat": "lstat",
+                           "list": "iterdir", "read": "read_text", "stat": "stat"}
+        fd_operations = {"lstat": "lstat", "list": "scandir", "read": "open", "stat": "stat"}
         original = live.census_fs
         with tempfile.TemporaryDirectory() as tmp:
             work = Path(tmp).resolve()
@@ -1499,11 +1536,18 @@ class R0SamplerAdmissionSpec(unittest.TestCase):
                     rejected.mkdir()
                     return {"status": "pass", "contention_redo": [{"output_dir": str(rejected)}]}
 
-                def inject(path, operation):
+                def inject(path, operation, *, dir_fd=None):
                     trace.append((path, operation))
                     if len(trace) != target:
-                        return original(path, operation)
+                        return original(path, operation, dir_fd=dir_fd)
                     error = OSError(number, "synthetic census operation failed", str(path))
+                    if operation == "directory":
+                        @contextmanager
+                        def failed_directory():
+                            with patch.object(os, "open", side_effect=error):
+                                with original(path, operation, dir_fd=dir_fd) as fd:
+                                    yield fd
+                        return failed_directory()
                     if readlink:
                         # Exercise the nested syscall inside strict resolution.
                         read = os.readlink
@@ -1513,8 +1557,14 @@ class R0SamplerAdmissionSpec(unittest.TestCase):
                             return read(value, *args, **kwargs)
                         with patch.object(os, "readlink", fail_readlink):
                             return original(path, operation)
-                    with patch.object(Path, operations[operation], side_effect=error):
-                        return original(path, operation)
+                    if operation == "resolve":
+                        module, name = os.path, "realpath"
+                    elif dir_fd is not None:
+                        module, name = os, fd_operations[operation]
+                    else:
+                        module, name = Path, path_operations[operation]
+                    with patch.object(module, name, side_effect=error):
+                        return original(path, operation, dir_fd=dir_fd)
 
                 args = ["--config", str(config_file), "--output", str(output)]
                 if inventory_mode:
@@ -1558,7 +1608,7 @@ class R0SamplerAdmissionSpec(unittest.TestCase):
 
             with patch.dict("os.environ", {live.ADDITIONAL_PARENTS_ENV: json.dumps([str(extra)])}):
                 full_trace = run()
-                self.assertEqual({op for _, op in full_trace}, set(operations))
+                self.assertEqual({op for _, op in full_trace}, set(path_operations) | {"directory", "resolve"})
                 for target, (path, operation) in enumerate(full_trace, 1):
                     for number in (errno.EIO, errno.ENOENT, errno.EACCES):
                         with self.subTest(call=target, operation=operation, error=number):
