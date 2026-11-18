@@ -1052,6 +1052,33 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 
 <!-- RUN_STATE TYPED ITEMS: newest first. Add with scripts/run_state_add.py; never edit by hand. -->
 
+440. **R1-RERUN READY (one-use, lead): same pin b2e01464d, effective from f2-stab-15-l001's launch record; expires Sat 21 Nov 23:59 PST**
+
+```item
+{"expires_epoch_s": null, "issued_epoch_s": 1795037209, "number": 440, "owner": "magistrate", "schema": "joulewise.run_state_item.v1", "sets": [], "status": "ISSUED", "supersedes": []}
+```
+
+- **Lead decision: ISSUE one fresh, one-use R1 READY** under item 433 and RL-183 §2.6, using the worksheet `r1-ready-1116/RERUN-READY-DRAFT.md` (audit branch, PR #843).
+- **Prior attempt and Check:** item 438 (main `4135096dc`).
+  - Status complete, chain rc 0, thermometry pass, A-B-A released, step 30b no redo.
+  - G1 count complete by hand, restored, uninstalled.
+  - Kit word **R1-RERUN**: planning G0 timeouts at R+2C/R+4C, no planning release.
+  - It is a clean Check at the exact pin, so a lead READY at the same pin is the ruled branch. No ruling and no new Part C are needed: the pin and the ten blobs are unchanged.
+- **Pin:** `b2e01464d` exactly, with the ten frozen blobs unchanged. This is the same registered route as items 397/398 (HAZARD_PACK LaunchAgent via `scripts/arm_align_r1.py`), with item 437's D-7 correction: a fresh session-local copy of the RL-145 sensor ruling, with `authorizes_night: true`.
+- **Effective condition (RL-175 A.2, the only admissible form):** effective from the launch record of `f2-stab-15-l001` (item 439). Once that span closes clean, R1 has READY priority at the next clean close, after the copy step in the next item.
+- **Validity:** ONE use. It expires Sat 21 Nov 2026 23:59:59 PST (epoch 1795852799). A refused arm releases priority and voids this READY.
+- **Arm fills (magistrate, at the arm, as item 398 prescribes):**
+  - native checks on main;
+  - newest clean close and its Check;
+  - D-7 copy digests and `PKT_SHA`;
+  - fresh session and plan ID;
+  - whole-minute t0, cutoff, driver end, latest end and dead-man;
+  - fresh notice and route;
+  - the last directive, stop and Ed NO/veto reads.
+
+  Expected runtime UNKNOWN: driver bound 102,168 s, outer bound 119,880 s plus 300 s grace.
+- **Items 423, 431, 433 and 434 still bind.** F0 has retired at R1's post-close Check (RL-179 F-4).
+
 439. **Magistrate 8c6884e6: f2-stab-15-l001 first launch REFUSED by the pinned launcher (deadline = bare 8,360 s minimum; nothing started); DEADLINE + 900 s per the qual-pin README; relaunch is the last act**
 
 ```pointer
