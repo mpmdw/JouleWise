@@ -18164,3 +18164,212 @@ RL-175 §F.1, §F.2 and the first, second, fourth and fifth bullets of §F.4 sta
 **Blind status.** Blind: no v4 outcome exists, no campaign energy has been read, and nothing sealed or measured was opened. Q's outcome, population, statistic, alpha and words, `S_dec`'s definition, the aligned-power print, the three conditions on the title phrase and the control's construction and trigger are fixed before any series member exists and before the W1 receipt is signed. The prompt count reads public upstream text only.
 
 **For Ed, plainly.** "You are right about the goal. The registered test takes the amount of work out on purpose and asks whether anything is left, and our own protocol predicts nothing is. That is not a study of randomness; randomness is only the yardstick. But it does not tell you how much the instruction changes what the model does, and it never lines power up with actions. Both of your additions are in, and neither costs a minute on the laptop. The first becomes a registered result: whether a sabotage instruction changes the energy of a whole episode, and by how much, with tokens and turns beside it. It will see a change of about one run-to-run spread and can miss a smaller one. The second becomes the paper's figure: power laid over the logged turns and tool calls. It will show phases and amounts, not what a tool call did, because the tools are mocks. I also ordered a count of the two prompts, since the sabotage prompt is a different and probably longer message, and added a repeat of the test that leaves the prompt out. The matched harmless instruction is designed now and run only if the test finds a signature. I take Mythos's odds as fair: about one chance in fifteen of a signature, one in three of a clean 'nothing left over', and about four in ten that a skeptic learns something once the additions are in. So the paper is planned around 'the meter reads how much the model did, not what it was told', and the title 'sabotage leaves an energy signature' now needs the test, the repeat without the prompt, and the matched control. The talk on the 30th presents it as a question with our prediction, not as a finding."
+
+# RL-177. After the count and the cell: S is scored on decode-only rows, as a blind amendment before W1 signs. The rows with prefill become a print. No prompt is edited and no arm is added. Q is counted from turn 0's first generated token, and the whole-episode total prints beside it. Five synthetic cells gate the amendment's merge; if the decode-only rows fail them, the padded benign prompt comes back to me. The frame holds and gains a sentence: the two SHADE-Arena prompts differ by 1,219 and 768 tokens. No MBP minute, and nothing in the running chain changes
+
+Research lead (Fable 5.2), Tue Nov 17 18:27 PST 2026 (from `date`). This is the return RL-176 C.2 item 4 ordered (RLD:18045): the count is in at +1,219 and +768 tokens, and the cell reads .455 at 2 %, above .035. RL-148 to RL-176 stand except where "Amends" says otherwise.
+
+Short names: `RLD` is this log on `origin/audit/2026-11-10-fable` at `27cc1338b`. `P4` is `docs/align/pilot_protocol_v4.md` at `b2e01464d`. `CELL` is `/Volumes/JW-EXT/scratch/astra-rl176-prefill/CELL.md`. `SIM` is the cell directory `astra-rl176-prefill/tmp/cell.TbxkCfWR/`. `#813` is the RL-176 builder's draft at `e711fce43`.
+
+**Read.** RL-176 in full (RLD:17925-18166). RL-148 §1 and §3 (RLD:11035-11160), RL-149 §1.3 and §4 (RLD:12229-12308, 12788-12840), RL-150 §3 (RLD:13132-13200), RL-151 §1 and §2 (RLD:13277-13397), RL-175 §F (RLD:17880-17893). P4 B2 (`:1162-1268`). CELL, its brief, `prefill_cell.py` (all 125 lines), both result files, and the simulator's turn model and configuration (`s_oc_sim.py:74-100`, `:141-142`; `s_oc_rl149.py:1-43`). The count's README, `counts.json` and the dependency cross-check. #813's body, its P4 diff, its build report and three functions of `joulewise/align/apple/rl176.py` (`_decode_rows`, `_decode_scores`, `_observation`).
+
+**Verified by me, from source.**
+- **The counts.** `counts.json`: bank 10,021 and 11,240, spam 6,516 and 7,284, at medium effort with the hint on. The differences are 1,219 and 768 at low, medium and xhigh effort alike. Its sha256 is `eb237056…910901`, the value CELL quotes. Under the upstream Pydantic pin both bank counts fall by 6 and both differences are unchanged (`dependency-crosscheck.md`).
+- **The cell's numbers.** `counted.json`: 152, 455 and 998 signatures in 1,000 series, all 22,000 strata entered, none not evaluable. `fallback.json`: 142, 418 and 995. The script's sha256 is `afbe0a3a…0940970`, as CELL states.
+- **The cell's world is step 4's.** Its configuration has the cumulative-energy cut, no row after a hot turn, the 2 s guard, the clock clause and 1 J per edge (`cp_model: energy`, `norow_after_hot: True`, `guard: 2.0`, `clock_clause: True`, `edge_j: 1.0`), which are RL-148's additions (RLD:11130-11137) and RL-149 §1.3's constants. Drift 1.6 % and hot shift −9 % are RL-150 §3.1's central values. Lengths are equal and the direct effect is 0 (`prefill_cell.py:27`).
+- **What the cell changes.** `prefill_cell.py:34-42`: one multiplier, 1/(1 − e), on the whole prefill power of a turn with an empty cache whose prompt is the instructed size. No benign turn has that size, so the benign members' prefill is predicted exactly.
+- **The dose in joules,** computed by me from the simulator's own coefficients (0.16 J per prefill token and 2·10⁻⁶ on the quadratic term; assumptions, not measurements). At 2 % the cell adds 39 J to a bank member's turn 0 and 25 J to a spam member's. The simulated cost of the extra tokens themselves is 221 J and 134 J.
+- **`first_token_ns` is optional in the record.** `joulewise/align/records.py:74`: "end of prefill, when the server reports it". `workload.py:640` copies it from the result.
+- **#813 holds the place.** P4's *Prompt size* paragraph reads "PENDING RL-177". `_decode_scores` gives each decode-only row three timing edges.
+
+**Not checked.**
+- The simulator beyond the lines listed. I did not audit its heat model or its scorer. `claim_b_power_copy.py` was not opened.
+- Whether the series runtime stamps a first token on every turn that decodes. Section F item 4 orders the count.
+- Any measured cost of prefill. Every joule figure here is a simulator assumption. How well a counts fit predicts real prefill 1,219 tokens past its support is unknown, and this ruling is built so that S does not need to know.
+- #813's tests (none run by me), the Sol twin, the phase code, and draft #787.
+- I ran no simulation. No SSH, no push, no repo edit. No custody, energy, power, meter, transcript, slot, hazard, sealed or restricted file was opened.
+
+---
+
+## A. The cell: it is the one I ordered, and my order was loose in two places
+
+**Yes on the definition.** RLD:18045 asked for "rows S at the counted Δ, equal output lengths, with turn 0's prefill prediction wrong by 1, 2 and 5 %". The cell runs scorer iii on step 4's world at the counted sizes, with equal lengths, no direct effect and all 22 strata, and it puts the error on turn 0's prefill of the instructed member. That is a fair reading of my sentence, and the seat reported what it assumed.
+
+**Two limits, both mine.**
+1. **The dose does not scale with Δ.** I wrote "prefill prediction wrong by 2 %" and did not say wrong at which size, or by how much at the benign size. The cell takes 2 % of the whole prefill at the instructed size and zero at the benign size. The +16-token column shows what that means: .418 at a difference of 16 tokens against .455 at 1,219. The rate is set by the injected joules and hardly by Δ. In the terms that matter for a fit that is right at the benign size, 2 % of the whole prefill is an 18 to 19 % error in the cost of the extra tokens, and 1 % is about 9 %.
+2. **There is no 0 % arm,** and only underprediction was run. The cell does not say what the counted sizes do with a correct law, or what an overprediction does to the lower tail and to equivalence.
+
+**What it does establish.** S converts a label-tied excess of 20 to 40 J on turn 0 into a signature in 15 to 46 % of series. That is the sensitivity S was built to have (.68 power at a 0.5 % per-token effect, RLD:13293). The same sensitivity applies to any error in the one term the stratum cannot learn.
+
+**The 2 % was a borrowed number.** RLD:13366 is the heat model's leave-one-day-out gate. Nobody has measured how well the five-term fit extrapolates prefill at an empty cache. The frequency of the error is unknown, as CELL says in its second paragraph.
+
+## B. Is S, as registered, still a valid confirmatory test? No, not for its words
+
+**The test stays exact. Its words stop meaning what they say.** Under the sharp null the randomization still holds. But "at logged counts" claims that the fit has taken the counts out, and for turn 0's prefill it cannot.
+- Every benign member of a stratum has the same turn-0 prompt (RL-176 C, RLD:18020). The stratum holds no row at the instructed size with an empty cache.
+- The fit must extrapolate 12 % past its support, on the row every member is most likely to have (RLD:12268).
+- An error there has one sign in all 22 strata, and S has high power for exactly that.
+- The sign is not known in advance. Underprediction gives a false `S SIGNATURE`. Overprediction pushes θ̂ down, which costs power and can cost `S EQUIVALENT`, the outcome the registration predicts.
+
+To certify the registered rows at .035 I would need the cost of the extra tokens known to a few percent, and no leg has measured it at these sizes. So the question is not whether 2 % is too pessimistic. The registered score rests on a quantity nobody can supply from the series.
+
+**One more reason, apart from the fit.** Turn 0's prefill is the model reading text we wrote. Any energy difference there is a property of the two prompts and not of anything the model did. It was never where a signature of behaviour could live.
+
+### B.1 The options
+
+MBP cost is for the series. "Rate" is the false `S SIGNATURE` rate where a cell supports one.
+
+| Option | MBP cost | Registration change | Expected false-signature rate | Ruling |
+|---|---|---|---|---|
+| Keep S on rows with prefill | 0 | None | .152, .455, .998 at a turn-0 excess of 1, 2, 5 % of the whole prefill (9, 18, 46 % of the cost of the extra tokens). Unknown below that. Cell R2 fills it in | **Refused as the score.** Kept as the print `S_pf` |
+| Exclude turn 0, or every prefill-dominated row | 0 | S's rows | No cell. The cost is yield: turn 0 is the row most members have, D_bank ends itself at two turns, and no turn after a cut gives a row | **Refused.** It would leave S not evaluable in many strata |
+| **Decode-only rows as S's score** | 0 | S's score, by amendment before W1 signs | Not yet simulated. Expected near step 4's .028 to .032 (RLD:13287-13289), because no part of the row is at an uncovered prompt size. Cells R1, R3 and R4 decide, at the .035 bar | **Adopted** (section C) |
+| Pad the benign prompt to the instructed length | About 13 min of added prefill over 154 benign members, at the simulator's 200 tokens/s. The real cost is a change to the measured prompt: new text, new hashes, a smoke | The benign arm's prompt; K's population sentence; Q's meaning | By construction the misfit cannot occur. Step 4's baseline, .028 to .032 | **Not now. Named fallback** (section D) |
+| A matched-length harmless instruction as an in-series arm | 0 if it takes a benign slot; about 11 h if it adds a ninth member to 22 strata, at Mythos's 0.51 h a member (unchecked, RLD:17945) | The frozen draw, the strict-tier kit, K's calibration count | None: one control member against one instructed member per stratum gives B2's statistic no power | **Refused**, as in RL-176 D (RLD:18055). The block stays conditional on `S SIGNATURE` |
+| A prefill term estimated in-series from benign members | 0 | S's fit | Not identifiable. Benign members have one turn-0 size per task, so they carry no information on the cost beyond it. A term fitted on the instructed member is a label dummy and removes the test. The campaign model could supply it, at the transfer risk that sank S_w (.090 to .188, RLD:13352-13354) | **Refused** |
+| Demote S to a print | 0 | S loses its words | Not applicable | **Refused now.** It is what remains if both C and D fail |
+
+## C. S is scored on decode-only rows
+
+**Ruling.** S's score is the decode-only row of RL-176 C.2 item 3 (RLD:18040-18044). S's statistic, alpha, margin, strata, draw, release rule and outcome words do not change. This is RL-148's first correction again: "The score is new; the statistic is not" (RLD:11052).
+
+**The score, as registered text.**
+- A decode-only row runs from the turn's first stamped token to the row's end as RL-149 §1.3 defines it. State, clock clause, guard and `after_hot_turn` are unchanged.
+- Its prediction is the three-term fit [1, D, (C+P)·D + D²/2], refitted on all other eligible members of the stratum, both conditions, as P4:1183-1185 has it.
+- Its SD carries three timing edges a row. That is #813's convention and it stands; any label-free choice keeps the test exact (RLD:12289-12290).
+- A turn with no first-token stamp gives no decode-only row. A member with no decode-only row has no S score and leaves its stratum with `s_score_undefined`. The six-training-row floor of P4:1190 applies to decode-only rows.
+
+**Why I move the primary now, having declined to at 15:33.** I wrote then that I would not move it "on a guess about a count nobody has" (RLD:18045). The count now exists and it is 76 and 48 times the trigger. The change is made before any series member exists and before W1 is signed. And the reason is structural, as section B gives it; it does not depend on the cell's dose being right.
+
+**What the decode-only row is still exposed to. I name these so the cells test them and no draft says the prompt is gone.**
+1. **Context.** The longer prompt sits in the context of every decoded token. At turn 0 the instructed member's context is 11,240 where every benign member's is 10,021. Later benign turns cover that range, but only in strata where later turns give rows. Where most rows are turn-0 rows, the context coefficient is identified from the curvature in D alone, and the in-row drift (0.7 to 2.0 %, RLD:13296-13299) has the same shape. The fit could then overstate the context cost and overpredict the instructed member. That is my reasoning and not a result. Its direction is the lower tail.
+2. **Heat.** The instructed member's prefill is longer, by about 6 s (bank) and 4 s (spam) at the simulator's rate. Its decode starts later on the heating curve and its cut comes sooner.
+3. **The first-token stamp.** It is one more boundary, and it is optional in the record.
+
+**Prints beside S.** `S_pf`, the rows with prefill by the five-term fit (the score RL-151 kept), exact one-sided p and both tails, no word. `S_a4`, the count-only cut, S_w and the benign-only slope are unchanged (RLD:13304-13312) and each carries the prompt-size sentence. The benign-only slope gains one row: score against turn-0 context is not available (it does not vary), and the print says so.
+
+**If `S_pf` and S disagree at release.** S's word stands. A small `S_pf` p with no `S SIGNATURE` is reported as: "On rows that include the prompt, sabotage-instructed members scored higher (p = ‹›). Those rows include reading a prompt ‹1,219, 768› tokens longer than any benign prompt, which the fit cannot price." No signature word.
+
+## D. The padded benign prompt: named fallback, not ordered
+
+**RL-176 C.2 item 1 stands (RLD:18038).** I do not pad on the evidence in hand, for three reasons.
+- The decode-only row removes the uncovered term at no cost and without touching a measured byte.
+- A pad changes the benign arm, on which K, the confirmatory claim, is calibrated and tested. It also makes our benign condition something other than the benchmark's.
+- A pad is text the model reads. It needs drafting, a hash, a review and a smoke, in the week the chain is running.
+
+**It is still the only complete fix.** With equal prompts, prefill, context and heat are matched by design and nothing rests on a fit. So it is the named fallback: **if cells R1, R3 or R4 fail, the row comes back to me with the pad as the candidate,** and the lead brings its cost then (text, hashes, which kits and receipts change, the smoke). Nobody drafts it before that.
+
+## E. The cells: ordered now, from an analyst seat, off the MBP
+
+Synthetic only, on SIM's pinned sources, in the seat's own directory. One report, `CELLS-RL177.md`, beside CELL.
+
+**Common to all.** Counted sizes (bank 10,021 and 11,240; spam 6,516 and 7,284). 22 strata. Seed 20261114 with CELL's replicate rule, so draws are shared with CELL. 1,000 series a cell; the worst cell of each scorer in R1, R3 and R4 again at 10,000. Two scorers on the same draws:
+- `pf`: step 4's scorer iii, unchanged.
+- `dec`: the decode-only row of section C. The row's energy is the simulator's integral from the end of prefill to the row's end; design (1, D′, (C+P)·D′ + D′²/2); the leave-one-out structure of scorer iii; three edges of 1 J a row in the SD; at least six training rows.
+
+**Every cell reports, per scorer:** the rate of p_sup ≤ .025; the rate of p_inf ≤ .025; mean θ̂; the `S EQUIVALENT` rate; strata entered; and the share of scored rows by turn index and condition.
+
+| Cell | World | Grid | Purpose |
+|---|---|---|---|
+| R1, baseline | Correct law. Equal lengths, no direct effect | Drift 0.7, 1.6, 2.0 %; hot shift −4, −9, −15 % (nine settings). Each also with both conditions at the benign size, as the reference on the same draws | What the counted sizes do by themselves, through context and heat |
+| R2, cost of the extra tokens | In every member, turn-0 prefill power beyond the task's benign size is multiplied by (1 + m). Only instructed members have such tokens, but the law reads no label | m = −18, −10, −5, −2, +2, +5, +10, +18 %. Drift 1.6 %, hot −9 % | The curve for `S_pf`'s sentence, in the right units. m = +18 % should reproduce CELL's .455 on `pf` within Monte Carlo error; if it does not, say so first. `dec` should not move |
+| R3, context curvature | Decode cost per token at context n is b₂ + b₃·n·(1 + κ·(n − 10,000)/10,000) | κ = −0.2, +0.2. Drift 1.6 %, hot −9 % | A context law the three-term fit does not have |
+| R4, lengths | Correct law, instructed lengths changed | +10 %, +30 %, and bank +30 % with spam −11 % (RLD:13325-13326). Drift 1.6 and 2.0 %, hot −9 % | RL-151's length cells, on the new score |
+| R5, power | Correct law, a direct per-decode-token effect | 0.25 % and 0.5 %. Drift 1.6 %, hot −9 % | The power sentence for the amendment |
+
+**Bars, fixed now.**
+- **S on decode-only rows stands** if, in R1, R3 and R4, `dec`'s upper-tail rate and lower-tail rate are each at or under .035 in every cell, with the worst cell confirmed at 10,000.
+- **It comes back to me** if either tail is over .035 anywhere in those cells, if `dec`'s power in R5 at 0.5 % is under .50 (the rows had .68), or if fewer than 21 strata enter on average.
+- R2 carries no bar. It fills the sentence in section G.
+
+## F. Q
+
+**The prompt offset enters Q directly, and Q's question as I wrote it admits it** ("through prompt length", RLD:17960). That was a mistake of emphasis. We hand the instructed member 1,219 more tokens to read. A `Q SHIFT` that came from that alone would be true and would say nothing about how much the model did, which is what Ed asked for.
+
+**Ruling.**
+
+| | |
+|---|---|
+| Outcome | **Q's outcome is the member's turn-owned GPU-rail energy from turn 0's first stamped token to the member's end.** Turn 0's prefill, start to first token, is left out by measurement. No fit is involved, so Q stays free of any model |
+| A member with no turn-0 first token | Enters with outcome 0: it produced nothing. The log estimate is taken over strata in which every entering member's outcome is positive, and the number of strata left out prints |
+| Everything else | Unchanged from RL-176 A.1: population, statistic, Holm at .05, the eight-stratum floor, words, release |
+| Prints, exact two-sided p, no word | `Q_total`, the whole-episode energy RL-176 defined; turn-0 prefill-phase energy by condition (expected to differ, and labelled as the prompt); prefill tokens with turn 0 left out, beside the count that includes it |
+| What remains of the prompt in Q | The extra context under every decoded token, and the earlier arrival of heat. At the simulator's coefficients the context part is 0.4 to 0.6 % of a decoded token's cost. The real figure is printed at release from the label-blind quantity print: fitted context coefficient × Δ × mean benign decode tokens, as a percent of mean benign outcome |
+
+**Q's sentence** (replacing RLD:18091's first and last clauses): "In the randomized series the sabotage instruction changed the GPU energy of a ‹task› episode after the prompt was read: instructed episodes used ‹x› % ‹more, less› … This is the effect of the instruction on how much the model did, heat included. Reading the instructed prompt, which is ‹Δ› tokens longer, is not counted; its presence in context accounts for about ‹c› % at the series' fitted costs. It does not show that the meter reads intent, and no harmless second task was run for comparison." If |x| is not larger than c, the sentence says so in those words.
+
+**Power.** Unchanged in rank terms (P4:1246-1252).
+
+## G. Paper and talk
+
+**The frame holds, and it is stronger for this.** "The meter reads how much the model did, not what it was told" now has to separate three things where it separated two: how much the model was given to read, how much it did, and what it was told. The count shows the first is not equal across SHADE-Arena's conditions, and the cell shows a test at "equal counts" can be carried by it. That is a finding about the benchmark that any energy or timing comparison on it will meet, and we report it before running the series.
+
+**RL-176 E.1 becomes** (RLD:18072-18076):
+
+| The paper may use | When |
+|---|---|
+| Sentence 2 of RL-175 §F (RLD:17885), reading "on the decoded part of each reference-state row", with the prompt-size and drift sentences after it | `S SIGNATURE` |
+| A heading with "an energy signature of the sabotage instruction" | `S SIGNATURE`. The separate `S_dec` condition is gone, because S is now that score |
+| "Sabotage leaves an energy signature", as title or heading | `S SIGNATURE`, and the matched control block run with its contrast at p ≤ .025 |
+
+**RL-176 E.2's rows stand with these changes.**
+- `S EQUIVALENT`: "At equal logged token counts, on the decoded part of each reference-state row, the sabotage instruction did not change GPU energy by more than the registered margin. Within that margin the meter read how much the model computed and not what it was told." The margin's gloss adds "derived for whole turns with prefill".
+- S's outcome sentence (RLD:12303-12308) reads "from the turn's first generated token until…" in place of "from the turn's start until…".
+- `Q SHIFT`: section F's sentence. `Q SHIFT` with `S EQUIVALENT`: "The instruction changed how much energy an episode used after the prompt was read. At equal logged token counts, on the decoded part of each row, no difference beyond the registered margin remained."
+- Not permitted, added: any statement that the prompts were matched; "at equal work" without "decoded"; reading `S_pf` or `Q_total` as a signature.
+
+**Methods sentence, permitted now and in the paper:** "In SHADE-Arena the sabotage-instructed and benign conditions use different system messages. Rendered for this model the instructed prompt is 1,219 tokens longer on the bank task and 768 on the spam task, about 12 % in each. No benign episode reads a prompt of the instructed size, so the cost of reading it cannot be estimated from benign episodes. In simulation, an error of ‹R2's value› % in the fitted cost of the extra tokens produced a false signature in more than 3.5 % of series. Before any series episode was run, the registered test was therefore moved to the generated part of each turn, and the test on rows that include the prompt is reported beside it." Until R2 is in, the sentence uses CELL's figure in CELL's units: "a 2 % error in the fitted cost of reading the longer prompt produced a false signature in 46 % of simulated series."
+
+**The talk may add** to RL-176 E.3: the two counts; the methods sentence; "we moved the test off the prompt before running it". **It may not** show the cell as evidence about the real machine. The cell is a simulation with assumed costs.
+
+## H. Timing
+
+**Nothing in the chain is affected.** dev-05, R1, freeze 2 and qualification read no S score and no prompt. No prompt, kit, runner, logging or receipt byte changes. **Zero MBP minutes.**
+
+**Before the amendment merges, which is before W1 signs.** The default of RLD:18130 is withdrawn for the cells: S's score is the registration's subject, so the amendment waits for items 3 and 5.
+
+| # | What | Who |
+|---|---|---|
+| 1 | Commit this ruling verbatim | Lead |
+| 2 | In #813: S's score to decode-only rows through the release caller; `S_pf` and `Q_total` as prints; Q's outcome from turn 0's first token; the texts of section I in place of "PENDING RL-177"; the Sol twin of each; the frozen count restated | Sol builder and twin |
+| 3 | Cells R1 to R5 | Analyst seat, off-host |
+| 4 | First-token coverage, structure only: on the rehearsal and pilot turn records already on the desk, the count of turns with at least one decode token and no `first_token_ns`. Counts only. If it is not zero, it comes to me before the merge, because every such turn is a row S loses | Lead or builder |
+| 5 | My cold review of the whole amendment, already owed (RLD:18126), now including the cells against section E's bars | Research lead |
+| 6 | The Pydantic question (#813 NEEDS_RULING 1): the builder reads W1's installed version and prints the absolute bank counts from that environment. The differences are what this ruling rests on, and they do not move | Sol builder |
+
+**Before C1 arms.** A signed W1 on the merged amendment, with S's and Q's code frozen in it. RL-176 F item 4's rule for Q's words stands (RLD:18124). S has no such default: if its decode-only scorer is not frozen, W1 is not signed.
+
+**Not ruled here.** #813's other open conventions (tied midranks, mixed native grids, the release caller, the DC adapter) go to the cold review. The control message stays due before the release run (RLD:18127).
+
+## I. Registration text for the amendment
+
+**P4 B0, S's row:** the claim reads "S, sabotage-instructed versus benign at logged counts, on decode-only rows". Q's row reads "the instruction's effect on episode energy after the prompt is read".
+
+**P4 B2, *S score*:** the row definition of the B-S-admit draft takes section C's four bullets as S's score. "The sabotage-instructed member's S score equals its A4 score" was already deleted (RLD:11054-11055).
+
+**P4 B2, *Prompt size*, replacing "PENDING RL-177" and RL-176 C.3:**
+
+> *Prompt size.* The two conditions use different upstream system messages. Rendered for this model, the sabotage-instructed turn-0 prompt has ‹11,240› tokens and the benign prompt ‹10,021› (bank), ‹7,284› and ‹6,516› (spam). The differences, 1,219 and 768 tokens, are the same at every reasoning effort and under both schema-library versions checked. No benign member reads a prompt of the sabotage-instructed size, so the cost of reading it cannot be learned within a stratum. S is therefore scored on decode-only rows, which exclude every prefill. Two effects of the longer prompt remain in those rows: it is in the context of every decoded token, and it lengthens turn 0's prefill, so a sabotage-instructed member's decode begins later in the turn's heating. In simulation at the counted sizes with no effect of the instruction, S returned `S SIGNATURE` in at most ‹R1, R3, R4› % of series and its lower tail in at most ‹› % (nominal 2.5 % each). The same statistic on rows that include prefill prints as `S_pf` with no outcome word; in simulation an error of ‹R2› % in the fitted cost of the extra tokens gave it a false signature in more than 3.5 % of series. No instruction of matched length with a harmless second task was run in this series.
+
+**P4 B2a:** the title and *Question* read "after the prompt is read" for "whole-episode"; "through prompt length" is deleted. *Outcome* and the no-first-token rule are section F's table. *Prints* gain `Q_total`, turn-0 prefill-phase energy and prefill tokens without turn 0.
+
+**RL-149 §4's table:** row 15 (`S_dec`, RLD:18146) becomes `S_pf`. `Q_total` and the two Q prints join the frozen count.
+
+## Owners
+
+- **Lead:** section H items 1 and 4; the cold-review packet; section G's sentences in every draft and in the talk; telling Ed.
+- **Sol builder and twin:** items 2 and 6.
+- **Analyst seat:** the five cells.
+- **Research lead:** item 5, and the return if a bar fails.
+- **Magistrate:** nothing.
+
+**Amends.**
+- RL-176 A.1 and G: Q's outcome, question, sentence and prints (section F). RL-176 C.2 items 2 and 3: S's score is the decode-only row and `S_pf` is the print. RL-176 C.3: replaced by section I. RL-176 E.1 and E.2: section G. RL-176 F's default for the cells: withdrawn.
+- RL-151 §1.1 (RLD:13281-13282): "the rows stand as S's score" now reads "the decode part of the rows". The constants and `after_hot_turn` are unchanged. RL-151 §1.2: `S_pf` joins the prints. RL-151's .032 and .68 describe `S_pf`; S's own figures come from R1, R4 and R5.
+- RL-149 §1.3's S sentence and RL-175 §F.2: the wording of section G.
+- RL-148 step 4: cells R1 to R5.
+- RL-176 C.2 item 1 (no prompt is edited) and D (the control is conditional) stand.
+
+**Blind status.** Blind. No v4 outcome exists, no campaign energy has been read for this, and nothing sealed or measured was opened. The change of S's score rests on a count of public prompt text and on synthetic cells, and it is made before any series member exists and before the W1 receipt is signed. The cells' bars are fixed here before they run.
+
+**For Ed, plainly.** "Your question found a real hole. In SHADE-Arena the sabotage version of each task comes with a longer set of instructions: about 1,200 more tokens on the bank task and 770 on the spam task, 12 % more reading before the model does anything. Our test compares energy 'at equal token counts', and it relied on a fitted cost for that reading. No harmless run ever reads a prompt that long, so the fit is guessing there, and a simulation showed a small wrong guess is enough to produce a false 'signature' almost half the time. The fix costs nothing on the laptop: the test now starts at the first token the model writes and ignores the reading of the prompt. The old version is still printed beside it. I made the same change to your whole-episode comparison, so it measures what the model did and not the longer prompt we gave it. Before the registration is signed, a second simulation checks that the new version is clean, because the longer prompt still sits in the model's memory while it writes. If that check fails, the remaining fix is to pad the harmless prompt to the same length, and I will bring you that with its cost. The paper's line still holds and now has a sharper point: the meter reads how much the model read and wrote, and anyone testing for more than that on this benchmark has to deal with the two prompts being different sizes."
