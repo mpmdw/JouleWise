@@ -514,6 +514,8 @@ class SeriesReleaseTests(unittest.TestCase):
                 (window / alias).symlink_to(target)
                 (window / "references").mkdir()
                 (window / "references/chain.json").symlink_to(f"../{alias}")
+                (window / "reference-dir").symlink_to("references")
+                (window / "nested-reference.json").symlink_to("reference-dir/chain.json")
             return finalize(window)
 
         with tempfile.TemporaryDirectory() as tmp:
@@ -830,6 +832,8 @@ class SeriesReleaseTests(unittest.TestCase):
                             else:
                                 target.chmod(0)
                             with self.assertRaises((ValueError, OSError)):
+                                files = caller.RestoredFiles(
+                                    root, record, {"trace_layout": caller.LAYOUT, "hazard_journal": None})
                                 files.verify_listed_inputs()
                         finally:
                             if target.is_file():

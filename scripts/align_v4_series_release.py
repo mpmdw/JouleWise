@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import argparse
-from collections import Counter, defaultdict
+from collections import Counter, defaultdict, deque
 from contextlib import contextmanager
 import csv
 from dataclasses import dataclass, replace
@@ -343,31 +343,35 @@ class ClosureLink:
 def internal_link(entries, root, prefix, name):
     """Resolve authenticated link text within the finalized directory inventory."""
     store = str(root / prefix)
-    path = name
+    components = deque(input_parts(name))
+    parts = []
     hops, directories = [], set()
-    while "link" in entries.get(path, {}):
-        packet.require(len(hops) < harvest_offload.MAX_LINK_HOPS, "cyclic or excessive internal link chain")
-        hop = entries[path]["link"]
-        packet.require(isinstance(hop, str) and hop, "invalid internal link text")
-        hops.append((f"{prefix}/{path}", hop))
-        if hop.startswith("/"):
-            packet.require(hop == store or hop.startswith(store + "/"), "internal link leaves the restore")
-            parts = []
-            components = hop[len(store):].split("/")
-        else:
-            parts = path.split("/")[:-1]
-            components = hop.split("/")
-        for index, component in enumerate(components):
-            if component == "..":
-                packet.require(parts, "internal link leaves the restore")
-                parts.pop()
-            elif component not in ("", "."):
-                parts.append(component)
-            if parts and index < len(components) - 1:
-                parent = "/".join(parts)
-                packet.require(entries.get(parent) == {"directory": True}, "internal link traverses an unbound directory")
-                directories.add(f"{prefix}/{parent}")
+    while components:
+        component = components.popleft()
+        if component in ("", "."):
+            continue
+        if component == "..":
+            packet.require(parts, "internal link leaves the restore")
+            parts.pop()
+            continue
+        parts.append(component)
         path = "/".join(parts)
+        row = entries.get(path, {})
+        if "link" in row:
+            packet.require(len(hops) < harvest_offload.MAX_LINK_HOPS, "cyclic or excessive internal link chain")
+            hop = row["link"]
+            packet.require(isinstance(hop, str) and hop, "invalid internal link text")
+            hops.append((f"{prefix}/{path}", hop))
+            parts.pop()
+            if hop.startswith("/"):
+                packet.require(hop == store or hop.startswith(store + "/"), "internal link leaves the restore")
+                parts.clear()
+                hop = hop[len(store):]
+            components.extendleft(reversed(hop.split("/")))
+        elif components:
+            packet.require(row == {"directory": True}, "internal link traverses an unbound directory")
+            directories.add(f"{prefix}/{path}")
+    path = "/".join(parts)
     target = entries.get(path, {"directory": True} if not path else {})
     directory = target == {"directory": True}
     packet.require(directory or "sha256" in target or "digest" in target, "unbound internal link target")
@@ -426,12 +430,14 @@ class InputLedger:
                 self.entries.setdefault(link.target, None)
 
     def classify(self):
-        chains = [{entry.target, *entry.directories, *(path for path, _ in entry.hops)}
+        chains = [({entry.target, *(path for path, _ in entry.hops)}, entry.directories)
                   for entry in self.entries.values() if isinstance(entry, ClosureLink)]
-        paths = self.entries.keys() | set().union(*chains)
+        paths = self.entries.keys() | set().union(*(chain for chain, _ in chains))
         self.protected = {path for path in paths if protected_path(path)}
         while True:
-            expanded = self.protected.union(*(chain for chain in chains if any(self.is_protected(p) for p in chain)))
+            expanded = self.protected.union(*(chain for chain, directories in chains
+                                             if any(map(self.is_protected, chain))
+                                             or any(map(self.is_protected, directories))))
             if expanded == self.protected:
                 break
             self.protected = expanded
@@ -517,7 +523,6 @@ class RestoredFiles:
         self.links = tuple(manifest_links(manifest, root, self.prefix))
         self.ledger = InputLedger() if ledger is None else ledger
         self.ledger.add_manifest(self.listed, self.links)
-        self.read_inputs = set()
         self.stems = defaultdict(set)
         for name in self.entries:
             input_parts(name)
@@ -586,7 +591,6 @@ class RestoredFiles:
         listed = self.ledger.entries[relative]
         raw = bound_bytes(self.root, listed)
         parsed = plain_input(bound.path, raw)
-        self.read_inputs.add(relative)
         self.ledger.verified.add(relative)
         return raw, parsed
 
@@ -632,15 +636,12 @@ class RestoredFiles:
         self.ledger.verified.add(link.hops[0][0])
 
     def verify_listed_inputs(self):
-        mirror_files = set()
         for link in self.links:
             if self.is_protected(link.hops[0][0]):
                 continue
             self.verify_link(link)
-            if link.mirror_path is not None:
-                mirror_files.add(link.target)
         for path in self.listed:
-            if not self.is_protected(path) and path not in self.read_inputs and path not in mirror_files:
+            if not self.is_protected(path) and path not in self.ledger.verified:
                 verify_ancillary_input(self.root, self.ledger.entries[path])
                 self.ledger.verified.add(path)
 
