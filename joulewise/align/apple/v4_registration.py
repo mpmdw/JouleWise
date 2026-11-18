@@ -347,13 +347,15 @@ EXECUTED_CLOSURE = (
 )
 ARTIFACTS = _NAMED_ARTIFACTS + tuple(p for p in EXECUTED_CLOSURE if p not in _NAMED_ARTIFACTS)
 
-# RL-182 §1.5. The release verifies these bindings in the existing signed
-# artifact map. The W1 artifact inventory remains independent of release.
+# RL-182 §1.5 and the release's restore manifest reader. The release
+# verifies these bindings with the shared executable artifact inventory.
+# The W1 artifact inventory remains independent of release.
 SERIES_RELEASE_ARTIFACTS = (
     'scripts/align_v4_series_release.py',
     'joulewise/align/apple/s_rows.py',
     'joulewise/align/apple/rl176.py',
     'joulewise/align/apple/rl176_phases.py',
+    'joulewise/align/apple/harvest_offload.py',
 )
 
 # Two tiers (Opus cold review MED-1; delta2 inverted the default; delta3 emptied the allowlist).

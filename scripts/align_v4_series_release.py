@@ -4,9 +4,10 @@ from __future__ import annotations
 
 import argparse
 from collections import defaultdict
+from contextlib import contextmanager
 from dataclasses import dataclass, replace
-from importlib.machinery import SourceFileLoader
-from importlib.util import spec_from_file_location
+import hashlib
+from importlib.machinery import PathFinder, SourceFileLoader
 import json
 import os
 from pathlib import Path
@@ -16,51 +17,77 @@ from tempfile import TemporaryDirectory
 
 ROOT = Path(__file__).resolve().parents[1]
 _CALLER_CODE = sys._getframe().f_code
+PROJECT_PACKAGES = ("joulewise", "scripts")
+CALLER_PATH = "scripts/align_v4_series_release.py"
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
-
-from joulewise.align.apple import v4_registration
-
 
 class ReleaseSourceLoader(SourceFileLoader):
     """Keep the digest of the source bytes used to create the loaded code."""
 
+    def __init__(self, fullname, path, *, source_check=None):
+        super().__init__(fullname, path)
+        self.source_check = source_check
+
     def get_code(self, fullname):
         source = self.get_data(self.path)
-        self.source_digest = v4_registration.digest(source)
+        self.source_digest = hashlib.sha256(source).hexdigest()
+        if self.source_check is not None:
+            self.source_check(self.path, self.source_digest)
         return self.source_to_code(source, self.path)
 
 
 class ReleaseSourceFinder:
-    paths = {
-        path.removesuffix(".py").replace("/", "."): path
-        for path in v4_registration.SERIES_RELEASE_ARTIFACTS
-        if path.startswith("joulewise/")
-    }
+    def __init__(self):
+        self.bindings = None
+        self.binding_refused = False
 
     def find_spec(self, fullname, path=None, target=None):
-        if fullname in self.paths:
-            origin = str(ROOT / self.paths[fullname])
-            return spec_from_file_location(fullname, origin, loader=ReleaseSourceLoader(fullname, origin))
-        return None
+        parts = fullname.split(".")
+        if parts[0] not in PROJECT_PACKAGES:
+            return None
+        spec = PathFinder.find_spec(fullname, [str(ROOT.joinpath(*parts[:-1]))])
+        if spec is None:
+            raise ModuleNotFoundError(f"release source missing: {fullname}", name=fullname)
+        if spec.origin is None:
+            spec.submodule_search_locations = [str(ROOT.joinpath(*parts))]
+        else:
+            origin = Path(spec.origin)
+            if not isinstance(spec.loader, SourceFileLoader) or origin.resolve() != origin:
+                raise ImportError(f"release source outside its checkout: {fullname}", name=fullname)
+            spec.loader = ReleaseSourceLoader(fullname, spec.origin, source_check=self.check_source)
+        return spec
+
+    def check_source(self, origin, digest):
+        relative = Path(origin).relative_to(ROOT).as_posix()
+        if self.bindings is not None and self.bindings.get(relative) != digest:
+            self.binding_refused = True
+            raise ValueError("loaded release dependency differs from the receipt")
+
+    @contextmanager
+    def installed(self):
+        previous = self.bindings, self.binding_refused
+        self.bindings = None
+        self.binding_refused = False
+        sys.meta_path.insert(0, self)
+        try:
+            yield
+        finally:
+            sys.meta_path.remove(self)
+            self.bindings, self.binding_refused = previous
 
 
-# A release subprocess imports these three pinned modules from source.
-# A stale Python bytecode cache must never stand in for the receipt's bytes.
-_release_finder = ReleaseSourceFinder()
-sys.meta_path.insert(0, _release_finder)
-try:
-    from joulewise.align.apple import rl176, rl176_phases, s_rows
-finally:
-    sys.meta_path.remove(_release_finder)
-    del _release_finder
-
-from joulewise.align.apple import harvest_offload, light_triage, v4_contention, v4_desk_seal as seal
-from joulewise.align.apple.workload import read_episode_bundle
-from joulewise.align.records import ClockMapping, PowerTrace, from_json
-from joulewise.b5.harvest import write_json_once
-from scripts import align_v4_next_arm_packet as packet, align_v4_series as series
-from scripts.align_v4_session import HELD_WINDOW_REASONS
+# Capture the actual source of the first-party import tree. Use the same
+# finder while releasing so late imports cannot execute unsigned code.
+_release_sources = ReleaseSourceFinder()
+with _release_sources.installed():
+    from joulewise.align.apple import harvest_offload, light_triage, rl176, s_rows
+    from joulewise.align.apple import v4_contention, v4_desk_seal as seal, v4_registration
+    from joulewise.align.apple.workload import read_episode_bundle
+    from joulewise.align.records import ClockMapping, PowerTrace, from_json
+    from joulewise.b5.harvest import write_json_once
+    from scripts import align_v4_next_arm_packet as packet, align_v4_series as series
+    from scripts.align_v4_session import HELD_WINDOW_REASONS
 
 
 RELEASE_REF = "refs/remotes/origin/align-v4-series-release"
@@ -99,28 +126,41 @@ def named_bytes(root, relative):
 
 
 def require_executing_bindings(receipt):
-    origins = {
-        "scripts/align_v4_series_release.py": Path(__file__),
-        **{ReleaseSourceFinder.paths[module.__name__]: Path(module.__file__)
-           for module in (s_rows, rl176, rl176_phases)},
+    bindings = {
+        path: digest for path, digest in receipt["artifacts"].items()
+        if path.partition("/")[0] in PROJECT_PACKAGES and path.endswith(".py")
     }
-    for relative in v4_registration.SERIES_RELEASE_ARTIFACTS:
-        packet.require(origins[relative].resolve() == ROOT / relative,
-                       "release source was loaded from another checkout")
-        expected = receipt["artifacts"][relative]
+    packet.require(Path(__file__).resolve() == ROOT / CALLER_PATH,
+                   "release caller was loaded from another checkout")
+    # Check the signed source inventory before any member file is opened.
+    # This includes registered lazy imports that have not executed yet.
+    for relative, expected in bindings.items():
         raw = named_bytes(ROOT, relative)
         packet.require(packet.digest(raw) == expected, "executing release source differs from the receipt")
-        if relative == "scripts/align_v4_series_release.py":
+        if relative == CALLER_PATH:
             code = compile(raw, _CALLER_CODE.co_filename, "exec", dont_inherit=True)
             packet.require(code == _CALLER_CODE, "loaded release caller differs from the receipt")
-    for module in (s_rows, rl176, rl176_phases):
-        loader = module.__loader__
+    for name, module in list(sys.modules.items()):
+        if name == __name__ or name.partition(".")[0] not in PROJECT_PACKAGES:
+            continue
+        origin = getattr(module, "__file__", None)
+        if origin is None:
+            continue  # Namespace packages have no executable source.
+        stem = name.replace(".", "/")
+        paths = (stem + ".py", stem + "/__init__.py")
+        loader = getattr(module, "__loader__", None)
+        if __name__ != "__main__" and not isinstance(loader, ReleaseSourceLoader) \
+                and not any(path in bindings for path in paths):
+            continue  # Unrelated modules imported by the in-process test harness.
+        path = Path(origin).resolve().relative_to(ROOT).as_posix()
+        packet.require(path in paths and path in bindings, "loaded release module is not bound")
         if isinstance(loader, ReleaseSourceLoader):
-            relative = ReleaseSourceFinder.paths[module.__name__]
-            packet.require(loader.source_digest == receipt["artifacts"][relative],
+            packet.require(loader.source_digest == bindings[path],
                            "loaded release source differs from the receipt")
         elif __name__ == "__main__":
             raise ValueError("release module was loaded outside the source loader")
+    if _release_sources in sys.meta_path:
+        _release_sources.bindings = bindings
 
 
 class SeriesEvidence(packet.GitEvidence):
@@ -446,7 +486,7 @@ def build_report(root):
     guarded_metadata = {}
     # The guard reads only its three metadata files. Snapshot those exact
     # bytes without following a path from the series root into member data.
-    with TemporaryDirectory(prefix="align-series-authority-") as tmp:
+    with _release_sources.installed(), TemporaryDirectory(prefix="align-series-authority-") as tmp:
         guard_root = Path(tmp)
         for relative in RELEASE_METADATA:
             try:
@@ -468,6 +508,7 @@ def build_report(root):
         )
         if inputs is not None:
             inputs.add_disclosures(report[seal.RL176])
+        packet.require(not _release_sources.binding_refused, "release dependency verification refused")
         return report
 
 
@@ -478,7 +519,7 @@ def main(argv=None):
     args = parser.parse_args(argv)
     try:
         write_json_once(args.output, build_report(args.measurement_root))
-    except (OSError, ValueError, TypeError, KeyError, AttributeError, IndexError):
+    except (OSError, ValueError, TypeError, KeyError, AttributeError, IndexError, ImportError):
         parser.exit(1, "series release refused: invalid or unverified release input or output\n")
     return 0
 

@@ -7,6 +7,7 @@ from dataclasses import replace
 from datetime import datetime
 import hashlib
 from io import StringIO
+from importlib import import_module
 from importlib.machinery import SourceFileLoader
 import json
 import os
@@ -240,12 +241,14 @@ def describe(root, relative, value, *, canonical=False):
 
 
 def registration_fixture(root, amount_field=None):
-    for path in registration.ARTIFACTS:
+    paths = dict.fromkeys((*registration.ARTIFACTS, *registration.SERIES_RELEASE_ARTIFACTS))
+    for path in paths:
         target = root / path
         target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_text("synthetic\n")
-    for code in RELEASE_PATHS:
-        (root / code).write_bytes((ROOT / code).read_bytes())
+        if path.startswith(("joulewise/", "scripts/")) and path.endswith(".py"):
+            target.write_bytes((ROOT / path).read_bytes())
+        else:
+            target.write_text("synthetic\n")
     manifest = root / seal.SERIES_MANIFEST
     manifest.write_bytes(series.raw_json(series.candidate()))
     reg = registration.REGISTRATION
@@ -270,7 +273,6 @@ def registration_fixture(root, amount_field=None):
         "static_proof": True, "contrast_predeclared": "INCONCLUSIVE: identity broken",
     })
     signed = commit_fixture(root, ["configs", "docs", "synthetic-transfer.json", "synthetic-u3.json"])
-    paths = dict.fromkeys((*registration.ARTIFACTS, *RELEASE_PATHS))
     artifacts = {path: hashlib.sha256((root / path).read_bytes()).hexdigest() for path in paths}
     describe(root, reg + "registration_receipt.json", {
         "schema": registration.RECEIPT_SCHEMA, "status": "registered", "commit": signed,
@@ -451,6 +453,28 @@ class SeriesReleaseTests(unittest.TestCase):
         bound = set(registration.ARTIFACTS) | set(registration.SERIES_RELEASE_ARTIFACTS)
         self.assertIn("joulewise/align/energy_residual.py", closure)
         self.assertEqual(sorted(closure - bound), [])
+
+    def test_late_release_import_checks_receipt_before_executing_source(self):
+        from scripts import align_v4_series_release as caller
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp).resolve()
+            (root / "scripts").mkdir()
+            good = "scripts/test_c1_receipt_bound_source.py"
+            changed = "scripts/test_c1_receipt_changed_source.py"
+            unbound = "scripts/test_c1_receipt_unbound_source.py"
+            source = b"value = 42\n"
+            (root / good).write_bytes(source)
+            for path in (changed, unbound):
+                (root / path).write_bytes(b"raise AssertionError('executed an unverified release dependency')\n")
+            finder = caller.ReleaseSourceFinder()
+            with patch.object(caller, "ROOT", root), patch.dict(sys.modules), finder.installed():
+                finder.bindings = dict.fromkeys((good, changed), registration.digest(source))
+                self.assertEqual(import_module(good.removesuffix(".py").replace("/", ".")).value, 42)
+                for path in (changed, unbound):
+                    with self.subTest(path=path), self.assertRaisesRegex(ValueError, "differs from the receipt"):
+                        import_module(path.removesuffix(".py").replace("/", "."))
+                self.assertTrue(finder.binding_refused)
 
     def test_audit_scorer_differs_from_legacy_receipt_refuses_without_report(self):
         with tempfile.TemporaryDirectory() as tmp:
