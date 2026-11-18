@@ -1044,6 +1044,28 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 
 <!-- RUN_STATE TYPED ITEMS: newest first. Add with scripts/run_state_add.py; never edit by hand. -->
 
+425. **f2-stab-01..14 available as standing fillers (RL-179 F-4, RL-180 row 13): 168 one-leg drafts at audit f9b03c33d**
+
+```item
+{"expires_epoch_s": null, "issued_epoch_s": 1794988890, "number": 425, "owner": "magistrate", "schema": "joulewise.run_state_item.v1", "sets": [], "status": "ISSUED", "supersedes": []}
+```
+
+- **What:** 14 stability kits, `f2-stab-01..14`, each with 12 single-leg spans. That is 168 unissued drafts with queue entries. They sit on `origin/audit/2026-11-10-fable` at `f9b03c33d`, under `docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/f2-stab/` (MANIFEST.md lists each kit's sha256 and seed).
+  - Runner pin: `2d347f721`, unchanged.
+  - Worst case per span: 5,850 s.
+  - Every kit matches `f2-inst-01` cell for cell (RL-180 row 13). The validator check is in `f2-stab/tools/validate_kit.py`.
+- **Ladder (RL-179 F-4, item 422):**
+  1. the first f2-stab leg of each local date;
+  2. the remaining f2-inst pieces;
+  3. hp-02;
+  4. further f2-stab legs;
+  5. F0, the last rung, until R1 closes.
+
+  Counted entries (dev-05, R1) keep their priority as issued.
+- **Issue:** under item 418 (d) from these committed drafts. Before each issue, check the kit's sha256 against MANIFEST.md and run `validate_kit.py` against f2-inst-01.
+- **Status:** sealed under RL-169 §3 and RL-179. No leg is campaign data, enters a fit, or counts anywhere (RL-180 restored row). Close and copy as for any span.
+- **Item 423 still binds:** nothing arms while `/Users/Shared/JouleWise/MAINTENANCE` exists.
+
 424. **Copy measurement_mode.zsh into the repo (Brief D): read-only, at a close, never delays an arm**
 
 ```item
