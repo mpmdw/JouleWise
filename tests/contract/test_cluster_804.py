@@ -19,7 +19,8 @@ def configure(world):
     fingerprint = span_offload.keygen(openssl, recipient, bits=3072)
     # Only the public key is available to the offload process.
     (recipient / "span-offload.key.pem").unlink()
-    for name, value in (("provider_evicts", True), ("cloud_availability", "signed_in"),
+    for name, value in (("provider_evicts", True), ("provider_upload_idle", True),
+                        ("cloud_availability", "signed_in"),
                         ("forbid_private_inputs", False), ("air_input_reads", [])):
         world.boundary.put(name, value)
     (world.controls / "cloud-bytes").mkdir()
@@ -42,10 +43,15 @@ def configure(world):
     world.offload_config.write_text(json.dumps(config), encoding="utf-8")
 
 
-def prepare(world, *, provider_evicts=None, cloud_availability=None, air_available=None,
-            forbid_private_inputs=None):
+def prepare(world, *, provider_evicts=None, provider_upload_idle=None, cloud_availability=None,
+            air_available=None, forbid_private_inputs=None):
     if provider_evicts is not None:
         world.boundary.put("provider_evicts", provider_evicts)
+    if provider_upload_idle is not None:
+        world.boundary.put("provider_upload_idle", provider_upload_idle)
+        config = json.loads(world.offload_config.read_text())
+        config["backend"]["poll_interval_s"] = 0.5
+        world.offload_config.write_text(json.dumps(config), encoding="utf-8")
     if cloud_availability is not None:
         world.boundary.put("cloud_availability", cloud_availability)
         if cloud_availability == "missing_container":
@@ -59,6 +65,9 @@ def prepare(world, *, provider_evicts=None, cloud_availability=None, air_availab
 
 
 def observe(world, name, *, span=None):
+    if name == "provider_upload_polls":
+        calls = world.controls / "upload-polls"
+        return len(calls.read_text().splitlines()) if calls.exists() else 0
     if name == "provider_readbacks":
         calls = world.controls / "readbacks"
         return [line for line in calls.read_text().splitlines() if Path(line).parent.name == span.plan]
@@ -109,7 +118,11 @@ if command == "status":
     assert arg == "com.apple.CloudDocs"
     if json.loads((control / "cloud_availability").read_text()) == "signed_out":
         sys.exit(1)
-    print("com.apple.CloudDocs client:idle caught-up")
+    idle = json.loads((control / "provider_upload_idle").read_text())
+    with (control / "upload-polls").open("a") as log:
+        print(idle, file=log)
+    print("com.apple.CloudDocs client:idle caught-up" if idle
+          else "com.apple.CloudDocs client:uploading pending")
 elif command in {"evict", "download"}:
     path = Path(arg)
     assert path.is_relative_to(control.parent.resolve() / "cloud")

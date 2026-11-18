@@ -1316,10 +1316,17 @@ def _finish_marker(path):
         raise unverified("MARKER_IO", "marker recovery did not sync") from None
 
 
+def _publish_once_retry(path, data):
+    try:
+        durable.publish_once(path, data)
+    except durable.VisibleNotDurable:
+        durable.publish_once(path, data)
+
+
 def _publish_copy_marker(path, record):
     try:
         durable.checkpoint("offload.marker_write")
-        durable.publish_once(path, canonical(record))
+        _publish_once_retry(path, canonical(record))
     except FileExistsError:
         raise OffloadError("MARKER_EXISTS", "another writer created the marker first", "marker_exists") from None
     except OSError:
@@ -1408,7 +1415,12 @@ def offload(config, plan, span_dir, *, require_files=("runner_receipt.json",), a
                     raise unverified("MARKER_IO", "legacy marker migration failed") from None
                 _finish_marker(marker)
             else:
-                return _recheck_marker(config, plan, span_dir, backend, deadline, record)
+                checked = _recheck_marker(config, plan, span_dir, backend, deadline, record)
+                try:
+                    _publish_once_retry(marker, marker_bytes)
+                except OSError:
+                    raise unverified("MARKER_IO", "marker retry did not sync") from None
+                return checked
 
         if not walk_span(span_dir)[1]:
             raise refused("SPAN_EMPTY", "the span holds no regular file")
@@ -1733,7 +1745,7 @@ def ssd_copy(config, plan, marker, ssd_root, *, clock=time.time):
             receipt_bytes = canonical({"schema": SSD_SCHEMA, "plan": plan,
                                        "descriptor_sha256": marker["descriptor_sha256"], "files": expected,
                                        "destination": str(final), "verified_epoch_s": clock()})
-            durable.publish_once(tmp / "ssd.ok.json", receipt_bytes)
+            _publish_once_retry(tmp / "ssd.ok.json", receipt_bytes)
             os.rename(tmp, final)
     return str(receipt)
 
@@ -1959,7 +1971,7 @@ def pull(config, plan, kit, dest_root, expect, *, allow_local=False, deadline_ep
                 os.fsync(handle.fileno())
             os.chmod(side[which], 0o444)
         # The completion record last, complete and atomic (link of a synced temporary file, as the marker).
-        durable.publish_once(side["done"], canonical({
+        _publish_once_retry(side["done"], canonical({
             "schema": PULL_SCHEMA, "plan": plan, "span_name": span_name,
             "manifest_sha256": got["manifest"], "ciphertext_sha256": got["ciphertext"],
             "pulled_epoch_s": round(clock(), 3),

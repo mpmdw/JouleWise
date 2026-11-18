@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import contextlib
+import errno
 import gzip
 import hashlib
 import io
@@ -621,6 +622,16 @@ class SpanOffloadTests(unittest.TestCase):
         self.assertEqual(caught.exception.code, "MARKER_EXISTS")
         self.assertEqual(marker.read_text(), "first\n")
         self.assertEqual(os.listdir(self.tmp / "markers"), [marker.name])
+
+    def test_marker_retry_failure_cannot_report_success(self):
+        marker = self.marker()
+        record = {"synthetic": True}
+        data = so.canonical(record)
+        error = durable.VisibleNotDurable(marker, data, OSError(errno.ENOSPC, "synthetic sync failure"))
+        with mock.patch.object(durable, "publish_once", side_effect=error) as publish:
+            with self.assertRaisesRegex(so.OffloadError, "MARKER_IO"):
+                so._publish_copy_marker(marker, record)
+        self.assertEqual(publish.call_args_list, [mock.call(marker, data), mock.call(marker, data)])
 
     def test_refuses_symlink_special_and_bad_names(self):
         cases = {

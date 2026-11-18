@@ -666,6 +666,7 @@ T38c folds the six live follow-ups (including the existing bridge-baseline row) 
 ## Cluster contract handoff — 2026-11-17
 
 - [AGENT] Tier 2 step 1, selected directly under RUN_STATE 399. Recheck #811 at its audit-repair head, then #804 on that base. The merge gates are hosted CI and independent delta review. See the [audit repair report](docs/run_reports/2026-11-17-cluster-contract-audit-repair.md).
+- [AGENT] Tier 2 step 2, #804 rebased on #811 `c40e953d2`. I-01 and I-02 pass on the real offload seam. Check hosted CI and lead delta admission. See the [rebase report](docs/run_reports/2026-11-17-pr804-audit-rebase.md).
 
 ## Current Queue
 
