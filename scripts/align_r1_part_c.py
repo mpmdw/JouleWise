@@ -123,6 +123,25 @@ def g1_records(turns, intervals, *, allowed_outcomes=("released",)):
                         for row in per_turn), "per_turn": per_turn}
 
 
+def no_g1_timeout(member):
+    """Either timeout source is decisive; absent G1 evidence cannot prove no timeout.
+
+    ThermalSession.wait writes thermal.gate_timeout:<turn> for G1, including
+    an attempted turn that never enters the admitted turn list. Workload copies
+    these flags into the episode. G0 and H have distinct start_gate_timeout and
+    hold_timeout flags and are not G1s.
+    """
+    intervals = member.get("intervals", [])
+    timeouts = [r.get("turn") for r in intervals
+                if r.get("kind") == "G1" and r.get("outcome") == "timeout"]
+    flags = [f for f in member.get("episode_flags") or []
+             if isinstance(f, str) and (f == "thermal.gate_timeout" or f.startswith("thermal.gate_timeout:"))]
+    missing = [r["turn"] for r in g1_records(member.get("turns", []), intervals)["per_turn"]
+               if not r["outcomes"]]
+    return _check(not timeouts and not flags and not missing,
+                  g1_timeout_turns=timeouts, gate_timeout_flags=flags, missing_g1_turns=missing)
+
+
 def gate_durations(intervals):
     """Reconcile each G0/G1/H duration to the interval's episode-monotonic bounds."""
     durations = []
@@ -173,8 +192,7 @@ def d_bank_mechanics(d_bank, n_chunk, *, max_tokens=MAX_TOKENS):
                               gates_plus_holds_s=gate_s, limit_s=limit,
                               share_of_t_dead=gate_s / t_dead if valid_budget and gate_s is not None else None)
     out["no_x7"] = _check(d_bank.get("x7") is False, x7=d_bank.get("x7"))
-    g1_timeouts = [r.get("turn") for r in intervals if r.get("kind") == "G1" and r.get("outcome") == "timeout"]
-    out["no_g1_timeout"] = _check(not g1_timeouts, g1_timeout_turns=g1_timeouts)
+    out["no_g1_timeout"] = no_g1_timeout(d_bank)
     holds, per_turn = {}, []
     for r in intervals:
         if r.get("kind") == "H":
@@ -236,11 +254,12 @@ def x_g_line(x_g):
     if x_g is None:
         return None
     intervals = x_g.get("intervals", [])
-    timeouts = [r.get("turn") for r in intervals if r.get("kind") == "G1" and r.get("outcome") == "timeout"]
+    timeout_check = no_g1_timeout(x_g)
     coverage = g1_records(x_g.get("turns", []), intervals, allowed_outcomes=("released", "unobserved"))
     durations = gate_durations(intervals)
-    return _check(x_g.get("x7") is False and not timeouts and coverage["pass"] and durations["pass"],
-                  x7=x_g.get("x7"), g1_timeout_turns=timeouts, g1_records=coverage, gate_durations=durations)
+    return {**timeout_check,
+            **_check(x_g.get("x7") is False and timeout_check["pass"] and coverage["pass"] and durations["pass"],
+                     x7=x_g.get("x7"), g1_records=coverage, gate_durations=durations)}
 
 
 def _printed_rows(printed):

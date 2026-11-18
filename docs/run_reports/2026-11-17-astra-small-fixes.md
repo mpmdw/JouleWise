@@ -45,3 +45,81 @@ The evaluator SHA-256 moves from
 It is the sole executable path changed on the candidate. Item 346's
 W1-head and renewal checks still govern adoption. Lead-owned review, the
 applicable source binding, W1 CI and the renewal remain pending.
+
+
+## Part C fail-closed fixes
+
+2026-11-18, Sol builder for interim lead b7aad16d. **Partial: timeout hole
+fixed; unreadable-X_G hole blocked on WRITE_SCOPE.** Merged `origin/main`
+`2f9e8b6f6` first, merge commit `7cb6eb95a`. The merge was automatic,
+including `scripts/gen_current.py`: PR #809's duplicate-pointer/heading
+refusals and exact historical-387 exemption coexist with PR #810's typed
+open-items projection. No manual merge-resolution edits were required.
+
+The shared no-G1-timeout check now fails on either an interval timeout or
+`thermal.gate_timeout` / `thermal.gate_timeout:<turn>` in episode_flags,
+including a timeout on the next, unadmitted turn whose interval is absent.
+Missing G1 evidence at an admitted index also fails this check rather than
+printing no timeout. The writer is `ThermalSession.wait` in
+`joulewise/align/apple/thermal_gates.py:624-625` at F0 `b2e01464d`;
+`workload.py:664` copies its flags into the episode. G0's
+`thermal.start_gate_timeout` and H's `thermal.hold_timeout:<turn>` retain
+their distinct meanings. No tolerance, threshold or pass bar changed.
+
+Regression evidence (all test invocations set `JW_B5_SYNTHETIC_ONLY=1` and
+`PYTHONDONTWRITEBYTECODE=1`):
+
+- Before: `PartCEvaluatorTimeoutTests.test_flag_only_timeout_on_next_unadmitted_turn_fails`
+  ran through the real `evaluate` with three clean admissions and only
+  `thermal.gate_timeout:3` recording the failed next G1. Both D_bank and
+  X_G subtests FAILED: `AssertionError: True is not false`, verdict pass.
+  The evaluator after the main merge was byte-identical to `bc4671106`
+  (SHA-256 `238ab79c72e2540ff2ce0522b6bf6864bca9602fa94685fc082c9d999907cfe3`).
+- Explicit baseline replay also loaded `git show bc4671106:scripts/align_r1_part_c.py`
+  into an in-memory module and reran that test: 1 test, 2 expected subtest
+  failures, no errors. For this replay, real `turn_check` and `stamp_fresh`
+  code and their constants were AST-extracted in memory from immutable F0
+  `b2e01464d6d4fbf2901ff4d4154df9455104a12a`; no W1 files were added.
+- After: the same regression PASSED for both roles, with other_failure
+  and the named timeout flag. The complete Part C module passed all 6
+  tests both with those real F0 helpers and in main's synthetic world.
+  Coverage also includes bare flags, interval-only timeouts, missing G1
+  rows, and clean released/unobserved X_G evidence.
+- Final scoped command:
+  `JW_B5_SYNTHETIC_ONLY=1 PYTHONDONTWRITEBYTECODE=1 python3 -m unittest tests.test_part_c_gate_evidence tests.test_gen_current -v`
+  — 61 tests PASS (6 Part C, 55 generator). `rg -l align_r1_part_c tests`
+  found only `tests/test_part_c_gate_evidence.py`; no other existing Part C
+  evaluator test module exists on this branch. Full-suite execution is
+  left to CI, per the assignment.
+
+The clean-shape assertion uses production-shaped synthetic facts through
+all real Part C checks. Main lacks the W1 `align_r1_rehearsal` and
+`rl145_prints` imports, so the standalone tests supply narrowly constrained
+clean-input doubles for those two helpers only; the additional replay
+above used their real F0 implementations. The nine real F0 bundles are not
+available in this checkout and were not re-evaluated. This is synthetic
+verification, not live validation.
+
+**Scope blocker for hole 2:** F0's
+`scripts/align_r1_followup_kit.py:521-535` records X_G in members, then wraps
+both invocation and fact extraction in one catch. A read/parse failure
+becomes the same `x_g=None, x_g_not_run_reason=...` evaluator arguments as
+a genuinely unrun X_G. `evaluate` receives no run directory, runtime result
+or ran bit. That runner file is absent from this PR branch and is outside
+the exhaustive WRITE_SCOPE. It has not been added or modified. Scope was
+requested for that exact path; no permission has yet been received.
+An evaluator-only error-string heuristic would guess which runs count,
+so it was not used. Hole 2 remains unfixed and has no pass-after claim.
+The next step is the lead's scope expansion / runner-line assignment,
+followed by an explicit ran/evidence-error handoff and a real-evaluator
+regression for unreadable or malformed completed X_G evidence.
+
+Decisions made: use one timeout-source check for D_bank and X_G; keep raw
+flag evidence separately from interval-derived timeout-turn indices;
+retain X_G's unobserved outcome; do not infer run status from exception
+text. NEEDS_RULING: none on data-counting or printed-number policy; the
+outstanding request is file-write authority only.
+
+Final hygiene: `git diff --check` PASS; fixture orphan census
+`python3 scripts/fixture_orphan_census.py --fail-on-orphans` returned
+`[]` (0 rows), exit 0.
