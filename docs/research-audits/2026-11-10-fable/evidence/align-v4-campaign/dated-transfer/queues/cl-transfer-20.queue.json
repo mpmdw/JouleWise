@@ -15,7 +15,7 @@
       "block_id": "cl-transfer-20",
       "kit": {
         "path": "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/dated-transfer/kits/cl-transfer-20.v1.1.json",
-        "sha256": "586145d13ad04551f501b3eb2f7bca46ee665ac208cccee136b1221ce1632b09"
+        "sha256": "7700a96872ef766c6f4926eedc28acea674134683c338991b9e5d2fa7f51f80c"
       },
       "legs": [
         "L001",

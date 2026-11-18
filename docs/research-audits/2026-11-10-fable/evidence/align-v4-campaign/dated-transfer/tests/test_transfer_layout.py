@@ -5,9 +5,10 @@ import json
 from pathlib import Path
 import sys
 import unittest
+from unittest.mock import patch
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from build_kits import HERE, pair_layout, registered_seeds, validate_layout
+from build_kits import HERE, QUAL, make_kit, pair_layout, registered_seeds, validate_layout
 from date_rules import (CountedClose, Window, arm_bounds, counted_batch_hold, date_dispositions, date_places,
                         lower_priority_fits, midnight, permits_t0)
 from validate_look import HASHES, LOOK_ID, load, validate_draft
@@ -25,6 +26,29 @@ class LayoutTests(unittest.TestCase):
                          {(3724, True), (3724, False), (3151, True), (3151, False)})
         # p1 is a local identifier, shared by both ratios even when span position is constant.
         self.assertEqual({leg["pair"] for kit in self.kits for leg in kit["legs"] if leg["leg_type"] == "L"}, {"p1"})
+
+    def test_all_kits_replace_retired_stop_scopes(self):
+        base = load(QUAL)
+        for kit in self.kits:
+            with self.subTest(kit=kit["campaign_id"]):
+                rules = kit["stop_rules"]
+                notes = rules["notes"]
+                self.assertNotIn("disk or watcher down (span; the lead clears)", notes)
+                self.assertNotIn("stops the campaign", notes)
+                self.assertIn("Watcher loss raises an alarm only", notes)
+                self.assertIn("A changed frozen path removes only that entry from admission", notes)
+                self.assertEqual({key: value for key, value in rules.items() if key != "notes"},
+                                 {key: value for key, value in base["stop_rules"].items() if key != "notes"})
+
+    def test_qualification_template_cannot_supply_transfer_stop_prose(self):
+        base = load(QUAL)
+        base["stop_rules"]["notes"] = "Stale qualification procedure."
+        sample = self.kits[0]
+        seeded = {key: sample[key] for key in ("seed_law", "legs")}
+        with patch("build_kits.pinned", return_value=seeded):
+            draft = make_kit(None, base, 1, set(), set())
+        self.assertNotIn(base["stop_rules"]["notes"], draft["stop_rules"]["notes"])
+        self.assertEqual(draft["stop_rules"], sample["stop_rules"])
 
     def test_qualification_p1_alias_cannot_substitute_for_transfer_layout(self):
         qual = load(HERE.parent / "item-drafts-1118" / "kits" / "cl-qual-01.v1.1.json")
@@ -120,12 +144,41 @@ class DateTests(unittest.TestCase):
     def test_cap_and_missed_dates_keep_original_ordinals(self):
         days = [self.day + timedelta(days=i) for i in range(25)]
         windows = [Window(f"C-{i}", "C", midnight(day) + 99) for i, day in enumerate(days)]
-        places = date_places(windows, (midnight(days[3]) + 100,), freeze_date=days[2],
-                             as_of=midnight(days[-1]) + 100)
+        as_of = midnight(days[-1]) + 100
+        places = date_places(windows, (midnight(days[3]) + 100,), freeze_date=days[2], as_of=as_of)
         self.assertEqual(list(places), days[2:22])
         self.assertEqual(places[days[2]], (1, ("C-2",)))
         self.assertEqual(places[days[3]], (2, ("C-3",)))
         self.assertEqual(places[days[21]], (20, ("C-21",)))
+
+        beyond_cap = midnight(days[22]) + 100
+        with self.assertRaisesRegex(ValueError, "outside the eligible date places"):
+            date_places(windows, [beyond_cap], freeze_date=days[2], as_of=as_of)
+        with self.assertRaisesRegex(ValueError, "outside the eligible date places"):
+            date_dispositions(places, [beyond_cap], as_of=as_of)
+        too_many = [midnight(day) + 100 for day in days[2:23]]
+        with self.assertRaisesRegex(ValueError, "exceed the 20-place cap"):
+            date_places(windows, too_many, freeze_date=days[2], as_of=as_of)
+
+    def test_a_duplicate_start_cannot_disappear_into_twenty_served_rows(self):
+        days = [self.day + timedelta(days=i) for i in range(20)]
+        windows = [Window(f"C-{i}", "C", midnight(day) + 10) for i, day in enumerate(days)]
+        starts = [midnight(day) + 20 for day in days]
+        as_of = midnight(days[-1]) + 40
+        places = date_places(windows, starts, freeze_date=self.day, as_of=as_of)
+        served = date_dispositions(places, starts, as_of=as_of)
+        self.assertEqual(len(served), 20)
+        self.assertTrue(all(row["status"] == "served" for row in served.values()))
+
+        readers = (
+            ("places", lambda t0s: date_places(windows, t0s, freeze_date=self.day, as_of=as_of)),
+            ("dispositions", lambda t0s: date_dispositions(places, t0s, as_of=as_of)),
+        )
+        for extra in (starts[-1], starts[-1] + 1, starts[0] + 1):
+            for name, reader in readers:
+                with self.subTest(extra=extra, reader=name):
+                    with self.assertRaisesRegex(ValueError, "multiple transfer starts"):
+                        reader([*starts, extra])
 
     def test_expired_date_dst_and_both_bounds(self):
         early = self.start + 70

@@ -22,7 +22,8 @@ issue queue after all applicable gates pass.
    close date qualifies in its place, including for the final window.
    Count that window once (RL-183 §3.1).
 3. Record the date and opportunity status in ordinal order, including
-   misses, and retain the supporting window attempt IDs. An unserved
+   misses, and retain the supporting window attempt IDs. Refuse duplicate
+   transfer starts and starts outside the admitted date places. An unserved
    eligible date spends its place at midnight, including an unused
    substitute close date. Close the series at the 20th place or with the
    last date that the series' last window makes eligible. The span's
@@ -65,6 +66,8 @@ issue queue after all applicable gates pass.
   unproven, unowned High Power, disk below floor, and instrument or
   collector failure retain their named host stops. A refusal, non-clean
   close or LEG_OVERTIME holds the kit/block until an input changes.
+  Watcher loss raises an alarm only. A changed frozen path removes only
+  that entry from admission under RL-179 F-6.
 - CONTAMINATED_REDOS holds counted and v4 work until a later span closes
   with neither load redo nor load flag. A filler may probe. Independently,
   after two distinct counted CONTAMINATED_REDOS stops in this campaign

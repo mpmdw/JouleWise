@@ -4,8 +4,8 @@
 
 | Binding | Draft value |
 | --- | --- |
-| Kit | [cl-transfer-17](kits/cl-transfer-17.v1.1.json), SHA-256 `ebc92d1087e8c859d1af55957f6560768ca313d845a21ab3f88e5cec157ad780` |
-| Queue | [cq-cl-transfer-17](queues/cl-transfer-17.queue.json), SHA-256 `adf820bccef44376c51b5fb2dbf4b27a8109164f660e290d0ce6af28cf03fd0d` |
+| Kit | [cl-transfer-17](kits/cl-transfer-17.v1.1.json), SHA-256 `b52de0d5172f95bb62279aab9a44475074dff1ac350afafdcafe40a44257ce4b` |
+| Queue | [cq-cl-transfer-17](queues/cl-transfer-17.queue.json), SHA-256 `ca327de50df26a8a535409ab89a958cb2ed80f9ec29fd63884147d466c739ee3` |
 | Span | `cl-transfer-17-s01`, sequence 1, attempt 1, roster `L001,L002,L003,L004,L005,L006` |
 | Runner | `cadence-legs-v1.1` at `ab32a6c915a9a78f92554a89c5d0eb93333b7a39` |
 | Cells | Four A at cap 4,096. L caps in run order 4,096, 3,724. q0, Automatic. |

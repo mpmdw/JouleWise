@@ -11,9 +11,11 @@ The draft entries are held for effective freeze 2, scientific registration
 and dated lead issue. The final-window midnight substitution and closed
 v2 transfer variant have RL-183's rules. Both NEEDS_SPEC items closed on
 remote implementation head `224cb92d3` after synthetic execution checks.
-The lead owns registration, scorer integration, final pins and Fable's
-cold pass. No live queue or phase exit gate changed.
-[Closure record](docs/run_reports/2026-11-18-rl183-transfer-closure.md).
+Audit round 1 repair applies the RL-179 F-6 stop scopes and rejects
+duplicate transfer starts. The lead owns delta review, registration,
+scorer integration, final pins and Fable's cold pass. No live queue or
+phase exit gate changed.
+[Audit repair](docs/run_reports/2026-11-18-dated-transfer-audit-1.md).
 
 ## 2026-11-17 qualification t0 guard successor
 

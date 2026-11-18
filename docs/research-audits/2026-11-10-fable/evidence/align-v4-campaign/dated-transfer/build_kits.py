@@ -30,6 +30,20 @@ A_TOKENS = (2000, 10000, 19458, 19458)
 FULL = 4096
 CYCLE = ((3724, True), (3151, False), (3724, False), (3151, True))
 SEED_START = 2026111800
+TRANSFER_STOP_NOTES = (
+    "RL-179 F-6 and F-9: Watcher loss raises an alarm only. A changed frozen path removes only that entry "
+    "from admission. An unplanned restart has no admission effect. Keep hygiene settings fixed from "
+    "freeze 2 through qual-03 close. "
+    "Unproven restore or an unowned High Power marker stops all work. Retry the pinned restore once and "
+    "verify the readback, then halt and page if it fails. Disk below the floor stops all work until the "
+    "disk check passes. Meter absent or not polling, or collector startup failure, stops measured work "
+    "until the launcher's instrument check passes. Tell the research lead. "
+    "CONTAMINATED_REDOS at three in a span holds counted and v4 entries until a later span on the host "
+    "closes with neither a load redo nor a load flag. A filler may probe. Apply the counted batch hold "
+    "under RL-180 row 8. LEG_OVERTIME, a non-clean close, launcher refusal, desk failure or a failed "
+    "consumer gate holds the affected kit or block until an input changes. Refer a consumer failure to "
+    "the research lead under RL-179 F-3. The pinned runner models leg budgets and process caps."
+)
 INCLUSION_OVERRIDES = {
     "bands_by_history": (
         "RL-149 section 2.2 and RL-181 section 3.3: q0 begins at the leg's G0 release. "
@@ -182,6 +196,7 @@ def make_kit(source, base, place, masters, seeds):
         "campaign_id": kit_id,
         "title": f"DRAFT, unissued pending effective freeze 2 and lead issue. RL-181 transfer date place {place}.",
         "ruling": {"id": "RL-181", "authorizes_spans": True},
+        "stop_rules": {**base["stop_rules"], "notes": TRANSFER_STOP_NOTES},
         "inclusion_rules": [
             {**row, "text": INCLUSION_OVERRIDES.get(row["id"], row["text"])}
             for row in base["inclusion_rules"]
@@ -239,14 +254,26 @@ def build(source, write):
     base = json.loads(git("show", f"{BASE}:{QUAL.relative_to(ROOT)}"))
     if base["frozen"]["commit"] != PIN:
         raise ValueError("qualification reference differs from the unchanged runner pin")
+    look_path = HERE / "looks" / "lm-transfer-01.json"
+    ledger_path = HERE / "looks" / "LOOKS.json"
+    look = json.loads(look_path.read_bytes())
+    ledger = json.loads(ledger_path.read_bytes())
+    look_entry, = [entry for entry in ledger["looks"] if entry["look_id"] == "lm-transfer-01"]
+    if look["look_id"] != look_entry["look_id"] or look["status"] != "draft" or look_entry["status"] != "draft":
+        raise ValueError("kit regeneration requires the unregistered transfer look and draft ledger row")
     prior_masters, prior_seeds = registered_seeds()
     masters, seeds = prior_masters.copy(), prior_seeds.copy()
     kits = [make_kit(source, base, n, masters, seeds) for n in range(1, MAX_DATES + 1)]
     validate_layout(kits, prior_masters, prior_seeds)
+    validation_root = source / "draft-artifacts" if write else ROOT
+    replacements = {}
 
     def artifact(path, data):
         if write:
-            path.write_bytes(data)
+            candidate = validation_root / path.relative_to(ROOT)
+            candidate.parent.mkdir(parents=True, exist_ok=True)
+            candidate.write_bytes(data)
+            replacements[path] = data
         elif path.read_bytes() != data:
             raise ValueError(f"{path.relative_to(HERE)} differs from the ruled draft")
         return pinned_path(path, data)
@@ -259,12 +286,14 @@ def build(source, write):
         roster = [leg["leg_id"] for leg in kit["legs"]]
         queue_path = HERE / "queues" / f"{kit_id}.queue.json"
         queue_ref = artifact(queue_path, json_bytes(draft_queue(kit_id, kit_ref, roster)))
-        pinned(source, QUEUE, "validate-kit", kit_path, "--repo", ROOT)
-        pinned(source, QUEUE, "validate-queue", queue_path, "--kits-root", ROOT)
-        decision = pinned(source, QUEUE, "next", "--queue", queue_path, "--now", T0.timestamp())
+        kit_input = validation_root / kit_ref["path"]
+        queue_input = validation_root / queue_ref["path"]
+        pinned(source, QUEUE, "validate-kit", kit_input, "--repo", ROOT)
+        pinned(source, QUEUE, "validate-queue", queue_input, "--kits-root", validation_root)
+        decision = pinned(source, QUEUE, "next", "--queue", queue_input, "--now", T0.timestamp())
         if decision["action"] != "halt" or decision["span_id"] is not None:
             raise ValueError(f"{kit_id} draft queue can issue")
-        plan = pinned(source, RUNNER, "plan", "--kit", kit_path, "--t0", T0.timestamp(), "--legs", ",".join(roster))
+        plan = pinned(source, RUNNER, "plan", "--kit", kit_input, "--t0", T0.timestamp(), "--legs", ",".join(roster))
         row = {
             "date_place": place, "kit_id": kit_id, "span_id": f"{kit_id}-s01", "kit": kit_ref, "queue": queue_ref,
             "legs": roster, "master_seed": kit["seed_law"]["master_seed"],
@@ -280,6 +309,13 @@ def build(source, write):
         "max_legs": MAX_LEGS, "runner_pin": PIN, "places": rows,
     }
     ref = artifact(HERE / "date-place-roster.json", json_bytes(document))
+    look["reads"]["planned_date_places"] = ref
+    look["reads"]["kits"] = [{"kit_id": place["kit_id"], **place["kit"]} for place in rows]
+    manifest_ref = artifact(look_path, json_bytes(look))
+    look_entry["sha256"] = manifest_ref["sha256"]
+    artifact(ledger_path, json_bytes(ledger))
+    for path, data in replacements.items():
+        path.write_bytes(data)
     print(f"{MAX_DATES} kits, queues, items and plans validated. Roster SHA-256 {ref['sha256']}.")
 
 

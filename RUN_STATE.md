@@ -18,9 +18,10 @@ held for effective freeze 2 and scientific registration. Pinned kit,
 queue and plan validation passed, as did one synthetic span. RL-183 gives
 the final window its substitute close date and admits a closed transfer
 variant in v2. Both NEEDS_SPEC items closed on remote implementation
-head `224cb92d3` after synthetic worker checks. The look awaits
-registration, scorer integration, final pins and Fable's cold pass.
-See the [closure record](docs/run_reports/2026-11-18-rl183-transfer-closure.md).
+head `224cb92d3` after synthetic worker checks. Audit round 1 repair
+regenerated the transfer stop scopes and added duplicate-start refusal.
+The look awaits registration, scorer integration, final pins and
+Fable's cold pass. See the [audit repair](docs/run_reports/2026-11-18-dated-transfer-audit-1.md).
 
 **2026-11-17 qualification draft handoff [AGENT].** The six unissued
 items bind the PR #812 delta-audit pin

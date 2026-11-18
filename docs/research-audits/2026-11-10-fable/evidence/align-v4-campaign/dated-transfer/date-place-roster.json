@@ -12,11 +12,11 @@
       "span_id": "cl-transfer-01-s01",
       "kit": {
         "path": "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/dated-transfer/kits/cl-transfer-01.v1.1.json",
-        "sha256": "62188932ab4011804d72bdce2d65c144e748f7ac62e45f0ebf4b747a47dddd9f"
+        "sha256": "a018bf05c67e0417cb2a3e5cf0f8a3073a7fac9502670f823b10d868539cefd3"
       },
       "queue": {
         "path": "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/dated-transfer/queues/cl-transfer-01.queue.json",
-        "sha256": "710d7b3a22d25955610baf69c3127b08f24083aee7e79547ff56c354f49a2ed3"
+        "sha256": "1b2d179a40a71d9c8ac189996ce6a276bde8fa410fd9abb00a9e1804f33d0c2e"
       },
       "legs": [
         "L001",
@@ -41,11 +41,11 @@
       "span_id": "cl-transfer-02-s01",
       "kit": {
         "path": "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/dated-transfer/kits/cl-transfer-02.v1.1.json",
-        "sha256": "0d7f417fb5361c39265ac95ac27d16923545e35353345c2f94aec4c3fb57fa6f"
+        "sha256": "54b4719d29e8d14dad6c0cefbbdfcda05eb4206077e303f99c30649919d31ed6"
       },
       "queue": {
         "path": "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/dated-transfer/queues/cl-transfer-02.queue.json",
-        "sha256": "14b244f93e742dd6caf20be3ddd9fe5d0d951a89b63669d1fbfce48edc4fcc1b"
+        "sha256": "49abae9b9b49aae2d7b00e76bfe2a728eeb54759be7c30fabe4fba1b3a0e26cb"
       },
       "legs": [
         "L001",
@@ -70,11 +70,11 @@
       "span_id": "cl-transfer-03-s01",
       "kit": {
         "path": "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/dated-transfer/kits/cl-transfer-03.v1.1.json",
-        "sha256": "e29bd9fe49ec45256c1cf304c91d16d2afdfb477a661f3a8c691c6414c28b736"
+        "sha256": "281aa82f348e1270ac3162ffd4c933185b3ce78c8be38daaf3b9fbf560ab4054"
       },
       "queue": {
         "path": "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/dated-transfer/queues/cl-transfer-03.queue.json",
-        "sha256": "5ab5a2f5d6aa430778dc42306a584bdc68bdc75d170e0ebef132da0c3420d24a"
+        "sha256": "92a8de853b448d82519187eb5e61465ec602ff44df53f65519bbe216eaa27adb"
       },
       "legs": [
         "L001",
@@ -99,11 +99,11 @@
       "span_id": "cl-transfer-04-s01",
       "kit": {
         "path": "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/dated-transfer/kits/cl-transfer-04.v1.1.json",
-        "sha256": "8733acf69434d8b6d63abf9aad686a8e7ddcd6b85b496f85bdd954fc5105c244"
+        "sha256": "017f702b5596e082eca1734ad9667339c540054c5cb2fbdfe7f58027e6bdc00a"
       },
       "queue": {
         "path": "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/dated-transfer/queues/cl-transfer-04.queue.json",
-        "sha256": "8b21dfb7c72097f61d3d23195e26635ef0044854e9feed5fe19eae2cf06eaf17"
+        "sha256": "5cf2cb0b209ec414b3c57ed59d00fe8e10de83dea2bc280d5d025fd0bff5d126"
       },
       "legs": [
         "L001",
@@ -128,11 +128,11 @@
       "span_id": "cl-transfer-05-s01",
       "kit": {
         "path": "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/dated-transfer/kits/cl-transfer-05.v1.1.json",
-        "sha256": "9ace0db032b332a3a350739609e9ba421b2ca5bd84e214ff0af502de1055c20b"
+        "sha256": "a0c4f719d86f91ff451074df2f8260f105cfdabc566586e7c2efa5fe69a0e0bb"
       },
       "queue": {
         "path": "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/dated-transfer/queues/cl-transfer-05.queue.json",
-        "sha256": "290cb879a6628690be488fbb41553826b92cdf84269f52339fc6b542dfece5e5"
+        "sha256": "dd9138112b1a2948ef4d89961f3b99d5b32fd0f55721f137273449d2b7635623"
       },
       "legs": [
         "L001",
@@ -157,11 +157,11 @@
       "span_id": "cl-transfer-06-s01",
       "kit": {
         "path": "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/dated-transfer/kits/cl-transfer-06.v1.1.json",
-        "sha256": "ce150a91217d795ec8d42d6553734c199ab1ef7c30e2fee129576a343cb4c344"
+        "sha256": "d14b07bac7662feb7d33ef91d8152118fbaaa4db73279eb263e3942c555c94bb"
       },
       "queue": {
         "path": "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/dated-transfer/queues/cl-transfer-06.queue.json",
-        "sha256": "564e2341f5bb9eb0c3b50f44a9073fbb9b161df86f49fc271c166c708ac4b7e9"
+        "sha256": "dfbd3e0ff2e82878dece10611ceb5fad1a5b6745665b6fa981ad6711ae393030"
       },
       "legs": [
         "L001",
@@ -186,11 +186,11 @@
       "span_id": "cl-transfer-07-s01",
       "kit": {
         "path": "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/dated-transfer/kits/cl-transfer-07.v1.1.json",
-        "sha256": "0c65124b3175428dbd37763951b3927a52e03b9e657c4333a5e3e86bfe792199"
+        "sha256": "5b32779bea3acf458035a9952bc1f9cee8834b3bd487df6ef99dda7b9c79dde0"
       },
       "queue": {
         "path": "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/dated-transfer/queues/cl-transfer-07.queue.json",
-        "sha256": "b17de779263f2d0de89fe11dfca4f87d08c8300c48195756f2b3354d7e418d24"
+        "sha256": "846d9a201aeacc85df0e56f1be54e2994c087d9632b8953818178cbd80a80e4e"
       },
       "legs": [
         "L001",
@@ -215,11 +215,11 @@
       "span_id": "cl-transfer-08-s01",
       "kit": {
         "path": "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/dated-transfer/kits/cl-transfer-08.v1.1.json",
-        "sha256": "aca60a0c0b94f8a7f642e0bf338b0a1fe539867c36ab6aab0b6296be4a31cc8c"
+        "sha256": "21604ddc5fafce3986b7bf626b70fa73ab81d2f5c59cc99d607d4113e4fff7c0"
       },
       "queue": {
         "path": "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/dated-transfer/queues/cl-transfer-08.queue.json",
-        "sha256": "e6f8143e9624fcd8fc72d6a519857b3b4f464d39c2feacbbff62f2325fe303fb"
+        "sha256": "f4dba862ff02980557783aa4b8108162b2fd510c02087c86e10597e480b5aaf9"
       },
       "legs": [
         "L001",
@@ -244,11 +244,11 @@
       "span_id": "cl-transfer-09-s01",
       "kit": {
         "path": "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/dated-transfer/kits/cl-transfer-09.v1.1.json",
-        "sha256": "99a78db14f7d798b9378399c2bc6397bb415242fe692c260842eed7cec7969d3"
+        "sha256": "03aa6cde0c57e1fd0a1697922bb960df42866db822f1907fb14b63caac46e750"
       },
       "queue": {
         "path": "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/dated-transfer/queues/cl-transfer-09.queue.json",
-        "sha256": "09a3292d415bd00e843e23b947529c566fdaf1fd924a6df7f243eb88998620a9"
+        "sha256": "f4724a112921718558c40849fdbfa36aac36c08009e0aaa3b37605ecfba8c7c5"
       },
       "legs": [
         "L001",
@@ -273,11 +273,11 @@
       "span_id": "cl-transfer-10-s01",
       "kit": {
         "path": "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/dated-transfer/kits/cl-transfer-10.v1.1.json",
-        "sha256": "a00de3a0db0f90f366a6c71e0c44a0c2d3bd4f5d26b0fcb3a9e09dc9ddb4b09e"
+        "sha256": "6aafd694d784b645aeb52d35502e5a2b8242f4fa306b844bf6190744a782e40b"
       },
       "queue": {
         "path": "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/dated-transfer/queues/cl-transfer-10.queue.json",
-        "sha256": "f76bdfaba4142cd0557ab1d505a45edf392d2d58ecf330ca67e53c6ed5e11582"
+        "sha256": "193e0ba37907267ad69218965ee3a67e8431444036c63ac5479f9c64e1c183f5"
       },
       "legs": [
         "L001",
@@ -302,11 +302,11 @@
       "span_id": "cl-transfer-11-s01",
       "kit": {
         "path": "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/dated-transfer/kits/cl-transfer-11.v1.1.json",
-        "sha256": "7bdc83c142a397bc16b0f0750335262d9e34156b1ef4d91dd67ed17317fe7a77"
+        "sha256": "44e535ccbadcf18241b187499c8a9c0eb1c554bace87cf430ea8429b0676531b"
       },
       "queue": {
         "path": "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/dated-transfer/queues/cl-transfer-11.queue.json",
-        "sha256": "0355b75ec771d6aec64b8b51a248c0070d4cb3620e26135e77873daaa121bd1e"
+        "sha256": "8c26c9cd606ccc1719ce3076f276abd9c012c4f70d6663f719ca1ffc0054a3cf"
       },
       "legs": [
         "L001",
@@ -331,11 +331,11 @@
       "span_id": "cl-transfer-12-s01",
       "kit": {
         "path": "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/dated-transfer/kits/cl-transfer-12.v1.1.json",
-        "sha256": "b9b7e552a343b1acc8a44cc5eaae4dc586d32e6e8d385df54c10ad5d009259cb"
+        "sha256": "ea43cb68e0619443101afdd738fcb359f96b9e031eeef00006afb3e09a890e5f"
       },
       "queue": {
         "path": "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/dated-transfer/queues/cl-transfer-12.queue.json",
-        "sha256": "e9ef2d490836e75377507c1ad6cebb38b7a801ced948b1f460b0ec8ff456015e"
+        "sha256": "62ae5198c70f0f8177e4f825abd6bf9c343b4495ff3e5329dad0b8bbff80b66b"
       },
       "legs": [
         "L001",
@@ -360,11 +360,11 @@
       "span_id": "cl-transfer-13-s01",
       "kit": {
         "path": "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/dated-transfer/kits/cl-transfer-13.v1.1.json",
-        "sha256": "79162f5dd05639f6f29ce94ee8df428f42898f467cea4cc70b35351356ba8a7b"
+        "sha256": "fff6daf0bb33f00c74045a092a6f874822c819e37b39f9ad41eb505e253898c2"
       },
       "queue": {
         "path": "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/dated-transfer/queues/cl-transfer-13.queue.json",
-        "sha256": "3407a84d628106a9b6643937796086c6d0bea0cf22ea528bc9c449be373e9780"
+        "sha256": "882acb14e13251547647d2632345a9422867ec7541807f28136904160a7196d1"
       },
       "legs": [
         "L001",
@@ -389,11 +389,11 @@
       "span_id": "cl-transfer-14-s01",
       "kit": {
         "path": "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/dated-transfer/kits/cl-transfer-14.v1.1.json",
-        "sha256": "2ce78699e7fa9497c3acc5d8057c56efe97bf3bd92e1764cb4ef37115767bfba"
+        "sha256": "7a6b13750fd4cee7c5bbb063070163135c1f20663f93ed28efdb72ac7e5474cd"
       },
       "queue": {
         "path": "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/dated-transfer/queues/cl-transfer-14.queue.json",
-        "sha256": "c47e8a32a9eea7b68d3acaa4703b7086278edf797a7300a85c917417a9c676a4"
+        "sha256": "4a1fe597aa34e6f18705e9e03e32ce3678cbc4ccedc6e61dd2068de3b2a8eb69"
       },
       "legs": [
         "L001",
@@ -418,11 +418,11 @@
       "span_id": "cl-transfer-15-s01",
       "kit": {
         "path": "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/dated-transfer/kits/cl-transfer-15.v1.1.json",
-        "sha256": "3f8dfb7d5f1a8b0c637f5ea169df891361298c13de2438ef8d8d6667fd9cd675"
+        "sha256": "b2589cb1dd0f19a55d6fb7a15199bf72338064c59a7dc83c46b67b0e0ca8df17"
       },
       "queue": {
         "path": "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/dated-transfer/queues/cl-transfer-15.queue.json",
-        "sha256": "553a0ce284adff155827b8ccc5d6bfd5fd5e0c0cdc1bb57df399c5d0e1f299e6"
+        "sha256": "12a7f456481401919d484e23b1d2005d25403362a0f2faa028fca789493ac1c1"
       },
       "legs": [
         "L001",
@@ -447,11 +447,11 @@
       "span_id": "cl-transfer-16-s01",
       "kit": {
         "path": "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/dated-transfer/kits/cl-transfer-16.v1.1.json",
-        "sha256": "704b33d21e9173214c5e1d04443c2d4a97c4fdd849a1cb163eeb485fd9645d2c"
+        "sha256": "5626da9346676158484d557ac2c86474ac66cfc04485c3485690982f704924ee"
       },
       "queue": {
         "path": "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/dated-transfer/queues/cl-transfer-16.queue.json",
-        "sha256": "3750dcc4ad9cb876f92b3202262f799bf5260054e8e3bde39e53e685e0eacc8d"
+        "sha256": "a2df0df7f0e0d98efb812e133de2fbf3b7d2391ca77726e3523bd2f5b110d57d"
       },
       "legs": [
         "L001",
@@ -476,11 +476,11 @@
       "span_id": "cl-transfer-17-s01",
       "kit": {
         "path": "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/dated-transfer/kits/cl-transfer-17.v1.1.json",
-        "sha256": "ebc92d1087e8c859d1af55957f6560768ca313d845a21ab3f88e5cec157ad780"
+        "sha256": "b52de0d5172f95bb62279aab9a44475074dff1ac350afafdcafe40a44257ce4b"
       },
       "queue": {
         "path": "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/dated-transfer/queues/cl-transfer-17.queue.json",
-        "sha256": "adf820bccef44376c51b5fb2dbf4b27a8109164f660e290d0ce6af28cf03fd0d"
+        "sha256": "ca327de50df26a8a535409ab89a958cb2ed80f9ec29fd63884147d466c739ee3"
       },
       "legs": [
         "L001",
@@ -505,11 +505,11 @@
       "span_id": "cl-transfer-18-s01",
       "kit": {
         "path": "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/dated-transfer/kits/cl-transfer-18.v1.1.json",
-        "sha256": "8bf206b1fd28342547c7ce42f96a4a8f8edbef6bbefeae5e8c76b8739ebe06b9"
+        "sha256": "f38541efee926c54b329ab915f0d98bb88530e751545e14bd7b2231c8ed8aa28"
       },
       "queue": {
         "path": "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/dated-transfer/queues/cl-transfer-18.queue.json",
-        "sha256": "e43434a0e614fd6f0328ebe834ad36d5a986b907c9ad490668f429f409b441bf"
+        "sha256": "f2cd1f903b843b8aa3dbd843110bc25d8a598df42c244366572a78aeaa48d76d"
       },
       "legs": [
         "L001",
@@ -534,11 +534,11 @@
       "span_id": "cl-transfer-19-s01",
       "kit": {
         "path": "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/dated-transfer/kits/cl-transfer-19.v1.1.json",
-        "sha256": "7acab32e2d323f96ade7106da1fe08c7b1c547ac5b2cec307d7bab26559d48d4"
+        "sha256": "6ebd03e473f20ad4003e9facf51f603507046886e6e90090a370cbd4ee7de828"
       },
       "queue": {
         "path": "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/dated-transfer/queues/cl-transfer-19.queue.json",
-        "sha256": "bec811065740c0fb7a96dfa5947a9905edd0ab8398de4fd208b0ea4618893861"
+        "sha256": "1a8186d844e0caa3b6fd60d50da0c3e8126d78d1a1f82be5aaf5ef8883ddd9af"
       },
       "legs": [
         "L001",
@@ -563,11 +563,11 @@
       "span_id": "cl-transfer-20-s01",
       "kit": {
         "path": "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/dated-transfer/kits/cl-transfer-20.v1.1.json",
-        "sha256": "586145d13ad04551f501b3eb2f7bca46ee665ac208cccee136b1221ce1632b09"
+        "sha256": "7700a96872ef766c6f4926eedc28acea674134683c338991b9e5d2fa7f51f80c"
       },
       "queue": {
         "path": "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/dated-transfer/queues/cl-transfer-20.queue.json",
-        "sha256": "9dd04bfab2c9db317c0bf8b1c9188217e1585e850cfa5d48662ec66b2e5d81a7"
+        "sha256": "e374b389386473debaf53402d4105b7bf6594ed1de224399438059f259ae6c09"
       },
       "legs": [
         "L001",

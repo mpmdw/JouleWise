@@ -25,108 +25,108 @@
   "reads": {
     "planned_date_places": {
       "path": "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/dated-transfer/date-place-roster.json",
-      "sha256": "cc2a29a95a0028f78ce85aaf9b7a7dd7f019130ddf75dcf02bdb589cb13cf6f6"
+      "sha256": "173f75c45475ab2c2cd01402d570d5c8740cbf8c24fa85c5127b76b22dc4e01f"
     },
     "kits": [
       {
         "kit_id": "cl-transfer-01",
         "path": "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/dated-transfer/kits/cl-transfer-01.v1.1.json",
-        "sha256": "62188932ab4011804d72bdce2d65c144e748f7ac62e45f0ebf4b747a47dddd9f"
+        "sha256": "a018bf05c67e0417cb2a3e5cf0f8a3073a7fac9502670f823b10d868539cefd3"
       },
       {
         "kit_id": "cl-transfer-02",
         "path": "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/dated-transfer/kits/cl-transfer-02.v1.1.json",
-        "sha256": "0d7f417fb5361c39265ac95ac27d16923545e35353345c2f94aec4c3fb57fa6f"
+        "sha256": "54b4719d29e8d14dad6c0cefbbdfcda05eb4206077e303f99c30649919d31ed6"
       },
       {
         "kit_id": "cl-transfer-03",
         "path": "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/dated-transfer/kits/cl-transfer-03.v1.1.json",
-        "sha256": "e29bd9fe49ec45256c1cf304c91d16d2afdfb477a661f3a8c691c6414c28b736"
+        "sha256": "281aa82f348e1270ac3162ffd4c933185b3ce78c8be38daaf3b9fbf560ab4054"
       },
       {
         "kit_id": "cl-transfer-04",
         "path": "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/dated-transfer/kits/cl-transfer-04.v1.1.json",
-        "sha256": "8733acf69434d8b6d63abf9aad686a8e7ddcd6b85b496f85bdd954fc5105c244"
+        "sha256": "017f702b5596e082eca1734ad9667339c540054c5cb2fbdfe7f58027e6bdc00a"
       },
       {
         "kit_id": "cl-transfer-05",
         "path": "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/dated-transfer/kits/cl-transfer-05.v1.1.json",
-        "sha256": "9ace0db032b332a3a350739609e9ba421b2ca5bd84e214ff0af502de1055c20b"
+        "sha256": "a0c4f719d86f91ff451074df2f8260f105cfdabc566586e7c2efa5fe69a0e0bb"
       },
       {
         "kit_id": "cl-transfer-06",
         "path": "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/dated-transfer/kits/cl-transfer-06.v1.1.json",
-        "sha256": "ce150a91217d795ec8d42d6553734c199ab1ef7c30e2fee129576a343cb4c344"
+        "sha256": "d14b07bac7662feb7d33ef91d8152118fbaaa4db73279eb263e3942c555c94bb"
       },
       {
         "kit_id": "cl-transfer-07",
         "path": "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/dated-transfer/kits/cl-transfer-07.v1.1.json",
-        "sha256": "0c65124b3175428dbd37763951b3927a52e03b9e657c4333a5e3e86bfe792199"
+        "sha256": "5b32779bea3acf458035a9952bc1f9cee8834b3bd487df6ef99dda7b9c79dde0"
       },
       {
         "kit_id": "cl-transfer-08",
         "path": "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/dated-transfer/kits/cl-transfer-08.v1.1.json",
-        "sha256": "aca60a0c0b94f8a7f642e0bf338b0a1fe539867c36ab6aab0b6296be4a31cc8c"
+        "sha256": "21604ddc5fafce3986b7bf626b70fa73ab81d2f5c59cc99d607d4113e4fff7c0"
       },
       {
         "kit_id": "cl-transfer-09",
         "path": "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/dated-transfer/kits/cl-transfer-09.v1.1.json",
-        "sha256": "99a78db14f7d798b9378399c2bc6397bb415242fe692c260842eed7cec7969d3"
+        "sha256": "03aa6cde0c57e1fd0a1697922bb960df42866db822f1907fb14b63caac46e750"
       },
       {
         "kit_id": "cl-transfer-10",
         "path": "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/dated-transfer/kits/cl-transfer-10.v1.1.json",
-        "sha256": "a00de3a0db0f90f366a6c71e0c44a0c2d3bd4f5d26b0fcb3a9e09dc9ddb4b09e"
+        "sha256": "6aafd694d784b645aeb52d35502e5a2b8242f4fa306b844bf6190744a782e40b"
       },
       {
         "kit_id": "cl-transfer-11",
         "path": "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/dated-transfer/kits/cl-transfer-11.v1.1.json",
-        "sha256": "7bdc83c142a397bc16b0f0750335262d9e34156b1ef4d91dd67ed17317fe7a77"
+        "sha256": "44e535ccbadcf18241b187499c8a9c0eb1c554bace87cf430ea8429b0676531b"
       },
       {
         "kit_id": "cl-transfer-12",
         "path": "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/dated-transfer/kits/cl-transfer-12.v1.1.json",
-        "sha256": "b9b7e552a343b1acc8a44cc5eaae4dc586d32e6e8d385df54c10ad5d009259cb"
+        "sha256": "ea43cb68e0619443101afdd738fcb359f96b9e031eeef00006afb3e09a890e5f"
       },
       {
         "kit_id": "cl-transfer-13",
         "path": "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/dated-transfer/kits/cl-transfer-13.v1.1.json",
-        "sha256": "79162f5dd05639f6f29ce94ee8df428f42898f467cea4cc70b35351356ba8a7b"
+        "sha256": "fff6daf0bb33f00c74045a092a6f874822c819e37b39f9ad41eb505e253898c2"
       },
       {
         "kit_id": "cl-transfer-14",
         "path": "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/dated-transfer/kits/cl-transfer-14.v1.1.json",
-        "sha256": "2ce78699e7fa9497c3acc5d8057c56efe97bf3bd92e1764cb4ef37115767bfba"
+        "sha256": "7a6b13750fd4cee7c5bbb063070163135c1f20663f93ed28efdb72ac7e5474cd"
       },
       {
         "kit_id": "cl-transfer-15",
         "path": "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/dated-transfer/kits/cl-transfer-15.v1.1.json",
-        "sha256": "3f8dfb7d5f1a8b0c637f5ea169df891361298c13de2438ef8d8d6667fd9cd675"
+        "sha256": "b2589cb1dd0f19a55d6fb7a15199bf72338064c59a7dc83c46b67b0e0ca8df17"
       },
       {
         "kit_id": "cl-transfer-16",
         "path": "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/dated-transfer/kits/cl-transfer-16.v1.1.json",
-        "sha256": "704b33d21e9173214c5e1d04443c2d4a97c4fdd849a1cb163eeb485fd9645d2c"
+        "sha256": "5626da9346676158484d557ac2c86474ac66cfc04485c3485690982f704924ee"
       },
       {
         "kit_id": "cl-transfer-17",
         "path": "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/dated-transfer/kits/cl-transfer-17.v1.1.json",
-        "sha256": "ebc92d1087e8c859d1af55957f6560768ca313d845a21ab3f88e5cec157ad780"
+        "sha256": "b52de0d5172f95bb62279aab9a44475074dff1ac350afafdcafe40a44257ce4b"
       },
       {
         "kit_id": "cl-transfer-18",
         "path": "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/dated-transfer/kits/cl-transfer-18.v1.1.json",
-        "sha256": "8bf206b1fd28342547c7ce42f96a4a8f8edbef6bbefeae5e8c76b8739ebe06b9"
+        "sha256": "f38541efee926c54b329ab915f0d98bb88530e751545e14bd7b2231c8ed8aa28"
       },
       {
         "kit_id": "cl-transfer-19",
         "path": "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/dated-transfer/kits/cl-transfer-19.v1.1.json",
-        "sha256": "7acab32e2d323f96ade7106da1fe08c7b1c547ac5b2cec307d7bab26559d48d4"
+        "sha256": "6ebd03e473f20ad4003e9facf51f603507046886e6e90090a370cbd4ee7de828"
       },
       {
         "kit_id": "cl-transfer-20",
         "path": "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/dated-transfer/kits/cl-transfer-20.v1.1.json",
-        "sha256": "586145d13ad04551f501b3eb2f7bca46ee665ac208cccee136b1221ce1632b09"
+        "sha256": "7700a96872ef766c6f4926eedc28acea674134683c338991b9e5d2fa7f51f80c"
       }
     ],
     "timezone": "America/Los_Angeles",

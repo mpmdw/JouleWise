@@ -39,6 +39,19 @@ def midnight(day):
     return int(datetime.combine(day, time.min, ZONE).timestamp())
 
 
+def _transfer_start_days(transfer_t0s, as_of):
+    served = set()
+    for t0 in transfer_t0s:
+        if t0 <= as_of:
+            day = local_day(t0)
+            if day in served:
+                raise ValueError(f"multiple transfer starts on {day}")
+            served.add(day)
+    if len(served) > MAX_DATES:
+        raise ValueError(f"transfer starts exceed the {MAX_DATES}-place cap")
+    return served
+
+
 def date_places(windows, transfer_t0s, *, freeze_date: date, as_of):
     """Map eligible dates to the first 20 ordinal places and their supporting attempt IDs.
 
@@ -47,7 +60,7 @@ def date_places(windows, transfer_t0s, *, freeze_date: date, as_of):
     """
     attempts = set()
     eligible = {}
-    served = {local_day(t0) for t0 in transfer_t0s if t0 <= as_of}
+    served = _transfer_start_days(transfer_t0s, as_of)
     starts = [window for window in windows
               if window.kind in WINDOW_KINDS and window.t0 is not None and window.t0 <= as_of]
     for window in starts:
@@ -69,6 +82,8 @@ def date_places(windows, transfer_t0s, *, freeze_date: date, as_of):
             eligible.setdefault(day, set()).add(window.attempt_id)
 
     ordered = sorted(eligible)[:MAX_DATES]
+    if served.difference(ordered):
+        raise ValueError("transfer start outside the eligible date places")
     return {day: (place, tuple(sorted(eligible[day]))) for place, day in enumerate(ordered, 1)}
 
 
@@ -87,7 +102,9 @@ def permits_t0(epoch, bounds):
 
 def date_dispositions(places, transfer_t0s, *, as_of):
     """Give each eligible date its place, source attempts and as-of disposition."""
-    served = {local_day(t0) for t0 in transfer_t0s if t0 <= as_of}
+    served = _transfer_start_days(transfer_t0s, as_of)
+    if served.difference(places):
+        raise ValueError("transfer start outside the eligible date places")
     today = local_day(as_of)
     result = {}
     for day, (place, attempts) in places.items():
