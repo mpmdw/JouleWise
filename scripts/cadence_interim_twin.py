@@ -26,6 +26,7 @@ import os
 from pathlib import Path
 import plistlib
 import re
+from statistics import median
 from types import ModuleType, SimpleNamespace
 
 
@@ -48,6 +49,14 @@ DECODER_PACKAGE_PATH = "joulewise/external/__init__.py"
 METER_PERIODS = {0: 0.5, 1: 0.1, 2: 0.02, 3: 0.001}
 SQRT_TWO = math.sqrt(2)
 LOG_SQRT_TWO_PI = math.log(2 * math.pi) / 2
+
+# Census defaults pending RL-184.
+PRESERVE_BUNDLE_PATH_SPELLING = True  # F01
+ALLOW_EMPTY_SOAK_ATTEMPTS = True  # F02
+ALLOW_MISSING_SOAK_MEMBERS = True  # F03
+VALIDATE_SOAK_HISTORY = True  # F04
+FALL_BACK_ON_UNKNOWN_LEGACY_SOAK_KIND = True  # F05
+HOT_ERROR_FOR_VERDICT = float  # F08
 
 
 @dataclass(frozen=True)
@@ -92,8 +101,12 @@ class MeterInput:
     sha256: str
 
 
-class RankDeficient(ValueError):
+class FitUnavailable(ValueError):
     """A sensitivity fit can be unavailable even with valid inputs."""
+
+
+class RankDeficient(FitUnavailable):
+    """The design cannot estimate all of its columns."""
 
 
 def token_rates(legs):
@@ -378,11 +391,11 @@ def interim_verdict(day_hot_totals):
             measured = math.fsum(value for _, value in totals)
             predicted = math.fsum(value for value, _ in totals)
             if measured <= 0:
-                raise ValueError("nonpositive measured hot total")
+                raise FitUnavailable("nonpositive measured hot total")
             errors.append(abs(predicted - measured) / measured)
     if len(errors) < 3:
         return "not_evaluable"
-    return "passes" if max(errors) <= 0.02 else "fails"
+    return "passes" if HOT_ERROR_FOR_VERDICT(max(errors)) <= 0.02 else "fails"
 
 
 class _ArgumentParser(argparse.ArgumentParser):
@@ -601,6 +614,10 @@ def relative_differences(left, right):
             yield abs(left / scale - right / scale)
 
 
+COEFFICIENT_DIFFERENCES = relative_differences  # F06
+CENSORED_FIT_DIFFERENCES = relative_differences  # F07
+
+
 def comparison_frame(primary, twin):
     def pair(primary_values, twin_values):
         return {"primary": primary_values, "twin": twin_values}
@@ -610,11 +627,13 @@ def comparison_frame(primary, twin):
         frame[field] = {c: pair(primary[field][c], twin[field][c]) for c in sorted(CHANNELS)}
     for field in ("censored_fit", "verdicts", "soak_retries"):
         frame[field] = pair(primary[field], twin[field])
-    numeric = frame["coefficients"] | {"censored_fit": frame["censored_fit"]}
-    frame["max_relative_difference"] = {
-        field: max(relative_differences(values["primary"], values["twin"]), default=None)
-        for field, values in numeric.items()
+    differences = {
+        channel: max(COEFFICIENT_DIFFERENCES(values["primary"], values["twin"]), default=None)
+        for channel, values in frame["coefficients"].items()
     }
+    differences["censored_fit"] = max(CENSORED_FIT_DIFFERENCES(primary["censored_fit"], twin["censored_fit"]),
+                                      default=None)
+    frame["max_relative_difference"] = differences
     return frame
 
 
@@ -707,17 +726,37 @@ def hot_totals(predictions, response, segments):
     return tuple(math.fsum(values) for values in zip(*selected, strict=True))
 
 
-def fit_projection(records, readings, centring, rates, days, response_records, *, sensitivity=False):
+def require_fit_denominators(records, responses):
+    for record, response in zip(records, responses, strict=True):
+        if math.fsum(response) <= 0:
+            raise FitUnavailable("nonpositive measured leg total")
+        hot = [i for i, segment in enumerate(record["segments"]) if i > 0 and segment["hot"]]
+        if not hot:
+            continue
+        if math.fsum(response[i] for i in hot) <= 0:
+            raise FitUnavailable("nonpositive measured leg hot total")
+        if record["state"]["onset_use"] == "uncensored":
+            first_hot = hot[0]
+            if any(response[i] <= 0 for i in range(max(1, first_hot - 2), min(len(response), first_hot + 6))):
+                raise FitUnavailable("nonpositive measured onset-profile block")
+
+
+def fit_projection(records, readings, centring, rates, days, response_records, *, sensitivity=False,
+                   include_delta=True):
     legs = [fit_leg(record, readings, centring) for record in records]
     active = tuple(READINGS[reading] for reading in readings)
     onset_rows = onset_roster(records, legs, rates)
-    main = fit_onset(onset_rows, sensitivity=sensitivity)
+    main = fit_onset(onset_rows, sensitivity=sensitivity) if include_delta else None
+    if sensitivity and include_delta and main is None:
+        raise FitUnavailable("required sensitivity onset is unavailable")
     onsets = dict.fromkeys(days)
     delta_drops = []
     if main is not None:
         onsets = {day: fit_onset(onset_rows, held_out_day=day) for day in days}
         delta_drops = [day for day, onset in onsets.items() if onset is None]
     responses = {channel: [data[channel]["segments"] for data in response_records] for channel in sorted(CHANNELS)}
+    for channel_responses in responses.values():
+        require_fit_denominators(records, channel_responses)
     full = fit_channels(legs, rates, active, responses, main)
     base_legs = [replace(leg, readings=()) for leg in legs]
     folds, base = {}, {}
@@ -776,8 +815,9 @@ def recompute_fit(stage1, fit_records, response_records, marked_spans):
         days = [day for day in stage1["roster"]["fit_days"] if any(r["day"] == day for r in kept_records)]
         if len(days) > 1:
             try:
-                without = fit_projection(kept_records, active, centring, rates, days, responses, sensitivity=True)
-            except RankDeficient:
+                without = fit_projection(kept_records, active, centring, rates, days, responses,
+                                         sensitivity=True, include_delta=fit["delta_column"] == "kept")
+            except FitUnavailable:
                 pass
     for channel in CHANNELS:
         variant = without["channels"][channel] if without is not None else None
@@ -821,30 +861,29 @@ def gpu_rows(data):
     for row in gpu_fields(data):
         left, right, stamp, power = (finite(row[k]) for k in
                                     ("interval_start_s", "interval_end_s", "timestamp_s", "power_w"))
-        if left >= right:
-            raise ValueError("invalid GPU support interval")
         rows.append((left, right, stamp, power))
     if not rows:
         raise ValueError("GPU trace is empty")
     return sorted(rows)
 
 
-def supported_gpu_rows(rows, start, end):
-    clipped = []
-    rightmost = start
+def gpu_row_overlaps(rows, start, end):
     for left, right, _, power in rows:
-        if right <= start:
-            continue
         if left >= end:
             break
         left, right = max(left, start), min(right, end)
+        if left < right:
+            yield left, right, power
+
+
+def require_gpu_gap_bound(rows, start, end):
+    rightmost = start
+    for left, right, _ in gpu_row_overlaps(rows, start, end):
         if left - rightmost > 2:
             raise ValueError("GPU trace hole")
-        clipped.append((right - left, power))
         rightmost = max(rightmost, right)
-    if end - rightmost > 2 or not clipped:
-        raise ValueError("GPU trace does not support the segment")
-    return clipped
+    if end - rightmost > 2:
+        raise ValueError("GPU trace hole")
 
 
 def power_intervals(rows, start, end):
@@ -855,7 +894,8 @@ def power_intervals(rows, start, end):
         return 0.0, None
     pieces = []
     width = 0.0
-    for duration, power in supported_gpu_rows(rows, start, end):
+    for left, right, power in gpu_row_overlaps(rows, start, end):
+        duration = right - left
         pieces.append(power * duration)
         width += duration
     return math.fsum(pieces), width / (end - start)
@@ -994,7 +1034,7 @@ def connected_response_intervals(record):
 def responses_for_leg(record, gpu, dc_segment_reader):
     # Check the connected fit surface before cutting it into separate responses.
     for start, end in connected_response_intervals(record):
-        supported_gpu_rows(gpu, start, end)
+        require_gpu_gap_bound(gpu, start, end)
     output = {}
     for channel, measure in (("gpu_rail", lambda u, v: power_intervals(gpu, u, v)),
                              ("dc_in", dc_segment_reader)):
@@ -1010,35 +1050,68 @@ SOAK_KINDS = ("slope", "load", "kind not recorded")
 
 
 def span_soak(receipt):
+    structured = receipt.get("soak_refusals", [])
+    if ALLOW_MISSING_SOAK_MEMBERS and structured is None:
+        structured = []
+    if not isinstance(structured, list):
+        raise ValueError("invalid structured soak refusals")
     if "soak_attempts" not in receipt:
+        if VALIDATE_SOAK_HISTORY and structured:
+            raise ValueError("structured refusal without a recorded attempt")
         return {"attempts": 1, "field_present": False, "accepted": True, "retried": []}
     attempts = receipt["soak_attempts"]
-    if not attempts or [row["attempt"] for row in attempts] != list(range(1, len(attempts) + 1)):
+    if not isinstance(attempts, list) or (not attempts and not ALLOW_EMPTY_SOAK_ATTEMPTS):
         raise ValueError("invalid soak attempts")
+    numbers = range(1, len(attempts) + 1)
+    if [row["attempt"] for row in attempts] != list(numbers):
+        raise ValueError("invalid soak attempt order")
+    refused = [row.get("refused") if ALLOW_MISSING_SOAK_MEMBERS else row["refused"] for row in attempts]
+    names = ["soak" if number == 1 else f"soak.a{number}" for number in numbers]
+    if VALIDATE_SOAK_HISTORY:
+        steps = []
+        for step in receipt.get("steps") or []:
+            name = step.get("name") if isinstance(step, dict) else None
+            if isinstance(name, str) and (name == "soak" or name.startswith("soak.a")):
+                steps.append(step)
+        if [step["name"] for step in steps] != names:
+            raise ValueError("invalid soak step order")
+        for number, (reason, step) in enumerate(zip(refused, steps, strict=True), 1):
+            rc = step.get("rc") if ALLOW_MISSING_SOAK_MEMBERS else step["rc"]
+            if reason is not None and (not isinstance(reason, str) or rc == 0):
+                raise ValueError("invalid refused soak attempt")
+            if number < len(attempts) and (not reason or rc is None):
+                raise ValueError("retry without a failed soak step")
+    else:
+        steps = [step for step in receipt.get("steps", []) if names and step["name"] == names[-1]]
+        if names and len(steps) != 1:
+            raise ValueError("missing or repeated final soak step")
     distinct = {}
-    for row in receipt.get("soak_refusals", []):
+    for row in structured:
+        if VALIDATE_SOAK_HISTORY and (not isinstance(row, dict) or row.keys() != {"attempt", "kind"}):
+            raise ValueError("invalid structured soak refusal fields")
         number, kind = row["attempt"], row["kind"]
+        if VALIDATE_SOAK_HISTORY and (type(number) is not int or not 1 <= number <= len(attempts)
+                                      or not refused[number - 1]):
+            raise ValueError("structured refusal without a matching refused attempt")
         if number in distinct or kind not in SOAK_KINDS[:2] or not 1 <= number <= len(attempts):
             raise ValueError("invalid soak refusal")
         distinct[number] = kind
     retried = []
-    for row in attempts[:-1]:
-        number = row["attempt"]
+    for number, row in enumerate(attempts[:-1], 1):
+        legacy_kind = row.get("refusal_kind")
         if number in distinct:
             kind, source = distinct[number], "receipt soak_refusals[].kind"
-        elif row.get("refusal_kind") is not None:
-            kind, source = row["refusal_kind"], "receipt soak_attempts[].refusal_kind"
+        elif legacy_kind in SOAK_KINDS[:2] or (legacy_kind is not None and not FALL_BACK_ON_UNKNOWN_LEGACY_SOAK_KIND):
+            kind, source = legacy_kind, "receipt soak_attempts[].refusal_kind"
         else:
             kind, source = "kind not recorded", None
         if kind not in SOAK_KINDS:
             raise ValueError("unknown soak refusal kind")
         retried.append({"attempt": number, "kind": kind, "read_from": source})
-    final = attempts[-1]
-    name = "soak" if len(attempts) == 1 else f"soak.a{len(attempts)}"
-    steps = [step for step in receipt["steps"] if step["name"] == name]
-    if len(steps) != 1:
-        raise ValueError("missing or repeated final soak step")
-    accepted = final["refused"] is None and steps[0]["rc"] == 0
+    accepted = False
+    if attempts:
+        final_rc = steps[-1].get("rc") if ALLOW_MISSING_SOAK_MEMBERS else steps[-1]["rc"]
+        accepted = refused[-1] is None and final_rc == 0
     return {"attempts": len(attempts), "field_present": True, "accepted": accepted, "retried": retried}
 
 
@@ -1050,7 +1123,7 @@ def soak_summary(receipts):
         "spans_with_retry": sum(bool(span["retried"]) for span in spans.values()),
         "retried_by_kind": {kind: counts[kind] for kind in SOAK_KINDS},
         "accepted_after_retry": sum(bool(span["retried"]) and span["accepted"] for span in spans.values()),
-        "stopped_by_soak": sum(not span["accepted"] for span in spans.values()),
+        "stopped_by_soak": sum(span["attempts"] > 0 and not span["accepted"] for span in spans.values()),
     }
 
 
@@ -1076,8 +1149,6 @@ def mean_centered_slope(legs):
 
 def step3_drift(legs):
     """Largest absolute eligible gamma times the median Automatic TV0h rise."""
-    from statistics import median
-
     all_rows = [rows for _, _, rows in legs]
     matched = matched_step3_blocks(all_rows)
     if not any(round(max(t for t, _ in rows) - min(t for t, _ in rows), 3) >= 2 for rows in matched):
@@ -1098,11 +1169,15 @@ def step3_projection(cells, threshold):
         failures, legs = measurements
         if not failures and not legs:
             continue
+        row = {"prompt_tokens": cell, "status": "not_run", "gamma_estimable": None}
+        rows.append(row)
         if failures > 2 or not legs:
-            rows.append({"prompt_tokens": cell, "status": "not_run", "gamma_estimable": None})
             continue
-        estimable, drift = step3_drift(legs)
-        rows.append({"prompt_tokens": cell, "status": "ok", "gamma_estimable": estimable})
+        try:
+            estimable, drift = step3_drift(legs)
+        except (TypeError, ValueError, ArithmeticError):
+            continue
+        row.update(status="ok", gamma_estimable=estimable)
         if drift is not None and estimable:
             drifts.append(drift)
     trips = max(drifts) > threshold if drifts else None
@@ -1154,39 +1229,48 @@ def child_frame(args):
 def step3_records(events_data, turns_data, journal_data, rich_data, native_data):
     """Decode the independent Step 3 inputs without retaining synthetic token IDs."""
     (turn,) = json_lines(turns_data)
-    start, end = turn["start_stamp"]["epoch_s"], turn["end_stamp"]["epoch_s"]
+    start, end = float(turn["start_stamp"]["epoch_s"]), float(turn["end_stamp"]["epoch_s"])
     count = len(turn["generation"]["output_token_ids"])
-    tokens = {}
+    tokens = []
     for row in json_lines(events_data):
-        metadata = row.get("metadata", {})
-        if "index" not in metadata or "align_turn_index" not in metadata:
+        # Thermal hold and other phase events are outside the token stream.
+        if row.get("event_type") != "token":
             continue
-        index = metadata["index"]
-        if type(index) is not int or not 0 <= index < count or index in tokens:
-            raise ValueError("invalid Step 3 token index")
-        tokens[index] = row["timestamp_s"]
-    token_times = [tokens[i] for i in range(count)]
-    if not token_times or not start <= token_times[0] <= token_times[-1] <= end or any(
-        a >= b for a, b in zip(token_times, token_times[1:])
-    ):
+        metadata = row["metadata"]
+        if metadata.get("align_turn_index") not in (None, 0):
+            raise ValueError("invalid Step 3 turn index")
+        tokens.append((int(metadata["index"]), float(row["timestamp_s"])))
+    tokens.sort()
+    if not tokens or [index for index, _ in tokens] != list(range(count)):
+        raise ValueError("invalid Step 3 token indices")
+    token_times = [stamp for _, stamp in tokens]
+    if any(a > b for a, b in zip(token_times, token_times[1:])):
         raise ValueError("invalid Step 3 token times")
 
     journal = []
     for row in json_lines(journal_data):
-        if row.get("kind") != "reading" or row.get("error") or not row.get("values"):
+        if row.get("kind") != "reading" or row.get("error"):
             continue
+        values = row.get("values") or {}
         journal.append((row["finished"]["wall_ns"] / 1e9, row["started"]["monotonic_ns"],
-                        row["values"]["sensors"].get("TV0h"), row["values"]["status"]))
-    native = (frame for frame in native_data.split(b"\0") if frame.strip())
+                        (values.get("sensors") or {}).get("TV0h"), values.get("status") or {}))
+    rich = json_lines(rich_data)
+    native = [frame for frame in native_data.split(b"\0") if frame.strip()]
+    if len(native) not in (len(rich), len(rich) + 1):
+        raise ValueError("invalid Step 3 native frame count")
     power_state = []
-    for frame, raw_bytes in zip(json_lines(rich_data), native):
-        raw = plistlib.loads(raw_bytes)
-        if frame["elapsed_ns"] != raw["elapsed_ns"]:
-            raise ValueError("Step 3 telemetry intervals disagree")
-        states = [(state["freq"], state["used_ns"]) for state in frame["gpu"]["dvfm_states"]]
-        power_state.append((frame["timestamp_s"], frame["elapsed_ns"], raw.get("thermal_pressure"), states))
-    if not journal or not power_state:
-        raise ValueError("Step 3 telemetry is empty")
+    for frame, raw_bytes in zip(rich, native):
+        stamp, elapsed = float(frame["timestamp_s"]), int(frame["elapsed_ns"])
+        state = None
+        if start - 5 <= stamp <= token_times[-1] + 5:
+            raw = plistlib.loads(raw_bytes)
+            if elapsed != int(raw["elapsed_ns"]):
+                raise ValueError("Step 3 telemetry intervals disagree")
+            value = raw.get("thermal_pressure")
+            state = value if isinstance(value, str) else None
+        frequencies = (frame.get("gpu") or {}).get("dvfm_states") or []
+        states = [(item["freq"], int(item.get("used_ns", 0))) for item in frequencies]
+        power_state.append((stamp, elapsed, state, states))
     return start, end, token_times, sorted(journal, key=lambda row: row[0]), power_state
 
 
@@ -1196,16 +1280,19 @@ def step3_cut(start, token_times, journal, power_state):
 
     def fresh(row):
         _, started, _, status = row
-        observed = status["pm_observed_ns"]
-        return (type(status["os_level"]) is int and status["pm_state"] not in (None, "Unknown")
-                and type(observed) is int and 0 <= started - observed <= 2_000_000_000)
+        observed = status.get("pm_observed_ns")
+        return type(observed) is int and started - observed <= 2_000_000_000
+
+    def nominal(status):
+        return status.get("os_level") == 0 and status.get("pm_state") == "Nominal"
 
     def off(status):
-        return (type(status["os_level"]) is int and status["os_level"] > 0
-                or status["pm_state"] not in (None, "Nominal", "Unknown"))
+        level = status.get("os_level")
+        return (isinstance(level, (int, float)) and level > 0
+                or status.get("pm_state") not in (None, "Nominal", "Unknown"))
 
     carry = next((row for row in reversed(journal) if row[0] <= start), None)
-    if carry is None or start - carry[0] > 2 or not fresh(carry) or off(carry[3]):
+    if carry is None or start - carry[0] > 2 or not fresh(carry) or not nominal(carry[3]):
         return None
     anchors = [carry[0], *(row[0] for row in journal if start < row[0] <= end and fresh(row)), end]
     cuts = [end]
@@ -1216,30 +1303,27 @@ def step3_cut(start, token_times, journal, power_state):
                     *(row[0] for row in power_state if start < row[0] <= end
                       and row[2] not in (None, "Nominal", "Unknown"))), default=None)
     if off_time is not None:
-        last_nominal = max((row[0] for row in journal if row[0] < off_time and fresh(row) and not off(row[3])),
+        last_nominal = max((row[0] for row in journal if row[0] < off_time and nominal(row[3])),
                            default=start)
         cuts.append(min(last_nominal, off_time - 2))
 
     # Apply the e20 rule only to windows beginning at least 10 s into decode.
     # Scale active time by each row's overlap with the window.
     reference = max((freq for _, _, _, states in power_state for freq, used in states if used > 0), default=0)
-    intervals = []
-    for right, elapsed, _, states in sorted(power_state, key=lambda row: row[0]):
-        if elapsed <= 0:
-            raise ValueError("invalid Step 3 sampling period")
-        left = right - elapsed / 1e9
-        intervals.append((left, right, math.fsum(used for _, used in states),
-                          math.fsum(freq * used for freq, used in states)))
+    intervals = [(right - elapsed / 1e9, right, math.fsum(used for _, used in states),
+                  math.fsum(freq * used for freq, used in states))
+                 for right, elapsed, _, states in power_state if elapsed > 0]
+    for right in sorted({row[0] for row in power_state}):
         begin = right - 10
         if not token_times[0] + 10 <= begin < right <= end:
             continue
         weights, numerators = [], []
-        for lo, hi, used, frequency_time in reversed(intervals):
-            if hi <= begin:
-                break
-            scale = (hi - max(lo, begin)) / (hi - lo)
-            weights.append(scale * used)
-            numerators.append(scale * frequency_time)
+        for lo, hi, used, frequency_time in intervals:
+            overlap = min(hi, right) - max(lo, begin)
+            if overlap > 0 and hi > lo:
+                scale = overlap / (hi - lo)
+                weights.append(scale * used)
+                numerators.append(scale * frequency_time)
         total = math.fsum(weights)
         if total and math.fsum(numerators) < 0.97 * reference * total:
             cuts.append(begin)
@@ -1253,6 +1337,17 @@ def step3_temperature(journal, time):
 
 
 def step3_observations(start, tokens, journal, power, gpu):
+    blocks = []
+    for block in range(len(tokens) // 256):
+        left, right = tokens[max(0, 256 * block - 1)], tokens[256 * block + 255]
+        joules, _ = power_intervals(gpu, left, right)
+        blocks.append((left, right, joules))
+    if len(blocks) < 4:
+        raise ValueError("missing Step 3 reference blocks")
+    # Validate the whole diagnostic, including the per-leg ratio reference.
+    reference = median([joules for _, _, joules in blocks[1:4]])
+    if reference <= 0 or any(joules <= 0 for _, _, joules in blocks):
+        raise ValueError("nonpositive Step 3 block response")
     cut = step3_cut(start, tokens, journal, power)
     if cut is None:
         return False, None, []
@@ -1261,17 +1356,21 @@ def step3_observations(start, tokens, journal, power, gpu):
     rise = last - first if first is not None and last is not None else None
     observations = []
     for block in range(1, prefix // 256):
-        left, right = tokens[256 * block - 1], tokens[256 * block + 255]
+        left, right, joules = blocks[block]
         readings = [temperature for stamp, _, temperature, _ in journal
                     if left < stamp <= right and temperature is not None]
         temperature = math.fsum(readings) / len(readings) if readings else step3_temperature(journal, (left + right) / 2)
-        if temperature is not None:
-            joules, _ = power_intervals(gpu, left, right)
-            if joules <= 0:
-                raise ValueError("nonpositive Step 3 block response")
-            observations.append((block, temperature, joules))
+        observations.append((block, temperature, joules))
     # All admitted development legs in the interim adapter are Automatic.
     return False, rise, observations
+
+
+STEP3_PRESSURE_STATES = {None, "None", "Nominal", "Moderate", "Heavy", "Trapping", "Sleeping",
+                         "Unknown", "not_read"}
+
+
+class Step3CellFailure(ValueError):
+    """A surviving leg's diagnostics cannot be used in the cell output."""
 
 
 def step3_measurements(bundle):
@@ -1279,7 +1378,27 @@ def step3_measurements(bundle):
                "rich_telemetry.jsonl", "raw/powermetrics.plist")
     start, _, tokens, journal, power = step3_records(*(child_path(bundle, name).read_bytes() for name in sources))
     gpu = gpu_rows(child_path(bundle, "power_trace.csv").read_bytes())
-    return step3_observations(start, tokens, journal, power, gpu)
+    observations = step3_observations(start, tokens, journal, power, gpu)
+    if any(state not in STEP3_PRESSURE_STATES for _, _, state, _ in power):
+        raise Step3CellFailure("unregistered Step 3 pressure state")
+    return observations
+
+
+def step3_cells(entrants, threshold):
+    cells = {}
+    invalid_cells = set()
+    for size, read_leg in entrants:
+        failures, legs = cells.setdefault(size, (0, []))
+        try:
+            legs.append(read_leg())
+        except Step3CellFailure:
+            invalid_cells.add(size)
+        except (OSError, KeyError, TypeError, IndexError, ValueError, ArithmeticError,
+                plistlib.InvalidFileException):
+            cells[size] = (failures + 1, legs)
+    for size in invalid_cells:
+        cells[size] = (1, [])
+    return step3_projection(cells, threshold)
 
 
 
@@ -1291,6 +1410,8 @@ OPERATIONAL_BUNDLE_FILES = (
 
 def present_file(span, name):
     path = span / name
+    if not path.resolve().is_relative_to(span):
+        raise ValueError("input escapes its declared directory")
     if path.with_name(path.name + ".zst").is_file():
         raise ValueError("compressed custody input")
     if path.is_file():
@@ -1320,14 +1441,18 @@ def span_identities(span):
         if not bundle or record.get("spec", {}).get("leg_type") == "T":
             continue
         bundle_path = Path(bundle)
-        if bundle_path.is_absolute() or not bundle_path.parts or ".." in bundle_path.parts:
-            raise ValueError("invalid runtime bundle path")
         runtime = Path(prefix) / "runtime"
         resolved = (span / runtime / bundle_path).resolve()
         # Missing bundles remain eligible for Step 3's per-leg absence handling.
-        if resolved == span / runtime or not resolved.is_relative_to(span / runtime):
+        if not resolved.is_relative_to(span / runtime):
             raise ValueError("bundle escapes the leg runtime directory")
-        relative = (runtime / bundle_path).as_posix()
+        if PRESERVE_BUNDLE_PATH_SPELLING:
+            relative = (bundle_path.relative_to(span).as_posix() if bundle_path.is_absolute()
+                        else f"{runtime.as_posix()}/{bundle}")
+        else:
+            if bundle_path.is_absolute() or not bundle_path.parts or ".." in bundle_path.parts:
+                raise ValueError("invalid runtime bundle path")
+            relative = (runtime / bundle_path).as_posix()
         bundles[leg] = relative
         names.update(f"{relative}/{suffix}" for suffix in OPERATIONAL_BUNDLE_FILES)
 
@@ -1341,7 +1466,7 @@ def span_identities(span):
         rich = present_file(span, f"{relative}/rich_telemetry.jsonl")
         native = present_file(span, f"{relative}/raw/powermetrics.plist")
         if rich is not None and native is not None:
-            native_time[relative] = native_time_digest(rich.read_bytes(), native.read_bytes())
+            native_time[relative.rstrip("/")] = native_time_digest(rich.read_bytes(), native.read_bytes())
     return receipt, bundles, raw_files, native_time
 
 
@@ -1369,7 +1494,7 @@ def verified_span_inputs(span, identity, inventory):
 
 
 def inventory_path(root, spans, path):
-    if ".." in path.parts:
+    if not PRESERVE_BUNDLE_PATH_SPELLING and ".." in path.parts:
         raise ValueError("parent traversal in comparison input")
     if path.is_absolute():
         # An inventory may already name the selected physical span directory.
@@ -1455,20 +1580,15 @@ def recompute_bundle(args, stage1, fit_identity, step3_identity, decoder_pin, th
     marked = {key for key, row in span_records.items() if row["marks"]}
     fit = recompute_fit(stage1, fit_legs, responses, marked)
     fit["soak_retries"] = soak_summary(receipts)
-    cells = {}
-    for row in step3_legs:
-        size = row["cell_prompt_tokens"]
-        failures, legs = cells.setdefault(size, (0, []))
-        try:
-            relative = known_bundles[row["leg_key"]]
-            if relative is None:
-                raise ValueError("no accepted Step 3 bundle")
-            span = directories[row["span_id"]]
-            bundle = child_path(span, relative)
-            legs.append(step3_measurements(bundle))
-        except (OSError, KeyError, TypeError, IndexError, ValueError, plistlib.InvalidFileException):
-            cells[size] = (failures + 1, legs)
-    return fit, step3_projection(cells, threshold)
+
+    def read_step3_leg(row):
+        relative = known_bundles[row["leg_key"]]
+        if relative is None:
+            raise ValueError("no accepted Step 3 bundle")
+        return step3_measurements(child_path(directories[row["span_id"]], relative))
+
+    entrants = ((row["cell_prompt_tokens"], lambda row=row: read_step3_leg(row)) for row in step3_legs)
+    return fit, step3_cells(entrants, threshold)
 
 
 if __name__ == "__main__":

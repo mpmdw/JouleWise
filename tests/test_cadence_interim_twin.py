@@ -59,6 +59,27 @@ def parent_agreement(frame):
 
 
 class ComparisonTests(unittest.TestCase):
+    def test_census_f06_f07_relative_metrics_remain_separate(self):
+        from copy import deepcopy
+        from scripts.cadence_interim_twin import comparison_frame, projections
+
+        stage1, coefficients, fit, step3 = example_outputs()
+        left = projections(stage1, coefficients, fit, step3)
+        for metric, tolerance in (("gpu_rail", 1e-8), ("censored_fit", 1e-6)):
+            with self.subTest(metric=metric):
+                primary, twin = deepcopy(left), deepcopy(left)
+                if metric == "gpu_rail":
+                    primary["coefficients"][metric] = {"p1": 1.0361e-14}
+                    twin["coefficients"][metric] = {"p1": -3.3672e-14}
+                else:
+                    primary[metric] = {"t_p_s": 1.7286e-17}
+                    twin[metric] = {"t_p_s": -5.2905e-17}
+                frame = comparison_frame(primary, twin)
+                self.assertEqual(parent_agreement(frame), "no")
+                self.assertGreater(frame["max_relative_difference"][metric], tolerance)
+                self.assertTrue(all(value == 0 for key, value in frame["max_relative_difference"].items()
+                                    if key != metric))
+
     def test_registered_projection_and_parent_derived_agreement(self):
         from scripts.cadence_interim_twin import comparison_frame, projections
 
@@ -320,8 +341,88 @@ class FitTests(unittest.TestCase):
             self.assertIn("delta", channel["fold_coefficients"][days[0]])
             self.assertNotIn("delta", channel["fold_coefficients"][days[2]])
 
+    def test_census_t01_t02_marked_onset_mask_and_required_refit(self):
+        from scripts.cadence_interim_twin import READINGS, fit_leg, fit_onset, onset_roster, recompute_fit
+
+        def run(days, prompts, keep):
+            records, responses = [], []
+            for day in days:
+                for i, prompt in enumerate(prompts):
+                    records.append({"day": day, "span_id": f"{day}/{i}", "cell_prompt_tokens": prompt,
+                        "prefill_tokens": prompt, "decode_tokens": 512, "start": {"state": "in_state"},
+                        "state": {"onset_use": "uncensored", "first_off_s": 6 + day + i + prompt},
+                        "segments": [{"wall_start_s": j * 10, "wall_end_s": (j + 1) * 10, "hot": j == 2}
+                                     for j in range(3)]})
+                    values = [2 * prompt + 3 * prompt**2, 255 * (4 + 5 * (prompt + 128) + 6 * prompt),
+                              256 * (4 + 5 * (prompt + 383.5) + 6 * prompt) + day]
+                    responses.append({channel: {"segments": values, "coverage_min": 1.0}
+                                      for channel in ("gpu_rail", "dc_in")})
+            stage1 = {"active_readings": {name: {"active": False} for name in READINGS},
+                      "rates": {"r_p": 1.0, "r_d": 10.0}, "centring": {}, "roster": {"fit_days": days}}
+            reduced = [row for row in records if keep(row)]
+            onset = fit_onset(onset_roster(reduced, [fit_leg(row, (), {}) for row in reduced], (1.0, 10.0)),
+                              sensitivity=True)
+            return onset, recompute_fit(stage1, records, responses, {r["span_id"] for r in records if not keep(r)})
+
+        # Primary census outcomes for few_hot_days and reduced_gate.
+        onset, fit = run([1, 2, 3], (2, 2, 4), lambda row: row["day"] < 3)
+        self.assertIsNotNone(onset)
+        self.assertEqual(fit["delta_column"], "dropped_onset_not_estimable")
+        for channel in fit["channels"].values():
+            reduced = channel["marked_sensitivity"]["fit_without"]
+            self.assertEqual(reduced["columns"], ["p1", "p2", "a0", "a1", "a2"])
+            self.assertEqual(reduced["lodo"]["folds_delta_dropped"], [])
+            self.assertTrue(all("delta" not in row for row in reduced["fold_coefficients"].values()))
+
+        onset, fit = run([1, 2, 3, 4, 5], (2, 4, 2, 4),
+                         lambda row: row["day"] < 3 and row["span_id"].endswith(("/0", "/1")))
+        self.assertIsNone(onset)
+        self.assertEqual(fit["delta_column"], "kept")
+        for channel in fit["channels"].values():
+            self.assertEqual(channel["marked_sensitivity"], {"coefficients_without": None, "fit_without": None})
+
+        onset, fit = run([1, 2, 3, 4, 5], (2, 4, 2, 4), lambda row: row["day"] < 3)
+        self.assertIsNotNone(onset)
+        for channel in fit["channels"].values():
+            reduced = channel["marked_sensitivity"]["fit_without"]
+            self.assertIn("delta", reduced["coefficients"])
+            self.assertEqual(reduced["lodo"]["folds_delta_dropped"], [1, 2])
+
+    def test_census_t16_refuses_each_registered_denominator(self):
+        from scripts.cadence_interim_twin import FitUnavailable, fit_projection
+
+        def fit(values, onset_use):
+            records, responses = [], []
+            for day in ("a", "b", "c"):
+                for prompt in (2, 4):
+                    records.append({"day": day, "cell_prompt_tokens": prompt, "prefill_tokens": prompt,
+                                    "decode_tokens": 768, "start": {"state": "in_state"},
+                                    "state": {"onset_use": onset_use, "first_off_s": 20},
+                                    "segments": [{"wall_start_s": i * 10, "wall_end_s": (i + 1) * 10,
+                                                  "hot": i >= 2} for i in range(4)]})
+                    responses.append({c: {"segments": [10, 10, 10, 10], "coverage_min": 1.0}
+                                      for c in ("gpu_rail", "dc_in")})
+            responses[0]["gpu_rail"]["segments"] = values
+            return fit_projection(records, (), {}, (1, 10), ["a", "b", "c"], responses)
+
+        for values, reason in (([0, 0, 0, 0], "leg total"), ([10, 10, 0, 0], "hot total"),
+                               ([10, 0, 10, 10], "onset-profile block")):
+            with self.subTest(reason=reason), self.assertRaisesRegex(FitUnavailable, reason):
+                fit(values, "uncensored")
+        # The P-3 pre-hot offset is applicable only for an observed onset.
+        self.assertIn("channels", fit([10, 0, 10, 10], "left_out_state_unobserved"))
+        self.assertIn("channels", fit([0, 10, 10, 10], "uncensored"))
+
 
 class DiagnosticsTests(unittest.TestCase):
+    def test_census_f08_unrounded_inclusive_hot_cutoff(self):
+        from scripts.cadence_interim_twin import interim_verdict
+
+        for predicted, expected in ((math.nextafter(49.0, -math.inf), "passes"),
+                                    (49.0, "passes"), (math.nextafter(49.0, math.inf), "fails")):
+            with self.subTest(predicted=predicted):
+                self.assertEqual(interim_verdict(dict.fromkeys("abc", [(predicted, 48), (1, 1), (1, 1)])), expected)
+
     def test_hand_derived_trapezoid_and_coverage(self):
         from scripts.cadence_interim_twin import dc_segment, trace_coverage
 
@@ -345,6 +446,32 @@ class DiagnosticsTests(unittest.TestCase):
 
 
 class ReaderTests(unittest.TestCase):
+    def test_census_f01_preserves_operation_keys_and_trims_native_suffix(self):
+        from scripts.cadence_interim_twin import inventory_path, span_identities
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp).resolve()
+            span = root / "staged-span"
+            runtime = span / "legs/a/runtime"
+            bundle = runtime / "runs/cadence-leg"
+            (bundle / "raw").mkdir(parents=True)
+            for name in ("events.jsonl", "rich_telemetry.jsonl", "raw/powermetrics.plist"):
+                (bundle / name).touch()
+            (span / "runner_receipt.json").write_text('{"roster":["a"]}')
+            record = runtime.parent / "leg_record.json"
+            for spelling in ("./runs/./cadence-leg", "runs//cadence-leg", "runs/cadence-leg/",
+                             "runs/../runs/cadence-leg", str(bundle)):
+                with self.subTest(spelling=spelling):
+                    record.write_text(json.dumps({"result": {"bundle": spelling}}))
+                    _, bundles, operations, native = span_identities(span)
+                    expected = (bundle.relative_to(span).as_posix() if spelling == str(bundle)
+                                else f"legs/a/runtime/{spelling}")
+                    self.assertEqual(bundles, {"a": expected})
+                    self.assertIn(f"{expected}/events.jsonl", operations)
+                    self.assertEqual(set(native), {expected.rstrip("/")})
+                    self.assertEqual(inventory_path(root, {"s": span}, Path(f"s/{expected}/events.jsonl")),
+                                     bundle / "events.jsonl")
+
     def test_inventory_uses_the_selected_span_for_logical_paths(self):
         from scripts.cadence_interim_twin import check_custody_inventory, digest, span_dirs
 
@@ -431,6 +558,17 @@ class ReaderTests(unittest.TestCase):
         fit = responses_for_leg({"segments": [segment(0, 0.5), segment(3.5, 4)], "prefix_tails": []}, rows, dc)
         self.assertEqual(fit["gpu_rail"]["segments"], [0.5, 0.5])
 
+    def test_census_t03_empty_prefix_within_a_permitted_fit_gap(self):
+        from scripts.cadence_interim_twin import power_intervals, responses_for_leg
+
+        gpu = [(0, 2, 2, 2), (3, 4, 4, 4)]
+        record = {"segments": [{"wall_start_s": 0, "wall_end_s": 4}],
+                  "prefix_tails": [{"wall_start_s": 2, "wall_end_s": 3, "prefix_len": 3724}]}
+        response = responses_for_leg(record, gpu, lambda lo, hi: (hi - lo, 1.0))["gpu_rail"]
+        self.assertEqual(response, {"segments": [8.0], "prefix_tails": {"3724": 0.0}, "coverage_min": 0.75})
+        self.assertEqual(power_intervals(gpu, 2, 3), (0.0, 0.0))
+        self.assertEqual(power_intervals(gpu, 2, 2), (0.0, None))
+
     def test_meter_decoder_import_boundary(self):
         from scripts.cadence_interim_twin import meter_decoder
 
@@ -488,7 +626,9 @@ def parse(path):
 
     def test_gpu_rows_and_raw_meter_time_identities(self):
         import struct
-        from scripts.cadence_interim_twin import digest, gpu_rows, gpu_time_digest, meter_time_digest, power_intervals
+        from scripts.cadence_interim_twin import (
+            digest, gpu_rows, gpu_time_digest, meter_time_digest, power_intervals, require_gpu_gap_bound,
+        )
 
         raw = (b"source,rail,interval_start_s,interval_end_s,timestamp_s,power_w\n"
                b"powermetrics,gpu_power,0,1,1,3\n"
@@ -498,7 +638,7 @@ def parse(path):
         self.assertEqual(power_intervals(gpu, 0.5, 1.25), (3.25, 1.0))
         self.assertEqual(power_intervals(gpu, 0.5, 2.5), (8.5, 0.75))
         with self.assertRaises(ValueError):
-            power_intervals(gpu, 0.5, 4.1)
+            require_gpu_gap_bound(gpu, 0.5, 4.1)
 
         self.assertEqual(gpu_time_digest(raw), digest(b"[[0.0, 1.0], [1.0, 2.0]]"))
         payload = struct.pack("<HHiiHHHH", 22, 0, 20_000_000, -250_000, 0, 0, 0, 0)
@@ -547,12 +687,12 @@ def parse(path):
         from scripts.cadence_interim_twin import soak_summary
 
         receipts = {"a": {}, "b": {
-            "steps": [{"name": "soak", "rc": 1}, {"name": "soak.a3", "rc": 0}],
+            "steps": [{"name": "soak", "rc": 1}, {"name": "soak.a2", "rc": 1}, {"name": "soak.a3", "rc": 0}],
             "soak_attempts": [{"attempt": 1, "refused": "refused", "refusal_kind": "load"},
                               {"attempt": 2, "refused": "refused", "refusal_kind": "load"},
                               {"attempt": 3, "refused": None}],
             "soak_refusals": [{"attempt": 1, "kind": "slope"}],
-        }, "c": {"steps": [{"name": "soak.a2", "rc": None}],
+        }, "c": {"steps": [{"name": "soak", "rc": 1}, {"name": "soak.a2", "rc": 1}],
                    "soak_attempts": [{"attempt": 1, "refused": "refused"},
                                      {"attempt": 2, "refused": "refused"}]}}
         summary = soak_summary(receipts)
@@ -569,6 +709,42 @@ def parse(path):
         self.assertEqual(summary["retried_by_kind"], {"slope": 1, "load": 1, "kind not recorded": 1})
         self.assertEqual(summary["accepted_after_retry"], 1)
         self.assertEqual(summary["stopped_by_soak"], 1)
+
+    def test_census_f02_through_f05_current_receipt_defaults(self):
+        from copy import deepcopy
+        from scripts.cadence_interim_twin import soak_summary, span_soak
+
+        empty = soak_summary({"s": {"soak_attempts": [], "steps": []}})
+        self.assertEqual(empty["spans"]["s"], {"attempts": 0, "field_present": True,
+                                               "accepted": False, "retried": []})
+        self.assertEqual(empty["stopped_by_soak"], 0)
+        with self.assertRaises(ValueError):
+            span_soak({"soak_attempts": None})
+
+        base = {"soak_attempts": [{"attempt": 1, "refused": "synthetic"}, {"attempt": 2}],
+                "steps": [None, {}, {"name": "soak", "rc": 1}, {"name": "soak.a2", "rc": 0}],
+                "soak_refusals": None}
+        self.assertTrue(span_soak(base)["accepted"])
+        no_rc = deepcopy(base)
+        del no_rc["steps"][-1]["rc"]
+        self.assertFalse(span_soak(no_rc)["accepted"])
+        histories = [
+            {"soak_attempts": [{"attempt": 1, "refused": None}, {"attempt": 2}]},
+            {"steps": [{"name": "soak", "rc": 0}, {"name": "soak.a2", "rc": 0}]},
+            {"steps": [{"name": "soak.a2", "rc": 0}]},
+            {"steps": list(reversed(base["steps"]))},
+            {"steps": [*base["steps"], {"name": "soak.a3", "rc": 0}]},
+            *[{"soak_refusals": [{"attempt": n, "kind": "load"}]} for n in (True, 1.0, 2, 3)],
+            {"soak_refusals": [{"attempt": 1, "kind": "load", "extra": 1}]},
+        ]
+        for overrides in histories:
+            with self.subTest(overrides=overrides), self.assertRaises(ValueError):
+                span_soak({**base, **overrides})
+        for kind in ("other", "kind not recorded"):
+            with self.subTest(legacy_kind=kind):
+                base["soak_attempts"][0]["refusal_kind"] = kind
+                self.assertEqual(span_soak(base)["retried"],
+                                 [{"attempt": 1, "kind": "kind not recorded", "read_from": None}])
 
     def test_step3_fixed_effect_and_tripwire_against_hand_fit(self):
         from scripts.cadence_interim_twin import mean_centered_slope, step3_projection
@@ -609,7 +785,7 @@ class Step3CutTests(unittest.TestCase):
     def test_step3_temperature_at_unsnapped_cut_and_block_mean(self):
         from scripts.cadence_interim_twin import step3_observations
 
-        tokens = [1 + 0.1 * i for i in range(512)] + [56.0]
+        tokens = [1 + 0.1 * i for i in range(512)] + [56 + i / 128 for i in range(512)]
         # The accepted block ends at 52.1. A reading at 52.5 must still
         # supply the rise to the guarded wall-time cut at 52.8.
         stamps = [*range(55), 52.5, 54.8]
@@ -660,6 +836,165 @@ class Step3CutTests(unittest.TestCase):
         fresh[0]["values"]["status"]["os_level"] = 1
         _, _, _, journal, power = step3_records(lines(events), lines(turns), lines(fresh), lines(rich), native)
         self.assertIsNone(step3_cut(start, decoded, journal, power))
+
+
+class CensusStep3Tests(unittest.TestCase):
+    def measurements(self, directory, leg, case):
+        import plistlib
+        from scripts.cadence_interim_twin import step3_measurements
+
+        name, option = case
+        tokens = [8 + 8 * i / 255 for i in range(256)]
+        tokens += [16 + (i + 1) / 32 for i in range(768)] + [48]
+        if name == "short":
+            tokens = tokens[:512]
+        if name == "before_start":
+            tokens = [time - 9 for time in tokens]
+        if name == "ties":
+            tokens[2] = tokens[1]
+        events = [{"event_type": "token", "timestamp_s": str(t) if name == "stampstr" else t,
+                   "metadata": {"index": str(i) if name == "indexstr" else i, "align_turn_index": 0}}
+                  for i, t in enumerate(tokens)]
+
+        def alter(mapping, field):
+            if option == "absent":
+                mapping.pop(field)
+            else:
+                mapping[field] = None
+
+        for event in events:
+            if name == "index":
+                alter(event["metadata"], "align_turn_index")
+            if name == "event_type":
+                alter(event, "event_type")
+            if name == "marker":
+                event["metadata"]["align_turn_index"] = 1
+        if name == "phase":
+            events.insert(0, {"event_type": "phase_start", "timestamp_s": 12, "phase": "align_thermal_hold",
+                              "metadata": option})
+
+        turns = [{"start_stamp": {"epoch_s": 0}, "end_stamp": {"epoch_s": 39 if name == "end_early" else 48},
+                  "generation": {"output_token_ids": [1] * len(tokens)}}]
+        if name == "multi":
+            turns *= 2
+        readings = []
+        for t in range(49):
+            observed = t * 10**9
+            if name == "future":
+                observed += 10**7
+            if name == "guard" and t == 24:
+                observed -= 3 * 10**9
+            level = (0.0 if name == "start_float" and t == 0 else
+                     int((name == "guard" and t >= 26) or (name == "zero_last" and t >= 28)))
+            unknown = (name == "unknown_mid" and 9 <= t < 29) or (name == "guard" and t == 25)
+            status = {"os_level": level, "pm_state": "Unknown" if unknown else "Nominal", "pm_observed_ns": observed}
+            sensors = {"TV0h": 30 + leg * 3 + t / 50}
+            values = {"sensors": sensors, "status": status}
+            reading = {"kind": "reading", "started": {"monotonic_ns": t * 10**9},
+                       "finished": {"wall_ns": t * 10**9}, "values": values}
+            if name in ("values", "kind"):
+                alter(reading, name)
+            if name in ("status", "sensors"):
+                alter(values, name)
+            if name in status:
+                alter(status, name)
+            if name == "TV0h":
+                alter(sensors, name)
+            if name == "all_error":
+                reading["error"] = "synthetic"
+            readings.append(reading)
+
+        rich, native = [], []
+        if name != "native_empty":
+            for t in range(1, 49):
+                elapsed = 0 if name == "zero_elapsed" else 10**9
+                state = {"freq": 1000, "used_ns": 1000}
+                if name == "clock_overlap":
+                    if t == 28:
+                        state["freq"] = 100
+                    if t == 45:
+                        elapsed, state["used_ns"] = 45 * 10**9, 4_500_000
+                if name == "used_ns":
+                    alter(state, name)
+                gpu = {"dvfm_states": [state]}
+                frame = {"timestamp_s": t, "elapsed_ns": elapsed, "gpu": gpu}
+                if name == "dvfm_states":
+                    alter(gpu, name)
+                if name == "gpu":
+                    alter(frame, name)
+                rich.append(frame)
+                raw = {"elapsed_ns": str(elapsed) if name == "native_elapsed" else elapsed}
+                if name == "pressure" and (option != "UnregisteredState" or leg == 0):
+                    raw["thermal_pressure"] = option
+                native.append(plistlib.dumps(raw))
+        if name == "native_count":
+            native = native[:len(native) + option] if option < 0 else native + [b"unused suffix"] * option
+        if name == "native_outside":
+            rich.append(dict(rich[-1], timestamp_s=1000))
+            native.append(b"invalid plist outside the load window")
+
+        gpu = [(t, t + 8, 2 if t < 32 or name != "zero_last" else 0) for t in range(0, 48, 8)]
+        if name == "gap_part":
+            gpu[2:3] = [(16, 19, 2), (22, 24, 2)]
+        if name == "nonpositive_width":
+            gpu.append((*option, 100))
+        trace = "source,rail,interval_start_s,interval_end_s,timestamp_s,power_w\n"
+        trace += "".join(f"powermetrics,gpu_power,{start},{stop},{stop},{power}\n" for start, stop, power in gpu)
+        for path, rows in (("events.jsonl", events), ("outputs/align_turns.jsonl", turns),
+                           ("outputs/align_thermal.jsonl", readings), ("rich_telemetry.jsonl", rich)):
+            target = directory / path
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text("".join(json.dumps(row) + "\n" for row in rows))
+        (directory / "raw").mkdir()
+        (directory / "raw/powermetrics.plist").write_bytes(b"\0".join(native))
+        (directory / "power_trace.csv").write_text(trace)
+        return step3_measurements(directory)
+
+    def test_census_t04_through_t15_step3_primary_outcomes(self):
+        from scripts.cadence_interim_twin import step3_cells
+
+        # Primary categorical outcomes were recorded by Astra in the synthetic census.
+        within = ("within", False, "ok", True)
+        not_run = ("not_evaluable", None, "not_run", None)
+        unestimable = ("not_evaluable", None, "ok", False)
+        cases = [
+            ("T04", "nonpositive_width", (1, 1), within),
+            ("T04", "nonpositive_width", (2, 1), within),
+            ("T05", "index", "absent", within), ("T05", "index", "null", within),
+            ("T05", "event_type", "absent", not_run), ("T05", "event_type", "null", not_run),
+            ("T05", "marker", None, not_run), ("T05", "multi", None, not_run),
+            ("T05", "phase", {"align_turn_index": 0, "index": 0}, within),
+            ("T05", "phase", None, within),
+            ("T06", "ties", None, within), ("T06", "indexstr", None, within),
+            ("T06", "stampstr", None, within), ("T06", "end_early", None, within),
+            ("T06", "before_start", None, ("not_evaluable", None, "ok", True)),
+            *[("T07", name, opt, unestimable)
+              for name in ("values", "status", "kind", "os_level", "pm_state", "pm_observed_ns")
+              for opt in ("absent", "null")],
+            ("T07", "all_error", None, unestimable),
+            *[("T08", name, None, within) for name in ("future", "unknown_mid", "guard", "start_float")],
+            ("T09", "TV0h", "absent", not_run), ("T09", "TV0h", "null", not_run),
+            ("T09", "sensors", "absent", not_run), ("T09", "sensors", "null", not_run),
+            *[("T10", name, opt, within) for name in ("gpu", "dvfm_states") for opt in ("absent", "null")],
+            ("T10", "used_ns", "absent", within), ("T10", "used_ns", "null", not_run),
+            ("T10", "native_empty", None, within), ("T10", "zero_elapsed", None, within),
+            ("T11", "native_count", -1, not_run), ("T11", "native_count", 2, not_run),
+            ("T11", "native_count", 1, within), ("T11", "native_outside", None, within),
+            ("T11", "native_elapsed", None, within),
+            ("T12", "pressure", False, within), ("T12", "pressure", "UnregisteredState", not_run),
+            ("T13", "clock_overlap", None, within),
+            ("T14", "short", None, not_run), ("T14", "zero_last", None, not_run),
+            ("T15", "gap_part", None, within),
+        ]
+        for clause, name, option, primary in cases:
+            with self.subTest(clause=clause, case=name, option=option), tempfile.TemporaryDirectory() as tmp:
+                entrants = [(2000, lambda i=i: self.measurements(Path(tmp) / str(i), i, (name, option)))
+                            for i in range(3)]
+                result = step3_cells(entrants, 0.08)
+                cell, = result["cells"]
+                self.assertEqual(cell["prompt_tokens"], 2000)
+                self.assertEqual((result["tripwire"]["decision"], result["tripwire"]["trips"],
+                                  cell["status"], cell["gamma_estimable"]), primary)
 
 
 FIXTURE_DECODER = '''
@@ -781,9 +1116,11 @@ class RawBundleTests(unittest.TestCase):
                     segments = []
                     for i, (a, b) in enumerate(endpoints):
                         # Each row contributes half the hand-derived response.
-                        trace += f"powermetrics,gpu_power,{a},{b},{b},{gpu[i] / 16!r}\n"
+                        # The first leg's one-second prefix-only piece has no GPU support.
+                        trace_start = a + 1 if i == 5 and leg_index == 0 else a
+                        trace += f"powermetrics,gpu_power,{trace_start},{b},{b},{gpu[i] / 16!r}\n"
                         trace += f"powermetrics,gpu_power,{a + 2},{b - 2},{b - 2},{gpu[i] / 8!r}\n"
-                        gpu_intervals.extend(([float(a), float(b)], [float(a + 2), float(b - 2)]))
+                        gpu_intervals.extend(([float(trace_start), float(b)], [float(a + 2), float(b - 2)]))
                         if i <= len(layout):
                             segments.append({"seg": i, "wall_start_s": a, "wall_end_s": b, "hot": i == 4})
                         for offset in range(16):
@@ -804,7 +1141,7 @@ class RawBundleTests(unittest.TestCase):
                     token_times.append(wall + 48)
                     sources = {
                         "events.jsonl": lines({"event_type": "token", "timestamp_s": t,
-                                              "metadata": {"index": j, "align_turn_index": 0}}
+                                              "metadata": {"index": j}}
                                              for j, t in enumerate(token_times)),
                         "outputs/align_turns.jsonl": lines([{"start_stamp": {"epoch_s": wall},
                                                             "end_stamp": {"epoch_s": wall + 48},
@@ -831,8 +1168,10 @@ class RawBundleTests(unittest.TestCase):
                                     "leg_type": "A", "included": True, "in_energy_fit": True,
                                     "cell_prompt_tokens": prompt, "prefill_tokens": prompt, "decode_tokens": 1025,
                                     "start": {**readings, "state": "in_state"}, "segments": segments,
-                                    "prefix_tails": [{"prefix_len": 510, "wall_start_s": wall + 16,
-                                                      "wall_end_s": wall + 23.9375}],
+                                    "prefix_tails": ([{"prefix_len": 1024, "wall_start_s": wall + 40,
+                                                       "wall_end_s": wall + 41}] if leg_index == 0 else
+                                                     [{"prefix_len": 510, "wall_start_s": wall + 16,
+                                                       "wall_end_s": wall + 23.9375}]),
                                     "state": {"onset_use": "uncensored" if prompt == 2 else "left_out_state_unobserved",
                                               "first_off_s": 28},
                                     "trace_holes": {"gpu_rail": {"rows_sha256": trace_hash}}})
