@@ -665,7 +665,7 @@ T38c folds the six live follow-ups (including the existing bridge-baseline row) 
 
 ## Cluster contract handoff — 2026-11-17
 
-- [AGENT] Tier 2 step 1, selected directly under RUN_STATE 399. The draft is for lead review and hosted CI. After admission, #804 consumes I0 and binds the offload tests. See the [builder report](docs/run_reports/2026-11-17-cluster-contract-step1.md).
+- [AGENT] Tier 2 step 1, selected directly under RUN_STATE 399. Recheck #811 at its audit-repair head, then #804 on that base. The merge gates are hosted CI and independent delta review. See the [audit repair report](docs/run_reports/2026-11-17-cluster-contract-audit-repair.md).
 
 ## Current Queue
 
