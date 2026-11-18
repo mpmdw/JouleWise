@@ -1044,6 +1044,22 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 
 <!-- RUN_STATE TYPED ITEMS: newest first. Add with scripts/run_state_add.py; never edit by hand. -->
 
+419. **Laptop lead (interactive, Opus 5.5), 2026-11-17 21:53:28 PST: process audit ADOPTED: rule register (PHYSICS, VALIDITY or SAFETY only, no waivers), queue plus scheduler replace standing items; PR #800, #799, #807 and #811 parked; #804 reduced to copy-only; four builder briefs issued**
+
+```item
+{"expires_epoch_s": null, "issued_epoch_s": 1794981208, "number": 419, "owner": "lead", "schema": "joulewise.run_state_item.v1", "sets": [], "status": "CLOSED", "supersedes": []}
+```
+
+- **Decision (lead, under Ed's standing permission of 2026-11-17).** The structure in `/Volumes/JW-EXT/scratch/mythos-process-audit/STRUCTURE.md` is adopted: a queue file, a rule register, one scheduler function and a short typed log replace standing items and per-span items. Nothing on the MBP changes by this item; the PHYSICS-ONLY SCHEDULING item posted before this one already carries tonight's changes.
+- **Rules.** A rule exists only as a row of `docs/process/RULES.json` with class PHYSICS, VALIDITY or SAFETY, the quantity or claim it protects, an owner and a review date. A paragraph with no row is not executed. No waivers: a rule that needs one is retired or changed.
+- **Parked, with their branches kept:** PR #800 (queue controller), #799 (desk-final transport), #807 (close-offload and retention) and #811 (their contract). Reason: they implement, as code, rules this audit removes (three-ahead and 24 h expiry, the watcher line, k+2 desk debt, F0 spacing and cap, copy as a gate, automatic retirement). No further review round is spent on them. They are revisited after the paper.
+- **Reduced and merged at tier 1:** PR #804 as a copy-only tool (its deleting `close` verb removed). Nothing deletes an original on the arm path; the lead packs old spans by hand at a block boundary when free space nears the floor.
+- **Builder briefs issued** (`/Volumes/JW-EXT/scratch/mythos-process-audit/briefs/`): A scheduler, read-only (tier 1); B scripted close (tier 1); C RUN_STATE archive, add-tool limits and the magistrate prompt (tier 0 and 1); D `measurement_mode.zsh` into the repository (tier 1). Brief E, the W1-line change that removes F0's 22:40 window with the #809 evaluator fix, waits for R1's close as RL-171 already schedules.
+- **PIPELINE.md edits (tier 0, lead):** tier 2 narrowed to four cases; kits on an admitted pin are tier 0; one accept instead of two; a finding must cite a frozen acceptance scenario or carry a reproduction. Retired by name: paired Sol and Opus builds for every block design (item 220, item 221 rule 6), "two Sol seats for every step", and a research-lead cold review of everything.
+- **Retired standing text:** item 346 rules 4, 5, 8 (restart clause) and 10 (mail per run); item 348; item 395 (A); item 396's pre-notice as a hold; the Air-state hand-off items as a practice (the lead's lanes go in TASK_QUEUE.md).
+- **To the research lead, one batch:** CUT.md section 3, questions F-1 to F-11. F-1 to F-4 wait for her answer; the rest proceed unless she objects.
+- **Ed is told after,** in one plain mail: what was cut, the hours it recovers, and the two things that still need him (none on the measurement path).
+
 418. **Laptop lead (interactive, Opus 5.5), 2026-11-17 21:52:49 PST: PHYSICS-ONLY SCHEDULING (standing; the process audit's ruling): F0 spacing and age expiry removed; nothing waits for a person, the Air or a count; the MBP copies at once, always; product fillers before F0; items 393, 394, 397 and 398 run as issued**
 
 ```pointer
