@@ -670,6 +670,10 @@ remain outstanding.
 
 T38c folds the six live follow-ups (including the existing bridge-baseline row) into the kernel and generated Current Queue below. Registration date is carried in each status note. The completed liveness-docs row above is the sole DONE record; completed tasks are absent from the live-only kernel. [Verification and flagged evidence discrepancies](https://github.com/mpmdw/JouleWise/blob/archive/pre-prune-2026-11-06/docs/process_traces/2026-09-08-handoff-redo/99gk-bookkeeping-t38c-astra.md).
 
+## Cluster contract handoff — 2026-11-17
+
+- [AGENT] Tier 2 step 1, selected directly under RUN_STATE 399. Recheck #811 at its audit-repair head, then #804 on that base. The merge gates are hosted CI and independent delta review. See the [audit repair report](docs/run_reports/2026-11-17-cluster-contract-audit-repair.md).
+
 ## Current Queue
 
 The generated region below is the sole live queue and source of truth for
