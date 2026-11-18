@@ -18,10 +18,10 @@ qualification manifest digest and deferred code and schema digests. The
 registration and report leave the v2 schema digest unpinned, so RL-183 §3.2
 keeps the variants in v2. [Ruling](https://github.com/mpmdw/JouleWise/blob/09c77ae4fc9ae66526dbf752fbd283d8030469a5/docs/research-audits/2026-11-10-fable/RESEARCH-LEAD-DECISIONS.md#L20323)
 
-The new `joulewise.cadence_looks.manifest_dispatch` CLI chooses validation
-from the schema ID. It delegates v1 to the pinned CLI, uses the reviewed
-qualification validator for qualification, and validates the other two v2
-shapes locally. For final v2 validation it checks decoded strings in values,
+The `joulewise.cadence_looks.manifest_dispatch` CLI admits exact schema ID,
+look kind and look ID triples. It delegates the interim look to the pinned
+v1 CLI, uses the reviewed qualification validator and validates the
+remaining v2 shapes locally. For final v2 validation it checks decoded strings in values,
 arrays and keys for either reserved placeholder. The description roster is
 the named filler series for that read. Qualification's independently bound
 blocks and transfer's ordered twenty kits still govern their rosters. RL-180
@@ -243,6 +243,23 @@ checks its declared identity and the Part C run identifier.
 | LOW, preservation | The qualification registration and validator, interim pins, candidate manifests, output schema and both state files retain their prior bytes. |
 
 The niced synthetic shard reported 62 passes and one expected v1 skip.
+
+## Round 8 manifest routing
+
+On both the pinned and current PR #795 validators, the replay showed that
+changing the interim kind could bypass its roster validation. A false kit
+digest also passed on that route. The regression froze at `d3cdea9c1`.
+Commit `0009c1001` installs a six-row routing table in the dispatcher.
+An unrecognized triple is refused before v1 delegation or v2 validation.
+The public v2 function uses the same table.
+
+| Finding | Disposition and regression |
+| --- | --- |
+| HIGH, implementation bug | `test_dispatch_accepts_only_closed_manifest_identity_triples` passed all 120 combinations. Six reached their validator and the other 114 were refused before either validator ran. `test_v1_interim_mislabeled_qualification_refuses_before_delegate` passed with a false kit digest in final mode. The original probe returned 0 on both genuine interim controls and 2 on all 16 altered fixtures. |
+| MED, admission integration | Transfer stage-1 arm bounds and authoritative public registration-source authorization remain with their owners. |
+| LOW, preservation | The schemas, pinned validators, registered and candidate manifests, ledger and both state files retain their prior bytes. |
+
+The niced synthetic shard reported 64 passes and one expected v1 skip.
 
 ## RL-185 and lead handoff
 
