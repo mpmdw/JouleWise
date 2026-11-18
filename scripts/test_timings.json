@@ -677,6 +677,7 @@
     "tests.test_promote_calibration_candidate": 1.349,
     "tests.test_prune_ops": 8.4,
     "tests.test_publication_privacy": 0.098,
+    "tests.test_qualification_manifest": 0.066,
     "tests.test_quick_suite": 0.129,
     "tests.test_quiet_admission": 0.007,
     "tests.test_quiet_guard": 1.263,

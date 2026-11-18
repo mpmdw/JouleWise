@@ -39,6 +39,11 @@ registration and the synthetic final. The PR's CI runs the repository
 shards. This [AGENT] lane used public specifications and synthetic
 substitutions.
 
+The first quick CI run refused the missing module timing. The test
+map now records the 0.066 s local Python 3.13 observation from
+`scripts.shard_tests.run_shard`. The shard inventory regression checks
+the entry.
+
 The lead's next gate is Tier 2 review and admission to main before the
 first qualification receipt. Before the eventual stage-2 reservation,
 validate the final manifest against the registered bytes from the
