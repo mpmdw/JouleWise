@@ -510,27 +510,35 @@ def smoke_part_c(output, runtime, config, *, soak_reference, invoke=r1._invoke,
         bank_dir = output / PART_C_GATED_D
         bank = invoke(runtime, "d-bank-benign-s1", bank_dir, soak_reference=soak_reference)
         result["members"]["d_bank"] = bank
-        bank_facts = facts(bank_dir / bank["bundle"], role="d-bank")
-        # The runtime's own X7 flag and T_dead are the authority where it reports them.
-        bank_facts["x7"] = bank.get("x7", bank_facts["x7"])
-        bank_facts["t_dead_s"] = (bank.get("deadman") or {}).get("T_dead_s", bank_facts["t_dead_s"])
-        # RL-149 section 1.5: the stop reason is read from the runtime's episode flags where it reports them.
-        if isinstance(bank.get("episode_flags"), list):
-            bank_facts["episode_flags"] = list(bank["episode_flags"])
+        bank_facts = {**facts(bank_dir / bank["bundle"], role="d-bank"), "runtime": bank}
         printed = prints(bank_dir / bank["bundle"])
         x_g_facts, why = None, None
+        x_g_dir = output / PART_C_X_G
         try:
-            x_g = invoke(runtime, "x-g", output / PART_C_X_G, soak_reference=soak_reference)
-            result["members"]["x_g"] = x_g
-            x_g_facts = facts(output / PART_C_X_G / x_g["bundle"], role="x-g")
-            # PR #777 row-2 finding 7: the runtime's flags decide only when they are recorded (a list), as on
-            # D_bank's path; otherwise the bundle-derived X7 stands.
-            if isinstance(x_g.get("episode_flags"), list):
-                x_g_facts["x7"] = any(str(f).startswith("episode.deadman:") for f in x_g["episode_flags"])
-        except (r1.Refusal, ValueError, KeyError, OSError) as exc:
+            x_g = invoke(runtime, "x-g", x_g_dir, soak_reference=soak_reference)
+        except r1.RuntimeEvidenceError as exc:
+            if exc.receipt is not None:
+                result["members"]["x_g"] = exc.receipt
+            x_g_facts = {"evidence_error": str(exc)}
+        except r1.RuntimeLaunchError as exc:
             why = f"{type(exc).__name__}: {exc}"
-            print(f"Part C: X_G left out, the launcher could not run it without more condition-13 code: {why}",
-                  file=sys.stderr)
+        except (subprocess.TimeoutExpired, UnicodeError, OSError) as exc:
+            x_g_facts = {"evidence_error": f"{type(exc).__name__}: {exc}"}
+        except r1.Refusal as exc:
+            if (x_g_dir / rt.RESULT_NAME).is_file():
+                x_g_facts = {"evidence_error": f"{type(exc).__name__}: {exc}"}
+            else:
+                why = f"{type(exc).__name__}: {exc}"
+        else:
+            result["members"]["x_g"] = x_g
+            try:
+                bundle = Path(x_g["bundle"])
+                if not bundle.parts or bundle.is_absolute() or ".." in bundle.parts:
+                    raise ValueError("X_G receipt has no relative bundle path")
+                x_g_facts = {**facts(x_g_dir / bundle, role="x-g"), "runtime": x_g}
+            except Exception as exc:
+                # Once the runtime returns, any failure to read its evidence is judged.
+                x_g_facts = {"evidence_error": f"{type(exc).__name__}: {exc}"}
         doc = part_c.evaluate(step_d=step_line, d_bank=bank_facts, n_chunk=n_chunk, x_g=x_g_facts,
                               x_g_not_run_reason=why, printed=printed)
         result["n_chunk_formula_recorded"] = (step.get("slot_detail") or {}).get("N_chunk_formula")

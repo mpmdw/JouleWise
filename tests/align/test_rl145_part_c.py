@@ -351,7 +351,8 @@ class SidecarJournalTests(unittest.TestCase):
         raw = [json.loads(x) for x in (self.bundle / 'outputs/align_thermal.jsonl').read_text().splitlines()]
         self.assertEqual({r['kind'] for r in raw}, {'session_start', 'reading', 'align_thermal_gate', 'session_end'})
         self.assertNotIn('sample', {r['kind'] for r in raw})
-        self.assertEqual(len(pc._journal(self.bundle)), len(self.stamps))   # the legacy reader found 0 rows
+        samples, _, _ = pc._journal(self.bundle)
+        self.assertEqual(len(samples), len(self.stamps))
         line = pc.d_bank_start_state(facts)
         self.assertTrue(line['pass'], line)
         self.assertEqual(line['reasons'], [])
@@ -391,6 +392,44 @@ class SidecarJournalTests(unittest.TestCase):
         self.assertFalse(line['pass'])
         self.assertIn("level 1, state 'Moderate'", line['reasons'][0])
 
+    def test_failed_first_reading_cannot_be_replaced_by_a_later_nominal_reading(self):
+        journal = self.bundle / 'outputs/align_thermal.jsonl'
+        facts = self.facts()
+        rows = [json.loads(line) for line in journal.read_text().splitlines()]
+        after_start = next(r for r in rows if r['kind'] == 'reading'
+                           and r['started']['monotonic_ns'] > facts['turns'][0]['start_ns'])
+        after_start['values']['status'] = {'error': 'OSError: synthetic'}
+        journal.write_text(''.join(json.dumps(r) + '\n' for r in rows))
+        ep = SimpleNamespace(flags=[], turns=[SimpleNamespace(**t) for t in facts['turns']],
+                             hardware={'thermal': {'intervals': []}})
+        with patch('joulewise.align.apple.workload.read_episode_bundle', return_value=ep):
+            selected = pc.facts_from_bundle(self.bundle, role='d-bank')['turns'][0]['first_reading_after_start']
+        self.assertEqual(selected.get('error'), 'OSError: synthetic')
+        facts['turns'][0]['first_reading_after_start'] = selected
+        self.assertEqual(run(d_bank=facts)['verdict'], 'start_state_failed')
+
+    def test_finalized_journal_failure_disagrees_with_bundle_for_both_roles(self):
+        from joulewise.align.apple.thermal_gates import ThermalSession
+
+        self.sidecar.stop()
+        sidecar = SimpleNamespace(event=lambda kind, values: rows.append(
+            {'module': 'temperature', 'kind': kind, 'values': values}))
+        for journal_turn in (2, 3):
+            rows = []
+            ThermalSession.persist_interval(SimpleNamespace(sidecar=sidecar),
+                                            interval('G1', journal_turn, outcome='timeout'))
+            ep = SimpleNamespace(flags=[], turns=[], hardware={'thermal': {'intervals': bank()['intervals']}})
+            encoded = '\n'.join(map(json.dumps, rows)).encode()
+            with self.subTest(journal_turn=journal_turn), \
+                    patch('joulewise.align.apple.workload.read_episode_bundle', return_value=ep), \
+                    patch('joulewise.desk_compress.read_bytes', return_value=encoded):
+                extracted = pc.facts_from_bundle(self.bundle, role='x-g')
+                for role in ('d_bank', 'x_g'):
+                    facts = {**bank(), **extracted, 'turns': bank()['turns'], 't_dead_s': 1000.0}
+                    for row in facts['intervals']:
+                        row['release_status'] = status()
+                    self.assertEqual(run(**{role: facts})['verdict'], 'other_failure')
+
 
 class KitSequenceTests(unittest.TestCase):
     """smoke --part C: the runtime kinds in order, no slots entered, a failure raises after the table."""
@@ -411,9 +450,9 @@ class KitSequenceTests(unittest.TestCase):
             return {**base, 'g0_outcome': 'released', 'g0_wait_s': 212.0,
                     'slots': {'N_chunk': 4096, 'B_D': 6144}, 'slot_detail': {'N_chunk_formula': 1280}}
         if kind == 'd-bank-benign-s1':
-            return {**base, 'x7': False, 'deadman': {'T_dead_s': 1000.0}}
+            return {**base, 'admitted_turns': 3, 'x7': False, 'deadman': {'T_dead_s': 1000.0}}
         if kind == 'x-g':
-            return {**base, 'episode_flags': []}
+            return {**base, 'admitted_turns': 2, 'episode_flags': []}
         return base
 
     def facts(self, bundle, *, role):
@@ -458,6 +497,41 @@ class KitSequenceTests(unittest.TestCase):
         evaluation = result['evaluation']
         self.assertTrue(evaluation['pass'])
         self.assertTrue(any(line.startswith('X_G was not run: Refusal') for line in evaluation['log']))
+
+    def test_completed_x_g_with_missing_or_unreadable_evidence_fails(self):
+        original = self.facts
+        for failure in (FileNotFoundError('synthetic missing episode'), ValueError('synthetic unreadable episode')):
+            with self.subTest(failure=failure), tempfile.TemporaryDirectory() as tmp:
+                self.tmp = Path(tmp)
+                def facts(bundle, *, role):
+                    if role == 'x-g':
+                        raise failure
+                    return original(bundle, role=role)
+                self.facts = facts
+                with self.assertRaisesRegex(ValueError, 'other_failure'):
+                    self.run_c()
+                table = json.loads((self.tmp / 'c' / 'smoke_part_c.json').read_text())
+                self.assertIn('x_g', table['members'])
+                self.assertFalse(table['evaluation']['lines']['x_g']['pass'])
+
+    def test_zero_exit_x_g_missing_contract_fields_fails(self):
+        original = self.invoke
+
+        def invoke(runtime, kind, output, **kwargs):
+            if kind != 'x-g':
+                return original(runtime, kind, output, **kwargs)
+            receipt = {'bundle': 'synthetic', 'admitted_turns': 2, 'episode_flags': []}
+            process = SimpleNamespace(returncode=0, stdout=json.dumps(receipt), stderr='')
+            with patch.object(kit.r1, '_run', return_value=process):
+                return kit.r1._invoke(runtime, kind, output, **kwargs)
+
+        self.invoke = invoke
+        with self.assertRaisesRegex(ValueError, 'other_failure'):
+            self.run_c()
+        table = json.loads((self.tmp / 'c' / 'smoke_part_c.json').read_text())
+        self.assertEqual(table['members']['x_g']['admitted_turns'], 2)
+        self.assertTrue(any('contract fields missing' in line for line in table['evaluation']['log']))
+        self.assertFalse(table['evaluation']['lines']['x_g']['pass'])
 
     def test_a_failed_test_writes_the_table_then_raises(self):
         bad = bank()
