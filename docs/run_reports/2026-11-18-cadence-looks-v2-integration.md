@@ -30,13 +30,14 @@ row 9 is implemented by the description registration in RL-181 §2.1.
 
 | Look | Candidate manifest SHA-256 |
 | --- | --- |
-| `lm-transfer-01` | `e5777535e5c330010a5266cc7b4a444b6b05f37c8adf6d489da58753763999c7` |
-| `lm-inst-01` | `53ce885331db6ff5d17de6f050d44fcc4081957cadf655467924b682da27cb51` |
-| `lm-stab-01` | `597abc793ea42fe82378cbaee6b80d024380ea270271ff6df9af8e2eeee6173d` |
+| `lm-transfer-01` | `aa6b090c227838e3be36151384a81e46613831bbd9708ece87d41c844756a908` |
+| `lm-inst-01` | `8b95837d38c72dc090ecb23e113e99193bddc4b3421f07d2e57fcde8b1515556` |
+| `lm-stab-01` | `d25be3769af2ecc0f41fa29ff0841f76dc876a37fbe72cd3dbd0a2a10594891e` |
 
 All three candidates are drafts beside `lm-qual-01.manifest.json`. The
-transfer draft changes two path references for the new layout. The transfer
-output schema and release worker match the bytes at `4e5c2ad1d`.
+transfer draft carries two relocated paths and the new deferred commitment
+pin described below. The transfer output schema and release worker match
+the bytes at `4e5c2ad1d`.
 The qualification manifest remains
 `d6fde6918023ea69051da45a6b0e3c06ffcfdafd8975a1773989324fa7c9bdab`
 and its validator remains Git blob `35bbd6b2f5`.
@@ -73,6 +74,35 @@ separately. Local execution was limited to synthetic test inputs. The
 unfiltered local shard suite includes a test that can open the real
 measurement ledger and archive. The hosted PR records repository CI on the
 integration head.
+
+## Audit round 1 dispositions
+
+The review at `a8a198f05` reported two verified HIGH, two MED and two LOW
+findings. It refuted fall-through within v2. The three new failing probes
+were reproduced on intake. Commit `10e4c7173` fixes both HIGH findings
+and the unused-registration MED finding.
+
+| Severity | Root cause | Disposition and regression |
+| --- | --- | --- |
+| HIGH | `integration-seam` | The dispatcher reserves every v2 look ID defined by the schema before v1 delegation, including the qualification ID pattern. Both schema versions share the final marker check. The pinned v1 CLI receives the exact bytes checked by dispatch. `test_v1_refuses_v2_look_ids_and_final_markers_before_delegating` and `test_v1_delegate_receives_checked_bytes` passed. The pinned #795 CLI replay kept exit 0 for the v1 control and got exit 2 for all three relabelled finals and the marker. |
+| HIGH | `impl-bug` | A fixed independent record binds transfer kit ID, path and digest to each date place, plus the roster path and digest. The description records bind every named filler ID to its published digest. Candidate and transfer registration are checked against the same record. `test_kit_commitments_refuse_relabelling_and_substituted_paths` passed. The audit's cross-family substitutions, path-only, digest-only and same-family substitutions now refuse. |
+| MED | `impl-bug` | The dispatcher refuses an inapplicable `--registration` before reading its path. Only a registered qualification or transfer candidate in final mode can use it. `test_rejects_unused_registration_before_open` passed. |
+| MED | `integration-seam` | The historical date-map and arm-bound distinction remains a follow-up for the transfer stage-1 owner. Check each observed start against the authorized bounds before using the date map in stage 1. |
+| LOW | — | The qualification registration and validator, v1 and its pinned step-3 module, transfer worker, and output schema retain their pinned bytes. The relevant preservation checks passed. |
+| LOW | — | The ported transfer exit-status regressions passed. A relabelled v2 look now exits 2 at the dispatcher before delegation. |
+
+`docs/process/cadence/looks/look-kit-commitments.v2.json` records the
+audited transfer roster from `4e5c2ad1d` and the instrument and stability
+kit digests verified against published Git blobs at `e26a566c` and
+`a8dc8b23c`. The three drafts carry a deferred hash for that fixed
+validator input. The dispatcher reads the repository's fixed record and
+compares manifest references against it. It does not open kit or roster
+paths from a manifest.
+
+The niced synthetic shard ran 49 tests with zero failures and one expected
+v1 skip. Independently, Draft 2020-12 validated the updated schema and all
+four manifests, and the pinned v1 CLI replay and original kit-substitution
+replays passed through the dispatcher.
 
 ## RL-185 and lead handoff
 
