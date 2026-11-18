@@ -1052,6 +1052,21 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 
 <!-- RUN_STATE TYPED ITEMS: newest first. Add with scripts/run_state_add.py; never edit by hand. -->
 
+441. **At f2-stab-15-l001's close, before R1's pre-arm: push 4 raw dev trees to the Air (rsync over Tailscale, at most 600 s, never hold R1)**
+
+```item
+{"expires_epoch_s": null, "issued_epoch_s": 1795037223, "number": 441, "owner": "magistrate", "schema": "joulewise.run_state_item.v1", "sets": [], "status": "ISSUED", "supersedes": []}
+```
+
+- **What (RL-184 item 2: the look runs on the Air with a complete, hash-verified copy).** The Air already holds verified raw copies of 7 of the 11 dev plans. Four are missing: `dev-04 s01-a1`, `dev-04 s02-a1`, `dev-05 s01-a2` and `dev-05 s02-a1`.
+- **When:** at `f2-stab-15-l001`'s close, as part of that close's copy work, BEFORE R1's pre-arm (clock settle) begins. This is MBP-to-Air only. Nothing runs on the MBP during R1's window.
+- **How:** for each of the four plans, push its raw OUT tree and its `.mbp.SHA256SUMS` with `rsync -a --checksum` over Tailscale to `edr@100.64.2.113`, using the `jw-hostlink` key.
+  - Destination: `/Volumes/JW-EXT/cadence-desk/<kit>/`, where `<kit>` is `cl-dev-04` or `cl-dev-05`, matching the existing layout. For example: `/Volumes/JW-EXT/cadence-desk/cl-dev-04/cq-dev-04-s01-a1-<stamp>/` and `.../cq-dev-04-s01-a1-<stamp>.mbp.SHA256SUMS`.
+  - Order: dev-04 s01, then s02, then dev-05 s01-a2, then s02.
+  - Then, on the MBP, recompute the sha256 of the four `.mbp.SHA256SUMS` files and record them in your item. The lead hash-verifies the trees on the Air.
+- **Bound:** at most 600 s in total (RL-179's copy bound). If the transfer fails or runs past 600 s, stop it, record what landed, and go on to R1's pre-arm. Do NOT hold R1. Originals stay on the MBP. Nothing is deleted.
+- **Not this:** no decrypting and no key handling. This is a plain copy of retained originals to an authorized custody host (RL-184).
+
 440. **R1-RERUN READY (one-use, lead): same pin b2e01464d, effective from f2-stab-15-l001's launch record; expires Sat 21 Nov 23:59 PST**
 
 ```item
