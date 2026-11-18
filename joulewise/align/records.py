@@ -248,8 +248,8 @@ def to_json(record: Any) -> str:
     return json.dumps(to_jsonable(record), sort_keys=True, separators=(",", ":"), allow_nan=False)
 
 
-def from_json(cls: type, text: str | bytes) -> Any:
-    return _build(cls, json.loads(text))
+def from_json(cls: type, text: str | bytes, *, loads=json.loads) -> Any:
+    return _build(cls, loads(text))
 
 
 def write_episodes(path: Path, episodes: Iterable[Episode]) -> int:

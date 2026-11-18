@@ -540,7 +540,7 @@ class PowerModeGuard(AbstractContextManager):
 
 
 def _invoke(runtime, kind, output, duration=None, *, soak_reference=None, quiet=False, contract_key=None,
-            watch=None):
+            watch=None, loads=json.loads):
     if watch is not None:
         # Ruling 20: no external volume may be mounted between t0 and the
         # terminal record; check before every runtime invocation.
@@ -562,7 +562,7 @@ def _invoke(runtime, kind, output, duration=None, *, soak_reference=None, quiet=
         error = Refusal if result.returncode == 2 else RuntimeEvidenceError
         raise error(f"runtime.{kind}: exit {result.returncode}: {result.stderr.strip()}")
     try:
-        value = json.loads(result.stdout)
+        value = loads(result.stdout)
     except (ValueError, TypeError) as error:
         raise RuntimeEvidenceError(f"runtime.{kind}.invalid_json: {error}") from error
     if not isinstance(value, dict):

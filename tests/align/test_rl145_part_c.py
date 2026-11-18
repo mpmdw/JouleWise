@@ -332,17 +332,19 @@ class SidecarJournalTests(unittest.TestCase):
     def facts(self, *, release_ns=None, flags=('ended_in_unclosed_reasoning',)):
         """Two gates and two turns placed on the journal's own stamps (G0 release at tick 2, turn 0 after it;
         G1 release at tick 6, turn 1 after it), then ``facts_from_bundle`` on the written bundle."""
+        g0_start = self.clocks.monotonic_ns()
         g0 = self.tick(2)
         t0 = self.clocks.monotonic_ns() + 100_000_000
         self.tick(3)
         g1 = self.tick()
         t1 = self.clocks.monotonic_ns() + 100_000_000
         self.tick(3)
-        intervals = [{'kind': 'G0', 'turn': 0, 'outcome': 'released', 'duration_s': 110.0,
-                      'start_ns': 0, 'end_ns': 110_000_000_000,
+        t0_end = t0 + 2_000_000_000
+        intervals = [{'kind': 'G0', 'turn': 0, 'outcome': 'released', 'duration_s': (g0 - g0_start) / 1e9,
+                      'start_ns': g0_start, 'end_ns': g0,
                       'exit_sample_ns': g0 if release_ns is None else release_ns},
-                     {'kind': 'G1', 'turn': 1, 'outcome': 'released', 'duration_s': 99.8,
-                      'start_ns': 0, 'end_ns': 99_800_000_000, 'exit_sample_ns': g1}]
+                     {'kind': 'G1', 'turn': 1, 'outcome': 'released', 'duration_s': (g1 - t0_end) / 1e9,
+                      'start_ns': t0_end, 'end_ns': g1, 'exit_sample_ns': g1}]
         from joulewise.align.apple.thermal_gates import ThermalSession
         for row in intervals:
             row.update(token_count=None, reference=STEP['reference'], release={'fast_c': 50.0, 'slow_c': 34.0},
@@ -352,8 +354,9 @@ class SidecarJournalTests(unittest.TestCase):
                                                      'entry_stamp': row['entry_stamp']})
             ThermalSession.persist_interval(SimpleNamespace(sidecar=self.sidecar), row)
         self.sidecar.stop()
-        turns = [SimpleNamespace(index=0, start_ns=t0, end_ns=t0 + 2, decode_tokens=2200, prefill_tokens=11211),
-                 SimpleNamespace(index=1, start_ns=t1, end_ns=t1 + 2, decode_tokens=4096, prefill_tokens=40)]
+        turns = [SimpleNamespace(index=0, start_ns=t0, end_ns=t0_end, decode_tokens=2200, prefill_tokens=11211),
+                 SimpleNamespace(index=1, start_ns=t1, end_ns=t1 + 2_000_000_000, decode_tokens=4096,
+                                 prefill_tokens=40)]
         ep = SimpleNamespace(hardware={'thermal': {'intervals': intervals, 'flags': []},
                                        'token_budget': {'deadman_s': 983.1}},
                              turns=turns, flags=list(flags))
@@ -457,6 +460,39 @@ class SidecarJournalTests(unittest.TestCase):
                     mutations += 1
         print(f'Part C native journal mutations rejected: {mutations}')
 
+    def test_episode_flags_must_be_present_and_unique_before_native_decoding(self):
+        from joulewise.align.apple import workload
+        from joulewise.align.records import Episode, Turn, to_jsonable
+
+        self.facts()
+        fixture = self.fixture_episode
+        hardware = {**fixture.hardware, 'paired_clock_stamps_ns': [dict(
+            epoch_ns=1, monotonic_before_ns=1, monotonic_after_ns=1,
+            wall_resolution_ns=1, monotonic_resolution_ns=1)]}
+        episode = Episode(episode_id='synthetic', task_pair='synthetic', condition='benign', agent_model='test',
+                          endpoint='test', seed=1, clock_domain='synthetic', start_ns=0,
+                          end_ns=fixture.turns[-1].end_ns, hardware=hardware, flags=tuple(fixture.flags),
+                          turns=tuple(Turn(context_tokens=0, **vars(turn)) for turn in fixture.turns))
+        payload = to_jsonable(episode)
+        raw = json.dumps(payload)
+        path = self.bundle / 'outputs/align_episode.json'
+        auxiliary = SimpleNamespace(metadata=lambda: {}, trace_rows=lambda: [],
+                                    config=lambda: SimpleNamespace(sampling=SimpleNamespace(power_hz=1)))
+        with patch.object(workload, 'BundleReader', return_value=auxiliary):
+            path.write_text(raw)
+            clean = pc.facts_from_bundle(self.bundle, role='d-bank')
+            clean.pop('bundle_path')
+            self.assertTrue(run(d_bank=clean)['pass'])
+            for damaged, reason in (
+                ('{"flags":["episode.deadman:2"],' + raw[1:], 'duplicate JSON field'),
+                (json.dumps({k: v for k, v in payload.items() if k != 'flags'}), 'explicitly record its flags'),
+            ):
+                with self.subTest(reason=reason):
+                    path.write_text(damaged)
+                    facts = pc.facts_from_bundle(self.bundle, role='d-bank')
+                    self.assertIn(reason, facts.get('evidence_error', ''))
+                    self.assertFalse(run(d_bank=facts)['pass'])
+
     def test_finalized_journal_failure_disagrees_with_bundle_for_both_roles(self):
         from joulewise.align.apple.thermal_gates import ThermalSession
 
@@ -478,6 +514,7 @@ class SidecarJournalTests(unittest.TestCase):
                 self.assertEqual(extracted['journal_intervals'][0]['outcome'], 'timeout')
                 for role in ('d_bank', 'x_g'):
                     facts = {**bank(), **extracted, 'turns': bank()['turns'], 't_dead_s': 1000.0}
+                    facts.pop('reading_stamps')
                     for row in facts['intervals']:
                         row['release_status'] = status()
                     result = run(**{role: facts})
@@ -562,6 +599,80 @@ class KitSequenceTests(unittest.TestCase):
         evaluation = result['evaluation']
         self.assertTrue(evaluation['pass'])
         self.assertTrue(any(line.startswith('X_G was not run: Refusal') for line in evaluation['log']))
+
+    def test_native_predecessor_receipts_are_reconciled(self):
+        from joulewise.align.apple.workload import EpisodeRuntimeAdapter
+
+        original = self.invoke
+        for mismatch in (False, True):
+            with self.subTest(mismatch=mismatch), tempfile.TemporaryDirectory() as tmp:
+                self.tmp = Path(tmp)
+
+                def invoke(runtime, kind, output, **kwargs):
+                    if kind != 'capture-predecessor-30b':
+                        return original(runtime, kind, output, **kwargs)
+                    template = self.tmp / 'synthetic-template.json'
+                    template.write_text('{}')
+                    mode = EpisodeRuntimeAdapter._observe_ac_powermode(SimpleNamespace(powermode_reader=lambda: 0))
+                    member = SimpleNamespace(status='succeeded', bundle=output / 'member',
+                                             ep=SimpleNamespace(turns=[object()], hardware={'ac_powermode': mode}))
+                    segment = SimpleNamespace(out=output, config={'templates': {'model_30b': str(template)}},
+                                              run_member=lambda template, hook: member,
+                                              template=lambda key: ({'run_metadata': {'tags': []}}, {}))
+                    fields = rt.Segment.k_capture_predecessor_30b(segment)
+                    write_receipt(output, {**fields, 'ac_powermode': 'Automatic'} if mismatch else fields)
+                    return fields
+
+                self.invoke = invoke
+                if mismatch:
+                    with self.assertRaisesRegex(ValueError, 'other_failure'):
+                        self.run_c()
+                    result = json.loads((self.tmp / 'c/smoke_part_c.json').read_text())['evaluation']
+                    self.assertIn('differs from runtime stdout', result['evidence_failures']['predecessor_receipt'])
+                else:
+                    self.assertTrue(self.run_c()['evaluation']['pass'])
+
+    def test_duplicate_stdout_field_fails_before_the_last_value_can_win(self):
+        original = self.invoke
+
+        def invoke(runtime, kind, output, **kwargs):
+            fields = original(runtime, kind, output, **kwargs)
+            if kind != 'd-bank-benign-s1':
+                return fields
+            fields.update(energy_j=1, battery_drain_pct_per_h=0,
+                          deadman={'T_dead_s': 1000.0, 'phases_s': {phase: 0 for phase in rt.contract.DEADMAN_PHASES}},
+                          reference_source='step-d', inter_member_idle_s=300)
+            write_receipt(output, fields)
+            raw = '{"episode_flags":["episode.deadman:2"],' + json.dumps(fields)[1:]
+            with patch.object(kit.r1, '_run', return_value=SimpleNamespace(returncode=0, stdout=raw, stderr='')):
+                return kit.r1._invoke(runtime, kind, output, **kwargs)
+
+        self.invoke = invoke
+        with self.assertRaisesRegex(ValueError, 'invalid'):
+            self.run_c()
+        result = json.loads((self.tmp / 'c/smoke_part_c.json').read_text())['evaluation']
+        self.assertEqual(result['verdict'], 'other_failure')
+        self.assertIn('duplicate JSON field', result['evidence_failures']['runtime_receipt'])
+
+    def test_exit_two_cannot_hide_an_x_g_bundle_without_a_receipt(self):
+        original = self.invoke
+
+        def invoke(runtime, kind, output, **kwargs):
+            if kind != 'x-g':
+                return original(runtime, kind, output, **kwargs)
+            bundle = output / 'runs/synthetic/outputs'
+            bundle.mkdir(parents=True)
+            (bundle / 'align_episode.json').write_text('{"turns":[{},{}],"flags":[]}')
+            (bundle / 'align_thermal.jsonl').write_text('{}\n')
+            with patch.object(kit.r1, '_run', return_value=SimpleNamespace(returncode=2, stdout='', stderr='refused')):
+                return kit.r1._invoke(runtime, kind, output, **kwargs)
+
+        self.invoke = invoke
+        with self.assertRaisesRegex(ValueError, 'other_failure'):
+            self.run_c()
+        result = json.loads((self.tmp / 'c/smoke_part_c.json').read_text())['evaluation']
+        self.assertIn('conflicts with output', result['evidence_failures']['x_g_launch'])
+        self.assertFalse(any(line.startswith('X_G was not run:') for line in result['log']))
 
     def test_completed_x_g_with_missing_or_unreadable_evidence_fails(self):
         original = self.facts

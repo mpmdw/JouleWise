@@ -494,28 +494,32 @@ def smoke_part_c(output, runtime, config, *, soak_reference, invoke=r1._invoke,
             print(f"Part C verdict: {verdict_doc.get('verdict')} (pass: {verdict_doc.get('pass')})")
             for line in verdict_doc.get("log") or ():
                 print(f"Part C log: {line}")
+    def run_member(kind, directory):
+        return invoke(runtime, kind, directory, soak_reference=soak_reference, loads=part_c.parse_evidence_json)
+
     try:
-        result["members"]["predecessor"] = invoke(runtime, "capture-predecessor-30b", output / "capture_predecessor_30b",
-                                                  soak_reference=soak_reference)
+        predecessor = run_member("capture-predecessor-30b", output / "capture_predecessor_30b")
+        result["members"]["predecessor"] = predecessor
         step_dir = output / rt.STEP_D_SEGMENT
-        step = invoke(runtime, "step-d", step_dir, soak_reference=soak_reference)
+        step = run_member("step-d", step_dir)
         result["members"]["step_d"] = step
         slots = step.get("slots")
         n_chunk = (slots or {}).get("N_chunk")
         step_line = step_facts(step_dir / step["bundle"], step) if step.get("bundle") else {"g0_outcome": step.get("g0_outcome")}
         if not isinstance(slots, dict) or not isinstance(n_chunk, int):
-            doc = part_c.evaluate(step_d=step_line, d_bank=None, n_chunk=n_chunk if isinstance(n_chunk, int) else 1)
+            doc = part_c.evaluate(predecessor=predecessor, step_d=step_line,
+                                  n_chunk=n_chunk if isinstance(n_chunk, int) else 1)
             finish(doc, "step-D produced no slots: the gated members cannot run")
             raise ValueError("Part C: step-D produced no slots; see smoke_part_c.json")
         bank_dir = output / PART_C_GATED_D
-        bank = invoke(runtime, "d-bank-benign-s1", bank_dir, soak_reference=soak_reference)
+        bank = run_member("d-bank-benign-s1", bank_dir)
         result["members"]["d_bank"] = bank
         bank_facts = {**facts(bank_dir / bank["bundle"], role="d-bank"), "runtime": bank}
-        printed = prints(bank_dir / bank["bundle"])
+        printed = None if "evidence_error" in bank_facts else prints(bank_dir / bank["bundle"])
         x_g_facts, why = None, None
         x_g_dir = output / PART_C_X_G
         try:
-            x_g = invoke(runtime, "x-g", x_g_dir, soak_reference=soak_reference)
+            x_g = run_member("x-g", x_g_dir)
         except r1.RuntimeEvidenceError as exc:
             if exc.receipt is not None:
                 result["members"]["x_g"] = exc.receipt
@@ -525,10 +529,7 @@ def smoke_part_c(output, runtime, config, *, soak_reference, invoke=r1._invoke,
         except (subprocess.TimeoutExpired, UnicodeError, OSError) as exc:
             x_g_facts = {"evidence_error": f"{type(exc).__name__}: {exc}"}
         except r1.Refusal as exc:
-            if (x_g_dir / rt.RESULT_NAME).is_file():
-                x_g_facts = {"evidence_error": f"{type(exc).__name__}: {exc}"}
-            else:
-                why = f"{type(exc).__name__}: {exc}"
+            why = f"{type(exc).__name__}: {exc}"
         else:
             result["members"]["x_g"] = x_g
             try:
@@ -539,10 +540,13 @@ def smoke_part_c(output, runtime, config, *, soak_reference, invoke=r1._invoke,
             except Exception as exc:
                 # Once the runtime returns, any failure to read its evidence is judged.
                 x_g_facts = {"evidence_error": f"{type(exc).__name__}: {exc}"}
-        doc = part_c.evaluate(step_d=step_line, d_bank=bank_facts, n_chunk=n_chunk, x_g=x_g_facts,
+        doc = part_c.evaluate(predecessor=predecessor, step_d=step_line, d_bank=bank_facts, n_chunk=n_chunk, x_g=x_g_facts,
                               x_g_not_run_reason=why, printed=printed)
         result["n_chunk_formula_recorded"] = (step.get("slot_detail") or {}).get("N_chunk_formula")
         finish(doc)
+    except r1.RuntimeEvidenceError as exc:
+        finish(part_c.evaluate(runtime_error=str(exc)), error=str(exc))
+        raise ValueError("Part C: runtime receipt is invalid; see smoke_part_c.json") from exc
     except BaseException as exc:
         if "evaluation" not in result and "error" not in result:
             finish(error=f"{type(exc).__name__}: {exc}")
