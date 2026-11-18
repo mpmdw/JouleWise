@@ -56,3 +56,13 @@ from this directory. The audit-side tool checks RL-180’s cell comparison and c
 `validate-kit` for frozen-path and seeded-list validation. Both batch-window arguments passed
 for all 14 kits. All 168 plans and 14 queue fixtures passed. Mock `f2-stab-01` L001 returned
 `{"rc": 0, "legs": 1, "stops": []}`. [Recorded outputs](VERIFICATION.json)
+
+## Qualification-pin kits
+
+Use the manifest seed procedure above and freeze the result with the named pin's own `pin-kit`.
+The qualification pin changes the frozen commit and path digests. The cell layout follows the same base.
+
+| Kit | SHA-256 | Runner pin | First-hit master seed | Candidates tested | First different index | Span drafts | Queue entries |
+| --- | --- | --- | ---: | ---: | ---: | --- | --- |
+| [f2-stab-15](qual-pin/f2-stab-15.v1.1.json) | `8dceffc2e1a10a03d25c6c06487756fe37f8f5a1c57d52e242a64faabcbc36a1` | `6e9d42f1dd3d308bc9239143d0d634ab965e50e1` | 2026112669 | 1226 | 0 | [12 items](qual-pin/items/ITEM-f2-stab-15.md) | [12 entries](qual-pin/queues/f2-stab-15.json) |
+| [f2-stab-16](qual-pin/f2-stab-16.v1.1.json) | `0fc1139dfb4b92ab18e5fb4c0b66e0d211a02e218e841a4cf94fde1fb19f2b96` | `6e9d42f1dd3d308bc9239143d0d634ab965e50e1` | 2026113603 | 2160 | 0 | [12 items](qual-pin/items/ITEM-f2-stab-16.md) | [12 entries](qual-pin/queues/f2-stab-16.json) |
