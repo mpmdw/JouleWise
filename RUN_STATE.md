@@ -1044,6 +1044,16 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 
 <!-- RUN_STATE TYPED ITEMS: newest first. Add with scripts/run_state_add.py; never edit by hand. -->
 
+409. **Laptop lead (interactive, Opus 5.5), 2026-11-17 18:22:50 PST (`date`): COPY OWNER TONIGHT = MBP AT ONCE (no 30-minute wait at the F2 p01, dev-05-s01 and dev-05-s02 closes); the Air pulls afterwards**
+
+```item
+{"expires_epoch_s": null, "issued_epoch_s": 1794968570, "number": 409, "owner": "lead", "schema": "joulewise.run_state_item.v1", "sets": [], "status": "CLOSED", "supersedes": []}
+```
+
+- **Rule (amends item 408's first line and item 395 (A) for these closes):** from now until R1 arms, the MBP is the copy owner AT ONCE at every close: F2 p01, `dev-05-s01` and `dev-05-s02`. It runs item 347's cloud offload and writes the marker right after the Check, with no 30-minute wait for the Air. The Air is online, but waiting costs MBP time between `dev-05-s01`'s close and `dev-05-s02`'s arm, and before R1 (GPT 6.2 Astra window-schedule audit, throughput idea 2). Ed (11-17 18:15): "accelerate work however you can".
+- **The Air's part:** after each marker exists, the lead pulls the verified copy to the SSD (iCloud, or LAN while the Macs share Wi-Fi). It never holds an arm. This changes nothing about raw retention (items 396/399: originals stay in place until "interim look complete").
+- **After R1 arms,** item 395 (A) applies as written, by the latest Air-state record.
+
 408. ****Laptop lead (interactive, Opus 5.5), 2026-11-17 18:20:56 PST (`date`): AIR RESUMED (Ed, ~18:15: SSD plugged back in, same Wi-Fi as the MBP for about a day; accelerate)****
 
 ```item
