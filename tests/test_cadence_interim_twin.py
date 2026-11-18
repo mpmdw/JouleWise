@@ -144,6 +144,56 @@ run_child(evaluate)
 
 @unittest.skipUnless(HAS_NUMPY, "NumPy is required for the fit")
 class FitTests(unittest.TestCase):
+    def test_interim_fit_uses_only_full_decode_blocks(self):
+        from scripts.cadence_interim_twin import FitLeg, fit_channels, predict
+
+        legs = [FitLeg(day, prompt, (), 0.0, 2.0, 4095, 55.0)
+                for day, prompt in (("a", 2), ("b", 4), ("c", 8))]
+        columns = ("p1", "p2", "a0", "a1", "a2")
+        counts = [(255, 128), *((256, k * 256 + 127.5) for k in range(1, 15))]
+        observations = [[2 * leg.prompt_tokens + 3 * leg.prompt_tokens**2] + [
+            n * (4 + 5 * (leg.prompt_tokens + c) + 6 * leg.prompt_tokens) for n, c in counts
+        ] for leg in legs]
+        self.assertEqual(len(observations[0]), 16)
+        responses = {channel: observations for channel in ("gpu_rail", "dc_in")}
+        fitted = fit_channels(legs, (2.0, 256.0), (), responses, None)
+        for coefficients in fitted.values():
+            self.assertEqual(set(coefficients), set(columns))
+            for name, truth in zip(columns, (2, 3, 4, 5, 6), strict=True):
+                self.assertAlmostEqual(coefficients[name], truth, places=8)
+            _, predictions = predict(legs[0], (2.0, 256.0), (), coefficients)
+            self.assertEqual(len(predictions), 16)
+            _, with_tail = predict(legs[0], (2.0, 256.0), (), coefficients, include_prefix_tail=True)
+            self.assertEqual(len(with_tail), 17)
+
+    def test_no_main_delta_disables_individually_estimable_folds(self):
+        from scripts.cadence_interim_twin import OnsetRow, fit_onset, fit_projection
+
+        # Nine observed onsets are too few for B-3, but every fold independently
+        # meets B-4 and has a finite optimum in each cell.
+        days = ["a", "b", "c"]
+        roster, records, responses = [], [], []
+        for shift, day in enumerate(days):
+            for prompt, time in ((2, 10), (2, 11), (4, 14)):
+                elapsed = time + shift
+                roster.append(OnsetRow(day, prompt, (), float(prompt), elapsed, True))
+                records.append({"day": day, "cell_prompt_tokens": prompt, "prefill_tokens": prompt,
+                    "decode_tokens": 512, "start": {"state": "in_state"}, "state": {
+                        "onset_use": "uncensored", "first_off_s": elapsed,
+                    }, "segments": [{"wall_start_s": i * 10, "wall_end_s": (i + 1) * 10, "hot": False}
+                                    for i in range(3)]})
+                values = [2 * prompt + 3 * prompt**2, 255 * (4 + 5 * (prompt + 128) + 6 * prompt),
+                          256 * (4 + 5 * (prompt + 383.5) + 6 * prompt)]
+                responses.append({channel: {"segments": values, "coverage_min": 1.0}
+                                  for channel in ("gpu_rail", "dc_in")})
+        self.assertIsNone(fit_onset(roster))
+        self.assertTrue(all(fit_onset(roster, held_out_day=day) is not None for day in days))
+        fit = fit_projection(records, (), {}, (1.0, 10.0), days, responses)
+        self.assertEqual(fit["onset"]["folds"], dict.fromkeys(days))
+        for channel in fit["channels"].values():
+            self.assertEqual(channel["lodo"]["folds_delta_dropped"], [])
+            self.assertTrue(all("delta" not in values for values in channel["fold_coefficients"].values()))
+
     def test_hand_derived_rows_full_fit_and_prediction(self):
         from scripts.cadence_interim_twin import (
             FitLeg, design_rows, fit_channels, predict, token_rates,
@@ -158,7 +208,7 @@ class FitTests(unittest.TestCase):
         self.assertEqual(rates, (2.0, 256.0))
         # The first leg has prefill [0,1], followed by token intervals
         # 0–255, 255–511, then a one-gap tail. Context begins at P + 128.
-        names, rows = design_rows(legs[0], rates, ("k_tf08",))
+        names, rows = design_rows(legs[0], rates, ("k_tf08",), include_prefix_tail=True)
         self.assertEqual(names, ("p1", "p2", "a0", "a1", "a2", "k_tf08"))
         self.assertEqual(rows[0], (2, 4, 0, 0, 0, -0.5))
         self.assertEqual(rows[1], (0, 0, 255, 255 * 130, 510, -(511**2 - 256**2) / (2 * 256**2)))
@@ -177,8 +227,7 @@ class FitTests(unittest.TestCase):
                 prompt, (z,) = leg.prompt_tokens, leg.readings
                 t = prompt / 2
                 segments = [p1 * prompt + p2 * prompt**2 + k * z * t**2 / 2]
-                for lo, hi, n, offset in ((0, 255, 255, 128), (255, 511, 256, 383.5),
-                                          (511, 512, 1, 512)):
+                for lo, hi, n, offset in ((0, 255, 255, 128), (255, 511, 256, 383.5)):
                     ramp = ((t + hi / 256)**2 - (t + lo / 256)**2) / 2
                     segments.append(n * (a0 + a1 * (prompt + offset) + a2 * prompt) + k * z * ramp)
                 measured.append(segments)
@@ -193,9 +242,11 @@ class FitTests(unittest.TestCase):
                 for name, coefficient in zip(names, coefficients):
                     self.assertTrue(math.isclose(fitted[channel][name], coefficient, rel_tol=1e-8), name)
                 heat, predictions = predict(legs[0], rates, ("k_tf08",), fitted[channel])
-                self.assertAlmostEqual(heat, -4.5 * coefficients[-1])
-                for prediction, energy in zip(predictions, measurements[channel][0]):
+                self.assertAlmostEqual(heat, -0.5 * (1 + 511 / 256)**2 * coefficients[-1])
+                for prediction, energy in zip(predictions, measurements[channel][0], strict=True):
                     self.assertTrue(math.isclose(prediction, energy, rel_tol=1e-8))
+                full_heat, _ = predict(legs[0], rates, ("k_tf08",), fitted[channel], include_prefix_tail=True)
+                self.assertAlmostEqual(full_heat, -4.5 * coefficients[-1])
 
     def test_right_censored_normal_with_analytic_optimum(self):
         from scripts.cadence_interim_twin import censored_normal
@@ -360,6 +411,25 @@ class ReaderTests(unittest.TestCase):
         # The nested row contributes energy without moving the right edge back.
         nested = [(0.0, 4.0, 4.0, 2.0), (0.5, 1.0, 1.0, 6.0)]
         self.assertEqual(power_intervals(nested, 0.0, 4.0), (11.0, 1.125))
+
+    def test_gpu_backstop_checks_connected_response_intervals(self):
+        from scripts.cadence_interim_twin import responses_for_leg
+
+        rows = [(0.0, 0.5, 0.5, 1.0), (3.5, 4.0, 4.0, 1.0)]
+
+        def segment(start, end):
+            return {"wall_start_s": start, "wall_end_s": end}
+
+        def dc(start, end):
+            return end - start, 1.0
+
+        with self.assertRaisesRegex(ValueError, "GPU trace hole"):
+            responses_for_leg({"segments": [segment(0, 2), segment(2, 4)], "prefix_tails": []}, rows, dc)
+        with self.assertRaisesRegex(ValueError, "GPU trace hole"):
+            responses_for_leg({"segments": [segment(0, 1.8), segment(2.2, 4)],
+                               "prefix_tails": [{**segment(1, 2.5), "prefix_len": 12}]}, rows, dc)
+        fit = responses_for_leg({"segments": [segment(0, 0.5), segment(3.5, 4)], "prefix_tails": []}, rows, dc)
+        self.assertEqual(fit["gpu_rail"]["segments"], [0.5, 0.5])
 
     def test_meter_decoder_import_boundary(self):
         from scripts.cadence_interim_twin import meter_decoder
@@ -578,6 +648,12 @@ class Step3CutTests(unittest.TestCase):
         start, _, decoded, journal, power = step3_records(lines(events), lines(turns), lines(fresh), lines(rich), native)
         self.assertEqual(decoded, tokens)
         self.assertEqual(step3_cut(start, decoded, journal, power), 11)
+        no_pressure = b"\0".join(plistlib.dumps({"elapsed_ns": 10**9}) for _ in tokens)
+        _, _, _, journal, pressure_optional = step3_records(
+            lines(events), lines(turns), lines(fresh), lines(rich), no_pressure,
+        )
+        self.assertEqual(len(pressure_optional), len(tokens))
+        self.assertEqual(step3_cut(start, decoded, journal, pressure_optional), 11)
         fresh[8]["values"]["status"]["os_level"] = 1
         _, _, _, journal, power = step3_records(lines(events), lines(turns), lines(fresh), lines(rich), native)
         self.assertEqual(step3_cut(start, decoded, journal, power), 6)
@@ -660,8 +736,8 @@ class RawBundleTests(unittest.TestCase):
         vectors = {"gpu_rail": [n * 0.004 for n in (2, 5, 11, 17, 23)],
                    "dc_in": [n * 0.000064 for n in (3, 7, 13, 19, 29)]}
         names = ("p1", "p2", "a0", "a1", "a2")
-        # Gap counts and context offsets derived by hand for 1,025 stamped tokens.
-        layout = ((255, 128), (256, 383.5), (256, 639.5), (256, 895.5), (1, 1024))
+        # The last of 1,025 tokens is outside the four full decode blocks.
+        layout = ((255, 128), (256, 383.5), (256, 639.5), (256, 895.5))
         days = ["2026-01-01", "2026-01-02", "2026-01-03"]
         readings = {"tf08_c": 40.0, "fan_rpm": 1000.0, "tv0h_excess_c": 0.0}
         onset = {"status": "not_estimable", "predictors": ["intercept", "t_p_s"], "coefficients": None,
@@ -697,7 +773,8 @@ class RawBundleTests(unittest.TestCase):
                     record = f"legs/{leg}/leg_record.json"
                     operational[record] = write(span / record, json_bytes({"spec": {"leg_type": "A"},
                                                                          "result": {"bundle": bundle_name}}))
-                    gpu, dc = segment_values(prompt, "gpu_rail"), segment_values(prompt, "dc_in")
+                    gpu = segment_values(prompt, "gpu_rail") + [0.5]
+                    dc = segment_values(prompt, "dc_in") + [0.5]
                     trace = "source,rail,interval_start_s,interval_end_s,timestamp_s,power_w\n"
                     endpoints = [(wall + i * 8, wall + (i + 1) * 8) for i in range(6)]
                     gpu_intervals = []
@@ -707,7 +784,8 @@ class RawBundleTests(unittest.TestCase):
                         trace += f"powermetrics,gpu_power,{a},{b},{b},{gpu[i] / 16!r}\n"
                         trace += f"powermetrics,gpu_power,{a + 2},{b - 2},{b - 2},{gpu[i] / 8!r}\n"
                         gpu_intervals.extend(([float(a), float(b)], [float(a + 2), float(b - 2)]))
-                        segments.append({"seg": i, "wall_start_s": a, "wall_end_s": b, "hot": i == 4})
+                        if i <= len(layout):
+                            segments.append({"seg": i, "wall_start_s": a, "wall_end_s": b, "hot": i == 4})
                         for offset in range(16):
                             sample_index = 2 * a + offset
                             rx = 10**10 + sample_index * 500_000_000
@@ -743,12 +821,11 @@ class RawBundleTests(unittest.TestCase):
                     rich_times = list(range(wall + 1, wall + 49))
                     rich = lines({"timestamp_s": t, "elapsed_ns": 10**9, "gpu": {"gpu_energy": 0,
                                   "dvfm_states": [{"freq": 1000, "used_ns": 1000}]}} for t in rich_times)
-                    native = b"\0".join(plistlib.dumps({"elapsed_ns": 10**9, "thermal_pressure": "Nominal"})
-                                        for _ in rich_times)
+                    native = b"\0".join(plistlib.dumps({"elapsed_ns": 10**9}) for _ in rich_times)
                     write(span / bundle / "rich_telemetry.jsonl", rich)
                     write(span / bundle / "raw/powermetrics.plist", native)
                     native_identity[bundle] = sha(json_bytes([[[str(t), "1000000000"] for t in rich_times],
-                                                             [["1000000000", "4e6f6d696e616c"] for _ in rich_times],
+                                                             [["1000000000", None] for _ in rich_times],
                                                              len(rich_times)]))
                     records.append({"leg_key": f"{day}/{leg}", "day": day, "span_id": day, "role": "fit",
                                     "leg_type": "A", "included": True, "in_energy_fit": True,

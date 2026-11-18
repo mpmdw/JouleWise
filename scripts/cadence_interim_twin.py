@@ -128,8 +128,8 @@ def expected_hot_seconds(start, end, mean, sigma):
     return min(end - start, max(0, overlap + correction))
 
 
-def design_rows(leg, rates, active_columns, onset=None):
-    """Count-clock prefill and decode segments, including a prefix tail."""
+def design_rows(leg, rates, active_columns, onset=None, *, include_prefix_tail=False):
+    """Count-clock prefill and full decode blocks, with an optional prefix tail."""
     prefill_rate, decode_rate = rates
     prompt = leg.prompt_tokens
     prefill = prompt / prefill_rate
@@ -148,18 +148,16 @@ def design_rows(leg, rates, active_columns, onset=None):
 
     rows = [(prompt, prompt**2, 0, 0, 0, *temperature_columns(0, prefill))]
     left = 0
-    for last_token in range(255, leg.decode_tokens + 255, 256):
-        right = min(last_token, leg.decode_tokens - 1)
-        if right == left:
-            break
+    block_ends = list(range(255, leg.decode_tokens, 256))
+    if include_prefix_tail and leg.decode_tokens - 1 > (block_ends[-1] if block_ends else 0):
+        block_ends.append(leg.decode_tokens - 1)
+    for right in block_ends:
         count = right - left
         context = prompt + (left + 1 + right) / 2
         start = prefill + left / decode_rate
         end = prefill + right / decode_rate
         rows.append((0, 0, count, count * context, count * prompt, *temperature_columns(start, end)))
         left = right
-        if right == leg.decode_tokens - 1:
-            break
     return columns, rows
 
 
@@ -185,9 +183,9 @@ def fit_channel(columns, design, response):
     return dict(zip(columns, (float(value) for value in solution / scales), strict=True))
 
 
-def predict(leg, rates, active_columns, coefficients, onset=None):
-    """Return turn heat and the segment predictions on the count clock."""
-    columns, rows = design_rows(leg, rates, active_columns, onset)
+def predict(leg, rates, active_columns, coefficients, onset=None, *, include_prefix_tail=False):
+    """Return heat and predictions over the selected count-clock segments."""
+    columns, rows = design_rows(leg, rates, active_columns, onset, include_prefix_tail=include_prefix_tail)
     weights = tuple(coefficients[name] for name in columns)
     contributions = [tuple(a * b for a, b in zip(row, weights, strict=True)) for row in rows]
     heat = math.fsum(value for row in contributions for value in row[len(BASE_COLUMNS):])
@@ -714,8 +712,11 @@ def fit_projection(records, readings, centring, rates, days, response_records, *
     active = tuple(READINGS[reading] for reading in readings)
     onset_rows = onset_roster(records, legs, rates)
     main = fit_onset(onset_rows, sensitivity=sensitivity)
-    onsets = {day: fit_onset(onset_rows, held_out_day=day) for day in days}
-    delta_drops = [day for day, onset in onsets.items() if onset is None] if main is not None else []
+    onsets = dict.fromkeys(days)
+    delta_drops = []
+    if main is not None:
+        onsets = {day: fit_onset(onset_rows, held_out_day=day) for day in days}
+        delta_drops = [day for day, onset in onsets.items() if onset is None]
     responses = {channel: [data[channel]["segments"] for data in response_records] for channel in sorted(CHANNELS)}
     full = fit_channels(legs, rates, active, responses, main)
     base_legs = [replace(leg, readings=()) for leg in legs]
@@ -828,14 +829,9 @@ def gpu_rows(data):
     return sorted(rows)
 
 
-def power_intervals(rows, start, end):
-    """Integrate each clipped GPU row under RL-166 Q2's Trace convention."""
-    if start > end:
-        raise ValueError("invalid wall-clock segment")
-    if start == end:
-        return 0.0, None
-    pieces = []
-    width, rightmost = 0.0, start
+def supported_gpu_rows(rows, start, end):
+    clipped = []
+    rightmost = start
     for left, right, _, power in rows:
         if right <= start:
             continue
@@ -844,13 +840,24 @@ def power_intervals(rows, start, end):
         left, right = max(left, start), min(right, end)
         if left - rightmost > 2:
             raise ValueError("GPU trace hole")
-        duration = right - left
+        clipped.append((right - left, power))
+        rightmost = max(rightmost, right)
+    if end - rightmost > 2 or not clipped:
+        raise ValueError("GPU trace does not support the segment")
+    return clipped
+
+
+def power_intervals(rows, start, end):
+    """Integrate each clipped GPU row under RL-166 Q2's Trace convention."""
+    if start > end:
+        raise ValueError("invalid wall-clock segment")
+    if start == end:
+        return 0.0, None
+    pieces = []
+    width = 0.0
+    for duration, power in supported_gpu_rows(rows, start, end):
         pieces.append(power * duration)
         width += duration
-        # Only the gap check uses the union of the intervals.
-        rightmost = max(rightmost, right)
-    if end - rightmost > 2 or not pieces:
-        raise ValueError("GPU trace does not support the segment")
     return math.fsum(pieces), width / (end - start)
 
 
@@ -967,7 +974,27 @@ def pooled_meter(streams, parse):
     return measure
 
 
+def connected_response_intervals(record):
+    requests = sorted((row["wall_start_s"], row["wall_end_s"])
+                      for kind in ("segments", "prefix_tails") for row in record[kind])
+    intervals = []
+    for start, end in requests:
+        if start > end:
+            raise ValueError("invalid wall-clock segment")
+        if start == end:
+            continue
+        if intervals and start <= intervals[-1][1]:
+            left, right = intervals[-1]
+            intervals[-1] = (left, max(right, end))
+        else:
+            intervals.append((start, end))
+    return intervals
+
+
 def responses_for_leg(record, gpu, dc_segment_reader):
+    # Check the connected fit surface before cutting it into separate responses.
+    for start, end in connected_response_intervals(record):
+        supported_gpu_rows(gpu, start, end)
     output = {}
     for channel, measure in (("gpu_rail", lambda u, v: power_intervals(gpu, u, v)),
                              ("dc_in", dc_segment_reader)):
@@ -1157,7 +1184,7 @@ def step3_records(events_data, turns_data, journal_data, rich_data, native_data)
         if frame["elapsed_ns"] != raw["elapsed_ns"]:
             raise ValueError("Step 3 telemetry intervals disagree")
         states = [(state["freq"], state["used_ns"]) for state in frame["gpu"]["dvfm_states"]]
-        power_state.append((frame["timestamp_s"], frame["elapsed_ns"], raw["thermal_pressure"], states))
+        power_state.append((frame["timestamp_s"], frame["elapsed_ns"], raw.get("thermal_pressure"), states))
     if not journal or not power_state:
         raise ValueError("Step 3 telemetry is empty")
     return start, end, token_times, sorted(journal, key=lambda row: row[0]), power_state
