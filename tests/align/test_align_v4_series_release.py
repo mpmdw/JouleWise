@@ -1,10 +1,12 @@
 """Synthetic tests for the C1 caller and its stored-bundle inputs."""
 
 import ast
+from contextlib import redirect_stderr
 import csv
 from dataclasses import replace
 from datetime import datetime
 import hashlib
+from io import StringIO
 import json
 from pathlib import Path
 import plistlib
@@ -271,7 +273,7 @@ def registration_fixture(root, amount_field=None):
 
 
 def stored_series(root, *, wins=102, different=None, no_rows=False, spoof=False, history=False,
-                  amount_fields=None, amount_field=None, defective_layout=False):
+                  amount_fields=None, amount_field=None, defective_layout=False, omit_first_pm=False):
     """Synthetic committed arm history with a separate, untracked restored tree."""
     init_git_fixture(root, "-q")
     registration_fixture(root, amount_field)
@@ -337,7 +339,8 @@ def stored_series(root, *, wins=102, different=None, no_rows=False, spoof=False,
                              amount=(amount_fields or {}).get((slot, pair, condition)))
                 episode = read_episode_bundle(bundle)
                 (bundle / "outputs/align_soc_rails.csv").write_bytes((bundle / "power_trace.csv").read_bytes())
-                write_json(bundle / "outputs/align_s_pm_rows.json", s_rows.pm_rows_with_states(bundle, episode))
+                if not (omit_first_pm and window == "C1" and ordinal == series.FRESH_ORDINALS[0]):
+                    write_json(bundle / "outputs/align_s_pm_rows.json", s_rows.pm_rows_with_states(bundle, episode))
                 if spoof:
                     dc_file = bundle / "outputs/align_dc_in.json"
                     if condition == "sabotage":
@@ -523,13 +526,87 @@ class SeriesReleaseTests(unittest.TestCase):
 
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
-            stored_series(root, defective_layout=True)
+            stored_series(root, defective_layout=True, omit_first_pm=True)
             output = root / "report.json"
-            with patch.object(caller, "read_member", side_effect=AssertionError("protected member loader")):
-                with self.assertRaises(SystemExit) as refusal:
-                    caller.main(["--measurement-root", str(root), "--output", str(output)])
+            argv = ["--measurement-root", str(root), "--output", str(output)]
+            with patch.object(caller.ReleasedInputs, "load_members",
+                              side_effect=AssertionError("member loader invoked")), \
+                    redirect_stderr(StringIO()), self.assertRaises(SystemExit) as refusal:
+                caller.main(argv)
             self.assertEqual(refusal.exception.code, 1)
             self.assertFalse(output.exists())
+
+            # Admit the separate layout while keeping the first PM projection
+            # absent from the record's digest-bound restore manifest.
+            ledger = json.loads((root / packet.SERIES_PATH).read_bytes())
+            ledger["release_layouts"]["T3"]["trace_layout"] = caller.LAYOUT
+            write_json(root / packet.SERIES_PATH, ledger)
+            tip = commit_fixture(root, [packet.SERIES_PATH])
+            fixture_git(root, "update-ref", caller.RELEASE_REF, tip)
+            real = caller.named_bytes
+
+            def observe(source_root, path):
+                self.assertNotIn("/runs/", path, "opened a member file without its PM binding")
+                return real(source_root, path)
+
+            with patch.object(caller, "named_bytes", side_effect=observe), \
+                    redirect_stderr(StringIO()), self.assertRaises(SystemExit) as refusal:
+                caller.main(argv)
+            self.assertEqual(refusal.exception.code, 1)
+            self.assertFalse(output.exists())
+
+    def test_post_release_terminal_authority_refuses_before_member_loading(self):
+        from scripts import align_v4_series_release as caller
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            stored_series(root)
+            ledger = json.loads((root / packet.SERIES_PATH).read_bytes())
+            terminal = ledger["previous_record"]
+            terminal_record = json.loads((root / terminal["path"]).read_bytes())
+            prior = terminal_record["previous_record"]
+            output = root / "report.json"
+
+            def point_authority_at(link, *, completion_commit=None):
+                paths = [packet.SERIES_PATH]
+                if completion_commit is not None:
+                    write_release_context(root, commit=completion_commit)
+                    paths.extend((seal.SERIES_COMPLETE, seal.RELEASE_RECEIPT))
+                write_json(root / packet.SERIES_PATH, {**ledger, "previous_record": link})
+                fixture_git(root, "update-ref", caller.RELEASE_REF, commit_fixture(root, paths))
+
+            def assert_refusal(case):
+                with self.subTest(case=case):
+                    self.assertTrue(seal.released({"measurement_root": root}))
+                    with patch.object(caller.ReleasedInputs, "load_members",
+                                      side_effect=AssertionError("member loader invoked")), \
+                            redirect_stderr(StringIO()), self.assertRaises(SystemExit) as refusal:
+                        caller.main(["--measurement-root", str(root), "--output", str(output)])
+                    self.assertEqual(refusal.exception.code, 1)
+                    self.assertFalse(output.exists())
+
+            fixture_git(root, "update-ref", "-d", caller.RELEASE_REF)
+            assert_refusal("missing authority ref")
+
+            point_authority_at(prior)
+            assert_refusal("stale terminal binding")
+
+            point_authority_at({**terminal, "sha256": "0" * 64})
+            assert_refusal("wrong chained digest")
+
+            tree = fixture_git(root, "rev-parse", terminal["commit"] + "^{tree}")
+            other = fixture_git(root, "commit-tree", tree, "-m", "synthetic unreachable terminal")
+            point_authority_at({**terminal, "commit": other}, completion_commit=other)
+            assert_refusal("terminal outside authority history")
+
+            prior_record = json.loads(fixture_git(root, "show", prior["commit"] + ":" + prior["path"]))
+            duplicate_final = {"record_sha256": prior["sha256"],
+                               "sources": {key: prior_record["sources"][key]
+                                           for key in packet.FINAL_SOURCES_WITH_RECEIPT}}
+            ambiguous = describe(root, terminal["path"], {**terminal_record, "previous_final": duplicate_final})
+            new_terminal = commit_fixture(root, [terminal["path"]])
+            point_authority_at({**ambiguous, "commit": new_terminal}, completion_commit=new_terminal)
+            assert_refusal("direct and successor evidence both supplied")
 
     def test_restored_mount_refuses_ancestor_symlink(self):
         from scripts import align_v4_series_release as caller
