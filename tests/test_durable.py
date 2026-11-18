@@ -1,4 +1,5 @@
 import errno
+import hashlib
 import os
 import stat
 import subprocess
@@ -207,6 +208,30 @@ durable.publish_once(Path(sys.argv[1]), b"child")
         self.assertEqual(durable.read_published(self.path, 1), winner)
         self.assertEqual(self.temps(), [])
 
+    def test_linked_publication_reconciles_through_filesystem_alias(self):
+        for name, alternate in (("Record.ok", "record.ok"), ("café", "cafe\u0301")):
+            with self.subTest(name=name):
+                self.path = self.root / name
+                alias = self.root / alternate
+                self.path.write_bytes(b"probe")
+                equivalent = alias.exists() and alias.samefile(self.path)
+                self.path.unlink()
+                if not equivalent:
+                    self.skipTest("the fixture filesystem distinguishes these spellings")
+                neighbor = self.root / "unrelated"
+                self.interrupt(lambda _, data: durable.publish_once(neighbor, data),
+                               "durable.temp_written")
+                neighbor_temps = self.temps()
+                self.interrupt(durable.publish_once, "durable.link_synced")
+                with self.assertRaises(durable.Busy):
+                    durable.read_published(alias, 3)
+                durable.finish_publication(alias)
+                self.assertEqual(durable.read_published(self.path, 3), b"new")
+                self.assertEqual(durable.read_published(alias, 3), b"new")
+                self.assertEqual(self.temps(), neighbor_temps)
+                durable.finish_publication(neighbor)
+                self.path.unlink()
+
     def test_sync_order_and_enospc_eio_at_each_sync(self):
         fsync = os.fsync
         for operation, order in ((durable.publish_once, ["file", "dir", "dir"]),
@@ -227,9 +252,15 @@ durable.publish_once(Path(sys.argv[1]), b"child")
                             if error is None:
                                 operation(self.path, b"new")
                             else:
-                                with self.assertRaises(OSError) as raised:
+                                expected_error = durable.VisibleNotDurable if position else OSError
+                                with self.assertRaises(expected_error) as raised:
                                     operation(self.path, b"new")
                                 self.assertEqual(raised.exception.errno, error)
+                                if position:
+                                    self.assertEqual(raised.exception.digest, hashlib.sha256(b"new").hexdigest())
+                                    self.assertIsInstance(raised.exception.__cause__, OSError)
+                                else:
+                                    self.assertNotIsInstance(raised.exception, durable.VisibleNotDurable)
                         self.assertEqual(seen, order if position is None else order[:position + 1])
                         if position == 1 and operation == durable.publish_once:
                             with self.assertRaises(durable.Busy):
@@ -242,6 +273,29 @@ durable.publish_once(Path(sys.argv[1]), b"child")
                             self.assertEqual(durable.read_published(self.path, 3), expected)
                         self.assertEqual(self.temps(), [])
                         self.path.unlink(missing_ok=True)
+
+    def test_publish_once_late_retry_resyncs_identical_bytes(self):
+        native_sync = os.fsync
+        for point in ("durable.linked", "durable.temp_unlinked"):
+            with self.subTest(point=point):
+                failure = OSError(errno.EIO, "synthetic sync failure")
+
+                def fail_after_visibility(name):
+                    if name == point:
+                        raise failure
+
+                with patch.object(durable, "checkpoint", fail_after_visibility):
+                    with self.assertRaises(durable.VisibleNotDurable) as caught:
+                        durable.publish_once(self.path, b"original")
+                self.assertEqual(caught.exception.digest, hashlib.sha256(b"original").hexdigest())
+                with self.assertRaises(FileExistsError):
+                    durable.publish_once(self.path, b"different")
+                with patch.object(durable.os, "fsync", side_effect=native_sync) as sync:
+                    durable.publish_once(self.path, b"original")
+                self.assertGreaterEqual(sync.call_count, 2)
+                self.assertEqual(durable.read_published(self.path, 8), b"original")
+                self.assertEqual(self.temps(), [])
+                self.path.unlink()
 
     def test_enospc_on_create_write_and_link(self):
         failure = OSError(errno.ENOSPC, "synthetic disk full")

@@ -26,6 +26,14 @@ class Unsafe(ValueError):
     """The artifact or its temporary names violate the publication protocol."""
 
 
+class VisibleNotDurable(OSError):
+    """Complete bytes entered the namespace, but publication did not sync."""
+
+    def __init__(self, path: Path, data: bytes, error: OSError):
+        super().__init__(error.errno, "visible publication did not sync", path)
+        self.digest = hashlib.sha256(data).hexdigest()
+
+
 def checkpoint(name: str) -> None:
     """A no-op production hook for named crash and fault injection."""
 
@@ -46,12 +54,12 @@ def _prefix(name: str) -> str:
     return f".jw-publish-{digest}-"
 
 
-def _temps(directory: int, name: str) -> Iterator[str]:
-    prefix = _prefix(name)
+def _temps(directory: int) -> Iterator[str]:
     for candidate in os.listdir(directory):
-        if candidate.startswith(prefix) and candidate.endswith(".tmp"):
-            token = candidate[len(prefix):-4]
-            if len(token) == 32 and all(ch in "0123456789abcdef" for ch in token):
+        if candidate.startswith(".jw-publish-") and candidate.endswith(".tmp"):
+            digest, _, token = candidate[len(".jw-publish-"):-4].partition("-")
+            if (len(digest) == 64 and len(token) == 32
+                    and all(ch in "0123456789abcdef" for ch in digest + token)):
                 yield candidate
 
 
@@ -83,21 +91,37 @@ def _publish(path: Path, data: bytes, *, once: bool) -> None:
                         follow_symlinks=False)
             except FileExistsError:
                 os.unlink(temp, dir_fd=directory)
-                raise
-            checkpoint("durable.linked")
-            os.fsync(directory)
-            checkpoint("durable.link_synced")
-            os.unlink(temp, dir_fd=directory)
-            checkpoint("durable.temp_unlinked")
+                try:
+                    identical = _read_published(directory, path, len(data), allow_linked=True) == data
+                except (Absent, Busy, Unsafe):
+                    identical = False
+                if not identical:
+                    raise
+                try:
+                    _finish_publication(directory, path.name)
+                except OSError as error:
+                    raise VisibleNotDurable(path, data, error) from error
+                checkpoint("durable.directory_synced")
+                return
         else:
             os.replace(temp, path.name, src_dir_fd=directory, dst_dir_fd=directory)
-            checkpoint("durable.replaced")
-        os.fsync(directory)
+        try:
+            if once:
+                checkpoint("durable.linked")
+                os.fsync(directory)
+                checkpoint("durable.link_synced")
+                os.unlink(temp, dir_fd=directory)
+                checkpoint("durable.temp_unlinked")
+            else:
+                checkpoint("durable.replaced")
+            os.fsync(directory)
+        except OSError as error:
+            raise VisibleNotDurable(path, data, error) from error
         checkpoint("durable.directory_synced")
 
 
 def publish_once(path: Path, data: bytes) -> None:
-    """Publish bytes without replacing an existing entry."""
+    """Publish bytes once, or re-sync identical bytes already published."""
     _publish(path, data, once=True)
 
 
@@ -115,37 +139,51 @@ def finish_publication(path: Path) -> None:
     since the previous attempt may have failed its final sync.
     """
     with _directory(path) as directory:
-        target = _stat(directory, path.name)
-        if target is not None and not stat.S_ISREG(target.st_mode):
-            raise Unsafe("published artifact is not a regular file")
-        candidates = list(_temps(directory, path.name))
-        linked = 0
-        for name in candidates:
-            temp = _stat(directory, name)
-            if temp is None or not stat.S_ISREG(temp.st_mode):
-                raise Unsafe("publication temp is not a regular file")
-            if _same(temp, target):
-                linked += 1
-            elif temp.st_nlink != 1:
-                raise Unsafe("publication temp has unexpected links")
-        if target is not None and target.st_nlink != linked + 1:
-            raise Unsafe("published artifact has unexpected links")
-        if linked:
-            os.fsync(directory)
-        for name in candidates:
-            os.unlink(name, dir_fd=directory)
+        _finish_publication(directory, path.name)
+
+
+def _finish_publication(directory: int, name: str) -> None:
+    target = _stat(directory, name)
+    if target is not None and not stat.S_ISREG(target.st_mode):
+        raise Unsafe("published artifact is not a regular file")
+    prefix = _prefix(name)
+    candidates = []
+    linked = 0
+    for candidate in _temps(directory):
+        temp = _stat(directory, candidate)
+        # Case and Unicode aliases can resolve to the same inode even when
+        # the spelling used to create the temp has a different digest.
+        same = temp is not None and _same(temp, target)
+        if not same and not candidate.startswith(prefix):
+            continue
+        if temp is None or not stat.S_ISREG(temp.st_mode):
+            raise Unsafe("publication temp is not a regular file")
+        if same:
+            linked += 1
+        elif temp.st_nlink != 1:
+            raise Unsafe("publication temp has unexpected links")
+        candidates.append(candidate)
+    if target is not None and target.st_nlink != linked + 1:
+        raise Unsafe("published artifact has unexpected links")
+    if linked:
         os.fsync(directory)
+    for candidate in candidates:
+        os.unlink(candidate, dir_fd=directory)
+    os.fsync(directory)
 
 
-def _check_links(directory: int, name: str, fd: int, record: os.stat_result) -> None:
+def _check_links(directory: int, name: str, fd: int, record: os.stat_result,
+                 *, allow_linked: bool) -> None:
     if record.st_nlink == 1:
         return
-    for temp in _temps(directory, name):
-        if _same(record, _stat(directory, temp)):
-            raise Busy("publication still has a temporary link")
+    linked = sum(_same(record, _stat(directory, temp)) for temp in _temps(directory))
     current = os.fstat(fd)
     if current.st_nlink != record.st_nlink or not _same(record, _stat(directory, name)):
         raise Busy("publication changed during the read")
+    if record.st_nlink == linked + 1:
+        if allow_linked:
+            return
+        raise Busy("publication still has a temporary link")
     raise Unsafe("published artifact has unexpected links")
 
 
@@ -154,28 +192,32 @@ def read_published(path: Path, limit: int) -> bytes:
     if limit < 0:
         raise ValueError("limit must be nonnegative")
     with _directory(path) as directory:
-        record = _stat(directory, path.name)
-        if record is None:
-            raise Absent(errno.ENOENT, os.strerror(errno.ENOENT), path)
-        if not stat.S_ISREG(record.st_mode):
-            raise Unsafe("published artifact is not a regular file")
-        try:
-            fd = os.open(path.name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK,
-                         dir_fd=directory)
-        except FileNotFoundError as error:
-            raise Busy("publication changed during the read") from error
-        except OSError as error:
-            if error.errno == errno.ELOOP:
-                raise Unsafe("published artifact became a symbolic link") from error
-            raise
-        with os.fdopen(fd, "rb") as stream:
-            opened = os.fstat(stream.fileno())
-            if not _same(record, opened):
-                raise Busy("publication changed during the read")
-            _check_links(directory, path.name, fd, opened)
-            if opened.st_size > limit:
-                raise Unsafe("published artifact exceeds the read limit")
-            data = stream.read(limit + 1)
-            if len(data) > limit:
-                raise Unsafe("published artifact exceeds the read limit")
-            return data
+        return _read_published(directory, path, limit)
+
+
+def _read_published(directory: int, path: Path, limit: int, *, allow_linked: bool = False) -> bytes:
+    name = path.name
+    record = _stat(directory, name)
+    if record is None:
+        raise Absent(errno.ENOENT, os.strerror(errno.ENOENT), path)
+    if not stat.S_ISREG(record.st_mode):
+        raise Unsafe("published artifact is not a regular file")
+    try:
+        fd = os.open(name, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK, dir_fd=directory)
+    except FileNotFoundError as error:
+        raise Busy("publication changed during the read") from error
+    except OSError as error:
+        if error.errno == errno.ELOOP:
+            raise Unsafe("published artifact became a symbolic link") from error
+        raise
+    with os.fdopen(fd, "rb") as stream:
+        opened = os.fstat(stream.fileno())
+        if not _same(record, opened):
+            raise Busy("publication changed during the read")
+        _check_links(directory, name, fd, opened, allow_linked=allow_linked)
+        if opened.st_size > limit:
+            raise Unsafe("published artifact exceeds the read limit")
+        data = stream.read(limit + 1)
+        if len(data) > limit:
+            raise Unsafe("published artifact exceeds the read limit")
+        return data
