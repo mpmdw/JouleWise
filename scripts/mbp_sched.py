@@ -5,13 +5,10 @@ Ledger decision observations have a decision key. Producers record actual host
 events with an event key (LAUNCH, CLOSE, COPY_VERIFIED, REFUSAL, STOP, GATE, READY).
 Only those events are used as launch and close history.
 
-LAUNCH, CLOSE, COPY_VERIFIED and the receipt share a span_id for each attempt.
-Legacy inputs use entry_id, kit_sha256 and t0_epoch. Order launches by sequence
-or by boot_id, boot_order and monotonic_ns, with append order as the legacy
-fallback. A CLOSE adds kind, ended_epoch, clean and the RESTORE_READBACKS.
-A GATE carries its id. REFUSAL, STOP and READY use the respective facts fields.
-When a facts snapshot and a ledger are both supplied, the ledger must retain
-every launch and close observation in the snapshot.
+Only sequenced ledger events can open or close an attempt.
+The independently committed head is read from <ledger>.head.json. Its digest
+is SHA-256 over compact canonical JSON rows, each followed by one newline.
+Decision observations go to a separate report ledger.
 
 Probe sources that need no native command (for example meter readiness, the
 High Power marker and queue commit) can be supplied via --host-facts. Probe
@@ -23,7 +20,7 @@ from __future__ import annotations
 
 import argparse
 from collections import Counter
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import date, datetime, time as local_time, timedelta
 import fcntl
 import hashlib
@@ -217,8 +214,8 @@ RULE_PARAMS = {
 }
 ENTRY_FIELDS = {
     "id": identifier, "kind": one_of(*KINDS), "launcher": string, "worktree": string,
-    "argv": argument_vector, "pin": PIN, "kit_sha256": KIT, "expected_s": integer,
-    "worst_case_s": integer, "requires": array(identifier), "params": IS_OBJECT,
+    "argv": argument_vector, "pin": PIN, "kit_sha256": KIT, "expected_s": positive_integer,
+    "worst_case_s": positive_integer, "requires": array(identifier), "params": IS_OBJECT,
     "repeat": boolean, "product": string,
 }
 ENTRY_OPTIONAL = {
@@ -228,7 +225,9 @@ ENTRY_OPTIONAL = {
 ENTRY_PARAMS = {
     "window": IS_OBJECT, "date_caps": array(IS_OBJECT), "not_on_dates_of": array(identifier),
     "batch_clear": boolean, "soak_end_s": integer, "group": identifier, "legs": positive_integer,
-    "after": array(identifier), "gates": array(identifier), "launch_window_local":
+    "after": array(identifier), "gates": array(identifier),
+    "groups": array(identifier), "qualification": boolean, "floating_battery": boolean,
+    "dry_run_required": boolean, "campaign": identifier, "launch_window_local":
         lambda value: array(clock_time)(value) and len(value) == 2,
     "kill_margin_s": integer, "pilot": boolean, "hygiene_change": boolean,
 }
@@ -317,20 +316,17 @@ def validate_queue(path, data, rules, errors, check_references):
             restricted = {rules[ref]["test"] for ref in refs if ref in rules}
             if (entry.get("repeat") is True and entry.get("done") is not True
                     and one_of(*FILLERS)(entry.get("kind"))
+                    and not entry.get("block") and not (isinstance(params, dict) and
+                         (params.get("after") or params.get("gates")))
                     and not restricted.intersection({"window", "dependency", "session_route"})):
                 standing = True
-            if (entry.get("kind") == "counted" and isinstance(params, dict)
-                    and any(params.get(key) for key in ("window", "date_caps", "not_on_dates_of"))
-                    and not any(ref in rules and rules[ref]["test"] == "window"
-                                and rules[ref]["status"] == "LIVE" for ref in refs)):
-                errors.add(path, "UNBOUND_DATE_RULE", f"{entry_id}: configured dates require a LIVE window rule")
         if isinstance(params, dict):
             validate_entry_params(path, where, params, errors)
             if entry.get("kind") == "counted":
-                if params.get("date_caps") and not identifier(params.get("group")):
+                if params.get("date_caps") and not (params.get("groups") or identifier(params.get("group"))):
                     errors.add(path, "MISSING_COUNT_METADATA",
                                f"{where}.params.group is required for a counted date cap")
-                if (params.get("date_caps") or params.get("group")) and "legs" not in params:
+                if (params.get("date_caps") or params.get("groups") or params.get("group")) and "legs" not in params:
                     errors.add(path, "MISSING_COUNT_METADATA",
                                f"{where}.params.legs is required for grouped counted work")
     if check_references and not standing:
@@ -339,7 +335,13 @@ def validate_queue(path, data, rules, errors, check_references):
 
 def validate_entry_params(path, where, params, errors):
     where = f"{where}.params"
+
     errors.fields(path, where, params, {}, ENTRY_PARAMS)
+    if params.get("groups") and array(identifier)(params["groups"]):
+        if len(set(params["groups"])) != len(params["groups"]):
+            errors.add(path, "BAD_GROUPS", f"{where}.groups must be unique")
+        if params.get("group") and params["group"] not in params["groups"]:
+            errors.add(path, "BAD_GROUPS", f"{where}.group conflicts with groups")
     if "window" in params and errors.fields(path, f"{where}.window", params["window"], {}, {
         "earliest_epoch": nullable(epoch), "latest_epoch": nullable(epoch),
     }):
@@ -353,98 +355,329 @@ def validate_entry_params(path, where, params, errors):
             errors.fields(path, f"{where}.date_caps[{index}]", cap, {"group": identifier, "max": integer})
 
 
-FACT_TYPES = {
-    "now_epoch": epoch, "boot_epoch": epoch, "power": IS_OBJECT, "disk_free_gib": number,
-    "meter_ready": boolean, "fence": IS_OBJECT, "labels_loaded": array(string),
-    "foreign_processes": array(IS_OBJECT), "high_power_marker": boolean, "owner_stop": boolean,
-    "maintenance_active": boolean,
-    "launches": array(IS_OBJECT), "closes": array(IS_OBJECT), "refusals": array(IS_OBJECT),
-    "gates": array(identifier), "ready": array(IS_OBJECT), "queue_commit": string,
-    "uncopied": array(IS_OBJECT), "stops": array(IS_OBJECT), "plans": IS_OBJECT,
-    "errors": IS_OBJECT, "receipts": array(nullable(IS_OBJECT)),
-}
-CLOSE_FIELDS = {"entry_id": identifier, "kind": nullable(one_of(*KINDS)),
-                "ended_epoch": nullable(epoch), "clean": nullable(boolean),
-                "restore_proven": nullable(boolean), "t0_epoch": nullable(epoch)}
-ATTEMPT_FIELDS = {"span_id": identifier, "sequence": integer, "boot_id": identifier,
-                  "boot_order": integer, "monotonic_ns": integer, "ledger_index": integer}
-CLOSE_OPTIONAL = {**ATTEMPT_FIELDS, "kit_sha256": KIT, "pin": PIN, "mock": nullable(boolean),
-                  "copy_verified": nullable(boolean), "fault": nullable(string),
-                  "load_redos": nullable(integer), "load_flag": nullable(boolean), "stranded": boolean,
-                  "group": nullable(identifier), "legs": integer}
+MAINTENANCE_PATH = "/Users/Shared/JouleWise/MAINTENANCE"
 RESTORE_READBACKS = ("power_mode", "network_time_off", "frequency_word_zero", "no_monitor",
                      "no_high_power_marker", "feeds_stopped", "process_group_gone")
-LAUNCH_FIELDS = {"entry_id": identifier, "t0_epoch": nullable(epoch)}
-LAUNCH_OPTIONAL = {**ATTEMPT_FIELDS, "kit_sha256": KIT, "kind": one_of(*KINDS),
-                   "group": nullable(identifier), "legs": integer}
-FACT_ROWS = {
-    "launches": (LAUNCH_FIELDS, LAUNCH_OPTIONAL),
-    "closes": (CLOSE_FIELDS, CLOSE_OPTIONAL),
-    "foreign_processes": ({"pid": integer, "name": string}, {}),
-    "ready": ({"entry_id": identifier, "effective": nullable(boolean)}, {}),
-    "refusals": ({"entry_id": identifier, "queue_commit": string, "epoch": epoch, "reason": string},
-                 {"kit_sha256": KIT, "block": identifier}),
-    "uncopied": ({"entry_id": identifier, "kind": nullable(one_of(*KINDS)),
-                  "ended_epoch": nullable(epoch)}, {"kit_sha256": KIT}),
-    "stops": ({"code": identifier, "epoch": epoch},
-              {"entry_id": identifier, "queue_commit": string, "kit_sha256": KIT, "block": identifier}),
+CONTAMINATED = "CONTAMINATED_REDOS"
+KIT_STOPS = {"LEG_OVERTIME", "NON_CLEAN_CLOSE", "LAUNCHER_REFUSED", "DESK_FAILURE", "CONSUMER_GATE"}
+COPY_EVENTS = {"COPY_STARTED", "COPY_VERIFIED", "UPLOAD_STOPPED"}
+MIRRORS = {
+    "launches": {"LAUNCH"}, "closes": {"CLOSE"}, "receipts": {"RECEIPT"},
+    "restore_proofs": {"RESTORE"}, "stops": {"STOP"}, "gates": {"GATE"},
+    "ready": {"READY"}, "refusals": {"REFUSAL"}, "copy_events": COPY_EVENTS,
+}
+HEAD_FIELDS = {"ledger_id": identifier, "last_seq": positive_integer, "digest": hexadecimal(64)}
+BOUND = {"open_seq": positive_integer, "span_id": identifier,
+         "entry_id": identifier, "kit_sha256": KIT}
+KINDS_CHECK = one_of(*KINDS)
+REGISTRATION = {"kind": KINDS_CHECK, "groups": array(identifier),
+                "legs": integer, "block": nullable(identifier)}
+EVENT_FIELDS = {
+    "LAUNCH": {**REGISTRATION, "span_id": identifier, "entry_id": identifier, "pin": PIN,
+               "kit_sha256": KIT, "t0_epoch": epoch, "boot_id": identifier,
+               "queue_commit": identifier, "registration": IS_OBJECT, "campaign": identifier},
+    "CLOSE": {**BOUND, "ended_epoch": epoch, "clean": boolean, "load_redos": integer,
+              "load_flag": boolean},
+    "RECEIPT": {**BOUND, "receipt_id": identifier, "receipt": IS_OBJECT},
+    "RESTORE": {**BOUND, "readbacks": IS_OBJECT},
+    "STOP": {**BOUND, "code": one_of(CONTAMINATED, *KIT_STOPS), "epoch": epoch},
+    "GATE": {"id": identifier, "passed": boolean},
+    "READY": {"entry_id": identifier, "effective": boolean, "route_clear": boolean},
+    "REFUSAL": {"entry_id": identifier, "kit_sha256": KIT, "block": nullable(identifier),
+                "queue_commit": identifier, "epoch": epoch, "reason": string},
+    **{event: BOUND for event in COPY_EVENTS},
+}
+EVENT_OPTIONAL = {"LAUNCH": {"soak_end_epoch": epoch, "predicted_batch_epoch": epoch}}
+HOST_FIELDS = {
+    "now_epoch": epoch, "clock_verified": boolean, "boot_epoch": epoch,
+    "power": IS_OBJECT, "disk_free_gib": number, "fence_clear": boolean,
+    "runner_group_clear": boolean, "high_power_marker": boolean, "foreign_processes": array(IS_OBJECT),
+    "process_census_verified": boolean, "upload_stopped": boolean, "owner_stop": boolean,
+    "owner_veto": boolean, "maintenance_active": boolean, "maintenance_marker": string,
+    "queue_commit": identifier, "queue_digest": hexadecimal(64), "rules_digest": hexadecimal(64),
+    "ledger_head": IS_OBJECT, "plans": IS_OBJECT,
+}
+HOST_OPTIONAL = {
+    "labels_loaded": array(string), "meter_ready": boolean, "collector_ready": boolean,
+    "receipt_attestations": array(IS_OBJECT), "errors": IS_OBJECT, "uncopied": array(IS_OBJECT),
+    **{key: array(IS_OBJECT) for key in MIRRORS},
 }
 
 
-def validate_facts(path, data, errors, now=None):
-    if data is None:
-        return
-    if not isinstance(data, dict):
-        errors.add(path, "BAD_VALUE", "facts must be an object")
-        return
-    for key, check in FACT_TYPES.items():
-        if key in data and not nullable(check)(data[key]):
-            errors.add(path, "BAD_VALUE", f"facts.{key}")
-    if now is None and not epoch(data.get("now_epoch")):
-        errors.add(path, "MISSING_CLOCK", "now_epoch or --now is required")
-    if isinstance(data.get("power"), dict):
-        errors.fields(path, "facts.power", data["power"], {},
-                      {"ac": nullable(boolean), "charging": nullable(boolean)})
-    if isinstance(data.get("fence"), dict):
-        errors.fields(path, "facts.fence", data["fence"], {}, {
-            "purpose": nullable(string), "pid": nullable(integer), "deadline": nullable(epoch),
-            "pid_alive": nullable(boolean),
-        })
-    for key, (required, optional) in FACT_ROWS.items():
-        if isinstance(data.get(key), list):
-            for index, row in enumerate(data[key]):
-                errors.fields(path, f"facts.{key}[{index}]", row, required, optional)
-    if isinstance(data.get("receipts"), list):
-        for index, receipt in enumerate(data["receipts"]):
-            if receipt is not None and project_receipt(receipt) != receipt:
-                errors.add(path, "BAD_RECEIPT_PROJECTION", f"facts.receipts[{index}]")
+def canonical(value):
+    return json.dumps(value, ensure_ascii=True, sort_keys=True, separators=(",", ":"), allow_nan=False)
 
 
-def status_at(rule, day):
-    review = rule["review_by"]
-    status = rule["status"]
-    if status == "LIVE" and calendar_date(review) and review < day.isoformat():
-        if rule["owner"] == "lead":
-            return "FLAG", False
-        return "LIVE", True
-    return status, False
+def digest(value):
+    return hashlib.sha256(canonical(value).encode()).hexdigest()
+
+
+def ledger_digest(rows):
+    return hashlib.sha256("".join(canonical(row) + "\n" for row in rows).encode()).hexdigest()
+
+
+class Halt(Exception):
+    def __init__(self, rule, detail):
+        self.decision = {"decision": "HALT", "rule": rule, "detail": detail}
+        super().__init__(detail)
+
+
+def require(condition, rule, detail):
+    if not condition:
+        raise Halt(rule, detail)
+
+
+def fields(value, required, rule, name, optional=None):
+    problems = Errors()
+    problems.fields(name, name, value, required, optional)
+    if problems.items:
+        raise Halt(rule, problems.items[0].split(": ", 2)[-1])
+
+
+def same(left, right):
+    return canonical(left) == canonical(right)
+
+
+def head_valid(head):
+    fields(head, HEAD_FIELDS, "LEDGER_HEAD_INVALID", "ledger head")
+
+
+def read_head(path):
+    try:
+        head = parse_json(path.read_text(encoding="utf-8"))
+        head_valid(head)
+        return head
+    except (OSError, ValueError, RecursionError, Halt) as err:
+        raise Halt("LEDGER_HEAD_INVALID", f"committed head is unreadable or invalid: {path.name}") from err
+
+
+def default_head_path(ledger):
+    return ledger.with_name(ledger.name + ".head.json")
+
+
+def read_events(path):
+    if path is None:
+        raise Halt("LEDGER_MISSING", "no committed event ledger was supplied")
+    try:
+        with path.open(encoding="utf-8") as stream:
+            fcntl.flock(stream.fileno(), fcntl.LOCK_SH)
+            rows = []
+            for index, line in enumerate(stream, 1):
+                require(line.endswith("\n"), "LEDGER_INVALID", f"row {index} is incomplete")
+                try:
+                    rows.append(parse_json(line))
+                except (ValueError, RecursionError) as err:
+                    raise Halt("LEDGER_INVALID", f"row {index} has invalid JSON") from err
+            return rows
+    except (OSError, UnicodeError) as err:
+        raise Halt("LEDGER_MISSING", "event ledger is unreadable") from err
+
+
+@dataclass
+class Attempt:
+    launch: dict
+    close: dict | None = None
+    receipt: dict | None = None
+    restore: dict | None = None
+    copy: set = field(default_factory=set)
+
+    @property
+    def span(self):
+        return self.launch["span_id"]
+
+    def prove_close(self):
+        require(self.receipt is not None, "RECEIPT_MISSING", f"{self.span} has no own receipt")
+        require(self.restore is not None, "RESTORE_UNPROVEN", f"{self.span} has no restore readbacks")
+        for check in RESTORE_READBACKS:
+            require(self.restore[check] is True, "RESTORE_UNPROVEN", f"{self.span} failed {check}")
+        start, end = self.launch["t0_epoch"], self.close["ended_epoch"]
+        received_start = self.receipt["started"]["epoch_s"]
+        received_end = self.receipt["ended"]["epoch_s"]
+        require(start <= received_start <= received_end <= end,
+                "CLOCK_ROLLBACK", f"{self.span} receipt and close timestamps are inconsistent")
+        require(not self.close["clean"] or self.receipt["rc"] == 0,
+                "RECEIPT_CONFLICT", f"{self.span} clean close disagrees with its receipt")
+
+    def clean_load(self):
+        return (self.close is not None and self.close["clean"] is True
+                and self.close["load_redos"] == 0 and self.close["load_flag"] is False)
+
+
+class History:
+    """Fold one already committed event stream in its physical order."""
+
+    def __init__(self, rows, head):
+        require(isinstance(rows, list) and rows, "LEDGER_MISSING", "event ledger is missing or empty")
+        head_valid(head)
+        require(head["last_seq"] == len(rows), "LEDGER_HEAD_MISMATCH",
+                "row count disagrees with the independently committed head")
+        for index, row in enumerate(rows, 1):
+            require(isinstance(row, dict) and positive_integer(row.get("seq")) and row["seq"] == index,
+                    "LEDGER_SEQUENCE", f"expected sequence {index} at row {index}")
+        require(ledger_digest(rows) == head["digest"], "LEDGER_HEAD_MISMATCH",
+                "ordered rows disagree with the independently committed digest")
+        self.rows = rows
+        self.attempts = {}
+        self.spans = set()
+        self.receipt_ids = set()
+        self.latest = None
+        self.stops = []
+        self.refusals = []
+        self.gates = {}
+        self.ready = {}
+        for row in rows:
+            self.fold(row)
+
+    def fold(self, row):
+        seq, event = row["seq"], row.get("event")
+        label = f"ledger event {seq}"
+        require(isinstance(event, str) and event in EVENT_FIELDS, "LEDGER_INVALID", f"{label} has no known event")
+        fields(row, {**EVENT_FIELDS[event], "seq": positive_integer, "event": string, "legs": integer},
+               "LEDGER_INVALID", label, EVENT_OPTIONAL.get(event))
+        require(event in {"LAUNCH", "CLOSE"} or row["legs"] == 0,
+                "LEDGER_LEGS", f"{label} must carry zero legs")
+        if event == "LAUNCH":
+            if self.latest is not None:
+                require(self.latest.close is not None, "LEDGER_OVERLAP",
+                        f"{row['span_id']} opened before {self.latest.span} closed")
+                self.latest.prove_close()
+            fields(row["registration"], REGISTRATION, "LEDGER_REGISTRATION", f"{label}.registration")
+            require(all(same(row[key], row["registration"][key]) for key in REGISTRATION),
+                    "LEDGER_REGISTRATION", f"{label} disagrees with its kit registration")
+            require(len(set(row["groups"])) == len(row["groups"]), "LEDGER_REGISTRATION",
+                    f"{label} has duplicate group membership")
+            require(row["kind"] != "counted" or positive_integer(row["legs"]),
+                    "LEDGER_LEGS", f"{label} counted launch needs positive legs")
+            if row["kind"] == "counted":
+                require(valid_counted_groups(row["groups"], row["entry_id"]), "LEDGER_REGISTRATION",
+                        f"{label} lacks explicit registered memberships")
+            require(row["span_id"] not in self.spans, "LEDGER_DUPLICATE", f"reused attempt {row['span_id']}")
+            self.spans.add(row["span_id"])
+            self.latest = self.attempts[seq] = Attempt(row)
+        elif event == "GATE":
+            self.gates[row["id"]] = row["passed"]
+        elif event == "READY":
+            self.ready[row["entry_id"]] = row
+        elif event == "REFUSAL":
+            self.refusals.append(row)
+        else:
+            attempt = self.attempts.get(row["open_seq"])
+            require(attempt is not None, "LEDGER_ORPHAN", f"{label} names missing attempt {row['span_id']}")
+            require(all(same(row[key], attempt.launch[key]) for key in ("span_id", "entry_id", "kit_sha256")),
+                    "LEDGER_ATTEMPT_CONFLICT", f"{label} does not bind to attempt {attempt.span}")
+            if event == "STOP":
+                self.stops.append((row, attempt))
+            elif event in COPY_EVENTS:
+                require(attempt.close is not None, "LEDGER_ORPHAN", f"{label} precedes the close of {attempt.span}")
+                require(event not in attempt.copy, "LEDGER_DUPLICATE", f"{label} repeats {event} for {attempt.span}")
+                attempt.copy.add(event)
+            elif event == "CLOSE":
+                require(attempt.close is None, "LEDGER_DUPLICATE", f"duplicate close for {attempt.span}")
+                require(row["legs"] == attempt.launch["legs"], "LEDGER_LEGS",
+                        f"{label} changes the charged legs for {attempt.span}")
+                attempt.close = row
+            elif event == "RESTORE":
+                require(attempt.restore is None, "LEDGER_DUPLICATE", f"duplicate restore for {attempt.span}")
+                fields(row["readbacks"], dict.fromkeys(RESTORE_READBACKS, boolean),
+                       "RESTORE_INVALID", f"{attempt.span}.restore")
+                attempt.restore = row["readbacks"]
+            else:
+                self.add_receipt(row, attempt)
+
+    def add_receipt(self, row, attempt):
+        require(attempt.receipt is None and row["receipt_id"] not in self.receipt_ids,
+                "LEDGER_DUPLICATE", f"duplicate or reused receipt for {attempt.span}")
+        receipt = row["receipt"]
+        fields(receipt, {"entry_id": identifier, "span_id": identifier, "kit_sha256": KIT,
+                         "mock": boolean, "rc": lambda value: type(value) is int,
+                         "started": IS_OBJECT, "ended": IS_OBJECT}, "RECEIPT_INVALID", attempt.span,
+               {"error": nullable(string), "roster": nullable(array(identifier)),
+                "span_result": IS_OBJECT})
+        for name in ("started", "ended"):
+            fields(receipt[name], {"epoch_s": epoch}, "RECEIPT_INVALID", f"{attempt.span}.{name}")
+        if "span_result" in receipt:
+            span = receipt["span_result"]
+            fields(span, {}, "RECEIPT_INVALID", f"{attempt.span}.span_result",
+                   {**dict.fromkeys(("outcome", "chain_outcome", "fault"), nullable(string)),
+                    "steps": nullable(array(IS_OBJECT))})
+            for step in span.get("steps") or ():
+                fields(step, {"name": string, "rc": lambda value: type(value) is int},
+                       "RECEIPT_INVALID", f"{attempt.span}.steps")
+        require(receipt["mock"] is False and all(
+            same(receipt[key], attempt.launch[key]) for key in ("span_id", "entry_id", "kit_sha256")
+        ), "RECEIPT_CONFLICT", f"{attempt.span} has a mock or wrong-attempt receipt")
+        self.receipt_ids.add(row["receipt_id"])
+        attempt.receipt = receipt
+
+    def verify_mirrors(self, facts):
+        for field, events in MIRRORS.items():
+            if field not in facts:
+                continue
+            projection = [row for row in self.rows if row["event"] in events]
+            supplied = facts[field]
+            if same(projection, supplied):
+                continue
+            if isinstance(supplied, list):
+                difference = next((row for i, row in enumerate(projection)
+                                   if i >= len(supplied) or not same(row, supplied[i])), None)
+                if difference is None and len(supplied) > len(projection):
+                    difference = supplied[len(projection)]
+            else:
+                difference = projection[0] if projection else None
+            point = (difference.get("span_id") or f"event {difference.get('seq')}"
+                     if isinstance(difference, dict) else "projection")
+            raise Halt("LEDGER_FACT_CONFLICT", f"{field} disagrees at {point}")
+        if "uncopied" in facts:
+            debts = self.copy_debts()
+            require(same(debts, facts["uncopied"]), "LEDGER_FACT_CONFLICT",
+                    f"uncopied disagrees at {debts[0]['span_id'] if debts else 'copy projection'}")
+        if "receipt_attestations" in facts:
+            attested = facts["receipt_attestations"]
+            require(isinstance(attested, list), "LEDGER_FACT_CONFLICT", "receipt_attestations is not a list")
+            seen = set()
+            for attestation in attested:
+                span = attestation.get("span_id") if isinstance(attestation, dict) else None
+                attempt = next((run for run in self.attempts.values() if run.span == span), None)
+                require(attempt is not None and attempt.receipt is not None and span not in seen and
+                        same(project_receipt(attempt.receipt), attestation), "LEDGER_FACT_CONFLICT",
+                        f"receipt_attestations disagrees at {span or 'unknown attempt'}")
+                seen.add(span)
+
+    def copy_debts(self):
+        return [{"span_id": run.span, "entry_id": run.launch["entry_id"], "kind": run.launch["kind"],
+                 "ended_epoch": run.close["ended_epoch"]}
+                for run in self.attempts.values() if run.close is not None and "COPY_VERIFIED" not in run.copy]
+
+    def contaminated(self):
+        return any(row["code"] == CONTAMINATED and not any(
+            later.launch["seq"] > attempt.launch["seq"] and later.clean_load()
+            and later.close["seq"] > row["seq"] for later in self.attempts.values()
+        ) for row, attempt in self.stops)
+
+    def batch_triggered(self, campaign):
+        affected = set()
+        for stop, attempt in self.stops:
+            row = attempt.launch
+            if stop["code"] != CONTAMINATED or row["kind"] != "counted" or row["campaign"] != campaign:
+                continue
+            require(attempt.close is not None and all(
+                key in row for key in ("soak_end_epoch", "predicted_batch_epoch")
+            ), "BATCH_HISTORY_UNKNOWN", f"{attempt.span} lacks batch timing evidence")
+            if row["soak_end_epoch"] <= row["predicted_batch_epoch"] <= attempt.close["ended_epoch"]:
+                affected.add(attempt.span)
+        return len(affected) >= 2
 
 
 @dataclass(frozen=True)
-class Check:
-    detail: str = "holds"
-    holds: bool = True
+class Eligibility:
+    rule: str
+    detail: str
     until: int | float | None = None
 
 
-def fails(detail, until=None):
-    return Check(detail, False, until)
-
-
-def missing(name):
-    return fails(f"{name} is null or missing")
-
-
+def wait(rule, detail, until):
+    return {"decision": "WAIT", "rule": rule, "class": "VALIDITY", "detail": detail,
+            "until_epoch": until}
 def local_candidates(day, hour, zone):
     naive = datetime.combine(day, hour)
     result = set()
@@ -470,798 +703,580 @@ def local_candidates(day, hour, zone):
     return sorted(result)
 
 
-def identity(record):
-    when = ("span", record["span_id"]) if "span_id" in record else ("t0", record["t0_epoch"])
-    return record["entry_id"], record.get("kit_sha256"), when
+def status_at(rule, day):
+    review = rule["review_by"]
+    if rule["status"] == "LIVE" and calendar_date(review) and review < day.isoformat():
+        return ("FLAG", False) if rule["owner"] == "lead" else ("LIVE", True)
+    return rule["status"], False
 
 
-def attempt_name(attempt):
-    return attempt.get("span_id", attempt["entry_id"])
+def entry_groups(entry):
+    params = entry["params"]
+    group = params.get("group")
+    return set(params.get("groups", [group] if group else []))
 
 
-def latest_attempt(attempts):
-    if not attempts:
-        return None, None
-    if any("sequence" in row for row in attempts):
-        if any("sequence" not in row for row in attempts):
-            return None, "launch sequence is incomplete"
-        newest = max(attempts, key=lambda row: row["sequence"])
-        if sum(row["sequence"] == newest["sequence"] for row in attempts) != 1:
-            return None, "latest launch sequence is ambiguous"
-        return newest, None
-    if all("boot_order" in row for row in attempts):
-        order = max(row["boot_order"] for row in attempts)
-        in_boot = [row for row in attempts if row["boot_order"] == order]
-        latest_boots = {row["boot_id"] for row in in_boot if "boot_id" in row}
-        if len(latest_boots) > 1:
-            return None, "latest boot order is ambiguous"
-    elif all("boot_id" in row for row in attempts):
-        newest_boot = next(reversed(dict.fromkeys(row["boot_id"] for row in attempts)))
-        in_boot = [row for row in attempts if row.get("boot_id") == newest_boot]
-    else:
-        # A missing boot stamp says nothing about which boot contained the
-        # attempt. Keep every attempt in the append-ordered history.
-        return attempts[-1], None
-    if all("monotonic_ns" in row for row in in_boot):
-        newest = max(in_boot, key=lambda row: row["monotonic_ns"])
-        if sum(row["monotonic_ns"] == newest["monotonic_ns"] for row in in_boot) != 1:
-            return None, "latest monotonic launch stamp is ambiguous"
-        return newest, None
-    return in_boot[-1], None
+def qualification(entry):
+    params = entry["params"]
+    return (params.get("qualification", False) or params.get("batch_clear", False)
+            or entry["id"].startswith("qual-") or "qualification" in entry_groups(entry))
 
 
-class AttemptHistory:
-    def __init__(self, facts):
-        self.launches = facts.get("launches")
-        self.closes = facts.get("closes")
-        self.latest, self.order_error = latest_attempt(self.launches)
-        self.receipts = {}
-        for receipt in facts.get("receipts") or []:
-            if receipt is not None and receipt["mock"] is False and receipt["entry_id"] is not None:
-                start = receipt["started"]["epoch_s"]
-                finish = receipt["ended"]["epoch_s"]
-                if start is not None and finish is not None and start <= finish:
-                    key = identity({**receipt, "t0_epoch": start})
-                    self.receipts.setdefault(key, set()).add(finish)
+def valid_counted_groups(groups, name):
+    development = name.startswith("dev-") or any(group.startswith("dev-") for group in groups)
+    return (bool(groups) and (not development or "dev-total" in groups)
+            and (not name.startswith("qual-") or "qualification" in groups))
 
-        self.closes_by_launch = {}
-        self.unpaired_closes = []
-        by_identity = {}
-        for index, launch in enumerate(self.launches or []):
-            by_identity.setdefault(identity(launch), []).append((index, launch))
-        self.reused_ids = {key for key, attempts in by_identity.items() if len(attempts) > 1}
-        for close in self.closes or []:
-            matching = [index for index, launch in by_identity.get(identity(close), ())
-                        if self.close_follows(launch, close)]
-            if len(matching) == 1:
-                self.closes_by_launch.setdefault(matching[0], []).append(close)
-            elif not by_identity.get(identity(close)):
-                self.unpaired_closes.append(close)
 
-        if self.latest is not None:
-            index = next(index for index, launch in enumerate(self.launches) if launch is self.latest)
-            self.latest_close = next(iter(self.closes_by_launch.get(index, ())), None)
+def render_argv(entry, now, caller_pid, output_root):
+    argv = entry["argv"]
+    require(all("<lead fills at merge>" not in arg for arg in [*argv, entry["worktree"]]),
+            "LAUNCHER_UNKNOWN", f"{entry['id']} has a launcher placeholder")
+    values = {}
+    for name in {name for arg in argv for name in PLACEHOLDERS.findall(arg)}:
+        if name == "deadline_epoch":
+            margin = entry["params"].get("kill_margin_s")
+            require(integer(margin) and epoch(now + entry["worst_case_s"] + margin),
+                    "DEADLINE_UNKNOWN", f"{entry['id']} has no valid params.kill_margin_s or deadline")
+            values[name] = str(math.ceil(now + entry["worst_case_s"] + margin))
+        elif name == "out":
+            require(string(output_root), "LAUNCHER_UNKNOWN", f"{entry['id']} has no output root")
+            values[name] = str(Path(output_root) / f"{entry['id']}-{now}")
         else:
-            self.latest_close = None
-
-    @staticmethod
-    def close_follows(launch, close):
-        if "ledger_index" in launch and "ledger_index" in close:
-            if close["ledger_index"] <= launch["ledger_index"]:
-                return False
-        return all(key not in launch or key not in close or launch[key] == close[key]
-                   for key in ("sequence", "boot_id", "boot_order", "monotonic_ns", "t0_epoch"))
-
-    def receipt_matches(self, close):
-        key = identity(close)
-        finishes = self.receipts.get(key, ())
-        return (key not in self.reused_ids and close["t0_epoch"] is not None
-                and close["ended_epoch"] is not None and len(finishes) == 1
-                and close["t0_epoch"] <= next(iter(finishes)) <= close["ended_epoch"])
-
-    def runs(self):
-        for index, launch in enumerate(self.launches or []):
-            yield launch, self.closes_by_launch.get(index, ())
-        for close in self.unpaired_closes:
-            yield close, ()
+            require(positive_integer(caller_pid), "LAUNCHER_UNKNOWN", f"{entry['id']} needs --caller-pid")
+            values[name] = str(caller_pid)
+    return [PLACEHOLDERS.sub(lambda match: values[match[1]], arg) for arg in argv]
 
 
-def kit_matches(record, entry):
-    return (record.get("entry_id") == entry["id"]
-            and record.get("kit_sha256") == entry["kit_sha256"])
+def plan_signature(entry, facts, now, argv):
+    return digest([entry, facts["ledger_head"], facts["queue_commit"], facts["queue_digest"],
+                   facts["rules_digest"], facts["now_epoch"], now, argv])
 
 
-def plan_signature(entry, queue_commit):
-    data = [entry["plan_argv"], entry["worktree"], entry["pin"], entry["kit_sha256"], queue_commit]
-    return hashlib.sha256(as_json(data).encode()).hexdigest()
+def validate_observation(facts):
+    require(isinstance(facts, dict), "FACT_INVALID", "host facts are missing or invalid")
+    for key, check in HOST_FIELDS.items():
+        rule = ("OWNER_FACT" if key in {"owner_stop", "owner_veto", "maintenance_active", "maintenance_marker"}
+                else "FACT_INVALID")
+        require(check(facts.get(key)), rule, f"{key} is missing, null or invalid")
+    for key in facts:
+        require(key in HOST_FIELDS or key in HOST_OPTIONAL, "FACT_INVALID", f"unknown fact {key}")
+        if key in HOST_OPTIONAL and key not in MIRRORS:
+            require(HOST_OPTIONAL[key](facts[key]), "FACT_INVALID", f"{key} is null or invalid")
+    fields(facts["power"], {"ac": boolean, "charging": boolean}, "HOST_POWER", "power")
+    if facts.get("errors"):
+        raise Halt("PROBE_FAILED", f"failed observation: {sorted(facts['errors'])[0]}")
+    for index, row in enumerate(facts["foreign_processes"]):
+        fields(row, {"pid": positive_integer, "name": string}, "HOST_CENSUS",
+               f"foreign_processes[{index}]")
 
 
 class Scheduler:
-    def __init__(self, queue, rules, facts, now, caller_pid=None):
+    """Evaluate host, registration and priority against a single folded history."""
+
+    def __init__(self, queue, rules, facts, history, now, caller_pid):
         self.entries = queue["entries"]
         self.by_id = {entry["id"]: entry for entry in self.entries}
         self.admitted = {pair(row) for row in queue["admitted"]}
         self.rules = rules
         self.facts = facts
+        self.history = history
         self.now = now
+        self.caller_pid = caller_pid
         self.zone = ZoneInfo(queue["timezone"])
         self.today = self.local(now).date()
-        self.caller_pid = caller_pid
-        self.closes = facts.get("closes")
-        self.history = AttemptHistory(facts)
-        self.bound_closes = [
-            rows[0] for rows in self.history.closes_by_launch.values()
-            if self.history.receipt_matches(rows[0])
-        ]
-        self.newest = self.history.latest_close
-        self.launches = facts.get("launches")
-        self.rule_status = {key: status_at(rule, self.today) for key, rule in rules.items()}
+        self.by_test = {}
+        for rule in rules.values():
+            status, _ = status_at(rule, self.today)
+            if status == "LIVE":
+                self.by_test.setdefault(rule["test"], []).append(rule)
         self.blocks = {}
+        self.completed = {}
+        for attempt in history.attempts.values():
+            if attempt.close is not None and attempt.close["clean"] is True:
+                self.completed[(attempt.launch["entry_id"], attempt.launch["kit_sha256"])] = attempt
         for entry in self.entries:
-            if "block" in entry:
+            if entry.get("block"):
                 self.blocks.setdefault(entry["block"], []).append(entry)
-        self.active_blocks = {name for name, entries in self.blocks.items()
-                              if all(entry["kind"] == "counted" for entry in entries)
-                              and self.closed_clean(entries[0]) and any(not self.done(e) for e in entries[1:])}
-        self.batches = next((rule["params"] for rule in rules.values()
-                             if rule["test"] == "batch_clear" and rule["status"] != "RETIRED"), None)
-        self.ladder = next((rule["params"] for rule in rules.values()
-                            if rule["test"] == "filler_ladder" and self.live(rule)), None)
-        self.output_root = next((rule.get("params", {}).get("output_root") for rule in rules.values()
-                                 if rule["test"] == "launcher_admits" and rule["status"] != "RETIRED"), None)
-        self.cutoffs = {}
+        self.active = {block for block, entries in self.blocks.items()
+                       if all(e["kind"] == "counted" for e in entries)
+                       and self.completed.get(self.key(entries[0])) is not None
+                       and any(not self.done(e) for e in entries[1:])}
+        self.commands = {}
+        self.batch_rule = self.require_rule("batch_clear") if any(
+            entry["kind"] == "counted" for entry in self.entries) else None
 
     def local(self, when):
         return datetime.fromtimestamp(when, self.zone)
 
-    def live(self, rule):
-        return self.rule_status.get(rule["id"], ("LIVE", False))[0] == "LIVE"
+    def require_rule(self, test):
+        rows = self.by_test.get(test, ())
+        require(len(rows) == 1, "RULE_REQUIRED", f"{test} needs one live register row")
+        return rows[0]
 
-    def closed_clean(self, entry):
-        return any(kit_matches(close, entry) and close["clean"] is True
-                   for close in self.bound_closes)
+    def key(self, entry):
+        return entry["id"], entry["kit_sha256"]
 
     def done(self, entry):
-        return entry.get("done", False) or not entry["repeat"] and self.closed_clean(entry)
+        return entry.get("done", False) or not entry["repeat"] and self.key(entry) in self.completed
 
-    def latest_launch_owed(self):
-        if self.history.latest is not None and self.newest is None and self.closes is not None:
-            return attempt_name(self.history.latest)
+    def host(self):
+        facts, latest = self.facts, self.history.latest
+        power = self.require_rule("host_power")
+        disk = self.require_rule("host_disk")
+        self.require_rule("host_clean")
+        self.require_rule("host_meter")
+        quiet = self.require_rule("host_quiet")
+        owner = self.require_rule("owner_stop")
+        copy = self.require_rule("copy_debt")
+        require(facts["power"]["ac"] is True, power["id"], "power.ac is false")
+        require(facts["disk_free_gib"] >= disk["params"]["floor_gib"], disk["id"], "disk is below the registered floor")
+        require(owner.get("params", {}).get("maintenance_marker") == MAINTENANCE_PATH
+                and facts["maintenance_marker"] == MAINTENANCE_PATH, "OWNER_FACT",
+                "maintenance observation is not bound to the registered path")
+        require(not facts["owner_stop"] and not facts["owner_veto"], owner["id"], "owner stop or veto is active")
+        if facts["maintenance_active"]:
+            return wait(owner["id"], "owner maintenance marker is active",
+                        self.now + owner.get("params", {}).get("recheck_s", 60))
+        require(facts["high_power_marker"] is False, "host-clean", "unowned High Power marker")
+        require(facts["fence_clear"] is True and facts["runner_group_clear"] is True,
+                quiet["id"], "fence or runner group is active")
+        require(facts["process_census_verified"] is True, "HOST_CENSUS", "process census is unverified")
+        if facts["foreign_processes"]:
+            return wait(quiet["id"], "foreign processes are present", self.now + quiet["params"]["recheck_s"])
+        until = latest.close["ended_epoch"] + copy["params"]["wait_s"]
+        if "COPY_VERIFIED" not in latest.copy and self.now < until:
+            return wait(copy["id"], "latest copy is awaiting verification", until)
+        require(facts["upload_stopped"] is True, "UPLOAD_ACTIVE", "upload stop before soak is unproven")
+        require("COPY_STARTED" not in latest.copy
+                or bool({"COPY_VERIFIED", "UPLOAD_STOPPED"} & latest.copy), "UPLOAD_ACTIVE",
+                "the latest started copy lacks a verified stop")
         return None
 
-    def host_check(self, rule):
-        facts = self.facts
-        test = rule["test"]
-        params = rule.get("params", {})
-        fence = facts.get("fence")
-        if test == "host_power":
-            ac = (facts.get("power") or {}).get("ac")
-            return missing("power.ac") if ac is None else Check("AC power required", ac)
-        if test == "host_disk":
-            disk = facts.get("disk_free_gib")
-            floor = params["floor_gib"]
-            return missing("disk_free_gib") if disk is None else Check(f"disk floor: {floor} GiB", disk >= floor)
-        if test == "host_meter":
-            ready = facts.get("meter_ready")
-            return missing("meter_ready") if ready is None else Check("meter or collector unavailable", ready)
-        if test == "host_clean":
-            errors = facts.get("errors") or {}
-            if "attempt_history" in errors:
-                return fails(errors["attempt_history"] if string(errors["attempt_history"])
-                             else "launch and close evidence conflict")
-            if self.closes is None:
-                return missing("closes")
-            if self.history.order_error:
-                return fails(self.history.order_error)
-            if self.closes and self.history.latest is None:
-                return missing("launch attempt history for the recorded close")
-            if self.newest is not None:
-                span = attempt_name(self.history.latest or self.newest)
-                ended = self.newest["ended_epoch"]
-                if ended is None:
-                    return missing(f"{span} close.ended_epoch")
-                if self.newest["restore_proven"] is not False and not self.history.receipt_matches(self.newest):
-                    return fails(f"{span} has no matching close receipt")
-                if self.newest["restore_proven"] is not True:
-                    if self.newest["restore_proven"] is None:
-                        return missing(f"{span} close.restore_proven")
-                    return fails(f"{span} close has unproven restoration")
-                if ended > self.now:
-                    return fails(f"{span} close ends after the requested start")
-            marker = facts.get("high_power_marker")
-            if marker is None:
-                return missing("high_power_marker")
-            if marker and (fence is None or fence.get("pid_alive") is not True):
-                return fails("High Power marker has no live fence")
-        if test == "host_quiet":
-            if "fence" not in facts or "fence" in (facts.get("errors") or {}):
-                return missing("fence")
-            if fence is not None:
-                alive, deadline = fence.get("pid_alive"), fence.get("deadline")
-                if alive is None:
-                    return missing("fence.pid_alive")
-                if alive is True:
-                    if deadline is None:
-                        return missing("fence.deadline")
-                    if deadline <= self.now:
-                        return fails("fence deadline passed with its process still alive")
-                    return fails("fence process is alive", deadline)
-            if self.launches is None:
-                return missing("launches")
-            owed = self.latest_launch_owed()
-            if owed is not None:
-                return fails(f"{owed} has no matching close")
-            foreign = facts.get("foreign_processes")
-            if foreign is None:
-                return missing("foreign_processes")
-            if foreign:
-                return fails("foreign processes are present", self.now + params["recheck_s"])
-        if test == "owner_stop":
-            stop = facts.get("owner_stop")
-            maintenance = facts.get("maintenance_active")
-            if stop is True or maintenance is True:
-                retry = params.get("recheck_s")
-                return fails("owner maintenance or stop is active", self.now + retry if retry else None)
-            if stop is None:
-                return missing("owner_stop")
-            if maintenance is None and (params.get("maintenance_marker") or "maintenance_active" in facts):
-                return missing("maintenance_active")
-        if test == "copy_debt" and self.newest is not None:
-            ended = self.newest["ended_epoch"]
-            if ended is None:
-                return missing("newest close.ended_epoch")
-            until = ended + params["wait_s"]
-            if self.now < until and self.newest.get("copy_verified") is not True:
-                uncopied = facts.get("uncopied")
-                if uncopied is None or any(
-                    item["entry_id"] == self.newest["entry_id"] and item["ended_epoch"] == ended
-                    and item.get("kit_sha256") == self.newest.get("kit_sha256") for item in uncopied
-                ):
-                    return fails("newest close has no verified copy yet", until)
-        return Check()
+    def check_clock(self):
+        require(self.facts["clock_verified"] is True and self.facts["boot_epoch"] <= self.now,
+                "CLOCK_UNVERIFIED", "observation clock or boot epoch is unverified")
+        require(self.now >= self.facts["now_epoch"], "CLOCK_ROLLBACK", "requested t0 precedes the probe observation")
+        previous = None
+        for attempt in self.history.attempts.values():
+            start, end = attempt.launch["t0_epoch"], attempt.close["ended_epoch"]
+            require(start <= end <= self.now and (previous is None or start >= previous),
+                    "CLOCK_ROLLBACK", f"{attempt.span} has an uncertain t0 or close time")
+            previous = end
 
-    def shift_window(self, entry, days):
-        window = entry["params"].get("window", {})
-        shifted = []
-        for key in ("earliest_epoch", "latest_epoch"):
-            when = window.get(key)
-            if when is not None and days:
-                local = self.local(when)
-                candidates = local_candidates(local.date() + timedelta(days=days), local.time(), self.zone)
-                when = candidates[min(local.fold, len(candidates) - 1)]
-            shifted.append(when)
-        return shifted
+    def registered_history(self):
+        """Check new events against the current revision when that registration is available."""
+        for attempt in self.history.attempts.values():
+            row = attempt.launch
+            entry = self.by_id.get(row["entry_id"])
+            if entry is None or row["queue_commit"] != self.facts["queue_commit"]:
+                continue
+            params = entry["params"]
+            require(pair(row) == pair(entry) and row["kind"] == entry["kind"]
+                    and row["block"] == entry.get("block") and set(row["groups"]) == entry_groups(entry)
+                    and ("campaign" not in params or row["campaign"] == params["campaign"])
+                    and (entry["kind"] != "counted" and "legs" not in params or row["legs"] == params.get("legs")),
+                    "LEDGER_REGISTRATION", f"{attempt.span} disagrees with its current kit registration")
+
+    def static_blocks(self, entry):
+        identity = self.key(entry)
+        block = entry.get("block")
+        if any(row["queue_commit"] == self.facts["queue_commit"] and (
+                (row["entry_id"], row["kit_sha256"]) == identity
+                or row["block"] is not None and row["block"] == block
+                or row["kit_sha256"] is not None and row["kit_sha256"] == entry["kit_sha256"]
+        ) for row in self.history.refusals):
+            return Eligibility("not-refused", "a refusal holds the current kit or block")
+        for stop, attempt in self.history.stops:
+            row = attempt.launch
+            if stop["code"] in KIT_STOPS and row["queue_commit"] == self.facts["queue_commit"] and (
+                (row["entry_id"], row["kit_sha256"]) == identity
+                or row["block"] is not None and row["block"] == block
+                or row["kit_sha256"] is not None and row["kit_sha256"] == entry["kit_sha256"]
+            ):
+                return Eligibility(stop["code"], "the named stop holds this kit or block")
+        if entry["id"] == "f0-part-c":
+            gate = self.require_rule("f0_retirement")["params"]["gate"]
+            if self.history.gates.get(gate) is True:
+                return Eligibility("f0-retirement", "R1 post-close Check retires F0")
+        return None
+
+    def period_window(self, entry, day):
+        params = entry["params"]
+        window = params.get("window")
+        require(isinstance(window, dict) and epoch(window.get("latest_epoch")), "DATE_DEADLINE_UNKNOWN",
+                f"{entry['id']} has no registered latest t0")
+        latest = self.local(window["latest_epoch"])
+        earliest = self.local(window["earliest_epoch"]) if window.get("earliest_epoch") is not None else None
+        days = max(0, (day - latest.date()).days)
+        if days == 0:
+            return window.get("earliest_epoch"), window["latest_epoch"]
+        start = None if earliest is None else local_candidates(
+            earliest.date() + timedelta(days=days), earliest.time(), self.zone)[0]
+        finish = local_candidates(latest.date() + timedelta(days=days), latest.time(), self.zone)[-1]
+        return start, finish
 
     def remaining(self, entry):
-        if "block" not in entry:
+        if not entry.get("block"):
             return [entry]
-        members = self.blocks[entry["block"]]
-        index = members.index(entry)
-        return [member for member in members[index:] if not self.done(member)]
+        block = self.blocks[entry["block"]]
+        return [member for member in block[block.index(entry):] if not self.done(member)]
 
-    def raw_cutoff(self, entry, days):
-        deadlines = []
-        elapsed = 0
+    def cutoff(self, entry, day):
+        latest_start = math.inf
+        for member in reversed(self.remaining(entry)):
+            require(member["kind"] == "counted", "BLOCK_INVALID",
+                    f"{entry.get('block', entry['id'])} mixes counted and other work")
+            opening, latest = self.period_window(member, day)
+            if self.local(latest).date() != day:
+                return None
+            latest_start = min(latest, latest_start - member["worst_case_s"])
+            if opening is not None and opening > latest_start:
+                return None
+        return latest_start
+
+    def date_limit(self, entry, day):
+        params = entry["params"]
+        used = Counter()
+        proposed = Counter()
+        qual_blocks = set()
+        for attempt in self.history.attempts.values():
+            row = attempt.launch
+            if row["kind"] != "counted" or self.local(row["t0_epoch"]).date() != day:
+                continue
+            for group in row["groups"]:
+                used[group] += row["legs"]
+            if "qualification" in row["groups"]:
+                qual_blocks.add(row["block"] or row["entry_id"])
+        caps = {"dev-mixed": 12, "dev-total": 24}
+        excludes = set(params.get("not_on_dates_of", []))
         for member in self.remaining(entry):
-            _, latest = self.shift_window(member, days)
-            if latest is not None:
-                deadlines.append(latest - elapsed)
-            elapsed += member["worst_case_s"]
-        return min(deadlines, default=None)
+            members = entry_groups(member)
+            legs = member["params"].get("legs")
+            require(positive_integer(legs) and valid_counted_groups(members, member["id"])
+                    and (not qualification(member) or "qualification" in members),
+                    "DATE_LEGS_UNKNOWN", f"{member['id']} needs positive legs and all registered groups")
+            for group in members:
+                proposed[group] += legs
+            for cap in member["params"].get("date_caps", []):
+                group = cap["group"]
+                caps[group] = min(caps.get(group, cap["max"]), cap["max"])
+            excludes.update(member["params"].get("not_on_dates_of", []))
+        if "qualification" in proposed:
+            excludes.add("dev-total")
+        if "dev-total" in proposed:
+            excludes.add("qualification")
+        if "qualification" in proposed and "dev-total" in proposed:
+            return "block members have disjoint registered groups"
+        if any(used[group] for group in excludes):
+            return "registered groups are disjoint on this date"
+        if "qualification" in proposed and qual_blocks - {entry.get("block") or entry["id"]}:
+            return "another qualification block used this date"
+        if any(used[group] + proposed[group] > cap for group, cap in caps.items()):
+            return "registered counted date cap would be exceeded"
+        return None
 
-    def date_shift(self, entry, when):
-        cutoff = self.raw_cutoff(entry, 0)
-        if cutoff is None:
-            return 0
-        _, latest = self.shift_window(entry, 0)
-        anchor = latest if latest is not None else max(
-            latest for member in self.remaining(entry)
-            if (latest := self.shift_window(member, 0)[1]) is not None)
-        return max(0, (self.local(when).date() - self.local(anchor).date()).days)
-
-    def history_for_date(self, day):
-        if self.launches is None or self.closes is None:
-            return None
-        launched = set()
-        counts = Counter()
-        unknown = set()
-        for row, closes in self.history.runs():
-            entry = self.by_id.get(row["entry_id"])
-            if entry is not None and not kit_matches(row, entry):
-                entry = None
-            params = entry["params"] if entry is not None else {}
-            t0 = row["t0_epoch"]
-            if t0 is not None and self.local(t0).date() != day:
-                continue
-            if t0 is not None:
-                launched.add(row["entry_id"])
-            facts = (row, *closes)
-            kinds = {record["kind"] for record in facts if record.get("kind") is not None}
-            if not kinds and entry is not None:
-                kinds.add(entry["kind"])
-            if kinds and "counted" not in kinds:
-                continue
-            groups = {record["group"] for record in facts if record.get("group") is not None}
-            legs = {record["legs"] for record in facts if "legs" in record}
-            group = next(iter(groups), params.get("group")) if len(groups) <= 1 else None
-            count = next(iter(legs), params.get("legs")) if len(legs) <= 1 else None
-            if kinds != {"counted"} or t0 is None or group is None or not positive_integer(count):
-                unknown.add(group)
-            else:
-                counts[group] += count
-        return counts, launched, unknown
-
-    def date_caps(self, entry, day):
-        params = entry["params"]
-        caps, excludes = params.get("date_caps", []), params.get("not_on_dates_of", [])
-        if not caps and not excludes:
-            return Check()
-        history = self.history_for_date(day)
-        if history is None:
-            return missing("launches or closes date history")
-        counts, _, unknown = history
-        relevant_groups = {cap["group"] for cap in caps} | set(excludes)
-        if None in unknown or unknown.intersection(relevant_groups):
-            return missing("counted date history (kind, t0, group or legs)")
-        for cap in caps:
-            group = cap["group"]
-            added = params["legs"] if params.get("group") == group else 0
-            if counts[group] + added > cap["max"]:
-                if added > cap["max"]:
-                    return fails(f"{group} entry legs exceed its date cap")
-                return fails(f"{group} date cap {cap['max']} would be exceeded",
-                             local_candidates(day + timedelta(days=1), local_time.min, self.zone)[0])
-        for group in excludes:
-            if counts[group]:
-                return fails(f"{group} already launched on the local date",
-                             local_candidates(day + timedelta(days=1), local_time.min, self.zone)[0])
-        return Check()
-
-    def window(self, entry, when):
-        if entry["kind"] != "counted":
-            return Check("date rules apply to named counted entries")
-        params = entry["params"]
-        shifted = self.date_shift(entry, when)
-        earliest, _ = self.shift_window(entry, shifted)
-        cutoff = self.raw_cutoff(entry, shifted)
-        # Move a missed date, including one on which the remaining block cannot fit.
-        if cutoff is not None and when > cutoff:
-            shifted += 1
-            earliest, _ = self.shift_window(entry, shifted)
-            if earliest is None:
-                earliest = local_candidates(self.local(when).date() + timedelta(days=1),
-                                            local_time.min, self.zone)[0]
-            cutoff = self.raw_cutoff(entry, shifted)
-        if cutoff is not None and earliest is not None and earliest > cutoff:
-            return fails("the block cannot fit on its registered date")
-        if earliest is not None and when < earliest:
-            return fails("registered window has not opened", earliest)
-        check = self.date_caps(entry, self.local(when).date())
-        if not check.holds:
-            return check
-        if params.get("batch_clear"):
-            return self.batch(entry, when, self.batches)
-        return Check()
-
-    def batch(self, entry, when, params):
-        if entry["kind"] != "counted":
-            return Check("batch clearance applies to named qualification entries")
-        boot = self.facts.get("boot_epoch")
-        if boot is None:
-            return missing("boot_epoch")
-        if params is None:
-            return missing("qualification batch rule parameters")
-        soak_end = entry["params"].get("soak_end_s")
-        if soak_end is None:
-            return missing("params.soak_end_s")
-        batch = boot + params["offset_s"]
-        period = params["period_s"]
-        batch += max(0, math.ceil((when - batch) / period)) * period
-        if when + soak_end <= batch <= when + entry["expected_s"]:
-            return fails("predicted OS batch overlaps the span after soak", batch + params["settle_s"])
-        previous = batch if batch == when else batch - period
-        if previous >= boot + params["offset_s"] and previous <= when < previous + params["settle_s"]:
-            return fails("predicted OS batch clearance has not elapsed", previous + params["settle_s"])
-        return Check()
-
-    def is_stability(self, entry):
-        return self.ladder is not None and entry["id"].startswith(self.ladder["stability_prefix"])
-
-    def filler_rank(self, entry, when):
-        if self.ladder is not None and entry["kind"] == "product_filler":
-            if self.is_stability(entry):
-                history = self.history_for_date(self.local(when).date())
-                if history is not None:
-                    _, launched, _ = history
-                    if not any(entry_id.startswith(self.ladder["stability_prefix"]) for entry_id in launched):
-                        return (0, "")
-                return (4, "")
-            if entry["id"].startswith(self.ladder["instrument_prefix"]):
-                return (1, entry["id"])
-            if entry["id"].startswith(self.ladder["high_power_prefix"]):
-                return (2, "")
-        return (3 if entry["kind"] == "product_filler" else 5, "")
-
-    def priority(self, entry, when, cutoff=None):
-        active = 0 if entry.get("block") in self.active_blocks else 1
-        kind = KINDS.index(entry["kind"])
-        if entry["kind"] == "counted":
-            return active, kind, cutoff if cutoff is not None else float("inf"), ""
-        if entry["kind"] in FILLERS:
-            rank, name = self.filler_rank(entry, when)
-            return active, kind, rank, name
-        return active, kind, 0, ""
-
-    def predecessor(self, entry):
-        if "block" not in entry:
-            return Check()
-        members = self.blocks[entry["block"]]
-        if all(self.closed_clean(member) for member in members[:members.index(entry)]):
-            return Check()
-        return fails("the preceding span in the block has no clean close")
-
-    def scoped_fault(self, entry, codes):
-        rows = self.facts.get("stops")
-        if rows is None:
-            return missing("stops")
-        commit = self.facts.get("queue_commit")
-        for row in rows:
-            if row["code"] not in codes:
-                continue
-            scoped = (
-                row.get("block") is not None and row.get("block") == entry.get("block")
-                or kit_matches(row, entry)
-                or row.get("kit_sha256") is not None and row["kit_sha256"] == entry["kit_sha256"]
-            )
-            if scoped and (row.get("queue_commit") is None or row["queue_commit"] == commit):
-                return fails(f"{row['code']} holds this kit or block")
-        return Check()
-
-    def launcher(self, entry, when):
-        params = entry["params"]
-        window = params.get("launch_window_local")
-        high_power = self.ladder is not None and entry["id"].startswith(self.ladder["high_power_prefix"])
-        if window and not high_power:
-            start, end = map(local_time.fromisoformat, window)
-            local = self.local(when)
-            clock = local.time()
-            inside = start <= clock <= end if start <= end else clock >= start or clock <= end
-            if not inside:
-                today = local.date()
-                for day in (today, today + timedelta(days=1)):
-                    for stamp in local_candidates(day, start, self.zone):
-                        if stamp > when:
-                            return fails("outside frozen local launch window", stamp)
-        if "plan_argv" in entry:
-            if "plans" not in self.facts:
-                return Check("SKIPPED: probe did not run plans")
-            plans = self.facts["plans"]
-            evidence = plans.get(entry["id"]) if isinstance(plans, dict) else None
-            if not isinstance(evidence, dict) or evidence.get("signature") != plan_signature(
-                    entry, self.facts.get("queue_commit")):
-                return missing(f"plans.{entry['id']} (current probe)")
-            if evidence.get("rc") != 0 or not integer(evidence.get("rc")):
-                return fails(f"probe dry run did not admit {entry['id']}")
-        return Check()
-
-    def render_argv(self, entry):
-        argv = entry["argv"]
-        fields = {name for arg in argv for name in PLACEHOLDERS.findall(arg)}
-        if not fields:
-            return argv, Check()
-        values = {}
-        if "deadline_epoch" in fields:
-            margin = entry["params"].get("kill_margin_s")
-            if margin is None:
-                return None, missing("params.kill_margin_s")
-            values["deadline_epoch"] = str(math.ceil(self.now + entry["worst_case_s"] + margin))
-        if "out" in fields:
-            if self.output_root is None:
-                return None, missing("launcher-admits.params.output_root")
-            values["out"] = str(Path(self.output_root) / f"{entry['id']}-{self.now}")
-        if "magistrate_pid" in fields:
-            if self.caller_pid is None:
-                return None, missing("--caller-pid")
-            values["magistrate_pid"] = str(self.caller_pid)
-        return [PLACEHOLDERS.sub(lambda match: values[match[1]], arg) for arg in argv], Check()
-
-    def check(self, rule, entry, when):
-        test = rule["test"]
-        params = entry["params"]
-        facts = self.facts
-        kind = entry["kind"]
-        if test == "pin":
-            return Check("pin and kit hash must be admitted", pair(entry) in self.admitted)
-        if test == "window":
-            return self.window(entry, when)
-        if test == "dependency":
-            if params.get("after") and self.closes is None:
-                return missing("closes")
-            for predecessor in params.get("after", []):
-                row = self.by_id.get(predecessor)
-                clean = self.closed_clean(row) if row is not None else any(
-                    c["entry_id"] == predecessor and c["clean"] is True for c in self.bound_closes)
-                if not clean:
-                    return fails(f"{predecessor} has no clean close")
-            if params.get("gates") and facts.get("gates") is None:
-                return missing("gates")
-            for gate in params.get("gates", []):
-                if gate not in facts["gates"]:
-                    return fails(f"gate {gate} is not recorded")
-        if test == "fits":
-            limit = when + entry["worst_case_s"]
-            entry_priority = self.priority(entry, when, self.cutoffs.get(entry["id"]))
-            for other in self.entries:
-                cutoff = self.cutoffs.get(other["id"])
-                if cutoff is not None and limit > cutoff and self.priority(other, when, cutoff) < entry_priority:
-                    return fails(f"would pass latest feasible start of {other['id']} ({cutoff:g})")
-        if test == "launcher_admits":
-            check = self.launcher(entry, when)
-            if check.holds:
-                _, argv_check = self.render_argv(entry)
-                if not argv_check.holds:
-                    return argv_check
-            return check
-        if test == "not_refused":
-            if facts.get("refusals") is None or facts.get("queue_commit") is None:
-                return missing("refusals or queue_commit")
-            for refusal in facts["refusals"]:
-                if refusal["queue_commit"] != facts["queue_commit"]:
-                    continue
-                if (refusal["entry_id"] == entry["id"] and
-                    ("kit_sha256" not in refusal or kit_matches(refusal, entry))
-                    or refusal.get("block") is not None and refusal["block"] == entry.get("block")
-                    or refusal.get("kit_sha256") is not None and refusal["kit_sha256"] == entry["kit_sha256"]):
-                    return fails("refused at current queue_commit")
-            return self.scoped_fault(entry, {"LEG_OVERTIME", "NON_CLEAN_CLOSE", "LAUNCHER_REFUSED"})
-        if test == "session_route":
-            if kind != "v4_session":
-                return Check()
-            if facts.get("ready") is None:
-                return missing("ready")
-            return Check("no effective READY record", any(
-                row["entry_id"] == entry["id"] and row["effective"] is True for row in facts["ready"]))
-        if test == "batch_clear":
-            return self.batch(entry, when, rule["params"])
-        if test == "desk_gate":
-            return self.scoped_fault(entry, {"DESK_FAILURE", "CONSUMER_GATE"})
-        if test == "contaminated_redos" and kind in COUNTED_KINDS:
-            if self.closes is None or facts.get("stops") is None:
-                return missing("closes or stops")
-            events = [row["epoch"] for row in facts["stops"] if row["code"] == "CONTAMINATED_REDOS"]
-            events += [row["ended_epoch"] for row in self.bound_closes
-                       if row.get("fault") == "CONTAMINATED_REDOS" and row["ended_epoch"] is not None]
-            if events and not any(row["ended_epoch"] is not None and row["ended_epoch"] > max(events)
-                                  and row["clean"] is True and row.get("load_redos") == 0
-                                  and row.get("load_flag") is False for row in self.bound_closes):
-                return fails("CONTAMINATED_REDOS awaits a clean span with no load redo or flag")
-        if test == "new_pin_smoke" and kind in COUNTED_KINDS and not params.get("pilot"):
-            if self.closes is None:
-                return missing("closes")
-            if not any(row["clean"] is True and row.get("mock") is False
-                       and (row.get("pin") or self.by_id.get(row["entry_id"], {}).get("pin")) == entry["pin"]
-                       for row in self.bound_closes):
-                return fails("no clean native smoke on this pin")
-        if test == "f0_retirement" and entry["id"] == "f0-part-c":
-            if facts.get("gates") is None:
-                return missing("gates")
-            if rule["params"]["gate"] in facts["gates"]:
-                return fails("R1 post-close Check retires standing F0")
-        if test == "ready_outside_block" and kind == "v4_session" and self.active_blocks:
-            return fails("a counted block is in progress")
-        if test == "hygiene" and kind == "maintenance" and params.get("hygiene_change"):
-            gates = facts.get("gates")
-            if gates is None:
-                return missing("gates")
-            rp = rule["params"]
-            if rp["start_gate"] in gates and rp["end_gate"] not in gates:
-                return fails("qualification hygiene settings are frozen")
-        return Check()
-
-    def entry_rules(self, entry):
-        rule_ids = set(entry["requires"])
-        # Faults apply by scope even when a newly queued entry lacks a redundant reference.
-        by_scope = {"not_refused", "desk_gate", "contaminated_redos", "f0_retirement",
-                    "hygiene", "fits"}
-        if entry["kind"] == "v4_session":
-            by_scope.add("session_route")
-            if any(any(member["id"].startswith("qual-") or member["params"].get("batch_clear")
-                       or any(self.rules[ref]["test"] == "batch_clear" for ref in member["requires"])
-                       for member in self.blocks[block]) for block in self.active_blocks):
-                by_scope.add("ready_outside_block")
-        rule_ids.update(rule["id"] for rule in self.rules.values() if rule["test"] in by_scope)
-        return [rule for test in ENTRY_TESTS for rule in self.rules.values()
-                if rule["id"] in rule_ids and rule["test"] == test]
-
-    def checks(self, entry, when, omit_fits=False):
-        predecessor = self.predecessor(entry)
-        if not predecessor.holds:
-            rule = self.rules.get("block-dependency")
-            if rule is not None and rule["status"] != "RETIRED":
-                yield rule, predecessor
-        for rule in self.entry_rules(entry):
-            status, _ = self.rule_status[rule["id"]]
-            if status != "RETIRED" and not (omit_fits and rule["test"] == "fits"):
-                yield rule, self.check(rule, entry, when)
-        if not omit_fits:
-            _, argv_check = self.render_argv(entry)
-            if not argv_check.holds and not any(rule["test"] == "launcher_admits" and self.live(rule)
-                                                for rule in self.entry_rules(entry)):
-                # Missing substitution inputs prevent rendering even if the queue omits the rule.
-                yield {"id": "launcher-admits", "class": "PHYSICS"}, argv_check
-
-    def first_failure(self, checks):
-        return next(((rule, check) for rule, check in checks
-                     if self.rule_status.get(rule["id"], ("LIVE", False))[0] == "LIVE"
-                     and not check.holds), None)
-
-    def earliest_entry(self, entry, when, omit_fits):
-        """Follow known recheck times until all predicates can hold together."""
-        anchors = [self.now]
-        if self.batches is not None and self.facts.get("boot_epoch") is not None:
-            anchors.append(self.facts["boot_epoch"] + self.batches["offset_s"])
-        for member in self.remaining(entry):
-            anchors.extend(stamp for stamp in self.shift_window(member, 0) if stamp is not None)
-        for launch, _ in self.history.runs():
-            if launch["t0_epoch"] is not None:
-                anchors.append(launch["t0_epoch"])
-        last_anchor = max(anchors)
-        seen = set()
+    def dated_slot(self, entry):
+        block = entry.get("block")
+        fixed_day = None
+        if block in self.active:
+            first = self.completed[self.key(self.blocks[block][0])]
+            fixed_day = self.local(first.launch["t0_epoch"]).date()
+        day = fixed_day or max(self.local(self.period_window(member, self.today)[1]).date()
+                               for member in self.remaining(entry))
         while True:
-            checks = list(self.checks(entry, when, omit_fits))
-            failures = [(rule, check) for rule, check in checks
-                        if self.live(rule) and not check.holds]
-            if not failures:
-                return when
-            if any(check.until is None for _, check in failures):
-                return None
-            later = max(check.until for _, check in failures)
-            if later <= when or not epoch(later):
-                return None
-            if when > last_anchor and self.local(when).date() > self.local(last_anchor).date():
-                # Once dated input events are past, only recurring local clocks
-                # and the boot-relative batch phase can change the outcome.
-                local = self.local(when)
-                phase = when % self.batches["period_s"] if self.batches else 0
-                state = (local.month, local.day, local.weekday(), local.time(), local.utcoffset(), phase,
-                         tuple((rule["id"], check.until - when) for rule, check in failures))
-                if state in seen:
-                    return None
-                seen.add(state)
-            when = later
+            opening, latest = self.period_window(entry, day)
+            day = self.local(latest).date()
+            cutoff = self.cutoff(entry, day)
+            start_of_day = local_candidates(day, local_time.min, self.zone)[0]
+            start = max(start_of_day, opening if opening is not None else start_of_day)
+            # A finished half fixes its actual t0-date. An entirely unrun
+            # block may move to the next lawful date.
+            if fixed_day is not None and day != fixed_day:
+                return None, None, Eligibility("registered-window", "continuation lost its registered date")
+            unavailable = self.date_limit(entry, day)
+            if cutoff is not None and not unavailable and start <= cutoff and self.now <= cutoff:
+                return start, cutoff, None
+            if fixed_day is not None or cutoff is None or start > cutoff or (
+                unavailable and not any(
+                    run.launch["kind"] == "counted" and self.local(run.launch["t0_epoch"]).date() == day
+                    for run in self.history.attempts.values()
+                )
+            ):
+                return None, None, Eligibility("registered-window", unavailable or "block cannot fit its date")
+            day += timedelta(days=1)
 
-    def prepare_cutoffs(self, entries):
-        for entry in entries:
-            if entry["kind"] != "counted" or not any(rule["test"] == "window" and self.live(rule)
-                       for rule in self.entry_rules(entry)):
+    def batch(self, entry, when):
+        params = entry["params"]
+        if entry["kind"] != "counted":
+            return None
+        require(identifier(params.get("campaign")), "BATCH_HISTORY_UNKNOWN",
+                f"{entry['id']} lacks its registered campaign")
+        if not (qualification(entry) or self.history.batch_triggered(params["campaign"])):
+            return None
+        require(integer(params.get("soak_end_s")) and params["soak_end_s"] <= entry["expected_s"],
+                "BATCH_TIMING_UNKNOWN", f"{entry['id']} has no valid soak end")
+        batch_params = self.batch_rule["params"]
+        boot_batch = self.facts["boot_epoch"] + batch_params["offset_s"]
+        period = batch_params["period_s"]
+        predicted = boot_batch + max(0, math.ceil((when - boot_batch) / period)) * period
+        if when + params["soak_end_s"] <= predicted <= when + entry["expected_s"]:
+            return Eligibility(self.batch_rule["id"], "predicted batch overlaps measured interval",
+                               predicted + batch_params["settle_s"])
+        previous = predicted - period
+        if previous >= boot_batch and previous <= when < previous + batch_params["settle_s"]:
+            return Eligibility(self.batch_rule["id"], "predicted batch clearance has not elapsed",
+                               previous + batch_params["settle_s"])
+        return None
+
+    def local_launcher(self, entry):
+        window = entry["params"].get("launch_window_local")
+        if window is None or entry["id"].startswith("hp-02"):
+            return None
+        start, end = map(local_time.fromisoformat, window)
+        clock = self.local(self.now).time()
+        inside = start <= clock <= end if start <= end else clock >= start or clock <= end
+        if inside:
+            return None
+        for day in (self.today, self.today + timedelta(days=1)):
+            for stamp in local_candidates(day, start, self.zone):
+                if stamp > self.now:
+                    return Eligibility("launcher-admits", "frozen launcher window is closed", stamp)
+        return Eligibility("launcher-admits", "frozen launcher window is closed")
+
+    def check_plans(self):
+        plans = self.facts["plans"]
+        output_root = self.require_rule("launcher_admits").get("params", {}).get("output_root")
+        expected = {entry["id"]: entry for entry in self.entries if "plan_argv" in entry and not self.done(entry)}
+        require(set(plans) == set(expected), "PLAN_UNKNOWN",
+                "dry-run observations must cover exactly the pending entries with plan argv")
+        for name, entry in expected.items():
+            record = plans[name]
+            fields(record, {"rc": lambda value: type(value) is int, "signature": hexadecimal(64)},
+                   "PLAN_UNKNOWN", f"plans.{name}")
+            argv = render_argv(entry, self.now, self.caller_pid, output_root)
+            require(record["signature"] == plan_signature(entry, self.facts, self.now, argv),
+                    "PLAN_CONFLICT", f"{name} dry run is not bound to this head, observation, t0 and argv")
+            self.commands[name] = argv
+
+    def checks(self, entry):
+        """Return a known ineligibility. Unknown evidence raises Halt."""
+        params, kind = entry["params"], entry["kind"]
+        require(pair(entry) in self.admitted, "pin-admitted", f"{entry['id']} pin and kit are not admitted")
+        held = self.static_blocks(entry)
+        if held is not None:
+            return held, None, False
+        if kind in COUNTED_KINDS and self.history.contaminated():
+            return Eligibility("contaminated-redos", "no later clean span clears the stop"), None, False
+        if entry.get("block"):
+            members = self.blocks[entry["block"]]
+            if any(self.key(member) not in self.completed for member in members[:members.index(entry)]):
+                return self.pending(entry, "block-dependency", "a preceding span is not closed clean")
+        if kind == "v4_session" and self.active:
+            if any(any(qualification(member) for member in self.blocks[block]) for block in self.active):
+                return Eligibility("ready-outside-block", "qualification block is in progress"), None, False
+        for parent in params.get("after", []):
+            if parent not in self.by_id:
+                require(any(key[0] == parent for key in self.completed), "DEPENDENCY_UNKNOWN",
+                        f"{entry['id']} names unknown predecessor {parent}")
+            elif self.key(self.by_id[parent]) not in self.completed:
+                return self.pending(entry, "block-dependency", f"{parent} has not closed clean")
+        gates = set(params.get("gates", []))
+        if kind == "counted" and qualification(entry):
+            gates.add("freeze-2")
+        for gate in sorted(gates):
+            require(gate in self.history.gates, "GATE_UNKNOWN", f"{entry['id']} requires gate {gate}")
+            if not self.history.gates[gate]:
+                return self.pending(entry, "block-dependency", f"gate {gate} is closed")
+        if kind in COUNTED_KINDS and not params.get("pilot"):
+            if not any(run.launch["pin"] == entry["pin"] and run.clean_load()
+                       for run in self.history.attempts.values()):
+                return Eligibility("new-pin-smoke", "a clean native smoke on this pin is owed"), None, False
+        if params.get("floating_battery") and self.facts["power"]["charging"]:
+            return Eligibility("host-power", "kit requires a floating battery"), None, False
+        if kind == "maintenance" and params.get("hygiene_change"):
+            hygiene = self.require_rule("hygiene")["params"]
+            require(hygiene["start_gate"] in self.history.gates, "GATE_UNKNOWN", "hygiene start gate is unknown")
+            if self.history.gates[hygiene["start_gate"]] and not self.history.gates.get(hygiene["end_gate"], False):
+                return Eligibility("qualification-hygiene", "qualification hygiene settings are frozen"), None, False
+        require(not params.get("dry_run_required") or "plan_argv" in entry, "PLAN_UNKNOWN",
+                f"{entry['id']} requires a dry run")
+        if "plan_argv" in entry and self.facts["plans"][entry["id"]]["rc"] != 0:
+            return Eligibility("launcher-admits", "pinned launcher dry run refused"), None, False
+
+        ready = True
+        if kind in COUNTED_KINDS:
+            state = self.history.ready.get(entry["id"])
+            require(state is not None, "READY_UNKNOWN", f"{entry['id']} has no READY transition")
+            ready = state["effective"]
+            if kind == "v4_session" and ready:
+                require(state["route_clear"], "SESSION_ROUTE", f"{entry['id']} notice and veto route is unproven")
+        cutoff = None
+        if kind == "counted":
+            start, cutoff, failure = self.dated_slot(entry)
+            if failure is not None:
+                return failure, None, False
+            if self.now < start:
+                return Eligibility("registered-window", "counted date has not opened", start), cutoff, True
+            blocked = self.batch(entry, self.now)
+            if blocked is not None:
+                return blocked, cutoff, True
+        if not ready:
+            return Eligibility("session-route" if kind == "v4_session" else "READY_PENDING",
+                               "work has not reached READY"), cutoff, True
+        failure = self.local_launcher(entry)
+        return failure, cutoff, failure is not None
+
+    def pending(self, entry, rule, detail):
+        cutoff = self.dated_slot(entry)[1] if entry["kind"] == "counted" else None
+        return Eligibility(rule, detail), cutoff, entry["kind"] in COUNTED_KINDS
+
+    def filler_rank(self, entry):
+        if entry["kind"] == "diagnostic_filler":
+            return 5, ""
+        ladder = self.require_rule("filler_ladder")["params"]
+        name = entry["id"]
+        if name.startswith(ladder["stability_prefix"]):
+            already = any(run.launch["entry_id"].startswith(ladder["stability_prefix"])
+                          and self.local(run.launch["t0_epoch"]).date() == self.today
+                          for run in self.history.attempts.values())
+            return (4 if already else 0), ""
+        if name.startswith(ladder["instrument_prefix"]):
+            return 1, name
+        if name.startswith(ladder["high_power_prefix"]):
+            return 2, ""
+        return 3, ""
+
+    def precedence(self, entry, cutoff):
+        return (0 if entry.get("block") in self.active else 1, KINDS.index(entry["kind"]),
+                cutoff if cutoff is not None else math.inf,
+                self.filler_rank(entry) if entry["kind"] in FILLERS else (0, ""))
+
+    def ranking(self, report):
+        checks = []
+        for entry in self.entries:
+            if self.done(entry):
+                report["entries"].append({"id": entry["id"], "kind": entry["kind"], "status": "DONE"})
                 continue
-            if self.raw_cutoff(entry, 0) is None:
-                continue
-            when = self.earliest_entry(entry, self.now, omit_fits=True)
-            if when is not None:
-                self.cutoffs[entry["id"]] = self.raw_cutoff(entry, self.date_shift(entry, when))
-
-    def check_row(self, rule, check):
-        status, overdue = self.rule_status.get(rule["id"], ("LIVE", False))
-        return {"rule": rule["id"], "class": rule["class"], "status": status,
-                "overdue": overdue, "holds": check.holds, "detail": check.detail,
-                **({"until_epoch": check.until} if check.until is not None else {})}
-
-    def host_decision(self, rule, check):
-        owed = self.latest_launch_owed()
-        if rule["test"] == "host_quiet" and owed is not None and check.detail == f"{owed} has no matching close":
-            return {"decision": "CLOSE_OWED", "entry": owed}
-        if check.until is not None:
-            return self.wait(rule, check, check.until)
-        return {"decision": "HALT", "rule": rule["id"], "detail": check.detail}
-
-    @staticmethod
-    def wait(rule, check, until):
-        return {"decision": "WAIT", "until_epoch": until, "rule": rule["id"],
-                "class": rule["class"], "detail": check.detail}
-
-    def evaluate(self):
-        host_checks = [(rule, self.host_check(rule)) for test in HOST_TESTS for rule in self.rules.values()
-                       if rule["test"] == test and rule["status"] != "RETIRED"]
-        pending = [entry for entry in self.entries if not self.done(entry)]
-        self.prepare_cutoffs(pending)
-        pending.sort(key=lambda entry: self.priority(entry, self.now, self.cutoffs.get(entry["id"])))
-        rows = {}
-        eligible = []
-        waits = []
-        for entry in pending:
-            checks = list(self.checks(entry, self.now))
-            failure = self.first_failure(checks)
-            row = {"id": entry["id"], "kind": entry["kind"], "status": "ELIGIBLE",
-                   "checks": [self.check_row(rule, check) for rule, check in checks]}
-            if failure:
-                rule, check = failure
-                row.update(status=rule["id"], rule=rule["id"], **{"class": rule["class"]}, detail=check.detail)
-                if check.until is not None:
-                    when = self.earliest_entry(entry, self.now, omit_fits=False)
-                    if when is not None:
-                        waits.append((when, rule, check))
+            failure, cutoff, pending = self.checks(entry)
+            checks.append((entry, failure, cutoff, pending))
+        checks.sort(key=lambda item: self.precedence(item[0], item[2]))
+        future = [item for item in checks if item[3]]
+        eligible, waits = [], []
+        for entry, failure, cutoff, _ in checks:
+            kind = entry["kind"]
+            if failure is None and kind in FILLERS | {"maintenance"}:
+                end = self.now + entry["worst_case_s"]
+                for other, _, deadline, _ in future:
+                    if other["kind"] not in COUNTED_KINDS:
+                        continue
+                    ready_by = other.get("expected_ready_by")
+                    if kind in FILLERS and ready_by is not None and ready_by <= end:
+                        failure = Eligibility("READY_FIT", f"{entry['id']} occupies {other['id']}'s READY deadline")
+                        break
+                    if deadline is not None and end > deadline:
+                        failure = Eligibility("counted-fits", f"{entry['id']} overran {other['id']}'s latest start")
+                        break
+            row = {"id": entry["id"], "kind": kind, "status": failure.rule if failure else "ELIGIBLE"}
+            if failure is not None:
+                row.update(rule=failure.rule, detail=failure.detail)
+                if failure.until is not None:
+                    waits.append(failure)
             else:
                 eligible.append(entry)
-            rows[entry["id"]] = row
+            report["entries"].append(row)
+        if eligible:
+            return eligible[0], None
+        blocked = next((row for row in report["entries"] if row["status"] == "READY_FIT"), None)
+        if blocked is not None:
+            return None, {"decision": "HALT", "rule": blocked["rule"], "detail": blocked["detail"]}
+        if waits:
+            earliest = min(waits, key=lambda item: item.until)
+            return None, wait(earliest.rule, earliest.detail, earliest.until)
+        return None, {"decision": "QUEUE_EMPTY", "detail": "all unfinished entries are held"}
 
-        host_failure = self.first_failure(host_checks)
-        if host_failure and host_failure[0]["test"] == "host_meter" and any(
-                entry["kind"] == "maintenance" for entry in eligible):
-            eligible = [entry for entry in eligible if entry["kind"] == "maintenance"]
-            host_failure = self.first_failure((rule, check) for rule, check in host_checks
-                                              if rule["test"] != "host_meter")
-        if host_failure:
-            decision = self.host_decision(*host_failure)
-        elif eligible:
-            best = self.choose(eligible, pending)
-            argv, check = self.render_argv(best)
-            if check.holds:
-                decision = {"decision": "LAUNCH", "entry": best["id"], "worktree": best["worktree"],
-                            "argv": argv, "reasons": [
-                                f"{check['rule']}: {check['detail']}" for check in rows[best["id"]]["checks"]
-                                if check["status"] == "LIVE" and check["holds"]
-                            ]}
-            else:
-                decision = {"decision": "QUEUE_EMPTY", "detail": check.detail}
-        elif waits:
-            when, rule, check = min(waits, key=lambda row: row[0])
-            decision = self.wait(rule, check, when)
+    def measured(self, entry):
+        if entry["kind"] != "maintenance":
+            rule = self.require_rule("host_meter")
+            require(self.facts.get("meter_ready") is True and self.facts.get("collector_ready") is True,
+                    rule["id"], "meter_ready or collector_ready is missing or false")
+
+
+def checked_config(queue, raw_rules):
+    errors = Errors()
+    rules = validate_rules("rules", raw_rules, errors)
+    validate_queue("queue", queue, rules, errors, True)
+    require(not errors.items, "CONFIG_INVALID", errors.items[0] if errors.items else "")
+    return rules
+
+
+def authorize_next(queue, raw_rules, facts, rows, head, *, now=None, caller_pid=None, recheck_head):
+    """Construct the only launch decision, after verifying all inputs and rechecking the head."""
+    report = {"entries": [], "host": [], "overdue": [], "advisories": []}
+    try:
+        require(isinstance(rows, list) and rows, "LEDGER_MISSING", "event ledger is missing or empty")
+        head_valid(head)
+        require(isinstance(facts, dict), "FACT_INVALID", "host facts are missing or invalid")
+        require(same(facts.get("ledger_head"), head), "LEDGER_FACT_CONFLICT",
+                "ledger_head does not match the independently committed head")
+        require(facts.get("queue_digest") == digest(queue) and facts.get("rules_digest") == digest(raw_rules),
+                "CONFIG_REVISION", "queue or rule register differs from the probed revision")
+        require(isinstance(queue, dict) and isinstance(raw_rules, list), "CONFIG_INVALID", "queue or rules is missing")
+        history = History(rows, head)
+        history.verify_mirrors(facts)
+        validate_observation(facts)
+        rules = checked_config(queue, raw_rules)
+        when = facts["now_epoch"] if now is None else now
+        require(epoch(when) and when >= facts["now_epoch"], "CLOCK_ROLLBACK", "requested t0 precedes the probe observation")
+        require(history.latest is not None, "PREDECESSOR_MISSING", "no attempt opened in the committed ledger")
+        if history.latest.close is None:
+            decision = {"decision": "CLOSE_OWED", "entry": history.latest.span}
         else:
-            detail = next((row["detail"] for row in rows.values() if "detail" in row), "no unfinished entries")
-            decision = {"decision": "QUEUE_EMPTY", "detail": detail}
-
-        reports = []
-        for entry in self.entries:
-            reports.append(rows.get(entry["id"], {"id": entry["id"], "kind": entry["kind"],
-                                                 "status": "DONE", "checks": []}))
-        overdue = [{"rule": key, "review_by": self.rules[key]["review_by"]}
-                   for key, (_, flagged) in self.rule_status.items() if flagged]
-        advisories = []
-        for rule in self.rules.values():
-            if rule["test"] == "copy_debt" and self.live(rule):
-                age = rule["params"].get("page_age_s")
-                for debt in self.facts.get("uncopied") or []:
-                    if age is not None and debt["ended_epoch"] is not None and self.now - debt["ended_epoch"] >= age:
-                        advisories.append(f"{rule['id']}: {debt['entry_id']} still has copy debt")
-        return {"entries": reports, "host": [self.check_row(rule, check) for rule, check in host_checks],
-                "overdue": overdue, "advisories": advisories, "decision": decision}
-
-    def choose(self, eligible, pending):
-        first = eligible[0]
-        if first["kind"] not in FILLERS or first.get("block") in self.active_blocks:
-            return first
-        ready_by = min((entry["expected_ready_by"] for entry in pending
-                        if entry["kind"] in COUNTED_KINDS and entry.get("expected_ready_by", 0) > self.now),
-                       default=None)
-        if ready_by is None:
-            return first
-        top_rank = self.filler_rank(first, self.now)[0]
-        if top_rank == 0:
-            return first
-        fillers = [entry for entry in eligible if entry["kind"] in FILLERS]
-        fit = [entry for entry in fillers if self.now + entry["expected_s"] <= ready_by]
-        if fit:
-            return max(fit, key=lambda entry: entry["expected_s"])
-        return min(fillers, key=lambda entry: entry["expected_s"])
+            history.latest.prove_close()
+            scheduler = Scheduler(queue, rules, facts, history, when, caller_pid)
+            scheduler.check_clock()
+            scheduler.registered_history()
+            report["overdue"] = [{"rule": rule["id"], "review_by": rule["review_by"]}
+                                 for rule in rules.values() if status_at(rule, scheduler.today)[1]]
+            page_age = scheduler.require_rule("copy_debt")["params"].get("page_age_s")
+            if page_age is not None:
+                report["advisories"] = [f"copy-debt: {debt['span_id']} remains uncopied"
+                                        for debt in history.copy_debts()
+                                        if when - debt["ended_epoch"] >= page_age]
+            decision = scheduler.host()
+            if decision is None:
+                scheduler.check_plans()
+                entry, decision = scheduler.ranking(report)
+                if entry is not None:
+                    scheduler.measured(entry)
+                    argv = scheduler.commands.get(entry["id"])
+                    if argv is None:
+                        argv = render_argv(entry, when, caller_pid, scheduler.require_rule(
+                            "launcher_admits").get("params", {}).get("output_root"))
+                    require(same(recheck_head(), head), "LEDGER_HEAD_CHANGED",
+                            "committed head changed during authorization")
+                    report["decision"] = {
+                        "decision": "LAUNCH", "entry": entry["id"], "worktree": entry["worktree"],
+                        "argv": argv, "reasons": [f"committed sequence {head['last_seq']}",
+                                                  f"proven predecessor {history.latest.span}"],
+                    }
+                    return report
+        require(same(recheck_head(), head), "LEDGER_HEAD_CHANGED", "committed head changed during authorization")
+        report["decision"] = decision
+    except Halt as err:
+        report["decision"] = err.decision
+    except (ValueError, OverflowError, RecursionError) as err:
+        report["decision"] = Halt("INPUT_DOMAIN", str(err)).decision
+    return report
 
 
 def explain(report):
     for row in report["entries"]:
-        print(f"{row['id']} {row['kind']} {row['status']}", end="")
-        if "rule" in row:
-            print(f" {row['class']} {row['detail']}", end="")
-        print()
-        for check in row["checks"]:
-            if check["status"] == "FLAG" or check["detail"].startswith("SKIPPED"):
-                print(f"  {check['status']} {check['rule']} {check['class']} {check['detail']}")
-    for check in report["host"]:
-        verdict = "PASS" if check["holds"] else "FAIL"
-        print(f"HOST {check['rule']} {check['class']} {check['status']} {verdict} {check['detail']}")
+        print(f"{row['id']} {row['kind']} {row['status']}" + (f" {row['detail']}" if "detail" in row else ""))
     for row in report["overdue"]:
         print(f"OVERDUE {row['rule']} {row['review_by']}")
-    for advisory in report["advisories"]:
-        print(advisory)
+    for note in report["advisories"]:
+        print(note)
     print(as_json(report["decision"]))
 
 
@@ -1271,110 +1286,15 @@ def ledger_rows(path, errors):
             fcntl.flock(stream.fileno(), fcntl.LOCK_SH)
             for index, line in enumerate(stream, 1):
                 try:
-                    data = parse_json(line)
-                    if not isinstance(data, dict):
+                    row = parse_json(line)
+                    if not isinstance(row, dict):
                         raise ValueError("expected a JSON object")
                 except (ValueError, RecursionError) as err:
                     errors.add(path, "BAD_LEDGER_ROW", f"line {index}: {err}")
                     continue
-                yield index, data
+                yield index, row
     except (OSError, ValueError) as err:
         errors.add(path, "READ_LEDGER", str(err))
-
-
-def missing_observation(observed, ledger):
-    """Find the first snapshot observation absent from the ordered ledger."""
-    events = iter(ledger)
-    for observation in observed or ():
-        # Copy verification can have been appended separately since the snapshot.
-        known = {key: value for key, value in observation.items()
-                 if value is not None and (key != "copy_verified" or value is True)}
-        if not any(identity(row) == identity(observation)
-                   and all(row.get(key) == value for key, value in known.items())
-                   for row in events):
-            return observation
-    return None
-
-
-def overlay_ledger(facts, path, errors):
-    launches = []
-    closes = []
-    verified = set()
-    refusals = []
-    stops = []
-    gates = []
-    ready = {}
-    for index, row in ledger_rows(path, errors):
-        where = f"line {index}"
-        event = row.get("event")
-        payload = {key: value for key, value in row.items() if key not in {"event", "now_epoch"}}
-        if event in ("LAUNCH", "CLOSE", "COPY_VERIFIED"):
-            required, optional = (CLOSE_FIELDS, CLOSE_OPTIONAL) if event == "CLOSE" else (
-                LAUNCH_FIELDS, LAUNCH_OPTIONAL)
-            required = {**required, "kit_sha256": KIT}
-            if event == "CLOSE":
-                required = {key: check for key, check in required.items() if key != "restore_proven"}
-                optional = {**optional, "restore_readbacks": IS_OBJECT,
-                            "restore_proven": nullable(boolean)}
-            if errors.fields(path, where, payload, required, optional):
-                payload["ledger_index"] = index
-                if event == "LAUNCH":
-                    launches.append(payload)
-                elif event == "CLOSE":
-                    readbacks = payload.pop("restore_readbacks", {})
-                    if readbacks:
-                        errors.fields(path, f"{where}.restore_readbacks", readbacks, {},
-                                      {key: nullable(boolean) for key in RESTORE_READBACKS})
-                    evidence = [readbacks.get(key) for key in RESTORE_READBACKS]
-                    proof = (False if any(v is False for v in evidence)
-                             else True if all(v is True for v in evidence) else None)
-                    # An explicit failure binds even when other readbacks are present.
-                    payload["restore_proven"] = False if payload.get("restore_proven") is False else proof
-                    if payload.get("stranded"):
-                        payload["clean"] = False
-                    closes.append(payload)
-                else:
-                    verified.add(identity(payload))
-        elif event == "GATE":
-            if errors.fields(path, where, payload, {"id": identifier}):
-                gates.append(payload["id"])
-        elif event in ("REFUSAL", "STOP", "READY"):
-            key = {"REFUSAL": "refusals", "STOP": "stops", "READY": "ready"}[event]
-            if errors.fields(path, where, payload, *FACT_ROWS[key]):
-                if event == "REFUSAL":
-                    refusals.append(payload)
-                elif event == "STOP":
-                    stops.append(payload)
-                else:
-                    ready[payload["entry_id"]] = payload
-        elif event is not None:
-            errors.add(path, "BAD_LEDGER_EVENT", f"{where}: unrecognized event")
-        elif not (isinstance(row.get("decision"), str) and row["decision"] in DECISIONS):
-            errors.add(path, "BAD_LEDGER_ROW", f"{where}: expected event or decision")
-    for close in closes:
-        if identity(close) in verified:
-            close["copy_verified"] = True
-    uncopied = [
-        {key: close[key] for key in ("entry_id", "kind", "ended_epoch", "kit_sha256") if key in close}
-        for close in closes if close.get("copy_verified") is not True
-    ]
-    closes.reverse()
-    observations = dict(facts.get("errors") or {})
-    for key, parsed in (("launches", launches), ("closes", closes)):
-        omitted = missing_observation(facts.get(key), parsed)
-        if omitted is not None:
-            label = "launch" if key == "launches" else "close"
-            observations["attempt_history"] = (
-                f"supplied ledger omits or contradicts the observed {label} for {attempt_name(omitted)}")
-            facts["errors"] = observations
-            return
-    observations.pop("attempt_history", None)
-    if observations or "errors" in facts:
-        facts["errors"] = observations
-    facts.update(launches=launches, closes=closes, uncopied=uncopied, refusals=refusals,
-                 gates=gates, ready=list(ready.values()), stops=stops)
-
-
 def append_decision(path, decision, now):
     line = (as_json({**decision, "now_epoch": now}) + "\n").encode()
     with path.open("a+b") as stream:
@@ -1561,126 +1481,124 @@ def probe_command(command, parse, fact, errors):
         return None
 
 
-def run_plans(queue, facts, errors):
+def probe_plans(queue, rules, facts, history, args, errors):
     plans = {}
+    if (history is None or history.latest is None or history.latest.close is None
+            or facts["fence_clear"] is not True or facts["runner_group_clear"] is not True
+            or facts["process_census_verified"] is not True or facts["foreign_processes"]):
+        errors["plans"] = "dry run requires a committed close and a clear runner census"
+        return plans
+    try:
+        history.latest.prove_close()
+    except Halt as err:
+        errors["plans"] = err.decision["detail"]
+        return plans
+    output_root = next((row.get("params", {}).get("output_root") for row in rules.values()
+                        if row["test"] == "launcher_admits" and row["status"] == "LIVE"), None)
+    completed = {(run.launch["entry_id"], run.launch["kit_sha256"]) for run in history.attempts.values()
+                 if run.close is not None and run.close["clean"]}
+    now = facts["now_epoch"]
     for entry in queue["entries"]:
-        if "plan_argv" not in entry or entry.get("done"):
+        name = entry["id"]
+        if ("plan_argv" not in entry or entry.get("done")
+                or not entry["repeat"] and (name, entry["kit_sha256"]) in completed):
             continue
-        signature = plan_signature(entry, facts.get("queue_commit"))
-        rc = None
         try:
+            argv = render_argv(entry, now, args.caller_pid, output_root)
+            signature = plan_signature(entry, facts, now, argv)
             child = subprocess.run(entry["plan_argv"], cwd=entry["worktree"], check=False,
                                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=120)
-            rc = child.returncode
-            if rc:
-                errors[f"plans.{entry['id']}"] = f"dry run exited {rc}"
-        except (OSError, ValueError, subprocess.TimeoutExpired) as err:
-            errors[f"plans.{entry['id']}"] = f"dry run failed: {type(err).__name__}"
-        plans[entry["id"]] = {"signature": signature, "rc": rc}
+            plans[name] = {"signature": signature, "rc": child.returncode}
+        except (Halt, OSError, ValueError, subprocess.TimeoutExpired) as err:
+            errors[f"plans.{name}"] = f"dry run failed: {type(err).__name__}"
     return plans
 
 
-def maintenance_active(args, rules, errors):
-    paths = []
-    for row in rules.values():
-        marker = row.get("params", {}).get("maintenance_marker")
-        if row["test"] == "owner_stop" and row["status"] != "RETIRED" and marker:
-            paths.append(Path(marker))
-    if args.maintenance_marker is not None:
-        paths.append(args.maintenance_marker)
+def probe_maintenance(args, errors):
     active = False
-    for path in dict.fromkeys(paths):
+    paths = {Path(MAINTENANCE_PATH): None}
+    if args.maintenance_marker is not None:
+        paths[args.maintenance_marker] = None
+    for path in paths:
         try:
             path.lstat()
             active = True
         except FileNotFoundError:
             continue
-        except OSError as err:
-            errors["maintenance_active"] = str(err)
-    if not active and "maintenance_active" in errors:
-        return None
-    return active
+        except OSError:
+            errors["maintenance_active"] = "a maintenance marker could not be checked"
+    return None if not active and "maintenance_active" in errors else active
 
 
-def probe(args, queue, rules, supplied):
+def probe(args, queue, raw_rules, rules, supplied):
     failures = {}
-    supplied_errors = supplied.get("errors") or {}
-    if "attempt_history" in supplied_errors:
-        failures["attempt_history"] = supplied_errors["attempt_history"]
     power = probe_command("/usr/bin/pmset -g batt", parse_power, "power", failures)
     disk = probe_command("/bin/df -g /", parse_disk, "disk_free_gib", failures)
     labels = probe_command("/bin/launchctl list", parse_labels, "labels_loaded", failures)
-    processes = probe_command("/bin/ps -axo pid,ppid,comm", parse_processes,
-                              "foreign_processes", failures)
+    processes = probe_command("/bin/ps -axo pid,ppid,comm", parse_processes, "foreign_processes", failures)
     boot = probe_command("/usr/sbin/sysctl -n kern.boottime", parse_boot, "boot_epoch", failures)
     now = time.time()
-    quiet_rules = [row for row in rules.values() if row["test"] == "host_quiet" and row["status"] != "RETIRED"]
+    quiet = [row for row in rules.values() if row["test"] == "host_quiet" and row["status"] == "LIVE"]
     foreign = None
-    if processes is not None:
-        patterns = [re.compile(pattern) for row in quiet_rules for pattern in row["params"]["patterns"]]
+    if processes is not None and len(quiet) == 1:
+        patterns = [re.compile(pattern) for pattern in quiet[0]["params"]["patterns"]]
         root = args.caller_pid or os.getppid()
-        if root not in processes:
-            failures["foreign_processes"] = "caller pid is absent from the process census"
-        else:
+        if root in processes:
             excluded = process_tree(processes, root)
             foreign = [{"pid": pid, "name": name} for pid, (_, name) in sorted(processes.items())
                        if pid not in excluded and any(pattern.search(name) for pattern in patterns)]
-    fence = None
+        else:
+            failures["foreign_processes"] = "caller pid is absent from the process census"
+
+    fence_clear = supplied.get("fence_clear")
     if args.custody is not None:
         try:
-            raw_fence = read_regular_json(args.custody / "desk_fence.json")
-            pid = raw_fence.get("pid")
-            fence = {"purpose": raw_fence.get("purpose") if string(raw_fence.get("purpose")) else None,
-                     "pid": pid if integer(pid) and pid else None,
-                     "deadline": raw_fence.get("deadline") if epoch(raw_fence.get("deadline")) else None,
-                     "pid_alive": pid in processes if processes is not None and integer(pid) and pid else None}
+            read_regular_json(args.custody / "desk_fence.json")
+            fence_clear = False
         except FileNotFoundError:
-            if not args.custody.is_dir():
-                failures["fence"] = "fence directory unavailable"
-        except (OSError, ValueError, RecursionError) as err:
-            failures["fence"] = str(err)
-    else:
-        if "fence" in supplied_errors:
-            failures["fence"] = "the supplied fence fact is unreadable"
-        elif "fence" in supplied:
-            fence = supplied["fence"]
-        else:
-            failures["fence"] = "fence fact not supplied"
-    maintenance = maintenance_active(args, rules, failures)
+            fence_clear = True if args.custody.is_dir() else None
+        except (OSError, ValueError, RecursionError):
+            fence_clear = None
+            failures["fence_clear"] = "fence state could not be read"
     receipts = []
     for root in args.receipt_root:
         try:
             for directory, name in receipt_files(root):
                 try:
                     receipts.append(project_receipt(read_regular_json(name, dir_fd=directory)))
-                except (OSError, ValueError, RecursionError) as err:
-                    failures[f"receipts.{len(receipts)}"] = f"receipt unreadable: {type(err).__name__}"
-                    receipts.append(None)
-        except (OSError, ValueError) as err:
-            failures[f"receipt_root.{root.name}"] = str(err)
-    facts = dict.fromkeys(FACT_TYPES)
-    facts.update({key: supplied[key] for key in FACT_TYPES if key in supplied})
-    facts.update(now_epoch=now, boot_epoch=boot, power=power, disk_free_gib=disk, labels_loaded=labels,
-                 foreign_processes=foreign, fence=fence,
-                 receipts=receipts if args.receipt_root else None, maintenance_active=maintenance,
-                 errors=failures)
-    if facts["closes"]:
-        history = AttemptHistory(facts)
-        for close in facts["closes"]:
-            if not history.receipt_matches(close):
-                close["clean"] = None
-                if close["restore_proven"] is True:
-                    close["restore_proven"] = None
+                except (OSError, ValueError, RecursionError):
+                    failures["receipt_attestations"] = "a receipt could not be projected"
+        except (OSError, ValueError):
+            failures["receipt_attestations"] = "receipt root could not be read"
+    history, head = None, None
+    if args.ledger is not None:
+        try:
+            head_path = args.ledger_head or default_head_path(args.ledger)
+            head = read_head(head_path)
+            history = History(read_events(args.ledger), head)
+            require(same(read_head(head_path), head), "LEDGER_HEAD_CHANGED", "head changed during probe")
+        except Halt as err:
+            failures["ledger_head"] = err.decision["detail"]
+            history, head = None, None
+    facts = {key: supplied.get(key) for key in HOST_FIELDS}
+    facts.update(now_epoch=now, boot_epoch=boot, power=power, disk_free_gib=disk,
+                 foreign_processes=foreign, process_census_verified=foreign is not None,
+                 fence_clear=fence_clear, ledger_head=head, queue_digest=digest(queue),
+                 rules_digest=digest(raw_rules), maintenance_marker=MAINTENANCE_PATH,
+                 maintenance_active=probe_maintenance(args, failures), plans={})
+    for key in ("meter_ready", "collector_ready"):
+        if key in supplied:
+            facts[key] = supplied[key]
+    if labels is not None:
+        facts["labels_loaded"] = labels
     if args.queue_commit is not None:
         facts["queue_commit"] = args.queue_commit
+    if args.receipt_root:
+        facts["receipt_attestations"] = receipts
     if args.run_plans:
-        facts["plans"] = run_plans(queue, facts, failures)
-    else:
-        facts.pop("plans", None)
-    # Missing optional sources stay null. Command/file failures are reported separately.
+        facts["plans"] = probe_plans(queue, rules, facts, history, args, failures)
+    facts["errors"] = failures
     return facts, failures
-
-
 def write_facts(path, facts):
     # Readers see either the previous complete probe or this complete probe.
     temporary = None
@@ -1725,33 +1643,95 @@ def create_parser():
         command = commands.add_parser(name)
         command.add_argument("--queue", type=Path, default=DEFAULT_QUEUE)
         command.add_argument("--rules", type=Path, default=DEFAULT_RULES)
+        if name != "validate":
+            command.add_argument("--ledger", type=Path, help="committed structural event ledger")
+            command.add_argument("--ledger-head", type=Path, help="writer's independent committed head (default: LEDGER.head.json)")
         if name in ("explain", "next"):
-            command.add_argument("--facts", required=True, type=Path)
-            command.add_argument("--now", type=parse_epoch)
-            command.add_argument("--caller-pid", type=positive_pid)
-            command.add_argument("--ledger", type=Path, help="append-only structural launch and close events")
+            command.add_argument("--facts", type=Path)
+            command.add_argument("--now")
         if name == "explain":
             command.add_argument("--json", action="store_true")
         elif name == "next":
-            command.add_argument("--record", type=Path, help="append a decision observation to this ledger")
+            command.add_argument("--record", type=Path, help="append to a separate decision observation ledger")
         elif name == "probe":
             command.add_argument("--out", type=Path, required=True)
             command.add_argument("--custody", type=Path, help="directory containing desk_fence.json")
             command.add_argument("--receipt-root", type=Path, action="append", default=[])
-            command.add_argument("--self-pid", "--caller-pid", type=positive_pid, dest="caller_pid")
-            command.add_argument("--host-facts", type=Path, help="additional structural facts from the caller")
-            command.add_argument("--ledger", type=Path, help="append-only structural launch and close events")
-            command.add_argument("--queue-commit")
+            command.add_argument("--host-facts", type=Path, help="current external structural host observations")
+            command.add_argument("--queue-commit", type=str)
             command.add_argument("--maintenance-marker", type=Path, help="additional stop marker to check")
             command.add_argument("--run-plans", action="store_true")
+        if name in ("next", "explain", "probe"):
+            command.add_argument("--self-pid", "--caller-pid", type=positive_pid, dest="caller_pid")
     command = commands.add_parser("report")
     command.add_argument("--ledger", type=Path, required=True)
     command.add_argument("--since", required=True)
     return parser
 
 
+def control_inputs(args):
+    require(args.ledger is not None, "LEDGER_MISSING", "no committed event ledger was supplied")
+    head_path = args.ledger_head or default_head_path(args.ledger)
+    require(head_path.resolve() != args.ledger.resolve(), "LEDGER_HEAD_INVALID",
+            "event ledger and committed head need separate files")
+    head = read_head(head_path)
+    rows = read_events(args.ledger)
+    require(args.facts is not None, "FACT_INVALID", "no facts snapshot was supplied")
+    errors = Errors()
+    queue = errors.read_json(args.queue)
+    rules = errors.read_json(args.rules)
+    facts = errors.read_json(args.facts)
+    require(not errors.items, "FACT_INVALID", errors.items[0] if errors.items else "")
+    return queue, rules, facts, rows, head, head_path
+
+
+def separate_output(out, inputs):
+    for path in inputs:
+        if path is None:
+            continue
+        if path.resolve() == out.resolve() or path.exists() and out.exists() and path.samefile(out):
+            return False
+    return True
+
+
+def scheduling_command(args):
+    facts = None
+    try:
+        if args.now is not None:
+            try:
+                args.now = parse_epoch(args.now)
+            except argparse.ArgumentTypeError as err:
+                raise Halt("CLOCK_INVALID", str(err)) from err
+        queue, rules, facts, rows, head, head_path = control_inputs(args)
+        if args.command == "next" and args.record is not None:
+            require(separate_output(args.record, (args.ledger, head_path, args.queue, args.rules, args.facts)),
+                    "RECORD_PATH", "decision record must be separate from scheduler inputs")
+        report = authorize_next(queue, rules, facts, rows, head, now=args.now, caller_pid=args.caller_pid,
+                                recheck_head=lambda: read_head(head_path))
+    except Halt as err:
+        report = {"entries": [], "host": [], "overdue": [], "advisories": [], "decision": err.decision}
+    if args.command == "explain":
+        if args.json:
+            print(as_json(report))
+        else:
+            explain(report)
+        return 0
+    decision = report["decision"]
+    if args.record is not None and decision.get("rule") != "RECORD_PATH" and isinstance(facts, dict):
+        now = args.now if args.now is not None else facts.get("now_epoch")
+        if epoch(now):
+            try:
+                append_decision(args.record, decision, now)
+            except (OSError, ValueError):
+                decision = Halt("RECORD_WRITE", "decision observation could not be appended").decision
+    print(as_json(decision))
+    return 0
+
+
 def main(argv=None):
     args = create_parser().parse_args(argv)
+    if args.command in ("next", "explain"):
+        return scheduling_command(args)
     errors = Errors()
     if args.command == "report":
         try:
@@ -1761,67 +1741,31 @@ def main(argv=None):
         else:
             report_ledger(args.ledger, since, errors)
         return errors.finish()
-    source = errors.read_json(args.rules)
-    if source is None and not errors.items:
-        errors.add(args.rules, "BAD_VALUE", "rules must be an array")
-    rules = validate_rules(args.rules, source, errors)
-    reference_rules = rules if not isinstance(source, list) else {
-        row["id"]: row for row in source if isinstance(row, dict)
-        and identifier(row.get("id")) and RULE_NAME(row.get("test"))
-        and one_of("LIVE", "FLAG", "RETIRED")(row.get("status"))
-    }
+    raw_rules = errors.read_json(args.rules)
     queue = errors.read_json(args.queue)
-    if queue is None and not any(error.startswith(f"{args.queue}:") for error in errors.items):
+    if not isinstance(raw_rules, list) and not errors.items:
+        errors.add(args.rules, "BAD_VALUE", "rules must be an array")
+    if queue is None and not errors.items:
         errors.add(args.queue, "BAD_VALUE", "queue must be an object")
-    validate_queue(args.queue, queue, reference_rules, errors, isinstance(source, list))
-    if args.command == "validate":
+    rules = validate_rules(args.rules, raw_rules, errors)
+    validate_queue(args.queue, queue, rules, errors, isinstance(raw_rules, list))
+    if args.command == "validate" or errors.items:
         return errors.finish()
-    if args.command == "probe":
-        supplied = {}
-        if args.host_facts is not None:
-            supplied = errors.read_json(args.host_facts)
-            if supplied is None and not any(error.startswith(f"{args.host_facts}:") for error in errors.items):
-                errors.add(args.host_facts, "BAD_VALUE", "facts must be an object")
-            validate_facts(args.host_facts, supplied, errors, 0)
-        if args.ledger is not None and isinstance(supplied, dict):
-            overlay_ledger(supplied, args.ledger, errors)
-        if args.queue_commit is not None and not string(args.queue_commit):
-            errors.add(args.out, "BAD_VALUE", "--queue-commit must be a nonempty string")
-        if errors.items:
-            return errors.finish()
-        facts, failures = probe(args, queue, rules, supplied)
-        try:
-            write_facts(args.out, facts)
-        except (OSError, ValueError) as err:
-            errors.add(args.out, "WRITE_FACTS", str(err))
-            return errors.finish()
-        # An omitted fence source stays unknown without making a host command fail.
-        return 3 if any(key != "fence" or args.custody is not None for key in failures) else 0
-    facts = errors.read_json(args.facts)
-    if facts is None and not any(error.startswith(f"{args.facts}:") for error in errors.items):
-        errors.add(args.facts, "BAD_VALUE", "facts must be an object")
-    validate_facts(args.facts, facts, errors, args.now)
-    if args.ledger is not None and isinstance(facts, dict):
-        overlay_ledger(facts, args.ledger, errors)
+    supplied = errors.read_json(args.host_facts) if args.host_facts else {}
+    if not isinstance(supplied, dict):
+        errors.add(args.host_facts, "BAD_VALUE", "host facts must be an object")
+    head_path = args.ledger_head or (default_head_path(args.ledger) if args.ledger is not None else None)
+    if not separate_output(args.out, (args.ledger, head_path, args.queue, args.rules, args.host_facts)):
+        errors.add(args.out, "WRITE_FACTS", "probe output must be separate from its inputs")
     if errors.items:
         return errors.finish()
-    now = args.now if args.now is not None else facts["now_epoch"]
-    results = Scheduler(queue, rules, facts, now, args.caller_pid).evaluate()
-    if args.command == "explain":
-        if args.json:
-            print(as_json(results))
-        else:
-            explain(results)
-    else:
-        decision = results["decision"]
-        if args.record is not None:
-            try:
-                append_decision(args.record, decision, now)
-            except (OSError, ValueError) as err:
-                errors.add(args.record, "APPEND_LEDGER", str(err))
-                return errors.finish()
-        print(as_json(decision))
-    return 0
+    facts, failures = probe(args, queue, raw_rules, rules, supplied)
+    try:
+        write_facts(args.out, facts)
+    except (OSError, ValueError) as err:
+        errors.add(args.out, "WRITE_FACTS", str(err))
+        return errors.finish()
+    return 3 if failures else 0
 
 
 if __name__ == "__main__":
