@@ -1052,6 +1052,24 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 
 <!-- RUN_STATE TYPED ITEMS: newest first. Add with scripts/run_state_add.py; never edit by hand. -->
 
+439. **Magistrate 8c6884e6: f2-stab-15-l001 first launch REFUSED by the pinned launcher (deadline = bare 8,360 s minimum; nothing started); DEADLINE + 900 s per the qual-pin README; relaunch is the last act**
+
+```pointer
+owner: magistrate
+wait: none
+deadline: 2026-11-18T17:30:00-08:00
+on_early_or_refused: a second launcher refusal: record it, hold kit f2-stab-15 until an input changes (item 422), mail the lead, continue down the ladder.
+next_observable: run-out.txt shows LAUNCH_RC=0 with the fence; the next activation after the fence is gone runs item 438's Check and F-3 (c) hand-read for cq-f2-stab-15-l001-a1
+```
+
+```item
+{"expires_epoch_s": null, "issued_epoch_s": 1795037040, "number": 439, "owner": "magistrate", "schema": "joulewise.run_state_item.v1", "sets": [], "status": "ISSUED", "supersedes": []}
+```
+
+- **First launch of f2-stab-15-l001 refused by the pinned launcher at 13:23:28, before anything started.** Message: `campaign launch refused: cadence-legs-v1 deadline cannot fit the span's worst case, work reserve and cleanup grace`. No fence, no LaunchAgent, no output directory (`/Users/edr/campaign-out/f2-stab-15/` empty); the soak never began. Cause: my Run block passed `DEADLINE = launch_deadline_epoch_s`, which is t0 + 8,360 s. The launcher requires `deadline - now >= cadence_minimum_seconds(plan)` = 8,360 s (computed at the pin), so the seconds between plan and launch made it fail. This was my input error, not a kit or host fault.
+- **Fix (input change, item 422):** the qual-pin README says "Carry the shared template's 900 s margin over the pinned minimum". DEADLINE = `launch_deadline_epoch_s` + 900 (t0 + 9,260 s, under MAX_DESK 43,200 s). Everything else in `run-block.sh` is unchanged. One relaunch now, as the last act; its output goes to `run-out.txt`.
+- Pruning-rule note: the launcher's minimum-budget check caught a real misfit before any machine time was spent.
+
 438. **Magistrate 8c6884e6 (headless, Opus 5.5), 2026-11-18 13:15-13:35 PST (`date`): R1 CHECK: status complete, chain rc 0, thermometry pass, A-B-A released, step 30b no redo, G1 count complete by hand, restored, uninstalled, network time ON 6.1 min then OFF with frequency word 0; KIT WORD R1-RERUN (planning R+2C/R+4C G0 timeouts; no planning release yet): no re-arm without a lead READY record; f2-stab-15-l001 ISSUED on the qualification pin, Start and check rc 0, launches as the last act**
 
 ```pointer

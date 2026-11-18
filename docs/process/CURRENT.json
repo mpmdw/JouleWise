@@ -1,7 +1,13 @@
 {
   "armed": null,
-  "next_observable": "the next activation after the f2-stab-15-l001 fence is gone runs its operational Check (receipt, feeds stopped, restore readback, process group absent, close epoch) and the F-3 (c) hand-read with desk-cq-dev-04-s01-a1/hand/hand_table.py (row 8), copies at once (row 14), then takes the next ladder rung; the lead handles R1-RERUN (desk 3(a) and planning release, or a new READY record)",
+  "next_observable": "run-out.txt shows LAUNCH_RC=0 with the fence; the next activation after the fence is gone runs item 438's Check and F-3 (c) hand-read for cq-f2-stab-15-l001-a1",
   "open_items": [
+    {
+      "expires_epoch_s": null,
+      "item": 439,
+      "owner": "magistrate",
+      "status": "ISSUED"
+    },
     {
       "expires_epoch_s": null,
       "item": 438,
@@ -83,11 +89,11 @@
   ],
   "owner": "magistrate",
   "schema": "joulewise.current_pointer.v2",
-  "source_item": "438",
-  "source_item_heading_date": "2026-11-18",
+  "source_item": "439",
+  "source_item_heading_date": null,
   "wait": {
     "deadline_epoch_s": 1795051800,
     "observable": "none",
-    "on_early_or_refused": "a launcher refusal or non-clean close: record it, hold kit f2-stab-15 until an input changes (item 422), mail the lead; continue down the ladder at the next close. R1 stays unarmed until the lead writes a new READY record or a signed planning release (item 433)."
+    "on_early_or_refused": "a second launcher refusal: record it, hold kit f2-stab-15 until an input changes (item 422), mail the lead, continue down the ladder."
   }
 }
