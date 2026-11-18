@@ -1243,10 +1243,9 @@ class R0SamplerAdmissionSpec(unittest.TestCase):
                     self.assertAlmostEqual(evidence["cpu_s_per_s"], 0.06)
                     self.assertIn("lower bound", evidence["basis"])
 
-    def run_background_census(self, configured, prepare, *, just_before_census=lambda: None):
+    def run_synthetic_host_cli(self, configured, guard, host):
         from contextlib import nullcontext, redirect_stderr, redirect_stdout
         from io import StringIO
-        from joulewise import measurement_liveness as live
         from joulewise.align import r0_runner
         from tests.align.test_r0_checks import FakeBackend
 
@@ -1256,8 +1255,120 @@ class R0SamplerAdmissionSpec(unittest.TestCase):
         config_file = work / "config.json"
         config_file.write_text(json.dumps(config))
         output = work / "output"
-        guard, clock, advance, _ = self.admission(busy=False)
         guard.parents = [configured]
+        stderr = StringIO()
+        with (patch.object(r0_runner, "host_snapshot", side_effect=host),
+              patch.object(r0_runner, "deadline", return_value=nullcontext()),
+              patch.object(r0_runner, "command", return_value="synthetic-head"),
+              patch.object(r0_runner, "softwareupdate_scan_forecast", return_value={"status": "unknown"}),
+              redirect_stderr(stderr), redirect_stdout(StringIO())):
+            status = r0_runner.main(["--config", str(config_file), "--output", str(output), "--checks", "host"],
+                                    guard_factory=lambda _: guard, backend_factory=FakeBackend,
+                                    display_probe=None, lock_path=work / "lock")
+        return status, output, stderr.getvalue()
+
+    def test_r0_cli_refuses_desktop_agents_in_its_own_census(self):
+        import re
+        from joulewise import agent_identity
+        from joulewise.measurement_liveness import census
+
+        claude = "/Applications/Claude.app/Contents/MacOS/Claude"
+        codex = "/Applications/Codex.app/Contents/MacOS/Codex"
+        for executable, args, start, refuses in (
+                (None, (), 0, False), ("/usr/local/bin/claude", (), 45, True),
+                (claude, (), 45, True), (codex, (), 45, True), (claude, (), 0, True),
+                ("/bin/echo", (claude,), 45, False)):
+            with self.subTest(executable=executable, args=args, start=start), tempfile.TemporaryDirectory() as tmp:
+                required = Path(tmp).resolve() / "required"
+                required.mkdir()
+                guard, clock, advance, _ = self.admission(busy=False)
+                guard.inspect_custody = census
+                normal = guard.run
+                candidate_times = []
+                process_argv = (executable, *args) if executable else ()
+                command_line = " ".join(process_argv)
+
+                def run(argv, **kwargs):
+                    active = bool(executable) and clock.now >= start
+                    if argv[0] == "/usr/bin/pgrep":
+                        flags = "".join(argv[1:-1])
+                        self.assertTrue(set("alf") <= set(flags))
+                        hits = active and re.search(argv[-1], command_line, re.I if "i" in flags else 0)
+                        if hits:
+                            candidate_times.append(clock.now)
+                        return subprocess.CompletedProcess(argv, 0 if hits else 1,
+                                                           f"42 {command_line}\n" if hits else "", "")
+                    if argv == prewindow.PS_ARGV:
+                        return subprocess.CompletedProcess(argv, 0, "1 0.0 /sbin/launchd\n" +
+                                                           (f"42 0.0 {command_line}\n" if active else ""), "")
+                    if argv == contention.PS_ARGV:
+                        workers = [(42, OLD_START, "0:01.00", Path(executable).name)] if active else []
+                        return subprocess.CompletedProcess(argv, 0, cpu_table(*workers), "")
+                    return normal(argv, **kwargs)
+
+                def host():
+                    for at in (45, 60, 75):
+                        advance(at)
+                        if guard._background_failure:
+                            break
+                    return {"status": "pass"}
+
+                filter_census = agent_identity.filter_census
+
+                def filter_fixture(stdout, **kwargs):
+                    info = agent_identity.ProcessInfo(42, 1, 42, executable, process_argv)
+                    return filter_census(stdout, inspector=lambda _: info, **kwargs)
+
+                guard.run = run
+                with patch.object(agent_identity, "filter_census", filter_fixture):
+                    status, output, diagnostic = self.run_synthetic_host_cli(required, guard, host)
+                self.assertEqual((status, output.exists()), (2, False) if refuses else (0, True), diagnostic)
+                if refuses:
+                    self.assertEqual(candidate_times, [start])
+                    self.assertIn(command_line, diagnostic)
+                else:
+                    self.assertEqual(candidate_times, [45, 60, 75] if args else [])
+
+    def test_r0_baseline_flags_cpu_delta_of_worker_that_exits_mid_window(self):
+        from joulewise.measurement_liveness import census
+
+        for first, midpoint, last, flagged in (
+                ("0:00.00", "0:01.80", None, True), ("0:05.00", "0:06.80", None, True),
+                ("0:05.00", "0:06.20", None, False), ("0:05.00", "0:00.00", None, False),
+                ("0:00.00", "0:01.80", "0:01.80", True)):
+            with self.subTest(first=first, midpoint=midpoint, last=last), tempfile.TemporaryDirectory() as tmp:
+                required = Path(tmp).resolve() / "required"
+                required.mkdir()
+                guard, clock, _, _ = self.admission(busy=False)
+                guard.inspect_custody = census
+                normal = guard.run
+                samples = []
+
+                def run(argv, **kwargs):
+                    if argv == contention.PS_ARGV:
+                        cpu = {0: first, 15: midpoint, 30: last}[clock.now]
+                        samples.append(clock.now)
+                        workers = [(42, OLD_START, cpu, "mdworker_shared")] if cpu is not None else []
+                        return subprocess.CompletedProcess(argv, 0, cpu_table(*workers), "")
+                    return normal(argv, **kwargs)
+
+                guard.run = run
+                status, output, diagnostic = self.run_synthetic_host_cli(required, guard, lambda: {"status": "pass"})
+                self.assertEqual((status, output.exists()), (0, True), diagnostic)
+                self.assertEqual(samples, [0, 15, 30])
+                report = json.loads((output / "report.json").read_text())
+                self.assertEqual(report["contention"]["guard_flags"], int(flagged))
+                if flagged:
+                    event, = guard.contention_flags
+                    evidence, = event["busy"]
+                    self.assertAlmostEqual(evidence["cpu_s_per_s"], 0.06)
+                    if last is None:
+                        self.assertIn("lower bound", evidence["basis"])
+
+    def run_background_census(self, configured, prepare, *, just_before_census=lambda: None):
+        from joulewise import measurement_liveness as live
+
+        guard, clock, advance, _ = self.admission(busy=False)
         command = guard.run
 
         def observe(pid):
@@ -1276,16 +1387,8 @@ class R0SamplerAdmissionSpec(unittest.TestCase):
 
         guard.run = run
         guard.inspect_custody = lambda **kwargs: live.census(**kwargs, observer=observe)
-        stderr = StringIO()
-        with (patch.object(r0_runner, "host_snapshot", side_effect=host),
-              patch.object(r0_runner, "deadline", return_value=nullcontext()),
-              patch.object(r0_runner, "command", return_value="synthetic-head"),
-              patch.object(r0_runner, "softwareupdate_scan_forecast", return_value={"status": "unknown"}),
-              redirect_stderr(stderr), redirect_stdout(StringIO())):
-            status = r0_runner.main(["--config", str(config_file), "--output", str(output), "--checks", "host"],
-                                    guard_factory=lambda _: guard, backend_factory=FakeBackend,
-                                    display_probe=None, lock_path=work / "lock")
-        return status, output.exists(), stderr.getvalue()
+        status, output, diagnostic = self.run_synthetic_host_cli(configured, guard, host)
+        return status, output.exists(), diagnostic
 
     def test_background_census_resolves_configured_alias_at_scan_time(self):
         import os
