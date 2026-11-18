@@ -1132,6 +1132,7 @@ class SoakLauncherBindingTests(unittest.TestCase):
         config, spec = rt.read_template(template)
         native_mode = {"value": 0, "source": pc.POWERMODE_SOURCE, "observed_at": "episode_start"}
         hardware = {"ac_powermode": native_mode}
+        flags, gate_events = [], []
         if role == "predecessor":
             receipt = write_predecessor(segment, {"bundle": f"runs/{config['run_id']}", "ac_powermode": native_mode,
                                                    "admitted_turns": 1})
@@ -1142,8 +1143,14 @@ class SoakLauncherBindingTests(unittest.TestCase):
             turns = [Turn(index=0, start_ns=ns, first_token_ns=2*ns, end_ns=3*ns, prefill_tokens=50,
                           context_tokens=0, decode_tokens=1)]
         else:
+            source = bank() if role == "d-bank" else deepcopy(XG)
+            if role == "x-g":
+                for gate in source["intervals"]:
+                    if gate["outcome"] == "unobserved":
+                        gate.update(duration_s=60.0, end_ns=gate["start_ns"] + 60 * ns)
+                        flags.append("thermal.state_unobserved")
             member = (step_record(segment.parent, STEP, 4096)["member"] if role == "step-d"
-                      else member_record(segment.parent, role, bank() if role == "d-bank" else XG))
+                      else member_record(segment.parent, role, source))
             receipt = member["runtime"]
             spec.update(warmup_condition="benign")
             if role == "step-d":
@@ -1153,8 +1160,12 @@ class SoakLauncherBindingTests(unittest.TestCase):
                 receipt["slot_detail"] = {"N_chunk_formula": 2048, "N_chunk_source": "config.d_n_chunk"}
             if role == "d-bank":
                 receipt["failure_reason"] = None
-            if role in ("d-bank", "x-g"):
-                receipt["deadman"]["phases_s"] = dict.fromkeys(rt.contract.DEADMAN_PHASES, 0.0)
+            bands = {"delta_fast_c": 1.0, "delta_slow_c": 1.0}
+            policy = rt.gate_policy(sensors, bands, turn_cap_s=300 if role == "step-d" else 60.0,
+                                    chunk_tokens=4096 if role == "d-bank" else 256, heavy=role == "d-bank",
+                                    per_turn=role != "step-d", g0_cap_s=configured["g0_timeout_s"])
+            spec["thermal"] = policy
+            receipt["bands_c"] = bands
             config["workload_profile"]["prompt_text"] = json.dumps(spec, sort_keys=True)
             shift = 120 * ns
             turns = []
@@ -1164,24 +1175,57 @@ class SoakLauncherBindingTests(unittest.TestCase):
                                   end_ns=row["end_ns"] + shift, prefill_tokens=row["prefill_tokens"],
                                   context_tokens=0, decode_tokens=row["decode_tokens"]))
             gates = member["journal_intervals"]
+            reference = {"fast_c": 35.0, "slow_c": 35.0, "source_member": "member", "span_ns": [0, 60 * ns]}
+            episode_reference = gates[0]["release"]
+            receipt["g0_reference"] = reference
+            receipt["reference_custody"] = reference
             events = [("reading", i * ns, (35.0, 35.0)) for i in range(60)] if role == "step-d" else []
             for gate, turn in zip(gates, turns, strict=True):
                 for key in ("start_ns", "end_ns", "exit_sample_ns"):
                     gate[key] += shift
-                gate["entry_stamp"] = self.paired_stamp(gate["start_ns"])
-                events.append(("align_thermal_gate", gate["start_ns"],
+                start, end = gate["start_ns"], gate["end_ns"]
+                gate.update(entry_stamp=self.paired_stamp(start), exit_stamp=self.paired_stamp(end),
+                            entry_epoch_s=start / ns, exit_epoch_s=end / ns, clock="episode_monotonic_ns",
+                            entry_slope_c_per_min=0.0,
+                            reference=reference if gate["kind"] == "G0" else episode_reference)
+                gate_phase = "align_thermal_hold" if gate["kind"] == "H" else "align_thermal_gate"
+                events.append((gate_phase, start,
                                {"state": "begin", "gate_kind": gate["kind"], "turn": gate["turn"],
                                 "token_count": gate["token_count"], "entry_stamp": gate["entry_stamp"]}))
-                events.append(("reading", gate["exit_sample_ns"],
-                               tuple(gate["release"][key] for key in ("fast_c", "slow_c"))))
-                events.append(("align_thermal_gate", gate["end_ns"], {"state": "end", "gate": gate}))
+                release = tuple(gate["release"][key] for key in ("fast_c", "slow_c"))
+                if gate["outcome"] == "unobserved":
+                    events.append(("reading", end, release))
+                else:
+                    count = 10 if gate["kind"] == "G0" else 5
+                    hot = (gate["reference"]["fast_c"] + 2, release[1])
+                    ticks = range(end - ((end - start) // ns + 60) * ns, end + 1, ns)
+                    for tick in ticks:
+                        events.append(("reading", tick, release if end - tick < count * ns else hot))
+                events.append((gate_phase, end, {"state": "end", "gate": gate}))
                 events.append(("reading", turn.start_ns + ns, (35.4, 35.4)))
+                gate_events.extend({"timestamp_s": gate[f"{clock}_epoch_s"], "event_type": f"phase_{direction}",
+                                    "phase": gate_phase, "message": gate["kind"], "metadata": gate}
+                                   for clock, direction in (("entry", "start"), ("exit", "end")))
+            # Journal sequence follows acquisition order, including a read
+            # completed at the same stamp as its gate closes.
+            order = {"begin": 0, "reading": 1, "end": 2}
+            events.sort(key=lambda event: (event[1], order["reading" if event[0] == "reading" else event[2]["state"]]))
             journal = self.journal(sensors, events)
-            hardware.update(thermal={"intervals": gates, "flags": []}, token_budget={
+            samples = tg.sample_rows(journal)
+            for gate in gates:
+                gate["entry_sensors"] = next((row["sensors"] for row in reversed(samples)
+                                               if row["monotonic_ns"] <= gate["start_ns"]), {})
+            deadline = turns[-1].end_ns + ns
+            hardware.update(thermal={"intervals": gates, "flags": flags, "policy": policy,
+                                     "window_reference": reference, "episode_reference": episode_reference},
+                            token_budget={
                 "deadman_s": receipt["deadman"]["T_dead_s"], "stop_reason": "episode_returned", "incomplete": False,
                 "decode_tokens_used": sum(turn.decode_tokens for turn in turns),
                 "prefill_tokens_used": sum(turn.prefill_tokens for turn in turns), "cached_context_tokens_used": 0,
+                "deadline_ns": deadline,
             })
+            if role == "d-bank":
+                receipt["deadman"]["deadline_ns"] = deadline
         receipt.update(schema=rt.RESULT_SCHEMA, kind=kind, backend="production", config_sha256=self.attempt.config_sha,
                        ac_powermode=native_mode, energy_j=MARKER, battery_drain_pct_per_h=MARKER)
         bundle = segment / receipt["bundle"]
@@ -1198,7 +1242,11 @@ class SoakLauncherBindingTests(unittest.TestCase):
         identity.pop("flags")
         ep = Episode(**identity, episode_id=bundle.name, endpoint="test",
                      clock_domain=f"joulewise.monotonic:{bundle.name}", start_ns=1,
-                     end_ns=end_ns, hardware=hardware, turns=tuple(turns))
+                     end_ns=end_ns, hardware=hardware, turns=tuple(turns), flags=tuple(flags))
+        if role == "d-bank":
+            receipt["deadman"]["phases_s"] = rt.episode_phases(ep)
+        if role == "x-g":
+            receipt["phases_s"] = rt.episode_phases(ep)
         (out / "align_episode.json").write_bytes(json_bytes(to_jsonable(ep)))
 
         def clock(ns):
@@ -1218,14 +1266,15 @@ class SoakLauncherBindingTests(unittest.TestCase):
                         "effective_clock_anchor_bound_s": 0, "method": "synthetic"}},
                     "workload_observed": {"token_count": decode + prefill, "output_token_count": decode},
                     "workload_provenance": {"episode_spec_sha256": hashed(config["workload_profile"]["prompt_text"].encode()),
-                                            "endpoint_identity": "test", "flags": [], "output_policy": {"emitted_tokens": decode},
+                                            "endpoint_identity": "test", "flags": flags, "output_policy": {"emitted_tokens": decode},
                                             "episode_outcome": {"stop_condition": "episode_returned", "emitted_tokens": decode,
                                                                 **({"token_budget": hardware["token_budget"]} if role != "predecessor" else {})}},
                     "synthetic_private": MARKER}
         (bundle / "metadata.json").write_bytes(json_bytes(metadata))
         (bundle / "summary_metrics.json").write_bytes(json_bytes({"status": "succeeded", "failure_reason": None}))
-        (bundle / "events.jsonl").write_bytes(json_bytes({"event_type": "run_finalized", "phase": "run",
-                                                        "timestamp_s": 1, "message": "bundle finalized", "metadata": {}}))
+        final = {"event_type": "run_finalized", "phase": "run", "timestamp_s": end_ns / ns + 1,
+                 "message": "bundle finalized", "metadata": {}}
+        (bundle / "events.jsonl").write_bytes(b"".join(map(json_bytes, [*gate_events, final])))
         (bundle / "power_trace.csv").write_text("timestamp_s,power_w,source\n")
         if role != "predecessor":
             (out / "align_thermal.jsonl").write_bytes(b"".join(map(json_bytes, journal)))
@@ -1615,6 +1664,130 @@ class SoakLauncherBindingTests(unittest.TestCase):
         for short, unrun in ((True, False), (False, True), (True, True)):
             with self.subTest(short=short, unrun=unrun):
                 self.audit_case(lambda test: verify(test, short=short, unrun=unrun))
+
+    def run_gate_regression(self, test, kind, edit, expected_reason=None):
+        original = write_terminal
+        applied = []
+
+        def close(segment, member_kind, receipt, config_sha):
+            if member_kind == kind:
+                edit(segment / receipt["bundle"], receipt)
+                applied.append(member_kind)
+            return original(segment, member_kind, receipt, config_sha)
+
+        with patch(__name__ + ".write_terminal", side_effect=close):
+            rc = test.run_launcher()
+        self.assertEqual(applied, [kind])
+        root, output = test.attempt.root, test.attempt.output
+        primary, secondary = (json.loads((output / name).read_bytes())["evaluation"]
+                              for name in ("smoke_part_c.json", "smoke.json"))
+        final_row = json.loads((output / "evidence_ledger.jsonl").read_bytes().splitlines()[-1])
+        runner = json.loads((root / "runner_receipt.json").read_bytes())
+        expected = "pass" if expected_reason is None else "other_failure"
+        accepted = expected == "pass"
+        self.assertEqual(primary, secondary)
+        self.assertEqual((primary["verdict"], final_row["verdict"], primary["pass"]), (expected, expected, accepted))
+        self.assertEqual((rc, runner["rc"], runner["parts"]), (0 if accepted else 2, rc, {"C": accepted}))
+        if expected_reason is not None:
+            self.assertIn(expected_reason, primary["evidence_failures"])
+
+    def test_sealed_phase_receipts_must_match_frozen_reduction_on_d_and_x(self):
+        operations = ("control", "missing", "empty", "null", "wrong-type", "plus", "minus")
+        for kind in ("d-bank-benign-s1", "x-g"):
+            for operation in operations:
+                def edit(_bundle, receipt):
+                    holder = receipt["deadman"] if kind == "d-bank-benign-s1" else receipt
+                    if operation == "missing":
+                        del holder["phases_s"]
+                    elif operation == "empty":
+                        holder["phases_s"] = {}
+                    elif operation == "null":
+                        holder["phases_s"]["G1"] = None
+                    elif operation == "wrong-type":
+                        holder["phases_s"]["G1"] = True
+                    elif operation in ("plus", "minus"):
+                        holder["phases_s"]["G1"] += 1 if operation == "plus" else -1
+
+                reason = None if operation == "control" else "phase_accounting"
+                if kind == "d-bank-benign-s1" and operation in ("missing", "empty"):
+                    reason = "receipt_contract"
+                with self.subTest(kind=kind, operation=operation):
+                    self.audit_case(lambda test: self.run_gate_regression(test, kind, edit, reason))
+
+    def test_every_phase_rejects_absence_wrong_type_and_a_one_unit_difference(self):
+        for kind, directory in (("d-bank-benign-s1", kit.PART_C_GATED_D), ("x-g", kit.PART_C_X_G)):
+            with self.subTest(member=kind):
+                process = self.make_model_member(kind, self.attempt.output / directory)
+                receipt = json.loads(process.stdout)
+                bundle = self.attempt.output / directory / receipt["bundle"]
+                episode = (bundle / "outputs/align_episode.json").read_bytes()
+                budget = json.loads(episode)["hardware"]["token_budget"]
+                pc._check_phase_accounting(kind, receipt, episode, budget)
+                holder = receipt["deadman"] if kind == "d-bank-benign-s1" else receipt
+                trusted = holder["phases_s"]
+                for phase, seconds in trusted.items():
+                    for operation, value in (("delete", None), ("null", None), ("bool", True),
+                                             ("plus", seconds + 1), ("minus", seconds - 1)):
+                        with self.subTest(phase=phase, operation=operation):
+                            mutant = {**trusted, phase: value}
+                            if operation == "delete":
+                                del mutant[phase]
+                            holder["phases_s"] = mutant
+                            with self.assertRaisesRegex(pc.EvidenceFailure, "phase_accounting"):
+                                pc._check_phase_accounting(kind, receipt, episode, budget)
+
+    def test_released_g1_needs_the_entire_consecutive_in_band_streak(self):
+        def mutate(bundle, _receipt):
+            path = bundle / "outputs/align_thermal.jsonl"
+            rows = [json.loads(line) for line in path.read_bytes().splitlines()]
+            gate = next(row["values"]["gate"] for row in rows if row["kind"] == "align_thermal_gate"
+                        and row["values"]["state"] == "end" and row["values"]["gate"]["turn"] == 1)
+            penultimate = next(row for row in rows if row["kind"] == "reading"
+                               and row["started"]["monotonic_ns"] == gate["exit_sample_ns"] - 1_000_000_000)
+            key = rows[0]["values"]["thermal"]["s_fast"]
+            hot = gate["reference"]["fast_c"] + 2
+            penultimate["values"]["sensors"][key] = penultimate["values"]["readings"][key]["value"] = hot
+            path.write_bytes(b"".join(map(json_bytes, rows)))
+
+        for edit, reason in ((lambda *_: None, None), (mutate, "release_conditions")):
+            with self.subTest(reason=reason):
+                self.audit_case(lambda test: self.run_gate_regression(test, "d-bank-benign-s1", edit, reason))
+
+    def test_each_thermal_boundary_must_agree_in_the_ordered_event_stream(self):
+        for operation in ("control", "delete", "duplicate", "reorder", "identity", "one-second", "truncate",
+                          "relabeled-duplicate"):
+            def edit(bundle, _receipt):
+                path = bundle / "events.jsonl"
+                rows = [json.loads(line) for line in path.read_bytes().splitlines()]
+                index = next(i for i, row in enumerate(rows) if row["event_type"] == "phase_end"
+                             and row["phase"] == "align_thermal_gate" and row["metadata"]["turn"] == 1)
+                if operation == "delete":
+                    del rows[index]
+                elif operation == "duplicate":
+                    rows.insert(index, rows[index].copy())
+                elif operation == "relabeled-duplicate":
+                    rows.insert(index, {**rows[index], "phase": "other"})
+                elif operation == "reorder":
+                    rows[index - 1:index + 1] = rows[index - 1:index + 1][::-1]
+                elif operation == "identity":
+                    rows[index]["message"] = "G0"
+                elif operation == "one-second":
+                    rows[index]["timestamp_s"] += 1
+                elif operation == "truncate":
+                    rows[index] = {"event_type": "phase_end"}
+                path.write_bytes(b"".join(map(json_bytes, rows)))
+
+            reason = {"control": None, "truncate": "bundle_binding"}.get(operation, "gate_journal_disagreement")
+            with self.subTest(operation=operation):
+                self.audit_case(lambda test: self.run_gate_regression(test, "d-bank-benign-s1", edit, reason))
+
+    def test_timed_x_coverage_loss_stays_distinct_from_a_released_gate(self):
+        contrast = deepcopy(XG)
+        contrast["intervals"][1]["outcome"] = "unobserved"
+        with patch(__name__ + ".XG", contrast):
+            self.assertEqual(self.run_launcher(), 0)
+        verdict = json.loads((self.attempt.output / "smoke.json").read_bytes())["evaluation"]
+        self.assertIs(verdict["lines"]["x_g"]["pass"], True)
 
 
 if __name__ == '__main__':

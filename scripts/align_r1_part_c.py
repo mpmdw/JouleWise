@@ -1259,7 +1259,7 @@ def _validate_sidecar(rows, sensors, kind, source, *, gated=False):
     check(canonical(counter.report(span[1])) == canonical(coverage), "coverage")
 
 
-def _check_member_records(kind, bundle, receipt, data, configured):
+def _check_member_records(kind, bundle, receipt, data, configured, gate_inputs):
     from joulewise.align.apple import r1_runtime as rt
     from joulewise.align.apple.stop_precedence import primary_stop
 
@@ -1432,32 +1432,254 @@ def _check_member_records(kind, bundle, receipt, data, configured):
                     "token_accounting", episode_name, field=key)
 
     if role == "predecessor":
+        require(not _thermal_events(events), "gate_journal_disagreement", events_name, peer=episode_name)
         return
     require(receipt.get("g0_timeout_s") == configured["g0_timeout_s"] == G0_LIMIT_S, "gate_summary", RECEIPT_NAME)
     sensors = rt.sensors_policy(configured)
     journal = rows(THERMAL_SOURCE, "journal_session")
     _validate_sidecar(journal, sensors, kind, THERMAL_SOURCE, gated=True)
-    require(isinstance(intervals, list) and intervals and canonical(intervals) == canonical(
-        [item["values"]["gate"] for item in journal if item["kind"] in
-         ("align_thermal_gate", "align_thermal_hold") and item["values"].get("state") == "end"]),
-        "gate_journal_disagreement", THERMAL_SOURCE, peer=episode_name)
-    readings = {record["started"]["monotonic_ns"]: record for record in journal if record["kind"] == "reading"}
-    for interval in intervals:
-        if interval["outcome"] != "released":
-            continue
-        timestamp = interval["exit_sample_ns"]
-        reading = readings.get(timestamp)
-        require(_uint(timestamp) and reading is not None and
-                interval["start_ns"] <= timestamp <= reading["finished"]["monotonic_ns"] <= interval["end_ns"],
-                "release_sample", THERMAL_SOURCE, peer=episode_name)
-        values = reading["values"]
-        keys = sensors["s_fast"], sensors["s_slow"]
-        released = dict(zip(TEMPERATURE_KEYS, (values["sensors"][key] for key in keys), strict=True))
-        require(not any(key in values["errors"] for key in keys) and _temperatures(released)
-                and canonical(released) == canonical(interval["release"]),
-                "release_sample", THERMAL_SOURCE, peer=episode_name)
+    _check_gate_boundaries(intervals, journal, events, kind)
     if role == "step-d":
         _check_step_sources(receipt, doc, rows, require, sensors, journal, bundle, config_sha, configured)
+    else:
+        _check_phase_accounting(kind, receipt, data[episode_name], budget)
+    _check_release_evidence(kind, receipt, thermal, episode["flags"], journal, spec, configured, gate_inputs)
+
+
+GATE_JOURNALS = ("align_thermal_gate", "align_thermal_hold")
+
+
+def _thermal_events(events):
+    return [event for event in events if event["phase"] in GATE_JOURNALS or (
+        event["metadata"].get("kind") in ("G0", "G1", "H")
+        and event["metadata"].get("clock") == "episode_monotonic_ns"
+    )]
+
+
+def _check_gate_boundaries(intervals, journal, events, kind):
+    """Join ordered begin/end pairs across the sidecar, episode and event file."""
+    from joulewise.align.apple.sampler import seconds_ns
+
+    episode = "outputs/align_episode.json"
+    _required(isinstance(intervals, list) and intervals, "gate_pair", kind, episode)
+    boundaries = [row for row in journal if row["kind"] in GATE_JOURNALS]
+    controller = _thermal_events(events)
+    for records, source in ((boundaries, THERMAL_SOURCE), (controller, "events.jsonl")):
+        _required(len(records) == 2 * len(intervals), "gate_journal_disagreement", kind, source, peer=episode)
+    previous_end = 0
+    seen = set()
+    for index, interval in enumerate(intervals):
+        gate, turn, token = (interval.get(key) for key in ("kind", "turn", "token_count"))
+        start, end = interval.get("start_ns"), interval.get("end_ns")
+        duration = interval.get("duration_s")
+        release = interval.get("release")
+        _required(gate in ("G0", "G1", "H") and _uint(turn) and "token_count" in interval
+                  and (_uint(token) and token > 0 if gate == "H" else token is None)
+                  and _uint(start) and _uint(end) and previous_end <= start <= end
+                  and (gate, turn, token) not in seen and interval.get("clock") == "episode_monotonic_ns"
+                  and isinstance(interval.get("entry_sensors"), dict) and isinstance(interval.get("reference"), dict)
+                  and isinstance(release, dict) and set(release) == set(TEMPERATURE_KEYS)
+                  and all(value is None or _finite(value) for value in release.values())
+                  and all(key in interval and (interval[key] is None or _finite(interval[key]))
+                          for key in ("slope_c_per_min", "entry_slope_c_per_min"))
+                  and "exit_sample_ns" in interval and (interval["exit_sample_ns"] is None
+                                                        or _uint(interval["exit_sample_ns"])),
+                  "interval_shape", kind, episode, index=index)
+        _required(_finite(duration) and duration == (end - start) / 1e9,
+                  "gate_duration", kind, episode, index=index)
+        seen.add((gate, turn, token))
+        previous_end = end
+        phase = "align_thermal_hold" if gate == "H" else "align_thermal_gate"
+        begin, close = boundaries[2 * index:2 * index + 2]
+        _required(begin["kind"] == close["kind"] == phase and canonical(begin["values"]) == canonical({
+            "state": "begin", "gate_kind": gate, "turn": turn, "token_count": token,
+            "entry_stamp": interval.get("entry_stamp"),
+        }) and canonical(close["values"]) == canonical({"state": "end", "gate": interval}),
+            "gate_journal_disagreement", kind, THERMAL_SOURCE, index=index, peer=episode)
+        for offset, (label, direction, ns) in enumerate((("entry", "start", start), ("exit", "end", end))):
+            stamp = interval.get(f"{label}_stamp")
+            epoch = interval.get(f"{label}_epoch_s")
+            _required(_paired_stamp(stamp, ns) and _finite(epoch) and seconds_ns(epoch) == stamp["epoch_ns"],
+                      "interval_clock", kind, episode, index=index, field=f"{label}_stamp")
+            event = controller[2 * index + offset]
+            _required(event["event_type"] == f"phase_{direction}" and event["phase"] == phase
+                      and event["message"] == gate and seconds_ns(event["timestamp_s"]) == stamp["epoch_ns"]
+                      and canonical(event["metadata"]) == canonical(interval),
+                      "gate_journal_disagreement", kind, "events.jsonl", index=2 * index + offset, peer=THERMAL_SOURCE)
+
+
+def _paired_stamp(stamp, ns):
+    return (isinstance(stamp, dict) and all(_uint(stamp.get(key)) for key in (
+        "epoch_ns", "monotonic_before_ns", "monotonic_after_ns", "wall_resolution_ns", "monotonic_resolution_ns",
+    )) and stamp["monotonic_before_ns"] <= ns <= stamp["monotonic_after_ns"]
+        # The producer rounds the midpoint and each bracket independently.
+        and abs(2 * ns - stamp["monotonic_before_ns"] - stamp["monotonic_after_ns"]) <= 2)
+
+
+def _check_phase_accounting(kind, receipt, raw_episode, budget):
+    from joulewise.align.apple.r1_runtime import episode_phases
+    from joulewise.align.records import Episode, from_json
+
+    bank = kind == "d-bank-benign-s1"
+    holder = receipt.get("deadman") if bank else receipt
+    claim = holder.get("phases_s") if isinstance(holder, dict) else None
+    deadline = budget.get("deadline_ns")
+    _required(_uint(deadline) and (not bank or isinstance(holder, dict)
+              and _uint(holder.get("deadline_ns")) and holder["deadline_ns"] == deadline),
+              "phase_accounting", kind, RECEIPT_NAME, field="deadline_ns", peer="outputs/align_episode.json")
+    expected = episode_phases(from_json(Episode, raw_episode))
+    _required(isinstance(claim, dict) and claim.keys() == expected.keys(),
+              "phase_accounting", kind, RECEIPT_NAME, field="phases_s", peer="outputs/align_episode.json")
+    for phase, seconds in expected.items():
+        _required(_finite(claim[phase]) and 0 <= claim[phase] == seconds,
+                  "phase_accounting", kind, RECEIPT_NAME, field=f"phases_s.{phase}", peer="outputs/align_episode.json")
+
+
+def _check_release_evidence(kind, receipt, thermal, episode_flags, journal, spec, configured, gate_inputs):
+    from joulewise.align.apple import r1_runtime as rt, thermal_gates as gates
+
+    step, bands = gate_inputs
+    slots, reference = step["slots"], step["operating_reference"]
+    capture = kind == "step-d"
+    heavy = kind == "d-bank-benign-s1"
+    _required(_finite(slots.get("S7")) and _uint(slots.get("N_chunk")),
+              "gate_policy", kind, RECEIPT_NAME, field="slots")
+    sensors = rt.sensors_policy(configured)
+    policy = rt.gate_policy(sensors, bands, turn_cap_s=300 if capture else min(300.0, max(1.0, slots["S7"])),
+                            chunk_tokens=slots["N_chunk"] if heavy else 256, heavy=heavy,
+                            per_turn=not capture, g0_cap_s=configured["g0_timeout_s"])
+    _required(canonical(thermal.get("policy")) == canonical(spec.get("thermal")) == canonical(policy)
+              and canonical(receipt.get("bands_c")) == canonical(bands),
+              "gate_policy", kind, "outputs/align_episode.json", peer="config.json")
+
+    intervals = thermal["intervals"]
+    first, *remaining = intervals
+    _required(first["kind"] == "G0" and first["turn"] == 0 and first["outcome"] == "released"
+              and all(interval["kind"] != "G0" for interval in remaining),
+              "gate_cardinality", kind, "outputs/align_episode.json")
+    episode_reference = first.get("release")
+    _required(_temperatures(reference) and _temperatures(episode_reference)
+              and canonical(thermal.get("window_reference")) == canonical(reference) == canonical(first.get("reference"))
+              and canonical(thermal.get("episode_reference")) == canonical(episode_reference)
+              and (capture or canonical(receipt.get("reference_custody")) == canonical(reference)),
+              "gate_reference", kind, "outputs/align_episode.json", peer=RECEIPT_NAME)
+
+    samples = gates.sample_rows(journal)
+    reading_index = {sample["monotonic_ns"]: index for index, sample in enumerate(samples)}
+    keys = sensors["s_fast"], sensors["s_slow"]
+    for index, interval in enumerate(intervals):
+        expected = reference if index == 0 else episode_reference
+        _required(canonical(interval.get("reference")) == canonical(expected),
+                  "gate_reference", kind, THERMAL_SOURCE, index=index)
+        entry = next((sample["sensors"] for sample in reversed(samples)
+                      if sample["monotonic_ns"] <= interval["start_ns"]
+                      and sample["finished"]["monotonic_after_ns"] <= interval["end_ns"]), {})
+        _required(canonical(interval["entry_sensors"]) == canonical(entry),
+                  "interval_shape", kind, THERMAL_SOURCE, index=index, field="entry_sensors")
+        if interval["outcome"] == "unobserved":
+            _check_unobserved_gate(kind, interval, index, samples, reading_index, keys, policy,
+                                   (thermal["flags"], episode_flags, receipt["episode_flags"]))
+        else:
+            _required(interval["outcome"] == "released", "gate_outcome", kind, THERMAL_SOURCE, index=index)
+            _check_released_gate(kind, interval, index, samples, reading_index, keys, expected, policy)
+
+
+def _gate_window_observed(samples, ns, keys):
+    from joulewise.align.apple.thermal_gates import _window_coverage
+
+    fraction = _window_coverage(samples, ns, keys)["sample_fraction"]
+    return fraction is not None and fraction >= .9
+
+
+def _sample_values(sample, keys):
+    return {name: sample["sensors"][key] for name, key in zip(TEMPERATURE_KEYS, keys, strict=True)}
+
+
+def _check_released_gate(kind, interval, index, samples, reading_index, keys, reference, policy):
+    from joulewise.align.apple.thermal_gates import NS, slow_slope
+
+    start, end = interval["start_ns"], interval["end_ns"]
+    gate = interval["kind"]
+    if gate == "H":
+        met = interval.get("condition_met_stamp")
+        _required(isinstance(met, dict) and _uint(met.get("monotonic_before_ns"))
+                  and _uint(met.get("monotonic_after_ns")),
+                  "interval_clock", kind, THERMAL_SOURCE, index=index, field="condition_met_stamp")
+        decision = round((met["monotonic_before_ns"] + met["monotonic_after_ns"]) / 2)
+        _required(start <= decision <= end and _paired_stamp(met, decision),
+                  "interval_clock", kind, THERMAL_SOURCE, index=index, field="condition_met_stamp")
+    else:
+        decision = end
+
+    exit_sample = interval.get("exit_sample_ns")
+    at = reading_index.get(exit_sample) if _uint(exit_sample) else None
+    _required(at is not None and start <= exit_sample <= decision
+              and samples[at]["finished"]["monotonic_after_ns"] <= decision
+              and decision - exit_sample <= 2 * NS,
+              "release_sample", kind, THERMAL_SOURCE, index=index, peer="outputs/align_episode.json")
+    release = _sample_values(samples[at], keys)
+    _required(_temperatures(release) and canonical(release) == canonical(interval.get("release")),
+              "release_sample", kind, THERMAL_SOURCE, index=index, peer="outputs/align_episode.json")
+
+    length = 10 if gate == "G0" else 5
+    first = at - length + 1
+    _required(first >= 0, "release_conditions", kind, THERMAL_SOURCE, index=index, field="streak")
+    # The first poll can take its most recent pre-entry sample. Older rows
+    # can contribute to the coverage window but cannot count toward release.
+    earliest = samples[first]["monotonic_ns"]
+    _required(earliest >= start or (start - earliest <= 2 * NS and samples[first + 1]["monotonic_ns"] >= start),
+              "release_conditions", kind, THERMAL_SOURCE, index=index, field="streak")
+    previous = samples[first - 1]["monotonic_ns"] if first and samples[first - 1]["monotonic_ns"] >= start else None
+    for sample in samples[first:at + 1]:
+        ns = sample["monotonic_ns"]
+        observed = _sample_values(sample, keys)
+        _required((previous is None or 0 < ns - previous <= 2 * NS)
+                  and not set(keys).intersection(sample["errors"]) and _temperatures(observed)
+                  and observed["fast_c"] <= reference["fast_c"] + policy["delta_fast_c"]
+                  and observed["slow_c"] <= reference["slow_c"] + policy["delta_slow_c"]
+                  and _gate_window_observed(samples, max(ns, start), keys),
+                  "release_conditions", kind, THERMAL_SOURCE, index=index, field="streak")
+        if gate == "G0":
+            status = sample["status"]
+            _required(isinstance(status, dict), "release_conditions", kind, THERMAL_SOURCE,
+                      index=index, field="G0_status_or_slope")
+            pm_ns = status.get("pm_observed_ns")
+            status_ns = status.get("monotonic_ns")
+            finished = sample["finished"]["monotonic_after_ns"]
+            slope = slow_slope(samples, ns, keys[1])
+            _required(status.get("error") is None and type(status.get("os_level")) is int and status["os_level"] == 0
+                      and status.get("pm_state") == "Nominal" and _uint(pm_ns) and _uint(status_ns)
+                      and pm_ns <= status_ns and finished <= status_ns
+                      and max(start, status_ns) <= min(decision, ns + 2 * NS, pm_ns + 2 * NS)
+                      and _finite(slope) and abs(slope) <= STEP_D_SLOPE_C_PER_MIN,
+                      "release_conditions", kind, THERMAL_SOURCE, index=index, field="G0_status_or_slope")
+        previous = ns
+    _required(_gate_window_observed(samples, decision, keys),
+              "release_conditions", kind, THERMAL_SOURCE, index=index, field="coverage")
+    if gate == "G0":
+        slope = interval.get("slope_c_per_min")
+        _required(_finite(slope) and abs(slope) <= STEP_D_SLOPE_C_PER_MIN,
+                  "release_conditions", kind, THERMAL_SOURCE, index=index, field="slope_c_per_min")
+
+
+def _check_unobserved_gate(kind, interval, index, samples, reading_index, keys, policy, flags):
+    start, end = interval["start_ns"], interval["end_ns"]
+    _required(kind == "x-g" and interval["kind"] == "G1"
+              and interval["duration_s"] >= policy["turn_cap_s"]
+              and all("thermal.state_unobserved" in source for source in flags),
+              "gate_outcome", kind, THERMAL_SOURCE, index=index)
+    timestamps = [sample["monotonic_ns"] for sample in samples if start < sample["monotonic_ns"] < end]
+    _required(any(not _gate_window_observed(samples, ns, keys) for ns in (start, *timestamps, end)),
+              "release_conditions", kind, THERMAL_SOURCE, index=index, field="coverage")
+    sample_ns = interval["exit_sample_ns"]
+    at = reading_index.get(sample_ns) if _uint(sample_ns) else None
+    expected = dict.fromkeys(TEMPERATURE_KEYS)
+    if sample_ns is not None:
+        _required(at is not None and samples[at]["finished"]["monotonic_after_ns"] <= end,
+                  "release_sample", kind, THERMAL_SOURCE, index=index)
+        expected = _sample_values(samples[at], keys)
+    _required(canonical(interval.get("release")) == canonical(expected),
+              "release_sample", kind, THERMAL_SOURCE, index=index)
 
 
 def _check_step_sources(receipt, doc, rows, require, sensors, journal, bundle, config_sha, configured):
@@ -1521,13 +1743,13 @@ def _check_step_sources(receipt, doc, rows, require, sensors, journal, bundle, c
             "step_configuration", classification_file, peer=RECEIPT_NAME)
 
 
-def _native_bundle(ledger, kind, receipt, configured):
+def _native_bundle(ledger, kind, receipt, configured, gate_inputs):
     bound = ledger.member(kind)
     bundle, data = _bound_member_files(bound, receipt)
     try:
         _required({item.name for item in bundle.parent.iterdir()} == {bundle.name},
                   "bundle_binding", kind, "runs")
-        _check_member_records(kind, bundle, receipt, data, configured)
+        _check_member_records(kind, bundle, receipt, data, configured, gate_inputs)
     except EvidenceFailure:
         raise
     except (OSError, ArithmeticError, LookupError, TypeError, ValueError, AttributeError) as error:
@@ -1615,7 +1837,9 @@ def _check_native_soak(soak, config_path):
     return configured
 
 
-def _native_verdict(ledger, runtime, invoke, configured):
+def _native_verdict(ledger, runtime, invoke, configured, soak_reference):
+    from joulewise.align.apple.r1_runtime import bands_c, sensors_policy
+
     receipts = {}
     refusal = None
     for kind, segment in KINDS.items():
@@ -1634,8 +1858,10 @@ def _native_verdict(ledger, runtime, invoke, configured):
             slots = receipts[kind].get("slots")
             if not isinstance(slots, dict) or type(slots.get("N_chunk")) is not int or slots["N_chunk"] <= 0:
                 raise EvidenceFailure("step_configuration", kind, RECEIPT_NAME, field="slots")
-    bundles = {kind: _native_bundle(ledger, kind, receipt, configured) for kind, receipt in receipts.items()}
     step_receipt = receipts["step-d"]
+    bands = bands_c(soak_reference, sensors_policy(configured), slow_floor=configured["slow_band_floor_c"])
+    bundles = {kind: _native_bundle(ledger, kind, receipt, configured, (step_receipt, bands))
+               for kind, receipt in receipts.items()}
     step = step_d_facts(bundles["step-d"], step_receipt)
     bank = {**facts_from_bundle(bundles["d-bank-benign-s1"], role="d-bank", native=True),
             "runtime": receipts["d-bank-benign-s1"]}
@@ -1664,7 +1890,7 @@ def run_bound_part_c(output, runtime, *, soak_reference, soak_ledger_sha256=None
         ledger = EvidenceLedger(output, revision, config, soak_reference, soak=soak)
         with redirect_stdout(StringIO()), redirect_stderr(StringIO()):
             configured = _check_native_soak(soak, config)
-            table = _native_verdict(ledger, runtime, invoke or judged_invoke, configured)
+            table = _native_verdict(ledger, runtime, invoke or judged_invoke, configured, soak.reference)
     except EvidenceFailure as error:
         failures = (error,)
     except Exception:
