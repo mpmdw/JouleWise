@@ -463,10 +463,9 @@ class SeriesReleaseTests(unittest.TestCase):
             copies = []
             populate = frozen.populate
 
-            def with_previous_donor(window, fixture_scratch):
-                inputs = populate(window, fixture_scratch)
+            def with_previous_donor(window):
+                inputs = populate(window)
                 benign = inputs["benign_dc"]
-                self.assertEqual(benign.donor.parent, scratch)
                 copy = inputs["config"].donor.with_name("benign_dc")
                 copy.write_bytes(benign.donor.read_bytes())
                 copies.append((copy, benign.path))
@@ -495,6 +494,45 @@ class SeriesReleaseTests(unittest.TestCase):
             self.assertFalse(output.exists())
             observed = json.loads(witness.read_bytes())
             self.assertEqual(observed, {"ranked": [], "entering": [], "errors": [], "denied": False})
+
+    def test_linked_directory_checks_nested_digests_and_extra_protected_names(self):
+        from scripts import align_v4_series_release as caller
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp).resolve()
+            store = root / "series/restored/C8"
+            store.mkdir(parents=True)
+            calibration = root / "calibration"
+            nested = calibration / "curves/reference.json"
+            nested.parent.mkdir(parents=True)
+            original = b'{"synthetic":1}\n'
+            nested.write_bytes(original)
+            (store / "calibration").symlink_to(calibration, target_is_directory=True)
+            manifest = describe(store, "finalized_manifest.json",
+                                harvest_offload.finalized_manifest(store), canonical=True)
+            record = SimpleNamespace(window="C8", finalized_manifest_sha256=manifest["sha256"])
+
+            def restore():
+                return caller.RestoredFiles(root, record, {"trace_layout": caller.LAYOUT, "hazard_journal": None})
+
+            intact = restore()
+            intact.verify_listed_inputs()
+            intact.ledger.require_complete()
+            nested.write_bytes(original.replace(b"1", b"2"))
+            with self.assertRaisesRegex(ValueError, "differs from record manifest"):
+                restore().verify_listed_inputs()
+            nested.write_bytes(original)
+
+            (nested.parent / "dc_in").write_bytes(original)
+            named = caller.open_named_bytes
+
+            def observe(source_root, path):
+                self.assertFalse(path.endswith("/dc_in"), "opened an unlisted protected input")
+                return named(source_root, path)
+
+            with patch.object(caller, "open_named_bytes", side_effect=observe), \
+                    self.assertRaisesRegex(ValueError, "names differ from finalized inventory"):
+                restore()
 
     def test_declared_protected_inputs_without_a_provider_refuse_release(self):
         from joulewise.align.apple.km003c import REQUIREMENT

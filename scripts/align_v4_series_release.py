@@ -408,13 +408,76 @@ def manifest_links(manifest, root, prefix):
             yield internal_link(entries, root, prefix, name)
 
 
+@dataclass(frozen=True)
+class BoundDirectory:
+    path: str
+    children: frozenset[str]
+
+
+def directory_inventory(target, members, directories):
+    """Build exact child sets from a finalized, flat recursive inventory."""
+    packet.require(isinstance(members, list) and isinstance(directories, list),
+                   "invalid finalized directory inventory")
+    children = {name: set() for name in directories}
+    packet.require("." in children and len(children) == len(directories)
+                   and len(set(members)) == len(members) and not children.keys() & set(members),
+                   "conflicting finalized directory membership")
+    for path in (*members, *(name for name in directories if name != ".")):
+        *parents, name = input_parts(path)
+        parent = "/".join(parents) if parents else "."
+        packet.require(parent in children, "inventory has an unbound parent directory")
+        children[parent].add(name)
+    return tuple(BoundDirectory((Path(target) / relative).as_posix(), frozenset(names))
+                 for relative, names in children.items())
+
+
+def manifest_directories(manifest, root, prefix, listed, links):
+    members, directories = ["finalized_manifest.json"], ["."]
+    aliases = {link.hops[0][0] for link in links}
+    for name, entry in manifest["entries"].items():
+        input_parts(name)
+        if entry == {"directory": True}:
+            directories.append(name)
+        else:
+            relative = f"{prefix}/{name}"
+            packet.require(relative in listed or relative in aliases, "restored input lacks a manifest binding")
+            members.append(name)
+    yield from directory_inventory(prefix, members, directories)
+
+    closure = manifest["closure"]
+    for row in closure["links"].values():
+        if row["class"] == "bytes" and row.get("kind") == "directory":
+            target = manifest_path(root, prefix, row["target"])
+            members = row["files"]
+            inventory = directory_inventory(target, members, row["directories"])
+            packet.require(all(f"{target}/{name}" in listed for name in members),
+                           "directory member lacks a finalized digest")
+            yield from inventory
+        if row["class"] == "mirror":
+            mirror_root = Path(closure["mirror"]["root"])
+            for ignored in row["ignored"]:
+                if "directories" not in ignored:
+                    continue
+                name = ignored["path"].removesuffix("/")
+                input_parts(name)
+                target = manifest_path(root, prefix, (mirror_root / name).as_posix())
+                members = []
+                for member, size in ignored["members"]:
+                    input_parts(member)
+                    binding = listed.get(f"{target}/{member}")
+                    packet.require(binding is not None and (size is None or size == binding.size),
+                                   "ignored directory member lacks a matching finalized digest")
+                    members.append(member)
+                yield from directory_inventory(target, members, ignored["directories"])
+
+
 class InputLedger:
     def __init__(self):
         self.entries = {}
         self.verified = set()
         self.protected = set()
 
-    def add_manifest(self, files, links):
+    def add_manifest(self, files, links, directories):
         for path, bound in files.items():
             previous = self.entries.get(path)
             if previous is not None:
@@ -428,6 +491,9 @@ class InputLedger:
             self.entries[path] = link
             if link.mirror_path is not None:
                 self.entries.setdefault(link.target, None)
+        for directory in directories:
+            packet.require(self.entries.setdefault(directory.path, directory) == directory,
+                           "conflicting finalized directory bindings")
 
     def classify(self):
         chains = [({entry.target, *(path for path, _ in entry.hops)}, entry.directories)
@@ -521,8 +587,9 @@ class RestoredFiles:
         self.listed = manifest_inputs(manifest, root, self.prefix)
         self.mirror = manifest["closure"]["mirror"]
         self.links = tuple(manifest_links(manifest, root, self.prefix))
+        self.directories = tuple(manifest_directories(manifest, root, self.prefix, self.listed, self.links))
         self.ledger = InputLedger() if ledger is None else ledger
-        self.ledger.add_manifest(self.listed, self.links)
+        self.ledger.add_manifest(self.listed, self.links, self.directories)
         self.stems = defaultdict(set)
         for name in self.entries:
             input_parts(name)
@@ -547,28 +614,15 @@ class RestoredFiles:
         return self.ledger.is_protected(path)
 
     def verify_inventory(self):
-        # Check directory entry names without opening or following any of the
-        # unprojected files. The finalizer excludes its own manifest from entries.
-        children = defaultdict(set, {"": {"finalized_manifest.json"}})
-        directories = {""}
-        for path, entry in self.entries.items():
-            parent, _, name = path.rpartition("/")
-            children[parent].add(name)
-            if entry == {"directory": True}:
-                directories.add(path)
-                children.setdefault(path, set())
-            else:
-                packet.require(f"{self.prefix}/{path}" in self.ledger.entries,
-                               "restored input lacks a manifest binding")
-        packet.require(directories == children.keys(), "restore inventory has an unbound parent directory")
-        for parent, expected in children.items():
-            relative = (Path(self.prefix) / parent).as_posix()
-            if self.is_protected(relative):
+        # Compare names in real, manifest-listed directories. File bytes are
+        # verified under their own bindings, with protected inputs left to the provider.
+        for binding in self.directories:
+            if self.is_protected(binding.path):
                 continue
-            with named_directory(self.root, input_parts(relative)) as directory:
-                actual = set(os.listdir(directory))
-            unprotected = lambda names: {name for name in names if not self.is_protected(f"{relative}/{name}")}
-            packet.require(unprotected(actual) == unprotected(expected), "restored names differ from finalized inventory")
+            with named_directory(self.root, input_parts(binding.path)) as directory:
+                packet.require(set(os.listdir(directory)) == binding.children,
+                               "restored names differ from finalized inventory")
+            self.ledger.verified.add(binding.path)
 
     def bind(self, name, *, optional=False):
         # Only the canonical representation belongs to this input. Compare
@@ -628,8 +682,8 @@ class RestoredFiles:
         if link.mirror_path is not None:
             self.verify_mirror_target(link)
         elif link.directory_target:
-            with named_directory(self.root, input_parts(link.target)):
-                pass
+            packet.require(isinstance(self.ledger.entries.get(link.target), BoundDirectory)
+                           and link.target in self.ledger.verified, "restored directory target is unverified")
         else:
             packet.require(isinstance(self.ledger.entries.get(link.target), BoundInput),
                            "restored link target lacks a manifest digest")
