@@ -19231,3 +19231,348 @@ Rows for the lead to commit to `RULES.json`. Owner is `research_lead` for rows 1
 **Rows closed or changed by this ruling.** RL-179 row 29 closes at the import commit. `RL-174-L17649` is replaced by row 10. RL-171's stop rule is replaced by row 8. RL-97 has no row.
 
 **What comes back to me.** A `PUBLIC.json` with `twin_agrees` other than `yes`. A failed or interrupted look that the lead cannot reproduce blind. The transfer block's page. `lm-stab-01` before any read, with the list of fields that differ between stability kits. A disputed class on a restored row. Nothing else in this ruling returns.
+
+# RL-181. Four drafts ruled. `lm-qual-01`: the ±0.10 word rests on each full-length type-A leg against its own first 3,724 tokens, not on the three independently seeded pairs; the scientific part of the manifest is committed before the first receipt and the code pins are filled before the read; no twin. `lm-inst-01` and `lm-stab-01`: a versioned sibling schema, their own custody names, two stability reads. The transfer block: approved at one span a window date, up to 120 legs outside the 132, no verdict word. A second hand-read is owed on qual-01-s01. The day count of zero for a zero-capture attempt is confirmed, and so is the twin handshake
+
+Research lead (Fable 5.2), Wed Nov 18 01:05 PST 2026 (from `date`). Answers the dispatcher's five items: Astra 6.2's drafts for `lm-qual-01`, for `lm-inst-01` and `lm-stab-01`, and for the transfer block's page; two short items; and the lead's item on the twin handshake. RL-179 and RL-180 stand except where "Amends" says otherwise.
+
+**Cites.** `RLD:n` is `RESEARCH-LEAD-DECISIONS.md` on the audit branch at `61377dc45`; the drafts cite `f9b03c33d`, and the lines I used are the same there. `Q:n` is `/Volumes/JW-EXT/scratch/d-lm-qual-01-spec/SPEC-QUAL-01.md`, `QO:n` its `OPEN.md`, `QB:n` its `BUILD-BRIEF.md`. `IN:n`, `ST:n`, `IO:n` and `FD:n` are `SPEC-INST-01.md`, `SPEC-STAB-01.md`, `OPEN.md` and `FIELDS-THAT-DIFFER.md` in `/Volumes/JW-EXT/scratch/d-inst-stab-looks-spec/`. `TP:n`, `TO:n` and `TB:n` are `PAGE.md`, `OPEN.md` and `BUILD-NOTES.md` in `/Volumes/JW-EXT/scratch/d-transfer-block-page/`. `RS:n` is `RUN_STATE.md` on `origin/main` at `2bb70e143`.
+
+**Read.**
+- The three specs, the three OPEN files, the two build briefs, FIELDS-THAT-DIFFER and the transfer page, in full.
+- RL-179 and RL-180 in full. RL-151 §2.1 and §2.2 (RLD:13364-13386). RL-166 Q2, Q3 and Q9 to Q19 (RLD:15853-15865, 15908-15918). RL-166a R-1 to R-9 and R-11 (RLD:15988-15995, 16044). RL-167 rows 12 to 15 and Part B (RLD:16075-16078, 16116-16122). RL-166b §4 (RLD:16613-16614). RL-169 §1 to §3 and RL-169a §1 and §5 (RLD:16363-16421, 16680-16696, 16763-16772). RL-172 (a) and (e) (RLD:17226-17234, 17274-17283). RL-175 B.4, C.1 to C.3 and D.4 (RLD:17770-17813, 17864-17870). RL-149 §2.3's table and RL-155's cap change (RLD:12482-12497, 14228-14232).
+- RUN_STATE items 429 and 430 (RS:1081-1119).
+
+**Checked myself.**
+- The two tail lengths. 3,724 tokens hold 14 full blocks, the last closing at stamp 3,583, so the tail is 3,583 to 3,723 and 140 gaps. 3,151 holds 12, so 3,071 to 3,150 and 79 gaps (R-2, RLD:15989).
+- `LOOKS.json` on `origin/align/2026-11-14-fit-interim` at `f09469894` has one row, `lm-interim-01`, status `draft`. No `PUBLIC.json` and no looks directory is on main at `2bb70e143`. So stage 2 of the interim look has not published.
+- The arithmetic in section 1.1 on what three independent pairs can resolve.
+
+**Not checked.**
+- I ran nothing. I did not open the three draft manifests' JSON, the kits, `fit_interim.py`, the schema or the validator. I take Astra's account of what the fetched code refuses (Q:120-124, IO:19) as written.
+- Which bytes `lm-interim-01`'s manifest pins beyond the scorer. Section 2.1 is written so that it does not matter.
+- Whether the coefficient file carries the length SDs of R-8. Section 1.1 does not use them.
+- The runner pin that qualification runs on, and what differs between it and `2d347f721`. Section 4 (a) is ruled from the leg-type rule alone.
+- The hours at which v4 windows start and close. Section 3.2 has a clause for a window that crosses midnight because I do not know.
+- The twin's code and its brief. Section 5 rules on the lead's description of them.
+- No SSH. No custody, energy, power, meter, transcript, slot, hazard, sealed or restricted file was opened.
+
+**Not done.** No commit, push, comment or run. The only file written is this one.
+
+---
+
+## 0. The answers
+
+| # | Answer | In one line |
+|---|---|---|
+| Qual OPEN-1 | **AMEND** | The word is the GPU-rail 1.10 own-prefix interval over included full-length type-A legs. The L pairs do not gate it. The SD is qualification's own |
+| Qual OPEN-2 | **APPROVE**, one amendment | The two tails as drafted. `lm-qual-01` pins its own scorer hash; equality with the interim pin is shown by a test, not required of the bytes |
+| Qual OPEN-3 | **APPROVE** | Private per-ratio line; two pairs print as contrasts with null estimate |
+| Qual OPEN-4 | **APPROVE** | Eleven fields, two energy words. Every listed number is restricted |
+| Qual OPEN-5 | **APPROVE: no twin.** Amend the names | Three custody names. The oracle for the word is written by a seat other than the builder |
+| Qual, added | **The manifest is committed in two steps** | Scientific content before the first receipt; code pins before the read |
+| Inst/stab OPEN-1 | **B** | A versioned sibling schema. No byte the interim manifest pins is changed |
+| OPEN-2, -3, -6, -8, -9 | **A**, with text | Sections 2.2 to 2.6 |
+| OPEN-4, -5 | **Supplied** | The conventions are in section 2.4 |
+| OPEN-7 | **A, N = 14**, two reads | `lm-stab-01` at 14 dates, `lm-stab-02` at the paper's data lock |
+| Transfer 1 | **A, amended** | Up to 20 dates and 120 legs, as their own cap. The 132 does not move |
+| Transfer 2 | **A, one clause added** | A window that holds the host past midnight makes its close date eligible |
+| Transfer 3, 4, 5 | **A** | One span; the fixed cycle; qualification first |
+| Transfer 6 | **AMEND** | Absolute error per date as Q3 has it; the interval is on the signed values |
+| Transfer 7 | **A** | No verdict word |
+| 4 (a) | **A second read is owed** | On qual-01-s01, for the capture and consumer types. The magistrate may do it in the close interval |
+| 4 (b) | **CONFIRMED** | A zero-capture attempt counts no leg |
+| 5 | **CONFIRMED**, one sentence | The parent derives the word from the numbers |
+
+The builder order is section 1 first. Nothing here needs an MBP minute.
+
+---
+
+## 1. `lm-qual-01`
+
+**The spec's release boundary, its preflight, its failure contract and its acceptance list are approved as written** (Q:75-116), except where the five answers change an expected value.
+
+### 1.0 Two commits, so that Friday does not rest on a build
+
+**The draft requires the final manifest, with every code and schema hash, before the first qualification receipt** (Q:83, QB:5). RL-166 Q10 required it "before any qualification energy is opened" (RLD:15909). The stricter rule is right for the scientific content and wrong for the hashes.
+- A hash pinned on Thursday night and found wrong on Monday could be fixed only by changing the manifest after a receipt, and the draft's own preflight then refuses the whole look. That would lose the word to a typing error.
+- What registration before the data protects is the decision rule. What a code pin protects is that the code was fixed before it read energy. They have different deadlines.
+
+**The text:**
+
+> `lm-qual-01` is committed twice. **The registration** is the manifest with every scientific field final (the roster, the kits and their hashes, the decision series, the SD, the day rule, the word list and its mapping, every print's destination, the tail edges, the paper sentences) and every code, schema and scorer hash set to the sentinel `PENDING:CODE`. Its ledger row has status `registered`. It is on main before the first qualification receipt. **The final manifest** equals the registration byte for byte outside the `PENDING:CODE` slots. It is on main before stage 2's reservation. Preflight 3 (Q:83) tests the registration commit against every receipt. `validate --final` refuses a final manifest that differs from the registration anywhere else. A scientific field changed after the first receipt refuses the look and comes to me.
+
+**What the builder builds first:** the registration file and the ledger row, from the draft manifest with sections 1.1 to 1.5 applied. That is a data file. The lead commits it before qual-01-s01 arms. The schema branch, `qual_score.py` and the tests follow at build speed.
+
+### 1.1 OPEN-1: the series behind the word. AMEND
+
+**Astra's recommendation is right, and two of my own sentences pointed the other way.** RL-175 C.2 said a re-seed "buys nothing the word can use" and that "a pass says the contrast was small in the orders and positions that were run" (RLD:17800-17802). RL-179 F-7 said "each ratio has three pairs" of the word (RLD:18799). Both read as though the word rested on the three independently seeded L pairs. It cannot.
+- A residual divided by the SD of its own length has unit spread by construction. The difference of two such values from two independently seeded legs has an SD near 1.4, unless nearly all the residual spread is shared inside a span.
+- Three pairs on three days then give a 90 % half-width of about 2.92 × 1.4 / √3, which is 2.4 score SD. That interval never fits inside ±0.10.
+- RL-151 §2.2's "about ±0.05 at 1.10 at 36 legs" (RLD:13382) and RL-166b's 0.84 (RLD:16614) are numbers for the own-prefix comparison, where a leg and its own first 3,724 tokens share almost all their error. That is the series RL-151 §2.1 named and RL-166 Q2 defined (RLD:13367, 15857).
+
+**The text for the registration:**
+
+> **Decision series.** GPU rail. Every included type-A qualification leg whose decode count is 4,096. For each, the long value is the whole leg and the short value is its own first 3,724 decode tokens, both scored by the frozen predictor. Residual = measured − predicted, in joules. No leg of type L enters this series, as long or as short.
+>
+> **Scale.** SD_long and SD_short are the sample SDs (ddof 1) of those residuals over the same legs, one for each length. They are computed once, on the full included roster.
+>
+> **Estimate and interval.** d = residual_long / SD_long − residual_short / SD_short for each leg. A day is the local t0-date, as run, of the leg's span. The estimate is the mean of the day means. The interval is that mean ± t(0.95, D − 1) · SD(day means, ddof 1) / √D.
+>
+> **The word `qualified_qualification`.** `not_evaluable` when the series has fewer than 3 legs, or fewer than 3 distinct days, or either SD is not above 1e-12 J. Otherwise `yes` when −0.10 ≤ lower and upper ≤ +0.10, on unrounded values. Otherwise `no`.
+
+- **Why the qualification SDs.** It is R-8's rule carried over (RLD:15995, 16076): the SD of the residual at that length over the legs that have it. It needs no second authenticated input, and I did not check that the coefficient file holds the development SDs.
+- **Why type A only.** A surviving L leg "joins no type-A row" (RLD:16120). It also keeps the word independent of which L legs are excluded.
+- **Struck from the draft's table** (Q:39): "fewer than two complete L pairs at the decision ratio, or fewer than three distinct complete-pair days". The L pairs gate their own print and nothing else.
+- **Endpoints inclusive:** approved.
+- **1.30, the DC-in channel, the 1.374 grid point and every L-pair line** are computed as registered and are restricted. There is one word.
+
+**The paper sentence changes with it.** RL-175 C.2's second sentence is replaced in the manifest and the paper:
+
+> At the 1.10 ratio the long-first pairs were also the second-span pairs, so an effect of order cannot be told from an effect of span position. The pair contrasts describe the orders and positions that were run and carry no word. The qualification word compares each full-length leg with its own first 3,724 tokens; three independently seeded pairs a ratio cannot resolve a tenth of a score SD.
+
+RL-175 C.1's sentence stands as written (RLD:17786).
+
+### 1.2 OPEN-2: the final partial block and the scorer. APPROVE, one amendment
+
+**The tail is approved as drafted** (QO:7): one terminal segment from the last full block's closing stamp to the last stamped token, 3,583 to 3,723 (140 gaps) and 3,071 to 3,150 (79), on the measured and the predicted side, once. n is the gap count and c = P + (first + last) / 2, as R-2 and R-3 already give for a tail (RLD:15989-15990). A native short leg and a long leg's prefix stay distinct observations.
+
+**The word does not need this.** The decision series scores 4,096-token legs and their prefixes, which the fetched predict path already does (Q:120). The tail serves the L-pair prints only.
+
+**Amendment, the pin.** Q10 said "its scorer is `fit_interim.py`'s predict path at the same hash" (RLD:15909). That ties the registration to bytes #795 may still change. It becomes:
+
+> `lm-qual-01` pins the sha256 of the predict path it runs. Native type-L input and the terminal segment are added in `fit_interim.py`, by its owner, without changing any existing branch. If that hash differs from the one `lm-interim-01`'s admitted manifest pins, the lead commits an equivalence record before stage 2: on generated type-A turns, with one coefficient set, the two files give byte-equal predictions for every segment the interim look scores. A difference in any such prediction comes to me. No second scorer, padding, truncation or relabelling of an L leg as A.
+
+- **What "the same hash" protected:** that qualification is scored by the arithmetic that was frozen. The equivalence record protects the same thing.
+- If the owner can land the change before the interim manifest is admitted, the two hashes are equal and no record is needed. That is the better outcome and the builder tries it first.
+
+### 1.3 OPEN-3: Part B question 5. APPROVE
+
+As recommended (QO:9). The private per-ratio line holds the ratio, the complete and incomplete counts, the incomplete ids and a status from three values:
+- `not_evaluable` with 0 or 1 complete pair (RLD:16120);
+- `pairs_only` with exactly 2: the two contrasts and their own-prefix comparators print, estimate and interval null (R-11, RLD:16044);
+- `described` with 3 or more: R-11's estimate and interval, day-weighted as RL-175 B.4 has it.
+
+Stage 1 publishes the counts and ids. No per-ratio status is public. No leg is re-run or moved to A.
+
+### 1.4 OPEN-4: the fields and the destinations. APPROVE
+
+**The eleven fields, their sources and the two energy-dependent positions are approved** (Q:13-25). So is every destination in the table at Q:49-59, and the list at QO:11 is confirmed as restricted in full.
+- By-job, by-cell and per-ratio counts and the incomplete ids stay in committed stage 1. No extra public integer is added.
+- `type_m_residual = not_run` stays (Q10).
+- A count formed after an energy open is restricted, whatever it counts.
+
+### 1.5 OPEN-5: no twin, and the custody names. APPROVE, names amended
+
+**No twin runs in `lm-qual-01`, and the report has no `twin_agrees`.** RL-180 row 2 is scoped to looks that freeze coefficients (RLD:19217), and this one freezes nothing. A wrong word here arms nothing and is recomputable by anyone at the data release. A wrong freeze would not have been.
+
+**One thing replaces it, at no machine time:**
+
+> The expected values for `test_qual_interval_containment`, `test_qual_equal_day_unequal_counts`, `test_qual_fewer_than_three_pair_days`, `test_qual_undefined_interval` and `test_qual_l_partial_blocks_same_scorer` are written from section 1.1 and 1.2 of this ruling by a seat of another model family than the builder's, without sight of `qual_score.py`.
+
+**The custody names.** Two fixed `not_run` files and a copy of a restricted input are clutter. RL-180 row 5's "six fixed names" is amended for every look:
+
+> Each look's manifest carries a closed list of custody names, fixed at registration, which always includes `stdout` and `stderr`. On success `RESTRICTED/` holds exactly those names.
+
+For `lm-qual-01` the list is `scores.json`, `stdout`, `stderr`. The coefficient file is read where it lies, in `lm-interim-01`'s custody directory, against the freeze-2 hash. `lm-interim-01` keeps its six.
+
+---
+
+## 2. `lm-inst-01` and `lm-stab-01`
+
+**Both specs are approved as written** (IN:1-62, ST:1-59) with the answers below. Neither is a run authority. Both still come to me once, as final manifests with their synthetic hand tables, for the cold pass RL-169 §3 and RL-179 row 12 require (RLD:16421, 18919).
+
+### 2.1 OPEN-1: B, a versioned sibling schema
+
+**Three looks now need a manifest shape the v1 schema refuses: qualification, and the two descriptions.** v1's bytes are pinned by a manifest that gates freeze 2. I will not have #795 reopened for a filler's reader.
+
+> `look_manifest.schema.json` at v1 is not edited while `lm-interim-01` pins it. A new file, `look_manifest.v2.schema.json`, holds two closed variants selected by `look_kind`: `qualification` and `description`. The validator dispatches on the manifest's schema id. An interim manifest validates under v1 exactly as today. Under v2, a `description` manifest names every kit by id and sha256, may name filler kits and no others, lists its channels from `gpu_rail`, `rail_sum` and `dc_in`, and has no `fit`, `freeze1` or word list. A `qualification` manifest names the incoming freeze-2 reference and has no training object. `validate --final` refuses any `PENDING:CODE` or `OPEN-n` string anywhere in the document.
+
+- The filler ban stays on every other kind. RL-180 row 9 is what the `description` variant implements (RLD:19224).
+- If the validator's dispatch must touch a file the interim manifest pins, the interim scorer's owner makes that change before the interim manifest is admitted, or the dispatch lives in a new module. The builder says which in its final message.
+
+### 2.2 OPEN-2: the release inventory. A
+
+- **`lm-inst-01`:** five fields (IN:21-27). **`lm-stab-01`:** six (ST:22). Every one is a hash, an id or an integer copied from committed stage 1. No word. A completed description look is marked by its `PUBLIC.json` existing.
+- **Custody names,** under section 1.5's amended row: `hold.json`, `turn.json`, `gain.json`, `edges.json`, `stdout`, `stderr` for the instrument look; `hold.json`, `turn.json`, `date_spreads.json`, `context.json`, `stdout`, `stderr` for each stability read.
+- The failure channel is RL-180 row 4, unchanged.
+
+### 2.3 OPEN-3: who contributes. A, with the source named
+
+> **Stage 1** decides a leg's disposition from `leg_record.json` and `runner_receipt.json` only, the sources RL-169a named as operational (RLD:16714, 16766): `leg_status`, `g0_outcome`, the quiet span of 600 s or more, `decode_tokens` against the kit's cap, `decode_cap_reached`, the power mode, the loaded flag. `n_legs` counts legs that pass these. **Stage 2** judges sidecar coverage, rail gaps against U1 and a present, clean DC-in stream, from time stamps and sample counts on the print's own interval, before it reads a value on that interval. A failed check makes that print null with its reason. It removes no leg from the roster and changes no public count.
+
+- **Why the split.** RL-169a already said coverage is "judged by `lm-inst-01` at the read" (RLD:16717). Stage 1 must not open a stream to prove it, and a count that waits for stage 2 could not be public.
+- A short turn, an unreleased G0 and a loaded attempt keep their reason and stay in the accounting. No partial prints (option B).
+
+### 2.4 OPEN-4 and OPEN-5: the arithmetic
+
+**Where a pinned definition exists and matches, the builder cites it. Where the table differs from pinned code, the builder stops and tells me at the cold pass.** These are the conventions, fixed here before any F2 or stability energy is read.
+
+| Quantity | Convention |
+|---|---|
+| GPU rail, DC-in | As RL-166 Q2: the committed step-3 loader and `Trace` for the rail; the trapezoid between consecutive KM003C samples, cut at the interval's ends, for DC-in (RLD:15853) |
+| Rail sum | The sample-by-sample sum of every rail column that loader returns for the host. The manifest lists the columns by name. A sample missing a column is a gap |
+| Clock | The mapping the interim look uses for its edges (RLD:17866) |
+| Hold | The leg's recorded quiet span, from its start for 600 s. Mean = energy / duration |
+| Window SDs | Contiguous windows of 10, 40 and 128 s from the hold's start; an incomplete last window is dropped (60, 15 and 4 windows). SD of window means, ddof 1. A window holding a gap over U1 is dropped and counted. Fewer than 2 windows: null |
+| Drift | The least-squares slope of the 10 s window means on their midpoints, printed in W per 600 s |
+| Turn energy | ∫ (P − hold mean) dt from `turn_start_s` to `last_token_s` + 1.000 s. DC-in's value is marked "tail cut" |
+| Plateaus | Decode: mean power from `first_token_s` to `last_token_s`, less the hold mean. Long prefill: the 19,458 legs only, from `turn_start_s` to `first_token_s`. No trimming |
+| Plateau gain, energy ratio | DC-in above hold divided by rail sum above hold, and by GPU rail above hold, on equal limits. A denominator at or under zero gives null, with both operands printed |
+| Idle gap | Hold mean of DC-in less hold mean of rail sum, beside the hold's mean fan speed (R-7's rule, RLD:15994) and mean of each start sensor |
+| Onset lag and rise | Legs of 2,000 and 19,458 only. Level = the prefill's mean above hold over its second half. Rise = time between the first crossings of 10 % and 90 % of the level. Lag = DC-in's first 50 % crossing less the rail's. The 256 legs print null, "prefill shorter than the level window". Each value carries the channel's sample period as its resolution |
+| Decode-end lag | DC-in's first fall through 50 % of its decode plateau less the rail's, inside the 1 s tail; otherwise "over 1 s" |
+| Return after warm-up | Origin as RL-175 D.4. The start of the first 10 s window whose mean is at or under hold mean + 2 × the hold's 10 s SD, less the origin. If the first observed window qualifies, "under" the unobserved interval, censored |
+| Floor in tokens | For each window length w: (SD of window means at w) × w, in joules, divided by the leg's decode energy above hold per decode token. One SD; a reader applies their own multiple |
+
+- The "2 ×" in the return rule is a display convention for one print. It is no detection threshold and nothing reads it.
+- Every undefined value is null with its reason. None is zero.
+- A synthetic hand table covers each row, the 128 s remainder included (IN:59-61).
+
+### 2.5 OPEN-6: when the instrument roster is complete. A
+
+All 36 planned positions have a receipt-backed close or a documented terminal disposition. The look never waits for 36 successes, and I name no early cutoff. `f2-inst-01`'s legs rank second on the ladder (RLD:18739), so this resolves itself.
+
+### 2.6 OPEN-7, -8 and -9: the stability reads
+
+**Schedule (OPEN-7): A, two reads.**
+
+> `lm-stab-01` is due at the first proven close after stage 1 can count 14 distinct local t0-dates that each hold a qualified stability leg. `lm-stab-02` is due when the lead commits the ledger row `paper1_data_lock`. Both manifests are committed before `lm-stab-01`'s reservation. A read runs at the first time its preconditions hold on or after its due event; being late changes nothing, because it takes the legs closed at its stage-1 hash. If the data lock comes before `lm-stab-01` has run, `lm-stab-01` runs then and `lm-stab-02`'s row is set to `coalesced` and never runs. No third read exists without a ruling.
+
+- **14 is a scheduling number.** It spans two weeks, and the first-daily legs alone then put four or five dates in each prompt-size cell. It is no adequacy threshold and nothing tests it.
+- RL-179 row 13's rank ends when `lm-stab-02` has run or is coalesced.
+
+**Identity (OPEN-8): A.** One manifest id for each read; a later read is never a retry or a `supersedes`. Kits `f2-stab-01` to `-14` are named by id and sha256 in both manifests. For kits minted later:
+
+> `lm-stab-02`'s roster is the fourteen named kits plus every kit in the committed file `f2-stab/KITS.json` (id and sha256) whose row was committed before that kit's first receipt. The manifest pins the file's path, and stage 1 pins its hash.
+
+**Tables (OPEN-9): A, one line added.**
+- Within a prompt-size cell and a channel, for each of the five measures: each date's SD (ddof 1; a date with one leg is null and counted), the SD of the date means (ddof 1; null under 2 dates), and **the pooled within-date SD**, the root of the within-date variances weighted by their degrees of freedom. Most dates will hold one leg in a cell, so the pooled line is the one F-1's comparison reads (RLD:18661).
+- Hour is the local hour of the span's t0. The gap is the span's t0 less the proven close of the host's immediately preceding entry of any kind. An unknown predecessor or a negative gap is printed as such.
+- **The paper's wording is decided by stage 1 and needs no further ruling.** The sentence says "the same work" only if the committed token table shows, at every leg position, one realised (prefill, decode) pair across every contributing kit. Otherwise it says "the same cell of work" (RLD:19173).
+- **FD:26's finding is accepted.** The committed kits use first-hit master seeds and not `f2-inst-01`'s. I allowed a new seed "with no word from me" (RLD:18722). The manifests pin the actual bytes and carry FD's table.
+
+---
+
+## 3. The transfer block
+
+**The page is approved with the amendments below, and `RL-180` row 10 is met:** it is ruled before stage 2 of `lm-interim-01` has published anything. I confirm Astra's statement (TP:48). My amendments were made without any word of a `PUBLIC.json`, since none exists.
+
+### 3.1 Budget and last date (question 1): A, as its own cap
+
+> The transfer block has its own cap: one six-leg block on each of the first 20 eligible dates from the effective freeze-2 date, 120 legs at most. A missed date spends its place. It ends at the 20th place or the series' last W1, C or T t0-date. The campaign cap of 132 and every phase allocation are unchanged. No transfer leg is replaced, and none draws on the reserve of twelve.
+
+- **Why not "252".** The 132 bounds the legs that feed the fit, its qualification and its controls. Transfer legs feed none of them. Two counters cannot be traded against each other.
+- **RL-149 §2.3's extension rule** (RLD:12496) is about extending the fit's roster from the interim errors. This cap is sized from the v4 roster (12 windows and 8 reserves) and from nothing measured.
+- About 52 machine-hours at most, displacing fillers only.
+
+### 3.2 What makes a date eligible (question 2): A, one clause added
+
+> A date is eligible when a structural record shows a W1, C or T window t0 on it. An abort after t0 counts. A forecast, a READY record or a refusal before t0 does not. If that window still holds the host at midnight and no transfer block took its t0 on the window's t0-date, the window's close date is eligible in its place. One window gives at most one block, and two windows on one date give one block. The block's own day is its span's t0-date.
+
+- **Why the clause.** The question is whether the fit holds on the dates the windows run, and a window that runs across midnight runs on both. Without it a late-starting series could yield no block at all. I did not check the windows' hours.
+- A missed date is never made up.
+
+### 3.3 Layout, order and seeds (questions 3 and 4): A and A
+
+- **One span of six:** four type-A legs at 2,000, 10,000, 19,458 and 19,458 with cap 4,096, and one adjacent L pair at 19,458. This is one qualification span with new seeds, so its layout is a ruled one and no cold seat is owed on the kit (RLD:18846).
+- **RL-175 C.2's rank rule** (RLD:17803) is for layouts with more than one span. For a one-span kit family the test is: over the planned date places, each ratio has both orders. `validate-kit` carries it, with TB:23's negative fixtures.
+- **The cycle** (1.10 full first, 1.30 short first, 1.10 short first, 1.30 full first) is indexed by date place, misses included, and never shifted. Master seeds are the first from 2026111800 upward that give the place's order and unused leg seeds.
+- **The pair contrasts are description.** The paper says the span position was constant.
+
+### 3.4 Priority (question 5): A
+
+Qualification has first call on a shared date. A transfer block never arms between the two spans of a qualification block. A READY v4 session keeps its registered priority. A conflict that cannot be resolved inside the date is a recorded miss.
+
+### 3.5 The estimand (question 6): AMEND
+
+> For each evaluable date and channel, e = (Σ predicted − Σ measured) / Σ measured over the hot decode blocks of every included A and L leg, by the frozen predictor. A date is evaluable with at least three included legs that have a hot stretch and a positive, finite denominator. **Printed, all restricted:** each date's e and |e|; the number of evaluable dates, the largest |e| and the count with |e| ≤ 0.02; the mean of e over dates with its interval, mean ± t(0.95, D − 1) · SD(ddof 1) / √D; the pooled value over every hot block on every date; and the date map with misses and non-evaluable dates. GPU rail first, DC-in beside it. One date gives no interval.
+
+- **Why the interval moves to the signed values.** A t interval on absolute values describes a folded quantity and is not symmetric. The per-date bar is on |e|, as RL-166 Q3 has it (RLD:15862-15864); the interval says whether the fit runs high or low on window dates.
+- 0.02 is the interim half's bar, shown for comparison. It gives no word.
+
+### 3.6 The look (question 7): A
+
+`lm-transfer-01`, one terminal read after the last place is served or expired and the desks are final. Public: `transfer_interval` (`estimated`, `not_evaluable`), `stage2_error`, and the hashes. No `transfer_holds`.
+- **Why no verdict.** The largest of up to twenty daily errors is not comparable with the largest of five, so the interim bar would fail a sound fit. A bar chosen for twenty would be a new threshold, and the paper prints every date's error at the data release anyway.
+- It is registered in two steps, as section 1.0: the scientific content before the first transfer block arms, the pins before the read. It comes to me once for a cold pass.
+
+**The scheduling register on the page** (TP:29-37) restates RL-179 rows 2, 9 and 20 and RL-180 row 8 and is approved. Its two new clauses are rows 13 and 14 below.
+
+**What the builder builds:** TB's four deliverables with option A throughout, the kit generator with the pinned `sha256-qual-v1` law at `--spans 1` (TB:14-19), and no law change.
+
+---
+
+## 4. Two short items
+
+### (a) The hand-read on the qualification pin: a second read is owed
+
+**The read on the first `f2-stab` leg discharges the pin's part of F-3 (c), and RL-172a's soak comparison with it** (RLD:18705). It does not discharge the leg types. A stability leg is own-shaped at `q600`. Qualification runs a capture and five consumers a span at `q0`. F-3 (c) names G0 shape and band as what makes a type, and "the first native run of a leg type that has not run on that pin" is owed its read (RLD:18701).
+
+> A second hand-read is owed on qual-01-s01. It covers what the filler could not show: the capture leg's G0 record, each consumer's release against the span reference and its wait, and each leg's decode count against its own cap, 4,096, 3,724 or 3,151. The magistrate does it in s01's close interval, from the template, on the operational records. qual-01-s02 arms when it passes. If it has not passed by s02's latest t0 under F-1 rule 3, s02 is re-dated under RL-175 C.3 and the half that ran stands.
+
+- So s02 keeps its date unless the read fails or runs out of date.
+- **F-11 is satisfied by the filler** (RLD:18840). The machine consumer gate of F-3 (a) still protects s01's own legs (RLD:18692).
+- If the lead shows, before Friday, a filler or pilot that ran both types at `q0` on this pin, that run's read discharges this and none is owed on s01.
+
+### (b) RUN_STATE 430: confirmed
+
+**A zero-capture refused attempt counts no leg toward a date.** RL-172 (a) rule 1 limits the mixed-size development legs a t0-date holds (RLD:17229), because the fold is the date and the look keys it on the receipt of a span that measured. An attempt that measured nothing has no leg in any fold.
+- "Legs that started measuring" is the right reading, and the conservative one: a leg that started and was later excluded still counts toward the date's 12.
+- The look takes dev-05-s01's date from attempt 2's receipt. Attempt 1's directory is kept and enters no roster.
+
+---
+
+## 5. The twin handshake: confirmed
+
+**The lead's reading is what amendment 2 meant** (RLD:19015-19017). The child writes its numbers as one JSON object on its standard output, captured in custody. The parent writes `RESTRICTED/twin.json`, with the largest differences, and derives `twin_agrees`. Only the word reaches `PUBLIC.json`.
+
+One sentence added:
+
+> The parent computes `twin_agrees` from the numbers, by RL-180's tolerances. It never copies a word the child wrote. Output from the child that the parent cannot parse gives `not_evaluable`.
+
+The child's standard error is inside `RESTRICTED/` as well, so a library warning there breaks nothing.
+
+---
+
+## Amends and retirements
+
+- **RL-166 Q10:** "committed before any qualification energy is opened" reads as section 1.0's two commits. "At the same hash" reads as section 1.2.
+- **RL-175 C.2:** its second paper sentence is replaced by section 1.1's. "A re-seed buys nothing the word can use" is withdrawn as a reason; the ruling against a re-seed stands on its cost. The rank rule is scoped to layouts of more than one span.
+- **RL-179 F-7 and row 22:** "each ratio has three pairs" described the L-pair prints. The row protects the three qualification dates the word needs, and stands.
+- **RL-180 row 5:** "six fixed names" reads as section 1.5.
+- **RL-172 (e):** "date that holds a window t0" gains section 3.2's clause.
+- **Stand unchanged:** every inclusion rule; the six qualification rules; RL-175 B.4, C.1 and C.3; RL-179 F-12 and rows 26 to 28; RL-180 rows 1 to 4 and 6 to 14.
+
+**Blind status.** Blind. No v4 outcome exists. Stage 2 of the interim look has not published, and no campaign, qualification, F2, stability or transfer energy has been read under any look. Nothing sealed or measured was opened for this ruling. Section 1.1 names which registered series carries a word, before any qualification leg exists. Sections 2 and 3 fix description prints and one new estimand before their data exist.
+
+**For Ed, plainly.** "Four designs are approved to build. The one with a deadline is the check on the three test days that start Friday. I found a mistake in my own earlier wording: I had tied its pass or fail to three pairs of runs that are far too noisy to decide it. It rests on the comparison the design was sized for, each long run against its own first part. To keep Friday safe, only the rules of that check have to be written down before the first run; the code can be finished and locked afterwards, before anyone reads the data. The repeat-run series will be read twice, after two weeks of dates and at the paper's data lock. The extra test runs on the days of the main experiment are approved, up to 120, counted separately."
+
+---
+
+## Register
+
+Rows for the lead to commit to `RULES.json`. Owner is `research_lead` for rows 1 to 12 and 15; the lead owns rows 13, 14 and 16.
+
+| # | Clause | Class | Protects | Scope | Ends | Test |
+|---|---|---|---|---|---|---|
+| 1 | A look's scientific content is on main, with status `registered`, before the first receipt of the spans it reads; its final manifest differs only in `PENDING:CODE` slots and is on main before the reservation (1.0) | VALIDITY (prereg) | The decision rule is fixed before the data exist; the code before it reads energy | `lm-qual-01`, `lm-transfer-01` | When each look has run | `validate --final` compares the two commits; preflight 3 on the registration commit |
+| 2 | `qualified_qualification` is the GPU-rail 1.10 own-prefix interval over included 4,096-token type-A legs, scaled by qualification's own length SDs, day-weighted, inclusive at ±0.10; `not_evaluable` under 3 legs, under 3 days or at an SD floor (1.1) | VALIDITY (prereg) | The qualification half of `qualified` | `lm-qual-01` | The paper's data release | `test_qual_interval_containment`, `_equal_day_unequal_counts`, `_fewer_than_three_pair_days`, `_undefined_interval` |
+| 3 | No type-L leg enters the decision series, and no L-pair count gates the word (1.1) | VALIDITY | The word does not move with an L exclusion | `lm-qual-01` | The paper's data release | A fixture that excludes each L leg in turn leaves `PUBLIC.json` byte-equal |
+| 4 | The 3,724 and 3,151 legs are scored with one terminal segment, 3,583 to 3,723 and 3,071 to 3,150, on both sides, once (1.2) | VALIDITY | The short legs' totals | `lm-qual-01`, `lm-transfer-01` | The paper's data release | `test_qual_l_partial_blocks_same_scorer` |
+| 5 | `lm-qual-01` pins its own predict-path hash; a hash unequal to the interim pin needs a committed record of byte-equal type-A predictions before stage 2 (1.2) | VALIDITY (prereg) | Qualification is scored by the frozen arithmetic | `lm-qual-01`, `lm-transfer-01` | The paper's data release | Preflight reads the two pins and, if unequal, the record's hash in the ledger row |
+| 6 | The oracle values for the word and the tails are written by a seat of another family than the builder's (1.5) | VALIDITY | The word's arithmetic has an independent check without a twin | `lm-qual-01` | When the build merges | The PR names the seat and the commit of its fixtures |
+| 7 | Each look's manifest carries its closed list of custody names, with `stdout` and `stderr`; success leaves exactly those (1.5) | VALIDITY (blinding) | One public file, everything else in custody | Every look after `lm-interim-01` | The paper's data release | Each look's success check |
+| 8 | New look kinds validate under `look_manifest.v2.schema.json`; the v1 file is not edited while `lm-interim-01` pins it (2.1) | SAFETY | Freeze 2's pinned bytes | The looks package | When `lm-interim-01`'s `PUBLIC.json` is on main | `test_description_manifest_final`; the v1 file's sha256 in CI |
+| 9 | Stage 1 decides a leg's disposition from `leg_record.json` and `runner_receipt.json`; stage 2 judges coverage from stamps and counts and nulls a print, never a leg (2.3) | VALIDITY (blinding) | No public count waits on an energy file | `lm-inst-01`, `lm-stab-*` | The paper's data release | `test_blind_stage1_and_effective_freeze`; the invariance test |
+| 10 | The F2 arithmetic is section 2.4's table; a conflict with pinned code comes to me at the cold pass (2.4) | VALIDITY | The instrument numbers are defined before their energy is read | `lm-inst-01`, `lm-stab-*` | When the cold pass is given | `test_f2_hold_and_turn_vectors`, `test_instrument_print_inventory`, `test_instrument_edges_and_origins` |
+| 11 | `lm-stab-01` is due at 14 qualified local dates and `lm-stab-02` at the `paper1_data_lock` row; both manifests precede the first reservation; no third read (2.6) | VALIDITY (blinding) | The reads are named before any is made; no read changes the series | `f2-stab-*` | When `lm-stab-02` has run or is coalesced | `test_stability_named_reads` |
+| 12 | "The same work" is written only if stage 1's token table shows one realised pair at every position across kits (2.6) | VALIDITY | The validation section's sentence | The paper | The paper's data release | Read from the committed stage-1 table |
+| 13 | Transfer: one six-leg span on each of the first 20 eligible dates, 120 legs at most, its own counter; none replaced, none from the reserve; arms only after effective freeze 2 and its registration (3.1) | VALIDITY | The fit is tested on window dates by a roster fixed blind; the 132 is untouched | `cl-transfer-*` | The 20th place or the series' last window date | The queue's date-place counter; the 132 counter reads no transfer kit |
+| 14 | A transfer date is eligible on a structural record of a W1, C or T t0, or on that window's close date if it held the host at midnight; never re-dated or made up; never between the two spans of a qualification block (3.2, 3.4) | VALIDITY | The window-day population; qualification's dates | `cl-transfer-*` | With row 13 | TB:25's queue tests, with a midnight-crossing window |
+| 15 | `lm-transfer-01` prints section 3.5's quantities in custody and publishes `transfer_interval` and `stage2_error` only (3.5, 3.6) | VALIDITY (prereg and blinding) | The estimand is fixed before any transfer leg exists | `lm-transfer-01` | The paper's data release | Its type, invariance, failure and once tests |
+| 16 | A hand-read on qual-01-s01 for the capture and consumer types at `q0`; qual-01-s02 waits for it (4 a) | VALIDITY | RL-179 row 8, for the types the filler did not run | Qualification on its pin | When the read passes, or a prior `q0` run of both types is shown | The arm predicate for s02 reads the read's record |
+
+**Rows closed or changed by this ruling.** RL-180 row 5 is read with row 7. RL-180 row 10 closes: the page is ruled. RL-179 row 22's "protects" text is read as section "Amends" has it. No row is added for items 4 (b) and 5; each confirms a reading of an existing row.
+
+**What comes back to me.** A scientific field of a registration changed after a first receipt. An unequal A-leg prediction under row 5. The final manifests of `lm-inst-01`, `lm-stab-01` with `lm-stab-02`, and `lm-transfer-01`, once each, for a cold pass. A conflict between section 2.4 and pinned code. A failed second hand-read. Nothing else in this ruling returns.
