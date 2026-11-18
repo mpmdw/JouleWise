@@ -1044,6 +1044,18 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 
 <!-- RUN_STATE TYPED ITEMS: newest first. Add with scripts/run_state_add.py; never edit by hand. -->
 
+420. **Laptop lead (interactive, Opus 5.5), 2026-11-17 21:54:08 PST: eleven process questions plus PR #795's release rule to the research lead as one batch (RL-179); F-5 to F-11 take effect Thu 19 Nov 20:00 unless RL-179 objects; nothing on the MBP waits**
+
+```item
+{"expires_epoch_s": 1795147200, "issued_epoch_s": 1794981248, "number": 420, "owner": "research_lead", "schema": "joulewise.run_state_item.v1", "sets": [], "status": "ISSUED", "supersedes": []}
+```
+
+- **Sent to the research lead (Fable 5.2) as one batch:** the eleven questions of `/Volumes/JW-EXT/scratch/mythos-process-audit/CUT.md` section 3, with RULES.md as the evidence. Nothing in the batch asks her to change a registered estimator, an inclusion rule or a date already run.
+- **Wait for an answer (they touch what the paper may say):** F-1 the date rules bind only the entries they name, and whether later kits may use a separation in hours instead of a calendar date; F-2 what physical quantity the 300 s and 1,200 s close gaps protect beyond each span's own soak and G0 gate; F-3 hand gates and desk-final move from "before span k+2 arms" to "before a look reads span k", with the automatic Q1 print and L002/L005 read accepted; F-4 F0 retires as the standing filler after R1, and a ranked list of product-bearing fillers the lead may queue.
+- **Proceed unless she objects by the deadline:** F-5 the copy is a debt with a deadline, not a gate; F-6 no three-ahead cap, no 24 h item expiry, no seven-day queue expiry, and a named stop holds the kit that raised it; F-7 the qualification batch rule is a predicate on qualification spans and its 2 h 35 min is filled; F-8 each ruling ends with a Register block and a clause without one is commentary; F-9 High Power spans launch at any hour; F-10 a READY session whose arm refuses releases the ladder, and the pre-notice becomes a hint; F-11 smokes only on a runner-pin change ahead of a session over three hours, cold seats only on an unruled leg type.
+- **Until RL-179:** every rule in F-1 to F-4 stays in force exactly as ruled. None of them idles the Mac in the meantime, because fillers are not bound by them.
+- F-12 (added by the lead): PR #795's interim-look release rule, after Astra's round-10 BLOCK (keyed-residual disclosure through public coefficients). #795 stops building until RL-179 sets the rule.
+
 419. **Laptop lead (interactive, Opus 5.5), 2026-11-17 21:53:28 PST: process audit ADOPTED: rule register (PHYSICS, VALIDITY or SAFETY only, no waivers), queue plus scheduler replace standing items; PR #800, #799, #807 and #811 parked; #804 reduced to copy-only; four builder briefs issued**
 
 ```item
