@@ -660,6 +660,137 @@ class R0DisplayCensusTest(unittest.TestCase):
         self.assertIsNone(record["display_woke_during_run"])
 
 
+class R0SamplerAdmissionSpec(unittest.TestCase):
+    setUp = R0HostTest.setUp
+    runner = R0HostTest.runner
+
+    def admission(self, *, busy=True):
+        clock = GuardClock()
+        cpu = "0:00.00"
+        launchctl_at = []
+        bad_census_at = set()
+        def run(argv, **kwargs):
+            if argv == contention.PS_ARGV:
+                return subprocess.CompletedProcess(
+                    argv, 0, cpu_table((42, OLD_START, cpu, "mdworker_shared")), "")
+            if argv[0] == "/bin/launchctl":
+                launchctl_at.append(clock.now)
+                if clock.now in bad_census_at:
+                    return subprocess.CompletedProcess(argv, 1, "", "fixture failure")
+            return self.runner(argv, **kwargs)
+        guard = QuietGuard([], run=run, inspect_custody=lambda **kw: Census(),
+                           clock=clock, sleep=clock.sleep)
+        guard.host_reader = None
+        guard.SNAPSHOT_CADENCE_S = 3600  # Only the fixture advances the sampler.
+        close = getattr(guard, "close", None)
+        if close is not None:
+            self.addCleanup(close)
+
+        def advance(at, *, census_ok=True):
+            nonlocal cpu
+            clock.now = at
+            cpu = "0:01.80" if busy and at >= 45 else "0:00.00"
+            if not census_ok:
+                bad_census_at.add(at)
+            sample = getattr(guard, "_background_snapshot", None)
+            if sample is not None:
+                sample()
+        return guard, clock, advance, launchctl_at
+
+    def test_early_busy_window_cannot_mask_a_queued_excessive_interval(self):
+        guard, _, advance, launchctl_at = self.admission()
+        guard.check(force=True)
+        for at in (45, 105, 120):
+            advance(at)
+        with self.assertRaisesRegex(Refused, "judged CPU window of 60.0 s exceeds"):
+            guard.check(force=True)
+        receipt = guard.receipts[-1]
+        self.assertEqual([flag["interval"]["end_monotonic_s"] for flag in guard.contention_flags],
+                         [45])
+        self.assertEqual([window["end_monotonic_s"] for window in receipt["cpu_intervals"]],
+                         [45, 105])
+        self.assertEqual(launchctl_at, [0, 45, 105, 120])
+
+    def test_early_busy_window_allows_later_windows_and_their_censuses(self):
+        guard, _, advance, launchctl_at = self.admission()
+        guard.check(force=True)
+        for at in (45, 60, 75, 90):
+            advance(at)
+        guard.check(force=True)
+        receipt = guard.receipts[-1]
+        self.assertEqual([window["end_monotonic_s"] for window in receipt.get("cpu_intervals", ())],
+                         [45, 60, 75, 90])
+        self.assertEqual([entry["monotonic_s"] for entry in receipt["background_census"]],
+                         [45, 60, 75, 90])
+        self.assertEqual([flag["interval"]["end_monotonic_s"] for flag in guard.contention_flags],
+                         [45, 60])
+        self.assertEqual(launchctl_at, [0, 45, 60, 75, 90])
+        self.assertIsNone(guard.failure)
+
+    def test_invalid_background_census_still_refuses_after_contention(self):
+        guard, _, advance, _ = self.admission()
+        guard.check(force=True)
+        advance(45)
+        guard.check(force=True)
+        self.assertEqual([flag["interval"]["end_monotonic_s"] for flag in guard.contention_flags], [45])
+        advance(60, census_ok=False)
+        with self.assertRaisesRegex(Refused, "background sampler: .*LaunchAgent census indeterminate"):
+            guard.check()
+        self.assertIn("LaunchAgent census indeterminate", guard.receipts[-1]["refusal"])
+
+    def test_stalled_sampler_still_refuses_after_contention(self):
+        guard, clock, advance, _ = self.admission()
+        guard.check(force=True)
+        advance(45)
+        guard.check(force=True)
+        self.assertEqual([flag["interval"]["end_monotonic_s"] for flag in guard.contention_flags], [45])
+        clock.now = 96
+        with self.assertRaisesRegex(Refused, "background snapshots stalled"):
+            guard.check(force=True)
+
+    def test_caller_gap_retains_contention_and_quiet_control(self):
+        for busy in (True, False):
+            with self.subTest(busy=busy):
+                guard, clock, advance, launchctl_at = self.admission(busy=busy)
+                guard.check(force=True)
+                for at in range(45, 331, 15):
+                    advance(at)
+                guard.check(force=True)
+                self.assertEqual(launchctl_at, [0, *range(45, 331, 15)])
+                self.assertEqual(sum(clock.sleeps), prewindow.INTERVAL_S)
+                self.assertEqual(len(guard.receipts[-1]["cpu_intervals"]), 20)
+                self.assertEqual([flag["interval"]["end_monotonic_s"] for flag in guard.contention_flags],
+                                 [45, 60] if busy else [])
+                self.assertIsNone(guard.failure)
+
+    def test_execute_reports_guard_flag_before_a_later_refusal(self):
+        from contextlib import nullcontext
+        from joulewise.align import r0_runner
+        from tests.align.test_r0_checks import FakeBackend
+
+        for last, status in ((60, "pass"), (105, "refused")):
+            with self.subTest(status=status), tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp)
+                guard, _, advance, _ = self.admission()
+                def host():
+                    advance(45)
+                    advance(last)
+                    return {"status": "pass"}
+                with patch.object(r0_runner, "host_snapshot", side_effect=host), \
+                        patch.object(r0_runner, "deadline", return_value=nullcontext()), \
+                        patch.object(r0_runner, "command", return_value="synthetic-head"), \
+                        patch.object(r0_runner, "softwareupdate_scan_forecast", create=True,
+                                     return_value={"status": "unknown"}):
+                    report = r0_runner.execute(config_at(root), root, ["host"], ["D"],
+                                               guard=guard, backend_factory=FakeBackend)
+                self.assertEqual(report["status"], status)
+                self.assertEqual(report["checks"][0]["status"], status)
+                self.assertEqual(report["checks"][0]["contention_flags"][0]["interval"]["end_monotonic_s"], 45)
+                self.assertEqual(report["contention"]["guard_flags"], 2 if status == "pass" else 1)
+                self.assertEqual(json.loads((root / "report.json").read_text())["status"], status)
+                self.assertTrue(guard._stop_sampler.is_set())
+
+
 class R0QuietIntervalTest(unittest.TestCase):
     # CPU fixtures derive from the 0.05 CPU-s/s bar and 30 s interval:
     # 0.06 / 0.04 straddle the bar by 0.01; 1.80 / 1.20 are their
