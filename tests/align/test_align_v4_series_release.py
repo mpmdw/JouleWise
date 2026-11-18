@@ -225,6 +225,15 @@ def write_boundary_bundles(root, wins):
                 yield window, bundle, episode_id
 
 
+def read_restored_fixture_rows(bundle):
+    with tempfile.TemporaryDirectory() as tmp:
+        projection = Path(tmp) / "member"
+        shutil.copytree(bundle, projection)
+        (projection / "power_trace.csv").write_bytes((bundle / "outputs/align_soc_rails.csv").read_bytes())
+        pm_rows = json.loads((bundle / "outputs/align_s_pm_rows.json").read_bytes())
+        return s_rows.read_member_rows(projection, s_rows.REGISTERED, pm_rows=pm_rows)
+
+
 def fixture_git(root, *args):
     return subprocess.check_output([
         "git", "-c", "user.name=Synthetic", "-c", "user.email=synthetic@example.invalid", *args,
@@ -802,12 +811,7 @@ class SeriesReleaseTests(unittest.TestCase):
                 run_id = member.episode.episode_id
                 attempt = run_id.split("-")[1]
                 bundle = root / "series/restored" / attempt / "runs" / run_id
-                with tempfile.TemporaryDirectory() as tmp:
-                    projection = Path(tmp) / "member"
-                    shutil.copytree(bundle, projection)
-                    (projection / "power_trace.csv").write_bytes((bundle / caller.RAIL_FILE).read_bytes())
-                    pm_rows = json.loads((bundle / caller.PM_ROWS).read_bytes())
-                    expected, _ = s_rows.read_member_rows(projection, s_rows.REGISTERED, pm_rows=pm_rows)
+                expected, _ = read_restored_fixture_rows(bundle)
                 self.assertEqual(member.s_rows, expected.rows)
                 cut |= any(row.cut for row in expected.rows)
                 empty |= not expected.rows and member.eligible
@@ -1119,14 +1123,14 @@ class SeriesReleaseTests(unittest.TestCase):
                 bundle = directory / "runs" / run_id
                 events = bundle / "events.jsonl"
                 raw = events.read_bytes()
-                rows, _ = s_rows.read_member_rows(bundle, s_rows.REGISTERED)
+                rows, _ = read_restored_fixture_rows(bundle)
                 self.assertTrue(rows.rows)
                 encoded = events.with_suffix(".jsonl.zst")
                 subprocess.run([zstd_path(), "-q", "--rm", "-o", str(encoded), str(events)], check=True)
                 self.assertEqual(subprocess.check_output([zstd_path(), "-qdc", str(encoded)]), raw)
                 with self.assertRaises(CompressedBundleRequiresRestore) as refusal:
-                    s_rows.read_member_rows(bundle, s_rows.REGISTERED)
-                self.assertEqual(refusal.exception.path, str(events))
+                    read_restored_fixture_rows(bundle)
+                self.assertEqual(Path(refusal.exception.path).name, events.name)
                 manifest = finalized_manifest(directory)
                 self.assertIn(f"runs/{run_id}/events.jsonl.zst", manifest["entries"])
                 self.assertNotIn(f"runs/{run_id}/events.jsonl", manifest["entries"])
