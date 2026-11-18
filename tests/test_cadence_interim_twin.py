@@ -236,6 +236,39 @@ class FitTests(unittest.TestCase):
         self.assertIsNone(fit_onset(one_cell))
         self.assertIsNone(fit_onset(one_cell, held_out_day="a"))
 
+    def test_no_main_delta_is_not_reported_as_a_fold_drop(self):
+        from unittest.mock import patch
+        from scripts.cadence_interim_twin import OnsetFit, fit_projection
+
+        days = [f"2026-01-0{day}" for day in range(1, 6)]
+        records, responses = [], []
+        for day_index, day in enumerate(days):
+            for prompt in (2, 2, 2, 4):
+                records.append({"day": day, "cell_prompt_tokens": prompt, "prefill_tokens": prompt,
+                    "decode_tokens": 512, "start": {"state": "in_state"}, "state": {
+                        "onset_use": "uncensored" if prompt == 2 else "censored",
+                        "first_off_s": 10 + day_index, "censored_at_s": 30,
+                    }, "segments": [{"wall_start_s": i * 10, "wall_end_s": (i + 1) * 10, "hot": False}
+                                    for i in range(3)]})
+                values = [2 * prompt + 3 * prompt**2, 255 * (4 + 5 * (prompt + 128) + 6 * prompt),
+                          256 * (4 + 5 * (prompt + 383.5) + 6 * prompt)]
+                responses.append({channel: {"segments": values, "coverage_min": 1.0}
+                                  for channel in ("gpu_rail", "dc_in")})
+        fit = fit_projection(records, (), {}, (1.0, 10.0), days, responses)
+        self.assertEqual(fit["delta_column"], "dropped_onset_not_estimable")
+        for channel in fit["channels"].values():
+            self.assertEqual(channel["lodo"]["folds_delta_dropped"], [])
+            self.assertEqual(set(channel["fold_coefficients"]), set(days))
+
+        kept = OnsetFit((12.0, 0.15), 2.0)
+        with patch("scripts.cadence_interim_twin.fit_onset",
+                   side_effect=lambda rows, held_out_day=None, **kw: None if held_out_day == days[2] else kept):
+            fit = fit_projection(records, (), {}, (1.0, 10.0), days, responses)
+        for channel in fit["channels"].values():
+            self.assertEqual(channel["lodo"]["folds_delta_dropped"], [days[2]])
+            self.assertIn("delta", channel["fold_coefficients"][days[0]])
+            self.assertNotIn("delta", channel["fold_coefficients"][days[2]])
+
 
 class DiagnosticsTests(unittest.TestCase):
     def test_hand_derived_trapezoid_and_coverage(self):
@@ -261,6 +294,40 @@ class DiagnosticsTests(unittest.TestCase):
 
 
 class ReaderTests(unittest.TestCase):
+    def test_inventory_uses_the_selected_span_for_logical_paths(self):
+        from scripts.cadence_interim_twin import check_custody_inventory, digest, span_dirs
+
+        with tempfile.TemporaryDirectory() as tmp:
+            base = Path(tmp).resolve()
+            root, staged = base / "input", base / "staged"
+            root.mkdir()
+            staged.mkdir()
+            selected = staged / "sample"
+            selected.write_bytes(b"synthetic")
+            dirs = span_dirs(root, [f"s1={staged}"], ["s1"])
+            sha256 = digest(b"synthetic")
+            for alias in ("s1/sample", str(root / "s1/sample"), str(selected)):
+                inventory = {"files": [{"path": alias, "sha256": sha256}]}
+                self.assertEqual(check_custody_inventory(root, dirs, inventory), {selected: sha256})
+            (root / "s1").mkdir()
+            (root / "s1/sample").write_bytes(b"stale synthetic copy")
+            logical = {"files": [{"path": "s1/sample", "sha256": sha256}]}
+            self.assertEqual(check_custody_inventory(root, dirs, logical), {selected: sha256})
+            (staged / "escape").symlink_to(root / "s1/sample")
+            for outside in ("s1/escape", "s1/../input/s1/sample", "other/sample"):
+                invalid = {"files": [{"path": outside, "sha256": sha256}]}
+                with self.subTest(outside=outside), self.assertRaises(ValueError):
+                    check_custody_inventory(root, dirs, invalid)
+
+            # An absolute path may already name a selected override, even
+            # when that directory lies below a different logical span key.
+            nested = root / "s1/staged-s2"
+            nested.mkdir()
+            (nested / "sample").write_bytes(b"synthetic")
+            two_spans = {**dirs, "s2": nested}
+            physical = {"files": [{"path": str(nested / "sample"), "sha256": sha256}]}
+            self.assertEqual(check_custody_inventory(root, two_spans, physical), {nested / "sample": sha256})
+
     def test_span_override_and_runtime_bundle_containment(self):
         from scripts.cadence_interim_twin import span_dirs, span_identities
 
@@ -268,17 +335,31 @@ class ReaderTests(unittest.TestCase):
             root = Path(tmp).resolve()
             (root / "a").mkdir()
             override = root / "alternate"
-            runtime = override / "legs" / "sample" / "runtime" / "attempt"
-            runtime.mkdir(parents=True)
-            record = runtime.parents[1] / "leg_record.json"
-            record.write_text('{"result":{"bundle":"attempt"}}')
+            runtime = override / "legs" / "sample" / "runtime"
+            (runtime / "runs/cadence-leg").mkdir(parents=True)
+            record = runtime.parent / "leg_record.json"
+            record.write_text('{"result":{"bundle":"runs/cadence-leg"}}')
             (override / "runner_receipt.json").write_text('{"roster":["sample"]}')
             directories = span_dirs(root, [f"b={override}"], {"a", "b"})
             self.assertEqual(directories, {"a": root / "a", "b": override})
-            self.assertEqual(span_identities(directories["b"])[1], {"sample": "legs/sample/runtime/attempt"})
-            record.write_text('{"result":{"bundle":"../../.."}}')
-            with self.assertRaises(ValueError):
-                span_identities(directories["b"])
+            self.assertEqual(span_identities(directories["b"])[1], {"sample": "legs/sample/runtime/runs/cadence-leg"})
+            (runtime / "runs/escape").symlink_to(runtime.parent)
+            for outside in ("../../..", "runs/../../sample", "runs/escape", str(override)):
+                record.write_text(json.dumps({"result": {"bundle": outside}}))
+                with self.subTest(outside=outside), self.assertRaises(ValueError):
+                    span_identities(directories["b"])
+
+    def test_gpu_overlap_counts_every_row_in_trace_energy_and_coverage(self):
+        from scripts.cadence_interim_twin import power_intervals, trace_coverage
+
+        # The registered Trace applies both rows to the shared second.
+        rows = [(0.0, 2.0, 2.0, 2.0), (1.0, 3.0, 3.0, 5.0)]
+        self.assertEqual(power_intervals(rows, 0.0, 3.0), (14.0, 4 / 3))
+        self.assertEqual(power_intervals(rows, 0.5, 2.5), (10.5, 1.5))
+        self.assertEqual(trace_coverage([4 / 3, 1.5]), (4 / 3, 0))
+        # The nested row contributes energy without moving the right edge back.
+        nested = [(0.0, 4.0, 4.0, 2.0), (0.5, 1.0, 1.0, 6.0)]
+        self.assertEqual(power_intervals(nested, 0.0, 4.0), (11.0, 1.125))
 
     def test_meter_decoder_import_boundary(self):
         from scripts.cadence_interim_twin import meter_decoder
@@ -599,8 +680,9 @@ class RawBundleTests(unittest.TestCase):
             stage1, _, primary_fit, _ = example_outputs()
             spans, records = [], []
             fixture_files = []
+            staged_span = root / "staged-span"
             for index, day in enumerate(days):
-                span = custody / day
+                span = staged_span if index == 0 else custody / day
                 operational = {}
                 native_identity = {}
                 roster = ["a", "b", "c"] + (["d"] if index == 0 else [])
@@ -610,16 +692,21 @@ class RawBundleTests(unittest.TestCase):
                 polls, poll_preimages = [], []
                 for leg_index, (leg, prompt) in enumerate(zip(roster[:3], (2, 4, 8), strict=True)):
                     wall = leg_index * 48
-                    bundle = f"legs/{leg}/runtime/mock"
+                    bundle_name = "runs/cadence-leg"
+                    bundle = f"legs/{leg}/runtime/{bundle_name}"
                     record = f"legs/{leg}/leg_record.json"
                     operational[record] = write(span / record, json_bytes({"spec": {"leg_type": "A"},
-                                                                         "result": {"bundle": "mock"}}))
+                                                                         "result": {"bundle": bundle_name}}))
                     gpu, dc = segment_values(prompt, "gpu_rail"), segment_values(prompt, "dc_in")
                     trace = "source,rail,interval_start_s,interval_end_s,timestamp_s,power_w\n"
                     endpoints = [(wall + i * 8, wall + (i + 1) * 8) for i in range(6)]
+                    gpu_intervals = []
                     segments = []
                     for i, (a, b) in enumerate(endpoints):
-                        trace += f"powermetrics,gpu_power,{a},{b},{b},{gpu[i] / 8!r}\n"
+                        # Each row contributes half the hand-derived response.
+                        trace += f"powermetrics,gpu_power,{a},{b},{b},{gpu[i] / 16!r}\n"
+                        trace += f"powermetrics,gpu_power,{a + 2},{b - 2},{b - 2},{gpu[i] / 8!r}\n"
+                        gpu_intervals.extend(([float(a), float(b)], [float(a + 2), float(b - 2)]))
                         segments.append({"seg": i, "wall_start_s": a, "wall_end_s": b, "hot": i == 4})
                         for offset in range(16):
                             sample_index = 2 * a + offset
@@ -632,7 +719,7 @@ class RawBundleTests(unittest.TestCase):
                             poll_preimages.append([rx - 1000, rx, rx - 10**10, 1, [counter]])
                     trace_path = span / bundle / "power_trace.csv"
                     write(trace_path, trace.encode())
-                    trace_hash = sha(json.dumps([[float(a), float(b)] for a, b in endpoints]).encode())
+                    trace_hash = sha(json.dumps(sorted(gpu_intervals)).encode())
                     token_times = [wall + 8 + 8 * i / 255 for i in range(256)]
                     for block in range(1, 4):
                         token_times.extend(wall + 8 + block * 8 + 8 * i / 256 for i in range(1, 257))
@@ -669,7 +756,8 @@ class RawBundleTests(unittest.TestCase):
                                     "start": {**readings, "state": "in_state"}, "segments": segments,
                                     "prefix_tails": [{"prefix_len": 510, "wall_start_s": wall + 16,
                                                       "wall_end_s": wall + 23.9375}],
-                                    "state": {"onset_use": "left_out_state_unobserved", "first_off_s": 28},
+                                    "state": {"onset_use": "uncensored" if prompt == 2 else "left_out_state_unobserved",
+                                              "first_off_s": 28},
                                     "trace_holes": {"gpu_rail": {"rows_sha256": trace_hash}}})
                 if index == 0:
                     operational["legs/d/leg_record.json"] = write(span / "legs/d/leg_record.json", json_bytes({
@@ -690,7 +778,10 @@ class RawBundleTests(unittest.TestCase):
                 spans.append({"span_id": day, "role": "fit", "marks": ["reference from a redo"] if index == 2 else [],
                               "t0_local_date": day, "custody": {"files_sha256": operational,
                                   "meter_time_sha256": time_digest, "native_pm_sha256": native_identity}})
-                fixture_files.extend(path for path in span.rglob("*") if path.is_file())
+                for path in sorted(span.rglob("*")):
+                    if path.is_file():
+                        inventory_path = Path(day) / path.relative_to(span) if index == 0 else path
+                        fixture_files.append({"path": str(inventory_path), "sha256": sha(path.read_bytes())})
 
             local_script = root / "scripts" / SCRIPT.name
             local_script.parent.mkdir()
@@ -734,17 +825,19 @@ class RawBundleTests(unittest.TestCase):
                 base = {"columns": list(names), "coefficients": values, "fold_coefficients": dict.fromkeys(days, values)}
                 primary_c["channels"][channel] = base
                 full = primary_fit["channels"][channel]
+                coverage = {"min": 1.5 if channel == "gpu_rail" else 1.0, "n_legs_under_0_99": 0}
                 marked_days = days[:2]
                 marked_view = {"columns": list(names), "coefficients": values,
                                "fold_coefficients": dict.fromkeys(marked_days, values),
                                "fold_coefficients_no_heat": dict.fromkeys(marked_days, values),
-                               "trace_coverage": {"min": 1.0, "n_legs_under_0_99": 0}, "lodo": {
+                               "trace_coverage": coverage, "lodo": {
                                    "hot": {"verdict": "not_evaluable"},
-                                   "no_heat": {"hot": {"verdict": "not_evaluable"}}, "folds_delta_dropped": marked_days}}
+                                   "no_heat": {"hot": {"verdict": "not_evaluable"}}, "folds_delta_dropped": []}}
                 full.update({**base, "fold_coefficients_no_heat": dict.fromkeys(days, values),
+                             "trace_coverage": coverage,
                              "marked_sensitivity": {"coefficients_without": values, "fit_without": marked_view},
-                             "lodo": {"hot": qualified, "no_heat": {"hot": qualified}, "folds_delta_dropped": days}})
-            inventory = {"files": [{"path": str(path), "sha256": sha(path.read_bytes())} for path in fixture_files]}
+                             "lodo": {"hot": qualified, "no_heat": {"hot": qualified}, "folds_delta_dropped": []}})
+            inventory = {"files": fixture_files}
             primary_fit.update({"custody": inventory, "soak_retries": soak})
             step3 = {"custody": inventory, "cells": [{"prompt_tokens": p, "status": "ok", "gamma_estimable": True}
                       for p in (2, 4, 8)] + [{"prompt_tokens": 16, "status": "not_run", "gamma_estimable": None}],
@@ -755,10 +848,10 @@ class RawBundleTests(unittest.TestCase):
             write(d, json_bytes(step3))
             argv = ["--manifest", str(m), "--manifest-sha256", mh, "--ledger-commit", "a" * 40,
                     "--stage1", str(s1), "--stage1-sha256", sh, "--custody", str(custody),
-                    "--span-dir", f"{days[0]}={custody / days[0]}", "--coefficients", str(c),
+                    "--span-dir", f"{days[0]}={staged_span}", "--coefficients", str(c),
                     "--coefficients-sha256", ch, "--fit", str(f), "--step3", str(d)]
 
-            stream = custody / days[0] / "hazards/meter/stream-a.jsonl"
+            stream = staged_span / "hazards/meter/stream-a.jsonl"
             original_stream = stream.read_bytes()
             for mode, expected, error in (("match", "yes", None), ("import audit", "yes", None),
                     ("perturbation", "no", None), ("missing stream", "not_evaluable", "FileNotFoundError"),

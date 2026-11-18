@@ -367,7 +367,7 @@ def dc_trapezoids(timestamps, samples, start, end):
 def trace_coverage(leg_fractions):
     """RL-173 E, for one channel's independently computed leg fractions."""
     values = tuple(leg_fractions)
-    if not values or any(not 0 <= value <= 1 for value in values):
+    if not values or any(not math.isfinite(value) or value < 0 for value in values):
         raise ValueError("invalid leg coverage")
     return min(values), sum(value < 0.99 for value in values)
 
@@ -715,6 +715,7 @@ def fit_projection(records, readings, centring, rates, days, response_records, *
     onset_rows = onset_roster(records, legs, rates)
     main = fit_onset(onset_rows, sensitivity=sensitivity)
     onsets = {day: fit_onset(onset_rows, held_out_day=day) for day in days}
+    delta_drops = [day for day, onset in onsets.items() if onset is None] if main is not None else []
     responses = {channel: [data[channel]["segments"] for data in response_records] for channel in sorted(CHANNELS)}
     full = fit_channels(legs, rates, active, responses, main)
     base_legs = [replace(leg, readings=()) for leg in legs]
@@ -749,7 +750,7 @@ def fit_projection(records, readings, centring, rates, days, response_records, *
             "lodo": {
                 "hot": {"verdict": interim_verdict(with_heat[channel])},
                 "no_heat": {"hot": {"verdict": interim_verdict(no_heat[channel])}},
-                "folds_delta_dropped": [day for day in days if onsets[day] is None],
+                "folds_delta_dropped": delta_drops,
             },
             "trace_coverage": {"min": low, "n_legs_under_0_99": count},
         }
@@ -828,7 +829,7 @@ def gpu_rows(data):
 
 
 def power_intervals(rows, start, end):
-    """Cut recorded GPU intervals at the segment's wall-clock bounds."""
+    """Integrate each clipped GPU row under RL-166 Q2's Trace convention."""
     if start > end:
         raise ValueError("invalid wall-clock segment")
     if start == end:
@@ -843,15 +844,14 @@ def power_intervals(rows, start, end):
         left, right = max(left, start), min(right, end)
         if left - rightmost > 2:
             raise ValueError("GPU trace hole")
-        # Intersect with the uncovered support, so no sample interval is counted twice.
-        overlap = right - max(left, rightmost)
-        if overlap > 0:
-            pieces.append(power * overlap)
-            width += overlap
-            rightmost = right
+        duration = right - left
+        pieces.append(power * duration)
+        width += duration
+        # Only the gap check uses the union of the intervals.
+        rightmost = max(rightmost, right)
     if end - rightmost > 2 or not pieces:
         raise ValueError("GPU trace does not support the segment")
-    return math.fsum(pieces), min(1.0, width / (end - start))
+    return math.fsum(pieces), width / (end - start)
 
 
 METER_HEADER_KEYS = frozenset("k schema status reason rate_idx sps poll_s start_raw_ns start_real_ns start_mono_ns".split())
@@ -1292,9 +1292,15 @@ def span_identities(span):
         bundle = (record.get("result") or {}).get("bundle")
         if not bundle or record.get("spec", {}).get("leg_type") == "T":
             continue
-        if Path(bundle).name != bundle or bundle in (".", ".."):
-            raise ValueError("invalid runtime bundle name")
-        relative = f"{prefix}/runtime/{bundle}"
+        bundle_path = Path(bundle)
+        if bundle_path.is_absolute() or not bundle_path.parts or ".." in bundle_path.parts:
+            raise ValueError("invalid runtime bundle path")
+        runtime = Path(prefix) / "runtime"
+        resolved = (span / runtime / bundle_path).resolve()
+        # Missing bundles remain eligible for Step 3's per-leg absence handling.
+        if resolved == span / runtime or not resolved.is_relative_to(span / runtime):
+            raise ValueError("bundle escapes the leg runtime directory")
+        relative = (runtime / bundle_path).as_posix()
         bundles[leg] = relative
         names.update(f"{relative}/{suffix}" for suffix in OPERATIONAL_BUNDLE_FILES)
 
@@ -1335,14 +1341,28 @@ def verified_span_inputs(span, identity, inventory):
     return receipt, bundles, streams
 
 
+def inventory_path(root, spans, path):
+    if ".." in path.parts:
+        raise ValueError("parent traversal in comparison input")
+    if path.is_absolute():
+        # An inventory may already name the selected physical span directory.
+        span = max((v for v in spans.values() if path != v and path.is_relative_to(v)),
+                   key=lambda v: len(v.parts), default=None)
+        if span is not None:
+            return child_path(span, path.relative_to(span))
+        if not path.is_relative_to(root):
+            raise ValueError("comparison input outside named spans")
+        path = path.relative_to(root)
+    if len(path.parts) > 1 and path.parts[0] in spans:
+        return child_path(spans[path.parts[0]], Path(*path.parts[1:]))
+    raise ValueError("comparison input outside named spans")
+
+
 def check_custody_inventory(root, spans, *inventories):
     seen = {}
     for inventory in inventories:
         for file in inventory["files"]:
-            path = Path(file["path"])
-            resolved = (root / path).resolve(strict=True)
-            if not any(resolved.is_relative_to(span) for span in spans):
-                raise ValueError("comparison input outside named spans")
+            resolved = inventory_path(root, spans, Path(file["path"]))
             if resolved.suffix == ".zst" or resolved.with_name(resolved.name + ".zst").is_file():
                 raise ValueError("compressed comparison input")
             sha256 = file["sha256"]
@@ -1369,7 +1389,7 @@ def recompute_bundle(args, stage1, fit_identity, step3_identity, decoder_pin, th
     if len(span_records) != len(roster):
         raise ValueError("duplicate span ID")
     directories = span_dirs(args.custody, args.span_dir, span_records)
-    inventory = check_custody_inventory(args.custody.resolve(), directories.values(), fit_identity, step3_identity)
+    inventory = check_custody_inventory(args.custody.resolve(), directories, fit_identity, step3_identity)
     receipts, bundle_paths, streams = {}, {}, {}
     for key, row in span_records.items():
         receipts[key], bundle_paths[key], streams[key] = verified_span_inputs(directories[key], row["custody"], inventory)
