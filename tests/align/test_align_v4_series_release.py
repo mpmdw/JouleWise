@@ -453,6 +453,49 @@ def authored_receipt(root, window="C1"):
 
 
 class SeriesReleaseTests(unittest.TestCase):
+    def test_listed_copy_of_benign_dc_refuses_without_opening_it(self):
+        from tests.align import test_c1_release_input_completeness as frozen
+
+        with tempfile.TemporaryDirectory() as tmp:
+            scratch = Path(tmp).resolve()
+            root = scratch / "synthetic"
+            root.mkdir()
+            copies = []
+            populate = frozen.populate
+
+            def with_previous_donor(window, fixture_scratch):
+                inputs = populate(window, fixture_scratch)
+                benign = inputs["benign_dc"]
+                self.assertEqual(benign.donor.parent, scratch)
+                copy = inputs["config"].donor.with_name("benign_dc")
+                copy.write_bytes(benign.donor.read_bytes())
+                copies.append((copy, benign.path))
+                return inputs
+
+            with patch.object(frozen, "populate", with_previous_donor):
+                frozen.build_world(root, "events", "control")
+
+            (copy, canonical), = copies
+            store = root / "series/restored/C8"
+            raw = (store / "finalized_manifest.json").read_bytes()
+            record = json.loads((root / "records/C8/record.json").read_bytes())
+            self.assertEqual(packet.digest(raw), record["finalized_manifest"])
+            entries = json.loads(raw)["entries"]
+            self.assertEqual(entries[copy.relative_to(store).as_posix()],
+                             entries[canonical.relative_to(store).as_posix()])
+            self.assertNotEqual(copy.stat().st_ino, canonical.stat().st_ino)
+
+            output, witness = scratch / "report.json", scratch / "opens.json"
+            result = subprocess.run(
+                [sys.executable, "-B", frozen.__file__, "--observe-cli", str(SCRIPT),
+                 str(root), str(output), str(witness), str(copy)],
+                cwd=ROOT, capture_output=True, text=True, check=False,
+            )
+            self.assertEqual(result.returncode, 1, result.stderr)
+            self.assertFalse(output.exists())
+            observed = json.loads(witness.read_bytes())
+            self.assertEqual(observed, {"ranked": [], "entering": [], "errors": [], "denied": False})
+
     def test_declared_protected_inputs_without_a_provider_refuse_release(self):
         from joulewise.align.apple.km003c import REQUIREMENT
         from scripts import align_v4_series_release as caller
