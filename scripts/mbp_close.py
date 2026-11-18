@@ -3,13 +3,13 @@
 
 The launch producer retains desk_fence.json through close and tick, with pid,
 pgid, and the scheduler attempt key: entry_id, kit_sha256, t0_epoch and span_id
-when present. A standalone close also binds its canonical OUT to fence.out.
+when present. Every close binds its canonical OUT to fence.out.
 """
 
 from __future__ import annotations
 
 import argparse
-from contextlib import contextmanager
+from contextlib import ExitStack, contextmanager
 import ctypes
 from datetime import datetime
 import fcntl
@@ -44,6 +44,8 @@ CLOSE_ERRORS = (OSError, ValueError, RecursionError)
 TIMEOUT = 15
 COPY_POLL_S = 0.25
 COPY_STOP_S = 60
+ARM_LOCK = ".arm-copy.lock"
+ARM_PENDING = "arm-pending.json"
 
 
 class Refused(ValueError):
@@ -85,7 +87,9 @@ def string_array(value):
 def project_receipt(raw):
     kit = obj(raw.get("kit"))
     span = obj(raw.get("span_result"))
-    steps = raw.get("steps", span.get("steps"))
+    step_sources = [row["steps"] for row in (raw, span) if "steps" in row]
+    steps = ([step for source in step_sources for step in source]
+             if step_sources and all(isinstance(source, list) for source in step_sources) else None)
     feeds = raw.get("feeds")
     receipt = {
         "entry_id": field(raw, "entry_id", sched.identifier),
@@ -154,24 +158,53 @@ def directory(path, *, dir_fd=None):
         os.close(fd)
 
 
-def leg_table(out):
+def native_receipt(out):
+    try:
+        with directory(out) as parent:
+            return project_receipt(sched.read_regular_json(RECEIPT, dir_fd=parent))
+    except FileNotFoundError:
+        return None
+    except CLOSE_ERRORS as exc:
+        # JSON diagnostics may contain unlisted member names.
+        raise Refused("runner receipt is unreadable or invalid") from exc
+
+
+def leg_table(out, roster):
+    if roster is None or len(set(roster)) != len(roster):
+        return [], False
     legs = []
+    complete = True
     try:
         with directory(out) as root, directory("desk-bundle", dir_fd=root) as bundle, directory(
             "legs", dir_fd=bundle
-        ) as parent, os.scandir(parent) as entries:
-            for item in sorted(entries, key=lambda row: row.name):
-                if not item.is_dir(follow_symlinks=False) or not sched.identifier(item.name):
+        ) as parent:
+            with os.scandir(parent) as entries:
+                directories = {item.name for item in entries if item.is_dir(follow_symlinks=False)}
+            complete = directories == set(roster)
+            for name in sorted(roster):
+                try:
+                    with directory(name, dir_fd=parent) as leg:
+                        row = project_leg(sched.read_regular_json("leg_summary.json", dir_fd=leg))
+                except CLOSE_ERRORS:
+                    complete = False
                     continue
-                with directory(item.name, dir_fd=parent) as leg:
-                    try:
-                        raw = sched.read_regular_json("leg_summary.json", dir_fd=leg)
-                    except FileNotFoundError:
-                        continue
-                    legs.append(project_leg(raw))
+                if row["leg_id"] != name:
+                    complete = False
+                    continue
+                legs.append(row)
     except FileNotFoundError:
-        pass
-    return legs
+        return legs, not roster
+    except CLOSE_ERRORS:
+        return legs, False
+    return legs, complete
+
+
+def leg_evidence(out, receipt, launch):
+    roster = receipt["roster"]
+    legs, complete = leg_table(out, roster)
+    planned = receipt["legs_planned"]
+    return legs, (complete and planned == len(roster) and
+                  (not obj(launch).get("legs") or launch["legs"] == planned))
 
 
 def consumer_rows(legs):
@@ -234,14 +267,37 @@ def require_idle_group(custody, attempt=None, *, name=None, out=None):
     key = attempt_key(fence)
     if key is None or (attempt is not None and key != attempt_key(attempt)):
         raise Refused("retained desk fence does not identify the attempt")
-    if name is not None and (name not in (fence["entry_id"], fence.get("span_id")) or fence.get("out") != str(out)):
-        raise Refused("standalone close does not match the retained fence's entry and OUT")
+    if name is not None and name not in (fence["entry_id"], fence.get("span_id")):
+        raise Refused("close does not match the retained fence's entry")
+    if out is not None and retained_out(fence) != out:
+        raise Refused("OUT does not match the retained fence")
     live = probe(["/bin/ps", "-axo", "pid=,pgid=,stat="], groups)
     if live is None:
         raise Refused("process group census unavailable")
     if fence["pid"] in live or fence["pgid"] in live.values():
         raise Refused("desk fence owner or process group is alive")
     return fence
+
+
+def retained_out(fence):
+    value = fence.get("out")
+    if not sched.string(value):
+        raise Refused("retained desk fence has no authoritative OUT")
+    path = Path(value)
+    if not path.is_absolute() or path.resolve() != path:
+        raise Refused("retained OUT must be a canonical absolute path")
+    return path
+
+
+def restore_steps_pass(receipt):
+    steps = obj(receipt).get("steps")
+    if steps is None:
+        return None
+    return any(step["name"] == "restore" for step in steps) and all(
+        step["name"] is not None and (
+            step["rc"] == 0 or not (step["name"] == "restore" or step["name"].startswith(("stop-", "close-")))
+        ) for step in steps
+    )
 
 
 def marker_present(path):
@@ -304,13 +360,7 @@ def readback(receipt, marker, custody, attempt, pgid):
     feeds = None if feed_rows is None else all(
         feed["stop"]["proven_stopped"] is True for feed in feed_rows.values()
     )
-    steps = obj(receipt).get("steps")
-    restore_steps = None if steps is None else (
-        any(step["name"] == "restore" for step in steps)
-        and all(step["name"] is not None and (step["rc"] == 0 or not (
-            step["name"] == "restore" or step["name"].startswith(("stop-", "close-"))
-        )) for step in steps)
-    )
+    restore_steps = restore_steps_pass(receipt)
     current_fence = require_idle_group(custody, attempt)
     if current_fence["pgid"] != pgid:
         raise Refused("retained PGID changed during close")
@@ -360,12 +410,12 @@ def json_line(value):
 
 
 @contextmanager
-def lock(path):
+def lock(path, *, blocking=True):
     fd = os.open(path, os.O_CREAT | os.O_RDWR | os.O_NOFOLLOW | os.O_NONBLOCK, 0o600)
     try:
         if not stat.S_ISREG(os.fstat(fd).st_mode):
             raise ValueError("expected a regular lock file")
-        fcntl.flock(fd, fcntl.LOCK_EX)
+        fcntl.flock(fd, fcntl.LOCK_EX | (0 if blocking else fcntl.LOCK_NB))
         yield fd
     finally:
         os.close(fd)
@@ -530,14 +580,10 @@ def make_close(args, *, launch=None, receipt=None, snapshot=None):
     if launch is None:
         fence = require_idle_group(custody, name=args.entry, out=out)
     else:
-        fence = require_idle_group(custody, launch)
+        fence = require_idle_group(custody, launch, out=out)
     pgid = fence["pgid"]
     if receipt is None:
-        with directory(out) as parent:
-            try:
-                receipt = project_receipt(sched.read_regular_json(RECEIPT, dir_fd=parent))
-            except FileNotFoundError:
-                pass
+        receipt = native_receipt(out)
     if launch is not None and not matching_receipt(receipt, launch):
         raise Refused(f"{args.entry}: newest attempt has no matching receipt")
     if receipt is not None and receipt_key(receipt) != attempt_key(fence):
@@ -555,8 +601,13 @@ def make_close(args, *, launch=None, receipt=None, snapshot=None):
         if existing is not None:
             if existing.get("schema") != SCHEMA or existing.get("entry_id") != entry_id:
                 raise Refused(f"{args.entry}: close.json is not an MBP close record for this entry")
-            if attempt_key(existing) != attempt_key(fence) or existing.get("pgid") != pgid:
-                raise Refused(f"{args.entry}: close.json has a different attempt or PGID")
+            if (attempt_key(existing) != attempt_key(fence) or existing.get("pgid") != pgid
+                    or existing.get("out") != str(out)):
+                raise Refused(f"{args.entry}: close.json has a different attempt, PGID or OUT")
+            if receipt is not None:
+                legs, _ = leg_evidence(out, receipt, launch)
+                if existing.get("receipt") != receipt or not sched.same(existing.get("leg_table"), legs):
+                    raise Refused(f"{args.entry}: native evidence conflicts with close.json")
             if not (parent / "summary.txt").is_file():
                 create_once(parent / "summary.txt", summary(existing))
             return existing, False, 0
@@ -572,14 +623,16 @@ def make_close(args, *, launch=None, receipt=None, snapshot=None):
         host, readbacks, steps_ok, native_ok = readback(receipt, args.high_power_marker, custody, attempt, pgid)
         proven = (native_ok and steps_ok is True and readbacks["feeds_stopped"] is True
                   and matching_receipt(receipt, attempt))
-        legs = leg_table(out) if receipt is not None else []
+        legs, complete = leg_evidence(out, receipt, launch) if receipt is not None else ([], False)
         consumers = consumer_rows(legs)
         maintenance = maintenance_table(parent / "maintenance-log.txt", started, ended)
         problems, overtime, redos = verdict(receipt, legs, consumers)
+        if receipt is not None and not complete:
+            problems.append("LEG_EVIDENCE")
         clean = not problems
         stops = scoped_stops(problems, entry_id, kit, obj(launch).get("block"), obj(launch).get("queue_commit"),
                              ended if ended is not None else time.time())
-        if require_idle_group(custody, attempt)["pgid"] != pgid:
+        if require_idle_group(custody, attempt, out=out)["pgid"] != pgid:
             raise Refused("retained PGID changed during close")
         record = {
             "schema": SCHEMA, **attempt, "kind": obj(launch).get("kind"),
@@ -587,14 +640,15 @@ def make_close(args, *, launch=None, receipt=None, snapshot=None):
             "pin": obj(receipt).get("frozen_commit"), "mock": obj(receipt).get("mock"),
             "receipt": receipt, "stranded": receipt is None, "host": host,
             "restore_readbacks": readbacks, "restore_steps_passed": steps_ok, "restore_proven": proven,
-            "leg_table": legs, "legs": len(legs), "legs_admitted": sum(row["admitted"] is True for row in legs),
+            "leg_table": legs, "leg_evidence_complete": complete, "legs": len(legs), "legs_admitted": sum(row["admitted"] is True for row in legs),
             "overtime_legs": overtime, "load_redos": redos,
             "load_flag": bool(redos) if legs and all(row["contaminated_redos"] is not None for row in legs) else None,
             "consumers": consumers, "maintenance": maintenance, "clean": clean,
             "problems": problems + (["RESTORE_UNPROVEN"] if receipt is not None and not proven else []),
             "stops": stops, "copy": {"pid": None, "status": "not started"},
         }
-        if not args.no_copy and args.copy_config is not None:
+        if (not args.no_copy and args.copy_config is not None
+                and (snapshot is None or (proven and complete))):
             config = copy_config(args.copy_config, out, attempt_name, custody)
             copy = record["copy"]
             copy["config"] = config
@@ -603,7 +657,7 @@ def make_close(args, *, launch=None, receipt=None, snapshot=None):
                 pending = stage_observations(history, launch, close_events(record, launch))
                 attempt["copy_start_seq"] = head["last_seq"] + len(pending) + 1
             try:
-                copy["pid"] = start_copy(custody, out, attempt_name, config, attempt)
+                copy["pid"] = start_authorized_copy(custody, out, attempt_name, config, attempt, launch)
                 copy["status"] = "started"
                 if "copy_start_seq" in attempt:
                     copy["start_seq"] = attempt["copy_start_seq"]
@@ -635,7 +689,8 @@ def copy_config(path, out, entry, custody):
         pidfile = path.absolute().parent / pidfile
     pidfile = pidfile.resolve()
     reserved = [custody / name for name in ("closes", "copy-control", "mbp_ledger.jsonl",
-                                           "desk_fence.json", ".tick.lock")]
+                                           "mbp_ledger.jsonl.head.json", "desk_fence.json", ".tick.lock",
+                                           ARM_LOCK, ARM_PENDING)]
     if any(pidfile.is_relative_to(path) for path in [out, *reserved]):
         raise ValueError("copy pidfile must be outside OUT and the close control paths")
     return {"argv": [replace(value) for value in raw["argv"]], "pidfile": str(pidfile)}
@@ -671,6 +726,46 @@ def copy_starting(custody):
     except BlockingIOError:
         return True
     return False
+
+
+@contextmanager
+def arm_copy_guard(custody):
+    with ExitStack() as guard:
+        try:
+            guard.enter_context(lock(custody / ARM_LOCK, blocking=False))
+        except BlockingIOError as exc:
+            raise Refused("copy startup or arm authorization is in progress") from exc
+        yield
+
+
+def pending_arm(custody, head, launch):
+    # The printed argv may be executed after tick exits. An authorization
+    # stays outstanding until the writer commits a newer launch.
+    path = custody / ARM_PENDING
+    claim = {"ledger_id": head["ledger_id"], "open_seq": launch["seq"], "span_id": launch["span_id"]}
+    if read_optional(path) != claim:
+        publish_head(path, claim)
+
+
+def start_authorized_copy(custody, out, entry, config, attempt, latest):
+    with arm_copy_guard(custody):
+        snapshot = read_snapshot(custody / "mbp_ledger.jsonl", optional=True)
+        current = snapshot[1].latest.launch if snapshot is not None and snapshot[1].latest else None
+        if current != latest:
+            raise Refused("committed launch changed before copy start")
+        claim = read_optional(custody / ARM_PENDING)
+        if claim is not None and (
+            snapshot is None or current is None or claim.get("ledger_id") != snapshot[0]["ledger_id"]
+            or not sched.positive_integer(claim.get("open_seq")) or current["seq"] <= claim["open_seq"]
+        ):
+            raise Refused("an arm authorization is still outstanding")
+        if latest is None:
+            require_idle_group(custody, name=entry, out=out)
+        else:
+            require_idle_group(custody, latest)
+        if not upload_quiet(custody):
+            raise Refused("previous copy group has not been proven stopped")
+        return start_copy(custody, out, entry, config, attempt)
 
 
 def start_copy(custody, out, entry, config, attempt=None):
@@ -747,11 +842,9 @@ def copy_worker(state):
             print(pid, flush=True)
 
         def finished(pid):
-            # The child has been reaped. Its isolated group remains observable
-            # if a descendant survives the original process.
-            live = probe(["/bin/ps", "-axo", "pid=,pgid=,stat="], groups)
-            if live is not None and pid not in live.values():
-                create_once(state / "done.json", json_line({"pgid": pid}))
+            # Reaping proves the leader exited. Keep its group identity even
+            # when descendants still need to be observed on a later tick.
+            create_once(state / "exit.json", json_line({"pgid": pid}))
 
         try:
             run_copy_child(state, config["argv"], ready, finished)
@@ -813,46 +906,42 @@ def record_matches(record, launch, receipt):
             and record.get("ended_epoch") == receipt["ended"]["epoch_s"])
 
 
-def receipt_locations(root, depth=1, *, dir_fd=None, name=None):
-    with directory(root if name is None else name, dir_fd=dir_fd) as parent:
-        try:
-            data = sched.read_regular_json(RECEIPT, dir_fd=parent)
-        except FileNotFoundError:
-            pass
-        else:
-            yield root, project_receipt(data)
-        if depth >= 4:
-            return
-        with os.scandir(parent) as entries:
-            children = sorted(item.name for item in entries if item.is_dir(follow_symlinks=False))
-        for child in children:
-            yield from receipt_locations(root / child, depth + 1, dir_fd=parent, name=child)
-
-
-def receipts_in(roots):
-    locations = {}
-    for root in roots:
-        for location, receipt in receipt_locations(root.absolute()):
-            locations[location.resolve()] = receipt
-    return locations
-
-
 def bound(launch):
     return {"open_seq": launch["seq"], **{key: launch[key] for key in ("span_id", "entry_id", "kit_sha256")}}
 
 
+def require_close_proof(record, launch):
+    span = launch["span_id"]
+    sched.require(record["restore_proven"] is True, "RESTORE_UNPROVEN",
+                  next((f"{span} failed {check}" for check, value in record["restore_readbacks"].items()
+                        if value is False), f"{span} restore steps or readbacks are unproven"))
+    sched.require(record_has_legs(record), "LEG_EVIDENCE",
+                  f"{span} has incomplete or inconsistent leg evidence")
+
+
+def record_has_legs(record):
+    if "leg_evidence_complete" in record:
+        return record["leg_evidence_complete"] is True
+    # Earlier immutable records can be used when their rows still match the
+    # fresh, complete projection at the retained OUT.
+    receipt = obj(record.get("receipt"))
+    roster = receipt.get("roster")
+    legs = record.get("leg_table")
+    return (sched.array(sched.identifier)(roster) and isinstance(legs, list)
+            and receipt.get("legs_planned") == len(roster)
+            and len(legs) == len(roster) == len(set(roster))
+            and {field(obj(leg), "leg_id", sched.identifier) for leg in legs} == set(roster))
+
+
 def close_events(record, launch):
+    require_close_proof(record, launch)
     events = [
         {"event": "RECEIPT", "receipt_id": launch["span_id"],
          "receipt": sched.project_receipt(record["receipt"])},
         {"event": "CLOSE", "legs": launch["legs"], "ended_epoch": record["ended_epoch"],
          "clean": record["clean"], "load_redos": record["load_redos"], "load_flag": record["load_flag"] is not False},
     ]
-    checks = record["restore_readbacks"]
-    if all(type(value) is bool for value in checks.values()) and (
-        record["restore_proven"] or any(value is False for value in checks.values())
-    ):
-        events.insert(1, {"event": "RESTORE", "readbacks": checks})
+    events.insert(1, {"event": "RESTORE", "readbacks": record["restore_readbacks"]})
     events.extend({"event": "STOP", "code": stop["code"], "epoch": stop["epoch"]}
                   for stop in record["stops"])
     if "start_seq" in record["copy"]:
@@ -943,17 +1032,46 @@ def append_observed(ledger, expected_head, launch, observed):
         return new_head
 
 
-def observed_copy_stop(custody, ledger, snapshot):
-    if snapshot is None or active_copy(custody) is not None:
-        return snapshot
+def copy_job(custody):
     control = custody / "copy-control"
+    if control.is_symlink():
+        raise Refused("copy control is not an authorized directory")
     job = read_optional(control / "active.json")
-    if job is None or not sched.hexadecimal(32)(job.get("job")):
-        return snapshot
-    state = control / job["job"]
-    done, ready = read_optional(state / "done.json"), read_optional(state / "ready.json")
-    pgid = obj(done).get("pgid")
+    if job is None:
+        return None, None
+    name = job.get("job")
+    if not sched.hexadecimal(32)(name):
+        raise Refused("copy job identity is invalid")
+    state = control / name
+    if state.is_symlink():
+        raise Refused("copy job is not an authorized directory")
+    return job, state
+
+
+def observed_group_exit(state):
+    # done.json was written by the previous supervisor only after the same
+    # reap. It remains valid evidence about the owner, with a fresh census.
+    exited = read_optional(state / "exit.json") or read_optional(state / "done.json")
+    ready = read_optional(state / "ready.json")
+    pgid = obj(exited).get("pgid")
     if not positive_pid(pgid) or obj(ready).get("pid") != pgid:
+        return False
+    live = probe(["/bin/ps", "-axo", "pid=,pgid=,stat="], groups)
+    return live is not None and pgid not in live.values()
+
+
+def upload_quiet(custody):
+    if copy_starting(custody) or active_copy(custody) is not None:
+        return False
+    _, state = copy_job(custody)
+    return state is None or observed_group_exit(state)
+
+
+def observed_copy_stop(custody, ledger, snapshot):
+    if snapshot is None or copy_starting(custody) or active_copy(custody) is not None:
+        return snapshot
+    job, state = copy_job(custody)
+    if job is None:
         return snapshot
     head, history = snapshot
     attempt = obj(job.get("attempt"))
@@ -962,8 +1080,7 @@ def observed_copy_stop(custody, ledger, snapshot):
         return snapshot
     start_seq = attempt.get("copy_start_seq")
     latest_start = run.copy.get("COPY_STARTED")
-    live = probe(["/bin/ps", "-axo", "pid=,pgid=,stat="], groups)
-    if latest_start is None or start_seq != latest_start or live is None or pgid in live.values():
+    if latest_start is None or start_seq != latest_start or not observed_group_exit(state):
         return snapshot
     new_head = append_observed(ledger, head, run.launch, [{"event": "UPLOAD_STOPPED", "copy_start_seq": start_seq}])
     return read_snapshot(ledger) if new_head != head else snapshot
@@ -1005,7 +1122,8 @@ def copy_resume(custody, deadline):
         sched.require(not any(attempt.upload_active() for attempt in history.attempts.values()),
                       "UPLOAD_ACTIVE", "existing copy must stop before resuming")
         attempt.update(open_seq=run.launch["seq"], copy_start_seq=snapshot[0]["last_seq"] + 1)
-    pid = start_copy(custody, out, name, record["copy"]["config"], attempt)
+    latest = history.latest.launch if history is not None else None
+    pid = start_authorized_copy(custody, out, name, record["copy"]["config"], attempt, latest)
     if run is not None:
         append_observed(ledger, snapshot[0], run.launch, [
             {"event": "COPY_STARTED", "copy_start_seq": attempt["copy_start_seq"]},
@@ -1021,9 +1139,17 @@ def copy_limits(rules, override):
     return (min(registered, override) if override is not None else registered, params.get("page_age_s", 7200))
 
 
-def wait_for_copy(custody, ledger, active, launch, deadline_epoch):
-    deadline = time.monotonic() + max(0, deadline_epoch - time.time())
-    while time.monotonic() < deadline:
+def wait_for_copy(custody, ledger, active, launch, closed_epoch, limit, args):
+    deadline_epoch = closed_epoch + limit
+    deadline = time.monotonic() + min(limit, max(0, deadline_epoch - time.time()))
+
+    def remaining():
+        return min(deadline - time.monotonic(), deadline_epoch - time.time())
+
+    state = custody / "copy-control" / active["job"]
+    while remaining() > 0 and not copy_stop_requested(state):
+        if sched.probe_maintenance(args, {}) is True:
+            return
         try:
             _, history = read_snapshot(ledger, nonblocking=True)
         except BlockingIOError:
@@ -1035,9 +1161,9 @@ def wait_for_copy(custody, ledger, active, launch, deadline_epoch):
         current = active_copy(custody)
         if current is None or current["job"] != active["job"]:
             return
-        remaining = deadline - time.monotonic()
-        if remaining > 0:
-            time.sleep(min(COPY_POLL_S, remaining))
+        delay = remaining()
+        if delay > 0:
+            time.sleep(min(COPY_POLL_S, delay))
     request_copy_stop(custody, active, 0)
 
 
@@ -1081,11 +1207,12 @@ def probe_for_tick(args, queue, rules, ledger, launch):
     require_idle_group(args.custody, launch)
     supplied.update(fence_clear=True, runner_group_clear=True,
                     high_power_marker=marker_present(args.high_power_marker))
-    if copy_starting(args.custody) or active_copy(args.custody) is not None:
+    if not upload_quiet(args.custody):
         supplied["upload_stopped"] = False
     options = argparse.Namespace(**{
         **vars(args), "custody": None, "receipt_root": [], "ledger": ledger,
         "ledger_head": sched.default_head_path(ledger),
+        "run_plans": args.run_plans and sched.probe_maintenance(args, {}) is False,
     })
     return sched.probe(options, queue, rules, sched.checked_config(queue, rules), supplied)[0]
 
@@ -1109,23 +1236,38 @@ def finish_attempt(args, ledger, snapshot):
     launch = history.latest.launch
     retained = require_idle_group(args.custody, launch)
     pgid = retained["pgid"]
-    locations = receipts_in(args.receipt_root)
-    matches = [(out, receipt) for out, receipt in locations.items() if matching_receipt(receipt, launch)]
-    sched.require(len(matches) == 1, "RECEIPT_MISSING",
-                  f"{launch['span_id']} has no unique matching runner receipt")
-    out, receipt = matches[0]
+    out = retained_out(retained)
+    sched.require(any(out.is_relative_to(root.resolve()) for root in args.receipt_root),
+                  "OUT_UNAUTHORIZED", f"{launch['span_id']} retained OUT is outside the authorized receipt roots")
+    receipt = native_receipt(out)
+    sched.require(matching_receipt(receipt, launch), "RECEIPT_MISSING",
+                  f"{launch['span_id']} has no matching runner receipt in its retained OUT")
     args.out, args.entry = out, launch["span_id"]
     target = args.custody / "closes" / args.entry / "close.json"
     if history.latest.close is None:
         record, _, _ = make_close(args, launch=launch, receipt=receipt, snapshot=snapshot)
     else:
         record = read_optional(target)
+    sched.require(restore_steps_pass(receipt) is True, "RESTORE_UNPROVEN",
+                  f"{launch['span_id']} native restore steps are unproven")
+    legs, complete = leg_evidence(out, receipt, launch)
     if record is not None:
-        sched.require(record_matches(record, launch, receipt) and record.get("pgid") == pgid,
+        require_close_proof(record, launch)
+        sched.require(complete and record_matches(record, launch, receipt) and record.get("pgid") == pgid
+                      and record.get("out") == str(out) and sched.same(record.get("leg_table"), legs),
                       "CLOSE_CONFLICT", f"{launch['span_id']} conflicts with its immutable close")
         new_head = append_observed(ledger, head, launch, close_events(record, launch))
         if new_head != head:
             head, history = read_snapshot(ledger)
+    else:
+        sched.require(complete, "LEG_EVIDENCE", f"{launch['span_id']} has incomplete or inconsistent leg evidence")
+        _, checks, steps, native_ok = readback(receipt, args.high_power_marker, args.custody, launch, pgid)
+        sched.require(native_ok and steps is True and all(value is True for value in checks.values()),
+                      "RESTORE_UNPROVEN", f"{launch['span_id']} native restore readbacks are unproven")
+        # An external close must classify the same native evidence.
+        problems, _, _ = verdict(receipt, legs, consumer_rows(legs))
+        sched.require(history.latest.close["clean"] == (not problems), "CLOSE_CONFLICT",
+                      f"{launch['span_id']} committed verdict conflicts with its native close")
     sched.require(history.latest.launch == launch, "LEDGER_HEAD_CHANGED", "attempt changed during close")
     if history.latest.receipt is not None:
         native = sched.project_receipt(receipt)
@@ -1146,29 +1288,91 @@ def page_debt(history, now, age):
         print(f"PAGE uncopied {entry} {hours:.2f}")
 
 
+def within(path, root):
+    return path.is_relative_to(root) or (
+        root.is_dir() and any(parent.exists() and parent.samefile(root) for parent in path.parents)
+    )
+
+
+class DecisionLog:
+    """Give the scheduler appender an already checked, append-only descriptor."""
+
+    def __init__(self, path, protected, reserved):
+        self.path = path
+        self.protected = protected
+        self.reserved = reserved
+
+    def check(self):
+        self.check_target(self.path)
+
+    def check_target(self, path):
+        resolved = path.resolve()
+        if (any(within(resolved, root) for root in self.reserved)
+                or not sched.separate_output(path, self.protected)):
+            raise Refused("decision log must be separate from close evidence and OUT")
+        try:
+            info = path.lstat()
+        except FileNotFoundError:
+            return
+        if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1:
+            raise Refused("decision log must be a regular file with one link")
+
+    @contextmanager
+    def open(self, mode):
+        self.check()
+        parent = self.path.parent.resolve(strict=True)
+        self.check_target(parent / self.path.name)
+        with directory(parent) as parent_fd:
+            fd = os.open(self.path.name, os.O_RDWR | os.O_APPEND | os.O_CREAT | os.O_NOFOLLOW | os.O_NONBLOCK,
+                         0o600, dir_fd=parent_fd)
+        with os.fdopen(fd, mode) as stream:
+            fcntl.flock(fd, fcntl.LOCK_EX)
+            info = os.fstat(fd)
+            if not stat.S_ISREG(info.st_mode) or info.st_nlink != 1:
+                raise Refused("decision log must be a regular file with one link")
+            self.check()
+            if not os.path.samestat(info, self.path.lstat()):
+                raise Refused("decision log changed during open")
+            stream.seek(0, os.SEEK_END)
+            yield stream
+
+
 def run_tick_command(args):
     try:
         args.custody = args.custody.resolve(strict=True)
         ledger = args.custody / "mbp_ledger.jsonl"
         head_path = sched.default_head_path(ledger)
-        decision_log = args.record or args.custody / "mbp_decisions.jsonl"
-        protected = (ledger, head_path, args.rules, args.queue, args.host_facts,
-                     args.custody / "desk_fence.json", args.custody / ".tick.lock")
+        protected = (ledger, head_path, args.rules, args.queue, args.host_facts, args.copy_config,
+                     args.custody / "desk_fence.json", args.custody / ".tick.lock",
+                     args.custody / ARM_LOCK, args.custody / ARM_PENDING)
         roots = [root.resolve() for root in args.receipt_root]
-        if (any(args.custody.is_relative_to(root) or decision_log.resolve().is_relative_to(root) for root in roots)
-                or not sched.separate_output(decision_log, protected)):
-            print(sched.as_json(halt("RECORD_PATH", "decision record must be separate from tick inputs and OUT")))
-            return 0
-        with lock(args.custody / ".tick.lock"):
-            return run_tick(args, ledger, decision_log)
-    except CLOSE_ERRORS as exc:
-        print(sched.as_json(halt("TICK_INPUT", str(exc))))
+        if any(within(args.custody, root) or args.custody.samefile(root) for root in roots if root.exists()):
+            raise Refused("receipt roots cannot contain custody")
+        reserved = [*roots, args.custody / "closes", args.custody / "copy-control"]
+        try:
+            fence = read_optional(args.custody / "desk_fence.json")
+            if fence is not None:
+                reserved.append(retained_out(fence))
+        except CLOSE_ERRORS:
+            # The close path will report the unavailable retained evidence.
+            pass
+        decision_log = DecisionLog(args.record or args.custody / "mbp_decisions.jsonl", protected, reserved)
+        decision_log.check()
+        with lock(args.custody / ".tick.lock"), ExitStack() as guard:
+            return run_tick(args, ledger, decision_log, guard)
+    except Refused as exc:
+        print(sched.as_json(halt("RECORD_PATH", str(exc))))
+        return 0
+    except CLOSE_ERRORS:
+        print(sched.as_json(halt("TICK_INPUT", "tick paths are unreadable or invalid")))
         return 2
 
 
-def run_tick(args, ledger, decision_log):
+def run_tick(args, ledger, decision_log, guard):
     now = time.time()
     launch = None
+    rules = []
+    maintenance = sched.probe_maintenance(args, {}) is True
     head_path = sched.default_head_path(ledger)
     try:
         queue = sched.read_regular_json(args.queue)
@@ -1183,28 +1387,38 @@ def run_tick(args, ledger, decision_log):
         head, history = observed_copy_stop(args.custody, ledger, snapshot)
         sched.require(history.latest.launch == launch, "LEDGER_HEAD_CHANGED", "attempt changed during tick")
         facts = probe_for_tick(args, queue, rules, ledger, launch)
-        if facts["maintenance_active"] is not True:
-            # Preserve the attempt-specific proof refusal even when a requested
-            # dry run also fails because the preceding close is unproven.
+        maintenance = maintenance or facts["maintenance_active"] is True
+        if not maintenance:
+            # Preserve the attempt-specific proof refusal when planning also
+            # fails because the preceding close is unproven.
             history.latest.prove_close()
         wait, page_age = copy_limits(rules, args.copy_wait_s)
         active = active_copy(args.custody)
-        if active is not None and facts["maintenance_active"] is not True and history.latest.close is not None:
-            wait_for_copy(args.custody, ledger, active, launch, history.latest.close["ended_epoch"] + wait)
+        if active is not None and not maintenance and history.latest.close is not None:
+            wait_for_copy(args.custody, ledger, active, launch, history.latest.close["ended_epoch"], wait, args)
             head, history = observed_copy_stop(args.custody, ledger, read_snapshot(ledger))
             sched.require(history.latest.launch == launch, "LEDGER_HEAD_CHANGED", "attempt changed during tick")
             facts = probe_for_tick(args, queue, rules, ledger, launch)
 
         def recheck_head():
-            require_idle_group(args.custody, launch)
-            if copy_starting(args.custody) or active_copy(args.custody) is not None:
-                raise sched.Halt("UPLOAD_ACTIVE", "an upload is still active")
-            return read_head(head_path)
+            current = read_head(head_path)
+            require_idle_group(args.custody, launch, out=args.out)
+            marker = sched.probe_maintenance(args, {})
+            if marker is True:
+                raise sched.Halt("MAINTENANCE", "owner maintenance marker is present")
+            sched.require(marker is not None, "OWNER_FACT", "maintenance observation is unavailable")
+            sched.require(upload_quiet(args.custody), "UPLOAD_ACTIVE", "an upload is still active or unproven")
+            return current
 
         now = facts["now_epoch"]
-        if facts["maintenance_active"] is True:
+        maintenance = maintenance or facts["maintenance_active"] is True
+        if maintenance:
             decision = maintenance_wait(rules, now)
         else:
+            try:
+                guard.enter_context(arm_copy_guard(args.custody))
+            except Refused as exc:
+                raise sched.Halt("UPLOAD_ACTIVE", str(exc)) from exc
             decision = sched.authorize_next(
                 queue, rules, facts, history.rows, head, now=now, caller_pid=args.caller_pid, recheck_head=recheck_head,
             )["decision"]
@@ -1217,14 +1431,27 @@ def run_tick(args, ledger, decision_log):
             decision.setdefault("entry", launch["span_id"])
     except (Refused, *CLOSE_ERRORS) as exc:
         decision = halt("CLOSE_UNPROVEN", str(exc), launch)
-    # Check again so a path changed during the copy wait cannot alias evidence.
-    if not sched.separate_output(decision_log, (ledger, head_path)):
-        decision = halt("RECORD_PATH", "decision record aliases committed history")
-    else:
-        try:
-            sched.append_decision(decision_log, decision, now)
-        except (OSError, ValueError):
-            decision = halt("RECORD_WRITE", "decision observation could not be appended")
+    # Preserve a maintenance hold even when close proof failed, or when the
+    # marker appeared during planning or the final head recheck.
+    marker = sched.probe_maintenance(args, {})
+    if maintenance or marker is True or decision.get("rule") == "MAINTENANCE":
+        decision = maintenance_wait(rules, now)
+    elif decision["decision"] == "LAUNCH" and marker is None:
+        decision = halt("OWNER_FACT", "maintenance observation is unavailable", launch)
+    try:
+        decision_log.check()
+        if decision["decision"] == "LAUNCH":
+            pending_arm(args.custody, head, launch)
+            marker = sched.probe_maintenance(args, {})
+            if marker is True:
+                decision = maintenance_wait(rules, now)
+            elif marker is None:
+                decision = halt("OWNER_FACT", "maintenance observation is unavailable", launch)
+        sched.append_decision(decision_log, decision, now)
+    except Refused as exc:
+        decision = halt("RECORD_PATH", str(exc))
+    except CLOSE_ERRORS:
+        decision = halt("RECORD_WRITE", "decision observation could not be appended")
     print(sched.as_json(decision))
     return 0
 
@@ -1260,7 +1487,7 @@ def main(argv=None):
             if snapshot is not None and launch is None:
                 raise Refused("committed ledger has no launch")
             record, created, status = make_close(args, launch=launch, snapshot=snapshot)
-            if launch is not None:
+            if launch is not None and record["restore_proven"] and record_has_legs(record):
                 append_observed(ledger, snapshot[0], launch, close_events(record, launch))
             name = attempt_name(record)
             body = args.custody.resolve() / "closes" / name / "summary.txt"

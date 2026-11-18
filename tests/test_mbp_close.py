@@ -6,6 +6,7 @@ import hashlib
 import io
 import json
 import os
+import shutil
 from pathlib import Path
 import subprocess
 import sys
@@ -776,6 +777,233 @@ class CloseTests(unittest.TestCase):
         self.assertEqual((decision["decision"], decision["rule"]), ("HALT", "LEDGER_HEAD_INVALID"))
         self.assertFalse(self.head.exists())
         self.assertEqual(self.ledger.read_bytes(), before)
+
+    def test_missing_consumer_summary_cannot_prove_close(self):
+        self.append(self.launch())
+        self.legs[1].unlink()
+        decision = self.tick("--no-copy")
+        self.assertEqual((decision["decision"], decision["rule"]), ("HALT", "LEG_EVIDENCE"))
+        record = read(self.record)
+        self.assertFalse(record["clean"])
+        self.assertIn("LEG_EVIDENCE", record["problems"])
+        self.assertFalse(any(row["event"] == "CLOSE" for row in self.rows()))
+
+    def test_mislabeled_leg_cannot_substitute_for_roster_member(self):
+        self.append(self.launch())
+        write(self.legs[1], {**read(self.legs[1]), "leg_id": "L001"})
+        self.assertEqual(self.tick("--no-copy")["rule"], "LEG_EVIDENCE")
+
+    def test_out_must_match_retained_fence_even_with_same_receipt(self):
+        foreign = self.root / "foreign"
+        shutil.copytree(self.out, foreign)
+        write(self.legs[1], {**read(self.legs[1]), "g0_outcome": "timeout"})
+        self.append(self.launch())
+        before = self.ledger.read_bytes()
+        self.close("--out", foreign, status=4)
+        self.assertEqual(self.ledger.read_bytes(), before)
+        self.assertFalse(self.record.exists())
+        self.tick("--no-copy", "--receipt-root", foreign)
+        self.assertEqual(read(self.record)["out"], str(self.out.resolve()))
+        self.assertIn("CONSUMER_NOT_RELEASED", read(self.record)["problems"])
+
+    def test_nested_failed_restore_is_not_masked_by_passing_top_level_steps(self):
+        receipt = read(self.receipt)
+        receipt["span_result"]["steps"] = [{"name": "restore", "rc": 1}]
+        write(self.receipt, receipt)
+        self.append(self.launch())
+        decision = self.tick("--no-copy")
+        self.assertEqual((decision["decision"], decision["rule"]), ("HALT", "RESTORE_UNPROVEN"))
+        self.assertFalse(read(self.record)["restore_proven"])
+
+    def test_committed_passing_restore_cannot_override_failed_native_step(self):
+        receipt = read(self.receipt)
+        receipt["steps"][0]["rc"] = 1
+        write(self.receipt, receipt)
+        self.append(self.launch())
+        self.append({"event": "RESTORE", **History().bind(self.current_launch()),
+                     "readbacks": dict.fromkeys(sched.RESTORE_READBACKS, True)})
+        before = self.ledger.read_bytes()
+        decision = self.tick("--no-copy")
+        self.assertEqual((decision["decision"], decision["rule"]), ("HALT", "RESTORE_UNPROVEN"))
+        self.assertFalse(read(self.record)["restore_proven"])
+        self.assertEqual(self.ledger.read_bytes(), before)
+
+    def test_maintenance_takes_precedence_over_missing_receipt(self):
+        self.append(self.launch())
+        self.maintenance.touch()
+        self.receipt.unlink()
+        decision = self.tick("--no-copy")
+        self.assertEqual((decision["decision"], decision["reason"]), ("WAIT", "MAINTENANCE"))
+        self.assertFalse(self.record.exists())
+
+    def test_maintenance_created_during_planning_refuses_launch(self):
+        self.append(self.launch())
+
+        def observe(argv, **kwargs):
+            if argv[0] == "fixture-plan":
+                self.maintenance.touch()
+            return census(argv, **kwargs)
+
+        self.commands.side_effect = observe
+        decision = self.tick("--no-copy")
+        self.assertTrue(self.maintenance.is_file())
+        self.assertEqual((decision["decision"], decision["reason"]), ("WAIT", "MAINTENANCE"))
+        self.assertNotIn("argv", decision)
+
+    def test_maintenance_created_during_final_head_read_refuses_launch(self):
+        self.append(self.launch())
+        read_head = closer.read_head
+
+        def observe(path):
+            if sys._getframe(1).f_code.co_name == "recheck_head":
+                self.maintenance.touch()
+            return read_head(path)
+
+        with patch.object(closer, "read_head", new=observe):
+            decision = self.tick("--no-copy")
+        self.assertEqual((decision.get("decision"), decision.get("reason")), ("WAIT", "MAINTENANCE"))
+
+    def test_duplicate_unlisted_native_key_never_reaches_output(self):
+        self.append(self.launch())
+        sentinel = "SYNTHETIC-PRIVATE-KEY"
+        original = self.receipt.read_text().rstrip()
+        self.receipt.write_text(original[:-1] + ',"extra":{"' + sentinel + '":1,"' + sentinel + '":2}}\n')
+        output = self.call("tick", "--no-copy")
+        self.assertNotIn(sentinel, output)
+        self.assertNotIn(sentinel, self.decisions.read_text())
+        self.assertEqual(json.loads(output)["decision"], "HALT")
+
+    def test_tick_does_not_open_nested_receipts_inside_out(self):
+        self.append(self.launch())
+        sentinel = "SYNTHETIC-FILE-CANARY"
+        nested = self.legs[1].with_name("runner_receipt.json")
+        nested.write_text('{"extra":{"' + sentinel + '":1,"' + sentinel + '":2}}\n')
+        output = self.call("tick", "--no-copy")
+        self.assertNotIn(sentinel, output)
+        self.assertNotIn(sentinel, self.decisions.read_text())
+        self.assertEqual(json.loads(output)["decision"], "LAUNCH")
+
+    def test_decision_log_cannot_target_managed_close_before_or_after_creation(self):
+        self.append(self.launch())
+        decision = self.tick("--no-copy", "--record", self.record)
+        self.assertEqual((decision["decision"], decision["rule"]), ("HALT", "RECORD_PATH"))
+        self.assertFalse(self.record.exists())
+        self.tick("--no-copy")
+        before = self.record.read_bytes()
+        decision = self.tick("--no-copy", "--record", self.record)
+        self.assertEqual((decision["decision"], decision["rule"]), ("HALT", "RECORD_PATH"))
+        self.assertEqual(self.record.read_bytes(), before)
+
+    def test_external_hardlink_cannot_modify_out(self):
+        self.append(self.launch())
+        alias = self.root / "external.jsonl"
+        os.link(self.receipt, alias)
+        before = self.receipt.read_bytes()
+        decision = self.tick("--no-copy", "--record", alias)
+        self.assertEqual((decision["decision"], decision["rule"]), ("HALT", "RECORD_PATH"))
+        self.assertEqual(self.receipt.read_bytes(), before)
+        self.assertFalse(self.record.exists())
+
+    def test_copy_deadline_is_bounded_during_wall_clock_rollback(self):
+        self.append(self.launch())
+        self.tick("--no-copy")
+        self.copy_event("COPY_STARTED")
+        self.now = self.ended - 60
+        started = self.now
+        stop_times = []
+
+        def stop(custody, active, timeout):
+            stop_times.append((self.now - started, timeout))
+            return False
+
+        def advance(delay):
+            self.now += delay
+
+        with (patch.object(closer, "active_copy", return_value={"job": "fixture"}),
+              patch.object(closer, "request_copy_stop", side_effect=stop),
+              patch.object(closer, "COPY_POLL_S", 60.0),
+              patch.object(closer.time, "monotonic", side_effect=lambda: self.now - started),
+              patch.object(closer.time, "sleep", side_effect=advance)):
+            decision = self.tick("--no-copy")
+        self.assertEqual(len(stop_times), 1)
+        self.assertLessEqual(stop_times[0][0], 600)
+        self.assertEqual(stop_times[0][1], 0)
+        self.assertNotIn("argv", decision)
+
+    def test_copy_stop_can_be_proven_after_the_supervisors_group_drains(self):
+        self.append(self.launch())
+        self.tick("--no-copy", "--record", self.root / "first.jsonl")
+        self.copy_event("COPY_STARTED")
+        launch = self.current_launch()
+        job = "f" * 32
+        state = self.custody / "copy-control" / job
+        write(state / "config.json", read(self.config))
+        write(state.parent / "active.json", {"job": job, "entry_id": ENTRY, "out": str(self.out),
+              "attempt": {**History().bind(launch), "t0_epoch": launch["t0_epoch"],
+                          "copy_start_seq": self.rows()[-1]["seq"]}})
+        child = Mock(pid=141)
+        child.poll.return_value = 0
+
+        def live_descendant(argv, **kwargs):
+            output = census(argv, **kwargs)
+            if argv[-1] == "pid=,pgid=,stat=":
+                output.stdout += "142 141 S\n"
+            return output
+
+        self.commands.side_effect = live_descendant
+        with patch.object(closer.subprocess, "Popen", return_value=child), contextlib.redirect_stdout(io.StringIO()):
+            self.assertEqual(closer.copy_worker(state), 0)
+        self.assertEqual(self.tick("--no-copy")["rule"], "UPLOAD_ACTIVE")
+        self.commands.side_effect = census
+        self.now += 86400
+        self.assertEqual(self.tick("--no-copy")["decision"], "LAUNCH")
+        self.assertEqual(self.rows()[-1]["event"], "UPLOAD_STOPPED")
+
+    def test_copy_resume_cannot_start_during_authorization_or_handoff(self):
+        self.append(self.launch())
+        with patch.object(closer, "start_copy", side_effect=ValueError("fixture starter unavailable")):
+            self.call("close", "--copy-config", self.config)
+        read_head, append = closer.read_head, closer.append_observed
+        attempted = []
+
+        def concurrent_resume(path):
+            if sys._getframe(1).f_code.co_name == "recheck_head" and not attempted:
+                attempted.append(True)
+                try:
+                    closer.copy_resume(self.custody, None)
+                except closer.Refused:
+                    pass
+            return read_head(path)
+
+        def delayed_copy_publication(ledger, head, launch, observed):
+            if observed[0]["event"] == "COPY_STARTED":
+                return head
+            return append(ledger, head, launch, observed)
+
+        with (patch.object(closer, "read_head", new=concurrent_resume),
+              patch.object(closer, "append_observed", new=delayed_copy_publication),
+              patch.object(closer, "start_copy", return_value=141) as start):
+            self.assertEqual(self.tick("--no-copy")["decision"], "LAUNCH")
+            self.assertTrue(attempted)
+            start.assert_not_called()
+            self.call("copy-resume", status=4)
+            start.assert_not_called()
+
+    def test_new_committed_launch_consumes_previous_arm_reservation(self):
+        self.append(self.launch())
+        self.assertEqual(self.tick("--no-copy")["decision"], "LAUNCH")
+        start = self.started + 500
+        end = self.ended + 500
+        write(self.receipt, {**read(self.receipt), "span_id": "next-span",
+                             "started": {"epoch_s": start}, "ended": {"epoch_s": end}})
+        self.write_fence(span_id="next-span", t0_epoch=start)
+        self.append(self.launch(span_id="next-span", t0_epoch=start))
+        self.now += 500
+        with patch.object(closer, "start_copy", return_value=141) as copy:
+            decision = self.tick("--copy-config", self.config)
+        copy.assert_called_once()
+        self.assertEqual(self.rows()[-1]["event"], "COPY_STARTED")
+        self.assertEqual((decision.get("decision"), decision.get("rule")), ("HALT", "UPLOAD_ACTIVE"))
 
     def test_a4_committed_q1_consumer_and_reference_reproduction(self):
         self.skipTest(f"{AUDIT_PIN} lacks the required step 4 inputs: " + ", ".join(Q1_MISSING))

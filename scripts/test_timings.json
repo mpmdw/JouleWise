@@ -616,7 +616,7 @@
     "tests.test_magistrate_watchdog_cli": 11.319,
     "tests.test_magistrate_watchdog_span": 0.126,
     "tests.test_magistrate_watchdog_yield": 5.344,
-    "tests.test_mbp_close": 0.65,
+    "tests.test_mbp_close": 6.0,
     "tests.test_mbp_sched": 0.076,
     "tests.test_measurement_liveness": 0.11,
     "tests.test_microdelta_generate_configs": 0.06,
