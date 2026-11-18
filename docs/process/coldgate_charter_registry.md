@@ -20,38 +20,14 @@ independently of the packet.
 
 ## Convening triggers (process prune, 2026-09-29)
 
-The charter bytes are unchanged, so their digest stays valid. The five
-"mandatory convening triggers" in charter §3 no longer decide WHEN a cold
-gate is convened: since the owner-authorized prune of 2026-09-29, cold gates
-are convened only for registrations, claim-bearing results, irreversible
-actions and owner-reserved choices (`docs/orchestration.md`, "Cold gates,
-councils and round limits"; `docs/process_prune_2026-09-29.md`). §3 still
-tells a judge that a convening reason is not evidence on the merits. Fold
-the new list into the charter at the next byte change that Ed ratifies.
-
-## Candidate charter v3 (not operative)
-
-| Field | Value |
-|---|---|
-| File | `docs/process/coldgate_charter_v3_candidate.md` |
-| Version | v3 candidate (packet-input and convening-procedure amendments) |
-| sha256 | `473ada40f7e2725d78f80e1e7ac18489456f1442ff6091c123173737546a3228` |
-| Status | **CANDIDATE — NOT OPERATIVE; AWAITING ED RE-RATIFICATION.** Cold gates continue to use the v2 file and digest in the Operative charter table above. |
-| Change authority | D-170 item 4 and its charter-v3 deferral in `docs/decision_log.md` |
-| Tracked consult brief | `docs/process/coldgate_consult_brief_template.md` |
-
-Promotion requires Ed to re-ratify these exact candidate bytes. After that
-external decision is recorded, the lead replaces the operative charter bytes
-with the candidate bytes, verifies that the digest is unchanged, changes the
-operative table to v3 with the same digest, and moves v2 into History. Until
-all promotion steps occur together, the candidate must not be supplied to a
-cold judge as the operative charter.
+Superseded by `docs/process/PIPELINE.md` §5 (2026-11-17).
 
 ## History
 
 | Version | sha256 | Disposition |
 |---|---|---|
 | v1 (2026-08-03) | `2a738630e5bd780b4664ad47d058e93e7241595064b9d0d2dbd223b4bbc8acaa` | Superseded pre-ratification — Sol consult found five seams (bias leakage, missing doctrine, §4 laundering channel, §5 composition holes, hash-pin trust anchor); never used in a live gate. |
+| v3 candidate | `473ada40f7e2725d78f80e1e7ac18489456f1442ff6091c123173737546a3228` | Retired 2026-11-17 under `docs/process/PIPELINE.md` §8. |
 
 ## Convening procedure (ADOPTED 2026-08-03 late night — cure for the
 ## doctrine-gate judges' BLOCKER B1: suppression failed via harness
@@ -73,18 +49,7 @@ cold judge as the operative charter.
    frozen-packet digest) are supplied to the judge from this registry
    at an immutable revision, independently of the packet, by the
    operator or the convening session.
-4. Fold items 1-2 into charter v3 at the next byte-change opportunity
-   (new candidate, new gate per the bootstrap rule).
 
 ## Minimal validator (queued; spec from the consult)
 
-`scripts/validate_gate_packet.py` (to be built): accepts `--packet`,
-`--charter`, and an independently supplied `--expected-charter-sha256`;
-strictly parses exactly one charter pin in the packet; hashes the
-charter and every manifest-listed exhibit; requires trusted pin ==
-packet pin == observed hash; emits a receipt (packet digest, charter
-digest, exhibit-manifest digest, result); the judge is invoked only
-with the exact sealed bytes validated. Until built, the launch-time
-expected digest is read from this registry at an immutable revision
-and the judge performs the recorded recompute per charter §9
-(defense in depth).
+Superseded by `docs/process/PIPELINE.md` §5 (2026-11-17).

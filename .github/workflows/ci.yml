@@ -120,6 +120,8 @@ jobs:
           python-version: "3.11"
       - name: State kernel and generated-view drift
         run: python scripts/gen_state.py --check
+      - name: RUN_STATE typed items (uniqueness, schema, transitions, expiry, references)
+        run: python scripts/run_state_items.py check
       - name: Hard-coded pins that protect a number are current
         # Kind-P pins (configs/pins/registry.json) and the generators' --check
         # modes. A stale pin prints "run python scripts/repin.py --write <name>".

@@ -1046,6 +1046,335 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 - **Size:** about 31k code lines of the retired arm/T-0 chain plus about 115k test lines naming it; the never-live NVIDIA/remote stack (about 4.6k); frozen reducer versions and analysis manifest v2; the about 440-line `whole_window.py` mirror; about 1.6k lines of duplicated verification helpers; about 40k lines of census data.
 - Fold in the post-release deferrals already listed in item 165 and in the D-188 retrospective.
 
+<!-- RUN_STATE TYPED ITEMS: newest first. Add with scripts/run_state_add.py; never edit by hand. -->
+
+405. **Magistrate b7aad16d (headless, Opus 5.5, interim lead), 2026-11-17 16:28-16:50 PST (`date`): STANDING-F0 run 9 (item 346; pre-launch item 401) CHECK: RECEIPT OK, verdict pass, every judged line passes; item 404 (a) re-read of F0 runs 1-9 finds neither #809 hole; #810 merged and typed items initialized**
+
+```item
+{"expires_epoch_s": null, "issued_epoch_s": 1794962185, "number": 405, "owner": "magistrate", "schema": "joulewise.run_state_item.v1", "sets": [], "status": "CLOSED", "supersedes": []}
+```
+
+- Receipt rc 0; parts `{"C": true}`, fresh soak; soak rc 0, sha256 `1cd69e24229a583c585003b2c7eb1bc332ebe7ad4a38cf31237e6d4db402f972`; part-C rc 0. t0 14:29:10 PST, receipt 16:27:57 PST (span 7,127 s). The align-r0 label was gone at 16:28; this activation spawned 16:28:34, after the receipt, so no agent was alive during the run.
+- smoke_part_c.json: evaluation `pass` (`d_bank_mechanics`, `d_bank_start_state`, `step_d`, `x_g` all pass, as runs 7 and 8); N_chunk 4096; T_dead 987.475 s; gate_time 200.62 s of limit 394.99 s; no_g1_timeout pass (no turns).
+- Restore lines all rc 0; host after close: no desk fence, no align-r0 label, ProcessType Interactive, powermode 0, Network Time Off, frequency word 0, no High Power marker, no stray monitor or root powermetrics, AC not charging.
+- Printed only: turn-1 last-512 clock ratio 0.922 (predicted band 0.83-0.93; run 8 0.912); first off-nominal (pm Moderate) at token 1,700; token-rate ratio 0.978. Maintenance (log show, 45,750 lines): dasd steady; `mobileassetd` bursts at 14:47 (379 lines, soak), 15:53 (122, D_bank) and 16:23-16:24 (5,358, inside X_G_contrast 16:08-16:27); `softwareupdated` 8 lines at 15:11 and 16:11 and 1 at 16:00; XProtectPluginService 2 at 16:00. X_G still passes. OS build unchanged.
+- Copy: an F0 close is non-campaign; this Check covers the copy (items 346/347, F2 draft copy_gate NONCAMPAIGN route). No offload.
+- **Item 404 (a) re-read of F0 runs 1-9 (both #809 holes on the F0 pin):**
+
+| run | OUT (UTC start) | verdict | `gate_timeout` in any part-c .json/.jsonl | X_G dir / runtime_result readable | x_g line present, pass | no_g1_timeout |
+|---|---|---|---|---|---|---|
+| 1 | 20261115T211611Z | pass | none | yes / yes | yes, pass | pass, [] |
+| 2 | 20261116T011723Z | pass | none | yes / yes | yes, pass | pass, [] |
+| 3 | 20261116T051844Z | pass | none | yes / yes | yes, pass | pass, [] |
+| 4 | 20261116T133233Z | pass | none | yes / yes | yes, pass | pass, [] |
+| 5 | 20261116T193440Z | pass | none | yes / yes | yes, pass | pass, [] |
+| 6 | 20261117T021602Z | pass | none | yes / yes | yes, pass | pass, [] |
+| 7 | 20261117T142329Z | pass | none | yes / yes | yes, pass | pass, [] |
+| 8 | 20261117T182510Z | pass | none | yes / yes | yes, pass | pass, [] |
+| 9 | 20261117T222907Z | pass | none | yes / yes | yes, pass | pass, [] |
+
+  Hole (1) (pass with a recorded G1 timeout in episode_flags): no run has the string `gate_timeout` anywhere in its Part C JSON. Hole (2) (completed X_G with unreadable evidence omitted): every run has X_G_contrast, a readable runtime_result.json, and an `x_g` line that was judged. No verdict changes. Script and output: custody `standing-f0/check-b7aad16d/` (`reread-404a.txt`).
+- **#810 merged** (item 404): all 41 checks green on head `442e37c49`; merge commit `5a301bd45`; `run_state_add.py init` on main gave cutover 405, `run_state_items.py check` exit 0 (commit `0aa2bb0a9`). From here items go through `run_state_add.py`.
+- No mail from Ed (unread search empty at 16:29); no new directive; notice queue empty.
+
+<!-- RUN_STATE LEGACY ITEMS below: prose, not typed; cutover 405 -->
+
+404. **Laptop lead (interactive, Opus 5.5), 2026-11-17 16:26:15 PST (`date`): AIR PAUSED AGAIN (Ed: wrap up by 16:50 and eject). ITEM 402 APPLIES AGAIN AS WRITTEN (the MBP interim lead holds items 1-6; item 395 (A) is in the "Air paused" state: the MBP is the copy owner at once at every close). Updates since item 402 are below. RL-176 (Fable, audit `66d0d622d`) is committed.**
+- **#810 (typed RUN_STATE items, tier 1).** The review passed: MERGE, the MED fence finding fixed, and the review record `docs/run_reports/2026-11-17-pr810-review.md` is on the branch. The gate ledger is in the body. CI is re-running on head `442e37c49`. INTERIM LEAD:
+  - when every check is green, merge it (merge commit);
+  - then on main run `python3 scripts/run_state_add.py init` and confirm that `python3 scripts/run_state_items.py check` exits 0;
+  - from then on add every RUN_STATE item through `run_state_add.py`.
+- **#809: BLOCKED by Astra (VERIFIED HIGH x2).** Both holes are already present on the CURRENT F0 pin, so they predate #809:
+  - (1) Part C returns `pass` with a recorded G1 timeout (`thermal.gate_timeout` in episode_flags) when its interval row is missing;
+  - (2) a completed X_G whose evidence cannot be read is treated as unrun and left out of the verdict.
+
+  The report and reproductions are at `/Volumes/JW-EXT/scratch/astra-review-809/` (Air SSD), and in summary the evaluator's no-timeout check must honour either source, and an unreadable X_G must fail closed. INTERIM LEAD:
+  - (a) in gaps, re-read F0 runs 1-9's Part C outputs for (1) a gate_timeout in episode_flags and (2) an X_G result that was run but omitted, the same way as item 400's re-read, and report a table;
+  - (b) have #809 fixed by a Sol 6.2 Codex Cloud task (fail closed on both, with regressions), and get one Astra re-review before merge;
+  - (c) the STANDING-F0 renewal must use the fixed pin.
+
+  R1's pin and R1 are unaffected: RL-175 D.2's re-read passed (item 400). A finding of (1) or (2) in the counted Part C at `c3f4bacd8` goes to the research lead before R1 installs.
+- **RL-176 prefill cell (Astra, synthetic): FALSE S SIGNATURE RATE 0.455 ± 0.016 at the counted prompt sizes** (0.418 at +16 tokens), against RL-176's .035 threshold (`/Volumes/JW-EXT/scratch/astra-rl176-prefill/CELL.md`). Under RL-176 this goes back to the research lead before the S amendment merges. Lead-owed on return: the Fable question, with the cell and the token count. Nothing in the chain, freeze 2 or qualification changes.
+- **#811** (cluster contract, step 1): 20/20 CI; 75 scenarios, 1 passed and 74 xfail awaiting member bindings. Ready for its adversarial audit, then the merge order of item 402 §4.
+- **#812** (qualification pin `0576ed76d` with the t0 guard): 21/21 CI, both admission lines pass for all three kits, cold attestation open. The drafts are repointed (audit `c84a47674`). RL-175 C.3/C.4 are in the drafts per its builder; verify before issue.
+- **Frozen mid-run, with pushed heads:** #795 (Sol, adding RL-175 B.3/B.4) and the RL-176 builder (token count, Q, S_dec, the action-aligned print, the amendment text). Continue both via Codex Cloud tasks from their branches. Check each branch head first: the frozen builders may have pushed partial work.
+
+403. **Laptop lead (interactive, Opus 5.5), 2026-11-17 15:24:07 PST (`date`): AIR RESUMED (Ed, ~15:20: SSD plugged back in, resume work). Item 395 (A) is now in the "Air resumed" state: item 348 stands (the lead copies at close; the MBP falls back at close + 30 min). The Air's three agents run again from 15:24:07. The LEAD TAKES BACK item 402's items 3-6 (freeze-2 packet, PRs #810/#809/#811/#812 and the cluster merge order, qualification items, F0 renewal, F2 re-dating, hp-02). The MBP keeps items 1-2 (the chain; dev-05 desks and Q1 records in gaps, local Sol desk seat). If the Air pauses again, item 402 applies again as written.**
+
+402. **Laptop lead (interactive, Opus 5.5), 2026-11-17 14:43:11 PST (`date`): AIR PAUSED (Ed, ~14:20: wrap up the Air; ~14:45: pass as much work as possible back to the MBP). The Air's agents are booted out and every lead lane is frozen with its work PUSHED. LEAD WORK HANDED TO THE MBP's INTERIM LEAD (item 388 fallback 6), in the priority order below. Item 395 (A): the Air is recorded paused, so the MBP is the copy owner at every close, with no 30-minute wait.**
+- **Rule for all of this:** the measurement chain comes first and the MBP stays quiet while anything is armed: F0, F2, dev-05, and above all R1 (about Wed 08:15 to Thu 17:38). Agent or code work on the MBP runs only in gaps of 2 h or more with nothing armed, and never in R1's window. Prefer Codex Cloud tasks (`codex cloud exec`, GPT 6.2 Sol, on the named branch) for code work; they put no load on the MBP. The interim lead applies and pushes their diffs in gaps. If no Codex Cloud environment for this repo exists, local seats in gaps only. Claude usage: the account is shared and the weekly window is about 6% used. Paper-bound questions go to Fable; real decisions go to Ed by plain email.
+- **1. Chain (already ruled):**
+  - F0 run 9 (item 401);
+  - F2 p01 if lawful (item 395 B);
+  - `dev-05-s01` at 00:00 and `dev-05-s02` (items 393/394);
+  - R1 from s02's launch record (items 397/398/400). R1's native steps already passed (item 400).
+- **2. dev-05 desks and Q1 records** (needed for line 9 and qual-01): build the s01 desk in the s01-to-s02 gap if it fits, otherwise in the gap between s02's close and R1's t0, otherwise after R1. Use a local Sol desk seat, method of item 386.
+- **3. Freeze-2 packet to Fable, due Thu 08:00 (RL-175 B.2):**
+  - the F0 series table and three-daemon counts (item 396);
+  - the G1 re-read results (item 400);
+  - the freeze-2 manifest cold pass (RL-175 F-2);
+  - #795's state.
+
+  #795 (`align/2026-11-14-fit-interim`, head `0b93be9f7`) still owes RL-175 B.3/B.4: the residual split (keyed residuals restricted), equal-day weights for both estimate and interval, and per-fold onset parameters, plus the Astra date-from-epoch and rank-before-read fixes if they are not on the head yet. Use a Codex Cloud task on that branch. If the packet cannot be complete by Thu 08:00, send what exists. A later packet moves qualification by whole dates (RL-175), which is acceptable.
+- **4. PRs** (tiers per PIPELINE in #810; merges by the interim lead, with Ed told after):
+  - **#810** (typed RUN_STATE items, head `75efad8d5`, tier 1, 40/40 CI): one cross-family review, which here means a Claude review since Sol built it. Merge if there is no VERIFIED HIGH. After merge, the lead (or the interim lead) runs `init` and thereafter uses `scripts/run_state_add.py` for every new item.
+  - **#809** (Air-watcher retry, duplicate item numbers, Part C G1 check, combined stop probe; head `bc4671106`, CI green after a rerun): one Astra review (`gpt-6.2-astra` high). Merge if there is no VERIFIED HIGH. Its W1 rebind candidate `4d7dd28cc` is the next STANDING-F0 pin.
+  - **#811** (cluster contract, step 1, head `4a4d12930`, builder frozen mid-run): continue it with a Codex Cloud task (brief: `docs/ops` contract plus the PR body). Then, in this order: #804 (head `5755eef52`), #807 (`57f9149ce`), #799 (`3747167f4`), #800 (`ce5097e95`), each rebased onto the contract and running `tests/contract/cluster.py` against real code. Astra findings 1, 2, 8 and 10 are redone through the contract's seams. Tier 2: at most 3 review rounds, otherwise back to the spec.
+  - **#812** (qualification pin with the t0 guard, branch `align/2026-11-17-qual-pin-t0guard`, builder frozen): continue it. Then repeat both exact-pin admission checks for all three kits and repoint the six qual drafts.
+- **5. Qualification items:** RL-175 C.3 item 6 (span-keyed date gate) and C.4 (no arm across the predicted OS batch; arm at batch start + 27 min) are still owed in the six drafts (audit branch `dddf95c04`). The checklist-order fix is done. Codex Cloud task, then issue after freeze 2 and Fable's answer.
+- **6. Before Sun 22 Nov 11:51:** renew STANDING-F0 (draft on the audit branch `dddf95c04`; pin per #809). Re-date F2 p2/p3 (R1 takes Wed) and issue hp-02 per RL-175 D.3, whose same-date clause is ordering only.
+- **Lead return:** the lead posts "Air resumed" and takes back whatever is still open, read from the interim lead's items.
+
+401. **Magistrate c6a5728a (headless, Opus 5.5), 2026-11-17 ~14:35 PST (`date`): STANDING-F0 (item 346) IS LAUNCHING, its ninth run (the third and last F0 t0 of Tue 17 Nov), on `b2e01464d` in `/Users/edr/code/jw-wt/partc-b2e01464d`. F0 standing notice: trigger (c) NO_STAGED after F0 run 8's close (12:24:12; Check item 392); dev-05 (items 393/394) cannot arm before Wed 00:00; SESSION_READY no (item 400: R1 effective only from `dev-05-s02`'s launch record); no pre-notice. Every Start-and-check line passed at 14:27:43 PST (W1-line head `b2e01464d` by ls-remote; 17 hashes equal; RL-89 MAC CHECK OK; F0 ELIGIBLE, last close other, gap 1,200 s; Network Time Off; powermode 0; frequency word 0; AC not charging; free 292 GB; agent processes only this magistrate and its MCP children). Expected end ~16:30, worst case ~17:55, fence ~18:35. Record: `docs/process_traces/2026-11-15-standing-f0/MAGISTRATE-LAUNCH-c6a5728a.md`; t0, OUT, DEADLINE, rc and launcher JSON in custody `r1-partc-f0-out-c6a5728a.txt`. No mail from Ed at 14:26; no new directive; notice queue empty. Next: the first activation after the fence runs item 346's Check of run 9 (reuse `standing-f0/check-c6a5728a/check.sh`, new OUT and plist id), adds its G1 and F0-series rows (item 396), then item 395 B (F2 p01: fill, issue and launch only if its protected next-arm time 20:22:02 still precedes `dev-05-s01`'s 00:00 arm), then `dev-05-s01` from Wed 00:00:00 under item 393.**
+
+400. **Magistrate c6a5728a as interim lead (item 388 fallback 6), 2026-11-17 14:26-14:30 PST (`date`): R1 READY record (item 397): native steps 1 to 4 PASSED; item 328's counted Part C is "G1 complete (RL-175 re-read)". R1 is READY from this item with item 397's effective condition unchanged: effective from `dev-05-s02`'s launch record and not before; until then every gate reads `SESSION_READY=no`.**
+- Run in the gap after F0 run 8's close with nothing armed; item 397's zsh block verbatim, exit 0. Staging: dry run then real run, `SOURCE STAGED ONLY (dry-run 0) 2026-11-17 14:27:04 PST`; `/Users/edr/code/jw-wt/r1-slot-b2e01464d` detached at `b2e01464d`, tree `c904864e…`, clean. Imports through both interpreters `0.31.2 0.31.3 5.12.1`. 60-key check ok (16 die, 44 heatsink, r0 `e6231a8f…769b`, config `272aecb8…2f46`). G1 re-read: T 2, rows 4, G0 1, G1 turn 1, G1 COUNT OK; by hand (b) the G1 is turn 1, (d) G0 102.800 s + G1 99.905 s = gates_plus_holds_s 202.705 s. Network Time Off; frequency word 0. Item 328's verdict file was not packed: no deviation.
+- Item 396's G1 re-read of every Part C on this host (items 319, 325 and F0 runs 1-8): all ten G1 COUNT OK, each G0 + G1 equal to its gate_time. No missing G1; no verdict changes.
+- Record: `docs/process_traces/2026-11-17-r1-ready/NATIVE-RECORD-c6a5728a.md`; outputs in custody `r1-ready-c6a5728a/`.
+
+399. **Laptop lead (interactive, Opus 5.5), 2026-11-17 13:16:26 PST (`date`): CLARIFIES ITEM 396 (raw retention): MAKING COPIES IS ALLOWED; ONLY REMOVING THE ORIGINAL IS NOT. Item 347/348's close offload of every dev-05 span (an encrypted or packed archive built FROM the span directory, the cloud upload, the round trip and the copy marker) runs as usual: it leaves the original directory in place. What item 396 forbids until the lead records "interim look complete" is any step that deletes, moves or replaces a dev-01..dev-05 span directory or its files in place (in-place packing, retirement, eviction of originals). A copy-marker hold because of item 396 would be wrong: the marker is written as normal.**
+- **Also adopted (integration contract for #799/#800/#804/#807, Mythos 5.2, `/Volumes/JW-EXT/scratch/mythos-cluster-contract/CONTRACT.md`, lead decisions L1-L6):**
+  - Closed spans are retained by default; the controller retires a span only once its debts close.
+  - The copy may run after a failed bundle push, but retirement may not.
+  - A stranded span with no receipt is still copied.
+  - VOID with a proven no-launch may re-arm the same plan id.
+  - None of this changes current MBP behaviour. It governs the PRs, which merge in the contract's order: contract and tests, then #804, #807, #799 and #800.
+
+398. **Laptop lead (interactive, Opus 5.5), prepared by Sol on 2026-11-16 (audit `05fd23160`) and filled by the Mythos design seat on 2026-11-17 under RL-175; ISSUED 2026-11-17 13:13:47 PST (epoch 1794950027) (`date`): MAGISTRATE: prepare and arm ONE slot-producing ALIGN v4 R1 session on `b2e01464d6d4fbf2901ff4d4154df9455104a12a` (tree `c904864e46879a4adfbdf0b467d4da1ee5928285`), detached at `/Users/edr/code/jw-wt/r1-slot-b2e01464d`, using its own HAZARD_PACK LaunchAgent route. Full R1 program, Automatic admission, D no holds, N_chunk 4096, TV0h/TV1h, Tf08 recorded. No campaign span, campaign queue extension or W1 is authorized by this item. EARLIEST: the clean close of `dev-05-s02` (item 394), once the lead's READY record is effective (RL-175 A.2: from `dev-05-s02`'s launch record and not before), that span's Check, restores and copy marker are complete and 300 s have passed since its close; then the ordinary notice and install requirements. If the READY record takes effect later, the next clean close of anything on the host, with 1,200 s after an F0, F2 or other close. LIMIT: the READY record's validity, 72 h from its stamp or until R1 arms (RL-175 Q5); a counted span's 24 h expiry does not apply. The latest whole-minute t0 that ends inside Sun 22 Nov is Sat 21 Nov 14:36 PST (arithmetic only). Expected runtime UNKNOWN (RL-175 Q4): driver bound 102168 s (28:22:48), outer 119880 s (33:18), plus 300 s shutdown grace. Install is your final operational action; sleep the display and exit all agent sessions before t0.**
+
+```pointer
+owner: magistrate
+wait: none
+deadline: 2026-11-20T13:13:47-08:00
+on_early_or_refused: any missing or open checklist line, a READY record that is not yet effective or is VOID, a stop or veto, an unproven restore or process group, a failed or unverified offload, a stale authorization, or a failed prepare or install: NOTHING arms; preserve outputs and report to the lead by the existing authorized route. Do not retry a measured session, skip a hold, extend a queue, reuse S, or erase recovery markers. A refused arm makes the READY record VOID (its clause 6), so STANDING-F0's rule 4 applies. A new t0 for time only goes through the same route. A running lower-priority span finishes.
+next_observable: before install: the READY record and this item on main, the native record, the ordinary notice, PKT_SHA, the actual arm.json, plan digest, t0, end and dead-man, fresh host and no-veto reads. On the next post-fence activation: the registered R1 terminal status plus chain exit, restore and process-absence Check; the lead handles results and slot fills under the owning procedure.
+```
+- **Deadline note (lead):** the pointer deadline is the READY record's validity end (item 397, 72 h). The arm-time dead-man is a fill at the arm (the magistrate, item 388 fallback 4): the dead-man time of the rendered `com.joulewise.night.deadman.plist`, with the latest end before it at t0 + 119880 s + 300 s.
+
+Authorization and priority: RL-149 §5.12 restores the RL-145 step-4 checklist with the close's additions; RL-152/153/156/159/170/172b/172c govern subsequent repairs and carry; RL-175 A settles Q1, Q3, Q4 and Q6 and gives the READY record its effective condition. RL-174 B makes this checklist the lead's first priority. **READY record: item <LEAD FILLS (the lead at paste): the READY record's item number and main commit>, effective from the launch record of `dev-05-s02` (item 394).** Until that launch record is on main every gate reads `SESSION_READY=no` and cites the READY record and RL-175 A.2; from it nothing lower priority arms (RL-172(f)). This typed entry uses ENTRY-DRAFT's R1 route and never `cadence_queue.py next` or `launch_cadence_span.py`. Never abort F0, F2 or other running work to make room.
+
+**[ADDED, design seat] AIR FALLBACK (item 388).** Issue-time and arm-time fills: the magistrate (fallback 4). The staging script: from the audit branch, as the READY record's Start and check has it (fallback 5). The predecessor's copy marker: the Air's copy or the MBP's own offload, by the Air's state at the close (fallback 1; item 395 A). Lead process questions at the arm: the magistrate as interim lead (fallback 6). The R1 result and slot reads, and anything paper-bound, wait for the lead, the research lead or Ed.
+
+Filled before READY, with the values that are known now:
+
+- Package and staging record. Package: audit `05fd231609bde202def258745b8a45ce44ce43da`, directory `evidence/align-v4-campaign/r1-ready-1116/` (`SOURCES.sha256` sha256 `eb9baf74…8b03`, `stage_mbp_r1.sh` sha256 `138040de…069f`). Measurement worktree at the pin, clean and detached, with the existing venv linked; the 25 SOURCES hashes. Staging record: **LEAD FILLS (the magistrate, item 388 fallback 4): the item that records the READY record's steps 1 to 4, with the staging output.**
+- Ticked CHECKLIST: the READY record's adoption bullet (A03, A06, A10, A11, A13, A16 to A19; Q1, Q3, Q4 and Q6 ruled by RL-175 A.1; Q2 and Q5 adopted there). The amendment draft is `AMENDMENT-R1-DRAFT.md` at audit `05fd23160`. The carry and the item 329 correction are `CARRY-RECORD-DRAFT.md`. The Part C table is item 328's. No new Part C solely for the pin: item 328 carries under RL-172b/172c.
+- **The G1 re-read of the counted Part C (RL-175 D.2) is done before anything installs:** the READY record's step 4. A re-read that does not pass means R1 is not READY, and it goes to the research lead.
+- Notice route and veto handling: the existing ones, unchanged (RL-175 Q5). The notice is the pinned runbook's section 3 text, sent through the magistrate's ordinary route: mail to Ed and the lead, or the `directive-notice` issue of item 306 when the mail tool is absent. Ed's NO arrives as a reply or as a `directive` issue. The interval is the route's own: t0 is chosen at least 900 s ahead (`ARM_NOTICE_S`), and the notice goes out as soon as the arm record is read. **LEAD FILLS at the arm (the magistrate, item 388 fallback 4): the actual send time, the route used, and the last directive and mail read before install. No inferred NO.**
+- Newest close. The predecessor is `dev-05-s02` (item 394). **LEAD FILLS at the arm (the magistrate, item 388 fallback 4): its close epoch, the time its fence was seen gone, its Check item, the restore lines, process-group absence and the copy marker.** Campaign close floor 300 s; other, F0 and F2 floor 1200 s. The typed marker obeys RL-173 A as amended by RL-174 D. A failed verification holds the arm.
+- Whole-minute t0, Pacific and UTC, the outer latest end including grace, and the dead-man time: **LEAD FILLS at the arm (the magistrate, item 388 fallback 4), from the fresh arm.json.** Expected-duration print: UNKNOWN, with both bounds (RL-175 Q4).
+- Host readback: **LEAD FILLS at the arm (the magistrate, item 388 fallback 4)**: Mac15,9, AC and not charging, no external mount; Automatic; Network Time Off and frequency word 0; no High Power marker, armed job, monitor, root sampler, R12 or packer; free disk. State `spotlightknowledged` present or absent, `corespotlightd` present, `/` indexing off, Time Machine destination none (or the actual recorded state). Nothing changes hygiene between freeze 2 and qual-03 close; network time is not a hygiene setting (RL-175 Q6).
+- Pending iCloud transfer read: **LEAD FILLS at the arm (the magistrate, item 388 fallback 4).** Nothing of ours writes iCloud during the session; sync daemons remain in the maintenance print. The key's second copy was recorded in item 353; no new key request is needed.
+
+**Start and check (magistrate, in a clean close interval only).** The eight synthetic modules ran off the MBP (`VERIFICATION.md`: 195 pinned-source and 17 preparation tests OK, no skips); the lead adopts that and the exact pin in the READY record. Do not build, test or analyze on the MBP while any queue is live (RL-172(i)). Native staging is the READY record's steps 1 to 4, run once in a gap with nothing armed. The lines below are the fresh read at the real arm (RL-175 Q5: every native line is read fresh, whatever was staged earlier).
+
+```zsh
+set -euo pipefail
+export M=/Users/edr/code/jw-wt/r1-slot-b2e01464d
+export PY=/Users/edr/night-custody/measurement/JouleWise-measurement-20261102-align-pilot2/.venv/bin/python
+test "$(git -C "$M" rev-parse HEAD)" = b2e01464d6d4fbf2901ff4d4154df9455104a12a
+test -z "$(git -C "$M" status --porcelain --untracked-files=all)"
+# Native imports only, no package installs. Must print 0.31.2 0.31.3 5.12.1.
+"$PY" -B -c 'import mlx.core,mlx_lm,transformers; from importlib.metadata import version; print(*(version(x) for x in ("mlx","mlx_lm","transformers")))'
+# [ADDED, design seat] The same line through the worktree's own interpreter: it is the one D-7's stack check and the chain use.
+"$M/.venv/bin/python" -B -c 'import mlx.core,mlx_lm,transformers; from importlib.metadata import version; print(*(version(x) for x in ("mlx","mlx_lm","transformers")))'
+# Item 377: the old R0 path was archived. Use the hash-verified restored R0 file in custody,
+# standing-f0/r0-restore-ade002e9/r0.json (sha256 e6231a8f…769b); do not re-extract during a run.
+: "${R0:?LEAD FILLS at the arm (the magistrate, item 388 fallback 4): the absolute path of that restored r0.json}"
+test "$(shasum -a 256 "$R0" | cut -c1-64)" = e6231a8f3e6ab6177bbedbf12b878c958a7b4d4331e36472c74c2a192588769b || { print -u2 'STOP: R0 bytes'; exit 1; }
+"$PY" -B "$M/scripts/align_r1_r0_classes_from_r0.py" check --r0 "$R0" --config "$M/configs/align/v4/r1_runtime.json" || { print -u2 'STOP: R0 check failed'; exit 1; }
+# Check output against CHECKLIST A14 and SOURCES; fresh host checks above
+# use the existing measurement_mode / network-time zero-step procedures.
+unset JOULEWISE_HOST_STATE_DIR ALIGN_R1_RUNTIME ALIGN_R1_INPUTS ALIGN_R1_REGISTRATION
+unset EVIDENCE_POWER_RECORDER_REPLAY NIGHT_VERIFY_ONLY NIGHT_RESERVATION_ARGV_ONLY
+```
+
+D-7, on these final bytes: preserve an existing packet before removing its fixed name; then regenerate with real registered weight and stack checks. Never reuse a packet merely because the commit matches. A preparation failure may leave a REFUSED packet: it is not a valid arm attachment.
+
+```zsh
+set -euo pipefail
+export S="/Users/edr/night-align/r1-$(date -u +%Y%m%dT%H%M%SZ)"
+test ! -e "$S"                    # new session only
+# A fresh worktree holds no earlier packet. If one is there (an earlier attempt under this item),
+# keep it in the private preparation directory and free the fixed name, per D-7.
+if [[ -e "$M/.align-r1-prepare.json" ]]; then
+  mkdir -p /Users/edr/r1-preparation/r1-slot-b2e01464d/prepare-archive
+  mv "$M/.align-r1-prepare.json" "/Users/edr/r1-preparation/r1-slot-b2e01464d/prepare-archive/align-r1-prepare.$(date -u +%Y%m%dT%H%M%SZ).json"
+fi
+test ! -e "$M/.align-r1-prepare.json"
+"$PY" -B "$M/scripts/align_r1_followup_kit.py" prepare \
+  --output "$M/.align-r1-prepare.json" \
+  --sensor-ruling "$M/docs/run_reports/2026-11-13-rl145/sensor_ruling_rl145.json" \
+  --smoke-table "$M/docs/run_reports/2026-11-13-rl145/smoke_part_b.rl145.json"
+PKT_SHA=$(shasum -a 256 "$M/.align-r1-prepare.json" | cut -c1-64)
+# At P this CLI does not print a digest; shasum records the required value.
+print -r -- "D-7 PKT_SHA $PKT_SHA $(date '+%Y-%m-%d %H:%M:%S %Z')"
+# Select only once review/notice are ready. T0 must be a whole minute,
+# >= now+900 s, and leave the actual clean-close floor and install budget.
+export T0="${T0:?LEAD FILLS at the arm (the magistrate, item 388 fallback 4): final whole-minute epoch}"
+"$PY" -B "$M/scripts/arm_align_r1.py" size --t0 "$T0"
+"$PY" -B "$M/scripts/arm_align_r1.py" prepare --measurement-root "$M" --custody-root "$S" --t0 "$T0"
+df -g /Users/edr > "$S/df-arm.txt"
+"$PY" -B "$M/scripts/arm_align_r1.py" render --custody-root "$S" --output "$S/rendered"
+plutil -p "$S/rendered/com.joulewise.night.plist"
+plutil -p "$S/rendered/com.joulewise.night.deadman.plist"
+```
+
+Read only the preparation arm and plan fields needed to verify: both checkout heads at the pin; packet SHA equal to PKT_SHA; no packet-absent flag; no `ac_powermode` key; one HAZARD_PACK/R1 chain, no W1 roster; bounds as CHECKLIST B13; correct t0, paths and end. Default allocation is explicitly unsized, retaining 20 GiB arm headroom and 10 GiB live floor. A sourced R1-specific footprint estimate may be supplied with `--planned-bytes`; Block 5's unrelated estimate is not substituted. Installer cutoff is t0−180−120 s; allow 180 s to install before that cutoff. Move t0 and repeat the ordinary route when review, notice or install cannot fit.
+
+**Notice (ordinary authorized route; the magistrate sends, or the lead if at hand).** Fill the actual times from the fresh arm record:
+
+> ALIGN v4 R1 slot-producing hardware session is arming on Mac15,9,
+> after R0 and counted Part C passed. Measurement checkout/head:
+> `/Users/edr/code/jw-wt/r1-slot-b2e01464d` at `b2e01464d6d4fbf2901ff4d4154df9455104a12a`;
+> custody: LEAD FILLS at the arm (the magistrate): `$S`. t0: LEAD FILLS at the arm
+> (the magistrate): Pacific / UTC. Expected: UNKNOWN; driver bound 102168 s;
+> ceiling 119880 s after t0, plus 300 s shutdown grace; latest end LEAD FILLS at
+> the arm (the magistrate). It normally ends when R1 completes. No agents remain
+> at t0. Keep AC connected, battery not charging, external SSD unplugged and
+> display asleep; do not touch, wake, start agents or other work until latest
+> end. Security Responses stay automatic. Scheduled load may redo/refuse the
+> session under its existing caps; lead has received any required scheduling
+> notification. R1 owns High Power transitions and restores Automatic. KM003C
+> and calibration bookends are diagnostic; R1 uses GPU energy. Allocation is
+> unsized unless a sourced R1 estimate is supplied. I will report terminal
+> status and actual restore afterwards. To stop it, reply NO or open a
+> `directive` issue before t0.
+
+**Run.** Immediately re-read issue validity, all host, close, copy, stop and veto facts; the READY record effective and not VOID; no new lower-priority arm since it took effect. Only after these and the notice hold, install, observe both jobs, sleep the display, exit:
+
+```zsh
+set -euo pipefail
+"$PY" -B "$M/scripts/arm_align_r1.py" install --custody-root "$S"
+launchctl print "gui/$(id -u)/com.joulewise.night"
+launchctl print "gui/$(id -u)/com.joulewise.night.deadman"
+pmset displaysleepnow
+```
+
+No Git operation in M from install through t0, including status and fetch; no agent, live driver probe, manual High Power selection, build, test, analysis, offload or transfer during the armed interval. The existing LaunchAgent, shared fence, deadman and file-only courier own execution.
+
+**Dispositions (issued unchanged from current rulings).** Thermometry must be `ok`; any other result comes to the research lead. Any H in a gated D run is a defect. The duty own-stop exception needs all four RL-156 §1 conditions and at least one valid three-turn run in the set. Extra keys in TV0h's alias group are reported; they do not fail the named pair. Planning 3(a) remains, TV1h is the heater key; S6 is the registered G1 median, not a hold median. The own-session typical-case fit is evaluated after R1. No 1(f) receipt or key is permitted. Repeated sustained load and gappy evidence use the existing refusal and redo rules; no change inside the driver. **RL-175 D.2: the evaluator at this pin does not count G1 records, so R1's post-return disposition adds the count by hand (one released G0, exactly one released G1 for each admitted turn after the first, by index) before A12 and A20 are evaluated.**
+
+**Check after the fence is gone (separate magistrate activation).** Read R1's terminal status and the chain exit first under the registered result boundary; the shared `result.json` GO does not establish R1 success. Record the exact host restore and the absence of meter, hazard and root-sampler processes and of the process group, not merely the power mode. Check the three A–B–A sensors-only G0 releases; if the accepted step-30b was a redo, flag R_op to the research lead before any R_op-gated number is used. Preserve complete rejects, bookends, terminal and recovery markers. Uninstall through `arm_align_r1.py uninstall`. **Network time (RL-175 Q6): ON at return, as the pinned runbook has it (`sudo -n systemsetup -setusingnetworktime on`), and record the time. Then, in this same Check and before anything arms, set it OFF and the frequency word to 0, with a readback (`-getusingnetworktime` says Off; the word reads 0, by item 251's remedy if not), and record the minutes it was ON.** The next arm of anything is 1200 s or more after R1's close; record R1's close epoch for that arm's `OTHER_CLOSE_EPOCH`, with `LAST_CLOSE_KIND=other`. The lead alone applies the R1-to-W1 chain and any raw-result or slot reads. W1 remains unarmed pending its own gates.
+
+397. **Laptop lead (interactive, Opus 5.5), 2026-11-17 13:13:47 PST (`date`): R1 SLOT SESSION: THE LEAD'S READY RECORD under RL-175 A.2, EFFECTIVE FROM THE LAUNCH RECORD OF `dev-05-s02` (item 394) and not before, with the lead's adoptions of the `r1-ready-1116` checklist (audit `05fd23160`). The session is the slot-producing ALIGN v4 R1 on `b2e01464d6d4fbf2901ff4d4154df9455104a12a` (tree `c904864e46879a4adfbdf0b467d4da1ee5928285`), route HAZARD_PACK through `scripts/arm_align_r1.py`, issued as item 398. Until `dev-05-s02`'s launch record is on main, every gate that asks whether a v4 session is READY reads `SESSION_READY=no` and cites this record and RL-175 A.2: `dev-05-s01`, `dev-05-s02`, STANDING-F0 and F2 arm on their own rules. From that record on it reads `yes`: nothing of lower priority arms, `dev-05-s02` runs to its close, and R1 takes that clean close (t0 about Wed 18 Nov 08:15 PST). VALID for 72 h from this stamp or until R1 arms, whichever comes first. Expected runtime: UNKNOWN (RL-175 Q4). Driver bound 102,168 s (28 h 23 min). Outer bound 119,880 s plus 300 s (33 h 23 min). Latest whole-minute t0 that ends inside Sun 22 Nov: Sat 21 Nov 14:36 PST. This record installs nothing: the R1 item's gates, the ordinary notice and the install route all still apply.**
+
+```pointer
+owner: magistrate
+wait: none
+deadline: 2026-11-20T13:13:47-08:00
+on_early_or_refused: before the wait is met: SESSION_READY=no everywhere and nothing of R1 installs. VOID, so that nothing ever installs on this record's authority and the ladder goes on as if it had not been written (mail the lead; a new READY record is needed): (1) the W1-line head is not `b2e01464d`, the worktree's tree is not `c904864e…`, or any of the 25 source hashes differs; (2) the G1 re-read of the counted Part C does not pass (RL-175 D.2; its number goes to the research lead); (3) staging refuses on bytes (a source hash, the checkout's HEAD or state, a differing preparation file), either interpreter prints anything but `0.31.2 0.31.3 5.12.1`, or the 60-key check fails; (4) item 394 goes VOID, or `dev-05-s02` has no launch record when item 394's window ends; (5) 72 h pass; (6) R1's arm refuses: a failed line of the R1 item's Start and check, a REFUSED D-7 packet, or a failed size, prepare, render or install; (7) the lead withdraws it. HOLD, with the record standing and nothing installing meanwhile: Ed's NO, an open directive or cadence-stop, a restore or process group unproven, a missing copy marker or a failed offload, a High Power marker, a pending iCloud transfer. A staging stop on host state (a fence, a runner or monitor, a loaded night or iCloud job) is a WAIT: stage again in the next gap. A later t0 chosen only because review, notice or install did not fit is neither. A running span is never aborted
+next_observable: the magistrate's native record (staging, both import lines, the 60-key line, the G1 re-read) as its own item; `dev-05-s02`'s launch record with `SESSION_READY=no` and this record cited; then R1's arm record before install, and the post-fence Check
+```
+
+- **The effective condition (RL-175 A.2).** One condition, in the one form the ruling allows: "effective from the launch record of span X". X is `dev-05-s02`, a span already issued (item 394, Tue 17 Nov 12:32:46 PST). No clock time and no other event. No READY record takes effect between the two spans of a block, so dev-05 is not split and `dev-05-s02` does not cede. If this record goes VOID or lapses, a later READY record takes the first block boundary after it.
+- **Native lines (A14, B01, B02) and the G1 count (RL-175 A.2, D.2).** Not yet on main. Under RL-175 A.2 the lead delegates the READY record to the interim lead: R1 is READY from the magistrate's item that records steps 1 to 4 below as passed, signed as interim lead (item 388 fallback 6), with this item's effective condition and terms unchanged. Until that item is on main every gate reads `SESSION_READY=no` and cites this line.
+- **Adoptions (lead; RL-149 §5 step 12).** Prepared by the Mythos 5.2 design seat (`/Volumes/JW-EXT/scratch/mythos-r1-ready/`, 13:12), adopted by the lead in full, including its LEAD-DECIDE recommendations L1-L5 (worktree-interpreter import line; take only the verdict file from a packed archive as a recorded deviation; a refused R1 arm VOIDs this record; a dev-05-s02 with no launch record lapses it).
+  - **A03, Q1.** RL-175 A.1 rules that #734 is not a prerequisite: the build PR and the kit change are merged on the W1 line (#777, #783, #774, #798, #790). Item 355's sentence described that day's state. R1 arms at `b2e01464d`.
+  - **A06.** The off-host verification is adopted: 212 synthetic tests, no skips, and CI run 43712204542 `success` at the pin (`VERIFICATION.md`, `CI-AND-MERGES.json`).
+  - **A10, A19, Q2.** `CARRY-RECORD-DRAFT.md` is adopted as the correction to item 329 (RL-172b conditions 1 and 2). The "one line" covers the path census only; the imported-module table there is the record. RL-170 note 4 is met by the amendment draft's sentence; note 3 does not gate.
+  - **A11, Q2.** The Part C table is item 328's. No new Part C. The typical-case bar replaces 1(f) (RL-148 §2; RL-149 §1.5). One line is added: the G1 re-read below.
+  - **A13, Q3.** `AMENDMENT-R1-DRAFT.md` at audit `05fd23160` is "the amendment draft" of step 12. Its move into the B-S-admit PR, the attack seats and the cold review are W1's and do not gate R1.
+  - **A16, A17, A18.** The three synthetic results are adopted: the pair on an `ok` confirmation, N_chunk bound from slots, the 3(a) planning release.
+  - **Q4, Q5, Q6.** UNKNOWN is printed with both bounds (ruled). This record is valid 72 h; the notice and veto route are the existing ones, unchanged; every native line (A14, A15, B01 to B15) is read fresh at the real arm. Network time is not a hygiene setting (ruled; see "On return").
+- **Before installing, the magistrate does all of the following and records each with its output. Steps 1 to 4 run in the first gap with nothing armed, tonight's by preference, and never while a span is armed.**
+  1. **Native staging (B01).** `stage_mbp_r1.sh` from the committed package at audit `05fd23160`, with `JW_CLOSE_WINDOW_CONFIRMED=yes`, a dry run first. It must end `SOURCE STAGED ONLY (dry-run 0)`. Worktree `/Users/edr/code/jw-wt/r1-slot-b2e01464d`, detached, clean, tree `c904864e…`.
+  2. **Imports (B02).** Both the established interpreter and the worktree's own `.venv/bin/python` print `0.31.2 0.31.3 5.12.1`. The second is the one the D-7 step and the chain use. No install.
+  3. **The 60-key check (A14).** `align_r1_r0_classes_from_r0.py check` on the hash-verified restored R0 file of item 377, fatal on failure: 60 keys, 16 die, 44 heatsink, pair TV0h/TV1h, record key Tf08, source sha256 `e6231a8f…769b`, config sha256 `272aecb8…2f46`.
+  4. **The G1 re-read of the counted Part C (RL-175 D.2).** The run is item 328's, at `c3f4bacd8`. From its stored verdict file, gate records only: with T the admitted turns, (a) one released G0; (b) exactly one released G1 for each turn after the first, by index; (c) 2T start-state rows; (d) `gate_time` includes those G1 durations. Item 328's published line (2 turns, 4 samples) fits (c); (a), (b) and (d) are not yet on record. Pass: the run is marked "G1 complete (RL-175 re-read)". Anything else: "not established", this record is VOID, nothing installs, and the number goes to the research lead. If that run's output directory was packed on 16 Nov, take only the one verdict file from the receipt-verified archive into custody, as item 377 did for `r0.json`, and record it as a deviation.
+  5. **Network time and the frequency word (RL-175 Q6).** At the arm: Network Time Off and the frequency word 0, read fresh (item 251's remedy if not, then re-read). On return: ON as the pinned runbook has it; then the post-R1 Check sets it OFF and the word to 0, with a readback, before anything arms; the minutes it was ON are recorded.
+  6. **Then the R1 item:** the fresh close facts, the four host lines, the pending-transfer read, a fresh D-7 packet, size, prepare, render, the ordinary notice, the veto read, install, display sleep, exit.
+- **Ladder and protected horizons (RL-174 B; RL-175 A.2, C.4, C.5).** The ladder is: a READY v4 session, then counted work, then F0, then F2, then hp-02, then DESIGN_QUEUE_LOW. R1 is the top rung from the effective moment and not before.
+  - **Counted, protected from R1.** `dev-05-s01` (item 393, from Wed 00:00:00) and `dev-05-s02` (item 394) arm as usual under their own items.
+  - **R1.** It takes `dev-05-s02`'s clean close: that span's Check reported with every restore line OK, its copy marker written, 300 s after the close, then a whole-minute t0 chosen at least 900 s ahead, with the notice sent as soon as the arm record is read. For t0 08:15 the driver bound ends Thu 19 Nov 12:37:48 and the outer bound plus grace ends Thu 17:38:00 (arithmetic, not a promise). Until that end nothing else arms and nobody touches the Mac.
+  - **F0 (item 346).** It cedes from the effective moment (its rule 3, R-A). It returns on its own rules 1,200 s after R1's close.
+  - **F2.** A filler below F0. It cedes to a READY session and never interrupts a running span. Its gate protects 13,010 s ahead of a counted arm; tonight's `f2-inst-p1` (item 395 B) keeps that horizon against `dev-05-s01`'s 00:00 arm and reads `SESSION_READY=no`, because this record is not yet effective. From the effective moment no F2 piece launches until 1,200 s after R1's close; p2 and p3, dated Wed, are re-dated by the lead. After R1 the same 13,010 s holds before each counted arm (a last launch at 20:23:10 before a 00:00 arm).
+  - **Qualification.** It never arms before freeze 2. R1 outranks a qualification date: the next whole block is re-dated to the first date after R1's post-close Check and its items are issued fresh. A Thursday start holds only if `qual-01-s01` can arm by 16:32, after R1's close, its Check and 1,200 s; otherwise Fri, Sat and Sun, with the queues re-committed under RL-175 C.3 item 5. No qualification span arms across the predicted OS batch (RL-175 C.4). "R1 by Fri 06:46:59" is arithmetic and not a rule.
+  - **Freeze 2.** If the Air is not back with its copy when R1 closes, the interim look runs on the MBP in that close interval (RL-175 B.1). The MBP keeps dev-01 to dev-05's originals raw until then.
+- **On return (RL-175 Q6 and D.2).** The post-fence Check reads R1's terminal status and the chain exit first. Network time goes ON, then OFF with the word at 0 and a readback, as step 5. Network time is not a hygiene setting under RL-174 C, so R1 may run between freeze 2 and qual-03's close. The G1 count is added by hand before A12 and A20 are evaluated. The next arm is 1,200 s or more after R1's close, with R1's close epoch as `OTHER_CLOSE_EPOCH` and `LAST_CLOSE_KIND=other`. R1's result and slot reads stay the lead's.
+- **If the lead is away (item 388).** The magistrate fills the R1 item's issue-time values in a gap (fallback 4) and signs as interim lead (fallback 6). If the native record is still owed when `dev-05-s02` closes, the interim lead may post one RL-175 A.3 pre-notice, "READY record for session R1, expected within N minutes" (N at most 30, renewable once), which holds F0, F2 and hp-02 while steps 1 to 4 run. Paper-bound and prereg questions wait for the research lead or Ed.
+
+**Start and check (magistrate; steps 1 to 4 above; nothing armed, the latest close's Check reported with every restore line OK and its copy verified).** Record every line and its output. Any `STOP` or `VOID` line: nothing of R1 installs; mail the lead.
+
+```zsh
+set -euo pipefail
+REPO=/Users/edr/code/JouleWise
+PIN=b2e01464d6d4fbf2901ff4d4154df9455104a12a
+PKGC=05fd231609bde202def258745b8a45ce44ce43da            # audit/2026-11-10-fable, the r1-ready-1116 package
+D=docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/r1-ready-1116
+PKG=/Users/edr/r1-preparation/package-05fd23160          # private, outside every checkout
+M=/Users/edr/code/jw-wt/r1-slot-b2e01464d
+PY=/Users/edr/night-custody/measurement/JouleWise-measurement-20261102-align-pilot2/.venv/bin/python
+# The pin has not moved (VOID 1). ls-remote, as the F0 launches read it; the canonical root takes no fetch for it.
+test "$(git -C "$REPO" ls-remote origin refs/heads/ops/2026-11-11-w1-presign | cut -f1)" = "$PIN" || { echo "VOID: the W1-line head is not b2e01464d"; exit 1; }
+# The package, byte for byte from the audit commit
+git -C "$REPO" cat-file -e "$PKGC^{commit}" || git -C "$REPO" fetch origin audit/2026-11-10-fable
+test -e "$PKG" || { mkdir -p "$PKG" && git -C "$REPO" archive "$PKGC" "$D" | tar -x -C "$PKG" --strip-components 6; }
+test "$(shasum -a 256 "$PKG/SOURCES.sha256" | cut -c1-64)" = eb9baf74b7490c321e3739e3a7706007f3335a30efeda35133ffb02f29238b03 || { echo "STOP: package bytes (SOURCES.sha256)"; exit 1; }
+test "$(shasum -a 256 "$PKG/stage_mbp_r1.sh" | cut -c1-64)" = 138040de17f18ba2b05ade30ba12ffbf1930c0d4186c68e9d2c3a8c74c69069f || { echo "STOP: package bytes (stage_mbp_r1.sh)"; exit 1; }
+# 1. Native staging (B01). JW_NO_FETCH=1 is the script's own switch: the pin is already local (STANDING-F0 runs on it).
+JW_CLOSE_WINDOW_CONFIRMED=yes JW_NO_FETCH=1 "$PKG/stage_mbp_r1.sh" --dry-run
+JW_CLOSE_WINDOW_CONFIRMED=yes JW_NO_FETCH=1 "$PKG/stage_mbp_r1.sh"       # last lines: SOURCE STAGED ONLY (dry-run 0) ... / NEXT: ...
+test "$(git -C "$M" rev-parse HEAD)" = "$PIN" || { echo "STOP: HEAD"; exit 1; }
+test "$(git -C "$M" rev-parse 'HEAD^{tree}')" = c904864e46879a4adfbdf0b467d4da1ee5928285 || { echo "VOID: tree"; exit 1; }
+test -z "$(git -C "$M" status --porcelain --untracked-files=all)" || { echo "STOP: dirty tree"; exit 1; }
+# 2. Imports (B02): the established interpreter, then the worktree's own (the one D-7 and the chain use). No install.
+cd /tmp
+for I in "$PY" "$M/.venv/bin/python"; do
+  V="$("$I" -B -c 'import mlx.core,mlx_lm,transformers; from importlib.metadata import version; print(*(version(x) for x in ("mlx","mlx_lm","transformers")))')"
+  echo "imports $I: $V"; test "$V" = "0.31.2 0.31.3 5.12.1" || { echo "VOID: imports through $I"; exit 1; }
+done
+# 3. The 60-key check (A14), on the restored R0 file of item 377 (custody standing-f0/r0-restore-ade002e9/r0.json)
+: "${R0:?Set to the absolute path of that restored r0.json}"
+test "$(shasum -a 256 "$R0" | cut -c1-64)" = e6231a8f3e6ab6177bbedbf12b878c958a7b4d4331e36472c74c2a192588769b || { echo "STOP: R0 bytes"; exit 1; }
+test "$(shasum -a 256 "$M/configs/align/v4/r1_runtime.json" | cut -c1-64)" = 272aecb8bc0d9e33defd7f686b129ea236b925fdfbf68137697120dd63232f46 || { echo "VOID: config bytes"; exit 1; }
+"$PY" -B "$M/scripts/align_r1_r0_classes_from_r0.py" check --r0 "$R0" --config "$M/configs/align/v4/r1_runtime.json" || { echo "VOID: the 60-key check failed"; exit 1; }
+test -z "$(git -C "$M" status --porcelain --untracked-files=all)" || { echo "STOP: the checks dirtied the tree"; exit 1; }
+# 4. The G1 re-read of the counted Part C (RL-175 D.2). Row labels and counts only; no temperature, energy or meter value is printed.
+: "${PARTC_VERDICT:?Set to the smoke_part_c.json of item 328s run (its OUT is named in docs/process_traces/2026-11-14-partc2-c3f4/CHECK-de565739.md)}"
+"$PY" -I -B - "$PARTC_VERDICT" <<'PYEOF'
+import json, re, sys
+lines = json.load(open(sys.argv[1]))["evaluation"]["lines"]
+checks = lines["d_bank_mechanics"]["checks"]
+T = checks["admitted_turns"]["value"]
+at = [r["at"] for r in lines["d_bank_start_state"]["samples"]]
+g0 = [a for a in at if a == "G0 release"]
+g1 = sorted(m.group(1) for a in at for m in [re.fullmatch(r"G1 release \(turn (.+)\)", a)] if m)
+first = sorted(m.group(1) for a in at for m in [re.fullmatch(r"first reading after turn (.+) start", a)] if m)
+other = [a for a in at if a not in g0 and not re.fullmatch(r"(G1 release \(turn .+\)|first reading after turn .+ start)", a)]
+print("admitted turns T =", T)
+print("start-state rows =", len(at), "; need 2T =", 2 * T if isinstance(T, int) else "?")
+print("released G0 rows =", len(g0), "; need 1")
+print("released G1 rows, by turn =", g1, "; need T-1, one for each turn after the first")
+print("first-reading rows, by turn =", first, "; need T")
+print("unrecognised rows =", other)
+ok = (type(T) is int and T >= 1 and len(g0) == 1 and len(first) == T == len(set(first))
+      and len(g1) == T - 1 == len(set(g1)) and len(at) == 2 * T and not other)
+print("gate_time gates_plus_holds_s =", checks["gate_time"]["gates_plus_holds_s"])
+print("G1 COUNT", "OK" if ok else "NOT ESTABLISHED")
+PYEOF
+# By hand, from the same run's gate interval rows: (b) each G1's turn is an admitted turn after the first, by index;
+# (d) gates_plus_holds_s equals the released G0's duration plus those G1 durations. Record both lines.
+# "G1 COUNT OK" with (b) and (d) holding: mark the run "G1 complete (RL-175 re-read)". Otherwise "not established": VOID, to the research lead.
+# 5. Network time and the frequency word, read now and again at the arm
+sudo -n systemsetup -getusingnetworktime                 # must say Off
+# kernel frequency word: read it as item 308 did; must be 0 (else item 251's remedy, then re-read)
+```
+
+396. **Laptop lead (interactive, Opus 5.5), 2026-11-17 12:52:20 PST (`date`): RL-175 (Fable 5.2, audit branch `b26c0d0e7`, committed verbatim) is in force. Below are its effects on the MBP that need no new item; R1's READY record follows as a separate lead item tonight.**
+- **Raw retention for the interim look (RL-175 F-3):** the look runs on the first ready host, the MBP included, reading the MBP's own raw dev-01..dev-05 span directories while nothing is armed.
+  - No offload, packer or close-offload step may pack, move or delete any dev-01..dev-05 campaign output until the lead records "interim look complete". Copying (cloud or SSD) is fine.
+  - Stage-2 look files stay restricted.
+- **G1 re-read (RL-175 on astra-design finding 2):**
+  - In gaps, re-read F0 runs 1-8's Part C outputs for G1 completeness (one released G1 per admitted turn after the first; 2T start-state rows). None is re-run.
+  - Before R1 installs, do the same re-read of the counted Part C at `c3f4bacd8`.
+  - Report each as a table row in the run's Check style. A missing G1 is reported to the lead and changes no verdict without a lead item. The evaluator fix (lead lane, PR to follow) does not move R1's pin.
+- **F0 run 7's 0.811:** no rule changes and R1 is not held. Keep a running F0 series table (run, predecessor, close-to-t0 gap, last-512 clock ratio, token-rate ratio, `bird`/`cloudd`/`fileproviderd` log counts where observed, otherwise "unobserved") for the freeze-2 packet.
+- **Pre-notice (RL-175):** a lead record "PRE-NOTICE <hand-read or READY> until <time>" (at most 30 min, renewable once) holds F0, F2 and hp-02 launches until it expires or is fulfilled. Counted work and READY v4 are not held.
+- **Qualification (for when its items are issued):** no qualification span arms across the predicted OS batch (arm at the predicted batch start + 27 min). A half-run block finishes on a date of its own. The qual drafts are being repaired for both rules and for the checklist-order defect before any is issued.
+- **hp-02:** its same-date clause is ordering only; it may fill a day with no qualification, outside every count. Its items come from the lead.
+- **Lead-owed by Thu 08:00:** the freeze-2 packet to Fable. Fallback if the lead is silent at Wed 20:00: the magistrate assembles the F0 series table and the G1 re-read results for it, and mails the lead.
+
 395. **Laptop lead (interactive, Opus 5.5), 2026-11-17 12:41:08 PST (`date`): (A) COPY OWNER BY AIR STATE (amends item 348; GPT 6.2 Astra window-schedule audit, throughput idea 2: four closes waited up to 100 min on the 30-minute fallback). (B) F2 piece 1 (`ITEM-f2-p01`): the lead adopts the recorded F2 re-check, and the magistrate issues it today if every other prerequisite holds. The Air is present now (item 390 state; Ed: stable ~2 h from 12:35).**
 - **(A) Rule.** The latest lead record of the Air's state decides the copy owner AT CLOSE, with no 30-minute wait:
   - "Air paused" (items 384, 391, and any later one): the MBP runs item 347's cloud offload and writes the marker at once after the Check.

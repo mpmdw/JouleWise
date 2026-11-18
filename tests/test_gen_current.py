@@ -12,6 +12,7 @@ import unittest
 from unittest import mock
 
 from scripts import gen_current as gc
+from tests.test_run_state_items import EXPIRY, change, doc, item
 
 
 T0 = "2026-11-10T20:53:00-08:00"
@@ -37,13 +38,13 @@ def unarmed() -> dict[str, str]:
 
 
 def expected() -> dict:
-    return {"schema": "joulewise.current_pointer.v1", "source_item": "262",
+    return {"schema": "joulewise.current_pointer.v2", "source_item": "262",
             "source_item_heading_date": "2026-11-11", "owner": "magistrate",
             "armed": {"plan_id": "synthetic-plan", "host": "synthetic-host",
                       "t0_epoch_s": 1794372780, "latest_end_epoch_s": 1794452580},
             "wait": {"observable": "result_json_exists", "deadline_epoch_s": 1794454380,
                      "on_early_or_refused": "read verdict first; ask lead"},
-            "next_observable": "synthetic result.json: verdict"}
+            "next_observable": "synthetic result.json: verdict", "open_items": []}
 
 
 class RenderTests(unittest.TestCase):
@@ -81,9 +82,9 @@ class RenderTests(unittest.TestCase):
         self.refused(history.replace("Magistrate cb24533b", "Magistrate substitute"), "DUPLICATE_ITEM", 2)
 
     def test_no_pointer_document_without_any_headings(self):
-        document = {"schema": "joulewise.current_pointer.v1", "source_item": None,
+        document = {"schema": "joulewise.current_pointer.v2", "source_item": None,
                     "source_item_heading_date": None, "owner": None, "armed": None,
-                    "wait": None, "next_observable": None}
+                    "wait": None, "next_observable": None, "open_items": []}
         for text in ("", "ordinary text\n", "261. **No declaration**\n"):
             self.assertEqual(json.loads(gc.render(text)), document)
         gc.validate(document)
@@ -402,7 +403,49 @@ class FileAndCliTests(unittest.TestCase):
         self.assertEqual(default_out.read_bytes(), gc.render(block()))
 
     def test_real_repository_agrees(self):
+        # G4: the real repository agrees with CURRENT v2.
         self.assertEqual(gc.check_default(), 0)
+
+    def test_g01_legacy_preserves_v1_declaration_values(self):
+        legacy = {key: value for key, value in expected().items() if key != "open_items"}
+        legacy["schema"] = "joulewise.current_pointer.v1"
+        current = json.loads(gc.render(block()))
+        self.assertEqual(current.pop("schema"), "joulewise.current_pointer.v2")
+        self.assertEqual(current.pop("open_items"), [])
+        del legacy["schema"]
+        self.assertEqual(json.dumps(current, sort_keys=True), json.dumps(legacy, sort_keys=True))
+
+    def test_g02_open_items_shape_and_recorded_status(self):
+        text = doc([item(23, owner="ed", sets=[change(22, "ARMED")]),
+                    item(22, owner="magistrate", expires_epoch_s=EXPIRY), item(21, status="CLOSED")])
+        actual = json.loads(gc.render(text))
+        gc.validate(actual)
+        self.assertEqual(actual["open_items"], [
+            {"item": 23, "status": "ISSUED", "owner": "ed", "expires_epoch_s": None},
+            {"item": 22, "status": "ARMED", "owner": "magistrate", "expires_epoch_s": EXPIRY},
+        ])
+        self.assertTrue(gc.show(actual).endswith("open=2"))
+        entry = actual["open_items"][0]
+        for invalid in (None, {}, [23], [{**entry, "extra": 1}], [{**entry, "item": True}],
+                        [{**entry, "expires_epoch_s": float(EXPIRY)}], [{**entry, "status": "CLOSED"}],
+                        [{key: value for key, value in entry.items() if key != "owner"}]):
+            with self.subTest(invalid=invalid), self.assertRaisesRegex(ValueError, "open_items"):
+                gc.validate({**actual, "open_items": invalid})
+
+    def test_g03_invalid_typed_transition_keeps_output_bytes(self):
+        before = self.out.read_bytes()
+        self.source.write_text(doc([item(22, sets=[change(21, "ARMED")]),
+                                    item(21, status="CLOSED")]), encoding="utf-8")
+        with mock.patch.object(gc, "ROOT", self.root):
+            # Call main([]) against the same default layout used in a checkout.
+            source, out = self.root / "RUN_STATE.md", self.root / "docs/process/CURRENT.json"
+            out.parent.mkdir(parents=True)
+            source.write_bytes(self.source.read_bytes())
+            out.write_bytes(before)
+            with contextlib.redirect_stderr(io.StringIO()) as errors:
+                self.assertEqual(gc.main([]), 2)
+            self.assertIn("ILLEGAL_TRANSITION", errors.getvalue())
+            self.assertEqual(out.read_bytes(), before)
 
 
 class SchemaTests(unittest.TestCase):
@@ -418,7 +461,7 @@ class SchemaTests(unittest.TestCase):
             del value[key]
             self.invalid(value, "pointer must be an object")
         self.invalid({**expected(), "extra": 1}, "pointer must be an object")
-        for schema in (None, "joulewise.current_pointer.v2", 1):
+        for schema in (None, "joulewise.current_pointer.v1", 1):
             self.invalid({**expected(), "schema": schema}, "schema must be")
         for item in (0, True, "", "0", "262bb", "262B"):
             self.invalid({**expected(), "source_item": item}, "numbered item string")

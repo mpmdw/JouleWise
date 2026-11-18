@@ -1,13 +1,14 @@
 {
   "armed": null,
-  "next_observable": "the next activation (after the fence is gone) runs \"Check\" below and reports, by email to Ed and the lead and as RUN_STATE the next item: the maintenance line, the receipt asserts, the per-leg admitted lines with g0_role and span_reference, the desk bundle, the restore lines, measurement_mode verify again, and the RL-150 R1 / RL-158 Q1 print (gates nothing)",
+  "next_observable": "before install: the READY record and this item on main, the native record, the ordinary notice, PKT_SHA, the actual arm.json, plan digest, t0, end and dead-man, fresh host and no-veto reads. On the next post-fence activation: the registered R1 terminal status plus chain exit, restore and process-absence Check; the lead handles results and slot fills under the owning procedure.",
+  "open_items": [],
   "owner": "magistrate",
-  "schema": "joulewise.current_pointer.v1",
-  "source_item": "394",
-  "source_item_heading_date": "2026-11-15",
+  "schema": "joulewise.current_pointer.v2",
+  "source_item": "398",
+  "source_item_heading_date": "2026-11-16",
   "wait": {
-    "deadline_epoch_s": 1795105020,
+    "deadline_epoch_s": 1795209227,
     "observable": "none",
-    "on_early_or_refused": "VOID, so that nothing of this item ever launches (mail the lead; a new item is needed), if `dev-05-s01` closed without a clean receipt (RL-173 D.2) or once 24 h have passed since the issue (RL-173 D.5). Otherwise: any failed line of \"Start and check\", any launch refusal (rc≠0 or no claimed fence), or a launch that cannot happen inside the bands below (Wed 00:00:00 to Wed 23:59:59 PST, outside 10:50:00-13:15:00): NOTHING of this item launches; mail the lead; a later t0 needs a new item, and the standing F0 item applies meanwhile. A span that ran but ends with any named stop or a receipt rc≠0: nothing relaunches, nothing is re-run, nothing else is queued; mail the lead. Do not retry, do not extend, do not reuse OUT"
+    "on_early_or_refused": "any missing or open checklist line, a READY record that is not yet effective or is VOID, a stop or veto, an unproven restore or process group, a failed or unverified offload, a stale authorization, or a failed prepare or install: NOTHING arms; preserve outputs and report to the lead by the existing authorized route. Do not retry a measured session, skip a hold, extend a queue, reuse S, or erase recovery markers. A refused arm makes the READY record VOID (its clause 6), so STANDING-F0's rule 4 applies. A new t0 for time only goes through the same route. A running lower-priority span finishes."
   }
 }
