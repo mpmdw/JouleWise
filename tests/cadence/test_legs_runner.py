@@ -69,11 +69,12 @@ class T0AuthorityTests(unittest.TestCase):
                        "--disk-path", str(self.root), "--custody-root", str(self.root / "synthetic-fence"),
                        "--magistrate-pid", "123", *self.spec]
 
-    def handoff(self, *, day="2026-11-19", earliest=None, cutoff=None, projected_ns, wall_ns, allowed):
+    def handoff(self, *, day="2026-11-19", earliest=None, cutoff=None, projected_ns, wall_ns, allowed,
+                anchor_width_ns=0):
         earliest = self.midnight - 3600 if earliest is None else earliest
         cutoff = self.midnight if cutoff is None else cutoff
         authority = ["--authorized-t0-date", day, "--t0-not-before", str(earliest), "--t0-before", str(cutoff),
-                     "--t0-anchor", f"{projected_ns - self.ns}:{999 * self.ns}"]
+                     "--t0-anchor", f"{projected_ns - self.ns}:{999 * self.ns - anchor_width_ns}:{999 * self.ns}"]
         with patch.object(cadence_launch, "launch") as launch:
             self.assertEqual(cadence_launch.main(self.launch + authority), 0)
             child_argv = cadence_launch.runner_argv(launch.call_args.args[0])
@@ -111,6 +112,10 @@ class T0AuthorityTests(unittest.TestCase):
         for wall_ns in (cutoff * self.ns, cutoff * self.ns - 1):
             with self.subTest(wall_ns=wall_ns):
                 self.handoff(cutoff=cutoff, projected_ns=cutoff * self.ns, wall_ns=wall_ns, allowed=False)
+
+    def test_handoff_refuses_if_clock_sampling_delay_can_cross_cutoff(self):
+        epoch_ns = self.midnight * self.ns - 1
+        self.handoff(projected_ns=epoch_ns, wall_ns=epoch_ns, allowed=False, anchor_width_ns=5)
 
     def test_submicrosecond_t0_stays_on_its_exact_los_angeles_date(self):
         for offset in (200, 1):

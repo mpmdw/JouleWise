@@ -82,9 +82,8 @@ def runner_argv(args) -> list[str]:
     t0_date = getattr(args, "authorized_t0_date", None)
     t0_args = []
     if t0_date is not None:
-        epoch_ns, monotonic_ns = args.t0_anchor
         t0_args = ["--authorized-t0-date", t0_date, "--t0-not-before", str(args.t0_not_before),
-                   "--t0-before", str(args.t0_before), "--t0-anchor", f"{epoch_ns}:{monotonic_ns}"]
+                   "--t0-before", str(args.t0_before), "--t0-anchor", ":".join(map(str, args.t0_anchor))]
     return [str(args.python_bin), str(args.repo / RUNNER), "run", "--kit", str(args.kit), "--output", str(args.output),
             *(["--legs", legs] if legs else []), *(["--batch-window", window] if window else []),
             "--deadline", str(args.deadline), "--pmset-bin", str(args.pmset_bin), *t0_args]
@@ -244,7 +243,7 @@ def main(argv=None) -> int:
             except ValueError as error:
                 parser.error(str(error))
             if args.authorized_t0_date is not None and args.t0_anchor is None:
-                args.t0_anchor = runner.RealClock.epoch_and_monotonic_ns()
+                args.t0_anchor = runner.RealClock.arm_anchor_ns()
             launch(args)
             return 0
         return run_until_deadline(args)

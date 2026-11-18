@@ -148,6 +148,12 @@ class RealClock:
         return time.time_ns(), time.monotonic_ns()
 
     @staticmethod
+    def arm_anchor_ns():
+        before_ns = time.monotonic_ns()
+        epoch_ns, after_ns = RealClock.epoch_and_monotonic_ns()
+        return epoch_ns, before_ns, after_ns
+
+    @staticmethod
     def sleep(seconds):
         time.sleep(seconds)
 
@@ -344,19 +350,20 @@ def production_deps(*, inputs, pmset_bin, output):
 # --------------------------------------------------------------------------
 def _parse_t0_anchor(raw):
     fields = raw.split(":")
-    if len(fields) != 2 or not all(field.isascii() and field.isdecimal() for field in fields):
-        raise argparse.ArgumentTypeError("expected epoch_ns:monotonic_ns")
-    epoch_ns, monotonic_ns = map(int, fields)
-    if epoch_ns <= 0:
-        raise argparse.ArgumentTypeError("t0 anchor epoch must be positive")
-    return epoch_ns, monotonic_ns
+    if len(fields) != 3 or not all(field.isascii() and field.isdecimal() for field in fields):
+        raise argparse.ArgumentTypeError("expected epoch_ns:monotonic_before_ns:monotonic_after_ns")
+    epoch_ns, before_ns, after_ns = map(int, fields)
+    if epoch_ns <= 0 or before_ns > after_ns:
+        raise argparse.ArgumentTypeError("t0 anchor needs a positive epoch and ordered monotonic readings")
+    return epoch_ns, before_ns, after_ns
 
 
 def add_t0_authority_arguments(parser):
     parser.add_argument("--authorized-t0-date", help="authorized America/Los_Angeles calendar date")
     parser.add_argument("--t0-not-before", type=int, help="inclusive earliest start in whole epoch seconds")
     parser.add_argument("--t0-before", type=int, help="exclusive start cutoff in whole epoch seconds")
-    parser.add_argument("--t0-anchor", type=_parse_t0_anchor, help="arm clock sample as epoch_ns:monotonic_ns")
+    parser.add_argument("--t0-anchor", type=_parse_t0_anchor,
+                        help="arm clock sample as epoch_ns:monotonic_before_ns:monotonic_after_ns")
 
 
 def validate_t0_authority(kit, authorized_date, t0_not_before, t0_before, t0_anchor, *, require_anchor):
@@ -375,16 +382,21 @@ def validate_t0_authority(kit, authorized_date, t0_not_before, t0_before, t0_anc
 
 def _authorized_start(clock, authorized_date, t0_not_before, t0_before, anchor):
     wall_ns, monotonic_ns = clock.epoch_and_monotonic_ns()
-    anchor_epoch_ns, anchor_monotonic_ns = anchor
-    elapsed_ns = monotonic_ns - anchor_monotonic_ns
-    t0_ns = anchor_epoch_ns + elapsed_ns
-    for epoch_ns in (t0_ns, wall_ns):
+    anchor_epoch_ns, before_ns, after_ns = anchor
+    if monotonic_ns < after_ns:
+        return None
+    # The arm wall read occurred somewhere between the two monotonic reads.
+    # Require the full projected interval to fit even if the sampler was preempted.
+    earliest_ns = anchor_epoch_ns + monotonic_ns - after_ns
+    latest_ns = anchor_epoch_ns + monotonic_ns - before_ns
+    for epoch_ns in (earliest_ns, latest_ns, wall_ns):
         second = epoch_ns // NS_PER_SECOND
-        if elapsed_ns < 0 or not t0_not_before <= second < t0_before:
+        if not t0_not_before <= second < t0_before:
             return None
         day = (UNIX_EPOCH + timedelta(seconds=second)).astimezone(legsmod.LOCAL_ZONE).date()
         if day.isoformat() != authorized_date:
             return None
+    t0_ns = (earliest_ns + latest_ns) // 2
     epoch_s = t0_ns / NS_PER_SECOND
     # Keep the legacy numeric seconds in the same whole second as the exact stamp.
     if math.floor(epoch_s) > t0_ns // NS_PER_SECOND:
