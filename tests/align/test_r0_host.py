@@ -1907,7 +1907,7 @@ class R0SamplerAdmissionSpec(unittest.TestCase):
 
 
 class R0PublicationAuditTest(unittest.TestCase):
-    def trial(self, case, *, publication_delay=0, probe_delay=0):
+    def trial(self, case, *, publication_delay=0, probe_delay=0, command=None, wall_offset_ns=0):
         from datetime import datetime
         from joulewise.align import r0_runner
         from tests.align import test_r0_vs_l3_differential as fixture
@@ -1939,11 +1939,17 @@ class R0PublicationAuditTest(unittest.TestCase):
             def run(model, argv, **kwargs):
                 if probe_delay and model.phase == "publication" and argv[0] == "/bin/launchctl":
                     original_move(model, 58 + probe_delay)
+                if command is not None:
+                    return command(original_run, model, argv, **kwargs)
                 return original_run(model, argv, **kwargs)
 
+            def wall(model):
+                return original_wall(model) + wall_offset_ns
+
             original_move, original_run = fixture.Fixture.move, fixture.Fixture.run
+            original_wall = fixture.Fixture.wall_ns
             with (patch.object(fixture, "datetime", LocalPsTime), patch.object(fixture.Fixture, "move", move),
-                  patch.object(fixture.Fixture, "run", run)):
+                  patch.object(fixture.Fixture, "run", run), patch.object(fixture.Fixture, "wall_ns", wall)):
                 return fixture.run_case(case, root, provenance, oracle=False)
 
     def assert_withheld(self, result):
@@ -1988,6 +1994,96 @@ class R0PublicationAuditTest(unittest.TestCase):
                 self.assert_withheld(result)
                 self.assertTrue(any(flag[:3] == (15.0, 45.0, fixture.PID) for flag in result["flags"]), result)
                 self.assertIn((15.0, 45.0), result["report_intervals"])
+
+    def test_midpoint_accounting_refuses_agent_that_exits_before_args_read(self):
+        from tests.align import test_r0_vs_l3_differential as fixture
+
+        for command in (fixture.CLAUDE, "/Applications/Codex.app/Contents/MacOS/CoDeX"):
+            with self.subTest(command=command):
+                queries = []
+
+                def run(original, model, argv, **kwargs):
+                    if 15 <= model.now < 16:
+                        queries.append(tuple(argv))
+                        if tuple(argv) == prewindow.PS_ARGV:
+                            model.now = 15.25
+                    return original(model, argv, **kwargs)
+
+                process = fixture.Process(command, 10, 15.125, 15, 180)
+                case = fixture.Case("accounting_only_agent", (process,), schedule="multi", end=56)
+                result = self.trial(case, command=run)
+                self.assert_withheld(result)
+                self.assertEqual(result["work_started"], [])
+                self.assertEqual(result["refused_at"], 15)
+                self.assertEqual(queries, [contention.PS_ARGV])
+
+    def test_args_and_pgrep_agent_sightings_do_not_query_process_identity(self):
+        from joulewise.align.r0_host import R0_AGENT_CENSUS_ARGV
+        from tests.align import test_r0_vs_l3_differential as fixture
+
+        for source in (prewindow.PS_ARGV, R0_AGENT_CENSUS_ARGV):
+            with self.subTest(source=source):
+                inspected = []
+                original_identity = fixture.Fixture.identity
+
+                def identity(model, pid):
+                    inspected.append(pid)
+                    return original_identity(model, pid)
+
+                def run(original, model, argv, **kwargs):
+                    if tuple(argv) != source:
+                        return original(model, argv, **kwargs)
+                    if source == prewindow.PS_ARGV and model.now == 15:
+                        # The process is absent from the accounting sample.
+                        model.now = 15.125
+                    result = original(model, argv, **kwargs)
+                    if any(line.startswith(f"{fixture.PID} ") for line in result.stdout.splitlines()):
+                        # The recorded agent exits before any identity read.
+                        model.now = 15.25
+                    return result
+
+                born = 15.125 if source == prewindow.PS_ARGV else 0
+                agent = fixture.Process("/Applications/Claude.app/Contents/MacOS/ClAuDe", born, 15.25)
+                case = fixture.Case("transient_agent_in_args", (agent,), schedule="multi", end=56)
+                with patch.object(fixture.Fixture, "identity", identity):
+                    result = self.trial(case, command=run)
+                self.assert_withheld(result)
+                self.assertEqual(result["work_started"], [])
+                self.assertNotIn(fixture.PID, inspected)
+
+    def test_exited_worker_retains_measured_growth_across_fractional_window_open(self):
+        from tests.align import test_r0_vs_l3_differential as fixture
+
+        # At the 15.500 opening, the 15.1 birth is displayed by ps as
+        # 15.000. The entry then grows from 0 at 32 s to 1.80 CPU-s at 40 s
+        # before disappearing before the 45.500 closing sample.
+        for born, cpu_at, busy in ((15.1, 40, True), (16.1, 40, True), (15.1, 32, False)):
+            with self.subTest(born=born, cpu_at=cpu_at):
+                process = fixture.Process(fixture.WORKER, born, 44.5, cpu_at, 180)
+                case = fixture.Case("fractional_open", (process,), schedule="multi", end=56)
+                result = self.trial(case, wall_offset_ns=500_000_000)
+                self.assert_withheld(result)
+                self.assertEqual(any(flag[:3] == (15.0, 45.0, fixture.PID) for flag in result["flags"]), busy, result)
+                if not busy:
+                    # The earlier interval proves the work. A later window
+                    # with no measured growth cannot charge it a second time.
+                    self.assertTrue(any(flag[:3] == (0.0, 32.0, fixture.PID) for flag in result["flags"]), result)
+
+    def test_worker_still_present_at_close_retains_growth_after_missing_open_sample(self):
+        from tests.align import test_r0_vs_l3_differential as fixture
+
+        def run(original, model, argv, **kwargs):
+            result = original(model, argv, **kwargs)
+            if tuple(argv) == contention.PS_ARGV and model.now == 15:
+                result.stdout = "".join(line for line in result.stdout.splitlines(keepends=True)
+                                        if not line.startswith(f"{fixture.PID} "))
+            return result
+
+        worker = fixture.Process(fixture.WORKER, 14.1, 46.5, 40, 180)
+        case = fixture.Case("worker_missed_at_fractional_open", (worker,), schedule="multi", end=56)
+        result = self.trial(case, command=run, wall_offset_ns=500_000_000)
+        self.assert_withheld(result)
+        self.assertTrue(any(flag[:3] == (15.0, 45.0, fixture.PID) for flag in result["flags"]), result)
 
 
 class R0QuietIntervalTest(unittest.TestCase):
