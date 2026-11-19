@@ -1052,6 +1052,27 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 
 <!-- RUN_STATE TYPED ITEMS: newest first. Add with scripts/run_state_add.py; never edit by hand. -->
 
+461. **Magistrate 9e6951be (headless, Opus 5.5), 2026-11-19 13:16 PST (`date`): f2-inst-02 two-leg L005-L006 ISSUED (queue -a, seq 5) after the planner's 10:50-13:15 band; start and check rc 0, launches as the last act**
+
+```pointer
+owner: magistrate
+wait: none
+deadline: 2026-11-19T16:05:00-08:00
+on_early_or_refused: a launcher refusal or non-clean close: record it, hold kit f2-inst-02 until an input changes (item 422, RL-179 F-6), mail the lead; at the next close continue down the ladder. R1 stays unarmed (item 448).
+next_observable: f2inst02-9e6951be/run-out.txt shows LAUNCH_RC=0 with the fence; the next activation after the fence is gone runs the operational Check for cq-f2-inst-02-l005-l006-a1 under /Users/edr/campaign-out/f2-inst-02/ (template f2inst02-check-9e6951be/check.sh with OUT, LEGS L005,L006 and TMPDIR changed), copies at once (offload-f2inst02-9e6951be.sh and offload-f2inst02-run-9e6951be.sh with plan id changed). Then seq 7 (L007-L008; inputs f2inst02-9e6951be/inputs.sh with SPAN/LEGS/SEQ/MAGISTRATE_PID changed, re-read worst_case_s for the run-block assert) if it fits before the Fri 02:00-02:35 margin; the planner refuses launches 10:50-13:15. Fri 20 Nov's first f2-stab leg (rank 1, f2-stab-15 L003) arms when its fence clears that margin.
+```
+
+```item
+{"expires_epoch_s": null, "issued_epoch_s": 1795122995, "number": 461, "owner": "magistrate", "schema": "joulewise.run_state_item.v1", "sets": [{"at_epoch_s": 1795122995, "item": 458, "status": "CLOSED"}], "status": "ISSUED", "supersedes": []}
+```
+
+- **f2-inst-02-l005-l006 ISSUED (two-leg, item 447; ladder rank 2, items 422/428):** same queue `f2-inst-02-a` (sha `c825d75c…53e9`), seq 5, attempt 1. Inputs `f2inst02-9e6951be/inputs.sh` (item 458's; unchanged since the 10:56 refusal).
+  - Start and check rerun at 13:16:10 after the planner's 10:50-13:15 band (`start-check.out`, rc 0): validate-kit ok (frozen paths verified); validate-queue ok (6 spans); entry OK (seq 5, L005,L006, attempt 1); plan worst 8,550 s, expected 6,017 s, blackout_clear true; L005 19,458 tokens budget 1,521 s, L006 2,000 tokens budget 1,346 s, both decode 128, q600.
+  - Census (`census.out`, 13:16:17): this activation's MCP children (3418, 3421, 3422; they exit with this session); ChatGPTHelper 97205 (the Run block SIGKILLs it, item 443); CursorUIViewService 871 (false positive); top CPU otherwise below 1% (AppleBCMWLAN 0.9%); AC, 100% charged; 241 GiB free; no MAINTENANCE marker; no night label or plist.
+  - Flag carried from item 458: L005 is a 19,458-token leg like L003, which ran 15.7 s over its 1,521 s budget. That is a time-budget flag only.
+  - Run block `f2inst02-9e6951be/run-block.sh` (output `run-out.txt`): item 457's with the custody dir changed only (the worst-case assert of 8,550 holds for this pair). **The launch is this activation's last act, after this commit and the mail to Ed.** Expected end ~14:56, worst case ~15:38, fence ~16:03.
+  - Wait 10:56-13:16 (item 458): no stand-down request, heartbeat refreshed each minute, no unread mail from Ed (checked again 13:16), directives still the standing seven, no stop. Closes 458.
+
 460. **AIR PAUSED (owner) again: MBP continues alone; R1 finished (item 459), no re-arm; fillers per 447/458; no qual issue; no W1-line merges**
 
 ```item
