@@ -533,7 +533,7 @@ class TransferReleaseTests(unittest.TestCase):
                 (DRAFT, [], 0, b""),
                 (invalid, ["--final"], 2, b"REFUSE unknown cadence manifest schema ID\n"),
                 (interim, ["--v1-tool", str(tool)], 0, b""),
-                (interim, ["--v1-tool", str(tool), "--final"], 2, b"synthetic legacy refusal\n"),
+                (interim, ["--v1-tool", str(tool), "--final"], 2, b"REFUSE manifest failed validation\n"),
             ):
                 with self.subTest(warnings=label, closed=closed, candidate=candidate.name, options=options):
                     args = ["-m", "joulewise.cadence_looks.manifest_dispatch", "validate", str(candidate), *options]

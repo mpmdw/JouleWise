@@ -213,7 +213,7 @@ class VariantContractTests(unittest.TestCase):
                         result = cli_with_closed_consumer(*args, channel="stderr", unbuffered=unbuffered)
                         self.assertEqual((result.returncode, result.stdout), (2, b""))
             connected = cli(interim, "--v1-tool", v1_tool, "--final")
-            self.assertEqual((connected.returncode, connected.stderr), (2, b"synthetic legacy refusal\n"))
+            self.assertEqual((connected.returncode, connected.stderr), (2, b"REFUSE manifest failed validation\n"))
 
     def test_dispatch_stdout_notices_survive_disconnected_reader(self):
         for args in (["validate", DRAFT], ["--help"], ["validate", "--help"]):
@@ -265,8 +265,8 @@ with patch.object(dispatch, "_dispatch", check_startup):
                 for case, argv, notice in (
                     ("parser", ["validate", "--bad-argument"], b"usage:"),
                     ("validator", ["validate", candidate], b"REFUSE unknown cadence manifest schema ID\n"),
-                    ("legacy", ["validate", interim, "--v1-tool", tool], b"fixture legacy refusal\n"),
-                    ("outer", ["outer-failure"], b"REFUSE synthetic outer refusal\n"),
+                    ("legacy", ["validate", interim, "--v1-tool", tool], b"REFUSE manifest failed validation\n"),
+                    ("outer", ["outer-failure"], b"REFUSE manifest failed validation\n"),
                 ):
                     with self.subTest(fd=fd, case=case):
                         marker = folder / f"{fd}-{case}"
@@ -362,6 +362,65 @@ raise SystemExit(97)
                         self.assertEqual((result.returncode, result.stdout, result.stderr),
                                          (2, b"", b"REFUSE invalid UTF-8 JSON manifest\n"))
 
+    def test_cli_candidate_schema_refusal_is_fixed(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            candidate = Path(tmp) / "candidate.json"
+            for source in (DRAFT, QUALIFICATION, INSTRUMENT, STABILITY):
+                document = json.loads(source.read_bytes())
+                variants = (
+                    dict(document, unexpected=0),
+                    dict(document, outputs=dict(document["outputs"], synthetic_nested_key=0)),
+                )
+                for index, invalid in enumerate(variants):
+                    with self.subTest(look=source.name, case=index):
+                        candidate.write_bytes(encode(invalid))
+                        result = cli(candidate)
+                        self.assertEqual((result.returncode, result.stdout, result.stderr),
+                                         (2, b"", b"REFUSE manifest failed validation\n"))
+
+    def test_cli_registration_schema_refusal_is_fixed(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            candidate = Path(tmp) / "candidate.json"
+            registration = Path(tmp) / "registration.json"
+            for registered in (registered_fixture(), QUALIFICATION.read_bytes()):
+                candidate.write_bytes(registered.replace(
+                    dispatch.REGISTRATION_PLACEHOLDER, json.dumps(H).encode()
+                ))
+                document = json.loads(registered)
+                variants = (
+                    dict(document, unexpected=0),
+                    dict(document, outputs=dict(document["outputs"], synthetic_nested_key=0)),
+                )
+                for index, invalid in enumerate(variants):
+                    with self.subTest(look=document["look_id"], case=index):
+                        registration.write_bytes(encode(invalid))
+                        result = cli(candidate, "--final", "--registration", registration)
+                        self.assertEqual((result.returncode, result.stdout, result.stderr),
+                                         (2, b"", b"REFUSE manifest failed validation\n"))
+
+    def test_cli_legacy_schema_refusal_is_fixed(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            candidate = root / "candidate.json"
+            candidate.write_bytes(encode({
+                "schema": dispatch.V1, "look_kind": "interim", "look_id": "lm-interim-01",
+                "synthetic_unexpected_key": 0,
+            }))
+            tool = root / "legacy.py"
+            tool.write_text(
+                "import json, sys\n"
+                "from pathlib import Path\n"
+                "key = next(key for key in json.loads(Path(sys.argv[2]).read_bytes()) "
+                "if key.startswith('synthetic_'))\n"
+                "print(f'REFUSE unexpected key {key}')\n"
+                "print(f'REFUSE unexpected key {key}', file=sys.stderr)\n"
+                "raise SystemExit(1)\n",
+                encoding="utf-8",
+            )
+            result = cli(candidate, "--v1-tool", tool)
+            self.assertEqual((result.returncode, result.stdout, result.stderr),
+                             (2, b"", b"REFUSE manifest failed validation\n"))
+
     def test_dispatch_boundary_contains_arbitrary_pre_read_exceptions(self):
         script = """
 from pathlib import Path
@@ -426,6 +485,7 @@ raise SystemExit(97)
                                             capture_output=True, check=False)
                     self.assertEqual((result.returncode, result.stdout), (2, b""))
                     self.assertNotIn(b"Traceback", result.stderr)
+                    self.assertNotIn(b"synthetic injected failure", result.stderr)
 
     def test_v1_refuses_v2_look_ids_and_final_markers_before_delegating(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -513,7 +573,7 @@ raise SystemExit(97)
                             candidate.write_bytes(encode(trial))
                             result = cli("--final", candidate, *options)
                             self.assertEqual((result.returncode, result.stdout), (2, b""))
-                            self.assertIn(marker.encode(), result.stderr)
+                            self.assertEqual(result.stderr, b"REFUSE final manifest contains PENDING:CODE or OPEN-n\n")
 
     def test_filler_ban_by_kind(self):
         for source, mutate in (
