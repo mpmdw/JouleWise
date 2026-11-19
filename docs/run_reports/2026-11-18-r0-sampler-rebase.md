@@ -148,3 +148,17 @@ The runner drains completed windows before the terminal verdict. Any guard conte
 | Track the args-only zombie after its arguments disappear | PASS, the 0–30 s flag was recorded |
 
 The frozen comparison reports **341 scenarios and 0 failures**, with zero invalid oracle controls. The oracle was staged from pinned local Git objects and both lanes ran on synthetic inputs. Exact-candidate CI and the two-family delta review are tracked on draft PR #824. NEEDS_SPEC has no entries.
+
+## Audit round 1 after the frozen differential
+
+The blocking audit reviewed `1d77b3194` and verified two HIGH findings and one MED. Regression commit `74ba84158` reproduced seven failing synthetic subcases. Repair `e79e6f231fe4fc52178582378f34846bbe149d70` covers all three findings.
+
+Publication now checks the age of the last background sample on both sides of its final census. A fresh caller probe does not renew background coverage. The same agent identity and measurement-chain decisions apply to each observed process table, including the table paired with the midpoint CPU sample. Caller and daemon windows keep their own endpoints and use observations from both sequences as intermediate evidence.
+
+| Verified finding | Regression | Result on `e79e6f231` |
+| --- | --- | --- |
+| HIGH, staging delayed publication until background coverage was stale. | `test_publication_refuses_stale_background_samples` exercises a delayed publication, an agent entirely inside the gap, and a final probe that crosses the freshness bound. | PASS |
+| HIGH, an agent observed during the baseline could leave before the next dedicated census. | `test_baseline_snapshot_refuses_agent_or_chain_that_leaves_before_admission` covers the CLI agent, desktop agent, measurement chain and benign argument control. | PASS |
+| MED, daemon windows lost a worker seen only by a caller admission. | `test_background_window_keeps_contender_seen_only_at_caller_admission` covers the caller-only worker and the daemon-visible control. | PASS |
+
+The six auditor replay cases passed, including the quiet control and the caller-only 15–45 s flag. The frozen module still matches the supplied SHA-256 and reports 341 scenarios, zero failures and zero invalid oracle controls. The earlier audit reports record findings on earlier candidate heads. Their existing custody, exit status, agent and CPU regressions remain in the focused suite and the frozen comparison. No additional MED or LOW follow-ups remain. Exact-candidate CI and two-family review are tracked on draft PR #824. NEEDS_SPEC has no entries.
