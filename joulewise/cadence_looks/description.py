@@ -29,6 +29,7 @@ CODE_ROOT = Path(__file__).resolve().parents[2]
 CHANNELS = ("gpu_rail", "rail_sum", "dc_in")
 RAILS = ("cpu_power", "gpu_power", "ane_power")
 WIDTHS = (10, 40, 128)
+DC_MIN_COVERAGE = 0.99  # RL-166 Q7, applied to each description print by RL-181.
 VALUE_FILES = ("support.json", "power_trace.csv", "dc_points.csv")
 LOCAL = ZoneInfo("America/Los_Angeles")
 SHA = re.compile(r"[0-9a-f]{64}")
@@ -921,6 +922,14 @@ class Signals:
             lo, hi = limits
             if any(self.meter[i + 1] - self.meter[i] > 2 for i in range(lo, hi)):
                 return "meter_gap"
+            # Bracketing samples support interpolation. Coverage counts only
+            # the stamps inside [a, b), against the nominal rate of each phase.
+            turn_start = min(b, max(a, self.meta["turn_start_s"]))
+            expected = ((turn_start - a) / self.periods["hold"]
+                        + (b - turn_start) / self.periods["dc_edge"])
+            samples = hi - bisect_left(self.meter, a)
+            if samples < DC_MIN_COVERAGE * expected:
+                return "meter_coverage"
         else:
             if channel == "rail_sum" and not self.sum_admitted:
                 return "rail_manifest"
