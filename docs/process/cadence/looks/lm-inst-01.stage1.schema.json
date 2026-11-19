@@ -1,0 +1,170 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:joulewise:cadence-description:lm-inst-01.stage1",
+  "description": "Energy-blind census keyed by exact kit ID and planned leg.",
+  "type": "object",
+  "required": [
+    "look_id",
+    "source_snapshot",
+    "counts",
+    "positions",
+    "by_kit"
+  ],
+  "properties": {
+    "look_id": {
+      "const": "lm-inst-01"
+    },
+    "source_snapshot": {
+      "type": "object",
+      "required": [
+        "receipt_commit",
+        "input_hashes_sha256"
+      ],
+      "properties": {
+        "receipt_commit": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}$"
+        },
+        "input_hashes_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        }
+      },
+      "additionalProperties": false
+    },
+    "counts": {
+      "type": "object",
+      "required": [
+        "n_legs"
+      ],
+      "properties": {
+        "n_legs": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false
+    },
+    "positions": {
+      "type": "object",
+      "patternProperties": {
+        "^f2-(inst|stab)-[0-9]{2}/L(00[1-9]|01[0-2])$": {
+          "$ref": "#/$defs/position"
+        }
+      },
+      "additionalProperties": false
+    },
+    "by_kit": {
+      "type": "object",
+      "patternProperties": {
+        "^f2-(inst|stab)-[0-9]{2}$": {
+          "type": "object",
+          "required": [],
+          "properties": {
+            "qualified": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "short": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "unreleased": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "short_hold": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "cap_not_reached": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "wrong_mode": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "incomplete": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "dropped": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "position": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": [
+            "disposition",
+            "loaded_flag",
+            "receipt",
+            "span_id",
+            "attempt"
+          ],
+          "properties": {
+            "disposition": {
+              "enum": [
+                "qualified",
+                "short",
+                "unreleased",
+                "short_hold",
+                "cap_not_reached",
+                "wrong_mode",
+                "incomplete"
+              ]
+            },
+            "loaded_flag": {
+              "type": "boolean"
+            },
+            "receipt": {
+              "type": "string",
+              "minLength": 1
+            },
+            "span_id": {
+              "type": "string",
+              "minLength": 1
+            },
+            "attempt": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          "additionalProperties": false
+        },
+        {
+          "type": "object",
+          "required": [
+            "disposition",
+            "loaded_flag",
+            "drop"
+          ],
+          "properties": {
+            "disposition": {
+              "const": "dropped"
+            },
+            "loaded_flag": {
+              "type": "null"
+            },
+            "drop": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    }
+  }
+}

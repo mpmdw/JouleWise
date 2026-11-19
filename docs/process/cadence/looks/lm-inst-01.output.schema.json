@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:joulewise:cadence-description:lm-inst-01.output",
+  "description": "Strict source-bound public provenance and nonnegative integer counts.",
+  "type": "object",
+  "required": [
+    "look_id",
+    "commit",
+    "manifest_sha256",
+    "stage1_sha256",
+    "n_legs"
+  ],
+  "properties": {
+    "look_id": {
+      "const": "lm-inst-01"
+    },
+    "commit": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}$"
+    },
+    "manifest_sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "stage1_sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "n_legs": {
+      "type": "integer",
+      "minimum": 0
+    }
+  },
+  "additionalProperties": false
+}
