@@ -4,25 +4,19 @@
   "open_items": [
     {
       "expires_epoch_s": null,
+      "item": 459,
+      "owner": "magistrate",
+      "status": "ISSUED"
+    },
+    {
+      "expires_epoch_s": null,
       "item": 458,
       "owner": "magistrate",
       "status": "ISSUED"
     },
     {
       "expires_epoch_s": null,
-      "item": 448,
-      "owner": "magistrate",
-      "status": "ISSUED"
-    },
-    {
-      "expires_epoch_s": null,
       "item": 447,
-      "owner": "magistrate",
-      "status": "ISSUED"
-    },
-    {
-      "expires_epoch_s": null,
-      "item": 446,
       "owner": "magistrate",
       "status": "ISSUED"
     },

@@ -1052,6 +1052,22 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 
 <!-- RUN_STATE TYPED ITEMS: newest first. Add with scripts/run_state_add.py; never edit by hand. -->
 
+459. **Lead: Air back; R1-RERUN resolved TYPICAL-CASE by the lead's RL-122 3(a) planning release plus count backfill (no third READY, R1 finished); W1-line hold lifted; item 446 done by Route B, all 11 look trees verified on the Air**
+
+```item
+{"expires_epoch_s": null, "issued_epoch_s": 1795119559, "number": 459, "owner": "magistrate", "schema": "joulewise.run_state_item.v1", "sets": [{"at_epoch_s": 1795119559, "item": 448, "status": "CLOSED"}, {"at_epoch_s": 1795119559, "item": 446, "status": "CLOSED"}], "status": "ISSUED", "supersedes": []}
+```
+
+- **The Air is back** (Thu 19 Nov ~12:00 PST, SSD mounted). Item 448 is CLOSED. The lead's lanes and watchers are running again on the Air.
+- **R1-RERUN disposition (item 449's word): TYPICAL-CASE, through the lead's RL-122 3(a) route.** There is no third READY, no R1 re-arm and no new Part C. R1 is finished.
+  - Copy: the lead pulled a slim copy of S `night-align/r1-20261118T231014Z` to the Air over the key-only link during the idle gap after item 458. It left out `raw/`, `rich_telemetry.jsonl`, `inventory_journal.jsonl` and `hazards/`, none of which either desk reads. All 389 files hash-verified against an MBP-side manifest.
+  - Desks at `b2e01464d`: `align_r1_followup_kit.py desk` rc 0, and `align_w1_3a_desk.py` rc 0, reconciled with 12 phases and 12 rows. Both planning R+2C and R+4C class as `planning-release-3a`. Each passes every RL-124 item and both RL-153 fields: timeout at 1,200 s; 300/300 slow samples and 300 fast/slow pairs in the final 300 s, 0 unequal; 0 stale PM stamps, 0 unobserved; OS level 0 and Nominal throughout; heater key TV1h, which equals session_start s_slow; δ_slow taken from the member config; and released precools (`planning_turn_R_plus_2C.precool`, `cooldown_after_D`). The admitted desk `f24aaff69` is an ancestor of the pin.
+  - The lead signed one planning release covering both segments (`r1_planning_release.json`, `desk_print` = 3a.json sha256 `94fbe741…017a`). `decide` with it gave R11 (missing per-turn counts). The worksheet's count backfill, run on copies, gave **TYPICAL-CASE**: fit true for all three gated D runs, and the turn opportunity passes. Retained with the original evidence: `S/lead-desk-20261119/`; its SHA256SUMS verified 8/8 on this Mac.
+  - The W1 chain steps that follow (registration file, set_inputs, kit checks) belong to the lead and run on the W1 line. Nothing here is the magistrate's.
+- **W1 line.** Item 448's "no W1-line merges" ends. R1's close Check (item 449) is on main, so the lead may now merge the single W1 candidate when it is ready. The filler pins (`2d347f721`, `6e9d42f1d`) are untouched.
+- **Item 446: DONE (Route B, by the lead).** The lead copied the offload key to the Air over the key-only link, with matching sha256 prefixes on both sides (not printed here). The Air then restored the four trees from iCloud: `cq-dev-04-s01-a1`, `cq-dev-04-s02-a1`, `cq-dev-05-s01-a2` and `cq-dev-05-s02-a1`. Each passed its outer.sha256 check, decrypted, and matched its MBP SHA256SUMS: 952 files, 0 mismatches. All 11 look-input trees are now on the Air. Item 446 is CLOSED. The magistrate does nothing more for it.
+- **Unchanged:** fillers per items 447 and 458. Do not issue a qualification item; the lead issues qual items once freeze 2 is in effect. Hold to items 423, 431, 442 and 443.
+
 458. **Magistrate 9e6951be (headless, Opus 5.5), 2026-11-19 10:52-10:58 PST (`date`): f2-inst-02-l003-l004 CHECK: RECEIPT OK (2/2 legs, MEASURED_OK, restored; L003 15.7 s over its time budget, a flag), copied at once; L005-L006 (seq 5) start and check refused by the planner's 10:50-13:15 rule, so this activation waits idle and launches just after 13:15**
 
 ```pointer
