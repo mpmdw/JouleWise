@@ -53,25 +53,24 @@ class CallClock:
 
 
 def endpoint_class(base, script, audit, *, synthetic):
-    class PhysicalEndpoint(base):
-        def chat(self, messages, **kwargs):
-            clock = CallClock(self.clock)
-            self.clock = clock
-            try:
-                return super().chat(messages, **kwargs)
-            except BaseException as error:
-                if clock.start is not None:
-                    error.started_ns = monotonic_ns(clock.start)
-                    if clock.end is not None:
-                        error.ended_ns = monotonic_ns(clock.end)
-                raise
-            finally:
-                self.clock = clock.clock
+    def physical_chat(endpoint, messages, **kwargs):
+        clock = CallClock(endpoint.clock)
+        endpoint.clock = clock
+        try:
+            return base.chat(endpoint, messages, **kwargs)
+        except BaseException as error:
+            if clock.start is not None:
+                error.started_ns = monotonic_ns(clock.start)
+                if clock.end is not None:
+                    error.ended_ns = monotonic_ns(clock.end)
+            raise
+        finally:
+            endpoint.clock = clock.clock
 
-    class ScriptEndpoint(PhysicalEndpoint):
+    class ScriptEndpoint(base):
         def __init__(self, *args, **kwargs):
             super().__init__(*args, **kwargs)
-            self.hidden_endpoint = PhysicalEndpoint(*args, **kwargs)
+            self.hidden_endpoint = base(*args, **kwargs)
             self.script_used = False
 
         def interval(self, kind, seconds):
@@ -98,7 +97,7 @@ def endpoint_class(base, script, audit, *, synthetic):
                    "requested_tokens": tokens, "actual_tokens": None, "complete": False}
             audit["steps"].append(row)
             try:
-                result = PhysicalEndpoint.chat(endpoint, messages, **{**kwargs, "max_tokens": tokens})
+                result = physical_chat(endpoint, messages, **{**kwargs, "max_tokens": tokens})
             except BaseException as error:
                 if hasattr(error, "started_ns"):
                     row["started_ns"] = error.started_ns
