@@ -20,6 +20,10 @@ LEDGER = ROOT / "docs/process/cadence/looks/LOOKS.json"
 KIT_COMMITMENTS = LEDGER.with_name("qualification-kit-commitments.json")
 OBSOLETE_KIT_PINS = ROOT / "docs/run_reports/2026-11-18-lm-qual-01-audit-1-obsolete-kit-pins.json"
 PLACEHOLDER = b'"PENDING:CODE"'
+OLD_TAIL_FORMULA = b"c = P + (first_stamp + last_stamp) / 2."
+RL188_TAIL_FORMULA = b"c = P + (first_stamp + 1 + last_stamp) / 2."
+PRIOR_MANIFEST_SHA256 = "d6fde6918023ea69051da45a6b0e3c06ffcfdafd8975a1773989324fa7c9bdab"
+PRIOR_LEDGER_SHA256 = "f6d9daf77eaad534608ec44d8c53d238351273f7e79bac44859e6c9122345792"
 
 
 def _final_bytes(registration):
@@ -69,7 +73,21 @@ class QualificationRegistrationTests(unittest.TestCase):
             source["kit_sha256_by_block"],
         )
 
-    def test_reregistration_differs_from_cold_pass_only_in_kit_hashes_and_pin(self):
+    def test_rl188_reregistration_changes_only_tail_rule_and_ledger_digest(self):
+        registered = validate_registration(self.registered)
+        self.assertTrue(registered["scoring"]["tail_rule"].endswith(RL188_TAIL_FORMULA.decode()))
+        self.assertEqual(self.registered.count(RL188_TAIL_FORMULA), 1)
+        prior_manifest = self.registered.replace(RL188_TAIL_FORMULA, OLD_TAIL_FORMULA, 1)
+        self.assertEqual(hashlib.sha256(prior_manifest).hexdigest(), PRIOR_MANIFEST_SHA256)
+
+        ledger = LEDGER.read_bytes()
+        current_digest = hashlib.sha256(self.registered).hexdigest().encode()
+        self.assertNotEqual(current_digest, PRIOR_MANIFEST_SHA256.encode())
+        self.assertEqual(ledger.count(current_digest), 1)
+        prior_ledger = ledger.replace(current_digest, PRIOR_MANIFEST_SHA256.encode(), 1)
+        self.assertEqual(hashlib.sha256(prior_ledger).hexdigest(), PRIOR_LEDGER_SHA256)
+
+    def test_reregistrations_differ_from_cold_pass_only_in_kit_hashes_pin_and_tail(self):
         registered = validate_registration(self.registered)
         source = json.loads(KIT_COMMITMENTS.read_bytes())[registered["look_id"]]
         cold_pass = source["cold_pass"]
@@ -80,6 +98,7 @@ class QualificationRegistrationTests(unittest.TestCase):
         self.assertIn(pin_text, registered["reads"]["first_span_hand_read"])
         self.assertEqual(self.registered.count(pin_text.encode()), 1)
         restored = self.registered.replace(pin_text.encode(), b"on this pin.", 1)
+        restored = restored.replace(RL188_TAIL_FORMULA, OLD_TAIL_FORMULA, 1)
 
         for block in registered["reads"]["blocks"]:
             old = cold_pass["kit_sha256_by_block"][block["block_id"]]
@@ -161,6 +180,7 @@ class QualificationRegistrationTests(unittest.TestCase):
     def test_final_rejects_changes_outside_hash_slots(self):
         kit_hash = json.loads(self.registered)["reads"]["blocks"][0]["kit_sha256"].encode()
         edits = (
+            (RL188_TAIL_FORMULA, OLD_TAIL_FORMULA),
             (b'"short_own_prefix_tokens": 3724', b'"short_own_prefix_tokens": 3723'),
             (b'"gaps": 140', b'"gaps": 139'),
             (b'"min_days": 3', b'"min_days": 2'),

@@ -360,7 +360,7 @@
         "gaps": 79
       }
     ],
-    "tail_rule": "For the L-pair prints, use one terminal segment from last full-block closing stamp to last stamped token, once on each of the measured and predicted sides for both channels. Keep the frozen integration and count clock: n = gaps and c = P + (first_stamp + last_stamp) / 2."
+    "tail_rule": "For the L-pair prints, use one terminal segment from last full-block closing stamp to last stamped token, once on each of the measured and predicted sides for both channels. Keep the frozen integration and count clock: n = gaps and c = P + (first_stamp + 1 + last_stamp) / 2."
   },
   "decision": {
     "word": "qualified_qualification",

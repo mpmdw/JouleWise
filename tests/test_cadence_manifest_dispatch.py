@@ -666,6 +666,25 @@ raise SystemExit(97)
                 ):
                     dispatch.validate_v2(final, final=True, registration=trusted)
 
+    def test_qualification_final_uses_rl188_registration(self):
+        registered = QUALIFICATION.read_bytes()
+        self.assertEqual(dispatch.validate_v2(registered)["look_id"], "lm-qual-01")
+        final = registered.replace(dispatch.REGISTRATION_PLACEHOLDER, json.dumps(H).encode())
+        self.assertEqual(
+            dispatch.validate_v2(final, final=True, registration=registered)["look_id"],
+            "lm-qual-01",
+        )
+        corrected = b"first_stamp + 1 + last_stamp"
+        self.assertEqual(final.count(corrected), 1)
+        for change, candidate in (
+            ("old tail formula", final.replace(corrected, b"first_stamp + last_stamp", 1)),
+            ("extra newline", final + b"\n"),
+        ):
+            with self.subTest(change=change), self.assertRaisesRegex(
+                dispatch.ManifestError, "differs outside the registered hash slots"
+            ):
+                dispatch.validate_v2(candidate, final=True, registration=registered)
+
     def test_rejects_invalid_final_candidate_before_registration_open(self):
         with tempfile.TemporaryDirectory() as tmp:
             candidate = Path(tmp) / "final.json"
@@ -768,7 +787,7 @@ raise SystemExit(97)
     def test_registered_bytes_unchanged(self):
         self.assertEqual(
             sha256(QUALIFICATION.read_bytes()).hexdigest(),
-            "d6fde6918023ea69051da45a6b0e3c06ffcfdafd8975a1773989324fa7c9bdab",
+            "82a8da3deadbc43fb61d213b748b57c6c29dab101e3c06ac4e36b9e69a83c3a0",
         )
         self.assertEqual(
             subprocess.check_output(
