@@ -1,0 +1,1294 @@
+{
+  "validate_kit": [
+    {
+      "pin": "B",
+      "kit": "f2-stab-15",
+      "legs": 12,
+      "batch_window": null,
+      "campaign_id": "f2-stab-15",
+      "frozen_commit": "6e9d42f1dd3d308bc9239143d0d634ab965e50e1",
+      "frozen_paths_verified": true,
+      "kit_sha256": "8dceffc2e1a10a03d25c6c06487756fe37f8f5a1c57d52e242a64faabcbc36a1",
+      "ok": true
+    },
+    {
+      "pin": "B",
+      "kit": "f2-stab-15",
+      "legs": 12,
+      "batch_window": "02:00-02:35",
+      "campaign_id": "f2-stab-15",
+      "frozen_commit": "6e9d42f1dd3d308bc9239143d0d634ab965e50e1",
+      "frozen_paths_verified": true,
+      "kit_sha256": "8dceffc2e1a10a03d25c6c06487756fe37f8f5a1c57d52e242a64faabcbc36a1",
+      "ok": true
+    },
+    {
+      "pin": "A",
+      "kit": "f2-inst-02",
+      "legs": 12,
+      "batch_window": "02:00-02:35",
+      "campaign_id": "f2-inst-02",
+      "frozen_commit": "2d347f721552fe03bdd19f113e7bad7a7c24908e",
+      "frozen_paths_verified": true,
+      "kit_sha256": "cfd03677e3629b34a8bcd794a623ee3eaae1033408492eb1d1ddb3229273ed65",
+      "ok": true
+    },
+    {
+      "pin": "A",
+      "kit": "f2-inst-02",
+      "legs": 12,
+      "batch_window": "13:14-13:15",
+      "campaign_id": "f2-inst-02",
+      "frozen_commit": "2d347f721552fe03bdd19f113e7bad7a7c24908e",
+      "frozen_paths_verified": true,
+      "kit_sha256": "cfd03677e3629b34a8bcd794a623ee3eaae1033408492eb1d1ddb3229273ed65",
+      "ok": true
+    },
+    {
+      "pin": "A",
+      "kit": "f2-inst-02",
+      "legs": 12,
+      "batch_window": "02:00-02:35",
+      "campaign_id": "f2-inst-02",
+      "frozen_commit": "2d347f721552fe03bdd19f113e7bad7a7c24908e",
+      "frozen_paths_verified": true,
+      "kit_sha256": "cfd03677e3629b34a8bcd794a623ee3eaae1033408492eb1d1ddb3229273ed65",
+      "ok": true
+    },
+    {
+      "pin": "A",
+      "kit": "f2-inst-02",
+      "legs": 12,
+      "batch_window": "13:14-13:15",
+      "campaign_id": "f2-inst-02",
+      "frozen_commit": "2d347f721552fe03bdd19f113e7bad7a7c24908e",
+      "frozen_paths_verified": true,
+      "kit_sha256": "cfd03677e3629b34a8bcd794a623ee3eaae1033408492eb1d1ddb3229273ed65",
+      "ok": true
+    },
+    {
+      "pin": "A",
+      "kit": "f2-inst-03",
+      "legs": 12,
+      "batch_window": "02:00-02:35",
+      "campaign_id": "f2-inst-03",
+      "frozen_commit": "2d347f721552fe03bdd19f113e7bad7a7c24908e",
+      "frozen_paths_verified": true,
+      "kit_sha256": "286842217313e13ac5f8f25917b3325e3e512cd621b90b78b6201d331e9dcf25",
+      "ok": true
+    },
+    {
+      "pin": "A",
+      "kit": "f2-inst-03",
+      "legs": 12,
+      "batch_window": "13:14-13:15",
+      "campaign_id": "f2-inst-03",
+      "frozen_commit": "2d347f721552fe03bdd19f113e7bad7a7c24908e",
+      "frozen_paths_verified": true,
+      "kit_sha256": "286842217313e13ac5f8f25917b3325e3e512cd621b90b78b6201d331e9dcf25",
+      "ok": true
+    },
+    {
+      "pin": "A",
+      "kit": "f2-stab-01",
+      "legs": 12,
+      "batch_window": "02:00-02:35",
+      "campaign_id": "f2-stab-01",
+      "frozen_commit": "2d347f721552fe03bdd19f113e7bad7a7c24908e",
+      "frozen_paths_verified": true,
+      "kit_sha256": "dbad9c7b79088bb6f06aac1c1148c3631a0c616fd2ece596bab0f56657ce70fe",
+      "ok": true
+    },
+    {
+      "pin": "A",
+      "kit": "f2-stab-01",
+      "legs": 12,
+      "batch_window": "13:14-13:15",
+      "campaign_id": "f2-stab-01",
+      "frozen_commit": "2d347f721552fe03bdd19f113e7bad7a7c24908e",
+      "frozen_paths_verified": true,
+      "kit_sha256": "dbad9c7b79088bb6f06aac1c1148c3631a0c616fd2ece596bab0f56657ce70fe",
+      "ok": true
+    },
+    {
+      "pin": "A",
+      "kit": "f2-inst-01",
+      "legs": 12,
+      "batch_window": "02:00-02:35",
+      "campaign_id": "f2-inst-01",
+      "frozen_commit": "2d347f721552fe03bdd19f113e7bad7a7c24908e",
+      "frozen_paths_verified": true,
+      "kit_sha256": "651d1815ca87ee23640a8db1483d4ecaf42d70d029855ad03c14bfa076116f2b",
+      "ok": true
+    },
+    {
+      "pin": "A",
+      "kit": "f2-inst-01",
+      "legs": 12,
+      "batch_window": "13:14-13:15",
+      "campaign_id": "f2-inst-01",
+      "frozen_commit": "2d347f721552fe03bdd19f113e7bad7a7c24908e",
+      "frozen_paths_verified": true,
+      "kit_sha256": "651d1815ca87ee23640a8db1483d4ecaf42d70d029855ad03c14bfa076116f2b",
+      "ok": true
+    }
+  ],
+  "plan": [
+    {
+      "pin": "B",
+      "kit": "f2-stab-15",
+      "legs": "L003",
+      "batch_window": null,
+      "t0": 1795204799,
+      "local": "2026-11-20T11:59:59-08:00",
+      "rc": 0,
+      "batch_windows": [],
+      "blackout_clear": true,
+      "worst_case_s": 5850
+    },
+    {
+      "pin": "B",
+      "kit": "f2-stab-15",
+      "legs": "L003",
+      "batch_window": null,
+      "t0": 1795291199,
+      "local": "2026-11-21T11:59:59-08:00",
+      "rc": 0,
+      "batch_windows": [],
+      "blackout_clear": true,
+      "worst_case_s": 5850
+    },
+    {
+      "pin": "B",
+      "kit": "f2-stab-15",
+      "legs": "L003",
+      "batch_window": "02:00-02:35",
+      "t0": 1795162275,
+      "local": "2026-11-20T00:11:15-08:00",
+      "rc": 0,
+      "batch_windows": [
+        "02:00-02:35"
+      ],
+      "blackout_clear": true,
+      "worst_case_s": 5850
+    },
+    {
+      "pin": "B",
+      "kit": "f2-stab-15",
+      "legs": "L003",
+      "batch_window": "02:00-02:35",
+      "t0": 1795166925,
+      "local": "2026-11-20T01:28:45-08:00",
+      "rc": 1,
+      "refusal": "REFUSE the worst-case span [t0, t0 + 5850 s] meets a batch blackout (02:00-02:35); arm after it or earlier"
+    },
+    {
+      "pin": "B",
+      "kit": "f2-stab-15",
+      "legs": "L003",
+      "batch_window": "02:00-02:35",
+      "t0": 1795209449,
+      "local": "2026-11-20T13:17:29-08:00",
+      "rc": 0,
+      "batch_windows": [
+        "02:00-02:35"
+      ],
+      "blackout_clear": true,
+      "worst_case_s": 5850
+    },
+    {
+      "pin": "B",
+      "kit": "f2-stab-15",
+      "legs": "L003",
+      "batch_window": "02:00-02:35",
+      "t0": 1795248675,
+      "local": "2026-11-21T00:11:15-08:00",
+      "rc": 0,
+      "batch_windows": [
+        "02:00-02:35"
+      ],
+      "blackout_clear": true,
+      "worst_case_s": 5850
+    },
+    {
+      "pin": "B",
+      "kit": "f2-stab-15",
+      "legs": "L003",
+      "batch_window": "02:00-02:35",
+      "t0": 1795253325,
+      "local": "2026-11-21T01:28:45-08:00",
+      "rc": 1,
+      "refusal": "REFUSE the worst-case span [t0, t0 + 5850 s] meets a batch blackout (02:00-02:35); arm after it or earlier"
+    },
+    {
+      "pin": "B",
+      "kit": "f2-stab-15",
+      "legs": "L003",
+      "batch_window": "02:00-02:35",
+      "t0": 1795295849,
+      "local": "2026-11-21T13:17:29-08:00",
+      "rc": 0,
+      "batch_windows": [
+        "02:00-02:35"
+      ],
+      "blackout_clear": true,
+      "worst_case_s": 5850
+    },
+    {
+      "pin": "A",
+      "kit": "f2-inst-02",
+      "legs": "L005",
+      "batch_window": "02:00-02:35",
+      "t0": 1795166249,
+      "local": "2026-11-20T01:17:29-08:00",
+      "rc": 1,
+      "refusal": "REFUSE the worst-case span [t0, t0 + 5850 s] meets a batch blackout (02:00-02:35); arm after it or earlier"
+    },
+    {
+      "pin": "A",
+      "kit": "f2-inst-02",
+      "legs": "L005",
+      "batch_window": "02:00-02:35",
+      "t0": 1795185750,
+      "local": "2026-11-20T06:42:30-08:00",
+      "rc": 0,
+      "batch_windows": [
+        "02:00-02:35"
+      ],
+      "blackout_clear": true,
+      "worst_case_s": 5850
+    },
+    {
+      "pin": "A",
+      "kit": "f2-inst-02",
+      "legs": "L005",
+      "batch_window": "02:00-02:35",
+      "t0": 1795204950,
+      "local": "2026-11-20T12:02:30-08:00",
+      "rc": 1,
+      "refusal": "REFUSE no launch between 10:50 and 13:15: the soak path waits out 11:45-13:15 unbudgeted (RL-155a section 3)"
+    },
+    {
+      "pin": "A",
+      "kit": "f2-inst-02",
+      "legs": "L005",
+      "batch_window": "02:00-02:35",
+      "t0": 1795228295,
+      "local": "2026-11-20T18:31:35-08:00",
+      "rc": 0,
+      "batch_windows": [
+        "02:00-02:35"
+      ],
+      "blackout_clear": true,
+      "worst_case_s": 5850
+    },
+    {
+      "pin": "A",
+      "kit": "f2-inst-02",
+      "legs": "L005",
+      "batch_window": "02:00-02:35",
+      "t0": 1795247645,
+      "local": "2026-11-20T23:54:05-08:00",
+      "rc": 1,
+      "refusal": "REFUSE the fence end (worst case + 1460 s) at 01:55:55 passes 01:50:00, 10 min before the 02:00-02:35 blackout (RL-155a section 3)"
+    },
+    {
+      "pin": "A",
+      "kit": "f2-inst-02",
+      "legs": "L005",
+      "batch_window": "02:00-02:35",
+      "t0": 1795252649,
+      "local": "2026-11-21T01:17:29-08:00",
+      "rc": 1,
+      "refusal": "REFUSE the worst-case span [t0, t0 + 5850 s] meets a batch blackout (02:00-02:35); arm after it or earlier"
+    },
+    {
+      "pin": "A",
+      "kit": "f2-inst-02",
+      "legs": "L005",
+      "batch_window": "02:00-02:35",
+      "t0": 1795272150,
+      "local": "2026-11-21T06:42:30-08:00",
+      "rc": 0,
+      "batch_windows": [
+        "02:00-02:35"
+      ],
+      "blackout_clear": true,
+      "worst_case_s": 5850
+    },
+    {
+      "pin": "A",
+      "kit": "f2-inst-02",
+      "legs": "L005",
+      "batch_window": "02:00-02:35",
+      "t0": 1795291350,
+      "local": "2026-11-21T12:02:30-08:00",
+      "rc": 1,
+      "refusal": "REFUSE no launch between 10:50 and 13:15: the soak path waits out 11:45-13:15 unbudgeted (RL-155a section 3)"
+    },
+    {
+      "pin": "A",
+      "kit": "f2-inst-02",
+      "legs": "L005",
+      "batch_window": "02:00-02:35",
+      "t0": 1795314695,
+      "local": "2026-11-21T18:31:35-08:00",
+      "rc": 0,
+      "batch_windows": [
+        "02:00-02:35"
+      ],
+      "blackout_clear": true,
+      "worst_case_s": 5850
+    },
+    {
+      "pin": "A",
+      "kit": "f2-inst-02",
+      "legs": "L005",
+      "batch_window": "02:00-02:35",
+      "t0": 1795334045,
+      "local": "2026-11-21T23:54:05-08:00",
+      "rc": 1,
+      "refusal": "REFUSE the fence end (worst case + 1460 s) at 01:55:55 passes 01:50:00, 10 min before the 02:00-02:35 blackout (RL-155a section 3)"
+    },
+    {
+      "pin": "A",
+      "kit": "f2-inst-02",
+      "legs": "L005",
+      "batch_window": "13:14-13:15",
+      "t0": 1795181100,
+      "local": "2026-11-20T05:25:00-08:00",
+      "rc": 0,
+      "batch_windows": [
+        "13:14-13:15"
+      ],
+      "blackout_clear": true,
+      "worst_case_s": 5850
+    },
+    {
+      "pin": "A",
+      "kit": "f2-inst-02",
+      "legs": "L005",
+      "batch_window": "13:14-13:15",
+      "t0": 1795204950,
+      "local": "2026-11-20T12:02:30-08:00",
+      "rc": 1,
+      "refusal": "REFUSE the worst-case span [t0, t0 + 5850 s] meets a batch blackout (13:14-13:15); arm after it or earlier"
+    },
+    {
+      "pin": "A",
+      "kit": "f2-inst-02",
+      "legs": "L005",
+      "batch_window": "13:14-13:15",
+      "t0": 1795228649,
+      "local": "2026-11-20T18:37:29-08:00",
+      "rc": 0,
+      "batch_windows": [
+        "13:14-13:15"
+      ],
+      "blackout_clear": true,
+      "worst_case_s": 5850
+    },
+    {
+      "pin": "A",
+      "kit": "f2-inst-02",
+      "legs": "L005",
+      "batch_window": "13:14-13:15",
+      "t0": 1795267500,
+      "local": "2026-11-21T05:25:00-08:00",
+      "rc": 0,
+      "batch_windows": [
+        "13:14-13:15"
+      ],
+      "blackout_clear": true,
+      "worst_case_s": 5850
+    },
+    {
+      "pin": "A",
+      "kit": "f2-inst-02",
+      "legs": "L005",
+      "batch_window": "13:14-13:15",
+      "t0": 1795291350,
+      "local": "2026-11-21T12:02:30-08:00",
+      "rc": 1,
+      "refusal": "REFUSE the worst-case span [t0, t0 + 5850 s] meets a batch blackout (13:14-13:15); arm after it or earlier"
+    },
+    {
+      "pin": "A",
+      "kit": "f2-inst-02",
+      "legs": "L005",
+      "batch_window": "13:14-13:15",
+      "t0": 1795315049,
+      "local": "2026-11-21T18:37:29-08:00",
+      "rc": 0,
+      "batch_windows": [
+        "13:14-13:15"
+      ],
+      "blackout_clear": true,
+      "worst_case_s": 5850
+    },
+    {
+      "pin": "A",
+      "kit": "f2-inst-02",
+      "legs": "L005,L006",
+      "batch_window": "02:00-02:35",
+      "t0": 1795166249,
+      "local": "2026-11-20T01:17:29-08:00",
+      "rc": 1,
+      "refusal": "REFUSE the worst-case span [t0, t0 + 8550 s] meets a batch blackout (02:00-02:35); arm after it or earlier"
+    },
+    {
+      "pin": "A",
+      "kit": "f2-inst-02",
+      "legs": "L005,L006",
+      "batch_window": "02:00-02:35",
+      "t0": 1795185750,
+      "local": "2026-11-20T06:42:30-08:00",
+      "rc": 0,
+      "batch_windows": [
+        "02:00-02:35"
+      ],
+      "blackout_clear": true,
+      "worst_case_s": 8550
+    },
+    {
+      "pin": "A",
+      "kit": "f2-inst-02",
+      "legs": "L005,L006",
+      "batch_window": "02:00-02:35",
+      "t0": 1795204950,
+      "local": "2026-11-20T12:02:30-08:00",
+      "rc": 1,
+      "refusal": "REFUSE no launch between 10:50 and 13:15: the soak path waits out 11:45-13:15 unbudgeted (RL-155a section 3)"
+    },
+    {
+      "pin": "A",
+      "kit": "f2-inst-02",
+      "legs": "L005,L006",
+      "batch_window": "02:00-02:35",
+      "t0": 1795226945,
+      "local": "2026-11-20T18:09:05-08:00",
+      "rc": 0,
+      "batch_windows": [
+        "02:00-02:35"
+      ],
+      "blackout_clear": true,
+      "worst_case_s": 8550
+    },
+    {
+      "pin": "A",
+      "kit": "f2-inst-02",
+      "legs": "L005,L006",
+      "batch_window": "02:00-02:35",
+      "t0": 1795246295,
+      "local": "2026-11-20T23:31:35-08:00",
+      "rc": 1,
+      "refusal": "REFUSE the fence end (worst case + 1460 s) at 02:18:25 passes 01:50:00, 10 min before the 02:00-02:35 blackout (RL-155a section 3)"
+    },
+    {
+      "pin": "A",
+      "kit": "f2-inst-02",
+      "legs": "L005,L006",
+      "batch_window": "02:00-02:35",
+      "t0": 1795252649,
+      "local": "2026-11-21T01:17:29-08:00",
+      "rc": 1,
+      "refusal": "REFUSE the worst-case span [t0, t0 + 8550 s] meets a batch blackout (02:00-02:35); arm after it or earlier"
+    },
+    {
+      "pin": "A",
+      "kit": "f2-inst-02",
+      "legs": "L005,L006",
+      "batch_window": "02:00-02:35",
+      "t0": 1795272150,
+      "local": "2026-11-21T06:42:30-08:00",
+      "rc": 0,
+      "batch_windows": [
+        "02:00-02:35"
+      ],
+      "blackout_clear": true,
+      "worst_case_s": 8550
+    },
+    {
+      "pin": "A",
+      "kit": "f2-inst-02",
+      "legs": "L005,L006",
+      "batch_window": "02:00-02:35",
+      "t0": 1795291350,
+      "local": "2026-11-21T12:02:30-08:00",
+      "rc": 1,
+      "refusal": "REFUSE no launch between 10:50 and 13:15: the soak path waits out 11:45-13:15 unbudgeted (RL-155a section 3)"
+    },
+    {
+      "pin": "A",
+      "kit": "f2-inst-02",
+      "legs": "L005,L006",
+      "batch_window": "02:00-02:35",
+      "t0": 1795313345,
+      "local": "2026-11-21T18:09:05-08:00",
+      "rc": 0,
+      "batch_windows": [
+        "02:00-02:35"
+      ],
+      "blackout_clear": true,
+      "worst_case_s": 8550
+    },
+    {
+      "pin": "A",
+      "kit": "f2-inst-02",
+      "legs": "L005,L006",
+      "batch_window": "02:00-02:35",
+      "t0": 1795332695,
+      "local": "2026-11-21T23:31:35-08:00",
+      "rc": 1,
+      "refusal": "REFUSE the fence end (worst case + 1460 s) at 02:18:25 passes 01:50:00, 10 min before the 02:00-02:35 blackout (RL-155a section 3)"
+    },
+    {
+      "pin": "A",
+      "kit": "f2-inst-02",
+      "legs": "L005,L006",
+      "batch_window": "13:14-13:15",
+      "t0": 1795180115,
+      "local": "2026-11-20T05:08:35-08:00",
+      "rc": 0,
+      "batch_windows": [
+        "13:14-13:15"
+      ],
+      "blackout_clear": true,
+      "worst_case_s": 8550
+    },
+    {
+      "pin": "A",
+      "kit": "f2-inst-02",
+      "legs": "L005,L006",
+      "batch_window": "13:14-13:15",
+      "t0": 1795203965,
+      "local": "2026-11-20T11:46:05-08:00",
+      "rc": 1,
+      "refusal": "REFUSE the worst-case span [t0, t0 + 8550 s] meets a batch blackout (13:14-13:15); arm after it or earlier"
+    },
+    {
+      "pin": "A",
+      "kit": "f2-inst-02",
+      "legs": "L005,L006",
+      "batch_window": "13:14-13:15",
+      "t0": 1795228649,
+      "local": "2026-11-20T18:37:29-08:00",
+      "rc": 0,
+      "batch_windows": [
+        "13:14-13:15"
+      ],
+      "blackout_clear": true,
+      "worst_case_s": 8550
+    },
+    {
+      "pin": "A",
+      "kit": "f2-inst-02",
+      "legs": "L005,L006",
+      "batch_window": "13:14-13:15",
+      "t0": 1795266515,
+      "local": "2026-11-21T05:08:35-08:00",
+      "rc": 0,
+      "batch_windows": [
+        "13:14-13:15"
+      ],
+      "blackout_clear": true,
+      "worst_case_s": 8550
+    },
+    {
+      "pin": "A",
+      "kit": "f2-inst-02",
+      "legs": "L005,L006",
+      "batch_window": "13:14-13:15",
+      "t0": 1795290365,
+      "local": "2026-11-21T11:46:05-08:00",
+      "rc": 1,
+      "refusal": "REFUSE the worst-case span [t0, t0 + 8550 s] meets a batch blackout (13:14-13:15); arm after it or earlier"
+    },
+    {
+      "pin": "A",
+      "kit": "f2-inst-02",
+      "legs": "L005,L006",
+      "batch_window": "13:14-13:15",
+      "t0": 1795315049,
+      "local": "2026-11-21T18:37:29-08:00",
+      "rc": 0,
+      "batch_windows": [
+        "13:14-13:15"
+      ],
+      "blackout_clear": true,
+      "worst_case_s": 8550
+    },
+    {
+      "pin": "A",
+      "kit": "f2-inst-03",
+      "legs": "L001,L002",
+      "batch_window": "02:00-02:35",
+      "t0": 1795166249,
+      "local": "2026-11-20T01:17:29-08:00",
+      "rc": 1,
+      "refusal": "REFUSE the worst-case span [t0, t0 + 8550 s] meets a batch blackout (02:00-02:35); arm after it or earlier"
+    },
+    {
+      "pin": "A",
+      "kit": "f2-inst-03",
+      "legs": "L001,L002",
+      "batch_window": "02:00-02:35",
+      "t0": 1795185750,
+      "local": "2026-11-20T06:42:30-08:00",
+      "rc": 0,
+      "batch_windows": [
+        "02:00-02:35"
+      ],
+      "blackout_clear": true,
+      "worst_case_s": 8550
+    },
+    {
+      "pin": "A",
+      "kit": "f2-inst-03",
+      "legs": "L001,L002",
+      "batch_window": "02:00-02:35",
+      "t0": 1795204950,
+      "local": "2026-11-20T12:02:30-08:00",
+      "rc": 1,
+      "refusal": "REFUSE no launch between 10:50 and 13:15: the soak path waits out 11:45-13:15 unbudgeted (RL-155a section 3)"
+    },
+    {
+      "pin": "A",
+      "kit": "f2-inst-03",
+      "legs": "L001,L002",
+      "batch_window": "02:00-02:35",
+      "t0": 1795226945,
+      "local": "2026-11-20T18:09:05-08:00",
+      "rc": 0,
+      "batch_windows": [
+        "02:00-02:35"
+      ],
+      "blackout_clear": true,
+      "worst_case_s": 8550
+    },
+    {
+      "pin": "A",
+      "kit": "f2-inst-03",
+      "legs": "L001,L002",
+      "batch_window": "02:00-02:35",
+      "t0": 1795246295,
+      "local": "2026-11-20T23:31:35-08:00",
+      "rc": 1,
+      "refusal": "REFUSE the fence end (worst case + 1460 s) at 02:18:25 passes 01:50:00, 10 min before the 02:00-02:35 blackout (RL-155a section 3)"
+    },
+    {
+      "pin": "A",
+      "kit": "f2-inst-03",
+      "legs": "L001,L002",
+      "batch_window": "02:00-02:35",
+      "t0": 1795252649,
+      "local": "2026-11-21T01:17:29-08:00",
+      "rc": 1,
+      "refusal": "REFUSE the worst-case span [t0, t0 + 8550 s] meets a batch blackout (02:00-02:35); arm after it or earlier"
+    },
+    {
+      "pin": "A",
+      "kit": "f2-inst-03",
+      "legs": "L001,L002",
+      "batch_window": "02:00-02:35",
+      "t0": 1795272150,
+      "local": "2026-11-21T06:42:30-08:00",
+      "rc": 0,
+      "batch_windows": [
+        "02:00-02:35"
+      ],
+      "blackout_clear": true,
+      "worst_case_s": 8550
+    },
+    {
+      "pin": "A",
+      "kit": "f2-inst-03",
+      "legs": "L001,L002",
+      "batch_window": "02:00-02:35",
+      "t0": 1795291350,
+      "local": "2026-11-21T12:02:30-08:00",
+      "rc": 1,
+      "refusal": "REFUSE no launch between 10:50 and 13:15: the soak path waits out 11:45-13:15 unbudgeted (RL-155a section 3)"
+    },
+    {
+      "pin": "A",
+      "kit": "f2-inst-03",
+      "legs": "L001,L002",
+      "batch_window": "02:00-02:35",
+      "t0": 1795313345,
+      "local": "2026-11-21T18:09:05-08:00",
+      "rc": 0,
+      "batch_windows": [
+        "02:00-02:35"
+      ],
+      "blackout_clear": true,
+      "worst_case_s": 8550
+    },
+    {
+      "pin": "A",
+      "kit": "f2-inst-03",
+      "legs": "L001,L002",
+      "batch_window": "02:00-02:35",
+      "t0": 1795332695,
+      "local": "2026-11-21T23:31:35-08:00",
+      "rc": 1,
+      "refusal": "REFUSE the fence end (worst case + 1460 s) at 02:18:25 passes 01:50:00, 10 min before the 02:00-02:35 blackout (RL-155a section 3)"
+    },
+    {
+      "pin": "A",
+      "kit": "f2-inst-03",
+      "legs": "L001,L002",
+      "batch_window": "13:14-13:15",
+      "t0": 1795180115,
+      "local": "2026-11-20T05:08:35-08:00",
+      "rc": 0,
+      "batch_windows": [
+        "13:14-13:15"
+      ],
+      "blackout_clear": true,
+      "worst_case_s": 8550
+    },
+    {
+      "pin": "A",
+      "kit": "f2-inst-03",
+      "legs": "L001,L002",
+      "batch_window": "13:14-13:15",
+      "t0": 1795203965,
+      "local": "2026-11-20T11:46:05-08:00",
+      "rc": 1,
+      "refusal": "REFUSE the worst-case span [t0, t0 + 8550 s] meets a batch blackout (13:14-13:15); arm after it or earlier"
+    },
+    {
+      "pin": "A",
+      "kit": "f2-inst-03",
+      "legs": "L001,L002",
+      "batch_window": "13:14-13:15",
+      "t0": 1795228649,
+      "local": "2026-11-20T18:37:29-08:00",
+      "rc": 0,
+      "batch_windows": [
+        "13:14-13:15"
+      ],
+      "blackout_clear": true,
+      "worst_case_s": 8550
+    },
+    {
+      "pin": "A",
+      "kit": "f2-inst-03",
+      "legs": "L001,L002",
+      "batch_window": "13:14-13:15",
+      "t0": 1795266515,
+      "local": "2026-11-21T05:08:35-08:00",
+      "rc": 0,
+      "batch_windows": [
+        "13:14-13:15"
+      ],
+      "blackout_clear": true,
+      "worst_case_s": 8550
+    },
+    {
+      "pin": "A",
+      "kit": "f2-inst-03",
+      "legs": "L001,L002",
+      "batch_window": "13:14-13:15",
+      "t0": 1795290365,
+      "local": "2026-11-21T11:46:05-08:00",
+      "rc": 1,
+      "refusal": "REFUSE the worst-case span [t0, t0 + 8550 s] meets a batch blackout (13:14-13:15); arm after it or earlier"
+    },
+    {
+      "pin": "A",
+      "kit": "f2-inst-03",
+      "legs": "L001,L002",
+      "batch_window": "13:14-13:15",
+      "t0": 1795315049,
+      "local": "2026-11-21T18:37:29-08:00",
+      "rc": 0,
+      "batch_windows": [
+        "13:14-13:15"
+      ],
+      "blackout_clear": true,
+      "worst_case_s": 8550
+    },
+    {
+      "pin": "A",
+      "kit": "f2-stab-01",
+      "legs": "L001",
+      "batch_window": "02:00-02:35",
+      "t0": 1795166249,
+      "local": "2026-11-20T01:17:29-08:00",
+      "rc": 1,
+      "refusal": "REFUSE the worst-case span [t0, t0 + 5850 s] meets a batch blackout (02:00-02:35); arm after it or earlier"
+    },
+    {
+      "pin": "A",
+      "kit": "f2-stab-01",
+      "legs": "L001",
+      "batch_window": "02:00-02:35",
+      "t0": 1795185750,
+      "local": "2026-11-20T06:42:30-08:00",
+      "rc": 0,
+      "batch_windows": [
+        "02:00-02:35"
+      ],
+      "blackout_clear": true,
+      "worst_case_s": 5850
+    },
+    {
+      "pin": "A",
+      "kit": "f2-stab-01",
+      "legs": "L001",
+      "batch_window": "02:00-02:35",
+      "t0": 1795204950,
+      "local": "2026-11-20T12:02:30-08:00",
+      "rc": 1,
+      "refusal": "REFUSE no launch between 10:50 and 13:15: the soak path waits out 11:45-13:15 unbudgeted (RL-155a section 3)"
+    },
+    {
+      "pin": "A",
+      "kit": "f2-stab-01",
+      "legs": "L001",
+      "batch_window": "02:00-02:35",
+      "t0": 1795228295,
+      "local": "2026-11-20T18:31:35-08:00",
+      "rc": 0,
+      "batch_windows": [
+        "02:00-02:35"
+      ],
+      "blackout_clear": true,
+      "worst_case_s": 5850
+    },
+    {
+      "pin": "A",
+      "kit": "f2-stab-01",
+      "legs": "L001",
+      "batch_window": "02:00-02:35",
+      "t0": 1795247645,
+      "local": "2026-11-20T23:54:05-08:00",
+      "rc": 1,
+      "refusal": "REFUSE the fence end (worst case + 1460 s) at 01:55:55 passes 01:50:00, 10 min before the 02:00-02:35 blackout (RL-155a section 3)"
+    },
+    {
+      "pin": "A",
+      "kit": "f2-stab-01",
+      "legs": "L001",
+      "batch_window": "02:00-02:35",
+      "t0": 1795252649,
+      "local": "2026-11-21T01:17:29-08:00",
+      "rc": 1,
+      "refusal": "REFUSE the worst-case span [t0, t0 + 5850 s] meets a batch blackout (02:00-02:35); arm after it or earlier"
+    },
+    {
+      "pin": "A",
+      "kit": "f2-stab-01",
+      "legs": "L001",
+      "batch_window": "02:00-02:35",
+      "t0": 1795272150,
+      "local": "2026-11-21T06:42:30-08:00",
+      "rc": 0,
+      "batch_windows": [
+        "02:00-02:35"
+      ],
+      "blackout_clear": true,
+      "worst_case_s": 5850
+    },
+    {
+      "pin": "A",
+      "kit": "f2-stab-01",
+      "legs": "L001",
+      "batch_window": "02:00-02:35",
+      "t0": 1795291350,
+      "local": "2026-11-21T12:02:30-08:00",
+      "rc": 1,
+      "refusal": "REFUSE no launch between 10:50 and 13:15: the soak path waits out 11:45-13:15 unbudgeted (RL-155a section 3)"
+    },
+    {
+      "pin": "A",
+      "kit": "f2-stab-01",
+      "legs": "L001",
+      "batch_window": "02:00-02:35",
+      "t0": 1795314695,
+      "local": "2026-11-21T18:31:35-08:00",
+      "rc": 0,
+      "batch_windows": [
+        "02:00-02:35"
+      ],
+      "blackout_clear": true,
+      "worst_case_s": 5850
+    },
+    {
+      "pin": "A",
+      "kit": "f2-stab-01",
+      "legs": "L001",
+      "batch_window": "02:00-02:35",
+      "t0": 1795334045,
+      "local": "2026-11-21T23:54:05-08:00",
+      "rc": 1,
+      "refusal": "REFUSE the fence end (worst case + 1460 s) at 01:55:55 passes 01:50:00, 10 min before the 02:00-02:35 blackout (RL-155a section 3)"
+    },
+    {
+      "pin": "A",
+      "kit": "f2-stab-01",
+      "legs": "L001",
+      "batch_window": "13:14-13:15",
+      "t0": 1795181100,
+      "local": "2026-11-20T05:25:00-08:00",
+      "rc": 0,
+      "batch_windows": [
+        "13:14-13:15"
+      ],
+      "blackout_clear": true,
+      "worst_case_s": 5850
+    },
+    {
+      "pin": "A",
+      "kit": "f2-stab-01",
+      "legs": "L001",
+      "batch_window": "13:14-13:15",
+      "t0": 1795204950,
+      "local": "2026-11-20T12:02:30-08:00",
+      "rc": 1,
+      "refusal": "REFUSE the worst-case span [t0, t0 + 5850 s] meets a batch blackout (13:14-13:15); arm after it or earlier"
+    },
+    {
+      "pin": "A",
+      "kit": "f2-stab-01",
+      "legs": "L001",
+      "batch_window": "13:14-13:15",
+      "t0": 1795228649,
+      "local": "2026-11-20T18:37:29-08:00",
+      "rc": 0,
+      "batch_windows": [
+        "13:14-13:15"
+      ],
+      "blackout_clear": true,
+      "worst_case_s": 5850
+    },
+    {
+      "pin": "A",
+      "kit": "f2-stab-01",
+      "legs": "L001",
+      "batch_window": "13:14-13:15",
+      "t0": 1795267500,
+      "local": "2026-11-21T05:25:00-08:00",
+      "rc": 0,
+      "batch_windows": [
+        "13:14-13:15"
+      ],
+      "blackout_clear": true,
+      "worst_case_s": 5850
+    },
+    {
+      "pin": "A",
+      "kit": "f2-stab-01",
+      "legs": "L001",
+      "batch_window": "13:14-13:15",
+      "t0": 1795291350,
+      "local": "2026-11-21T12:02:30-08:00",
+      "rc": 1,
+      "refusal": "REFUSE the worst-case span [t0, t0 + 5850 s] meets a batch blackout (13:14-13:15); arm after it or earlier"
+    },
+    {
+      "pin": "A",
+      "kit": "f2-stab-01",
+      "legs": "L001",
+      "batch_window": "13:14-13:15",
+      "t0": 1795315049,
+      "local": "2026-11-21T18:37:29-08:00",
+      "rc": 0,
+      "batch_windows": [
+        "13:14-13:15"
+      ],
+      "blackout_clear": true,
+      "worst_case_s": 5850
+    },
+    {
+      "pin": "A",
+      "kit": "f2-inst-01",
+      "legs": "L001,L002,L003",
+      "batch_window": "02:00-02:35",
+      "t0": 1794907049,
+      "local": "2026-11-17T01:17:29-08:00",
+      "rc": 1,
+      "refusal": "REFUSE the worst-case span [t0, t0 + 11250 s] meets a batch blackout (02:00-02:35); arm after it or earlier"
+    },
+    {
+      "pin": "A",
+      "kit": "f2-inst-01",
+      "legs": "L001,L002,L003",
+      "batch_window": "02:00-02:35",
+      "t0": 1794926550,
+      "local": "2026-11-17T06:42:30-08:00",
+      "rc": 0,
+      "batch_windows": [
+        "02:00-02:35"
+      ],
+      "blackout_clear": true,
+      "worst_case_s": 11250
+    },
+    {
+      "pin": "A",
+      "kit": "f2-inst-01",
+      "legs": "L001,L002,L003",
+      "batch_window": "02:00-02:35",
+      "t0": 1794945750,
+      "local": "2026-11-17T12:02:30-08:00",
+      "rc": 1,
+      "refusal": "REFUSE no launch between 10:50 and 13:15: the soak path waits out 11:45-13:15 unbudgeted (RL-155a section 3)"
+    },
+    {
+      "pin": "A",
+      "kit": "f2-inst-01",
+      "legs": "L001,L002,L003",
+      "batch_window": "02:00-02:35",
+      "t0": 1794966395,
+      "local": "2026-11-17T17:46:35-08:00",
+      "rc": 0,
+      "batch_windows": [
+        "02:00-02:35"
+      ],
+      "blackout_clear": true,
+      "worst_case_s": 11250
+    },
+    {
+      "pin": "A",
+      "kit": "f2-inst-01",
+      "legs": "L001,L002,L003",
+      "batch_window": "02:00-02:35",
+      "t0": 1794985745,
+      "local": "2026-11-17T23:09:05-08:00",
+      "rc": 1,
+      "refusal": "REFUSE the worst-case span [t0, t0 + 11250 s] meets a batch blackout (02:00-02:35); arm after it or earlier"
+    },
+    {
+      "pin": "A",
+      "kit": "f2-inst-01",
+      "legs": "L001,L002,L003",
+      "batch_window": "02:00-02:35",
+      "t0": 1795166249,
+      "local": "2026-11-20T01:17:29-08:00",
+      "rc": 1,
+      "refusal": "REFUSE the worst-case span [t0, t0 + 11250 s] meets a batch blackout (02:00-02:35); arm after it or earlier"
+    },
+    {
+      "pin": "A",
+      "kit": "f2-inst-01",
+      "legs": "L001,L002,L003",
+      "batch_window": "02:00-02:35",
+      "t0": 1795185750,
+      "local": "2026-11-20T06:42:30-08:00",
+      "rc": 0,
+      "batch_windows": [
+        "02:00-02:35"
+      ],
+      "blackout_clear": true,
+      "worst_case_s": 11250
+    },
+    {
+      "pin": "A",
+      "kit": "f2-inst-01",
+      "legs": "L001,L002,L003",
+      "batch_window": "02:00-02:35",
+      "t0": 1795204950,
+      "local": "2026-11-20T12:02:30-08:00",
+      "rc": 1,
+      "refusal": "REFUSE no launch between 10:50 and 13:15: the soak path waits out 11:45-13:15 unbudgeted (RL-155a section 3)"
+    },
+    {
+      "pin": "A",
+      "kit": "f2-inst-01",
+      "legs": "L001,L002,L003",
+      "batch_window": "02:00-02:35",
+      "t0": 1795225595,
+      "local": "2026-11-20T17:46:35-08:00",
+      "rc": 0,
+      "batch_windows": [
+        "02:00-02:35"
+      ],
+      "blackout_clear": true,
+      "worst_case_s": 11250
+    },
+    {
+      "pin": "A",
+      "kit": "f2-inst-01",
+      "legs": "L001,L002,L003",
+      "batch_window": "02:00-02:35",
+      "t0": 1795244945,
+      "local": "2026-11-20T23:09:05-08:00",
+      "rc": 1,
+      "refusal": "REFUSE the worst-case span [t0, t0 + 11250 s] meets a batch blackout (02:00-02:35); arm after it or earlier"
+    },
+    {
+      "pin": "A",
+      "kit": "f2-inst-01",
+      "legs": "L001,L002,L003",
+      "batch_window": "02:00-02:35",
+      "t0": 1795252649,
+      "local": "2026-11-21T01:17:29-08:00",
+      "rc": 1,
+      "refusal": "REFUSE the worst-case span [t0, t0 + 11250 s] meets a batch blackout (02:00-02:35); arm after it or earlier"
+    },
+    {
+      "pin": "A",
+      "kit": "f2-inst-01",
+      "legs": "L001,L002,L003",
+      "batch_window": "02:00-02:35",
+      "t0": 1795272150,
+      "local": "2026-11-21T06:42:30-08:00",
+      "rc": 0,
+      "batch_windows": [
+        "02:00-02:35"
+      ],
+      "blackout_clear": true,
+      "worst_case_s": 11250
+    },
+    {
+      "pin": "A",
+      "kit": "f2-inst-01",
+      "legs": "L001,L002,L003",
+      "batch_window": "02:00-02:35",
+      "t0": 1795291350,
+      "local": "2026-11-21T12:02:30-08:00",
+      "rc": 1,
+      "refusal": "REFUSE no launch between 10:50 and 13:15: the soak path waits out 11:45-13:15 unbudgeted (RL-155a section 3)"
+    },
+    {
+      "pin": "A",
+      "kit": "f2-inst-01",
+      "legs": "L001,L002,L003",
+      "batch_window": "02:00-02:35",
+      "t0": 1795311995,
+      "local": "2026-11-21T17:46:35-08:00",
+      "rc": 0,
+      "batch_windows": [
+        "02:00-02:35"
+      ],
+      "blackout_clear": true,
+      "worst_case_s": 11250
+    },
+    {
+      "pin": "A",
+      "kit": "f2-inst-01",
+      "legs": "L001,L002,L003",
+      "batch_window": "02:00-02:35",
+      "t0": 1795331345,
+      "local": "2026-11-21T23:09:05-08:00",
+      "rc": 1,
+      "refusal": "REFUSE the worst-case span [t0, t0 + 11250 s] meets a batch blackout (02:00-02:35); arm after it or earlier"
+    },
+    {
+      "pin": "A",
+      "kit": "f2-inst-01",
+      "legs": "L001,L002,L003",
+      "batch_window": "13:14-13:15",
+      "t0": 1794919565,
+      "local": "2026-11-17T04:46:05-08:00",
+      "rc": 0,
+      "batch_windows": [
+        "13:14-13:15"
+      ],
+      "blackout_clear": true,
+      "worst_case_s": 11250
+    },
+    {
+      "pin": "A",
+      "kit": "f2-inst-01",
+      "legs": "L001,L002,L003",
+      "batch_window": "13:14-13:15",
+      "t0": 1794943415,
+      "local": "2026-11-17T11:23:35-08:00",
+      "rc": 1,
+      "refusal": "REFUSE the worst-case span [t0, t0 + 11250 s] meets a batch blackout (13:14-13:15); arm after it or earlier"
+    },
+    {
+      "pin": "A",
+      "kit": "f2-inst-01",
+      "legs": "L001,L002,L003",
+      "batch_window": "13:14-13:15",
+      "t0": 1794969449,
+      "local": "2026-11-17T18:37:29-08:00",
+      "rc": 0,
+      "batch_windows": [
+        "13:14-13:15"
+      ],
+      "blackout_clear": true,
+      "worst_case_s": 11250
+    },
+    {
+      "pin": "A",
+      "kit": "f2-inst-01",
+      "legs": "L001,L002,L003",
+      "batch_window": "13:14-13:15",
+      "t0": 1795178765,
+      "local": "2026-11-20T04:46:05-08:00",
+      "rc": 0,
+      "batch_windows": [
+        "13:14-13:15"
+      ],
+      "blackout_clear": true,
+      "worst_case_s": 11250
+    },
+    {
+      "pin": "A",
+      "kit": "f2-inst-01",
+      "legs": "L001,L002,L003",
+      "batch_window": "13:14-13:15",
+      "t0": 1795202615,
+      "local": "2026-11-20T11:23:35-08:00",
+      "rc": 1,
+      "refusal": "REFUSE the worst-case span [t0, t0 + 11250 s] meets a batch blackout (13:14-13:15); arm after it or earlier"
+    },
+    {
+      "pin": "A",
+      "kit": "f2-inst-01",
+      "legs": "L001,L002,L003",
+      "batch_window": "13:14-13:15",
+      "t0": 1795228649,
+      "local": "2026-11-20T18:37:29-08:00",
+      "rc": 0,
+      "batch_windows": [
+        "13:14-13:15"
+      ],
+      "blackout_clear": true,
+      "worst_case_s": 11250
+    },
+    {
+      "pin": "A",
+      "kit": "f2-inst-01",
+      "legs": "L001,L002,L003",
+      "batch_window": "13:14-13:15",
+      "t0": 1795265165,
+      "local": "2026-11-21T04:46:05-08:00",
+      "rc": 0,
+      "batch_windows": [
+        "13:14-13:15"
+      ],
+      "blackout_clear": true,
+      "worst_case_s": 11250
+    },
+    {
+      "pin": "A",
+      "kit": "f2-inst-01",
+      "legs": "L001,L002,L003",
+      "batch_window": "13:14-13:15",
+      "t0": 1795289015,
+      "local": "2026-11-21T11:23:35-08:00",
+      "rc": 1,
+      "refusal": "REFUSE the worst-case span [t0, t0 + 11250 s] meets a batch blackout (13:14-13:15); arm after it or earlier"
+    },
+    {
+      "pin": "A",
+      "kit": "f2-inst-01",
+      "legs": "L001,L002,L003",
+      "batch_window": "13:14-13:15",
+      "t0": 1795315049,
+      "local": "2026-11-21T18:37:29-08:00",
+      "rc": 0,
+      "batch_windows": [
+        "13:14-13:15"
+      ],
+      "blackout_clear": true,
+      "worst_case_s": 11250
+    }
+  ]
+}
