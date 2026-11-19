@@ -254,3 +254,41 @@ the combined base and lead-supplied native bindings.
 [Regressions after repair](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/audit3-regressions-green.log)
 [Direct scientific controls](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/audit3-scientific-controls.log)
 [Independent edge oracle](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/audit3-rl188-compatibility.log)
+
+## 2026-11-19 restart and interval admission repair
+
+After the Air pause, the fetched builder branch, clean worktree and draft
+PR #868 all agreed at `3a4f73af471be8777ecef21fe172e55460aa1d73`. No
+local round-four changes remained. The lead directed a shared repair for
+the round-four HIGH. GitHub retargeted the draft to main after PR #854
+merged at `d9e3d5127`. PR #795 and the combined native base were still
+pending at that check.
+
+| Finding | Disposition | Commit | Verification |
+| --- | --- | --- | --- |
+| HIGH / VERIFIED | `Signals.interval_values(channel, interval)` admits coverage, then gaps, then value decoding. It covers CPU, GPU, ANE, their sum, DC-in and sidecar-dependent readings. Rail sum checks each rail and the intersection of their intervals. The normalized sidecar uses the hold cadence. DC and rail expected counts use their recorded phase periods. Count loss returns `coverage`, and a gap after count admission returns `meter_gap`. | `78776829b` | **PASS**. The audit's 35/36 GPU turn, 300/600 sidecar hold and 120/180 DC turn now give coverage nulls in the applicable prints. The 192-case matrix spans six channels, four intervals, four count fractions and gap/no-gap. The source grep checks the shared reader, worker and CLI for value access outside the gateway. |
+| Earlier HIGHs / REFUTED | Retained before-reservation native code binding and the interval-specific rail gap threshold. The new common coverage reason takes precedence for sparse rail and DC paths. | `78776829b` | **PASS**. Native tests, both earlier count-loss witnesses, and a full-count 1.25 s versus 1.50 s turn-gap comparison passed. |
+| MED / VERIFIED | Frozen end-to-end publication and refusal observability still require the independently frozen observer update and an eligible synthetic host. | — | **BLOCKED**. The local exact-edge case returns exit 2 after stage 1. A disposable reservation probe received `EPERM`. The frozen foreign-series case still counts descriptor setup as a write. Prior hosted CI ran 1,046 frozen tests and reported 932 failures, including the observer's `/dev/null` assertions. |
+| LOW / VERIFIED | Public field counts and rail ordering remain positive controls. | `78776829b` | **PASS**. Source-bound public candidates, the frozen pinned GPU comparison, complete-stream scientific comparisons on all three looks, and all nine RL-188 edge maps passed. |
+
+The final focused run passed all 13 methods under Python 3.13. The
+original acceptance module, design and oracle still match all three
+frozen hashes. The checkpoint preserved the 53 previously inventoried
+builder-base blobs.
+
+Prior hosted CI also failed the shard timing inventory and command-site
+census. The five description modules now have timing weights, using
+four hosted observations and the new interval module's 24.241 s local
+synthetic run. The tracked command census now records the inert
+authenticated kit-mode string as text. Both command-site tests and the
+static discovery-to-weight comparison passed. The import-based inventory
+test hit denied metadata probes from unrelated local suites during
+discovery. Its full run belongs on hosted CI.
+
+Success-path frozen acceptance remains the outstanding gate. The
+successor freeze and lead-supplied native bindings are also pending.
+
+[Round-four report](/Volumes/JW-EXT/scratch/pl-d-desc-looks-executor/audit-4/FINAL-MESSAGE.md)
+[Final focused regressions](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/audit4-regressions-final.log)
+[Complete-stream controls](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/audit4-complete-controls.log)
+[Frozen boundary rerun](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/audit4-frozen-boundary.log)
