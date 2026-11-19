@@ -63,6 +63,7 @@ jobs:
       - name: Qualification contract regressions
         run: python -B -m unittest tests.cadence.test_qual_score_contract -v
       - name: Independent qualification oracle
+        if: success() || failure()
         run: python -B -m unittest tests.cadence.test_qual_score_acceptance.Oracle -v
       - name: Frozen qualification acceptance
         if: success() || failure()

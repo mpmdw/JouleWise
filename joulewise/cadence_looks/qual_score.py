@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import argparse
 from collections import Counter, defaultdict
+from concurrent.futures import ThreadPoolExecutor
+from contextlib import ExitStack
 from datetime import datetime
 import hashlib
 import json
@@ -13,6 +15,7 @@ from pathlib import Path
 import re
 import stat
 import statistics
+import subprocess
 import sys
 from zoneinfo import ZoneInfo
 
@@ -38,6 +41,7 @@ OUTPUT_SCHEMA = DOC + LOOK + ".output.schema.json"
 CONFIG = "configs/align/v4/r1_runtime.json"
 KITS = DOC + "qualification-kit-commitments.json"
 INTERIM_MAN = DOC + INTERIM + ".json"
+INTERIM_SCHEMA = DOC + INTERIM + ".output.schema.json"
 SLOTS = re.compile(rb'("path": "([^"]+)",\n\s*"sha256": )"PENDING:CODE"')
 MAIN = "refs/remotes/origin/main"
 RULES = ("ran_to_cap", "g0_released", "sidecar_coverage", "km003c_clean",
@@ -178,6 +182,75 @@ def filled_manifest(registration, pins):
     return candidate
 
 
+def validate_final_command(registration, final):
+    """Invoke the sanctioned validator over the exact authenticated public bytes."""
+    with ExitStack() as streams:
+        readers, writers = [], []
+        for payload in (registration, final):
+            rd, wr = os.pipe()
+            readers.append(streams.enter_context(os.fdopen(rd, "rb")))
+            writers.append((streams.enter_context(os.fdopen(wr, "wb")), payload))
+        reg, candidate = (reader.fileno() for reader in readers)
+        command = [sys.executable, "-B", "-E", "-s", "-m", "joulewise.cadence_looks.manifest_dispatch",
+                   "validate", f"/dev/fd/{candidate}", "--final", "--registration", f"/dev/fd/{reg}"]
+        with subprocess.Popen(command, cwd=ROOT, pass_fds=(reg, candidate),
+                              stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL) as validator:
+            for reader in readers:
+                reader.close()
+
+            def deliver(stream, payload):
+                with stream:
+                    stream.write(payload)
+
+            with ThreadPoolExecutor(max_workers=2) as pool:
+                futures = [pool.submit(deliver, writer, payload) for writer, payload in writers]
+                for delivery in futures:
+                    try:
+                        delivery.result()
+                    except BrokenPipeError:
+                        # On refusal the dispatcher can exit before reading the registration pipe.
+                        pass
+            require(validator.wait() == 0, "sanctioned final validation refused")
+
+
+def authenticated_registration(repo, main, commit, expected):
+    require(re.fullmatch("[0-9a-f]{40}", commit), "invalid registration commit")
+    git(repo, "merge-base", "--is-ancestor", REGISTRATION, commit)
+    git(repo, "merge-base", "--is-ancestor", commit, main)
+    raw = blob(repo, commit, MAN)
+    historical = row_at(repo, commit, LOOK)
+    require(historical == {"look_id": LOOK, "status": "registered", "manifest_path": MAN,
+                           "sha256": digest(raw)} and digest(raw) == expected,
+            "registration differs from the historical mainline row")
+    anchor = blob(repo, REGISTRATION, MAN)
+    require(digest(anchor) == REGISTRATION_SHA, "published registration differs from its authenticated bytes")
+    midpoint = b"c = P + (first_stamp + last_stamp) / 2."
+    require(anchor.count(midpoint) == 1, "RL-188 correction no longer identifies one sentence")
+    corrected = anchor.replace(midpoint, b"c = P + (first_stamp + 1 + last_stamp) / 2.", 1)
+    require(raw == (anchor if commit == REGISTRATION else corrected), "registration science differs")
+    return raw
+
+
+def mainline_final(repo):
+    require(repo == ROOT, "campaign invocation requires its executing checkout")
+    _, main = manifest.shared_ref(repo, "origin/main")
+    row = row_at(repo, main, LOOK)
+    require(row["status"] in ("committed", "stage1_committed") and row["manifest_path"] == MAN,
+            "final manifest must be committed on main")
+    registration = authenticated_registration(repo, main, row["registration_commit"], row["registration_sha256"])
+    final = blob(repo, main, MAN)
+    require(digest(final) == row["sha256"] and read_regular(repo / MAN) == final,
+            "final manifest differs from main")
+    validate_final_command(registration, final)
+    doc = qualification_manifest._decode(final)
+    pins = manifest_pins(doc)
+    require(filled_manifest(registration, pins) == final, "final pin inventory differs")
+    for rel, sha in {pin["path"]: pin["sha256"] for pin in pins}.items():
+        path_raw = blob(repo, main, rel)
+        require(digest(path_raw) == sha and read_regular(repo / rel) == path_raw, "executing source changed")
+    return doc
+
+
 class FixtureSources:
     """A file projection of synthetic Git evidence under the explicit --inputs interface."""
 
@@ -285,6 +358,33 @@ class FixtureSources:
                 and doc["look_id"] == INTERIM and doc["status"] == "committed", "interim manifest is unauthenticated")
         return doc
 
+    def public_freeze_sha(self):
+        """Bind the generated public report without opening the coefficient file."""
+        row = row_at(self.repo, self.main, INTERIM)
+        interim = self.interim()
+        public_root = row["public_root"]
+        require(row["status"] in ("run", "frozen") and manifest._relative_directory(public_root),
+                "interim public result is unavailable")
+        schema_pin = interim["outputs"]["schema"]
+        require(schema_pin["path"] == INTERIM_SCHEMA, "unexpected interim public schema")
+        schema_raw = self.bound(INTERIM_SCHEMA)
+        require(digest(schema_raw) == schema_pin["sha256"], "interim public schema changed")
+        raw = self.bound(f"{public_root}/{INTERIM}/PUBLIC.json")
+        require(digest(raw) == row["output_sha256"], "interim public result differs from the ledger")
+        report = release.read_public(raw, json.loads(schema_raw), look_id=INTERIM)
+        fields = {"manifest_sha256": "sha256", "stage1_sha256": "stage1_sha256",
+                  "coefficients_sha256": "coefficients_sha256"}
+        require(all(report[key] == row[value] for key, value in fields.items()),
+                "interim public result differs from its commitments")
+        commit = report["commit"]
+        git(self.repo, "merge-base", "--is-ancestor", commit, self.main)
+        execution = row_at(self.repo, commit, INTERIM)
+        bound_keys = ("sha256", "stage1_sha256", "public_root", "custody_root", "execution_host")
+        require(execution["status"] == "stage1_committed"
+                and all(execution[key] == row[key] for key in bound_keys), "interim execution row changed")
+        require(report["twin_agrees"] == "yes", "named freeze-2 intake awaits the shared reader")
+        return report["coefficients_sha256"]
+
 
 def edges(lo, hi):
     return {"edge_lo": lo, "edge_hi": hi, "gaps": hi - lo}
@@ -381,7 +481,9 @@ def cli(argv=None):
             command.add_argument("--candidate", required=True, type=Path)
     args = parser.parse_args(argv)
     try:
-        require(args.inputs is not None, "campaign closure intake is pending admission")
+        if args.inputs is None:
+            mainline_final(args.repo.absolute())
+            raise Refusal("campaign closure intake is pending admission")
         source = FixtureSources(args.repo.absolute(), args.inputs.absolute())
         doc = source.final()
         blind = stage1(source, doc)
@@ -394,6 +496,24 @@ def cli(argv=None):
                 "stage 1 has no authoritative commitment")
         require(blind == source.bound(STAGE) == read_regular(stage_path)
                 and digest(blind) == source.row["stage1_sha256"], "stage-1 bytes or sources changed")
+        execution = named_commit(source.repo, "HEAD")
+        git(source.repo, "merge-base", "--is-ancestor", execution, source.main)
+        require(row_at(source.repo, execution, LOOK) == source.row, "execution row differs from main")
+        if args.operation == "validate-public":
+            require(args.candidate.absolute().parent == source.repo.parent,
+                    "fixture candidate must stay in the generated world")
+            stage = json.loads(blind)
+            schema = json.loads(source.bound(OUTPUT_SCHEMA))
+            bindings = {
+                "look_id": LOOK, "commit": execution, "manifest_sha256": source.row["sha256"],
+                "stage1_sha256": digest(blind), "coefficients_sha256": source.public_freeze_sha(),
+                "development_config_sha256": stage["configs"]["development_sha256"],
+                "qualification_config_sha256": stage["configs"]["qualification_sha256"],
+                "included_legs": stage["counts"]["included_legs"], "type_m_residual": "not_run",
+                "stage2_error": "no",
+            }
+            validate_public(read_regular(args.candidate.absolute()), schema, bindings)
+            return 0
         raise Refusal("shared freeze-2 reader and native L predictor pending admission")
     except Exception:
         manifest_dispatch.exit_with_failure(2, lambda: "REFUSE qualification before read\n")

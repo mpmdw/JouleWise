@@ -29,6 +29,16 @@ class QualificationContractTests(unittest.TestCase):
                 })
         self.assertIsNone(qual.terminal_edges({"decode_tokens": 4096}))
 
+    def test_final_command_checks_exact_registration_bytes(self):
+        main = qual.named_commit(qual.ROOT, "HEAD")
+        raw = qual.authenticated_registration(qual.ROOT, main, qual.REGISTRATION, qual.REGISTRATION_SHA)
+        pins = [{**pin, "sha256": qual.digest((qual.ROOT / pin["path"]).read_bytes())}
+                for pin in qual.manifest_pins(json.loads(raw))]
+        candidate = qual.filled_manifest(raw, pins)
+        qual.validate_final_command(raw, candidate)
+        with self.assertRaises(qual.Refusal):
+            qual.validate_final_command(raw, candidate + b" ")
+
     def setUp(self):
         self.schema = json.loads((qual.ROOT / qual.OUTPUT_SCHEMA).read_bytes())
         self.base = {"look_id": qual.LOOK, "manifest_sha256": "a" * 64, "commit": "a" * 40,
@@ -105,3 +115,22 @@ class QualificationContractTests(unittest.TestCase):
                                     self.schema, self.base)
             self.assertEqual(qual.validate_public(destination.read_bytes(), self.schema, self.base), record)
             self.assertEqual(list(reservation.iterdir()), [])
+
+    def test_validate_public_uses_the_committed_blind_sources(self):
+        from tests.cadence import test_qual_score_acceptance as fixture
+
+        with tempfile.TemporaryDirectory() as tmp:
+            world = fixture.World(Path(tmp)).init()
+            fixture.admit(self, world)
+            candidate = world.root / "candidate.json"
+            report = {**fixture.bindings(world), "qualified_qualification": "not_evaluable"}
+            fixture.put(candidate, report)
+            run = fixture.launch(world, "validate-public", ["--candidate", str(candidate)])
+            self.assertEqual((run.returncode, run.stdout, run.stderr), (0, b"", b""))
+            self.assertEqual(candidate.read_bytes(), fixture.wire(report))
+            self.assertFalse(world.public.exists())
+            self.assertFalse(world.private.exists())
+            fixture.put(candidate, dict(report, included_legs=report["included_legs"] - 1))
+            run = fixture.launch(world, "validate-public", ["--candidate", str(candidate)])
+            self.assertEqual(run.returncode, 2)
+            fixture.read_trace(self, world)
