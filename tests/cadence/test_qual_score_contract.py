@@ -2,6 +2,8 @@
 
 import copy
 import json
+import math
+import os
 from pathlib import Path
 import subprocess
 import sys
@@ -71,29 +73,84 @@ class QualificationContractTests(unittest.TestCase):
         self.assertEqual((word, report["estimate"], report["ci90"]), ("not_evaluable", None, None))
 
     def test_each_l_exclusion_preserves_the_decision_and_eight_bound_public_fields(self):
-        legs = self.legs + [{"leg_type": "L", "N": 4096 if i % 2 else 3724, "rules": dict.fromkeys(qual.RULES, True),
-                             "leg_key": f"L{i}", "span_id": "a"} for i in range(12)]
-        word, decision = qual.decision(legs, self.scores, self.dates)
-        baseline = {**self.base, "qualified_qualification": word}
-        baseline_bytes = qual.public_bytes(baseline, self.schema, self.base)
-        self.assertEqual(qual.validate_public(baseline_bytes, self.schema, self.base), baseline)
-        fixed = set(baseline) - {"included_legs", "stage1_sha256", "commit"}
-        for i, row in enumerate(legs[5:], 1):
-            with self.subTest(leg=row["leg_key"]):
-                row["rules"]["g0_released"] = False
-                actual_word, actual_decision = qual.decision(legs, self.scores, self.dates)
-                row["rules"]["g0_released"] = True
-                bindings = {**self.base, "included_legs": self.base["included_legs"] - 1,
-                            "stage1_sha256": f"{i:064x}", "commit": f"{i:040x}"}
-                actual = {**bindings, "qualified_qualification": actual_word}
-                raw = qual.public_bytes(actual, self.schema, bindings)
-                self.assertEqual(qual.validate_public(raw, self.schema, bindings), actual)
-                self.assertEqual(actual.keys(), baseline.keys())
-                self.assertEqual(qual.release.dump({k: actual[k] for k in fixed}),
-                                 qual.release.dump({k: baseline[k] for k in fixed}))
-                self.assertEqual(actual_decision, decision)
-                for field in ("stage1_sha256", "commit"):
-                    self.assertNotEqual(actual[field], baseline[field])
+        from tests.cadence import test_qual_score_acceptance as fixture
+
+        self.assertFalse(os.environ.get("QUAL_TEST_COMMAND"), "A2 requires the default scorer command")
+        self.assertEqual(fixture.SOURCE, qual.ROOT)
+        self.assertEqual(fixture.PRIVATE, "RESTRICTED")
+        fixed = ("look_id", "manifest_sha256", "coefficients_sha256", "development_config_sha256",
+                 "qualification_config_sha256", "qualified_qualification", "type_m_residual", "stage2_error")
+        decision_fields = ("estimate", "ci90", "sd_long", "sd_short", "n_legs", "n_days", "differences")
+
+        def run_world(world, included):
+            fixture.admit(self, world)
+            execution = fixture.git(world.repo, "rev-parse", "HEAD").strip().decode("ascii")
+            stage1 = fixture.git(world.repo, "show", f"{execution}:{fixture.STAGE}")
+            ledger = json.loads(fixture.git(world.repo, "show", f"{execution}:{fixture.LEDGER}"))
+            row, = (item for item in ledger["looks"] if item["look_id"] == fixture.LOOK)
+            stage1_sha = fixture.sha(stage1)
+            blind = json.loads(stage1)
+            count = blind["counts"]["included_legs"]
+            self.assertEqual(world.stage.read_bytes(), stage1)
+            self.assertEqual(row["stage1_sha256"], stage1_sha)
+            self.assertIs(type(count), int)
+            self.assertEqual(count, len(included))
+
+            result = fixture.launch(world, "stage2")
+            if result.returncode == 2:
+                fixture.read_trace(self, world)
+                self.assertFalse(world.private.exists())
+                self.assertFalse(world.public.exists())
+            self.assertEqual((result.returncode, result.stdout, result.stderr), (0, b"", b""), result.stderr)
+            report = fixture.records(self, world)
+            self.assertEqual(report.keys(), set(fixed) | {"included_legs", "stage1_sha256", "commit"})
+            self.assertEqual(report["included_legs"], count)
+            self.assertEqual(report["stage1_sha256"], stage1_sha)
+            self.assertEqual(report["commit"], execution)
+
+            decision = fixture.obj(world.private / "scores.json")["decision"]
+            numbers = {field: decision[field] for field in decision_fields}
+            self.assertIsInstance(numbers["ci90"], list)
+            self.assertEqual(len(numbers["ci90"]), 2)
+            self.assertIsInstance(numbers["differences"], dict)
+            decision_legs = [leg for leg in included if leg["leg_type"] == "A" and leg["N"] == 4096]
+            self.assertEqual(numbers["differences"].keys(), {leg["leg_key"] for leg in decision_legs})
+            self.assertIs(type(numbers["n_legs"]), int)
+            self.assertIs(type(numbers["n_days"]), int)
+            self.assertEqual(numbers["n_legs"], len(decision_legs))
+            self.assertEqual(numbers["n_days"], len({blind["dates"][leg["span_id"]] for leg in decision_legs}))
+            values = (numbers["estimate"], *numbers["ci90"], numbers["sd_long"], numbers["sd_short"],
+                      *numbers["differences"].values())
+            for value in values:
+                self.assertIn(type(value), (int, float))
+                self.assertTrue(math.isfinite(value))
+            return report, numbers
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            base_world = fixture.World(root / "base").init()
+            base_roster = fixture.relation(base_world)
+            base_ids = {leg["leg_key"] for leg in base_roster}
+            l_ids = [leg["leg_key"] for leg in base_roster if leg["leg_type"] == "L"]
+            self.assertEqual(len(set(l_ids)), len(l_ids))
+            self.assertEqual(len(l_ids), 12)
+            base, base_numbers = run_world(base_world, base_roster)
+            base_fixed = fixture.wire({key: base[key] for key in fixed})
+            compared = 0
+            for index, key in enumerate(l_ids, 1):
+                with self.subTest(excluded_leg=key):
+                    world = fixture.World(root / f"exclusion-{index}").init(excluded=[key])
+                    roster = fixture.relation(world)
+                    self.assertEqual({leg["leg_key"] for leg in roster}, base_ids - {key})
+                    report, numbers = run_world(world, roster)
+                    self.assertEqual(report.keys(), base.keys())
+                    self.assertEqual(fixture.wire({field: report[field] for field in fixed}), base_fixed)
+                    self.assertEqual(report["included_legs"], base["included_legs"] - 1)
+                    self.assertNotEqual(report["stage1_sha256"], base["stage1_sha256"])
+                    self.assertNotEqual(report["commit"], base["commit"])
+                    self.assertEqual(numbers, base_numbers)
+                    compared += 1
+            self.assertEqual(compared, 12)
 
     def test_writer_refuses_invalid_sources_before_publication_and_publishes_exclusively(self):
         with tempfile.TemporaryDirectory() as tmp:
