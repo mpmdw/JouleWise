@@ -1,4 +1,12 @@
-"""Frozen synthetic R0 versus admitted L3 acceptance, PR 824 / audits 1–8.
+"""Frozen synthetic R0 versus admitted L3 acceptance, v2 (PR 824).
+
+The 341 original cases and their assertions are preserved. Two additional
+families exercise single-read process names and per-window CPU evidence.
+Each family prints its own denominator and failure count. The threshold
+oracle uses integer centiseconds, the printed lstart second and observable
+read brackets. A worker's exact fractional lifetime is private to the fixture.
+Darwin ps fallback source:
+https://github.com/apple-oss-distributions/adv_cmds/blob/6bed8737a34dbb54782a18f47dccf933a9967a12/ps/print.c#L284-L289
 
 Run from the candidate checkout: python3.13 -B /path/to/this_file.py
 Also discoverable by unittest and pytest. R0_CANDIDATE can override the cwd.
@@ -559,10 +567,10 @@ class Fixture:
             yield
 
 
-def run_case(case, root, provenance, oracle):
+def run_case(case, root, provenance, oracle, *, fixture_factory=Fixture):
     from joulewise import agent_identity, measurement_liveness as live
     from joulewise.align import r0, r0_runner as runner
-    f = Fixture(case, root)
+    f = fixture_factory(case, root)
     default_root = root / "default-parent"
     default_root.mkdir()
     config = root / "config.json"
@@ -710,7 +718,7 @@ def restrict_worker(source, work):
     sys.addaudithook(audit)
 
 
-def worker(source, work, oracle):
+def worker(source, work, oracle, *, cases=scenarios, execute=run_case):
     os.chdir(work)
     sys.path.insert(0, str(source))
     # Prime stdlib locale/time-zone tables before the I/O boundary.
@@ -725,9 +733,9 @@ def worker(source, work, oracle):
         path.parent.mkdir(exist_ok=True, parents=True)
         path.write_text("synthetic provenance\n")
     result = {}
-    for c in scenarios():
+    for c in cases():
         with tempfile.TemporaryDirectory(dir=work) as tmp:
-            result[c.name] = run_case(c, Path(tmp), prov, oracle)
+            result[c.name] = execute(c, Path(tmp), prov, oracle)
     print(json.dumps(result, allow_nan=False))
 
 
@@ -767,13 +775,15 @@ def stage_oracle(candidate, destination):
         dest.write_bytes(raw)
 
 
-def lane(source, work, role):
+def lane(source, work, role, family=None):
     work.mkdir()
     command = [sys.executable, "-I", "-B", str(Path(__file__).resolve()),
                "--synthetic-worker", str(source), str(work), role]
+    if family:
+        command.append(family)
     env = {"HOME": str(work), "TMPDIR": str(work), "LC_ALL": "C", "TZ": "UTC",
            "PATH": os.defpath, "PYTHONDONTWRITEBYTECODE": "1"}
-    return json.loads(subprocess.check_output(command, cwd=work, env=env, text=True, timeout=240))
+    return json.loads(subprocess.check_output(command, cwd=work, env=env, text=True, timeout=900 if family else 240))
 
 
 def check_case(c, old, new):
@@ -890,8 +900,400 @@ class TestR0VsAdmittedL3(unittest.TestCase):
               f"invalid_oracle_controls={len(invalid)}", flush=True)
 
 
+# v2. Freeze the class vocabulary here. Deriving the generator or oracle from
+# the candidate's matchers would delete coverage when a matcher regressed.
+_AGENT_NAMES = (
+    ("claude", "/usr/local/bin"), ("codex", "/usr/local/bin"),
+    ("Claude", "/Applications/Claude.app/Contents/MacOS"),
+    ("Codex", "/Applications/Codex.app/Contents/MacOS"),
+    ("codex-aarch64-apple-darwin", "/fixture/bin"), ("claude-code", "/fixture/bin"),
+)
+_CHAIN_NAMES = tuple(
+    stem + suffix
+    for stem in ("powermetrics", "run_campaign", "run_night", "window-chain", "window_chain",
+                 "align_r1_rehearsal", "align_r0_checks", "run_b5_analysis", "chain")
+    for suffix in ("", ".py", ".sh", ".zsh")
+)
+_CPU_NAMES = (
+    "XProtect", "XProtectRemediatorMRT", "mds_stores", "mdworker", "mdworker_shared",
+    "mdbulkimport", "backupd", "photoanalysisd", "softwareupdated", "Spotlight", "mediaanalysisd",
+)
+
+
+@dataclass(frozen=True)
+class NameSighting:
+    name: str
+    group: str
+    table: str
+    spelling: str
+
+
+def name_scenarios():
+    entries = [("agent", name, path) for name, path in _AGENT_NAMES]
+    entries += [("chain", name, "/usr/bin" if name == "powermetrics" else "/fixture/scripts")
+                for name in _CHAIN_NAMES]
+    entries += [("cpu", name, "/fixture/system") for name in _CPU_NAMES]
+    # A short comm is already its own 16-byte form. Count each rendered row
+    # once per class and table, including when app and CLI basenames coincide.
+    seen = set()
+    for group, name, directory in entries:
+        mixed = "".join(ch.upper() if i % 2 else ch.lower() for i, ch in enumerate(name))
+        for case, cased in (("native", name), ("lower", name.lower()),
+                            ("upper", name.upper()), ("mixed", mixed)):
+            for width, comm in (("full", cased), ("comm16", cased[:16])):
+                forms = [("bare", comm), ("path", f"{directory}/{comm}"), ("paren", f"({comm})")]
+                if directory.startswith("/Applications/"):
+                    forms.append(("app-path-case", f"{directory.swapcase()}/{comm}"))
+                for form, value in forms:
+                    tables = ["accounting", "census_ps", "cpu_args"]
+                    if group == "agent":
+                        tables.append("pgrep")
+                    for table in tables:
+                        key = group, table, value
+                        if key in seen:
+                            continue
+                        seen.add(key)
+                        # Include the value so a failure is directly replayable.
+                        label = f"name/{group}/{table}/{case}/{width}/{form}/{value}"
+                        yield NameSighting(label, group, table, value)
+
+
+class SingleReadFixture(Fixture):
+    """The name is visible on precisely one read at 45 s. The PID then exits."""
+    def __init__(self, case, root, spec):
+        super().__init__(case, root)
+        self.spec = spec
+        self.previous_table = None
+        self.show = False
+        self.delivered = False
+
+    def processes(self):
+        rows = super().processes()
+        if self.delivered:
+            return rows
+        worker = self.spec.group == "cpu"
+        if self.show or (worker and self.now >= 5):
+            # CPU contaminants have independent, same-PID/start TIME evidence:
+            # zero at 15 s, 3 CPU-s by 30 s (>0.05 even across 45 s). The
+            # earlier executable is neutral. A quiet resident alone is not a
+            # positive case. Agents and chains require no CPU evidence.
+            text = self.spec.spelling if self.show else "helper"
+            cs = 300 if worker and self.now >= 30 else 0
+            # A transient named executable was born during this census.
+            # Only the CPU worker has the earlier neutral accounting history.
+            rows.append((PID, 5 if worker else 45, cs, text, text))
+        return rows
+
+    def run(self, argv, **kwargs):
+        from joulewise import prewindow
+        from joulewise.hazards import contention
+        if tuple(argv) == tuple(contention.PS_ARGV):
+            table = "accounting"
+        elif tuple(argv) == tuple(prewindow.PS_ARGV):
+            table = "cpu_args" if self.previous_table == "accounting" else "census_ps"
+        elif argv[0] == "/usr/bin/pgrep":
+            table = "pgrep"
+        else:
+            table = "other"
+        self.previous_table = table
+        self.show = self.now == 45 and not self.delivered and self.spec.table == table
+        try:
+            reply = super().run(argv, **kwargs)
+            if self.show:
+                # For pgrep, the real requested regex/options still determine
+                # whether the program receives the row. Record that separately.
+                self.delivered = True
+                self.visible = any(line.split()[:1] == [str(PID)] for line in reply.stdout.splitlines())
+        finally:
+            self.show = False
+        return reply
+
+
+@dataclass(frozen=True)
+class Overlap:
+    name: str
+    opening_ms: int
+    birth_offset_ms: int
+    wall_phase_ms: int
+    read_ms: int
+    exit_mode: str
+    level: str
+
+    @property
+    def midpoint_read(self):
+        return self.opening_ms + self.read_ms + 15_000
+
+    @property
+    def close(self):
+        # Only the initial dwell sleeps another 15 s after its midpoint argv
+        # read. All daemon deadlines are fixed by the virtual timer.
+        argv_cost = 200 if self.opening_ms == 0 and self.exit_mode == "short" else 0
+        return self.opening_ms + self.read_ms + 30_000 + argv_cost
+
+    @property
+    def first_absence(self):
+        return self.midpoint_read + 200 if self.exit_mode == "short" else self.close
+
+    @property
+    def birth(self):
+        # Offsets are relative to the reported window opening (the sample
+        # midpoint). The rate oracle separately uses the wider read bracket.
+        return self.opening_ms + self.read_ms // 2 + self.birth_offset_ms
+
+    @property
+    def birth_floor(self):
+        return (self.birth + self.wall_phase_ms) // 1000 * 1000 - self.wall_phase_ms
+
+    @property
+    def overlap_max(self):
+        # Largest possible intersection of the window and the lifetime. Use
+        # the beginning of the opening read, the *floor* of printed lstart,
+        # and the first confirmed absence. Actual fractional birth and exit
+        # times are available only to the synthetic process producer.
+        return self.first_absence - max(self.opening_ms, self.birth_floor)
+
+    @property
+    def cpu_growth_cs(self):
+        # 0.05 CPU-s/s == one centisecond per 200 ms. Strictly adjacent TIME
+        # quanta even when the exact threshold is not representable.
+        if self.level == "audit180":
+            return 180
+        if self.level == "above":
+            return self.overlap_max // 200 + 1
+        if self.level == "below":
+            return (self.overlap_max - 1) // 200
+        assert self.overlap_max % 200 == 0
+        return self.overlap_max // 200
+
+    @property
+    def window(self):
+        return (self.opening_ms + self.read_ms / 2, self.close)
+
+
+def overlap_scenarios():
+    # All seven sliding 30-second windows in a two-minute, 15 s cadence
+    # timeline. Add openings whose table-read bracket crosses a wall second.
+    for opening in range(0, 90_001, 15_000):
+        for phase, read in ((0, 0), (700, 400)):
+            offsets = {-1000, -750, -500, -250, -1, 0, 1, 100, 250, 400, 450, 750, 1000}
+            if read:
+                offsets.update((-read//2, read//2))
+            for offset in sorted(offsets):
+                for exit_mode in ("short", "long"):
+                    for level in ("below", "above", "equal"):
+                        name = f"overlap/open{opening}/birth{offset:+}/wall{phase}/read{read}/{exit_mode}/{level}"
+                        spec = Overlap(name, opening, offset, phase, read, exit_mode, level)
+                        if level != "equal" or spec.overlap_max % 200 == 0:
+                            yield spec
+    for birth in (250, 450):
+        yield Overlap(f"overlap/audit4-read-crosses-wall-second/birth{birth}ms",
+                      0, birth - 200, 700, 400, "long", "audit180")
+
+
+class OverlapFixture(Fixture):
+    def __init__(self, case, root, spec):
+        super().__init__(case, root)
+        self.spec = spec
+        self.open_read = False
+        self.mid_accounted = False
+        self.mid_args_done = False
+        self.trace = []
+
+    @property
+    def ms(self):
+        return round(self.now * 1000)
+
+    def wall_ns(self):
+        return EPOCH * 10**9 + (self.ms + self.spec.wall_phase_ms) * 10**6
+
+    def processes(self):
+        s = self.spec
+        rows = super().processes()
+        exit_ms = 20_000 if s.level == "audit180" else s.first_absence - 100
+        if s.birth <= self.ms < exit_ms:
+            # A resident can have CPU before the opening. Put it in both
+            # counters so a test that credits the whole last TIME is detectable.
+            prior = min(20, max(0, (s.opening_ms - s.birth) // 20))
+            cs = prior + (s.cpu_growth_cs if self.ms >= s.midpoint_read else 0)
+            lstart_s = (s.birth_floor + s.wall_phase_ms) // 1000
+            rows.append((PID, lstart_s, cs, WORKER, WORKER))
+        return rows
+
+    def run(self, argv, **kwargs):
+        from joulewise import prewindow
+        from joulewise.hazards import contention
+        s = self.spec
+        is_cpu = tuple(argv) == tuple(contention.PS_ARGV)
+        is_args = tuple(argv) == tuple(prewindow.PS_ARGV)
+        if is_args and self.mid_accounted and not self.mid_args_done and self.ms == s.midpoint_read:
+            self.mid_args_done = True
+            if s.exit_mode == "short":
+                self.now = (self.ms + 200) / 1000
+        begin = self.ms
+        reply = super().run(argv, **kwargs)
+        if is_cpu and begin == s.opening_ms and not self.open_read:
+            self.open_read = True
+            self.now = (begin + s.read_ms) / 1000
+            self.next_tick += s.read_ms / 1000
+        if is_cpu and begin == s.midpoint_read:
+            self.mid_accounted = True
+        if is_cpu or is_args:
+            row = next((line for line in reply.stdout.splitlines() if line.split()[:1] == [str(PID)]), None)
+            self.trace.append(("cpu" if is_cpu else "args", begin, self.ms, row))
+        return reply
+
+    def move(self, end):
+        # v1's ticks are instantaneous. Here the daemon may consume a fraction
+        # of its target tick before it parks. Never rewind the fixture clock.
+        if end >= self.now:
+            super().move(end)
+        if self.trace:
+            self.now = max(self.now, self.trace[-1][2] / 1000)
+
+
+def observed_overlap(spec, trace):
+    """Independent oracle using only returned rows and their read brackets."""
+    cpu = [r for r in trace if r[0] == "cpu"]
+    opening = next((r for r in cpu if r[1] == spec.opening_ms), None)
+    closing = next((r for r in cpu if r[1] == spec.close), None)
+    if opening is None or closing is None:
+        return None
+    within = trace[trace.index(opening):trace.index(closing)+1]
+    positive = [r for r in within if r[0] == "cpu" and r[3]]
+    if not positive:
+        return None
+    last = positive[-1]
+    absent = next((r for r in within[within.index(last)+1:] if r[3] is None), None)
+    if absent is None:
+        return None
+
+    def counter(row):
+        minutes, seconds = row[3].split()[-2].split(":")
+        whole, cents = seconds.split(".")
+        return (int(minutes)*60 + int(whole))*100 + int(cents)
+
+    # lstart contains seconds only. An identity absent in the opening table
+    # can start within that read bracket, even if its printed second predates
+    # the *end* of the read. A resident supplies its actual opening counter.
+    stamp = " ".join(last[3].split()[2:7])
+    birth_floor = (int(datetime.strptime(stamp, "%a %b %d %H:%M:%S %Y")
+                       .replace(tzinfo=timezone.utc).timestamp()) - EPOCH)*1000 - spec.wall_phase_ms
+    if not opening[3] and birth_floor + 1000 <= opening[1]:
+        raise FixtureError("lstart is incompatible with absence in the opening table")
+    cpu_cs = counter(last) - (counter(opening) if opening[3] else 0)
+    duration = min(closing[2], absent[2]) - max(opening[1], birth_floor)
+    return cpu_cs, duration
+
+
+def v2_trial(spec, root, prov, oracle):
+    captured = []
+    if isinstance(spec, NameSighting):
+        typ, end = SingleReadFixture, 45
+    else:
+        typ, end = OverlapFixture, spec.close / 1000
+
+    def factory(case, directory):
+        fixture = typ(case, directory, spec)
+        captured.append(fixture)
+        return fixture
+
+    result = run_case(Case(spec.name, end=end), root, prov, oracle, fixture_factory=factory)
+    fixture, = captured
+    # The historical lane does not have all of the daemon's observations.
+    # Preserve its real verdict for the differential, never invent a sample.
+    summary = {k: result[k] for k in ("rc", "status", "published", "refused", "guard_count", "flags",
+                                      "refused_at", "accepted", "work_started", "judged_windows",
+                                      "report_intervals", "recorded")}
+    if isinstance(spec, NameSighting):
+        summary.update(delivered=fixture.delivered, visible=getattr(fixture, "visible", False))
+    else:
+        witness = observed_overlap(spec, fixture.trace)
+        summary.update(witness=witness, reached=any(
+            abs(a*1000-spec.window[0]) < .001 and abs(b*1000-spec.window[1]) < .001
+            for a, b in result["judged_windows"]))
+        if not oracle and (witness is None or not summary["reached"]):
+            summary["trace"] = [(k, a, b, bool(row)) for k, a, b, row in fixture.trace]
+    return summary
+
+
+def v2_errors(spec, old, new):
+    errors = []
+    refused = new["rc"] == 2 and new["status"] != "pass" and not new["published"]
+    if isinstance(spec, NameSighting):
+        if not new["delivered"]:
+            errors.append("target table was never queried")
+        elif not new["visible"]:
+            errors.append("requested query missed the synthetic name")
+        if not (refused and (new["refused"] or new["guard_count"])):
+            errors.append("single-table sighting did not refuse with exit 2")
+    else:
+        witness = new["witness"]
+        if witness != [spec.cpu_growth_cs, spec.overlap_max] or not new["reached"]:
+            errors.append(f"target window or fixture witness missing: {witness}, {new.get('trace')}")
+        else:
+            above = witness[0]*200 > witness[1]
+            start, end = spec.window
+            expected_start = datetime.fromtimestamp(
+                EPOCH + (spec.birth_floor+spec.wall_phase_ms)//1000, timezone.utc
+            ).strftime("%a %b %d %H:%M:%S %Y")
+            def is_target(a, b):
+                return abs(a*1000-start) < .001 and abs(b*1000-end) < .001
+            flags = {(pid, identity) for a, b, pid, identity in new["flags"] if is_target(a, b)}
+            if flags != ({(PID, expected_start)} if above else set()):
+                errors.append(f"target flags={sorted(flags)}, expected worker flag={above}, "
+                              f"{witness[0]} CPU centiseconds / {witness[1]} ms")
+            if above and flags and not any(is_target(a, b) for a, b in new["report_intervals"]):
+                errors.append("terminal report lost the target interval")
+            if above and not refused:
+                errors.append("above-threshold evidence allowed publication")
+    if new["recorded"] != new["guard_count"]:
+        errors.append("terminal report lost contention flags")
+    if (old["refused"] or old["flags"]) and not refused:
+        errors.append("lost L3 refusal or contention flag")
+    return errors
+
+
+def generated_worker(source, work, oracle, family):
+    cases = name_scenarios if family == "names" else overlap_scenarios
+    worker(source, work, oracle, cases=cases, execute=v2_trial)
+
+
+class TestGeneratedR0Families(unittest.TestCase):
+    def test_generated_families(self):
+        candidate = Path(os.environ.get("R0_CANDIDATE", Path.cwd())).resolve()
+        with tempfile.TemporaryDirectory(prefix="r0-generated-") as tmp:
+            root = Path(tmp).resolve()
+            admitted = root / "admitted"
+            stage_oracle(candidate, admitted)
+            for family, generate in (("names", name_scenarios), ("overlap", overlap_scenarios)):
+                cases = list(generate())
+                labels = {s.name for s in cases}
+                self.assertEqual(len(cases), len(labels))
+                old = lane(admitted, root / (family+"-l3"), "admitted", family)
+                new = lane(candidate, root / (family+"-r0"), "candidate", family)
+                self.assertEqual(set(old), labels)
+                self.assertEqual(set(new), labels)
+                failed = unresolved = 0
+                for spec in cases:
+                    r = new[spec.name]
+                    errors = v2_errors(spec, old[spec.name], r)
+                    if isinstance(spec, Overlap) and (not r["reached"] or
+                            r["witness"] != [spec.cpu_growth_cs, spec.overlap_max]):
+                        unresolved += 1
+                    if errors:
+                        failed += 1
+                        with self.subTest(family=family, scenario=spec.name):
+                            self.fail(" | ".join(errors))
+                print(f"v2 family={family} scenarios={len(cases)} failed={failed} "
+                      f"passed={len(cases)-failed} incomplete_window_witnesses={unresolved}", flush=True)
+
+
+
 if __name__ == "__main__":
-    if sys.argv[1:2] == ["--synthetic-worker"]:
+    if sys.argv[1:2] == ["--synthetic-worker"] and len(sys.argv) == 6:
+        generated_worker(Path(sys.argv[2]).resolve(), Path(sys.argv[3]).resolve(),
+                         sys.argv[4] == "admitted", sys.argv[5])
+    elif sys.argv[1:2] == ["--synthetic-worker"]:
         worker(Path(sys.argv[2]).resolve(), Path(sys.argv[3]).resolve(), sys.argv[4] == "admitted")
     else:
         unittest.main()
