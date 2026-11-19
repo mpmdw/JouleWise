@@ -36,8 +36,11 @@ eligible captured member contributes no S score.
 | Revised spec private test head and tree | `1c70f484fb08e8df93253edc65857d91aada86cb`, `ff53b57846248a43f91f4361a814769d0ef2c675` |
 | Astra v2 spec freeze | `a4b1d2a4cfd706f883a5aaf02187a18864a14926` (draft replay `826c85fab`) |
 | Astra v2 private test head and tree | `7c0f18ce9f915435d1883d6cea79ab651d03e38c`, `54aee772122934db71f0a8f54dcb6a97e5701603` |
-| Caller SHA-256 for signatory | `48ccae14cd5222fa8e2e6286cc5564e14c00e67637cf926fbfdd4ef5e261c169` |
-| Draft code head and tree before report | `f9096ecb77f758d8a7f5b566b3e12c87db6a10f0`, `6f5fc27a29beafe5f7147d9ca1f69d8122b84c02` |
+| Round-ten regression freeze | `578a67778a74802827c4c8b02e6e115a9d549700` (draft replay `4cb201e15`) |
+| Round-ten private test head and tree | `716d74a7176e8db339397257cfaef2577e90a1c0`, `7a38f48a10fbc41d787b0f626093361d09f55362` |
+| Caller SHA-256 for signatory | `69ff6c01a8f20caaba46227bec6f0426c92e13621c797a0c7a6b2a2570055655` |
+| Shared validator SHA-256 for signatory | `27b1aef5862b5865c2a5ee20c935270ae3943bdbf8d7b2957c2c188e9444513c` |
+| Draft code head and tree before report | `1824b484bea34f215fdec89018e0abe669ad3668`, `fb02be0e2de6592b683ac0e28bf33ea31a6b583f` |
 
 At the initial freeze the CLI tests failed with no script. At the RL-185
 freeze both stored worlds reached the provisional provider and refused.
@@ -67,8 +70,9 @@ the dependency landings. [Draft PR #836](https://github.com/mpmdw/JouleWise/pull
 | CLI and guard | Caller `build_report`, `main`, PR #813 `v4_desk_seal.py:351,418` and `rl176.py:611,622,633` | Snapshot the guard's named metadata, call the real guard and use the literal freeze flag in the scorer. |
 | Registration and history | Caller `require_executing_bindings`, `bound_history`, `final_roster`, `ReleasedInputs`, `v4_registration.py` `validate_receipt` and `require_registration`, and `scripts/align_v4_series.py:220,231,239,510` | Verify the C1 predecessor's receipt digest, verify the executing source inventory, and join the authorized history to the frozen manifest. |
 | Final records and A9 | PR #826 `scripts/align_v4_next_arm_packet.py:237,306,395` and `light_triage.py:79,163` | Use the shared RL-183b finality, including successor `previous_final`, and independently preserve final per-member reasons. |
-| Stored rows and complete manifest | Caller `manifest_inputs`, :343,417,434,474,616,673,692, `read_member`, PR #787 `s_rows.py:193,751,774`, PR #813 `workload.py:893` | Classify protected sources and aliases from the manifest. Verify directory membership, unprotected byte bindings, internal links, and Git-mirror targets. Pass #787's row tuple directly. |
-| Roster, DC and coverage | Caller :718,886,944,1053, `verify_score_inputs`, `verify_s_coverage`, PR #813 `rl176.py:200,291,352,379,527,550,628` | The eligible benign provider verifies its own DC bytes. Require the complete ledger and check registered S decode and fit contributor identities before any comparison. Check ledger completeness and the report's counts before publishing. |
+| Finalized closure precondition | Caller :628,650,762, `harvest_offload.py:50,515` | Run the shared validator on the record-bound closure and collect the live identity of every declared mirror, including mirrors with no linked targets. A refusal stops the release before ledger verification and scoring. |
+| Stored rows and complete manifest | Caller `manifest_inputs`, :343,417,434,474,669,736, `read_member`, PR #787 `s_rows.py:193,751,774`, PR #813 `workload.py:893` | Classify protected sources and aliases from the manifest. Verify directory membership, unprotected byte bindings, internal links, and Git-mirror targets. Pass #787's row tuple directly. |
+| Roster, DC and coverage | Caller :762,932,990,1099, `verify_score_inputs`, `verify_s_coverage`, PR #813 `rl176.py:200,291,352,379,527,550,628` | The eligible benign provider verifies its own DC bytes. Require the complete ledger and check registered S decode and fit contributor identities before any comparison. Check ledger completeness and the report's counts before publishing. |
 
 ## Resolved interfaces under RL-185 §3
 
@@ -490,6 +494,46 @@ The caller and two test modules were byte-matched between the private test
 checkout and the release-only draft. The ten issued R1 source blobs still match
 W1. The #813, #787, and #826 landings and exact-head integrated CI remain gates.
 [Draft CI](https://github.com/mpmdw/JouleWise/pull/836/checks)
+
+## Round-ten finalized-validator precondition
+
+The supplied synthetic reproducer found four false releases at the previous
+head. The existing harvest closure validator refused a missing declared
+mirror, worktree file-mode drift, an advanced checkout, and a missing
+interpreter. The CLI exited 0 and published in each case. The missing-mirror
+world had no mirror links, so checking only linked Git blob targets could
+never catch it.
+
+`716d74a71` (draft `1824b484b`) passes the exact record-bound closure to the
+existing validator before the release verifies directory membership, reads
+members, or scores. The original checkout identity probe lives in the shared
+harvest module and keeps the same harvest CLI entry points. For release, the
+validator calls the exact-path reader for unprotected bytes. Its path guard
+refuses protected link scopes before inspection. It defers separately listed
+protected byte inputs via the existing transport parameter. Those entries
+still need verification by the authorized benign provider before
+publication. The release check also refuses to start the checkout identity
+probe when Git would inspect a declared protected tracked file or directory.
+The existing harvest pack and unpack route keeps its default behavior.
+
+| Regression | Result |
+|---|---|
+| `test_declared_mirror_missing_without_links_refuses_release` | PASS. The intact mirror without links publishes. Removing the mirror exits 1 and leaves no report. |
+| `test_finalized_mirror_refuses_mode_drift_advanced_head_and_missing_interpreter` | PASS for file-mode drift, an advanced checkout, and a missing interpreter. Each exits 1 and leaves no report. |
+| `test_finalized_validator_refusal_precedes_ledger_and_scoring` | PASS. The real bound closure reaches the validator. Injecting a refusal stops the inventory check and member loader before scoring. |
+| Astra-authorized v2 module | PASS. All 254 named cases passed with zero skips across the sharded run and named replays of the same candidate. The intact control kept 176 contributors, 22 strata, 11 windows, and 101 of 154 wins. |
+
+The v2 blob retains SHA-256
+`1bbd2846bf5ccb47d87f0e85e10e6fd4b067816b7352c7204c15f3b7aa17a8e7`.
+All nine focused release tests passed, including both stored S decision worlds
+and the protected-open observer. The pinned row, scorer, and registration
+suites passed 94 tests with four opt-in skips. The wider 206-test harvest
+review run recorded 192 passes, four skips, and ten fixture setup errors.
+All ten errors reproduced on the pre-change tree `34fa9a81a` because the
+staged next-arm code lacks the legacy fixture constant
+`FINALIZED_MANIFEST_SCHEMA`.
+All ten issued R1 source blobs still match W1. The dependency landings and
+exact-head integrated CI remain gates. [Draft CI](https://github.com/mpmdw/JouleWise/pull/836/checks)
 
 ## Executed checks and Tier 2 dispositions
 
