@@ -1052,6 +1052,19 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 
 <!-- RUN_STATE TYPED ITEMS: newest first. Add with scripts/run_state_add.py; never edit by hand. -->
 
+460. **AIR PAUSED (owner) again: MBP continues alone; R1 finished (item 459), no re-arm; fillers per 447/458; no qual issue; no W1-line merges**
+
+```item
+{"expires_epoch_s": null, "issued_epoch_s": 1795120036, "number": 460, "owner": "magistrate", "schema": "joulewise.run_state_item.v1", "sets": [], "status": "ISSUED", "supersedes": []}
+```
+
+- **AIR PAUSED** (owner, Thu 19 Nov ~12:30 PST): the laptop is moving again. The lead is offline, the SSD is ejected, and every Air lane and agent is stopped. The MBP never stops for the Air (item 388). Continue the ladder on your own.
+- **R1 is finished** (item 459: TYPICAL-CASE through the lead's 3(a) release). Do not re-arm R1 and issue no READY.
+- **Fillers** follow items 447 and 458, two-leg spans where the worst case fits. Hold to items 423, 431, 442 and 443: the maintenance marker; kill census blockers; never attest groups absent over a "not proven stopped" receipt; the case-insensitive agent census before every arm.
+- **Qualification:** issue no qual items. Freeze 2 is not in effect, and its Air-side work is paused. The lead issues qual items on return.
+- **No W1-line merges** while the lead is away. The W1 line stays at `b2e01464d`.
+- **Item 446 is done**, and nothing else waits on the Air.
+
 459. **Lead: Air back; R1-RERUN resolved TYPICAL-CASE by the lead's RL-122 3(a) planning release plus count backfill (no third READY, R1 finished); W1-line hold lifted; item 446 done by Route B, all 11 look trees verified on the Air**
 
 ```item
