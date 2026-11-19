@@ -21865,3 +21865,164 @@ Rows for the lead to commit to `RULES.json`. Owner is `research_lead` for rows 1
 **Rows closed or changed by this ruling.** Gate-ledger row 4 for PR #828 is met. RL-186 rows 6 and 8 are read with rows 9 to 12. RL-181 row 8 and RL-183 row 14 are read with row 1's third clause. The C1 resolver's items 1 and 2 and the figure format of item 3 are answered; its items 4 and 5 are the owners'. The ctl-01 resolver's item 1 and the floor, unit and CPU parts of item 2 are answered; the rest of items 2 to 4 stay with RL-186 2.4 and the lead.
 
 **What comes back to me.** A numeric leaf that refuses as `unbound_numeric`, by name. A recompute owner who cannot emit `[num, den]`. A ctl leg whose view fails a check on a native run, with the check's name and no value. A runner whose episode ends before its recovery does. The `lm-inst-01` output, for the freezing line. A read at which doubling twice leaves the lowest dose under the floor. The four final manifests already owed. Nothing else in this ruling returns.
+
+# RL-188. `lm-qual-01`'s tails take the produced-token midpoint (P + 3653.5 and P + 3111): R-3 governs and the registered formula is corrected, by a free re-registration if no qualification receipt exists and by this disposition alone if one does. Register row 3's test is the word, eight fixed fields and the decision numbers, not the whole file. Under three days the private estimate and interval print as R-11 has them. For the description looks a rail crossing is stamped at the leading edge of its interval and a DC-in crossing is interpolated; the recovery search uses contiguous 10 s windows from sampling start
+
+Research lead (Fable 5.2), Wed Nov 18 16:59 PST 2026 (from `date`). Answers the dispatcher's five items. RL-181 and RL-187 stand except where "Amends" says otherwise.
+
+**Cites.** `RLD:n` is `RESEARCH-LEAD-DECISIONS.md` on the audit branch at `c4b4f4265`. `M:n` is `lm-qual-01.manifest.json` on main at `c07c7a75e`. `FI:n` is `joulewise/cadence_looks/fit_interim.py` at PR #795 head `eb449af64`. `OD:n` is `/Volumes/JW-EXT/scratch/qual-oracle/DERIVATION.md`. `HT:n` is `/Volumes/JW-EXT/scratch/d-desc-looks-suite/HAND-TABLES.md`. `SS:n` is `/Volumes/JW-EXT/scratch/d-qual-scorer-suite/SCORER-SPEC.md`.
+
+**Read.** The builder's escalation, both FOR-FABLE files, the oracle derivation and the hand tables, in full. RL-181 §1 and §2.4 and its Register, RL-166a R-2, R-3 and R-11, RL-175 D.4 and RL-187 §3.7. `M:341-364`. `FI:308-333` by grep, with the R-3 mutant.
+
+**Not checked.**
+- Whether a qualification receipt exists. Item 1 is ruled for both cases, and the lead reads which one holds from the committed span records.
+- `qual_score.py`, the two test suites and the step-3 loader. I ran nothing.
+- No SSH. No custody, energy, power, meter, transcript, slot, hazard, sealed or restricted file was opened.
+
+**Not done.** No commit, push or comment. The only file written is this one.
+
+---
+
+## 0. The answers
+
+| # | Answer | In one line |
+|---|---|---|
+| A1 | **R-3 governs** | c = P + (`first_stamp` + 1 + `last_stamp`) / 2: P + 3653.5 and P + 3111. This ruling is the formal disposition |
+| A2 | **Not the whole file** | The word, seven other fields and the private decision numbers are unchanged; three roster-derived fields follow their own sources |
+| A3 | **Numbers** | With 3 or more legs on 2 days, the estimate and the two-day interval print in custody. The oracle's world 3 is right |
+| B1 | **Leading edge for a rail, interpolation for DC-in** | Onset lag 0.50 s on the planted trace |
+| B2 | **Contiguous windows from sampling start** | (19, 19, 19) s |
+
+---
+
+## 1. The tail's c
+
+**The registered sentence contradicts itself.** `scoring.tail_rule` says "Keep the frozen integration and count clock" and then gives "c = P + (first_stamp + last_stamp) / 2" (`M:363`). `tail_segments` sets `first_stamp` to 3583 and 3071, the closing stamps of the last full blocks (`M:351-360`). So the formula gives P + 3653 and P + 3110.5. The frozen count clock gives P + 3653.5 and P + 3111.
+
+**The frozen clock governs, for three reasons.**
+- R-3 defines c as the mean context over the tokens the interval produces, P + (`edge_lo` + 1 + `edge_hi`) / 2 (RLD:15990). The coefficients were fitted on that c.
+- The frozen code already scores a long leg's own-prefix tail on the same edges with `tok_first` 3584 (`FI:333`), which is P + 3653.5. A native short leg scored at P + 3653 would differ from a prefix with the same stamps. RL-181 §1.2 requires one scorer for both (RLD:19338).
+- The independent oracle derived 3653.5 and 3111 from the brief, without sight of the scorer (`OD:91-92`).
+
+**The mistake is mine in part.** RL-181 §1.2 wrote "c = P + (first + last) / 2" beside the stamps 3,583 and 3,723 (RLD:19338). "First" there meant the first produced token, as in R-3's tail clause. The registration copied it as `first_stamp`.
+
+**The disposition.** The correct formula is:
+
+> n = gaps and c = P + (first_stamp + 1 + last_stamp) / 2.
+
+- **If no qualification receipt exists when the fix reaches main:** re-register. Only that one string in `tail_rule` changes. This is a free pre-receipt re-registration by RL-181 §1.0 (RLD:19303), on the same route as `59557d6e8`. It needs no further ruling. The ledger row takes the new sha256, and every place that quotes the old digest (`SS:9`) is updated.
+- **If a receipt exists, or the fix cannot land before the first arm:** the registered bytes stand and no arm waits. The final manifest still equals the registration outside the `PENDING:CODE` slots. The scorer uses the formula above. The lead adds one entry to the public deviation log, quoting the registered sentence, the formula above and this ruling. The look's report cites the entry.
+
+**Why this is allowed after a receipt.** RL-181 §1.0 sends such a change to me (RLD:19303), and this is that referral.
+- The tail feeds the L-pair prints only. The word does not use it (RLD:19340).
+- The correction is toward a rule dated before any qualification leg existed (RL-166a) and toward the clause the registered sentence itself names.
+- No qualification energy has been read. The predicted tails differ by a1 × n / 2, which is 70 × a1 and 39.5 × a1 joules.
+
+**In both cases** the scorer computes c from the segment's two edges, as the frozen code does. `tail_segments` is unchanged. The scorer build does not wait for the re-registration.
+
+---
+
+## 2. Register row 3's test
+
+**The literal sentence was wrong.** Excluding an L leg changes the roster, so `included_legs`, `stage1_sha256` and `commit` must change (RLD:19360, `SS:40-52`). What row 3 protects is that the decision does not move.
+
+**The invariant.** Take the base world, and the 12 worlds that each exclude one included L leg through a blind inclusion rule. For each of the 12:
+
+> 1. `PUBLIC.json` has the same eleven keys as the base.
+> 2. Eight fields are byte-equal to the base: `look_id`, `manifest_sha256`, `coefficients_sha256`, `development_config_sha256`, `qualification_config_sha256`, `qualified_qualification`, `type_m_residual`, `stage2_error`.
+> 3. `included_legs` is the base value less 1. `stage1_sha256` and `commit` equal that world's own committed sources and differ from the base.
+> 4. In `scores.json`, the decision series is equal to the base as exact numbers: the estimate, both interval ends, SD_long, SD_short, `n_legs`, `n_days` and each leg's d.
+
+- **Why clause 4.** A planted word far from ±0.10 would stay put even if an L leg leaked into the series. The numbers would not.
+- The suite's plan in FOR-FABLE is accepted with clause 4 added. The field contract of RL-181 §1.4 does not change.
+
+---
+
+## 3. Fewer than three days
+
+**The private values follow R-11, whatever the word is** (RLD:16044). The word follows RL-181 §1.1 (RLD:19322). The two are separate.
+
+| Included legs in the series | Days | Word | `estimate` | `ci90` |
+|---|---|---|---|---|
+| Under 3 | any | `not_evaluable` | null | null |
+| 3 or more | 1 | `not_evaluable` | number | null |
+| 3 or more | 2 | `not_evaluable` | number | number, with t(0.95, 1) |
+| 3 or more, an SD not above 1e-12 J | any | `not_evaluable` | null | null |
+| 3 or more | 3 or more | `yes` or `no` | number | number |
+
+- The oracle's worlds 3 and 4 are correct as written (`OD:53-76`).
+- These values are in `scores.json` only. `PUBLIC.json` carries the word and no number.
+- `n_days` is always the count of distinct days among the included legs.
+
+---
+
+## 4. The description looks
+
+Both conventions fill RL-181 §2.4's table (RLD:19423-19425). They are fixed before any F2 or stability energy is read. They answer items 1 and 2 of the executor's resolver (`/Volumes/JW-EXT/scratch/pl-d-desc-looks-executor/resolve-1/FINAL-MESSAGE.md`), which asks the same questions as the suite's FOR-FABLE. Its item 3 is the lead's and is not ruled here.
+
+| Resolver question | Ruling | Value the spec seat binds in `description-edge-ruling.json` |
+|---|---|---|
+| (a) Rail crossing, for the onset and the decode-end lag: interval start or row-end stamp? | **The start of the first qualifying interval** | Onset lag 0.50 s. Rail decode-end crossings at u = 8.25 and 8.50 s |
+| (b) DC-in crossing: interpolated time or first qualifying sample? | **The linearly interpolated threshold time** | Decode-end crossing at u = 8.5078125 s, not 8.55 s. Lags 0.2578125 and 0.0078125 s |
+| (c) After the first complete 10 s window fails: every 10 s from sampling start, or every observed sample start? | **Every 10 s from sampling start** | (19, 19, 19) s for GPU rail, rail sum and DC-in on inst-02/L001 |
+
+The same two crossing rules apply to every crossing in both looks: the 10 %, 50 % and 90 % points of the rise as well as the two lags.
+
+### 4.1 The time of a crossing
+
+**Each channel is read as the function its energy is integrated from** (RLD:19413): constant over each rail interval, linear between DC-in samples. The spec seat's recommendation is adopted.
+
+> **Threshold.** θ = hold mean + f × level, with f and the level as RL-181 §2.4 gives them for each print.
+>
+> **Rail (GPU rail, rail sum).** A rise crosses θ at the **start time** of the first interval in the search span whose mean is at or above θ. A fall crosses at the start time of the first interval whose mean is at or under θ. The row's end stamp is never used as the crossing.
+>
+> **DC-in.** Let k be the first sample in the search span at or above θ on a rise (at or under θ on a fall), with sample k − 1 also in the span. The crossing is t(k−1) + (θ − p(k−1)) / (p(k) − p(k−1)) × (t(k) − t(k−1)).
+>
+> **Already across.** If the first interval or sample of the search span already qualifies, the crossing is null with the reason `crossed_before_span`. Every rise or lag that uses it is null.
+>
+> **Resolution.** Each value still prints its channel's sample period. A lag prints both periods.
+
+- **Why the leading edge.** If interval k is the first whose mean reaches θ on a monotone rise, the true crossing lies between the start of interval k − 1 and the end of interval k. The start of interval k is the middle of that range. The end stamp is its upper limit, so it is late by up to a period on every rail and makes every DC-in lag too small.
+- **On the planted trace:** the rails cross at 0.50, 0.75 and 1.00 s, DC-in at 0.85, 1.25 and 1.65 s. The onset lag is **0.50 s**. The decode-end fall is at u = 8.5078125 for DC-in, and the lags are 0.2578125 and 0.0078125 s (`HT:54-56`).
+- The search spans and the "over 1 s" rule are unchanged.
+
+### 4.2 The recovery search
+
+**Contiguous windows.** The spec seat's recommendation is adopted.
+
+> The anchor a is the latest first observed time among the look's channels on that leg (a rail's first interval start, DC-in's first sample). The windows are [a + 10j, a + 10(j + 1)) for j = 0, 1, 2, … All channels use the same windows. The return time is the start of the first window whose mean is at or under hold mean + 2 × the hold's 10 s SD, less the origin of RL-175 D.4. A window holding a gap over U1 neither passes nor fails; it is skipped and counted. If window 0 passes, the value is "under" a − origin, censored, as before. The search ends with the last complete window before the hold's end. If none passes, the value is "not returned", with the last window's end less the origin as its bound. Each value prints 10 s as its resolution.
+
+- **Why not every sample start.** The threshold uses the hold's SD of contiguous 10 s means (RLD:19417), so the window being compared should be the same kind. Overlapping starts give many tries at one threshold and return early by chance. They also depend on each channel's sample grid.
+- **Downstream.** RL-187 §3.7 takes five times the largest return time, within 120 to 600 s (RLD:21800). A value late by up to 10 s lengthens a rest by under a minute. An early one shortens it.
+- **On inst-02/L001:** (19, 19, 19) s (`HT:58`).
+
+---
+
+## Amends
+
+- **RL-181 §1.2:** "c = P + (first + last) / 2" reads as the first and last produced tokens, which is c = P + (first stamp + 1 + last stamp) / 2.
+- **RL-181 Register row 3:** its Test cell is replaced by row 2 below.
+- **RL-181 §2.4:** the "Onset lag and rise", "Decode-end lag" and "Return after warm-up" rows are read with section 4.
+- **Stand unchanged:** RL-181 §1.0, §1.1 and §1.4; R-11; RL-187 §3.7.
+
+**Blind status.** Blind. No qualification, F2 or stability energy has been read under any look. Nothing sealed or measured was opened for this ruling. Section 1 corrects a formula toward a rule fixed on 2026-11-17 or earlier, in a print that carries no word.
+
+**For Ed, plainly.** "Five small definitions for the builders. One was a half-token slip in the written rules for the three test days. It affects a side table only, not the pass or fail. It is fixed in the open, by re-filing the rules if no test run has finished, or by a logged note if one has. Nothing here needs machine time or holds a run."
+
+---
+
+## Register
+
+Rows for the lead to commit to `RULES.json`. Owner is `research_lead` for all five.
+
+| # | Clause | Class | Protects | Scope | Ends | Test |
+|---|---|---|---|---|---|---|
+| 1 | A tail's c is P + (`first_stamp` + 1 + `last_stamp`) / 2. The registration is corrected in that one string before the first receipt, or else stands with a public deviation entry citing RL-188 (1) | VALIDITY (prereg) | A native short leg and a prefix on the same stamps get one prediction | `lm-qual-01`, `lm-transfer-01` | The paper's data release | `test_qual_l_partial_blocks_same_scorer` at 3653.5 and 3111; the ledger sha or the deviation entry |
+| 2 | Excluding any one included L leg leaves the word, seven other named fields and the private decision numbers unchanged; `included_legs` falls by 1; `stage1_sha256` and `commit` match that world's sources (2) | VALIDITY | The word does not move with an L exclusion | `lm-qual-01` | The paper's data release | The 12-world exclusion fixture, clauses 1 to 4 |
+| 3 | The private estimate and interval follow R-11 whatever the word: both numeric on 2 days with 3 or more legs, interval null on 1 day, both null under 3 legs or at an SD floor (3) | VALIDITY | The word's gate and the private print are not confused | `lm-qual-01` | The paper's data release | `test_qual_fewer_than_three_pair_days`, `test_qual_undefined_interval` |
+| 4 | A rail crossing is the start of the first qualifying interval; a DC-in crossing is the linear interpolant between the two bracketing samples; a span that starts across gives null (4.1) | VALIDITY | Lags are defined before their energy is read | `lm-inst-01`, `lm-stab-*` | The paper's data release | `test_instrument_edges_and_origins` at 0.50 s, 0.2578125 s and 0.0078125 s |
+| 5 | The recovery search uses contiguous 10 s windows from the latest channel start, shared by all channels; a gapped window is skipped and counted (4.2) | VALIDITY | The return time that sets ctl-01's recovery | `lm-inst-01` | The paper's data release | `test_instrument_edges_and_origins` at (19, 19, 19) s |
+
+**Rows closed or changed by this ruling.** RL-181 row 3's Test cell is replaced by row 2. RL-181 rows 4 and 10 are read with rows 1, 4 and 5.
+
+**What comes back to me.** A re-registration that changes anything but the one string. A scorer or loader that cannot give an interval's start time. Nothing else in this ruling returns.
