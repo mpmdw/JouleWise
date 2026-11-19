@@ -38,6 +38,7 @@ _CHAIN_NAMES = tuple(stem + suffix
                                   "align_r1_rehearsal", "align_r0_checks", "run_b5_analysis", "chain", "powermetrics")
                      for suffix in ("", ".py", ".sh", ".zsh"))
 _CONTAMINANT_NAMES = tuple(name.casefold() for name in prewindow.CONTAMINANTS.split("|"))
+_ADMITTED_CONTAMINANTS = re.compile(prewindow.CONTAMINANTS, re.I)
 _CPU_LIMIT_NUM, _CPU_LIMIT_DEN = prewindow.CPU_LIMIT_PERCENT.as_integer_ratio()
 
 
@@ -119,7 +120,10 @@ def _require_clear_sighting(pid, command, receipt, *, argv=None, line=None):
         if matched:
             receipt.setdefault(field, []).append(line or f"{pid} {command}")
             raise Refused(f"machine occupied or census indeterminate: {field}, pid {pid} process {argv or command}")
-    return any(_matches_process_name(name, _CONTAMINANT_NAMES, prefixes=True) for name in names)
+    # The admitted census also matches within executable names and argv
+    # paths. Inspect the original spelling to retain directory components.
+    return (any(_matches_process_name(name, _CONTAMINANT_NAMES, prefixes=True) for name in names)
+            or _ADMITTED_CONTAMINANTS.search(argv or command) is not None)
 
 
 @dataclass(frozen=True)
