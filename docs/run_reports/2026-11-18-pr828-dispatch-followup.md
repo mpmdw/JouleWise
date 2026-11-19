@@ -53,10 +53,27 @@ both the manifest and `--registration`. Every case returned status 2 and
 the fixed notice with zero calls to `Path.read_bytes`. No VERIFIED HIGH
 remained. Both rounds used synthetic inputs and public source metadata.
 
+## Cold audit round one
+
+The cold audit blocked `7fccc17790d67f98a195d21e6b4c1a2ae6723c5b` on one
+VERIFIED HIGH. Valid JSON with an extra key exposed that key on stderr when
+the dispatcher refused either a candidate or a registration. Sol reproduced
+the leak with top-level and nested keys across the v2 routes and with a
+synthetic v1 validator that emitted a refused key on both streams. The three
+regressions failed all 13 cases before the fix.
+
+Commit `69dd859f3a828c8f9046584c2fce9adac350f648` makes the CLI emit one
+fixed notice for untrusted validation exceptions and delegated v1 failures.
+Dispatcher guards can emit their fixed notices. The final placeholder guard
+uses fixed text for both placeholder forms, and the outer failure path uses
+the same refusal policy. Qualification validator bytes remain pinned. The
+success paths and exit status 2 on refusal are preserved. Return the final
+head to the cold reviewer for execution and a recorded verdict.
+
 ## Exact-head cold pass
 
-The fresh Fable 5.2 seat executes the following synthetic checks on the
-final PR head in a private scratch directory. Record the reviewed SHA,
+The Fable 5.2 seat executes the following synthetic checks on the final PR
+head in a private scratch directory. Record the reviewed SHA,
 execution results, and verdict in the PR body to keep the evidence bound
 to that head.
 
@@ -64,6 +81,9 @@ to that head.
 python3.13 -B -m unittest -v \
   tests.test_cadence_manifest_dispatch.VariantContractTests.test_cli_candidate_decode_refusal_is_fixed \
   tests.test_cadence_manifest_dispatch.VariantContractTests.test_cli_registration_decode_refusal_is_fixed \
+  tests.test_cadence_manifest_dispatch.VariantContractTests.test_cli_candidate_schema_refusal_is_fixed \
+  tests.test_cadence_manifest_dispatch.VariantContractTests.test_cli_registration_schema_refusal_is_fixed \
+  tests.test_cadence_manifest_dispatch.VariantContractTests.test_cli_legacy_schema_refusal_is_fixed \
   tests.test_cadence_manifest_dispatch.VariantContractTests.test_restricted_cli_paths_refuse_before_either_file_is_opened \
   tests.test_cadence_manifest_dispatch.VariantContractTests.test_qualification_bytes_unchanged \
   tests.test_cadence_manifest_dispatch.TransferManifestTests.test_missing_interim_inputs_are_reported_as_skips
