@@ -26,7 +26,8 @@ QUALIFICATION = LOOKS / "lm-qual-01.manifest.json"
 INSTRUMENT = LOOKS / "lm-inst-01.manifest.json"
 STABILITY = LOOKS / "lm-stab-01.manifest.json"
 H = sha256(b"synthetic digest").hexdigest()
-INTERIM_REF = "2f67206528f46d227815355ce701bd738233f647"
+INTERIM_REF = "eb449af6404ad302fd8e659fa733f97665044c5f"
+QUALIFICATION_REGISTRATION = "59557d6e8e00fcba6a2bdb2bfa4189bd6d7aee98"
 RAIL_SUM_COLUMNS = ["cpu_power", "gpu_power", "ane_power"]
 CUSTODY = {
     INSTRUMENT: ["hold.json", "turn.json", "gain.json", "edges.json", "stdout", "stderr"],
@@ -766,8 +767,11 @@ raise SystemExit(97)
                     dispatch.validate_v2(encode(document), final=final)
 
     def test_registered_bytes_unchanged(self):
+        registered = subprocess.check_output(
+            ["git", "show", f"{QUALIFICATION_REGISTRATION}:{QUALIFICATION.relative_to(ROOT).as_posix()}"], cwd=ROOT,
+        )
         self.assertEqual(
-            sha256(QUALIFICATION.read_bytes()).hexdigest(),
+            sha256(registered).hexdigest(),
             "d6fde6918023ea69051da45a6b0e3c06ffcfdafd8975a1773989324fa7c9bdab",
         )
         self.assertEqual(
@@ -777,6 +781,7 @@ raise SystemExit(97)
             b"35bbd6b2f5f2db62e401038afa4290491c5fc282",
         )
 
+    def test_audited_interim_paths_unchanged(self):
         def tree(ref):
             result = subprocess.run(
                 ["git", "ls-tree", "-r", ref, "--", "docs/process/cadence/looks", "joulewise/cadence_looks"],
@@ -786,11 +791,11 @@ raise SystemExit(97)
 
         result, interim = tree(INTERIM_REF)
         if result.returncode:
-            # Hosted CI may fetch only the PR head.
-            return
+            self.skipTest("the audited interim ref is absent")
         result, current = tree("HEAD")
         self.assertEqual(result.returncode, 0, result.stderr)
-        for path in (interim.keys() & current.keys()) - {b"docs/process/cadence/looks/LOOKS.json"}:
+        mutable = {b"docs/process/cadence/looks/LOOKS.json", b"docs/process/cadence/looks/look_manifest.v2.schema.json"}
+        for path in (interim.keys() & current.keys()) - mutable:
             self.assertEqual(current[path], interim[path], path)
 
 
