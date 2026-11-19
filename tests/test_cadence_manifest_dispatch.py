@@ -36,6 +36,12 @@ V1_SCHEMA_PINS = {
     "5c0724bd39cb41d2a0e155de31b9930a850286d395213e658be3e0e0e231b723",  # 9a7defbb
     "78f312feb24e3ee95ac8bdd386cdb38f56fc0ab6846d27edc66f522f3a7acd3d",  # f09469894
 }
+MALFORMED_JSON = (
+    b'{"synthetic": "\xff"}',
+    b'{"synthetic": }',
+    b'{"synthetic_duplicate": 1, "synthetic_duplicate": 2}',
+    b'{"synthetic": NaN}',
+)
 
 
 def encode(document):
@@ -207,7 +213,7 @@ class VariantContractTests(unittest.TestCase):
                         result = cli_with_closed_consumer(*args, channel="stderr", unbuffered=unbuffered)
                         self.assertEqual((result.returncode, result.stdout), (2, b""))
             connected = cli(interim, "--v1-tool", v1_tool, "--final")
-            self.assertEqual((connected.returncode, connected.stderr), (2, b"synthetic legacy refusal\n"))
+            self.assertEqual((connected.returncode, connected.stderr), (2, b"REFUSE manifest failed validation\n"))
 
     def test_dispatch_stdout_notices_survive_disconnected_reader(self):
         for args in (["validate", DRAFT], ["--help"], ["validate", "--help"]):
@@ -259,8 +265,8 @@ with patch.object(dispatch, "_dispatch", check_startup):
                 for case, argv, notice in (
                     ("parser", ["validate", "--bad-argument"], b"usage:"),
                     ("validator", ["validate", candidate], b"REFUSE unknown cadence manifest schema ID\n"),
-                    ("legacy", ["validate", interim, "--v1-tool", tool], b"fixture legacy refusal\n"),
-                    ("outer", ["outer-failure"], b"REFUSE synthetic outer refusal\n"),
+                    ("legacy", ["validate", interim, "--v1-tool", tool], b"REFUSE manifest failed validation\n"),
+                    ("outer", ["outer-failure"], b"REFUSE manifest failed validation\n"),
                 ):
                     with self.subTest(fd=fd, case=case):
                         marker = folder / f"{fd}-{case}"
@@ -331,6 +337,90 @@ raise SystemExit(97)
                     self.assertEqual((result.returncode, result.stdout), (2, b""))
                     self.assertTrue(result.stderr.startswith(b"REFUSE "))
 
+    def test_cli_candidate_decode_refusal_is_fixed(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            candidate = Path(tmp) / "candidate.json"
+            for payload in MALFORMED_JSON:
+                with self.subTest(payload=payload):
+                    candidate.write_bytes(payload)
+                    result = cli(candidate)
+                    self.assertEqual((result.returncode, result.stdout, result.stderr),
+                                     (2, b"", b"REFUSE invalid UTF-8 JSON manifest\n"))
+
+    def test_cli_registration_decode_refusal_is_fixed(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            candidate = Path(tmp) / "candidate.json"
+            registration = Path(tmp) / "registration.json"
+            for registered in (registered_fixture(), QUALIFICATION.read_bytes()):
+                candidate.write_bytes(registered.replace(
+                    dispatch.REGISTRATION_PLACEHOLDER, json.dumps(H).encode()
+                ))
+                for payload in MALFORMED_JSON:
+                    with self.subTest(look=json.loads(registered)["look_id"], payload=payload):
+                        registration.write_bytes(payload)
+                        result = cli(candidate, "--final", "--registration", registration)
+                        self.assertEqual((result.returncode, result.stdout, result.stderr),
+                                         (2, b"", b"REFUSE invalid UTF-8 JSON manifest\n"))
+
+    def test_cli_candidate_schema_refusal_is_fixed(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            candidate = Path(tmp) / "candidate.json"
+            for source in (DRAFT, QUALIFICATION, INSTRUMENT, STABILITY):
+                document = json.loads(source.read_bytes())
+                variants = (
+                    dict(document, unexpected=0),
+                    dict(document, outputs=dict(document["outputs"], synthetic_nested_key=0)),
+                )
+                for index, invalid in enumerate(variants):
+                    with self.subTest(look=source.name, case=index):
+                        candidate.write_bytes(encode(invalid))
+                        result = cli(candidate)
+                        self.assertEqual((result.returncode, result.stdout, result.stderr),
+                                         (2, b"", b"REFUSE manifest failed validation\n"))
+
+    def test_cli_registration_schema_refusal_is_fixed(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            candidate = Path(tmp) / "candidate.json"
+            registration = Path(tmp) / "registration.json"
+            for registered in (registered_fixture(), QUALIFICATION.read_bytes()):
+                candidate.write_bytes(registered.replace(
+                    dispatch.REGISTRATION_PLACEHOLDER, json.dumps(H).encode()
+                ))
+                document = json.loads(registered)
+                variants = (
+                    dict(document, unexpected=0),
+                    dict(document, outputs=dict(document["outputs"], synthetic_nested_key=0)),
+                )
+                for index, invalid in enumerate(variants):
+                    with self.subTest(look=document["look_id"], case=index):
+                        registration.write_bytes(encode(invalid))
+                        result = cli(candidate, "--final", "--registration", registration)
+                        self.assertEqual((result.returncode, result.stdout, result.stderr),
+                                         (2, b"", b"REFUSE manifest failed validation\n"))
+
+    def test_cli_legacy_schema_refusal_is_fixed(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            candidate = root / "candidate.json"
+            candidate.write_bytes(encode({
+                "schema": dispatch.V1, "look_kind": "interim", "look_id": "lm-interim-01",
+                "synthetic_unexpected_key": 0,
+            }))
+            tool = root / "legacy.py"
+            tool.write_text(
+                "import json, sys\n"
+                "from pathlib import Path\n"
+                "key = next(key for key in json.loads(Path(sys.argv[2]).read_bytes()) "
+                "if key.startswith('synthetic_'))\n"
+                "print(f'REFUSE unexpected key {key}')\n"
+                "print(f'REFUSE unexpected key {key}', file=sys.stderr)\n"
+                "raise SystemExit(1)\n",
+                encoding="utf-8",
+            )
+            result = cli(candidate, "--v1-tool", tool)
+            self.assertEqual((result.returncode, result.stdout, result.stderr),
+                             (2, b"", b"REFUSE manifest failed validation\n"))
+
     def test_dispatch_boundary_contains_arbitrary_pre_read_exceptions(self):
         script = """
 from pathlib import Path
@@ -351,7 +441,7 @@ step, candidate, registration = sys.argv[1:]
 read_bytes = Path.read_bytes
 
 def fail_registration(path):
-    if path == Path(registration):
+    if path == Path(registration).resolve():
         fail()
     return read_bytes(path)
 
@@ -395,6 +485,7 @@ raise SystemExit(97)
                                             capture_output=True, check=False)
                     self.assertEqual((result.returncode, result.stdout), (2, b""))
                     self.assertNotIn(b"Traceback", result.stderr)
+                    self.assertNotIn(b"synthetic injected failure", result.stderr)
 
     def test_v1_refuses_v2_look_ids_and_final_markers_before_delegating(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -482,7 +573,7 @@ raise SystemExit(97)
                             candidate.write_bytes(encode(trial))
                             result = cli("--final", candidate, *options)
                             self.assertEqual((result.returncode, result.stdout), (2, b""))
-                            self.assertIn(marker.encode(), result.stderr)
+                            self.assertEqual(result.stderr, b"REFUSE final manifest contains PENDING:CODE or OPEN-n\n")
 
     def test_filler_ban_by_kind(self):
         for source, mutate in (
@@ -617,9 +708,35 @@ raise SystemExit(97)
         with self.assertRaisesRegex(dispatch.ManifestError, "filler kit"):
             dispatch.validate_v2(encode(qualification))
 
+    def test_restricted_cli_paths_refuse_before_either_file_is_opened(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            restricted = root / "RESTRICTED"
+            direct = restricted / "synthetic.json"
+            alias = root / "alias.json"
+            alias.symlink_to(direct)
+            case_alias = root / "ReStRiCtEd" / direct.name
+            linked_case_alias = root / "case-alias.json"
+            linked_case_alias.symlink_to(case_alias)
+            public = root / "public.json"
+            paths = (direct, alias, case_alias, linked_case_alias, restricted / ".." / public.name, restricted)
+
+            for path in paths:
+                for argument, argv in (
+                    ("manifest", [str(path)]),
+                    ("--registration", [str(public), "--final", "--registration", str(path)]),
+                ):
+                    with self.subTest(path=path, argument=argument):
+                        with patch.object(Path, "read_bytes", side_effect=AssertionError("unexpected read")) as read:
+                            with redirect_stdout(StringIO()) as stdout, redirect_stderr(StringIO()) as stderr:
+                                status = dispatch._dispatch(["validate", *argv])
+                        read.assert_not_called()
+                        self.assertEqual((status, stdout.getvalue(), stderr.getvalue()),
+                                         (2, "", f"REFUSE {argument} path contains RESTRICTED\n"))
+
     def test_rejects_unused_registration_before_open(self):
         with tempfile.TemporaryDirectory() as tmp:
-            registration = Path(tmp) / "RESTRICTED" / "coefficients.json"
+            registration = Path(tmp).resolve() / "registration.json"
             description = Path(tmp) / "description.json"
             payload = json.loads(INSTRUMENT.read_bytes())
             payload["status"] = "committed"
@@ -688,7 +805,7 @@ raise SystemExit(97)
     def test_rejects_invalid_final_candidate_before_registration_open(self):
         with tempfile.TemporaryDirectory() as tmp:
             candidate = Path(tmp) / "final.json"
-            registration = Path(tmp) / "RESTRICTED" / "coefficients.json"
+            registration = Path(tmp).resolve() / "registration.json"
             read_bytes = Path.read_bytes
 
             def guard(path):
@@ -784,7 +901,7 @@ raise SystemExit(97)
                     document["channels"].remove("rail_sum")
                     dispatch.validate_v2(encode(document), final=final)
 
-    def test_registered_bytes_unchanged(self):
+    def test_qualification_bytes_unchanged(self):
         self.assertEqual(
             sha256(QUALIFICATION.read_bytes()).hexdigest(),
             "82a8da3deadbc43fb61d213b748b57c6c29dab101e3c06ac4e36b9e69a83c3a0",
@@ -796,28 +913,49 @@ raise SystemExit(97)
             b"35bbd6b2f5f2db62e401038afa4290491c5fc282",
         )
 
+    def test_registered_bytes_unchanged(self):
+        ref = subprocess.run(
+            ["git", "rev-parse", "--quiet", "--verify", f"{INTERIM_REF}^{{commit}}"],
+            cwd=ROOT, capture_output=True, check=False,
+        )
+        if ref.returncode == 1:
+            self.skipTest(f"interim comparison commit {INTERIM_REF} is absent from this checkout")
+        self.assertEqual(ref.returncode, 0, ref.stderr)
+
         def tree(ref):
             result = subprocess.run(
                 ["git", "ls-tree", "-r", ref, "--", "docs/process/cadence/looks", "joulewise/cadence_looks"],
                 cwd=ROOT, capture_output=True, check=False,
             )
-            return result, dict(line.split(b"\t")[::-1] for line in result.stdout.splitlines())
+            self.assertEqual(result.returncode, 0, result.stderr)
+            return dict(line.split(b"\t")[::-1] for line in result.stdout.splitlines())
 
-        result, interim = tree(INTERIM_REF)
-        if result.returncode:
-            # Hosted CI may fetch only the PR head.
-            return
-        result, current = tree("HEAD")
-        self.assertEqual(result.returncode, 0, result.stderr)
+        interim = tree(INTERIM_REF)
+        current = tree("HEAD")
         for path in (interim.keys() & current.keys()) - {b"docs/process/cadence/looks/LOOKS.json"}:
             self.assertEqual(current[path], interim[path], path)
 
 
 class TransferManifestTests(unittest.TestCase):
+    def test_missing_interim_inputs_are_reported_as_skips(self):
+        checks = (
+            (VariantContractTests("test_registered_bytes_unchanged"), "interim comparison commit"),
+            (type(self)("test_integrated_v1_schema_retains_interim_pin"), "v1 schema for lm-interim-01"),
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            with patch(f"{__name__}.INTERIM_REF", "0" * 40), patch.object(
+                dispatch, "V2_SCHEMA", Path(tmp) / "look_manifest.v2.schema.json"
+            ):
+                for test, reason in checks:
+                    with self.subTest(test=test.id()):
+                        result = test.run()
+                        self.assertEqual(len(result.skipped), 1, result.errors + result.failures)
+                        self.assertIn(reason, result.skipped[0][1])
+
     def test_integrated_v1_schema_retains_interim_pin(self):
         legacy = dispatch.V2_SCHEMA.with_name("look_manifest.schema.json")
         if not legacy.exists():
-            self.skipTest("v1 schema lives on the separate interim line")
+            self.skipTest("v1 schema for lm-interim-01 is absent from this checkout")
         self.assertIn(sha256(legacy.read_bytes()).hexdigest(), V1_SCHEMA_PINS)
 
     def test_transfer_candidate_validates(self):

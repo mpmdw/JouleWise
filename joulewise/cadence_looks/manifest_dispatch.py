@@ -20,6 +20,7 @@ from . import qualification_manifest as schema_check
 V1 = "joulewise.cadence_look_manifest.v1"
 V2 = "joulewise.cadence_look_manifest.v2"
 PRE_READ_REFUSAL = 2
+_VALIDATION_REFUSAL = "REFUSE manifest failed validation\n"
 REGISTRATION_PLACEHOLDER = b'"PENDING:CODE"'
 FINAL_PLACEHOLDER = re.compile(r"PENDING:CODE|OPEN-[0-9]+")
 V2_SCHEMA = schema_check._SCHEMA
@@ -27,6 +28,11 @@ V1_TOOL = V2_SCHEMA.parents[4] / "scripts/cadence_look_manifest.py"
 KIT_COMMITMENTS = V2_SCHEMA.with_name("look-kit-commitments.v2.json")
 FILLER_KIT_REGISTRY = V2_SCHEMA.with_name("filler-kit-registry.json")
 ManifestError = schema_check.ManifestError
+
+
+class _PublicRefusal(ManifestError):
+    """A dispatcher refusal with a fixed message safe for the CLI."""
+
 
 _MANIFEST_ROUTES = frozenset((
     (V1, "interim", "lm-interim-01"),
@@ -117,6 +123,14 @@ def exit_with_failure(status, notice, *, stderr_fd=None, flush_streams=False) ->
     os._exit(status)
 
 
+def _refusal_notice(error):
+    if isinstance(error, _PublicRefusal):
+        return f"REFUSE {error}\n"
+    if isinstance(error, OSError) and error.errno == errno.EMFILE:
+        return "REFUSE Too many open files\n"
+    return _VALIDATION_REFUSAL
+
+
 class _ParserExit(SystemExit):
     """A normal exit selected by this argparse frontend."""
 
@@ -146,10 +160,10 @@ class _NoticeArgumentParser(argparse.ArgumentParser):
 
 def _manifest_route(document):
     if not isinstance(document, dict) or document.get("schema") not in (V1, V2):
-        raise ManifestError("unknown cadence manifest schema ID")
+        raise _PublicRefusal("unknown cadence manifest schema ID")
     route = (document["schema"], document.get("look_kind"), document.get("look_id"))
     if not all(isinstance(value, str) for value in route) or route not in _MANIFEST_ROUTES:
-        raise ManifestError("unrecognized cadence manifest schema, look_kind and look_id combination")
+        raise _PublicRefusal("unrecognized cadence manifest schema, look_kind and look_id combination")
     return route
 
 
@@ -182,7 +196,7 @@ def _reject_filler_kits(document, kind):
                 digest.lower() in filler_digests for digest in digests if isinstance(digest, str)
             )
             if matched_id or matched_digest or value.get("queue_class") == "filler":
-                raise ManifestError("counted roster references a filler kit")
+                raise _PublicRefusal("counted roster references a filler kit")
             pending.extend((item, key in ("kit", "kits")) for key, item in value.items())
 
 
@@ -263,14 +277,13 @@ def _transfer_final(registration, candidate, pins, definitions, commitments):
 
 def _reject_final_placeholders(document):
     # Search decoded strings, including object keys and strings in arrays.
-    marker = FINAL_PLACEHOLDER.search(json.dumps(document))
-    if marker:
-        raise ManifestError(f"final manifest contains {marker.group()}")
+    if FINAL_PLACEHOLDER.search(json.dumps(document)):
+        raise _PublicRefusal("final manifest contains PENDING:CODE or OPEN-n")
 
 
 def _validate_legacy(tool, payload, final, *, stderr_fd=None):
     if not tool.is_file():
-        raise ManifestError("pinned v1 entry point unavailable, supply --v1-tool")
+        raise _PublicRefusal("pinned v1 entry point unavailable, supply --v1-tool")
     # Keep the delegated check on the exact bytes used for dispatch.
     with TemporaryDirectory(prefix="cadence-v1-manifest-") as directory:
         manifest = Path(directory) / "manifest.json"
@@ -281,16 +294,18 @@ def _validate_legacy(tool, payload, final, *, stderr_fd=None):
             command.append("--final")
         result = subprocess.run(command, check=False, capture_output=True, text=True,
                                 encoding="utf-8", errors="replace")
-        status = PRE_READ_REFUSAL if result.returncode else 0
-        return finish_notice(status, stdout=result.stdout or None, stderr=result.stderr or None,
+        # The pinned validator can print rejected input keys on either stream.
+        if result.returncode:
+            return finish_notice(PRE_READ_REFUSAL, stderr=_VALIDATION_REFUSAL, stderr_fd=stderr_fd)
+        return finish_notice(0, stdout=result.stdout or None, stderr=result.stderr or None,
                              stderr_fd=stderr_fd)
 
 
 def _check_registration_use(document, kind, final):
     if not final:
-        raise ManifestError("--registration requires --final")
+        raise _PublicRefusal("--registration requires --final")
     if kind not in ("qualification", "transfer") or document.get("status") != "registered":
-        raise ManifestError("--registration requires a registered qualification or transfer final")
+        raise _PublicRefusal("--registration requires a registered qualification or transfer final")
 
 
 def _validate_qualification(payload, final, read_registration, commitments):
@@ -333,7 +348,7 @@ def _validate_v2_document(payload, document, kind, final, read_registration):
         return document
 
     if document["status"] == "draft":
-        raise ManifestError("a draft cannot pass final validation")
+        raise _PublicRefusal("a draft cannot pass final validation")
     if kind == "transfer":
         if read_registration is None:
             raise ManifestError("transfer final validation requires the exact registered manifest bytes")
@@ -353,6 +368,33 @@ def validate_v2(payload: bytes, *, final=False, registration: bytes | None = Non
     return _validate_v2_document(payload, document, kind, final, read_registration)
 
 
+def _decode_cli_manifest(payload):
+    try:
+        return schema_check._decode(payload)
+    except (ValueError, RecursionError):
+        raise _PublicRefusal("invalid UTF-8 JSON manifest") from None
+
+
+def _read_cli_registration(path):
+    payload = path.read_bytes()
+    # Final validators parse the same bytes again for their exact-byte checks.
+    _decode_cli_manifest(payload)
+    return payload
+
+
+def _has_restricted_component(path):
+    # resolve() can preserve the caller's casing on a case-insensitive volume.
+    return any(component.casefold() == "restricted" for component in path.parts)
+
+
+def _public_input_path(path, argument):
+    if not _has_restricted_component(path):
+        resolved = path.resolve()
+        if not _has_restricted_component(resolved):
+            return resolved
+    raise _PublicRefusal(f"{argument} path contains RESTRICTED")
+
+
 def _dispatch(argv, *, stderr_fd=None):
     parser = _NoticeArgumentParser(description=__doc__, stderr_fd=stderr_fd)
     commands = parser.add_subparsers(dest="command", required=True)
@@ -367,20 +409,24 @@ def _dispatch(argv, *, stderr_fd=None):
     except _ParserExit as completion:
         return completion.code
     try:
-        payload = args.manifest.read_bytes()
-        document = schema_check._decode(payload)
+        manifest = _public_input_path(args.manifest, "manifest")
+        registration = None
+        if args.registration is not None:
+            registration = _public_input_path(args.registration, "--registration")
+        payload = manifest.read_bytes()
+        document = _decode_cli_manifest(payload)
         schema, kind, _ = _manifest_route(document)
         if schema == V1:
             _reject_filler_kits(document, kind)
             if args.registration is not None:
-                raise ManifestError("--registration applies to v2 manifests")
+                raise _PublicRefusal("--registration applies to v2 manifests")
             if args.final:
                 _reject_final_placeholders(document)
             return _validate_legacy(args.v1_tool, payload, args.final, stderr_fd=stderr_fd)
-        read_registration = args.registration.read_bytes if args.registration is not None else None
+        read_registration = None if registration is None else lambda: _read_cli_registration(registration)
         doc = _validate_v2_document(payload, document, kind, args.final, read_registration)
     except (ManifestError, OSError) as error:
-        return finish_notice(PRE_READ_REFUSAL, stderr=f"REFUSE {error}\n", stderr_fd=stderr_fd)
+        return finish_notice(PRE_READ_REFUSAL, stderr=_refusal_notice(error), stderr_fd=stderr_fd)
     return finish_notice(0, stdout=f"ok {doc['look_id']} ({doc['status']})\n")
 
 
@@ -396,7 +442,7 @@ def main(argv=None) -> NoReturn:
         if finish_notice(0, flush_streams=True):
             raise OSError("validation output could not be flushed")
     except BaseException as error:
-        exit_with_failure(PRE_READ_REFUSAL, lambda: f"REFUSE {error}\n", stderr_fd=stderr_fd)
+        exit_with_failure(PRE_READ_REFUSAL, lambda: _refusal_notice(error), stderr_fd=stderr_fd)
     os._exit(0)
 
 
