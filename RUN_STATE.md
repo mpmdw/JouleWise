@@ -1052,6 +1052,34 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 
 <!-- RUN_STATE TYPED ITEMS: newest first. Add with scripts/run_state_add.py; never edit by hand. -->
 
+454. **Magistrate dc3b6a00 (headless, Opus 5.5), 2026-11-19 05:01-05:07 PST (`date`): f2-inst-01-l007-l008 CHECK: RECEIPT OK (2/2 legs, MEASURED_OK, restored), copied at once; rank 2 f2-inst-01 two-leg L009-L010 ISSUED (queue -b, seq 9), Start and check rc 0, launches as the last act**
+
+```pointer
+owner: magistrate
+wait: none
+deadline: 2026-11-19T07:55:00-08:00
+on_early_or_refused: a launcher refusal or non-clean close: record it, hold kit f2-inst-01 until an input changes (item 422), mail the lead; at the next close continue down the ladder. R1 stays unarmed (item 448).
+next_observable: f2inst01-dc3b6a00/run-out.txt shows LAUNCH_RC=0 with the fence; the next activation after the fence is gone runs the operational Check for cq-f2-inst-01-l009-l010-a1 under /Users/edr/campaign-out/f2-inst-01/ (template custody f2inst01-check-dc3b6a00/check.sh with OUT and roster L009,L010, leg count 2), copies at once (row 14, offload-f2inst01-run-dc3b6a00.sh with plan id changed), then takes the last rank-2 pair f2-inst-01-l011-l012 (queue -b, seq 11, same staged queue file) where worst case 8,550 s + 1,460 s ends by 01:50 Fri, else one-leg L011; Fri 20 Nov's first f2-stab leg (rank 1, f2-stab-15 L003) arms when its fence clears the 02:00-02:35 blackout margin.
+```
+
+```item
+{"expires_epoch_s": null, "issued_epoch_s": 1795093493, "number": 454, "owner": "magistrate", "schema": "joulewise.run_state_item.v1", "sets": [{"at_epoch_s": 1795093493, "item": 453, "status": "CLOSED"}], "status": "ISSUED", "supersedes": []}
+```
+
+- **f2-inst-01-l007-l008 (item 453) Check after the fence was gone: RECEIPT OK.** Activation dc3b6a00 spawned 05:01:37; launcher fence pid 72211 gone, no `com.joulewise.align-r0` label loaded, receipt written 04:57:51, so this activation was not inside the span. Script and output: custody `f2inst01-check-dc3b6a00/` (`check.sh`, `out.txt`, 05:02:33-05:02:35), c0f1faef's template with OUT, roster (L007,L008) and leg count 2 changed only.
+  - Receipt: rc 0, error none, legs 2/2, span_result `MEASURED_OK` / `COMPLETE` / "2/2 legs run", fault false, batch window `02:00-02:35`, kit sha `651d1815…6f2b` and frozen commit `2d347f721` asserted, mock false. t0 03:40:05, ended 1795093071.3 (04:57:51) against plan expected 5,889 s, worst case 8,550 s.
+  - Steps (23), all rc 0, including restore, stop-volumes, stop-meter, stop-agents, close-volumes. Feeds `proven_stopped` true; meter 23,278 polls, 0 bad, 0 USB errors, 4,655.6 s, 0 restarts.
+  - Legs (leg_record / leg_summary only): L007 complete, admitted, G0 released (86.6 s), prefill 284, decode 512 (cap), 0 contaminated redos, wall 1,238.9 s vs budget 1,361 s. L008 complete, admitted, G0 released (137.6 s), prefill 2,024, decode 512 (cap), 0 contaminated redos, wall 1,312.3 s vs budget 1,378 s.
+  - Host readback: measurement_mode verify's only FAIL is this activation's own MCP children (77472/77473/77476); network time Off; powermode 0; frequency word 0; AC, not charging; 246 GiB free; no desk fence, High Power marker, stray monitor, root powermetrics or night.lock holder. Standing WARNs (charge limit syntax; softwareupdate schedule, item 201).
+  - Maintenance print (03:40:06-04:57:51, 22,323 lines, `OUT/maintenance-log.txt`): dasd 984-1,978 per 10 min (peak 1,978 at 04:30), cloudd 1,322 at 04:00 and 711 at 03:50, mobileassetd 122 at 03:50, softwareupdated 8 at 04:10. A print only.
+- **Copy (row 14, at once):** encrypted cloud offload, manifest 90 files; enc sha256 `d35201e1…9445`, manifest sha256 `60544254…8444`; iCloud Drive `JouleWise-offload/cq-f2-inst-01-l007-l008-a1`; brctl 05:03:35 no needs-upload, idle, caught-up, last-sync 05:03:14 after the 05:02:56 copy. Marker `/Users/Shared/JouleWise/desk-copy/cq-f2-inst-01-l007-l008-a1.ok`. Originals retained. Scripts `offload-f2inst01-dc3b6a00.sh`, `offload-f2inst01-run-dc3b6a00.sh`; output `offload-f2inst01-out-dc3b6a00.txt`.
+- **Ladder at 05:04 Thu (items 422, 425, 447):** Thu's rank-1 f2-stab leg already ran (item 453). Rank 2: f2-inst-01 two-leg L009-L010, queue -b seq 9 (same staged queue `f2-inst-01-b.fillers-w2-c4b4f4265.json`, sha `941c639c…c78d`; kit `651d1815…6f2b`). Fence end ~07:51 Thu, far before the 01:50 Fri margin.
+  - REPO reused: `/Users/edr/code/jw-wt/cadence-f2-inst-01-l006`, clean, detached at `2d347f721`.
+  - Start and check (`f2inst01-dc3b6a00/start-check.sh`, item 453's with span/legs/seq changed; 05:04:10 rc 0): `validate-kit` ok (12 legs, frozen paths verified); `validate-queue` ok (4 spans); entry seq 9, L009-L010, attempt 1, ruling RL-169a, expires 2026-12-08; plan worst case 8,550 s, expected 6,081 s, blackout_clear true; L009 prefill 19,458 budget 1,553 s, L010 prefill 2,000 budget 1,378 s, both decode 512, q600.
+  - Census (`census.out`, 05:04:10): only this activation's Codex MCP adapter tree (77472 -> 77475 -> 77476; exits with this session); top CPU sysmond 2.4%; AC, 100% charged; 246 GiB free; no MAINTENANCE marker; no night label.
+  - Run block `f2inst01-dc3b6a00/run-block.sh` (output `run-out.txt`), item 453's (worst-case assert 8,550, blackout_clear assert, DEADLINE = fence_end_epoch_s). **Launch is the last act of this activation, after this commit and the mail to Ed.** Expected end ~06:50, worst case ~07:25, fence ~07:52.
+- Activation dc3b6a00 (05:01:37): notice_pending []; no unread mail from Ed; directives the standing seven (587/422/421/417/416/408/405), no stop; no standdown request; canonical clean at `32c4f59e5` = origin/main. Closes 453.
+
 453. **Magistrate c0c4a8e2 (headless, Opus 5.5), 2026-11-19 03:36-03:45 PST (`date`): f2-stab-15-l002 CHECK: RECEIPT OK (1/1 leg, MEASURED_OK, restored), copied at once; rank 2 f2-inst-01 two-leg L007-L008 ISSUED (queue -b), Start and check rc 0, launches as the last act**
 
 ```pointer
