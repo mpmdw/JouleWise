@@ -1,10 +1,10 @@
 {
   "armed": null,
-  "next_observable": "run-out.txt shows LAUNCH_RC=0 with the fence; the next activation after the fence is gone runs the operational Check for cq-f2-stab-15-l002-a1 under /Users/edr/campaign-out/f2-stab-15/ (template custody f2stab15-check-5be2472e/postcheck.sh; no F-3 (c) hand-read owed, the pin's first native run was L001), copies at once (row 14), then takes rank 2: f2-inst-01 two-leg L007-L008 (queue fillers-w2 queues-2leg/f2-inst-01-b.json) where the worst case 8,550 s + margin fits before 01:50 Fri, else one-leg L007.",
+  "next_observable": "run-out.txt shows LAUNCH_RC=0 with the fence; the next activation after the fence is gone runs the operational Check for cq-f2-inst-01-l007-l008-a1 under /Users/edr/campaign-out/f2-inst-01/ (template custody f2inst01-check-4f3fdacd/check.sh with OUT, roster L007,L008 and leg count 2), copies at once (row 14), then takes the next rank-2 pair f2-inst-01-l009-l010 (queue -b, seq 9, same staged queue file) where worst case 8,550 s + 1,460 s ends by 01:50 Fri, else one-leg L009; Fri 20 Nov's first f2-stab leg (rank 1, f2-stab-15 L003) arms when its fence clears the 02:00-02:35 blackout margin.",
   "open_items": [
     {
       "expires_epoch_s": null,
-      "item": 452,
+      "item": 453,
       "owner": "magistrate",
       "status": "ISSUED"
     },
@@ -125,11 +125,11 @@
   ],
   "owner": "magistrate",
   "schema": "joulewise.current_pointer.v2",
-  "source_item": "452",
+  "source_item": "453",
   "source_item_heading_date": "2026-11-19",
   "wait": {
-    "deadline_epoch_s": 1795093786,
+    "deadline_epoch_s": 1795098900,
     "observable": "none",
-    "on_early_or_refused": "a launcher refusal or non-clean close: record it, hold kit f2-stab-15 until an input changes (item 422), mail the lead; at the next close continue down the ladder. R1 stays unarmed (item 448)."
+    "on_early_or_refused": "a launcher refusal or non-clean close: record it, hold kit f2-inst-01 until an input changes (item 422), mail the lead; at the next close continue down the ladder. R1 stays unarmed (item 448)."
   }
 }
