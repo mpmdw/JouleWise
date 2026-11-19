@@ -192,3 +192,20 @@ CPU-rate evidence uses the observations in each window's overlap with a process 
 | MED, a whole-second start bound excluded the only observation of an exited worker from a 30 s window. | `test_single_sighting_of_exited_worker_counts_at_either_side_of_birth_tick`, `test_distinct_cpu_observations_on_window_edges_are_retained`, `test_exited_worker_retains_measured_growth_across_fractional_window_open` | PASS |
 
 All 44 generated sightings and six auditor replays passed on synthetic inputs. The two worker start variants each recorded the 0–30 s flag at 0.06 CPU-s/s and withheld publication. The 50 publication and CPU interval tests passed. The byte-identical frozen differential passed all 341 scenarios with zero failures and zero invalid oracle controls. Exact-candidate CI and the two-family review are tracked on draft PR #824. NEEDS_SPEC has no entries.
+
+## Frozen differential v2
+
+The November 19 resume found a clean worktree at the existing test-first commit `5b038d8e7401c1f4eddb8bb2c3147fc8bddafd0d`, one commit ahead of draft PR #824 at `fb320ce683c6ae929f17eee7da3b86d8ed2928e5`. The v2 suite SHA-256 is `0752ccc152ec4c93b710337be6d9ff6e5de7f50c6997ff6db3d046391d91fcca`. The copy matches the supplied file byte for byte. The supplied baseline recorded 906 failures on `fb320ce68`.
+
+Repair `33138f71a55d87199329ccba164ef29195ed1466` normalizes each captured process name through one function. It strips enclosing parentheses, takes the basename, case-folds and recognizes process names shortened to Darwin's 16-byte command limit. Agents and measurement chains refuse on the captured sighting. A CPU contender named in an arguments read can use that identity's accounting history, including when it exits before a later query.
+
+The rate uses the largest supported intersection of a window and a process lifetime. The opening read's beginning and the whole-second start floor bound one end. The closing read's completion and the first observed absence after the last accounting sighting bound the other. Counter growth uses centisecond arithmetic and a strict integer comparison to 0.05 CPU-s/s. Exact ties stay quiet. Earlier flags continue to block publication, and subsequent windows are judged on their own evidence.
+
+| Regression family | Cases | Failures before repair | Failures on `33138f71a` |
+| --- | ---: | ---: | ---: |
+| Preserved differential against admitted R0-L3 | 341 | 0 | 0 |
+| Name normalization by class and read | 1,673 | 525 | 0 |
+| Lifetime overlap and the strict threshold | 1,080 | 381 | 0 |
+| Total | 3,094 | 906 | 0 |
+
+Focused verification passed 115 tests and all 11 publication audit tests. The contention module passed 46 synthetic tests with three live cases skipped. The prior candidate's shard 5 failed `test_every_refusal_site_is_listed_with_its_exact_count` on the refusal allowlist for `measurement_liveness.py`. The previous result and the new exact-candidate CI are tracked on draft PR #824. NEEDS_SPEC has no entries.
