@@ -2057,7 +2057,7 @@ class R0PublicationAuditTest(unittest.TestCase):
         # At the 15.500 opening, the 15.1 birth is displayed by ps as
         # 15.000. The entry then grows from 0 at 32 s to 1.80 CPU-s at 40 s
         # before disappearing before the 45.500 closing sample.
-        for born, cpu_at, busy in ((15.1, 40, True), (16.1, 40, True), (15.1, 32, False)):
+        for born, cpu_at, busy in ((15.1, 40, True), (16.1, 40, True), (15.1, 30, False)):
             with self.subTest(born=born, cpu_at=cpu_at):
                 process = fixture.Process(fixture.WORKER, born, 44.5, cpu_at, 180)
                 case = fixture.Case("fractional_open", (process,), schedule="multi", end=56)
@@ -2067,7 +2067,7 @@ class R0PublicationAuditTest(unittest.TestCase):
                 if not busy:
                     # The earlier interval proves the work. A later window
                     # with no measured growth cannot charge it a second time.
-                    self.assertTrue(any(flag[:3] == (0.0, 32.0, fixture.PID) for flag in result["flags"]), result)
+                    self.assertTrue(any(flag[:3] == (0.0, 30.0, fixture.PID) for flag in result["flags"]), result)
 
     def test_worker_still_present_at_close_retains_growth_after_missing_open_sample(self):
         from tests.align import test_r0_vs_l3_differential as fixture
