@@ -124,3 +124,39 @@ descendant tip carries two owner commits beyond the checkpoint's base. PR
 had no earlier remote ref or PR. Publish the checkpoint on the builder
 branch, with PR #854's branch as the draft base so its changes stay in the
 owner's PR. The combined final base and final pins remain pending.
+
+## Lead resolution and independent oracle
+
+The lead resolved the validator and recovery contract conflicts. Keep the
+sanctioned final validator CLI and require exit 0, its exact committed notice
+and empty stderr. The successor observer will recognize only the pinned
+dispatcher's pre-reservation stderr setup open of the actual `/dev/null`
+character device, without create, truncate or append flags. All other
+observed writes, including those to a regular-file substitute, remain
+subject to the write checks. Remove the worker's own preflight device opens
+when the successor spec is frozen.
+
+The successor private edge record adds the per-channel
+`recovery_resolution_s` and `recovery_skipped_windows` maps. The recovery grid
+starts at the latest channel start. Count each skipped U1 window, report
+`not returned` at the ruled final-window bound, and propagate
+`crossed_before_span` to dependent rises and lags. The suite author owns the
+observer, revised closed-field assertion and new scenarios.
+
+| Check | Result |
+| --- | --- |
+| Lead-supplied independent `tests/description-edge-ruling.json` | **PASS**. The frozen `wire()` emits 1,040 bytes with one terminal LF and SHA-256 `334f028d934e4618ced41362eb6c8ae934c6388ab8963b7273b0bacb217da92c`. |
+| Exact oracle comparison on the direct normalized reader | **PASS**. All nine maps agree across the three invented legs. |
+| Frozen `test_lm_inst_01_edge_hand_table_exact` | **FAIL** at stage 2 with exit 2 and the pre-read refusal notice. It found the oracle and completed stage 1. This host's reserved-directory restriction remains in effect. |
+| Direct `lm-stab-02` census chronology | **PASS** on five invented snapshots. The strict earlier exact kit-15 row admitted the leg. Simultaneous, late, absent and wrong-digest index rows refused. Native first-receipt proof remains a lead input. |
+| Original frozen suite and archive | **PASS**. Both digests still match the original brief. No successor spec commit and digest were present in the supplied seat or matching remote refs at this checkpoint. |
+
+The prior report's missing-oracle finding is closed. The original suite still
+carries its prior edge shape and observer. This checkpoint adds the approved
+oracle and records the resolution. Implementation resumes on the suite
+author's successor commit and digest. Final integration still needs the
+combined base and native source bindings.
+
+[Direct oracle comparison](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/rl188-oracle-reader.log)
+[Frozen end-to-end case](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/rl188-oracle-end-to-end.log)
+[Invented kit-15 chronology](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/rl188-kit15-chronology.log)
