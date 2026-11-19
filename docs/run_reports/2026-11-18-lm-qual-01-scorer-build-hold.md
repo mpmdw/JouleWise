@@ -58,3 +58,24 @@ The separate row-3 PUBLIC comparison question in FOR-FABLE.md remains open.
 Next action for the lead is to obtain the terminal-context disposition
 from Fable, record it in FOR-FABLE.md, and supply the admitted predictor
 and reader revisions. The build can then resume against that authority.
+
+## Audit round 1
+
+The verified HIGH remains open. The default CLI's `--help` reproduces
+exit 2 and ENOENT for the missing scorer. The unchanged acceptance suite
+is the regression for installation of the scorer and both schemas. With
+the default command, it discovered 697 methods and reported five class
+setup errors before running a method. The ledgers and registration were
+unchanged. Fetched main advanced to
+`c0ff28b7c75ec53cc7ecb016f4e8b2713071ce84` with a state-only change.
+PR #795 still points to `eb449af6404ad302fd8e659fa733f97665044c5f`.
+
+The lead supplied the synthetic oracle authored by the independent
+Anthropic Claude Opus 5.5 seat. The exact byte transfer is fixture commit
+`8d566c8afb68807be4174f076f95a44bebdbeb75`. SHA-256
+`02cf3b1c769574923ffb5439063a03b34e12410a580c7fc126406e86b9ae8844`
+matches the lead's attestation. The authoring script and derivation stay
+with the oracle seat. The lead also identified an open print question
+for the two-day oracle world. Its word is `not_evaluable`, and the fixture
+expects numeric private diagnostics. That question remains for Fable if
+the scorer produces nulls.
