@@ -32,6 +32,11 @@ R0_AGENT_CENSUS_ARGV = (
     # The literal pattern must not match a simultaneous census's command line.
     r"/([c]laude|[c]odex)[.]app/Contents/MacOS/|" + AGENT_CENSUS_PATTERN,
 )
+_AGENT_CANDIDATE = re.compile(R0_AGENT_CENSUS_ARGV[-1], re.I)
+_MEASUREMENT_CHAIN = re.compile(
+    r"(?:^|[/\s])(?:run_campaign|run_night|window[-_]chain|"
+    r"align_r1_rehearsal|align_r0_checks|run_b5_analysis|chain|powermetrics)"
+    r"(?:\.py|\.sh|\.zsh)?(?:\s|$)", re.I)
 
 
 def profile_config(value=None):
@@ -85,6 +90,10 @@ def _with_peak_counters(snapshot):
     corrected = {key: {**row, "cumulative_cpu_seconds": row["peak_cpu_seconds"]}
                  for key, row in snapshot.rows.items() if "peak_cpu_seconds" in row}
     return replace(snapshot, rows={**snapshot.rows, **corrected}) if corrected else snapshot
+
+
+def _observations_inside(observations, opening, current):
+    return [sample for sample in observations if opening.midpoint_ns < sample.midpoint_ns < current.midpoint_ns]
 
 
 def _interior_exit_evidence(opening, current, intermediate, elapsed_s, limit):
@@ -169,6 +178,7 @@ class QuietGuard:
         self._cpu_probe_lock = threading.Lock()
         self._snapshots = []
         self._admission_snapshots = []
+        self._cpu_observations = []
         self._admission_previous_over = {}
         self._process_history = {}  # pid -> (start identity, highest CPU, contaminant matches)
         self._previous_over = {}
@@ -225,13 +235,11 @@ class QuietGuard:
             raise Refused(f"census indeterminate: cumulative CPU snapshot exit {result.returncode}")
         if table.returncode:
             raise Refused("census indeterminate: process args table unavailable")
-        busy_contaminants(table.stdout)  # validate the args table at each snapshot
+        args = self._process_table(table.stdout, {})
         try:
             rows = contention.parse(result.stdout.encode("utf-8"))
         except (ValueError, OverflowError) as exc:
             raise Refused(f"census indeterminate: cumulative CPU snapshot: {exc}") from exc
-        args = {int(line.split(None, 2)[0]): line.split(None, 2)[2]
-                for line in table.stdout.splitlines() if line.strip()}
         for row in rows.values():
             row["contaminant_matches"] = [
                 source for source, value in (("ucomm", row["command"]),
@@ -264,6 +272,7 @@ class QuietGuard:
                 row["contaminant_matches"] = sorted(matches)
                 row["contaminant"] = bool(matches)
             self._process_history[pid] = (start, cpu, matches)
+        self._cpu_observations.append(snapshot)
         if not admission:
             backwards = snapshot.finished.wall_ns < snapshot.started.wall_ns
             if self._snapshots:
@@ -286,14 +295,38 @@ class QuietGuard:
         result = self.run(argv, capture_output=True, text=True, timeout=15)
         return ProbeResult(argv, result.returncode, result.stdout, result.stderr, time.monotonic_ns())
 
-    def _agent_census(self, receipt):
-        agent = self._probe(R0_AGENT_CENSUS_ARGV)
+    @staticmethod
+    def _require_clear_agent_result(agent, receipt, field):
         if type(agent.exit_code) is not int or not isinstance(agent.stdout, str) or not isinstance(agent.stderr, str):
             raise Refused("agent census returned malformed probe result")
         agent = decide_census(agent)
-        receipt["agent"] = asdict(agent)
+        receipt[field] = asdict(agent)
         if agent.exit_code != 1 or agent.stdout.strip():
-            raise Refused(f"agent census refused: {receipt['agent']}")
+            raise Refused(f"agent census refused: {receipt[field]}")
+
+    def _process_table(self, stdout, receipt):
+        receipt["pcpu_diagnostic"] = busy_contaminants(stdout)
+        args = {}
+        candidates = []
+        chains = []
+        own_pid = os.getpid()
+        for line in stdout.splitlines():
+            if not line.strip():
+                continue
+            pid, _, argv = line.split(None, 2)
+            pid = int(pid)
+            args[pid] = argv
+            if _AGENT_CANDIDATE.search(argv):
+                candidates.append(f"{pid} {argv}\n")
+            if pid != own_pid and _MEASUREMENT_CHAIN.search(argv):
+                chains.append(line)
+        receipt["chains"] = chains
+        if candidates:
+            self._require_clear_agent_result(
+                ProbeResult(PS_ARGV, 0, "".join(candidates), "", time.monotonic_ns()), receipt, "process_table_agent")
+        if chains:
+            raise Refused(f"machine occupied or census indeterminate: {receipt}")
+        return args
 
     def _census(self, receipt):
         fs = measurement_liveness.census_fs
@@ -316,25 +349,15 @@ class QuietGuard:
             raise Refused("measurement night LaunchAgent is loaded")
         if launched.returncode != 113 or "could not find service" not in launched.stderr.lower():
             raise Refused("LaunchAgent census indeterminate")
-        self._agent_census(receipt)
+        self._require_clear_agent_result(self._probe(R0_AGENT_CENSUS_ARGV), receipt, "agent")
         custody = self.inspect_custody(parents=parents, strict=True)
         receipt["resolved_custody_parents"] = custody.resolved_parents
+        receipt["custody"] = {"refusals": custody.refusals, "warnings": custody.warnings}
         table = self._probe(PS_ARGV)
         if table.exit_code != 0:
             raise Refused("process table unavailable")
-        diagnostic = busy_contaminants(table.stdout)  # also validates every row
-        chains = []
-        pattern = re.compile(
-            r"(?:^|[/\s])(?:run_campaign|run_night|window[-_]chain|"
-            r"align_r1_rehearsal|align_r0_checks|run_b5_analysis|chain|powermetrics)"
-            r"(?:\.py|\.sh|\.zsh)?(?:\s|$)", re.I)
-        for line in table.stdout.splitlines():
-            pid, _, argv = line.split(None, 2)
-            if int(pid) != os.getpid() and pattern.search(argv):
-                chains.append(line)
-        receipt.update(custody={"refusals": custody.refusals, "warnings": custody.warnings},
-                       pcpu_diagnostic=diagnostic, chains=chains)
-        if not custody.clear or chains:
+        self._process_table(table.stdout, receipt)
+        if not custody.clear:
             raise Refused(f"machine occupied or census indeterminate: {receipt}")
 
     def _background_snapshot(self):
@@ -407,14 +430,26 @@ class QuietGuard:
         receipt = {}
         try:
             receipt["monotonic_s"] = self._now()
+            with self._snapshot_lock:
+                latest = self._snapshots[-1] if self._snapshots else None
+            self._require_fresh_background(receipt["monotonic_s"], latest)
             self._census(receipt)
-            self._admission_interval(receipt)
+            current = self._cpu_snapshot(admission=True)
+            self._admission_interval(receipt, current)
+            self._require_fresh_background(self._now(), latest)
         except Exception as exc:
             raise self._record_refusal(receipt, exc) from exc
         if self.receipts:
             self.receipts[-1]["publication_census"] = receipt
         else:
             self.receipts.append(receipt)
+
+    def _require_fresh_background(self, now, latest):
+        if latest is None:
+            raise Refused("census indeterminate: background snapshots unavailable")
+        lag = now - latest.finished.monotonic_ns / 1e9
+        if lag > self.MAX_WINDOW_S:
+            raise Refused(f"census indeterminate: background snapshots stalled ({lag:.1f} s since the last)")
 
     def __enter__(self):
         return self
@@ -451,7 +486,10 @@ class QuietGuard:
                       if current.midpoint_ns - samples[i].midpoint_ns >= dwell_ns), None)
         if start is not None:
             details = {"regressed_counters": [], "regressed_noncontaminant": []}
-            busy = self._judge_cpu_interval(samples[start], current, details, intermediate=(),
+            opening = samples[start]
+            with self._snapshot_lock:
+                intermediate = _observations_inside(self._cpu_observations, opening, current)
+            busy = self._judge_cpu_interval(opening, current, details, intermediate=intermediate,
                                            previous_over=self._admission_previous_over)
             self._record_cpu_flags(receipt, details, busy)
             receipt.setdefault("admission_cpu_intervals", []).append(details)
@@ -460,6 +498,11 @@ class QuietGuard:
             samples.append(current)
         else:
             samples[-1] = current
+        with self._snapshot_lock:
+            # Retain observations until neither sequence can use them inside
+            # a future window. Each sequence keeps its own opening endpoint.
+            cutoff = min(self._snapshots[0].midpoint_ns, samples[0].midpoint_ns)
+            self._cpu_observations = [sample for sample in self._cpu_observations if sample.midpoint_ns > cutoff]
 
     def _cpu_interval(self, receipt):
         details = {"regressed_counters": [], "regressed_noncontaminant": []}
@@ -468,6 +511,7 @@ class QuietGuard:
         busy = []
         with self._snapshot_lock:
             snapshots = list(self._snapshots)
+            observations = list(self._cpu_observations)
             pending, self._pending = self._pending, self._empty_pending()
             background_failure = self._background_failure
         if pending["census"]:
@@ -486,8 +530,9 @@ class QuietGuard:
                 if start is None:
                     continue  # only the admission's mid-baseline snapshot
                 interval_details = {"regressed_counters": [], "regressed_noncontaminant": []}
+                intermediate = _observations_inside(observations, snapshots[start], snapshots[end])
                 interval_busy = self._judge_cpu_interval(
-                    snapshots[start], snapshots[end], interval_details, intermediate=snapshots[start + 1:end])
+                    snapshots[start], snapshots[end], interval_details, intermediate=intermediate)
                 receipt["cpu_intervals"].append(interval_details)
                 details = interval_details
                 self._judged_end, opening = end, start
@@ -521,10 +566,8 @@ class QuietGuard:
         # Completed windows precede a later failed census or stale tail.
         if background_failure:
             raise Refused(f"census refused or indeterminate in the background sampler: {background_failure}")
-        if snapshots and "monotonic_s" in receipt:
-            lag = receipt["monotonic_s"] - snapshots[-1].finished.monotonic_ns / 1e9
-            if lag > self.MAX_WINDOW_S:
-                raise Refused(f"census indeterminate: background snapshots stalled ({lag:.1f} s since the last)")
+        if "monotonic_s" in receipt:
+            self._require_fresh_background(receipt["monotonic_s"], snapshots[-1] if snapshots else None)
         return busy
 
     def _judge_cpu_interval(self, opening, current, details, *, intermediate, previous_over=None):

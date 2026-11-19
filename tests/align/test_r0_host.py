@@ -1902,8 +1902,16 @@ class R0SamplerAdmissionSpec(unittest.TestCase):
 
 class R0PublicationAuditTest(unittest.TestCase):
     def trial(self, case, *, publication_delay=0, probe_delay=0):
+        from datetime import datetime
         from joulewise.align import r0_runner
         from tests.align import test_r0_vs_l3_differential as fixture
+
+        class LocalPsTime(datetime):
+            @classmethod
+            def fromtimestamp(cls, value, tz=None):
+                # The frozen worker sets TZ=UTC. Here ps and the parser
+                # must agree on the current process's local timezone.
+                return super().fromtimestamp(value)
 
         with tempfile.TemporaryDirectory() as tmp:
             work = Path(tmp).resolve()
@@ -1928,7 +1936,8 @@ class R0PublicationAuditTest(unittest.TestCase):
                 return original_run(model, argv, **kwargs)
 
             original_move, original_run = fixture.Fixture.move, fixture.Fixture.run
-            with patch.object(fixture.Fixture, "move", move), patch.object(fixture.Fixture, "run", run):
+            with (patch.object(fixture, "datetime", LocalPsTime), patch.object(fixture.Fixture, "move", move),
+                  patch.object(fixture.Fixture, "run", run)):
                 return fixture.run_case(case, root, provenance, oracle=False)
 
     def assert_withheld(self, result):
