@@ -2595,13 +2595,17 @@ def _check_terminal_order(bound, prior_end):
     return bound.ended_epoch_s
 
 
-def _check_gated_energy(episode, raw_journal, receipt, kind):
+def _check_gated_energy(episode, data, receipt, kind):
     from joulewise.align.apple.thermal_desk import member_record
 
     reason = "member_energy"
-    journal = _jsonl_objects(raw_journal, kind, THERMAL_SOURCE, reason)
+    journal = _jsonl_objects(data[THERMAL_SOURCE], kind, THERMAL_SOURCE, reason)
+    config = _object_from_bytes(data["config.json"], kind, "config.json", reason)
     try:
-        record = member_record(episode, journal)
+        # Only the attribution projection is judged here. These optional desk
+        # observations feed its diagnostics and never enter that projection.
+        record = member_record(episode, journal, os_readings=(), pm_samples=(),
+                               pm_period_s=1 / config["sampling"]["power_hz"])
     except (ArithmeticError, LookupError, TypeError, ValueError) as error:
         raise EvidenceFailure(reason, kind, "power_trace.csv", peer=RECEIPT_NAME) from error
     fields = {"energy_j": record["turn_owned_j"]}
@@ -2632,7 +2636,7 @@ def _native_bundle(bound, receipt, configured, gate_inputs, step_binding):
         _check_battery(bound.read(BATTERY_SOURCE, BATTERY_SOURCE), receipt, kind)
         if kind not in QUIET_MEMBERS:
             _check_load(bound.read(LOAD_SOURCE, LOAD_SOURCE), receipt, kind)
-            _check_gated_energy(joined, data[THERMAL_SOURCE], receipt, kind)
+            _check_gated_energy(joined, data, receipt, kind)
     except EvidenceFailure:
         raise
     except (OSError, ArithmeticError, LookupError, TypeError, ValueError, AttributeError) as error:

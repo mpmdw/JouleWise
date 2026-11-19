@@ -1431,7 +1431,7 @@ class SoakLauncherBindingTests(unittest.TestCase):
                                           quiet_before_prefill_s=rt.STEP_QUIET_S,
                                           recovery_observed_s=rt.RECOVERY_CAP_S)
         if role != "predecessor":
-            from joulewise.align.apple.thermal_desk import member_record
+            from joulewise.align.apple.thermal_desk import member_record as frozen_member_record
             from joulewise.align.apple.workload import read_episode_bundle
 
             if role in ("d-bank", "x-g"):
@@ -1442,7 +1442,8 @@ class SoakLauncherBindingTests(unittest.TestCase):
             joined = read_episode_bundle(bundle)
             receipt["episode_flags"] = list(joined.flags)
             if role in ("d-bank", "x-g"):
-                observation = member_record(joined, journal)
+                observation = frozen_member_record(joined, journal, os_readings=(), pm_samples=(),
+                                                   pm_period_s=1 / config["sampling"]["power_hz"])
                 receipt["energy_j"] = observation["turn_owned_j"]
                 if role == "d-bank":
                     receipt["gross_episode_j"] = observation["gross_episode_j"]
