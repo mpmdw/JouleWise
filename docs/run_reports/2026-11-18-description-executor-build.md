@@ -223,3 +223,34 @@ source bindings remain prerequisites for final integration.
 [Value parsing before repair](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/audit2-gap-boundary-red.log)
 [Regressions after repair](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/audit2-regressions-green.log)
 [Direct oracle check after repair](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/audit2-rl188-compatibility.log)
+
+## Audit round 3 repair
+
+Astra reviewed `ac6b767e` and reported one VERIFIED HIGH, one VERIFIED
+MED and one VERIFIED LOW. Both earlier HIGHs were refuted. The third-round
+HIGH meets Pipeline §3's return-to-spec condition. This checkpoint fixes
+the requested implementation defect under the existing RL-166 Q7 and
+RL-181 per-print coverage rule. Any further review requires the successor
+spec commit and suite digest.
+
+| Severity | Disposition | Commit | Regression and result |
+| --- | --- | --- | --- |
+| HIGH / VERIFIED | Require at least 99% of expected DC samples on each print before reading values. Count decoded timestamps in `[start, stop)`. Expected samples come from the authenticated nominal periods before and during the turn, apportioned by duration for mixed intervals. Bracketing and maximum gap still have their own checks. | `ddbce2c4d` | **PASS**. The sparse decode regression reproduces the audit's 8/80 decode and 108/180 turn stamps with a 0.5 s maximum gap. It now emits `meter_coverage` for affected prints across all three IDs and preserves the public roster. A second regression accepts exactly 99%, excludes the end bracket from the count, and confirms below-threshold hold, turn and mixed intervals refuse before opening planted bad values. |
+| Prior HIGHs / REFUTED | Native loader admission and interval-specific rail gap selection remain fixed. | `cb042106c`, `d4622c221` | **PASS**. All five previous regression methods passed on the repair. |
+| MED / VERIFIED | Success-path publication and descriptor confinement need the successor observer and a synthetic host that permits the reservation directory. | — | **FOLLOW-UP**. The audit again saw two observed-device-write refusals and two reservation failures. |
+| LOW / VERIFIED | Public field shapes and rail order are positive controls. | `ddbce2c4d` | **PASS**. The frozen GPU comparator, direct scientific checks on all three complete worlds, and all nine independent RL-188 edge maps passed. |
+
+Before repair the new tests got 19.375 W for the instrument DC decode
+and 115 J in the stability context despite the sparse data. All three
+below-threshold unit cases tried to parse a planted sentinel. After
+repair all eight focused regression and comparator methods passed
+together under Python 3.13. The 53 protected blob paths and the three
+frozen artifact digests matched the earlier audit. Draft CI runs the
+sharded suite on its synthetic runner. Final integration still needs
+the combined base and lead-supplied native bindings.
+
+[Audit round 3](/Volumes/JW-EXT/scratch/pl-d-desc-looks-executor/audit-3/FINAL-MESSAGE.md)
+[Coverage tests before repair](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/audit3-dc-coverage-red.log)
+[Regressions after repair](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/audit3-regressions-green.log)
+[Direct scientific controls](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/audit3-scientific-controls.log)
+[Independent edge oracle](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/audit3-rl188-compatibility.log)
