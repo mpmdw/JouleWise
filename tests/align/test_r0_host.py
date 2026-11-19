@@ -1900,6 +1900,81 @@ class R0SamplerAdmissionSpec(unittest.TestCase):
                                 readlink=path == root and operation == "resolve")
 
 
+class R0PublicationAuditTest(unittest.TestCase):
+    def trial(self, case, *, publication_delay=0, probe_delay=0):
+        from joulewise.align import r0_runner
+        from tests.align import test_r0_vs_l3_differential as fixture
+
+        with tempfile.TemporaryDirectory() as tmp:
+            work = Path(tmp).resolve()
+            root = work / "trial"
+            root.mkdir()
+            provenance = work / "provenance"
+            for name in ("joulewise/align/r0_host.py", "joulewise/align/r0_mlx.py",
+                         "joulewise/align/r0_step.py", "scripts/align_r0_checks.py",
+                         r0_runner.LOAD_REFERENCE_NOTE, "reference.json"):
+                path = provenance / name
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text("synthetic provenance\n")
+
+            def move(model, end):
+                if model.phase == "publication" and end == 58:
+                    end += publication_delay
+                return original_move(model, end)
+
+            def run(model, argv, **kwargs):
+                if probe_delay and model.phase == "publication" and argv[0] == "/bin/launchctl":
+                    original_move(model, 58 + probe_delay)
+                return original_run(model, argv, **kwargs)
+
+            original_move, original_run = fixture.Fixture.move, fixture.Fixture.run
+            with patch.object(fixture.Fixture, "move", move), patch.object(fixture.Fixture, "run", run):
+                return fixture.run_case(case, root, provenance, oracle=False)
+
+    def assert_withheld(self, result):
+        self.assertEqual((result["rc"], result["status"], result["published"]), (2, "refused", False), result)
+
+    def test_publication_refuses_stale_background_samples(self):
+        from tests.align import test_r0_vs_l3_differential as fixture
+
+        quiet = fixture.Case("quiet", schedule="multi", end=56)
+        self.assertEqual(self.trial(quiet)["rc"], 0)
+        transient = fixture.Case("transient_agent", (fixture.Process(fixture.CLAUDE, 60, 110),),
+                                 schedule="multi", end=56)
+        for case, delays in ((quiet, {"publication_delay": 60}),
+                             (transient, {"publication_delay": 60}), (quiet, {"probe_delay": 60})):
+            with self.subTest(case=case.name, **delays):
+                result = self.trial(case, **delays)
+                self.assert_withheld(result)
+                self.assertIn("background snapshots stalled", result["reason"])
+
+    def test_baseline_snapshot_refuses_agent_or_chain_that_leaves_before_admission(self):
+        from tests.align import test_r0_vs_l3_differential as fixture
+
+        for command in (fixture.CLAUDE, fixture.APP, fixture.CHAIN, f"/bin/echo {fixture.APP}"):
+            with self.subTest(command=command):
+                case = fixture.Case("baseline_mid", (fixture.Process(command, 10, 20),), schedule="multi", end=56)
+                result = self.trial(case)
+                if command.startswith("/bin/echo"):
+                    self.assertEqual(result["rc"], 0, result)
+                else:
+                    self.assert_withheld(result)
+                    self.assertEqual(result["work_started"], [])
+                    self.assertEqual(result["refused_at"], 15)
+
+    def test_background_window_keeps_contender_seen_only_at_caller_admission(self):
+        from tests.align import test_r0_vs_l3_differential as fixture
+
+        for gone in (41, 47):
+            with self.subTest(gone=gone):
+                process = fixture.Process(fixture.WORKER, 34, gone, 40, 180)
+                case = fixture.Case("observed_worker", (process,), schedule="multi", end=56)
+                result = self.trial(case)
+                self.assert_withheld(result)
+                self.assertTrue(any(flag[:3] == (15.0, 45.0, fixture.PID) for flag in result["flags"]), result)
+                self.assertIn((15.0, 45.0), result["report_intervals"])
+
+
 class R0QuietIntervalTest(unittest.TestCase):
     # CPU fixtures derive from the 0.05 CPU-s/s bar and 30 s interval:
     # 0.06 / 0.04 straddle the bar by 0.01; 1.80 / 1.20 are their
