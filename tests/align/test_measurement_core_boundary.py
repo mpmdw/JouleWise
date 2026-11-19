@@ -49,12 +49,33 @@ class MeasurementCoreBoundaryTests(unittest.TestCase):
             with self.subTest(name=name):
                 self.assertEqual(hashlib.sha256((root/name).read_bytes()).hexdigest(), digest)
 
-    def test_mlx_core_is_byte_identical_to_pilot10(self):
-        # Complete file at 83e2dac59, before #657/0ba413d40. Earlier ALIGN
-        # extensions predate this package; no new rebind of file@c27485347.
+    def test_mlx_core_matches_pilot10_outside_rl182a_boundary(self):
+        # SHA-256 of the Pilot-10 source with just the first-yield boundary removed.
         root = Path(__file__).resolve().parents[2]
-        self.assertEqual(hashlib.sha256((root/'joulewise/adapters/mlx_runtime.py').read_bytes()).hexdigest(),
-                         '953e6fec990c1d7e0702a8abb199a55f179e50d28854f4b62d0e95302dde0c45')
+        source = (root / "joulewise/adapters/mlx_runtime.py").read_text()
+        before, boundary, rest = source.partition(
+            "                    # RL-182a: record both boundaries before constructing the events.\n"
+        )
+        self.assertTrue(boundary)
+        _, after_marker, after = rest.partition(
+            '                text_parts.append(str(getattr(response, "text", "")))\n'
+        )
+        self.assertTrue(after_marker)
+        self.assertEqual(hashlib.sha256((before + after_marker + after).encode()).hexdigest(),
+                         "0bd67dde60118ce722fd716d564b3ddc1748262b1ec32eac05a05c474e8ce829")
+
+    def test_mlx_first_yield_boundary_matches_rl182b_hash(self):
+        root = Path(__file__).resolve().parents[2]
+        lines = (root / "joulewise/adapters/mlx_runtime.py").read_bytes().splitlines(keepends=True)
+        start_line = b"                    # RL-182a: record both boundaries before constructing the events.\n"
+        end_line = b'                text_parts.append(str(getattr(response, "text", "")))\n'
+        self.assertEqual(lines.count(start_line), 1)
+        self.assertEqual(lines.count(end_line), 1)
+        start, end = lines.index(start_line), lines.index(end_line)
+        self.assertLess(start, end)
+        block = b"".join(lines[start:end])
+        self.assertEqual(hashlib.sha256(block).hexdigest(),
+                         "85ffe1a3cff318c6880d09d72b437c410a18f2dd92395ce62e08956d64c845c5")
 
     def test_disabled_checkpoint_anchor_runtime_bytes_match_pilot10_path(self):
         def pilot10_generate(runtime, stream, *args, **kwargs):
