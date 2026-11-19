@@ -1,3 +1,8 @@
+# Frozen differential acceptance v3 for PR 824.
+# Run with python3.13 -B test_r0_vs_l3_differential.py from the candidate
+# checkout, or set R0_CANDIDATE and R0_L3_SOURCE as documented below.
+# The unchanged v2 module follows. The v3 cases precede its main dispatcher.
+# END V3 HEADER
 """Frozen synthetic R0 versus admitted L3 acceptance, v2 (PR 824).
 
 The 341 original cases and their assertions are preserved. Two additional
@@ -1288,6 +1293,502 @@ class TestGeneratedR0Families(unittest.TestCase):
                       f"passed={len(cases)-failed} incomplete_window_witnesses={unresolved}", flush=True)
 
 
+
+
+# BEGIN FROZEN V3 ADDITION. Removing this block restores the complete v2 file.
+# Run this module exactly as v2. TestR0V3 adds two fixed CLI replays, a
+# fast real-guard timing sweep, and CLI histories with scheduled admissions.
+# A scenario is one distinct timeline, regardless of how many PIDs it has.
+
+@dataclass(frozen=True)
+class TimingCase:
+    name: str
+    # Milliseconds for accounting and its trailing arguments read, respectively.
+    opening_lag: tuple
+    closing_lag: tuple
+    place: str = "first"
+    jitter: int = 0
+    missed: str = "none"
+    history: str = "resident"
+    only_gain: int | None = None
+    # Offset in ms about the 30 s eligibility cliff for a second opening.
+    alternate_offset: int | None = None
+    skip_alternate: bool = False
+
+    @property
+    def opening(self):
+        return {"first": 0, "interior": 64_000, "last": 96_000}[self.place]
+
+    @property
+    def closing(self):
+        separation = 30_000 + sum(self.opening_lag) if self.place == "first" else 34_000
+        return self.opening + separation + self.jitter
+
+    @property
+    def end(self):
+        if self.place == "last":
+            return self.closing
+        return self.closing + sum(self.closing_lag) + 34_000
+
+    @property
+    def alternate(self):
+        if self.alternate_offset is None or self.skip_alternate:
+            return None
+        return self.closing + sum(self.closing_lag)//2 - 30_000 + self.alternate_offset
+
+    @property
+    def l3_opening(self):
+        if self.alternate is not None:
+            # L3 stamps int(clock()*1e9). At exactly 30 s on the fixture's
+            # decimal clock a representational ns can change eligibility.
+            ns = lambda ms: int((ms/1000)*1e9)
+            close_mid = (ns(self.closing) + ns(self.closing + sum(self.closing_lag)))//2
+            if close_mid - ns(self.alternate) >= 30_000_000_000:
+                return self.alternate
+        return self.opening
+
+    def boundary_gains(self):
+        # Work in microseconds. One CPU centisecond ties 0.05 at 200 ms.
+        # At an unrepresentable tie, use the closest legal TIME on each side.
+        def points(start, lag):
+            cpu, args = lag
+            return {start*1000 + offset for offset in
+                    (0, cpu*500, cpu*1000, (cpu+args)*500, (cpu+args)*1000)}
+        gains = set()
+        openings = points(self.opening, self.opening_lag)
+        if self.alternate is not None:
+            openings.add(self.alternate*1000)
+        for a in openings:
+            for b in points(self.closing, self.closing_lag):
+                quotient, remainder = divmod(b-a, 200_000)
+                gains.update((quotient if remainder else quotient-1, quotient+1))
+                if not remainder:
+                    gains.add(quotient)
+        return sorted(gains)
+
+    def pulses(self):
+        # Ordinary 15 s timer with bounded alternating wake-up jitter. A
+        # skipped interior tick leaves the two admissions and their rows intact.
+        first = (self.closing + sum(self.closing_lag) if self.place == "first" else 30_000) + 15_000
+        nominal = range(first, self.end+1, 15_000)
+        times = [t + (1 if i % 2 == 0 else -1)*self.jitter for i, t in enumerate(nominal)]
+        times = [t for t in times if t <= self.end]
+        inside = [t for t in times if self.opening < t < self.closing]
+        omitted = set()
+        if inside and self.missed != "none":
+            omitted.add(inside[0] if self.missed == "early" else inside[-1])
+        return tuple(t for t in times if t not in omitted)
+
+
+def split_read(total, mode):
+    cpu = (total, 0, total//2)[mode]
+    return cpu, total-cpu
+
+
+def timing_scenarios():
+    # Every integral millisecond from 0 to 2,000 occurs at BOTH endpoints.
+    # The permutation gives independently varying pairs. A Cartesian edge
+    # grid adds symmetric, one-sided, and exactly representable boundaries.
+    pairs = set()
+    for opening in range(2001):
+        closing = (997*opening + 400) % 2001
+        pairs.add(((opening, 0), (closing, 0)))
+        pairs.add((split_read(opening, opening % 3), split_read(closing, (opening//3) % 3)))
+    for opening in (0, 1, 199, 200, 400, 1000, 1999, 2000):
+        for closing in (0, 1, 199, 200, 400, 1000, 1999, 2000):
+            for left in range(3):
+                for right in range(3):
+                    pairs.add((split_read(opening, left), split_read(closing, right)))
+    for a, b in sorted(pairs):
+        yield TimingCase(f"time_o{a[0]}a{a[1]}_c{b[0]}a{b[1]}", a, b)
+
+
+def endpoint_scenarios():
+    profiles = (((0, 0), (0, 0)), ((400, 0), (0, 0)), ((0, 0), (2000, 0)),
+                ((2000, 0), (400, 0)), ((0, 800), (0, 2000)), ((200, 200), (800, 400)))
+    for place in ("first", "interior", "last"):
+        for i, (opening, closing) in enumerate(profiles):
+            for jitter in ((0, 400) if place == "first" else (-400, 0, 600)):
+                for missed in (("none",) if place == "first" else ("none", "early", "late")):
+                    label = f"{place}_p{i}_j{jitter}_{missed}"
+                    yield TimingCase("admission_"+label, opening, closing, place, jitter, missed)
+    # Solo workers ensure a companion that is far above threshold cannot
+    # hide a wrongful CLI pass. The multi-PID matrix checks individual flags.
+    for place in ("first", "interior", "last"):
+        for history in ("born_inside", "closing_only", "opening_only", "interior_only",
+                        "name_at_open", "name_at_close", "pid_reuse"):
+            for i, (opening, closing) in enumerate(profiles):
+                spec = TimingCase(f"endpoint_{place}_{history}_p{i}", opening, closing, place,
+                                  0 if place == "first" else 400, "none", history)
+                yield spec
+    for place in ("interior", "last"):
+        for history in ("prior_flag_exit", "prior_flag_reset"):
+            for missed in ("none", "early", "late"):
+                yield TimingCase(f"carry_{place}_{history}_{missed}", (400, 0), (0, 0),
+                                 place, 0, missed, history)
+    for place in ("interior", "last"):
+        for i, (opening, closing) in enumerate(profiles):
+            for offset in (-1, 0, 1, None):
+                # The skipped case omits the near-eligible foreground sample
+                # altogether. A daemon tick still occurs inside the interval.
+                yield TimingCase(f"choice_{place}_p{i}_{offset}", opening, closing,
+                                 place, history="eligible_opening", alternate_offset=offset or 0,
+                                 skip_alternate=offset is None)
+    for place in ("first", "last"):
+        for i, (opening, closing) in enumerate(profiles):
+            for history in ("exit_at_close", "exit_after_close", "born_at_open", "born_after_open"):
+                yield TimingCase(f"edge_{place}_{history}_p{i}", opening, closing, place,
+                                 history=history)
+    for place in ("first", "last"):
+        for value in (150, 151, 152, 153, 170, 171, 172):
+            yield TimingCase(f"solo_{place}_{value}", (400, 0), (0, 0), place,
+                             only_gain=value)
+
+
+class TimingFixture(Fixture):
+    def __init__(self, case, root, spec):
+        super().__init__(case, root)
+        self.spec = spec
+        self.gains = [spec.only_gain] if spec.only_gain is not None else spec.boundary_gains()
+        self.trace = []
+        self.pending = None
+        self.lags = {spec.opening: spec.opening_lag, spec.closing: spec.closing_lag}
+        self.pulses = list(spec.pulses())
+        self.delivered = []
+
+    @property
+    def ms(self):
+        return round(self.now*1000)
+
+    def sleep(self, seconds):
+        end = self.ms + round(seconds*1000)
+        if self.spec.place == "first" and end == self.spec.closing - self.spec.jitter:
+            end += self.spec.jitter
+        self.now = end / 1000
+
+    def wall_ns(self):
+        return EPOCH*10**9 + self.ms*10**6
+
+    def processes(self):
+        s, now = self.spec, self.ms
+        rows = super().processes()
+        history = s.history
+        # All rows are functions of absolute time, independent of lane, table
+        # number or presence of a background timer. lstart has second precision.
+        born, gone = -100_000, s.end+60_000
+        lo, hi = s.opening+2500, s.closing-1000
+        if s.alternate is not None:
+            lo = max(lo, s.alternate+200)
+        if history in ("exit_at_close", "exit_after_close"):
+            # At close is absent from accounting. One ms later can survive
+            # only in accounting if the ps read takes at least one ms.
+            gone = s.closing + int(history == "exit_after_close")
+        if history in ("born_at_open", "born_after_open"):
+            born = s.opening + int(history == "born_after_open")
+        if history in ("born_inside", "interior_only"):
+            born = s.opening+2500
+        if history == "closing_only":
+            born = lo = s.closing-6000
+        if history in ("opening_only", "interior_only"):
+            gone, hi = s.closing-6000, s.opening+8000
+        if history.startswith("prior_flag_"):
+            lo, hi = s.opening-14_000, s.opening-1000
+            if history == "prior_flag_exit":
+                gone = s.closing-5000
+        if history == "pid_reuse":
+            if now < s.opening+5000:
+                gone = s.opening+5000
+            else:
+                born = lo = s.opening+8000
+        if not born <= now < gone:
+            return rows
+        name = WORKER
+        if ((history == "name_at_open" and now > s.opening + sum(s.opening_lag))
+                or (history == "name_at_close" and now < s.closing)):
+            name = "fixture-idle"
+        for index, gain in enumerate(self.gains):
+            if history.startswith("prior_flag_"):
+                gain += 300  # the preceding observation is decisively over
+            cs = gain*min(max(now-lo, 0), hi-lo)//(hi-lo)
+            if history == "prior_flag_reset" and now >= s.closing-5000:
+                cs = 0
+            rows.append((PID+index, born//1000, cs, name, name))
+        return rows
+
+    def run(self, argv, **kwargs):
+        from joulewise import prewindow
+        from joulewise.hazards import contention
+        start = self.ms
+        reply = super().run(argv, **kwargs)
+        if tuple(argv) == tuple(contention.PS_ARGV):
+            if self.pending is not None:
+                raise FixtureError("two accounting reads without their paired args read")
+            cpu, args = self.lags.pop(start, (0, 0))
+            self.now = (start+cpu)/1000
+            self.pending = (start, start+cpu, args, reply.stdout)
+        elif tuple(argv) == tuple(prewindow.PS_ARGV) and self.pending is not None:
+            at, cpu_end, args, cpu_rows = self.pending
+            self.pending = None
+            self.now = (start+args)/1000
+            self.trace.append((at, cpu_end, self.ms, cpu_rows, reply.stdout))
+        return reply
+
+    def move(self, end):
+        ms = round(end*1000)
+        if ms < self.ms:
+            raise FixtureError(f"clock reversal {self.ms} -> {ms}")
+        while self.pulses and self.pulses[0] <= ms:
+            pulse = self.pulses.pop(0)
+            if pulse < self.ms:
+                raise FixtureError("timer overlaps a scripted admission read")
+            self.now = pulse/1000
+            if self.timer:
+                self.timer.pulse()
+                self.delivered.append(pulse)
+        self.now = ms/1000
+
+    def host(self):
+        s = self.spec
+        self.work_started.append("host")
+        self.phase = "host_return"
+        if s.place != "first":
+            self.move(s.opening/1000)
+            self.guard.check(force=True)
+            if s.alternate is not None:
+                self.move(s.alternate/1000)
+                self.guard.check(force=True)
+            if s.place == "interior":
+                self.move(s.closing/1000)
+                self.guard.check(force=True)
+        self.move(s.end/1000)
+        return {"status": "pass"}
+
+
+def guard_flags(guard):
+    return [(f["interval"]["start_monotonic_s"], f["interval"]["end_monotonic_s"],
+             b["pid"], b["start"]) for f in guard.contention_flags for b in f["busy"]]
+
+
+def timing_result(spec, f, oracle, raw_flags):
+    # Match the SAME two physical reads. L3 times accounting + args; a
+    # candidate can timestamp accounting alone. No overlapping-window match.
+    # The parser converts a float second to ns with int on L3 and round on R0.
+    # Rounding to us recovers the exact integer/half-ms fixture instant.
+    stamps, witnesses = {}, {}
+    for start, cpu_end, args_end, cpu, args in f.trace:
+        for end in {cpu_end, args_end}:
+            stamp = (start+end)*500
+            if stamp in stamps and stamps[stamp] != start:
+                raise FixtureError("two distinct samples have the same midpoint")
+            stamps[stamp] = start
+        if start in (spec.opening, spec.alternate, spec.closing) and start not in witnesses:
+            witnesses[start] = [cpu_end, args_end, hashlib.sha256(
+                (cpu+"\0"+args).encode()).hexdigest()]
+    def read(seconds):
+        stamp = round(seconds*10**6)
+        if stamp not in stamps:
+            raise FixtureError(f"reported endpoint {seconds} is not a sampled midpoint")
+        return stamps[stamp]
+    flags = {(read(a), read(b), pid, birth) for a, b, pid, birth in raw_flags}
+    # A baseline with no flags still needs an actual L3 judgement. Read its
+    # receipt so a missed window cannot pass as a quiet boundary control.
+    judged = set()
+    if oracle:
+        for receipt in f.guard.receipts:
+            interval = receipt.get("cpu_interval", {})
+            if "start_monotonic_s" in interval:
+                judged.add((read(interval["start_monotonic_s"]), read(interval["end_monotonic_s"])))
+    return dict(flags=sorted(flags), witnesses=witnesses,
+                target_judged=(spec.l3_opening, spec.closing) in judged,
+                delivered=f.delivered, gains=f.gains)
+
+
+def matrix_trial(spec, root, prov, oracle):
+    # The dense sweep stops at the first admission through the normal public
+    # guard. CLI tests below independently exercise publication and teardown.
+    from joulewise import agent_identity, measurement_liveness as live
+    f = TimingFixture(Case(spec.name), root, spec)
+    real_filter = agent_identity.filter_census
+    with (patch.dict(os.environ, {"HOME": str(root/"home"), live.CUSTODY_PARENT_ENV: str(f.parent),
+                                  live.ADDITIONAL_PARENTS_ENV: "[]"}),
+          patch.object(time, "time_ns", f.wall_ns), patch.object(os, "getpid", return_value=8001),
+          patch.object(agent_identity, "filter_census",
+                       lambda stdout, **kw: real_filter(stdout, inspector=f.identity, **kw))):
+        guard = f.factory([f.parent])
+        try:
+            guard.check(force=True)
+            return timing_result(spec, f, oracle, guard_flags(guard))
+        finally:
+            if f.timer:
+                f.timer.set()
+                guard.close()
+
+
+def endpoint_trial(spec, root, prov, oracle):
+    captured = []
+    def factory(case, directory):
+        f = TimingFixture(case, directory, spec)
+        captured.append(f)
+        return f
+    row = run_case(Case(spec.name), root, prov, oracle, fixture_factory=factory)
+    f, = captured
+    result = timing_result(spec, f, oracle, row["flags"])
+    result.update({k: row[k] for k in ("rc", "status", "published", "guard_count", "recorded", "exception")})
+    return result
+
+
+def fixed_scenarios():
+    for name, worker_name, cpu_at, growth in (
+        ("fixed_audit_1_corespotlightd", "corespotlightd", 30, 180),
+        ("fixed_audit_2_resident_400ms", WORKER, 10, 152),
+    ):
+        yield Case(name, (Process(worker_name, cpu_at=cpu_at, centiseconds=growth),), end=60)
+
+
+def fixed_trial(case, root, prov, oracle):
+    # Verbatim timing of audit 2's OpeningRead. Audit 1 uses v2's Fixture.
+    class OpeningRead(Fixture):
+        def run(self, argv, **kwargs):
+            from joulewise.hazards.contention import PS_ARGV
+            reply = super().run(argv, **kwargs)
+            if tuple(argv) == tuple(PS_ARGV) and self.now == 0:
+                self.now = .4
+                self.next_tick += .4
+            return reply
+    fixture = OpeningRead if case.name.startswith("fixed_audit_2") else Fixture
+    return run_case(case, root, prov, oracle, fixture_factory=fixture)
+
+
+def fixed_errors(case, old, new):
+    audit2 = case.name.startswith("fixed_audit_2")
+    window = (0.2, 30.4) if audit2 else (0., 30.)
+    expected = (*window, PID, TOKEN)
+    admitted = set(map(tuple, old["flags"]))
+    candidate = set(map(tuple, new["flags"]))
+    errors = []
+    if expected not in admitted or old["refused"]:
+        errors.append("invalid L3 audit witness")
+    if not admitted <= candidate:
+        errors.append(f"missing={sorted(admitted-candidate)}")
+    if new["rc"] != 2 or new["status"] == "pass" or new["published"]:
+        errors.append(f"rc={new['rc']} status={new['status']} published={new['published']}")
+    if new["recorded"] != new["guard_count"]:
+        errors.append("terminal report flag count differs from guard")
+    return errors
+
+
+def timing_errors(spec, old, new, cli):
+    errors = []
+    start, end = spec.opening, spec.closing
+    reads = [(start, spec.opening_lag), (end, spec.closing_lag)]
+    if spec.alternate is not None:
+        reads.append((spec.alternate, (0, 0)))
+    for at, lag in reads:
+        expected = [at+lag[0], at+sum(lag)]
+        a, b = (r["witnesses"].get(str(at)) for r in (old, new))
+        if a is None or b is None or a[:2] != expected or a != b:
+            errors.append(f"invalid endpoint witness at {at}: {a} / {b}, expected {expected}")
+    if not old["target_judged"]:
+        errors.append("L3 did not judge the target endpoint pair")
+    if cli and tuple(new["delivered"]) != spec.pulses():
+        errors.append("scheduled daemon samples differ from the fixture")
+    before, after = (set(map(tuple, r["flags"])) for r in (old, new))
+    target = {(p, birth) for a,b,p,birth in before if (a,b) == (spec.l3_opening,end)}
+    # Controls prove the generated positives are real L3 flags. A lone case
+    # tuned below threshold can legitimately lack any target flag.
+    positive = spec.history not in ("opening_only", "interior_only", "exit_at_close") and spec.only_gain is None
+    if positive and not target:
+        errors.append("missing positive L3 endpoint control")
+    if spec.history in ("opening_only", "interior_only", "exit_at_close") and target:
+        errors.append("unexpected positive L3 endpoint control")
+    if spec.history in ("resident", "eligible_opening"):
+        # Independently check delivered counters against the observed L3
+        # midpoint spacing. Exact ties use the pinned implementation's own
+        # flag set in the differential (including its float arithmetic).
+        left = spec.l3_opening*1000
+        if spec.l3_opening == start:
+            left += sum(spec.opening_lag)*500
+        elapsed = end*1000 + sum(spec.closing_lag)*500 - left
+        for i, gain in enumerate(old["gains"]):
+            key = (PID+i, TOKEN)
+            if gain*200_000 != elapsed and ((gain*200_000 > elapsed) != (key in target)):
+                errors.append(f"invalid L3 boundary control for {key}, {gain} cs/{elapsed} us")
+                break
+    if not before <= after:
+        missing = sorted(before-after)
+        errors.append(f"missing {len(missing)} L3 flags, first={missing[0]}")
+    if cli:
+        if new["exception"] or new["rc"] not in (0, 2) or new["recorded"] != new["guard_count"]:
+            errors.append("invalid terminal outcome or lost report count")
+        if before or after:
+            if new["rc"] != 2 or new["status"] == "pass" or new["published"]:
+                errors.append(f"rc={new['rc']} status={new['status']} published={new['published']}")
+    return errors
+
+
+V3_FAMILIES = {"v3-fixed": (fixed_scenarios, fixed_trial),
+               "v3-timing": (timing_scenarios, matrix_trial),
+               "v3-endpoints": (endpoint_scenarios, endpoint_trial)}
+
+
+class TestR0V3(unittest.TestCase):
+    def compare(self, family):
+        candidate = Path(os.environ.get("R0_CANDIDATE", Path.cwd())).resolve()
+        generate, _ = V3_FAMILIES[family]
+        specs = list(generate())
+        labels = {s.name for s in specs}
+        self.assertEqual(len(labels), len(specs))
+        if family == "v3-timing":
+            for key in ("opening_lag", "closing_lag"):
+                self.assertEqual({sum(getattr(s, key)) for s in specs}, set(range(2001)))
+                self.assertEqual({getattr(s, key)[0] for s in specs}, set(range(2001)))
+        with tempfile.TemporaryDirectory(prefix=family+"-") as tmp:
+            work = Path(tmp).resolve()
+            admitted = work/"admitted"
+            stage_oracle(candidate, admitted)
+            old = lane(admitted, work/"l3", "admitted", family)
+            new = lane(candidate, work/"r0", "candidate", family)
+        self.assertEqual(set(old), labels)
+        self.assertEqual(set(new), labels)
+        failed = invalid = lost = published = 0
+        for spec in specs:
+            a, b = old[spec.name], new[spec.name]
+            if family == "v3-fixed":
+                errors = fixed_errors(spec, a, b)
+                print(f"{spec.name} L3={a['flags'][:1]} R0={b['flags']} "
+                      f"exit={b['rc']} status={b['status']} published={b['published']}", flush=True)
+            else:
+                errors = timing_errors(spec, a, b, family == "v3-endpoints")
+            if errors:
+                failed += 1
+                invalid += int(any("control" in e or "witness" in e or "did not judge" in e
+                                   or "scheduled daemon" in e for e in errors))
+                lost += int(any(e.startswith("missing") and "control" not in e for e in errors))
+                published += int(bool(a["flags"] and b.get("published")))
+                print(f"FAIL {family} {spec.name} | {' | '.join(errors)}")
+        publication_count = "n/a" if family == "v3-timing" else str(published)
+        print(f"{family} scenarios={len(specs)} failed={failed} passed={len(specs)-failed} "
+              f"invalid_controls={invalid} lost_flag_cases={lost} "
+              f"published_despite_L3_flag={publication_count}", flush=True)
+        self.assertEqual(failed, 0, family)
+
+    def test_v3_fixed(self):
+        self.compare("v3-fixed")
+
+    def test_v3_timing(self):
+        self.compare("v3-timing")
+
+    def test_v3_endpoints(self):
+        self.compare("v3-endpoints")
+
+
+if (__name__ == "__main__" and sys.argv[1:2] == ["--synthetic-worker"] and
+        len(sys.argv) == 6 and sys.argv[5] in V3_FAMILIES):
+    generate, execute = V3_FAMILIES[sys.argv[5]]
+    worker(Path(sys.argv[2]).resolve(), Path(sys.argv[3]).resolve(),
+           sys.argv[4] == "admitted", cases=generate, execute=execute)
+    sys.exit(0)
+# END FROZEN V3 ADDITION.
 
 if __name__ == "__main__":
     if sys.argv[1:2] == ["--synthetic-worker"] and len(sys.argv) == 6:
