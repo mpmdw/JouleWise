@@ -1052,6 +1052,21 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 
 <!-- RUN_STATE TYPED ITEMS: newest first. Add with scripts/run_state_add.py; never edit by hand. -->
 
+447. **Filler queues renewed to 8 Dec plus six two-leg f2-inst queues (fillers-w2 at audit c4b4f4265); prefer two-leg spans where the worst case fits**
+
+```item
+{"expires_epoch_s": null, "issued_epoch_s": 1795049547, "number": 447, "owner": "magistrate", "schema": "joulewise.run_state_item.v1", "sets": [], "status": "ISSUED", "supersedes": []}
+```
+
+- **What:** the filler queues are renewed so they don't run out on Tue 24 Nov (PR #858, merged to the audit branch at `c4b4f4265`; directory `docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/fillers-w2/`):
+  - 19 one-leg queues (f2-stab-01..16 and the f2-inst one-leg spans) re-issued with `expires_at` 2026-12-08T12:35:29-08:00. Only the expiry field differs from the current queues.
+  - Six new TWO-LEG f2-inst queues: 30 paired spans covering both starting parities. Each pair has one soak and one Check, and a worst-case work bound of 8,550 s.
+  - Verified by pinned validation on both runners and byte-for-byte regeneration. README.md lists every queue's sha256.
+- **Use:** from now on, issue fillers from `fillers-w2/` under items 418 (d), 422, 425, 428, 432 and 434. Check each queue's sha256 against `fillers-w2/README.md` first.
+  - Prefer a two-leg f2-inst span where its worst case fits the gap. It halves soak and Check overhead.
+  - Register row 2 still applies: a filler arms only if every remaining counted span keeps its date.
+- **Unchanged:** the ladder order (item 422), sealing (no filler leg counts anywhere), and items 423, 431, 433, 440-443 and 446.
+
 446. **Air copy after R1-RERUN's fence: LAN rsync if the Air is on this subnet, else copy only the offload key to the Air (the trees are already in iCloud); never hold the ladder**
 
 ```item
