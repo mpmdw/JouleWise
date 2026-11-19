@@ -293,6 +293,7 @@ class Snapshot:
         self.cache = {}
         self.manifest = self._manifest(self.manifest_name, look)
         require(self.hashes[self.manifest_name] == self.row["sha256"], "wrong manifest ledger digest")
+        self.step3_code = _validate_executables(integrated=self.native)
         self.validate_manifest(self.manifest_name, look)
         self.roster = self.doc("roster.json")
         self.receipts = self.roster["receipt_commit"]
@@ -332,7 +333,6 @@ class Snapshot:
         registry = f"{CONTROL}/filler-kit-registry.json"
         require(exact_path(CODE_ROOT / registry).read_bytes() == self.read(registry),
                 "filler registry differs from the executing registry")
-        _validate_executables()
         result = subprocess.run(
             [sys.executable, "-B", "-m", "joulewise.cadence_looks.manifest_dispatch",
              "validate", str(self.book.root / name), "--final"],
@@ -762,9 +762,9 @@ def _ratios(levels):
     return ratios
 
 
-def _step3_source(*, integrated=False):
+def _step3_code(*, integrated):
     path = CODE_ROOT / STEP3_PATH
-    if path.exists() or integrated:
+    if integrated or os.path.lexists(path):
         source = exact_path(path).read_bytes()
     else:
         # Development can use the owner's immutable Git blob while the two
@@ -775,13 +775,18 @@ def _step3_source(*, integrated=False):
             env=_git_environment(), stdin=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
         )
     require(digest(source) == STEP3_SHA256, "pinned step-3 reader has different bytes")
-    return source
+    return compile(source, STEP3_PATH, "exec")
 
 
-def step3_reader(*, integrated=False):
+def _load_step3(code):
     mod = ModuleType("_description_pinned_step3")
-    exec(compile(_step3_source(integrated=integrated), STEP3_PATH, "exec"), mod.__dict__)
+    exec(code, mod.__dict__)
     return mod
+
+
+def step3_reader():
+    """Load the pinned reader for the invented row comparator."""
+    return _load_step3(_step3_code(integrated=False))
 
 
 def _max_gap(intervals, start, stop):
@@ -1258,7 +1263,9 @@ def _context(hold, turn, qualified):
 def score(snapshot, sources, qualified, mark_read):
     files = {name.removesuffix(".json"): {} for name in private_names(snapshot.instrument)
              if name.endswith(".json")}
-    pinned = step3_reader(integrated=snapshot.native) if qualified else None
+    # Reuse preflight's verified code. Scoring must not resolve a different
+    # dependency after the worker has spent the one-use reservation.
+    pinned = _load_step3(snapshot.step3_code) if qualified else None
     for key, detail in qualified.items():
         paths = sources[key]
         support = decode(paths["support.json"].read_bytes())
@@ -1292,8 +1299,8 @@ EXECUTABLE_DEPENDENCIES = {
 }
 
 
-def _validate_executables():
+def _validate_executables(*, integrated):
     for path, expected in EXECUTABLE_DEPENDENCIES.items():
         require(digest(exact_path(CODE_ROOT / path).read_bytes()) == expected,
                 "executing dependency differs from its reader inventory")
-    _step3_source()
+    return _step3_code(integrated=integrated)
