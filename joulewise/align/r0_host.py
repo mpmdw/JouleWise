@@ -94,59 +94,70 @@ def _with_peak_counters(snapshot):
 
 
 def _observations_inside(observations, opening, current):
-    return [sample for sample in observations if opening.midpoint_ns < sample.midpoint_ns < current.midpoint_ns]
+    return [sample for sample in observations
+            if opening.midpoint_ns <= sample.midpoint_ns <= current.midpoint_ns
+            and sample is not opening and sample is not current]
 
 
-def _refuse_seen_agent(pid, command, args=()):
-    """An agent named by the captured row needs no live PID confirmation."""
-    if (_AGENT_NAME.search(command.rsplit("/", 1)[-1]) or _AGENT_APP.search(command)
-            or (args and identify_agent(command, args) == "agent")):
-        raise Refused(f"agent census refused: pid {pid} process {command}")
+def _named_agent(pid, command, argv):
+    return (_AGENT_NAME.search(command.rsplit("/", 1)[-1]) or _AGENT_APP.search(command)
+            or (argv and _AGENT_CANDIDATE.search(argv) and identify_agent(command, tuple(argv.split())) == "agent"))
 
 
-def _interior_cpu_evidence(opening, current, intermediate, elapsed_s, limit):
-    """CPU lower bounds when a contender is missing from either endpoint."""
-    if not intermediate:
-        return []
-    evidence = {}
-    first_inside = {}
-    paired = opening.rows.keys() & current.rows.keys()
-    for snapshot in (*intermediate, current):
-        wall_shift_ns = ((snapshot.started.wall_ns - opening.started.wall_ns)
-                         - (snapshot.started.monotonic_ns - opening.started.monotonic_ns))
-        window_start_ns = opening.finished.wall_ns + max(0, wall_shift_ns)
-        if snapshot is current:
-            identities = snapshot.rows.keys() & first_inside.keys()
+def _measurement_chain(pid, command, argv):
+    return _MEASUREMENT_CHAIN.search(argv or command) and pid != os.getpid()
+
+
+_PROCESS_CENSUS_CLASSES = (
+    ("named_agents", _named_agent),
+    ("chains", _measurement_chain),
+)
+
+
+def _require_clear_sighting(pid, command, receipt, *, argv=None, line=None):
+    """Apply every census rule to a captured row before any follow-up query."""
+    for field, matches in _PROCESS_CENSUS_CLASSES:
+        if matches(pid, command, argv):
+            receipt.setdefault(field, []).append(line or f"{pid} {command}")
+            raise Refused(f"machine occupied or census indeterminate: {field}, pid {pid} process {argv or command}")
+
+
+def _start_overlaps_window(opening, first, row):
+    # ps lstart is the lower endpoint of a one-second range. The identity
+    # was absent in the opening table. Only a start compatible with that
+    # absence can supply a zero counter to the observed lifetime.
+    wall_shift_ns = ((first.started.wall_ns - opening.started.wall_ns)
+                     - (first.started.monotonic_ns - opening.started.monotonic_ns))
+    window_start_ns = opening.finished.wall_ns + max(0, wall_shift_ns)
+    start_floor_ns = row["start_epoch_s"] * 1_000_000_000
+    return (abs(wall_shift_ns) <= 1_000_000_000
+            and window_start_ns < start_floor_ns + 1_000_000_000
+            and start_floor_ns <= first.finished.wall_ns)
+
+
+def _overlap_cpu_evidence(opening, current, intermediate, elapsed_s, limit):
+    """Judge the observed counter growth in each lifetime's overlap with this window."""
+    samples = (opening, *intermediate, current)
+    contenders = {identity for sample in samples for identity, row in sample.rows.items() if row["contaminant"]}
+    evidence = []
+    for identity in contenders:
+        # A sighting on either edge belongs to this window. The last sample
+        # still bounds observed CPU when the process exits before closing.
+        observed = [(sample, sample.rows[identity]) for sample in samples if identity in sample.rows]
+        first, first_row = observed[0]
+        if first is not opening and _start_overlaps_window(opening, first, first_row):
+            baseline = 0.0
+            basis = "CPU lower bound from a start and sample inside this window"
         else:
-            identities = snapshot.rows.keys() - paired
-        for identity in identities:
-            row = snapshot.rows[identity]
-            first = opening.rows.get(identity)
-            if first is None:
-                if identity not in first_inside:
-                    birth_floor_ns = row["start_epoch_s"] * 1_000_000_000
-                    if (abs(wall_shift_ns) <= 1_000_000_000
-                            and window_start_ns <= birth_floor_ns <= snapshot.finished.wall_ns):
-                        baseline = 0.0
-                        basis = "CPU lower bound from a process born inside this window"
-                    else:
-                        # A whole-second lstart can overlap the opening. Measured
-                        # growth between samples still happened inside the window.
-                        baseline = row.get("peak_cpu_seconds", row["cumulative_cpu_seconds"])
-                        basis = "CPU lower bound between samples inside this window"
-                    first_inside[identity] = baseline, basis
-                baseline, basis = first_inside[identity]
-            else:
-                baseline = first["cumulative_cpu_seconds"]
-                basis = "CPU lower bound from the opening counter and a sample before exit"
-            if not (row["contaminant"] or (first is not None and first["contaminant"])):
-                continue
-            rate = (row["cumulative_cpu_seconds"] - baseline) / elapsed_s
-            if math.isfinite(rate) and rate > evidence.get(identity, {}).get("cpu_s_per_s", limit):
-                evidence[identity] = {
-                    "pid": row["pid"], "command": row["command"], "start": row["start_identity"],
-                    "cpu_s_per_s": rate, "basis": basis}
-    return sorted(evidence.values(), key=lambda row: (-row["cpu_s_per_s"], row["pid"], row["start"]))
+            baseline = first_row.get("peak_cpu_seconds", first_row["cumulative_cpu_seconds"])
+            basis = ("CPU lower bound from the opening counter and a later sample in this window"
+                     if first is opening else "CPU lower bound between samples in this window")
+        peak = max((row for _, row in observed), key=lambda row: row["cumulative_cpu_seconds"])
+        rate = (peak["cumulative_cpu_seconds"] - baseline) / elapsed_s
+        if math.isfinite(rate) and rate > limit:
+            evidence.append({"pid": peak["pid"], "command": peak["command"], "start": peak["start_identity"],
+                             "cpu_s_per_s": rate, "basis": basis})
+    return sorted(evidence, key=lambda row: (-row["cpu_s_per_s"], row["pid"], row["start"]))
 
 
 class QuietGuard:
@@ -255,8 +266,9 @@ class QuietGuard:
             rows = contention.parse(result.stdout.encode("utf-8"))
         except (ValueError, OverflowError) as exc:
             raise Refused(f"census indeterminate: cumulative CPU snapshot: {exc}") from exc
+        sightings = {}
         for row in rows.values():
-            _refuse_seen_agent(row["pid"], row["command"])
+            _require_clear_sighting(row["pid"], row["command"], sightings)
         try:
             table = self.run(PS_ARGV, capture_output=True, text=True,
                              timeout=contention.PROBE_TIMEOUT_S,
@@ -326,9 +338,10 @@ class QuietGuard:
         if type(agent.exit_code) is not int or not isinstance(agent.stdout, str) or not isinstance(agent.stderr, str):
             raise Refused("agent census returned malformed probe result")
         for line in agent.stdout.splitlines():
-            fields = line.split()
-            if len(fields) > 1 and fields[0].isdecimal():
-                _refuse_seen_agent(fields[0], fields[1], tuple(fields[1:]))
+            fields = line.split(None, 1)
+            if len(fields) == 2 and fields[0].isdecimal():
+                pid, argv = fields
+                _require_clear_sighting(int(pid), argv.split(None, 1)[0], receipt, argv=argv, line=line)
         # Resolve incidental argv matches using the admitted identity filter.
         agent = decide_census(agent)
         receipt[field] = asdict(agent)
@@ -337,26 +350,21 @@ class QuietGuard:
 
     def _process_table(self, stdout, receipt):
         receipt["pcpu_diagnostic"] = busy_contaminants(stdout)
+        receipt["chains"] = []
         args = {}
         candidates = []
-        chains = []
-        own_pid = os.getpid()
         for line in stdout.splitlines():
             if not line.strip():
                 continue
             pid, _, argv = line.split(None, 2)
             pid = int(pid)
+            _require_clear_sighting(pid, argv.split(None, 1)[0], receipt, argv=argv, line=line)
             args[pid] = argv
             if _AGENT_CANDIDATE.search(argv):
                 candidates.append(f"{pid} {argv}\n")
-            if pid != own_pid and _MEASUREMENT_CHAIN.search(argv):
-                chains.append(line)
-        receipt["chains"] = chains
         if candidates:
             self._require_clear_agent_result(
                 ProbeResult(PS_ARGV, 0, "".join(candidates), "", time.monotonic_ns()), receipt, "process_table_agent")
-        if chains:
-            raise Refused(f"machine occupied or census indeterminate: {receipt}")
         return args
 
     def _census(self, receipt):
@@ -664,7 +672,7 @@ class QuietGuard:
                     direct.setdefault((row["pid"], row["start"]),
                                       {**row, "basis": "admitted R0-L3 counter decision"})
         exits = {(row["pid"], row["start"]): row for row in raw["exited_over_limit"] if contaminant(row)}
-        for row in _interior_cpu_evidence(peak_opening, current, intermediate, measured["elapsed_s"], limit):
+        for row in _overlap_cpu_evidence(opening, current, intermediate, measured["elapsed_s"], limit):
             identity = row["pid"], row["start"]
             if identity in current.rows:
                 direct.setdefault(identity, row)
