@@ -1,0 +1,1015 @@
+{
+  "expires_at": "2026-12-08T12:35:29-08:00",
+  "runs": [
+    {
+      "runner_pin": "2d347f721552fe03bdd19f113e7bad7a7c24908e",
+      "cwd": "$PINNED_CHECKOUT",
+      "checks": [
+        {
+          "check": "queue",
+          "sha256": "0031cb6c03db68286a36cba50852f265c9143867495297f9677c95697d8b7e0b",
+          "argv": [
+            "python3.13",
+            "-I",
+            "-B",
+            "scripts/cadence_queue.py",
+            "validate-queue",
+            "$AUDIT_CHECKOUT/docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/fillers-w2/queues-1leg/f2-inst-01.json",
+            "--kits-root",
+            "$AUDIT_CHECKOUT"
+          ],
+          "exit_code": 0,
+          "result": {
+            "ok": true,
+            "plan_ids": [
+              "cq-f2-inst-01-l004-a1",
+              "cq-f2-inst-01-l005-a1",
+              "cq-f2-inst-01-l006-a1",
+              "cq-f2-inst-01-l007-a1",
+              "cq-f2-inst-01-l008-a1",
+              "cq-f2-inst-01-l009-a1",
+              "cq-f2-inst-01-l010-a1",
+              "cq-f2-inst-01-l011-a1",
+              "cq-f2-inst-01-l012-a1"
+            ],
+            "queue_id": "cq-f2-inst-01",
+            "spans": 9
+          },
+          "stderr": ""
+        },
+        {
+          "check": "queue",
+          "sha256": "12a83e392ed85fde76dcbec60627e8f15a4ac913a89a61be0d8d6245ad61eb01",
+          "argv": [
+            "python3.13",
+            "-I",
+            "-B",
+            "scripts/cadence_queue.py",
+            "validate-queue",
+            "$AUDIT_CHECKOUT/docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/fillers-w2/queues-1leg/f2-inst-02.json",
+            "--kits-root",
+            "$AUDIT_CHECKOUT"
+          ],
+          "exit_code": 0,
+          "result": {
+            "ok": true,
+            "plan_ids": [
+              "cq-f2-inst-02-l001-a1",
+              "cq-f2-inst-02-l002-a1",
+              "cq-f2-inst-02-l003-a1",
+              "cq-f2-inst-02-l004-a1",
+              "cq-f2-inst-02-l005-a1",
+              "cq-f2-inst-02-l006-a1",
+              "cq-f2-inst-02-l007-a1",
+              "cq-f2-inst-02-l008-a1",
+              "cq-f2-inst-02-l009-a1",
+              "cq-f2-inst-02-l010-a1",
+              "cq-f2-inst-02-l011-a1",
+              "cq-f2-inst-02-l012-a1"
+            ],
+            "queue_id": "cq-f2-inst-02",
+            "spans": 12
+          },
+          "stderr": ""
+        },
+        {
+          "check": "queue",
+          "sha256": "8ce447dc0d1ba01b816133e3d9c6d7815bf2a75eb441eef384cfccd4bdadb20e",
+          "argv": [
+            "python3.13",
+            "-I",
+            "-B",
+            "scripts/cadence_queue.py",
+            "validate-queue",
+            "$AUDIT_CHECKOUT/docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/fillers-w2/queues-1leg/f2-inst-03.json",
+            "--kits-root",
+            "$AUDIT_CHECKOUT"
+          ],
+          "exit_code": 0,
+          "result": {
+            "ok": true,
+            "plan_ids": [
+              "cq-f2-inst-03-l001-a1",
+              "cq-f2-inst-03-l002-a1",
+              "cq-f2-inst-03-l003-a1",
+              "cq-f2-inst-03-l004-a1",
+              "cq-f2-inst-03-l005-a1",
+              "cq-f2-inst-03-l006-a1",
+              "cq-f2-inst-03-l007-a1",
+              "cq-f2-inst-03-l008-a1",
+              "cq-f2-inst-03-l009-a1",
+              "cq-f2-inst-03-l010-a1",
+              "cq-f2-inst-03-l011-a1",
+              "cq-f2-inst-03-l012-a1"
+            ],
+            "queue_id": "cq-f2-inst-03",
+            "spans": 12
+          },
+          "stderr": ""
+        },
+        {
+          "check": "queue",
+          "sha256": "67866ef9d9e6972921cdc664b533d3f323e9bef2e296b01d970f951131f9bbd0",
+          "argv": [
+            "python3.13",
+            "-I",
+            "-B",
+            "scripts/cadence_queue.py",
+            "validate-queue",
+            "$AUDIT_CHECKOUT/docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/fillers-w2/queues-1leg/f2-stab-01.json",
+            "--kits-root",
+            "$AUDIT_CHECKOUT"
+          ],
+          "exit_code": 0,
+          "result": {
+            "ok": true,
+            "plan_ids": [
+              "cq-f2-stab-01-l001-a1",
+              "cq-f2-stab-01-l002-a1",
+              "cq-f2-stab-01-l003-a1",
+              "cq-f2-stab-01-l004-a1",
+              "cq-f2-stab-01-l005-a1",
+              "cq-f2-stab-01-l006-a1",
+              "cq-f2-stab-01-l007-a1",
+              "cq-f2-stab-01-l008-a1",
+              "cq-f2-stab-01-l009-a1",
+              "cq-f2-stab-01-l010-a1",
+              "cq-f2-stab-01-l011-a1",
+              "cq-f2-stab-01-l012-a1"
+            ],
+            "queue_id": "cq-f2-stab-01",
+            "spans": 12
+          },
+          "stderr": ""
+        },
+        {
+          "check": "queue",
+          "sha256": "5fbb575f88017b9787e15b5fa624c43ca464d0799b65ee3f24ecc17503919508",
+          "argv": [
+            "python3.13",
+            "-I",
+            "-B",
+            "scripts/cadence_queue.py",
+            "validate-queue",
+            "$AUDIT_CHECKOUT/docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/fillers-w2/queues-1leg/f2-stab-02.json",
+            "--kits-root",
+            "$AUDIT_CHECKOUT"
+          ],
+          "exit_code": 0,
+          "result": {
+            "ok": true,
+            "plan_ids": [
+              "cq-f2-stab-02-l001-a1",
+              "cq-f2-stab-02-l002-a1",
+              "cq-f2-stab-02-l003-a1",
+              "cq-f2-stab-02-l004-a1",
+              "cq-f2-stab-02-l005-a1",
+              "cq-f2-stab-02-l006-a1",
+              "cq-f2-stab-02-l007-a1",
+              "cq-f2-stab-02-l008-a1",
+              "cq-f2-stab-02-l009-a1",
+              "cq-f2-stab-02-l010-a1",
+              "cq-f2-stab-02-l011-a1",
+              "cq-f2-stab-02-l012-a1"
+            ],
+            "queue_id": "cq-f2-stab-02",
+            "spans": 12
+          },
+          "stderr": ""
+        },
+        {
+          "check": "queue",
+          "sha256": "6fcb707c17778b1f59f09db2a4e19912d0211fd299f0d984c5bfe6bf7258fe3d",
+          "argv": [
+            "python3.13",
+            "-I",
+            "-B",
+            "scripts/cadence_queue.py",
+            "validate-queue",
+            "$AUDIT_CHECKOUT/docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/fillers-w2/queues-1leg/f2-stab-03.json",
+            "--kits-root",
+            "$AUDIT_CHECKOUT"
+          ],
+          "exit_code": 0,
+          "result": {
+            "ok": true,
+            "plan_ids": [
+              "cq-f2-stab-03-l001-a1",
+              "cq-f2-stab-03-l002-a1",
+              "cq-f2-stab-03-l003-a1",
+              "cq-f2-stab-03-l004-a1",
+              "cq-f2-stab-03-l005-a1",
+              "cq-f2-stab-03-l006-a1",
+              "cq-f2-stab-03-l007-a1",
+              "cq-f2-stab-03-l008-a1",
+              "cq-f2-stab-03-l009-a1",
+              "cq-f2-stab-03-l010-a1",
+              "cq-f2-stab-03-l011-a1",
+              "cq-f2-stab-03-l012-a1"
+            ],
+            "queue_id": "cq-f2-stab-03",
+            "spans": 12
+          },
+          "stderr": ""
+        },
+        {
+          "check": "queue",
+          "sha256": "c15432cec8dac9ce358ec4666cb67ae7e3796a8852f804e66ba028babb7ad85b",
+          "argv": [
+            "python3.13",
+            "-I",
+            "-B",
+            "scripts/cadence_queue.py",
+            "validate-queue",
+            "$AUDIT_CHECKOUT/docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/fillers-w2/queues-1leg/f2-stab-04.json",
+            "--kits-root",
+            "$AUDIT_CHECKOUT"
+          ],
+          "exit_code": 0,
+          "result": {
+            "ok": true,
+            "plan_ids": [
+              "cq-f2-stab-04-l001-a1",
+              "cq-f2-stab-04-l002-a1",
+              "cq-f2-stab-04-l003-a1",
+              "cq-f2-stab-04-l004-a1",
+              "cq-f2-stab-04-l005-a1",
+              "cq-f2-stab-04-l006-a1",
+              "cq-f2-stab-04-l007-a1",
+              "cq-f2-stab-04-l008-a1",
+              "cq-f2-stab-04-l009-a1",
+              "cq-f2-stab-04-l010-a1",
+              "cq-f2-stab-04-l011-a1",
+              "cq-f2-stab-04-l012-a1"
+            ],
+            "queue_id": "cq-f2-stab-04",
+            "spans": 12
+          },
+          "stderr": ""
+        },
+        {
+          "check": "queue",
+          "sha256": "5cbd79d3992a6726ff79276a54aa594b68f680b092f1d4c21a2002ba6ceec786",
+          "argv": [
+            "python3.13",
+            "-I",
+            "-B",
+            "scripts/cadence_queue.py",
+            "validate-queue",
+            "$AUDIT_CHECKOUT/docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/fillers-w2/queues-1leg/f2-stab-05.json",
+            "--kits-root",
+            "$AUDIT_CHECKOUT"
+          ],
+          "exit_code": 0,
+          "result": {
+            "ok": true,
+            "plan_ids": [
+              "cq-f2-stab-05-l001-a1",
+              "cq-f2-stab-05-l002-a1",
+              "cq-f2-stab-05-l003-a1",
+              "cq-f2-stab-05-l004-a1",
+              "cq-f2-stab-05-l005-a1",
+              "cq-f2-stab-05-l006-a1",
+              "cq-f2-stab-05-l007-a1",
+              "cq-f2-stab-05-l008-a1",
+              "cq-f2-stab-05-l009-a1",
+              "cq-f2-stab-05-l010-a1",
+              "cq-f2-stab-05-l011-a1",
+              "cq-f2-stab-05-l012-a1"
+            ],
+            "queue_id": "cq-f2-stab-05",
+            "spans": 12
+          },
+          "stderr": ""
+        },
+        {
+          "check": "queue",
+          "sha256": "3c63f6d6d128aa581337cdddaf7a9afc15f426fcfa528e029a30ebf11e626116",
+          "argv": [
+            "python3.13",
+            "-I",
+            "-B",
+            "scripts/cadence_queue.py",
+            "validate-queue",
+            "$AUDIT_CHECKOUT/docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/fillers-w2/queues-1leg/f2-stab-06.json",
+            "--kits-root",
+            "$AUDIT_CHECKOUT"
+          ],
+          "exit_code": 0,
+          "result": {
+            "ok": true,
+            "plan_ids": [
+              "cq-f2-stab-06-l001-a1",
+              "cq-f2-stab-06-l002-a1",
+              "cq-f2-stab-06-l003-a1",
+              "cq-f2-stab-06-l004-a1",
+              "cq-f2-stab-06-l005-a1",
+              "cq-f2-stab-06-l006-a1",
+              "cq-f2-stab-06-l007-a1",
+              "cq-f2-stab-06-l008-a1",
+              "cq-f2-stab-06-l009-a1",
+              "cq-f2-stab-06-l010-a1",
+              "cq-f2-stab-06-l011-a1",
+              "cq-f2-stab-06-l012-a1"
+            ],
+            "queue_id": "cq-f2-stab-06",
+            "spans": 12
+          },
+          "stderr": ""
+        },
+        {
+          "check": "queue",
+          "sha256": "95183257710af8efaea67d396a484e30ca2d93bf364cd226d1a54c82e66a50b5",
+          "argv": [
+            "python3.13",
+            "-I",
+            "-B",
+            "scripts/cadence_queue.py",
+            "validate-queue",
+            "$AUDIT_CHECKOUT/docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/fillers-w2/queues-1leg/f2-stab-07.json",
+            "--kits-root",
+            "$AUDIT_CHECKOUT"
+          ],
+          "exit_code": 0,
+          "result": {
+            "ok": true,
+            "plan_ids": [
+              "cq-f2-stab-07-l001-a1",
+              "cq-f2-stab-07-l002-a1",
+              "cq-f2-stab-07-l003-a1",
+              "cq-f2-stab-07-l004-a1",
+              "cq-f2-stab-07-l005-a1",
+              "cq-f2-stab-07-l006-a1",
+              "cq-f2-stab-07-l007-a1",
+              "cq-f2-stab-07-l008-a1",
+              "cq-f2-stab-07-l009-a1",
+              "cq-f2-stab-07-l010-a1",
+              "cq-f2-stab-07-l011-a1",
+              "cq-f2-stab-07-l012-a1"
+            ],
+            "queue_id": "cq-f2-stab-07",
+            "spans": 12
+          },
+          "stderr": ""
+        },
+        {
+          "check": "queue",
+          "sha256": "53adb757d55084105b2fea04c5339da04c04fc7ff6ff021c07bb2a16cc78437c",
+          "argv": [
+            "python3.13",
+            "-I",
+            "-B",
+            "scripts/cadence_queue.py",
+            "validate-queue",
+            "$AUDIT_CHECKOUT/docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/fillers-w2/queues-1leg/f2-stab-08.json",
+            "--kits-root",
+            "$AUDIT_CHECKOUT"
+          ],
+          "exit_code": 0,
+          "result": {
+            "ok": true,
+            "plan_ids": [
+              "cq-f2-stab-08-l001-a1",
+              "cq-f2-stab-08-l002-a1",
+              "cq-f2-stab-08-l003-a1",
+              "cq-f2-stab-08-l004-a1",
+              "cq-f2-stab-08-l005-a1",
+              "cq-f2-stab-08-l006-a1",
+              "cq-f2-stab-08-l007-a1",
+              "cq-f2-stab-08-l008-a1",
+              "cq-f2-stab-08-l009-a1",
+              "cq-f2-stab-08-l010-a1",
+              "cq-f2-stab-08-l011-a1",
+              "cq-f2-stab-08-l012-a1"
+            ],
+            "queue_id": "cq-f2-stab-08",
+            "spans": 12
+          },
+          "stderr": ""
+        },
+        {
+          "check": "queue",
+          "sha256": "da6d0a50d85559453287cabbbf7636a4c47edcf2880bc54cb9eb3f63443e1152",
+          "argv": [
+            "python3.13",
+            "-I",
+            "-B",
+            "scripts/cadence_queue.py",
+            "validate-queue",
+            "$AUDIT_CHECKOUT/docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/fillers-w2/queues-1leg/f2-stab-09.json",
+            "--kits-root",
+            "$AUDIT_CHECKOUT"
+          ],
+          "exit_code": 0,
+          "result": {
+            "ok": true,
+            "plan_ids": [
+              "cq-f2-stab-09-l001-a1",
+              "cq-f2-stab-09-l002-a1",
+              "cq-f2-stab-09-l003-a1",
+              "cq-f2-stab-09-l004-a1",
+              "cq-f2-stab-09-l005-a1",
+              "cq-f2-stab-09-l006-a1",
+              "cq-f2-stab-09-l007-a1",
+              "cq-f2-stab-09-l008-a1",
+              "cq-f2-stab-09-l009-a1",
+              "cq-f2-stab-09-l010-a1",
+              "cq-f2-stab-09-l011-a1",
+              "cq-f2-stab-09-l012-a1"
+            ],
+            "queue_id": "cq-f2-stab-09",
+            "spans": 12
+          },
+          "stderr": ""
+        },
+        {
+          "check": "queue",
+          "sha256": "9b511a5883eea8dc009dd72ac59764444c3ae800de524f1cc78912deec3e7505",
+          "argv": [
+            "python3.13",
+            "-I",
+            "-B",
+            "scripts/cadence_queue.py",
+            "validate-queue",
+            "$AUDIT_CHECKOUT/docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/fillers-w2/queues-1leg/f2-stab-10.json",
+            "--kits-root",
+            "$AUDIT_CHECKOUT"
+          ],
+          "exit_code": 0,
+          "result": {
+            "ok": true,
+            "plan_ids": [
+              "cq-f2-stab-10-l001-a1",
+              "cq-f2-stab-10-l002-a1",
+              "cq-f2-stab-10-l003-a1",
+              "cq-f2-stab-10-l004-a1",
+              "cq-f2-stab-10-l005-a1",
+              "cq-f2-stab-10-l006-a1",
+              "cq-f2-stab-10-l007-a1",
+              "cq-f2-stab-10-l008-a1",
+              "cq-f2-stab-10-l009-a1",
+              "cq-f2-stab-10-l010-a1",
+              "cq-f2-stab-10-l011-a1",
+              "cq-f2-stab-10-l012-a1"
+            ],
+            "queue_id": "cq-f2-stab-10",
+            "spans": 12
+          },
+          "stderr": ""
+        },
+        {
+          "check": "queue",
+          "sha256": "b6aabf073eff2d99ad4190a6ed76c84095bee073ff7ae70b7bb753a5ba2329d4",
+          "argv": [
+            "python3.13",
+            "-I",
+            "-B",
+            "scripts/cadence_queue.py",
+            "validate-queue",
+            "$AUDIT_CHECKOUT/docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/fillers-w2/queues-1leg/f2-stab-11.json",
+            "--kits-root",
+            "$AUDIT_CHECKOUT"
+          ],
+          "exit_code": 0,
+          "result": {
+            "ok": true,
+            "plan_ids": [
+              "cq-f2-stab-11-l001-a1",
+              "cq-f2-stab-11-l002-a1",
+              "cq-f2-stab-11-l003-a1",
+              "cq-f2-stab-11-l004-a1",
+              "cq-f2-stab-11-l005-a1",
+              "cq-f2-stab-11-l006-a1",
+              "cq-f2-stab-11-l007-a1",
+              "cq-f2-stab-11-l008-a1",
+              "cq-f2-stab-11-l009-a1",
+              "cq-f2-stab-11-l010-a1",
+              "cq-f2-stab-11-l011-a1",
+              "cq-f2-stab-11-l012-a1"
+            ],
+            "queue_id": "cq-f2-stab-11",
+            "spans": 12
+          },
+          "stderr": ""
+        },
+        {
+          "check": "queue",
+          "sha256": "e8fe5cbb07f1f65be14704b79173b8c32e347bdc653ef5e4b424160c3bac8705",
+          "argv": [
+            "python3.13",
+            "-I",
+            "-B",
+            "scripts/cadence_queue.py",
+            "validate-queue",
+            "$AUDIT_CHECKOUT/docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/fillers-w2/queues-1leg/f2-stab-12.json",
+            "--kits-root",
+            "$AUDIT_CHECKOUT"
+          ],
+          "exit_code": 0,
+          "result": {
+            "ok": true,
+            "plan_ids": [
+              "cq-f2-stab-12-l001-a1",
+              "cq-f2-stab-12-l002-a1",
+              "cq-f2-stab-12-l003-a1",
+              "cq-f2-stab-12-l004-a1",
+              "cq-f2-stab-12-l005-a1",
+              "cq-f2-stab-12-l006-a1",
+              "cq-f2-stab-12-l007-a1",
+              "cq-f2-stab-12-l008-a1",
+              "cq-f2-stab-12-l009-a1",
+              "cq-f2-stab-12-l010-a1",
+              "cq-f2-stab-12-l011-a1",
+              "cq-f2-stab-12-l012-a1"
+            ],
+            "queue_id": "cq-f2-stab-12",
+            "spans": 12
+          },
+          "stderr": ""
+        },
+        {
+          "check": "queue",
+          "sha256": "2f72301bc6756a51f25ec292b136d65287ac399b863ceefaf171bea73b6f8e0d",
+          "argv": [
+            "python3.13",
+            "-I",
+            "-B",
+            "scripts/cadence_queue.py",
+            "validate-queue",
+            "$AUDIT_CHECKOUT/docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/fillers-w2/queues-1leg/f2-stab-13.json",
+            "--kits-root",
+            "$AUDIT_CHECKOUT"
+          ],
+          "exit_code": 0,
+          "result": {
+            "ok": true,
+            "plan_ids": [
+              "cq-f2-stab-13-l001-a1",
+              "cq-f2-stab-13-l002-a1",
+              "cq-f2-stab-13-l003-a1",
+              "cq-f2-stab-13-l004-a1",
+              "cq-f2-stab-13-l005-a1",
+              "cq-f2-stab-13-l006-a1",
+              "cq-f2-stab-13-l007-a1",
+              "cq-f2-stab-13-l008-a1",
+              "cq-f2-stab-13-l009-a1",
+              "cq-f2-stab-13-l010-a1",
+              "cq-f2-stab-13-l011-a1",
+              "cq-f2-stab-13-l012-a1"
+            ],
+            "queue_id": "cq-f2-stab-13",
+            "spans": 12
+          },
+          "stderr": ""
+        },
+        {
+          "check": "queue",
+          "sha256": "784c844a405c93a71594e70d5550aeb76d58c53fed9e965087694b06990a9500",
+          "argv": [
+            "python3.13",
+            "-I",
+            "-B",
+            "scripts/cadence_queue.py",
+            "validate-queue",
+            "$AUDIT_CHECKOUT/docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/fillers-w2/queues-1leg/f2-stab-14.json",
+            "--kits-root",
+            "$AUDIT_CHECKOUT"
+          ],
+          "exit_code": 0,
+          "result": {
+            "ok": true,
+            "plan_ids": [
+              "cq-f2-stab-14-l001-a1",
+              "cq-f2-stab-14-l002-a1",
+              "cq-f2-stab-14-l003-a1",
+              "cq-f2-stab-14-l004-a1",
+              "cq-f2-stab-14-l005-a1",
+              "cq-f2-stab-14-l006-a1",
+              "cq-f2-stab-14-l007-a1",
+              "cq-f2-stab-14-l008-a1",
+              "cq-f2-stab-14-l009-a1",
+              "cq-f2-stab-14-l010-a1",
+              "cq-f2-stab-14-l011-a1",
+              "cq-f2-stab-14-l012-a1"
+            ],
+            "queue_id": "cq-f2-stab-14",
+            "spans": 12
+          },
+          "stderr": ""
+        },
+        {
+          "check": "queue",
+          "sha256": "68f589016e3626c48d7e7d375ef6f1da2c43afc52e717dd6afecf41c5f8a9a52",
+          "argv": [
+            "python3.13",
+            "-I",
+            "-B",
+            "scripts/cadence_queue.py",
+            "validate-queue",
+            "$AUDIT_CHECKOUT/docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/fillers-w2/queues-2leg/f2-inst-01-a.json",
+            "--kits-root",
+            "$AUDIT_CHECKOUT"
+          ],
+          "exit_code": 0,
+          "result": {
+            "ok": true,
+            "plan_ids": [
+              "cq-f2-inst-01-l004-l005-a1",
+              "cq-f2-inst-01-l006-l007-a1",
+              "cq-f2-inst-01-l008-l009-a1",
+              "cq-f2-inst-01-l010-l011-a1"
+            ],
+            "queue_id": "cq-f2-inst-01",
+            "spans": 4
+          },
+          "stderr": ""
+        },
+        {
+          "check": "plan",
+          "sha256": "68f589016e3626c48d7e7d375ef6f1da2c43afc52e717dd6afecf41c5f8a9a52",
+          "argv": [
+            "python3.13",
+            "-I",
+            "-B",
+            "scripts/cadence_legs_runner.py",
+            "plan",
+            "--kit",
+            "$AUDIT_CHECKOUT/docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/item-drafts-f2/f2-inst-01.v1.1.json",
+            "--legs",
+            "L004,L005",
+            "--t0",
+            "1796162400",
+            "--batch-window",
+            "02:00-02:35"
+          ],
+          "exit_code": 0,
+          "result": {
+            "expected_s": 5889,
+            "worst_case_s": 8550,
+            "t0_epoch_s": 1796162400.0,
+            "launch_deadline_epoch_s": 1796171510.0,
+            "fence_end_epoch_s": 1796172410.0
+          },
+          "stderr": ""
+        },
+        {
+          "check": "queue",
+          "sha256": "941c639c4914b978d011b9c94ab0f286662c52e72aa40284ed884ab70c07c78d",
+          "argv": [
+            "python3.13",
+            "-I",
+            "-B",
+            "scripts/cadence_queue.py",
+            "validate-queue",
+            "$AUDIT_CHECKOUT/docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/fillers-w2/queues-2leg/f2-inst-01-b.json",
+            "--kits-root",
+            "$AUDIT_CHECKOUT"
+          ],
+          "exit_code": 0,
+          "result": {
+            "ok": true,
+            "plan_ids": [
+              "cq-f2-inst-01-l005-l006-a1",
+              "cq-f2-inst-01-l007-l008-a1",
+              "cq-f2-inst-01-l009-l010-a1",
+              "cq-f2-inst-01-l011-l012-a1"
+            ],
+            "queue_id": "cq-f2-inst-01",
+            "spans": 4
+          },
+          "stderr": ""
+        },
+        {
+          "check": "plan",
+          "sha256": "941c639c4914b978d011b9c94ab0f286662c52e72aa40284ed884ab70c07c78d",
+          "argv": [
+            "python3.13",
+            "-I",
+            "-B",
+            "scripts/cadence_legs_runner.py",
+            "plan",
+            "--kit",
+            "$AUDIT_CHECKOUT/docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/item-drafts-f2/f2-inst-01.v1.1.json",
+            "--legs",
+            "L005,L006",
+            "--t0",
+            "1796162400",
+            "--batch-window",
+            "02:00-02:35"
+          ],
+          "exit_code": 0,
+          "result": {
+            "expected_s": 6064,
+            "worst_case_s": 8550,
+            "t0_epoch_s": 1796162400.0,
+            "launch_deadline_epoch_s": 1796171510.0,
+            "fence_end_epoch_s": 1796172410.0
+          },
+          "stderr": ""
+        },
+        {
+          "check": "queue",
+          "sha256": "c825d75c2b65c38450418a04e83c73264611d8b622d3f55c9462b72f9c2053e9",
+          "argv": [
+            "python3.13",
+            "-I",
+            "-B",
+            "scripts/cadence_queue.py",
+            "validate-queue",
+            "$AUDIT_CHECKOUT/docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/fillers-w2/queues-2leg/f2-inst-02-a.json",
+            "--kits-root",
+            "$AUDIT_CHECKOUT"
+          ],
+          "exit_code": 0,
+          "result": {
+            "ok": true,
+            "plan_ids": [
+              "cq-f2-inst-02-l001-l002-a1",
+              "cq-f2-inst-02-l003-l004-a1",
+              "cq-f2-inst-02-l005-l006-a1",
+              "cq-f2-inst-02-l007-l008-a1",
+              "cq-f2-inst-02-l009-l010-a1",
+              "cq-f2-inst-02-l011-l012-a1"
+            ],
+            "queue_id": "cq-f2-inst-02",
+            "spans": 6
+          },
+          "stderr": ""
+        },
+        {
+          "check": "plan",
+          "sha256": "c825d75c2b65c38450418a04e83c73264611d8b622d3f55c9462b72f9c2053e9",
+          "argv": [
+            "python3.13",
+            "-I",
+            "-B",
+            "scripts/cadence_legs_runner.py",
+            "plan",
+            "--kit",
+            "$AUDIT_CHECKOUT/docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/item-drafts-f2-0203/f2-inst-02/f2-inst-02.v1.1.json",
+            "--legs",
+            "L001,L002",
+            "--t0",
+            "1796162400",
+            "--batch-window",
+            "02:00-02:35"
+          ],
+          "exit_code": 0,
+          "result": {
+            "expected_s": 5825,
+            "worst_case_s": 8550,
+            "t0_epoch_s": 1796162400.0,
+            "launch_deadline_epoch_s": 1796171510.0,
+            "fence_end_epoch_s": 1796172410.0
+          },
+          "stderr": ""
+        },
+        {
+          "check": "queue",
+          "sha256": "74cd52bc6dccc3d05a7db614a033da7b4e93d10b4ec24454cf201e7f7e4b6dc5",
+          "argv": [
+            "python3.13",
+            "-I",
+            "-B",
+            "scripts/cadence_queue.py",
+            "validate-queue",
+            "$AUDIT_CHECKOUT/docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/fillers-w2/queues-2leg/f2-inst-02-b.json",
+            "--kits-root",
+            "$AUDIT_CHECKOUT"
+          ],
+          "exit_code": 0,
+          "result": {
+            "ok": true,
+            "plan_ids": [
+              "cq-f2-inst-02-l002-l003-a1",
+              "cq-f2-inst-02-l004-l005-a1",
+              "cq-f2-inst-02-l006-l007-a1",
+              "cq-f2-inst-02-l008-l009-a1",
+              "cq-f2-inst-02-l010-l011-a1"
+            ],
+            "queue_id": "cq-f2-inst-02",
+            "spans": 5
+          },
+          "stderr": ""
+        },
+        {
+          "check": "plan",
+          "sha256": "74cd52bc6dccc3d05a7db614a033da7b4e93d10b4ec24454cf201e7f7e4b6dc5",
+          "argv": [
+            "python3.13",
+            "-I",
+            "-B",
+            "scripts/cadence_legs_runner.py",
+            "plan",
+            "--kit",
+            "$AUDIT_CHECKOUT/docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/item-drafts-f2-0203/f2-inst-02/f2-inst-02.v1.1.json",
+            "--legs",
+            "L002,L003",
+            "--t0",
+            "1796162400",
+            "--batch-window",
+            "02:00-02:35"
+          ],
+          "exit_code": 0,
+          "result": {
+            "expected_s": 6000,
+            "worst_case_s": 8550,
+            "t0_epoch_s": 1796162400.0,
+            "launch_deadline_epoch_s": 1796171510.0,
+            "fence_end_epoch_s": 1796172410.0
+          },
+          "stderr": ""
+        },
+        {
+          "check": "queue",
+          "sha256": "2d530910e89f9634241a30e0ec0dff9ac90eb06bbef55fa48b3925f68a6526bd",
+          "argv": [
+            "python3.13",
+            "-I",
+            "-B",
+            "scripts/cadence_queue.py",
+            "validate-queue",
+            "$AUDIT_CHECKOUT/docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/fillers-w2/queues-2leg/f2-inst-03-a.json",
+            "--kits-root",
+            "$AUDIT_CHECKOUT"
+          ],
+          "exit_code": 0,
+          "result": {
+            "ok": true,
+            "plan_ids": [
+              "cq-f2-inst-03-l001-l002-a1",
+              "cq-f2-inst-03-l003-l004-a1",
+              "cq-f2-inst-03-l005-l006-a1",
+              "cq-f2-inst-03-l007-l008-a1",
+              "cq-f2-inst-03-l009-l010-a1",
+              "cq-f2-inst-03-l011-l012-a1"
+            ],
+            "queue_id": "cq-f2-inst-03",
+            "spans": 6
+          },
+          "stderr": ""
+        },
+        {
+          "check": "plan",
+          "sha256": "2d530910e89f9634241a30e0ec0dff9ac90eb06bbef55fa48b3925f68a6526bd",
+          "argv": [
+            "python3.13",
+            "-I",
+            "-B",
+            "scripts/cadence_legs_runner.py",
+            "plan",
+            "--kit",
+            "$AUDIT_CHECKOUT/docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/item-drafts-f2-0203/f2-inst-03/f2-inst-03.v1.1.json",
+            "--legs",
+            "L001,L002",
+            "--t0",
+            "1796162400",
+            "--batch-window",
+            "02:00-02:35"
+          ],
+          "exit_code": 0,
+          "result": {
+            "expected_s": 5846,
+            "worst_case_s": 8550,
+            "t0_epoch_s": 1796162400.0,
+            "launch_deadline_epoch_s": 1796171510.0,
+            "fence_end_epoch_s": 1796172410.0
+          },
+          "stderr": ""
+        },
+        {
+          "check": "queue",
+          "sha256": "a70121e5e241823a674c6c9bcf92cd32d95967e81d702c484e52af55ba16e016",
+          "argv": [
+            "python3.13",
+            "-I",
+            "-B",
+            "scripts/cadence_queue.py",
+            "validate-queue",
+            "$AUDIT_CHECKOUT/docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/fillers-w2/queues-2leg/f2-inst-03-b.json",
+            "--kits-root",
+            "$AUDIT_CHECKOUT"
+          ],
+          "exit_code": 0,
+          "result": {
+            "ok": true,
+            "plan_ids": [
+              "cq-f2-inst-03-l002-l003-a1",
+              "cq-f2-inst-03-l004-l005-a1",
+              "cq-f2-inst-03-l006-l007-a1",
+              "cq-f2-inst-03-l008-l009-a1",
+              "cq-f2-inst-03-l010-l011-a1"
+            ],
+            "queue_id": "cq-f2-inst-03",
+            "spans": 5
+          },
+          "stderr": ""
+        },
+        {
+          "check": "plan",
+          "sha256": "a70121e5e241823a674c6c9bcf92cd32d95967e81d702c484e52af55ba16e016",
+          "argv": [
+            "python3.13",
+            "-I",
+            "-B",
+            "scripts/cadence_legs_runner.py",
+            "plan",
+            "--kit",
+            "$AUDIT_CHECKOUT/docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/item-drafts-f2-0203/f2-inst-03/f2-inst-03.v1.1.json",
+            "--legs",
+            "L002,L003",
+            "--t0",
+            "1796162400",
+            "--batch-window",
+            "02:00-02:35"
+          ],
+          "exit_code": 0,
+          "result": {
+            "expected_s": 6020,
+            "worst_case_s": 8550,
+            "t0_epoch_s": 1796162400.0,
+            "launch_deadline_epoch_s": 1796171510.0,
+            "fence_end_epoch_s": 1796172410.0
+          },
+          "stderr": ""
+        }
+      ]
+    },
+    {
+      "runner_pin": "6e9d42f1dd3d308bc9239143d0d634ab965e50e1",
+      "cwd": "$PINNED_CHECKOUT",
+      "checks": [
+        {
+          "check": "queue",
+          "sha256": "1adf8673916f1f7675478665b7fcb80cf56d3647d298fb16032a864d613ca8a2",
+          "argv": [
+            "python3.13",
+            "-I",
+            "-B",
+            "scripts/cadence_queue.py",
+            "validate-queue",
+            "$AUDIT_CHECKOUT/docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/fillers-w2/queues-1leg/f2-stab-15.json",
+            "--kits-root",
+            "$AUDIT_CHECKOUT"
+          ],
+          "exit_code": 0,
+          "result": {
+            "ok": true,
+            "plan_ids": [
+              "cq-f2-stab-15-l001-a1",
+              "cq-f2-stab-15-l002-a1",
+              "cq-f2-stab-15-l003-a1",
+              "cq-f2-stab-15-l004-a1",
+              "cq-f2-stab-15-l005-a1",
+              "cq-f2-stab-15-l006-a1",
+              "cq-f2-stab-15-l007-a1",
+              "cq-f2-stab-15-l008-a1",
+              "cq-f2-stab-15-l009-a1",
+              "cq-f2-stab-15-l010-a1",
+              "cq-f2-stab-15-l011-a1",
+              "cq-f2-stab-15-l012-a1"
+            ],
+            "queue_id": "cq-f2-stab-15",
+            "spans": 12
+          },
+          "stderr": ""
+        },
+        {
+          "check": "queue",
+          "sha256": "c108c9cc2b6700942ac4ad9b25f8a03e8c71bfcb5ebaa2abb2a68c8218e53278",
+          "argv": [
+            "python3.13",
+            "-I",
+            "-B",
+            "scripts/cadence_queue.py",
+            "validate-queue",
+            "$AUDIT_CHECKOUT/docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/fillers-w2/queues-1leg/f2-stab-16.json",
+            "--kits-root",
+            "$AUDIT_CHECKOUT"
+          ],
+          "exit_code": 0,
+          "result": {
+            "ok": true,
+            "plan_ids": [
+              "cq-f2-stab-16-l001-a1",
+              "cq-f2-stab-16-l002-a1",
+              "cq-f2-stab-16-l003-a1",
+              "cq-f2-stab-16-l004-a1",
+              "cq-f2-stab-16-l005-a1",
+              "cq-f2-stab-16-l006-a1",
+              "cq-f2-stab-16-l007-a1",
+              "cq-f2-stab-16-l008-a1",
+              "cq-f2-stab-16-l009-a1",
+              "cq-f2-stab-16-l010-a1",
+              "cq-f2-stab-16-l011-a1",
+              "cq-f2-stab-16-l012-a1"
+            ],
+            "queue_id": "cq-f2-stab-16",
+            "spans": 12
+          },
+          "stderr": ""
+        }
+      ]
+    }
+  ]
+}
