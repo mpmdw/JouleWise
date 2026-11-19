@@ -2051,22 +2051,114 @@ class R0PublicationAuditTest(unittest.TestCase):
                 self.assertEqual(result["work_started"], [])
                 self.assertNotIn(fixture.PID, inspected)
 
+    def test_background_cpu_table_refuses_measurement_chain_before_args_read(self):
+        from tests.align import test_r0_vs_l3_differential as fixture
+
+        for gone in (46.5, 48):
+            with self.subTest(gone=gone):
+                reads = []
+
+                def run(original, model, argv, **kwargs):
+                    if 45 <= model.now < 48:
+                        if tuple(argv) == contention.PS_ARGV:
+                            model.now = 46
+                        elif tuple(argv) == prewindow.PS_ARGV and model.now >= 46:
+                            model.now = 47
+                        reads.append((model.now, tuple(argv)))
+                    return original(model, argv, **kwargs)
+
+                probe = fixture.Process("/usr/bin/powermetrics", 45.125, gone, 46, 20)
+                case = fixture.Case("sampled_chain", (probe,), schedule="multi", end=56)
+                result = self.trial(case, command=run)
+                self.assert_withheld(result)
+                self.assertIn("powermetrics", result["reason"])
+                self.assertIn((46, contention.PS_ARGV), reads)
+                self.assertNotIn((47, prewindow.PS_ARGV), reads)
+
+    def test_every_census_name_refuses_from_any_process_table_without_confirmation(self):
+        from itertools import product
+        from joulewise.align.r0_host import R0_AGENT_CENSUS_ARGV
+        from tests.align import test_r0_vs_l3_differential as fixture
+
+        names = (
+            "/usr/local/bin/ClAuDe", "/Applications/Codex.app/Contents/MacOS/CoDeX",
+            "/usr/bin/PoWeRmEtRiCs", "/synthetic/run_campaign.py", "/synthetic/run_night.zsh",
+            "/synthetic/window-chain", "/synthetic/window_chain", "/synthetic/align_r1_rehearsal.py",
+            "/synthetic/align_r0_checks.py", "/synthetic/run_b5_analysis.py", "/synthetic/chain.sh",
+        )
+        for command, source in product(names, ("accounting", "census_ps", "cpu_args", "agent_query")):
+            with self.subTest(command=command, source=source):
+                reads = []
+                inspected = []
+                accounting_started = False
+                original_identity = fixture.Fixture.identity
+
+                def identity(model, pid):
+                    inspected.append(pid)
+                    return original_identity(model, pid)
+
+                def run(original, model, argv, **kwargs):
+                    nonlocal accounting_started
+                    if tuple(argv) == contention.PS_ARGV:
+                        accounting_started = True
+                        table = "accounting"
+                    elif tuple(argv) == prewindow.PS_ARGV:
+                        table = "cpu_args" if accounting_started else "census_ps"
+                    elif tuple(argv) == R0_AGENT_CENSUS_ARGV:
+                        table = "agent_query"
+                    else:
+                        table = "other"
+                    if reads or table != source:
+                        if reads:
+                            reads.append(table)
+                        return original(model, argv, **kwargs)
+                    reads.append(table)
+                    if table == "agent_query":
+                        return subprocess.CompletedProcess(argv, 0, f"{fixture.PID} {command}\n", "")
+                    row = fixture.Process(command).row(model.now)
+                    # Only this returned table contains the process. No later
+                    # table or live identity lookup can observe it again.
+                    with patch.object(model, "processes", return_value=[*model.processes(), row]):
+                        return original(model, argv, **kwargs)
+
+                case = fixture.Case("single_process_sighting", schedule="multi", end=56)
+                with patch.object(fixture.Fixture, "identity", identity):
+                    result = self.trial(case, command=run)
+                self.assert_withheld(result)
+                self.assertEqual(result["work_started"], [])
+                self.assertIn(Path(command).name, result["reason"])
+                self.assertEqual(reads, [source])
+                self.assertNotIn(fixture.PID, inspected)
+
+    def test_single_sighting_of_exited_worker_counts_at_either_side_of_birth_tick(self):
+        from tests.align import test_r0_vs_l3_differential as fixture
+
+        for born, centiseconds, busy in ((0.1, 180, True), (1.1, 180, True), (0.1, 140, False)):
+            with self.subTest(born=born, centiseconds=centiseconds):
+                worker = fixture.Process(fixture.WORKER, born, 20, 15, centiseconds)
+                case = fixture.Case("single_worker_sighting", (worker,), schedule="multi", end=56)
+                result = self.trial(case, wall_offset_ns=1_000_000)
+                if busy:
+                    self.assert_withheld(result)
+                    self.assertTrue(any(flag[:3] == (0.0, 30.0, fixture.PID) for flag in result["flags"]), result)
+                else:
+                    self.assertEqual((result["rc"], result["published"], result["flags"]), (0, True, []), result)
+
     def test_exited_worker_retains_measured_growth_across_fractional_window_open(self):
         from tests.align import test_r0_vs_l3_differential as fixture
 
         # At the 15.500 opening, the 15.1 birth is displayed by ps as
         # 15.000. The entry then grows from 0 at 32 s to 1.80 CPU-s at 40 s
         # before disappearing before the 45.500 closing sample.
-        for born, cpu_at, busy in ((15.1, 40, True), (16.1, 40, True), (15.1, 30, False)):
+        for born, cpu_at in ((15.1, 40), (16.1, 40), (15.1, 30)):
             with self.subTest(born=born, cpu_at=cpu_at):
                 process = fixture.Process(fixture.WORKER, born, 44.5, cpu_at, 180)
                 case = fixture.Case("fractional_open", (process,), schedule="multi", end=56)
                 result = self.trial(case, wall_offset_ns=500_000_000)
                 self.assert_withheld(result)
-                self.assertEqual(any(flag[:3] == (15.0, 45.0, fixture.PID) for flag in result["flags"]), busy, result)
-                if not busy:
-                    # The earlier interval proves the work. A later window
-                    # with no measured growth cannot charge it a second time.
+                self.assertTrue(any(flag[:3] == (15.0, 45.0, fixture.PID) for flag in result["flags"]), result)
+                if cpu_at == 30:
+                    # CPU from this lifetime also overlaps the earlier window.
                     self.assertTrue(any(flag[:3] == (0.0, 30.0, fixture.PID) for flag in result["flags"]), result)
 
     def test_worker_still_present_at_close_retains_growth_after_missing_open_sample(self):
