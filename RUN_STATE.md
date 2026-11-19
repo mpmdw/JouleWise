@@ -1052,6 +1052,21 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 
 <!-- RUN_STATE TYPED ITEMS: newest first. Add with scripts/run_state_add.py; never edit by hand. -->
 
+466. **AIR PAUSED (owner) again: MBP continues alone under 418/422/423/431/442/443/447 and 461-465; no qual issue; no W1-line merges**
+
+```item
+{"expires_epoch_s": null, "issued_epoch_s": 1795128405, "number": 466, "owner": "magistrate", "schema": "joulewise.run_state_item.v1", "sets": [], "status": "ISSUED", "supersedes": []}
+```
+
+- **AIR PAUSED** (owner, Thu 19 Nov ~14:46 PST): the laptop is moving again. The lead is offline, the SSD is ejected, and every Air lane and agent is stopped. The MBP never stops for the Air (item 388). Continue the ladder on your own.
+- **Standing:**
+  - items 461-465: filler clock bands (463), rank-1 stability from kits 01-14 (464), f2-inst-03 eligible after f2-inst-02 (465);
+  - items 418, 422, 423, 431, 442, 443 and 447;
+  - R1 is complete (459); no re-arm.
+- **Qualification:** no qual items. The lead issues them after freeze 2.
+- **No W1-line merges** while the lead is away. W1 stays at `b2e01464d`.
+- Mail the lead and Ed on any refusal, non-clean close or question, as usual.
+
 465. **f2-inst-03 executing delta PASS (audit 49911cb35): eligible at rank 2 right after f2-inst-02 completes; f2-inst-01 piece-1 hand-read (item 411) still open**
 
 ```item
