@@ -361,7 +361,7 @@ class StdoutTests(unittest.TestCase):
                     self.assertEqual(evidence.stdout_payload(process.stdout, "step-d"), expected)
 
 
-SOAK_FILES = ("runtime_result.json", "sensors/align_thermal.jsonl", "load_journal.json")
+SOAK_FILES = ("runtime_result.json", "sensors/align_thermal.jsonl", "load_journal.json", "battery.jsonl")
 
 
 def write_terminal(segment, kind, receipt, config_sha):
