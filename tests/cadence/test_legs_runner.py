@@ -2,6 +2,7 @@
 synthetic backend, and the launcher registration. No model, sensor, host setting or energy is touched."""
 from __future__ import annotations
 
+from contextlib import redirect_stderr, redirect_stdout
 from datetime import datetime
 import io
 import json
@@ -13,7 +14,7 @@ import sys
 import tempfile
 from types import SimpleNamespace
 import unittest
-from unittest.mock import patch
+from unittest.mock import call, patch
 
 from joulewise.cadence import desk, kit as kitmod, legs as legsmod
 from scripts import cadence_legs_runner as runner, launch_align_r0 as launcher, launch_cadence_span as cadence_launch
@@ -52,6 +53,211 @@ def campaign_kit(n_legs=12, bands=("q0",), validate=True, **template):
         "looks": [], "desk": {"adapter": "leg-summary-v1"},
     }
     return kitmod.validate_kit(kit) if validate else kit
+
+
+class T0AuthorityTests(unittest.TestCase):
+    ns = 1_000_000_000
+    midnight = 1795161600
+    kit = runner.ROOT / "docs/process/cadence/kits/cl-qual-01.v1.1.json"
+
+    def setUp(self):
+        self.root = Path(self.enterContext(tempfile.TemporaryDirectory(dir=TMP)))
+        self.output = self.root / "span"
+        self.spec = ["--kit", str(self.kit), "--output", str(self.output), "--deadline", str(self.midnight + 29000),
+                     "--legs", "L001,L002,L003,L004,L005,L006"]
+        self.launch = ["launch", "--repo", str(self.root), "--python-bin", sys.executable,
+                       "--disk-path", str(self.root), "--custody-root", str(self.root / "synthetic-fence"),
+                       "--magistrate-pid", "123", *self.spec]
+
+    def handoff(self, *, day="2026-11-19", earliest=None, cutoff=None, projected_ns, wall_ns, allowed,
+                anchor_width_ns=0, exact_close_ns=None, span_id=None):
+        earliest = self.midnight - 3600 if earliest is None else earliest
+        cutoff = self.midnight if cutoff is None else cutoff
+        authority = ["--authorized-t0-date", day, "--t0-not-before", str(earliest), "--t0-before", str(cutoff),
+                     "--t0-anchor", f"{projected_ns - self.ns}:{999 * self.ns - anchor_width_ns}:{999 * self.ns}"]
+        if exact_close_ns is not None:
+            authority += ["--t0-not-before-ns", str(exact_close_ns)]
+        with patch.object(cadence_launch, "launch") as launch:
+            identity = ["--span-id", span_id] if span_id else []
+            self.assertEqual(cadence_launch.main(self.launch + identity + authority), 0)
+            child_argv = cadence_launch.runner_argv(launch.call_args.args[0])
+        self.assertEqual(child_argv[-len(authority):], authority)
+
+        clock = runner.FakeClock(wall_ns / self.ns)
+        deps = runner.mock_deps(self.output, clock)
+        with (patch.object(runner, "production_deps", return_value=deps),
+              patch.object(clock, "epoch_and_monotonic_ns", return_value=(wall_ns, 1000 * self.ns)),
+              redirect_stderr(io.StringIO())):
+            rc = runner.main(child_argv[2:])
+        if allowed:
+            self.assertEqual(rc, 0)
+            receipt = json.loads((self.output / runner.RECEIPT_NAME).read_text())
+            self.assertEqual(receipt["started"]["epoch_ns"], projected_ns)
+            return receipt
+        self.assertEqual(rc, 3)
+        self.assertFalse(self.output.exists())
+        self.assertEqual(deps.host.calls, [])
+        return None
+
+    def test_handoff_refuses_a_rollback_into_the_batch_hold(self):
+        hold_end = self.midnight - 3600
+        for offset in (250_000_000, 87 * 60 * self.ns):
+            with self.subTest(offset=offset):
+                self.handoff(earliest=hold_end, projected_ns=hold_end * self.ns,
+                             wall_ns=hold_end * self.ns - offset, allowed=False)
+        self.handoff(earliest=hold_end, projected_ns=hold_end * self.ns - 1,
+                     wall_ns=hold_end * self.ns, allowed=False)
+        self.handoff(earliest=hold_end, projected_ns=hold_end * self.ns,
+                     wall_ns=hold_end * self.ns, allowed=True)
+
+    def test_handoff_refuses_when_anchored_t0_crosses_exclusive_cutoff(self):
+        cutoff = self.midnight - 30
+        for wall_ns in (cutoff * self.ns, cutoff * self.ns - 1):
+            with self.subTest(wall_ns=wall_ns):
+                self.handoff(cutoff=cutoff, projected_ns=cutoff * self.ns, wall_ns=wall_ns, allowed=False)
+
+    def test_handoff_refuses_before_issue_observation_or_proven_close(self):
+        earliest = 1795111200
+        rolled_back_ns = (earliest - 1) * self.ns
+        self.handoff(earliest=earliest, projected_ns=rolled_back_ns, wall_ns=rolled_back_ns, allowed=False)
+        at_release_ns = earliest * self.ns
+        self.handoff(earliest=earliest, projected_ns=at_release_ns, wall_ns=at_release_ns, allowed=True)
+
+    def test_handoff_compares_fractional_close_at_nanosecond_resolution(self):
+        now_ns = 1795118400 * self.ns
+        close_ns = now_ns + 125_000_000
+        for projected_ns, wall_ns in ((close_ns - 1, close_ns), (close_ns, close_ns - 1)):
+            self.handoff(earliest=1795118400, exact_close_ns=close_ns, projected_ns=projected_ns,
+                         wall_ns=wall_ns, allowed=False)
+        start_ns = now_ns + 750_000_000
+        receipt = self.handoff(earliest=1795118400, exact_close_ns=close_ns, projected_ns=start_ns,
+                               wall_ns=start_ns, span_id="qual-01-s01", allowed=True)
+        self.assertEqual(receipt["t0_authority"]["t0_not_before_ns"], close_ns)
+        self.assertEqual(receipt["span_id"], "qual-01-s01")
+        self.assertIn("epoch_ns", receipt["ended"])
+
+    def test_handoff_clock_counts_suspend_at_both_ends(self):
+        now = 1795111200
+        arm_ns = 999 * self.ns
+        # After 60 s suspended and 5 s awake, a wall correction says only 55 s elapsed.
+        clock_id = runner.time.CLOCK_MONOTONIC_RAW if sys.platform == "darwin" else runner.time.CLOCK_BOOTTIME
+        clock = runner.FakeClock(now + 55)
+        deps = runner.mock_deps(self.output, clock)
+        with (patch.object(runner.time, "clock_gettime_ns", side_effect=[arm_ns, arm_ns, arm_ns + 65 * self.ns]) as ticks,
+              patch.object(runner.time, "time_ns", side_effect=[now * self.ns, (now + 55) * self.ns]),
+              patch.object(runner.time, "monotonic_ns", return_value=arm_ns + 5 * self.ns),
+              patch.object(clock, "epoch_and_monotonic_ns", runner.RealClock.epoch_and_monotonic_ns),
+              patch.object(runner, "production_deps", return_value=deps), redirect_stderr(io.StringIO())):
+            with redirect_stdout(io.StringIO()) as anchor:
+                self.assertEqual(runner.main(["t0-anchor"]), 0)
+            authority = ["--authorized-t0-date", "2026-11-19", "--t0-not-before", str(now),
+                         "--t0-before", str(now + 60), "--t0-anchor", anchor.getvalue().strip()]
+            with patch.object(cadence_launch, "launch") as launch:
+                self.assertEqual(cadence_launch.main(self.launch + authority), 0)
+                child_argv = cadence_launch.runner_argv(launch.call_args.args[0])
+            self.assertEqual(runner.main(child_argv[2:]), 3)
+        self.assertEqual(ticks.call_args_list, [call(clock_id)] * 3)
+        self.assertFalse(self.output.exists())
+        self.assertEqual(deps.host.calls, [])
+
+    def test_handoff_refuses_if_clock_sampling_delay_can_cross_cutoff(self):
+        epoch_ns = self.midnight * self.ns - 1
+        self.handoff(projected_ns=epoch_ns, wall_ns=epoch_ns, allowed=False, anchor_width_ns=5)
+
+    def test_submicrosecond_t0_stays_on_its_exact_los_angeles_date(self):
+        for offset in (200, 1):
+            with self.subTest(offset=offset):
+                epoch_ns = self.midnight * self.ns - offset
+                self.handoff(day="2026-11-20", cutoff=self.midnight + 3600, projected_ns=epoch_ns,
+                             wall_ns=epoch_ns, allowed=False)
+        epoch_ns = self.midnight * self.ns - 1
+        receipt = self.handoff(projected_ns=epoch_ns, wall_ns=epoch_ns, allowed=True)
+        self.assertEqual(receipt["started"]["epoch_s"], 1795161599.9999998)
+
+    def test_qualification_requires_authority_in_both_clis(self):
+        authority = [("--authorized-t0-date", "2026-11-19"), ("--t0-not-before", str(self.midnight - 3600)),
+                     ("--t0-before", str(self.midnight))]
+        cases = [[], *[authority[:i] + authority[i + 1:] for i in range(len(authority))]]
+        for pairs in cases:
+            for module, argv, entry in ((cadence_launch, self.launch, "launch"),
+                                        (runner, ["run", *self.spec], "production_deps")):
+                with (self.subTest(module=module.__name__, pairs=pairs), patch.object(module, entry) as work,
+                      redirect_stderr(io.StringIO()), self.assertRaises(SystemExit) as error):
+                    module.main(argv + [arg for pair in pairs for arg in pair])
+                self.assertEqual(error.exception.code, 2)
+                work.assert_not_called()
+
+    def test_child_receipt_includes_all_three_authority_values(self):
+        earliest = self.midnight - 3600
+        epoch_ns = (earliest + 10) * self.ns
+        receipt = self.handoff(earliest=earliest, projected_ns=epoch_ns, wall_ns=epoch_ns - self.ns, allowed=True)
+        self.assertEqual(receipt["started"]["continuous_ns"], 1000 * self.ns)
+        self.assertEqual(receipt["t0_authority"], {"authorized_t0_date": "2026-11-19",
+                                                   "t0_not_before": earliest, "t0_before": self.midnight})
+
+    def test_qualification_bootstrap_requires_ledger_and_retains_failed_attempt(self):
+        now = 1795118400
+        old_close = self.root / "a.close.json"
+        close_ns = (now - 1200) * self.ns
+        old_close.write_text(json.dumps({"span_id": "attempt-a", "ended": {"epoch_ns": close_ns},
+                                         "restore_readbacks": {"automatic": True}}))
+        ledger = self.root / "attempts.json"
+        previous = {"sequence": 1, "span_id": "attempt-a", "close_receipt": str(old_close)}
+        ledger.write_text(json.dumps({"attempts": [previous]}))
+        ledger_arg = ["--attempt-ledger", str(ledger)]
+        receipt_arg = ["--previous-close-receipt", str(old_close)]
+        bootstrap_calls = []
+
+        def service_command(command, **_kwargs):
+            self.assertEqual(command[0], "synthetic-launchctl")
+            if command[1] == "bootstrap":
+                bootstrap_calls.append(command[1])
+                raise subprocess.CalledProcessError(19, command)
+            self.assertEqual(command[1], "bootout")
+            return subprocess.CompletedProcess(command, 0, b"", b"")
+
+        def launch_span(span, roster, proof_args):
+            argv = self.launch.copy()
+            for flag, value in (("--repo", runner.ROOT), ("--deadline", now + 28160),
+                                ("--output", self.root / span), ("--legs", roster)):
+                argv[argv.index(flag) + 1] = str(value)
+            argv += ["--launchctl-bin", "synthetic-launchctl", "--span-id", span,
+                     "--authorized-t0-date", "2026-11-19", "--t0-not-before", str(now - 100),
+                     "--t0-before", str(now + 600), "--t0-not-before-ns", str(close_ns),
+                     "--t0-anchor", f"{now * self.ns}:{1000 * self.ns}:{1000 * self.ns}", *proof_args]
+            with redirect_stderr(io.StringIO()) as stderr:
+                self.assertEqual(cadence_launch.main(argv), 2)
+            self.assertFalse((self.root / span).exists())
+            return stderr.getvalue()
+
+        with (patch.object(cadence_launch.base, "pid_alive", return_value=True),
+              patch.object(cadence_launch.time, "time", return_value=now),
+              patch.object(cadence_launch.subprocess, "run", side_effect=service_command)):
+            first_roster = "L001,L002,L003,L004,L005,L006"
+            for proof_args in ([], ledger_arg, receipt_arg):
+                with self.subTest(proof_args=proof_args):
+                    refusal = launch_span("qual-01-s01", first_roster, proof_args)
+                    self.assertIn("--attempt-ledger", refusal)
+                    self.assertIn("--previous-close-receipt", refusal)
+                    self.assertEqual(bootstrap_calls, [])
+                    self.assertEqual(json.loads(ledger.read_text())["attempts"], [previous])
+            self.assertFalse((self.root / "synthetic-fence").exists())
+
+            launch_span("qual-01-s01", first_roster, ledger_arg + receipt_arg)
+            self.assertEqual(bootstrap_calls, ["bootstrap"])
+            first_receipt = self.root.resolve() / "qual-01-s01" / runner.RECEIPT_NAME
+            self.assertEqual(json.loads(ledger.read_text())["attempts"], [
+                previous,
+                {"sequence": 2, "span_id": "qual-01-s01", "close_receipt": str(first_receipt)},
+            ])
+
+            refusal = launch_span("qual-01-s02", "L007,L008,L009,L010,L011,L012", ledger_arg + receipt_arg)
+            self.assertIn("latest attempt qual-01-s01 has no close receipt", refusal)
+            self.assertEqual(bootstrap_calls, ["bootstrap"])
+
+    def test_qualification_launch_function_requires_ledger(self):
+        with self.assertRaisesRegex(ValueError, "--attempt-ledger"):
+            cadence_launch.launch(SimpleNamespace(kit=self.kit))
 
 
 # --------------------------------------------------------------------------
@@ -233,7 +439,7 @@ class MockSpanTests(unittest.TestCase):
         kit = kit or campaign_kit()
         out = self.root / name
         rc, summary, stops, deps = runner.run_mock(kit=kit, kit_sha256="f" * 64, output=out, t0_epoch=local(t0),
-                                                   windows=NEW_WINDOW, **kw)
+                                                   windows=kw.pop("windows", NEW_WINDOW), **kw)
         receipt = json.loads((out / runner.RECEIPT_NAME).read_text())
         return out, rc, summary, stops, deps, receipt
 
@@ -364,19 +570,67 @@ class MockSpanTests(unittest.TestCase):
             started = datetime.fromtimestamp(leg["started_epoch_s"], ZONE)
             self.assertFalse(started.hour == 2 and started.minute < 35, leg)
 
-    def test_soak_does_not_overlap_the_driver_window(self):
-        out = self.root / "soak"
-        clock = runner.FakeClock(local("2026-11-15T11:30"))
-        deps = runner.mock_deps(out, clock)
-        deps.soak_windows, deps.max_span_s = OLD_WINDOW, runner.max_span_s()
-        kit = campaign_kit()
-        plan = legsmod.plan_span(kit, t0_epoch=clock.time(), windows=NEW_WINDOW, leg_ids=["L001"])
-        rc = runner.run_span(kit=kit, kit_sha256="f" * 64, output=out, deadline=runner.launch_deadline(plan) + 7200,
-                             windows=NEW_WINDOW, deps=deps, leg_ids=["L001"])
-        receipt = json.loads((out / runner.RECEIPT_NAME).read_text())
+    def test_a_named_window_holds_the_soak(self):
+        # --batch-window (backward compatibility): a soak that would overlap the named window waits it out.
+        with patch.object(legsmod, "blackout_bound_s", return_value=0.0):
+            out, rc, summary, stops, deps, receipt = self.run_mock(t0="2026-11-15T01:30", leg_ids=["L001"])
         self.assertEqual(rc, 0, receipt.get("error"))
         soak = next(s for s in receipt["steps"] if s["name"] == "soak")
-        self.assertGreaterEqual(soak["started"]["epoch_s"], local("2026-11-15T13:15"))
+        self.assertGreaterEqual(soak["started"]["epoch_s"], local("2026-11-15T02:35"))
+        self.assertEqual([s["name"] for s in receipt["steps"] if s["name"].endswith("blackout-wait")],
+                         ["soak-blackout-wait"])
+
+    def test_no_window_means_no_hold_across_0200(self):
+        # RL-171: with no window, nothing holds at 02:00-02:35; the per-leg checks are the quiet rule.
+        out, rc, summary, stops, deps, receipt = self.run_mock(t0="2026-11-15T00:30", windows=runner.default_windows())
+        self.assertEqual(rc, 0, receipt.get("error"))
+        self.assertEqual(receipt["batch_windows"], [])
+        self.assertEqual([s for s in receipt["steps"] if s["name"].endswith("blackout-wait")], [])
+        self.assertTrue(any(local("2026-11-15T02:00") <= leg["started_epoch_s"] < local("2026-11-15T02:35")
+                            for leg in summary["legs"]), [leg["started_epoch_s"] for leg in summary["legs"]])
+        self.assertEqual(len(summary["legs"]), 12)
+
+    def test_a_refused_soak_is_retried_once_and_the_span_goes_on(self):
+        out, rc, summary, stops, deps, receipt = self.run_mock(soak_refusals=1)
+        self.assertEqual(rc, 0, receipt.get("error"))
+        self.assertEqual(deps.fake.soaks, 2)
+        attempts = receipt["soak_attempts"]
+        self.assertEqual([(a["attempt"], a["output_dir"], a["refused"] is not None) for a in attempts],
+                         [(1, "soak.rejected1", True), (2, "soak", False)])
+        self.assertIn("settle or quiet", attempts[0]["refused"])
+        self.assertTrue((out / "soak.rejected1").is_dir())
+        self.assertTrue((out / "soak/soak_reference.json").is_file())
+        self.assertEqual(receipt["soak_reference"], str(out / "soak/soak_reference.json"))
+        steps = {s["name"]: s["rc"] for s in receipt["steps"]}
+        self.assertEqual((steps["soak"], steps["soak.a2"]), (2, 0))
+        self.assertIn("before-soak.a2-agents", steps)
+        self.assertEqual(len(summary["legs"]), 12)
+        self.assertEqual(stops, [])
+
+    def test_a_second_soak_refusal_stops_the_span_and_closes(self):
+        out, rc, summary, stops, deps, receipt = self.run_mock(soak_refusals=2)
+        self.assertEqual(rc, 2)
+        self.assertIn("settle or quiet", receipt["error"])
+        self.assertEqual((deps.fake.soaks, deps.fake.calls), (2, []))
+        self.assertEqual(len(receipt["soak_attempts"]), 2)
+        self.assertEqual(deps.host.calls[-1], "restore")
+
+    def test_the_retry_needs_its_budget(self):
+        # A deadline without the soak retry's budget (the old launch deadline) refuses the retry, not a leg.
+        kit = campaign_kit()
+        out = self.root / "nobudget"
+        clock = runner.FakeClock(local("2026-11-15T13:20"))
+        deps = runner.mock_deps(out, clock, soak_refusals=1)
+        deps.max_span_s = runner.max_span_s()
+        plan = legsmod.plan_span(kit, t0_epoch=clock.time(), windows=[])
+        self.assertEqual(runner.launch_deadline(plan),
+                         plan["deadline_epoch_s"] + plan["soak_s"] + runner.LAUNCH_RESERVE_S)
+        rc = runner.run_span(kit=kit, kit_sha256="f" * 64, output=out,
+                             deadline=plan["deadline_epoch_s"] + runner.LAUNCH_RESERVE_S, windows=[], deps=deps)
+        receipt = json.loads((out / runner.RECEIPT_NAME).read_text())
+        self.assertEqual(rc, 2)
+        self.assertIn("no retry", receipt["error"])
+        self.assertEqual((deps.fake.soaks, deps.fake.calls), (1, []))
 
     def test_mock_cli(self):
         kit_path = self.root / "kit.json"
@@ -387,11 +641,16 @@ class MockSpanTests(unittest.TestCase):
                               "--legs", "L001,L002,L003"])
         self.assertEqual(rc, 0)
         self.assertEqual(json.loads(stdout.getvalue())["legs"], 3)
+        with patch("sys.stdout", io.StringIO()):
+            rc = runner.main(["mock", "--kit", str(kit_path), "--output", str(self.root / "cli-retry"),
+                              "--t0-local", "2026-11-15T13:20", "--legs", "L001", "--soak-refusals", "1"])
+        self.assertEqual(rc, 0)
+        self.assertEqual(len(json.loads((self.root / "cli-retry" / runner.RECEIPT_NAME).read_text())["soak_attempts"]), 2)
         with patch("sys.stdout", io.StringIO()) as stdout:
             self.assertEqual(runner.main(["plan", "--kit", str(kit_path), "--t0", str(local("2026-11-15T13:20")),
                                           "--batch-window", "02:00-02:35"]), 0)
         plan = json.loads(stdout.getvalue())
-        self.assertEqual(plan["launch_deadline_epoch_s"], plan["deadline_epoch_s"] + runner.LAUNCH_RESERVE_S)
+        self.assertEqual(plan["launch_deadline_epoch_s"], plan["deadline_epoch_s"] + 1950 + runner.LAUNCH_RESERVE_S)
 
 
 # --------------------------------------------------------------------------
@@ -474,7 +733,13 @@ class LegRuntimeTests(unittest.TestCase):
 
     def test_condition13_sources_are_untouched(self):
         from joulewise.align.apple import v4_registration as reg
-        changed = subprocess.run(["git", "diff", "--name-only", "origin/align/2026-11-13-rl145-build", "--",
+        # The base whose condition-13 sources this branch carries: the R1 build line, or (at the qualification
+        # pin, RL-165 section 8.1) the W1-line head it merged, c3f4bacd8.
+        merged = "c3f4bacd8013ca98c19cf8d41f830c701930cd41"
+        has_merge = subprocess.run(["git", "merge-base", "--is-ancestor", merged, "HEAD"], cwd=runner.ROOT,
+                                   capture_output=True).returncode == 0
+        base = merged if has_merge else "origin/align/2026-11-13-rl145-build"
+        changed = subprocess.run(["git", "diff", "--name-only", base, "--",
                                   *reg.R1_EXECUTED_SOURCES], cwd=runner.ROOT, capture_output=True, text=True)
         if changed.returncode == 0:
             self.assertEqual(changed.stdout.strip(), "")
@@ -509,6 +774,80 @@ class ProductionSeamTests(unittest.TestCase):
                 (leg_dir / "runtime").rename(leg_dir / "runtime.rejected1")
                 deps.run_leg(leg_dir / "runtime", leg_dir / "leg_spec.json", root / "soak.json", 2700, [], lambda: 1e9)
             self.assertEqual(names, ["L001.a1", "L001.a2"])
+
+
+class ProductionSoakTests(unittest.TestCase):
+    """The production soak step and the span's soak child (RL-171): no OS batch window check, one retryable
+    refusal (unsettled or loaded), fresh child names per attempt. Synthetic runtime results only."""
+
+    def soak_result(self, slope=0.0, busy=0.1):
+        times = [float(t) for t in range(1801)]
+        series = {key: [30.0 + slope * t / 60.0 + (0.01 if t % 2 else 0.0) for t in times] for key in ("TV0h", "Th0C")}
+        return {"sensor_series_c": series, "sensor_series_t_s": {k: times for k in series},
+                "sensor_series_end_t_s": 1800.0, "sensor_roles": {"s_fast": "TV0h", "s_slow": "Th0C"},
+                "cpu_busy_cores": [busy] * 1801, "cpu_busy_t_s": times, "census": [{"ok": True}]}
+
+    def run_child(self, result, when="2026-11-15T01:50"):
+        from scripts import align_r1_rehearsal as r1
+        from joulewise.align.apple import v4_registration as reg
+        with tempfile.TemporaryDirectory(dir=TMP) as directory:
+            out = Path(directory) / "soak"
+            moment = r1.datetime.fromisoformat(when).replace(tzinfo=r1.LOCAL_ZONE)
+            with patch.object(reg, "verify_r1_executed_sources"), \
+                 patch.object(r1, "executed_commit", return_value="0" * 40), \
+                 patch.object(r1, "_now_local", lambda: moment), \
+                 patch.object(r1, "wait_outside_os_batch", side_effect=AssertionError("batch window checked")), \
+                 patch.object(r1, "runtime_argv_from_inputs", return_value=["runtime"]), \
+                 patch.object(r1, "_invoke", return_value=result):
+                path = runner.soak_child(out, Path(directory) / "inputs.json")
+                return json.loads(Path(path).read_text()), json.loads((out / "soak_row.json").read_text())
+
+    def test_the_soak_child_has_no_batch_window_check(self):
+        # 01:50: the soak runs through 02:00-02:35, which the Part C path's soak child would refuse.
+        reference, row = self.run_child(self.soak_result())
+        self.assertTrue(all(v["settled"] for v in reference["detrended"].values()))
+        self.assertFalse(row["os_load"]["redo"])
+
+    def test_unsettled_or_loaded_soak_is_the_retryable_refusal(self):
+        with self.assertRaisesRegex(runner.SoakQuietRefusal, "unresolved slope"):
+            self.run_child(self.soak_result(slope=0.5))
+        with self.assertRaisesRegex(runner.SoakQuietRefusal, "sustained CPU load"):
+            self.run_child(self.soak_result(busy=0.9))
+        with patch.object(runner, "soak_child", side_effect=runner.SoakQuietRefusal("idle soak has unresolved slope")), \
+             patch("sys.stderr", io.StringIO()):
+            self.assertEqual(runner.main(["soak-child", "--output", "/synthetic/soak"]), runner.SOAK_REFUSED_RC)
+        with patch.object(runner, "soak_child", side_effect=ValueError("other")), self.assertRaises(ValueError):
+            runner.main(["soak-child", "--output", "/synthetic/soak"])
+
+    def test_run_soak_maps_the_exit_and_names_each_attempt(self):
+        with tempfile.TemporaryDirectory(dir=TMP) as td:
+            root = Path(td)
+            inputs = root / "inputs.json"
+            inputs.write_text(json.dumps({"WP15": {"runtime_entrypoint": [
+                "scripts/align_r1_runtime.py", "--config", "configs/align/v4/r1_runtime.json"]}}))
+            with patch("scripts.run_align_r1_smoke.AgentFeed"), patch("scripts.run_align_r1_smoke.MeterFeed"), \
+                 patch("scripts.run_align_r1_smoke.VolumeFeed"):
+                deps = runner.production_deps(inputs=inputs, pmset_bin="fake", output=root / "span")
+            span = root / "span"
+            span.mkdir()
+            names, codes = [], [runner.SOAK_REFUSED_RC, 0, 1]
+
+            def child(**kw):
+                names.append(kw["name"])
+                out = Path(kw["argv"][kw["argv"].index("--output") + 1])
+                out.mkdir()
+                (out / "soak_reference.json").write_text("{}")
+                return {"rc": codes[len(names) - 1]}
+            with patch.object(runner, "run_child", side_effect=child):
+                with self.assertRaises(runner.SoakRefusal):
+                    deps.run_soak(span / "soak", 1950, [], lambda: 1e9)
+                (span / "soak").rename(span / "soak.rejected1")
+                self.assertEqual(deps.run_soak(span / "soak", 1950, [], lambda: 1e9), span / "soak/soak_reference.json")
+                (span / "soak").rename(span / "soak.rejected2")
+                with self.assertRaises(runner.SpanRefusal) as ctx:
+                    deps.run_soak(span / "soak", 1950, [], lambda: 1e9)
+                self.assertNotIsInstance(ctx.exception, runner.SoakRefusal)
+            self.assertEqual(names, ["soak", "soak.a2", "soak.a3"])
 
 
 class RunnerWithLegRuntimeTests(unittest.TestCase):
@@ -601,6 +940,29 @@ class LauncherTests(unittest.TestCase):
             "/synthetic/kit.json", "--output", "/synthetic/new", "--legs", "L001,L002,L003", "--batch-window",
             "02:00-02:35", "--deadline", "1234", "--pmset-bin", "fake-pmset"])
 
+    def test_launch_ledger_records_attempt_even_if_bootstrap_fails(self):
+        with tempfile.TemporaryDirectory(dir=TMP) as td:
+            root = Path(td)
+            receipt = root / "previous.json"
+            receipt.write_text(json.dumps({"span_id": "prior", "ended": {"epoch_ns": 100_125_000_000},
+                                           "steps": [{"name": "restore", "rc": 0, "result": {"ok": True}}]}))
+            ledger = root / "attempts.json"
+            previous = {"sequence": 3, "span_id": "prior", "close_receipt": str(receipt)}
+            ledger.write_text(json.dumps({"attempts": [previous]}))
+            kit = self.kit_file(root)
+            legs = "L001,L002,L003"
+            plan = cadence_launch.cadence_plan(kit, legs, t0=local("2026-11-15T13:20"))
+            with patch.object(cadence_launch, "cadence_plan", return_value=plan):
+                spec, _ = launch_files(root, seconds=cadence_launch.cadence_minimum_seconds(plan), kit=kit, legs=legs,
+                                       attempt_ledger=ledger, previous_close_receipt=str(receipt),
+                                       span_id="qual-01-s01", t0_not_before_ns=100_125_000_000)
+            attempts = json.loads(ledger.read_text())["attempts"]
+            self.assertEqual(attempts, [previous, {"sequence": 4, "span_id": "qual-01-s01",
+                                                  "close_receipt": str(root / "out" / runner.RECEIPT_NAME)}])
+            self.assertIn("--span-id", json.loads(spec)["argv"])
+            with self.assertRaisesRegex(ValueError, "latest attempt qual-01-s01 has no close receipt"):
+                cadence_launch.proven_close({"attempts": attempts}, runner)
+
     def test_launch_writes_an_agent_free_interactive_job_on_the_desk_wrapper(self):
         import plistlib
         with tempfile.TemporaryDirectory(dir=TMP) as td:
@@ -608,7 +970,7 @@ class LauncherTests(unittest.TestCase):
             plan = cadence_launch.cadence_plan(self.kit_file(root), "L001,L002,L003", "02:00-02:35",
                                                t0=local("2026-11-15T13:20"))
             minimum = cadence_launch.cadence_minimum_seconds(plan)
-            self.assertEqual(minimum, plan["worst_case_s"] + runner.LAUNCH_RESERVE_S)
+            self.assertEqual(minimum, plan["worst_case_s"] + plan["soak_s"] + runner.LAUNCH_RESERVE_S)
             spec, plist = self._launch_at(root, minimum)
             spec = json.loads(spec)
             self.assertEqual(spec["kind"], "cadence-legs-v1")

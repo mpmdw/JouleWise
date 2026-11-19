@@ -12,7 +12,7 @@
   "d_4bit_source": null,
   "d_class": "heavy",
   "d_n_chunk": 4096,
-  "d_n_chunk_status": "candidate, not adopted (RL-145 addendum section 5 row 2); the t_decline formula value is still computed and recorded beside it",
+  "d_n_chunk_status": "adopted (RL-149 section 1.1: the no-hold design, N_chunk 4,096; RL-145 addendum section 5 row 2 configured it); the t_decline formula value is still computed and recorded beside it",
   "sensors": {"s_fast": "TV0h", "s_slow": "TV1h", "fan_keys": ["F0Ac", "F1Ac"], "record_keys": ["Tf08"], "r0_sha256": "e6231a8f3e6ab6177bbedbf12b878c958a7b4d4331e36472c74c2a192588769b"},
   "r0_picks": {"s_fast": "TV0h", "s_slow": "Tf08"},
   "step": {"prefill_chars": 40000, "decode_tokens": 4096, "seed": 1, "deadman_s": 1580},
