@@ -162,3 +162,18 @@ Publication now checks the age of the last background sample on both sides of it
 | MED, daemon windows lost a worker seen only by a caller admission. | `test_background_window_keeps_contender_seen_only_at_caller_admission` covers the caller-only worker and the daemon-visible control. | PASS |
 
 The six auditor replay cases passed, including the quiet control and the caller-only 15–45 s flag. The existing baseline-close regression introduces its agent after the closing sample so it exercises the dedicated admission census. The frozen module still matches the supplied SHA-256 and reports 341 scenarios, zero failures and zero invalid oracle controls. The earlier audit reports record findings on earlier candidate heads. Their existing custody, exit status, agent and CPU regressions remain in the focused suite and the frozen comparison. No additional MED or LOW follow-ups remain. Exact-candidate CI and two-family review are tracked on draft PR #824. NEEDS_SPEC has no entries.
+
+## Audit round 2 after the frozen differential
+
+Round 2 reviewed `835235b2f54ca7359315a4c085de43677d0e4f65`. Regression commit `dd299ca0c` produced six failing subcases on those bytes. Repair `27854ed1659c34a600dea3b2c5631fdf89e05263` covers both findings.
+
+R0 refuses case-insensitive agent identities directly from the captured row in the cumulative CPU table, the process arguments table and the dedicated agent query. The cumulative CPU table is judged before the arguments query. The existing identity filter handles incidental argument mentions such as a desktop app path passed to `echo`.
+
+For a worker missing from a window endpoint, R0 keeps CPU growth measured between its observations. A whole-second start near or before the opening does not erase that growth. R0 uses a zero baseline when the observed start floor proves the worker was born within the window. Otherwise it uses the first observed counter and retains the highest measured increase. A worker seen at the close and a worker that exited before it both use this evidence.
+
+| Verified finding | Regression | Result on `27854ed16` |
+| --- | --- | --- |
+| HIGH, an agent listed at the midpoint could exit before the arguments query and escape admission. | `test_midpoint_accounting_refuses_agent_that_exits_before_args_read`, `test_args_and_pgrep_agent_sightings_do_not_query_process_identity` | PASS |
+| MED, the whole-second start floor hid the observed CPU growth of an exiting worker. | `test_exited_worker_retains_measured_growth_across_fractional_window_open`, `test_worker_still_present_at_close_retains_growth_after_missing_open_sample` | PASS |
+
+Both auditor probes passed all four synthetic replay cases. The accounting sightings halted the check before an arguments query or host work. Both worker start-time variants recorded the 15–45 s flag at 0.06 CPU-s/s and withheld output. The frozen suite remains byte-identical at `e113501601e3cae09b1fc1a131dcf8ef55361493ae7a353135a5c5c83c7438b3`. It passed all 341 scenarios with zero failures and zero invalid oracle controls. Exact-candidate CI and the two-family review are tracked on draft PR #824. NEEDS_SPEC has no entries.
