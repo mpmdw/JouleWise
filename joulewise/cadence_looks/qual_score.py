@@ -141,6 +141,18 @@ def read_regular(path):
         return stream.read()
 
 
+def fixture_host_token(raw):
+    """Convert the generated ioreg projection to the same token as the hardware probe."""
+    probe = qualification_manifest._decode(raw)
+    require(type(probe) is dict and probe.keys() == {"IOPlatformUUID"}, "invalid generated host probe")
+    values = probe["IOPlatformUUID"]
+    require(type(values) is list and len(values) == 1, "generated host probe needs exactly one UUID")
+    uuid = values[0]
+    require(type(uuid) is str and re.fullmatch(r"[0-9a-fA-F]{8}(?:-[0-9a-fA-F]{4}){3}-[0-9a-fA-F]{12}", uuid),
+            "invalid IOPlatformUUID")
+    return "hw1:" + digest(("joulewise.execution_host.v1:" + uuid.upper()).encode("ascii"))
+
+
 def git(repo, *args):
     status, value, _ = manifest._git(repo, *args)
     require(status == 0, "required Git evidence unavailable")
@@ -385,6 +397,15 @@ class FixtureSources:
         require(report["twin_agrees"] == "yes", "named freeze-2 intake awaits the shared reader")
         return report["coefficients_sha256"]
 
+    def execution_destinations(self, execution):
+        require(not manifest.look_spent(self.repo, LOOK, execution), "look ID is spent in ledger history")
+        custody = Path(self.row["custody_root"])
+        require(self.repo.parent in custody.parents and manifest._relative_directory(self.row["public_root"]),
+                "generated destinations must stay in the fixture world")
+        local_host = fixture_host_token(read_regular(self.inputs / "local-host.json"))
+        require(local_host == self.row["execution_host"], "generated host differs from its committed token")
+        return release.destinations(self.repo, self.row)
+
 
 def edges(lo, hi):
     return {"edge_lo": lo, "edge_hi": hi, "gaps": hi - lo}
@@ -517,6 +538,8 @@ def cli(argv=None):
             }
             validate_public(read_regular(args.candidate.absolute()), schema, bindings)
             return 0
+        source.public_freeze_sha()
+        source.execution_destinations(execution)
         raise Refusal("shared freeze-2 reader and native L predictor pending admission")
     except Exception:
         manifest_dispatch.exit_with_failure(2, lambda: "REFUSE qualification before read\n")

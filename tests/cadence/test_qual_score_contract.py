@@ -191,3 +191,49 @@ class QualificationContractTests(unittest.TestCase):
             run = fixture.launch(world, "validate-public", ["--candidate", str(candidate)])
             self.assertEqual(run.returncode, 2)
             fixture.read_trace(self, world)
+
+    def test_stage2_preflight_checks_host_destinations_and_spent_history(self):
+        from tests.cadence import test_qual_score_acceptance as fixture
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp).resolve()
+            repo, inputs, custody = (root / name for name in ("repo", "inputs", "private"))
+            repo.mkdir()
+            subprocess.run(["git", "-C", str(repo), "init", "--quiet", "--initial-branch=fixture"], check=True)
+            ref = "refs/heads/records"
+            registration = fixture.history(repo, ref, {})
+            row = {"look_id": qual.LOOK, "status": "stage1_committed", "registration_commit": registration,
+                   "custody_root": str(custody), "public_root": "public", "execution_host": fixture.host()}
+            ledger = {"schema": "joulewise.cadence_look_ledger.v1", "looks": [row]}
+            head = fixture.history(repo, ref, {qual.LEDGER: ledger}, registration, main=True)
+            fixture.put(inputs / "local-host.json", {"IOPlatformUUID": [fixture.HOST_UUID]})
+            (repo / "public" / qual.LOOK).mkdir(parents=True)
+            (custody / qual.LOOK).mkdir(parents=True)
+            source = qual.FixtureSources(repo, inputs)
+            reservation, report = source.execution_destinations(head)
+            self.assertEqual(reservation, custody / qual.LOOK / "RESTRICTED")
+            self.assertEqual(report, repo / "public" / qual.LOOK / "PUBLIC.json")
+            self.assertFalse(reservation.exists())
+            self.assertFalse(report.exists())
+
+            for uuids in ([], [fixture.HOST_UUID, fixture.HOST_UUID], ["invalid"], [fixture.HOST_UUID[:-1] + "2"]):
+                with self.subTest(uuid_count=len(uuids)):
+                    fixture.put(inputs / "local-host.json", {"IOPlatformUUID": uuids})
+                    with self.assertRaises(qual.Refusal):
+                        source.execution_destinations(head)
+                    self.assertFalse(reservation.exists())
+
+            fixture.put(inputs / "local-host.json", {"IOPlatformUUID": [fixture.HOST_UUID]})
+            fixture.put(report, b"existing report\n")
+            with self.assertRaisesRegex(ValueError, "already has an execution reservation or public report"):
+                source.execution_destinations(head)
+            self.assertEqual(report.read_bytes(), b"existing report\n")
+            report.unlink()
+
+            failed = {**ledger, "looks": [dict(row, status="failed")]}
+            spent = fixture.history(repo, ref, {qual.LEDGER: failed}, head)
+            reset = fixture.history(repo, ref, {qual.LEDGER: ledger}, spent, main=True)
+            with self.assertRaisesRegex(qual.Refusal, "spent in ledger history"):
+                qual.FixtureSources(repo, inputs).execution_destinations(reset)
+            self.assertFalse(reservation.exists())
+            self.assertFalse(report.exists())
