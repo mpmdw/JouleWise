@@ -1961,6 +1961,26 @@ class R0PublicationAuditTest(unittest.TestCase):
     def assert_withheld(self, result):
         self.assertEqual((result["rc"], result["status"], result["published"]), (2, "refused", False), result)
 
+    def test_contaminant_substrings_keep_admitted_cpu_flags(self):
+        from tests.align import test_r0_vs_l3_differential as fixture
+
+        commands = ["corespotlightd"]
+        for name in prewindow.CONTAMINANTS.split("|"):
+            commands.extend((f"core{name.swapcase()}helper", f"python3 /fixture/core{name}helper/work.py"))
+        for command in commands:
+            with self.subTest(command=command):
+                worker = fixture.Process(command, cpu_at=30, centiseconds=180)
+                result = self.trial(fixture.Case("admitted_contaminant_substring", (worker,), end=60))
+                self.assert_withheld(result)
+                self.assertTrue(any(flag[:3] == (0.0, 30.0, fixture.PID) for flag in result["flags"]), result)
+                self.assertIn((0.0, 30.0), result["report_intervals"])
+
+        for command, centiseconds in (("corespotlightd", 150), ("neutral-worker", 180)):
+            with self.subTest(command=command, centiseconds=centiseconds):
+                worker = fixture.Process(command, cpu_at=30, centiseconds=centiseconds)
+                result = self.trial(fixture.Case("admitted_contaminant_control", (worker,), end=60))
+                self.assertEqual((result["rc"], result["published"], result["flags"]), (0, True, []), result)
+
     def test_publication_refuses_stale_background_samples(self):
         from tests.align import test_r0_vs_l3_differential as fixture
 
