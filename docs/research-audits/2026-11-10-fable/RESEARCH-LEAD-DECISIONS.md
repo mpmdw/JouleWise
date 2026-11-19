@@ -22026,3 +22026,241 @@ Rows for the lead to commit to `RULES.json`. Owner is `research_lead` for all fi
 **Rows closed or changed by this ruling.** RL-181 row 3's Test cell is replaced by row 2. RL-181 rows 4 and 10 are read with rows 1, 4 and 5.
 
 **What comes back to me.** A re-registration that changes anything but the one string. A scorer or loader that cannot give an interval's start time. Nothing else in this ruling returns.
+
+# RL-189. Part C refuses a native-limit claim unless the judged invoker's ledger binds the mirror descriptor it is compared with: attestation, not existence; no v1 case changes expectation and v2 adds sixteen. The R1-RERUN planning release passes its cold pass with notes, and the lead's signature in place of a third rerun was within its authority. The `lm-interim-01` runtime pin is confirmed at `272aecb8…2f46` as an edit to a draft, on one of the lead's three grounds; a second is wrong for this look and its row is reworded. The description-looks brief conflicts with RL-188 4.2 on recovery and is corrected in three places
+
+Research lead (Fable 5.2), Thu Nov 19 14:11 PST 2026 (from `date`). Answers the dispatcher's four items. RL-183, RL-183c, RL-185, RL-186 and RL-188 stand except where "Amends" says otherwise.
+
+**Cites.**
+- `RLD:n` is `RESEARCH-LEAD-DECISIONS.md` on the audit branch at `9a5a9be30`.
+- `FF:n` is `/Volumes/JW-EXT/scratch/d-partc-differential-v2/FOR-FABLE.md`; `WLOG` is `tmp/descriptor-witness.log` beside it. `V1:n` is the v1 suite, `/Volumes/JW-EXT/scratch/astra-partc-differential/test_partc_frozen_differential.py` (sha256 `d343448b…3430`).
+- At the R1 pin `b2e01464d`: `WL:n` is `joulewise/align/apple/workload.py`, `PV:n` is `joulewise/provenance.py`, `BP:n` is `scripts/align_w1_budget_procedure.py`, `CH:n` is `docs/align/R1-TO-W1-CHAIN.md`.
+- `WS:n` is `/Volumes/JW-EXT/scratch/d-r1-rerun-close-worksheet/WORKSHEET.md`. `RS459` is RUN_STATE item 459 on `origin/main` at `6640a6671`. `REL`, `D3A` and `DEC2` are `r1_planning_release.json`, `3a.json` and `decision2.json` in `/Volumes/JW-EXT/cadence-desk/r1-rerun-20261118-work/`.
+- `LR:n` and `LP:n` are `RESUME.md` and `REPORT.md` in `/Volumes/JW-EXT/scratch/d-look-stack-base-sync/`. `A` is draft PR #859's head `62e987ff7`.
+- `AB:n` is `/Volumes/JW-EXT/scratch/astra-desc-suite-v2/BRIEF.md`. `A5` is `pl-d-desc-looks-executor/audit-5/FINAL-MESSAGE.md`.
+
+**Read.**
+- FF in full, WLOG, the witness script, the v2 seat's brief and final message. V1:600-640, 1100-1116, 1676-1700.
+- RL-183 sections 1 and 2.6 to 2.10, RL-183c in full, RL-186 section 1 with its Amends and Register, RL-122 with its amendment, RL-124, RL-153 section 1, RL-180 1 (a), RL-184 sections 1 and 2, RL-181 2.3 and 2.4, RL-185 section 4, RL-188 (my file) and RL-187 3.7's table.
+- WL:263-289 and the lines that name the limit; PV:146-173; BP:1-45, 100-170, 204-245; CH:21-75.
+- WS in full, RS459, and the three desk files and no other file in that directory.
+- LR in full; LP's NEEDS_SPEC and the 2026-11-19 section. AB in full, A5 in full, and the executor spec's coverage line.
+
+**Checked myself.**
+- **The frozen read.** `prepare` takes the limit from `<model.source>/config.json`, sets it to null with the flag `model.position_limit_unread` when the file or value is unusable (WL:268-273), and derives the effective cap from it (WL:283-289). The weight inventory keeps only weight-suffix files (PV:169). In `joulewise/align/`, `provenance.py` and the rehearsal driver at the pin, the field is written at WL:743 and read nowhere else.
+- **The release.** sha256 of D3A is `94fbe741…017a`, the value REL cites. REL is canonical JSON (sorted keys, indent 2, final newline) with sha256 `171b2a3b…df6a`. REL's `segments` equals D3A's `kit_record_segments`. D3A has 12 rows, 12 distinct phase names, and reconciles 12 to 12 with no mismatch. `f24aaff69` is an ancestor of `b2e01464d`. The pinned runtime config has `s_slow` TV1h and `s_fast` TV0h.
+- **The two config blobs.** `a784f7811` hashes to `bf2cb2e6…81df` and `bf8479b26` to `272aecb8…2f46`. As JSON they have 152 leaves each, the same key order, and one differing leaf, `d_n_chunk_status`. `2d347f721` carries the first blob; `6e9d42f1d` and `b2e01464d` carry the second. At A no file under `joulewise/` or `scripts/` reads that key; the look names the file for "rule 3's sensor policy" (`inclusion_34.py:432`). At A the manifest and its `LOOKS.json` row both say `draft`.
+
+**Not checked.**
+- I ran no suite, no replay and no desk. The four witnesses and the 19,461 count are the v2 seat's (WLOG).
+- Whether an unchanged frozen call gives each member's `model.source` from the issued runtime config before launch. 1.3 is written for both cases.
+- `followup.json`, `counted.json`, `counts.json`, `decision.json`, the slot record and the R1 run directory. The duty bar and the slot identity in section 2 are read from DEC2 and from `decide` having accepted REL.
+- Which runner pin each campaign span ran on, beyond `dev-05-s01` and `dev-05-s02` at `2d347f721` as RUN_STATE records them.
+- The description suite v1, audits 1 to 4 and the Astra seat's output, which does not exist yet.
+- No custody, energy, power, meter, transcript, hazard, sealed or restricted file was opened.
+
+**Not done.** No commit, push, comment, run or SSH. The only file written is this one.
+
+---
+
+## 0. The answers
+
+| # | Answer | In one line |
+|---|---|---|
+| 1 | **Attestation.** RL-183 1.2's default governs; RL-186 1.3 is not extended | The judged invoker hashes the mirror's `config.json` into the member's ledger row; the evaluator compares the claim with that file. No v1 expectation changes. v2 adds 16 cases. The ten are untouched |
+| 1, replay | **Existence, labelled** | A replay has no ledger: the claim passes if some limit reproduces the recorded cap, and the record prints `native_limit: unattested`. Never a Part C |
+| 2 | **PASS WITH NOTES** | Every RL-124 item and both RL-153 fields are met for both segments; the backfill is the chain's own steps; `TYPICAL-CASE` is right; signing was the lead's to do. Four things owed before W1 signing |
+| 3 | **Confirmed at `272aecb8…2f46`,** on ground 1 and a corrected ground 3 | Ground 2 is wrong for this look: `dev-05` ran on a pin that carries the old blob. It is an edit to a draft, not a deviation. Freeze 2 needs three small things |
+| 4 | **One conflict, two imprecisions** | The brief's "indeterminate return" contradicts RL-188 4.2. RL-188 stands and is extended to any window that fails its own coverage |
+
+---
+
+## 1. Part C: the native-limit claim
+
+### 1.1 Ruling
+
+**Part C accepts a member's `hardware.context_limits.max_position_embeddings` only when it equals the value frozen code derives from descriptor bytes that the judged invoker bound in the ledger. A claim that some descriptor could have produced is not enough in a native run.**
+
+- RL-183 1.2's default stands for this field: where the unchanged call cannot distinguish two cases, the evaluator takes the failing one (RLD:20127). RL-186 1.3 is not extended to descriptors (RLD:21295).
+- **Why not existence.** RL-186 chose existence for values that could have no witness without a change in the ten or I/O in the runtime process (RLD:21286-21288). This one can: the evaluator already runs on the measurement host (RLD:20564), the file is there, and the invoker already hashes a small file at each member's return (RLD:20607).
+- **What existence would cost.** With a recorded cap of 40,960, every integer from 40,960 up is admissible (FF:17). The check would then test nothing about the field, and the suite's four detections of an edited limit would become passes.
+- **Nothing in the ten changes.** The read is by the kit's process, outside the runtime, and adds no argument to the frozen call.
+
+### 1.2 The witness
+
+| | |
+|---|---|
+| **Who** | The judged invoker of RL-183c 1.3 (RLD:20585) |
+| **What** | The bytes of `<model.source>/config.json` for each member that runs an episode |
+| **When** | When the frozen `_run` returns or raises for that member, with the rest of its row |
+| **Where** | The member's ledger row gains one field, `model_descriptor_sha256`: 64 lowercase hex, or the word `absent` or `unreadable`. No other field is added, and the emitted record gains none (RLD:20577) |
+| **The path** | From the issued runtime config that row 0 binds (RLD:20589), through frozen code called unchanged. Never from a member's own files |
+
+**If no unchanged frozen call gives the path before the member's files are opened,** the invoker takes it from the member's bundle `config.json` once that file's manifest entry has verified, and writes the digest as one further chained row before the next member launches. The builder's report says which route it took.
+
+### 1.3 The evaluator's test
+
+`A` is the attested limit: WL:268-272 applied to the bound bytes, so a positive integer or null.
+
+| # | Check | Failure |
+|---|---|---|
+| D1 | The row has the field | `other_failure / evidence_unverifiable` (RLD:20601) |
+| D2 | The evaluator reads the file's bytes itself; their sha256 before the parse and after it equal the row | `source_integrity` (RLD:20597-20598) |
+| D3 | The member's bundle `config.json` names the same `model.source` as the issued inputs | The evaluator's existing configuration reason |
+| D4 | The claim equals `A`, by type and value | The evaluator's existing context-limit decision reason. Not `evidence_unverifiable` |
+| D5 | `A` is null if and only if the recorded flags hold `model.position_limit_unread` | The existing flags reason |
+| D6 | The recorded `max_context_tokens` equals WL:283-289 computed from `A`, the configured cap and whether a decode budget or deadman is set | As now |
+
+- Every other consistency check stays as it is. D4 to D6 replace nothing; they give the existing comparison a bound operand.
+- A finding names the field and carries no value (RLD:20578). The ledger gains a digest and two words.
+- **What this proves.** The descriptor did not change between the member's return and the verdict, and the claim matches it. **What it does not.** That the file was the same when `prepare` read it earlier in that member. The runtime never writes the mirror, and I accept that gap as RL-183c accepted its own (RLD:20605).
+
+### 1.4 When the witness is absent
+
+| Case | Disposition |
+|---|---|
+| A native Part C with no field for a member | `evidence_unverifiable`. The Part C fails |
+| The clean control | `pass`. Its ledger carries the field for all four episode members and the claim equals `A` |
+| The replay of RL-183 1.3 on the counted Part C and F0 run 11 (RLD:20144) | No ledger exists and none is invented (RLD:20613). The claim passes when it is null with the flag, or a positive integer `n` for which WL:283-289 gives the recorded `max_context_tokens`; D5 and D6 are kept. The replay record prints `native_limit: unattested` for each member. That is not a failure and does not come to me |
+| R1's own stored records | Nothing is owed. R1 is judged by its post-close tests, not by Part C (RLD:20146), and no code at the pin reads the field after writing it |
+
+### 1.5 What the suite author writes into v2
+
+1. **No v1 case changes expectation.** `CHANGES.md` lists zero of the 19,461 IDs. The four IDs of FF:25-28 (leaf `hardware.context_limits.max_position_embeddings`, mutation `shift`, in `capture-predecessor-30b`, `step-d`, `d-bank-benign-s1` and `x-g`) keep "must refuse". The mirror says 40,960, the claim says 40,961, and D4 fails.
+2. **One fixture change.** There is one mirror. The directory the oracle reads (V1:612-613, V1:1683) is the `model.source` the control's issued configs name, so the launcher's ledger binds the bytes the oracle reads.
+3. **The clean control expects `pass`,** and v2 asserts that each of the four episode members' rows holds the sha256 of the mirror's `config.json`.
+4. **Sixteen added cases,** four for each of the four members, IDs `<member>/descriptor/<name>`:
+
+| Name | Setup | Expected |
+|---|---|---|
+| `rewritten-after-return` | Mirror 40,960 until the member's row is written, then 40,961 | `source_integrity` |
+| `consistent-40961` | Mirror 40,961 for the whole attempt; the stub producer writes the claim 40,961 with a consistent manifest; the cap stays 40,960 | `pass` |
+| `mirror-40961-claim-40960` | Mirror 40,961 for the whole attempt; the episode as in the clean control | Refused under D4 |
+| `no-binding` | The member's row lacks the field | `evidence_unverifiable` |
+
+5. The total is 19,477. The frozen R1 pin, every other family and every other expectation are unchanged.
+
+**For the builder (#809).** 1.2 and 1.3, the existing argument-list test (RLD:20136) still equal, `git diff b2e01464d -- <the ten paths>` empty, and RL-183c's marker test extended to the new checks.
+
+---
+
+## 2. The R1-RERUN planning release: PASS WITH NOTES
+
+### 2.1 RL-124 and RL-153, both segments
+
+| Requirement | R+2C | R+4C |
+|---|---|---|
+| Heater key is the session's `s_slow` (RL-124 item 1, RLD:7313) | TV1h; the pin's config says TV1h, and the kit refuses a mismatch | Same |
+| Outcome `timeout`, at least 300 s (item 2) | 1,200.05 s | 1,200.04 s |
+| At least 270 valid samples in the last 300 s (item 2) | 300 | 300 |
+| Peak over the last 300 s at or above band edge − 0.3 °C (RLD:7158) | Above by 7.1 °C | Above by 5.7 °C |
+| δ_slow from the member's config (item 3) | `member config.json thermal.delta_slow_c` | Same |
+| OS level 0 and Nominal throughout, none unobserved (item 4) | `[0]`, `["Nominal"]`, 0 unobserved | Same |
+| The preceding idle-until-soak phase released (item 5 (a), RLD:7322) | `planning_turn_R_plus_2C.precool`, released | `cooldown_after_D`, released |
+| One final G0 row for the name, not superseded (item 5 (c)) | Yes | Yes |
+| RL-153 finding 1: pairs above zero, none unequal (RLD:13854-13856) | 300 pairs, 0 unequal | 300 pairs, 0 unequal |
+| RL-153 finding 2: no stale power-state stamp (RLD:13857) | 0 | 0 |
+| The print is from the admitted desk and is cited by sha256 (item 8, RLD:7330) | `f24aaff69` is an ancestor of the pin; the digest in REL matches the file | Same |
+
+- **The disclosures of RL-124 item 1, read.** In the last 300 s the key was at or over the threshold in 261 and 260 of 300 samples. Both precools released, and the session's ten other G0s released in 85 to 209 s. This is the heater holding a die key at the band edge on a host that cools normally. It is not the case RL-124 5 (a) was written to catch.
+- R+0 released and is not in REL. No R+6 row exists. REL's keys are exactly the two inconclusive planning segments.
+
+### 2.2 The backfill
+
+**It is the chain's own steps 1 and 3** (CH:32-39), which RL-183 2.6 adopted through "chain step 6" (RLD:20248). The export reads turn counts and finish reasons only (CH:63-75). The backfill overwrites nothing, refuses a mismatch with the driver's row, and records the export's sha256 (BP:204-240). It is allowed. The X-G fields were already present, so step 2 was not needed.
+
+### 2.3 `TYPICAL-CASE`
+
+**Correct.** With both segments released, the typical case fits on all three gated D runs and the turn opportunity passes: two runs with three admitted turns, and `D_bank` `not_applicable` at two turns, own stop, uncut, which is RL-152 1.2 as restated (RLD:12367-12370, 14452-14458). DEC2 carries no duty-bar note, and `decide` writes one whenever the bar has not passed.
+
+**The contrast is a non-veto `INCONCLUSIVE`, and that is the pinned rule** (BP:39-40, BP:136-137; the duty note is BP:138-139). The contrast's G0 cap is set to 488 s against a nominal 600 s, and the record predeclares why. I accept it on one condition, in 2.5.
+
+### 2.4 Authority
+
+**Within the lead's authority.**
+- RL-122 3 (a) says such a timeout "does not block W1" (RLD:7027-7029). RL-124 names the lead as owner of the record and makes the lead's signature the control (RLD:7326, 7336).
+- RL-183 2.6 lets the kit's word govern (RLD:20248). The kit reads the release by design, and with it the word is `TYPICAL-CASE`. The re-arm row (RLD:20253) applies while the word is `R1-RERUN`.
+- A third identical spend was owed a consult, not a third night (WS:27). The lead spent nothing, and this pass is the consult.
+- **A note on cycle time, not on authority.** The same release was available after the first session's Check. The second session bought nothing the desk could not have shown.
+
+### 2.5 Owed before W1 signing
+
+1. **REL is committed** at `configs/campaigns/align_v4/registration/r1_planning_release.json` on the W1 line with sha256 `171b2a3b…df6a`. It is not on main today.
+2. **The installed `r1_slots.json` is the backfilled record** (chain step 4), and `derive-contrast`, the kit regeneration and `--check` (steps 5, 7 and 8) run on it. `inputs.json` then holds DEC2's five `set_inputs` values unchanged.
+3. **The contrast stays `INCONCLUSIVE` in every W1 print.** No W1 report reads the X-G contrast as a pass or a fail, and the anti-hindsight list of RL-183 2.7 carries the reduced cap (RLD:20271).
+4. **One line in that list on the two sessions.** The slot record is the session armed under item 440, fixed before it ran. The first session of 18 November is named as superseded, and no value was chosen between the two.
+
+---
+
+## 3. The `lm-interim-01` runtime pin: confirmed, with one ground corrected
+
+**The pin is `272aecb8bc0d9e33defd7f686b129ea236b925fdfbf68137697120dd63232f46`.** The lead's ruling (LR:3) stands in its result.
+
+| Ground | Verdict |
+|---|---|
+| 1. The files differ only in the string `d_n_chunk_status` | **Holds.** One leaf of 152, and no code reads it. The sensor policy the look takes from this file is identical in both |
+| 2. `272aecb8…` is the config the measurement Mac executed | **Wrong for this look.** It is what R1 executed. `dev-05-s01` and `dev-05-s02` ran at `2d347f721`, whose tree holds `a784f7811`. The campaign did not run on one blob |
+| 3. Keeping the old bytes would revert a frozen path | **Holds, restated.** A dependency pin names the file in the tree the look executes at. That tree is on the kit line, where the blob is `bf8479b26` |
+
+**It is not a deviation.** The manifest and its ledger row are `draft`, and an edit to a draft is an edit before commitment (RLD:19020). The lead owns it. The `LM-INTERIM-01-RUNTIME-PIN` row may stay as a dated record. Its last three sentences are replaced by:
+
+> This is the file in the tree the look executes at. Campaign spans ran on runner pins that carry either blob (`2d347f721` has `a784f7811`; `6e9d42f1d` has `bf8479b26`); the two differ in one label that no code reads. The manifest was a draft when the pin moved, so this is an edit before commitment (RL-180 1 (a), RL-189 3).
+
+**What freeze 2 needs, given RL-180 and RL-184.**
+1. **At commitment,** `fit.dependencies[0].sha256` equals the sha256 of `configs/align/v4/r1_runtime.json` at the look's execution commit. The existing pre-run check tests this.
+2. **In the freeze-2 packet,** the manifest's diff from the reviewed draft is this one digest and the `LOOKS.json` digest derived from it. Earlier verdicts on the manifest carry on that diff (RLD:20269).
+3. **One table in the packet:** each runner pin on the committed roster beside its blob of this file. A blob that is neither of the two comes to me before stage 1. No span is included or excluded by this table.
+4. RL-184's naming record and stanza are unchanged. They carry the coefficient and public hashes only (RLD:21038).
+
+---
+
+## 4. The description-looks suite v2: one conflict with RL-188
+
+**The cause of the audit cap is partly mine.** RL-188 4.2 spoke only of "a gap over U1" (RLD:21993). Audit 5's third finding is a window with 9 of 10 samples, which that text does not name.
+
+| Brief (AB) | Ruling |
+|---|---|
+| "A failed-coverage window anywhere before the first qualifying return makes the return indeterminate (null + named reason), never a later value" (AB:9) | **Conflicts with RL-188 4.2 and its register row 5** (RLD:21993, 22024). Not written into v2. See 4.1 |
+| "Sample-count coverage on the channel itself decides" (AB:8) | **Accepted as the order of reasons only.** Any failed stage-2 check makes the print null (RLD:19402). A met count never passes a print that holds a gap over its limit |
+| The same rule, for the rail sum | **Read with RL-185 4.** The rail sum's coverage is judged on rows that carry all three listed rails (RLD:20915), and the `rail_manifest` equality is checked before any coverage read (RLD:20918). It is the first row of the precedence table. The GPU-rail print is judged on `gpu_power` alone |
+| "No raw channel value from any interval is read … before that interval's own coverage check passes" (AB:7) | **The unit is the print's own interval** (RLD:19402): the hold, the turn, the search span, or one window of a windowed print. Passing one sample row's check does not license reading that row while the rest of the print's interval is unjudged |
+| The cross product over `cpu_power`, `gpu_power`, `ane_power` (AB:10) | **The printed channels are the GPU rail, the rail sum and DC-in** (RLD:21993). v2 crosses those three. The three rails are the missing-column axis of the rail sum |
+| Tails keep their coverage reason (AB:9) | No conflict. An incomplete last window is not searched (RLD:21993); a complete window that fails coverage is skipped under 4.1 with its reason |
+
+### 4.1 Recovery through a window that cannot be judged
+
+> A 10 s window that fails any stage-2 check on its own interval, whether a count under its coverage rule or a gap over U1, neither passes nor fails. It is skipped and counted for that channel, with its reason. The return time is the start of the first window that passes, less the origin. The count of windows skipped before it prints beside the value. If window 0 is skipped, the censored "under" form is not used.
+
+- **Why not null.** RL-187 3.7 takes the largest return time and has no case for a null (RLD:21800). A value late by 10 s for each skipped window lengthens a rest. A null would drop the leg from the maximum and could shorten it.
+- **On audit 5's fixture** the expected print is the later value with a skipped count of 1, not null. The executor's fault there is a missing count or reason, if it printed neither.
+- The same sentence governs the window SDs of RL-181 2.4 (RLD:19417): a window failing its own coverage is dropped and counted.
+
+---
+
+## Amends
+
+- **RL-183c 1.3** (RLD:20590): the member row gains `model_descriptor_sha256`, as in 1.2.
+- **RL-186 1.4 row 6b** (RLD:21317): unchanged. The limit it checks admission against is the attested one in a native run.
+- **RL-188 4.2** (RLD:21993) and its register row 5: "a window holding a gap over U1" reads "a window that fails any stage-2 check on its own interval", as in 4.1. **RL-181 2.4** (RLD:19417): the same.
+- **Stand unchanged:** the ten frozen sources and the pin `b2e01464d`; RL-107; RL-183 1.2's quoted rule; RL-186 1.3 for poll schedules; RL-122 3 (a) and RL-124; RL-180 and RL-184; RL-185 4; RL-188 4.1.
+
+**Blind status.** Blind. No series member exists and W1 is not signed. Section 1 fixes an evaluator's rule on synthetic witnesses before a native run is judged by it. Section 2 rests on R1 thermal and timing fields and on counts. Section 3 changes a digest in a draft manifest before stage 1. Section 4 fixes a print convention; I have opened no F2 or stability energy, and I did not check whether anyone has.
+
+**For Ed, plainly.** "Four items. The smoke-test checker will compare the model's stated context limit with the model's own config file, which it now fingerprints, instead of accepting any limit that could fit. That is a small change for the builder and it unblocks the final test suite. Second, the lead was right to sign off the rehearsal's two known heater timeouts instead of running a third night; I checked every condition and they hold. Third, a one-word label change in a config file needed a new fingerprint in the interim look's draft; fine, with one sentence of the note corrected. Fourth, the description-looks test brief had one rule that contradicted mine, and I have fixed the wording of both. Nothing here needs machine time."
+
+---
+
+## Register
+
+Rows for the lead to commit to `RULES.json`. Owner is `research_lead` for rows 1, 2 and 4; the lead owns row 3.
+
+| # | Clause | Class | Protects | Scope | Ends | Test |
+|---|---|---|---|---|---|---|
+| 1 | In a native Part C the native-limit claim passes only against descriptor bytes whose sha256 the judged invoker wrote in the member's ledger row; no field gives `evidence_unverifiable`, a changed file `source_integrity`, an unequal claim the context-limit reason (1.2, 1.3) | VALIDITY (prereg) | A Part C `pass` never rests on an unbound model descriptor | Every native Part C on the W1 line | The last Part C of the series | The sixteen `descriptor` cases of 1.5; the ten-path diff empty |
+| 2 | A replay judges the native-limit claim by existence against the recorded cap and prints `native_limit: unattested` (1.4) | VALIDITY | A replay is not failed for a witness that cannot exist, and says so | The replay of RL-183 1.3 | W1's Part C | The replay's two records |
+| 3 | `lm-interim-01` pins `r1_runtime.json` at `272aecb8…2f46`; the freeze-2 packet tables each roster runner pin's blob of that file (3) | VALIDITY (prereg) | The look's dependency pin names the bytes in its own tree, and the two-blob history is disclosed | `lm-interim-01` | Freeze 2 in effect | The pre-run check; the packet's table |
+| 4 | A window failing any stage-2 check on its own interval is skipped and counted, never read as a pass or a fail, and never makes the return null (4.1) | VALIDITY | The return time that sets ctl-01's recovery is defined on every trace | `lm-inst-01`, `lm-stab-*` | The paper's data release | Suite v2's recovery family: the later value with its skipped count |
+
+**Rows closed or changed by this ruling.** The v2 seat's NEEDS_SPEC (FF:5) is answered. RL-188 register row 5 is read with row 4.
+
+**What comes back to me.** A member whose `model.source` neither route of 1.2 can give. A native Part C that fails D2 or D5 on a clean run, with the member and no value. A roster runner pin with a third blob of `r1_runtime.json`. A description print on which 4.1 and the precedence table disagree. Nothing else in this ruling returns.
