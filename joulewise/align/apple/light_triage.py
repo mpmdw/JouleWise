@@ -23,7 +23,11 @@ codes and capture presence only.
 """
 from __future__ import annotations
 
+import json
+import re
+
 SCHEMA = 'joulewise.align_v4.light_triage.v1'
+UNPACK_RECEIPT_SCHEMA = 'joulewise.align_v4.unpack_receipt.v1'
 PAIR_OF_TASK = {'spam_filter_update': 'spam', 'bank_transfer_2': 'bank', 'spam': 'spam', 'bank': 'bank'}
 
 
@@ -153,4 +157,28 @@ def final_adjudication_error(desk, pilot, exclusions, plan_id, *, captured):
            and not v4_contention.records_agree_with_harvest(record, exclusions['members_excluded'])
            for record in (desk, pilot)):
         return 'desk, PILOT.json and exclusions disagree'
+    return None
+
+
+def unpack_receipt_error(raw, *, window, plan_id, finalized_sha256, captured):
+    """RL-183b: verify the canonical unpack attestation for this window's own plan and digest."""
+    if raw is None:
+        return 'unpack receipt missing for a window with captures' if captured else None
+    try:
+        receipt = json.loads(raw)
+    except ValueError:
+        return 'unpack receipt is not valid JSON'
+    if not isinstance(receipt, dict) or set(receipt) != {'schema', 'window', 'plan_id', 'finalized_manifest_sha256'}:
+        return 'unpack receipt must carry exactly schema, window, plan_id and finalized_manifest_sha256'
+    if json.dumps(receipt, sort_keys=True, separators=(',', ':')).encode() != raw:
+        return 'unpack receipt is not canonical JSON'
+    if receipt['schema'] != UNPACK_RECEIPT_SCHEMA:
+        return 'unpack receipt schema is wrong'
+    if not isinstance(receipt['window'], str) or not receipt['window'] or receipt['window'] != window:
+        return 'unpack receipt names another window'
+    if not isinstance(receipt['plan_id'], str) or not receipt['plan_id'] or receipt['plan_id'] != plan_id:
+        return 'unpack receipt names another plan'
+    digest = receipt['finalized_manifest_sha256']
+    if not isinstance(digest, str) or not re.fullmatch(r'[0-9a-f]{64}', digest) or digest != finalized_sha256:
+        return 'unpack receipt differs from the finalized manifest digest'
     return None

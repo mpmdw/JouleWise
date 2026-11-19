@@ -24,6 +24,7 @@ import json
 import math
 from pathlib import Path
 import re
+import subprocess
 import sys
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -86,19 +87,30 @@ def configuration_sha256(bundle):
 #   R1 slot session: ``align-v4-r1-<label>`` (joulewise/align/apple/r1_runtime.py member_config run ids).
 #   Pilot sessions:  ``align-pilot-v<N>-episodes-<stage>-e<NN>`` (configs/campaigns/align_pilot_v*/collection_plan.json),
 #                    EXCEPT the run ids a v4 series roster reuses: W1's anchors 1-4 run under the pilot-v3 ids with
-#                    byte-identical configs (configs/campaigns/align_v4/collection_plan.json), so those ids are
-#                    refused (a W1 anchor bundle cannot be told from a pilot one by its own bytes).
+#                    byte-identical configs (configs/campaigns/align_v4/collection_plan.json). For those ids,
+#                    RL-168 §1 also requires a resolved path named in the committed pilot selection.
 # A series bundle (``align-v4-<window>-eNN``, ``align-v4-episodes-...``), anything else, or an unreadable or
 # inconsistent identity is refused before any energy is read.
 R1_RUN_ID = re.compile(r'align-v4-r1-[A-Za-z0-9_.-]+')
 PILOT_RUN_ID = re.compile(r'align-pilot-v[0-9]+-episodes-[a-z]+-e[0-9]{2}')
-V4_ROSTER_PLAN = ROOT / 'configs/campaigns/align_v4/collection_plan.json'
+V4_ROSTER_PLAN = 'configs/campaigns/align_v4/collection_plan.json'
+REGISTERED_SELECTION = 'configs/campaigns/align_v4/registration/u3_sources/selection.json'
 
 
-def series_reused_run_ids():
-    """Run ids a v4 series roster (W1's plan) shares with the pilots; refused even though they match PILOT_RUN_ID."""
-    plan = json.loads(V4_ROSTER_PLAN.read_bytes())
+def _git(*args):
+    return subprocess.run(['git', *args], cwd=ROOT, capture_output=True, check=True).stdout
+
+
+def series_reused_run_ids(commit):
+    """Run ids a v4 series roster (W1's plan) shares with the pilots."""
+    plan = json.loads(_git('show', f'{commit}:{V4_ROSTER_PLAN}'))
     return {m['run_id'] for m in plan['members'] if PILOT_RUN_ID.fullmatch(str(m.get('run_id')))}
+
+
+def _registered_pilot_paths(commit):
+    selection = json.loads(_git('show', f'{commit}:{REGISTERED_SELECTION}'))
+    return {Path(candidate[key]).resolve() for session in selection['sessions']
+            for candidate in session['candidates'] for key in ('early_bundle', 'late_bundle')}
 
 
 def bundle_identity(bundle):
@@ -113,8 +125,15 @@ def bundle_identity(bundle):
     run_id = next(iter(stored))
     if R1_RUN_ID.fullmatch(run_id):
         return 'R1'
-    if PILOT_RUN_ID.fullmatch(run_id) and run_id not in series_reused_run_ids():
-        return 'pilot'
+    if PILOT_RUN_ID.fullmatch(run_id):
+        try:
+            commit = _git('rev-parse', '--verify', 'HEAD^{commit}').decode().strip()
+            if run_id not in series_reused_run_ids(commit) or Path(bundle).resolve() in _registered_pilot_paths(commit):
+                return 'pilot'
+        except (OSError, RuntimeError, subprocess.CalledProcessError, ValueError, KeyError, TypeError, AttributeError):
+            raise ValueError('committed pilot roster or selection unreadable; pilot id refused') from None
+        raise ValueError(f'{Path(bundle).name}: reused pilot id at a path outside the committed pilot selection; '
+                         'refused (RL-168 section 1)')
     raise ValueError(f'{Path(bundle).name}: not a pilot or R1 slot-session bundle; refused before the series '
                      'release (RL-162 section 3)')
 
