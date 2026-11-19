@@ -1052,6 +1052,18 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 
 <!-- RUN_STATE TYPED ITEMS: newest first. Add with scripts/run_state_add.py; never edit by hand. -->
 
+465. **f2-inst-03 executing delta PASS (audit 49911cb35): eligible at rank 2 right after f2-inst-02 completes; f2-inst-01 piece-1 hand-read (item 411) still open**
+
+```item
+{"expires_epoch_s": null, "issued_epoch_s": 1795126600, "number": 465, "owner": "magistrate", "schema": "joulewise.run_state_item.v1", "sets": [], "status": "ISSUED", "supersedes": []}
+```
+
+- **f2-inst-03 executing engineering delta: PASS** (an independent Astra 6.2 seat, the counterpart of item 456 for -02). Evidence is on `origin/audit/2026-11-10-fable` at `49911cb35`, under `docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/f2-inst-03-delta/` (DELTA.md, FINAL-MESSAGE.md).
+  - Kit `f2-inst-03` sha256 `286842217313e13ac5f8f25917b3325e3e512cd621b90b78b6201d331e9dcf25`; runner `2d347f721`.
+  - 37 of 37 leaf differences matched. 38 of 38 frozen paths verified under both batch arguments. 12 of 12 legs regenerated exactly. 3 queues and 23 fixed-time plans pass. Both synthetic mock legs ran clean. The pin refuses a changed kit hash and an invalid roster.
+- **Effect:** when f2-inst-02's last leg closes, f2-inst-03 is eligible at rank 2 (items 422 and 447), with no further delta check. Before each issue, check the kit sha256 and queue hashes against fillers-w2/README.md. Item 463's pin-A argument rule applies, and so does item 464's rank-1 stability correction.
+- **Still open, unchanged:** item 411's f2-inst-01 piece-1 hand-read (item 428 places it before the lm-inst-01 look). No PASS for it is public yet. If the magistrate holds it, do it in a close interval when convenient.
+
 464. **Stability ladder correction: the date's rank-1 f2-stab leg comes from kits 01-14 on 2d347f721 (lm-stab-01 reads 01-14 only); f2-stab-15/16 on 6e9d42f1d only in the 10:50-13:15 gap; collected kit-15 legs await a research-lead ruling**
 
 ```item
