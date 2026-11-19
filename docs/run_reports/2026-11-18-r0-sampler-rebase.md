@@ -177,3 +177,18 @@ For a worker missing from a window endpoint, R0 keeps CPU growth measured betwee
 | MED, the whole-second start floor hid the observed CPU growth of an exiting worker. | `test_exited_worker_retains_measured_growth_across_fractional_window_open`, `test_worker_still_present_at_close_retains_growth_after_missing_open_sample` | PASS |
 
 Both auditor probes passed all four synthetic replay cases. The accounting sightings halted the check before an arguments query or host work. Both worker start-time variants recorded the 15–45 s flag at 0.06 CPU-s/s and withheld output. The frozen suite remains byte-identical at `e113501601e3cae09b1fc1a131dcf8ef55361493ae7a353135a5c5c83c7438b3`. It passed all 341 scenarios with zero failures and zero invalid oracle controls. Exact-candidate CI and the two-family review are tracked on draft PR #824. NEEDS_SPEC has no entries.
+
+## Audit round 3 after the frozen differential
+
+Round 3 reviewed `7891f898e920cdd0c4bc19ba191aeac88f9b92f0`. Regression commit `c0f607e47` produced 31 failing synthetic subcases. Commit `2429f7a10` added a failing check for distinct observations timestamped on the window edges. Repair `ddf8a4558ae0296cdf1dd79109d4024044f1c13e` covers both classes of finding.
+
+Every captured process row goes through the same census rule set. The case-insensitive agent and measurement-chain matchers refuse from the first sighting in the CPU accounting table, either use of the process arguments table, or the dedicated agent query. An incidental name in a non-agent argument retains the admitted identity filter. The generated matrix hides each process from every other read and checks that the first sighting refuses before another command or identity lookup.
+
+CPU-rate evidence uses the observations in each window's overlap with a process lifetime, including observations on either edge. For an identity absent at the opening, the whole-second start range can supply a zero counter when it overlaps the window. An older start uses its first observed counter. The highest value observed in the overlap establishes measured growth. That evidence survives an exit before the closing sample. Windows with overlapping observations can each retain their own lower bound.
+
+| Verified finding | Regression | Result on `ddf8a4558` |
+| --- | --- | --- |
+| HIGH, a background CPU table identified an active measurement chain that exited before the arguments query. | `test_background_cpu_table_refuses_measurement_chain_before_args_read`, `test_every_census_name_refuses_from_any_process_table_without_confirmation` | PASS |
+| MED, a whole-second start bound excluded the only observation of an exited worker from a 30 s window. | `test_single_sighting_of_exited_worker_counts_at_either_side_of_birth_tick`, `test_distinct_cpu_observations_on_window_edges_are_retained`, `test_exited_worker_retains_measured_growth_across_fractional_window_open` | PASS |
+
+All 44 generated sightings and six auditor replays passed on synthetic inputs. The two worker start variants each recorded the 0–30 s flag at 0.06 CPU-s/s and withheld publication. The 50 publication and CPU interval tests passed. The byte-identical frozen differential passed all 341 scenarios with zero failures and zero invalid oracle controls. Exact-candidate CI and the two-family review are tracked on draft PR #824. NEEDS_SPEC has no entries.
