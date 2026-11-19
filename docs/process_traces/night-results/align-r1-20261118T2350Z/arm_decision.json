@@ -1,0 +1,50 @@
+{
+  "arm_deadline_epoch_s": 1795049100.0,
+  "arm_error": null,
+  "arm_record": {
+    "path": "/Users/edr/night-align/r1-20261118T231014Z/hazards/arm.json",
+    "sha256": "5bca0cff7df5277756eb036588f888d9268ac012bc87b4eb2b98fbadb5e870fb"
+  },
+  "census": {
+    "argv": [
+      "/usr/bin/pgrep",
+      "-a",
+      "-lf",
+      "[c]odex|[c]laude"
+    ],
+    "clean": true,
+    "exit_code": 1,
+    "monotonic_ns": 3030142109052875,
+    "refusal": null,
+    "stderr": "",
+    "stdout": ""
+  },
+  "collector_calls": 1,
+  "dry_arm": false,
+  "ended": {
+    "monotonic_ns": 3030364090309208,
+    "monotonic_raw_ns": 3030364090308958,
+    "wall_s": 1795046026.177618
+  },
+  "go": true,
+  "go_after_t0_stage_cap": false,
+  "network_time_off_calls": 1,
+  "not_pass": [],
+  "plan_id": "align-r1-20261118T2350Z",
+  "reasons": [],
+  "schema": "joulewise.b5_arm_decision.v1",
+  "started": {
+    "monotonic_ns": 3030142156241833,
+    "monotonic_raw_ns": 3030142156241583,
+    "wall_s": 1795045804.243551
+  },
+  "unmeasured": [],
+  "verdicts": {
+    "battery": "PASS",
+    "clock": "PASS",
+    "contention": "PASS",
+    "disk": "PASS",
+    "instrument": "PASS",
+    "thermal": "PASS"
+  }
+}
