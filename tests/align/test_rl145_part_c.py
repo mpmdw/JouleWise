@@ -1406,7 +1406,12 @@ class SoakLauncherBindingTests(unittest.TestCase):
                                reasons=confirmation["reasons"], for_record_only=False,
                                classification_file="inventory/r1_classification.json",
                                keys_inventoried=len(picks))
-            receipt.update(e_D_j_per_token=MARKER, thermometry=thermometry)
+            from joulewise.align.apple.workload import read_episode_bundle
+
+            joules, tokens, energy_flags = rt.decode_energy(read_episode_bundle(bundle))
+            receipt.update(decode_energy_j=joules, e_D_j_per_token=joules / tokens,
+                           energy_flags=energy_flags, thermometry=thermometry,
+                           reference_c=reference["slow_c"])
             recovery = segment / "recovery"
             recovery.mkdir()
             rec = self.journal(sensors, [("reading", end_ns + i * ns, (38.0, 38.0) if i <= 20 else (35.4, 35.4))
@@ -1420,6 +1425,8 @@ class SoakLauncherBindingTests(unittest.TestCase):
                 ep=ep, turn=turns[0], wall_s=wall, responses=responses, recovery_s=20.0, recovery_censored=False,
                 bands=bands, t_decline_s=None, t_decline_status="no_decline", d_class=configured["d_class"],
                 n_chunk_config=configured["d_n_chunk"])
+            receipt["slot_detail"]["S6_tuning"] = {"status": "new_sensor_default", "authority": "RL-78 default band",
+                                                    "S6_now": bands["delta_slow_c"], "receipt_transferred": False}
             receipt["slot_detail"].update(thermometry_classification_sha256=classification["classification_sha256"],
                                           quiet_before_prefill_s=rt.STEP_QUIET_S,
                                           recovery_observed_s=rt.RECOVERY_CAP_S)

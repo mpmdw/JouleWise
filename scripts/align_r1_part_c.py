@@ -2365,7 +2365,8 @@ def _check_step_sources(receipt, doc, rows, require, sensors, journal, bundle, c
             and median(row[2] for row in expected) == reference.get("slow_c"),
             "step_reference", REFERENCE_SOURCE, peer=THERMAL_SOURCE)
     require(canonical(receipt.get("operating_reference")) == canonical({
-        "source_member": bundle.name, **{key: reference[key] for key in ("fast_c", "slow_c", "span_ns")}}),
+        "source_member": bundle.name, **{key: reference[key] for key in ("fast_c", "slow_c", "span_ns")}})
+        and canonical(receipt.get("reference_c")) == canonical(reference["slow_c"]),
         "reference_values", RECEIPT_NAME, peer=REFERENCE_SOURCE)
 
     recovery_file, classification_file = STEP_SOURCES
@@ -2377,7 +2378,16 @@ def _check_step_sources(receipt, doc, rows, require, sensors, journal, bundle, c
             and _finite(detail.get("recovery_observed_s")) and detail["recovery_observed_s"] == rt.RECOVERY_CAP_S
             and _finite(detail.get("quiet_before_prefill_s")) and detail["quiet_before_prefill_s"] == rt.STEP_QUIET_S,
             "step_recovery", recovery_file, peer=RECEIPT_NAME)
-    decline = _recompute_decline(receipt, data, episode.turns[0], require)
+    joined = _episode_from_bound_trace(data)
+    try:
+        joules, tokens, flags = rt.decode_energy(joined)
+    except (ArithmeticError, TypeError, ValueError, rt.RuntimeFailure) as error:
+        raise EvidenceFailure("step_energy", "step-d", "power_trace.csv", peer=RECEIPT_NAME) from error
+    for key, value in {"decode_energy_j": joules, "e_D_j_per_token": joules / tokens,
+                       "energy_flags": flags}.items():
+        require(canonical(receipt.get(key)) == canonical(value), "step_energy", RECEIPT_NAME,
+                field=key, peer="power_trace.csv")
+    decline = _recompute_decline(receipt, data, joined, require)
     _check_step_derivation(receipt, episode, sensors, samples + gates.sample_rows(recovery_rows), configured,
                            bands, require, decline)
     inventory = doc(classification_file, "step_configuration")
@@ -2431,7 +2441,7 @@ def _check_step_sources(receipt, doc, rows, require, sensors, journal, bundle, c
             field="thermometry", peer=classification_file)
 
 
-def _recompute_decline(receipt, data, turn, require):
+def _recompute_decline(receipt, data, ep, require):
     """Use the producer's PM observation reduction on authenticated source bytes."""
     from joulewise.adapters.powermetrics import decode_rich_telemetry, parse_powermetrics_records
     from joulewise.align.apple.r1_runtime import t_decline
@@ -2440,7 +2450,6 @@ def _recompute_decline(receipt, data, turn, require):
     rich_name, raw_name = STEP_PM_SOURCES
     rich = _jsonl_objects(data[rich_name], "step-d", rich_name, "step_decline")
     try:
-        ep = _episode_from_bound_trace(data)
         trace, = (trace for trace in ep.power_traces
                   if trace.source == "powermetrics" and trace.channel == "gpu_power")
         mapping, = (mapping for mapping in ep.clock_mappings
@@ -2463,7 +2472,7 @@ def _recompute_decline(receipt, data, turn, require):
             clock = (sum(state["freq"] * state.get("used_ns", 0) for state in states) / active if active else None)
             require(clock is None or _finite(clock), "step_decline", rich_name, index=index)
             samples.append({"start_ns": end - raw.elapsed_ns, "end_ns": end, "clock_mhz": clock})
-        decline, status = t_decline(samples, turn)
+        decline, status = t_decline(samples, ep.turns[0])
     except EvidenceFailure:
         raise
     except Exception as error:
@@ -2502,11 +2511,12 @@ def _check_step_derivation(receipt, episode, sensors, readings, configured, band
     for key, value in expected_slots.items():
         require(key in slots and canonical(slots[key]) == canonical(value), "step_phase_accounting",
                 RECEIPT_NAME, field=f"slots.{key}")
-    # Production replaces S6_tuning with its own registered provenance record.
+    # The frozen production path uses the default band from this attempt.
+    expected_detail["S6_tuning"] = {"status": "new_sensor_default", "authority": "RL-78 default band",
+                                    "S6_now": bands[0]["delta_slow_c"], "receipt_transferred": False}
     for key, value in expected_detail.items():
-        if key != "S6_tuning":
-            require(key in detail and canonical(detail[key]) == canonical(value), "step_phase_accounting",
-                    RECEIPT_NAME, field=f"slot_detail.{key}")
+        require(key in detail and canonical(detail[key]) == canonical(value), "step_phase_accounting",
+                RECEIPT_NAME, field=f"slot_detail.{key}")
 
 
 def _check_load(raw, receipt, kind, wall_s):
