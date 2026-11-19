@@ -1,0 +1,39 @@
+{
+  "authority": "RL-120 item 3; RL-122 item 3(a)",
+  "desk_print": {
+    "path": "cadence-desk/r1-rerun-20261118-work/3a.json (align_w1_3a_desk.py at b2e01464d over the hash-verified Air copy of night-align/r1-20261118T231014Z)",
+    "sha256": "94fbe741cc4694f4c7c88b8290454d0cd2cd825e6744f3196f4339e8a691017a"
+  },
+  "lead_signature": "lead: Air lead session 8cb40284 2026-11-19",
+  "r1_record": {
+    "I_D": 631.718592813,
+    "max_r1_tail_s": 0.0,
+    "schema": "joulewise.align.r1_slots.v1",
+    "source": "R1 hardware rehearsal"
+  },
+  "schema": "joulewise.align_v4.r1_planning_release.v1",
+  "segments": {
+    "planning_turn_R_plus_2C": {
+      "band_edge_c": 37.883615,
+      "heater_key": "TV1h",
+      "heater_key_max_last_300s_c": 44.668331,
+      "os_levels": [
+        0
+      ],
+      "pm_states": [
+        "Nominal"
+      ]
+    },
+    "planning_turn_R_plus_4C": {
+      "band_edge_c": 39.883615,
+      "heater_key": "TV1h",
+      "heater_key_max_last_300s_c": 45.277454,
+      "os_levels": [
+        0
+      ],
+      "pm_states": [
+        "Nominal"
+      ]
+    }
+  }
+}
