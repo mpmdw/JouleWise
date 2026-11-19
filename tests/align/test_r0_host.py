@@ -1449,11 +1449,13 @@ class R0SamplerAdmissionSpec(unittest.TestCase):
                 guard, clock, _, _ = self.admission(busy=False)
                 guard.inspect_custody = census
                 normal = guard.run
-                arrival = {"baseline-close": 10, "later-admission": 35, "publication": 40}.get(mode, float("inf"))
+                arrival = {"later-admission": 35, "publication": 40}.get(mode, float("inf"))
                 queries, host_times, pass_saves = [], [], []
+                closing_snapshot_returned = False
 
                 def run(argv, **kwargs):
-                    present = clock.now >= arrival
+                    nonlocal closing_snapshot_returned
+                    present = closing_snapshot_returned or clock.now >= arrival
                     if argv[0] == "/usr/bin/pgrep":
                         flags = "".join(argv[1:-1])
                         hit = present and re.search(argv[-1], executable, re.I if "i" in flags else 0)
@@ -1461,6 +1463,10 @@ class R0SamplerAdmissionSpec(unittest.TestCase):
                         return subprocess.CompletedProcess(argv, 0 if hit else 1, f"42 {executable}\n" if hit else "", "")
                     if argv == prewindow.PS_ARGV:
                         table = "1 0.0 /sbin/launchd\n" + (f"42 0.0 {executable}\n" if present else "")
+                        if mode == "baseline-close" and clock.now == 30:
+                            # The agent arrives after the closing sample and
+                            # before the dedicated admission census.
+                            closing_snapshot_returned = True
                         return subprocess.CompletedProcess(argv, 0, table, "")
                     return normal(argv, **kwargs)
 
