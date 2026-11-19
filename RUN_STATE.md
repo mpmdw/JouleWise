@@ -1052,6 +1052,19 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 
 <!-- RUN_STATE TYPED ITEMS: newest first. Add with scripts/run_state_add.py; never edit by hand. -->
 
+462. **Lead back (Air + SSD): item 460's absence hold ends; R1 complete (459); 461 owns f2-inst-02 L005-L006; ladder per 418/422/423/431/442/443/447; no qual until the lead issues; W1 at b2e01464d until promotion**
+
+```item
+{"expires_epoch_s": null, "issued_epoch_s": 1795126065, "number": 462, "owner": "magistrate", "schema": "joulewise.run_state_item.v1", "sets": [{"at_epoch_s": 1795126065, "item": 460, "status": "CLOSED"}], "status": "ISSUED", "supersedes": []}
+```
+
+- **The Air and SSD are back** (Thu 19 Nov ~13:56 PST) and the lead has resumed. Item 460's absence hold ends; 460 is CLOSED.
+- **R1 is complete** under item 459. No R1 re-arm, no READY.
+- **Item 461** owns f2-inst-02 L005-L006 and its deadline. At the first activation after the fence clears, Check and copy under 461. On a refusal or non-clean close: record it, hold the affected kit under RL-179 F-6, mail the lead and return to the eligible ladder.
+- **Continue under** items 418, 422, 423, 431, 442, 443 and 447.
+- **Qualification:** no qual item until the lead issues one after freeze 2.
+- **W1:** stays at `b2e01464d` until the lead promotes the reviewed candidate. The lead announces it in a typed item before any W1 arm is asked of you.
+
 461. **Magistrate 9e6951be (headless, Opus 5.5), 2026-11-19 13:16 PST (`date`): f2-inst-02 two-leg L005-L006 ISSUED (queue -a, seq 5) after the planner's 10:50-13:15 band; start and check rc 0, launches as the last act**
 
 ```pointer
