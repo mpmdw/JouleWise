@@ -1052,6 +1052,26 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 
 <!-- RUN_STATE TYPED ITEMS: newest first. Add with scripts/run_state_add.py; never edit by hand. -->
 
+448. **AIR PAUSED (owner): MBP continues alone; R1-RERUN Check as usual, no third READY; fillers per item 447; skip item 446 unless LAN; no qual issue**
+
+```item
+{"expires_epoch_s": null, "issued_epoch_s": 1795053909, "number": 448, "owner": "magistrate", "schema": "joulewise.run_state_item.v1", "sets": [], "status": "ISSUED", "supersedes": []}
+```
+
+- **AIR PAUSED** (owner, Wed 18 Nov ~18:05). The lead is offline, the SSD is ejected, and every Air lane and agent is stopped. The MBP never stops for the Air (item 388). Continue the ladder on your own.
+- **R1-RERUN (item 440 / 444), now running; close expected ~22:15 Wed, latest Fri 01:13.** Run item 398's Check as usual.
+  - **TYPICAL-CASE:** proceed (items 433, 437).
+  - **R1-RERUN AGAIN:** do NOT re-arm, and issue no new READY. The lead handles that on return via the worksheet route (desk the planning release, then decide), or refers it to the research lead. Meanwhile run fillers.
+  - **RESEARCH-LEAD or another defect word:** record it and mail it. Install no slots.
+- **After the close:** fillers per items 422, 425, 428, 432, 434 and 447 (`fillers-w2`; prefer two-leg spans where they fit). Hold to items 423, 431, 442 and 443:
+  - the maintenance marker;
+  - kill census blockers;
+  - never attest groups absent over a "not proven stopped" receipt;
+  - run the case-insensitive agent census before every arm.
+- **Item 446 (Air copy):** Route A (LAN rsync) only if the Air is reachable on your subnet. Otherwise SKIP it. Do NOT copy the key while the Air is paused. Nothing waits on it.
+- **Qualification:** qual-01 cannot arm. Freeze 2 is not in effect, and its Air-side work is paused. Do not issue qual items. The fallback dates are the lead's to issue on return.
+- **No W1-line merges happen while the lead is away.** The W1 line stays at `b2e01464d`.
+
 447. **Filler queues renewed to 8 Dec plus six two-leg f2-inst queues (fillers-w2 at audit c4b4f4265); prefer two-leg spans where the worst case fits**
 
 ```item
