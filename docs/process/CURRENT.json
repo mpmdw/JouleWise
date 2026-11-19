@@ -1,10 +1,10 @@
 {
   "armed": null,
-  "next_observable": "f2inst01-a5db6d81/run-out.txt shows LAUNCH_RC=0 with the fence; the next activation after the fence is gone runs the operational Check for cq-f2-inst-01-l011-l012-a1 under /Users/edr/campaign-out/f2-inst-01/ (template custody f2inst01-check-a5db6d81/check.sh with OUT and roster L011,L012, leg count 2), copies at once (row 14, offload-f2inst01-run-a5db6d81.sh with plan id changed). That closes the f2-inst-01 -b queue (L011-L012 is its last span). Then the item 422 ladder: f2-inst-02/-03 if their kits and queues exist, else hp-02 (only if lm-hp-01 has not run), else further f2-stab legs, else F0; Fri 20 Nov's first f2-stab leg (rank 1, f2-stab-15 L003) arms when its fence clears the 02:00-02:35 blackout margin.",
+  "next_observable": "f2inst02-753113e5/run-out.txt shows LAUNCH_RC=0 with the fence; the next activation after the fence is gone runs the operational Check for cq-f2-inst-02-l001-l002-a1 under /Users/edr/campaign-out/f2-inst-02/ (template custody f2inst01-check-753113e5/check.sh with OUT, roster L001,L002, and the kit assertions changed to f2-inst-02: sha cfd03677e3629b34a8bcd794a623ee3eaae1033408492eb1d1ddb3229273ed65, campaign_id f2-inst-02), copies at once (offload-f2inst01-run-753113e5.sh with plan id and kit dir changed). Then next f2-inst-02 span from the same -a queue (seq 3, L003-L004) if it fits before the Fri 02:00-02:35 blackout margin; Fri 20 Nov's first f2-stab leg (rank 1, f2-stab-15 L003) arms when its fence clears that margin.",
   "open_items": [
     {
       "expires_epoch_s": null,
-      "item": 455,
+      "item": 456,
       "owner": "magistrate",
       "status": "ISSUED"
     },
@@ -125,11 +125,11 @@
   ],
   "owner": "magistrate",
   "schema": "joulewise.current_pointer.v2",
-  "source_item": "455",
+  "source_item": "456",
   "source_item_heading_date": "2026-11-19",
   "wait": {
-    "deadline_epoch_s": 1795109100,
+    "deadline_epoch_s": 1795114500,
     "observable": "none",
-    "on_early_or_refused": "a launcher refusal or non-clean close: record it, hold kit f2-inst-01 until an input changes (item 422), mail the lead; at the next close continue down the ladder. R1 stays unarmed (item 448)."
+    "on_early_or_refused": "a launcher refusal or non-clean close: record it, hold kit f2-inst-02 until an input changes (item 422, RL-179 F-6), mail the lead; at the next close continue down the ladder. R1 stays unarmed (item 448)."
   }
 }
