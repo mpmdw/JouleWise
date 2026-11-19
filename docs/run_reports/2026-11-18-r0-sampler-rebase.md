@@ -209,3 +209,15 @@ The rate uses the largest supported intersection of a window and a process lifet
 | Total | 3,094 | 906 | 0 |
 
 Focused verification passed 115 tests and all 11 publication audit tests. The contention module passed 46 synthetic tests with three live cases skipped. The prior candidate's shard 5 failed `test_every_refusal_site_is_listed_with_its_exact_count` on the refusal allowlist for `measurement_liveness.py`. The previous result and the new exact-candidate CI are tracked on draft PR #824. NEEDS_SPEC has no entries.
+
+## Audit round 1 after frozen differential v2
+
+The November 19 resume found a clean worktree and draft PR #824 at `53aba150b8ddbf235d547880609b2048a5a48c7d`. The current audit verified that R0 missed `corespotlightd` at 0.06 CPU-s/s and published. The earlier audit reports cover the repaired census, sampler and window findings exercised by the existing suites.
+
+| Verified finding | Test-first commit | Repair | Regression result |
+| --- | --- | --- | --- |
+| HIGH, the normalized prefix matcher dropped the admitted substring matches in CPU command names and arguments. | `a0a310e01` | `9690e9e30c2d75aadbc6a7ece6849ec59a8e951e` | PASS, `test_contaminant_substrings_keep_admitted_cpu_flags` |
+
+The CPU census retains the normalized match and the admitted case-insensitive substring search on the original command or arguments. The original arguments preserve path components that basename normalization removes. The regression covers every admitted contaminant pattern in both fields, the exact `corespotlightd` report, and the threshold and neutral-process controls. All 19 above-threshold cases failed before the repair and passed afterward. Both controls published. The auditor replay recorded the 0–30 s flag on admitted R0-L3 and on the repaired R0, which exited 2 without publishing.
+
+Frozen v2 remains byte-identical and passed all 3,094 scenarios with zero failures. The 115 focused tests, 12 publication audit tests, and 46 synthetic contention tests passed. Three live contention cases were skipped. The current report has no additional MED or LOW findings. Exact-candidate CI and the two-family delta review are tracked on draft PR #824. NEEDS_SPEC has no entries.
