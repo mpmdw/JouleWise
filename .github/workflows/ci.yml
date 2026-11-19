@@ -47,6 +47,28 @@ jobs:
           EXTRA_TESTS: ${{ needs.changes.outputs.extra }}
         run: python3 -m unittest $EXTRA_TESTS
 
+  qualification:
+    needs: changes
+    if: needs.changes.outputs.code == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+      - name: Install the pinned scorer environment
+        run: python -m pip install 'numpy==2.2.6'
+      - name: Qualification contract regressions
+        run: python -B -m unittest tests.cadence.test_qual_score_contract -v
+      - name: Independent qualification oracle
+        if: success() || failure()
+        run: python -B -m unittest tests.cadence.test_qual_score_acceptance.Oracle -v
+      - name: Frozen qualification acceptance
+        if: success() || failure()
+        run: python -B -m unittest discover -s tests/cadence -p test_qual_score_acceptance.py -v
+
   # Select interpreters and skip the shards only for proven class A ranges.
   changes:
     runs-on: ubuntu-latest
@@ -250,7 +272,9 @@ jobs:
           discovered = shard_tests.discover_test_modules()
           assert exclusive <= set(discovered), (exclusive, discovered)
           timings = shard_tests.load_timing_map()
-          ordinary = tuple(module for module in discovered if module not in exclusive)
+          # The qualification job runs these modules with the pinned NumPy environment.
+          qualification = {"tests.cadence.test_qual_score_acceptance", "tests.cadence.test_qual_score_contract"}
+          ordinary = tuple(module for module in discovered if module not in exclusive | qualification)
 
           # UNIT-atomic, not module-atomic. Modules in split_modules (today
           # test_reduce and test_controller_g2b_attachment, each audited for

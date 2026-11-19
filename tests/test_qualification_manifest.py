@@ -4,8 +4,10 @@ import hashlib
 import json
 from pathlib import Path
 import re
+import subprocess
 import unittest
 
+from joulewise.cadence_looks import manifest_dispatch
 from joulewise.cadence_looks.qualification_manifest import (
     ManifestError,
     validate_final,
@@ -20,6 +22,11 @@ LEDGER = ROOT / "docs/process/cadence/looks/LOOKS.json"
 KIT_COMMITMENTS = LEDGER.with_name("qualification-kit-commitments.json")
 OBSOLETE_KIT_PINS = ROOT / "docs/run_reports/2026-11-18-lm-qual-01-audit-1-obsolete-kit-pins.json"
 PLACEHOLDER = b'"PENDING:CODE"'
+REGISTRATION = "59557d6e8e00fcba6a2bdb2bfa4189bd6d7aee98"
+
+
+def _blob(commit, path):
+    return subprocess.check_output(["git", "show", f"{commit}:{path.relative_to(ROOT).as_posix()}"], cwd=ROOT)
 
 
 def _final_bytes(registration):
@@ -43,7 +50,7 @@ def _digest_slots(value, path=()):
 
 class QualificationRegistrationTests(unittest.TestCase):
     def setUp(self):
-        self.registered = MANIFEST.read_bytes()
+        self.registered = _blob(REGISTRATION, MANIFEST)
         self.final = _final_bytes(self.registered)
 
     def test_registered_manifest_parses_and_matches_ledger(self):
@@ -51,13 +58,36 @@ class QualificationRegistrationTests(unittest.TestCase):
         self.assertEqual(document["look_kind"], "qualification")
         self.assertEqual(document["status"], "registered")
         self.assertEqual(document["registration"]["ledger_path"], LEDGER.relative_to(ROOT).as_posix())
-        ledger = json.loads(LEDGER.read_bytes())
+        ledger = json.loads(_blob(REGISTRATION, LEDGER))
         self.assertEqual(ledger["looks"], [{
             "look_id": document["look_id"],
             "manifest_path": MANIFEST.relative_to(ROOT).as_posix(),
             "sha256": hashlib.sha256(self.registered).hexdigest(),
             "status": "registered",
         }])
+
+    def test_current_ledger_binds_the_manifest_and_registration(self):
+        row, = (item for item in json.loads(LEDGER.read_bytes())["looks"] if item["look_id"] == "lm-qual-01")
+        candidate = MANIFEST.read_bytes()
+        self.assertEqual(row["manifest_path"], MANIFEST.relative_to(ROOT).as_posix())
+        self.assertEqual(row["sha256"], hashlib.sha256(candidate).hexdigest())
+        corrected = self.registered.replace(b"(first_stamp + last_stamp) / 2.",
+                                            b"(first_stamp + 1 + last_stamp) / 2.", 1)
+        if row["status"] == "registered":
+            self.assertIn(candidate, (self.registered, corrected))
+            validate_registration(candidate)
+            return
+        commit = row["registration_commit"]
+        registration = _blob(commit, MANIFEST)
+        self.assertIn(registration, (self.registered, corrected))
+        historical, = (item for item in json.loads(_blob(commit, LEDGER))["looks"]
+                       if item["look_id"] == "lm-qual-01")
+        self.assertEqual(historical["status"], "registered")
+        self.assertEqual(historical["manifest_path"], row["manifest_path"])
+        self.assertEqual(row["registration_sha256"], hashlib.sha256(registration).hexdigest())
+        self.assertEqual(historical["sha256"], row["registration_sha256"])
+        self.assertNotEqual(row["sha256"], row["registration_sha256"])
+        manifest_dispatch.validate_v2(candidate, final=True, registration=registration)
 
     def test_registered_kit_pins_match_independent_source(self):
         registered = validate_registration(self.registered)

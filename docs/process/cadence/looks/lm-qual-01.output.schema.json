@@ -1,0 +1,66 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "lm-qual-01 completed public report",
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    }
+  },
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "look_id",
+    "manifest_sha256",
+    "commit",
+    "stage1_sha256",
+    "coefficients_sha256",
+    "development_config_sha256",
+    "qualification_config_sha256",
+    "included_legs",
+    "qualified_qualification",
+    "type_m_residual",
+    "stage2_error"
+  ],
+  "properties": {
+    "look_id": {
+      "const": "lm-qual-01"
+    },
+    "manifest_sha256": {
+      "$ref": "#/$defs/sha256"
+    },
+    "commit": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}$"
+    },
+    "stage1_sha256": {
+      "$ref": "#/$defs/sha256"
+    },
+    "coefficients_sha256": {
+      "$ref": "#/$defs/sha256"
+    },
+    "development_config_sha256": {
+      "$ref": "#/$defs/sha256"
+    },
+    "qualification_config_sha256": {
+      "$ref": "#/$defs/sha256"
+    },
+    "included_legs": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "qualified_qualification": {
+      "enum": [
+        "yes",
+        "no",
+        "not_evaluable"
+      ]
+    },
+    "type_m_residual": {
+      "const": "not_run"
+    },
+    "stage2_error": {
+      "const": "no"
+    }
+  }
+}

@@ -1,0 +1,79 @@
+{
+  "interval_containment": {
+    "word": "yes",
+    "estimate": 0.01445996637471838,
+    "ci90": [
+      -0.04613319979837409,
+      0.07505313254781085
+    ],
+    "n_legs": 3,
+    "n_days": 3
+  },
+  "equal_day_unequal_counts": {
+    "word": "no",
+    "estimate": 0.06,
+    "ci90": [
+      -0.04115126765082295,
+      0.16115126765082294
+    ],
+    "n_legs": 4,
+    "n_days": 3
+  },
+  "fewer_than_three_pair_days": {
+    "word": "not_evaluable",
+    "estimate": 0.0008913911365584267,
+    "ci90": [
+      -0.07657745462076354,
+      0.07836023689388039
+    ],
+    "n_legs": 3,
+    "n_days": 2
+  },
+  "undefined_interval": {
+    "word": "not_evaluable",
+    "estimate": null,
+    "ci90": null,
+    "n_legs": 3,
+    "n_days": 3
+  },
+  "l_partial_blocks_same_scorer": {
+    "full": {
+      "gpu_rail": {
+        "predicted": 8392.01171875,
+        "measured": 8401.01171875
+      },
+      "dc_in": {
+        "predicted": 16784.0234375,
+        "measured": 16809.0234375
+      }
+    },
+    "short3724": {
+      "gpu_rail": {
+        "predicted": 7483.30908203125,
+        "measured": 7486.30908203125,
+        "tail_predicted": 333.23486328125,
+        "tail_measured": 336.23486328125
+      },
+      "dc_in": {
+        "predicted": 14966.6181640625,
+        "measured": 14985.6181640625,
+        "tail_predicted": 666.4697265625,
+        "tail_measured": 685.4697265625
+      }
+    },
+    "short3151": {
+      "gpu_rail": {
+        "predicted": 6149.713134765625,
+        "measured": 6151.713134765625,
+        "tail_predicted": 177.576416015625,
+        "tail_measured": 179.576416015625
+      },
+      "dc_in": {
+        "predicted": 12299.42626953125,
+        "measured": 12325.42626953125,
+        "tail_predicted": 355.15283203125,
+        "tail_measured": 381.15283203125
+      }
+    }
+  }
+}
