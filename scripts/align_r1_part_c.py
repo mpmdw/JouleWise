@@ -1295,6 +1295,9 @@ def _validate_sidecar(rows, sensors, kind, source, *, gated=False):
             continue
         check(row["kind"] == "reading" or row["kind"] in boundary_kinds, "kind", i)
         if row["kind"] in boundary_kinds:
+            # Frozen Sidecar.event takes one stamp and records no read error.
+            check(a == b, "stamp", i)
+            check(row["error"] is None, "error", i)
             continue
         values = row["values"]
         if gated or "status" in values:
@@ -2519,22 +2522,28 @@ def _check_step_derivation(receipt, episode, sensors, readings, configured, band
                 RECEIPT_NAME, field=f"slot_detail.{key}")
 
 
-def _check_load(raw, receipt, kind, wall_s):
-    """Compare sealed process observations before applying the issued load decision."""
+def _check_load(raw, receipt, kind, wall_s=None):
+    """Reconcile the issued journal projection and apply quiet admission when required."""
     from scripts import align_r1_rehearsal as r1
 
-    reason = "soak_load" if kind == "idle" else "quiet_load"
+    reason = "load_evidence"
+    if wall_s is not None:
+        reason = "soak_load" if kind == "idle" else "quiet_load"
     load = _object_from_bytes(raw, kind, LOAD_SOURCE, reason)
     try:
         if (not isinstance(load["exclude_roots"], list) or any(not _uint(pid) for pid in load["exclude_roots"])
-                or load["errors"] != [] or canonical(load["errors"]) != canonical(receipt["load_journal_errors"])):
+                or not _strings(load["errors"]) or canonical(load["errors"]) != canonical(receipt["load_journal_errors"])):
             raise ValueError("unavailable load observations")
         fields = r1.contract.LoadJournal.fields(SimpleNamespace(**load))
         if any(canonical(value) != canonical(receipt[key]) for key, value in fields.items()):
             raise ValueError("inconsistent load observations")
+        samples, times = fields["cpu_busy_cores"], fields["cpu_busy_t_s"]
+        if (not isinstance(samples, list) or not isinstance(times, list) or len(samples) != len(times)
+                or not all(map(_finite, samples)) or not all(map(_finite, times))):
+            raise ValueError("invalid load samples")
         census = load["census"]
-        if not isinstance(census, list) or not census:
-            raise ValueError("missing census")
+        if not isinstance(census, list):
+            raise ValueError("invalid census")
         for snapshot in census:
             if (not isinstance(snapshot, dict) or not isinstance(snapshot.get("label"), str) or not snapshot["label"]
                     or not _finite(snapshot.get("t_s")) or not isinstance(snapshot.get("processes"), list)
@@ -2542,6 +2551,10 @@ def _check_load(raw, receipt, kind, wall_s):
                                and _uint(process.get("ppid")) and _finite(process.get("pcpu"))
                                and isinstance(process.get("comm"), str) for process in snapshot["processes"])):
                 raise ValueError("invalid census")
+        if wall_s is None:
+            return
+        if load["errors"]:
+            raise ValueError("unavailable quiet load observations")
         verdict = r1.os_load_verdict(SOAK_SEGMENT if kind == "idle" else kind, fields, wall_s=wall_s)
         if verdict["redo"] is not False:
             raise ValueError("load redo required")
@@ -2582,6 +2595,23 @@ def _check_terminal_order(bound, prior_end):
     return bound.ended_epoch_s
 
 
+def _check_gated_energy(episode, raw_journal, receipt, kind):
+    from joulewise.align.apple.thermal_desk import member_record
+
+    reason = "member_energy"
+    journal = _jsonl_objects(raw_journal, kind, THERMAL_SOURCE, reason)
+    try:
+        record = member_record(episode, journal)
+    except (ArithmeticError, LookupError, TypeError, ValueError) as error:
+        raise EvidenceFailure(reason, kind, "power_trace.csv", peer=RECEIPT_NAME) from error
+    fields = {"energy_j": record["turn_owned_j"]}
+    if kind == "d-bank-benign-s1":
+        fields["gross_episode_j"] = record["gross_episode_j"]
+    for key, value in fields.items():
+        _required(key in receipt and canonical(receipt[key]) == canonical(value), reason, kind,
+                  RECEIPT_NAME, field=key, peer="power_trace.csv")
+
+
 def _native_bundle(bound, receipt, configured, gate_inputs, step_binding):
     from joulewise.align.apple.sampler import seconds_ns
 
@@ -2600,6 +2630,9 @@ def _native_bundle(bound, receipt, configured, gate_inputs, step_binding):
                   <= seconds_ns(bound.ended_epoch_s), "member_order", kind, MANIFEST_NAME,
                   field="episode_bracket", peer="outputs/align_episode.json")
         _check_battery(bound.read(BATTERY_SOURCE, BATTERY_SOURCE), receipt, kind)
+        if kind not in QUIET_MEMBERS:
+            _check_load(bound.read(LOAD_SOURCE, LOAD_SOURCE), receipt, kind)
+            _check_gated_energy(joined, data[THERMAL_SOURCE], receipt, kind)
     except EvidenceFailure:
         raise
     except (OSError, ArithmeticError, LookupError, TypeError, ValueError, AttributeError) as error:

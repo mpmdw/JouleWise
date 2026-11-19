@@ -1431,14 +1431,27 @@ class SoakLauncherBindingTests(unittest.TestCase):
                                           quiet_before_prefill_s=rt.STEP_QUIET_S,
                                           recovery_observed_s=rt.RECOVERY_CAP_S)
         if role != "predecessor":
+            from joulewise.align.apple.thermal_desk import member_record
             from joulewise.align.apple.workload import read_episode_bundle
 
-            receipt["episode_flags"] = list(read_episode_bundle(bundle).flags)
-        if kind in ("capture-predecessor-30b", "step-d"):
-            load = {"cpu_busy_cores": [0.1] * 1801, "cpu_busy_t_s": list(range(1801)),
-                    "census": [{"label": "start", "t_s": 0.0, "processes": []}]}
-            receipt.update(**load, load_journal_errors=[])
-            (segment / "load_journal.json").write_bytes(json_bytes({**load, "exclude_roots": [], "errors": []}))
+            if role in ("d-bank", "x-g"):
+                times = [instant for turn in turns for instant in (turn.start_ns / ns + 1, turn.end_ns / ns)]
+                (bundle / "power_trace.csv").write_text(
+                    "timestamp_s,power_w,source,rail,interval_start_s,interval_end_s\n" +
+                    "".join(f"{t},0.002,powermetrics,gpu_power,{t-1},{t}\n" for t in times))
+            joined = read_episode_bundle(bundle)
+            receipt["episode_flags"] = list(joined.flags)
+            if role in ("d-bank", "x-g"):
+                observation = member_record(joined, journal)
+                receipt["energy_j"] = observation["turn_owned_j"]
+                if role == "d-bank":
+                    receipt["gross_episode_j"] = observation["gross_episode_j"]
+        quiet = kind in ("capture-predecessor-30b", "step-d")
+        count = 1801 if quiet else 0
+        load = {"cpu_busy_cores": [0.1] * count, "cpu_busy_t_s": list(range(count)),
+                "census": [{"label": "start", "t_s": 0.0, "processes": []}]}
+        receipt.update(**load, load_journal_errors=[])
+        (segment / "load_journal.json").write_bytes(json_bytes({**load, "exclude_roots": [], "errors": []}))
         observation = "Now drawing from 'AC Power'\n -InternalBattery-0 80%; charged;"
         battery_rows = [{"epoch_s": member_base_ns / ns + value, "raw": observation,
                          **rt.parse_pmset_batt(observation)} for value in (0.0, 120.0)]
@@ -2375,9 +2388,17 @@ class SoakLauncherBindingTests(unittest.TestCase):
                 self.audit_case(lambda case: self.run_gate_regression(case, kind, edit, "reference_binding"))
 
         for value, reason in (("not numeric", None), (None, None), (None, "too_few_samples")):
-            def edit(_, receipt):
-                receipt.update(battery_drain_pct_per_h=value,
-                               battery={"drain_pct_per_h": value, "drain_unavailable_reason": reason})
+            def edit(bundle, receipt):
+                if reason:
+                    path = bundle.parent.parent / "battery.jsonl"
+                    first = path.read_bytes().splitlines()[0]
+                    path.write_bytes(first + b"\n")
+                    receipt["battery"] = rt.battery_summary([json.loads(first)])
+                    self.assertEqual(receipt["battery"]["drain_unavailable_reason"], reason)
+                    receipt["battery_drain_pct_per_h"] = value
+                else:
+                    receipt.update(battery_drain_pct_per_h=value,
+                                   battery={"drain_pct_per_h": value, "drain_unavailable_reason": reason})
             with self.subTest(value=value, reason=reason):
                 self.audit_case(lambda case: self.run_gate_regression(
                     case, "d-bank-benign-s1", edit, None if reason else "receipt_contract"))
