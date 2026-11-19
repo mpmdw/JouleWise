@@ -1,0 +1,101 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "look_id",
+    "manifest_sha256",
+    "commit",
+    "stage1_sha256",
+    "coefficients_sha256",
+    "in_energy_fit",
+    "qualified_interim",
+    "dev_included_below_45",
+    "days_below_4",
+    "cell_below_10",
+    "start_reading_invalid_over_10pct",
+    "hp01_below_9",
+    "drift_tripwire",
+    "twin_agrees",
+    "stage2_error"
+  ],
+  "properties": {
+    "look_id": {
+      "type": "string",
+      "pattern": "^lm-interim-[0-9]{2}$"
+    },
+    "manifest_sha256": {
+      "$ref": "#/$defs/sha256"
+    },
+    "commit": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}$"
+    },
+    "stage1_sha256": {
+      "$ref": "#/$defs/sha256"
+    },
+    "coefficients_sha256": {
+      "$ref": "#/$defs/sha256"
+    },
+    "in_energy_fit": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "qualified_interim": {
+      "type": "string",
+      "enum": [
+        "yes",
+        "no",
+        "not_evaluable"
+      ]
+    },
+    "dev_included_below_45": {
+      "$ref": "#/$defs/yes_no"
+    },
+    "days_below_4": {
+      "$ref": "#/$defs/yes_no"
+    },
+    "cell_below_10": {
+      "$ref": "#/$defs/yes_no"
+    },
+    "start_reading_invalid_over_10pct": {
+      "$ref": "#/$defs/yes_no"
+    },
+    "hp01_below_9": {
+      "$ref": "#/$defs/yes_no"
+    },
+    "drift_tripwire": {
+      "type": "string",
+      "enum": [
+        "within",
+        "to_research_lead",
+        "not_evaluable"
+      ]
+    },
+    "twin_agrees": {
+      "type": "string",
+      "enum": [
+        "yes",
+        "no",
+        "not_evaluable"
+      ]
+    },
+    "stage2_error": {
+      "type": "string",
+      "const": "no"
+    }
+  },
+  "$defs": {
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "yes_no": {
+      "type": "string",
+      "enum": [
+        "yes",
+        "no"
+      ]
+    }
+  }
+}

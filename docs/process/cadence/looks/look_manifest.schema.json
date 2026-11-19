@@ -1,0 +1,1594 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "joulewise.cadence_look_manifest.v1",
+  "title": "Look manifest (RL-150 R4, RL-166): freeze 1 for one look of the conditionless calibration campaign",
+  "description": "Structural copy of joulewise/cadence_looks/manifest.py. The Python validator is authoritative. It adds the ruling invariants this schema cannot state: the phases each look may read, the predictor whitelists, the stage-1 tripwires and decision thresholds RL-166 fixed, rules 3 and 4 judged at the look with pinned code, the required code paths and prints, and the placeholder rules (PENDING:CODE only as the sha256 of a file not yet written; PENDING:Qn only for an open question the manifest carries; neither in a committed manifest). Spec: docs/process/cadence_look_manifest.md.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema",
+    "look_id",
+    "look_kind",
+    "status",
+    "title",
+    "rulings",
+    "when",
+    "stages",
+    "reads",
+    "energy",
+    "fit",
+    "inclusion",
+    "outputs",
+    "decisions",
+    "later_looks",
+    "freeze1",
+    "freeze2",
+    "custody",
+    "review",
+    "open_questions"
+  ],
+  "properties": {
+    "schema": {
+      "const": "joulewise.cadence_look_manifest.v1"
+    },
+    "look_id": {
+      "type": "string",
+      "pattern": "^lm-[a-z0-9][a-z0-9-]{2,40}$"
+    },
+    "look_kind": {
+      "enum": [
+        "interim",
+        "qualification",
+        "controls"
+      ]
+    },
+    "status": {
+      "enum": [
+        "draft",
+        "committed"
+      ]
+    },
+    "title": {
+      "$ref": "#/$defs/text"
+    },
+    "rulings": {
+      "$ref": "#/$defs/cites"
+    },
+    "when": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "after_desk_final",
+        "describe_blocks_rule",
+        "before",
+        "cite"
+      ],
+      "properties": {
+        "after_desk_final": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/block_id"
+          }
+        },
+        "describe_blocks_rule": {
+          "$ref": "#/$defs/text"
+        },
+        "before": {
+          "$ref": "#/$defs/texts"
+        },
+        "cite": {
+          "$ref": "#/$defs/cites"
+        }
+      }
+    },
+    "stages": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "stage1",
+        "stage2",
+        "tripwires",
+        "tripwire_action",
+        "cite"
+      ],
+      "properties": {
+        "stage1": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "opens",
+            "writes",
+            "schema",
+            "committed_before_stage2",
+            "dry_run",
+            "cite"
+          ],
+          "properties": {
+            "opens": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "enum": [
+                  "inclusion",
+                  "journal"
+                ]
+              }
+            },
+            "writes": {
+              "$ref": "#/$defs/texts"
+            },
+            "schema": {
+              "$ref": "#/$defs/code_ref"
+            },
+            "committed_before_stage2": {
+              "const": true
+            },
+            "dry_run": {
+              "$ref": "#/$defs/text"
+            },
+            "cite": {
+              "$ref": "#/$defs/cites"
+            }
+          }
+        },
+        "stage2": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "opens",
+            "roster_source",
+            "time_budget_s",
+            "cite",
+            "holds",
+            "hold_record"
+          ],
+          "properties": {
+            "opens": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "enum": [
+                  "energy",
+                  "journal"
+                ]
+              }
+            },
+            "roster_source": {
+              "$ref": "#/$defs/text"
+            },
+            "time_budget_s": {
+              "type": "number",
+              "exclusiveMinimum": 0,
+              "maximum": 1200
+            },
+            "cite": {
+              "$ref": "#/$defs/cites"
+            },
+            "holds": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "flag",
+                  "rule",
+                  "cite"
+                ],
+                "properties": {
+                  "flag": {
+                    "type": "string"
+                  },
+                  "rule": {
+                    "$ref": "#/$defs/text"
+                  },
+                  "cite": {
+                    "$ref": "#/$defs/cites"
+                  }
+                }
+              }
+            },
+            "hold_record": {
+              "$ref": "#/$defs/text"
+            },
+            "failure_exit_status": {
+              "const": 1
+            }
+          }
+        },
+        "tripwires": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "id",
+              "threshold",
+              "cite"
+            ],
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "threshold": {
+                "type": "number"
+              },
+              "cite": {
+                "$ref": "#/$defs/cites"
+              }
+            }
+          }
+        },
+        "tripwire_action": {
+          "$ref": "#/$defs/text"
+        },
+        "cite": {
+          "$ref": "#/$defs/cites"
+        }
+      }
+    },
+    "reads": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "blocks",
+        "leg_types_read",
+        "leg_types_never",
+        "attempts",
+        "day_rule",
+        "never_read",
+        "custody_files",
+        "cite"
+      ],
+      "properties": {
+        "blocks": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "block_id",
+              "phase",
+              "role",
+              "kit_sha256",
+              "spans",
+              "cite"
+            ],
+            "properties": {
+              "block_id": {
+                "$ref": "#/$defs/block_id"
+              },
+              "phase": {
+                "enum": [
+                  "pilot",
+                  "development",
+                  "qualification",
+                  "extension",
+                  "reserve"
+                ]
+              },
+              "role": {
+                "enum": [
+                  "fit",
+                  "describe"
+                ]
+              },
+              "serves_phase": {
+                "enum": [
+                  "development",
+                  "qualification"
+                ]
+              },
+              "kit_sha256": {
+                "oneOf": [
+                  {
+                    "$ref": "#/$defs/sha"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "spans": {
+                "oneOf": [
+                  {
+                    "enum": [
+                      "all_desk_final",
+                      "desk_final_if_any"
+                    ]
+                  },
+                  {
+                    "type": "array",
+                    "minItems": 1,
+                    "items": {
+                      "type": "string",
+                      "pattern": "^[a-z0-9][a-z0-9-]{2,60}$"
+                    }
+                  }
+                ]
+              },
+              "cite": {
+                "$ref": "#/$defs/cites"
+              }
+            }
+          }
+        },
+        "leg_types_read": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/leg_type"
+          }
+        },
+        "leg_types_never": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/leg_type"
+          }
+        },
+        "attempts": {
+          "const": "accepted_only"
+        },
+        "day_rule": {
+          "$ref": "#/$defs/text"
+        },
+        "never_read": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "id",
+              "what",
+              "cite"
+            ],
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "what": {
+                "$ref": "#/$defs/text"
+              },
+              "cite": {
+                "$ref": "#/$defs/cites"
+              }
+            }
+          }
+        },
+        "custody_files": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "basename",
+              "scope",
+              "carries",
+              "stage"
+            ],
+            "properties": {
+              "basename": {
+                "type": "string"
+              },
+              "scope": {
+                "type": "string"
+              },
+              "carries": {
+                "type": "string"
+              },
+              "stage": {
+                "enum": [
+                  "inclusion",
+                  "energy",
+                  "journal"
+                ]
+              }
+            }
+          }
+        },
+        "cite": {
+          "$ref": "#/$defs/cites"
+        }
+      }
+    },
+    "energy": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "channels",
+        "not_read",
+        "per_leg_energy_in_output",
+        "per_leg_relative_residuals_in_output",
+        "cite"
+      ],
+      "properties": {
+        "channels": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "id",
+              "source",
+              "unit",
+              "read_as",
+              "cite"
+            ],
+            "properties": {
+              "id": {
+                "$ref": "#/$defs/channel"
+              },
+              "source": {
+                "$ref": "#/$defs/text"
+              },
+              "unit": {
+                "$ref": "#/$defs/text"
+              },
+              "read_as": {
+                "$ref": "#/$defs/text"
+              },
+              "cite": {
+                "$ref": "#/$defs/cites"
+              }
+            }
+          }
+        },
+        "not_read": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "id",
+              "cite"
+            ],
+            "properties": {
+              "id": {
+                "$ref": "#/$defs/channel"
+              },
+              "cite": {
+                "$ref": "#/$defs/cites"
+              }
+            }
+          }
+        },
+        "per_leg_energy_in_output": {
+          "const": false
+        },
+        "per_leg_relative_residuals_in_output": {
+          "type": "boolean"
+        },
+        "cite": {
+          "$ref": "#/$defs/cites"
+        }
+      }
+    },
+    "fit": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "code",
+        "runtime",
+        "authors",
+        "heat_term",
+        "rates",
+        "onset",
+        "validation",
+        "prefix_bias",
+        "step3",
+        "sensitivity",
+        "reads_from_leg_record",
+        "reads_never",
+        "cite",
+        "stated_limits",
+        "dependencies"
+      ],
+      "properties": {
+        "code": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/code_ref"
+          }
+        },
+        "runtime": {
+          "$ref": "#/$defs/text"
+        },
+        "authors": {
+          "type": "object",
+          "minProperties": 1,
+          "additionalProperties": {
+            "type": "string"
+          }
+        },
+        "heat_term": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "unit",
+            "segments",
+            "count_clock",
+            "start_readings",
+            "form",
+            "response",
+            "base",
+            "estimation",
+            "predictors",
+            "forbidden_predictors",
+            "sign_of_start_term_assumed",
+            "missing_start_reading",
+            "out_of_state_start",
+            "onset_not_estimable",
+            "outside_calibrated_range",
+            "cite"
+          ],
+          "properties": {
+            "unit": {
+              "const": "segment"
+            },
+            "segments": {
+              "$ref": "#/$defs/text"
+            },
+            "count_clock": {
+              "$ref": "#/$defs/text"
+            },
+            "start_readings": {
+              "$ref": "#/$defs/text"
+            },
+            "form": {
+              "$ref": "#/$defs/text"
+            },
+            "response": {
+              "$ref": "#/$defs/text"
+            },
+            "base": {
+              "$ref": "#/$defs/text"
+            },
+            "estimation": {
+              "$ref": "#/$defs/text"
+            },
+            "predictors": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "$ref": "#/$defs/predictor"
+              }
+            },
+            "forbidden_predictors": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "sign_of_start_term_assumed": {
+              "const": false
+            },
+            "missing_start_reading": {
+              "$ref": "#/$defs/text"
+            },
+            "out_of_state_start": {
+              "$ref": "#/$defs/text"
+            },
+            "onset_not_estimable": {
+              "$ref": "#/$defs/text"
+            },
+            "outside_calibrated_range": {
+              "$ref": "#/$defs/text"
+            },
+            "cite": {
+              "$ref": "#/$defs/cites"
+            }
+          }
+        },
+        "rates": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "r_p",
+            "r_d",
+            "stage",
+            "per_cell",
+            "cite"
+          ],
+          "properties": {
+            "r_p": {
+              "$ref": "#/$defs/text"
+            },
+            "r_d": {
+              "$ref": "#/$defs/text"
+            },
+            "stage": {
+              "const": "stage1"
+            },
+            "per_cell": {
+              "$ref": "#/$defs/text"
+            },
+            "cite": {
+              "$ref": "#/$defs/cites"
+            }
+          }
+        },
+        "onset": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "stage",
+            "reads_energy",
+            "response",
+            "predictors",
+            "censoring",
+            "estimable_when",
+            "error",
+            "count_only_cut",
+            "cite"
+          ],
+          "properties": {
+            "stage": {
+              "const": "stage1"
+            },
+            "reads_energy": {
+              "const": false
+            },
+            "response": {
+              "$ref": "#/$defs/text"
+            },
+            "predictors": {
+              "type": "array",
+              "minItems": 4,
+              "maxItems": 4,
+              "uniqueItems": true,
+              "items": {
+                "enum": [
+                  "start_tf08",
+                  "start_fan_rpm",
+                  "start_tv0h_excess_over_soak_reference",
+                  "prefill_seconds_from_counts"
+                ]
+              }
+            },
+            "censoring": {
+              "$ref": "#/$defs/text"
+            },
+            "estimable_when": {
+              "$ref": "#/$defs/text"
+            },
+            "error": {
+              "$ref": "#/$defs/text"
+            },
+            "count_only_cut": {
+              "$ref": "#/$defs/text"
+            },
+            "cite": {
+              "$ref": "#/$defs/cites"
+            }
+          }
+        },
+        "validation": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "unit",
+            "method",
+            "hot_stretch",
+            "relative_error",
+            "qualified_rule",
+            "also_printed",
+            "min_calendar_days",
+            "folds_refit",
+            "cite"
+          ],
+          "properties": {
+            "unit": {
+              "const": "calendar_day"
+            },
+            "method": {
+              "const": "leave_one_day_out"
+            },
+            "hot_stretch": {
+              "$ref": "#/$defs/text"
+            },
+            "relative_error": {
+              "$ref": "#/$defs/text"
+            },
+            "qualified_rule": {
+              "$ref": "#/$defs/text"
+            },
+            "also_printed": {
+              "$ref": "#/$defs/text"
+            },
+            "min_calendar_days": {
+              "type": "integer",
+              "minimum": 3
+            },
+            "folds_refit": {
+              "type": "array",
+              "items": {
+                "enum": [
+                  "base",
+                  "heat_term",
+                  "onset_model"
+                ]
+              },
+              "minItems": 3,
+              "maxItems": 3,
+              "uniqueItems": true
+            },
+            "cite": {
+              "$ref": "#/$defs/cites"
+            }
+          }
+        },
+        "prefix_bias": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "long",
+            "short",
+            "residuals",
+            "statistic",
+            "cite"
+          ],
+          "properties": {
+            "long": {
+              "$ref": "#/$defs/text"
+            },
+            "short": {
+              "$ref": "#/$defs/text"
+            },
+            "residuals": {
+              "$ref": "#/$defs/text"
+            },
+            "statistic": {
+              "$ref": "#/$defs/text"
+            },
+            "cite": {
+              "$ref": "#/$defs/cites"
+            }
+          }
+        },
+        "step3": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "code",
+            "adapter",
+            "statistic",
+            "method",
+            "kept",
+            "dropped",
+            "tripwire_reads",
+            "leg_failure",
+            "cite"
+          ],
+          "properties": {
+            "code": {
+              "$ref": "#/$defs/code_ref"
+            },
+            "adapter": {
+              "$ref": "#/$defs/code_ref"
+            },
+            "statistic": {
+              "const": "iii"
+            },
+            "method": {
+              "$ref": "#/$defs/text"
+            },
+            "kept": {
+              "$ref": "#/$defs/texts"
+            },
+            "dropped": {
+              "$ref": "#/$defs/texts"
+            },
+            "tripwire_reads": {
+              "$ref": "#/$defs/text"
+            },
+            "leg_failure": {
+              "$ref": "#/$defs/text"
+            },
+            "cite": {
+              "$ref": "#/$defs/cites"
+            }
+          }
+        },
+        "sensitivity": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "reads_from_leg_record": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string"
+          }
+        },
+        "reads_never": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "allOf": [
+            {
+              "contains": {
+                "const": "condition"
+              }
+            },
+            {
+              "contains": {
+                "const": "kit_start_band"
+              }
+            },
+            {
+              "contains": {
+                "const": "kit_g0_shape"
+              }
+            }
+          ]
+        },
+        "cite": {
+          "$ref": "#/$defs/cites"
+        },
+        "stated_limits": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "id",
+              "text",
+              "cite"
+            ],
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "text": {
+                "$ref": "#/$defs/text"
+              },
+              "note": {
+                "type": "string"
+              },
+              "cite": {
+                "$ref": "#/$defs/cites"
+              }
+            }
+          }
+        },
+        "dependencies": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/code_ref"
+          }
+        },
+        "gpu_trace_hole_refusal": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "enabled",
+            "max_gap_s"
+          ],
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            },
+            "max_gap_s": {
+              "type": "number",
+              "exclusiveMinimum": 0,
+              "maximum": 60
+            },
+            "cite": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "minItems": 1
+            }
+          },
+          "description": "RL-173 E.1 item 3: the GPU-rail hole refusal, stage 2's backstop, on at 2 s for the interim look; switched on, it cites its ruling (Mythos r5 N10)",
+          "anyOf": [
+            {
+              "properties": {
+                "enabled": {
+                  "const": false
+                }
+              }
+            },
+            {
+              "required": [
+                "cite"
+              ]
+            }
+          ]
+        },
+        "twin": {
+          "anyOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/code_ref"
+            }
+          ]
+        }
+      }
+    },
+    "inclusion": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "rules",
+        "interval",
+        "inclusion_reads_no_energy",
+        "no_drop_by_outcome",
+        "verdicts_frozen_before_energy",
+        "cite"
+      ],
+      "properties": {
+        "rules": {
+          "type": "array",
+          "minItems": 6,
+          "maxItems": 6,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "rule",
+              "id",
+              "text",
+              "judged_at",
+              "reads_energy",
+              "cite"
+            ],
+            "properties": {
+              "rule": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 6
+              },
+              "id": {
+                "enum": [
+                  "ran_to_cap",
+                  "g0_released",
+                  "sidecar_coverage",
+                  "km003c_clean",
+                  "not_a_contaminated_attempt",
+                  "block_power_mode"
+                ]
+              },
+              "text": {
+                "$ref": "#/$defs/text"
+              },
+              "judged_at": {
+                "enum": [
+                  "runner",
+                  "look"
+                ]
+              },
+              "reads_energy": {
+                "const": false
+              },
+              "code": {
+                "$ref": "#/$defs/code_ref"
+              },
+              "cite": {
+                "$ref": "#/$defs/cites"
+              }
+            }
+          }
+        },
+        "interval": {
+          "$ref": "#/$defs/text"
+        },
+        "inclusion_reads_no_energy": {
+          "const": true
+        },
+        "no_drop_by_outcome": {
+          "const": true
+        },
+        "verdicts_frozen_before_energy": {
+          "const": true
+        },
+        "cite": {
+          "$ref": "#/$defs/cites"
+        }
+      }
+    },
+    "outputs": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema",
+        "words",
+        "cite"
+      ],
+      "properties": {
+        "schema": {
+          "$ref": "#/$defs/code_ref"
+        },
+        "words": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "qualified_interim",
+            "dev_included_below_45",
+            "days_below_4",
+            "cell_below_10",
+            "start_reading_invalid_over_10pct",
+            "hp01_below_9",
+            "drift_tripwire",
+            "twin_agrees",
+            "stage2_error"
+          ],
+          "properties": {
+            "qualified_interim": {
+              "const": [
+                "yes",
+                "no",
+                "not_evaluable"
+              ]
+            },
+            "dev_included_below_45": {
+              "const": [
+                "yes",
+                "no"
+              ]
+            },
+            "days_below_4": {
+              "const": [
+                "yes",
+                "no"
+              ]
+            },
+            "cell_below_10": {
+              "const": [
+                "yes",
+                "no"
+              ]
+            },
+            "start_reading_invalid_over_10pct": {
+              "const": [
+                "yes",
+                "no"
+              ]
+            },
+            "hp01_below_9": {
+              "const": [
+                "yes",
+                "no"
+              ]
+            },
+            "drift_tripwire": {
+              "const": [
+                "within",
+                "to_research_lead",
+                "not_evaluable"
+              ]
+            },
+            "twin_agrees": {
+              "const": [
+                "yes",
+                "no",
+                "not_evaluable"
+              ]
+            },
+            "stage2_error": {
+              "const": [
+                "no"
+              ]
+            }
+          }
+        },
+        "cite": {
+          "$ref": "#/$defs/cites"
+        }
+      }
+    },
+    "decisions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "statistic",
+          "rule",
+          "action",
+          "reads_energy",
+          "cite"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "not": {
+              "pattern": "(?i)rule[_-]?p|s_?w_selection|one_decision"
+            }
+          },
+          "statistic": {
+            "$ref": "#/$defs/text"
+          },
+          "rule": {
+            "$ref": "#/$defs/text"
+          },
+          "action": {
+            "$ref": "#/$defs/text"
+          },
+          "threshold": {
+            "type": "number"
+          },
+          "fallback_threshold": {
+            "type": "number"
+          },
+          "reads_energy": {
+            "type": "boolean"
+          },
+          "cite": {
+            "$ref": "#/$defs/cites"
+          },
+          "ruled_threshold": {
+            "type": "number"
+          },
+          "pending": {
+            "type": "string"
+          },
+          "disposed_by": {
+            "type": "string",
+            "pattern": "^RL-\\d+[a-z]?"
+          },
+          "evidence": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "path",
+              "sha256"
+            ],
+            "properties": {
+              "path": {
+                "type": "string",
+                "pattern": "^(?!/)(?!.*\\.\\.).+\\.md$"
+              },
+              "sha256": {
+                "type": "string",
+                "pattern": "^[0-9a-f]{64}$"
+              }
+            }
+          }
+        }
+      }
+    },
+    "later_looks": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "look_id",
+          "look_kind",
+          "declared_prints",
+          "scorer",
+          "committed_before",
+          "cite"
+        ],
+        "properties": {
+          "look_id": {
+            "type": "string",
+            "pattern": "^lm-[a-z0-9][a-z0-9-]{2,40}$"
+          },
+          "look_kind": {
+            "enum": [
+              "interim",
+              "qualification",
+              "controls"
+            ]
+          },
+          "declared_prints": {
+            "$ref": "#/$defs/texts"
+          },
+          "scorer": {
+            "$ref": "#/$defs/text"
+          },
+          "committed_before": {
+            "$ref": "#/$defs/text"
+          },
+          "cite": {
+            "$ref": "#/$defs/cites"
+          }
+        }
+      }
+    },
+    "freeze1": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "contents",
+        "committed_before",
+        "ledger_pointer",
+        "cite"
+      ],
+      "properties": {
+        "contents": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string"
+          }
+        },
+        "committed_before": {
+          "const": "any development energy is read"
+        },
+        "ledger_pointer": {
+          "$ref": "#/$defs/text"
+        },
+        "cite": {
+          "$ref": "#/$defs/cites"
+        }
+      }
+    },
+    "freeze2": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "artifact",
+        "contents",
+        "commit_before",
+        "used_by",
+        "refit_on_qualification",
+        "cite",
+        "deferred_rules"
+      ],
+      "properties": {
+        "artifact": {
+          "$ref": "#/$defs/text"
+        },
+        "contents": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string"
+          }
+        },
+        "commit_before": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "allOf": [
+            {
+              "contains": {
+                "const": "qualification_energy_opened"
+              }
+            },
+            {
+              "contains": {
+                "const": "qualification_leg_runs"
+              }
+            },
+            {
+              "contains": {
+                "const": "phase_boundary_crossed"
+              }
+            },
+            {
+              "contains": {
+                "const": "release_run_inputs_signed"
+              }
+            }
+          ]
+        },
+        "used_by": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string"
+          }
+        },
+        "refit_on_qualification": {
+          "const": false
+        },
+        "cite": {
+          "$ref": "#/$defs/cites"
+        },
+        "deferred_rules": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": [
+              "id",
+              "when",
+              "rule",
+              "cite"
+            ],
+            "properties": {
+              "id": {
+                "type": "string"
+              },
+              "when": {
+                "$ref": "#/$defs/text"
+              },
+              "rule": {
+                "$ref": "#/$defs/text"
+              },
+              "cite": {
+                "$ref": "#/$defs/cites"
+              }
+            }
+          }
+        },
+        "schema": {
+          "$ref": "#/$defs/code_ref"
+        }
+      }
+    },
+    "custody": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "runs_by",
+        "seats",
+        "lead_checks_output_against_schema",
+        "custody_copy",
+        "host",
+        "no_import_by",
+        "fit_paths_outside_kit_frozen_paths",
+        "disclosure",
+        "pre_run_check",
+        "cite",
+        "pin_check"
+      ],
+      "properties": {
+        "runs_by": {
+          "const": "analyst_seat"
+        },
+        "seats": {
+          "const": 1
+        },
+        "lead_checks_output_against_schema": {
+          "const": true
+        },
+        "custody_copy": {
+          "$ref": "#/$defs/text"
+        },
+        "host": {
+          "$ref": "#/$defs/text"
+        },
+        "no_import_by": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "string"
+          }
+        },
+        "fit_paths_outside_kit_frozen_paths": {
+          "const": true
+        },
+        "disclosure": {
+          "$ref": "#/$defs/text"
+        },
+        "pre_run_check": {
+          "$ref": "#/$defs/text"
+        },
+        "cite": {
+          "$ref": "#/$defs/cites"
+        },
+        "pin_check": {
+          "$ref": "#/$defs/text"
+        }
+      }
+    },
+    "review": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "cold_seat",
+        "then",
+        "paper_bound",
+        "due",
+        "cite"
+      ],
+      "properties": {
+        "cold_seat": {
+          "$ref": "#/$defs/text"
+        },
+        "then": {
+          "$ref": "#/$defs/text"
+        },
+        "paper_bound": {
+          "const": true
+        },
+        "due": {
+          "$ref": "#/$defs/text"
+        },
+        "cite": {
+          "$ref": "#/$defs/cites"
+        }
+      }
+    },
+    "open_questions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "id",
+          "question",
+          "proposal",
+          "cite"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^Q\\d{1,2}$"
+          },
+          "question": {
+            "$ref": "#/$defs/text"
+          },
+          "proposal": {
+            "type": "string"
+          },
+          "cite": {
+            "$ref": "#/$defs/cites"
+          }
+        }
+      }
+    },
+    "supersedes": {
+      "type": "string",
+      "pattern": "^lm-[a-z0-9][a-z0-9-]{2,40}$"
+    }
+  },
+  "$defs": {
+    "text": {
+      "type": "string",
+      "minLength": 1
+    },
+    "texts": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "cites": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string",
+        "pattern": "^RL-\\d+[a-z]?"
+      }
+    },
+    "block_id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]{2,40}$"
+    },
+    "sha": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "sha_or_pending": {
+      "type": "string",
+      "pattern": "^([0-9a-f]{64}|PENDING:CODE)$"
+    },
+    "code_ref": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "path",
+        "sha256"
+      ],
+      "properties": {
+        "path": {
+          "type": "string",
+          "pattern": "^(?!/)(?!.*\\.\\.).+\\.(py|json)$"
+        },
+        "sha256": {
+          "$ref": "#/$defs/sha_or_pending"
+        }
+      }
+    },
+    "what_cite": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "what",
+        "cite"
+      ],
+      "properties": {
+        "what": {
+          "$ref": "#/$defs/text"
+        },
+        "cite": {
+          "$ref": "#/$defs/cites"
+        }
+      }
+    },
+    "leg_type": {
+      "enum": [
+        "A",
+        "H",
+        "L",
+        "M",
+        "T",
+        "C"
+      ]
+    },
+    "channel": {
+      "enum": [
+        "gpu_rail",
+        "dc_in",
+        "cpu_rail",
+        "ane_rail",
+        "package",
+        "smc_system_total"
+      ]
+    },
+    "predictor": {
+      "enum": [
+        "prefill_tokens",
+        "decode_tokens",
+        "decode_block_tokens",
+        "context_tokens",
+        "turn_index",
+        "prefill_rate_frozen",
+        "decode_rate_frozen",
+        "load_seconds_from_counts",
+        "prefill_seconds_from_counts",
+        "segment_duration_s",
+        "segment_midpoint_s",
+        "start_tf08",
+        "start_fan_rpm",
+        "start_tv0h_excess_over_soak_reference",
+        "predicted_onset_s",
+        "expected_hot_seconds"
+      ]
+    }
+  },
+  "allOf": [
+    {
+      "anyOf": [
+        {
+          "properties": {
+            "look_kind": {
+              "not": {
+                "const": "interim"
+              }
+            }
+          }
+        },
+        {
+          "properties": {
+            "fit": {
+              "required": [
+                "gpu_trace_hole_refusal"
+              ],
+              "properties": {
+                "gpu_trace_hole_refusal": {
+                  "required": [
+                    "cite"
+                  ],
+                  "properties": {
+                    "enabled": {
+                      "const": true
+                    },
+                    "max_gap_s": {
+                      "const": 2
+                    }
+                  }
+                }
+              }
+            },
+            "freeze2": {
+              "required": [
+                "schema"
+              ]
+            }
+          }
+        }
+      ]
+    }
+  ]
+}
