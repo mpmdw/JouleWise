@@ -1052,6 +1052,20 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 
 <!-- RUN_STATE TYPED ITEMS: newest first. Add with scripts/run_state_add.py; never edit by hand. -->
 
+463. **Filler clock bands: pin 6e9d42f1d f2-stab legs omit --batch-window (any hour); pin 2d347f721 picks 02:00-02:35 else 13:14-13:15 at actual t0; 10:50:01-13:14:59 fill with f2-stab on 6e9d42f1d; RL-171 rollback retired (RL-180 §2(b))**
+
+```item
+{"expires_epoch_s": null, "issued_epoch_s": 1795126401, "number": 463, "owner": "magistrate", "schema": "joulewise.run_state_item.v1", "sets": [], "status": "ISSUED", "supersedes": []}
+```
+
+- **Pin B (`6e9d42f1d`, f2-stab-15 and f2-stab-16).** Omit `--batch-window` from plan, launcher and runner. A single leg may launch at any hour when its existing gates hold. In item 439's Start and check and Run blocks as used in item 452, remove the batch `ARG` assignment and any window allow-list, and drop `--batch-window "$ARG"` from both `cadence_legs_runner.py plan` lines. Keep the pin's native `validate-kit --repo "$REPO"` with no window argument, the frozen-path and queue checks, and the Run block's actual-t0 replan. Keep `assert p["blackout_clear"]` and assert `p["batch_windows"] == []`. Keep the deadline at `p["launch_deadline_epoch_s"] + 900`. Drop `--batch-window "$ARG"` from `launch_cadence_span.py launch`. The launcher then omits it from the runner argv. The Check's receipt must show `r["batch_windows"] == []`.
+- **Pin A (`2d347f721`, f2-inst-01 through -03 and f2-stab-01 through -14).** Plan at the actual t0 with `02:00-02:35`. If the pinned plan refuses on the fence or blackout, try `13:14-13:15`. Use the admitted argument for plan, launcher and runner, and assert `r["batch_windows"] == [ARG]` in the Check, with `ARG` set to the argument actually used. Recheck the selection at Run's actual t0. Both arguments refuse from **10:50:01 through 13:14:59** local.
+  - **One leg (5,850 s worst case).** Use `02:00-02:35` from 02:35:00 through 10:50:00 and 13:15:00 through 23:48:10. Use `13:14-13:15` from 00:00:00 through 02:34:59 and 23:48:11 through 23:59:59.
+  - **Two f2-inst legs (8,550 s worst case).** Use `02:00-02:35` from 02:35:00 through 10:50:00 and 13:15:00 through 23:03:10. Use `13:14-13:15` from 00:00:00 through 02:34:59 and 23:03:11 through 23:59:59.
+- **Item 422 ladder.** When a rung is refused only by its pin's clock checks after trying the applicable argument, go down the ladder immediately. During 10:50:01–13:14:59, a READY f2-stab-15 or -16 leg on pin B can fill the gap at rank 4 after the higher rungs are checked. F2 instrument work resumes from 13:15:00 when its gates and any in-flight span's close are clear. The local date's first f2-stab leg on pin B can start at 00:00:00 at rank 1.
+- Continue to apply rule 5 and both censuses to every leg, and items 423, 431, 442, 443 and 447. Apply the RL-171 §7 stop rule per pin. RL-171's two-night rollback is RETIRED (RL-180 §2(b), RLD:19118-19132). The only batch predicate left applies to counted spans: after CONTAMINATED_REDOS on two counted spans whose predicted batch start fell between soak end and close, no counted span arms with that overlap. Fillers and v4 sessions are not affected. A genuine refusal follows RL-179 F-6. F0 retired at R1's close.
+- **Authority and evidence.** Lead decision under RL-180 §2(b): on the v1 and v1.1 pins the `--batch-window` argument is the lead's choice at each launch. This supersedes RL-172 §0's per-pin window rule for the argument's choice. Proof: draft PR #885 at `6940012fc` (filler-clock-bands evidence). It reproduces item 406 to the second, with 96 native plan checks, 448 picker comparisons and three rc-0 mocks, including overnight crossings of 02:00-02:35.
+
 462. **Lead back (Air + SSD): item 460's absence hold ends; R1 complete (459); 461 owns f2-inst-02 L005-L006; ladder per 418/422/423/431/442/443/447; no qual until the lead issues; W1 at b2e01464d until promotion**
 
 ```item
