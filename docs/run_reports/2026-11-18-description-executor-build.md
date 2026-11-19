@@ -194,3 +194,32 @@ source admission and the cross-family delta review remain open.
 [Regression after repair](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/audit1-preflight-green.log)
 [Direct oracle check after repair](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/audit1-rl188-compatibility.log)
 [Existing focused checks](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/audit1-existing-focused.log)
+
+## Audit round 2 repair
+
+Astra reviewed `1df349848` and reported one VERIFIED HIGH, one VERIFIED
+MED and one VERIFIED LOW. The round-one HIGH was refuted on this head.
+Both rounds had two combined VERIFIED HIGH and MED findings. Round two
+is nondecaying under Pipeline §3, so the next review requires the
+successor freeze. This checkpoint addresses the lead-requested defect
+under the existing U1 rule.
+
+| Severity | Disposition | Commit | Regression and result |
+| --- | --- | --- | --- |
+| HIGH / VERIFIED | Both the timestamp precheck and CSV row backstop now use one U1 check with the interval's rail cadence. A print extending into the turn uses `rail_edge`. Earlier prints use `hold`. With a 250 ms turn cadence the limit is 1.25 s. | `d4622c221` | **PASS**. `test_four_second_ane_decode_gap_nulls_turn_and_plateau` reproduced −69.75 J on the old scorer for all three IDs. After the fix, affected turn and plateau prints are null with `rail_gap`, the stability summary records the missing print, and the public roster counts agree. `test_stamp_and_row_checks_share_the_inclusive_phase_limit` checks a four-second hold gap, an exact-limit turn gap and a longer turn gap with and without a metadata announcement. The rejected interval's planted bad value stays unparsed. |
+| HIGH / REFUTED | The round-one missing-loader defect remains fixed. | `cb042106c` | **PASS**. All three pre-reservation dependency regressions passed again. |
+| MED / VERIFIED | Publication and descriptor confinement require the successor observer and a synthetic host that permits the reservation directory. | — | **FOLLOW-UP**. The audit saw two observed-device-write refusals and two publication refusals. |
+| LOW / VERIFIED | Release field count, public record binding and rail order are positive controls. | `d4622c221` | **PASS**. The frozen GPU row comparator and all nine direct RL-188 oracle maps passed. |
+
+The two new regression methods, three native preflight cases and frozen
+GPU comparator passed together on Python 3.13. The patch changed no
+protected blob among the 53 compared paths. The original module, archive
+and RL-188 oracle hashes still match. Draft CI runs the sharded suite on
+its synthetic runner. The combined native base and lead-supplied native
+source bindings remain prerequisites for final integration.
+
+[Audit round 2](/Volumes/JW-EXT/scratch/pl-d-desc-looks-executor/audit-2/FINAL-MESSAGE.md)
+[Four-second gap before repair](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/audit2-rail-gap-red.log)
+[Value parsing before repair](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/audit2-gap-boundary-red.log)
+[Regressions after repair](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/audit2-regressions-green.log)
+[Direct oracle check after repair](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/audit2-rl188-compatibility.log)
