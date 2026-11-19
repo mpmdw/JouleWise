@@ -2144,6 +2144,16 @@ class R0PublicationAuditTest(unittest.TestCase):
                 else:
                     self.assertEqual((result["rc"], result["published"], result["flags"]), (0, True, []), result)
 
+    def test_distinct_cpu_observations_on_window_edges_are_retained(self):
+        from joulewise.align.r0_host import _observations_inside
+
+        before, opening, same_open, interior, same_close, current, after = (
+            SimpleNamespace(midpoint_ns=stamp, index=index)
+            for index, stamp in enumerate((9, 10, 10, 15, 20, 20, 21))
+        )
+        observations = [before, opening, same_open, interior, same_close, current, after]
+        self.assertEqual(_observations_inside(observations, opening, current), [same_open, interior, same_close])
+
     def test_exited_worker_retains_measured_growth_across_fractional_window_open(self):
         from tests.align import test_r0_vs_l3_differential as fixture
 
