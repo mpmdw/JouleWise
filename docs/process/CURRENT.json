@@ -1,10 +1,10 @@
 {
   "armed": null,
-  "next_observable": "f2inst01-dc3b6a00/run-out.txt shows LAUNCH_RC=0 with the fence; the next activation after the fence is gone runs the operational Check for cq-f2-inst-01-l009-l010-a1 under /Users/edr/campaign-out/f2-inst-01/ (template custody f2inst01-check-dc3b6a00/check.sh with OUT and roster L009,L010, leg count 2), copies at once (row 14, offload-f2inst01-run-dc3b6a00.sh with plan id changed), then takes the last rank-2 pair f2-inst-01-l011-l012 (queue -b, seq 11, same staged queue file) where worst case 8,550 s + 1,460 s ends by 01:50 Fri, else one-leg L011; Fri 20 Nov's first f2-stab leg (rank 1, f2-stab-15 L003) arms when its fence clears the 02:00-02:35 blackout margin.",
+  "next_observable": "f2inst01-a5db6d81/run-out.txt shows LAUNCH_RC=0 with the fence; the next activation after the fence is gone runs the operational Check for cq-f2-inst-01-l011-l012-a1 under /Users/edr/campaign-out/f2-inst-01/ (template custody f2inst01-check-a5db6d81/check.sh with OUT and roster L011,L012, leg count 2), copies at once (row 14, offload-f2inst01-run-a5db6d81.sh with plan id changed). That closes the f2-inst-01 -b queue (L011-L012 is its last span). Then the item 422 ladder: f2-inst-02/-03 if their kits and queues exist, else hp-02 (only if lm-hp-01 has not run), else further f2-stab legs, else F0; Fri 20 Nov's first f2-stab leg (rank 1, f2-stab-15 L003) arms when its fence clears the 02:00-02:35 blackout margin.",
   "open_items": [
     {
       "expires_epoch_s": null,
-      "item": 454,
+      "item": 455,
       "owner": "magistrate",
       "status": "ISSUED"
     },
@@ -125,10 +125,10 @@
   ],
   "owner": "magistrate",
   "schema": "joulewise.current_pointer.v2",
-  "source_item": "454",
+  "source_item": "455",
   "source_item_heading_date": "2026-11-19",
   "wait": {
-    "deadline_epoch_s": 1795103700,
+    "deadline_epoch_s": 1795109100,
     "observable": "none",
     "on_early_or_refused": "a launcher refusal or non-clean close: record it, hold kit f2-inst-01 until an input changes (item 422), mail the lead; at the next close continue down the ladder. R1 stays unarmed (item 448)."
   }
