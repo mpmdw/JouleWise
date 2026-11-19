@@ -1052,6 +1052,19 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 
 <!-- RUN_STATE TYPED ITEMS: newest first. Add with scripts/run_state_add.py; never edit by hand. -->
 
+464. **Stability ladder correction: the date's rank-1 f2-stab leg comes from kits 01-14 on 2d347f721 (lm-stab-01 reads 01-14 only); f2-stab-15/16 on 6e9d42f1d only in the 10:50-13:15 gap; collected kit-15 legs await a research-lead ruling**
+
+```item
+{"expires_epoch_s": null, "issued_epoch_s": 1795126493, "number": 464, "owner": "magistrate", "schema": "joulewise.run_state_item.v1", "sets": [], "status": "ISSUED", "supersedes": []}
+```
+
+- **Correction to item 463's ladder line (lead).** lm-stab-01 reads 14 local dates from kits **f2-stab-01..14** (pin `2d347f721`; item 425's 168 drafts at audit `f9b03c33d`; RL-181 §2.6). Its manifest names kits 01-14 only. So far every rank-1 stability leg has gone to f2-stab-15 on the qualification pin (items 444 and 452). That gives zero eligible 01-14 dates.
+- **From now on:**
+  - **Rank 1:** the first f2-stab leg of each local date comes from **f2-stab-01..14** on pin `2d347f721`. Take the lowest-numbered kit with an unrun leg, in roster order. Use item 463's pin-A argument rule; at 00:00-02:34:59 that is `13:14-13:15`. Item 425's issue checks apply: kit sha256 against MANIFEST.md, and `validate_kit.py` against f2-inst-01.
+  - **The 10:50:01-13:14:59 gap:** f2-stab-15/16 on pin `6e9d42f1d` with no window (item 463). These legs also exercise the qualification pin. They stay sealed, like every filler.
+  - Everything else in items 422, 447 and 463 stands: f2-inst at rank 2, hp-02 at rank 3, further stability at rank 4. On pin A, further stability legs come from kits 01-14 first.
+- **Already collected f2-stab-15 legs:** kept and copied as usual. Whether they count toward a stability look is the research lead's question (d-inst-stab-read-runbook FOR-FABLE item 5). Nothing changes for them until it is ruled.
+
 463. **Filler clock bands: pin 6e9d42f1d f2-stab legs omit --batch-window (any hour); pin 2d347f721 picks 02:00-02:35 else 13:14-13:15 at actual t0; 10:50:01-13:14:59 fill with f2-stab on 6e9d42f1d; RL-171 rollback retired (RL-180 §2(b))**
 
 ```item
