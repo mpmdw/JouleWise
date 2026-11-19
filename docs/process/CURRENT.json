@@ -1,10 +1,10 @@
 {
   "armed": null,
-  "next_observable": "run-out.txt shows LAUNCH_RC=0 with the fence; the next activation after the fence is gone runs the operational Check for cq-f2-inst-01-l006-a1 under /Users/edr/campaign-out/f2-inst-01/ (template custody f2inst01-check-4f3fdacd/check.sh), copies at once (row 14), then, after the 02:00-02:35 blackout (a one-leg fence is t0+7,310 s, so nothing fits between ~00:30 and 02:35), arms Thu 19 Nov's first f2-stab leg (rank 1; items 425, 447), then f2-inst-01 two-leg pairs where they fit (L007-L008 via queue f2-inst-01-b, L008-L009 via -a).",
+  "next_observable": "the first activation at or after 02:35 Thu (after the 02:00-02:35 blackout) arms Thu 19 Nov's first f2-stab leg (rank 1; items 425, 447) from fillers-w2 after its sha256 check, then f2-inst-01 two-leg pairs where the worst case fits (L007-L008 via queue f2-inst-01-b). An activation before 02:35 has nothing to do: no record, no commit, exit.",
   "open_items": [
     {
       "expires_epoch_s": null,
-      "item": 450,
+      "item": 451,
       "owner": "magistrate",
       "status": "ISSUED"
     },
@@ -125,11 +125,11 @@
   ],
   "owner": "magistrate",
   "schema": "joulewise.current_pointer.v2",
-  "source_item": "450",
-  "source_item_heading_date": "2026-11-18",
+  "source_item": "451",
+  "source_item_heading_date": "2026-11-19",
   "wait": {
-    "deadline_epoch_s": 1795080346,
+    "deadline_epoch_s": 1795084500,
     "observable": "none",
-    "on_early_or_refused": "a launcher refusal or non-clean close: record it, hold kit f2-inst-01 until an input changes (item 422), mail the lead; at the next close continue down the ladder. R1 stays unarmed (item 448)."
+    "on_early_or_refused": "a launcher refusal or non-clean close: record it, hold that kit until an input changes (item 422), mail the lead, continue down the ladder at the next close. R1 stays unarmed (item 448)."
   }
 }
