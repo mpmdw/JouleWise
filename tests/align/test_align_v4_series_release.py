@@ -247,6 +247,20 @@ def commit_fixture(root, paths):
     return fixture_git(root, "rev-parse", "HEAD")
 
 
+def mirror_fixture(mirror, paths):
+    from scripts.align_v4_harvest_off import checkout_identity, _usable_identity
+
+    python = mirror / ".venv/bin/python"
+    python.parent.mkdir(parents=True)
+    python.symlink_to(sys.executable)
+    (mirror / ".gitignore").write_text(".venv/\n")
+    commit_fixture(mirror, [*paths, ".gitignore"])
+    identity = checkout_identity(mirror)
+    if not _usable_identity(identity):
+        raise AssertionError("invalid synthetic mirror identity")
+    return {"root": str(mirror), "identity": identity}
+
+
 def describe(root, relative, value, *, canonical=False):
     path = root / relative
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -453,6 +467,103 @@ def authored_receipt(root, window="C1"):
 
 
 class SeriesReleaseTests(unittest.TestCase):
+    def test_declared_mirror_missing_without_links_refuses_release(self):
+        from scripts.align_v4_harvest_off import checkout_identity
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp).resolve() / "synthetic"
+            root.mkdir()
+            mirror = root / "mirror"
+            mirror.mkdir()
+            init_git_fixture(mirror, "-q")
+            (mirror / "reference.json").write_text('{"synthetic":1}\n')
+            descriptor = mirror_fixture(mirror, ["reference.json"])
+            finalize = harvest_offload.finalized_manifest
+
+            def with_mirror(window):
+                return finalize(window, mirror=descriptor if window.name == "C8" else None)
+
+            with patch.object(harvest_offload, "finalized_manifest", with_mirror):
+                stored_series(root)
+            store = root / "series/restored/C8"
+            closure = json.loads((store / "finalized_manifest.json").read_bytes())["closure"]
+            self.assertEqual(closure["links"], {})
+            present = root.parent / "intact.json"
+            result = invoke(root, present)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertTrue(present.is_file())
+
+            mirror.rename(root / "removed-mirror")
+            with self.assertRaises(harvest_offload.OffloadRefused):
+                harvest_offload._verify_closure(closure, store, mirror_identity=checkout_identity(mirror), where="test")
+            output = root.parent / "missing.json"
+            result = invoke(root, output)
+            self.assertEqual(result.returncode, 1, result.stderr)
+            self.assertFalse(output.exists())
+
+    def test_finalized_mirror_refuses_mode_drift_advanced_head_and_missing_interpreter(self):
+        from scripts.align_v4_harvest_off import checkout_identity
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp).resolve() / "synthetic"
+            root.mkdir()
+            mirror = root / "mirror"
+            mirror.mkdir()
+            init_git_fixture(mirror, "-q")
+            reference = mirror / "reference.json"
+            reference.write_text('{"synthetic":1}\n')
+            descriptor = mirror_fixture(mirror, [reference.name])
+            finalize = harvest_offload.finalized_manifest
+
+            def with_mirror(window):
+                if window.name != "C8":
+                    return finalize(window)
+                (window / reference.name).symlink_to(reference)
+                return finalize(window, mirror=descriptor)
+
+            with patch.object(harvest_offload, "finalized_manifest", with_mirror):
+                stored_series(root)
+            store = root / "series/restored/C8"
+            closure = json.loads((store / "finalized_manifest.json").read_bytes())["closure"]
+            self.assertEqual(closure["links"][reference.name]["class"], "mirror")
+            bound_head = descriptor["identity"]["head"]
+            mode = reference.stat().st_mode & 0o777
+            for defect in ("mode-drift", "head-advanced", "interpreter-absent"):
+                with self.subTest(defect=defect):
+                    if defect == "mode-drift":
+                        reference.chmod(mode ^ 0o111)
+                    elif defect == "head-advanced":
+                        reference.chmod(mode)
+                        (mirror / "revision.txt").write_text("synthetic revision two\n")
+                        commit_fixture(mirror, ["revision.txt"])
+                    else:
+                        fixture_git(mirror, "checkout", "-q", "--detach", bound_head)
+                        (mirror / ".venv/bin/python").unlink()
+                    with self.assertRaises(harvest_offload.OffloadRefused):
+                        harvest_offload._verify_closure(closure, store, mirror_identity=checkout_identity(mirror),
+                                                        where="test")
+                    output = root.parent / f"{defect}.json"
+                    result = invoke(root, output)
+                    self.assertEqual(result.returncode, 1, result.stderr)
+                    self.assertFalse(output.exists())
+
+    def test_finalized_validator_refusal_precedes_ledger_and_scoring(self):
+        from scripts import align_v4_series_release as caller
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp).resolve()
+            stored_series(root)
+            store = root / "series/restored/C1"
+            manifest = json.loads((store / "finalized_manifest.json").read_bytes())
+            before = AssertionError("release reached input verification or scoring")
+            with patch.object(harvest_offload, "_verify_closure",
+                              side_effect=harvest_offload.OffloadRefused("synthetic validator refusal")) as validator, \
+                    patch.object(caller.RestoredFiles, "verify_inventory", side_effect=before), \
+                    patch.object(caller.ReleasedInputs, "load_members", side_effect=before):
+                self.assert_release_refused(caller, root, root / "report.json")
+            validator.assert_called_once()
+            self.assertEqual(validator.call_args.args, (manifest["closure"], store))
+
     def test_listed_copy_of_benign_dc_refuses_without_opening_it(self):
         from tests.align import test_c1_release_input_completeness as frozen
 
@@ -687,7 +798,7 @@ class SeriesReleaseTests(unittest.TestCase):
             target = mirror / "calibration-reference.json"
             original = b'{"synthetic_factor":1}\n'
             target.write_bytes(original)
-            commit = commit_fixture(mirror, [target.name])
+            descriptor = mirror_fixture(mirror, [target.name])
             ledger = root / "synthetic-calibration.jsonl"
             ledger.write_bytes(original)
             finalize = harvest_offload.finalized_manifest
@@ -697,7 +808,7 @@ class SeriesReleaseTests(unittest.TestCase):
                     return finalize(window)
                 (window / target.name).symlink_to(target)
                 (window / "reference-ledger.jsonl").symlink_to(ledger)
-                return finalize(window, mirror={"root": str(mirror), "identity": {"commit": commit}}, inputs=(ledger,))
+                return finalize(window, mirror=descriptor, inputs=(ledger,))
 
             with patch.object(harvest_offload, "finalized_manifest", with_mirror):
                 stored_series(root)
@@ -706,7 +817,7 @@ class SeriesReleaseTests(unittest.TestCase):
             record = json.loads((root / "records/C8/record.json").read_bytes())
             self.assertEqual(packet.digest(raw), record["finalized_manifest"])
             closure = json.loads(raw)["closure"]
-            self.assertEqual(closure["mirror"]["identity"], {"commit": commit})
+            self.assertEqual(closure["mirror"], descriptor)
             self.assertEqual(closure["links"][target.name]["target"], str(target))
             control = root / "control.json"
             result = invoke(root, control)
@@ -759,7 +870,7 @@ class SeriesReleaseTests(unittest.TestCase):
             external.parent.mkdir(parents=True)
             init_git_fixture(mirror, "-q")
             external.write_bytes(b'{"synthetic_canary":true}\n')
-            mirror_commit = commit_fixture(mirror, [meter.as_posix()])
+            descriptor = mirror_fixture(mirror, [meter.as_posix()])
 
             def with_markers(store):
                 if store.name == window:
@@ -768,8 +879,7 @@ class SeriesReleaseTests(unittest.TestCase):
                         path.parent.mkdir(parents=True, exist_ok=True)
                         path.write_bytes(b'{"synthetic_canary":true}\n')
                     (store / "native-reference.jsonl").symlink_to(external)
-                    return finalize(store, mirror={"root": str(mirror), "identity": {"commit": mirror_commit}},
-                                    inputs=(external,))
+                    return finalize(store, mirror=descriptor, inputs=(external,))
                 return finalize(store)
 
             with patch.object(harvest_offload, "finalized_manifest", with_markers):
@@ -851,7 +961,7 @@ class SeriesReleaseTests(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, "protected"):
                     caller.named_bytes(root, blocked.relative_to(root).as_posix())
             self.assertEqual(verification_opens, [])
-            self.assertEqual(len(provider_opens), 1)
+            self.assertEqual(provider_opens, [])
             self.assertFalse(output.exists())
 
     def test_every_nested_manifest_file_binding_is_verified(self):
