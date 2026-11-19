@@ -1106,16 +1106,22 @@ class SoakLauncherBindingTests(unittest.TestCase):
             "census": [{"label": "start", "t_s": 0.0,
                         "processes": [{"pid": MARKER, "ppid": 0, "pcpu": 0.1, "comm": "synthetic"}]}],
         }
+        observation = "Now drawing from 'AC Power'\n -InternalBattery-0 80%; charged;"
+        battery_rows = [{"epoch_s": value, "raw": observation, **rt.parse_pmset_batt(observation)}
+                        for value in (0.0, 120.0)]
         receipt = self.attempt.receipt(
             duration_s=float(n), sensor_roles=sensors, sensor_series_c={key: [value] * (n + 1)
                                                                          for key, value in readings.items()},
             sensor_series_t_s={key: times for key in readings}, sensor_series_end_t_s=float(n),
             sensor_series_failed_reads={key: 0 for key in readings}, load_journal_errors=[],
-            battery={"private": MARKER}, **load)
+            sensor_series_note=("valid 1 Hz reads in order with their times (s from the first journal "
+                                "row); a failed read is dropped, never interpolated"),
+            battery=rt.battery_summary(battery_rows), **load)
         readings = [("reading", i * 1_000_000_000, (degrees, degrees)) for i in range(n + 1)]
         rows = self.journal(sensors, readings)
         return self.attempt.produce(receipt, **{
             "sensors/align_thermal.jsonl": b"".join(map(json_bytes, rows)),
+            "battery.jsonl": b"".join(map(json_bytes, battery_rows)),
             "load_journal.json": json_bytes({"exclude_roots": [MARKER], "errors": [], **load}),
         })
 

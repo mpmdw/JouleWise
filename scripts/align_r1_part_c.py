@@ -56,7 +56,7 @@ from types import SimpleNamespace
 import time
 
 from scripts.align_r1_part_c_evidence import (
-    BoundMember, BoundSoak, EvidenceFailure, EvidenceLedger, KINDS, MANIFEST_NAME,
+    BATTERY_SOURCE, BoundMember, BoundSoak, EvidenceFailure, EvidenceLedger, KINDS, MANIFEST_NAME,
     SOAK_DIRECTORY, SOAK_FILES, SOAK_SEGMENT, canonical, digest,
     parse_json as parse_evidence_json, read_regular, stdout_payload,
 )
@@ -1271,6 +1271,10 @@ def _validate_sidecar(rows, sensors, kind, source, *, gated=False):
     check(start.get("kind") == "session_start" and end.get("kind") == "session_end"
           and len(rows) >= 3 and _uint(begin_ns) and _uint(terminal_ns), "session")
     check(start.get("values", {}).get("thermal") == sensors, "thermal")
+    # Sidecar.start and Sidecar.stop each serialize one stamp and no row error.
+    for index, boundary in ((0, start), (len(rows) - 1, end)):
+        check(boundary.get("started") == boundary.get("finished"), "stamp", index)
+        check(boundary.get("error") is None, "error", index)
     session = start.get("session")
     check(isinstance(session, str) and bool(session), "session")
     counter = Coverage(begin_ns, selected)
@@ -1293,7 +1297,7 @@ def _validate_sidecar(rows, sensors, kind, source, *, gated=False):
         if row["kind"] in boundary_kinds:
             continue
         values = row["values"]
-        if gated:
+        if gated or "status" in values:
             status = values.get("status")
             check(isinstance(status, dict)
                   and ("error" not in status or status["error"] is None
@@ -2534,6 +2538,32 @@ def _check_load(raw, receipt, kind, wall_s):
         raise EvidenceFailure(reason, kind, LOAD_SOURCE, peer=RECEIPT_NAME) from error
 
 
+def _check_battery(raw, receipt, kind):
+    from joulewise.align.apple import r1_runtime as rt
+
+    reason = "battery_evidence"
+    records = _jsonl_objects(raw, kind, BATTERY_SOURCE, reason)
+    try:
+        for index, record in enumerate(records):
+            fields = {"epoch_s", "soc_pct", "state"}
+            if "error" in record:
+                agrees = (set(record) == fields | {"error"} and isinstance(record["error"], str)
+                          and bool(record["error"]) and record["soc_pct"] is None and record["state"] is None)
+            else:
+                observed = record.get("raw")
+                agrees = (set(record) == fields | {"raw", "ac"} and isinstance(observed, str)
+                          and all(canonical(record[key]) == canonical(value)
+                                  for key, value in rt.parse_pmset_batt(observed).items()))
+            _required(agrees and _finite(record.get("epoch_s")), reason, kind, BATTERY_SOURCE, index=index)
+        summary = rt.battery_summary(records)
+        _required(canonical(summary) == canonical(receipt.get("battery")), reason, kind, BATTERY_SOURCE,
+                  field="battery", peer=RECEIPT_NAME)
+    except EvidenceFailure:
+        raise
+    except (ArithmeticError, LookupError, TypeError, ValueError) as error:
+        raise EvidenceFailure(reason, kind, BATTERY_SOURCE, peer=RECEIPT_NAME) from error
+
+
 def _check_terminal_order(bound, prior_end):
     _required(prior_end <= bound.started_epoch_s,
               "member_order", bound.kind, MANIFEST_NAME, field="started_epoch_s")
@@ -2580,6 +2610,12 @@ def _check_native_soak(soak, config_path):
             or canonical(receipt.get("sensor_roles")) != canonical(sensors)
             or canonical(reference.get("sensor_roles")) != canonical(sensors)):
         raise EvidenceFailure("fresh_soak", "idle", "soak_row.json")
+    _check_battery(soak.sources[BATTERY_SOURCE], receipt, "idle")
+    # The frozen k_idle emits this fixed declaration about the derived series.
+    _required(receipt.get("sensor_series_note") == (
+        "valid 1 Hz reads in order with their times (s from the first journal row); "
+        "a failed read is dropped, never interpolated"), "soak_readings", "idle", RECEIPT_NAME,
+        field="sensor_series_note")
     journal = "sensors/align_thermal.jsonl"
     try:
         entries = _jsonl_objects(soak.sources[journal], "idle", journal, "soak_readings")

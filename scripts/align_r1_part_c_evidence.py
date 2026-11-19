@@ -19,7 +19,8 @@ SOAK_SEGMENT = "idle_soak"
 SOAK_DIRECTORY = "soak"
 SOAK_ROW = "soak_row.json"
 SOAK_REFERENCE = "soak_reference.json"
-SOAK_FILES = ("runtime_result.json", "sensors/align_thermal.jsonl", "load_journal.json")
+BATTERY_SOURCE = "battery.jsonl"
+SOAK_FILES = ("runtime_result.json", "sensors/align_thermal.jsonl", "load_journal.json", BATTERY_SOURCE)
 D = re.compile(r"[0-9a-f]{64}\Z")
 KINDS = {
     "capture-predecessor-30b": "capture_predecessor_30b",
