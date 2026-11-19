@@ -1052,6 +1052,29 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 
 <!-- RUN_STATE TYPED ITEMS: newest first. Add with scripts/run_state_add.py; never edit by hand. -->
 
+452. **Magistrate ace89c77 (headless, Opus 5.5), 2026-11-19 02:21-02:40 PST (`date`): Thu 19 Nov first f2-stab leg (rank 1): f2-stab-15-l002 ISSUED on the qualification pin 6e9d42f1d (fillers-w2 queue), Start and check rc 0 after the blackout, launches as the last act**
+
+```pointer
+owner: magistrate
+wait: none
+deadline: 2026-11-19T05:09:46-08:00
+on_early_or_refused: a launcher refusal or non-clean close: record it, hold kit f2-stab-15 until an input changes (item 422), mail the lead; at the next close continue down the ladder. R1 stays unarmed (item 448).
+next_observable: run-out.txt shows LAUNCH_RC=0 with the fence; the next activation after the fence is gone runs the operational Check for cq-f2-stab-15-l002-a1 under /Users/edr/campaign-out/f2-stab-15/ (template custody f2stab15-check-5be2472e/postcheck.sh; no F-3 (c) hand-read owed, the pin's first native run was L001), copies at once (row 14), then takes rank 2: f2-inst-01 two-leg L007-L008 (queue fillers-w2 queues-2leg/f2-inst-01-b.json) where the worst case 8,550 s + margin fits before 01:50 Fri, else one-leg L007.
+```
+
+```item
+{"expires_epoch_s": null, "issued_epoch_s": 1795084568, "number": 452, "owner": "magistrate", "schema": "joulewise.run_state_item.v1", "sets": [{"at_epoch_s": 1795084568, "item": 451, "status": "CLOSED"}], "status": "ISSUED", "supersedes": []}
+```
+
+- **Ladder at 02:35 Thu (items 422, 425, 447):** blackout 02:00-02:35 over; the preceding close is f2-inst-01-l006 (item 451, 00:26:56, receipt OK, restore readback, feeds stopped, fence gone, group census empty). No `com.joulewise.align-r0` or `com.joulewise.night*` label loaded and no night plist; no MAINTENANCE marker; no standdown request. Dated blocks to protect (rows 1-2): none (R1 unarmed per item 448, qual not issued). Rank 1 = Thu's first f2-stab leg.
+- **Decision I made: `f2-stab-15` L002 (seq 2, attempt 1) on the qualification pin `6e9d42f1d`.** Item 425 lists f2-stab-01..14 (pin `2d347f721`) and item 447's `fillers-w2` covers 01..16; ISSUE.md says "in kit order" without naming which kit. I continued f2-stab-15, whose L001 ran Wed (item 444), so the stability series stays one kit on consecutive dates, on the pin qualification will use, with item 439's proven template. Records show only L001 of this kit as run (`/Users/edr/campaign-out/f2-stab-15/` holds only `cq-f2-stab-15-l001-a1-20261118T212415Z`). The lead may switch kits at any later date.
+  - Queue `fillers-w2/queues-1leg/f2-stab-15.json` at audit `c4b4f4265`, sha256 `1adf8673…ca8a2` = README; staged to `/Users/edr/campaign-out/queues/f2-stab-15.fillers-w2-c4b4f4265.json` (same hash). Kit `/Users/edr/campaign-out/kits/f2-stab-15.v1.1-6f32db2af.json` sha256 `8dceffc2…36a1` = `qual-pin/f2-stab-15.v1.1.json` at `c4b4f4265`.
+  - REPO reused: `/Users/edr/code/jw-wt/cadence-f2-stab-15-l001`, clean, detached at `6e9d42f1d` (L001's runner checkout; only the output path is new).
+- **Start and check** (`f2stab15-ace89c77/start-check.sh`, item 439's with inputs changed): a first run at ~02:29 refused only on the blackout ("REFUSE the worst-case span [t0, t0 + 5850 s] meets a batch blackout (02:00-02:35)"), as expected; rerun 02:35:26 rc 0: pin `validate-kit` ok (12 legs, frozen paths verified); RL-180 cells OK (frozen exempt); `validate-queue` ok (12 spans); entry seq 2, L002, attempt 1, kit sha bound, expires 2026-12-08; plan worst case 5,850 s, expected 4,511 s, launch_deadline t0 + 8,360 s.
+- **Census at 02:35** (row 4, items 431, 442, 443): this activation's Codex MCP adapter tree (66715 -> 66719 -> 66723; exits with this session) and its shell; CursorUIViewService 871 (false positive); ChatGPTHelper 59981 (the Run block SIGKILLs it, item 443). Top CPU sysmond 4.6%. AC, 100% charged; 247 GiB free. No powermetrics or cadence process.
+- **Run block** `f2stab15-ace89c77/run-block.sh` (output `run-out.txt`): item 439's (DEADLINE = launch_deadline_epoch_s + 900) plus item 443's ChatGPTHelper kill and case-insensitive census, and an assert on `blackout_clear`. **Launch is the last act of this activation, after this commit and the mail to Ed.** Expected end ~03:51, worst case ~04:13, fence deadline ~05:10.
+- Activation ace89c77 (02:21:26): notice_pending []; no unread mail from Ed; directives the standing seven (587/422/421/417/416/408/405), no stop; no standdown request; canonical clean at `70cc9899a` = origin/main. Closes 451.
+
 451. **Magistrate c0f1faef (headless, Opus 5.5), 2026-11-19 00:30-00:40 PST (`date`): f2-inst-01-l006 CHECK: RECEIPT OK (1/1 leg, MEASURED_OK, restored; leg 22 s over its budget, admitted), copied at once; nothing fits before the 02:00-02:35 blackout, so Thu's first f2-stab leg arms at or after 02:35**
 
 ```pointer
