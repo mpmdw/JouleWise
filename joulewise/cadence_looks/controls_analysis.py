@@ -5,12 +5,18 @@ from dataclasses import dataclass, replace
 from math import ceil, fsum, isfinite, sqrt
 from statistics import median
 
-from .controls_print import CHANNELS, PILOT, REMAINDER, SCRIPT_STEPS, ControlsRefusal, validate_script_pin
+from .controls_print import (
+    CHANNELS, PILOT, REMAINDER, SCRIPT_STEPS, ControlsRefusal, _hex_pin, validate_script_pin,
+)
 from .qualification_manifest import _decode, ManifestError
 
 
 NS = 1_000_000_000
 FLOOR_WINDOWS = (10, 40, 128)
+MISSING_FLOOR = "missing_floor"
+# This is the null reason defined by the draft projection. The instrument
+# input schema and its closed reason vocabulary are pinned at registration.
+HOLD_NULL_REASONS = frozenset({MISSING_FLOOR})
 TRACE_CHANNELS = {
     "gpu_rail": ("powermetrics", "gpu_power"),
     "cpu_rail": ("powermetrics", "cpu_power"),
@@ -113,7 +119,7 @@ def _read_steps(payload, digest, leg_id, kind):
 def physical_call_view(leg: LegInput):
     """Replace just the logged turn. Keep the original episode and trace bounds."""
     episode = leg.episode
-    if (episode is None or len(episode.turns) != 1 or not episode.turns[0].logged
+    if (episode is None or len(episode.turns) != 1 or episode.turns[0].logged is not True
             or episode.turns[0].tool_calls):
         raise ViewError("logged_envelope")
     steps = tuple(_read_steps(leg.work_bytes, leg.work_sha256, leg.leg_id, leg.kind))
@@ -299,6 +305,10 @@ class HoldWindow:
     reason: str | None = None
 
 
+def _is_hold_null_reason(reason):
+    return type(reason) is str and reason in HOLD_NULL_REASONS
+
+
 def validate_instrument_pins(manifest_bytes, hold_bytes, edges_bytes, *, manifest_sha256,
                              hold_sha256, edges_sha256):
     """Check the three committed source byte strings before using a projection."""
@@ -320,6 +330,8 @@ def pool_hold_windows(rows, qualified_members):
         if (row.channel not in ("gpu_rail", "rail_sum", "dc_in") or row.window_s not in FLOOR_WINDOWS
                 or (row.member, key) in seen or not _nonnegative_int(row.retained)):
             raise ValueError("instrument_window")
+        if row.reason is not None and not _is_hold_null_reason(row.reason):
+            raise ValueError("floor_reason")
         seen.add((row.member, key))
         if row.sd_w is None:
             if row.reason is not None:
@@ -331,7 +343,7 @@ def pool_hold_windows(rows, qualified_members):
         weights[key] += weight
         variance[key].append(weight * row.sd_w ** 2)
     return {key: (sqrt(fsum(variance[key]) / weights[key]), ()) if weights[key]
-            else (None, tuple(sorted(nulls[key])) or ("missing_floor",))
+            else (None, tuple(sorted(nulls[key])) or (MISSING_FLOOR,))
             for key in {(channel, window) for channel in ("gpu_rail", "rail_sum", "dc_in")
                         for window in FLOOR_WINDOWS}}
 
@@ -341,13 +353,23 @@ def floor_units(joules, duration_s, channel, pooled, manifest_sha256):
     if channel == "cpu_rail":
         return {"joules": joules, "duration_s": duration_s, "floor_j": None,
                 "window_s": None, "units": None, "reason": "no_matched_floor"}
+    if not _hex_pin(manifest_sha256, 64):
+        raise ValueError("instrument_pin")
     window = max((width for width in FLOOR_WINDOWS if width <= duration_s), default=10)
     sd, reasons = pooled[(channel, window)]
+    if type(reasons) is not tuple or any(not _is_hold_null_reason(reason) for reason in reasons):
+        raise ValueError("floor_reason")
+    if sd is not None and (not _finite(sd) or sd < 0):
+        raise ValueError("instrument_variance")
     floor = None if sd is None else sd * duration_s
+    if floor is None:
+        reasons = reasons or (MISSING_FLOOR,)
+    else:
+        reasons = () if floor else ("zero_floor",)
     return {"joules": joules, "duration_s": duration_s, "floor_j": floor, "window_s": window,
             "units": joules / floor if floor and joules is not None else None,
             "under_shortest_window": duration_s < 10, "instrument_manifest_sha256": manifest_sha256,
-            "reason": (reasons or ("zero_floor",)) if not floor else ()}
+            "reason": reasons}
 
 
 @dataclass(frozen=True)
@@ -395,6 +417,10 @@ def print_controls(positions, *, kernel, gap_limits_ns, pooled, instrument_manif
     positions = tuple(positions)
     if tuple(leg.leg_id for leg in positions) != PILOT + REMAINDER:
         raise ValueError("roster")
+    if any(type(leg.kind) is not str or leg.kind not in SCRIPT_STEPS for leg in positions):
+        raise ValueError("script_kind")
+    if not _hex_pin(instrument_manifest_sha256, 64):
+        raise ValueError("instrument_pin")
     rows, controls = [], []
     fit_points = {name: {} for name in CHANNELS}
     for leg in positions:

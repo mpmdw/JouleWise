@@ -58,14 +58,34 @@ def cpu_steps():
     return (call(1, 2, 3), interval("cpu", 3, 13), call(13, 14, 15), interval("recovery", 15, 135))
 
 
-def calculate(kernel, *legs):
+def calculate(kernel, *legs, pooled=None, instrument_manifest_sha256="a" * 64):
     supplied = {row.leg_id: row for row in legs}
     full = [supplied.get(leg_id, analysis.LegInput(leg_id, "plain", False, False))
             for leg_id in analysis.PILOT + analysis.REMAINDER]
     return analysis.print_controls(full, kernel=kernel,
                                    gap_limits_ns=dict.fromkeys(analysis.CHANNELS, 2 * NS),
-                                   pooled=analysis.pool_hold_windows([], set()),
-                                   instrument_manifest_sha256="a" * 64)
+                                   pooled=analysis.pool_hold_windows([], set()) if pooled is None else pooled,
+                                   instrument_manifest_sha256=instrument_manifest_sha256)
+
+
+def synthetic_cpu_kernel():
+    # The routing and disclosure assertions also run on a checkout without
+    # the frozen kernel. The frozen phase tests exercise the actual math.
+    trace = SimpleNamespace(t_ns=tuple(seconds * NS for seconds in range(136)))
+    other = tuple(SimpleNamespace(kind="gap", start_ns=start * NS, end_ns=end * NS)
+                  for start, end in ((0, 1), (3, 13), (15, 135)))
+    phases = SimpleNamespace(
+        with_package=Mock(side_effect=lambda episode: episode),
+        selected_trace=Mock(return_value=(trace, None)),
+        phase_table=Mock(return_value={"phases": {}}),
+        ControlLeg=lambda episode, dose: (episode, dose),
+        qualify_ctl01=Mock(return_value={"qualified": "no"}),
+        TIMING_EDGE_J=1.0,
+    )
+    return analysis.PhaseKernel(
+        phases, Mock(return_value=SimpleNamespace(segments=other)),
+        Mock(return_value=SimpleNamespace(joules=0, flags=())),
+    )
 
 
 class TestControlsConventions(unittest.TestCase):
@@ -97,25 +117,8 @@ class TestControlsConventions(unittest.TestCase):
                 "L004", "cpu", steps),
         )
 
-        # Use spies so the routing assertions also run before the pinned phase
-        # implementation reaches this checkout. The frozen phase tests below
-        # cover the calculations on the same CPU step sequence.
-        trace = SimpleNamespace(t_ns=tuple(seconds * NS for seconds in range(136)))
-        other = tuple(SimpleNamespace(kind="gap", start_ns=start * NS, end_ns=end * NS)
-                      for start, end in ((0, 1), (3, 13), (15, 135)))
-        phases = SimpleNamespace(
-            with_package=Mock(side_effect=lambda episode: episode),
-            selected_trace=Mock(return_value=(trace, None)),
-            phase_table=Mock(return_value={"phases": {}}),
-            ControlLeg=lambda episode, dose: (episode, dose),
-            qualify_ctl01=Mock(return_value={"qualified": "no"}),
-            TIMING_EDGE_J=1.0,
-        )
-        kernel = analysis.PhaseKernel(
-            phases, Mock(return_value=SimpleNamespace(segments=other)),
-            Mock(return_value=SimpleNamespace(joules=0, flags=())),
-        )
-
+        kernel = synthetic_cpu_kernel()
+        phases = kernel.phases
         result = calculate(kernel, *rejected, accepted)
         rows = {row["leg_id"]: row for row in result["legs"]}
         for rejected_leg in rejected:
@@ -138,6 +141,71 @@ class TestControlsConventions(unittest.TestCase):
         self.assertEqual([entry.args[:2] for entry in phases.phase_table.call_args_list],
                          [(view, channel) for channel in channels])
         phases.qualify_ctl01.assert_called_once_with([(view, 10)])
+
+    def test_hold_pool_refuses_unruled_floor_reasons(self):
+        member = ("f2-inst-01", "a" * 64, "L001")
+        for reason in ("detected", "K_outcome", "S_score", "invented diagnostic", ["missing_floor"]):
+            with self.subTest(reason=reason):
+                hold = analysis.HoldWindow(member, "gpu_rail", 40, 0, None, reason)
+                with self.assertRaisesRegex(ValueError, "^floor_reason$"):
+                    analysis.pool_hold_windows([hold], {member})
+
+    def test_print_refuses_unruled_prepooled_floor_reasons(self):
+        admitted = leg(Episode(), "L010", "cpu", cpu_steps())
+        for reasons in (("detected",), ("K_outcome",), ("S_score",), ("invented diagnostic",),
+                        ({"reason": "detected"},), "missing_floor"):
+            with self.subTest(reasons=reasons):
+                pooled = analysis.pool_hold_windows([], set())
+                pooled["gpu_rail", 40] = (None, reasons)
+                with self.assertRaisesRegex(ValueError, "^floor_reason$"):
+                    calculate(synthetic_cpu_kernel(), admitted, pooled=pooled)
+
+        pooled = analysis.pool_hold_windows([], set())
+        pooled["gpu_rail", 40] = ("invented diagnostic", ())
+        with self.assertRaisesRegex(ValueError, "^instrument_variance$"):
+            analysis.floor_units(None, 40, "gpu_rail", pooled, "a" * 64)
+
+    def test_print_keeps_closed_null_and_zero_floor_reasons(self):
+        member = ("f2-inst-01", "a" * 64, "L001")
+        admitted = leg(Episode(), "L010", "cpu", cpu_steps())
+        for sd, retained, reason, expected in (
+            (None, 0, "missing_floor", ("missing_floor",)),
+            (None, 0, None, ("missing_floor",)),
+            (0, 2, None, ("zero_floor",)),
+        ):
+            with self.subTest(sd=sd, reason=reason):
+                hold = analysis.HoldWindow(member, "gpu_rail", 40, retained, sd, reason)
+                pooled = analysis.pool_hold_windows([hold], {member})
+                result = calculate(synthetic_cpu_kernel(), admitted, pooled=pooled)
+                row = result["legs"][9]
+                self.assertEqual(row["disposition"], "admitted")
+                floor = row["channels"]["gpu_rail"]["baseline_drift_floor"]
+                self.assertEqual((floor["units"], floor["reason"]), (None, expected))
+
+    def test_print_refuses_unruled_script_kind_on_any_position(self):
+        for kind in ("detected", "invented script", ["cpu"], None):
+            for dispatched in (False, True):
+                with self.subTest(kind=kind, dispatched=dispatched):
+                    position = analysis.LegInput("L001", kind, dispatched, dispatched,
+                                                 Episode() if dispatched else None)
+                    kernel = synthetic_cpu_kernel()
+                    with self.assertRaisesRegex(ValueError, "^script_kind$"):
+                        calculate(kernel, position)
+                    kernel.attribute_episode.assert_not_called()
+
+    def test_print_refuses_free_text_in_manifest_sha(self):
+        admitted = leg(Episode(), "L010", "cpu", cpu_steps())
+        with self.assertRaisesRegex(ValueError, "^instrument_pin$"):
+            calculate(synthetic_cpu_kernel(), admitted, instrument_manifest_sha256="invented diagnostic")
+
+    def test_print_refuses_non_boolean_logged_marker(self):
+        episode = Episode(turns=(Turn(logged="invented diagnostic"),))
+        kernel = synthetic_cpu_kernel()
+        result = calculate(kernel, leg(episode, "L010", "cpu", cpu_steps()))
+        self.assertEqual(result["legs"][9], {
+            "leg_id": "L010", "kind": "cpu", "disposition": "not_evaluable", "reason": "logged_envelope",
+        })
+        kernel.attribute_episode.assert_not_called()
 
     def test_dose_fit_six_legs_and_leave_one_out(self):
         points = {"L005": (128, 5), "L012": (128, 5), "L008": (256, 9),
