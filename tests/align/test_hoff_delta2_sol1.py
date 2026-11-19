@@ -61,7 +61,7 @@ class Scratch(unittest.TestCase):
                 'pack_root': str(source / 'pack'), 'claim_runs_root': str(source / 'captures'),
                 'hazard_window': {'bindings': bindings}}
         (source / 'plan.json').write_text(json.dumps(plan))
-        (source / 'session.json').write_text(json.dumps({'plan_path': str(source / 'plan.json'),
+        (source / 'session.json').write_text(json.dumps({'plan_path': str(source / 'plan.json'), 'session_id': 'synthetic',
             'measurement_root': str(source / 'measurement'), 'source_measurement_root': str(checkout)}))
         return source
 
@@ -92,7 +92,8 @@ class ProductionIgnoredInputsTests(Scratch):
         source.rename(self.root / 'kept')
         ledger.write_bytes(b'')  # a fresh receiver with the prefix of the declared ledger
         code, _, err = self.cli('unpack', '--offload', transport, '--finalized-manifest', manifest,
-                                '--finalized-sha256', digest)
+                                '--finalized-sha256', digest, '--window-id', 'W1',
+                                '--receipt-out', self.root / 'receipt.json')
         self.assertEqual(code, 0, err)
         self.assertEqual((source / 'measurement/runs/ledger.jsonl').read_bytes(), b'{"ledger":1}\n')
 
@@ -126,7 +127,8 @@ class ProductionIgnoredInputsTests(Scratch):
         pin.write_bytes(b'{"head":"Air"}\n')  # an ordinary stale mirror, with no race or forged manifest
         self.assertEqual(runner.checkout_identity(checkout), before)
         code, _, err = self.cli('unpack', '--offload', transport, '--finalized-manifest', manifest,
-                                '--finalized-sha256', digest)
+                                '--finalized-sha256', digest, '--window-id', 'W1',
+                                '--receipt-out', self.root / 'receipt.json')
         if code != 0:
             self.assertFalse(source.exists())
             return
