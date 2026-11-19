@@ -62,7 +62,7 @@ class RailGapPeriodTests(unittest.TestCase):
                 prints = reader.score(snapshot, reader.verify_gates(snapshot, qualified),
                                       qualified, lambda: None)
 
-                gap = {"value": None, "reason": "rail_gap"}
+                gap = {"value": None, "reason": "coverage"}
                 energy = prints["turn"][key]["energy_j"]
                 self.assertEqual(energy["rail_sum"], gap)
                 self.assertIsInstance(energy["gpu_rail"], float)
@@ -73,32 +73,58 @@ class RailGapPeriodTests(unittest.TestCase):
                 else:
                     self.assertEqual(prints["context"]["19458/rail_sum/turn_j"][key]["value"], gap)
                     self.assertEqual(
-                        prints["date_spreads"]["19458/rail_sum/turn_j"]["missing"], {"rail_gap": 1},
+                        prints["date_spreads"]["19458/rail_sum/turn_j"]["missing"], {"coverage": 1},
                     )
 
-    def test_stamp_and_row_checks_share_the_inclusive_phase_limit(self):
+    def test_stamp_and_row_checks_reject_undercount_before_decoding(self):
         cases = (
-            ("hold", 0, 10, 2, 6, False),
-            ("turn at limit", 606, 610, 606, 607.25, False),
-            ("turn above limit", 606, 610, 606, 607.50, True),
+            ("hold", 0, 10, 2, 6),
+            ("turn at gap limit", 606, 610, 606, 607.25),
+            ("turn above gap limit", 606, 610, 606, 607.50),
         )
-        for name, start, stop, gap_start, gap_stop, wide in cases:
+        for name, start, stop, gap_start, gap_stop in cases:
             for announced in (True, False):
                 with self.subTest(interval=name, announced=announced), TemporaryDirectory() as tmp:
                     directory = Path(tmp).resolve()
                     fixture.traces(directory, 1, 0)
                     support, _ = _omit_ane(directory, gap_start, gap_stop, announced=announced,
-                                           poison=wide)
+                                           poison=True)
                     opens = []
                     signal = reader.Signals(support, {"power_trace.csv": directory / "power_trace.csv"},
                                             lambda: opens.append("rail"), None)
-                    result = signal.pieces("rail_sum", start, stop)
-                    if wide:
-                        self.assertEqual(result, {"value": None, "reason": "rail_gap"})
-                        self.assertEqual(opens, [] if announced else ["rail"])
-                    else:
-                        self.assertIsInstance(result, list)
-                        self.assertEqual(opens, ["rail"])
+                    result = signal.interval_values("rail_sum", (start, stop))
+                    self.assertEqual(result, {"value": None, "reason": "coverage"})
+                    self.assertEqual(opens, [] if announced else ["rail"])
+
+    def test_full_sample_count_still_requires_the_turn_gap_limit(self):
+        for gap, accepted in ((1.25, True), (1.50, False)):
+            with self.subTest(gap=gap), TemporaryDirectory() as temporary:
+                directory = Path(temporary).resolve()
+                fixture.traces(directory, 1, 0)
+                support = fixture.read(directory / "support.json")
+                span = (4 - gap) / 2
+                # Sixteen starts satisfy the count while packing the intervals
+                # into two groups leaves the requested gap between them.
+                intervals = [(start + i * span / 8, start + (i + 1) * span / 8)
+                             for start in (606, 606 + span + gap) for i in range(8)]
+                support["rail_intervals"] = intervals
+                path = directory / "power_trace.csv"
+                fixture.put(path, fixture.csvbytes([
+                    ("interval_start_s", "interval_end_s", "timestamp_s", "source",
+                     "rail", "power_w"),
+                    *((a, b, b, "powermetrics", rail, 1)
+                      for a, b in intervals for rail in fixture.COLS),
+                ]))
+                opens = []
+                signal = reader.Signals(support, {"power_trace.csv": path},
+                                        lambda: opens.append(True), None)
+                value = signal.interval_values("rail_sum", (606, 610))
+                if accepted:
+                    self.assertEqual(len(value), 16)
+                    self.assertEqual(opens, [True])
+                else:
+                    self.assertEqual(value, {"value": None, "reason": "meter_gap"})
+                    self.assertEqual(opens, [])
 
 
 if __name__ == "__main__":

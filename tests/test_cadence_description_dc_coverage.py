@@ -60,7 +60,7 @@ class DCCoverageTests(unittest.TestCase):
                 prints = reader.score(snapshot, reader.verify_gates(snapshot, qualified),
                                       qualified, lambda: None)
 
-                missing = {"value": None, "reason": "meter_coverage"}
+                missing = {"value": None, "reason": "coverage"}
                 self.assertEqual(prints["hold"][key]["dc_in"]["mean_w"], 40.0)
                 energy = prints["turn"][key]["energy_j"]
                 if world.inst:
@@ -68,7 +68,7 @@ class DCCoverageTests(unittest.TestCase):
                 else:
                     cell = "19458/dc_in/turn_j"
                     self.assertEqual(prints["context"][cell][key]["value"], missing)
-                    self.assertEqual(prints["date_spreads"][cell]["missing"], {"meter_coverage": 1})
+                    self.assertEqual(prints["date_spreads"][cell]["missing"], {"coverage": 1})
                 self.assertEqual(energy["dc_in"], missing)
                 self.assertIsInstance(energy["gpu_rail"], float)
                 self.assertIsInstance(energy["rail_sum"], float)
@@ -99,7 +99,7 @@ class DCCoverageTests(unittest.TestCase):
                     self.assertEqual(opens, ["meter"])
                 else:
                     self.assertEqual(signal.energy("dc_in", start, stop),
-                                     {"value": None, "reason": "meter_coverage"})
+                                     {"value": None, "reason": "coverage"})
                     self.assertEqual(opens, [])
 
 

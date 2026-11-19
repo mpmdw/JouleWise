@@ -28,8 +28,9 @@ CAMPAIGN = "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign"
 CODE_ROOT = Path(__file__).resolve().parents[2]
 CHANNELS = ("gpu_rail", "rail_sum", "dc_in")
 RAILS = ("cpu_power", "gpu_power", "ane_power")
+RAIL_CHANNELS = {"cpu_rail": "cpu_power", "gpu_rail": "gpu_power", "ane_rail": "ane_power"}
 WIDTHS = (10, 40, 128)
-DC_MIN_COVERAGE = 0.99  # RL-166 Q7, applied to each description print by RL-181.
+MIN_SAMPLE_COVERAGE = 0.99  # RL-166 Q7, applied to each description print by RL-181.
 VALUE_FILES = ("support.json", "power_trace.csv", "dc_points.csv")
 LOCAL = ZoneInfo("America/Los_Angeles")
 SHA = re.compile(r"[0-9a-f]{64}")
@@ -802,14 +803,8 @@ def _max_gap(intervals, start, stop):
     return max(gap, stop - edge)
 
 
-def _overlap(intervals, start, stop):
-    total, edge = 0.0, start
-    for left, right in intervals:
-        lo, hi = max(edge, left, start), min(right, stop)
-        if hi > lo:
-            total += hi - lo
-            edge = hi
-    return total
+def _sample_count(times, a, b):
+    return bisect_left(times, b) - bisect_left(times, a)
 
 
 def _series(values):
@@ -852,28 +847,20 @@ def _rail_rows(stream):
     return rows
 
 
-def project_gpu_rows(stream):
-    """Produce the new reader's individual powermetrics GPU rows."""
-    rows = _rail_rows(stream)
-    return sorted((left, right, _float(rails["gpu_power"][1]), rails["gpu_power"][0])
-                  for (left, right), rails in rows.items() if "gpu_power" in rails)
-
-
 class Signals:
-    """A leg's timing, health and lazy value access on the common trace clock."""
+    """A leg's timed intervals and single gateway to scoring values."""
 
     def __init__(self, support, paths, mark_read, pinned):
         self.meta = support
         self.paths = paths
         self.mark_read = mark_read
         self.pinned = pinned
-        self.rails = None
-        self.dc = None
+        self._rail_tokens = None
+        self._meter_tokens = None
         self.periods = support["sample_period_s"]
         for name in ("hold", "rail_edge", "dc_edge"):
             _period(self.periods[name])
         self.sidecar = _series(support["sidecar_times"])
-        self.sidecar_intervals = list(zip(self.sidecar, self.sidecar[1:]))
         self.meter = _series(support["meter_times"])
         counts = support["meter_counts"]
         self.meter_clean = (
@@ -888,84 +875,125 @@ class Signals:
                 and all(first[1] <= second[0] for first, second in zip(self.bounds, self.bounds[1:])),
                 "invalid support interval ledger")
         self.sum_admitted = support["rail_manifest"] == list(RAILS)
-        self.missing_rails = support.get("rail_missing", {})
-        for rail, gaps in self.missing_rails.items():
+        missing_rails = support.get("rail_missing", {})
+        for rail, gaps in missing_rails.items():
             require(rail in RAILS and all(len(row) == 2 and all(number(x) for x in row)
                                          and row[0] < row[1] for row in gaps),
                     "invalid missing-rail support")
+        self._declared_rails = self._rail_support({
+            channel: [(a, b) for a, b in self.bounds
+                      if not any(a < end and b > start for start, end in missing_rails.get(rail, ()))]
+            for channel, rail in RAIL_CHANNELS.items()
+        })
 
-    def _rail_bounds(self, channel):
-        named = RAILS if channel == "rail_sum" else ("gpu_power",)
-        gaps = [tuple(gap) for rail in named for gap in self.missing_rails.get(rail, ())]
-        return [(a, b) for a, b in self.bounds
-                if not any(a < end and b > start for start, end in gaps)]
+    @staticmethod
+    def _rail_support(individual):
+        # A rail-sum sample exists only at an interval shared by every rail.
+        common = sorted(set.intersection(*(set(intervals) for intervals in individual.values())))
+        return {channel: ([a for a, _ in bounds], bounds)
+                for channel, bounds in {**individual, "rail_sum": common}.items()}
 
-    def _rail_gap_exceeds_limit(self, intervals, a, b):
-        # A print that includes turn samples uses the turn's rail cadence.
-        period = "rail_edge" if b > self.meta["turn_start_s"] else "hold"
-        return _max_gap(intervals, a, b) > max(1.0, 5 * self.periods[period])
+    def _expected_samples(self, a, b, edge_period):
+        split = min(b, max(a, self.meta["turn_start_s"]))
+        return (split - a) / self.periods["hold"] + (b - split) / self.periods[edge_period]
 
-    def quality(self, channel, a, b):
-        require(number(a) and number(b) and a < b, "invalid print interval")
-        connected = [(left, right) for left, right in self.sidecar_intervals if right - left <= 2]
-        if (_overlap(connected, a, b) < 0.99 * (b - a)
-                or _max_gap(connected, a, b) > 2
-                or any(left < b and right > a and right - left > 2
-                       for left, right in self.sidecar_intervals)):
-            return "sidecar_coverage"
+    def _interval_refusal(self, channel, a, b, rail_support):
+        # The normalized sidecar uses the hold cadence throughout. Count
+        # half-open sample starts for every required stream before any gap.
+        minimum = MIN_SAMPLE_COVERAGE * ((b - a) / self.periods["hold"])
+        if _sample_count(self.sidecar, a, b) < minimum:
+            return "coverage"
         if channel == "dc_in":
-            if not self.meter_clean:
-                return "meter_absent" if self.meta["meter_present"] is False else "meter_contaminated"
+            minimum = MIN_SAMPLE_COVERAGE * self._expected_samples(a, b, "dc_edge")
+            if _sample_count(self.meter, a, b) < minimum:
+                return "coverage"
+        elif rail_support:
+            minimum = MIN_SAMPLE_COVERAGE * self._expected_samples(a, b, "rail_edge")
+            if any(_sample_count(starts, a, b) < minimum for starts, _ in rail_support):
+                return "coverage"
+
+        lo = max(0, bisect_right(self.sidecar, a) - 1)
+        hi = bisect_left(self.sidecar, b)
+        sidecar = self.sidecar[lo:hi + 1]
+        if (not sidecar or sidecar[0] - a > 2 or b - sidecar[-1] > 2
+                or any(end - start > 2 for start, end in zip(sidecar, sidecar[1:]))):
+            return "meter_gap"
+        if channel == "dc_in":
             limits = _meter_slice(self.meter, a, b)
             if limits is None:
-                return "meter_unbracketed"
+                return "meter_gap"
             lo, hi = limits
             if any(self.meter[i + 1] - self.meter[i] > 2 for i in range(lo, hi)):
                 return "meter_gap"
-            # Bracketing samples support interpolation. Coverage counts only
-            # the stamps inside [a, b), against the nominal rate of each phase.
-            turn_start = min(b, max(a, self.meta["turn_start_s"]))
-            expected = ((turn_start - a) / self.periods["hold"]
-                        + (b - turn_start) / self.periods["dc_edge"])
-            samples = hi - bisect_left(self.meter, a)
-            if samples < DC_MIN_COVERAGE * expected:
-                return "meter_coverage"
-        else:
-            if channel == "rail_sum" and not self.sum_admitted:
-                return "rail_manifest"
-            if self._rail_gap_exceeds_limit(self._rail_bounds(channel), a, b):
-                return "rail_gap"
+            if not self.meter_clean:
+                return "meter_absent" if self.meta["meter_present"] is False else "meter_contaminated"
+        elif rail_support:
+            period = "rail_edge" if b > self.meta["turn_start_s"] else "hold"
+            if any(_max_gap(bounds, a, b) > max(1.0, 5 * self.periods[period])
+                   for _, bounds in rail_support):
+                return "meter_gap"
         return None
 
-    def _open(self, filename):
-        # Mark before invoking the reader, which may consume bytes inside open.
-        self.mark_read()
-        return self.paths[filename].open(encoding="utf-8", newline="")
+    def interval_values(self, channel, interval):
+        """Admit sample counts and gaps before interpreting the interval's values."""
+        a, b = interval
+        require(number(a) and number(b) and a < b, "invalid print interval")
+        require(channel in (*RAIL_CHANNELS, "rail_sum", "dc_in", "sidecar"), "unknown channel")
+        if channel == "rail_sum" and not self.sum_admitted:
+            return missing("rail_manifest")
 
-    def _rail_pieces(self, channel, a, b):
-        if self.rails is None:
-            with self._open("power_trace.csv") as stream:
-                self.rails = _rail_rows(stream)
-        intervals = self._rail_bounds(channel)
-        selected = {}
-        for left, right in intervals:
-            if right > a and left < b:
-                rails = self.rails.get((left, right), {})
-                names = RAILS if channel == "rail_sum" else ("gpu_power",)
-                if all(rail in rails for rail in names):
-                    selected[(left, right)] = rails
-        if self._rail_gap_exceeds_limit(selected, a, b):
-            return None
+        if channel == "rail_sum":
+            rail_channels = (*RAIL_CHANNELS, "rail_sum")
+        else:
+            rail_channels = (channel,) if channel in RAIL_CHANNELS else ()
+        reason = self._interval_refusal(
+            channel, a, b, [self._declared_rails[rail] for rail in rail_channels],
+        )
+        if reason:
+            return missing(reason)
+        if channel == "sidecar":
+            return self.meta["sensors"]
+        if channel == "dc_in":
+            if self._meter_tokens is None:
+                self.mark_read()
+                with self.paths["dc_points.csv"].open(encoding="utf-8", newline="") as stream:
+                    rows = csv.DictReader(stream)
+                    require(rows.fieldnames == ["epoch_s", "watts"], "wrong decoded point columns")
+                    points = list(rows)
+                require([_float(point["epoch_s"]) for point in points] == self.meter,
+                        "decoder stamps disagree with the copy's support")
+                self._meter_tokens = [point["watts"] for point in points]
+            lo, hi = _meter_slice(self.meter, a, b)
+            return [(self.meter[i], self.meter[i + 1], _float(self._meter_tokens[i]),
+                     _float(self._meter_tokens[i + 1])) for i in range(lo, hi)]
+
+        if self._rail_tokens is None:
+            # The CSV carries stamps and raw tokens together. Confirm actual
+            # row coverage and gaps with timestamps before converting power.
+            self.mark_read()
+            with self.paths["power_trace.csv"].open(encoding="utf-8", newline="") as stream:
+                self._rail_tokens = _rail_rows(stream)
+            self._observed_rails = self._rail_support({
+                name: [bounds for bounds in self._declared_rails[name][1]
+                       if rail in self._rail_tokens.get(bounds, {})]
+                for name, rail in RAIL_CHANNELS.items()
+            })
+        reason = self._interval_refusal(
+            channel, a, b, [self._observed_rails[rail] for rail in rail_channels],
+        )
+        if reason:
+            return missing(reason)
+        selected = [(left, right, self._rail_tokens[(left, right)])
+                    for left, right in self._observed_rails[channel][1] if right > a and left < b]
         if channel == "gpu_rail":
-            # Feed only timing-admitted rows to the immutable step-3 loader.
-            # Its original order and timestamp fields also drive edge reporting.
+            # The immutable loader sees only rows admitted for this print.
             buffer = io.StringIO()
             writer = csv.writer(buffer)
             writer.writerow(("interval_start_s", "interval_end_s", "timestamp_s", "source",
                              "rail", "power_w"))
-            for (start, end), rails in selected.items():
+            for left, right, rails in selected:
                 stamp, value = rails["gpu_power"]
-                writer.writerow((start, end, stamp, "powermetrics", "gpu_power", value))
+                writer.writerow((left, right, stamp, "powermetrics", "gpu_power", value))
             buffer.seek(0)
             self.pinned.open = lambda *_args, **_kwargs: buffer
             try:
@@ -974,33 +1002,13 @@ class Signals:
                 del self.pinned.open
             require(all(number(row[2]) for row in rows), "invalid GPU value")
             return rows
-        return [(left, right, sum(_float(rails[rail][1]) for rail in RAILS),
-                 rails["gpu_power"][0]) for (left, right), rails in selected.items()]
-
-    def _meter_pieces(self, a, b):
-        if self.dc is None:
-            with self._open("dc_points.csv") as stream:
-                reader = csv.DictReader(stream)
-                require(reader.fieldnames == ["epoch_s", "watts"], "wrong decoded point columns")
-                rows = list(reader)
-            require([_float(row["epoch_s"]) for row in rows] == self.meter,
-                    "decoder stamps disagree with the copy's support")
-            self.dc = [row["watts"] for row in rows]
-        lo, hi = _meter_slice(self.meter, a, b)
-        return [(self.meter[i], self.meter[i + 1], _float(self.dc[i]), _float(self.dc[i + 1]))
-                for i in range(lo, hi)]
-
-    def pieces(self, channel, a, b):
-        why = self.quality(channel, a, b)
-        if why is not None:
-            return missing(why)
-        if channel == "dc_in":
-            return self._meter_pieces(a, b)
-        rows = self._rail_pieces(channel, a, b)
-        return rows if rows is not None else missing("rail_gap")
+        names = RAILS if channel == "rail_sum" else (RAIL_CHANNELS[channel],)
+        stamp_rail = "gpu_power" if channel == "rail_sum" else names[0]
+        return [(left, right, sum(_float(rails[rail][1]) for rail in names), rails[stamp_rail][0])
+                for left, right, rails in selected]
 
     def energy(self, channel, a, b):
-        rows = self.pieces(channel, a, b)
+        rows = self.interval_values(channel, (a, b))
         if isinstance(rows, dict):
             return rows
         if channel != "dc_in":
@@ -1018,7 +1026,7 @@ class Signals:
         return energy / (b - a) if number(energy) else energy
 
     def cross(self, channel, a, b, threshold, *, falls=False):
-        rows = self.pieces(channel, a, b)
+        rows = self.interval_values(channel, (a, b))
         if isinstance(rows, dict):
             return rows
         if channel == "dc_in":
@@ -1080,7 +1088,7 @@ def _drift(windows):
 
 def _above_hold(signal, channel, hold, start, stop, *, average):
     if not number(hold):
-        return missing("hold_undefined")
+        return hold
     energy = signal.energy(channel, start, stop)
     if not number(energy):
         return energy
@@ -1089,9 +1097,9 @@ def _above_hold(signal, channel, hold, start, stop, *, average):
     return energy - hold * (stop - start)
 
 
-def _sensors(meta):
-    keys = meta["host_fan_keys"]
-    readings = meta["sensors"]
+def _sensors(keys, readings):
+    if isinstance(readings, dict):
+        return readings, {}
     rpm = []
     sensors = defaultdict(list)
     for record in readings:
@@ -1214,7 +1222,8 @@ def print_leg(signal, detail, instrument):
             if number(sd) and number(watts) and watts > 0:
                 value = sd * width * row["realised_decode_tokens"] / (watts * (last - first))
             floors[channel].append(value)
-    fan, sensors = _sensors(meta)
+    readings = signal.interval_values("sidecar", (quiet, quiet + 600))
+    fan, sensors = _sensors(meta["host_fan_keys"], readings)
     result["gain"] = {
         "decode_w": decode_w, "long_prefill_w": prefill_w, "decode_gain": _ratios(decode_w),
         "long_prefill_gain": prefill_gain, "idle_dc_minus_sum_w": difference(baseline["dc_in"],

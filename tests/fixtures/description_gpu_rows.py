@@ -9,8 +9,8 @@ import tempfile
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from joulewise.cadence_looks.description import project_gpu_rows, step3_reader
-from tests.test_desc_looks_acceptance import traces
+from joulewise.cadence_looks.description import Signals, step3_reader
+from tests.test_desc_looks_acceptance import read, traces
 
 
 def main():
@@ -22,9 +22,12 @@ def main():
     with tempfile.TemporaryDirectory() as scratch:
         source = Path(scratch)
         traces(source, 1, 0)
-        with (source / "power_trace.csv").open(encoding="utf-8", newline="") as stream:
-            rows = project_gpu_rows(stream)
-        print(json.dumps({"description": rows, "pinned_step3": step3_reader().load_gpu_trace(source)},
+        support = read(source / "support.json")
+        pinned = step3_reader()
+        signal = Signals(support, {"power_trace.csv": source / "power_trace.csv"}, lambda: None, pinned)
+        bounds = support["rail_intervals"]
+        rows = signal.interval_values("gpu_rail", (bounds[0][0], bounds[-1][1]))
+        print(json.dumps({"description": rows, "pinned_step3": pinned.load_gpu_trace(source)},
                          separators=(",", ":"), allow_nan=False))
 
 
