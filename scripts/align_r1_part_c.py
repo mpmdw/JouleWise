@@ -1593,6 +1593,8 @@ def _recompute_admissions(kind, execution, episode, witnessed, limits, budget, c
         _required(ok, "admission_recompute", kind, source, field=field, index=index, peer="config.json")
 
     position_cap = limits.get("max_position_embeddings") if isinstance(limits, dict) else None
+    # The descriptor is unbound. A positive recorded cap is a possible native
+    # descriptor, but its effective cap must still follow the issued limits.
     check(_uint(position_cap) and position_cap > 0, "context_limits.max_position_embeddings")
     context_cap = min(position_cap, execution.max_context_tokens or position_cap)
     if execution.deadman_s is not None or execution.max_episode_decode_tokens is not None:
@@ -2571,6 +2573,8 @@ def _check_terminal_order(bound, prior_end):
 
 
 def _native_bundle(bound, receipt, configured, gate_inputs, step_binding):
+    from joulewise.align.apple.sampler import seconds_ns
+
     kind = bound.kind
     bundle, data = _bound_member_files(bound, receipt)
     try:
@@ -2580,6 +2584,12 @@ def _native_bundle(bound, receipt, configured, gate_inputs, step_binding):
             _check_load(data[LOAD_SOURCE], receipt, kind, bound.ended_epoch_s - bound.started_epoch_s)
         binding = _check_member_records(kind, bundle, receipt, data, configured, gate_inputs,
                                         step_binding=step_binding)
+        joined = _episode_from_bound_trace(data)
+        first, last = joined.hardware["paired_clock_stamps_ns"]
+        _required(seconds_ns(bound.started_epoch_s) <= first["epoch_ns"] <= last["epoch_ns"]
+                  <= seconds_ns(bound.ended_epoch_s), "member_order", kind, MANIFEST_NAME,
+                  field="episode_bracket", peer="outputs/align_episode.json")
+        _check_battery(bound.read(BATTERY_SOURCE, BATTERY_SOURCE), receipt, kind)
     except EvidenceFailure:
         raise
     except (OSError, ArithmeticError, LookupError, TypeError, ValueError, AttributeError) as error:

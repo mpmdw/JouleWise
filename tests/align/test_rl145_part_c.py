@@ -1148,7 +1148,9 @@ class SoakLauncherBindingTests(unittest.TestCase):
         native_mode = {"value": 0, "source": pc.POWERMODE_SOURCE, "observed_at": "episode_start"}
         hardware = {"ac_powermode": native_mode}
         flags, gate_events = [], []
-        episode_start = 1
+        sequence = tuple(pc.KINDS)
+        member_base_ns = (sequence.index(kind) + 1) * 2000 * ns
+        episode_start = member_base_ns + 1
         if role == "predecessor":
             receipt = write_predecessor(segment, {"bundle": f"runs/{config['run_id']}", "ac_powermode": native_mode,
                                                    "admitted_turns": 1})
@@ -1156,7 +1158,8 @@ class SoakLauncherBindingTests(unittest.TestCase):
                                                   if tag != "launch_lineage_required"]
             receipt.update(template_sha256=hashed(template.read_bytes()),
                            template_derivation={"removed_run_metadata_tags": ["launch_lineage_required"]})
-            turns = [Turn(index=0, start_ns=ns, first_token_ns=2*ns, end_ns=3*ns, prefill_tokens=50,
+            turns = [Turn(index=0, start_ns=member_base_ns + ns, first_token_ns=member_base_ns + 2 * ns,
+                          end_ns=member_base_ns + 3 * ns, prefill_tokens=50,
                           context_tokens=0, decode_tokens=1)]
         else:
             source = bank() if role == "d-bank" else deepcopy(XG)
@@ -1189,7 +1192,7 @@ class SoakLauncherBindingTests(unittest.TestCase):
             spec.pop("max_episode_seconds", None)
             receipt["bands_c"] = bands
             config["workload_profile"]["prompt_text"] = json.dumps(spec, sort_keys=True)
-            shift = 120 * ns
+            shift = member_base_ns + 120 * ns
             turns = []
             for row in member["turns"]:
                 offset = shift - row["index"] * 9700 * ns
@@ -1203,11 +1206,11 @@ class SoakLauncherBindingTests(unittest.TestCase):
                                   end_ns=start + duration, prefill_tokens=row["prefill_tokens"],
                                   context_tokens=0, decode_tokens=row["decode_tokens"]))
             gates = member["journal_intervals"]
-            reference = {"fast_c": 35.0, "slow_c": 35.0, "source_member": "member", "span_ns": [0, 60 * ns]}
+            reference = {"fast_c": 35.0, "slow_c": 35.0, "source_member": "member", "span_ns": [4000 * ns, 4060 * ns]}
             episode_reference = gates[0]["release"]
             receipt["g0_reference"] = reference
             receipt["reference_custody"] = reference
-            events = [("reading", i * ns, (35.0, 35.0)) for i in range(60)] if role == "step-d" else []
+            events = [("reading", member_base_ns + i * ns, (35.0, 35.0)) for i in range(60)] if role == "step-d" else []
             for gate, turn in zip(gates, turns, strict=True):
                 for key in ("start_ns", "end_ns", "exit_sample_ns"):
                     gate[key] += shift - turn.index * 9700 * ns
@@ -1245,7 +1248,7 @@ class SoakLauncherBindingTests(unittest.TestCase):
             # completed at the same stamp as its gate closes.
             order = {"begin": 0, "reading": 1, "end": 2}
             events.sort(key=lambda event: (event[1], order["reading" if event[0] == "reading" else event[2]["state"]]))
-            journal = self.journal(sensors, events)
+            journal = self.journal(sensors, events, start=member_base_ns)
             samples = tg.sample_rows(journal)
             for gate in gates:
                 if gate["outcome"] == "released":
@@ -1354,7 +1357,7 @@ class SoakLauncherBindingTests(unittest.TestCase):
         if role != "predecessor":
             (out / "align_thermal.jsonl").write_bytes(b"".join(map(json_bytes, journal)))
         if role == "step-d":
-            end = 60 * ns
+            end = member_base_ns + 60 * ns
             sample_rows = tg.sample_rows(journal)
             keys = sensors["s_fast"], sensors["s_slow"]
             window = tg._good_window_rows(sample_rows, end, keys)
@@ -1362,7 +1365,7 @@ class SoakLauncherBindingTests(unittest.TestCase):
                 "run_id": bundle.name, "config_sha256": hashed(config_raw)}, "sensors": sensors,
                 "sensors_policy_sha256": tg._policy_digest(sensors),
                 "rule": {"anchor": "warmup_entry", "window_s": 60, "statistic": "median", "min_coverage": .9},
-                "span_ns": [0, end], "span_epoch_ns": [0, end],
+                "span_ns": [member_base_ns, end], "span_epoch_ns": [member_base_ns, end],
                 "coverage_fraction": tg._window_coverage(sample_rows, end, keys)["sample_fraction"],
                 "samples": [[row["monotonic_ns"], 35.0, 35.0] for row in window],
                 "fast_c": 35.0, "slow_c": 35.0, "journal": "outputs/align_thermal.jsonl"}
@@ -1429,6 +1432,13 @@ class SoakLauncherBindingTests(unittest.TestCase):
                     "census": [{"label": "start", "t_s": 0.0, "processes": []}]}
             receipt.update(**load, load_journal_errors=[])
             (segment / "load_journal.json").write_bytes(json_bytes({**load, "exclude_roots": [], "errors": []}))
+        observation = "Now drawing from 'AC Power'\n -InternalBattery-0 80%; charged;"
+        battery_rows = [{"epoch_s": member_base_ns / ns + value, "raw": observation,
+                         **rt.parse_pmset_batt(observation)} for value in (0.0, 120.0)]
+        receipt["battery"] = rt.battery_summary(battery_rows)
+        if kind in rt.BATTERY_DRAIN_KINDS:
+            receipt["battery_drain_pct_per_h"] = receipt["battery"]["drain_pct_per_h"]
+        (segment / "battery.jsonl").write_bytes(b"".join(map(json_bytes, battery_rows)))
         return write_terminal(segment, kind, receipt, self.attempt.config_sha)
 
     @staticmethod
