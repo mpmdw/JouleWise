@@ -91,3 +91,36 @@ confinement paths under the frozen observer. Then prove the native projection
 against invented native inputs and re-run acceptance on the synthetic host.
 The lead owns the final registration, one reservation, execution and human
 release.
+
+## RL-188 follow-up, 17:12 lead handoff
+
+RL-188 §4 is present on the research-lead branch at
+`9a5a9be30027d90a5ec69f1820b3f8a081d664de`. The provisional source already sets
+`RAIL_CROSSING_STAMP = "interval_start"`,
+`DC_CROSSING_STAMP = "interpolated"` and `RECOVERY_WINDOW_STRIDE_S = 10`.
+These choices match the ruled 0.50 s onset lag, 8.5078125 s DC-in crossing
+relative to onset, decode-end lags of 0.2578125 and 0.0078125 s, and three
+19 s recovery results on the discriminating leg. The additional recovery
+behavior and `crossed_before_span` treatment are pending the following
+frozen acceptance disposition.
+
+| Finding for the suite author | Frozen case | Result |
+| --- | --- | --- |
+| RL-188 §4.2 requires 10 s recovery resolution and a count of skipped windows. The frozen assertion closes the edge object to ten fields, accepts only bare numbers or exact censor objects in `recovery_s`, and fixes `resolution_s` to the three edge sample periods. | `test_lm_inst_01_all_prints_and_partial`, lines 725–739 | **FAIL** by contract comparison. There is no allowed field for either required recovery diagnostic. |
+| The independent RL-188 machine-readable hand table has no verified file in the checkout, the two supplied seat directories or the ruling commit tree. | `test_lm_inst_01_edge_hand_table_exact` | **FAIL** with the frozen `NEEDS_SPEC` message after the lead handoff. Admit the spec seat's exact bytes when supplied. |
+| The standalone validator's observed `/dev/null` write event is the lead's outstanding item 3. The updated dispatcher on PR #854 still opens the device with `O_RDWR`. | `test_lm_inst_01_roster_foreign_series`, `Checks.refused` and `Checks.confined` | **FAIL** at the existing observed-write boundary. RL-188 §4 expressly leaves this item to the lead. |
+
+Stop code changes at the first conflict. The author needs to admit a recovery
+metadata shape and issue the corresponding frozen acceptance bytes and
+independent oracle, with cases for already-crossed starts, latest-channel
+anchoring, skipped U1 windows and the bounded `not returned` result. The
+lead still owns the validator call boundary. The original suite and archive
+hashes match the frozen values above.
+
+At the handoff, `origin/main` was `c0ff28b7c75ec53cc7ecb016f4e8b2713071ce84`.
+PR #854 remained open at `e1a38045b3f7297a4be2866a559766a23edb84d0`. Its
+descendant tip carries two owner commits beyond the checkpoint's base. PR
+#795 remained open at its immutable reference SHA. The own builder branch
+had no earlier remote ref or PR. Publish the checkpoint on the builder
+branch, with PR #854's branch as the draft base so its changes stay in the
+owner's PR. The combined final base and final pins remain pending.
