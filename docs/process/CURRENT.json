@@ -1,10 +1,10 @@
 {
   "armed": null,
-  "next_observable": "f2inst02-0260607b/run-out.txt shows LAUNCH_RC=0 with the fence; the next activation after the fence is gone runs the operational Check for cq-f2-inst-02-l003-l004-a1 under /Users/edr/campaign-out/f2-inst-02/ (template custody f2inst02-check-0260607b/check.sh with OUT, roster L003,L004 and TMPDIR changed), copies at once (offload-f2inst02-0260607b.sh and offload-f2inst02-run-0260607b.sh with plan id changed). Then next f2-inst-02 span from the same -a queue (seq 5, L005-L006; inputs f2inst02-0260607b/inputs.sh with SPAN/LEGS/SEQ/MAGISTRATE_PID changed, re-read worst_case_s for the run-block assert) if it fits before the Fri 02:00-02:35 blackout margin; Fri 20 Nov's first f2-stab leg (rank 1, f2-stab-15 L003) arms when its fence clears that margin.",
+  "next_observable": "f2inst02-9e6951be/run-out.txt shows LAUNCH_RC=0 with the fence (a later item records the launch); then the next activation after the fence is gone Checks cq-f2-inst-02-l005-l006-a1 (template f2inst02-check-9e6951be/check.sh with OUT, LEGS, TMPDIR changed) and copies at once (offload-f2inst02-9e6951be.sh / -run- with plan id changed), then seq 7 L007-L008 if it fits before the Fri 02:00-02:35 margin and outside 10:50-13:15.",
   "open_items": [
     {
       "expires_epoch_s": null,
-      "item": 457,
+      "item": 458,
       "owner": "magistrate",
       "status": "ISSUED"
     },
@@ -125,11 +125,11 @@
   ],
   "owner": "magistrate",
   "schema": "joulewise.current_pointer.v2",
-  "source_item": "457",
+  "source_item": "458",
   "source_item_heading_date": "2026-11-19",
   "wait": {
-    "deadline_epoch_s": 1795119900,
+    "deadline_epoch_s": 1795124700,
     "observable": "none",
-    "on_early_or_refused": "a launcher refusal or non-clean close: record it, hold kit f2-inst-02 until an input changes (item 422, RL-179 F-6), mail the lead; at the next close continue down the ladder. R1 stays unarmed (item 448)."
+    "on_early_or_refused": "if activation 9e6951be dies before launching, the next activation reruns f2inst02-9e6951be/start-check.sh at or after 13:15 PST (it refuses 10:50-13:15) and, on rc 0, launches with a Run block built from f2inst02-0260607b/run-block.sh with the custody dir changed (re-read worst_case_s for the assert). A launcher refusal or non-clean close: record it, hold kit f2-inst-02 until an input changes (item 422, RL-179 F-6), mail the lead. R1 stays unarmed (item 448)."
   }
 }

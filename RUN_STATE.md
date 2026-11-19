@@ -1052,6 +1052,33 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 
 <!-- RUN_STATE TYPED ITEMS: newest first. Add with scripts/run_state_add.py; never edit by hand. -->
 
+458. **Magistrate 9e6951be (headless, Opus 5.5), 2026-11-19 10:52-10:58 PST (`date`): f2-inst-02-l003-l004 CHECK: RECEIPT OK (2/2 legs, MEASURED_OK, restored; L003 15.7 s over its time budget, a flag), copied at once; L005-L006 (seq 5) start and check refused by the planner's 10:50-13:15 rule, so this activation waits idle and launches just after 13:15**
+
+```pointer
+owner: magistrate
+wait: none
+deadline: 2026-11-19T13:45:00-08:00
+on_early_or_refused: if activation 9e6951be dies before launching, the next activation reruns f2inst02-9e6951be/start-check.sh at or after 13:15 PST (it refuses 10:50-13:15) and, on rc 0, launches with a Run block built from f2inst02-0260607b/run-block.sh with the custody dir changed (re-read worst_case_s for the assert). A launcher refusal or non-clean close: record it, hold kit f2-inst-02 until an input changes (item 422, RL-179 F-6), mail the lead. R1 stays unarmed (item 448).
+next_observable: f2inst02-9e6951be/run-out.txt shows LAUNCH_RC=0 with the fence (a later item records the launch); then the next activation after the fence is gone Checks cq-f2-inst-02-l005-l006-a1 (template f2inst02-check-9e6951be/check.sh with OUT, LEGS, TMPDIR changed) and copies at once (offload-f2inst02-9e6951be.sh / -run- with plan id changed), then seq 7 L007-L008 if it fits before the Fri 02:00-02:35 margin and outside 10:50-13:15.
+```
+
+```item
+{"expires_epoch_s": null, "issued_epoch_s": 1795114498, "number": 458, "owner": "magistrate", "schema": "joulewise.run_state_item.v1", "sets": [{"at_epoch_s": 1795114498, "item": 457, "status": "CLOSED"}], "status": "ISSUED", "supersedes": []}
+```
+
+- **f2-inst-02-l003-l004 (item 457) Check after the fence was gone: RECEIPT OK.** Activation 9e6951be spawned 10:52:00; launcher fence pid 97263 gone, no `com.joulewise.align-r0` label loaded, receipt written 10:51:39, so this activation was not inside the span. Script and output: custody `f2inst02-check-9e6951be/` (`check.sh`, `out.txt`, 10:52:34-10:52:36), 0260607b's template with OUT, roster (L003,L004) and TMPDIR changed only.
+  - Receipt: rc 0, error none, legs 2/2, span_result `MEASURED_OK` / `COMPLETE` / "2/2 legs run", fault false, batch window `02:00-02:35`, kit sha `cfd03677…ed65` and frozen commit `2d347f721` asserted, mock false. Ended 1795114299.5 (10:51:39).
+  - Steps (23), all rc 0, including restore, stop-volumes, stop-meter, stop-agents, close-volumes. Feeds `proven_stopped` true; meter 24,249 polls, 0 bad, 0 USB errors, 4,849.8 s, 0 restarts.
+  - Legs (leg_record / leg_summary): L003 complete, admitted, G0 released (199.9 s), prefill 19,458, decode 128 (cap), 0 contaminated redos, wall 1,536.7 s vs budget 1,521 s (**15.7 s over, 1.0%**). L004 complete, admitted, G0 released (91.7 s), prefill 284 (kit 256), decode 128 (cap), 0 contaminated redos, wall 1,208.4 s vs budget 1,329 s.
+  - **Flag for the lead (not a refusal; the leg was admitted and the span closed inside its fence):** the long-prefill leg overran its planner budget again. At decode 512 three 19k-token f2-inst-01 legs ran 17-40 s over (item 456); at decode 128 this one ran 15.7 s over. The planner's prefill term (0.005 s/token, 97 s for 19,458 tokens) looks low for this length. It touches only the span's time budget (worst case 8,550 s, fence 12:17 against an actual close of 10:51), not any measured number.
+  - Host readback: measurement_mode verify's only FAIL is this activation's own MCP children (3418/3419/3422); network time Off; powermode 0; frequency word 0; AC, not charging; 241 GiB free; no desk fence, High Power marker, runner/monitor process, root powermetrics or night.lock holder. Standing WARNs (charge limit syntax; softwareupdate schedule, item 201).
+  - Maintenance print (09:30:35-10:51:39, `OUT/maintenance-log.txt`, 29,477 lines): dasd 1,500-2,118 per 10 min (peak 10:10); cloudd at most 1,280 (10:10); mobileassetd at most 37; softwareupdated 8 (10:10); backupd at most 30. A print only.
+- **Copy (row 14, at once):** encrypted cloud offload, manifest 90 files; enc sha256 `e8be21af…b815`, manifest sha256 `6f45b3df…c44e`; iCloud Drive `JouleWise-offload/cq-f2-inst-02-l003-l004-a1`; round-trip list 124 entries; brctl 10:53:32 no needs-upload, idle, caught-up, last-sync 10:53:08 after the 10:52:53 copy. Marker `/Users/Shared/JouleWise/desk-copy/cq-f2-inst-02-l003-l004-a1.ok`. Originals retained. Scripts `offload-f2inst02-9e6951be.sh`, `offload-f2inst02-run-9e6951be.sh` (0260607b's with plan id changed); output `offload-f2inst02-out-9e6951be.txt`.
+- **f2-inst-02-l005-l006 (queue -a, seq 5) start and check REFUSED by the planner at 10:56:** "no launch between 10:50 and 13:15: the soak path waits out 11:45-13:15 unbudgeted (RL-155a section 3)". Everything before it passed: validate-kit ok (frozen paths verified, 12 legs), validate-queue ok (6 spans), entry OK (seq 5, L005,L006, attempt 1, not_before 2026-11-17; queue expires 2026-12-08). Inputs `f2inst02-9e6951be/inputs.sh` (0260607b's with SPAN/LEGS/SEQ and MAGISTRATE_PID 3404 changed); output `start-check.out`.
+  - The refusal is the planner's own midday rule, so nothing is wrong with the inputs. **This activation stays alive and idle, then reruns start and check just after 13:15 and launches as its last act.** The watchdog has no heartbeat or session-length limit, so waiting is cheaper than exiting into a string of empty relaunches. Nothing measures while it waits.
+  - Fits before Fri 02:00: launch ~13:16 plus worst case 8,550 s ends by ~15:39; expected ~14:56. Seq 7 (L007-L008) then fits from ~15:00-15:40 as well.
+- Activation 9e6951be (10:52:00): notice_pending []; no unread mail from Ed; directives the standing seven (587/422/421/417/416/408/405), no stop; no standdown request; canonical clean at `4258f7170` = origin/main. Closes 457.
+
 457. **Magistrate 0260607b (headless, Opus 5.5), 2026-11-19 09:26-09:31 PST (`date`): f2-inst-02-l001-l002 CHECK: RECEIPT OK (2/2 legs, MEASURED_OK, restored), copied at once; f2-inst-02 two-leg L003-L004 ISSUED (queue -a, seq 3), Start and check rc 0, launches as the last act**
 
 ```pointer
