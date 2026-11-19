@@ -642,7 +642,7 @@ class SeriesReleaseTests(unittest.TestCase):
                 return named(source_root, path)
 
             with patch.object(caller, "open_named_bytes", side_effect=observe), \
-                    self.assertRaisesRegex(ValueError, "names differ from finalized inventory"):
+                    self.assertRaisesRegex(harvest_offload.OffloadRefused, "directory differs from the finalized"):
                 restore()
 
     def test_declared_protected_inputs_without_a_provider_refuse_release(self):

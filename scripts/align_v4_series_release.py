@@ -585,7 +585,8 @@ class RestoredFiles:
         harvest_offload._validate_finalized(manifest)
         self.entries = manifest["entries"]
         self.listed = manifest_inputs(manifest, root, self.prefix)
-        self.mirror = manifest["closure"]["mirror"]
+        self.closure = manifest["closure"]
+        self.mirror = self.closure["mirror"]
         self.links = tuple(manifest_links(manifest, root, self.prefix))
         self.directories = tuple(manifest_directories(manifest, root, self.prefix, self.listed, self.links))
         self.ledger = InputLedger() if ledger is None else ledger
@@ -596,6 +597,7 @@ class RestoredFiles:
             self.stems[self.stem(name)].add(name)
         if ledger is None:
             self.ledger.classify()
+            self.verify_finalized()
             self.verify_inventory()
         journal = layout["hazard_journal"]
         self.hazard_input = None
@@ -612,6 +614,57 @@ class RestoredFiles:
 
     def is_protected(self, path):
         return self.ledger.is_protected(path)
+
+    def inspect_closure_path(self, path):
+        relative = manifest_path(self.root, self.prefix, str(path))
+        packet.require(not self.is_protected(relative), "finalized closure is outside the authorized release scope")
+        return relative
+
+    def closure_file_matches(self, path, row):
+        relative = self.inspect_closure_path(path)
+        bound_bytes(self.root, BoundInput(relative, row["size"], row["sha256"]))
+        return True
+
+    def verify_finalized(self):
+        # The validator gets the original record-bound closure. It checks
+        # links and identity first, and the authorized provider owns protected bytes.
+        deferred = frozenset(name for group in ("files", "ignored") for name in self.closure[group]
+                             if self.is_protected(manifest_path(self.root, self.prefix, name)))
+        harvest_offload._verify_closure(
+            self.closure, self.root / self.prefix, where="series release",
+            mirror_identity=self.checkout_mirror_identity, transported=deferred,
+            inspect_path=self.inspect_closure_path, file_matches=self.closure_file_matches,
+        )
+
+    @contextmanager
+    def mirror_checkout(self):
+        mirror_root = Path(self.mirror["root"])
+        relative = mirror_root.relative_to(self.root)
+        packet.require(not self.is_protected(relative.as_posix()), "protected mirror path cannot be opened")
+        with named_directory(self.root, relative.parts):
+            evidence = SeriesEvidence(mirror_root)
+            packet.require(evidence.git("rev-parse", "--show-toplevel").decode().strip() == str(mirror_root),
+                           "closure mirror does not bind the named Git worktree")
+            yield evidence
+
+    def checkout_mirror_identity(self):
+        if self.mirror is None:
+            return None
+        with self.mirror_checkout() as evidence:
+            prefix = evidence.repo.relative_to(self.root)
+            protected = {Path(path).relative_to(prefix): binding for path, binding in self.ledger.entries.items()
+                         if self.is_protected(path) and Path(path).is_relative_to(prefix)}
+            if protected:
+                tracked = {Path(os.fsdecode(name)) for name in evidence.git("ls-files", "-z").split(b"\0") if name}
+                for path, binding in protected.items():
+                    packet.require(path not in tracked, "mirror identity would inspect a protected input")
+                    if isinstance(binding, BoundDirectory):
+                        packet.require(not any(child.is_relative_to(path) for child in tracked),
+                                       "mirror identity would inspect a protected directory")
+                        evidence.git("check-ignore", "--quiet", "--", path.as_posix())
+            identity = harvest_offload.checkout_identity(evidence.repo)
+        packet.require(harvest_offload._usable_identity(identity), "finalized mirror identity is unavailable")
+        return identity
 
     def verify_inventory(self):
         # Compare names in real, manifest-listed directories. File bytes are
@@ -650,17 +703,8 @@ class RestoredFiles:
 
     def verify_mirror_target(self, link):
         packet.require(not self.is_protected(link.target), "protected mirror target cannot be opened")
-        mirror_root = Path(self.mirror["root"])
-        relative = mirror_root.relative_to(self.root)
-        packet.require(not self.is_protected(relative.as_posix()), "protected mirror path cannot be opened")
-        with named_directory(self.root, relative.parts):
-            evidence = SeriesEvidence(mirror_root)
-            packet.require(evidence.git("rev-parse", "--show-toplevel").decode().strip() == str(mirror_root),
-                           "closure mirror does not bind the named Git worktree")
-            identity = self.mirror["identity"]
-            commit = identity.get("commit", identity.get("head"))
-            packet.require(identity.get("head", commit) == commit, "closure mirror identities disagree")
-            committed = evidence.read(evidence.commit(commit), link.mirror_path)
+        with self.mirror_checkout() as evidence:
+            committed = evidence.read(evidence.commit(self.mirror["identity"]["head"]), link.mirror_path)
         reference = BoundInput(link.target, len(committed), packet.digest(committed))
         existing = self.ledger.entries[link.target]
         packet.require(existing is None or (isinstance(existing, BoundInput) and existing.sha256 == reference.sha256
@@ -801,6 +845,8 @@ def final_roster(root, manifest, completion, ledger, chain, input_ledger):
             assignments[identity] = assignment
             run_ids.add(run_id)
     input_ledger.classify()
+    for files in restored:
+        files.verify_finalized()
     for files in restored:
         files.verify_inventory()
     return assignments.values(), restored

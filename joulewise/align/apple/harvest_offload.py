@@ -31,17 +31,38 @@ import shutil
 import stat
 import subprocess
 import tarfile
-from typing import Any, BinaryIO
+from typing import Any, BinaryIO, Callable
 
 SCHEMA = 'joulewise.align_v4.harvest_offload.v1'
 PAYLOAD = 'payload.tar.zst'
 MANIFEST = 'MANIFEST.json'
 CHUNK = 8 * 1024 * 1024
 DEFAULT_LEVEL = 3
+PY_IDENTITY = ('import sys, hashlib, importlib.metadata as m; print(sys.version); '
+               'print(hashlib.sha256("\\n".join(sorted(f"{d.metadata[\'Name\']}=={d.version}" '
+               'for d in m.distributions())).encode()).hexdigest())')
 
 
 class OffloadRefused(ValueError):
     """The offload cannot be packed or restored without a byte mismatch."""
+
+
+def checkout_identity(measurement_root, run=subprocess.run):
+    """Collect the same checkout and interpreter identity recorded by harvest."""
+    root = Path(measurement_root)
+    head = run(['git', '-C', str(root), 'rev-parse', 'HEAD'], capture_output=True, text=True, check=False)
+    status = run(['git', '-C', str(root), 'status', '--porcelain=v1', '--untracked-files=all'],
+                 capture_output=True, text=True, check=False)
+    python = root / '.venv/bin/python'
+    interp = run([str(python), '-I', '-c', PY_IDENTITY], capture_output=True, text=True, check=False) \
+        if python.exists() else None
+    return {'measurement_root': str(root), 'head': head.stdout.strip() if head.returncode == 0 else None,
+            'tracked_clean': status.returncode == 0 and not status.stdout.strip(),
+            'python': interp.stdout.strip().splitlines() if interp is not None and interp.returncode == 0 else None}
+
+
+def _usable_identity(identity):
+    return bool(identity.get('tracked_clean')) and identity.get('head') is not None and identity.get('python') is not None
 
 
 def zstd_path() -> str:
@@ -174,7 +195,7 @@ class _ClosureFiles:
 
 
 def _walk_tree(target: Path, collected: _ClosureFiles | None = None, *, why: str = '',
-               into: str = 'files') -> tuple[list[str], list[str]]:
+               into: str = 'files', inspect_path: Callable[[Path], None] | None = None) -> tuple[list[str], list[str]]:
     """``(files, directories)`` below an external directory, in ONE walk; never follows a link; refuses an
     unreadable directory. ``directories`` holds ``'.'`` and every subdirectory, empty ones included.
 
@@ -184,6 +205,8 @@ def _walk_tree(target: Path, collected: _ClosureFiles | None = None, *, why: str
     key = str(target)
     if collected is not None and key in collected.listings:
         return collected.listings[key], collected.trees[key]
+    if inspect_path is not None:
+        inspect_path(target)
     names, tree = [], ['.']
     for current, dirs, files in os.walk(target, followlinks=False, onerror=_walk_error):
         dirs.sort()
@@ -191,6 +214,8 @@ def _walk_tree(target: Path, collected: _ClosureFiles | None = None, *, why: str
         for name in dirs:
             if (here / name).is_symlink():
                 raise OffloadRefused(f'external closure reaches a further link: {here / name}; declare it')
+            if inspect_path is not None:
+                inspect_path(here / name)
             tree.append((here / name).relative_to(target).as_posix())
             if len(tree) - 1 > CLOSURE_MAX_DIRECTORIES:
                 raise OffloadRefused(f'external closure has over {CLOSURE_MAX_DIRECTORIES} directories: {target}')
@@ -487,14 +512,28 @@ def _same_bytes(path: Path, row: dict[str, Any]) -> bool:
         return False
 
 
-def _verify_closure(closure: dict[str, Any], root: Path, *, mirror_identity: dict[str, Any] | None,
-                    transported: frozenset[str] = frozenset(), where: str, namespace: str | None = None) -> None:
+def _verify_closure(closure: dict[str, Any], root: Path, *,
+                    mirror_identity: dict[str, Any] | Callable[[], dict[str, Any] | None] | None,
+                    transported: frozenset[str] = frozenset(), where: str, namespace: str | None = None,
+                    inspect_path: Callable[[Path], None] | None = None,
+                    file_matches: Callable[[Path, dict[str, Any]], bool] | None = None) -> None:
     """Re-verify the closure against this host's bytes.
 
     ``root`` is where the tree is now (or staged); ``namespace`` the restore path it will be published
     at, so a ``session``-class chain back into the session resolves as it did at finalize.
+    Release can supply an access guard and an exact-path byte reader. Its protected files are
+    deferred through ``transported`` and must be verified separately by the release ledger.
     """
     mirror = closure['mirror']
+    if inspect_path is not None:
+        for relative, row in closure['links'].items():
+            inspect_path(root / relative)
+            target = Path(row['target'])
+            inspect_path(target)
+            if row['class'] == 'mirror' and not target.is_file():
+                raise OffloadRefused('guarded mirror link does not name a regular input')
+    if callable(mirror_identity):
+        mirror_identity = mirror_identity()
     if mirror is not None and mirror_identity != mirror['identity']:
         raise OffloadRefused(f'{where}: measurement checkout mirror differs from the finalized record manifest: '
                              + json.dumps({'finalized': mirror['identity'], 'here': mirror_identity}, sort_keys=True))
@@ -515,8 +554,8 @@ def _verify_closure(closure: dict[str, Any], root: Path, *, mirror_identity: dic
         if kind != row['class'] or str(target) != row['target'] or hops != row['hops']:
             raise OffloadRefused(f'{where}: external link {relative} resolves differently from the finalized '
                                  f'record manifest ({kind} {target} via {hops})')
-        if kind == 'bytes' and row['kind'] == 'directory' and list(_walk_tree(target)) != [row['files'],
-                                                                                           row['directories']]:
+        if (kind == 'bytes' and row['kind'] == 'directory'
+                and list(_walk_tree(target, inspect_path=inspect_path)) != [row['files'], row['directories']]):
             raise OffloadRefused(f'{where}: external closure directory differs from the finalized record '
                                  f'manifest: {target}')
         if kind == 'bytes' and row['kind'] == 'file' and target.is_dir():
@@ -529,11 +568,12 @@ def _verify_closure(closure: dict[str, Any], root: Path, *, mirror_identity: dic
             if here != row['ignored']:
                 raise OffloadRefused(f'{where}: ignored mirror content under {relative} differs from the finalized '
                                      'record manifest')
+    matches = _same_bytes if file_matches is None else file_matches
     for group in ('files', 'ignored'):
         for name, row in sorted(closure[group].items()):
             if name in transported_real:
                 continue
-            if not _same_bytes(Path(name), row):
+            if not matches(Path(name), row):
                 raise OffloadRefused(f'{where}: external closure input differs from the finalized record '
                                      f'manifest: {name}')
 
