@@ -1052,6 +1052,45 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 
 <!-- RUN_STATE TYPED ITEMS: newest first. Add with scripts/run_state_add.py; never edit by hand. -->
 
+449. **Magistrate 691a91ec (headless, Opus 5.5), 2026-11-18 21:45-21:55 PST (`date`): R1-RERUN CHECK: status complete, chain rc 0, thermometry pass, A-B-A released, step 30b no redo, G1 count complete by hand, restored, uninstalled, network time ON 13.3 min then OFF with frequency word 0; KIT WORD R1-RERUN AGAIN (same planning R+2C/R+4C G0 timeouts): no re-arm (item 448), lead decides; filler f2-inst-01-l004-l005 ISSUED (rank 2, two-leg), Start and check rc 0, launches as the last act**
+
+```pointer
+owner: magistrate
+wait: none
+deadline: 2026-11-19T00:37:00-08:00
+on_early_or_refused: a launcher refusal or non-clean close: record it, hold kit f2-inst-01 until an input changes (item 422), mail the lead, continue down the ladder at the next close (Thu's first f2-stab leg, rank 1). R1 stays unarmed: second R1-RERUN word, no new READY (item 448); the lead decides.
+next_observable: run-out.txt shows LAUNCH_RC=0 with the fence; the next activation after the fence is gone runs the operational Check (receipt, feeds stopped, restore readback, process group absent, close epoch) for cq-f2-inst-01-l004-l005-a1 under /Users/edr/campaign-out/f2-inst-01/, copies at once (row 14), then arms Thu 19 Nov's first f2-stab leg (rank 1; items 425, 447)
+```
+
+```item
+{"expires_epoch_s": null, "issued_epoch_s": 1795067448, "number": 449, "owner": "magistrate", "schema": "joulewise.run_state_item.v1", "sets": [{"at_epoch_s": 1795067447, "item": 444, "status": "CLOSED"}, {"at_epoch_s": 1795067447, "item": 440, "status": "CLOSED"}], "status": "ISSUED", "supersedes": []}
+```
+
+- **R1-RERUN (items 440, 444) Check after the fence is gone: COMPLETE.** Plan `align-r1-20261118T2350Z`, S `/Users/edr/night-align/r1-20261118T231014Z`. Driver started 15:50:04; chain 15:53-21:34 (chain_wall 20,117 s); `chain.exited` rc 0 at 1795066451.95; result `ended_epoch_s` **1795066457.92 (21:34:17.9) = R1 close: OTHER_CLOSE_EPOCH=1795066458, LAST_CLOSE_KIND=other**. The watchdog released the window and spawned this activation at 21:45:43. Custody `night-custody/magistrate/r1-check-691a91ec/` (`check.sh`, `check.out`, `decide.out`).
+  - Registered result boundary first: `night/align-r1/r1_result.json` `status` **complete**, `executed_commit` `b2e01464d`, prepare packet sha = PKT_SHA `53bfb6c2…10cd`, `skipped_segments` {}; `r1_slots.json` sha256 `6e0b886d…8bae`. Shared `night/result.json`: verdict GO, chain_outcome COMPLETE, fault false, no refusal codes, census 681 / 0 hits.
+  - Thermometry: bar `pass` (D: status pass, picks TV0h/TV1h, night confirmation ok; flag `r1.picks_alias_pair_rl145`). 30B record-only: pass, flag `r1.sensor_pick_changed` (record-only).
+  - A-B-A (sensors-only G0s): A1, B, A2 all released (207.2 / 209.1 / 209.2 s); verdict `not_adopted` (expected, RL-118).
+  - step_30b: attempt 0, `superseded_attempts` empty on every phase, G0 released 191.5 s: **not a redo**, no R_op flag.
+  - G0 waits (12): released except **planning R+4C and R+2C (timeout 1,200 s each)**; R+0C released 139.2 s. No rejected attempts this time. `inconclusive_segments` = {planning R+2C, R+4C: `r1.g0_timeout_run`}; U5 and planning temperature `inconclusive`.
+  - Gated D runs and X-G: no H gate row in any run; G1 timeouts 0; duty bar `pass`, three-turn run present.
+  - **G1 count by hand (RL-175 D.2)**, from each run's `outputs/align_thermal.jsonl` gate end rows: D_bank admitted 2 (G0 t0 released, G1 t1 released); D_spam a admitted 3 (G0, G1 t1, t2 released); D_spam b admitted 3 (same); X_G admitted 12 (G0, G1 t1-t11 released). **Complete: every admitted turn after the first has exactly one released G1, by index.**
+  - Restore and process absence (21:47:34): no monitor / driver / courier; no root powermetrics; chain pgid 25728 has 0 members (`chain.exit-census.json` absent true, survivors []); powermode 0; AC, 100% charged, not charging; 250 GiB free. Driver restore line: powermode 0 restored rc 0, network time set ON 21:34:17.9 (systemsetup's usual Error:-99 line, readback On).
+  - Uninstall: `arm_align_r1.py uninstall --custody-root S` rc 0; labels now only `com.joulewise.magistrate`; no night plist on disk. S, bookends, markers and courier files preserved untouched.
+  - **Network time (RL-175 Q6):** ON 21:34:17.9 (driver) to OFF 21:47:35 (`-setusingnetworktime off`, readback `Network Time: Off`): **ON for 13.3 min.** Frequency word read 206025 (+3.14 ppm) with offset 0, zeroed by item 251's remedy (`settle-b274d857/probe/zero.py` under `sudo -n`): readback freq 0, offset 0, status 0x2081.
+  - Canonical root: no night label or plist after uninstall, clean, ff `521c2c834` -> `fedcce4bf`.
+- **Post-close word (item 433, RL-183 2.6): `R1-RERUN` again.** `align_w1_budget_procedure.py decide` at `b2e01464d` (no `r1_planning_release.json` at the pin): `{"step": "R1-RERUN", "reason": "inconclusive segment(s) planning_turn_R_plus_2C, planning_turn_R_plus_4C: …(R7-3)"}`. No RESEARCH-LEAD trigger (no gated-D H, G1 count complete, thermometry pass, no redo flag).
+  - **Per item 448: no re-arm, no new READY.** Item 440's one-use READY is consumed (closed here). **For the lead:** this is the third night with the same two planning G0 timeouts at R+4C and R+2C (11-13, 11-18 morning, 11-18 evening), now with no load redo at all. A further plain re-run is the "same defect class twice" case (doctrine rule 3: consult, not round three); item 438's suggestion stands (desk 3(a) plus a signed planning release, or the research lead). Slot values and raw results are not read here (item 398: the lead's alone).
+  - No copy of S: R1 is not a campaign span; the courier delivered `refs/heads/night-results/align-r1-20261118T2350Z` (`f0f3be884`).
+- **Item 446 (Air copy): SKIPPED** per item 448 (Air paused; key not copied).
+- **Filler ISSUED and launching: `f2-inst-01-l004-l005`** (ladder rank 2, items 422, 428, 447: Wed's first f2-stab leg ran as f2-stab-15-l001; f2-inst-01 L001-L003 ran in f2-inst-p1, items 407/411; no f2-inst-01 leg since). Two-leg span preferred (item 447): no dated block is pending (dev-05 done, R1 unarmed, qual not issued per item 448), so the worst case fits. Kit `f2-inst-01.v1.1` sha256 `651d1815…6f2b` (= audit `item-drafts-f2/`), queue `fillers-w2/queues-2leg/f2-inst-01-a.json` sha256 `68f58901…9a52` (= `fillers-w2/README.md` at `c4b4f4265`), seq 4, legs L004 (2,000 prompt tokens) and L005 (256), q600, decode 512, attempt 1, runner pin `2d347f721`. Sealed: no leg counts or enters a fit.
+  - Staging (21:48:54, `f2inst01-691a91ec/stage.out`): REPO `/Users/edr/code/jw-wt/cadence-f2-inst-01-l004` fresh, detached, clean at the pin; SRC `/Users/edr/code/jw-wt/audit-c4b4f4265`; queue -> `/Users/edr/campaign-out/queues/f2-inst-01-a.fillers-w2-c4b4f4265.json`; kit the existing `/Users/edr/campaign-out/kits/f2-inst-01.v1.1-1f683fc63.json` (hash equal).
+  - Start and check (21:49:17, `start-check.out`, rc 0): pin's `validate-kit` ok (frozen paths verified, 12 legs); `validate-queue` ok (4 spans); entry seq 4, L004+L005, attempt 1, kit sha bound, queue expires 2026-12-08; plan worst case 8,550 s, expected 5,889 s, blackout_clear true, fence_end = t0 + 10,010 s.
+  - **Decision I made:** the shared template's audit validator `f2-stab/tools/validate_kit.py` refuses any non-f2-stab kit (`REFUSE campaign_id: expected f2-stab-NN`); for an f2-inst kit I ran only the pin's own `validate-kit`, as item 407 did for f2-inst-p1. DEADLINE = the plan's `fence_end_epoch_s` (template Run block).
+  - Census (items 431, 443; `census.out`, 21:49): hits were this session's own Codex MCP adapter tree (52610 -> 52613 -> 52618, exits with this session), Apple's CursorUIViewService (871, false positive) and ChatGPTHelper (24894: SIGTERM, respawned as 53329, SIGKILL, gone). The Run block kills ChatGPTHelper again if it is back. No MAINTENANCE marker. Item 442 is for `6e9d42f1d` spans; the predecessor (R1) group census is above (0 members).
+  - Rows applied: 4 (close proven by the Check above; no foreign process), 5, 14 (no campaign copy pending; R1 needs none), 1-2 (no dated block pending), item 423.
+  - Run block `f2inst01-691a91ec/run-block.sh` (output `run-out.txt`) re-reads standdown, MAINTENANCE, night label, census, pin, tree, both hashes and `validate-kit`, plans at the actual t0, sleeps the display and launches. **Launch is the last act of this activation, after this commit and the mail to Ed.** Expected end ~23:30, worst case ~00:12 Thu, fence ~00:37.
+- Activation 691a91ec (21:45:43): notice_pending []; no unread mail from Ed; directives the standing seven, no stop; no standdown request; no MAINTENANCE marker. Closes 444; closes 440 (consumed).
+
 448. **AIR PAUSED (owner): MBP continues alone; R1-RERUN Check as usual, no third READY; fillers per item 447; skip item 446 unless LAN; no qual issue**
 
 ```item

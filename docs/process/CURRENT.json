@@ -1,7 +1,13 @@
 {
   "armed": null,
-  "next_observable": "the next activation after the fence of plan align-r1-20261118T2350Z is gone (latest end Fri 20 Nov 01:13:00 PST) runs item 398's \"Check after the fence is gone\" as item 438 ran it: R1 terminal status and chain exit first; restore and process-group absence; the three A-B-A G0 releases; step 30b redo or not; uninstall via `arm_align_r1.py uninstall`; network time ON then OFF with frequency word 0 and readback, minutes ON recorded; R1 close epoch as OTHER_CLOSE_EPOCH with LAST_CLOSE_KIND=other; the G1 count by hand (RL-175 D.2); the post-close disposition by the kit's printed word (item 433); then the ladder (f2-inst-01 L004 one-leg span at rank 2, or the next date's first f2-stab leg)",
+  "next_observable": "run-out.txt shows LAUNCH_RC=0 with the fence; the next activation after the fence is gone runs the operational Check (receipt, feeds stopped, restore readback, process group absent, close epoch) for cq-f2-inst-01-l004-l005-a1 under /Users/edr/campaign-out/f2-inst-01/, copies at once (row 14), then arms Thu 19 Nov's first f2-stab leg (rank 1; items 425, 447)",
   "open_items": [
+    {
+      "expires_epoch_s": null,
+      "item": 449,
+      "owner": "magistrate",
+      "status": "ISSUED"
+    },
     {
       "expires_epoch_s": null,
       "item": 448,
@@ -28,12 +34,6 @@
     },
     {
       "expires_epoch_s": null,
-      "item": 444,
-      "owner": "magistrate",
-      "status": "ISSUED"
-    },
-    {
-      "expires_epoch_s": null,
       "item": 443,
       "owner": "magistrate",
       "status": "ISSUED"
@@ -47,12 +47,6 @@
     {
       "expires_epoch_s": null,
       "item": 441,
-      "owner": "magistrate",
-      "status": "ISSUED"
-    },
-    {
-      "expires_epoch_s": null,
-      "item": 440,
       "owner": "magistrate",
       "status": "ISSUED"
     },
@@ -131,11 +125,11 @@
   ],
   "owner": "magistrate",
   "schema": "joulewise.current_pointer.v2",
-  "source_item": "444",
+  "source_item": "449",
   "source_item_heading_date": "2026-11-18",
   "wait": {
-    "deadline_epoch_s": 1795169580,
+    "deadline_epoch_s": 1795077420,
     "observable": "none",
-    "on_early_or_refused": "an install failure, an Ed NO or a directive stop before t0: nothing runs; uninstall through `arm_align_r1.py uninstall`, preserve S, mail Ed and the lead; the READY record (item 440) is then VOID (one use; a refused arm voids it) and a new READY record is needed. A t0 refusal by the night job: preserve S and every marker, no retry of a measured session; the next activation reports it to the lead."
+    "on_early_or_refused": "a launcher refusal or non-clean close: record it, hold kit f2-inst-01 until an input changes (item 422), mail the lead, continue down the ladder at the next close (Thu's first f2-stab leg, rank 1). R1 stays unarmed: second R1-RERUN word, no new READY (item 448); the lead decides."
   }
 }
