@@ -160,3 +160,37 @@ combined base and native source bindings.
 [Direct oracle comparison](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/rl188-oracle-reader.log)
 [Frozen end-to-end case](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/rl188-oracle-end-to-end.log)
 [Invented kit-15 chronology](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/rl188-kit15-chronology.log)
+
+## Audit round 1 repair
+
+Astra reviewed `56dd32e8f` and reported BLOCK with one VERIFIED HIGH,
+one VERIFIED MED and one VERIFIED LOW. The HIGH is an implementation defect
+at the one-use reservation boundary. In native mode, manifest preflight
+could authenticate the step-3 blob via Git while scoring later required a
+working-tree loader. The missing loader could therefore be discovered only
+after the exclusive reservation had been spent.
+
+| Severity | Disposition | Commit | Regression and result |
+| --- | --- | --- | --- |
+| HIGH / VERIFIED | Fixed the native dependency admission mismatch. Native preflight requires the regular on-disk pinned file. Preflight compiles the authenticated bytes before a stage-1 write or a stage-2 reservation. Scoring loads that code without rereading the file. The immutable Git fallback remains available to the normalized development route when its file is absent. | `cb042106c` | **PASS**. The new native fixture refuses a missing loader even with a valid Git fallback, rejects changed bytes and symlinks, and still uses the preflight code after the verified file is removed. The pre-fix run failed the missing-reader case and raised `FileNotFoundError` in the scoring case. |
+| MED / VERIFIED | Follow-up for the synthetic acceptance host. This host's `EPERM` on reservation creation prevents the frozen end-to-end publication and descriptor-confinement checks from proving their success paths. | — | **BLOCKED**. Re-run the successor suite on a synthetic-only host permitting the actual reservation directory. |
+| LOW / VERIFIED | Positive controls for pre-read public record construction, the strict five/six fields, and ordered rails. | `cb042106c` | **PASS** for the frozen first-instrument GPU row comparator and the direct RL-188 oracle comparison. The fix changes neither release fields nor rail arithmetic. |
+
+The regression and GPU comparator ran together under Python 3.13. Four
+tests passed. Direct scoring also matched all three independent RL-188
+maps on each of the three invented legs. All 53 protected paths and the
+three frozen artifact hashes matched the prior checkpoint. The wider
+local dispatcher and focused transfer reservation checks were started by
+module name. The full sharded suite is assigned to GitHub's synthetic CI
+runner, which has no local measurement roots.
+
+Native execution on this stack will now refuse until the combined base
+provides the on-disk step-3 bytes. The validator observer and recovery
+changes remain gated on the suite author's successor freeze. Final native
+source admission and the cross-family delta review remain open.
+
+[Audit round 1](/Volumes/JW-EXT/scratch/pl-d-desc-looks-executor/audit-1/FINAL-MESSAGE.md)
+[Regression before repair](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/audit1-preflight-red.log)
+[Regression after repair](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/audit1-preflight-green.log)
+[Direct oracle check after repair](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/audit1-rl188-compatibility.log)
+[Existing focused checks](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/audit1-existing-focused.log)
