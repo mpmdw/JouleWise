@@ -494,11 +494,14 @@ def cli(argv=None):
             return 0
         require(source.row["status"] == "stage1_committed" and source.row["stage1_path"] == STAGE,
                 "stage 1 has no authoritative commitment")
-        require(blind == source.bound(STAGE) == read_regular(stage_path)
+        require(blind == blob(source.repo, source.main, STAGE) == read_regular(stage_path)
                 and digest(blind) == source.row["stage1_sha256"], "stage-1 bytes or sources changed")
         execution = named_commit(source.repo, "HEAD")
         git(source.repo, "merge-base", "--is-ancestor", execution, source.main)
-        require(row_at(source.repo, execution, LOOK) == source.row, "execution row differs from main")
+        require(row_at(source.repo, execution, LOOK) == source.row and blob(source.repo, execution, STAGE) == blind,
+                "execution row or stage-1 bytes differ from main")
+        for rel, sha in {pin["path"]: pin["sha256"] for pin in manifest_pins(doc)}.items():
+            require(digest(blob(source.repo, execution, rel)) == sha, "execution revision pin changed")
         if args.operation == "validate-public":
             require(args.candidate.absolute().parent == source.repo.parent,
                     "fixture candidate must stay in the generated world")
