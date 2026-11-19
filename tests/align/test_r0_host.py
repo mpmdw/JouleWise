@@ -1318,7 +1318,7 @@ class R0SamplerAdmissionSpec(unittest.TestCase):
 
         for birth, cpu, flagged in ((35, "0:01.80", [45, 60]),
                                     (20, "0:01.80", [45]),
-                                    (35, "0:01.40", [])):
+                                    (35, "0:00.50", [])):
             with self.subTest(birth=birth, cpu=cpu), tempfile.TemporaryDirectory() as tmp:
                 guard, clock, advance, _ = self.admission()
                 run = guard.run
@@ -1326,6 +1326,8 @@ class R0SamplerAdmissionSpec(unittest.TestCase):
                 guard.wall_clock_ns = lambda: int((wall + clock.now) * 1e9)
 
                 def command(argv, **kwargs):
+                    if argv == prewindow.PS_ARGV and clock.now == 45:
+                        return subprocess.CompletedProcess(argv, 0, "1 0.0 /sbin/launchd\n42 0.0 mdworker_shared\n", "")
                     if argv != contention.PS_ARGV:
                         return run(argv, **kwargs)
                     rows = []
@@ -1344,7 +1346,7 @@ class R0SamplerAdmissionSpec(unittest.TestCase):
                 self.assertEqual([flag["interval"]["end_monotonic_s"] for flag in guard.contention_flags], flagged)
                 if 60 in flagged:
                     evidence = guard.contention_flags[-1]["busy"][0]
-                    self.assertAlmostEqual(evidence["cpu_s_per_s"], 0.06)
+                    self.assertAlmostEqual(evidence["cpu_s_per_s"], 1.8 / (60 - birth))
                     self.assertIn("lower bound", evidence["basis"])
 
     def run_synthetic_host_cli(self, configured, guard, host):
@@ -1520,6 +1522,10 @@ class R0SamplerAdmissionSpec(unittest.TestCase):
                 samples = []
 
                 def run(argv, **kwargs):
+                    if argv == prewindow.PS_ARGV:
+                        present = {0: first, 15: midpoint, 30: last}[clock.now] is not None
+                        args = "1 0.0 /sbin/launchd\n" + ("42 0.0 mdworker_shared\n" if present else "")
+                        return subprocess.CompletedProcess(argv, 0, args, "")
                     if argv == contention.PS_ARGV:
                         cpu = {0: first, 15: midpoint, 30: last}[clock.now]
                         samples.append(clock.now)
@@ -2145,14 +2151,14 @@ class R0PublicationAuditTest(unittest.TestCase):
                     self.assertEqual((result["rc"], result["published"], result["flags"]), (0, True, []), result)
 
     def test_distinct_cpu_observations_on_window_edges_are_retained(self):
-        from joulewise.align.r0_host import _observations_inside
+        from joulewise.align.r0_host import _window_reads
 
         before, opening, same_open, interior, same_close, current, after = (
             SimpleNamespace(midpoint_ns=stamp, index=index)
             for index, stamp in enumerate((9, 10, 10, 15, 20, 20, 21))
         )
         observations = [before, opening, same_open, interior, same_close, current, after]
-        self.assertEqual(_observations_inside(observations, opening, current), [same_open, interior, same_close])
+        self.assertEqual(_window_reads(observations, opening, current), [opening, same_open, interior, same_close, current])
 
     def test_exited_worker_retains_measured_growth_across_fractional_window_open(self):
         from tests.align import test_r0_vs_l3_differential as fixture
@@ -2231,6 +2237,15 @@ class R0QuietIntervalTest(unittest.TestCase):
                 return subprocess.CompletedProcess(argv, code, stdout, "")
             if argv == prewindow.PS_ARGV:
                 args = diagnostic(clock()) if callable(diagnostic) else diagnostic
+                named = {line.split()[0] for line in args.splitlines() if line.strip()}
+                # Keep each accounting PID visible to the arguments read.
+                # Neutral arguments leave its classification to accounting.
+                sample = latest[1] if isinstance(latest, tuple) else latest
+                if isinstance(sample, str):
+                    for line in sample.splitlines()[1:]:
+                        pid = line.split()[0]
+                        if pid != "1" and pid not in named:
+                            args += f"{pid} 0.0 fixture-resident\n"
                 return subprocess.CompletedProcess(argv, 0, "1 0.0 /sbin/launchd\n" + args, "")
             return self.runner(argv, **kwargs)
         class FixtureGuard(QuietGuard):
@@ -2310,9 +2325,9 @@ class R0QuietIntervalTest(unittest.TestCase):
         self.assertAlmostEqual(actual, expected,
                                delta=contention.PS_TIME_QUANTUM_S / elapsed)
 
-    def test_real_respawn_bursts_are_diagnostic_only(self):
-        # Replays mdworker_shared pid 18002 at 6% and photoanalysisd at 34%:
-        # each was born 0.6 s before a subsequent call, using 0.6 CPU-s.
+    def test_short_respawn_bursts_use_the_observed_lifetime(self):
+        # Each synthetic worker was born 0.6 s before the closing sample
+        # and used 0.6 CPU-s. The %CPU field is separate from this rate.
         # Wall time is fixed independently of the injected monotonic clock.
         from datetime import datetime
         wall_end = datetime(2026, 11, 6, 18, 5, 15).timestamp() + 0.6
@@ -2327,13 +2342,12 @@ class R0QuietIntervalTest(unittest.TestCase):
                            side_effect=lambda: int((wall_end - 60 + clock()) * 1e9)):
                     guard.check(force=True)
                     clock.now = 60
-                    guard.check(force=True)
+                    self.assert_flagged(guard, f"{pid} {name} 1 CPU-s/s")
                 self.assertEqual(len(calls), 4)  # 3 admission + 1 daemon
-                self.assertFalse(guard.receipts[-1]["busy"])
                 entry = guard.receipts[-1]["cpu_interval"]["contaminants"][0]
                 self.assertEqual((entry["pid"], entry["lstart"], entry["name"]),
                                  (pid, " ".join(NEW_START.split()), name))
-                self.assert_rate(entry["cpu_s_per_s"], 0.02, 30)
+                self.assert_rate(entry["cpu_s_per_s"], 1.0, 0.6)
                 # TIME's 0.01 s resolution also bounds the reported CPU-s.
                 self.assertAlmostEqual(entry["cpu_s"], 0.6, delta=contention.PS_TIME_QUANTUM_S)
 
@@ -2390,10 +2404,11 @@ class R0QuietIntervalTest(unittest.TestCase):
 
     def test_burst_above_interval_budget_is_flagged(self):
         # 1.60 CPU-s exceeds 0.05 * 30 = 1.50 by ten TIME quanta.
-        guard, _, _ = self.guard([cpu_table(), cpu_table((42, NEW_START, "0:01.60", "photoanalysisd"))])
+        guard, clock, _ = self.guard([cpu_table(), cpu_table((42, NEW_START, "0:01.60", "photoanalysisd"))])
         from datetime import datetime
+        wall = datetime(2026, 11, 6, 18, 5, 15).timestamp()
         with patch("joulewise.align.r0_host.time.time_ns",
-                   return_value=int(datetime(2026, 11, 6, 18, 5, 15).timestamp() * 1e9)):
+                   side_effect=lambda: int((wall + clock()) * 1e9)):
             self.assert_flagged(guard, "photoanalysisd.*CPU-s/s")
 
     def test_each_snapshot_closes_a_window_from_the_newest_30_second_opening_and_prunes(self):
@@ -2436,7 +2451,7 @@ class R0QuietIntervalTest(unittest.TestCase):
                     else:
                         guard.check(force=True)
                         self.assert_rate(guard.receipts[-1]["cpu_interval"]["contaminants"][0]["cpu_s_per_s"],
-                                         0.02, 30)
+                                         0.04, 15)
 
     def test_contaminant_regression_between_short_forced_calls_is_recorded(self):
         # 100 TIME quanta / 30 s is below 0.05. A later drop of ten
@@ -2490,20 +2505,19 @@ class R0QuietIntervalTest(unittest.TestCase):
         self.assertFalse(interval["exited_over_limit"])
         self.assertEqual(interval["unaccounted"][0]["reason"], "exited")
 
-    def test_exited_over_limit_rule_uses_contention_previous_interval_evidence(self):
-        # Exercise accounting directly to prove the retained exit rule.
+    def test_exit_without_new_growth_keeps_only_the_previous_flag(self):
         guard, clock, _ = self.guard([
             cpu_table((42, OLD_START, "0:00.00", "mdworker_shared")),
             cpu_table((42, OLD_START, "0:01.80", "mdworker_shared")), cpu_table()])
         self.assert_flagged(guard, "mdworker_shared")
         clock.now = 60
         receipt = {}
-        busy = guard._cpu_interval(receipt)
-        self.assertEqual(busy[0]["pid"], 42)
-        self.assertIn("previous interval", busy[0]["basis"])
-        self.assert_rate(busy[0]["cpu_s_per_s"], 0.06, 30)
+        self.assertEqual(guard._cpu_interval(receipt), [])
+        self.assertEqual(receipt["cpu_interval"]["exited_over_limit"], [])
+        flag, = guard.contention_flags
+        self.assertEqual(flag["interval"]["end_monotonic_s"], 30)
 
-    def test_exit_delta_replaces_previous_interval_evidence_for_same_worker(self):
+    def test_exit_delta_uses_growth_since_opening_for_same_worker(self):
         guard, clock, _ = self.guard([
             cpu_table((42, OLD_START, "0:00.00", "mdworker_shared")),
             cpu_table((42, OLD_START, "0:01.80", "mdworker_shared")),
@@ -2527,9 +2541,8 @@ class R0QuietIntervalTest(unittest.TestCase):
         self.tick(guard, clock, 45, 60, 75)
         guard.check(force=True)
         self.assertEqual(guard.receipts[-1]["cpu_interval"]["start_monotonic_s"], 45)
-        final, = [flag for flag in guard.contention_flags if flag["interval"]["end_monotonic_s"] == 75]
-        self.assertEqual(final["interval"]["start_monotonic_s"], 30)
-        self.assertIn("previous interval", final["busy"][0]["basis"])
+        self.assertTrue(any(flag["interval"]["end_monotonic_s"] == 30 for flag in guard.contention_flags))
+        self.assertFalse(any(flag["interval"]["end_monotonic_s"] == 75 for flag in guard.contention_flags))
 
     def test_report_floor_filters_only_the_receipt(self):
         # 0.005 * 30 = 0.15 CPU-s; 0.14 / 0.16 are one TIME quantum
@@ -2589,20 +2602,20 @@ class R0QuietIntervalTest(unittest.TestCase):
                 self.assertEqual([(row["pid"], row["contaminant"]) for row in interval["regressed_counters"]],
                                  [(42, contaminant)])
 
-    def test_contaminant_regression_with_previous_over_limit_is_still_flagged(self):
-        # (0.05 + 0.01) * 30 = 1.80 CPU-s, then TIME -> zero. Under R0-L3
-        # the next public check judges the regressed interval and flags it.
+    def test_contaminant_regression_discloses_drop_and_preserves_earlier_flag(self):
+        # (0.05 + 0.01) * 30 = 1.80 CPU-s, then TIME drops to zero.
         guard, clock, _ = self.guard([
             cpu_table((42, OLD_START, "0:00.00", "mdworker_shared")),
             cpu_table((42, OLD_START, "0:01.80", "mdworker_shared")),
             cpu_table((42, OLD_START, "0:00.00", "mdworker_shared"))])
         self.assert_flagged(guard, "mdworker_shared 0.06 CPU-s/s")
         clock.now += prewindow.INTERVAL_S
-        self.assert_flagged(guard, "42 mdworker_shared")
+        guard.check(force=True)
         interval = guard.receipts[-1]["cpu_interval"]
-        self.assertEqual(interval["exited_over_limit"][0]["pid"], 42)
+        self.assertEqual(interval["exited_over_limit"], [])
         self.assertTrue(interval["regressed_counters"][0]["contaminant"])
-        self.assertEqual(len(guard.contention_flags), 2)
+        flag, = guard.contention_flags
+        self.assertEqual(flag["interval"]["end_monotonic_s"], 30)
 
     def test_interval_regression_after_missing_snapshot_is_recorded_for_every_identity(self):
         # Opening at 30 s, missing at 1.5 * 30, reappearing at 2 * 30:
@@ -2679,11 +2692,9 @@ class R0QuietIntervalTest(unittest.TestCase):
             self.assertLessEqual(current["start_monotonic_s"], previous["end_monotonic_s"])
         self.assertEqual(len(calls), 8)  # 3 admission + 5 daemon; checks ran none
 
-    def test_repeated_short_startup_bursts_do_not_refuse(self):
-        # Proportionality: mdworker_shared / photoanalysisd respawns, each
-        # ~0.6 CPU-s (60 TIME quanta, 0.02 CPU-s/s over 30 s), a new pair
-        # born in every 15 s cadence slot for ten minutes and gone at the
-        # next snapshot. Per-process judgement keeps them below 0.05.
+    def test_repeated_short_startup_bursts_are_judged_without_latching(self):
+        # A new pair born in every 15 s cadence slot for ten minutes uses
+        # 0.6 CPU-s each before its first sample and exits by the next one.
         from datetime import datetime
         wall0 = datetime(2026, 11, 6, 18, 0, 0).timestamp()
         def lstart(t):
@@ -2703,8 +2714,9 @@ class R0QuietIntervalTest(unittest.TestCase):
         windows = [w for receipt in guard.receipts for w in receipt.get("cpu_intervals", ())]
         self.assertEqual(len(windows), len(times) - 1)
         rates = [c["cpu_s_per_s"] for w in windows for c in w["contaminants"]]
-        # 0.6 CPU-s over a 30 s window (0.02), or over the first 45 s one.
-        self.assert_rate(max(rates), 0.02, prewindow.INTERVAL_S)
+        # The newest photoanalysisd uses 0.6 CPU-s over a 3 s overlap.
+        self.assert_rate(max(rates), 0.2, 3)
+        self.assertEqual(sorted({flag["interval"]["end_monotonic_s"] for flag in guard.contention_flags}), times[2:])
         self.assertIsNone(guard.failure)
 
     def test_caller_repeats_full_census_at_admission_boundaries(self):
