@@ -56,6 +56,11 @@ completed call's start, first-token and end stamps come from the endpoint
 result used to construct the logged envelope. Before admission the parent
 checks the first visible call's start and first-token stamps, the last visible
 call's end stamp, and the summed visible token counts against that envelope.
+The endpoint takes one start reading per physical call. On a raised call,
+the ctl endpoint attaches that reading to the exception. The work row uses
+it, and the work record retains an incomplete `failed_envelope` Turn from
+the first started visible call. A failed leg retains its runtime failure
+exit and is ineligible for admission.
 The work record carries cached prompt counts alongside full context counts
 so the parent can compare the envelope's fresh prefill count.
 A short dose stays on disk and is excluded. An unrelated or unbound result

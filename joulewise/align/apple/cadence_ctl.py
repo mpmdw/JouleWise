@@ -9,13 +9,14 @@ It is sealed ground truth, not a desk projection. No W1/R1 module on disk is cha
 from __future__ import annotations
 
 from contextlib import contextmanager
-from dataclasses import replace
+from dataclasses import asdict, replace
 import hashlib
 import json
 import time
 
 from joulewise.align.apple import cadence_leg, r1_runtime as rt
 from joulewise.align.apple.sampler import monotonic_ns
+from joulewise.align.records import Turn
 from joulewise.cadence import ctl, legs
 
 AUDIT_NAME = ctl.WORK_NAME
@@ -32,15 +33,46 @@ def cpu_burn(clock, seconds, *, synthetic):
         value = (value * 1664525 + 1013904223) & 0xffffffff
 
 
+class CallClock:
+    """Observe an endpoint's own boundaries without sampling the clock again."""
+
+    def __init__(self, clock):
+        self.clock = clock
+        self.start = self.end = None
+
+    def stamp(self):
+        stamp = self.clock.stamp()
+        if self.start is None:
+            self.start = stamp
+        else:
+            self.end = stamp
+        return stamp
+
+    def __getattr__(self, name):
+        return getattr(self.clock, name)
+
+
 def endpoint_class(base, script, audit, *, synthetic):
-    class ScriptEndpoint(base):
+    class PhysicalEndpoint(base):
+        def chat(self, messages, **kwargs):
+            clock = CallClock(self.clock)
+            self.clock = clock
+            try:
+                return super().chat(messages, **kwargs)
+            except BaseException as error:
+                if clock.start is not None:
+                    error.started_ns = monotonic_ns(clock.start)
+                    if clock.end is not None:
+                        error.ended_ns = monotonic_ns(clock.end)
+                raise
+            finally:
+                self.clock = clock.clock
+
+    class ScriptEndpoint(PhysicalEndpoint):
         def __init__(self, *args, **kwargs):
             super().__init__(*args, **kwargs)
-            self.hidden_endpoint = base(*args, **kwargs)
+            self.hidden_endpoint = PhysicalEndpoint(*args, **kwargs)
             self.script_used = False
-
-        def stamp(self):
-            return monotonic_ns(self.clock.stamp())
 
         def interval(self, kind, seconds):
             started = self.clock.stamp()
@@ -62,14 +94,16 @@ def endpoint_class(base, script, audit, *, synthetic):
             row["complete"] = ctl.completed_step(row, kind, seconds)
 
         def physical_call(self, endpoint, messages, kwargs, tokens, *, logged):
-            row = {"kind": "turn" if logged else "hidden", "started_ns": self.stamp(),
+            row = {"kind": "turn" if logged else "hidden",
                    "requested_tokens": tokens, "actual_tokens": None, "complete": False}
             audit["steps"].append(row)
             try:
-                result = base.chat(endpoint, messages, **{**kwargs, "max_tokens": tokens})
-            except BaseException:
-                # A call that raises cannot supply its own boundaries.
-                row["ended_ns"] = self.stamp()
+                result = PhysicalEndpoint.chat(endpoint, messages, **{**kwargs, "max_tokens": tokens})
+            except BaseException as error:
+                if hasattr(error, "started_ns"):
+                    row["started_ns"] = error.started_ns
+                if hasattr(error, "ended_ns"):
+                    row["ended_ns"] = error.ended_ns
                 raise
             row.update(started_ns=result.start_ns, first_token_ns=result.first_token_ns, ended_ns=result.end_ns,
                        actual_tokens=result.completion_tokens, context_tokens=result.prompt_tokens,
@@ -84,17 +118,32 @@ def endpoint_class(base, script, audit, *, synthetic):
                 raise rt.RuntimeFailure("one control script per member")
             self.script_used = True
             visible = []
-            for kind, dose in ctl.script_steps(script):
-                if kind == "hidden":
-                    self.physical_call(self.hidden_endpoint, messages, kwargs, dose, logged=False)
-                elif kind == "turn":
-                    if script["kind"] == "split":
-                        # The native sampler derives its seed from the endpoint turn.
-                        # Each split call starts at the plain member's logical turn zero.
-                        self._turn = 0
-                    visible.append(self.physical_call(self, messages, kwargs, dose, logged=True))
-                else:
-                    self.interval(kind, dose)
+            try:
+                for kind, dose in ctl.script_steps(script):
+                    if kind == "hidden":
+                        self.physical_call(self.hidden_endpoint, messages, kwargs, dose, logged=False)
+                    elif kind == "turn":
+                        if script["kind"] == "split":
+                            # The native sampler derives its seed from the endpoint turn.
+                            # Each split call starts at the plain member's logical turn zero.
+                            self._turn = 0
+                        visible.append(self.physical_call(self, messages, kwargs, dose, logged=True))
+                    else:
+                        self.interval(kind, dose)
+            except BaseException:
+                # The shared workload aborts before logging a Turn when chat raises.
+                turns = [row for row in audit["steps"] if row["kind"] == "turn" and "started_ns" in row]
+                if turns:
+                    first, last = turns[0], turns[-1]
+                    audit["failed_envelope"] = asdict(Turn(
+                        index=0, start_ns=first["started_ns"], end_ns=last.get("ended_ns", last["started_ns"]),
+                        first_token_ns=first.get("first_token_ns"),
+                        context_tokens=sum(call.cached_prompt_tokens for call in visible),
+                        prefill_tokens=sum(call.prompt_tokens - call.cached_prompt_tokens for call in visible),
+                        decode_tokens=sum(call.completion_tokens for call in visible),
+                        hidden_tokens=sum(call.reasoning_tokens for call in visible),
+                    ))
+                raise
             audit["complete"] = ctl.work_complete(audit["steps"], script)
             first, last = visible[0], visible[-1]
             return replace(last, start_ns=first.start_ns, first_token_ns=first.first_token_ns,

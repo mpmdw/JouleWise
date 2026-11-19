@@ -741,16 +741,37 @@ class RuntimeTests(unittest.TestCase):
         self.assertTrue(prompt)
         self.assertEqual([(seed, ids) for _, seed, ids in split_calls], [(physical_seed, prompt)] * 3)
 
-    def test_physical_call_boundaries_match_envelope_with_nonzero_clock_reads(self):
+    @contextmanager
+    def count_physical_start_reads(self):
+        from joulewise.align.apple.sampler import monotonic_ns
         from tests.align.w1_synthetic import WorldClock
 
         native_stamp = WorldClock.stamp
-        native_chat = workload.MlxEndpoint.chat
-        physical_calls = []
+        chat_code = workload.MlxEndpoint.chat.__code__
+        reads = []
 
         def stamp(clock):
             clock._now += 1e-6
-            return native_stamp(clock)
+            value = native_stamp(clock)
+            frame = sys._getframe(1)
+            while frame is not None:
+                if frame.f_code is chat_code:
+                    if "start_stamp" not in frame.f_locals:
+                        reads.append(monotonic_ns(value))
+                    break
+                if frame.f_code.co_filename == cadence_ctl.__file__ and frame.f_code.co_name == "physical_call":
+                    # Any wrapper-side read here is extra. The endpoint owns both boundaries.
+                    reads.append(monotonic_ns(value))
+                    break
+                frame = frame.f_back
+            return value
+
+        with patch.object(WorldClock, "stamp", stamp):
+            yield reads
+
+    def test_physical_call_boundaries_match_envelope_with_nonzero_clock_reads(self):
+        native_chat = workload.MlxEndpoint.chat
+        physical_calls = []
 
         def chat(endpoint, *args, **kwargs):
             result = native_chat(endpoint, *args, **kwargs)
@@ -758,10 +779,12 @@ class RuntimeTests(unittest.TestCase):
             return result
 
         source = None
-        with patch.object(WorldClock, "stamp", stamp), patch.object(workload.MlxEndpoint, "chat", chat):
+        count = 0
+        with self.count_physical_start_reads() as reads, patch.object(workload.MlxEndpoint, "chat", chat):
             for spec in specs():
                 with self.subTest(leg=spec["leg_id"]):
                     physical_calls.clear()
+                    reads.clear()
                     if spec["g0_role"] == "capture":
                         source = None
                     code, out, _ = self.call(spec, spec["leg_id"], source=source)
@@ -770,6 +793,8 @@ class RuntimeTests(unittest.TestCase):
                         source = out
                     work = json.loads((out / ctl.WORK_NAME).read_bytes())
                     calls = [row for row in work["steps"] if row["kind"] in {"hidden", "turn"}]
+                    self.assertEqual(reads, [row["started_ns"] for row in calls])
+                    count += len(reads)
                     self.assertEqual(
                         [(row["started_ns"], row["first_token_ns"], row["ended_ns"]) for row in calls],
                         [(r.start_ns, r.first_token_ns, r.end_ns) for r in physical_calls],
@@ -787,6 +812,43 @@ class RuntimeTests(unittest.TestCase):
                     self.assertEqual(result["decode_tokens"], sum(row["actual_tokens"] for row in visible))
                     self.assertEqual(result["prefill_tokens"],
                                      sum(row["context_tokens"] - row["cached_prompt_tokens"] for row in visible))
+        self.assertEqual(count, 24)
+
+    def test_failed_physical_call_preserves_single_start_read_for_envelope(self):
+        from joulewise.align.apple import endpoint
+
+        spec = specs()[0]
+        parse_completion = endpoint.parse_completion
+        for failed_call in (1, 2):
+            with self.subTest(failed_call=failed_call):
+                completed = 0
+                failure = RuntimeError("synthetic finalize failure")
+
+                def parse(*args, **kwargs):
+                    nonlocal completed
+                    completed += 1
+                    if completed == failed_call:
+                        raise failure
+                    return parse_completion(*args, **kwargs)
+
+                with (self.count_physical_start_reads() as reads,
+                      patch.object(endpoint, "parse_completion", side_effect=parse)):
+                    code, out, result = self.call(spec, f"failed-visible-{failed_call}")
+                self.assertEqual(code, rt.EXIT_FAILED)
+                self.assertIsNone(result)
+                raw = (out / ctl.WORK_NAME).read_bytes()
+                work = json.loads(raw)
+                calls = [row for row in work["steps"] if row["kind"] == "turn"]
+                self.assertEqual(len(reads), failed_call)
+                self.assertEqual([row["started_ns"] for row in calls], reads)
+                self.assertEqual(failure.started_ns, reads[-1])
+                self.assertFalse(calls[-1]["complete"])
+                self.assertFalse(work["complete"])
+                self.assertEqual(work["failed_envelope"]["start_ns"], reads[0])
+                self.assertEqual(work["failed_envelope"]["end_ns"], failure.ended_ns)
+                custody = json.loads((out / rt.CUSTODY_NAME).read_bytes())
+                self.assertEqual(custody["status"], "failed")
+                self.assertEqual(custody["files"][ctl.WORK_NAME], hashlib.sha256(raw).hexdigest())
 
     def test_authenticated_ctl_envelope_cannot_disagree_with_physical_work(self):
         spec = specs()[0]
