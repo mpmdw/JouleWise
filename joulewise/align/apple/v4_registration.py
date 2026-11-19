@@ -21,6 +21,9 @@ _NAMED_ARTIFACTS = (
     'scripts/align_w1_budget_procedure.py', 'joulewise/align/apple/km003c.py',
     'scripts/validate_align_v4_w1_plan.py', 'joulewise/align/apple/pilot_analysis.py',
     'joulewise/align/energy_residual.py',
+    # RL-176 F: bind the release analysis and its dedicated Student-t dependency.
+    'joulewise/align/apple/rl176.py', 'joulewise/align/apple/rl176_phases.py',
+    'joulewise/analysis_engine/distributions.py',
     'scripts/align_v4_kit.py', 'scripts/align_v4_session.py',
     'scripts/zero_ntp_frequency.c',
     'scripts/watchdog_status.py', 'scripts/launch_align_r0.py',

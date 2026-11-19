@@ -561,6 +561,60 @@ class MlxRuntimeTests(unittest.TestCase):
             "requested_tokens_emitted",
         )
 
+    def _assert_episode_prefix_first_stamp_boundary(self) -> None:
+        from tests.align import test_pilot3_cache
+
+        tick = 1 / 1024
+
+        class TickingClock(FakeClock):
+            def __init__(self) -> None:
+                super().__init__(start=1000.0)
+
+            def now(self) -> float:
+                self.sleep(tick)
+                return super().now()
+
+        def check_stamps(events, label):
+            prefill = [e for e in events if (e.event_type, e.phase) == ("phase_end", "prefill")]
+            decode = [e for e in events if (e.event_type, e.phase) == ("phase_start", "decode")]
+            tokens = [e for e in events if e.event_type == "token" and e.metadata["index"] == 0]
+            self.assertEqual((len(prefill), len(decode), len(tokens)), (1, 1, 1), label)
+            self.assertEqual(tokens[0].timestamp_s - prefill[0].timestamp_s, tick,
+                             f"{label} stamp gap must be exactly one tick")
+            self.assertEqual(decode[0].timestamp_s, prefill[0].timestamp_s, label)
+
+        api = test_pilot3_cache.CacheAPI()
+        initial = [1, 2, 3]
+        with (
+            patch.object(test_pilot3_cache, "FakeClock", TickingClock),
+            patch("joulewise.align.apple.prompt_cache.native_cache_api", return_value=api),
+        ):
+            cached, cached_calls = test_pilot3_cache.fake_endpoint(api, cache=True)
+            cold = test_pilot3_cache.chat(cached, initial)
+            prefix = initial + cached.turn_provenance[-1]["generation"]["output_token_ids"]
+            hit = test_pilot3_cache.chat(cached, prefix + [4])
+            uncached, uncached_calls = test_pilot3_cache.fake_endpoint(api, cache=False)
+            test_pilot3_cache.chat(uncached, initial)
+
+        for endpoint in (cached, uncached):
+            self.assertFalse(any(flag.startswith("endpoint_error:") for flag in endpoint.flags), endpoint.flags)
+        self.assertEqual(cached_calls, [initial, [4]])
+        self.assertEqual(cold.cached_prompt_tokens, 0)
+        self.assertEqual(hit.cached_prompt_tokens, len(prefix))
+        self.assertEqual(uncached_calls, [initial])
+        for index, label in enumerate(("cache miss", "cache hit")):
+            check_stamps([e for e in cached.events if e.metadata["align_turn_index"] == index], label)
+        check_stamps(uncached.events, "uncached")
+
+        adapter, _ = self.prepared_adapter(["A"])
+        adapter._clock = TickingClock()
+        item = adapter._generate(initial, initial, None, 1, suppress_eos=False,
+                                 item_id="synthetic", item_index=0, position=0)
+        check_stamps(item.events, "suite item")
+
+    def test_first_yield_stamp_gap_is_two_clock_reads_without_model_work(self) -> None:
+        self._assert_episode_prefix_first_stamp_boundary()
+
     def test_run_workload_event_shape_and_token_timeline(self) -> None:
         adapter, _ = self.prepared_adapter(["A", "B", "C"])
         result = adapter.run_workload(make_config())
