@@ -26,7 +26,7 @@ import time
 if __package__ in (None, ""):
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from joulewise.cadence import blocks, kit as kitmod, kit_v11, queue as q  # noqa: E402
+from joulewise.cadence import blocks, ctl, kit as kitmod, kit_v11, queue as q  # noqa: E402
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -176,11 +176,18 @@ def cmd_next(args):
 
 
 def cmd_checklist(args):
-    kit, _ = kitmod.load_kit(args.kit, batch_window=_window(args.batch_window))
+    kit, sha = kitmod.load_kit(args.kit, batch_window=_window(args.batch_window))
     obs = json.loads(Path(args.observations).read_text())
-    if kit["schema"] == kit_v11.SCHEMA:   # the free t0's span_window line (design doc section 14.3; RL-171)
+    if kit["schema"] in (kit_v11.SCHEMA, ctl.SCHEMA):
         rows = kit_v11.evaluate_checklist(kit, obs, expected_kit_sha256=args.kit_sha256,
                                           batch_window=_window(args.batch_window) if args.batch_window else None)
+        if kit["schema"] == ctl.SCHEMA:
+            for name, check, values in (("ctl_authority", ctl.require_issued, (kit,)),
+                                        ("ctl_queue_hash", ctl.require_queue_kit_hash, (args.kit_sha256, sha))):
+                try:
+                    check(*values)
+                except kitmod.KitError as error:
+                    rows.append({"id": name, "kind": name, "ok": False, "detail": str(error)})
     else:
         rows = kitmod.evaluate_checklist(kit, obs, expected_kit_sha256=args.kit_sha256)
     for r in rows:

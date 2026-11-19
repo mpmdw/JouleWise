@@ -21,4 +21,7 @@ if str(ROOT) not in sys.path:
 from joulewise.align.apple.cadence_leg import main  # noqa: E402
 
 if __name__ == "__main__":
+    if sys.argv[1:2] == ["--scripted-ctl"]:
+        from joulewise.align.apple import cadence_ctl
+        raise SystemExit(cadence_ctl.main(sys.argv[2:]))
     raise SystemExit(main())
