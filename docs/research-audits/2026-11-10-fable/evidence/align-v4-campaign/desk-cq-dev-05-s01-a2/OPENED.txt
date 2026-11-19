@@ -1,0 +1,56 @@
+2026-11-19 14:22:40 PST NOTE desk builder for cq-dev-05-s01-a2 (dev-05, kit cl-dev-05.v1.1) on the Air; PROPOSED, the lead signs. Method = desk-cq-dev-03-s02-a1 (/Volumes/JW-EXT/scratch/desk-dev03-s02, 38aa22e50) with desk-cq-dev-04-s01-a1's redo handling (a8d34609b on origin/audit/2026-11-10-fable): hand_table.py comparison unchanged (header and kit name only); r1print.py roster/capture/run-id only; sampler.py, oslevel.py, rule5_place.py, maint_overlap.py, maint_burst.py, keyscan.py byte-equal to the template; rule5_place_a1.py (s01 only) = dev-04-s01's with the L004.a1 header; ref_window_place.py new (thermal journal clock mapping + window reference span_ns/status only); build_result.py rewritten (no dev-04 gate section; adds redo, Check agreement, hand-sample draw).
+NOTE code/doc reads (not data): template REPORT/RESULT/OPENED/hand/*.py/auto/q1; dev-04-s01 desk files and hand scripts via git show; RUN_STATE.md at origin/main (items 386, 393/394, 427, 429, 430, 436, 437 and line-9 records); docs/process/cadence_desk_format.md at origin/align/2026-11-15-desk-final; desk_final.py (hand_sample, validate_q1_record) at that branch; queue JSON and kit JSON via git show; RESEARCH-LEAD-DECISIONS.md lines cited by the plan; /Volumes/JW-EXT/scratch/astra-air-desk-plan/PLAN.md row-7 section.
+NOTE manifest: shasum -a 256 -c of every cq-dev-05-s01-a2-20261118T083520Z.mbp.SHA256SUMS entry over the tree: 252 OK, 0 failed (hash only, sealed files included); find -type f count = 252. .mbp sha256 35c11dfe778bdd2bf750055bad9d9eca577448e35c01f3fef39a965fb4be0858 (= the Check's manifest hash); .air lists the same 252 entries in a different order (sorted-equal), sha256 1bbdecd696597507228bab57f23733fa72b24525111dd9bfd9034a73a20dac8f.
+NOTE kit: git show fecaf73f3:docs/process/cadence/kits/cl-dev-05.v1.1.json -> kit.json; sha256 2747381bf1169471d929d1e91510f7d272ff9cbc973da2c99f11673bea53ca1a (asserted = 2747381b...ca1a, the issued kit). Desk checkout /Volumes/JW-EXT/jw-wt/desk-pin-2d347f721-1119 at 2d347f721552fe03bdd19f113e7bad7a7c24908e, git status empty before and after.
+KEYS-ONLY first (hand/keyscan.py; list hand/keyscan.list; output hand/keyscan.out): 37 files; hits power-MODE keys only (ac_powermode in leg_record.json and runner_receipt.json). No file was opened for values before the scan.
+DESK (scripts/air/cadence_desk.py build at the pin, --kit, never --adapter, TMPDIR /Volumes/JW-EXT/scratch/desk-dev05-s01-a2/tmp) reads desk-bundle/legs/*/leg_summary.json and desk-bundle/span/{meter,result}.json -> auto/ (rc 0, stops 0; hand/desk.stdout).
+OPEN hand/hand_table.py: runner_receipt.json, span_plan.json, chain-stages.jsonl, censuses.jsonl, volume_censuses.jsonl, legs/*/leg_record.json, legs/*/runtime*/load_journal.json (every attempt), counted outputs/align_thermal.jsonl and align_window_reference.json (where present), kit.json -> hand/hand_table.json (diffs []).
+OPEN hand/r1print.py: soak/soak_reference.json, soak/idle_soak/sensors/align_thermal.jsonl, leg records, counted outputs/{align_thermal.jsonl, align_window_reference.json} (thermal sensor readings and G0 rows only) -> hand/r1print.out.
+OPEN hand/sampler.py, hand/oslevel.py, hand/ref_window_place.py: leg records and counted thermal journals (timestamps, errors, coverage, os_level/pm_state, G0 stamps; window reference span_ns/status) -> *.out.
+OPEN hand/rule5_place.py, hand/rule5_place_a1.py: leg records and load_journal.json (cpu_busy_cores, cpu_busy_t_s) -> rule5_place*.out. Rejected attempt read: L004.a1 (legs/L004/runtime.rejected1: load_journal.json and outputs/align_thermal.jsonl).
+OPEN hand/maint_overlap.py, hand/maint_burst.py: maintenance-log.txt LEADING FIELDS ONLY (date, time, process name; message text never kept or printed); every attempt's thermal journal (G0 stamps, wall/monotonic mapping) -> MAINTENANCE-OVERLAP.md, hand/maint_overlap.json, hand/maint_burst.out. maintenance-log.err: size only (0 bytes).
+OPEN hand/build_result.py: hand/*.out, hand/hand_table.json, hand/maint_judgement.txt, auto/{desk_summary,stops}.json, kit.json, runner_receipt.json (roster, kit identity, started/ended epochs), /Volumes/JW-EXT/scratch/row7-reconcile-1119/draw.json -> RESULT.json.
+NOTE Q1 completion record draft -> q1/cq-dev-05-s01-a2.json (no reading; validate_q1_record rules pass; signer PROPOSED).
+NOT OPENED: hazards/**, meter_supervision.jsonl, meter.std*.log, soak.std*.log, soak/soak_row.json, soak/idle_soak/{load_journal,runtime_custody,runtime_result,battery}.json*, legs/*/{leg_spec.json, leg_summary.json, L*.a*.std*.log}, legs/*/runtime*/{runtime_custody,runtime_result}.json, battery.jsonl, runs/*/{config,metadata,summary_metrics}.json, events.jsonl, logs/**, raw/**, power_trace.csv, rich_telemetry*.jsonl, outputs/{align_episode.json, align_turns.jsonl, align_transcript.jsonl}, the rejected attempt's align_window_reference.json, and every energy, power, meter-sample, powermetrics, transcript, slot or telemetry file. No energy value printed. No SSH to the MBP. No commit, push or PR.
+
+sha256 of every opened data file (each equals its manifest entry: yes)
+147e3d9292cd657c51c3c324b8ff5a8dbcca6aeb3f0209f3c745a50172f7bb7a  censuses.jsonl  manifest=OK
+bdba4f2d9d5d2c1dedcce89478f7403dca0eba0a6bd90795266970fbd0636438  chain-stages.jsonl  manifest=OK
+49af0643f9eaba51c186ea666f9470ec2f662f6ebb18ac0f7606c6f0ac897c08  desk-bundle/legs/L001/leg_summary.json  manifest=OK
+853cda10adb23dc2c5fa2285df2f08b16ab13f2e53d6d5ba05158d963c5d9afe  desk-bundle/legs/L002/leg_summary.json  manifest=OK
+bb702f00c21d838139d713bf5697f2d2d3f1051cf0a3a5be06ec6d07e99abf79  desk-bundle/legs/L003/leg_summary.json  manifest=OK
+944561675fa25159840365e6b1f4483da999ad8e41d0a3ec0a81ecfefdd08135  desk-bundle/legs/L004/leg_summary.json  manifest=OK
+511a8ebad4de812544559a2309d30a3cd59f914b3c0b99e9371e20c219a6cb0e  desk-bundle/legs/L005/leg_summary.json  manifest=OK
+e42ea83d26d1629fb7db0e57d2c30a9f1082e02b5d5e24110911ac73b8261462  desk-bundle/legs/L006/leg_summary.json  manifest=OK
+73747f62f4178a8d6b9379f6d20279f928508cead4e8cfceb8cf3b1ac76cd8e4  desk-bundle/span/meter.json  manifest=OK
+afc7a54c263fe9c6a28f06018acf28caa94733518898b38c7c10d9efac4a9e0d  desk-bundle/span/result.json  manifest=OK
+6e63c5a8fd698acc965532dc18cd5733c155097f1ca67e79344bf1d91b957e4f  legs/L001/leg_record.json  manifest=OK
+da1c5a6b1642df26da1ec932f8c7dcb7f4d0e976d05c80626aa076f168ceda14  legs/L001/runtime/load_journal.json  manifest=OK
+ae3d05908a8a9822f066fd53ddf2897c1d9c8a43ccf48e0d68a5fede5c281042  legs/L001/runtime/runs/cadence-cl-dev-05-l001/outputs/align_thermal.jsonl  manifest=OK
+1664dd3458d5e2b1043b5bf42c41ddbff4bae7cd67b1a551895490b2c24acd2c  legs/L001/runtime/runs/cadence-cl-dev-05-l001/outputs/align_window_reference.json  manifest=OK
+a54e5d10acadc122172a6aaf77fd27c6be3873775db95e0ef039bc19bbb8fb64  legs/L002/leg_record.json  manifest=OK
+4932c7396274751556bf0fb17620935a5595ee3bd3560517b8e638cce413b941  legs/L002/runtime/load_journal.json  manifest=OK
+a72608aeb31942beda95beac0cebf838402c4465b01dcd41765d77740e190952  legs/L002/runtime/runs/cadence-cl-dev-05-l002/outputs/align_thermal.jsonl  manifest=OK
+50c78b9a7043d2378a715a176f0d3d77a5d4e177426b12846ee7f42a2703e2c7  legs/L003/leg_record.json  manifest=OK
+779842ac1149dc25d9cbf4c38ce4b8984f912d5b3e0dec79be10b1c22aabea28  legs/L003/runtime/load_journal.json  manifest=OK
+584a405c86b896b7b84b2e42c6889b8dd553f3341540c39be5915deea2587663  legs/L003/runtime/runs/cadence-cl-dev-05-l003/outputs/align_thermal.jsonl  manifest=OK
+394d6cb2b7db8d71387cce85a31ccd4e70b376baf16341884a9ab6da1fe0348a  legs/L004/leg_record.json  manifest=OK
+6e79f2644e4aa90d845a089f749f30f5698699f3c2f4fe285864f3c4a753a03f  legs/L004/runtime.rejected1/load_journal.json  manifest=OK
+4e9fa8449f762228f5b11c6a1b4a8c2741bd423418a5982ec11e4d52289c882f  legs/L004/runtime.rejected1/runs/cadence-cl-dev-05-l004/outputs/align_thermal.jsonl  manifest=OK
+93ca3aba4e1e047899615e1eb98642070b850f5270913886979757757c2510e2  legs/L004/runtime/load_journal.json  manifest=OK
+298ed936dd8a02f2bf0e1c985b4655f101eff46813e0b9d447ad596ae93ed756  legs/L004/runtime/runs/cadence-cl-dev-05-l004/outputs/align_thermal.jsonl  manifest=OK
+831e1c57522d167f7f8a21b838724613a25d046a083c843b451542f6c7674d35  legs/L004/runtime/runs/cadence-cl-dev-05-l004/outputs/align_window_reference.json  manifest=OK
+c1a4cfaa6b97ec86439b283e0acea216542572932a7fbd5b589bb7fd5942486e  legs/L005/leg_record.json  manifest=OK
+37b84ab07f998f3cfc178f9dd787b80736978ce9206431657fba7e3c56f79d28  legs/L005/runtime/load_journal.json  manifest=OK
+d2025e7978825599b1b50d23affdb0128fdd1ede075b8248e36101a6963f4522  legs/L005/runtime/runs/cadence-cl-dev-05-l005/outputs/align_thermal.jsonl  manifest=OK
+6cac3041fab67e493ecef2f47eef1e43fdfbc99af75f8dd44fa1ea202f23d25f  legs/L006/leg_record.json  manifest=OK
+b28e8a3eb62fd7c978f2eb1cb7c3dd370082fd1c157248e24631ea7921176da6  legs/L006/runtime/load_journal.json  manifest=OK
+b3430b2bf098f8e9167313cb54b826210fa6a16ee989316d3fed64934019b820  legs/L006/runtime/runs/cadence-cl-dev-05-l006/outputs/align_thermal.jsonl  manifest=OK
+12a8b027be9453f90362d5fd5835edec26ff27e9498fe9645d8074d391a010dd  runner_receipt.json  manifest=OK
+3c049bc41a4f326b6247d8f5428668a038563dfb6ca4face9084f621157fc711  soak/idle_soak/sensors/align_thermal.jsonl  manifest=OK
+b2b0524519b8b75f5e6b0d7780bec590d99acdb14f83dbed40c2e6b6c0949c20  soak/soak_reference.json  manifest=OK
+dbe8d16a8e5c65142f671a8bcbeb55e755344f050d482b14f57ba86222146f44  span_plan.json  manifest=OK
+dde271a0e99dbdb8e78035daeacc7c9208c5a2b422d31da378994bdb6f893fce  volume_censuses.jsonl  manifest=OK
+5164645c31a8b16e627d3635c03458574d3a87aac1dfcb58f17aa4810d3bfe35  maintenance-log.txt  manifest=OK
+e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855  maintenance-log.err  manifest=OK
+2747381bf1169471d929d1e91510f7d272ff9cbc973da2c99f11673bea53ca1a  kit.json (outside the tree)

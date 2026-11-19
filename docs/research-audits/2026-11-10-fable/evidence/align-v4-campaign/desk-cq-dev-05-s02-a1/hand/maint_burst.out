@@ -1,0 +1,14 @@
+== 04:55-05:15
+05:08 mobileassetd 69
+05:09 XProtect 50
+05:09 XProtectPluginService 562
+05:09 mobileassetd 2041
+05:09 softwareupdated 2595
+05:10 mobileassetd 3
+05:10 softwareupdated 7
+05:11 mobileassetd 11
+05:11 softwareupdated 25
+05:12 softwareupdated 8
+05:14 mobileassetd 1
+05:14 softwareupdated 1
+first {'mobileassetd': '05:08:02', 'XProtect': '05:09:09', 'softwareupdated': '05:09:09', 'XProtectPluginService': '05:09:09'} last {'mobileassetd': '05:14:25', 'XProtect': '05:09:28', 'softwareupdated': '05:14:25', 'XProtectPluginService': '05:09:28'}

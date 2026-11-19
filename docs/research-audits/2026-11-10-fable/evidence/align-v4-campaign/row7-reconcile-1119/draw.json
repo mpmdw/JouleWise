@@ -1,0 +1,284 @@
+[
+ {
+  "span_id": "dev-01-s01",
+  "queue": "cq-cl-dev-01-pilot",
+  "seq": 1,
+  "kit_path": "docs/process/cadence/kits/cl-dev-01.json",
+  "kit_commit": "589748f15",
+  "kit_sha256": "c76344c50aebc271cef5711ecb4f9b05482e8b5593a57afa16e973dfe1dc66d7",
+  "kit_bytes_match": true,
+  "kit_schema": "joulewise.cadence_campaign_kit.v1",
+  "legs": [
+   "L001",
+   "L002",
+   "L003"
+  ],
+  "shape": "own",
+  "value": 1,
+  "hash_selected": false
+ },
+ {
+  "span_id": "dev-01-s03",
+  "queue": "cq-cl-dev-01-pilot",
+  "seq": 3,
+  "kit_path": "docs/process/cadence/kits/cl-dev-01.json",
+  "kit_commit": "589748f15",
+  "kit_sha256": "c76344c50aebc271cef5711ecb4f9b05482e8b5593a57afa16e973dfe1dc66d7",
+  "kit_bytes_match": true,
+  "kit_schema": "joulewise.cadence_campaign_kit.v1",
+  "legs": [
+   "L004",
+   "L005",
+   "L006",
+   "L007"
+  ],
+  "shape": "own",
+  "value": 1,
+  "hash_selected": false
+ },
+ {
+  "span_id": "dev-01-s04",
+  "queue": "cq-cl-dev-01-pilot",
+  "seq": 4,
+  "kit_path": "docs/process/cadence/kits/cl-dev-01.json",
+  "kit_commit": "589748f15",
+  "kit_sha256": "c76344c50aebc271cef5711ecb4f9b05482e8b5593a57afa16e973dfe1dc66d7",
+  "kit_bytes_match": true,
+  "kit_schema": "joulewise.cadence_campaign_kit.v1",
+  "legs": [
+   "L008",
+   "L009",
+   "L010",
+   "L011",
+   "L012"
+  ],
+  "shape": "own",
+  "value": 2,
+  "hash_selected": false
+ },
+ {
+  "span_id": "dev-02-s02",
+  "queue": "cq-cl-dev-02",
+  "seq": 2,
+  "kit_path": "docs/process/cadence/kits/cl-dev-02.json",
+  "kit_commit": "589748f15",
+  "kit_sha256": "d963500b39af8867576ab07e2086c22ffd4a176c9e2d6eb60c80f65bc03728a8",
+  "kit_bytes_match": true,
+  "kit_schema": "joulewise.cadence_campaign_kit.v1",
+  "legs": [
+   "L001",
+   "L002",
+   "L003",
+   "L004",
+   "L005",
+   "L006"
+  ],
+  "shape": "own",
+  "value": 3,
+  "hash_selected": false
+ },
+ {
+  "span_id": "dev-02-s03",
+  "queue": "cq-cl-dev-02",
+  "seq": 3,
+  "kit_path": "docs/process/cadence/kits/cl-dev-02.json",
+  "kit_commit": "589748f15",
+  "kit_sha256": "d963500b39af8867576ab07e2086c22ffd4a176c9e2d6eb60c80f65bc03728a8",
+  "kit_bytes_match": true,
+  "kit_schema": "joulewise.cadence_campaign_kit.v1",
+  "legs": [
+   "L007",
+   "L008",
+   "L009",
+   "L010",
+   "L011",
+   "L012"
+  ],
+  "shape": "own",
+  "value": 0,
+  "hash_selected": true
+ },
+ {
+  "span_id": "dev-03-s01",
+  "queue": "cq-cl-dev-03",
+  "seq": 1,
+  "kit_path": "docs/process/cadence/kits/cl-dev-03.v1.1.json",
+  "kit_commit": "9cbb365a6",
+  "kit_sha256": "0f535774b413654d9d72b153a7dc8369df81575b34c5fa120898d76dfe04e14b",
+  "kit_bytes_match": true,
+  "kit_schema": "joulewise.cadence_campaign_kit.v1.1",
+  "legs": [
+   "L001",
+   "L002",
+   "L003"
+  ],
+  "shape": "span",
+  "value": 2,
+  "hash_selected": false
+ },
+ {
+  "span_id": "dev-03-s02",
+  "queue": "cq-cl-dev-03",
+  "seq": 2,
+  "kit_path": "docs/process/cadence/kits/cl-dev-03.v1.1.json",
+  "kit_commit": "9cbb365a6",
+  "kit_sha256": "0f535774b413654d9d72b153a7dc8369df81575b34c5fa120898d76dfe04e14b",
+  "kit_bytes_match": true,
+  "kit_schema": "joulewise.cadence_campaign_kit.v1.1",
+  "legs": [
+   "L004",
+   "L005",
+   "L006",
+   "L007",
+   "L008",
+   "L009",
+   "L010",
+   "L011",
+   "L012"
+  ],
+  "shape": "span",
+  "value": 1,
+  "hash_selected": false
+ },
+ {
+  "span_id": "dev-04-s01",
+  "queue": "cq-cl-dev-04",
+  "seq": 1,
+  "kit_path": "docs/process/cadence/kits/cl-dev-04.v1.1.json",
+  "kit_commit": "fecaf73f3",
+  "kit_sha256": "1cc6673d78922a67b381155e24d53744e8515a6ca821e9a4a0ed62943d752228",
+  "kit_bytes_match": true,
+  "kit_schema": "joulewise.cadence_campaign_kit.v1.1",
+  "legs": [
+   "L001",
+   "L002",
+   "L003",
+   "L004",
+   "L005",
+   "L006"
+  ],
+  "shape": "span",
+  "value": 2,
+  "hash_selected": false
+ },
+ {
+  "span_id": "dev-04-s02",
+  "queue": "cq-cl-dev-04",
+  "seq": 2,
+  "kit_path": "docs/process/cadence/kits/cl-dev-04.v1.1.json",
+  "kit_commit": "fecaf73f3",
+  "kit_sha256": "1cc6673d78922a67b381155e24d53744e8515a6ca821e9a4a0ed62943d752228",
+  "kit_bytes_match": true,
+  "kit_schema": "joulewise.cadence_campaign_kit.v1.1",
+  "legs": [
+   "L007",
+   "L008",
+   "L009",
+   "L010",
+   "L011",
+   "L012"
+  ],
+  "shape": "span",
+  "value": 0,
+  "hash_selected": true
+ },
+ {
+  "span_id": "dev-05-s01",
+  "queue": "cq-cl-dev-05",
+  "seq": 1,
+  "kit_path": "docs/process/cadence/kits/cl-dev-05.v1.1.json",
+  "kit_commit": "fecaf73f3",
+  "kit_sha256": "2747381bf1169471d929d1e91510f7d272ff9cbc973da2c99f11673bea53ca1a",
+  "kit_bytes_match": true,
+  "kit_schema": "joulewise.cadence_campaign_kit.v1.1",
+  "legs": [
+   "L001",
+   "L002",
+   "L003",
+   "L004",
+   "L005",
+   "L006"
+  ],
+  "shape": "span",
+  "value": 3,
+  "hash_selected": false
+ },
+ {
+  "span_id": "dev-05-s02",
+  "queue": "cq-cl-dev-05",
+  "seq": 2,
+  "kit_path": "docs/process/cadence/kits/cl-dev-05.v1.1.json",
+  "kit_commit": "fecaf73f3",
+  "kit_sha256": "2747381bf1169471d929d1e91510f7d272ff9cbc973da2c99f11673bea53ca1a",
+  "kit_bytes_match": true,
+  "kit_schema": "joulewise.cadence_campaign_kit.v1.1",
+  "legs": [
+   "L007",
+   "L008",
+   "L009",
+   "L010",
+   "L011",
+   "L012"
+  ],
+  "shape": "span",
+  "value": 2,
+  "hash_selected": false
+ },
+ {
+  "span_id": "hp-01-s01",
+  "queue": "cq-cl-hp-01",
+  "seq": 1,
+  "kit_path": "docs/process/cadence/kits/cl-hp-01.json",
+  "kit_commit": "bbd34dc87",
+  "kit_sha256": "7eaf2660312ce6b3af90e8a1d9da1e05a6c409366a88a7e5e558d3bebb9d2965",
+  "kit_bytes_match": true,
+  "kit_schema": "joulewise.cadence_campaign_kit.v1",
+  "legs": [
+   "L001",
+   "L002",
+   "L003"
+  ],
+  "shape": "own",
+  "value": 3,
+  "hash_selected": false
+ },
+ {
+  "span_id": "hp-01-s02",
+  "queue": "cq-cl-hp-01",
+  "seq": 2,
+  "kit_path": "docs/process/cadence/kits/cl-hp-01.json",
+  "kit_commit": "bbd34dc87",
+  "kit_sha256": "7eaf2660312ce6b3af90e8a1d9da1e05a6c409366a88a7e5e558d3bebb9d2965",
+  "kit_bytes_match": true,
+  "kit_schema": "joulewise.cadence_campaign_kit.v1",
+  "legs": [
+   "L004",
+   "L005",
+   "L006",
+   "L007"
+  ],
+  "shape": "own",
+  "value": 3,
+  "hash_selected": false
+ },
+ {
+  "span_id": "hp-01-s03",
+  "queue": "cq-cl-hp-01",
+  "seq": 3,
+  "kit_path": "docs/process/cadence/kits/cl-hp-01.json",
+  "kit_commit": "bbd34dc87",
+  "kit_sha256": "7eaf2660312ce6b3af90e8a1d9da1e05a6c409366a88a7e5e558d3bebb9d2965",
+  "kit_bytes_match": true,
+  "kit_schema": "joulewise.cadence_campaign_kit.v1",
+  "legs": [
+   "L008",
+   "L009",
+   "L010",
+   "L011",
+   "L012"
+  ],
+  "shape": "own",
+  "value": 1,
+  "hash_selected": false
+ }
+]

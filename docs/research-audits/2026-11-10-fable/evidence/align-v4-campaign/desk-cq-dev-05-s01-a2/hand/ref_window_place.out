@@ -1,0 +1,2 @@
+L001 {"attempt": 1, "ref_status": "captured", "ref_window_pst": ["01:16:37", "01:17:37"], "g0_pst": ["01:18:33", "01:22:30"]}
+L004 {"attempt": 2, "ref_status": "captured", "ref_window_pst": ["02:29:39", "02:30:39"], "g0_pst": ["02:30:55", "02:33:23"]}

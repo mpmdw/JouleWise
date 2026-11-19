@@ -1,0 +1,1607 @@
+{
+ "desk_stops": [],
+ "diffs": [],
+ "legs": [
+  {
+   "ac_powermode": 0,
+   "attempt_detail": [
+    {
+     "attempt": 1,
+     "ended_epoch_s": 1794994212.646168,
+     "hand_agrees_with_record": true,
+     "hand_load": {
+      "census_present": true,
+      "coverage_ok": true,
+      "fires": false,
+      "longest_run_over_0p5_s": 18,
+      "max_cores": 1.9409999999999998,
+      "max_gap_s": 1.205380667001009,
+      "required_samples": 1048.2,
+      "samples": 1169
+     },
+     "output_dir": "legs/L001/runtime",
+     "record_wall_s": 1170.1914689540863,
+     "recorded": {
+      "contaminated": false,
+      "os_load": {
+       "max_busy_cores": 1.9409999999999998,
+       "max_gap_s": 1.205380667001009,
+       "seconds": 1169
+      },
+      "redo_reason": null,
+      "redone": false
+     },
+     "stage_rc": 0,
+     "stage_wall_s": 1170.1912879943848,
+     "started_epoch_s": 1794993042.454699
+    }
+   ],
+   "attempts": 1,
+   "band_reached": true,
+   "budget_s": 1156,
+   "capture_checks": {
+    "own_window_reference_status": "captured",
+    "row_reference_source_is_self": true
+   },
+   "compare": {
+    "attempts": {
+     "agree": true,
+     "desk": 1,
+     "hand": 1
+    },
+    "band_reached": {
+     "agree": true,
+     "desk": true,
+     "hand": true
+    },
+    "budget_s": {
+     "agree": true,
+     "desk": 1156,
+     "hand": 1156
+    },
+    "contaminated_redos": {
+     "agree": true,
+     "desk": 0,
+     "hand": 0
+    },
+    "g0_outcome": {
+     "agree": true,
+     "desk": "released",
+     "hand": "released"
+    },
+    "g0_role": {
+     "agree": true,
+     "desk": "capture",
+     "hand": "capture"
+    },
+    "g0_role(record vs desk)": {
+     "agree": true,
+     "desk": "capture",
+     "hand": "capture"
+    },
+    "g0_s": {
+     "agree": true,
+     "desk": 237.585956,
+     "hand": 237.585956
+    },
+    "g0_shape": {
+     "agree": true,
+     "desk": "own",
+     "hand": "own"
+    },
+    "included/admitted": {
+     "agree": true,
+     "desk": true,
+     "hand": true
+    },
+    "leg_id": {
+     "agree": true,
+     "desk": "L001",
+     "hand": "L001"
+    },
+    "os_level_max": {
+     "agree": true,
+     "desk": 1,
+     "hand": 1
+    },
+    "pm_nominal": {
+     "agree": true,
+     "desk": false,
+     "hand": false
+    },
+    "prefill_tokens(nominal: kit/spec vs desk)": {
+     "agree": true,
+     "desk": 10000,
+     "hand": 10000
+    },
+    "redo_reasons": {
+     "agree": true,
+     "desk": [],
+     "hand": []
+    },
+    "seed": {
+     "agree": true,
+     "desk": 4273557785,
+     "hand": 4273557785
+    },
+    "span_reference": {
+     "agree": true,
+     "desk": null,
+     "hand": null
+    },
+    "start_band": {
+     "agree": true,
+     "desk": "q0",
+     "hand": "q0"
+    },
+    "wall_s(stage vs summary)": {
+     "agree": true,
+     "desk": 1170.2,
+     "hand": 1170.2
+    }
+   },
+   "contaminated_redos": 0,
+   "decode_cap": 4096,
+   "decode_closed": true,
+   "decode_tokens": 4096,
+   "excluded_by": [],
+   "g0_outcome_journal": "released",
+   "g0_reference_record_sha256_record": null,
+   "g0_reference_source_record": "cadence-cl-dev-05-l001",
+   "g0_role_hand": "capture",
+   "g0_role_record": "capture",
+   "g0_row_reference_fast_c": 34.000492095947266,
+   "g0_row_reference_source": "cadence-cl-dev-05-l001",
+   "g0_row_reference_span_ns": [
+    2977735379943812,
+    2977795379943812
+   ],
+   "g0_s_journal": 237.585956166,
+   "g0_s_record": 237.585956166,
+   "g0_shape_hand": "own",
+   "g0_shape_kit": "own",
+   "g0_shape_record": "own",
+   "g0_shape_spec": null,
+   "g0_timeout_s": 1200,
+   "included": true,
+   "incomplete_reasons": [],
+   "leg_id": "L001",
+   "leg_status": "complete",
+   "load_counted": {
+    "census_present": true,
+    "coverage_ok": true,
+    "fires": false,
+    "longest_run_over_0p5_s": 18,
+    "max_cores": 1.9409999999999998,
+    "max_gap_s": 1.205380667001009,
+    "required_samples": 1048.2,
+    "samples": 1169
+   },
+   "member_status": "succeeded",
+   "os_level_max_turn": 1,
+   "over_time": false,
+   "own_window_reference": {
+    "fast_c": 34.000492095947266,
+    "record_sha256": "7f51b2383ed28cd3b49561ebb696567b26087ec5f511fede8102f287aa3e12d5",
+    "source_run_id": "cadence-cl-dev-05-l001",
+    "span_ns": [
+     2977735379943812,
+     2977795379943812
+    ],
+    "status": "captured"
+   },
+   "pm_nominal_turn": false,
+   "prefill_deviation_pct": 0.15,
+   "prefill_tokens": 10015,
+   "prefill_tokens_nominal_kit": 10000,
+   "prefill_tokens_nominal_spec": 10000,
+   "receipt_attempts": 1,
+   "redo": [],
+   "release_to_turn_s": 0.058422604,
+   "rules": {
+    "1_ran_to_cap": true,
+    "2_g0_released": true,
+    "3_sidecar": "at look (R9 note)",
+    "4_km003c": "at look (R9 note); meter present/0 bad/0 usb",
+    "5_not_contaminated": true,
+    "6_power_mode_0": true
+   },
+   "seed": 4273557785,
+   "span_reference_hand": null,
+   "start_band": "q0",
+   "thermal_coverage": {
+    "expected_samples": 1146,
+    "gaps_ns": [
+     [
+      2977384656061583,
+      2977385760640541
+     ]
+    ],
+    "max_consecutive_empty_cells": 1,
+    "max_interval_ns": 1104578958,
+    "sample_fraction": 0.9973821989528796,
+    "valid_samples": 1143
+   },
+   "wall_s_attempt": 1170.1914689540863,
+   "wall_s_stage": 1170.1912879943848
+  },
+  {
+   "ac_powermode": 0,
+   "attempt_detail": [
+    {
+     "attempt": 1,
+     "ended_epoch_s": 1794995187.382687,
+     "hand_agrees_with_record": true,
+     "hand_load": {
+      "census_present": true,
+      "coverage_ok": true,
+      "fires": false,
+      "longest_run_over_0p5_s": 2,
+      "max_cores": 1.2830000000000001,
+      "max_gap_s": 1.3945959587581456,
+      "required_samples": 871.7,
+      "samples": 973
+     },
+     "output_dir": "legs/L002/runtime",
+     "record_wall_s": 974.079421043396,
+     "recorded": {
+      "contaminated": false,
+      "os_load": {
+       "max_busy_cores": 1.2830000000000001,
+       "max_gap_s": 1.3945959587581456,
+       "seconds": 973
+      },
+      "redo_reason": null,
+      "redone": false
+     },
+     "stage_rc": 0,
+     "stage_wall_s": 974.0792331695557,
+     "started_epoch_s": 1794994213.303266
+    }
+   ],
+   "attempts": 1,
+   "band_reached": true,
+   "budget_s": 1467,
+   "compare": {
+    "attempts": {
+     "agree": true,
+     "desk": 1,
+     "hand": 1
+    },
+    "band_reached": {
+     "agree": true,
+     "desk": true,
+     "hand": true
+    },
+    "budget_s": {
+     "agree": true,
+     "desk": 1467,
+     "hand": 1467
+    },
+    "contaminated_redos": {
+     "agree": true,
+     "desk": 0,
+     "hand": 0
+    },
+    "g0_outcome": {
+     "agree": true,
+     "desk": "released",
+     "hand": "released"
+    },
+    "g0_role": {
+     "agree": true,
+     "desk": "consume",
+     "hand": "consume"
+    },
+    "g0_role(record vs desk)": {
+     "agree": true,
+     "desk": "consume",
+     "hand": "consume"
+    },
+    "g0_s": {
+     "agree": true,
+     "desk": 146.877165,
+     "hand": 146.877165
+    },
+    "g0_shape": {
+     "agree": true,
+     "desk": "span",
+     "hand": "span"
+    },
+    "included/admitted": {
+     "agree": true,
+     "desk": true,
+     "hand": true
+    },
+    "leg_id": {
+     "agree": true,
+     "desk": "L002",
+     "hand": "L002"
+    },
+    "os_level_max": {
+     "agree": true,
+     "desk": 0,
+     "hand": 0
+    },
+    "pm_nominal": {
+     "agree": true,
+     "desk": true,
+     "hand": true
+    },
+    "prefill_tokens(nominal: kit/spec vs desk)": {
+     "agree": true,
+     "desk": 2000,
+     "hand": 2000
+    },
+    "redo_reasons": {
+     "agree": true,
+     "desk": [],
+     "hand": []
+    },
+    "seed": {
+     "agree": true,
+     "desk": 1747827584,
+     "hand": 1747827584
+    },
+    "span_reference": {
+     "agree": true,
+     "desk": {
+      "attempt": 1,
+      "excluded": false,
+      "leg_id": "L001",
+      "redone": false
+     },
+     "hand": {
+      "attempt": 1,
+      "excluded": false,
+      "leg_id": "L001",
+      "redone": false
+     }
+    },
+    "start_band": {
+     "agree": true,
+     "desk": "q0",
+     "hand": "q0"
+    },
+    "wall_s(stage vs summary)": {
+     "agree": true,
+     "desk": 974.1,
+     "hand": 974.1
+    }
+   },
+   "consumer_checks": {
+    "own_window_reference_status": "absent (consumer)",
+    "record_sha_equals_capture_record_sha": true,
+    "record_source_equals_row_source": true,
+    "reference_is_first_leg": true,
+    "row_reference_fast_c_equals_capture_fast_c": true,
+    "row_reference_span_equals_capture_span": true
+   },
+   "contaminated_redos": 0,
+   "decode_cap": 4096,
+   "decode_closed": true,
+   "decode_tokens": 4096,
+   "excluded_by": [],
+   "g0_outcome_journal": "released",
+   "g0_reference_record_sha256_record": "7f51b2383ed28cd3b49561ebb696567b26087ec5f511fede8102f287aa3e12d5",
+   "g0_reference_source_record": "cadence-cl-dev-05-l001",
+   "g0_role_hand": "consume",
+   "g0_role_record": "consume",
+   "g0_row_reference_fast_c": 34.000492095947266,
+   "g0_row_reference_source": "cadence-cl-dev-05-l001",
+   "g0_row_reference_span_ns": [
+    2977735379943812,
+    2977795379943812
+   ],
+   "g0_s_journal": 146.877164916,
+   "g0_s_record": 146.877164916,
+   "g0_shape_hand": "span",
+   "g0_shape_kit": "span",
+   "g0_shape_record": "span",
+   "g0_shape_spec": "span",
+   "g0_timeout_s": 1200,
+   "included": true,
+   "incomplete_reasons": [],
+   "leg_id": "L002",
+   "leg_status": "complete",
+   "load_counted": {
+    "census_present": true,
+    "coverage_ok": true,
+    "fires": false,
+    "longest_run_over_0p5_s": 2,
+    "max_cores": 1.2830000000000001,
+    "max_gap_s": 1.3945959587581456,
+    "required_samples": 871.7,
+    "samples": 973
+   },
+   "member_status": "succeeded",
+   "os_level_max_turn": 0,
+   "over_time": false,
+   "own_window_reference": {
+    "fast_c": null,
+    "record_sha256": null,
+    "source_run_id": null,
+    "span_ns": null,
+    "status": "absent (consumer)"
+   },
+   "pm_nominal_turn": true,
+   "prefill_deviation_pct": 1.2,
+   "prefill_tokens": 2024,
+   "prefill_tokens_nominal_kit": 2000,
+   "prefill_tokens_nominal_spec": 2000,
+   "receipt_attempts": 1,
+   "redo": [],
+   "release_to_turn_s": 0.073463563,
+   "rules": {
+    "1_ran_to_cap": true,
+    "2_g0_released": true,
+    "3_sidecar": "at look (R9 note)",
+    "4_km003c": "at look (R9 note); meter present/0 bad/0 usb",
+    "5_not_contaminated": true,
+    "6_power_mode_0": true
+   },
+   "seed": 1747827584,
+   "span_reference_hand": {
+    "attempt": 1,
+    "excluded": false,
+    "leg_id": "L001",
+    "redone": false
+   },
+   "start_band": "q0",
+   "thermal_coverage": {
+    "expected_samples": 955,
+    "gaps_ns": [
+     [
+      2979468573320583,
+      2979469687634958
+     ]
+    ],
+    "max_consecutive_empty_cells": 1,
+    "max_interval_ns": 1114314375,
+    "sample_fraction": 0.9958115183246073,
+    "valid_samples": 951
+   },
+   "wall_s_attempt": 974.079421043396,
+   "wall_s_stage": 974.0792331695557
+  },
+  {
+   "ac_powermode": 0,
+   "attempt_detail": [
+    {
+     "attempt": 1,
+     "ended_epoch_s": 1794996440.5876439,
+     "hand_agrees_with_record": true,
+     "hand_load": {
+      "census_present": true,
+      "coverage_ok": true,
+      "fires": false,
+      "longest_run_over_0p5_s": 2,
+      "max_cores": 2.12,
+      "max_gap_s": 1.4211264997720718,
+      "required_samples": 1122.3,
+      "samples": 1251
+     },
+     "output_dir": "legs/L003/runtime",
+     "record_wall_s": 1252.5344667434692,
+     "recorded": {
+      "contaminated": false,
+      "os_load": {
+       "max_busy_cores": 2.12,
+       "max_gap_s": 1.4211264997720718,
+       "seconds": 1251
+      },
+      "redo_reason": null,
+      "redone": false
+     },
+     "stage_rc": 0,
+     "stage_wall_s": 1252.5342712402344,
+     "started_epoch_s": 1794995188.053177
+    }
+   ],
+   "attempts": 1,
+   "band_reached": true,
+   "budget_s": 1642,
+   "compare": {
+    "attempts": {
+     "agree": true,
+     "desk": 1,
+     "hand": 1
+    },
+    "band_reached": {
+     "agree": true,
+     "desk": true,
+     "hand": true
+    },
+    "budget_s": {
+     "agree": true,
+     "desk": 1642,
+     "hand": 1642
+    },
+    "contaminated_redos": {
+     "agree": true,
+     "desk": 0,
+     "hand": 0
+    },
+    "g0_outcome": {
+     "agree": true,
+     "desk": "released",
+     "hand": "released"
+    },
+    "g0_role": {
+     "agree": true,
+     "desk": "consume",
+     "hand": "consume"
+    },
+    "g0_role(record vs desk)": {
+     "agree": true,
+     "desk": "consume",
+     "hand": "consume"
+    },
+    "g0_s": {
+     "agree": true,
+     "desk": 210.13518,
+     "hand": 210.13518
+    },
+    "g0_shape": {
+     "agree": true,
+     "desk": "span",
+     "hand": "span"
+    },
+    "included/admitted": {
+     "agree": true,
+     "desk": true,
+     "hand": true
+    },
+    "leg_id": {
+     "agree": true,
+     "desk": "L003",
+     "hand": "L003"
+    },
+    "os_level_max": {
+     "agree": true,
+     "desk": 2,
+     "hand": 2
+    },
+    "pm_nominal": {
+     "agree": true,
+     "desk": false,
+     "hand": false
+    },
+    "prefill_tokens(nominal: kit/spec vs desk)": {
+     "agree": true,
+     "desk": 19458,
+     "hand": 19458
+    },
+    "redo_reasons": {
+     "agree": true,
+     "desk": [],
+     "hand": []
+    },
+    "seed": {
+     "agree": true,
+     "desk": 2210127335,
+     "hand": 2210127335
+    },
+    "span_reference": {
+     "agree": true,
+     "desk": {
+      "attempt": 1,
+      "excluded": false,
+      "leg_id": "L001",
+      "redone": false
+     },
+     "hand": {
+      "attempt": 1,
+      "excluded": false,
+      "leg_id": "L001",
+      "redone": false
+     }
+    },
+    "start_band": {
+     "agree": true,
+     "desk": "q0",
+     "hand": "q0"
+    },
+    "wall_s(stage vs summary)": {
+     "agree": true,
+     "desk": 1252.5,
+     "hand": 1252.5
+    }
+   },
+   "consumer_checks": {
+    "own_window_reference_status": "absent (consumer)",
+    "record_sha_equals_capture_record_sha": true,
+    "record_source_equals_row_source": true,
+    "reference_is_first_leg": true,
+    "row_reference_fast_c_equals_capture_fast_c": true,
+    "row_reference_span_equals_capture_span": true
+   },
+   "contaminated_redos": 0,
+   "decode_cap": 4096,
+   "decode_closed": true,
+   "decode_tokens": 4096,
+   "excluded_by": [],
+   "g0_outcome_journal": "released",
+   "g0_reference_record_sha256_record": "7f51b2383ed28cd3b49561ebb696567b26087ec5f511fede8102f287aa3e12d5",
+   "g0_reference_source_record": "cadence-cl-dev-05-l001",
+   "g0_role_hand": "consume",
+   "g0_role_record": "consume",
+   "g0_row_reference_fast_c": 34.000492095947266,
+   "g0_row_reference_source": "cadence-cl-dev-05-l001",
+   "g0_row_reference_span_ns": [
+    2977735379943812,
+    2977795379943812
+   ],
+   "g0_s_journal": 210.135180208,
+   "g0_s_record": 210.135180208,
+   "g0_shape_hand": "span",
+   "g0_shape_kit": "span",
+   "g0_shape_record": "span",
+   "g0_shape_spec": "span",
+   "g0_timeout_s": 1200,
+   "included": true,
+   "incomplete_reasons": [],
+   "leg_id": "L003",
+   "leg_status": "complete",
+   "load_counted": {
+    "census_present": true,
+    "coverage_ok": true,
+    "fires": false,
+    "longest_run_over_0p5_s": 2,
+    "max_cores": 2.12,
+    "max_gap_s": 1.4211264997720718,
+    "required_samples": 1122.3,
+    "samples": 1251
+   },
+   "member_status": "succeeded",
+   "os_level_max_turn": 2,
+   "over_time": false,
+   "own_window_reference": {
+    "fast_c": null,
+    "record_sha256": null,
+    "source_run_id": null,
+    "span_ns": null,
+    "status": "absent (consumer)"
+   },
+   "pm_nominal_turn": false,
+   "prefill_deviation_pct": 0.0,
+   "prefill_tokens": 19458,
+   "prefill_tokens_nominal_kit": 19458,
+   "prefill_tokens_nominal_spec": 19458,
+   "receipt_attempts": 1,
+   "redo": [],
+   "release_to_turn_s": 0.053745896,
+   "rules": {
+    "1_ran_to_cap": true,
+    "2_g0_released": true,
+    "3_sidecar": "at look (R9 note)",
+    "4_km003c": "at look (R9 note); meter present/0 bad/0 usb",
+    "5_not_contaminated": true,
+    "6_power_mode_0": true
+   },
+   "seed": 2210127335,
+   "span_reference_hand": {
+    "attempt": 1,
+    "excluded": false,
+    "leg_id": "L001",
+    "redone": false
+   },
+   "start_band": "q0",
+   "thermal_coverage": {
+    "expected_samples": 1228,
+    "gaps_ns": [
+     [
+      2980693300413145,
+      2980694402130083
+     ]
+    ],
+    "max_consecutive_empty_cells": 1,
+    "max_interval_ns": 1101716938,
+    "sample_fraction": 0.997557003257329,
+    "valid_samples": 1225
+   },
+   "wall_s_attempt": 1252.5344667434692,
+   "wall_s_stage": 1252.5342712402344
+  },
+  {
+   "ac_powermode": 0,
+   "attempt_detail": [
+    {
+     "attempt": 1,
+     "ended_epoch_s": 1794997425.0949209,
+     "hand_agrees_with_record": true,
+     "hand_load": {
+      "census_present": true,
+      "coverage_ok": true,
+      "fires": true,
+      "longest_run_over_0p5_s": 315,
+      "max_cores": 4.272,
+      "max_gap_s": 1.4237408330664039,
+      "required_samples": 880.5,
+      "samples": 983
+     },
+     "output_dir": "legs/L004/runtime.rejected1",
+     "record_wall_s": 983.84894490242,
+     "recorded": {
+      "contaminated": true,
+      "os_load": {
+       "max_busy_cores": 4.272,
+       "max_gap_s": 1.4237408330664039,
+       "seconds": 983
+      },
+      "redo_reason": "cpu_load",
+      "redone": true
+     },
+     "stage_rc": 0,
+     "stage_wall_s": 983.8487601280212,
+     "started_epoch_s": 1794996441.245976
+    },
+    {
+     "attempt": 2,
+     "ended_epoch_s": 1794998403.61065,
+     "hand_agrees_with_record": true,
+     "hand_load": {
+      "census_present": true,
+      "coverage_ok": true,
+      "fires": false,
+      "longest_run_over_0p5_s": 30,
+      "max_cores": 1.625,
+      "max_gap_s": 1.2128739170730114,
+      "required_samples": 875.1,
+      "samples": 977
+     },
+     "output_dir": "legs/L004/runtime",
+     "record_wall_s": 977.8535358905792,
+     "recorded": {
+      "contaminated": false,
+      "os_load": {
+       "max_busy_cores": 1.625,
+       "max_gap_s": 1.2128739170730114,
+       "seconds": 977
+      },
+      "redo_reason": null,
+      "redone": false
+     },
+     "stage_rc": 0,
+     "stage_wall_s": 977.8532421588898,
+     "started_epoch_s": 1794997425.7571142
+    }
+   ],
+   "attempts": 2,
+   "band_reached": true,
+   "budget_s": 1076,
+   "capture_checks": {
+    "own_window_reference_status": "captured",
+    "row_reference_source_is_self": true
+   },
+   "compare": {
+    "attempts": {
+     "agree": true,
+     "desk": 2,
+     "hand": 2
+    },
+    "band_reached": {
+     "agree": true,
+     "desk": true,
+     "hand": true
+    },
+    "budget_s": {
+     "agree": true,
+     "desk": 1076,
+     "hand": 1076
+    },
+    "contaminated_redos": {
+     "agree": true,
+     "desk": 1,
+     "hand": 1
+    },
+    "g0_outcome": {
+     "agree": true,
+     "desk": "released",
+     "hand": "released"
+    },
+    "g0_role": {
+     "agree": true,
+     "desk": "capture",
+     "hand": "capture"
+    },
+    "g0_role(record vs desk)": {
+     "agree": true,
+     "desk": "capture",
+     "hand": "capture"
+    },
+    "g0_s": {
+     "agree": true,
+     "desk": 148.777408,
+     "hand": 148.777408
+    },
+    "g0_shape": {
+     "agree": true,
+     "desk": "own",
+     "hand": "own"
+    },
+    "included/admitted": {
+     "agree": true,
+     "desk": true,
+     "hand": true
+    },
+    "leg_id": {
+     "agree": true,
+     "desk": "L004",
+     "hand": "L004"
+    },
+    "os_level_max": {
+     "agree": true,
+     "desk": 1,
+     "hand": 1
+    },
+    "pm_nominal": {
+     "agree": true,
+     "desk": false,
+     "hand": false
+    },
+    "prefill_tokens(nominal: kit/spec vs desk)": {
+     "agree": true,
+     "desk": 2000,
+     "hand": 2000
+    },
+    "redo_reasons": {
+     "agree": true,
+     "desk": [
+      "cpu_load"
+     ],
+     "hand": [
+      "cpu_load"
+     ]
+    },
+    "seed": {
+     "agree": true,
+     "desk": 2535821993,
+     "hand": 2535821993
+    },
+    "span_reference": {
+     "agree": true,
+     "desk": null,
+     "hand": null
+    },
+    "start_band": {
+     "agree": true,
+     "desk": "q0",
+     "hand": "q0"
+    },
+    "wall_s(stage vs summary)": {
+     "agree": true,
+     "desk": 977.9,
+     "hand": 977.9
+    }
+   },
+   "contaminated_redos": 1,
+   "decode_cap": 4096,
+   "decode_closed": true,
+   "decode_tokens": 4096,
+   "excluded_by": [],
+   "g0_outcome_journal": "released",
+   "g0_reference_record_sha256_record": null,
+   "g0_reference_source_record": "cadence-cl-dev-05-l004",
+   "g0_role_hand": "capture",
+   "g0_role_record": "capture",
+   "g0_row_reference_fast_c": 34.69826698303223,
+   "g0_row_reference_source": "cadence-cl-dev-05-l004",
+   "g0_row_reference_span_ns": [
+    2982116797725354,
+    2982176797725354
+   ],
+   "g0_s_journal": 148.777408062,
+   "g0_s_record": 148.777408062,
+   "g0_shape_hand": "own",
+   "g0_shape_kit": "own",
+   "g0_shape_record": "own",
+   "g0_shape_spec": null,
+   "g0_timeout_s": 1200,
+   "included": true,
+   "incomplete_reasons": [],
+   "leg_id": "L004",
+   "leg_status": "complete",
+   "load_counted": {
+    "census_present": true,
+    "coverage_ok": true,
+    "fires": false,
+    "longest_run_over_0p5_s": 30,
+    "max_cores": 1.625,
+    "max_gap_s": 1.2128739170730114,
+    "required_samples": 875.1,
+    "samples": 977
+   },
+   "member_status": "succeeded",
+   "os_level_max_turn": 1,
+   "over_time": false,
+   "own_window_reference": {
+    "fast_c": 34.69826698303223,
+    "record_sha256": "2dfec09a38105c3149b67105b646c9072b064b64bebc832f26f90741a0627bc8",
+    "source_run_id": "cadence-cl-dev-05-l004",
+    "span_ns": [
+     2982116797725354,
+     2982176797725354
+    ],
+    "status": "captured"
+   },
+   "pm_nominal_turn": false,
+   "prefill_deviation_pct": 1.2,
+   "prefill_tokens": 2024,
+   "prefill_tokens_nominal_kit": 2000,
+   "prefill_tokens_nominal_spec": 2000,
+   "receipt_attempts": 2,
+   "redo": [
+    "cpu_load"
+   ],
+   "release_to_turn_s": 0.075030104,
+   "rules": {
+    "1_ran_to_cap": true,
+    "2_g0_released": true,
+    "3_sidecar": "at look (R9 note)",
+    "4_km003c": "at look (R9 note); meter present/0 bad/0 usb",
+    "5_not_contaminated": true,
+    "6_power_mode_0": true
+   },
+   "seed": 2535821993,
+   "span_reference_hand": null,
+   "start_band": "q0",
+   "thermal_coverage": {
+    "expected_samples": 957,
+    "gaps_ns": [],
+    "max_consecutive_empty_cells": 0,
+    "max_interval_ns": 1076305146,
+    "sample_fraction": 1.0,
+    "valid_samples": 957
+   },
+   "wall_s_attempt": 977.8535358905792,
+   "wall_s_stage": 977.8532421588898
+  },
+  {
+   "ac_powermode": 0,
+   "attempt_detail": [
+    {
+     "attempt": 1,
+     "ended_epoch_s": 1794999660.6941462,
+     "hand_agrees_with_record": true,
+     "hand_load": {
+      "census_present": true,
+      "coverage_ok": true,
+      "fires": false,
+      "longest_run_over_0p5_s": 2,
+      "max_cores": 1.8219999999999998,
+      "max_gap_s": 1.2303362912498415,
+      "required_samples": 1125.8,
+      "samples": 1255
+     },
+     "output_dir": "legs/L005/runtime",
+     "record_wall_s": 1256.4145910739899,
+     "recorded": {
+      "contaminated": false,
+      "os_load": {
+       "max_busy_cores": 1.8219999999999998,
+       "max_gap_s": 1.2303362912498415,
+       "seconds": 1255
+      },
+      "redo_reason": null,
+      "redone": false
+     },
+     "stage_rc": 0,
+     "stage_wall_s": 1256.4144082069397,
+     "started_epoch_s": 1794998404.279555
+    }
+   ],
+   "attempts": 1,
+   "band_reached": true,
+   "budget_s": 1642,
+   "compare": {
+    "attempts": {
+     "agree": true,
+     "desk": 1,
+     "hand": 1
+    },
+    "band_reached": {
+     "agree": true,
+     "desk": true,
+     "hand": true
+    },
+    "budget_s": {
+     "agree": true,
+     "desk": 1642,
+     "hand": 1642
+    },
+    "contaminated_redos": {
+     "agree": true,
+     "desk": 0,
+     "hand": 0
+    },
+    "g0_outcome": {
+     "agree": true,
+     "desk": "released",
+     "hand": "released"
+    },
+    "g0_role": {
+     "agree": true,
+     "desk": "consume",
+     "hand": "consume"
+    },
+    "g0_role(record vs desk)": {
+     "agree": true,
+     "desk": "consume",
+     "hand": "consume"
+    },
+    "g0_s": {
+     "agree": true,
+     "desk": 212.208627,
+     "hand": 212.208627
+    },
+    "g0_shape": {
+     "agree": true,
+     "desk": "span",
+     "hand": "span"
+    },
+    "included/admitted": {
+     "agree": true,
+     "desk": true,
+     "hand": true
+    },
+    "leg_id": {
+     "agree": true,
+     "desk": "L005",
+     "hand": "L005"
+    },
+    "os_level_max": {
+     "agree": true,
+     "desk": 2,
+     "hand": 2
+    },
+    "pm_nominal": {
+     "agree": true,
+     "desk": false,
+     "hand": false
+    },
+    "prefill_tokens(nominal: kit/spec vs desk)": {
+     "agree": true,
+     "desk": 19458,
+     "hand": 19458
+    },
+    "redo_reasons": {
+     "agree": true,
+     "desk": [],
+     "hand": []
+    },
+    "seed": {
+     "agree": true,
+     "desk": 1700193897,
+     "hand": 1700193897
+    },
+    "span_reference": {
+     "agree": true,
+     "desk": {
+      "attempt": 1,
+      "excluded": false,
+      "leg_id": "L001",
+      "redone": false
+     },
+     "hand": {
+      "attempt": 1,
+      "excluded": false,
+      "leg_id": "L001",
+      "redone": false
+     }
+    },
+    "start_band": {
+     "agree": true,
+     "desk": "q0",
+     "hand": "q0"
+    },
+    "wall_s(stage vs summary)": {
+     "agree": true,
+     "desk": 1256.4,
+     "hand": 1256.4
+    }
+   },
+   "consumer_checks": {
+    "own_window_reference_status": "absent (consumer)",
+    "record_sha_equals_capture_record_sha": true,
+    "record_source_equals_row_source": true,
+    "reference_is_first_leg": true,
+    "row_reference_fast_c_equals_capture_fast_c": true,
+    "row_reference_span_equals_capture_span": true
+   },
+   "contaminated_redos": 0,
+   "decode_cap": 4096,
+   "decode_closed": true,
+   "decode_tokens": 4096,
+   "excluded_by": [],
+   "g0_outcome_journal": "released",
+   "g0_reference_record_sha256_record": "7f51b2383ed28cd3b49561ebb696567b26087ec5f511fede8102f287aa3e12d5",
+   "g0_reference_source_record": "cadence-cl-dev-05-l001",
+   "g0_role_hand": "consume",
+   "g0_role_record": "consume",
+   "g0_row_reference_fast_c": 34.000492095947266,
+   "g0_row_reference_source": "cadence-cl-dev-05-l001",
+   "g0_row_reference_span_ns": [
+    2977735379943812,
+    2977795379943812
+   ],
+   "g0_s_journal": 212.208626854,
+   "g0_s_record": 212.208626854,
+   "g0_shape_hand": "span",
+   "g0_shape_kit": "span",
+   "g0_shape_record": "span",
+   "g0_shape_spec": "span",
+   "g0_timeout_s": 1200,
+   "included": true,
+   "incomplete_reasons": [],
+   "leg_id": "L005",
+   "leg_status": "complete",
+   "load_counted": {
+    "census_present": true,
+    "coverage_ok": true,
+    "fires": false,
+    "longest_run_over_0p5_s": 2,
+    "max_cores": 1.8219999999999998,
+    "max_gap_s": 1.2303362912498415,
+    "required_samples": 1125.8,
+    "samples": 1255
+   },
+   "member_status": "succeeded",
+   "os_level_max_turn": 2,
+   "over_time": false,
+   "own_window_reference": {
+    "fast_c": null,
+    "record_sha256": null,
+    "source_run_id": null,
+    "span_ns": null,
+    "status": "absent (consumer)"
+   },
+   "pm_nominal_turn": false,
+   "prefill_deviation_pct": 0.0,
+   "prefill_tokens": 19458,
+   "prefill_tokens_nominal_kit": 19458,
+   "prefill_tokens_nominal_spec": 19458,
+   "receipt_attempts": 1,
+   "redo": [],
+   "release_to_turn_s": 0.078034938,
+   "rules": {
+    "1_ran_to_cap": true,
+    "2_g0_released": true,
+    "3_sidecar": "at look (R9 note)",
+    "4_km003c": "at look (R9 note); meter present/0 bad/0 usb",
+    "5_not_contaminated": true,
+    "6_power_mode_0": true
+   },
+   "seed": 1700193897,
+   "span_reference_hand": {
+    "attempt": 1,
+    "excluded": false,
+    "leg_id": "L001",
+    "redone": false
+   },
+   "start_band": "q0",
+   "thermal_coverage": {
+    "expected_samples": 1232,
+    "gaps_ns": [
+     [
+      2983925557710603,
+      2983926743935958
+     ],
+     [
+      2983937557623624,
+      2983938769848541
+     ]
+    ],
+    "max_consecutive_empty_cells": 1,
+    "max_interval_ns": 1212224917,
+    "sample_fraction": 0.9967532467532467,
+    "valid_samples": 1228
+   },
+   "wall_s_attempt": 1256.4145910739899,
+   "wall_s_stage": 1256.4144082069397
+  },
+  {
+   "ac_powermode": 0,
+   "attempt_detail": [
+    {
+     "attempt": 1,
+     "ended_epoch_s": 1795000807.7650769,
+     "hand_agrees_with_record": true,
+     "hand_load": {
+      "census_present": true,
+      "coverage_ok": true,
+      "fires": false,
+      "longest_run_over_0p5_s": 5,
+      "max_cores": 3.45,
+      "max_gap_s": 1.4019256248138845,
+      "required_samples": 1026.7,
+      "samples": 1145
+     },
+     "output_dir": "legs/L006/runtime",
+     "record_wall_s": 1146.323826789856,
+     "recorded": {
+      "contaminated": false,
+      "os_load": {
+       "max_busy_cores": 3.45,
+       "max_gap_s": 1.4019256248138845,
+       "seconds": 1145
+      },
+      "redo_reason": null,
+      "redone": false
+     },
+     "stage_rc": 0,
+     "stage_wall_s": 1146.323648929596,
+     "started_epoch_s": 1794999661.44125
+    }
+   ],
+   "attempts": 1,
+   "band_reached": true,
+   "budget_s": 1547,
+   "compare": {
+    "attempts": {
+     "agree": true,
+     "desk": 1,
+     "hand": 1
+    },
+    "band_reached": {
+     "agree": true,
+     "desk": true,
+     "hand": true
+    },
+    "budget_s": {
+     "agree": true,
+     "desk": 1547,
+     "hand": 1547
+    },
+    "contaminated_redos": {
+     "agree": true,
+     "desk": 0,
+     "hand": 0
+    },
+    "g0_outcome": {
+     "agree": true,
+     "desk": "released",
+     "hand": "released"
+    },
+    "g0_role": {
+     "agree": true,
+     "desk": "consume",
+     "hand": "consume"
+    },
+    "g0_role(record vs desk)": {
+     "agree": true,
+     "desk": "consume",
+     "hand": "consume"
+    },
+    "g0_s": {
+     "agree": true,
+     "desk": 218.296037,
+     "hand": 218.296037
+    },
+    "g0_shape": {
+     "agree": true,
+     "desk": "span",
+     "hand": "span"
+    },
+    "included/admitted": {
+     "agree": true,
+     "desk": true,
+     "hand": true
+    },
+    "leg_id": {
+     "agree": true,
+     "desk": "L006",
+     "hand": "L006"
+    },
+    "os_level_max": {
+     "agree": true,
+     "desk": 2,
+     "hand": 2
+    },
+    "pm_nominal": {
+     "agree": true,
+     "desk": false,
+     "hand": false
+    },
+    "prefill_tokens(nominal: kit/spec vs desk)": {
+     "agree": true,
+     "desk": 10000,
+     "hand": 10000
+    },
+    "redo_reasons": {
+     "agree": true,
+     "desk": [],
+     "hand": []
+    },
+    "seed": {
+     "agree": true,
+     "desk": 2253010653,
+     "hand": 2253010653
+    },
+    "span_reference": {
+     "agree": true,
+     "desk": {
+      "attempt": 1,
+      "excluded": false,
+      "leg_id": "L001",
+      "redone": false
+     },
+     "hand": {
+      "attempt": 1,
+      "excluded": false,
+      "leg_id": "L001",
+      "redone": false
+     }
+    },
+    "start_band": {
+     "agree": true,
+     "desk": "q0",
+     "hand": "q0"
+    },
+    "wall_s(stage vs summary)": {
+     "agree": true,
+     "desk": 1146.3,
+     "hand": 1146.3
+    }
+   },
+   "consumer_checks": {
+    "own_window_reference_status": "absent (consumer)",
+    "record_sha_equals_capture_record_sha": true,
+    "record_source_equals_row_source": true,
+    "reference_is_first_leg": true,
+    "row_reference_fast_c_equals_capture_fast_c": true,
+    "row_reference_span_equals_capture_span": true
+   },
+   "contaminated_redos": 0,
+   "decode_cap": 4096,
+   "decode_closed": true,
+   "decode_tokens": 4096,
+   "excluded_by": [],
+   "g0_outcome_journal": "released",
+   "g0_reference_record_sha256_record": "7f51b2383ed28cd3b49561ebb696567b26087ec5f511fede8102f287aa3e12d5",
+   "g0_reference_source_record": "cadence-cl-dev-05-l001",
+   "g0_role_hand": "consume",
+   "g0_role_record": "consume",
+   "g0_row_reference_fast_c": 34.000492095947266,
+   "g0_row_reference_source": "cadence-cl-dev-05-l001",
+   "g0_row_reference_span_ns": [
+    2977735379943812,
+    2977795379943812
+   ],
+   "g0_s_journal": 218.296036708,
+   "g0_s_record": 218.296036708,
+   "g0_shape_hand": "span",
+   "g0_shape_kit": "span",
+   "g0_shape_record": "span",
+   "g0_shape_spec": "span",
+   "g0_timeout_s": 1200,
+   "included": true,
+   "incomplete_reasons": [],
+   "leg_id": "L006",
+   "leg_status": "complete",
+   "load_counted": {
+    "census_present": true,
+    "coverage_ok": true,
+    "fires": false,
+    "longest_run_over_0p5_s": 5,
+    "max_cores": 3.45,
+    "max_gap_s": 1.4019256248138845,
+    "required_samples": 1026.7,
+    "samples": 1145
+   },
+   "member_status": "succeeded",
+   "os_level_max_turn": 2,
+   "over_time": false,
+   "own_window_reference": {
+    "fast_c": null,
+    "record_sha256": null,
+    "source_run_id": null,
+    "span_ns": null,
+    "status": "absent (consumer)"
+   },
+   "pm_nominal_turn": false,
+   "prefill_deviation_pct": 0.15,
+   "prefill_tokens": 10015,
+   "prefill_tokens_nominal_kit": 10000,
+   "prefill_tokens_nominal_spec": 10000,
+   "receipt_attempts": 1,
+   "redo": [],
+   "release_to_turn_s": 0.062406084,
+   "rules": {
+    "1_ran_to_cap": true,
+    "2_g0_released": true,
+    "3_sidecar": "at look (R9 note)",
+    "4_km003c": "at look (R9 note); meter present/0 bad/0 usb",
+    "5_not_contaminated": true,
+    "6_power_mode_0": true
+   },
+   "seed": 2253010653,
+   "span_reference_hand": {
+    "attempt": 1,
+    "excluded": false,
+    "leg_id": "L001",
+    "redone": false
+   },
+   "start_band": "q0",
+   "thermal_coverage": {
+    "expected_samples": 1123,
+    "gaps_ns": [],
+    "max_consecutive_empty_cells": 1,
+    "max_interval_ns": 1083134167,
+    "sample_fraction": 0.9991095280498664,
+    "valid_samples": 1122
+   },
+   "wall_s_attempt": 1146.323826789856,
+   "wall_s_stage": 1146.323648929596
+  }
+ ],
+ "span": {
+  "agent_census": {
+   "argv": [
+    "/usr/bin/pgrep",
+    "-a",
+    "-lf",
+    "[c]odex|[c]laude"
+   ],
+   "first_after_start_s": 0.066744333,
+   "hits": 0,
+   "last_before_end_s": 30.811880958,
+   "max_gap_s": 30.301981875,
+   "polls": 328
+  },
+  "batch_windows": [
+   "13:14-13:15"
+  ],
+  "close_steps": {
+   "close-volumes": 0,
+   "restore": 0,
+   "stop-agents": 0,
+   "stop-meter": 0,
+   "stop-volumes": 0
+  },
+  "deadlines_files": [],
+  "feeds_proven_stopped": {
+   "agents": true,
+   "meter": true,
+   "volumes": true
+  },
+  "legs_finished": 6,
+  "legs_planned": 6,
+  "load_redos_used": 1,
+  "meter": {
+   "bad_polls": 0,
+   "elapsed_s": 9869.211399375,
+   "polls": 49346,
+   "present": true,
+   "proven_stopped": true,
+   "usb_errors": 0
+  },
+  "mock": false,
+  "n_steps": 33,
+  "rc": 0,
+  "read_power": {
+   "ac_powermode": 0,
+   "automatic": true,
+   "rc": 0
+  },
+  "redo_quota_kit": 2,
+  "redos_by_hand": 1,
+  "restore": {
+   "argv": [
+    "sudo",
+    "-n",
+    "/usr/bin/pmset",
+    "-c",
+    "powermode",
+    "0"
+   ],
+   "exit_code": 0,
+   "marker": null,
+   "marker_removed": false,
+   "observed": 0,
+   "ok": true,
+   "rc": 0,
+   "stderr": ""
+  },
+  "soak_rc": 0,
+  "soak_s": 1800.4648878574371,
+  "span_result": {
+   "chain_exit_code": 0,
+   "chain_outcome": "COMPLETE",
+   "fault": false,
+   "outcome": "MEASURED_OK",
+   "verdict": "6/6 legs run"
+  },
+  "stages_end_rc_nonzero": [],
+  "stages_unclosed": [],
+  "step_names": [
+   "deadline",
+   "frozen",
+   "night_agents",
+   "ac_power",
+   "condition13",
+   "start-agents",
+   "start-meter",
+   "start-volumes",
+   "read_power",
+   "display",
+   "dwell",
+   "plan",
+   "before-soak-volumes",
+   "soak",
+   "before-L001-volumes",
+   "L001.a1",
+   "before-L002-volumes",
+   "L002.a1",
+   "before-L003-volumes",
+   "L003.a1",
+   "before-L004-volumes",
+   "L004.a1",
+   "before-L004-volumes",
+   "L004.a2",
+   "before-L005-volumes",
+   "L005.a1",
+   "before-L006-volumes",
+   "L006.a1",
+   "restore",
+   "stop-volumes",
+   "stop-meter",
+   "stop-agents",
+   "close-volumes"
+  ],
+  "steps_nonzero": [],
+  "stops_by_hand": [],
+  "volume_census": [
+   [
+    "PASS",
+    [],
+    []
+   ],
+   [
+    "PASS",
+    [],
+    []
+   ],
+   [
+    "PASS",
+    [],
+    []
+   ],
+   [
+    "PASS",
+    [],
+    []
+   ],
+   [
+    "PASS",
+    [],
+    []
+   ],
+   [
+    "PASS",
+    [],
+    []
+   ],
+   [
+    "PASS",
+    [],
+    []
+   ],
+   [
+    "PASS",
+    [],
+    []
+   ],
+   [
+    "PASS",
+    [],
+    []
+   ],
+   [
+    "PASS",
+    [],
+    []
+   ]
+  ]
+ }
+}

@@ -1,0 +1,4 @@
+L007 {"attempt": 1, "ref_status": "captured", "ref_window_pst": ["04:13:17", "04:14:17"], "g0_pst": ["04:16:01", "04:19:27"]}
+L009 {"attempt": 1, "ref_status": "captured", "ref_window_pst": ["04:50:19", "04:51:19"], "g0_pst": ["04:52:15", "04:56:02"]}
+L010 {"attempt": 1, "ref_status": "captured", "ref_window_pst": ["05:09:42", "05:10:42"], "g0_pst": ["05:10:59", "05:13:21"]}
+L011 {"attempt": 1, "ref_status": "captured", "ref_window_pst": ["05:25:56", "05:26:56"], "g0_pst": ["05:28:42", "05:32:09"]}
