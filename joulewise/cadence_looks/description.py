@@ -899,6 +899,11 @@ class Signals:
         return [(a, b) for a, b in self.bounds
                 if not any(a < end and b > start for start, end in gaps)]
 
+    def _rail_gap_exceeds_limit(self, intervals, a, b):
+        # A print that includes turn samples uses the turn's rail cadence.
+        period = "rail_edge" if b > self.meta["turn_start_s"] else "hold"
+        return _max_gap(intervals, a, b) > max(1.0, 5 * self.periods[period])
+
     def quality(self, channel, a, b):
         require(number(a) and number(b) and a < b, "invalid print interval")
         connected = [(left, right) for left, right in self.sidecar_intervals if right - left <= 2]
@@ -919,8 +924,7 @@ class Signals:
         else:
             if channel == "rail_sum" and not self.sum_admitted:
                 return "rail_manifest"
-            max_gap = max(1.0, 5 * self.periods["hold"])
-            if _max_gap(self._rail_bounds(channel), a, b) > max_gap:
+            if self._rail_gap_exceeds_limit(self._rail_bounds(channel), a, b):
                 return "rail_gap"
         return None
 
@@ -941,8 +945,7 @@ class Signals:
                 names = RAILS if channel == "rail_sum" else ("gpu_power",)
                 if all(rail in rails for rail in names):
                     selected[(left, right)] = rails
-        max_gap = max(1.0, 5 * self.periods["hold"])
-        if _max_gap(selected, a, b) > max_gap:
+        if self._rail_gap_exceeds_limit(selected, a, b):
             return None
         if channel == "gpu_rail":
             # Feed only timing-admitted rows to the immutable step-3 loader.
