@@ -3,10 +3,12 @@
 import ast
 from decimal import Decimal
 import hashlib
+import json
 from pathlib import Path
 import re
 import subprocess
 import sys
+import tempfile
 import unittest
 
 
@@ -133,3 +135,187 @@ class RegistrationEditsTests(unittest.TestCase):
         for count, powers in rows.items():
             with self.subTest(strata=count):
                 self.assertEqual(amendment.count(f"| {count} | {' | '.join(powers)} |"), 1)
+
+
+class ProtectedSourceComparisonTests(unittest.TestCase):
+    """Row 10's CLI contract on invented Git objects and prompt maps."""
+
+    SCORER = "joulewise/align/apple/rl176.py"
+    PHASES = "joulewise/align/apple/rl176_phases.py"
+    SOURCE = b"""S_SUPERIORITY_ALPHA = 'toy-level-a'
+
+@(
+    toy_decorator_a
+)
+def _tail_test(item):
+    return item
+
+def _holm(item):
+    return item  # holm-a
+
+def _decode_design(item):
+    # design-a
+    return item
+
+def _decode_rows(item):
+    return item
+    # rows-a
+
+def _residual_scores(item):
+    return 'residual-a'
+
+def _s_rank(item='rank-a'):
+    return item
+
+def _q_energies(item):
+    return 'q-a'
+
+def unrelated():
+    _holm = 'local only'
+    return 'other-a'
+"""
+    PROMPTS = {"invented-A": "a" * 64, "invented-B": "b" * 64}
+
+    def setUp(self):
+        self.scratch = Path(self.enterContext(tempfile.TemporaryDirectory()))
+        self.repo = self.scratch / "repo"
+        self.repo.mkdir()
+        self.git("init", "--quiet", "--object-format=sha1")
+        self.w1 = self.commit()
+
+    def git(self, *args, data=None):
+        return subprocess.check_output([
+            "git", "-C", self.repo, "-c", "user.name=Toy", "-c", "user.email=toy@example.invalid",
+            "-c", "commit.gpgsign=false", *args,
+        ], input=data).strip().decode("ascii")
+
+    def commit(self, source=SOURCE, phases=b"TOY_PHASE = 1\n", *, parent=None, mode="100644"):
+        entries = []
+        for name, blob, file_mode in (("rl176.py", source, mode), ("rl176_phases.py", phases, "100644")):
+            if blob is not None:
+                oid = self.git("hash-object", "-w", "--stdin", data=blob)
+                entries.append(f"{file_mode} blob {oid}\t{name}\n")
+        tree = self.git("mktree", data="".join(entries).encode("ascii"))
+        for directory in ("apple", "align", "joulewise"):
+            tree = self.git("mktree", data=f"040000 tree {tree}\t{directory}\n".encode("ascii"))
+        args = ["-p", parent] if parent is not None else []
+        return self.git("commit-tree", tree, *args, "-m", "invented commit")
+
+    def compare(self, c1, status, *, w1=None, w1_map=None, c1_map=None):
+        w1_prompts = self.scratch / "w1.json"
+        c1_prompts = self.scratch / "c1.json"
+        for path, payload in ((w1_prompts, w1_map), (c1_prompts, c1_map)):
+            if payload is False:
+                path.unlink(missing_ok=True)
+                continue
+            if not isinstance(payload, bytes):
+                payload = json.dumps(self.PROMPTS if payload is None else payload).encode("utf-8")
+            path.write_bytes(payload)
+        cmd = [sys.executable, "-B", ROOT / "scripts/compare_c1_protected_sources.py",
+               "--repo", self.repo, "--w1-commit", w1 or self.w1, "--c1-commit", c1,
+               "--w1-prompts", w1_prompts, "--c1-prompts", c1_prompts]
+        result = subprocess.run(cmd, capture_output=True, text=True)
+        self.assertEqual(result.returncode, status, (result.stdout, result.stderr))
+        self.assertEqual(result.stderr, "")
+        output = json.loads(result.stdout)
+        self.assertNotIn("toy-level-a", result.stdout)
+        return output
+
+    def test_same_commit_and_same_tree_at_distinct_commits(self):
+        c1 = self.commit(parent=self.w1)
+        self.assertNotEqual(c1, self.w1)
+        for commit in (self.w1, c1):
+            with self.subTest(commit=commit):
+                output = self.compare(commit, 0)
+                self.assertEqual(output["protected_changes"], {})
+                self.assertEqual(output["prompt_changes"], {})
+                self.assertEqual(output["files_for_review"], [])
+                self.assertEqual(output["revisions"]["w1"]["commit"], self.w1)
+                self.assertEqual(output["revisions"]["c1"]["commit"], commit)
+
+    def test_residual_inventory_includes_each_changed_module(self):
+        unrelated = self.SOURCE.replace(b"other-a", b"other-b")
+        for source, phases, expected in (
+            (unrelated, b"TOY_PHASE = 1\n", [self.SCORER]),
+            (self.SOURCE, b"TOY_PHASE = 2\n", [self.PHASES]),
+            (unrelated, b"TOY_PHASE = 2\n", [self.SCORER, self.PHASES]),
+        ):
+            with self.subTest(files=expected):
+                output = self.compare(self.commit(source, phases), 0)
+                self.assertEqual(output["protected_changes"], {})
+                self.assertEqual(output["files_for_review"], expected)
+                modules = output["revisions"]
+                for path in expected:
+                    self.assertNotEqual(modules["w1"]["modules"][path], modules["c1"]["modules"][path])
+
+    def test_each_protected_binding_detects_a_one_byte_change(self):
+        for name, before in (
+            ("S_SUPERIORITY_ALPHA", b"toy-level-a"), ("_tail_test", b"toy_decorator_a"),
+            ("_holm", b"holm-a"), ("_decode_design", b"design-a"), ("_decode_rows", b"rows-a"),
+            ("_residual_scores", b"residual-a"), ("_s_rank", b"rank-a"), ("_q_energies", b"q-a"),
+        ):
+            with self.subTest(binding=name):
+                self.assertEqual(self.SOURCE.count(before), 1)
+                c1 = self.commit(self.SOURCE.replace(before, before[:-1] + b"b"))
+                changes = self.compare(c1, 1)["protected_changes"]
+                self.assertEqual(list(changes), [name])
+                self.assertRegex(changes[name]["w1"], r"^[0-9a-f]{64}$")
+                self.assertRegex(changes[name]["c1"], r"^[0-9a-f]{64}$")
+                self.assertNotEqual(changes[name]["w1"], changes[name]["c1"])
+
+    def test_line_endings_are_source_bytes(self):
+        c1 = self.commit(self.SOURCE.replace(b"return item  # holm-a\n", b"return item  # holm-a\r\n"))
+        self.assertEqual(list(self.compare(c1, 1)["protected_changes"]), ["_holm"])
+
+    def test_missing_duplicate_and_rebound_bindings_fail_closed(self):
+        for source in (
+            self.SOURCE.replace(b"def _holm(item):\n    return item  # holm-a\n", b""),
+            self.SOURCE + b"\ndef _holm(item):\n    return item\n",
+            self.SOURCE + b"\n_holm = unrelated\n",
+            self.SOURCE + b"\nif False:\n    _holm = unrelated\n",
+            self.SOURCE + b"\nimport invented as _holm\n",
+            self.SOURCE + b"\nmatch object():\n    case _holm:\n        pass\n",
+            self.SOURCE + b"\ndef wrapper():\n    global _holm\n    _holm = unrelated\n",
+        ):
+            with self.subTest(tail=source[-75:]):
+                commit = self.commit(source)
+                self.assertIn("_holm", self.compare(commit, 2)["error"])
+                self.assertIn("_holm", self.compare(commit, 2, w1=commit)["error"])
+
+    def test_syntax_error_omits_source(self):
+        c1 = self.commit(self.SOURCE + b"\npretend_prompt_should_stay_hidden = )\n")
+        error = self.compare(c1, 2)["error"]
+        self.assertNotIn("pretend_prompt_should_stay_hidden", error)
+
+    def test_unreadable_tree_invalid_commit_and_missing_modules(self):
+        missing_oid = "f" * 40
+        broken_commit = self.git("hash-object", "-w", "-t", "commit", "--stdin", data=(
+            f"tree {missing_oid}\nauthor Toy <toy@example.invalid> 1 +0000\n"
+            "committer Toy <toy@example.invalid> 1 +0000\n\ninvented broken tree\n"
+        ).encode("ascii"))
+        tree = self.git("rev-parse", f"{self.w1}^{{tree}}")
+        for commit in (broken_commit, missing_oid, tree, "HEAD", self.w1[:12],
+                       self.commit(None), self.commit(phases=None),
+                       self.commit(b"invented symlink target", mode="120000")):
+            with self.subTest(commit=commit):
+                self.assertTrue(self.compare(commit, 2)["error"])
+
+    def test_malformed_duplicate_empty_and_missing_projections(self):
+        duplicate = ('{"invented-A":"' + "a" * 64 + '","invented-\\u0041":"' + "a" * 64 + '"}')
+        for prompts in (b"{", duplicate.encode("ascii"), {}, [], {"": "a" * 64},
+                        {"invented-A": "g" * 64}, {"invented-A": {"sha256": "a" * 64}}, False):
+            with self.subTest(projection=prompts):
+                self.assertTrue(self.compare(self.w1, 2, c1_map=prompts)["error"])
+                self.assertTrue(self.compare(self.w1, 2, w1_map=prompts)["error"])
+
+    def test_prompt_changes_compare_exact_key_set_and_each_digest(self):
+        changed_key = {"invented-C": "a" * 64, "invented-B": "b" * 64}
+        changes = self.compare(self.w1, 1, c1_map=changed_key)["prompt_changes"]
+        self.assertEqual(changes, {
+            "invented-A": {"w1": "a" * 64, "c1": None},
+            "invented-C": {"w1": None, "c1": "a" * 64},
+        })
+        changed_hash = self.PROMPTS | {"invented-B": "c" * 64}
+        self.assertEqual(self.compare(self.w1, 1, c1_map=changed_hash)["prompt_changes"], {
+            "invented-B": {"w1": "b" * 64, "c1": "c" * 64},
+        })
