@@ -599,6 +599,101 @@ class C1PacketRebuildTests(Base):
         w1.write(registration.REGISTRATION + 'registration_receipt.json', {'edited': True})
         self.assertEqual(self.ready_packet(w1), packet)
 
+    def commit_projection(self, w1):
+        w1.series['next_plan'] = w1.write(w1.series['next_plan']['path'], w1.next_plan)
+        self.commit_series(w1)
+
+    def test_v3_w1_desk_cannot_borrow_r1_artifact_state(self):
+        w1 = self.c1_scenario(older_desk=True, receipt={'signer': 'invented W1'})
+        w1.write(CODE_PATH, b'synthetic-code-v0\n')
+        r1_digest = registration.artifact_set_digest_at(w1.root, w1.previous.code_commit)
+        w1_digest = registration.artifact_set_digest_at(w1.root, w1.code_commit)
+        self.assertEqual(registration.artifact_set_digest(w1.root), r1_digest)
+        self.assertNotEqual(w1_digest, r1_digest)
+
+        w1.series['last_passed_record'] = dict(w1.link)
+        self.commit_series(w1)
+        control = w1.series_commit
+        self.assert_packet_failure(self.refused_packet(w1), 'full_desk_gate', 'different code/config state')
+
+        w1.series['last_passed_record'] = dict(w1.previous.link)
+        self.commit_series(w1)
+        self.assertEqual(w1.git('diff', '--name-only', control, w1.series_commit), w1.series_path)
+        code, supplied, error = self.cli_packet(w1)
+        self.assertIsNotNone(supplied, error)
+        rebuilt, matches = self.rebuild(w1, supplied)
+        self.assertTrue(matches)
+        self.assertTrue(session._record_bound(w1.root, rebuilt))
+        self.assertEqual(rebuilt['checks']['sentinel_roster']['status'], 'pass')
+        desk = rebuilt['checks']['full_desk_gate']
+        self.assertEqual(code, 2, {
+            'ready': rebuilt['packet_preflight']['ready'],
+            'full_desk': desk['status'],
+            'desk_matches_w1': desk.get('desk_sha256') == w1.record['sources']['desk']['sha256'],
+            'artifact_digest_matches_r1': rebuilt['last_desk_passed_artifact_set_sha256'] == r1_digest,
+        })
+        self.assertFalse(rebuilt['packet_preflight']['ready'])
+        self.assertEqual(desk['status'], 'fail')
+        self.assertIn('triage full_desk_gate failed', rebuilt['packet_preflight']['reasons'])
+
+    def test_v3_genuine_projection_binds_w1_desk_and_receipt_copies(self):
+        receipt = {'schema': registration.RECEIPT_SCHEMA, 'signer': 'invented W1'}
+        w1 = self.c1_scenario(receipt=receipt)
+        supplied = self.ready_packet(w1)
+        rebuilt, matches = self.rebuild(w1, supplied)
+        self.assertTrue(matches)
+        self.assertIs(series.bind_packet(w1.root, 'C1', rebuilt, authenticated_by_rebuild=True), rebuilt)
+        self.assertEqual(w1.series['last_passed_record'], w1.link)
+        desk = rebuilt['checks']['full_desk_gate']
+        self.assertEqual(desk['desk_sha256'], w1.record['sources']['desk']['sha256'])
+        self.assertEqual(desk['registration_receipt_sha256'],
+                         w1.record['sources']['registration_receipt']['sha256'])
+        self.assertEqual(rebuilt['last_desk_passed_artifact_set_sha256'],
+                         registration.artifact_set_digest_at(w1.root, w1.code_commit))
+
+        w1.write(registration.REGISTRATION + 'registration_receipt.json', {**receipt, 'different': True})
+        w1.record['finalized_at_epoch_s'] += 1
+        self.recommit_predecessor(w1)
+        self.assert_packet_failure(self.refused_packet(w1), 'full_desk_gate', 'source SHA-256 mismatch')
+
+    def test_v3_full_ordered_legacy_projection_is_admitted(self):
+        w1 = self.c1_scenario()
+        for row in w1.next_plan['members']:
+            del row['ordinal']
+        self.commit_projection(w1)
+        supplied = self.ready_packet(w1)
+        rebuilt, matches = self.rebuild(w1, supplied)
+        self.assertTrue(matches)
+        self.assertEqual(rebuilt, supplied)
+        self.assertEqual(rebuilt['checks']['sentinel_roster']['sentinel_ids'], w1.series['sentinel_ids'])
+        self.assertIs(series.bind_packet(w1.root, 'C1', rebuilt, authenticated_by_rebuild=True), rebuilt)
+        self.assertCountEqual(rebuilt['packet_preflight']['arm_checks_still_required'], INTERNAL)
+        self.assertTrue(set(INTERNAL).isdisjoint(rebuilt['checks']))
+
+    def test_v3_legacy_projection_cannot_move_or_duplicate_sentinel_ids(self):
+        for defect in ('moved', 'duplicate'):
+            with self.subTest(defect=defect):
+                w1 = self.c1_scenario()
+                members = w1.next_plan['members']
+                for row in members:
+                    del row['ordinal']
+                if defect == 'moved':
+                    members[19], members[22] = members[22], members[19]
+                    members[20], members[23] = members[23], members[20]
+                else:
+                    members[19]['run_id'] = members[22]['run_id']
+                w1.series['sentinel_ids'] = [row['run_id'] for row in members if row['role'] == 'sentinel']
+                self.commit_projection(w1)
+                self.assert_packet_failure(self.refused_packet(w1), 'sentinel_roster', 'two extra sentinels')
+
+    def test_v3_explicit_ordinal_cannot_contradict_ordered_position(self):
+        for bad in (20, True, '23'):
+            with self.subTest(bad=bad):
+                w1 = self.c1_scenario()
+                w1.next_plan['members'][22]['ordinal'] = bad
+                self.commit_projection(w1)
+                self.assert_packet_failure(self.refused_packet(w1), 'sentinel_roster', 'two extra sentinels')
+
     def test_a_changed_next_plan_cohort_cannot_carry_the_w1_pool(self):
         w1 = self.c1_scenario(wrong_cohort=True)
         packet = self.refused_packet(w1)
