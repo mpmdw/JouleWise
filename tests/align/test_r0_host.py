@@ -2923,6 +2923,18 @@ class R0QuietIntervalTest(unittest.TestCase):
         self.assertEqual(flag["interval"]["end_monotonic_s"], 32.5)
         self.assertAlmostEqual(flag["busy"][0]["cpu_s_per_s"], 1.8 / 32.5)
 
+    def test_host_probe_time_precedes_the_admitted_cpu_sample(self):
+        clock = GuardClock()
+
+        def read_host():
+            clock.now += 2
+            return [[0, 0, 100, 0]]
+
+        guard = QuietGuard([], run=self.runner, clock=clock, host_reader=read_host)
+        snapshot = guard._cpu_snapshot()
+        self.assertEqual(snapshot.host, [[0, 0, 100, 0]])
+        self.assertEqual(snapshot.admitted_midpoint_ns, 2_000_000_000)
+
     def test_host_aggregate_is_flagged_but_never_judged(self):
         hosts = iter([[[0, 0, 0, 0]], [[150, 0, 1350, 0]], [[300, 0, 2700, 0]]])
         guard, _, _ = self.guard([cpu_table(), cpu_table()])

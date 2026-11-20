@@ -317,14 +317,16 @@ class QuietGuard:
             return now
 
     def _read_cpu_snapshot(self, *, include_host):
-        started = self._now()
-        wall = self.wall_clock_ns()
         host = host_error = None
         if include_host and self.host_reader is not None:
             try:
                 host = [list(cpu) for cpu in self.host_reader()]
             except Exception as exc:
                 host_error = f"{type(exc).__name__}: {exc}"
+        # The optional host tick read precedes the process tables. Start the
+        # process clock at the first table, as the admitted guard does.
+        started = self._now()
+        wall = self.wall_clock_ns()
         try:
             result = self.run(contention.PS_ARGV, capture_output=True, text=True,
                               timeout=contention.PROBE_TIMEOUT_S,
@@ -355,7 +357,7 @@ class QuietGuard:
             raise Refused("census indeterminate: process args table unavailable")
         admitted_finished = self._now()
         admitted_wall = self.wall_clock_ns() if admitted_finished != finished else finished_wall
-        admitted_ns = int(admitted_finished * 1e9)
+        admitted_finish_ns = int(admitted_finished * 1e9)
         args = self._process_table(table.stdout, {}, finished_ns=round(admitted_finished * 1e9))
         for row in rows.values():
             if row["pid"] in args.contenders:
@@ -365,7 +367,7 @@ class QuietGuard:
             Stamp(wall, round(started * 1e9), round(started * 1e9)),
             Stamp(finished_wall, round(finished * 1e9), round(finished * 1e9)), rows, None,
             host=host, host_error=host_error, admitted_start_ns=int(started * 1e9),
-            admitted_finish=Stamp(admitted_wall, admitted_ns, admitted_ns)), args
+            admitted_finish=Stamp(admitted_wall, admitted_finish_ns, admitted_finish_ns)), args
 
     def _cpu_snapshot(self, *, census_summary=None, admission=False):
         with self._cpu_probe_lock:
