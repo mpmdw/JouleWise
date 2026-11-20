@@ -149,6 +149,17 @@ state at `--series-commit`, with:
   (the four D slots plus `cohort_identity`), `thermal_policy`, and `code_config`
   (optional `code_config_commit`). It must be the projection of the installed
   plan, not a proposed configuration. Scorer/series registration remains lead-owned.
+* For C1, commit the selected materialized kit under
+  `configs/campaigns/align_v4_c1` in the tree named by `--series-commit`.
+  The packet's `c1_kit` records the SHA-256 of the sorted, canonical JSON map
+  from kit-relative file paths to their byte digests, the raw collection-plan
+  SHA-256, the member count, and the ordered sentinel ordinals. The builder
+  checks the materialization against the committed series and projection.
+  Projection-only packets are usable for off-host preflight. C1 install
+  requires the kit binding and checks the selected materialization before
+  host actions. The arm checks it against its own rebuild and verifies the
+  staged plan and launch-tree binding. A kit mismatch refuses install with
+  exit 2 and `packet_kit_mismatch`.
 * The window records are **hash-chained**: each record names its predecessor
   (`previous_record`: `commit`, `path`, `sha256`) and the series ledger `series/state.json`
   names the latest one (`previous_record`, `series_sha256`). The builder walks the chain back to

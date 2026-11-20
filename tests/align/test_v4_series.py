@@ -484,6 +484,8 @@ class FakeWorld:
         packet = s.make_packet(m, self.name, history, checks, record_commit=RECORD_COMMIT,
                                last_desk_passed_artifact_set_sha256=v4_registration.artifact_set_digest(m),
                                valid_until_epoch_s=1000.0, now_epoch_s=500.0, commit_check=lambda root, commit: True)
+        if self.name == 'C1':
+            packet['c1_kit'], _ = s.read_c1_kit(m)
         # The source builder is separately checked against its exact output;
         # synthetic model/power readiness intentionally differs from a native kit.
         with ExitStack() as stack, redirect_stdout(io.StringIO()):

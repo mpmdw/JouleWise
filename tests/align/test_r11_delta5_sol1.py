@@ -33,7 +33,22 @@ class Delta5Witnesses(unittest.TestCase):
         cls.plans = {}
         for extras in (0, 2):
             files = series.build_files(ROOT, cls.manifest, 'C1', extra_sentinels=extras)
-            cls.plans[extras] = json.loads(files[series.kit_path('C1') / 'collection_plan.json'])
+            directory = series.kit_path('C1')
+            cls.plans[extras] = json.loads(files[directory / series.C1_PLAN])
+            if extras:
+                # Arm's synthetic host observes Automatic. Give its kit the
+                # same explicit power declaration the earlier arm witness used.
+                cls.c1_plan = deepcopy(cls.plans[extras])
+                cls.c1_plan['runtime_requirements']['ac_powermode'] = 0
+                for member in cls.c1_plan['members']:
+                    member['ac_powermode'] = 0
+                plan_raw = series.raw_json(cls.c1_plan)
+                files[directory / series.C1_PLAN] = plan_raw
+                tree_path = directory / 'plan_tree.json'
+                tree = json.loads(files[tree_path])
+                tree['plan'].update(actual_sha256=series.sha(plan_raw), declared_sha256=series.sha(plan_raw))
+                files[tree_path] = series.raw_json(tree)
+                cls.c1_files = files
 
     def setUp(self):
         temp = tempfile.TemporaryDirectory(prefix='jw-r11-delta5-')
@@ -102,7 +117,8 @@ class Delta5Witnesses(unittest.TestCase):
              patch.object(session, 'w1_disk_check', return_value={'status': 'pass'}), \
              patch.object(session.pilot, 'install', return_value={'exit_code': 0}) as installer:
             try:
-                session._arm_and_install(scratch, state, s.root, {'runtime_requirements': {'ac_powermode': 0}},
+                plan = self.c1_plan if window == 'C1' else {'runtime_requirements': {'ac_powermode': 0}}
+                session._arm_and_install(scratch, state, s.root, plan,
                     None, watchdog_check=_watchdog_acceptance, runner=host, volume_runner=host, now=lambda: NOW, w1_disk_config=None, disk_gate=None,
                     obc_off_attested_by='synthetic-review', battery_log=log, next_arm_triage=packet,
                     meter_probe=lambda root: {'live': True})
@@ -142,7 +158,11 @@ class Delta5Witnesses(unittest.TestCase):
             if (self.tmp / 'repo').exists():
                 self.tmp = self.tmp / 'independent'
                 self.tmp.mkdir()
-            s = self.scenario(previous, next_window=target).finish()
+            s = self.scenario(previous, next_window=target)
+            if target == 'C1':
+                for path, raw in self.c1_files.items():
+                    s.write(path, raw)
+            s.finish()
             honest = s.build()
             record, error, calls = self.arm(s, honest, window=target)
             self.assertIsNone(error, record['reasons'])

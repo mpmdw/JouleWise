@@ -12,6 +12,7 @@ from copy import deepcopy
 import json
 import math
 from pathlib import Path
+import stat
 import sys
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -37,6 +38,59 @@ def kit_path(window_id):
 
 def pack_id(window_id):
     return 'align-v4-' + window_id.lower()
+
+
+C1_PLAN = 'collection_plan.json'
+
+
+def c1_kit_file(path):
+    """The public file namespace emitted by the C1 materializer."""
+    return (path.as_posix() in (C1_PLAN, 'plan_tree.json')
+            or (path.parts[0] in ('stages', 'registration') and path.suffix == '.json'))
+
+
+def c1_plan_projection(plan):
+    if plan.get('window_id') != 'C1' or not isinstance(plan.get('members'), list):
+        raise ValueError('materialized C1 collection plan missing')
+    rows = []
+    for position, member in enumerate(plan['members'], 1):
+        if type(member['ordinal']) is not int or member['ordinal'] != position:
+            raise ValueError('materialized C1 ordinal disagrees with plan order')
+        rows.append({'run_id': member['run_id'],
+                     'role': 'sentinel' if member['pool_role'] == 'sentinel' else member['role']})
+    return rows
+
+
+def c1_kit_identity(file_hashes, plan):
+    rows = c1_plan_projection(plan)
+    return {'kit_sha256': sha(raw_json(file_hashes)), 'plan_sha256': file_hashes[C1_PLAN],
+            'member_count': len(rows),
+            'sentinel_ordinals': [i for i, row in enumerate(rows, 1) if row['role'] == 'sentinel']}
+
+
+def read_c1_kit(root):
+    """Hash the selected materialization, including the exact collection-plan bytes."""
+    relative = kit_path('C1')
+    directory = Path(root)
+    for part in relative.parts:
+        directory /= part
+        if not stat.S_ISDIR(directory.lstat().st_mode):
+            raise ValueError('materialized C1 kit directory must be a regular directory')
+    file_hashes, plan = {}, None
+    for path in sorted(directory.rglob('*')):
+        mode = path.lstat().st_mode
+        if stat.S_ISDIR(mode):
+            continue
+        relative = path.relative_to(directory)
+        if not stat.S_ISREG(mode) or not c1_kit_file(relative):
+            raise ValueError('unexpected file in materialized C1 kit: ' + relative.as_posix())
+        raw = path.read_bytes()
+        file_hashes[relative.as_posix()] = sha(raw)
+        if relative.as_posix() == C1_PLAN:
+            plan = json.loads(raw)
+    if not isinstance(plan, dict) or 'plan_tree.json' not in file_hashes:
+        raise ValueError('materialized C1 kit is incomplete')
+    return c1_kit_identity(file_hashes, plan), plan
 
 
 RESERVED_INDICES = frozenset({1, *range(91, 100)})   # development: W1 1/93, R0 91-92, reserve 94-99

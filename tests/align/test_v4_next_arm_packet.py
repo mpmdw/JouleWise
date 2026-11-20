@@ -530,25 +530,50 @@ class C1PacketRebuildTests(Base):
         w1.commit()
         self.assert_k1_refusal(w1, packet, ordinary)
 
-    def test_k1_cli_refuses_replaced_kit_before_host_access(self):
-        w1 = self.c1_scenario(materialized=True)
-        packet = self.ready_packet(w1)
-        ordinary = self.materialize_c1(w1, 0)
+    def assert_k1_cli_refusal(self, w1, packet, selected, state):
         target = self.output_dir / 'cli-session'
-        state = {'measurement_root': str(w1.root), 'source_measurement_root': str(w1.root),
-                 'v4_series': {'window_id': 'C1', 'extra_sentinels': 0}}
         session.pilot.h.write(target / 'session.json', state)
         packet_ref = w1.write('cli-packet.json', packet)
         args = ['install', '--session-root', str(target), '--w1-disk-config', 'unused',
                 '--battery-log', 'unused', '--obc-off-attested-by', 'synthetic',
                 '--next-arm-triage', str(w1.root / packet_ref['path'])]
         stderr = io.StringIO()
-        with patch.object(w1_kit, 'generate'), patch.object(session, 'validate_series_state', return_value=ordinary), \
+        with patch.object(w1_kit, 'generate'), patch.object(session, 'validate_series_state', return_value=selected), \
              patch('joulewise.align.apple.powermode.host_marker_path', side_effect=ValueError('host access')) as host, \
              contextlib.redirect_stderr(stderr):
             self.assertEqual(session.main(args), 2, stderr.getvalue())
         self.assertIn('packet_kit_mismatch', stderr.getvalue())
         host.assert_not_called()
+
+    def test_k1_cli_refuses_replaced_kit_before_host_access(self):
+        w1 = self.c1_scenario(materialized=True)
+        packet = self.ready_packet(w1)
+        ordinary = self.materialize_c1(w1, 0)
+        state = {'measurement_root': str(w1.root), 'source_measurement_root': str(w1.root),
+                 'v4_series': {'window_id': 'C1', 'extra_sentinels': 0}}
+        self.assert_k1_cli_refusal(w1, packet, ordinary, state)
+
+    def test_k1_cli_refuses_old_staged_tree_when_the_source_kit_matches(self):
+        w1 = self.c1_scenario(materialized=True)
+        packet = self.ready_packet(w1)
+        directory = w1.root / series.kit_path('C1')
+        complete = directory.with_name('complete-kit')
+        directory.rename(complete)
+        ordinary = self.materialize_c1(w1, 0)
+        view = self.output_dir / 'measurement'
+        pack = view / 'configs/campaigns' / series.pack_id('C1')
+        pack.parent.mkdir(parents=True)
+        directory.rename(pack)
+        complete.rename(directory)
+        plan_raw = (directory / 'collection_plan.json').read_bytes()
+        (pack / 'collection_plan.json').write_bytes(plan_raw)
+        night = self.output_dir / 'synthetic-night.json'
+        session.pilot.h.write(night, {'hazard_window': {
+            'pack': {'pack_root': str(pack), 'plan_tree_sha256': builder.digest((pack / 'plan_tree.json').read_bytes())},
+            'member_count': len(ordinary['members'])}})
+        state = {'measurement_root': str(view), 'source_measurement_root': str(w1.root), 'plan_path': str(night),
+                 'v4_series': {'window_id': 'C1', 'extra_sentinels': 2}}
+        self.assert_k1_cli_refusal(w1, packet, json.loads(plan_raw), state)
 
     def test_k1_any_kit_byte_swap_after_packet_refuses_even_when_plan_unchanged(self):
         w1 = self.c1_scenario(materialized=True)

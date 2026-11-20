@@ -148,6 +148,14 @@ class SeriesCadenceEndToEnd(unittest.TestCase):
         # The plan writer is skipped here; stage the synthetic plan its t0 names, which the batch's
         # post-install watchdog acceptance reads (RL-53 W-1).
         session_plan(target, state, now=state['t0_epoch_s'] - 3600)
+        if pack_id == s.pack_id('C1'):
+            plan_path = Path(state['plan_path'])
+            plan = json.loads(plan_path.read_bytes())
+            roster = json.loads((pack / s.C1_PLAN).read_bytes())
+            plan['hazard_window'] = {'pack': {'pack_root': str(pack),
+                                             'plan_tree_sha256': s.sha((pack / 'plan_tree.json').read_bytes())},
+                                     'member_count': len(roster['members'])}
+            h.write(plan_path, plan)
         h.write(target / 'session.json', state)
         return state
 
@@ -185,10 +193,13 @@ class SeriesCadenceEndToEnd(unittest.TestCase):
                 for k, v in statuses.items()}
 
     def packet(self, window, **checks):
-        return s.make_packet(self.measurement, window, self.history,
-                             self.checks(first=window == 'W1', **checks), record_commit=COMMIT,
-                             last_desk_passed_artifact_set_sha256=v4_registration.artifact_set_digest(self.measurement),
-                             valid_until_epoch_s=1000.0, now_epoch_s=500.0, commit_check=lambda root, commit: True)
+        packet = s.make_packet(self.measurement, window, self.history,
+                               self.checks(first=window == 'W1', **checks), record_commit=COMMIT,
+                               last_desk_passed_artifact_set_sha256=v4_registration.artifact_set_digest(self.measurement),
+                               valid_until_epoch_s=1000.0, now_epoch_s=500.0, commit_check=lambda root, commit: True)
+        if window == 'C1':
+            packet['c1_kit'], _ = s.read_c1_kit(self.measurement)
+        return packet
 
     def next_window(self):
         rows, nxt, _, _ = s.calibration_rows(self.manifest, self.history)

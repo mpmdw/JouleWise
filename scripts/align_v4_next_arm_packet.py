@@ -648,6 +648,31 @@ def frozen_sentinel_ids(manifest, plan, *, needs_supplemental):
     return list(wanted.values())
 
 
+def committed_c1_kit(evidence, commit, manifest_sha256, projection):
+    """Bind the materialization in the same commit as the ledger and its projection."""
+    directory = frozen_series.kit_path('C1').as_posix()
+    entries = evidence.git('ls-tree', '-r', '-z', commit, '--', directory).split(b'\0')[:-1]
+    if not entries:
+        return None    # projection-only packets can still be evaluated off-host
+    file_hashes = {}
+    plan = None
+    for entry in entries:
+        _, name = entry.split(b'\t', 1)
+        path = name.decode()
+        relative = PurePosixPath(path).relative_to(directory)
+        require(frozen_series.c1_kit_file(relative), 'unexpected file in materialized C1 kit: ' + path)
+        raw = evidence.read(commit, path)
+        file_hashes[relative.as_posix()] = digest(raw)
+        if relative.as_posix() == frozen_series.C1_PLAN:
+            plan = decode(raw)
+    require(plan is not None and 'plan_tree.json' in file_hashes, 'committed C1 kit is incomplete')
+    require(plan.get('series_manifest_sha256') == manifest_sha256, 'materialized C1 kit names a different series')
+    require(frozen_series.c1_plan_projection(plan) ==
+            [{'run_id': row['run_id'], 'role': row['role']} for row in projection],
+            'materialized C1 roster disagrees with the committed next plan')
+    return frozen_series.c1_kit_identity(file_hashes, plan)
+
+
 def build_packet(repo, *, record_commit, record_path, series_commit, series_path, pushed_ref,
                  now_epoch_s, current_artifact_set_sha256):
     require(number(now_epoch_s), 'arm clock unavailable')
@@ -897,9 +922,14 @@ def build_packet(repo, *, record_commit, record_path, series_commit, series_path
         reports = previous.thermal()['model_windows']
         # A15 / R21: only a U4 inconclusive triggers the R20 escalation sentinels; U5 is inconclusive by construction
         needs_supplemental = any(r['U4']['status'] == 'inconclusive' for r in reports.values())
-        manifest = decode(evidence.read(series_commit, MANIFEST_PATH))
-        expected = frozen_sentinel_ids(manifest, next_plan(), needs_supplemental=needs_supplemental)
+        manifest_raw = evidence.read(series_commit, MANIFEST_PATH)
+        plan = next_plan()
+        expected = frozen_sentinel_ids(decode(manifest_raw), plan, needs_supplemental=needs_supplemental)
         require(series.get('sentinel_ids') == expected, 'ledger sentinel IDs disagree with the frozen next roster')
+        if plan['window'].split('#')[0] == 'C1':
+            binding = committed_c1_kit(evidence, series_commit, digest(manifest_raw), plan['members'])
+            if binding is not None:
+                packet['c1_kit'] = binding
         return {'basis': 'next sentinel roster recorded with the U4 consequence', 'sentinel_ids': expected}
 
     def eligibility():
