@@ -267,3 +267,70 @@ edited packets with canonical comparison false. The R20 gate code is byte-identi
 through this test correction.
 [Hosted prequalification](https://github.com/mpmdw/JouleWise/actions/runs/44712187100/job/136208242934) ·
 [Hosted packet and mutation probe](https://github.com/mpmdw/JouleWise/actions/runs/44712187100/job/136208242907)
+
+
+## Lead audit round 2 · v3 freeze and build
+
+Round 2 on `13de6a387` verified one HIGH integration seam and one MED regression.
+Its HIGH plus MED count rose from one to two. The lead approved a return to spec and
+a build restart on this draft. The original freeze `9fba97178` and R20 supplemental
+freeze `49ac71d4e` remain in the published history. The five v3 cases were committed
+at `5d04e0dc54a28605b99675a2619eafce5fb390c5`, tree
+`40955eff9386aeb379301fb7d7a312ece1fc5fd1`, before editing production.
+With the validator still at `13de6a387`, the five-case baseline exited 1 with two
+expected failures and three passing controls. W1 borrowed R1's digest, and the
+genuine ordinal-free projection refused.
+
+The fix at `c80411e8eaa04d8770b13f41e954d2364c8d8c51`, tree
+`e2c53ad9ad8192168dd40443e21dcc8e28d7cfb1`, ties the last desk-passed record
+to the authenticated W1 predecessor by commit, path, and record SHA-256. A pass
+therefore compares W1's own committed artifact set to the consumer's current
+digest. The older-digest refusal keeps its existing diagnostic. The rebuild
+retains the W1 desk hash and any committed registration receipt hash, and requires
+agreement when both receipt copies exist. The validator leaves receipt issuance
+and the protected RL-182 functions with their owners.
+
+The full, ordered roster supplies one-based positions. Any explicit ordinal must
+be an integer equal to that position. The sentinel mapping is still derived from
+the frozen manifest. The rebuilt ordinal-free C1 packet matches and binds with
+all live checks pending. Moved, swapped, and duplicate IDs, missing supplemental
+rows, and conflicting explicit ordinals refuse at the sentinel check.
+
+| Invented case at clock 111 | W1 record commit | Series state commit | CLI |
+| --- | --- | --- | --- |
+| W1 desk on W1 code before changing checkout | `8a3833d8963ecafb7b69f2264a782e681c93a8b2` | `ae0ce6baef6338a3c193cb3571bbfe01f1851f0b` | 0, ready |
+| W1 correctly named, checkout on different code | `8a3833d8963ecafb7b69f2264a782e681c93a8b2` | `a983312d39404859e2ec64f50a3ae9407e4018d7` | 2, refused |
+| Only last-passed pointer switched to R1 | `8a3833d8963ecafb7b69f2264a782e681c93a8b2` | `9423123c6bbf60a7207e5f84ab605ef2bcfb6288` | 2, refused |
+| Complete ordered projection, ordinals omitted | `ae3e2dfce849af3a03565c5e636f4949c384ef6f` | `95c29cc813d99b192f5c5b9281f13a6166bb6833` | 0, ready |
+| Full W1 proof, matching committed receipt copies | `89aa8e843537908fd434d5021581c3cce68caa92` | `2e8afb0e1f43d17f30d7e463ac4fda9bb6f25feb` | 0, ready |
+| Different committed canonical receipt copy | `ef34b2f2ab669e55012bdb70426c6d0f69c66820` | `50f7600ae5bf1f46017b3647a81068ad1f076e48` | 2, refused |
+| Legacy projection, sentinel IDs moved | `ae3e2dfce849af3a03565c5e636f4949c384ef6f` | `eebe717e6b1eedb783a0e500301053157f3dbc1a` | 2, refused |
+| Legacy projection, sentinel ID duplicated | `ae3e2dfce849af3a03565c5e636f4949c384ef6f` | `fe0bd9dcd66783be21c482e1b2a7f5f3230d1375` | 2, refused |
+| Explicit ordinal contradicts position | `ae3e2dfce849af3a03565c5e636f4949c384ef6f` | `cd2ba5cc6937e49a3a34ba4372fb36e9a3e8710e` | 2, refused |
+| Explicit ordinal is Boolean | `ae3e2dfce849af3a03565c5e636f4949c384ef6f` | `1cbaa49255081f4addeca75d0109e3f296d11f45` | 2, refused |
+| Explicit ordinal is a string | `ae3e2dfce849af3a03565c5e636f4949c384ef6f` | `d451ae994e605c1d91eaf9ca0b720f352bdae48d` | 2, refused |
+
+
+The v3 regressions pass 5/5 after the fix. For the post-close command above,
+the authorized lead supplies a `last_passed_record` reference identical to the
+authenticated W1 predecessor's commit, path, and SHA-256. The lead carries one
+signed registration receipt and verifies that any committed copies agree.
+The complete C1 roster may use only `run_id` and `role` in frozen order. If the
+projection includes `ordinal`, it must agree with that order.
+
+```sh
+PYTHONPATH=tests:. python3.13 -B -m unittest -v -k test_v3_ align.test_v4_next_arm_packet.C1PacketRebuildTests
+PYTHONPATH=tests:. python3.13 -B -m unittest align.test_v4_next_arm_packet.C1PacketRebuildTests
+JW_B5_SYNTHETIC_ONLY=1 PYTHONPATH=tests:. python3.13 -B -m unittest \
+  align.test_v4_next_arm_packet.PacketTests align.test_v4_next_arm_packet.SentinelTriggerTests \
+  align.test_v4_next_arm_packet.DeskDerivationTests tests.align.test_v4_claim_b_packet \
+  tests.align.test_v4_series.PacketTests tests.align.test_v4_series_delta5 \
+  tests.align.test_v4_replacement_windows.BuilderTests \
+  tests.align.test_r11_delta6_sol1.Delta6Witnesses.test_u5_inconclusive_does_not_trigger_sentinels_but_u4_does
+git diff --check b2e01464d HEAD
+```
+
+`NEEDS_SPEC: none`. The lead's v3 ruling resolved the two findings. Exact-head CI is
+recorded in the draft ledger and the seat handoff. The integration owner and Opus
+still own exact-tree acceptance. W1 signing and the final post-close C1 packet
+remain with the lead or magistrate.
