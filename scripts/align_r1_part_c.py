@@ -103,6 +103,7 @@ FINAL_EVENT = {"event_type": "run_finalized", "phase": "run", "message": "bundle
 # form, or the three-column form without rails that the frozen reader also accepts.
 TRACE_HEADER = ("timestamp_s", "power_w", "source", "rail", "interval_start_s", "interval_end_s")
 JOURNAL_CLOCKS = ("wall_ns", "monotonic_ns", "monotonic_raw_ns")
+ISSUED_DRIVER = "issued_driver"
 POWERMODE_SOURCE = "pmset -g custom (AC Power block, exact powermode key)"
 CUT_FLAGS = frozenset({"episode.deadman", "episode.g0_unreleased", "episode.malformed_tool_call",
                        "episode.time_guard", "episode.context_limit", "thermal.start_gate_timeout",
@@ -2746,6 +2747,111 @@ def _check_gated_energy(episode, data, receipt, kind):
                   RECEIPT_NAME, field=key, peer="power_trace.csv")
 
 
+_DRIVER_PROGRAMS = {}
+
+
+def _issued_driver_program():
+    """Compile the frozen rehearsal's phase loop and close statements from its own source.
+
+    ``align_r1_rehearsal.run`` decides admission, skips and INCONCLUSIVE segments inline, so
+    there is no frozen function to call. The statements are taken as written: the phase loop
+    under ``with guard``, then the thermometry bar and the feed checks. Nothing is restated.
+    """
+    import ast
+
+    from scripts import align_r1_rehearsal as r1
+
+    raw = Path(r1.__file__).read_bytes()
+    key = r1.__file__, digest(raw)
+    if key not in _DRIVER_PROGRAMS:
+        run = next(node for node in ast.parse(raw).body
+                   if isinstance(node, ast.FunctionDef) and node.name == "run")
+        guard = next(node for node in ast.walk(run) if isinstance(node, ast.With)
+                     and any(ast.unparse(item.context_expr) == "guard" for item in node.items))
+        loop = next(index for index, node in enumerate(guard.body) if isinstance(node, ast.For)
+                    and isinstance(node.iter, ast.Call) and ast.unparse(node.iter.func) == "phase_plan")
+        outer = next(node.body for node in ast.walk(run) if isinstance(node, ast.Try) and guard in node.body)
+        bar = next(index for index, node in enumerate(outer) if isinstance(node, ast.Assign)
+                   and ast.unparse(node.targets[0]) == "thermometry['bar']")
+        mode = next(index for index, node in enumerate(outer[bar:], bar) if isinstance(node, ast.Assign)
+                    and ast.unparse(node.targets[0]) == "ac_powermode")
+        feeds = next(node for node in outer[mode:] if isinstance(node, ast.For)
+                     and ast.unparse(node.iter) == "results.items()")
+        _DRIVER_PROGRAMS[key] = tuple(
+            compile(ast.Module(body=list(block), type_ignores=[]), r1.__file__, "exec")
+            for block in (guard.body[:loop + 1], [*outer[bar:mode], feeds]))
+    return _DRIVER_PROGRAMS[key]
+
+
+def _check_issued_driver(runtime, schedule, soak_receipt, soak_reference, receipts):
+    """Replay the frozen rehearsal's decisions over the bound receipts.
+
+    The frozen statements run in a private namespace. Only the transport is replaced: it
+    serves the receipts this attempt bound, where the driver would launch the runtime. The
+    driver must admit every judged member, skip none, call none INCONCLUSIVE and keep the
+    thermometry bar. Its own Refusal is a refusal here.
+    """
+    from copy import deepcopy
+
+    from scripts import align_r1_rehearsal as r1
+
+    def refuse(field, role="attempt", error=None):
+        raise EvidenceFailure(ISSUED_DRIVER, role, RECEIPT_NAME, field=field) from error
+
+    served = {kind: deepcopy(receipt) for kind, receipt in {"idle": soak_receipt, **receipts}.items()}
+    try:
+        loop_code, close_code = _issued_driver_program()
+        plan = [row for row in r1.phase_plan() if row[1] in served and (row[1] != "idle" or row[0] == SOAK_SEGMENT)]
+        kinds = {row[0]: row[1] for row in plan}
+        if list(kinds.values()) != list(served):
+            refuse("phase_plan")
+
+        def role(names):
+            return next((kinds[name] for name in names if name in kinds),
+                        "step-d" if any(str(name).startswith("thermometry") for name in names) else "attempt")
+
+        def unit(args, output, rows, record, *, soak_reference=None, extra=None):
+            return {name: (served[kind], {"name": name, "class": workload_class, "result": served[kind]})
+                    for name, kind, _duration, workload_class in rows if name in kinds}
+
+        state = {**vars(r1), "args": SimpleNamespace(runtime=list(runtime), include_4bit=False),
+                 "output": None, "schedule": schedule, "precool_cap": r1.runtime_precool_cap_s(runtime),
+                 "record": {"phases": []}, "results": {}, "phase_plan": lambda *args, **kwargs: plan,
+                 "_admission_unit": unit, "write_soak_reference": lambda output, row: soak_reference}
+        exec(loop_code, state)
+        results = state["results"]
+        if state["skipped"] or set(results) != set(kinds):
+            refuse("skipped", role([*state["skipped"], *(set(kinds) - set(results))]))
+        step_name = r1.STEP_D_NAME
+        state["thermometry_d"] = r1.thermometry_record(step_name, results[step_name])
+        state["thermometry"] = {"D": state["thermometry_d"]}
+        exec(close_code, state)
+        if state["inconclusive"]:
+            refuse("inconclusive", role(list(state["inconclusive"])))
+        if state["thermometry"]["bar"] != "pass":
+            refuse("thermometry_bar", "step-d")
+        for name, kind in kinds.items():
+            if kind != "idle":
+                # The Part C series mode is Automatic. The loop checks it only after an A-B-A decision.
+                r1._check_member_powermode(name, results[name], 0)
+    except EvidenceFailure:
+        raise
+    except Exception as error:  # noqa: BLE001 - an unreplayable driver decision is never a pass
+        refuse("refused" if isinstance(error, getattr(r1, "Refusal", ())) else "unavailable", error=error)
+
+
+def _check_issued_duty_bar(receipt):
+    """A passing mechanics line must also be the frozen ``deadman_summary``'s duty bar."""
+    from scripts import align_r1_rehearsal as r1
+
+    kind = "d-bank-benign-s1"
+    try:
+        verdict = r1.deadman_summary(KINDS[kind], receipt)["duty_bar"]["verdict"]
+    except Exception as error:  # noqa: BLE001
+        raise EvidenceFailure("duty_budget", kind, RECEIPT_NAME, field="duty_bar", peer=ISSUED_DRIVER) from error
+    _required(verdict == "pass", "duty_budget", kind, RECEIPT_NAME, field="duty_bar", peer=ISSUED_DRIVER)
+
+
 def _check_power_trace(kind, raw, started_epoch_s, ended_epoch_s):
     """The bundle trace parses as the producer's CSV and lies inside this member's terminal bracket.
 
@@ -2932,6 +3038,7 @@ def _native_verdict(ledger, runtime, invoke, configured, soak):
                                                 _attested_descriptor(ledger, kind, configured))
         if kind == "step-d":
             step_binding = binding
+    _check_issued_driver(runtime, schedule, soak.row["result"], str(ledger.soak_reference), receipts)
     step = step_d_facts(bundles["step-d"], step_receipt)
     bank = {**facts_from_bundle(bundles["d-bank-benign-s1"], role="d-bank", native=True),
             "runtime": receipts["d-bank-benign-s1"]}
@@ -2940,6 +3047,8 @@ def _native_verdict(ledger, runtime, invoke, configured, soak):
     verdict = _judge_observations(predecessor=receipts["capture-predecessor-30b"], step_d=step, d_bank=bank,
                        n_chunk=step_receipt["slots"]["N_chunk"], x_g=contrast,
                        x_g_not_run_reason=refusal, ledger=ledger)
+    if verdict["verdict"] == "pass":
+        _check_issued_duty_bar(receipts["d-bank-benign-s1"])
     ledger.verify_final_sources()
     _required(canonical(schedule) == canonical(_w1_schedule(runtime)),
               "inter_member_schedule", "attempt", "W1 roster")
@@ -3097,9 +3206,12 @@ def replay_archived(output, runtime_config):
             result["failing_checks"] = sorted(set(failures))
             return result
         step = receipt["step-d"]
+        _check_issued_driver(["--config", str(runtime_config)], schedule, soak, None, receipt)
         table = _judge_observations(step_d=_project_step(projected["step-d"], step),
                                     d_bank=projected["d-bank-benign-s1"], x_g=projected["x-g"],
                                     n_chunk=step["slots"]["N_chunk"], archived=True)
+        if table["verdict"] == "pass":
+            _check_issued_duty_bar(receipt["d-bank-benign-s1"])
         config = Path(runtime_config)
         _required(digest(read_regular(config.parent, config.name)) == config_sha,
                   "source_integrity", "attempt", "runtime_config")

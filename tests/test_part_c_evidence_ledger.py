@@ -1204,7 +1204,7 @@ class DescriptorMarkerTests(unittest.TestCase):
                     self.assertTrue(evidence.is_descriptor_witness(row[FIELD]))
 
 
-# ---- Audit round 1: invalid raw evidence ---------------------------------------------------------
+# ---- Audit round 1: invalid raw evidence and the frozen driver's decisions -------------------------
 
 class RawEvidenceTests(unittest.TestCase):
     """A trace, an event stream and a journal each parse as the producer wrote them."""
@@ -1353,6 +1353,215 @@ class RawEvidenceTests(unittest.TestCase):
                     rows[index]["started"][clock] = rows[index - 1]["finished"][clock] - 1
                     with self.subTest(row=index, clock=clock), self.assertRaises(evidence.EvidenceFailure):
                         validate(rows)
+
+
+DRIVER_DOUBLE = '''
+"""A stand-in shaped like the pinned align_r1_rehearsal.run, for trees without the R1 driver."""
+STEP_D_NAME = "step_D"
+GATED = ("D_bank",)
+PLAN = [("pre", "calibration-pre"), ("idle_soak", "idle"), ("P", "capture-predecessor-30b"), (STEP_D_NAME, "step-d"),
+        ("D_bank", "d-bank-benign-s1"), ("D_other", "d-spam-benign-s1-a"), ("X_G", "x-g")]
+
+
+class Refusal(RuntimeError):
+    pass
+
+
+def phase_plan(include_4bit=False, precool_cap_s=None):
+    return [(name, kind, None, "heavy") for name, kind in PLAN]
+
+
+def runtime_precool_cap_s(runtime):
+    return 600.0
+
+
+def admission_units(runtime=None):
+    return [[row, *([phase_plan()[index + 1]] if row[1] == "capture-predecessor-30b" else [])]
+            for index, row in enumerate(phase_plan()) if row[1] != "step-d"]
+
+
+def _admission_unit(args, output, unit, record, *, soak_reference=None, extra=None):
+    raise AssertionError("the double never launches")
+
+
+def write_soak_reference(output, row):
+    raise AssertionError("the double never writes")
+
+
+def thermometry_record(name, result):
+    block = result.get("thermometry")
+    if not isinstance(block, dict):
+        raise Refusal("no classification")
+    return dict(block)
+
+
+def _check_member_powermode(name, result, mode):
+    if (result.get("ac_powermode") or {}).get("value") != mode:
+        raise Refusal("powermode")
+
+
+def deadman_summary(name, result):
+    if "deadman" not in result:
+        raise Refusal("no deadman block")
+    return {"duty_bar": {"verdict": "pass" if result["deadman"]["share"] <= 0.4 else "fail"}}
+
+
+def run(args):
+    results, record = {}, {"phases": []}
+    guard = open(__file__)
+    try:
+        with guard:
+            soak_reference = None
+            inconclusive, skipped, pending = {}, {}, {}
+            units = {unit[0][0]: unit for unit in admission_units(args.runtime)}
+            last_d_turn = None
+            for name, kind, duration, workload_class in phase_plan(args.include_4bit, precool_cap_s=precool_cap):
+                if kind != "idle" and kind != "capture-predecessor-30b" and kind != "step-d" and results.get(
+                        STEP_D_NAME, {}).get("reference_unobserved"):
+                    skipped[name] = inconclusive[name] = "reference unobserved"
+                    continue
+                if name not in pending:
+                    pending.update(_admission_unit(args, output, units[name], record, soak_reference=soak_reference))
+                results[name], row = pending.pop(name)
+                if results[name].get("segment_status") == "inconclusive":
+                    if results[name].get("g0_released") is not False:
+                        raise Refusal("an INCONCLUSIVE segment must report g0_released false")
+                    inconclusive[name] = "G0 unreleased"
+                if name == "idle_soak":
+                    soak_reference = write_soak_reference(output, row)
+                if kind == "x-g" and last_d_turn is None:
+                    inconclusive[name] = "the preceding member dispatched no D turn"
+                if kind in ("step-d", "d-bank-benign-s1"):
+                    last_d_turn = None if results[name].get("reference_unobserved") else name
+        thermometry_d = thermometry_record(STEP_D_NAME, results[STEP_D_NAME])
+        thermometry = {"D": thermometry_d}
+        thermometry["bar"] = thermometry_d["status"]
+        if thermometry["bar"] != "pass":
+            inconclusive["thermometry.D"] = "thermometry failed"
+        ac_powermode = None
+        for name, result in results.items():
+            if any(proc["comm"].startswith("claude") for census in result.get("census", [])
+                   for proc in census["processes"]):
+                inconclusive[name] = "agent feed overlap"
+    finally:
+        pass
+    return inconclusive
+'''
+
+
+@contextmanager
+def driver_double(source=DRIVER_DOUBLE):
+    import importlib.util
+
+    with TemporaryDirectory() as tmp:
+        path = Path(tmp) / "align_r1_rehearsal.py"
+        path.write_text(source)
+        spec = importlib.util.spec_from_file_location("scripts.align_r1_rehearsal", path)
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        with patch.dict(sys.modules, {module.__name__: module}), \
+                patch.object(scripts, "align_r1_rehearsal", module, create=True):
+            yield module
+
+
+class IssuedDriverTests(unittest.TestCase):
+    """The frozen rehearsal's own loop statements decide admission, skips and INCONCLUSIVE segments."""
+
+    D, X = "d-bank-benign-s1", "x-g"
+
+    @staticmethod
+    def receipts(*, contrast=True):
+        mode = {"value": 0}
+        receipts = {FIRST: {"ac_powermode": mode}, "step-d": {
+            "ac_powermode": mode, "g0_released": True, "thermometry": {"status": "pass"},
+            "census": [{"processes": [{"comm": "synthetic-worker"}]}]},
+            "d-bank-benign-s1": {"ac_powermode": mode, "deadman": {"share": 0.4}}}
+        if contrast:
+            receipts["x-g"] = {"ac_powermode": mode}
+        return receipts
+
+    def replay(self, receipts, soak=None):
+        pc._check_issued_driver(["runtime"], {}, {"private": MARKER} if soak is None else soak, "reference", receipts)
+
+    def refused(self, field, role, receipts, **kwargs):
+        with self.assertRaises(evidence.EvidenceFailure) as caught:
+            self.replay(receipts, **kwargs)
+        failure = caught.exception
+        self.assertEqual((failure.reason, failure.field, failure.role, failure.source),
+                         (pc.ISSUED_DRIVER, field, role, RECEIPT))
+        self.assertNotIn(str(MARKER), json.dumps(failure.finding()))
+
+    def test_the_drivers_statements_run_over_the_bound_receipts(self):
+        with driver_double() as driver:
+            receipts = self.receipts()
+            before = json.dumps(receipts, sort_keys=True)
+            self.replay(receipts)
+            self.replay(self.receipts(contrast=False))   # a proven X_G refusal leaves X_G out of the plan
+            self.assertEqual(json.dumps(receipts, sort_keys=True), before)
+            loop_code, close_code = pc._issued_driver_program()
+            self.assertEqual({loop_code.co_filename, close_code.co_filename}, {driver.__file__})
+            self.assertIn("pending", loop_code.co_names)
+            self.assertIn("thermometry", close_code.co_names)
+
+    def test_audit_reproductions_a_status_or_reference_field_the_driver_reads(self):
+        with driver_double():
+            # Audit round 1, `S-status`: an INCONCLUSIVE Step D that also reports a released G0.
+            receipts = self.receipts()
+            receipts["step-d"]["segment_status"] = "inconclusive"
+            self.refused("refused", "attempt", receipts)
+            receipts["step-d"]["g0_released"] = False
+            self.refused("inconclusive", "step-d", receipts)
+            # Audit round 1, `S-reference`: the driver skips every member after Step D.
+            receipts = self.receipts()
+            receipts["step-d"]["reference_unobserved"] = True
+            self.refused("skipped", self.D, receipts)
+            # Audit round 1, `D-reference`: X_G then follows no D turn.
+            receipts = self.receipts()
+            receipts[self.D]["reference_unobserved"] = True
+            self.refused("inconclusive", self.X, receipts)
+            self.replay({kind: row for kind, row in receipts.items() if kind != self.X})
+
+    def test_every_other_decision_of_the_loop_and_close_binds(self):
+        with driver_double():
+            receipts = self.receipts()
+            receipts["step-d"]["thermometry"]["status"] = "fail"
+            self.refused("inconclusive", "step-d", receipts)
+            receipts = self.receipts()
+            del receipts["step-d"]["thermometry"]
+            self.refused("refused", "attempt", receipts)
+            receipts = self.receipts()
+            receipts[self.X]["census"] = [{"processes": [{"comm": "claude"}]}]
+            self.refused("inconclusive", self.X, receipts)
+            self.refused("inconclusive", "idle", self.receipts(), soak={"census": [{"processes": [{"comm": "claude"}]}]})
+            receipts = self.receipts()
+            receipts[self.D]["ac_powermode"] = {"value": 2}
+            self.refused("refused", "attempt", receipts)
+            receipts = self.receipts()
+            receipts[self.X]["census"] = [{"processes": [{}]}]
+            self.refused("unavailable", "attempt", receipts)
+
+    def test_a_plan_or_source_that_cannot_be_replayed_is_never_a_pass(self):
+        with driver_double():
+            receipts = self.receipts()
+            self.refused("phase_plan", "attempt", {kind: receipts[kind] for kind in (FIRST, self.D, "step-d", self.X)})
+            self.refused("phase_plan", "attempt", {**receipts, "d-spam-benign-s1-b": {}})
+        for damage in (("with guard:", "with open(__file__):"), ("in phase_plan(", "in list("),
+                       ('thermometry["bar"] = ', 'thermometry["bars"] = '), ("ac_powermode = None", "mode = None"),
+                       ("in results.items():", "in list(results.items()):"), ("def run(args):", "def ran(args):")):
+            with self.subTest(damage=damage), driver_double(DRIVER_DOUBLE.replace(*damage)):
+                self.refused("unavailable", "attempt", self.receipts())
+        with rehearsal_double(Attempt.__new__(Attempt), None):   # a driver with no source file
+            self.refused("unavailable", "attempt", self.receipts())
+
+    def test_a_passing_mechanics_line_is_also_the_frozen_duty_bar(self):
+        with driver_double():
+            pc._check_issued_duty_bar({"deadman": {"share": 0.4}})
+            for receipt in ({"deadman": {"share": 0.400001}}, {}, {"deadman": {}}):
+                with self.subTest(receipt=receipt), self.assertRaises(evidence.EvidenceFailure) as caught:
+                    pc._check_issued_duty_bar(receipt)
+                failure = caught.exception
+                self.assertEqual((failure.reason, failure.role, failure.field, failure.peer),
+                                 ("duty_budget", self.D, "duty_bar", pc.ISSUED_DRIVER))
 
 
 class SoakArgvTests(unittest.TestCase):
