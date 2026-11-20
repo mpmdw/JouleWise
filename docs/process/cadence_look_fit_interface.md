@@ -471,9 +471,11 @@ nothing consumed. Stage 2 repeats the check before the reservation.
   summary, and each accepted bundle's `events.jsonl`, `align_turns.jsonl`,
   `align_thermal.jsonl`, `config.json` and runtime-event fallbacks decode as
   UTF-8 JSON with no duplicate key and no nonfinite number.
-- **Writer types.** A value the reader takes as a number, a count or a
-  length is a JSON number, integer or list. Text and booleans are never
-  converted, so digits outside ASCII cannot stand for a number.
+- **Writer types.** Each document, each journal row and each member the
+  reader indexes is an object. A value the reader takes as a number, a count
+  or a length is a JSON number, integer or list. Text and booleans are never
+  converted, so digits outside ASCII cannot stand for a number, and a wrong
+  type is refused, never read as an absent value.
 - **Events.** A row has a string type and a finite numeric stamp. A token
   row's index is an integer. A phase row names one of the nine runtime
   phases or `align_tool_<turn>_<call>` in ASCII digits without a sign or a

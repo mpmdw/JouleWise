@@ -1721,6 +1721,10 @@ def require_inputs_committed(repo, look_id, manifest_sha256, *, roster_sha256, v
 
 def runtime_bundle(sdir, leg_id, record):
     """Bind the literal RL-184 F01 locator. Resolution is used only to check containment."""
+    for where, value in (("leg record", record), *((f"leg record.{key}", record.get(key)) for key in ("spec", "result")
+                                                   if isinstance(record, dict) and record.get(key) is not None)):
+        if not isinstance(value, dict):
+            raise ManifestError([f"{where}: not an object as the pinned writers serialize it"])
     name = (record.get("result") or {}).get("bundle")
     if name is None:
         return None

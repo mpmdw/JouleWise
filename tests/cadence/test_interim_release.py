@@ -1334,7 +1334,44 @@ class WriterShapes(unittest.TestCase):
                  "invalid writer timestamp"),
                 ("event type number", events, lambda d: d.update(event_type=5), token, "invalid writer event")):
             self.refuses(label, path, self.changed(path, change, pick), reason)
-        self.refuses("event row list", events, b"[]\n" + events.read_bytes(), "invalid writer event")
+        self.refuses("event row list", events, b"[]\n" + events.read_bytes(), "not an object")
+
+    def test_a_wrong_container_is_refused_not_read_as_absent(self):
+        """A document, a journal row and each member the reader indexes is an object. Before this check a soak
+        reference that was a list read as no reference, and a list where the reader indexed crashed it only after
+        a meter stream had opened."""
+        receipt, record, summary = self.span / "runner_receipt.json", self.leg / "leg_record.json", \
+            self.leg / "leg_summary.json"
+        soak, config = self.span / "soak/soak_reference.json", self.bundle / "config.json"
+        turns, thermal = self.bundle / "outputs/align_turns.jsonl", self.bundle / "outputs/align_thermal.jsonl"
+        reading = lambda row: row.get("kind") == "reading"                                  # noqa: E731
+        for name, path in (("leg record", record), ("leg summary", summary), ("soak reference", soak),
+                           ("config", config)):
+            for label, data in (("a list", b"[]"), ("null", b"null"), ("text", b'"generated"'), ("a number", b"7")):
+                self.refuses(f"{name} is {label}", path, data, "not an object")
+        for name, path in (("turns", turns), ("thermal journal", thermal)):
+            self.refuses(f"{name} row is a list", path, b"[]\n" + path.read_bytes(), "not an object")
+            self.refuses(f"{name} row is null", path, b"null\n" + path.read_bytes(), "not an object")
+        for label, path, change, pick, reason in (
+                ("receipt started", receipt, lambda d: d.update(started=[d["started"]["epoch_s"]]), None,
+                 "runner receipt.started"),
+                ("soak sensors", soak, lambda d: d.update(sensors_c=[57.0]), None, "soak_reference.sensors_c"),
+                ("record spec", record, lambda d: d.update(spec=[]), None, "leg record.spec"),
+                ("record result", record, lambda d: d.update(result="runs/cadence-leg"), None, "leg record.result"),
+                ("record attempts", record, lambda d: d.update(attempts={"attempt": 1}), None, "attempts"),
+                ("record attempt rows", record, lambda d: d.update(attempts=["generated"]), None, "attempts"),
+                ("summary reference", summary, lambda d: d.update(span_reference="L001"), None,
+                 "leg summary.span_reference"),
+                ("config sampling", config, lambda d: d.update(sampling=[1.0]), None, "config.sampling"),
+                ("turn start stamp", turns, lambda d: d.update(start_stamp=[1.0]), bool, "align_turns.start_stamp"),
+                ("turn generation", turns, lambda d: d.update(generation=[]), bool, "align_turns.generation"),
+                ("journal finished", thermal, lambda d: d.update(finished=[1]), reading, "align_thermal.finished"),
+                ("journal values", thermal, lambda d: d.update(values=[1]), reading, "align_thermal.values"),
+                ("journal sensors", thermal, lambda d: d["values"].update(sensors=[40.5]), reading,
+                 "values.sensors"),
+                ("journal status", thermal, lambda d: d["values"].update(status="nominal"), reading,
+                 "values.status")):
+            self.refuses(label, path, self.changed(path, change, pick), reason)
 
     def test_phase_labels_are_the_writer_grammar(self):
         """``align_tool_<turn>_<call>`` is formatted from ``range`` and ``enumerate`` integers

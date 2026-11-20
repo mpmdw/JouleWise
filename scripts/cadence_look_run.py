@@ -697,13 +697,14 @@ def validate_runtime_bundles(roster, sdir_of):
             I34.check_writer_receipt(receipt)
         except ValueError as exc:
             raise F.LookInputError(str(exc)) from None
-        decoded = {rel: _writer_json(sdir / rel) for rel in M.operational_paths(sdir)}
+        decoded = {rel: _writer_json(sdir / rel) for rel in M.operational_paths(sdir) if (sdir / rel).is_file()}
         _check_values(receipt, decoded, [bundle.relative_to(sdir).as_posix() for bundle in bundles])
 
 
 def _check_values(receipt, decoded, bundles):
-    """Every value the reader takes as a number, a count or a length has the writers' JSON type, checked here so
-    that no trace or meter file opens first. A recorded value is never converted from text or a boolean."""
+    """Every value the reader takes has the writers' JSON type, checked here so that no trace or meter file opens
+    first. A document, a journal row and each member the reader indexes is an object; a number, a count or a
+    length is never converted from text or a boolean. A wrong type is refused, never read as an absent value."""
     def number(value, what):
         if value is not None:
             _real(value, what)
@@ -712,16 +713,39 @@ def _check_values(receipt, decoded, bundles):
         if value is not None:
             _whole(value, what)
 
+    def objects(doc, what, *members):
+        """``doc`` is an object, and so is each named member where it is present and not null."""
+        for name, value in ((None, doc), *((m, doc.get(m) if type(doc) is dict else None) for m in members)):
+            if type(value) is not dict and (name is None or value is not None):
+                raise WriterShape(f"{what}{'.' + name if name else ''}: not an object as the pinned writers serialize it")
+
+    for rel, doc in decoded.items():              # each present file: an object, or one object per journal row
+        for row in (doc if rel.endswith(".jsonl") else [doc]):
+            objects(row, rel.rsplit("/", 1)[-1])
+    objects(receipt, "runner receipt", "started")
     number(_member(receipt, "started", "epoch_s"), "runner receipt: started.epoch_s")
+    if "soak/soak_reference.json" in decoded:
+        objects(decoded["soak/soak_reference.json"], "soak_reference", "sensors_c")
     number(_member(decoded.get("soak/soak_reference.json"), "sensors_c", "TV0h"), "soak_reference: sensors_c.TV0h")
     for leg_id in receipt["roster"]:
         record = decoded.get(f"legs/{leg_id}/leg_record.json")
+        if record is not None:
+            objects(record, "leg record", "spec", "result")
+            attempts = record.get("attempts")
+            if attempts is not None and (type(attempts) is not list or any(type(a) is not dict for a in attempts)):
+                raise WriterShape("leg record: attempts is not a list of objects")
+        summary = decoded.get(f"legs/{leg_id}/leg_summary.json")
+        if summary is not None:
+            objects(summary, "leg summary", "span_reference")
         count(_member(record, "spec", "prefill_tokens"), "leg record: spec.prefill_tokens")
         count(_member(record, "result", "prefill_tokens"), "leg record: result.prefill_tokens")
     for bundle in bundles:
+        if f"{bundle}/config.json" in decoded:
+            objects(decoded[f"{bundle}/config.json"], "config", "sampling")
         for event in decoded.get(f"{bundle}/events.jsonl") or []:
             _check_event(event)
         for row in decoded.get(f"{bundle}/outputs/align_turns.jsonl") or []:
+            objects(row, "align_turns", "start_stamp", "end_stamp", "generation")
             for stamp in ("start_stamp", "end_stamp"):
                 number(_member(row, stamp, "epoch_s"), f"align_turns: {stamp}.epoch_s")
             count(_member(row, "generation", "prefill_tokens"), "align_turns: prefill_tokens")
@@ -729,8 +753,10 @@ def _check_values(receipt, decoded, bundles):
             if ids is not None and type(ids) is not list:
                 raise WriterShape("align_turns: output_token_ids is not a list")
         for row in decoded.get(f"{bundle}/outputs/align_thermal.jsonl") or []:
-            if _member(row, "kind") != "reading":
+            if row.get("kind") != "reading":
                 continue
+            objects(row, "align_thermal", "started", "finished", "values")
+            objects(row.get("values") or {}, "align_thermal: values", "status", "sensors")
             for stamp in ("started", "finished"):
                 for clock in ("wall_ns", "monotonic_ns"):
                     number(_member(row, stamp, clock), f"align_thermal: {stamp}.{clock}")
