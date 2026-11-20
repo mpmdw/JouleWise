@@ -306,8 +306,10 @@ class C1PacketRebuildTests(Base):
                       else f'{series.pack_id("C1")}-e{ordinal:02}')
             roster.append({'ordinal': ordinal, 'run_id': run_id,
                            'role': 'sentinel' if pool == 'sentinel' else 'anchor' if pool == 'anchor' else 'D'})
-        w1.series['sentinel_ids'] = [row['run_id'] for row in roster if row['role'] == 'sentinel']
-        w1.next_plan['members'] = roster if extra_sentinels else roster[:len(ordinary)]
+        planned_roster = roster if extra_sentinels else roster[:len(ordinary)]
+        w1.next_plan['members'] = planned_roster
+        # The omission control must fail the U4 minimum with a consistent plan and ledger.
+        w1.series['sentinel_ids'] = [row['run_id'] for row in planned_roster if row['role'] == 'sentinel']
         if bad_history_link:
             w1.record['previous_record'] = {**r1.link, 'sha256': '0' * 64}
         if wrong_cohort:
