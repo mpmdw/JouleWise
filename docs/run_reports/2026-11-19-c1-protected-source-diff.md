@@ -2,7 +2,7 @@
 
 2026-11-19 · Tier 2 · Sol 6.2 builder · draft against `align/2026-11-17-rl176-build`
 
-The helper compares the eight RL-182 source bindings and the two supplied prompt-hash maps. Spec v2 adds an isolated runtime identity comparison and a research-lead review flag for unapproved bytes in the scorer and phase modules. The helper reads Git blobs from the named commits and retains the ordinary changed-file inventory. Exit 0 in combined mode supplies one input to row 10. The signatory owns the actual comparison inputs, the authoritative prompt population and the anti-hindsight review.
+The helper compares committed dependency bytes, the eight RL-182 bindings, and the two supplied prompt-hash maps. Spec v3 adds a behavioural oracle to the isolated release import and freezes the conservative import and resource closure. A change anywhere in that byte scope returns 2. Runtime identity and the static binding hashes provide additional signals. Exit 0 in combined mode supplies one input to row 10. The signatory owns the actual comparison inputs, the authoritative prompt population and the anti-hindsight review.
 
 ## Spec freeze and assessed trees
 
@@ -33,7 +33,7 @@ All locations are in `joulewise/align/apple/rl176.py` at `82542232d`. Each fixtu
 
 The helper compares the whole scorer blob before locating definitions. It uses Python syntax and symbol tables to delimit each binding, validate direct uniqueness and catch statically visible extra module or explicit global bindings. It compares physical byte spans, including decorators, inline comments, trailing indented body comments and line endings. Other bytes go to ordinary review through the changed-file inventory. The Git inputs require regular blobs at both ruled module paths. The projection is a nonempty UTF-8 JSON object with unique, nonblank identifiers and 64-digit hexadecimal SHA-256 values. Identifier matching is exact. Hexadecimal case represents the same digest.
 
-## Verification
+## Initial static verification
 
 Executed locally with Python 3.13. Temporary files went into the assigned seat. The two commands below are the focused suite for this helper and its neighboring public contracts. The anchor and `origin/main` have no `tests/contracts` directory.
 
@@ -69,11 +69,11 @@ python3.13 -B scripts/compare_c1_protected_sources.py \
   --w1-prompts "$ROW10_TOY/w1.json" --c1-prompts "$ROW10_TOY/c1.json"
 ```
 
-This returned 0, with `rl176.py` in `files_for_review` and both static change maps empty. Substituting `546e6481910bdd3cb43ca2f527046f8e5a926785` for C1 returned 0 with no changed files. Substituting `6bb5615be138b728d0f026777de333d11e1941b7` returned 1 and named `_decode_rows`. Static-only mode preserves the original exit codes and emits `mode: static-only`. These are diagnostic examples.
+In spec v3 this returns 2 and lists `rl176.py` in `files_for_review`, with an empty protected binding change map. Substituting `546e6481910bdd3cb43ca2f527046f8e5a926785` for C1 returns 0 with no changed files. Substituting `6bb5615be138b728d0f026777de333d11e1941b7` returns 2 and names `_decode_rows`. Static-only mode emits `mode: static-only`. These are diagnostics without runtime evidence.
 
 ### Lead invocation template
 
-The lead supplies full commit IDs from the signed bindings, two privately verified public-safe identifier-to-digest projections and a trusted preloaded Python 3.13 Docker image ID. Both Git commits must carry the production release entry point. The isolation and wiring rules are specified below.
+The lead supplies full commit IDs from the signed bindings, two privately verified public-safe identifier-to-digest projections and a trusted preloaded Python 3.13 Docker image ID. Both Git commits must carry the production release entry point. The isolation setup and spec v3 review scope are specified below.
 
 ```sh
 python3.13 -B scripts/compare_c1_protected_sources.py \
@@ -83,7 +83,7 @@ python3.13 -B scripts/compare_c1_protected_sources.py \
   --w1-prompts "$ROW10_W1_PROJECTION" --c1-prompts "$ROW10_C1_PROJECTION"
 ```
 
-Use the paths in `files_for_review` for the ordinary public source diff. The command below covers both ruled modules.
+Use the paths in `files_for_review` for the lead's ordinary review. Protected changes route to the research lead under RL-182 §1.5. The command below covers both ruled modules.
 
 ```sh
 git --no-replace-objects -C "$ROW10_PUBLIC_CODE_REPO" diff --no-ext-diff --no-textconv \
@@ -179,7 +179,7 @@ python3.13 -B scripts/compare_c1_protected_sources.py --static-only --repo "$AUD
 
 The focused class passed 12 tests and 102 synthetic CLI invocations. The combined suite passed 44 tests. The audited aggregate is 3 VERIFIED HIGH, 0 MED and 0 LOW across two independent rounds. Round 2 decays under §3 with `H₂ = 1 ≤ floor(2 / 2)` and the existing `impl-bug` root cause. A VERIFIED HIGH in round 3 returns to spec. Integration-owner and Opus acceptance and the signatory's actual receipt comparison, attestation and review remain open.
 
-## Astra round 3 and spec v2
+## Astra round 3 and spec v2 (historical)
 
 Astra assessed `d0fb89a78b417bc43986366c01fe3b3ec7322e55`, tree `f1086f105d50964396437f6ae8d661218ac95ef0`, and blocked. The exact invented pair `b409e110b1531ffade1f130bb267cc466321ec83` → `7769e46b0c5fef95d8e6006079b1b3665357b148` changes only the phase module. At import it sets the scorer's level to 0.75 from 0.25. The old static comparator returned 0 in both directions. The round had 1 VERIFIED HIGH, 0 MED and 0 LOW. The `spec-gap` was that static scorer extraction could establish the source span while a sibling changed the effective binding. The three v1 audits ended with 4 VERIFIED HIGH, 0 MED and 0 LOW, and the round 3 finding returned the work to spec under Pipeline §3.
 
@@ -211,3 +211,35 @@ git diff 82542232d..HEAD --check
 The implementation was assessed at `74334dbabbed1d9e65c291ed380fb4d59f4e57fe`, tree `44a92c533d668b24914d550c008b330b76a16ee3`. The final focused run passed 52 tests. The v2 class made 113 synthetic comparison invocations, including the 96 mutations, and both directions of the adapted phase-only reproduction reported the level and phase-review flag. The exact retained audit pair still reports the phase-review flag and fails combined mode because its original invented commits have no release entry. All 12 v1 static cases and all seven frozen v2 cases were preserved. An extra aliasing regression was red against the first encoder and passes with reference tracking. The first sweep overlapped a worker edit and observed mismatched encoder versions. An invented concurrent-edit probe passed after the parent pinned one worker snapshot for both sides.
 
 The lead's signatory and anti-hindsight work, new-spec acceptance, and integration-owner and Opus decisions remain open. The v1 audit count stays at three.
+
+## Audit 4 and spec v3
+
+Audit 4 assessed `e831e9149ef9c6192ac38a47a4a71a257dd155d9`, tree `72d6d66ebdd0837c166200fd2cc379b6d50c5cba`, and recorded 2 VERIFIED HIGH, 2 VERIFIED MED and 0 VERIFIED LOW. The lead replaced the v2 byte-exemption policy with B1/B2. Spec v3 froze at `5ff27161af1d7a1118384fa327b0fbb5cdce7538`, tree `805f157b909bf542de1ad5c4f8bfc0d6777c657e`, against that assessed v2 head. The six targeted cases showed four failures and two errors before implementation. The two supplemental regressions cover multiple simultaneous oracle differences and a file-existence branch skipped in the source-only projection. The latter reproduced an exit 0 on the partial implementation.
+
+| Audit 4 finding | Regression and disposition |
+| --- | --- |
+| HIGH · shared NaN in the exclusion default is replaced by a separate NaN | `test_audit_four_nan_alias_changes_default_oracle` returns 2 in both directions with `_holm/defaults` and the changed dependency. P1 also tracks reference identity for floats and complex numbers. |
+| HIGH · root-level imported options module changed the effective S level | `test_audit_four_root_module_is_projected_and_in_the_closure` returns 2 in both directions with the root module and the level in P1 and B2. |
+| MED · a deleted phase module hid a simultaneous scorer edit | `test_audit_four_deleted_phase_preserves_every_flagged_path` returns both paths in both directions and gives the deleted file a null identity on the missing side. |
+| MED · the new isolated interpreter requires a reviewed command site | `test_tracked_command_sites_match_reviewed_allowlist` remains a scope hold at `isolated_identity:d16cb64193a201ee`. The B1 removal of byte exceptions applies to wiring. The existing repository command inventory is a separate gate. |
+
+The static closure follows literal absolute and relative imports transitively, including package initializers. The source-only runtime projection includes root-level modules and the rest of the committed Python source. The worker records tracked project paths opened during the release import, including failed open attempts. An observed, unprojected import-time resource returns 2, preserving the file report and any oracle differences still available.
+
+B1 also freezes all remaining tracked paths by Git blob ID and mode. A file-existence test can suppress both an open and a behavioural difference when the source-only projection omits that file. The complete tracked-tree fallback covers that case without reading other blobs. `closure_changes` labels each changed path as an import-time open, a static import, a potential module or a potential resource. Added and deleted paths are included. The conservative resource scope can flag unrelated tracked changes for the lead. Spec v3 has no wiring exemptions.
+
+B2 evaluates a fixed synthetic table following each full release import. It covers zero and one decode token, NaN and infinity, empty traces and rank strata, equal-rank ties, the five/six-row training boundary, the S significance threshold, both Holm cutoffs, and stamp ownership boundaries. A no-argument case applies when the effective signature permits it, including the audit's default-alias reproduction. Inputs are freshly copied for each case. The table includes the in-place Holm result and distinguishes an exception outcome by type. The frozen public scorer witness pins representative expected outputs for all eight protected names. The combined CLI reports every differing function and input in `oracle_changes`, alongside `runtime_changes` and the complete file flags. It emits digests for outcomes.
+
+```sh
+export TMPDIR=/Volumes/JW-EXT/scratch/pl-d-c1-protected-source-diff/build/tmp
+JW_B5_SYNTHETIC_ONLY=1 PYTHONPATH=tests:. python3.13 -B -m unittest \
+  align.test_rl182_registration.ProtectedSourceComparisonTests
+JW_B5_SYNTHETIC_ONLY=1 PYTHONPATH=tests:. python3.13 -B -m unittest \
+  align.test_rl182_registration align.test_rl176
+PYTHONPATH=tests:. python3.13 -B -m unittest \
+  tests.test_host_command_sites.HostCommandSiteTests.test_tracked_command_sites_match_reviewed_allowlist
+git diff 82542232d..HEAD --check
+```
+
+The implementation was assessed at `cdcbee79934a43e721d9ee668b59050f676611b4`, tree `76b2ca8c67c2da5a1e61a42f49a3f1643d28283f`. The six targeted cases passed after implementation. The 25 frozen v3 test methods are preserved and the combined focused run passed 59 tests. Condition 13 still matches all ten Git entries in the W1 baseline, the base and this implementation. The focused command site check reproduced the single unregistered launcher entry, with zero stale entries. The reviewed inventory file is outside this seat's authorized write scope.
+
+The real isolated-image run remains open. The builder exercised invented commits and the same worker through the fixture transport, plus the frozen synthetic table on the public anchor scorer. Any actual W1 input missing the release entry point still returns 2 under the combined contract. The signatory retains the actual comparison and the anti-hindsight review. The integration owner and Opus retain acceptance.
