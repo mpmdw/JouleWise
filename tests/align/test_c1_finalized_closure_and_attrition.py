@@ -1,4 +1,4 @@
-"""Independent C1 v3 acceptance. Only private TemporaryDirectory Git worlds are accepted.
+"""Independent C1 v3.1 acceptance. Only private TemporaryDirectory Git worlds are accepted.
 
 Run under unittest with the composed public source checkout on PYTHONPATH. The
 child executes the production file as __main__ without importing the fixtures.
@@ -6,12 +6,13 @@ C1_V3_EVIDENCE optionally names a directory for per-case synthetic observations.
 """
 import collections
 from contextlib import contextmanager
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from fractions import Fraction
 import hashlib
 import json
 import math
 import os
+import re
 from pathlib import Path
 import runpy
 import shutil
@@ -211,6 +212,182 @@ if __name__ == "__main__" and sys.argv[1:2] == ["--watch"]:
     cli_witness(*sys.argv[2:])
     sys.exit(0)
 
+def run_rl191_probe(script, root, output, witness, target, fault):
+    counts = collections.Counter()
+    a9, builder, fits, scored, groups, q_groups, injections, errors = [], [], [], [], [], [], [], []
+    descriptors = {}
+    real_open, real_close = os.open, os.close
+    target_dir = Path(root) / "series/restored/T3/runs" / target
+    opened = set()
+
+    def record_open(path):
+        if isinstance(path, (str, bytes)):
+            name = Path(os.fsdecode(path)).absolute()
+            if target_dir in name.parents:
+                opened.add(str(name.relative_to(target_dir)))
+
+    def open_at(path, flags, mode=0o777, *, dir_fd=None):
+        absolute = os.path.abspath(os.path.join(descriptors.get(dir_fd, os.getcwd()), os.fsdecode(path)))
+        if not flags & os.O_DIRECTORY:
+            record_open(absolute)
+        fd = real_open(path, flags, mode, dir_fd=dir_fd)
+        if flags & os.O_DIRECTORY:
+            descriptors[fd] = absolute
+        return fd
+
+    def close(fd):
+        descriptors.pop(fd, None)
+        return real_close(fd)
+
+    def audit(event, args):
+        if event == "open":
+            record_open(args[0])
+            if args[0] == output and args[2] & (os.O_WRONLY | os.O_RDWR | os.O_CREAT):
+                counts["output_open"] += 1
+
+    def install(caller):
+        rows, scorer = caller["s_rows"], caller["rl176"]
+        read, fit, release = rows.read_member_rows, scorer._decode_scores, scorer._s_release
+
+        def build(*args, **kwargs):
+            member, metadata = read(*args, **kwargs)
+            if member.episode_id == target:
+                if fault == "uncoded_no_s_turn":
+                    assert [r["turn"] for r in member.no_row] == [0, 1, 2] and not member.rows
+                    candidates = [dict(c) for c in member.candidates]
+                    candidates[1].pop("no_row")
+                    member = replace(member, no_row=(member.no_row[0], member.no_row[2]),
+                                     candidates=tuple(candidates))
+                    injections.append(fault)
+                if fault in {"missing_code", "duplicate_row", "row_and_code", "unknown_code"}:
+                    last, = member.no_row
+                    assert (last["turn"], last["reason"]) == (2, "start_out_of_state")
+                    candidates = [dict(c) for c in member.candidates]
+                    if fault == "missing_code":
+                        candidates[2].pop("no_row")
+                        member = replace(member, no_row=(), candidates=tuple(candidates))
+                    elif fault == "duplicate_row":
+                        # Three dispositions still exist, but two belong to turn 0.
+                        candidates[2] = dict(candidates[0])
+                        member = replace(member, no_row=(), rows=(*member.rows, member.rows[0]),
+                                         candidates=tuple(candidates))
+                    elif fault == "row_and_code":
+                        candidates[0]["no_row"] = last["reason"]
+                        member = replace(member, no_row=({"turn": 0, "reason": last["reason"]}, last),
+                                         candidates=tuple(candidates))
+                    else:
+                        candidates[2]["no_row"] = "invented_unknown"
+                        member = replace(member, no_row=({**last, "reason": "invented_unknown"},),
+                                         candidates=tuple(candidates))
+                    injections.append(fault)
+                builder.append({"rows": [r.turn for r in member.rows], "no_row": list(member.no_row)})
+            return member, metadata
+
+        in_decisive_scorer = False
+
+        def scores(group):
+            original = fit(group)
+            members = {m.episode.episode_id: len(m.decode_rows) for m in group}
+            if target not in members:
+                return original
+            fits.append({"held_rows": members[target], "training_rows": sum(members.values()) - members[target],
+                         "defined": target in original})
+            if fault == "unexplained_omission" and not in_decisive_scorer:
+                return original
+            if fault in {"substitute_id", "unexplained_omission"} and target in original:
+                result = dict(original)
+                value = result.pop(target)
+                if fault == "substitute_id":
+                    result["synthetic-unassigned-score"] = value
+                injections.append(fault)
+                return result
+            if fault == "fabricated_flat_score" and target not in original:
+                injections.append(fault)
+                return {**original, target: 0.0}
+            return original
+
+        def s_release(*args, **kwargs):
+            nonlocal in_decisive_scorer
+            in_decisive_scorer = True
+            try:
+                result = release(*args, **kwargs)
+            finally:
+                in_decisive_scorer = False
+            if fault == "substitute_stratum":
+                rows = result["S"]["attrition"]["instructed_assignments"]
+                first, second = [row for row in rows if row["included"] and row["pair"] == "bank_transfer_2"][:2]
+                assert first["window"] != second["window"]
+                second["window"] = first["window"]
+                injections.append(fault)
+            return result
+
+        for obj, name, wrapper in ((rows, "read_member_rows", build), (scorer, "_decode_scores", scores),
+                                   (scorer, "_s_release", s_release)):
+            patch.object(obj, name, wrapper).start()
+
+    def profile(frame, event, value):
+        name = frame.f_code.co_name
+        if name not in {"main", "read_member", "member_eligibility", "_s_attrition", "_entering_members",
+                        "_s_rank", "_series_prints", "_tail_test", "write_json_once", "_decode_scores"}:
+            return
+        src = frame.f_code.co_filename
+        data = frame.f_locals
+        if src == script and event == "call":
+            if name == "main":
+                install(frame.f_globals)
+            elif name == "read_member" and data["assignment"].run_id == target:
+                counts["read_target"] += 1
+        elif src.endswith("/light_triage.py") and name == "member_eligibility" and event == "return":
+            if value and value["stage"] == "final" and target in value["members"]:
+                a9.append(value["members"][target])
+        elif src.endswith("/rl176.py"):
+            if event == "call" and name in {"_decode_scores", "_s_rank", "_series_prints", "_tail_test"}:
+                counts[name] += 1
+            elif name == "_s_attrition" and event == "call":
+                scored.append(sorted(data["scores"]))
+            elif name == "_entering_members" and event == "return" and value is not None:
+                parents = []
+                f = frame.f_back
+                while f:
+                    parents.append(f)
+                    f = f.f_back
+                first, others = value
+                ids = [m.episode.episode_id for m, _ in [first, *others]]
+                if any(f.f_code.co_name == "splits" and f.f_locals.get("decide") for f in parents):
+                    groups.append(ids)
+                elif any(f.f_code.co_name == "_comparison"
+                         and "q_j" in f.f_locals["outcome"].__code__.co_names
+                         and len(f.f_locals["groups"]) == 22 for f in parents):
+                    q_groups.append(ids)
+        elif src.endswith("/b5/harvest.py") and name == "write_json_once" and event == "call":
+            counts[name] += 1
+
+    def guarded(frame, event, value):
+        try:
+            profile(frame, event, value)
+        except Exception as exc:
+            errors.append(repr(exc))
+            raise
+
+    sys.addaudithook(audit)
+    sys.argv = [script, "--measurement-root", root, "--output", output]
+    os.open, os.close = open_at, close
+    sys.setprofile(guarded)
+    try:
+        runpy.run_path(script, run_name="__main__")
+    finally:
+        sys.setprofile(None)
+        os.open, os.close = real_open, real_close
+        Path(witness).write_text(json.dumps(dict(counts=counts, a9=a9, builder=builder, fits=fits,
+            scored=scored, s_groups=groups, q_groups=q_groups, opened=sorted(opened),
+            injections=injections, errors=errors)))
+
+
+if __name__ == "__main__" and sys.argv[1:2] == ["--rl191-probe"]:
+    run_rl191_probe(*sys.argv[2:])
+    sys.exit(0)
+
+
 from tests.align import test_align_v4_series_release as fx
 
 
@@ -252,7 +429,7 @@ CASES.append(Case("ordinary_mirror_directory", "ignored_tree"))
 for role in ROLE:
     CASES.extend((
         Case(role + "_excluded", role + "_excluded"),
-        Case(role + "_captured_candidate", role + "_candidate", cli="owner"),
+        Case(role + "_captured_candidate", role + "_candidate"),
         Case(role + "_damaged", role + "_candidate", "damaged_member", "refuse", "refuse"),
     ))
 
@@ -669,14 +846,6 @@ class FinalizedClosureAndAttrition(unittest.TestCase):
                     "reasons": ["member.not_captured"] if absent else []})
             self.assertEqual(trace["projected"], [] if absent else [{"eligible": True, "rows": 0,
                 "condition": "benign" if role == "benign" else "sabotage"}])
-        if case.cli == "owner":
-            # The row-builder candidate is executable. Only its classification as
-            # an admitted *positive* is the owner's. A refusal is recorded verbatim.
-            self.assertEqual(world["candidate"]["rows"], 0)
-            if result.returncode == 1:
-                self.assertFalse(made)
-                self.assertEqual(counts["_series_prints"], 0)
-                self.assertEqual(counts["output_open"], 0)
         self.assertCountEqual([x for n,x in trace["events"] if n == "read_member"], runs)
         self.assertEqual(counts["rail_projection"], len(runs))
         self.assertEqual(counts["read_member_rows"], len(runs))
@@ -686,8 +855,6 @@ class FinalizedClosureAndAttrition(unittest.TestCase):
         for name in ("bind_benign_dc", "benign_dc", "dc_lookup"):
             self.assertCountEqual([key for n,key in trace["events"] if n == name], expected_benign)
         self.assertCountEqual(trace["dc_opens"], world["allowed_dc"])
-        if case.cli == "owner" and result.returncode == 1:
-            self.skipTest("NEEDS_RULING: intact candidate refused; series owner must admit this input")
         self.assertEqual((result.returncode, made), (0, True), result.stderr)
         self.assertEqual((counts["_series_prints"], counts["decisive_rank"], counts["write_json_once"],
                           counts["output_open"]), (1, 1, 1, 1))
@@ -717,7 +884,12 @@ class FinalizedClosureAndAttrition(unittest.TestCase):
             if not absent:
                 tally = score["attrition"]["by_pair_and_condition"][PAIR]["sabotage" if role=="instructed" else role]
                 self.assertEqual(tally["eligible"] - tally["with_score"], 1)
-                self.skipTest("NEEDS_RULING: series owner must admit candidate and supply independent producer outputs")
+                check_entries(self, score["attrition"], {("T3", PAIR, ROLE[role]): (NO_ROWS, CODES)})
+                if role == "instructed":
+                    affected = [r for r in score["attrition"]["instructed_assignments"]
+                                if (r["window"], r["pair"]) == ("T3", PAIR)]
+                    self.assertEqual([(r["episode_id"], r["included"], r["reason"]) for r in affected],
+                                     [(target, False, "s_score_undefined")])
         else:
             self.assertEqual(score["words"], ["S SIGNATURE"])
             self.assertEqual((score["windows"], score["theta"], score["p_sup"]),
@@ -769,6 +941,295 @@ def case_test(case):
 
 for card in CASES:
     setattr(FinalizedClosureAndAttrition, "test_" + card.id, case_test(card))
+
+
+CODES = ["start_out_of_state", "after_hot_turn", "after_hot_turn"]
+NO_ROWS = "no decode-only row"
+SHORT = "under six training rows"
+FLAT = "zero residual variance"
+
+# §2.2 names the status and the no_s_score record, but describes its cause
+# and per-turn fields in prose. Keep their wire spellings in one adapter.
+CAUSES = {
+    NO_ROWS: {"no_decode_only_row", "no_decode_only_rows", "no_decode_rows"},
+    SHORT: {"under_six_training_rows", "under_6_training_rows", "fewer_than_six_training_rows",
+            "fewer_than_6_training_rows", "insufficient_training_rows"},
+    FLAT: {"zero_residual_variance"},
+}
+
+
+def field(test, row, *names):
+    present = [name for name in names if name in row]
+    test.assertEqual(len(present), 1, f"expected one of {names} in {row}")
+    return row[present[0]]
+
+
+def check_entries(test, attrition, expected):
+    """Expected keys are (window, pair, ordinal); values are (cause, ordered codes)."""
+    records = attrition.get("no_s_score", [])
+    test.assertIsInstance(records, list)
+    actual = {}
+    for row in records:
+        test.assertNotIn("condition", row)
+        identity = (row["window"], row["pair"], field(test, row, "ordinal", "manifest_ordinal"))
+        test.assertIs(type(identity[2]), int)
+        test.assertIn(identity, expected)
+        test.assertNotIn(identity, actual, f"duplicate no_s_score for {identity}")
+        test.assertEqual(field(test, row, "decision", "a9_decision"), "eligible")
+        test.assertEqual(field(test, row, "status", "s_status"), "s_score_undefined")
+        cause, codes = expected[identity]
+        literal = re.sub(r"[-\s]+", "_", row["cause"].lower())
+        test.assertIn(literal, CAUSES[cause])
+        if codes is not None:
+            given = field(test, row, "codes", "turn_codes", "per_turn_codes", "no_row")
+            test.assertIsInstance(given, list)
+            if given and isinstance(given[0], dict):
+                test.assertEqual([record["turn"] for record in given], list(range(len(codes))))
+                given = [record["reason"] for record in given]
+            test.assertEqual(given, codes)
+        actual[identity] = row
+    test.assertEqual(actual.keys(), expected.keys())
+
+
+@dataclass(frozen=True)
+class CoverageCase:
+    name: str
+    world: str
+    result: str
+    fault: str = "none"
+
+
+COVERAGE_CASES = (
+    CoverageCase("all_eligible_defined_control", "healthy", "publish"),
+    CoverageCase("contributors_eligible_less_two_no_s", "two_benign", "publish"),
+    CoverageCase("contributors_foreign_id_same_count", "healthy", "refuse", "substitute_id"),
+    CoverageCase("dispositions_mixed_rows_and_code", "mixed", "publish"),
+    CoverageCase("dispositions_missing_entry_defined_fold", "healthy", "refuse", "unexplained_omission"),
+    CoverageCase("dispositions_missing_code", "mixed", "structural", "missing_code"),
+    CoverageCase("dispositions_duplicate_row_missing_turn", "mixed", "structural", "duplicate_row"),
+    CoverageCase("dispositions_row_and_code_same_turn", "mixed", "structural", "row_and_code"),
+    CoverageCase("dispositions_unknown_code", "mixed", "structural", "unknown_code"),
+    CoverageCase("strata_remove_only_undefined_instructed", "instructed", "publish"),
+    CoverageCase("strata_same_count_duplicate_identity", "healthy", "refuse", "substitute_stratum"),
+    CoverageCase("fold_under_six_training_rows", "short", "publish"),
+    CoverageCase("fold_zero_residual_variance", "flat", "publish"),
+    CoverageCase("fold_spurious_score_zero_variance", "flat", "refuse", "fabricated_flat_score"),
+    CoverageCase("absent_final_a9_earlier_exclusion", "absent", "publish"),
+    CoverageCase("incomplete_reconciled_uncoded_turn", "eligible", "structural", "uncoded_no_s_turn"),
+    CoverageCase("incomplete_hot_same_codes", "hot_unbalanced", "structural"),
+    CoverageCase("eligible_reconciled_no_s", "eligible", "publish"),
+    CoverageCase("incomplete_per_turn_token_counts", "unbalanced", "structural"),
+)
+
+
+def prepare(root, kind):
+    manifest = fx.series.candidate()
+    roster = ids(manifest)
+    members = {int(run[-2:]): cond for run, window, pair, cond in roster if (window, pair) == ("T3", PAIR)}
+    benign = sorted(o for o, cond in members.items() if cond == "benign")
+    target = ROLE["instructed" if kind == "instructed" else "benign"]
+    assert (len(members), benign[0]) == (8, ROLE["benign"])
+    missing = {}
+    if kind in {"eligible", "instructed", "two_benign", "short", "hot_unbalanced"}:
+        hot = {"eligible": [target], "hot_unbalanced": [target], "instructed": [target], "two_benign": benign[:2],
+               "short": benign[1:]}[kind]
+        missing.update({i: (NO_ROWS, CODES) for i in hot})
+    if kind == "short":
+        missing.update({o: (SHORT, None) for o in (target, ROLE["instructed"])})
+    if kind == "flat":
+        missing[target] = (FLAT, None)
+
+    write_bundle, describe = fx.write_bundle, fx.describe
+
+    def bundle(path, window, assignment, signal, **kwargs):
+        ordinal = assignment["ordinal"]
+        affected = (window, assignment["pair"]) == ("T3", PAIR)
+        if kind == "flat" and affected:
+            # All seven training members have exactly the same three energies
+            # at three linearly independent designs. Held target differs.
+            signal = 4 if ordinal == target else 1
+        run = write_bundle(path, window, assignment, signal, **kwargs)
+        if not affected:
+            return run
+        if missing.get(ordinal, (None,))[0] == NO_ROWS or (kind == "mixed" and ordinal == target):
+            journal = path / "outputs/align_thermal.jsonl"
+            records = [json.loads(s) for s in journal.read_text().splitlines()]
+            for row in records:
+                if kind != "mixed" or row["monotonic_ns"] >= 30 * fx.NS:
+                    row["status"]["os_level"] = 1
+            fx.write_jsonl(journal, records)
+        if kind in {"unbalanced", "hot_unbalanced"} and ordinal == target:
+            # Move one event between turns before signing. The total is still
+            # 30 and each turn still has decode events and a first-token stamp.
+            events = path / "events.jsonl"
+            records = [json.loads(s) for s in events.read_text().splitlines()]
+            origin = 1 if kind == "hot_unbalanced" else 0
+            row = next(r for r in reversed(records) if r["event_type"] == "token"
+                       and r["metadata"]["align_turn_index"] == origin)
+            row["metadata"]["align_turn_index"] = origin + 1
+            row["timestamp_s"] = 26.99 + 10 * origin
+            fx.write_jsonl(events, records)
+        return run
+
+    def record(path, relative, value, **kwargs):
+        if kind == "absent" and relative == "records/T3/pilot.json":
+            # Keep the required full thermal roster. Only the earlier A9
+            # exclusion on the uncaptured target changes before signing.
+            rows = value["extra_checks"]["thermal"]["members"]
+            target_row, = [m for m in rows if m["id"] == f"synthetic-T3-{target:02d}"]
+            assert target_row["excluded"] and target_row["calibration_exclusions"] == ["member.not_captured"]
+            target_row["calibration_exclusions"] = ["X5"]
+        return describe(path, relative, value, **kwargs)
+
+    with patch.object(fx, "write_bundle", bundle), patch.object(fx, "describe", record):
+        world = make_world(root, "benign_excluded" if kind == "absent" else "benign_ordinary")
+    directory = root / "series/restored/T3/runs"
+    observations = {}
+    for ordinal in members:
+        path = directory / f"synthetic-T3-{ordinal:02d}"
+        if kind == "absent" and ordinal == target:
+            assert not path.exists()
+            continue
+        turns = json.loads((path / "outputs/align_episode.json").read_text())["turns"]
+        tokens = collections.Counter(r["metadata"]["align_turn_index"]
+            for line in (path / "events.jsonl").read_text().splitlines()
+            if (r := json.loads(line))["event_type"] == "token")
+        logged = [t["decode_tokens"] for t in turns]
+        actual = [tokens[t["index"]] for t in turns]
+        assert logged == [6, 10, 14] and all(t["first_token_ns"] is not None for t in turns)
+        expected_tokens = logged
+        if ordinal == target:
+            expected_tokens = {"unbalanced": [5, 11, 14], "hot_unbalanced": [6, 9, 15]}.get(kind, logged)
+        assert actual == expected_tokens
+        built, _ = fx.read_restored_fixture_rows(path)
+        codes = [dict(r) for r in built.no_row]
+        row_turns = [row.turn for row in built.rows]
+        assert sorted(row_turns + [r["turn"] for r in codes]) == [0, 1, 2]
+        if missing.get(ordinal, (None,))[0] == NO_ROWS:
+            assert [r["reason"] for r in codes] == CODES and not row_turns
+        elif kind == "mixed" and ordinal == target:
+            assert row_turns == [0, 1] and codes == [{"turn": 2, "reason": "start_out_of_state"}]
+        elif not (kind == "unbalanced" and ordinal == target):
+            assert row_turns == [0, 1, 2] and not codes
+        observations[ordinal] = dict(tokens=actual, logged=logged, rows=row_turns, no_row=codes)
+    world.update(target=f"synthetic-T3-{target:02d}", missing=missing, projections=observations)
+    return world
+
+
+class Coverage(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        work = tempfile.TemporaryDirectory(prefix="c1-rl191-")
+        cls.addClassCleanup(work.cleanup)
+        cls.base = Path(work.name).resolve()
+        cls.worlds = {}
+
+    def check_case(self, case):
+        if case.world not in self.worlds:
+            self.worlds[case.world] = prepare(self.base / case.world, case.world)
+        world = self.worlds[case.world]
+        with tempfile.TemporaryDirectory(dir=self.base) as tmp:
+            output, witness = [Path(tmp) / p for p in ("report.json", "trace.json")]
+            cmd = [sys.executable, "-B", str(Path(__file__).resolve()), "--rl191-probe",
+                   str(fx.SCRIPT), str(world["root"]), str(output), str(witness), world["target"], case.fault]
+            result = subprocess.run(cmd, capture_output=True, text=True, cwd=fx.ROOT)
+            self.assertTrue(witness.is_file(), result.stderr)
+            trace = json.loads(witness.read_text())
+            made = os.path.lexists(output)
+            report = json.loads(output.read_text())["rl176"] if made else None
+            evidence = os.environ.get("C1_V3_EVIDENCE")
+            if evidence:
+                dest = Path(evidence)
+                dest.mkdir(exist_ok=True, parents=True)
+                (dest / (case.name + ".json")).write_text(json.dumps(dict(case=case.name,
+                    expected=case.result, exit=result.returncode, report=made, trace=trace,
+                    projections=world["projections"], stdout=result.stdout, stderr=result.stderr,
+                    S=report["S"]["attrition"] if report else None,
+                    Q=report["q"]["entering_members_by_stratum"] if report else None), sort_keys=True))
+            self.assertEqual(trace["errors"], [])
+            self.assertNotIn("Traceback", result.stderr)
+            self.assertEqual(result.stdout, "")
+            if case.fault != "none":
+                self.assertTrue(trace["injections"], f"{case.fault} was never delivered to the caller")
+                self.assertEqual(set(trace["injections"]), {case.fault})
+            absent = case.world == "absent"
+            self.assertTrue(trace["a9"])
+            self.assertTrue(all(a9 == dict(captured=not absent, eligible=not absent,
+                reasons=["X5"] if absent else []) for a9 in trace["a9"]), trace["a9"])
+            counts = collections.Counter(trace["counts"])
+            if case.result != "publish":
+                self.assertEqual((result.returncode, made, counts["output_open"], counts["write_json_once"]),
+                                 (1, False, 0, 0), f"release accepted {case.name}")
+                if case.result == "structural":
+                    self.assertEqual([counts[k] for k in ("_series_prints", "_decode_scores", "_s_rank",
+                                                          "_tail_test")], [0, 0, 0, 0])
+                return
+            self.assertEqual((result.returncode, made), (0, True), result.stderr)
+            self.assertEqual((counts["output_open"], counts["write_json_once"]), (1, 1))
+            if absent:
+                self.assertEqual((counts["read_target"], trace["builder"], trace["opened"]), (0, [], []))
+            else:
+                self.assertEqual(counts["read_target"], 1)
+                projection = world["projections"][int(world["target"][-2:])]
+                self.assertEqual(trace["builder"], [dict(rows=projection["rows"], no_row=projection["no_row"])])
+            self.check_population(world, case, trace, report)
+
+    def check_population(self, world, case, trace, report):
+        attr = report["S"]["attrition"]
+        missing = {("T3", PAIR, o): value for o, value in world["missing"].items()}
+        check_entries(self, attr, missing)
+        absent = case.world == "absent"
+        excluded = [{"window": "T3", "pair": PAIR, "ordinal": ROLE["benign"],
+                     "decision": "excluded", "reason": "X5"}] if absent else []
+        self.assertEqual(attr["uncaptured_assignments"], excluded)
+        scores, q_groups, s_groups = set(), collections.defaultdict(set), collections.defaultdict(set)
+        eligible_tally, score_tally = collections.Counter(), collections.Counter()
+        for run, window, pair, condition in world["roster"]:
+            if absent and run == world["target"]:
+                continue
+            key = window, pair
+            q_groups[key].add(run)
+            eligible_tally[pair, condition] += 1
+            if (window, pair, int(run[-2:])) not in missing:
+                s_groups[key].add(run)
+                scores.add(run)
+                score_tally[pair, condition] += 1
+        included = set()
+        for run, window, pair, condition in world["roster"]:
+            if condition == "sabotage" and run in scores and len(s_groups[window, pair]) > 1:
+                included.add((window, pair))
+        self.assertEqual(trace["scored"], [sorted(scores)])
+        for key in eligible_tally:
+            tally = attr["by_pair_and_condition"][key[0]][key[1]]
+            self.assertEqual((tally["eligible"], tally["with_score"]), (eligible_tally[key], score_tally[key]))
+        self.assertCountEqual([sorted(g) for g in trace["s_groups"]], [sorted(s_groups[k]) for k in included])
+        self.assertCountEqual([sorted(g) for g in trace["q_groups"]], [sorted(g) for g in q_groups.values()])
+        self.assertEqual(report["S"]["strata"], len(included))
+        decisions = attr["instructed_assignments"]
+        self.assertCountEqual([(r["window"], r["pair"]) for r in decisions if r["included"]], included)
+        for row in decisions:
+            if (row["window"], row["pair"]) not in included:
+                self.assertEqual(row["reason"], "s_score_undefined")
+        q = report["q"]
+        counts = {(w, p): n for w, pairs in q["entering_members_by_stratum"].items() for p, n in pairs.items()}
+        self.assertEqual(counts, {k: len(group) for k, group in q_groups.items()})
+        if case.world != "flat":
+            self.assertEqual(q["pooled_nominal"]["p_two_sided"], float(q_card("benign", not absent)))
+        if case.world in {"flat", "short"}:
+            training = 21 if case.world == "flat" else 3
+            self.assertTrue(trace["fits"])
+            self.assertTrue(all(f == dict(held_rows=3, training_rows=training, defined=False)
+                                for f in trace["fits"]))
+
+
+def bind(case):
+    def test(self):
+        self.check_case(case)
+    return test
+
+
+for case in COVERAGE_CASES:
+    setattr(Coverage, "test_" + case.name, bind(case))
 
 
 if __name__ == "__main__":
