@@ -1,10 +1,10 @@
 {
   "armed": null,
-  "next_observable": "f2stab01-f0c56fc9/run-out.txt shows LAUNCH_RC=0 with the fence (launch ~07:03, expected end ~08:18, fence ~08:41). The next activation after the fence is gone Checks cq-f2-stab-01-l004-a1 under /Users/edr/campaign-out/f2-stab-01/ with the ready template f2stab01-check-template-f0c56fc9/check.sh (LEGS L004, kit sha dbad…70fe, campaign_id f2-stab-01 and batch_windows == ['02:00-02:35'] asserted; replace REPLACE_STAMP in OUT with the actual directory's stamp and NEWACT in TMPDIR with the activation id; read the leg_summary's admitted/contaminated_redos and grep the leg_record for max_busy_cores/max_gap_s), and copies at once with f2stab01-check-template-f0c56fc9/offload-run.sh (replace NEWACT everywhere with the activation id). Then continue down the ladder (items 422, 447, 463, 464, 480): rank 2 only for an f2-inst kit whose executing delta PASS is recorded on main (none at 07:00); otherwise rank 3 hp-02 if issued (not issued); otherwise rank 4 further stability from kits f2-stab-01..14 on pin 2d347f721 (next: f2-stab-01 L005, seq 5; inputs f2stab01-f0c56fc9/inputs.sh with SPAN/LEGS/SEQ/MAGISTRATE_PID changed, ARG per item 463's one-leg rule, a span whose fence ends after 10:50:00 needs the other ARG, check templates with LEGS/plan id changed), or f2-stab-15/16 on pin 6e9d42f1d with no window in the 10:50:01-13:14:59 gap. Saturday's rank-1 stability leg is due at the first dispatch after 00:00.",
+  "next_observable": "f2stab01-39e112d4/run-out.txt shows LAUNCH_RC=0 with the fence (launch ~08:06, expected end ~09:21, fence ~10:08; read the true fence deadline from run-out.txt). The next activation after the fence pid is gone and runner_receipt.json exists Checks cq-f2-stab-01-l005-a1 under /Users/edr/campaign-out/f2-stab-01/ with f2stab01-check-template-39e112d4/check.sh (LEGS L005, kit sha dbad…70fe, campaign_id f2-stab-01 and batch_windows == ['02:00-02:35'] asserted; replace REPLACE_STAMP in OUT with the actual directory's stamp and NEWACT in TMPDIR with the activation id; read the leg_summary's admitted/contaminated_redos and grep the leg_record for max_busy_cores/max_gap_s), and copies at once with f2stab01-check-template-39e112d4/offload-run.sh (replace NEWACT everywhere with the activation id). Then continue down the ladder (items 422, 447, 463, 464, 480): rank 2 only for an f2-inst kit whose executing delta PASS is recorded on main; otherwise rank 3 hp-02 if issued (not issued at 08:05); otherwise rank 4 further stability from kits f2-stab-01..14 on pin 2d347f721 (next: f2-stab-01 L006, seq 6; inputs f2stab01-39e112d4/inputs.sh with SPAN/LEGS/SEQ/MAGISTRATE_PID changed, ARG per item 463's one-leg rule, a span whose fence ends after 10:50:00 needs the other ARG, check templates with LEGS/plan id changed), or f2-stab-15/16 on pin 6e9d42f1d with no window in the 10:50:01-13:14:59 gap. Saturday's rank-1 stability leg is due at the first dispatch after 00:00.",
   "open_items": [
     {
       "expires_epoch_s": null,
-      "item": 483,
+      "item": 484,
       "owner": "magistrate",
       "status": "ISSUED"
     },
@@ -161,10 +161,10 @@
   ],
   "owner": "magistrate",
   "schema": "joulewise.current_pointer.v2",
-  "source_item": "483",
+  "source_item": "484",
   "source_item_heading_date": "2026-11-20",
   "wait": {
-    "deadline_epoch_s": 1795197600,
+    "deadline_epoch_s": 1795201200,
     "observable": "none",
     "on_early_or_refused": "a launcher refusal or non-clean close: record it, hold kit f2-stab-01 until an input changes (item 422, RL-179 F-6), mail the lead and Ed, and continue down the ladder. R1 stays unarmed."
   }
