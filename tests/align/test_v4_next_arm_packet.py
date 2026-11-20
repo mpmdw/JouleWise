@@ -21,6 +21,8 @@ import unittest
 from unittest.mock import patch
 
 from scripts import align_v4_next_arm_packet as builder
+from scripts import align_v4_series as series
+from scripts import align_v4_session as session
 from joulewise.align.apple import v4_cadence as cad
 from joulewise.align.apple import v4_registration as registration
 
@@ -235,6 +237,184 @@ class Base(unittest.TestCase):
                                b_bar=rest[0] if rest else True).finish()
             previous = current
         return previous
+
+
+class C1PacketRebuildTests(Base):
+    """The W1 -> C1 handoff through the CLI, an independent rebuild and the frozen series."""
+
+    def c1_scenario(self, **changes):
+        self.fail('frozen acceptance: C1 predecessor fixture is pending')
+
+    def test_committed_w1_rebuild_binds_c1_with_live_checks_pending(self):
+        w1 = self.c1_scenario()
+        supplied = self.ready_packet(w1)
+        rebuilt, matches = self.rebuild(w1, supplied)
+        self.assertTrue(matches)
+        self.assertIs(series.bind_packet(w1.root, 'C1', rebuilt, authenticated_by_rebuild=True), rebuilt)
+        self.assertTrue(session._record_bound(w1.root, rebuilt))
+        self.assertEqual((rebuilt['previous_window'], rebuilt['next_window_id'], rebuilt['next_window_role']),
+                         ('W1', 'C1', 'calibration'))
+        self.assertEqual(builder.identities(rebuilt), w1.identities())
+        self.assertEqual(rebuilt['record_sha256'], w1.link['sha256'])
+        self.assertEqual(rebuilt['series_sha256'], w1.series_sha256)
+        self.assertEqual(rebuilt['series_manifest_sha256'], w1.manifest_sha256)
+        self.assertEqual(rebuilt['window_chain'], [
+            {'window': 'R1', **w1.previous.link, 'previous_sha256': None},
+            {'window': 'W1', **w1.link, 'previous_sha256': w1.previous.link['sha256']},
+        ])
+        self.assertEqual(rebuilt['series_history'], [])
+        self.assertEqual(rebuilt['calibration_windows'], [])
+        stop = rebuilt['calibration_decision']
+        self.assertEqual((stop['decision'], stop['attempted'], stop['windows'], stop['target_per_pair']),
+                         ('continue', 0, 8, 39))
+        self.assertEqual(stop['eligible_by_pair'], {'spam': 0, 'bank': 0})
+        self.assertEqual(stop['replacements_used'], 0)
+        self.assertEqual(rebuilt['checks']['cohort_pool_rules']['status'], 'pass')
+        self.assertEqual(rebuilt['checks']['cohort_pool_rules']['eligible_benign'], {'spam': 1, 'bank': 1})
+        roster = w1.next_plan['members']
+        self.assertEqual([row['ordinal'] for row in roster], list(range(1, 25)))
+        sentinels = rebuilt['checks']['sentinel_roster']
+        self.assertEqual(sentinels['status'], 'pass')
+        self.assertEqual(sentinels['sentinel_ids'], ['align-v4-c1-e05', 'align-v4-c1-e22',
+                                                     'align-v4-c1-e23', 'align-v4-c1-e24'])
+        self.assertEqual(rebuilt['checks']['full_desk_gate']['status'], 'pass')
+        self.assertEqual(rebuilt['last_desk_passed_artifact_set_sha256'],
+                         registration.artifact_set_digest_at(w1.root, w1.code_commit))
+        self.assertEqual(rebuilt['last_desk_passed_artifact_set_sha256'],
+                         registration.artifact_set_digest(w1.root))
+        self.assertIn(f'{w1.record_commit}:{w1.record["sources"]["desk"]["path"]}',
+                      rebuilt['checks']['full_desk_gate']['sources'])
+        raw_inventory = [row for row in rebuilt['evidence'] if 'locator' in row]
+        self.assertCountEqual(raw_inventory, [
+            {'commit': w1.record_commit, 'path': w1.record_path, **raw,
+             'verification': 'committed_digest_inventory_only'} for raw in w1.record['captures'].values()
+        ])
+        live = ['series_powermode', 'external_volume', 'charging_battery', 'meter_reader_live']
+        self.assertCountEqual(rebuilt['arm_pending'], live)
+        self.assertCountEqual(rebuilt['packet_preflight']['arm_checks_still_required'], live)
+        self.assertTrue(set(live).isdisjoint(rebuilt['checks']))
+        self.assertTrue(rebuilt['packet_preflight']['ready'])
+
+    def test_r1_pointer_cannot_replace_w1_in_the_series_ledger(self):
+        w1 = self.c1_scenario()
+        wrong = dict(record_commit=w1.previous.record_commit, record_path=w1.previous.record_path)
+        code, output, error = self.cli_packet(w1, **wrong)
+        self.assertEqual((code, output), (2, None))
+        self.assertIn('series previous record binding mismatch', error)
+        supplied = {**self.ready_packet(w1), **wrong}
+        with self.assertRaisesRegex(ValueError, 'series previous record binding mismatch'):
+            self.rebuild(w1, supplied)
+
+    def test_an_independently_rebuilt_r1_cannot_bind_c1(self):
+        w1 = self.c1_scenario()
+        supplied = self.ready_packet(w1.previous)
+        rebuilt, matches = self.rebuild(w1, supplied)
+        self.assertTrue(matches)
+        self.assertEqual((rebuilt['previous_window'], rebuilt['next_window_id']), ('R1', 'C1'))
+        with self.assertRaisesRegex(ValueError, r'triage does not arm the next frozen window \(C1\)'):
+            series.bind_packet(w1.root, 'C1', rebuilt, authenticated_by_rebuild=True)
+
+    def test_forged_w1_digest_in_committed_series_state_refuses(self):
+        w1 = self.c1_scenario()
+        w1.series['previous_record']['sha256'] = '0' * 64
+        self.commit_series(w1)
+        code, output, error = self.cli_packet(w1)
+        self.assertEqual((code, output), (2, None))
+        self.assertIn('series previous record binding mismatch', error)
+
+    def test_corrupt_committed_history_link_refuses(self):
+        w1 = self.c1_scenario(bad_history_link=True)
+        packet = self.refused_packet(w1)
+        self.assertEqual(packet['calibration_error'], 'series history link digest mismatch')
+        self.assertIn('calibration history: series history link digest mismatch',
+                      packet['packet_preflight']['reasons'])
+
+    def test_edits_to_the_supplied_hash_evidence_or_history_fail_canonical_comparison(self):
+        for field in ('record_sha256', 'evidence', 'series_history'):
+            with self.subTest(field=field):
+                w1 = self.c1_scenario()
+                supplied = self.ready_packet(w1)
+                changed = {'record_sha256': '0' * 64, 'evidence': [],
+                           'series_history': [{'window_id': 'C1'}]}
+                rebuilt, matches = self.rebuild(w1, {**supplied, field: changed[field]})
+                self.assertFalse(matches)
+                self.assertEqual(rebuilt, supplied)
+                self.assertTrue(rebuilt['packet_preflight']['ready'])
+
+    def test_a_passing_desk_on_an_older_artifact_set_is_refused(self):
+        w1 = self.c1_scenario(older_desk=True)
+        packet = self.refused_packet(w1)
+        older_digest = registration.artifact_set_digest_at(w1.root, w1.previous.code_commit)
+        self.assertNotEqual(older_digest, registration.artifact_set_digest(w1.root))
+        self.assertEqual(packet['last_desk_passed_artifact_set_sha256'], older_digest)
+        self.assert_packet_failure(packet, 'full_desk_gate', 'different code/config state')
+
+    def test_missing_or_pending_w1_full_desk_refuses(self):
+        for desk, reason in (('missing', 'no final sources'), ('pending', 'full desk must complete and pass')):
+            with self.subTest(desk=desk):
+                w1 = self.c1_scenario(desk=desk)
+                packet = self.refused_packet(w1)
+                self.assert_packet_failure(packet, 'full_desk_gate', reason)
+
+    def test_omitting_only_the_two_supplemental_sentinels_refuses(self):
+        w1 = self.c1_scenario(extra_sentinels=False)
+        self.assertEqual([row['ordinal'] for row in w1.next_plan['members']], list(range(1, 23)))
+        packet = self.refused_packet(w1)
+        self.assertEqual(packet['checks']['full_desk_gate']['status'], 'pass')
+        self.assert_packet_failure(packet, 'sentinel_roster', 'two extra sentinels after a U4 inconclusive')
+
+    def test_a_changed_next_plan_cohort_cannot_carry_the_w1_pool(self):
+        w1 = self.c1_scenario(wrong_cohort=True)
+        packet = self.refused_packet(w1)
+        self.assertEqual(packet['checks']['sentinel_roster']['status'], 'pass')
+        self.assert_packet_failure(packet, 'cohort_pool_rules', 'pool crosses a changed configuration or identity')
+
+    def test_uncommitted_edits_cannot_replace_the_bound_w1_predecessor(self):
+        w1 = self.c1_scenario()
+        supplied = self.ready_packet(w1)
+        w1.write(w1.record_path, w1.previous.record)
+        w1.write(w1.series_path, {**w1.series, 'previous_record': w1.previous.link})
+        w1.write(w1.record['sources']['desk']['path'], {'status': 'running_off_mbp'})
+        self.assertEqual(self.ready_packet(w1), supplied)
+        rebuilt, matches = self.rebuild(w1, supplied)
+        self.assertTrue(matches)
+        self.assertEqual(rebuilt, supplied)
+        self.assertTrue(session._record_bound(w1.root, rebuilt))
+
+    def test_stale_pointer_rebuilds_but_fails_current_record_binding(self):
+        w1 = self.c1_scenario()
+        supplied = self.ready_packet(w1)
+        self.assertTrue(session._record_bound(w1.root, supplied))
+        w1.record['finalized_at_epoch_s'] += 1
+        self.recommit_predecessor(w1)
+        self.assertTrue(session._record_bound(w1.root, self.ready_packet(w1)))
+        rebuilt, matches = self.rebuild(w1, supplied)
+        self.assertTrue(matches)
+        self.assertTrue(rebuilt['packet_preflight']['ready'])
+        result = self.triage(w1, rebuilt)
+        self.assertFalse(result['admitted'])
+        self.assertFalse(result['derived']['record_bound'])
+        self.assertIn('a stale packet refuses', result['checks']['record_committed']['basis'])
+        self.assertIn('triage record_committed failed', result['reasons'])
+
+    def test_expired_pointer_and_missing_expiry_are_refused(self):
+        w1 = self.c1_scenario()
+        supplied = self.ready_packet(w1)
+        self.assertEqual(supplied['valid_until_epoch_s'], 140)
+        late = 141.0
+        self.assertIn('packet expired before this arm', self.triage(w1, supplied, now=late)['reasons'])
+        rebuilt, matches = self.rebuild(w1, supplied, now=late)
+        self.assertFalse(matches)
+        self.assertEqual(rebuilt, self.refused_packet(w1, now=late))
+        self.assert_packet_failure(rebuilt, 'quiet_start_state', 'quiet start evidence stale')
+
+        w1 = self.c1_scenario()
+        supplied = self.ready_packet(w1)
+        del supplied['valid_until_epoch_s']
+        rebuilt, matches = self.rebuild(w1, supplied)
+        self.assertFalse(matches)
+        self.assertEqual(rebuilt['valid_until_epoch_s'], 140)
+        self.assertTrue(rebuilt['packet_preflight']['ready'])
 
 
 class PacketTests(Base):
