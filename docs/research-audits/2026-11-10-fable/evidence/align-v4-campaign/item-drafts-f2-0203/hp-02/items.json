@@ -3,73 +3,52 @@
     "item": "hp-02-s01",
     "span": "hp-02-s01",
     "piece": 1,
-    "date": "2026-11-21",
+    "rank": 3,
+    "attempt": 1,
     "legs": [
       "L001",
       "L002",
       "L003"
     ],
-    "predecessor": "qual-03-s02",
+    "predecessor": null,
+    "pin": "dd206025abb30fd5c07515cd4b34b3e653174810",
+    "kit_sha": "7693b8293b42b8ba20cbd321e201974745b172dc53c4f1397d2c1494f38fbe66",
+    "queue": {
+      "commit": "e3eaa282f9d4cea3b579eeb7bde989ff897df45e",
+      "path": "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/item-drafts-f2-0203/hp-02/queue-b.json",
+      "sha256": "078eb24c3149f2a7bc522a432098e51e21bd36278d288b0f41efbb5d57da528f"
+    },
+    "not_before": "2026-11-21T00:00:00-08:00",
+    "expires_at": "2026-11-30T00:00:00-08:00",
+    "expires_epoch_s": null,
+    "authority": {
+      "spec_sha256": "24331d02ebf8d2172f9ebce5866c44e80208b8c5145c18a08c4124acaf3de73a",
+      "occupancy_sha256": "77f34fae9bd88ae415d7b949ef6ea6ac68759b1ef47aec214a50c32317ad99c4",
+      "line_2": {
+        "main_commit": "6640a66719a2ff1f8cc38dbce3e8231f419e79d8",
+        "run_state_item": 338,
+        "hp01_kit_sha256": "7eaf2660312ce6b3af90e8a1d9da1e05a6c409366a88a7e5e558d3bebb9d2965",
+        "delta_commit": "e3eaa282f9d4cea3b579eeb7bde989ff897df45e",
+        "delta_path": "hp-02/HP02-DELTA.md",
+        "frozen_block_byte_equal": true,
+        "sentence": "Line 2 for `cl-hp-02` (`7693b8293b42b8ba20cbd321e201974745b172dc53c4f1397d2c1494f38fbe66`) is `cl-hp-01`'s record under RL-165 §5; no frozen byte differs (RL-190 2)."
+      },
+      "inherited_smoke": {
+        "main_commit": "6640a66719a2ff1f8cc38dbce3e8231f419e79d8",
+        "smoke_check_item": 337,
+        "acceptance_item": 338
+      }
+    },
     "expected_s": 6903,
     "worst_case_s": 16650,
-    "deadline_s": 18110,
-    "bands": [
-      [
-        1795248000,
-        1795257299,
-        "13:14-13:15"
-      ],
-      [
-        1795257300,
-        1795287000,
-        "02:00-02:35"
-      ],
-      [
-        1795295700,
-        1795319550,
-        "02:00-02:35"
-      ]
-    ],
-    "plan_endpoints": [
-      {
-        "epoch": 1795248000,
-        "argument": "13:14-13:15",
-        "rc": 0
-      },
-      {
-        "epoch": 1795257299,
-        "argument": "13:14-13:15",
-        "rc": 0
-      },
-      {
-        "epoch": 1795257300,
-        "argument": "02:00-02:35",
-        "rc": 0
-      },
-      {
-        "epoch": 1795287000,
-        "argument": "02:00-02:35",
-        "rc": 0
-      },
-      {
-        "epoch": 1795295700,
-        "argument": "02:00-02:35",
-        "rc": 0
-      },
-      {
-        "epoch": 1795319550,
-        "argument": "02:00-02:35",
-        "rc": 0
-      }
-    ],
-    "pin": "dd206025abb30fd5c07515cd4b34b3e653174810",
-    "kit_sha": "7693b8293b42b8ba20cbd321e201974745b172dc53c4f1397d2c1494f38fbe66"
+    "deadline_s": 18110
   },
   {
     "item": "hp-02-s02",
     "span": "hp-02-s02",
     "piece": 2,
-    "date": "2026-11-21",
+    "rank": 3,
+    "attempt": 1,
     "legs": [
       "L004",
       "L005",
@@ -77,66 +56,44 @@
       "L007"
     ],
     "predecessor": "hp-02-s01",
+    "pin": "dd206025abb30fd5c07515cd4b34b3e653174810",
+    "kit_sha": "7693b8293b42b8ba20cbd321e201974745b172dc53c4f1397d2c1494f38fbe66",
+    "queue": {
+      "commit": "e3eaa282f9d4cea3b579eeb7bde989ff897df45e",
+      "path": "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/item-drafts-f2-0203/hp-02/queue-b.json",
+      "sha256": "078eb24c3149f2a7bc522a432098e51e21bd36278d288b0f41efbb5d57da528f"
+    },
+    "not_before": "2026-11-21T00:00:00-08:00",
+    "expires_at": "2026-11-30T00:00:00-08:00",
+    "expires_epoch_s": null,
+    "authority": {
+      "spec_sha256": "24331d02ebf8d2172f9ebce5866c44e80208b8c5145c18a08c4124acaf3de73a",
+      "occupancy_sha256": "77f34fae9bd88ae415d7b949ef6ea6ac68759b1ef47aec214a50c32317ad99c4",
+      "line_2": {
+        "main_commit": "6640a66719a2ff1f8cc38dbce3e8231f419e79d8",
+        "run_state_item": 338,
+        "hp01_kit_sha256": "7eaf2660312ce6b3af90e8a1d9da1e05a6c409366a88a7e5e558d3bebb9d2965",
+        "delta_commit": "e3eaa282f9d4cea3b579eeb7bde989ff897df45e",
+        "delta_path": "hp-02/HP02-DELTA.md",
+        "frozen_block_byte_equal": true,
+        "sentence": "Line 2 for `cl-hp-02` (`7693b8293b42b8ba20cbd321e201974745b172dc53c4f1397d2c1494f38fbe66`) is `cl-hp-01`'s record under RL-165 §5; no frozen byte differs (RL-190 2)."
+      },
+      "inherited_smoke": {
+        "main_commit": "6640a66719a2ff1f8cc38dbce3e8231f419e79d8",
+        "smoke_check_item": 337,
+        "acceptance_item": 338
+      }
+    },
     "expected_s": 8154,
     "worst_case_s": 19350,
-    "deadline_s": 20810,
-    "bands": [
-      [
-        1795248000,
-        1795257299,
-        "13:14-13:15"
-      ],
-      [
-        1795257300,
-        1795287000,
-        "02:00-02:35"
-      ],
-      [
-        1795295700,
-        1795316850,
-        "02:00-02:35"
-      ]
-    ],
-    "plan_endpoints": [
-      {
-        "epoch": 1795248000,
-        "argument": "13:14-13:15",
-        "rc": 0
-      },
-      {
-        "epoch": 1795257299,
-        "argument": "13:14-13:15",
-        "rc": 0
-      },
-      {
-        "epoch": 1795257300,
-        "argument": "02:00-02:35",
-        "rc": 0
-      },
-      {
-        "epoch": 1795287000,
-        "argument": "02:00-02:35",
-        "rc": 0
-      },
-      {
-        "epoch": 1795295700,
-        "argument": "02:00-02:35",
-        "rc": 0
-      },
-      {
-        "epoch": 1795316850,
-        "argument": "02:00-02:35",
-        "rc": 0
-      }
-    ],
-    "pin": "dd206025abb30fd5c07515cd4b34b3e653174810",
-    "kit_sha": "7693b8293b42b8ba20cbd321e201974745b172dc53c4f1397d2c1494f38fbe66"
+    "deadline_s": 20810
   },
   {
     "item": "hp-02-s03",
     "span": "hp-02-s03",
     "piece": 3,
-    "date": "2026-11-21",
+    "rank": 3,
+    "attempt": 1,
     "legs": [
       "L008",
       "L009",
@@ -145,59 +102,36 @@
       "L012"
     ],
     "predecessor": "hp-02-s02",
+    "pin": "dd206025abb30fd5c07515cd4b34b3e653174810",
+    "kit_sha": "7693b8293b42b8ba20cbd321e201974745b172dc53c4f1397d2c1494f38fbe66",
+    "queue": {
+      "commit": "e3eaa282f9d4cea3b579eeb7bde989ff897df45e",
+      "path": "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/item-drafts-f2-0203/hp-02/queue-b.json",
+      "sha256": "078eb24c3149f2a7bc522a432098e51e21bd36278d288b0f41efbb5d57da528f"
+    },
+    "not_before": "2026-11-21T00:00:00-08:00",
+    "expires_at": "2026-11-30T00:00:00-08:00",
+    "expires_epoch_s": null,
+    "authority": {
+      "spec_sha256": "24331d02ebf8d2172f9ebce5866c44e80208b8c5145c18a08c4124acaf3de73a",
+      "occupancy_sha256": "77f34fae9bd88ae415d7b949ef6ea6ac68759b1ef47aec214a50c32317ad99c4",
+      "line_2": {
+        "main_commit": "6640a66719a2ff1f8cc38dbce3e8231f419e79d8",
+        "run_state_item": 338,
+        "hp01_kit_sha256": "7eaf2660312ce6b3af90e8a1d9da1e05a6c409366a88a7e5e558d3bebb9d2965",
+        "delta_commit": "e3eaa282f9d4cea3b579eeb7bde989ff897df45e",
+        "delta_path": "hp-02/HP02-DELTA.md",
+        "frozen_block_byte_equal": true,
+        "sentence": "Line 2 for `cl-hp-02` (`7693b8293b42b8ba20cbd321e201974745b172dc53c4f1397d2c1494f38fbe66`) is `cl-hp-01`'s record under RL-165 §5; no frozen byte differs (RL-190 2)."
+      },
+      "inherited_smoke": {
+        "main_commit": "6640a66719a2ff1f8cc38dbce3e8231f419e79d8",
+        "smoke_check_item": 337,
+        "acceptance_item": 338
+      }
+    },
     "expected_s": 9405,
     "worst_case_s": 22050,
-    "deadline_s": 23510,
-    "bands": [
-      [
-        1795248000,
-        1795257299,
-        "13:14-13:15"
-      ],
-      [
-        1795257300,
-        1795287000,
-        "02:00-02:35"
-      ],
-      [
-        1795295700,
-        1795314150,
-        "02:00-02:35"
-      ]
-    ],
-    "plan_endpoints": [
-      {
-        "epoch": 1795248000,
-        "argument": "13:14-13:15",
-        "rc": 0
-      },
-      {
-        "epoch": 1795257299,
-        "argument": "13:14-13:15",
-        "rc": 0
-      },
-      {
-        "epoch": 1795257300,
-        "argument": "02:00-02:35",
-        "rc": 0
-      },
-      {
-        "epoch": 1795287000,
-        "argument": "02:00-02:35",
-        "rc": 0
-      },
-      {
-        "epoch": 1795295700,
-        "argument": "02:00-02:35",
-        "rc": 0
-      },
-      {
-        "epoch": 1795314150,
-        "argument": "02:00-02:35",
-        "rc": 0
-      }
-    ],
-    "pin": "dd206025abb30fd5c07515cd4b34b3e653174810",
-    "kit_sha": "7693b8293b42b8ba20cbd321e201974745b172dc53c4f1397d2c1494f38fbe66"
+    "deadline_s": 23510
   }
 ]

@@ -3,6 +3,13 @@
 This is the live queue for JouleWise work. When the user gives a new task, first
 triage it here instead of assuming it should happen immediately.
 
+## 2026-11-19 hp-02 successor items
+
+P1 [AGENT], user-directed Tier 2 builder work under RL-190 §2 and the frozen
+item and occupancy contracts. Successor drafts and queue-b go to independent
+executing review. The lead owns review disposition and live issue.
+[Builder report](docs/run_reports/2026-11-19-hp02-successor-items.md).
+
 ## 2026-11-18 qualification drafts at the PR #812 merge pin
 
 P1 [AGENT], user-selected Tier 0 on the Nov 20 qualification critical path.

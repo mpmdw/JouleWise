@@ -1,0 +1,43 @@
+# hp-02 successor items
+
+[Queue-b](queue-b.json) supersedes [queue-a](queue-a.json). Queue-a is preserved for replay.
+
+The three attempt-1 items use kit `cl-hp-02` at `dd206025abb30fd5c07515cd4b34b3e653174810` in the fixed 3+4+5 order. Queue-b starts at local midnight on November 21 and expires exclusively at local midnight on November 30. The pinned queue schema encodes each entry's `not_before` as a Los Angeles date. [Items index](items.json) records the same effective instant with its offset.
+
+The lead owns actual issue and the choice of Check deadline. Each phase uses the same executable decision with a new observation. Friday examples in the [occupancy addendum](FREEZE-ADDENDUM.md) use a synthetic queue whose interval includes Friday. The production queue opens Saturday. The timing test has no fixed clock band.
+
+## Staging and execution
+
+From the reviewed audit checkout use the HP path of `stage_mbp_span.py` with `--commit` naming the successor item commit. Supply `--queue-commit`, `--queue-path` and `--queue-sha` from the item index. A separate staging admission supplies that `queue` object, `kit_sha256`, `nothing_armed: true`, `delta: ADMIT`, `observed_epoch_s`, `valid_through_epoch_s` and the current `look` record described below. Use the returned digest-qualified queue path as `QUEUE_FILE`. The stager copies exact bytes and uses separate write-once receipts for different queue digests.
+
+At the proposed issue time, the lead runs the Issue gate against the proposed record and an Issue observation. On eligibility the lead records that decision and publishes the ISSUED record and its SHA-256. Supply that immutable record and digest to Start and Run as `HP_ISSUE` and `HP_ISSUE_SHA`. Set `HP_DRAFTS` to the absolute path to the reviewed item-drafts directory and `PY` to the pinned interpreter. Use a fresh `OUT` named `cq-<span>-a1-<UTC timestamp YYYYMMDDTHHMMSSZ>` under `/Users/edr/campaign-out/cl-hp-02`. Set `MAGISTRATE_PID` to the authorized magistrate's PID.
+
+Use separate `HP_START_OBSERVATION` and `HP_RUN_OBSERVATION` files. Start records the passing decision. Run checks that Start was for the same issue and output, consumes the later observation, then records the once-only claim in `/Users/edr/night-custody/magistrate/hp-02-arms/`. An unresolved launch claim holds that roster through queue renewal. Send a refusal and its claim to the lead for disposition. After a claimed fence, exit the session. After fence clearance, take `ARG`, output, t0 and deadline from the claim and run the item's Check and the pinned cadence desk using the operational projection. Record the Check, restoration and copy disposition before the next decision.
+
+## Typed records
+
+Every record below with provenance carries `record` identifying the source evidence and `by` naming its responsible seat. Use JSON with epoch seconds for clock fields and lowercase SHA-256 hex for digests. The issuing desk and magistrate must reconcile conflicting or missing observations at their source before attesting.
+
+The issue object has schema `hp-02.issue.v1`, provenance, `status` (`PROPOSED` at Issue and `ISSUED` thereafter), `issued_epoch_s`, `expires_epoch_s: null`, `check_deadline_epoch_s`, `check_target` and `latest_close_at_issue` (the latest Check's record ID). Copy the selected item's `authority` fields to the issue top level. Its `binding` consists of the selected item's `span`, `piece`, `attempt`, `legs`, `pin`, `kit_sha`, `queue` and `predecessor`. The Check deadline is a reporting target. The queue interval controls admissible t0.
+
+The observation has schema `hp-02.observation.v1`, provenance, `phase` (`Issue`, `Start` or `Run`), `host`, the same `binding`, `issue_record` (the issue record ID), `observed_epoch_s`, `valid_through_epoch_s` and `fence_clear`. Supply these evidence objects with their own provenance.
+
+| Field | Contents |
+| --- | --- |
+| `look` | `scope: lm-hp-01`, `kit_sha256` for hp-02, `checked_through` equal to the observation time, `execution_register_checked`, `both_custody_roots_checked`, `all_execution_routes_covered`, `status` and `pending_conflict`. Require all three scope checks, `not_run` and no pending conflict. |
+| `hp01_dates` | `kit_sha256` for hp-01, `complete` and all `t0_dates` as LA calendar dates. |
+| `history` | `complete`, hp-02 `kit_sha256`, `legs` mapping kit leg IDs to `unrun`, `spent` or `ambiguous`, and `prior_check` for s02/s03. The latter names the prior `span`, `kit_sha256`, `attempt`, `legs`, `ended_epoch_s`, `receipt_sha256`, `fence_gone`, `restore_proven` and `status`. |
+| `latest_close` | `identity: latest-unambiguous`, same `host`, `ended_epoch_s`, `receipt_sha256`, `receipt_ok`, `fence_gone`, `restores_read_back`, `restore_status`, `ac_powermode`, `marker_present_or_link`, `host_lock_free`, `feeds_proven_stopped` for agents, meter and volumes, and `groups` with `group_id`, `start_identity`, `receipt_stop: proven` and `independent_census: empty`. A required `recovery` records `same_close`, `safe_route_proven`, `result` and `residual_refusal`. |
+| `safety` | Same `host`, `close_record` and `close_sha256`, current `ac_powermode`, `marker_present_or_link`, `foreign_agent_census_casefold` and `foreign_process_census`; both censuses must be empty after allowed exceptions. Provide `mode_verify` with `rc` and `exceptions` (empty for rc 0, or only `own-agent-tree-or-permitted-jobs` for rc 1). `agent_job_exceptions` maps permitted PIDs to independently verified `label`, exact `command` and provenance. Use an empty object when none apply. |
+| `safety.preflight` | Affirmative observations for `veto_clear`, `maintenance_clear`, `host_health`, `disk_floor`, `meter_available`, `collector_available`, `clock_ok`, `on_ac`, `battery_float`, `night_lock_free`, `mode_rules`, `measurement_mode`, `network_time_off` and `frequency_zero`. Retain the actual command results in the cited evidence. |
+| `stops` | `complete`, with `open` entries naming each `code` and `scope` (host, measured, hp-02, this span, counted, v4 or other-kit). |
+| `copy` | `predecessor` is the latest Check's record ID. Verified records have `status: verified`, `plaintext_manifest_sha256`, `ciphertext_sha256`, `ciphertext_size_bytes` and `provider_verification`. Both verified copies and debt require `transfer_stopped`. For unresolved debt at or after 600 s provide `debt_record`. |
+| `priority` | `complete`, LA `date`, `r1_post_close`, and one adjudicated entry per rung. Use `ready-session`, `counted`, `first-stability`, `f2-inst-01`, `f2-inst-02`, `f2-inst-03` and `further-stability`. Each entry identifies its evidence, `entry_id`, `rung` and `status` (eligible or unavailable). For the first stability leg name the lowest numbered eligible 01–14 kit. |
+| `calendar` | `complete`, `post_fence_transfer_s` (only the proved balance outside the fence), and `starts` in required order. Each outstanding start names `span`, assigned LA `date`, `pin`, inclusive whole-second epoch `windows` and `through_transition_s` covering its work, close and necessary transition. |
+| `timing` | Demonstrated upper bounds for `runner_start_max_s` from the decision anchor, `selector_sample_max_s` through the actual post-dwell sample, `soak_dispatch_max_s` including wake/dispatch latency, `inner_soak_gate_max_s` inside the soak cap, `pre_leg_max_s` before each attempt selector, `leg_wait_overshoot_max_s` for overhead between selector/wait and cap, `post_last_cap_max_s`, `restore_and_close_max_s` and `outer_clear_max_s`. The frozen fixture profile is synthetic. Demonstrated bounds must cover actual setup, waits, restore/readbacks and clearance. |
+
+The item gate verifies the pinned clean detached checkout and materialized frozen files, committed/staged queue, issue SHA, new output, current fence/marker, AC mode and case-insensitive census on each execution. The card's other observations require the desk's contemporaneous proof. [Frozen spec](ITEM-GATES-SPEC.md) · [Clock bounds](FREEZE-ADDENDUM.md) · [Fixture delivery verification](OCCUPANCY-VERIFICATION.md)
+
+## Replay
+
+Run `python3.13 -B -m unittest tests.test_hp02_successor_items` from the audit checkout. This compares the executing decisions and clock matrix to the frozen fixture and replays the pinned fake runner traces. The original held-item replay takes its item, shell and index bytes from the base audit commit. See the builder run report for the comparison.
