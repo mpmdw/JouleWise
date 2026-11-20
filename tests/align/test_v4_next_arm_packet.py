@@ -16,15 +16,18 @@ from itertools import combinations
 import json
 import os
 from pathlib import Path
+import shutil
 import subprocess
 import tempfile
 import time
 import unittest
 from unittest.mock import patch
 
-from scripts import align_v4_next_arm_packet as builder
+from scripts import align_v4_kit as w1_kit, align_v4_next_arm_packet as builder
 from scripts import align_v4_series as series
 from scripts import align_v4_session as session
+from joulewise.b5.chain import TOOLS
+from joulewise.schemas import BenchmarkConfig, CONFIG_SCHEMA_VERSION
 from joulewise.align.apple import v4_cadence as cad
 from joulewise.align.apple import v4_registration as registration
 
@@ -48,6 +51,69 @@ def fixture_next_members(manifest, *, extra_sentinels=True):
         role = {'sentinel': 'sentinel', 'anchor': 'anchor'}.get(pool, 'D')
         roster.append({'ordinal': ordinal, 'run_id': run_id, 'role': role})
     return roster
+
+
+def synthetic_stage_graph():
+    layout = [
+        ("reservation", "bracket_reservation", "bracket_reserver", ["fixture"]),
+        ("pre", "calibration_capture", "fiducial_capture", ["--slot", "pre"]),
+        ("episodes-a", "campaign_collection", "campaign_runner", ["fixture"]),
+        ("episodes-b", "campaign_collection", "campaign_runner", ["fixture"]),
+        ("derive", "bound_derivation", "campaign_runner", ["fixture"]),
+        ("post", "calibration_capture", "fiducial_capture", ["--slot", "post"]),
+    ]
+    names = ["align-pilot-v3-" + row[0] for row in layout]
+    graph = []
+    for pos, ((_, kind, tool, args), name) in enumerate(zip(layout, names, strict=True)):
+        argv = [{"kind": "literal", "value": value} for value in args]
+        graph.append(dict(
+            stage_id=name, kind=kind, ordinal=pos + 1, expected_count=1,
+            predecessor=names[pos - 1] if pos else None,
+            successor=names[pos + 1] if pos + 1 < len(names) else None,
+            launch=dict(schema_version="joulewise.stage_launch.v1", commands=[dict(
+                command_id=name, cwd=dict(kind="binding", value="repo_root"), success_exit_codes=[0],
+                argv_template=dict(tool_id=tool, interface_id=TOOLS[tool].interface_id, arguments=argv))]),
+        ))
+    return {"stage_graph": graph}
+
+
+def synthetic_stage_config(run_id):
+    config = dict(
+        schema_version=CONFIG_SCHEMA_VERSION, run_id=run_id,
+        model=dict(name="synthetic-anchor"), quantization=dict(name="fixture"),
+        hardware_target=dict(id="fixture", transport="local", runtime_backend="mock", telemetry_backend="mock"),
+        workload_profile=dict(name="fixture", prompt_text=json.dumps(dict(max_turns=12, task_kwargs={}))),
+    )
+    return w1_kit.bundle_config_bytes(BenchmarkConfig.from_mapping(config))
+
+
+def seed_materializer(scenario):
+    """Invent the v3 inputs used by the normal v4 materializer."""
+    write = scenario.write
+    for i in range(1, 5):
+        run_id = f"align-pilot-v3-episodes-a-e{i:02}"
+        write(w1_kit.SOURCE_KIT / "stages/episodes-a" / (run_id + ".json"), synthetic_stage_config(run_id))
+    for i in (18, 25):
+        run_id = f"align-pilot-v3-episodes-b-e{i:02}"
+        write(w1_kit.SOURCE_KIT / "stages/episodes-b" / (run_id + ".json"), synthetic_stage_config(run_id))
+    write(w1_kit.SOURCE_KIT / "plan_tree.json", synthetic_stage_graph())
+    reg = w1_kit.SOURCE_KIT / "registration"
+    write(reg / "identity_pins.json", dict(units=dict(neg8_reference={}, mock={}), runtime_versions={}))
+    write(reg / "model_artifact_inventory.json", dict(artifacts=dict(neg8_reference={}, mock={})))
+    write(reg / "sizing_b5.json", {"packs": {"align-pilot-v3": dict(
+        disk_member_law=dict(intercept=1, slope=1, largest_positive_residual=0),
+        disk_derivation=dict(scaffold_bytes=1))}})
+    commit = scenario.commit()
+    for pin in (w1_kit.ANCHOR_COMMIT, w1_kit.CONTRAST_COMMIT):
+        scenario.git("tag", pin, commit)
+    write(w1_kit.R1_SLOTS, dict(ac_powermode=0))
+    write(w1_kit.INPUTS, dict(
+        R0=dict(reasoning_effort=None), R1=dict(B_D=None, T_dead=None, thermal_policy=None),
+        WP11=dict(identity_unit=dict(model_source="fixture"), artifact_inventory={}, local_file_verification=None),
+        WP15=dict(runtime_entrypoint=None), WP18=dict(X=dict(max_turns=12), Y=dict(max_turns=12)),
+    ))
+    write(series.MANIFEST, series.raw_json(series.candidate()))
+
 
 
 class Scenario:
@@ -279,6 +345,7 @@ class C1PacketRebuildTests(Base):
     """The W1 -> C1 handoff through the CLI, an independent rebuild and the frozen series."""
 
     def setUp(self):
+        self.real_arm = session.arm_checks
         self.fixture_roots = set()
         self.output_dir = Path(self.enterContext(tempfile.TemporaryDirectory(prefix='jw-c1-packets-')))
         self.output_number = 0
@@ -319,10 +386,13 @@ class C1PacketRebuildTests(Base):
             self.addCleanup(trap.assert_not_called)
 
     def c1_scenario(self, *, bad_history_link=False, older_desk=False, desk='passed', extra_sentinels=True,
-                    wrong_cohort=False, receipt=None):
+                    wrong_cohort=False, receipt=None, materialized=False):
         root = Path(self.enterContext(tempfile.TemporaryDirectory(prefix='jw-c1-records-')))
         self.fixture_roots.add(root)
+        self.enterContext(patch.dict(os.environ, {'JOULEWISE_HOST_STATE_DIR': str(root / 'host')}))
         r1 = Scenario(root, 'R1')
+        if materialized:
+            seed_materializer(r1)
         manifest = series.candidate()
         manifest_ref = r1.write(series.MANIFEST, series.raw_json(manifest))
         r1.finish(code=b'synthetic-code-v0\n' if older_desk else b'synthetic-code-v1\n')
@@ -332,6 +402,11 @@ class C1PacketRebuildTests(Base):
         w1.manifest_sha256 = manifest_ref['sha256']
         w1.series['pool_members'] = [member['run_id'] for member in w1.members]
         planned_roster = fixture_next_members(manifest, extra_sentinels=extra_sentinels)
+        if materialized:
+            plan = self.materialize_c1(w1, 2 if extra_sentinels else 0)
+            planned_roster = [{'run_id': row['run_id'],
+                               'role': 'sentinel' if row['pool_role'] == 'sentinel' else row['role']}
+                              for row in plan['members']]
         w1.next_plan['members'] = planned_roster
         # The omission control must fail the U4 minimum with a consistent plan and ledger.
         w1.series['sentinel_ids'] = [row['run_id'] for row in planned_roster if row['role'] == 'sentinel']
@@ -408,6 +483,99 @@ class C1PacketRebuildTests(Base):
         self.assertEqual(packet['checks'][check]['status'], 'fail')
         self.assertIn(text, packet['checks'][check]['basis'])
         self.assertIn(f'triage {check} failed', packet['packet_preflight']['reasons'])
+
+
+    def materialize_c1(self, scenario, extras):
+        directory = scenario.root / series.kit_path('C1')
+        if directory.exists():
+            shutil.rmtree(directory)
+        args = ['--root', str(scenario.root), '--window-id', 'C1', '--extra-sentinels', str(extras)]
+        with patch.object(w1_kit, 'r0_heatsink_key', return_value='T002'), contextlib.redirect_stdout(io.StringIO()):
+            self.assertEqual(series.main(['materialize', *args]), 0)
+            self.assertEqual(series.main(['materialize', *args, '--check']), 0)
+        return json.loads((directory / 'collection_plan.json').read_bytes())
+
+    def k1_arm(self, scenario, packet, plan):
+        # Restore the real guard with only invented host inputs from the arm-rebuild suite.
+        with patch.object(session, 'arm_checks', side_effect=lambda root, _, **kw: self.real_arm(root, plan, **kw)):
+            return ArmRebuildTests().arm(scenario, packet, series_bind=lambda rebuilt: (
+                series.bind_packet(scenario.root, 'C1', rebuilt, authenticated_by_rebuild=True) and []))
+
+    def assert_k1_refusal(self, scenario, packet, plan):
+        record = self.k1_arm(scenario, packet, plan)
+        self.assertTrue(record['next_arm_triage']['supplied_packet_matches_rebuild'])
+        self.assertEqual(record['series_binding'], [])
+        self.assertFalse(record['admitted'], record['reasons'])
+        self.assertIn('packet_kit_mismatch', record['reasons'])
+
+    def test_k1_materialized_24_member_packet_rebuild_and_arm_agree(self):
+        w1 = self.c1_scenario(materialized=True)
+        packet = self.ready_packet(w1)
+        rebuilt, matches = self.rebuild(w1, packet)
+        self.assertTrue(matches)
+        directory = w1.root / series.kit_path('C1')
+        plan_raw = (directory / 'collection_plan.json').read_bytes()
+        binding = rebuilt['c1_kit']
+        self.assertRegex(binding['kit_sha256'], r'^[0-9a-f]{64}$')
+        self.assertEqual(binding['plan_sha256'], builder.digest(plan_raw))
+        self.assertEqual((binding['member_count'], binding['sentinel_ordinals']), (24, [5, 22, 23, 24]))
+        result = self.k1_arm(w1, packet, json.loads(plan_raw))
+        self.assertTrue(result['admitted'], result['reasons'])
+
+    def test_k1_ordinary_22_member_kit_cannot_arm_with_the_24_member_packet(self):
+        w1 = self.c1_scenario(materialized=True)
+        packet = self.ready_packet(w1)
+        ordinary = self.materialize_c1(w1, 0)
+        self.assertEqual(len(ordinary['members']), 22)
+        w1.commit()
+        self.assert_k1_refusal(w1, packet, ordinary)
+
+    def test_k1_cli_refuses_replaced_kit_before_host_access(self):
+        w1 = self.c1_scenario(materialized=True)
+        packet = self.ready_packet(w1)
+        ordinary = self.materialize_c1(w1, 0)
+        target = self.output_dir / 'cli-session'
+        state = {'measurement_root': str(w1.root), 'source_measurement_root': str(w1.root),
+                 'v4_series': {'window_id': 'C1', 'extra_sentinels': 0}}
+        session.pilot.h.write(target / 'session.json', state)
+        packet_ref = w1.write('cli-packet.json', packet)
+        args = ['install', '--session-root', str(target), '--w1-disk-config', 'unused',
+                '--battery-log', 'unused', '--obc-off-attested-by', 'synthetic',
+                '--next-arm-triage', str(w1.root / packet_ref['path'])]
+        stderr = io.StringIO()
+        with patch.object(w1_kit, 'generate'), patch.object(session, 'validate_series_state', return_value=ordinary), \
+             patch('joulewise.align.apple.powermode.host_marker_path', side_effect=ValueError('host access')) as host, \
+             contextlib.redirect_stderr(stderr):
+            self.assertEqual(session.main(args), 2, stderr.getvalue())
+        self.assertIn('packet_kit_mismatch', stderr.getvalue())
+        host.assert_not_called()
+
+    def test_k1_any_kit_byte_swap_after_packet_refuses_even_when_plan_unchanged(self):
+        w1 = self.c1_scenario(materialized=True)
+        packet = self.ready_packet(w1)
+        directory = series.kit_path('C1')
+        plan = json.loads((w1.root / directory / 'collection_plan.json').read_bytes())
+        path = directory / 'registration/seed_manifest.json'
+        w1.write(path, (w1.root / path).read_bytes() + b' ')
+        self.assert_k1_refusal(w1, packet, plan)
+
+    def test_k1_member_count_sweep_and_moved_sentinels_refuse(self):
+        for mutation in (-2, -1, 1, 2, 'moved'):
+            with self.subTest(mutation=mutation):
+                w1 = self.c1_scenario(materialized=True)
+                packet = self.ready_packet(w1)
+                path = series.kit_path('C1') / 'collection_plan.json'
+                plan = json.loads((w1.root / path).read_bytes())
+                members = plan['members']
+                if mutation == 'moved':
+                    members[19], members[22] = members[22], members[19]
+                elif mutation < 0:
+                    del members[mutation:]
+                else:
+                    members.extend(dict(members[5], run_id=f'fixture-extra-{i}') for i in range(mutation))
+                for i, member in enumerate(members, 1):
+                    member['ordinal'] = i
+                self.assert_k1_refusal(w1, packet, plan)
 
     def test_committed_w1_rebuild_binds_c1_with_live_checks_pending(self):
         w1 = self.c1_scenario()
