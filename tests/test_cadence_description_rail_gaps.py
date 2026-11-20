@@ -118,7 +118,7 @@ class RailGapPeriodTests(unittest.TestCase):
                 ]))
                 opens = []
                 signal = reader.Signals(support, {"power_trace.csv": path},
-                                        lambda: opens.append(True), None)
+                                        lambda: opens.append(True), fixture.fixture_step3())
                 value = signal.interval_values("rail_sum", (606, 610))
                 self.assertEqual(opens, [True])  # Verify observed identities before the gap.
                 if accepted:

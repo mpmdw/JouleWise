@@ -806,3 +806,10 @@ The earlier generator-keyword mismatch and hardware integration remain open.
 
 Draft PR #868 was read back at `f935e32da`. Hosted CI was queued on
 that code revision. [Hosted run](https://github.com/mpmdw/JouleWise/actions/runs/44727587543)
+
+The 79-test focused run passed 77 cases, recorded the existing missing
+interim schema skip, and found one older rail-gap fixture that supplied
+no step-3 reader on its admitted path. The fixture now uses the pinned
+reader. The isolated rerun passes both gap boundaries. The focused
+RL-192a hand and near-miss cases and the GPU row comparator also pass.
+[Focused run](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/rl192b-focused.log) · [Gap boundary rerun](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/rl192b-gap-fixture.log) · [Hand and row controls](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/rl192b-focused-no-interval-matrix.log)
