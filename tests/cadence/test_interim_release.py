@@ -875,13 +875,14 @@ def run(argv, *args, **kwargs):
         result.stdout = b"not a frame\n"
     elif fault == "coefficient_change":
         path.write_bytes(before[:-1] + b" ")
-    elif fault in ("missing_cell", "extra_cell", "malformed_cell"):
+    elif fault in ("cell_missing", "cell_extra", "cell_malformed"):
+        # The census's names (P02). A probe that injects its own cell under another fault name is not preempted.
         frame = json.loads(result.stdout)
         cells = frame["verdicts"]["twin"]["D#/cells"]
-        if fault == "missing_cell":
+        if fault == "cell_missing":
             cells.pop("10000")
         else:
-            key = "32" if fault == "extra_cell" else "032"
+            key = "32" if fault == "cell_extra" else "032"
             assert key not in cells
             cells[key] = {"status": "not_run", "gamma_estimable": None}
         result.stdout = json.dumps(frame, sort_keys=True, separators=(",", ":")).encode() + b"\n"
@@ -993,8 +994,8 @@ class TwinThroughCLI(unittest.TestCase):
         for sid in self.spans:
             shutil.move(self.source / sid, relocated / sid)
             self.assertFalse((self.source / sid).exists())
-        for fault, agreement in (("relocated", "yes"), ("numeric", "no"), ("missing_cell", "no"), ("extra_cell", "no"),
-                                 ("malformed_cell", "not_evaluable"),
+        for fault, agreement in (("relocated", "yes"), ("numeric", "no"), ("cell_missing", "no"), ("cell_extra", "no"),
+                                 ("cell_malformed", "not_evaluable"),
                                  ("omitted_fold", "not_evaluable"), ("forged_primary", "not_evaluable"),
                                  ("missing_input", "not_evaluable"),
                                  ("malformed", "not_evaluable"), ("timeout", "not_evaluable")):
