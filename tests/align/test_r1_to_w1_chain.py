@@ -221,6 +221,14 @@ class ContrastWriterTests(unittest.TestCase):
         self.assertIn('step derive-contrast failed with exit 23', err)
         self.assert_preserved(before)
 
+    def test_matching_values_preserve_noncanonical_formatting(self):
+        canonical = self.write_inputs(dict(self.base_policy, **self.derived))
+        before = json.dumps(json.loads(canonical), separators=(',', ':')).encode()
+        self.inputs.write_bytes(before)
+        code, calls, _, _ = self.run_writer('--write-contrast')
+        self.assertEqual((code, calls), (0, list(chain.STEPS)))
+        self.assert_preserved(before)
+
 
 if __name__ == '__main__':
     unittest.main()
