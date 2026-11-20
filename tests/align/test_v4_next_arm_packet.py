@@ -7,6 +7,7 @@ measurements, probes, models or network.
 from tests.git_fixture import init_git_fixture
 from tests.align.test_v4_arm_watchdog_check import acceptance as _watchdog_acceptance
 from tests.align.v4_registration_fixtures import session_plan
+import builtins
 import contextlib
 import copy
 import hashlib
@@ -242,8 +243,141 @@ class Base(unittest.TestCase):
 class C1PacketRebuildTests(Base):
     """The W1 -> C1 handoff through the CLI, an independent rebuild and the frozen series."""
 
-    def c1_scenario(self, **changes):
-        self.fail('frozen acceptance: C1 predecessor fixture is pending')
+    def setUp(self):
+        self.fixture_roots = set()
+        self.output_dir = Path(self.enterContext(tempfile.TemporaryDirectory(prefix='jw-c1-packets-')))
+        self.output_number = 0
+        self.enterContext(patch.dict(os.environ, {
+            'GIT_AUTHOR_DATE': '2001-01-01T00:00:00+00:00', 'GIT_COMMITTER_DATE': '2001-01-01T00:00:00+00:00',
+            'GIT_CONFIG_GLOBAL': '/dev/null', 'GIT_CONFIG_NOSYSTEM': '1', 'GIT_DEFAULT_HASH': 'sha1',
+            'GIT_TEMPLATE_DIR': '',
+        }))
+        for module, names in ((builtins, ('open',)), (io, ('open',)),
+                              (os, ('open', 'stat', 'lstat', 'readlink', 'listdir', 'scandir'))):
+            for name in names:
+                original = getattr(module, name)
+
+                def guarded(path='.', *args, operation=original, **kwargs):
+                    if not isinstance(path, int) and path is not None:
+                        self.assertNotIn('DO-NOT-FOLLOW', os.fsdecode(path), 'custody locator was followed')
+                    return operation(path, *args, **kwargs)
+
+                self.enterContext(patch.object(module, name, new=guarded))
+        popen = subprocess.Popen
+
+        def fixture_git(argv, *args, **kwargs):
+            if isinstance(argv, (tuple, list)) and argv and argv[0] == 'git':
+                root = argv[argv.index('-C') + 1] if '-C' in argv else kwargs.get('cwd')
+                if root is not None and Path(root) in self.fixture_roots and not kwargs.get('shell'):
+                    self.assertTrue(all('DO-NOT-FOLLOW' not in arg for arg in argv))
+                    return popen(argv, *args, **kwargs)
+            self.fail(f'only fixture-local Git subprocesses are allowed: {argv!r}')
+
+        self.enterContext(patch.object(subprocess, 'Popen', new=fixture_git))
+        for target in (
+            'scripts.align_v4_session.prepare', 'scripts.align_v4_session._arm_and_install',
+            'scripts.align_v4_session.arm_checks', 'scripts.align_v4_session._probe_meter_live',
+            'joulewise.align.apple.powermode.admit_ac_powermode', 'joulewise.align.apple.external_volume.census',
+            'joulewise.align.apple.external_volume.arm_check', 'joulewise.battery_float.observe',
+        ):
+            trap = self.enterContext(patch(target, side_effect=AssertionError(f'physical probe or arm: {target}')))
+            self.addCleanup(trap.assert_not_called)
+
+    def c1_scenario(self, *, bad_history_link=False, older_desk=False, desk='passed', extra_sentinels=True,
+                    wrong_cohort=False):
+        root = Path(self.enterContext(tempfile.TemporaryDirectory(prefix='jw-c1-records-')))
+        self.fixture_roots.add(root)
+        r1 = Scenario(root, 'R1')
+        manifest = series.candidate()
+        manifest_ref = r1.write(series.MANIFEST, series.raw_json(manifest))
+        r1.finish(code=b'synthetic-code-v0\n' if older_desk else b'synthetic-code-v1\n')
+
+        w1 = Scenario(root, 'W1', previous=r1)
+        w1.raw_custody = True
+        w1.manifest_sha256 = manifest_ref['sha256']
+        w1.series['pool_members'] = [member['run_id'] for member in w1.members]
+        window = series.selected(manifest, 'C1')
+        ordinary, supplemental = window['members'], series.escalation_allocations(window)
+        roster = []
+        for allocation in ordinary + supplemental:
+            ordinal, pool = allocation['ordinal'], allocation['pool']
+            # As in the kit producer, anchors retain their original run IDs.
+            run_id = (f'align-pilot-v3-episodes-a-e{ordinal:02}' if pool == 'anchor'
+                      else f'{series.pack_id("C1")}-e{ordinal:02}')
+            roster.append({'ordinal': ordinal, 'run_id': run_id,
+                           'role': 'sentinel' if pool == 'sentinel' else 'anchor' if pool == 'anchor' else 'D'})
+        w1.series['sentinel_ids'] = [row['run_id'] for row in roster if row['role'] == 'sentinel']
+        w1.next_plan['members'] = roster if extra_sentinels else roster[:len(ordinary)]
+        if bad_history_link:
+            w1.record['previous_record'] = {**r1.link, 'sha256': '0' * 64}
+        if wrong_cohort:
+            w1.next_plan['configuration']['cohort_identity']['model_revision'] = 'different-fixture'
+        if desk == 'missing':
+            w1.omit_sources.add('desk')
+        elif desk == 'pending':
+            w1.sources['desk'] = {'plan_id': w1.sources['plan']['plan_id'], 'status': 'running_off_mbp'}
+        w1.finish()
+        w1.series_sha256 = builder.digest((root / w1.series_path).read_bytes())
+        if older_desk:
+            # The W1 desk first passes on the current bytes. Only the ledger's last-pass link then moves.
+            self.ready_packet(w1)
+        if older_desk or desk == 'pending':
+            w1.series['last_passed_record'] = dict(r1.link)
+            self.commit_series(w1)
+        return w1
+
+    def commit_series(self, scenario):
+        scenario.series_sha256 = scenario.write(scenario.series_path, scenario.series)['sha256']
+        scenario.series_commit = scenario.commit()
+
+    def recommit_predecessor(self, scenario):
+        record_sha = scenario.write(scenario.record_path, scenario.record)['sha256']
+        scenario.record_commit = scenario.commit()
+        scenario.link = {'commit': scenario.record_commit, 'path': scenario.record_path, 'sha256': record_sha}
+        scenario.git('update-ref', scenario.identities()['pushed_ref'], scenario.record_commit)
+        scenario.series.update(previous_record=dict(scenario.link), last_passed_record=dict(scenario.link))
+        self.commit_series(scenario)
+
+    def cli_packet(self, scenario, *, now=NOW, **changes):
+        self.output_number += 1
+        path = self.output_dir / f'packet-{self.output_number}.json'
+        args = ['--repo', str(scenario.root), '--output', str(path)]
+        for name, value in scenario.identities(**changes).items():
+            args.extend(['--' + name.replace('_', '-'), value])
+        error = io.StringIO()
+        with patch('time.time', return_value=now), contextlib.redirect_stderr(error):
+            code = builder.main(args)
+        output = json.loads(path.read_bytes()) if path.exists() else None
+        return code, output, error.getvalue()
+
+    def ready_packet(self, scenario):
+        code, packet, error = self.cli_packet(scenario)
+        self.assertEqual(code, 0, (error, packet and packet['packet_preflight']['reasons']))
+        self.assertTrue(packet['packet_preflight']['ready'])
+        return packet
+
+    def refused_packet(self, scenario, *, now=NOW):
+        code, packet, error = self.cli_packet(scenario, now=now)
+        self.assertEqual(code, 2)
+        self.assertIsNotNone(packet, error)
+        self.assertFalse(packet['packet_preflight']['ready'])
+        return packet
+
+    def rebuild(self, scenario, supplied, *, now=NOW):
+        return builder.rebuild_and_compare(scenario.root, supplied, now_epoch_s=now,
+                                           current_artifact_set_sha256=registration.artifact_set_digest(scenario.root))
+
+    def triage(self, scenario, packet, *, now=NOW):
+        return cad.next_arm_triage(packet, {}, {
+            'artifact_set_sha256': registration.artifact_set_digest(scenario.root),
+            'record_commit_exists': session._commit_exists(scenario.root, packet['record_commit']),
+            'record_bound': session._record_bound(scenario.root, packet),
+        }, now_epoch_s=now)
+
+    def assert_packet_failure(self, packet, check, text):
+        self.assertEqual(packet['checks'][check]['status'], 'fail')
+        self.assertIn(text, packet['checks'][check]['basis'])
+        self.assertIn(f'triage {check} failed', packet['packet_preflight']['reasons'])
 
     def test_committed_w1_rebuild_binds_c1_with_live_checks_pending(self):
         w1 = self.c1_scenario()
