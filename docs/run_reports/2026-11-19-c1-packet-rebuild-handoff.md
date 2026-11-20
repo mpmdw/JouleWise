@@ -334,3 +334,77 @@ git diff --check b2e01464d HEAD
 recorded in the draft ledger and the seat handoff. The integration owner and Opus
 still own exact-tree acceptance. W1 signing and the final post-close C1 packet
 remain with the lead or magistrate.
+
+## Lead audit round 3 and K1
+
+Round 3 on `21010e9fb3e40d8e773640484dab3cfac005485f` verified one HIGH
+integration seam and zero MED or LOW findings. In the disposable audit
+reproduction, both the 24-member C1 kit and the ordinary 22-member kit passed
+the materializer's own check. A packet built for the 24-member kit also
+admitted the ordinary kit. The series binding and artifact-set digest both
+passed. The round 3 HIGH triggered a return to spec under Pipeline §3.
+The lead's K1 ruling supplied the revised contract. Earlier freezes
+`9fba97178`, `49ac71d4e`, and `5d04e0dc5` remain in the history.
+
+The five K1 cases were frozen before changes to the validator at
+`b3b8df3a20e8ece337c16953780eb984348b227d`, tree
+`9d67246781279a8f727720445680cb43a3c40ec7`. The baseline with the validator
+at `21010e9fb` exited 1. The positive control found no kit identity, the CLI
+reached the synthetic host trap and returned 1, and all seven direct mismatch
+assertions saw admission. The five frozen methods now pass.
+
+The packet incorporates the materialized C1 kit from the exact series commit.
+It carries a SHA-256 over the canonical map of kit filenames and file
+digests, the raw collection-plan digest, the member count, and sentinel
+ordinals. The builder compares the kit's ordered IDs and roles to the bound
+projection. The CLI checks the selected kit before host actions.
+`arm_checks` independently compares the actual selection to the packet it
+rebuilt. It also checks the staged plan and the prepared launch tree's digest
+binding. It verifies the copied science configs against the frozen plan.
+`packet_kit_mismatch` refuses install with exit 2. Projection-only packets
+remain usable for off-host preflight. A C1 install requires the committed
+kit binding.
+
+| Finding | Fix | Regression |
+| --- | --- | --- |
+| Round 3 HIGH, 24-member packet could admit an ordinary 22-member kit | `22461975ee2b6d60e8a0563a7b7a028d0d93c5ad` | True 24-member materialization admits under invented host inputs. True 22-member replacement refuses despite identical packet rebuild and successful series binding. The CLI refuses the replacement with exit 2 before host access. A same-plan kit byte change refuses. Counts 22, 23, 25 and 26 and a moved sentinel each refuse. |
+| Staged kit checks | `22461975e`, `7b3557ee6824768fc11e89544c6f8349c66ba30f` | A stale staged launch tree or edited staged config refuses while the source kit still matches. |
+
+The invented replay at clock 111 uses W1 record commit
+`46c68cbdc92d66613e3ebdb3e4931e087c98e8cd`, path `w-W1/record.json`,
+series commit `e9a24bf05a0322fd0d16747434b510aafa93bf4c`, path
+`series/state.json`, and ref `refs/remotes/synthetic/records`.
+
+| Kit consumed | Kit SHA-256 | Plan SHA-256 | Result |
+| --- | --- | --- | --- |
+| Frozen 24, sentinels 5/22/23/24 | `8e2b1c986990d932458d1e07a59079f6b3c5a993746649bc7dcb2e336511dbba` | `7e99554bcd0cb3fc8ac3ac681a9413ec398f6f81680dba856c6a022138cff968` | Builder exit 0, ready; synthetic arm admitted |
+| Ordinary 22, sentinels 5/22 | `b45cb44388b6cccac8a1e6f9dc6d57eaa4ec9a9a9c7f4001f9973dfd6f8cd849` | `3bca149c7d71c21c80e039ef8aa8e75c339876ae2a41102e70835ec247be5b70` | Canonical rebuild still matches; arm refuses with `packet_kit_mismatch`; CLI exit 2 |
+
+The regression fix commits have trees `f23eabdce03d9f252148b6f44bcbfdf4b035581f`
+and `aed6f987c6d391ecfe99e2da52a3ece4dc4db07c`. Exact published head,
+test-merge tree and hosted CI results are tracked in draft PR #896 and
+the seat handoff. All ten condition-13 Git blob IDs match the W1 baseline
+`b2e01464d`, with zero inherited absences. RL-182's eight protected
+functions and constant remain at their existing bytes.
+
+### K1 commands and lead hold
+
+```sh
+PYTHONPATH=tests:. python3.13 -B -m unittest align.test_v4_next_arm_packet.C1PacketRebuildTests -k test_k1
+PYTHONPATH=tests:. python3.13 -B -m unittest align.test_v4_next_arm_packet.C1PacketRebuildTests
+JW_B5_SYNTHETIC_ONLY=1 PYTHONPATH=tests:. python3.13 -B -m unittest \
+  align.test_r11_delta5_sol1 align.test_r11_delta5_sol2 align.test_v4_series_e2e
+git diff --check b2e01464d HEAD
+```
+
+For the authorized lead's post-close packet, run the builder command above
+with the materialized C1 kit under `configs/campaigns/align_v4_c1` in
+`--series-commit`. Use the exact chosen 24-member plan when W1 U4 is
+inconclusive. Check that the packet reports its kit digest, collection-plan
+digest, 24 members, and sentinel ordinals `[5, 22, 23, 24]`. Rebuild from
+that commit and use the same selection in the consumer. The authenticated
+W1 desk and receipt digests carry forward. W1 signing, integration-owner and
+Opus acceptance, and the final post-close packet remain with their owners.
+
+`NEEDS_SPEC: none`. Only invented fixtures were used for the audit replay
+and software checks.
