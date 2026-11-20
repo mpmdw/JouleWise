@@ -307,6 +307,32 @@ def unrelated():
                     error = self.compare(right, 2, w1=left)["error"]
                     self.assertIn(name or "namespace", error)
 
+    def test_mutating_or_exporting_protected_callable_objects_fails_closed(self):
+        base = self.SOURCE.replace(
+            b"def _holm(item):\n    return item  # holm-a\n",
+            b"def _holm(item=1, *, shift=0):\n    return item + shift\n",
+        ) + b"\ndef revised(): return 2\n"
+        w1 = self.commit(base)
+        residual = self.commit(base + b"\ndef ordinary(): return _holm() + revised()\n")
+        output = self.compare(residual, 0, w1=w1)
+        self.assertEqual(output["protected_changes"], {})
+        self.assertEqual(output["files_for_review"], [self.SCORER])
+
+        for tail in (
+            b"_holm.__code__ = revised.__code__\n",
+            b"alias = _holm\nalias.__defaults__ = (2,)\n",
+            b"def change():\n    callbacks = [_holm]\n    callbacks[0].__kwdefaults__['shift'] = 2\nchange()\n",
+            b"def change(fn):\n    fn.__defaults__ = (2,)\nchange(_holm)\n",
+            b"del _holm.__defaults__\n",
+            b"from .rl176 import _holm as alias\nalias.__defaults__ = (2,)\n",
+            b"from . import rl176 as scorer\nscorer._holm.__defaults__ = (2,)\n",
+            b"match scorer:\n    case ModuleType(_holm=fn):\n        fn.__defaults__ = (2,)\n",
+        ):
+            with self.subTest(tail=tail):
+                invalid = self.commit(base + tail)
+                for left, right in ((w1, invalid), (invalid, w1), (invalid, invalid)):
+                    self.assertIn("_holm", self.compare(right, 2, w1=left)["error"])
+
     def test_missing_duplicate_and_rebound_bindings_fail_closed(self):
         for source in (
             self.SOURCE.replace(b"def _holm(item):\n    return item  # holm-a\n", b""),

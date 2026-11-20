@@ -23,6 +23,7 @@ PROTECTED = (
     LEVEL, "_tail_test", "_holm", "_decode_design", "_decode_rows",
     "_residual_scores", "_s_rank", "_q_energies",
 )
+PROTECTED_FUNCTIONS = frozenset(PROTECTED) - {LEVEL}
 FUNCTION = (ast.FunctionDef, ast.AsyncFunctionDef)
 PHYSICAL_LINES = re.compile(rb"(?<=\n)|(?<=\r)(?!\n)")
 NAMESPACE_APIS = frozenset({
@@ -165,20 +166,35 @@ class ModuleBindings(ast.NodeVisitor):
 
 
 def reject_dynamic_namespace(module):
-    """Refuse indirect namespace access before it can escape lexical binding checks."""
+    """Refuse reflective access and escapes of mutable protected callable objects."""
+    nodes = tuple(ast.walk(module))
+    direct_callees = {node.func for node in nodes if isinstance(node, ast.Call)}
     ambiguous_access = False
-    for node in ast.walk(module):
+    for node in nodes:
+        references = ()
         if isinstance(node, ast.Attribute):
             if isinstance(node.ctx, (ast.Store, ast.Del)) and node.attr in PROTECTED:
                 raise InvalidInput(f"{node.attr} has an ambiguous namespace write")
+            if isinstance(node.ctx, ast.Load):
+                references = (node.attr,)
             if node.attr in NAMESPACE_ATTRIBUTES:
                 ambiguous_access = True
         elif isinstance(node, ast.Name) and isinstance(node.ctx, ast.Load):
+            references = (node.id,)
             if node.id in NAMESPACE_APIS:
                 ambiguous_access = True
-        elif isinstance(node, ast.ImportFrom):
-            if any(alias.name in NAMESPACE_ATTRIBUTES for alias in node.names):
+        elif isinstance(node, (ast.ImportFrom, ast.MatchClass)):
+            references = (tuple(alias.name for alias in node.names)
+                          if isinstance(node, ast.ImportFrom) else node.kwd_attrs)
+            if any(name in NAMESPACE_ATTRIBUTES for name in references):
                 ambiguous_access = True
+
+        # A first-class reference can mutate a function through aliases,
+        # containers or callees. A direct invocation does not expose its identity.
+        if node not in direct_callees:
+            for name in references:
+                if name in PROTECTED_FUNCTIONS:
+                    raise InvalidInput(f"{name} has ambiguous callable namespace access")
     if ambiguous_access:
         raise InvalidInput("ambiguous dynamic module namespace access")
 
