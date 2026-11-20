@@ -2641,6 +2641,83 @@ class R0ProcessIdentityTest(unittest.TestCase):
                 else:
                     self.assertEqual((result["rc"], result["published"], result["flags"]), (0, True, []), result)
 
+    def test_arguments_only_pid_sighting_reads_the_same_as_an_argument_change(self):
+        # Resolved for PR #824: a PID listed by the arguments table alone does
+        # not end the earlier worker's lifetime. The worker is listed once by
+        # accounting, at the 15 s baseline midpoint, with 0.60 CPU-s after a
+        # start at 5 s.
+        #   transient     it exits and another process holds the PID for half
+        #                 a second, so only the paired arguments read lists it
+        #   same_process  it changes its arguments, keeps PID and start, and
+        #                 idles until 29.9 s
+        # ps -Ao pid=,pcpu=,args= prints no start, so every table is the same
+        # in both. The lifetime runs to the first confirmed absence at 30 s:
+        # 0.60 / 25 s is below 0.05 and both publish.
+        #   confirmed     the later holder stays, and accounting lists it at
+        #                 30 s with another start. Its start second ends at
+        #                 16 s: 0.60 / 11 s is above 0.05.
+        from tests.align import test_r0_vs_l3_differential as fixture
+
+        def rows(case, now):
+            if 5 <= now < 15.005:
+                yield (fixture.PID, 5, 60 if now >= 10 else 0, fixture.WORKER, fixture.WORKER)
+            elif case.name == "transient" and 15.005 <= now < 15.5:
+                yield (fixture.PID, 15, 0, "ordinary", "ordinary")
+            elif case.name == "same_process" and 15.005 <= now < 29.9:
+                yield (fixture.PID, 5, 60, "ordinary", "ordinary")
+            elif case.name == "confirmed" and now >= 15.005:
+                yield (fixture.PID, 15, 0, "ordinary", "ordinary")
+
+        class Recorded(self.tables(rows, slow_reads=(15, 16))):
+            def __init__(self, case, root):
+                super().__init__(case, root)
+                self.replies = []
+
+            def run(self, argv, **kwargs):
+                reply = super().run(argv, **kwargs)
+                self.replies.append((tuple(argv), reply.returncode, reply.stdout, reply.stderr))
+                return reply
+
+        def disclosed(model):
+            return [(row["cpu_s"], row["cpu_s_per_s"]) for receipt in model.guard.receipts
+                    for key in ("cpu_intervals", "admission_cpu_intervals")
+                    for interval in receipt.get(key, ())
+                    for row in interval["contaminants"] if row["pid"] == fixture.PID]
+
+        outcomes = {}
+        for name in ("transient", "same_process", "confirmed"):
+            result, model = self.run_tables(fixture.Case(name, end=40), Recorded)
+            # Accounting at 15.00 lists the worker; the arguments read at 15.01 lists the PID.
+            self.assertIn("0:00.60 mdworker_shared", model.log[0][2])
+            self.assertEqual(model.log[1][2], f"{fixture.PID} 0.0 ordinary")
+            outcomes[name] = result, model
+
+        (transient, first), (same_process, second), (confirmed, third) = outcomes.values()
+        self.assertEqual(first.replies, second.replies)
+        self.assertGreater(len(first.replies), 20)
+        self.assertNotEqual(first.replies, third.replies)
+        for result, model in ((transient, first), (same_process, second)):
+            self.assertEqual((result["rc"], result["status"], result["published"], result["flags"]),
+                             (0, "pass", True, []), result)
+            rates = disclosed(model)
+            self.assertTrue(rates)
+            for cpu_s, rate in rates:
+                # The worker's observed CPU is kept, over 5 s to 30.02 s.
+                self.assertEqual(cpu_s, 0.6)
+                self.assertAlmostEqual(rate, 0.6 / 25.02, places=9)
+        for key in ("rc", "status", "published", "flags", "judged_windows", "accepted", "work_started",
+                    "report_intervals", "recorded", "guard_count", "refused_at"):
+            self.assertEqual(transient[key], same_process[key], key)
+        self.assertEqual(disclosed(first), disclosed(second))
+
+        self.assert_withheld(confirmed)
+        self.assertIn((0.0, 30.02, fixture.PID), [flag[:3] for flag in confirmed["flags"]], confirmed)
+        self.assertIn((0.0, 30.02), confirmed["report_intervals"])
+        self.assertIn("mdworker_shared 0.0545455 CPU-s/s", confirmed["reason"])
+        for cpu_s, rate in disclosed(third):
+            self.assertEqual(cpu_s, 0.6)
+            self.assertAlmostEqual(rate, 0.6 / 11, places=9)
+
     def test_arguments_sighting_before_the_first_accounting_row_names_the_process(self):
         # Born between the 45 s accounting read and its arguments read, the
         # process is named only in that arguments table. It then replaces its
