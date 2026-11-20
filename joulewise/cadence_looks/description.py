@@ -855,14 +855,53 @@ def _rail_rows(stream):
         yield ((left, right), row["rail"]), stamp, row
 
 
+_JSON_STRUCTURE = re.compile(rb'"(?:[^"\\]|\\.)*"|[{}\[\],:]')
+_JSON_CLOSERS = {ord("{"): ord("}"), ord("["): ord("]")}
+
+
+def _support_metadata(stream):
+    """Decode timing and health fields and keep only the sensor byte offsets."""
+    payload = stream.read()
+    stack = []
+    expect_key, sensor_key = True, False
+    sensor_start = sensor_span = None
+    for token in _JSON_STRUCTURE.finditer(payload):
+        start = token.start()
+        symbol = payload[start]
+        if len(stack) == 1 and stack[0] == ord("}"):
+            if expect_key and symbol == ord('"'):
+                sensor_key = decode(payload[start:token.end()]) == "sensors"
+                expect_key = False
+            elif sensor_key and symbol == ord(":") and sensor_start is None:
+                sensor_start = token.end()
+            elif symbol in (ord(","), ord("}")):
+                if sensor_start is not None:
+                    require(sensor_span is None, "duplicate JSON field")
+                    sensor_span = (sensor_start, start)
+                    sensor_start = None
+                expect_key, sensor_key = True, False
+        if symbol in _JSON_CLOSERS:
+            stack.append(_JSON_CLOSERS[symbol])
+        elif symbol in (ord("]"), ord("}")):
+            require(bool(stack) and stack.pop() == symbol, "unbalanced support JSON")
+    require(not stack, "unbalanced support JSON")
+    if sensor_span is not None:
+        start, end = sensor_span
+        payload = payload[:start] + b"null" + payload[end:]
+    metadata = decode(payload)
+    require(type(metadata) is dict, "support metadata is not a JSON object")
+    return metadata, sensor_span
+
+
 class Signals:
     """A leg's timed intervals and single gateway to scoring values."""
 
-    def __init__(self, support, paths, mark_read, pinned):
+    def __init__(self, support, paths, mark_read, pinned, *, sensor_source=None):
         self.meta = support
         self.paths = paths
         self.mark_read = mark_read
         self.pinned = pinned
+        self._sensor_source = sensor_source
         self.sum_admitted = support["rail_manifest"] == list(RAILS)
         self._read_started = False
         self._rail_stamps = None
@@ -877,11 +916,12 @@ class Signals:
         self.sidecar = _series(support["sidecar_times"])
         self.meter = _series(support["meter_times"])
         counts = support["meter_counts"]
+        # RL-166 Q7. The clean flag describes the stream's lifecycle. Its
+        # trailer counters describe the span. Each print judges its own stamps.
         self.meter_clean = (
             support["meter_present"] is True and support["meter_clean"] is True
             and integer(counts["decoded"], 2) and counts["decoded"] == len(self.meter)
-            and integer(counts["bad"]) and counts["bad"] == 0
-            and integer(counts["usb_errors"]) and counts["usb_errors"] == 0
+            and integer(counts["bad"]) and integer(counts["usb_errors"])
         )
         self.bounds = [tuple(row) for row in support["rail_intervals"]]
         require(all(len(row) == 2 and all(number(t) for t in row) and row[0] < row[1]
@@ -946,10 +986,13 @@ class Signals:
                 return "meter_gap"
         return None
 
-    def _open_signal(self, name):
+    def _start_read(self):
         if not self._read_started:
             self.mark_read()
             self._read_started = True
+
+    def _open_signal(self, name):
+        self._start_read()
         return self.paths[name].open(encoding="utf-8", newline="")
 
     def _index_rails(self):
@@ -1047,13 +1090,11 @@ class Signals:
         return [(self.meter[i], self.meter[i + 1], self._meter_values[i],
                  self._meter_values[i + 1]) for i in range(lo, hi)]
 
-    def interval_values(self, channel, interval):
-        """Admit sample counts and gaps before interpreting the interval's values."""
-        a, b = interval
+    def _interval_quality(self, channel, a, b):
         require(number(a) and number(b) and a < b, "invalid print interval")
         require(channel in (*RAIL_CHANNELS, "rail_sum", "dc_in", "sidecar"), "unknown channel")
         if channel == "rail_sum" and not self.sum_admitted:
-            return missing("rail_manifest")
+            return "rail_manifest"
 
         if channel == "rail_sum":
             rail_channels = (*RAIL_CHANNELS, "rail_sum")
@@ -1064,19 +1105,29 @@ class Signals:
             # identities can establish that coverage passed before the gap checks.
             if not self._coverage_passes(channel, a, b,
                                         [self._declared_rails[name] for name in rail_channels]):
-                return missing("coverage")
+                return "coverage"
             self._index_rails()
         reason = self._interval_refusal(
             channel, a, b, [self._observed_rails[name] for name in rail_channels],
         )
+        if reason is None and channel == "dc_in" and not self.meter_clean:
+            return "meter_absent" if self.meta["meter_present"] is False else "meter_contaminated"
+        return reason
+
+    def interval_values(self, channel, interval):
+        """Admit sample counts and gaps before interpreting the interval's values."""
+        a, b = interval
+        reason = self._interval_quality(channel, a, b)
         if reason:
             return missing(reason)
         if channel == "sidecar":
-            return self.meta["sensors"]
+            if self._sensor_source is None:
+                return self.meta["sensors"]
+            stream, (start, end) = self._sensor_source
+            self._start_read()
+            stream.seek(start)
+            return decode(stream.read(end - start))
         if channel == "dc_in":
-            if not self.meter_clean:
-                return missing("meter_absent" if self.meta["meter_present"] is False
-                               else "meter_contaminated")
             return self._admitted_meter(a, b)
         return self._admitted_rails(channel, a, b)
 
@@ -1177,7 +1228,8 @@ def _drift(windows):
 
 def _above_hold(signal, channel, hold, start, stop, *, average):
     if not number(hold):
-        return hold
+        reason = signal._interval_quality(channel, start, stop)
+        return missing(reason) if reason else hold
     energy = signal.energy(channel, start, stop)
     if not number(energy):
         return energy
@@ -1406,10 +1458,12 @@ def score(snapshot, sources, qualified, mark_read):
     pinned = _load_step3(snapshot.step3_code) if qualified else None
     for key, detail in qualified.items():
         paths = sources[key]
-        support = decode(paths["support.json"].read_bytes())
-        signal = Signals(support, paths, mark_read, pinned)
-        for name, value in print_leg(signal, detail, snapshot.instrument).items():
-            files[name][key] = value
+        with paths["support.json"].open("rb") as stream:
+            support, sensor_span = _support_metadata(stream)
+            sensor_source = (stream, sensor_span) if snapshot.instrument and sensor_span else None
+            signal = Signals(support, paths, mark_read, pinned, sensor_source=sensor_source)
+            for name, value in print_leg(signal, detail, snapshot.instrument).items():
+                files[name][key] = value
     if not snapshot.instrument:
         files["context"] = _context(files["hold"], files["turn"], qualified)
         files["date_spreads"] = _date_summaries(files["context"])

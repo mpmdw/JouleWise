@@ -2,11 +2,14 @@
 
 import ast
 import csv
+import io
 from itertools import product
+import json
 from pathlib import Path
 import re
 from tempfile import TemporaryDirectory
 import unittest
+from unittest.mock import patch
 
 from joulewise.cadence_looks import description as reader
 from tests import test_desc_looks_acceptance as fixture
@@ -83,7 +86,104 @@ def _filter_csv(path, keep):
     return output[1:]
 
 
+def _score_world(world):
+    fixture.copy_attestation(world)
+    fixture.Checks().stage1(world)
+    snapshot = reader.Snapshot(world.repo, world.look, "stage2")
+    census, qualified = reader.census(snapshot)
+    snapshot.check_stage1(census)
+    sources = reader.verify_gates(snapshot, qualified)
+    return reader.score(snapshot, sources, qualified, lambda: None)
+
+
 class DescriptionIntervalTests(unittest.TestCase):
+    def test_support_projection_handles_escaped_keys_and_nested_delimiters(self):
+        readings = br'[{"label":"a\"b,[}]","temperature":37.8125}]'
+        beginning = br'{"clock":{"note":"sensors: [,}]"},"sens\u006frs":'
+        end = ',"fan_label":"ventilateur été"}'.encode()
+        payload = beginning + readings + end
+        metadata, span = reader._support_metadata(io.BytesIO(payload))
+        self.assertEqual(metadata, {
+            "clock": {"note": "sensors: [,}]"}, "sensors": None, "fan_label": "ventilateur été",
+        })
+        self.assertEqual(payload[slice(*span)], readings)
+        duplicate = beginning + readings + b',"sensors":[]}'
+        with self.assertRaisesRegex(reader.Refusal, "duplicate JSON field"):
+            reader._support_metadata(io.BytesIO(duplicate))
+
+    def test_file_backed_fan_and_sensor_values_decode_only_after_hold_admission(self):
+        for look in fixture.IDS[:2]:
+            with self.subTest(look=look), TemporaryDirectory() as temporary:
+                world = fixture.World(Path(temporary).resolve() / "world", look)
+                omitted = (set(range(1, 600, 2)), {100, 101}, set())
+                readings = ((37.8125, 901.125), (37.9375, 902.125), (38.0625, 903.125))
+                keys = list(world.good)[:3]
+                for key, missing_stamps, (temperature, fan) in zip(keys, omitted, readings):
+                    path = world.copy / key / "support.json"
+                    support = fixture.read(path)
+                    support["sidecar_times"] = [t for t in support["sidecar_times"]
+                                                if t not in missing_stamps]
+                    support["sensors"][0]["TV0h"] = temperature
+                    support["sensors"][0]["fan_keys"]["left"] = fan
+                    fixture.put(path, support)
+                observed = []
+                watched = {value for pair in readings for value in pair}
+                original_loads = json.loads
+                original_refusal = reader.Signals._interval_refusal
+
+                def observe_number(raw):
+                    value = float(raw)
+                    if value in watched:
+                        observed.append(value)
+                    return value
+
+                def observe_loads(payload, **kwargs):
+                    return original_loads(payload, parse_float=observe_number, **kwargs)
+
+                def observe_gate(signal, channel, a, b, rails):
+                    reason = original_refusal(signal, channel, a, b, rails)
+                    if channel == "sidecar":
+                        observed.append(("sidecar", a, b, reason))
+                    return reason
+
+                with (patch.object(reader.json, "loads", observe_loads),
+                      patch.object(reader.Signals, "_interval_refusal", observe_gate)):
+                    report = _score_world(world)
+                if world.inst:
+                    self.assertEqual(observed[:3], [
+                        ("sidecar", 0, 600, "coverage"), ("sidecar", 0, 600, "meter_gap"),
+                        ("sidecar", 0, 600, None),
+                    ])
+                    self.assertCountEqual(observed[3:], readings[2])
+                    self.assertEqual(report["gain"][keys[0]]["mean_fan_rpm"],
+                                     {"value": None, "reason": "coverage"})
+                    self.assertEqual(report["gain"][keys[2]]["mean_start_c"]["TV0h"],
+                                     (readings[2][0] + 39) / 2)
+                else:
+                    self.assertEqual(observed, [])
+
+    def test_turn_coverage_takes_precedence_over_failed_hold(self):
+        for look in fixture.IDS[:2]:
+            with self.subTest(look=look), TemporaryDirectory() as temporary:
+                world = fixture.World(Path(temporary).resolve() / "world", look)
+                key = next(iter(world.good))
+                source = world.copy / key
+                support_path = source / "support.json"
+                support = fixture.read(support_path)
+                support["sidecar_times"] = [t for t in support["sidecar_times"] if t not in (100, 101)]
+                fixture.put(support_path, support)
+                _filter_csv(source / "power_trace.csv", lambda row: not (
+                    row["source"] == "powermetrics" and row["rail"] == "gpu_power"
+                    and float(row["interval_start_s"]) == 607
+                ))
+                report = _score_world(world)
+                self.assertEqual(report["hold"][key]["gpu_rail"]["mean_w"],
+                                 {"value": None, "reason": "meter_gap"})
+                turn = report["turn"][key]["energy_j"]
+                self.assertEqual(turn["gpu_rail"], {"value": None, "reason": "coverage"})
+                self.assertEqual(turn["rail_sum"], {"value": None, "reason": "coverage"})
+                self.assertEqual(turn["dc_in"], {"value": None, "reason": "meter_gap"})
+
     def test_channel_interval_and_fraction_matrix(self):
         pinned = reader.step3_reader()
         for channel, label, present, gap in product(
@@ -177,7 +277,7 @@ class DescriptionIntervalTests(unittest.TestCase):
         module = root / "joulewise/cadence_looks"
         sources = (module / "description.py", module / "description_worker.py",
                    root / "scripts/cadence_description_run.py")
-        raw = re.compile(r'\b(?:_rail_values|_meter_values|load_gpu_trace)\b'
+        raw = re.compile(r'\b(?:_rail_values|_meter_values|_sensor_source|load_gpu_trace)\b'
                          r'|\[["\'](?:power_w|watts|sensors)["\']\]')
         stamps = re.compile(r'\.(?:sidecar|meter)\b|\[["\'](?:sidecar_times|meter_times)["\']\]')
         io = re.compile(r'\b(?:open|read_bytes|read_text)\(')
@@ -207,14 +307,15 @@ class DescriptionIntervalTests(unittest.TestCase):
                 with self.subTest(file=source.name, line=line_no):
                     if raw.search(line):
                         permitted = (owner in {"interval_values", "_admitted_rails", "_admitted_meter"}
-                                     or owner == "__init__" and line.strip().endswith(" = {}"))
+                                     or owner == "__init__" and line.strip().endswith(
+                                         (" = {}", " = sensor_source")))
                         self.assertTrue(permitted, line)
                     if stamps.search(line):
                         self.assertIn(owner, {"__init__", "_coverage_passes", "_interval_refusal",
                                               "_admitted_meter", "recovery_start", "stream_end"}, line)
                     if io.search(line):
                         support_only = owner == "score" and line.strip() == (
-                            'support = decode(paths["support.json"].read_bytes())'
+                            'with paths["support.json"].open("rb") as stream:'
                         )
                         self.assertTrue(owner == "interval_values" or support_only
                                         or owner in structural_io.get(source.name, ()), line)

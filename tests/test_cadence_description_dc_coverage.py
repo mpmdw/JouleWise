@@ -33,6 +33,35 @@ def _select_meter_points(directory, keep, *, poison=None):
 
 
 class DCCoverageTests(unittest.TestCase):
+    def test_span_trailer_fault_counts_do_not_contaminate_clean_dc_intervals(self):
+        for look in fixture.IDS[:2]:
+            with self.subTest(look=look), TemporaryDirectory() as temporary:
+                world = fixture.World(Path(temporary).resolve() / "world", look)
+                expected = {}
+                for key, counter in zip(world.good, ("bad", "usb_errors")):
+                    path = world.copy / key / "support.json"
+                    support = fixture.read(path)
+                    stamps = [t for t in support["meter_times"] if 0 <= t < 600]
+                    self.assertEqual(stamps, list(range(600)))
+                    self.assertTrue(support["meter_present"] and support["meter_clean"])
+                    self.assertEqual(support["meter_counts"][counter], 0)
+                    support["meter_counts"][counter] = 1
+                    fixture.put(path, support)
+                    expected[key] = 40 * world.good[key][0]
+                fixture.copy_attestation(world)
+                fixture.Checks().stage1(world)
+                snapshot = reader.Snapshot(world.repo, look, "stage2")
+                census, qualified = reader.census(snapshot)
+                snapshot.check_stage1(census)
+                sources = reader.verify_gates(snapshot, qualified)
+                report = reader.score(snapshot, sources, qualified, lambda: None)
+                for key, watts in expected.items():
+                    with self.subTest(key=key):
+                        mean = report["hold"][key]["dc_in"]["mean_w"]
+                        self.assertIsInstance(mean, (int, float))
+                        self.assertAlmostEqual(mean, watts)
+                        self.assertEqual(report["hold"][key]["dc_in"]["dropped"], [0, 0, 0])
+
     def test_sparse_decode_nulls_dc_turn_and_plateau_even_with_short_gaps(self):
         for look in fixture.IDS:
             with self.subTest(look=look), TemporaryDirectory() as directory:
