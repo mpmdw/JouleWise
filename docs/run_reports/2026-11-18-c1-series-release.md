@@ -4,9 +4,9 @@
 CLI ran both complete stored worlds. At 102 of 154 wins it printed
 `S SIGNATURE` with `p_sup ≈ 0.0109278936864`. At 101 wins the signature
 was absent with `p_sup ≈ 0.0140103456299`. Both worlds used 22 untied
-strata, 11 windows and 176 members. The latest completeness gate preserves
-uncaptured roster dispositions and refuses to publish a report when an
-eligible captured member contributes no S score.
+strata, 11 windows and 176 members. Under RL-191, the caller preserves
+uncaptured roster dispositions and includes an eligible, reconciled
+scoreless capture in Q with an explicit S attrition entry.
 
 ## Parents, spec and publication
 
@@ -597,9 +597,8 @@ The three focused release tests passed. The pinned row, scorer, and
 registration suites passed 94 tests with four opt-in skips. All ten issued
 R1 source blobs match W1.
 
-The two captured/no-S cases remain `NEEDS_RULING` for the series owner under
-RL-185. The frozen supplement records the skips itself. No fixture expectation
-was changed. The exact W1 base still lacks the scorer and row builder.
+At this checkpoint, v3 recorded two `NEEDS_RULING` skips under RL-185.
+RL-191 resolves both expectations in frozen v3.1. The exact W1 base still lacks the scorer and row builder.
 Dependency landings, the integration-owner suite and full sharded CI on the
 resulting head and tree remain required. [Draft checks](https://github.com/mpmdw/JouleWise/pull/836/checks)
 
@@ -608,7 +607,7 @@ resulting head and tree remain required. [Draft checks](https://github.com/mpmdw
 | Regression | Result |
 |---|---|
 | `test_stored_series_through_787_and_release_script_s_signature_at_102_not_101_of_154` | PASS. Both CLI worlds and the frozen Q leaf. |
-| `test_uncaptured_and_captured_without_s_rows_form_two_distinct_world_pairs` | Uncaptured assignments remain disclosed. A captured eligible member with zero S rows now makes the CLI refuse without publishing the report. |
+| `test_uncaptured_assignments_publish_and_stripped_captures_refuse` | PASS. Uncaptured assignments remain disclosed. A captured episode with stripped decode events refuses before scoring. Frozen v3.1 establishes the separate reconciled scoreless cases. |
 | `test_final_roster_emits_one_fresh_member_per_assignment_with_a9_and_unmodified_787_rows` | PASS for reserve, retry, barred attempt, successor finality, X5 exclusions, row parity, truncation, missing stamps and hot cut. |
 | `test_no_member_loader_opens_dc_and_provider_keys_on_manifest_benign_ordinals` | PASS for the spoofed label, one benign DC open, direct ordinal refusals and corrupted rail bytes, with no partial report. |
 | `test_post_release_terminal_authority_refuses_before_member_loading` | PASS for a missing ref, stale terminal binding, wrong digest, unreachable commit and simultaneous direct and successor evidence. The release guard recognizes the synthetic authorization in each case. The member loader stays closed and no report is created. |
@@ -646,6 +645,50 @@ initial private pins. This comparison is against source commits.
 | `joulewise/align/apple/r1_phase_table.py` | `e412bb4389aae4e4239b47842512db178d4b53a2` |
 | `joulewise/align/apple/workload.py` | `ff30c29178ad9ccceab96140c569b8f14afa16e9` |
 | `joulewise/align/apple/thermal.py` | `e7cbd6808c5a407524e3a85254090a46c33fa910` |
+
+## RL-191 §2 and frozen v3.1
+
+RL-191 admits both captured, eligible scoreless fixtures. They enter Q with
+their outcomes. S records a `no_s_score` entry at the bound window, pair and
+manifest ordinal. A scoreless benign member reduces its stratum's S
+population. A scoreless instructed member removes its stratum from S.
+An uncaptured assignment keeps its excluded roster entry and A9 reason.
+A missing or inconsistent capture still refuses before scoring.
+
+| Item | Evidence |
+|---|---|
+| Private v3.1 test freeze | `42b8e66840220397c5c57f7401bab4615bdfc883` (draft replay `c55a8819f6dba21e487aaa5930e9460f7d53fc62`) |
+| Frozen v3.1 SHA-256 | `e3b45a97124d85422c75f1d5f13b46bb1430b38c8c066517c829731e624afb24` |
+| Frozen v2 SHA-256 | `1bbd2846bf5ccb47d87f0e85e10e6fd4b067816b7352c7204c15f3b7aa17a8e7` |
+| Private test head and tree | `a98ccddd451e90eb81878c687e4c8398795a2339`, `5c3155556917ed389c589ac82cf81623ac4c802f` |
+| Draft code and test head and tree before this report | `cfc44d659a48b320a242b04528bdb5636f18dbab`, `c3ed330956db9f9f3b94f3d9388520038351e3bb` |
+| Private reserve test rerun head and tree | `434b5def0ac396f75ccef7f93d09df9f698249e6`, `7cfe26d32dde49b4e759b4d330c932b90b113e26` |
+| Caller SHA-256 for signing owner | `366f632fcc8bbd3b53df952cb27a26ef627ee5a87ec6fd17969d77a84b951cbc` |
+| Frozen v3.1 at the test freeze | 56 passed, 13 failed, zero skips on the pre-change caller. |
+| Frozen v3.1 on the private candidate | PASS. All 69 cases with zero skips. Both captured arms entered Q with eight members. Benign retained 22 S strata and instructed retained 21. |
+| Frozen v2 on the private candidate | PASS. All 254 cases with zero skips. |
+| Focused caller and pinned producer suites | PASS. All 45 caller cases after the reserve assertion rerun. The pinned component suites passed 94 cases with four opt-in skips. |
+
+The caller reconciles per-turn decode counts against the bound event source
+and requires exactly one row or registered no-row code per eligible turn
+(`align_v4_series_release.py:952,966`). It derives the three registered
+scoreless causes using the row adapter and pinned fitter, and checks the exact
+contributor identities before ranking (`:1023,1115`). The report must disclose
+the expected ranked stratum identities and contributor tallies (`:1182`).
+The caller serializes the ordered builder codes for a missing decode-only row
+and preserves the registered S and Q computations (`:1249`). The eight
+RL-182 §1.5 names and all ten protected R1 source blobs match their issued
+or pinned versions.
+
+The 102/101 production-shaped boundary passed through the CLI. Local serial
+discovery began before the reserve assertion correction. The frozen suites
+and the caller reruns supply the staged evidence reported here.
+
+The four stored A9 bindings and paired serialized producer outputs remain
+with their owners under RL-191 §2.4. The signing owner still owes the receipt
+binding the new caller bytes before C1 arms. The public W1 CI candidate
+depends on the lead's separate PR #813, PR #787 and PR #826 landings.
+[Draft checks](https://github.com/mpmdw/JouleWise/pull/836/checks)
 
 ## Remaining acceptance
 
