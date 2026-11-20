@@ -13,9 +13,10 @@ the one current tool or document per job. [`docs/ARCHIVE.md`](docs/ARCHIVE.md)
 says how to get back files removed from `main` in the 2026-11-06 prune.
 
 **2026-11-20 hp-02 successor builder handoff [AGENT].** The gate now follows the
-frozen state machine. A replacement-issue binding mismatch in the frozen Q2
-cases awaits a lead ruling. Independent delta execution and lead acceptance
-precede issue.
+frozen state machine. The lead preserved exact issue binding and authorized the
+corrected Q2 spec freeze at `eafae0cb9`. All 374,900 frozen assertions and all
+six original fixtures passed on synthetic inputs. Independent delta execution
+and lead acceptance precede issue.
 [Gate-machine adoption report](docs/run_reports/2026-11-20-hp02-gate-machine.md).
 
 **2026-11-18 qualification draft handoff [AGENT].** Six unissued items

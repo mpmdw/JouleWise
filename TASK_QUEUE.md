@@ -7,8 +7,10 @@ triage it here instead of assuming it should happen immediately.
 
 P1 [AGENT], user-directed Tier 2 builder work under RL-190 §2 and the frozen
 item and occupancy contracts. The state machine implementation retains the
-existing issue binding. The replacement-issue Q2 fixture needs a lead ruling
-before the frozen acceptance run can pass.
+existing issue binding. The Q2 successor spec freeze at `eafae0cb9` corrects
+the replacement observations. All 300 Q2 recoveries and the complete frozen
+suite passed. Independent delta execution and lead acceptance remain due
+before issue.
 [Gate-machine adoption report](docs/run_reports/2026-11-20-hp02-gate-machine.md).
 
 ## 2026-11-18 qualification drafts at the PR #812 merge pin
