@@ -391,7 +391,7 @@ def unrelated():
 
 
 class ProtectedRuntimeComparisonTests(unittest.TestCase):
-    """Spec v2 on invented source and a test-only local worker transport."""
+    """Runtime evidence on invented source through a test-only worker transport."""
 
     PACKAGE = "joulewise/align/apple"
     SCORER = PACKAGE + "/rl176.py"
@@ -400,6 +400,15 @@ class ProtectedRuntimeComparisonTests(unittest.TestCase):
     LEVEL = "S_SUPERIORITY_ALPHA"
     FUNCTIONS = ("_decode_design", "_decode_rows", "_residual_scores", "_tail_test",
                  "_s_rank", "_holm", "_q_energies")
+    FIXED_CASES = {
+        "_decode_design": ("zero", "one", "nan", "infinity"),
+        "_decode_rows": ("no-trace", "stamp-at-end"),
+        "_residual_scores": ("empty", "five-training", "six-training"),
+        "_tail_test": ("empty", "tie", "infinity"),
+        "_s_rank": ("empty", "tie", "above-level", "below-level"),
+        "_holm": ("empty", "boundary"),
+        "_q_energies": ("empty", "no-trace-with-stamp", "stamp-at-segment-start"),
+    }
     SIBLINGS = ("rl176_phases", "wire", "nested.helper")
     SOURCE = ("S_SUPERIORITY_ALPHA = 0.25\n" + "".join(
         f"def {name}(): return 1\n" for name in FUNCTIONS
@@ -492,7 +501,8 @@ os.execve(sys.executable, [sys.executable, *python_args], {'PATH': os.defpath})
         if runtime:
             command.extend(("--runtime-image", self.IMAGE))
         output = subprocess.run(command, capture_output=True, env=self.env, text=True)
-        self.assertEqual(output.returncode, expected, (output.stdout, output.stderr))
+        if expected is not None:
+            self.assertEqual(output.returncode, expected, (output.stdout, output.stderr))
         self.assertEqual(output.stderr, "")
         return json.loads(output.stdout)
 
@@ -562,7 +572,7 @@ rl176._holm = decorate(CAPTURED)
         c1 = self.commit({self.SCORER: self.SOURCE + b"\n# invented unapproved byte change\n"})
         result = self.compare(w1, c1, 2)
         self.assertEqual(result["runtime_changes"], {})
-        self.assertEqual(result["oracle_changes"], {})
+        self.assertNotIn("oracle_changes", result)
         self.assertEqual(result["protected_changes"], {})
         self.assertEqual(list(result["closure_changes"]), [self.SCORER])
         self.assertEqual(result["research_lead_review"], [self.SCORER])
@@ -579,9 +589,13 @@ rl176._holm = replacement
         c1 = self.commit({path: module.replace(b"b=left", b"b=twin")})
         self.assertEqual(list(self.compare(w1, c1, 2)["runtime_changes"]), ["_holm"])
 
-    def test_default_comparison_requires_offline_runtime(self):
+    def test_default_comparison_applies_byte_gate_without_runtime(self):
         w1 = self.commit()
-        self.assertIn("error", self.compare(w1, w1, 2, runtime=False))
+        result = self.compare(w1, w1, 0, runtime=False)
+        self.assertNotIn("error", result)
+        self.assertNotIn("oracle_changes", result)
+        self.assertEqual(result["oracle_coverage"]["summary"], "evaluated 0 of 21 fixed cases")
+        self.assertEqual(set(result["runtime_unread"]), {self.LEVEL, *self.FUNCTIONS})
 
     def test_missing_release_entry_point_fails_closed_on_either_side(self):
         with_release = self.commit()
@@ -613,7 +627,7 @@ rl176._holm = replacement
             result = self.compare(old, new, 2)
             self.assertEqual(list(result["closure_changes"]), [self.PHASES])
             self.assertEqual(result["files_for_review"], [self.PHASES])
-            self.assertEqual(result["oracle_changes"], {})
+            self.assertNotIn("oracle_changes", result)
         other = self.commit({self.PHASES: c1_phase + b"# invented extra byte change\n"})
         self.assertEqual(self.compare(w1, other, 2)["files_for_review"], [self.PHASES])
         altered = self.SOURCE.replace(b"0.25", b"0.75")
@@ -685,8 +699,8 @@ except ModuleNotFoundError:
         for old, new in ((w1, c1), (c1, w1)):
             result = self.compare(old, new, 2)
             self.assertEqual(list(result["closure_changes"]), [resource, fresh])
-            self.assertIn(resource, result["error"])
-            self.assertEqual(result["oracle_changes"], {})
+            self.assertIn(resource, result["runtime_unread"][self.LEVEL]["w1"])
+            self.assertNotIn("oracle_changes", result)
 
     def test_reports_all_oracle_differences_alongside_all_changed_files(self):
         w1 = self.commit()
@@ -717,7 +731,55 @@ if flag.is_file():
         c1 = self.commit({wire: source, path: b"0.75\n"})
         result = self.compare(w1, c1, 2)
         self.assertEqual(list(result["closure_changes"]), [path])
-        self.assertEqual(result["oracle_changes"], {})
+        self.assertNotIn("oracle_changes", result)
+
+    def test_audit_five_reports_every_skipped_fixed_case(self):
+        w1 = self.commit()
+        tree = self.git("rev-parse", w1 + "^{tree}")
+        c1 = self.git("commit-tree", tree, "-p", w1, "-m", "invented equal tree")
+        skipped = {f"{name}/{label}": {"w1": "signature does not accept input", "c1": "signature does not accept input"}
+                   for name, labels in self.FIXED_CASES.items() for label in labels}
+        for old, new in ((w1, c1), (c1, w1)):
+            result = self.compare(old, new, None)
+            self.assertNotIn("oracle_changes", result)
+            self.assertEqual(result["oracle_coverage"]["summary"], "evaluated 0 of 21 fixed cases")
+            self.assertEqual(result["oracle_coverage"]["not_evaluated"], skipped)
+            self.assertEqual(result["oracle_coverage"]["unread_level"], {})
+
+    def test_audit_five_reports_level_unread_when_a_guarded_resource_is_unprojected(self):
+        wire = self.PACKAGE + "/wire.py"
+        resource = "invented-trigger.txt"
+        source = b"""from pathlib import Path
+flag = Path('invented-trigger.txt')
+if flag.is_file():
+    from joulewise.align.apple import rl176
+    rl176.S_SUPERIORITY_ALPHA = float(flag.read_text())
+"""
+        w1 = self.commit({wire: source, resource: b"0.25\n"})
+        c1 = self.commit({wire: source, resource: b"0.75\n"})
+        for old, new in ((w1, c1), (c1, w1)):
+            result = self.compare(old, new, None)
+            self.assertEqual(result["files_for_review"], [resource])
+            self.assertNotIn("oracle_changes", result)
+            report = result["oracle_coverage"]
+            self.assertEqual(report["summary"], "evaluated 0 of 21 fixed cases")
+            self.assertEqual(set(report["not_evaluated"]),
+                             {f"{name}/{label}" for name, labels in self.FIXED_CASES.items() for label in labels})
+            self.assertEqual(report["unread_level"], result["runtime_unread"][self.LEVEL])
+            self.assertEqual(set(result["runtime_unread"]), {self.LEVEL, *self.FUNCTIONS})
+            for side in ("w1", "c1"):
+                self.assertIn(resource, report["unread_level"][side])
+
+    def test_oracle_coverage_counts_all_fixed_cases_for_compatible_signatures(self):
+        source = ("S_SUPERIORITY_ALPHA = 0.25\n" + "".join(
+            f"def {name}(*args, **kwargs): return 1\n" for name in self.FUNCTIONS
+        ) + "from . import rl176_phases\n").encode("ascii")
+        w1 = self.commit({self.SCORER: source})
+        result = self.compare(w1, w1, 0)
+        self.assertEqual(result["oracle_coverage"]["summary"], "evaluated 21 of 21 fixed cases")
+        self.assertEqual(result["oracle_coverage"]["not_evaluated"], {})
+        self.assertEqual(result["oracle_coverage"]["unread_level"], {})
+        self.assertEqual(result["runtime_unread"], {})
 
     def test_frozen_public_scorer_outputs(self):
         from fractions import Fraction
