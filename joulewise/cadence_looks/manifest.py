@@ -47,6 +47,7 @@ LEDGER_SCHEMA = "joulewise.cadence_span_ledger.v1"
 LOOK_LEDGER_SCHEMA = "joulewise.cadence_look_ledger.v1"
 LOOK_LEDGER_PATH = "docs/process/cadence/looks/LOOKS.json"
 FILLER_KIT_REGISTRY = "docs/process/cadence/looks/filler-kit-registry.json"
+FILLER_SERIES = ("f2-inst-", "f2-stab-", "r1-partc-f0-")      # every id of a filler series, registered or not
 LOOK_LEDGER_STATUSES = ("draft", "committed", "stage1_committed", "run", "frozen", "superseded", "failed", "interrupted")
 _REGISTERED_QUAL_ID = re.compile(r"lm-qual-[0-9]{2}")
 # What each status needs recorded, so that "committed" is checkable (Mythos cold seat 8).
@@ -287,7 +288,9 @@ class ManifestError(ValueError):
 
 
 def strict_json(raw):
-    """Decode pinned writer JSON without ambiguous keys or nonfinite numbers."""
+    """Decode pinned writer JSON without ambiguous keys or nonfinite numbers. Bytes are UTF-8 as ``json.dump``
+    writes them: ``json.loads`` alone would also guess UTF-16 or UTF-32 and skip a byte-order mark. Every refusal
+    is a ManifestError, so no caller mistakes text that is not JSON for an absent file."""
     def unique(pairs):
         result = dict(pairs)
         if len(result) != len(pairs):
@@ -300,7 +303,14 @@ def strict_json(raw):
             raise ManifestError(["writer JSON has a nonfinite number"])
         return value
 
-    return json.loads(raw, object_pairs_hook=unique, parse_float=number, parse_constant=number)
+    try:
+        if isinstance(raw, (bytes, bytearray)):
+            raw = bytes(raw).decode("utf-8")
+        return json.loads(raw, object_pairs_hook=unique, parse_float=number, parse_constant=number)
+    except ManifestError:
+        raise
+    except (ValueError, RecursionError):
+        raise ManifestError(["writer JSON is not JSON as the pinned writers serialize it"]) from None
 
 
 # ---------------------------------------------------------------------------------------------- helpers
@@ -515,12 +525,31 @@ def _open_questions(qs, problems):
     return ids
 
 
+def filler_reference(block_id=None, kit_sha256=None):
+    """Whether a block id or a kit digest names a filler kit (RL-181 section 2.1): an id or a digest of the reviewed
+    registry, or an id in one of the filler series. The one predicate for every place the v1 manifest names a block.
+    The comparison folds case, as main's dispatcher does, so no spelling of a filler passes as another block."""
+    registry_path = Path(__file__).resolve().parents[2] / FILLER_KIT_REGISTRY
+    try:
+        registry = strict_json(registry_path.read_bytes())
+        registered = registry["kit_sha256_by_id"]
+        filler_ids = {item.casefold() for item in (*registered, *registry["other_ids"])}
+        filler_digests = {digest.casefold() for digest in registered.values()}
+    except (AttributeError, KeyError, OSError, TypeError, ValueError):
+        raise ManifestError(["reads.blocks: the filler-kit registry is unavailable or invalid"]) from None
+    return ((isinstance(block_id, str) and (block_id.casefold() in filler_ids
+                                            or block_id.casefold().startswith(FILLER_SERIES)))
+            or (isinstance(kit_sha256, str) and kit_sha256.casefold() in filler_digests))
+
+
 def _when(w, kind, problems):
     if not _closed(w, {"after_desk_final", "describe_blocks_rule", "before", "cite"}, "when", problems):
         return
     blocks = w.get("after_desk_final")
     if not (isinstance(blocks, list) and blocks and all(isinstance(b, str) and BLOCK_ID_RE.fullmatch(b) for b in blocks)):
         problems.append("when.after_desk_final: non-empty list of block ids")
+    if isinstance(blocks, list) and any(filler_reference(b) for b in blocks):
+        problems.append("when.after_desk_final: a counted block cannot reference a filler kit (RL-181 §2.1)")
     if kind == "interim" and isinstance(blocks, list):
         for b in ("dev-01", "dev-02", "dev-03", "dev-04", "dev-05"):
             if b not in blocks:
@@ -608,15 +637,6 @@ def _reads(r, kind, when, problems):
     if not (isinstance(blocks, list) and blocks):
         problems.append("reads.blocks: non-empty list")
         blocks = []
-    registry_path = Path(__file__).resolve().parents[2] / FILLER_KIT_REGISTRY
-    try:
-        registry = strict_json(registry_path.read_bytes())
-        registered = registry["kit_sha256_by_id"]
-        filler_ids = {item.casefold() for item in (*registered, *registry["other_ids"])}
-        filler_digests = set(registered.values())
-    except (AttributeError, KeyError, OSError, TypeError, ValueError):
-        raise ManifestError(["reads.blocks: the filler-kit registry is unavailable or invalid"]) from None
-    filler_prefixes = ("f2-inst-", "f2-stab-", "r1-partc-f0-")
     seen, fit_blocks = set(), set()
     for i, b in enumerate(blocks):
         where = f"reads.blocks[{i}]"
@@ -635,8 +655,7 @@ def _reads(r, kind, when, problems):
         for reason in block_phase_problems(kind, bid, phase, role, b.get("serves_phase")):
             problems.append(f"{where}: {reason}")
         sha = b.get("kit_sha256")
-        if ((isinstance(bid, str) and (bid.casefold() in filler_ids or bid.casefold().startswith(filler_prefixes)))
-                or (isinstance(sha, str) and sha.lower() in filler_digests)):
+        if filler_reference(bid, sha):
             problems.append(f"{where}: a counted block cannot reference a filler kit (RL-181 §2.1)")
         if not (sha is None or (isinstance(sha, str) and SHA_RE.fullmatch(sha))):
             problems.append(f"{where}.kit_sha256: 64 hex or null")
@@ -1725,6 +1744,8 @@ def runtime_bundle(sdir, leg_id, record):
 def check_runtime_bundles(sdir):
     """Check all rostered locators using only the receipt and leg records."""
     receipt = strict_json((sdir / "runner_receipt.json").read_bytes())
+    if not isinstance(receipt, dict) or not isinstance(receipt.get("roster"), list):
+        raise ManifestError(["invalid receipt roster (RL-184 F01)"])
     bundles = []
     for leg_id in receipt["roster"]:
         if (not isinstance(leg_id, str) or not leg_id or "\0" in leg_id
@@ -1738,11 +1759,10 @@ def check_runtime_bundles(sdir):
     return receipt, bundles
 
 
-def nonenergy_files(sdir):
-    """Operational sources reused by the look, with paths relative to a span and byte hashes.
-    Optional files are included when present; adding or removing one changes the map. No energy-bearing
-    telemetry, trace or meter file is opened here; those retain their dedicated time projections.
-    """
+def operational_paths(sdir):
+    """Span-relative paths of the operational sources the look reads: the receipt, the soak reference, each roster
+    leg's record and summary, and each accepted bundle's journals and config. Present or not; no energy-bearing
+    telemetry, trace or meter file is among them."""
     sdir = Path(sdir)
     receipt = strict_json((sdir / "runner_receipt.json").read_bytes())
     paths = {"runner_receipt.json", "soak/soak_reference.json"}
@@ -1758,7 +1778,16 @@ def nonenergy_files(sdir):
                 paths.update(f"{b}/{n}" for n in ("events.jsonl", "outputs/align_turns.jsonl",
                                                   "outputs/align_thermal.jsonl", "config.json",
                                                   "outputs/align_runtime_events.jsonl", "align_runtime_events.jsonl"))
-    return {rel: sha256_file(sdir / rel) for rel in sorted(paths) if (sdir / rel).is_file()}
+    return sorted(paths)
+
+
+def nonenergy_files(sdir):
+    """Operational sources reused by the look, with paths relative to a span and byte hashes.
+    Optional files are included when present; adding or removing one changes the map. No energy-bearing
+    telemetry, trace or meter file is opened here; those retain their dedicated time projections.
+    """
+    sdir = Path(sdir)
+    return {rel: sha256_file(sdir / rel) for rel in operational_paths(sdir) if (sdir / rel).is_file()}
 
 
 def native_pm_files(sdir):

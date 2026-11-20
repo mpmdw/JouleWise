@@ -513,11 +513,11 @@
       },
       {
         "path": "joulewise/cadence_looks/inclusion_34.py",
-        "sha256": "d67f3363d1ad7d61db7eb00f2beab222cd2e66d8818a3144ee8c3f9784116231"
+        "sha256": "0f5923a70ede0bce3e6f773673b3f7474fd5e99b7a66760f7d02b1d2dd9758a9"
       },
       {
         "path": "joulewise/cadence_looks/time_fields.py",
-        "sha256": "d57575de937896bf8d05f1c6fd47304215a72fdb59c12189358569a7e09fbd1a"
+        "sha256": "bf3d2967de88f775dcdfd6213081dd6fdbf9fe5c91169ab7133a8d0e74b3c412"
       },
       {
         "path": "joulewise/cadence_looks/step3_energy_ratios.py",
@@ -529,7 +529,7 @@
       },
       {
         "path": "scripts/cadence_look_run.py",
-        "sha256": "ebf26f953f1ade490c15923df092fdd4c2f723d06f7d6c2d91490eb134be3a04"
+        "sha256": "3354eab391d84707f0c161a98bf312c5605f4d27176c9073ffd0397e98277236"
       },
       {
         "path": "scripts/cadence_look_manifest.py",
@@ -844,7 +844,7 @@
       },
       {
         "path": "joulewise/cadence_looks/manifest.py",
-        "sha256": "9a7aa7cc89a89215b712d5bbb5c1e445e5a1b918fa7e96a8ea32c92bcf92e533"
+        "sha256": "2e850c28223cd1d5f961cfb66c1cc026ec81e728d6ab2a1ecd157bbba77a7d2a"
       },
       {
         "path": "joulewise/desk_compress.py",
@@ -930,7 +930,7 @@
         "reads_energy": false,
         "code": {
           "path": "joulewise/cadence_looks/inclusion_34.py",
-          "sha256": "d67f3363d1ad7d61db7eb00f2beab222cd2e66d8818a3144ee8c3f9784116231"
+          "sha256": "0f5923a70ede0bce3e6f773673b3f7474fd5e99b7a66760f7d02b1d2dd9758a9"
         },
         "cite": [
           "RL-149 §2.4",
@@ -946,7 +946,7 @@
         "reads_energy": false,
         "code": {
           "path": "joulewise/cadence_looks/inclusion_34.py",
-          "sha256": "d67f3363d1ad7d61db7eb00f2beab222cd2e66d8818a3144ee8c3f9784116231"
+          "sha256": "0f5923a70ede0bce3e6f773673b3f7474fd5e99b7a66760f7d02b1d2dd9758a9"
         },
         "cite": [
           "RL-149 §2.4",

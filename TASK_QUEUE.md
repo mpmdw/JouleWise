@@ -1,5 +1,10 @@
 # JouleWise Task Queue
 
+PR #795 fix round 2 (2026-11-19), [AGENT]. Astra audits the stage-1 closed
+list against the three writer pins. A real-roster receipt that stage 1
+refuses comes to Fable as a count and a shape (RL-184 §3.3).
+[Fix report](docs/run_reports/2026-11-19-pr795-fix-2.md).
+
 PR #795 audit round 2 repairs (2026-11-19), [AGENT]. Review the corrected
 writer and twin comparison paths and the checked port inventory. The
 main-side RL-188 registration test needs to compare the qualification row

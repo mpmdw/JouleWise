@@ -84,6 +84,56 @@ class ReceiptKinds(unittest.TestCase):
         for fields in ({}, {"rc": None}, {"rc": -9}, {"rc": 73}, {"rc": 130}):
             with self.subTest(fields=fields), self.assertRaisesRegex(ValueError, "span return code"):
                 I34.check_writer_receipt(dict(fields, steps=[]))
+        for receipt in ([], None, "receipt"):
+            with self.subTest(receipt=receipt), self.assertRaisesRegex(ValueError, "not an object"):
+                I34.check_writer_receipt(receipt)
+
+    def test_step_return_code_requires_the_writer_step_path(self):
+        """``step()`` at the three pins: a row's rc is null until its operation returns; a returned nonzero rc
+        raises with an error on every step but ``display``; a failure outside cleanup stops the span."""
+        refusal = "SpanRefusal: plan needs 10 s from now; the work deadline leaves 5 s"
+        failed = {"name": "plan", "rc": 2, "error": refusal}
+        fatal = {"name": "ac_power", "rc": 4, "result": {"rc": 4}, "error": "SpanRefusal: ac_power: rc 4"}
+        cleanup = [{"name": "restore", "rc": 0}, {"name": "stop-meter", "rc": 2, "error": "OSError: generated"},
+                   {"name": "close-meter", "rc": 0}]
+        first = {"attempt": 1, "started_epoch_s": 1, "refused": "generated refusal", "output_dir": "soak.rejected1"}
+        second = {"attempt": 2, "started_epoch_s": 2, "refused": None, "output_dir": "soak"}
+        refused = {"name": "soak", "rc": 2, "error": "SoakRefusal: generated refusal"}
+        admitted = (
+            {"rc": 0, "steps": [{"name": "display", "rc": 7, "result": {"rc": 7}}, {"name": "soak", "rc": 0}]},
+            {"rc": 0, "steps": [{"name": "soak", "rc": None}]},
+            {"rc": 2, "error": refusal, "steps": [{"name": "deadline", "rc": 0}, failed]},
+            {"rc": 2, "error": refusal, "steps": [failed, *cleanup]},
+            {"rc": 4, "error": "SpanRefusal: ac_power: rc 4", "steps": [fatal, *cleanup]},
+            {"rc": 2, "steps": [{"name": "soak", "rc": 0}, *cleanup]},
+            {"rc": 0, "soak_attempts": [first, second], "steps": [refused, {"name": "soak.a2", "rc": 0}]},
+            {"rc": 2, "error": "SoakRefusal: generated refusal; no retry: it needs 9 s and the work deadline leaves 1 s",
+             "soak_attempts": [dict(first, output_dir="soak")], "steps": [refused, *cleanup]},
+            {"rc": 143, "error": "SystemExit: 143", "soak_attempts": [first, second],
+             "steps": [refused, {"name": "soak.a2", "rc": 143, "error": "SystemExit: 143"}, *cleanup]},
+        )
+        for receipt in admitted:
+            with self.subTest(admitted=receipt):
+                I34.check_writer_receipt(copy.deepcopy(receipt))
+        refusals = (
+            ({"rc": 0, "steps": [{"name": "soak", "rc": 73}]}, "step return code"),
+            ({"rc": 0, "steps": [{"name": "plan", "rc": 1, "result": {"rc": 1}}]}, "step return code"),
+            ({"rc": 0, "steps": [{"name": "soak", "rc": True}]}, "invalid return code"),
+            ({"rc": 0, "steps": [{"name": "display", "rc": 7, "result": {"rc": 3}}]}, "contradicts its result"),
+            ({"rc": 0, "steps": [{"name": "soak", "rc": 0, "error": "ValueError: generated"}]}, "contradicts its error"),
+            ({"rc": 0, "steps": [failed]}, "failed step without the span's error"),
+            ({"rc": 2, "steps": [failed, *cleanup]}, "failed step without the span's error"),
+            ({"rc": 0, "soak_attempts": [dict(first, output_dir="soak")], "steps": [refused]},
+             "failed step without the span's error"),
+            ({"rc": 2, "error": refusal, "steps": [failed, {"name": "soak", "rc": 0}]}, "after the span stopped"),
+            ({"rc": 0, "steps": [{"name": "restore", "rc": 0}, {"name": "soak", "rc": 0}]}, "after the span stopped"),
+            ({"rc": 143, "error": "SystemExit: 143", "soak_attempts": [first, second],
+              "steps": [refused, {"name": "soak.a2", "rc": 143, "error": "SystemExit: 143"},
+                        {"name": "L001.a1", "rc": 0}]}, "after the span stopped"),
+        )
+        for receipt, reason in refusals:
+            with self.subTest(refused=receipt), self.assertRaisesRegex(ValueError, reason):
+                I34.check_writer_receipt(copy.deepcopy(receipt))
 
 
 class TraceTimes(unittest.TestCase):
@@ -102,6 +152,33 @@ class TraceTimes(unittest.TestCase):
                 else:
                     with self.subTest(stamp=stamp), self.assertRaisesRegex(TF.TimeFieldError, "stamp"):
                         TF.gpu_rows(d)
+
+    def test_stamps_are_the_writer_spelling_not_every_text_float_accepts(self):
+        """``csv.writer`` writes ``repr(float)``. ``float`` alone also takes digits outside ASCII, a sign, spaces
+        and underscores; a row spelled that way is no writer's, on any of the three stamp columns."""
+        fields = ("rail", "source", "interval_start_s", "interval_end_s", "timestamp_s", "power_w")
+        control = {"rail": "gpu_power", "source": "powermetrics", "interval_start_s": "1.5",
+                   "interval_end_s": "2.5", "timestamp_s": "2.5", "power_w": "DO-NOT-DECODE"}
+        with tempfile.TemporaryDirectory() as d:
+            p = Path(d) / "power_trace.csv"
+
+            def rows(**change):
+                with p.open("w", newline="", encoding="utf-8") as f:
+                    out = csv.DictWriter(f, fieldnames=fields)
+                    out.writeheader()
+                    out.writerow(dict(control, **change))
+                return TF.gpu_rows(d)
+
+            for spelling, value in (("1.5", 1.5), ("2", 2.0), ("-0.0", -0.0), ("1e-05", 1e-05), ("1.5e+16", 1.5e16),
+                                    ("1794719426.5356786", 1794719426.5356786)):
+                with self.subTest(admitted=spelling):
+                    self.assertEqual(rows(interval_start_s=spelling), [(value, 2.5)])
+            for spelling in ("\u0661.\u0665", "1\u0662", " 1.5", "1.5 ", "+1.5", "1_0", "1.", ".5", "0x1p0", "1,5",
+                             "\uff11.5", "Infinity", "NaN"):
+                for column in fields[2:5]:
+                    with self.subTest(refused=spelling, column=column), \
+                            self.assertRaisesRegex(TF.TimeFieldError, "stamp"):
+                        rows(**{column: spelling})
 
 
 @unittest.skipIf(R is None, "numpy is not installed; required NumPy CI exercises this class")

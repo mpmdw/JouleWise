@@ -430,10 +430,23 @@ def support(t, a, b):
 
 
 # ============================================================================================ power_trace.csv
+# joulewise/bundle.py ``write_power_trace`` hands Python floats to ``csv.writer``, which writes their ``repr``: ASCII
+# digits, an optional fraction and exponent. ``float`` alone would also take digits outside ASCII, a sign, spaces
+# and underscores, none of which a pinned writer writes.
+_STAMP = re.compile(r"-?[0-9]+(?:\.[0-9]+)?(?:[eE][+-]?[0-9]+)?")
+
+
+def _stamp(text):
+    """A stamp cell's value. ``nan`` and ``inf`` are ``repr`` spellings too; the caller refuses them by value."""
+    if not isinstance(text, str) or not (_STAMP.fullmatch(text) or text in ("nan", "inf", "-inf")):
+        raise ValueError("not a stamp as the writer formats one")
+    return float(text)
+
+
 def gpu_rows(bundle):
     """[(interval_start_s, interval_end_s)] of the ``gpu_power`` / ``powermetrics`` rows, sorted, as step 3's
     ``load_gpu_trace`` selects them; all three permitted time stamps are validated. ``power_w`` is never
-    converted. Raises TimeFieldError where step 3 would fail."""
+    converted. Raises TimeFieldError where step 3 would fail, and on a stamp no pinned writer spells (``_stamp``)."""
     path = Path(bundle) / "power_trace.csv"
     if Path(str(path) + ".zst").exists():
         raise CompressedCustody(f"{path.name}.zst is desk-compressed; the look reads a decompressed custody copy")
@@ -443,13 +456,13 @@ def gpu_rows(bundle):
         for row in reader:
             if row.get("rail") == "gpu_power" and row.get("source") == "powermetrics":
                 try:
-                    s, e = float(row["interval_start_s"]), float(row["interval_end_s"])
+                    s, e = _stamp(row["interval_start_s"]), _stamp(row["interval_end_s"])
                 except (KeyError, TypeError, ValueError):
                     raise TimeFieldError("power_trace.csv: a gpu_power row without numeric interval stamps") from None
                 if not (math.isfinite(s) and math.isfinite(e)):
                     raise TimeFieldError("power_trace.csv: a gpu_power row with a non-finite interval stamp")
                 try:
-                    ts = float(row["timestamp_s"])
+                    ts = _stamp(row["timestamp_s"])
                 except (KeyError, TypeError, ValueError):
                     raise TimeFieldError("power_trace.csv: a gpu_power row without numeric timestamp_s") from None
                 if not math.isfinite(ts):

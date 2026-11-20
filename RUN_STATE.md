@@ -1,5 +1,12 @@
 # JouleWise Run State
 
+PR #795 fix round 2 (2026-11-19) carries base sync B and closes stage-1
+admission at the writer's exit paths: a step's return code, a failed step's
+propagation, strict JSON in every operational file, and no text read as a
+number. The red writer-shape test now runs each stage against the ledger
+state that stage sees. Campaign admission awaits the paired census and
+manifest cold pass. [Fix report](docs/run_reports/2026-11-19-pr795-fix-2.md).
+
 PR #795 audit round 2 repairs writer exit and phase admission, compares
 complete Step 3 cell maps, and closes the interim v1 validator and filler
 check. The branch carries the reviewed base CI repairs. Campaign admission

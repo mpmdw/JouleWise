@@ -508,13 +508,40 @@ def _writer_rc(record):
     return rc
 
 
+# The exit paths of ``scripts/cadence_legs_runner.py`` at the three rostered writer pins (b4b6aeb19, 2d347f721,
+# 6e9d42f1d; the lines are cited in that order). RL-184 section 3.3 admits a receipt only if one of them writes it.
+#
+# The span (``run_span``, ``_close``):
+# * ``record["rc"]`` starts at 0 (321, 323, 453);
+# * the one handler around the span's work sets it with ``error``: an integer SpanRefusal or SystemExit code, else
+#   2 (465, 490, 648);
+# * cleanup can only turn a 0 into 2 (``record["rc"] or 2``: 494-531, 520-557, 678-715). A failed cleanup step is
+#   swallowed there, so it never reaches the span's ``error``.
+# So: no ``error`` means rc 0 or 2; an ``error`` means its code (``_writer_rc``), which cleanup leaves alone.
+#
+# A step (``step``: 342-360, 345-363, 477-495):
+# * the row is appended with ``rc`` null and keeps it until its operation returns;
+# * a returned rc that is not zero raises, with ``error``, on every step but the one called with ``fatal=False``
+#   (``display``: 433, 458, 621);
+# * an operation that raises records ``error`` with its code and raises again: nothing but cleanup follows, and the
+#   span's handler records the same exception. The exception is the retried soak refusal, caught in ``run_soak``
+#   (6e9d42f1d:592-604), which goes on only by appending the next attempt.
+# So: without ``error`` a step's rc is null, 0 or, for ``display`` only, its result's rc; a failed step outside
+# cleanup is the last one outside cleanup and the span carries an ``error``, unless a later soak attempt exists.
+_NONFATAL_STEPS = ("display",)
+_CLEANUP_STEP = re.compile(r"restore|(?:stop|close)-.+", re.DOTALL)
+
+
 def check_writer_receipt(receipt):
     """Check the historical runner envelope and the current one-retry writer's history."""
+    if not isinstance(receipt, dict):
+        raise ValueError("runner receipt: not an object")
     if "soak_refusals" in receipt:
         raise ValueError("runner receipt: soak_refusals is absent from the pinned writers")
     rc = _writer_rc(receipt)
+    span_error = receipt.get("error") is not None
     # The span starts at zero. Outside its exception handler only cleanup can change it to two.
-    if rc is None or (receipt.get("error") is None and rc not in (0, 2)):
+    if rc is None or (not span_error and rc not in (0, 2)):
         raise ValueError("runner receipt: invalid span return code for its exit path")
     steps = receipt.get("steps")
     if not isinstance(steps, list):
@@ -537,6 +564,18 @@ def check_writer_receipt(receipt):
     for prior, name in enumerate(("soak-blackout-wait", "soak.a2-blackout-wait")):
         if name in waits and waits[name] != 0 and max(len(attempts), len(soaks)) > prior:
             raise ValueError("runner receipt: attempt after a failed soak wait")
+    stopped = False
+    for step in steps:
+        if step.get("error") is None and step.get("rc") not in (None, 0) and step["name"] not in _NONFATAL_STEPS:
+            raise ValueError("runner receipt: invalid step return code for its exit path")
+        if _CLEANUP_STEP.fullmatch(step["name"]):
+            stopped = True                        # cleanup has begun: the span's work is over
+        elif stopped:
+            raise ValueError("runner receipt: a step after the span stopped")
+        elif step.get("error") is not None and not any(step is soak for soak in soaks[:max(len(attempts) - 1, 0)]):
+            if not span_error:
+                raise ValueError("runner receipt: a failed step without the span's error")
+            stopped = True
     if "soak_attempts" not in receipt:
         if names not in ((), ("soak",)) or "soak.a2-blackout-wait" in waits:
             raise ValueError("runner receipt: invalid historical soak steps")
@@ -570,7 +609,7 @@ def soak_fields(receipt):
     the matching attempt's soak_refusals_kind field; old receipts keep the same projection."""
     steps = [{"name": st.get("name"), "rc": None if st.get("error") and st.get("rc") == 0 else st.get("rc")}
              for st in receipt.get("steps") or []
-             if isinstance(st, dict) and re.fullmatch(r"soak(\.a\d+)?", str(st.get("name")))]
+             if isinstance(st, dict) and re.fullmatch(r"soak(\.a[0-9]+)?", str(st.get("name")))]
     attempts = receipt.get("soak_attempts")
     if isinstance(attempts, list):
         attempts = [{k: v for k, v in a.items() if k != "soak_refusals_kind"} if isinstance(a, dict) else a

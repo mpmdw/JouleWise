@@ -455,11 +455,33 @@ literal nested bundle locators, including under a staged span override.
 Campaign execution awaits Astra's paired census rerun and Fable's manifest
 cold pass.
 
-Stage 1 validates the pinned writers' receipt, attempt and phase shapes
-before reading trace files. This catches duplicate JSON keys, nonfinite
-numbers and unissued retry provenance. A terminal soak attempt can be
-present while its step is still absent. A legacy soak step with null or
-missing `rc` is unaccepted.
+Both stages check every rostered span against the pinned writers before any
+trace, telemetry or meter file opens (RL-184 §3.3). Stage 1 refuses with
+nothing consumed. Stage 2 repeats the check before the reservation.
+
+- **Exit paths.** The span's `rc` is 0 or 2 without an `error`, and the
+  error's own code with one. A step's `rc` without an `error` is null, 0 or,
+  for the one non-fatal step `display`, its result's `rc`. A step that failed
+  outside cleanup is the last step outside cleanup and the span carries an
+  `error`, unless a later soak attempt shows the refusal was retried.
+- **Soak history.** RL-184 F02 to F05 as ruled. A terminal soak attempt can
+  be present while its step is still absent. A legacy soak step with null or
+  missing `rc` is unaccepted.
+- **Strict JSON.** The receipt, the soak reference, each leg record and
+  summary, and each accepted bundle's `events.jsonl`, `align_turns.jsonl`,
+  `align_thermal.jsonl`, `config.json` and runtime-event fallbacks decode as
+  UTF-8 JSON with no duplicate key and no nonfinite number.
+- **Writer types.** A value the reader takes as a number, a count or a
+  length is a JSON number, integer or list. Text and booleans are never
+  converted, so digits outside ASCII cannot stand for a number.
+- **Events.** A row has a string type and a finite numeric stamp. A token
+  row's index is an integer. A phase row names one of the nine runtime
+  phases or `align_tool_<turn>_<call>` in ASCII digits without a sign or a
+  leading zero.
+
+A power-trace row whose stamps are not spelled as the writer's `repr` of a
+float excludes its leg under rule 3's trace clause (RL-173 E.1). Stage 1
+never reads an energy value, so it cannot judge one.
 
 The private comparison keeps RL-184 post-`no` diagnostics for fitted values,
 predicted onsets and the held-out GPU threshold. `cadence_look_run.py

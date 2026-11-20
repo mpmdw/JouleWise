@@ -211,6 +211,48 @@ class PostNo(unittest.TestCase):
                 self.assertEqual(frame["agreement"], "no")
                 self.assertTrue(parent.post_no(stage1, fit, energy, frame)["predictions_within_tolerances"])
 
+    def test_a_parseable_cell_map_difference_is_no_and_only_a_malformed_map_is_unevaluable(self):
+        """Census P02 on the production adjudicator with a completed frame: the cell map's syntax is validated,
+        its key set is an agreement predicate."""
+        parent, child, stage1, c, fit, _, step, _ = self.paired_fit()
+        ok = {"status": "ok", "gamma_estimable": True}
+        empty = {"status": "not_run", "gamma_estimable": None}
+        step = dict(step, cells=[dict(ok, prompt_tokens=10000), dict(empty, prompt_tokens=64)])
+        primary = child.projections(stage1, c, fit, step)
+        self.assertEqual(primary["verdicts"]["D#/cells"], {"10000": ok, "64": empty})
+
+        def adjudicate(cells, text=None):
+            twin = copy.deepcopy(primary)
+            twin["verdicts"]["D#/cells"] = cells
+            raw = C.dump(child.comparison_frame(primary, twin))
+            if text is not None:
+                self.assertEqual(raw.count(text[0]), 1)
+                raw = raw.replace(*text)
+            return parent.compare(raw, stage1, c, fit, step)["agreement"]
+
+        self.assertEqual(adjudicate({"10000": ok, "64": empty}), "yes")
+        for label, cells in (("the census's extra cell", {"10000": ok, "64": empty, "32": empty}),
+                             ("an extra estimable cell", {"10000": ok, "64": empty, "128": ok}),
+                             ("a removed cell", {"10000": ok}), ("no cells", {}),
+                             ("a replaced key", {"10000": ok, "65": empty}),
+                             ("a changed status", {"10000": ok, "64": dict(empty, status="ok")}),
+                             ("a changed word", {"10000": dict(ok, gamma_estimable=False), "64": empty})):
+            with self.subTest(parseable=label):
+                self.assertEqual(adjudicate(cells), "no")
+        for label, cells in (("a leading zero", {"10000": ok, "064": empty}), ("zero", {"10000": ok, "0": empty}),
+                             ("a sign", {"10000": ok, "-64": empty}), ("a space", {"10000": ok, "64 ": empty}),
+                             ("digits outside ASCII", {"10000": ok, "\u0666\u0664": empty}),
+                             ("an empty key", {"10000": ok, "": empty}),
+                             ("an unlisted status", {"10000": ok, "64": dict(empty, status="maybe")}),
+                             ("a word that is not boolean", {"10000": dict(ok, gamma_estimable=1), "64": empty}),
+                             ("an extra member", {"10000": dict(ok, note="generated"), "64": empty}),
+                             ("a missing member", {"10000": {"status": "ok"}, "64": empty}),
+                             ("a list", [ok, empty]), ("null", None)):
+            with self.subTest(malformed=label), self.assertRaises((ValueError, TypeError, KeyError)):
+                adjudicate(cells)
+        with self.subTest(malformed="a repeated key"), self.assertRaises(ValueError):
+            adjudicate({"10000": ok, "64": empty, "777": empty}, (b'"777":{', b'"64":{'))
+
     def test_valid_boundary_crossing_is_reviewable_and_larger_difference_is_not(self):
         for scale, expected in ((0.9816460542338478, True), (1.0217132401209437, True), (0.95, False)):
             with self.subTest(scale=scale):
@@ -1095,24 +1137,51 @@ class TwinThroughCLI(unittest.TestCase):
             ("unknown phase", {}, "invalid writer phase"),
             ("align_tool_1\u0662_0", {}, "invalid writer phase"),
             ("align_tool_0_1\u0662", {}, "invalid writer phase"),
+            # The same two classes one level down: a step's exit path, and text where the writers put a number.
+            ("unexplained step exit", {"steps": [{"name": "soak", "rc": 73}]}, "invalid step return code"),
+            ("unpropagated step failure", {"steps": [{"name": "plan", "rc": 2, "error": "ValueError: generated"},
+                                                     {"name": "soak", "rc": 0}]}, "failed step without the span's error"),
+            ("step after the stop", {"rc": 2, "error": "ValueError: generated",
+                                     "steps": [{"name": "plan", "rc": 2, "error": "ValueError: generated"},
+                                               {"name": "soak", "rc": 0}]}, "after the span stopped"),
+            ("text epoch", {"started": {"epoch_s": "\u0661\u0667\u0669\u0664\u0667\u0661\u0668\u0668\u0660\u0660"}},
+             "started.epoch_s"),
+        ]
+        # A journal beside the receipt carries the same refusals: a duplicated key, and a token index in digits
+        # outside ASCII, which ``int`` would read as 0.
+        soak_reference = span / "soak/soak_reference.json"
+        files = {receipt: original, events: original_events, soak_reference: soak_reference.read_bytes()}
+        token = original_events.index(b'"event_type": "token"')
+        line = original_events.rindex(b"\n", 0, token) + 1
+        token_row = json.loads(original_events[line:original_events.index(b"\n", token)])
+        token_row["metadata"]["index"] = "\u0660"
+        other = [
+            ("duplicate soak reference", soak_reference, b'{"generated":1,"generated":1,' + files[soak_reference][1:],
+             "duplicate keys"),
+            ("text token index", events, original_events[:line] + C.dump(token_row)
+             + original_events[original_events.index(b"\n", token) + 1:], "invalid writer token"),
         ]
         for args in ([*stage1, "--out", out], stage2):
             if args[0] == "stage2":
                 row.update(status="stage1_committed", stage1_sha256=stage1_sha)
                 ledger.write_bytes(C.dump(ledger_doc))
                 MR.git_commit(self.mini, "register generated stage-1 output")
-            for label, mutation, reason in cases:
+            for label, mutation, reason in cases + [(name, path, why) for name, path, _, why in other]:
                 with self.subTest(stage=args[0], label=label):
+                    for path, data in files.items():
+                        path.write_bytes(data)
                     receipt_doc = json.loads(original)
-                    if type(mutation) is bytes:
+                    if isinstance(mutation, Path):
+                        mutation.write_bytes(next(data for name, path, data, _ in other if name == label))
+                    elif type(mutation) is bytes:
                         receipt_doc.pop("rc", None)
                         receipt.write_bytes(b"{" + mutation + b"," + C.dump(receipt_doc)[1:])
                     else:
                         receipt.write_bytes(C.dump(dict(receipt_doc, **mutation)))
                     phase = "not_a_writer_phase" if label == "unknown phase" else label
-                    events.write_bytes(original_events + (C.dump({"event_type": "phase_start", "phase": phase,
-                                                                  "timestamp_s": 1, "metadata": {}})
-                                                          if reason == "invalid writer phase" else b""))
+                    if reason == "invalid writer phase":
+                        events.write_bytes(original_events + C.dump({"event_type": "phase_start", "phase": phase,
+                                                                     "timestamp_s": 1, "metadata": {}}))
                     with cli_fixture.spy_opens() as opened:
                         code, stdout, stderr = cli_fixture._cli_subprocess(args, repo=self.mini,
                                                                           extra={"host_probe": UUID_LINE,
@@ -1124,3 +1193,168 @@ class TwinThroughCLI(unittest.TestCase):
                     self.assertFalse([name for name in opened if "/hazards/meter/" in name or Path(name).name in
                                       ("power_trace.csv", "rich_telemetry.jsonl", "powermetrics.plist")])
                     self.assertFalse(out.exists() or private.exists() or (public / "PUBLIC.json").exists())
+
+
+@unittest.skipIf(R is None, "numpy is required")
+class WriterShapes(unittest.TestCase):
+    """RL-184 section 3.3 on generated custody. Each shape no pinned writer serializes refuses in the reader's
+    pre-pass, before a meter stream, a power trace or native telemetry opens. One file changes per case."""
+
+    @classmethod
+    def setUpClass(cls):
+        from joulewise.cadence_looks import fit_interim, time_fields
+
+        cls.F, cls.TF = fit_interim, time_fields
+        cls.root = Path(tempfile.mkdtemp(prefix="jw-writer-shapes-")).resolve()
+        cls.addClassCleanup(shutil.rmtree, cls.root, True)
+        tokens = {}
+        look_input, energy, _ = S.build("exact", tokens=tokens)
+        source = cls.root / "generated-bundles"
+        locators = S.write_custody(source, look_input, energy, tokens)
+        cls.roster = M.load_json(locators["roster.json"])[:1]
+        cls.rules = M.load_json(locators["rules_3_4.json"])
+        cls.span = source / cls.roster[0]["span_id"]
+        cls.source = source
+        control = cls.read()
+        leg = next(leg for leg in control["legs"] if leg["turn"])
+        cls.leg = cls.span / "legs" / leg["leg_id"]
+        cls.bundle = cls.leg / "runtime" / M.load_json(cls.leg / "leg_record.json")["result"]["bundle"]
+
+    @classmethod
+    def read(cls):
+        return R.read_look_input(cls.roster, R.span_dirs(cls.source, None), cls.rules)
+
+    def refuses(self, label, path, data, reason):
+        original = path.read_bytes()
+        self.addCleanup(path.write_bytes, original)
+        path.write_bytes(data)
+        late = AssertionError("a response-bearing file opened before the refusal")
+        with self.subTest(label=label), mock.patch.object(self.TF, "SpanMeter", side_effect=late), \
+                mock.patch.object(self.TF, "gpu_rows", side_effect=late), \
+                mock.patch.object(R, "native_states", side_effect=late), \
+                self.assertRaisesRegex((self.F.LookInputError, M.ManifestError), reason):
+            self.read()
+        path.write_bytes(original)
+
+    @staticmethod
+    def changed(path, change, pick=None):
+        """The file's bytes with one object changed: the document, or the first ``.jsonl`` row ``pick`` takes."""
+        if pick is None:
+            doc = json.loads(path.read_bytes())
+            change(doc)
+            return C.dump(doc)
+        rows = [json.loads(line) for line in path.read_bytes().splitlines() if line.strip()]
+        change(next(row for row in rows if pick(row)))
+        return b"".join(C.dump(row) for row in rows)
+
+    def test_the_generated_control_is_admitted(self):
+        self.assertEqual(len(self.read()["spans"]), 1)
+
+    def test_every_operational_file_is_strict_json(self):
+        files = {"leg record": self.leg / "leg_record.json", "leg summary": self.leg / "leg_summary.json",
+                 "soak reference": self.span / "soak/soak_reference.json", "config": self.bundle / "config.json",
+                 "turns": self.bundle / "outputs/align_turns.jsonl",
+                 "thermal journal": self.bundle / "outputs/align_thermal.jsonl", "events": self.bundle / "events.jsonl"}
+        for name, path in files.items():
+            data = path.read_bytes()
+            self.assertEqual(data[:1], b"{", name)
+            self.refuses(f"{name}: duplicate key", path, b'{"generated":1,"generated":1,' + data[1:], "duplicate keys")
+            for token in (b"NaN", b"Infinity", b"-Infinity", b"1e999"):
+                self.refuses(f"{name}: {token.decode()}", path, b'{"generated":' + token + b"," + data[1:], "nonfinite")
+            self.refuses(f"{name}: not JSON", path, b"{" + data, "not JSON as the pinned writers serialize it")
+            for encoding in ("utf-16", "utf-16-le", "utf-32-be", "utf-8-sig"):
+                self.refuses(f"{name}: {encoding}", path, data.decode("utf-8").encode(encoding),
+                             "not JSON as the pinned writers serialize it")
+
+    def test_step_exit_paths_refuse_through_the_reader(self):
+        receipt = self.span / "runner_receipt.json"
+        failed = {"name": "plan", "rc": 2, "error": "ValueError: generated"}
+        for label, change, reason in (
+                ("unexplained step exit", {"steps": [{"name": "soak", "rc": 73}]}, "invalid step return code"),
+                ("unpropagated failure", {"steps": [failed]}, "failed step without the span's error"),
+                ("step after the stop", {"rc": 2, "error": failed["error"], "steps": [failed, {"name": "soak", "rc": 0}]},
+                 "after the span stopped"),
+                ("roster text", {"roster": "L001"}, "invalid receipt roster")):
+            self.refuses(label, receipt, self.changed(receipt, lambda doc: doc.update(change)), reason)
+
+    def test_text_and_booleans_are_never_read_as_numbers(self):
+        """``float`` and ``int`` take digits outside ASCII, signs, spaces and underscores in text; the writers
+        serialize JSON numbers."""
+        receipt, record = self.span / "runner_receipt.json", self.leg / "leg_record.json"
+        soak, turns = self.span / "soak/soak_reference.json", self.bundle / "outputs/align_turns.jsonl"
+        thermal, events = self.bundle / "outputs/align_thermal.jsonl", self.bundle / "events.jsonl"
+        reading = lambda row: row.get("kind") == "reading"                                  # noqa: E731
+        token = lambda row: row.get("event_type") == "token"                                # noqa: E731
+        for label, path, change, pick, reason in (
+                ("receipt epoch text", receipt, lambda d: d["started"].update(epoch_s=str(d["started"]["epoch_s"])),
+                 None, "started.epoch_s"),
+                ("receipt epoch boolean", receipt, lambda d: d["started"].update(epoch_s=True), None, "started.epoch_s"),
+                ("soak reference text", soak, lambda d: d["sensors_c"].update(TV0h="\u0665\u0667"), None, "TV0h"),
+                ("cell prompt text", record, lambda d: d["spec"].update(prefill_tokens="\u0661\u0662"), None,
+                 "spec.prefill_tokens"),
+                ("cell prompt float", record, lambda d: d["spec"].update(prefill_tokens=12.0), None,
+                 "spec.prefill_tokens"),
+                ("cell prompt negative", record, lambda d: d["spec"].update(prefill_tokens=-1), None,
+                 "spec.prefill_tokens"),
+                ("recorded prefill text", record, lambda d: d["result"].update(prefill_tokens="12"), None,
+                 "result.prefill_tokens"),
+                ("turn prefill text", turns, lambda d: d["generation"].update(prefill_tokens="12"), bool,
+                 "align_turns: prefill_tokens"),
+                ("turn start text", turns, lambda d: d["start_stamp"].update(epoch_s=str(d["start_stamp"]["epoch_s"])),
+                 bool, "start_stamp.epoch_s"),
+                ("output ids text", turns, lambda d: d["generation"].update(output_token_ids="7" * 4096), bool,
+                 "output_token_ids"),
+                ("sensor text", thermal, lambda d: d["values"]["sensors"].update(Tf08="40.5"), reading, "Tf08"),
+                ("soak sensor text", thermal, lambda d: d["values"]["sensors"].update(TV0h="\u0664\u0660"), reading,
+                 "TV0h"),
+                ("fan boolean", thermal, lambda d: d["values"]["sensors"].update(F0Ac=True), reading, "F0Ac"),
+                ("journal stamp text", thermal, lambda d: d["finished"].update(wall_ns=str(d["finished"]["wall_ns"])),
+                 reading, "finished.wall_ns"),
+                ("token index text", events, lambda d: d["metadata"].update(index="\u0660"), token,
+                 "invalid writer token"),
+                ("token index boolean", events, lambda d: d["metadata"].update(index=False), token,
+                 "invalid writer token"),
+                ("token index float", events, lambda d: d["metadata"].update(index=0.0), token, "invalid writer token"),
+                ("token index negative", events, lambda d: d["metadata"].update(index=-1), token,
+                 "invalid writer token"),
+                ("turn index boolean", events, lambda d: d["metadata"].update(align_turn_index=False), token,
+                 "invalid writer token"),
+                ("token metadata list", events, lambda d: d.update(metadata=[]), token, "invalid writer token"),
+                ("token metadata null", events, lambda d: d.update(metadata=None), token, "invalid writer token"),
+                ("token without an index", events, lambda d: d["metadata"].pop("index"), token,
+                 "invalid writer token"),
+                ("turn end text", turns, lambda d: d["end_stamp"].update(epoch_s=str(d["end_stamp"]["epoch_s"])),
+                 bool, "end_stamp.epoch_s"),
+                ("journal clock text", thermal,
+                 lambda d: d["started"].update(monotonic_ns=str(d["started"]["monotonic_ns"])), reading,
+                 "started.monotonic_ns"),
+                ("token stamp text", events, lambda d: d.update(timestamp_s=str(d["timestamp_s"])), token,
+                 "invalid writer timestamp"),
+                ("token stamp boolean", events, lambda d: d.update(timestamp_s=True), token,
+                 "invalid writer timestamp"),
+                ("event type number", events, lambda d: d.update(event_type=5), token, "invalid writer event")):
+            self.refuses(label, path, self.changed(path, change, pick), reason)
+        self.refuses("event row list", events, b"[]\n" + events.read_bytes(), "invalid writer event")
+
+    def test_phase_labels_are_the_writer_grammar(self):
+        """``align_tool_<turn>_<call>`` is formatted from ``range`` and ``enumerate`` integers
+        (joulewise/align/apple/workload.py:587 at the three pins)."""
+        events = self.bundle / "events.jsonl"
+        original = events.read_bytes()
+
+        def phase(name, kind="phase_start", **more):
+            return original + C.dump({"event_type": kind, "phase": name, "timestamp_s": 1, "metadata": {}, **more})
+
+        for name in ("align_tool_0_0", "align_tool_12_3", "decode", "align_thermal_gate"):
+            events.write_bytes(phase(name))
+            with self.subTest(admitted=name):
+                self.read()
+        events.write_bytes(original)
+        for name in ("align_tool_1\u0662_0", "align_tool_0_1\u0662", "align_tool_\u0661_0", "align_tool_0_\uff11",
+                     "align_tool_01_0", "align_tool_0_00", "align_tool_-1_0", "align_tool_+1_0", "align_tool_1_ 0",
+                     "align_tool_1_0\n", "align_tool_1__0", "align_tool_1", "align_tool_1_0_0", "ALIGN_TOOL_1_0",
+                     "decode\n", " decode", "Decode", "not_a_writer_phase", "", None, 7, ["decode"]):
+            self.refuses(f"phase {name!r}", events, phase(name), "invalid writer phase")
+        self.refuses("phase kind", events, phase("decode", "phase_middle"), "invalid writer phase")
+        self.refuses("phase metadata", events, phase("decode", metadata=[]), "invalid writer phase")
+        self.refuses("phase stamp", events, phase("decode", timestamp_s="1"), "invalid writer timestamp")

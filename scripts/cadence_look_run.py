@@ -112,6 +112,46 @@ def _json(path):
         return M.strict_json(f.read())
 
 
+class WriterShape(F.LookInputError):
+    """A value no pinned writer serializes (RL-184 section 3.3). The look refuses on it whatever the leg's verdicts:
+    it is never read as a leg without a turn."""
+
+
+def _finite(value):
+    """Whether a decoded JSON value is a finite number: an int or a float, never a boolean or text."""
+    if type(value) not in (int, float):
+        return False
+    try:
+        return math.isfinite(float(value))
+    except OverflowError:
+        return False
+
+
+def _real(value, what):
+    """A JSON number as the pinned writers serialize one. Text, a boolean or a container is refused, never
+    converted: ``float`` and ``int`` accept digits outside ASCII, signs, spaces and underscores in a string."""
+    if not _finite(value):
+        raise WriterShape(f"{what}: not a finite number as the pinned writers serialize it")
+    return float(value)
+
+
+def _whole(value, what):
+    """A JSON integer as the pinned writers serialize one (a count or an index), at least zero."""
+    if type(value) is not int or value < 0:
+        raise WriterShape(f"{what}: not a count as the pinned writers serialize it")
+    return value
+
+
+def _member(doc, *keys):
+    """The nested member, or None where a level is absent, null or not an object: the reader's own rule for a
+    missing field then applies (a leg without a readable turn), never a conversion."""
+    for key in keys:
+        if not isinstance(doc, dict):
+            return None
+        doc = doc.get(key)
+    return doc
+
+
 def write_canonical(path, obj):
     data = F.dump(obj)
     with open(path, "wb") as f:
@@ -258,7 +298,10 @@ def native_states(bundle, lo, hi):
             m, e = _RICH_TS.search(line), _RICH_EL.search(line)
             if not m or not e:
                 raise F.LookInputError("rich_telemetry: a row without timestamp_s or elapsed_ns")
-            ends.append((float(m.group(1)), int(e.group(1))))
+            end = float(m.group(1))
+            if not math.isfinite(end):
+                raise F.LookInputError("rich_telemetry: a row with a non-finite timestamp_s")
+            ends.append((end, int(e.group(1))))
             del line
     with open(bundle / "raw/powermetrics.plist", "rb") as f:
         frames = [p for p in f.read().split(b"\0") if p.strip()]
@@ -283,7 +326,7 @@ def journal_readings(bundle, lo, hi, fan_keys):
     for r in _jsonl(bundle / "outputs/align_thermal.jsonl"):
         if r.get("kind") != "reading" or r.get("error"):
             continue
-        t = r["finished"]["wall_ns"] / 1e9
+        t = _real(r["finished"]["wall_ns"], "align_thermal: finished.wall_ns") / 1e9
         if not (lo <= t <= hi):
             continue
         v = r.get("values") or {}
@@ -292,13 +335,15 @@ def journal_readings(bundle, lo, hi, fan_keys):
         pmo = st.get("pm_observed_ns")
         fresh = type(pmo) is int and (r["started"]["monotonic_ns"] - pmo) <= PM_FRESH_S * 1e9
         fans = [sen.get(k) for k in fan_keys]
-        fan = (sum(float(x) for x in fans) / len(fans)) if fans and all(x is not None for x in fans) else None  # R-7
+        fan = ((sum(_real(x, "align_thermal: fan reading") for x in fans) / len(fans))
+               if fans and all(x is not None for x in fans) else None)  # R-7
         lvl = st.get("os_level")
         out.append({"t_s": t, "os_level": lvl if type(lvl) is int else None,
                     "pm_state": st.get("pm_state") if isinstance(st.get("pm_state"), str) else None,
                     "pm_fresh": bool(fresh),
-                    "tf08_c": None if sen.get("Tf08") is None else float(sen["Tf08"]), "fan_rpm": fan,
-                    "tv0h_c": None if sen.get("TV0h") is None else float(sen["TV0h"])})
+                    "tf08_c": None if sen.get("Tf08") is None else _real(sen["Tf08"], "align_thermal: Tf08"),
+                    "fan_rpm": fan,
+                    "tv0h_c": None if sen.get("TV0h") is None else _real(sen["TV0h"], "align_thermal: TV0h")})
     out.sort(key=lambda x: x["t_s"])
     return out
 
@@ -314,7 +359,8 @@ def token_stamps(bundle):
                 md = e.get("metadata") or {}
                 if md.get("align_turn_index", 0) not in (0, None):
                     raise F.LookInputError("events: a multi-turn leg")
-                toks.append((int(md["index"]), float(e["timestamp_s"])))
+                toks.append((_whole(md["index"], "events: token index"),
+                             _real(e["timestamp_s"], "events: token timestamp_s")))
             del e
     toks.sort()
     if [i for i, _ in toks] != list(range(len(toks))):
@@ -330,15 +376,20 @@ def build_turn(bundle, result, fan_keys):
     if len(turns) != 1:
         raise F.LookInputError("align_turns: not one turn")
     tr = turns[0]
-    ts = float(tr["start_stamp"]["epoch_s"])
+    ts = _real(tr["start_stamp"]["epoch_s"], "align_turns: start_stamp.epoch_s")
+    if type(tr["generation"]["output_token_ids"]) is not list:
+        raise WriterShape("align_turns: output_token_ids is not a list")
     n_out = len(tr["generation"]["output_token_ids"])          # LENGTH only
     P = tr["generation"].get("prefill_tokens", result.get("prefill_tokens"))
+    if P is None:
+        raise KeyError("prefill_tokens")          # no recorded prefill: the leg has no readable turn
+    P = _whole(P, "align_turns: prefill_tokens")
     del turns, tr
     tok = token_stamps(bundle)
     if len(tok) != n_out or not tok:
         raise F.LookInputError("token count differs from the output length")
     N = len(tok)
-    segs = [{"seg": 0, "kind": "prefill", "n_tokens": int(P), "edge_lo": None, "edge_hi": None, "tok_first": None,
+    segs = [{"seg": 0, "kind": "prefill", "n_tokens": P, "edge_lo": None, "edge_hi": None, "tok_first": None,
              "tok_last": None, "wall_start_s": ts, "wall_end_s": tok[0], "first_token_s": None}]
     for k in range(N // F.BLOCK):
         lo = 0 if k == 0 else F.BLOCK * k - 1
@@ -355,7 +406,7 @@ def build_turn(bundle, result, fan_keys):
         tails.append({"prefix_len": L, "kind": "prefix_tail", "tok_first": a, "tok_last": hi, "n_tokens": L - a,
                       "edge_lo": lo, "edge_hi": hi, "wall_start_s": tok[lo], "wall_end_s": tok[hi],
                       "first_token_s": tok[a]})
-    return {"prefill_tokens": int(P), "decode_tokens": N, "turn_start_s": ts, "first_token_s": tok[0],
+    return {"prefill_tokens": P, "decode_tokens": N, "turn_start_s": ts, "first_token_s": tok[0],
             "last_token_s": tok[-1], "segments": segs, "prefix_tails": tails,
             "journal": journal_readings(bundle, ts - JOURNAL_PRE_S, tok[-1] + JOURNAL_POST_S, fan_keys),
             "native_pm": native_states(bundle, ts, tok[-1])}
@@ -473,13 +524,17 @@ def read_span(sdir, entry, rules34, fan_keys, ruled=None):
     selected = I34.keys(_json(ROOT / I34.RUNTIME_CONFIG)["sensors"])
     replayed, _, _ = I34.judge_span(sdir, entry["span_id"], selected)
     try:
-        soak = float(_json(sdir / "soak/soak_reference.json")["sensors_c"]["TV0h"])
+        soak = _json(sdir / "soak/soak_reference.json")["sensors_c"]["TV0h"]
+    except M.ManifestError:
+        raise                                     # duplicate keys or a nonfinite number: never an absent reference
     except (OSError, KeyError, TypeError, ValueError):
         soak = None
+    if soak is not None:
+        soak = _real(soak, "soak_reference: sensors_c.TV0h")
     power = "high_power" if entry["block_id"].startswith("hp-") else "automatic"
     span = {"span_id": entry["span_id"], "block_id": entry["block_id"],
             "phase": "extension" if entry["role"] == "describe" else "development", "role": entry["role"],
-            "power_mode": power, "t0_epoch_s": float(epoch_s),
+            "power_mode": power, "t0_epoch_s": _real(epoch_s, "runner receipt: started.epoch_s"),
             "t0_local_date": day, "soak_reference_tv0h_c": soak, "marks": [],
             "meter_offsets_ns": dict(zip(("header", "end"), meter_offsets(sm) if sm else (None, None))),
             "soak_receipt": I34.soak_fields(receipt),
@@ -526,7 +581,7 @@ def read_span(sdir, entry, rules34, fan_keys, ruled=None):
         if bundle is not None:
             try:
                 turn = build_turn(bundle, result, fan_keys)
-            except M.ManifestError:
+            except (M.ManifestError, WriterShape):
                 raise
             except (OSError, ValueError, KeyError, TypeError, IndexError) as exc:
                 # A G0 timeout (cadence_leg.py: a bundle and no turn) is a ruled exclusion (rules 1 and 2), not a
@@ -546,7 +601,8 @@ def read_span(sdir, entry, rules34, fan_keys, ruled=None):
             inc[rule] = False
             ruled_x = {"rule": rule, "ruling": ruling}
         legs.append({"leg_key": key, "span_id": entry["span_id"], "leg_id": leg_id, "leg_type": leg_type,
-                     "cell_prompt_tokens": int(spec["prefill_tokens"]), "g0_role": spec.get("g0_role"),
+                     "cell_prompt_tokens": _whole(spec["prefill_tokens"], "leg record: spec.prefill_tokens"),
+                     "g0_role": spec.get("g0_role"),
                      "inclusion": inc, "turn": turn, "trace_holes": holes, "ruled_exclusion": ruled_x})
     # RL-161 §4 (Mythos cold seats 7 and N3): the leg that supplied the span's reference, excluded AT THE LOOK (any of
     # the six verdicts, rules 3 and 4 included), marks the span when a consumer is on its roster. The supplier is
@@ -584,33 +640,102 @@ def read_look_input(roster, sdir_of, rules34, fan_keys=FAN_KEYS, ruled=None):
 
 _WRITER_PHASES = {"tokenize", "generation_setup", "prefill", "decode", "align_thermal_gate", "align_thermal_hold",
                   "align_context_check", "align_context_stop_observation", "align_g0_unreleased_stop_observation"}
+# joulewise/align/apple/workload.py:587 at the three pins formats ``range`` and ``enumerate`` integers: ASCII digits,
+# no sign, no leading zero. ``\d`` would also take every other Unicode decimal digit.
+_TOOL_PHASE = re.compile(r"align_tool_(0|[1-9][0-9]*)_(0|[1-9][0-9]*)")
+
+
+def _writer_json(path):
+    """One operational file decoded as the pinned writers serialize it: ``M.strict_json`` on the file, or on each
+    line of a ``.jsonl``; None when the file is absent. Duplicate keys, a nonfinite number or text that is not
+    UTF-8 JSON refuses the look (ManifestError)."""
+    path = Path(path)
+    if not path.is_file():
+        return None
+    data = path.read_bytes()
+    if path.suffix == ".jsonl":
+        return [M.strict_json(line) for line in data.split(b"\n") if line.strip(b" \t\r")]
+    return M.strict_json(data)
+
+
+def _check_event(event):
+    """One ``events.jsonl`` row as ``joulewise/bundle.py`` ``_append_event_record`` writes it at the three pins: a
+    string type, a finite numeric stamp, metadata that is an object. A token row's index is an integer and a phase
+    row names a phase the leg runtime opens."""
+    if not isinstance(event, dict) or not isinstance(event.get("event_type"), str):
+        raise F.LookInputError("events: invalid writer event")
+    kind, metadata = event["event_type"], event.get("metadata")
+    if "timestamp_s" in event or kind in ("token", "phase_start", "phase_end"):
+        if not _finite(event.get("timestamp_s")):
+            raise F.LookInputError("events: invalid writer timestamp")
+    if kind == "token":
+        # joulewise/adapters/mlx_runtime.py:916 at the three pins: ``{"index": index}``, an enumerated integer. An
+        # absent or null ``align_turn_index`` is turn 0 (RL-184 section 3.1, T05); a recorded one is an integer.
+        # Both stage-2 readers index the metadata, so a token row without it would fail under the reservation.
+        if (not isinstance(metadata, dict) or type(metadata.get("index")) is not int or metadata["index"] < 0
+                or (metadata.get("align_turn_index") is not None
+                    and (type(metadata["align_turn_index"]) is not int or metadata["align_turn_index"] < 0))):
+            raise F.LookInputError("events: invalid writer token")
+    if not kind.startswith("phase_"):
+        return
+    phase = event.get("phase")
+    if (kind not in ("phase_start", "phase_end") or not isinstance(phase, str)
+            or (phase not in _WRITER_PHASES and not _TOOL_PHASE.fullmatch(phase))
+            or (metadata is not None and not isinstance(metadata, dict))):
+        raise F.LookInputError("events: invalid writer phase")
 
 
 def validate_runtime_bundles(roster, sdir_of):
+    """RL-184 section 3.3, in both stages and before any trace, telemetry or meter file opens. For every rostered
+    span: the receipt has a pinned writer's exit path and soak history (``inclusion_34.check_writer_receipt``);
+    every bundle locator is the literal F01 spelling; every operational file the look reads or hashes decodes
+    without a duplicate key or a nonfinite number; every event row carries the writers' types."""
     for span in roster:
-        receipt, bundles = M.check_runtime_bundles(sdir_of(span["span_id"]))
+        sdir = Path(sdir_of(span["span_id"]))
+        receipt, bundles = M.check_runtime_bundles(sdir)
         try:
             I34.check_writer_receipt(receipt)
         except ValueError as exc:
             raise F.LookInputError(str(exc)) from None
-        for bundle in bundles:
-            events = bundle / "events.jsonl"
-            if not events.is_file():
-                continue  # an uncompleted bundle may have no events
-            for event in _jsonl(events):
-                kind = event.get("event_type")
-                if "timestamp_s" in event or kind in ("token", "phase_start", "phase_end"):
-                    stamp = event.get("timestamp_s")
-                    if type(stamp) not in (int, float) or not math.isfinite(stamp):
-                        raise F.LookInputError("events: invalid writer timestamp")
-                if not isinstance(kind, str) or not kind.startswith("phase_"):
-                    continue
-                phase, metadata = event.get("phase"), event.get("metadata")
-                if (kind not in ("phase_start", "phase_end") or not isinstance(phase, str)
-                        or (phase not in _WRITER_PHASES
-                            and not re.fullmatch(r"align_tool_(0|[1-9][0-9]*)_(0|[1-9][0-9]*)", phase))
-                        or (metadata is not None and not isinstance(metadata, dict))):
-                    raise F.LookInputError("events: invalid writer phase")
+        decoded = {rel: _writer_json(sdir / rel) for rel in M.operational_paths(sdir)}
+        _check_values(receipt, decoded, [bundle.relative_to(sdir).as_posix() for bundle in bundles])
+
+
+def _check_values(receipt, decoded, bundles):
+    """Every value the reader takes as a number, a count or a length has the writers' JSON type, checked here so
+    that no trace or meter file opens first. A recorded value is never converted from text or a boolean."""
+    def number(value, what):
+        if value is not None:
+            _real(value, what)
+
+    def count(value, what):
+        if value is not None:
+            _whole(value, what)
+
+    number(_member(receipt, "started", "epoch_s"), "runner receipt: started.epoch_s")
+    number(_member(decoded.get("soak/soak_reference.json"), "sensors_c", "TV0h"), "soak_reference: sensors_c.TV0h")
+    for leg_id in receipt["roster"]:
+        record = decoded.get(f"legs/{leg_id}/leg_record.json")
+        count(_member(record, "spec", "prefill_tokens"), "leg record: spec.prefill_tokens")
+        count(_member(record, "result", "prefill_tokens"), "leg record: result.prefill_tokens")
+    for bundle in bundles:
+        for event in decoded.get(f"{bundle}/events.jsonl") or []:
+            _check_event(event)
+        for row in decoded.get(f"{bundle}/outputs/align_turns.jsonl") or []:
+            for stamp in ("start_stamp", "end_stamp"):
+                number(_member(row, stamp, "epoch_s"), f"align_turns: {stamp}.epoch_s")
+            count(_member(row, "generation", "prefill_tokens"), "align_turns: prefill_tokens")
+            ids = _member(row, "generation", "output_token_ids")
+            if ids is not None and type(ids) is not list:
+                raise WriterShape("align_turns: output_token_ids is not a list")
+        for row in decoded.get(f"{bundle}/outputs/align_thermal.jsonl") or []:
+            if _member(row, "kind") != "reading":
+                continue
+            for stamp in ("started", "finished"):
+                for clock in ("wall_ns", "monotonic_ns"):
+                    number(_member(row, stamp, clock), f"align_thermal: {stamp}.{clock}")
+            for key in ("Tf08", "TV0h", *FAN_KEYS):
+                number(_member(row, "values", "sensors", key), f"align_thermal: {key}")
 
 
 def stage2_preflight(stage1_out, sdir_of):
