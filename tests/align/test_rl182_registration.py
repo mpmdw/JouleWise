@@ -269,6 +269,44 @@ def unrelated():
         c1 = self.commit(self.SOURCE.replace(b"return item  # holm-a\n", b"return item  # holm-a\r\n"))
         self.assertEqual(list(self.compare(c1, 1)["protected_changes"]), ["_holm"])
 
+    def test_first_decorator_is_hashed_after_form_feed_indentation_reset(self):
+        body = b"def _holm(item):\n    return item  # holm-a\n"
+        helpers = b"def keep(f): return f\ndef twice(f): return lambda: 2 * f()\n"
+        for prefix, continuation in (
+            (b"\x0c", b"@keep\n"),
+            (b" \t\x0c", b"@(\n    keep\n    @ keep\n)\n"),
+        ):
+            with self.subTest(prefix=prefix, continuation=continuation):
+                old = prefix + b"@keep\n" + continuation + body
+                new = prefix + b"@twice\n" + continuation + body
+                w1 = self.commit(helpers + self.SOURCE.replace(body, old))
+                c1 = self.commit(helpers + self.SOURCE.replace(body, new))
+                for left, right, before, after in ((w1, c1, old, new), (c1, w1, new, old)):
+                    self.assertEqual(self.compare(right, 1, w1=left)["protected_changes"], {
+                        "_holm": {"w1": hashlib.sha256(before).hexdigest(),
+                                  "c1": hashlib.sha256(after).hexdigest()},
+                    })
+
+    def test_indirect_module_namespace_rebindings_fail_closed(self):
+        base = self.SOURCE.replace(b"S_SUPERIORITY_ALPHA = 'toy-level-a'", b"S_SUPERIORITY_ALPHA = 0.25")
+        w1 = self.commit(base)
+        for tail, name in (
+            (b"import sys\nsys.modules[__name__].S_SUPERIORITY_ALPHA = 0.75\n", "S_SUPERIORITY_ALPHA"),
+            (b"import sys as system\nrefs = system.modules\nmodule = refs[__name__]\ndel module._holm\n", "_holm"),
+            (b"from sys import modules as registry\nmodule = registry[__name__]\n"
+             b"module.__dict__['_' + 'holm'] = unrelated\n", None),
+            (b"from builtins import globals as namespace\ndef change():\n"
+             b"    namespace()['_holm'] = unrelated\nchange()\n", None),
+            (b"def change():\n    _holm.__globals__.update(_holm=unrelated)\nchange()\n", None),
+            (b"import sys as system\nlookup = getattr\nput = setattr\n"
+             b"put(lookup(system, 'mod' + 'ules')[__name__], '_' + 'holm', unrelated)\n", None),
+        ):
+            with self.subTest(tail=tail):
+                rebound = self.commit(base + b"\n" + tail)
+                for left, right in ((w1, rebound), (rebound, w1), (rebound, rebound)):
+                    error = self.compare(right, 2, w1=left)["error"]
+                    self.assertIn(name or "namespace", error)
+
     def test_missing_duplicate_and_rebound_bindings_fail_closed(self):
         for source in (
             self.SOURCE.replace(b"def _holm(item):\n    return item  # holm-a\n", b""),

@@ -4,12 +4,14 @@
 import argparse
 import ast
 import hashlib
+from io import BytesIO
 import json
 import os
 from pathlib import Path
 import re
 import subprocess
 import symtable
+import tokenize
 import unicodedata
 import warnings
 
@@ -23,6 +25,13 @@ PROTECTED = (
 )
 FUNCTION = (ast.FunctionDef, ast.AsyncFunctionDef)
 PHYSICAL_LINES = re.compile(rb"(?<=\n)|(?<=\r)(?!\n)")
+NAMESPACE_APIS = frozenset({
+    "exec", "eval", "globals", "locals", "vars", "getattr", "setattr", "delattr",
+    "__import__", "__builtins__", "__getattribute__", "__setattr__", "__delattr__",
+})
+NAMESPACE_ATTRIBUTES = NAMESPACE_APIS | {
+    "modules", "__dict__", "__globals__", "f_globals", "f_locals", "import_module",
+}
 
 
 class InvalidInput(ValueError):
@@ -154,13 +163,24 @@ class ModuleBindings(ast.NodeVisitor):
         self.record(node.rest, node)
         self.generic_visit(node)
 
-    def visit_Call(self, node):
-        if isinstance(node.func, ast.Name):
-            if node.func.id in {"exec", "eval", "globals", "locals"} or (
-                node.func.id == "vars" and not node.args and not node.keywords
-            ):
-                raise InvalidInput("ambiguous dynamic module namespace access")
-        self.generic_visit(node)
+
+def reject_dynamic_namespace(module):
+    """Refuse indirect namespace access before it can escape lexical binding checks."""
+    ambiguous_access = False
+    for node in ast.walk(module):
+        if isinstance(node, ast.Attribute):
+            if isinstance(node.ctx, (ast.Store, ast.Del)) and node.attr in PROTECTED:
+                raise InvalidInput(f"{node.attr} has an ambiguous namespace write")
+            if node.attr in NAMESPACE_ATTRIBUTES:
+                ambiguous_access = True
+        elif isinstance(node, ast.Name) and isinstance(node.ctx, ast.Load):
+            if node.id in NAMESPACE_APIS:
+                ambiguous_access = True
+        elif isinstance(node, ast.ImportFrom):
+            if any(alias.name in NAMESPACE_ATTRIBUTES for alias in node.names):
+                ambiguous_access = True
+    if ambiguous_access:
+        raise InvalidInput("ambiguous dynamic module namespace access")
 
 
 def reject_nested_global_writes(scope):
@@ -173,11 +193,34 @@ def reject_nested_global_writes(scope):
         reject_nested_global_writes(child)
 
 
-def source_span(lines, statement, previous_end, next_start):
+def module_decorator_lines(source):
+    """Locate module-scope decorator tokens at the start of logical lines."""
+    # Tokenize with universal newlines and slice the original bytes separately.
+    stream = BytesIO(re.sub(rb"\r\n?", b"\n", source))
+    decorators = set()
+    depth = 0
+    at_start = True
+    for token in tokenize.tokenize(stream.readline):
+        if token.type == tokenize.INDENT:
+            depth += 1
+        elif token.type == tokenize.DEDENT:
+            depth -= 1
+        elif token.type == tokenize.NEWLINE:
+            at_start = True
+        elif token.type not in (tokenize.ENCODING, tokenize.NL, tokenize.COMMENT):
+            if at_start and depth == 0 and token.exact_type == tokenize.AT:
+                decorators.add(token.start[0] - 1)
+            at_start = False
+    return decorators
+
+
+def source_span(lines, statement, previous_end, next_start, decorator_lines):
     start = statement.lineno - 1
     if isinstance(statement, FUNCTION) and statement.decorator_list:
-        # A parenthesized decorator can start before its AST expression's line.
-        start = next(index for index in range(previous_end, start) if lines[index].startswith(b"@"))
+        starts = sorted(line for line in decorator_lines if previous_end <= line < start)
+        if len(starts) != len(statement.decorator_list):
+            raise InvalidInput("protected decorator boundaries are ambiguous")
+        start = starts[0]
     end = statement.end_lineno
     if start < previous_end or end >= next_start:
         raise InvalidInput("protected binding shares a physical line with another statement")
@@ -204,11 +247,13 @@ def protected_sources(source):
             module = ast.parse(source, filename="<scorer>")
             compile(module, "<scorer>", "exec", dont_inherit=True)
             scopes = symtable.symtable(source, "<scorer>", "exec")
-    except (SyntaxError, ValueError, RecursionError):
+            decorator_lines = module_decorator_lines(source)
+    except (SyntaxError, ValueError, RecursionError, tokenize.TokenError):
         raise InvalidInput("scorer is not valid Python source") from None
     bindings = ModuleBindings()
     bindings.visit(module)
     reject_nested_global_writes(scopes)
+    reject_dynamic_namespace(module)
 
     lines = PHYSICAL_LINES.split(source.removeprefix(b"\xef\xbb\xbf"))
     definitions = {}
@@ -232,8 +277,8 @@ def protected_sources(source):
             following = module.body[index + 1:index + 2]
             next_start = following[0].lineno if following else len(lines) + 1
             try:
-                definitions[name] = source_span(lines, statement, previous_end, next_start)
-            except (InvalidInput, StopIteration):
+                definitions[name] = source_span(lines, statement, previous_end, next_start, decorator_lines)
+            except InvalidInput:
                 raise InvalidInput(f"{name} has an ambiguous source span") from None
         previous_end = statement.end_lineno
 
