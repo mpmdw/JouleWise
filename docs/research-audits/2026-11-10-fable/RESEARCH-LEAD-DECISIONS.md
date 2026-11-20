@@ -23278,3 +23278,52 @@ Section 2's rehearsal and section 7's clause do not gate the signature.
 - A series kit design in which a fold's training rows share one decode count.
 - An instrument cell left empty by the two losses.
 - The W1 cold pass, when the candidate is promoted.
+
+# RL-194. `lm-interim-01`'s stage 1 may meet RL-184 §3.3 by content hash: every file either stage or the twin opens is pinned in the manifest from the Check-time custody hashes, and admissibility is judged once on those bytes, on operational files only. The principle carries to the description looks at their lock. It does not replace code-level refusal in C1's release
+
+Research lead (Fable 5.2), Fri Nov 20 09:26 PST 2026 (from `date`). Answers the lead's architecture question on PR #795. RL-180, RL-184 and RL-189 stand except where "Amends" says otherwise.
+
+**Read.** RL-184 §3.3 (RLD:20954 onward, on the audit branch as fetched today) and its section headings. The first 30 lines of `/Volumes/JW-EXT/scratch/d-look-stack-base-sync/PIN-TABLE.md`. The lead's four-point proposal.
+**Checked myself.** The pin table lists 11 of 11 roster spans, each with a public close and Check item. RL-184 §3.3 F01 item 2 already lets "the lead's pre-run check" stand in for stage-1 enforcement.
+**Not checked.** I did not re-read RL-180, the row-7 desk records, #795's code or its suite. I did not verify any file hash. Section 2's RL-180 answer rests on RL-184's uses of it; a clause of RL-180 that conflicts returns to me.
+**Not done.** No commit, run or SSH. No custody, energy, meter or restricted file was opened. The only file written is this one.
+
+## 1. (a) Yes, on six conditions
+
+**Why it satisfies §3.3.** The rule's purpose is that no file a pinned writer did not write reaches a read, and that both sides return one record on what does. A general validator was the only way to promise that while the inputs were unknown. They are now eleven collected spans. Equality to a hash taken at each span's Check, before anyone proposed this, is a stronger promise about those bytes than any grammar.
+
+| # | Condition |
+|---|---|
+| 1 | **The pin list covers every roster file that stage 1, stage 2 or the twin opens**, not stage 1's alone. Any open of a roster file outside the list refuses |
+| 2 | **Each pin chains to a public Check item:** the file's sha256 is in the span's offload manifest, whose sha256 is in that Check. No pin is computed fresh from today's copy. The cold seat checks the chain |
+| 3 | **Hash the bytes that are parsed.** Each file is read once, hashed, and those same bytes are used. A mismatch, a missing file or a symlink refuses before any other read and before the reservation, and consumes nothing |
+| 4 | **The twin checks the pins itself**, from the manifest, and raises on a mismatch |
+| 5 | **The once-only review opens operational files only** (receipts, leg records, path strings). Streams are bound by hash and are not opened by the seat. Its criteria are §3.3's rule and F01 to F05 as written; nothing is re-decided on seeing the files |
+| 6 | **An inadmissible real file comes to me as a count and a shape** before anything is changed, as §3.3 already says. Neither the seat nor the lead edits the roster |
+
+**The record (3) produces.** One committed JSON in the cold-pass packet, named in my cold-pass ruling by sha256:
+- **Per span:** span id, runner pin, close and Check item numbers, offload-manifest sha256, and for every pinned file its relative path, sha256 and size.
+- **Per receipt:** the shape found for each of F01 to F05 (bundle spelling class, `soak_attempts` state, attempt keys, history coherence, kind values), the writer file and line at that span's pin that produces it, and the verdict `admissible` or `inadmissible`.
+- **Per source:** the row-7 desk record's verdict and the executing seat's, side by side. They agree on all eleven or the disagreement returns to me.
+- **Header:** the manifest pin list's sha256, the seat's model and family (not the builder's), the command it ran, the list of files it opened, and the date.
+
+## 2. (b) What else changes
+
+- **RL-184 §3.3:** the rule sentence and F01 to F05 stand as the definition of admissible and of what both sides return. Only the enforcement clause changes: "the primary refuses in stage 1" is met by conditions 1 to 3 plus the record. The builder's closed list from the writer code shrinks to the shapes present in the eleven spans.
+- **The 101,889-case suite** stops gating. Acceptance is: agreement of primary and twin on every shape the record lists; the hash refusals of condition 3 (one flipped byte, missing file, symlink, unlisted open); the grammar validator still running. A writer-impossible shape that is not in a pinned file is a low finding and blocks nothing.
+- **RL-180:** nothing but condition 4. The single look, `twin_agrees` and freeze 2 are unchanged. The manifest is a draft, so adding the pins is an edit before commitment (RL-189 §3).
+- **A changed roster** (a span added or replaced) redoes the pins and the record for the changed files, before the manifest is final.
+
+## 3. (c) Where the principle applies
+
+**The principle:** the rule for a valid input is written before the data; when the inputs are closed before the look's manifest is final, the rule may be checked once on those bytes instead of by a general validator.
+
+| Look | Applies? | Note |
+|---|---|---|
+| `lm-inst-01` | **Yes, now** | Collection is complete and the manifest may follow collection (RL-190 §3.4). Criteria are the seven stage-1 predicates in RL-193 §4's order |
+| `lm-stab-01`, `lm-stab-02` | **Yes, at the data lock** | Not before: the roster is still growing. Each new span's Check hash is recorded as it closes |
+| Transfer block | **At its lock, for integrity and operational shape only** | Its admissibility criteria are fixed in its registration before its first span. The scorer's own refusals stay in code |
+| C1's release | **No** | Its receipt is signed before any series member exists, so no input hash can be in it, and S's exactness needs eligibility decided by frozen code, not by a seat after capture. RL-191 §2.2's hash-equal inventory and structural refusals stay as they are |
+
+**Amends.** RL-184 §3.3's enforcement clause, as section 2 has it. **Blind status.** Blind.
+**What comes back to me.** An inadmissible or disputed span; a file either stage opens that has no Check-time hash; a conflict with RL-180's text.
