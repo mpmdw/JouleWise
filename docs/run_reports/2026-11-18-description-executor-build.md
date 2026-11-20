@@ -1386,3 +1386,55 @@ stage-1 fixture correction awaits its independently hashed
 successor. The eight v5 entries are byte-identical, and the
 53 protected entries match the intake branch.
 [Earlier regression replay](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/v5-audit1-previous-regressions.log) · [Protected paths](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/v5-audit1-protected.tsv) · [Draft PR #868](https://github.com/mpmdw/JouleWise/pull/868)
+
+## 2026-11-20 audit 2 recorded intervals and RL-194 intake
+
+The worktree, remote branch, and draft PR #868 agreed at
+`02501d06d8c101381f8cf2cbd296628b0f9c789e` at intake.
+The verified omission left 599 declared intervals against
+600 recorded intervals. The two scorers returned 0.998333 W
+for GPU and 2.995 W for rail sum where the complete recording
+gives 2 W and 6 W.
+[Audit 2 report](/Volumes/JW-EXT/scratch/pl-d-desc-looks-executor/done-v5-audit-2/FINAL-MESSAGE.md) · [Audit reproduction output](/Volumes/JW-EXT/scratch/pl-d-desc-looks-executor/audit-2-repro/ledger.log)
+
+`6b49010d6` builds the scoring index from recognized recorded
+rail intervals. The normalized support now has to account for
+every such interval encountered by the index. An omission, an
+endpoint substitution, or a declared gap that covers a recorded
+interval refuses during metadata indexing, before retrieving
+power values. Duplicate support bounds retain the existing
+structural refusal. Both authenticated scorers reproduced the
+audit's healthy 2 W and 6 W control, then refused its omission.
+The sweep tests hold, prefill, decode, tail, and recovery with
+an omitted, duplicated, or shifted bound and a false gap on
+each component. All three focused methods passed.
+[Builder regressions](../../tests/test_cadence_description_rail_gaps.py) · [Focused log](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/v5-audit2-focused.log) · [Frozen selection](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/v5-audit2-frozen-focused.log)
+
+### NEEDS_SPEC for the remaining RL-194(c) gates
+
+1. The protected v2 description manifest rejects an `inputs`
+   field. The integration owner needs to name the authorized
+   closed manifest reference or envelope and the Check-time
+   input inventory for `lm-inst-01`, including the native
+   recorded inputs behind the support projection. Draft
+   PR #795 uses `inputs.pins` and a Check-linked pin list for
+   the interim look. The instrument look can reuse that
+   representation and its guarded byte reader if the owner
+   adopts it on an accepted base.
+2. The current freeze binds the attestation in the ledger and
+   asserts zero scoring-file opens in stage 1. It needs an
+   independently hashed successor for manifest pinning,
+   hash-first stream reads, and refusal before reservation.
+   That successor needs to distinguish the registered nominal
+   interval grid from a separate ledger of realized observations.
+   The present normalized fixtures use the nominal grid even
+   when the corresponding recorded rows are absent. Full
+   equality belongs at the new recorded-ledger intake.
+
+The pushed change fixes the verified silent-discard class at
+scoring. It leaves the manifest and pre-reservation gates on
+their existing contract. Host ID remains tied to the PR #795
+integration. The eight v5 entries and all 53 protected paths
+match intake. The read-back PR records verification on this
+head.
+[RL-194 §3](/Volumes/JW-EXT/scratch/fable-rl194.md#3-c-where-the-principle-applies) · [Manifest shape proof](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/v5-audit2-manifest-shape.log) · [Protected paths](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/v5-audit2-protected.tsv) · [Draft PR #868](https://github.com/mpmdw/JouleWise/pull/868)
