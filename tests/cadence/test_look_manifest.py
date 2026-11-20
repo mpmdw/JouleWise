@@ -606,7 +606,8 @@ class RepoCheck(Base):
                  "scripts/cadence_legs_runner.py": runner_src,
                  "docs/process/cadence/looks/lm-interim-01.output.schema.json": "{}\n",
                  "docs/process/cadence/looks/lm-interim-01.stage1.schema.json": "{}\n",
-                 "docs/process/cadence/looks/lm-interim-01.coefficients.schema.json": "{}\n"}
+                 "docs/process/cadence/looks/lm-interim-01.coefficients.schema.json": "{}\n",
+                 lm.INPUTS_PATH: (REPO / lm.INPUTS_PATH).read_text(encoding="utf-8")}       # RL-194: the pinned inputs
         doc0 = draft()
         for where, rel, _ in lm.code_refs(doc0):
             if where.startswith("reads.blocks"):

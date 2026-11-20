@@ -128,7 +128,8 @@ def stage_span_dirs(argv):
     if not argv or argv[0] not in ("stage1", "stage2") or "--custody" not in argv:
         return None
     try:
-        source = json.loads(Path(argv[argv.index("--roster" if argv[0] == "stage1" else "--stage1") + 1]).read_bytes())
+        source = json.loads(custody_pin_fixture.quiet_bytes(
+            argv[argv.index("--roster" if argv[0] == "stage1" else "--stage1") + 1]))
         ids = [span["span_id"] for span in (source if argv[0] == "stage1" else source["roster"]["spans"])]
     except (OSError, ValueError, KeyError, TypeError, IndexError):
         return None
@@ -187,8 +188,11 @@ def write_pins(root, span_dirs=None):
     one, a placeholder list no roster names) and write a RUN_STATE whose Check items those pins chain to. Returns
     the inputs file's sha256, for the manifest's ``inputs.pins``."""
     pins = custody_pin_fixture.synthetic_pins(span_dirs) if span_dirs else custody_pin_fixture.placeholder_pins()
-    (root / lm.INPUTS_PATH).write_bytes(custody_pin_fixture.dump(pins))
-    (root / "RUN_STATE.md").write_text(custody_pin_fixture.run_state(pins), encoding="utf-8")
+    for rel, data in ((lm.INPUTS_PATH, custody_pin_fixture.dump(pins)),
+                      ("RUN_STATE.md", custody_pin_fixture.run_state(pins).encode("utf-8"))):
+        target = root / rel
+        target.unlink(missing_ok=True)       # never write through a hard link into the checkout (frozen_copy)
+        target.write_bytes(data)
     return lm.sha256_file(root / lm.INPUTS_PATH)
 
 
@@ -241,9 +245,9 @@ def qualification_files():
 
 def frozen_copy(test):
     """The repository's look-relevant trees (hard links where the filesystem allows) with the lead's freeze commit
-    applied to the copy's manifest and LOOKS.json (status committed, Q11's note disposed, the row's hash), so the
-    look's tests can be run on the frozen state (Mythos round-4 N2). The two edited files are real copies, so the
-    edit never reaches the checkout."""
+    applied to the copy's manifest and LOOKS.json (status committed, Q11's note disposed, the row's hash) and its
+    inputs file filled (RL-194), so the look's tests can be run on the frozen state (Mythos round-4 N2). The edited
+    files are real copies, so the edit never reaches the checkout."""
     root = Path(tempfile.mkdtemp(prefix="lm-frozen-"))
     test.addCleanup(lambda: shutil.rmtree(root, ignore_errors=True))
     for tree in FROZEN_TREES:
@@ -254,7 +258,7 @@ def frozen_copy(test):
         if not target.exists():
             target.parent.mkdir(parents=True, exist_ok=True)
             shutil.copy2(REPO / rel, target)
-    for rel in (MANIFEST, lm.LOOK_LEDGER_PATH):
+    for rel in (MANIFEST, lm.LOOK_LEDGER_PATH, lm.INPUTS_PATH):          # every file the freeze commit rewrites
         (root / rel).unlink()
         shutil.copy2(REPO / rel, root / rel)
     commit(root, git_commit_it=False)

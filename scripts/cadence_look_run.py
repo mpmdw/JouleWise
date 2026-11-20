@@ -1088,6 +1088,7 @@ def _stage2(a, stack, *, keep_redirected=False):
         # RL-194: stage 2's first act on custody, before any roster file is read and before the reservation
         # (a committed stage 2 runs under the manifest stage 1 names, so under the same pin list)
         _, a.custody_pins_sha256 = admit_custody(a, [span["span_id"] for span in s1["roster"]["spans"]], sdir_of, stack)
+        synthetic_custody_only(s1, sdir_of)
         validate_runtime_bundles(s1["roster"]["spans"], sdir_of)
         ids = [leg["span_id"] for leg in s1["legs"] if leg["included"] and leg["role"] == "fit" and
                leg["leg_type"] == "A"]
@@ -1245,9 +1246,10 @@ def stage2_energy_preflight(s1, a):
     """Everything stage 2 can refuse on without energy, checked before the first energy file opens:
     - a stage-1 file made under --allow-draft is refused by a run without it (Mythos r3 N2);
     - the stage-1 file names the manifest this run verified (N2);
-    - under --allow-draft, every span the custody run opens has a runner receipt saying "synthetic": true (N1);
     - stage 2's whole module set (the meter decoder, the step 3 file) is imported now and the unpinned-module and
-      cached-bytecode checks run on it (N2, N10)."""
+      cached-bytecode checks run on it (N2, N10).
+    It reads no roster file: the receipts' synthetic flag (N1) is read after the pin check
+    (``synthetic_custody_only``; RL-194 has no read of a roster file before every file equals its pin)."""
     if s1.get("numpy_version") != F.np.__version__:
         raise F.LookInputError("stage 2: numpy version differs from committed stage 1")
     if s1.get("allow_draft") is True and not a.allow_draft:
@@ -1260,16 +1262,20 @@ def stage2_energy_preflight(s1, a):
     problems = M.stage1_problems(ROOT, doc, s1, sha256_file(mpath), allow_draft=a.allow_draft)
     if problems:
         raise F.LookInputError("the stage-1 file: " + "; ".join(problems))
-    if s1["synthetic"] is True and a.custody:
-        sdir_of = span_dirs(a.custody, a.span_dir)
-        for sp in s1["roster"]["spans"]:
-            if _json(sdir_of(sp["span_id"]) / "runner_receipt.json").get("synthetic") is not True:
-                raise F.LookInputError("--allow-draft opens synthetic custody only: a span's receipt is not synthetic")
     importlib.import_module("joulewise.external.km003c_parse")
     importlib.import_module("joulewise.cadence_looks.step3_energy_ratios")
     importlib.import_module("joulewise.cadence_looks.step3_roster")
     importlib.import_module("joulewise.cadence_looks.interim_twin")
     _guard_loaded(doc)
+
+
+def synthetic_custody_only(s1, sdir_of):
+    """Mythos r3 N1: a stage-1 file marked synthetic opens synthetic custody only. Every span the run opens has a
+    runner receipt saying "synthetic": true. Called after the pin check, on the verified bytes."""
+    if s1["synthetic"] is True:
+        for sp in s1["roster"]["spans"]:
+            if _json(sdir_of(sp["span_id"]) / "runner_receipt.json").get("synthetic") is not True:
+                raise F.LookInputError("--allow-draft opens synthetic custody only: a span's receipt is not synthetic")
 
 
 def _guard_loaded(doc):

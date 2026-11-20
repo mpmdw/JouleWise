@@ -645,40 +645,33 @@ def synthetic_custody_pins(argv):
     the CLI is called (the generator's ``synthetic_pins``), unless the test names its own with ``--custody-pins``.
     A test that changes custody after generation therefore still reaches the check it is about; the tests of the
     pins themselves pass ``--custody-pins``. Returns the arguments to add."""
-    from scripts import cadence_look_synth as synth
+    from tests.cadence import custody_pin_fixture as fixture, look_minirepo
     if "--custody" not in argv or "--custody-pins" in argv or "--allow-draft" not in argv:
         return []
-    custody = Path(argv[argv.index("--custody") + 1])
     try:
-        if argv[0] == "stage1":
-            ids = [span["span_id"] for span in rj(argv[argv.index("--roster") + 1])]
-        else:
-            ids = [span["span_id"] for span in rj(argv[argv.index("--stage1") + 1])["roster"]["spans"]]
-        dirs = {sid: custody / sid for sid in ids}
-        for i, word in enumerate(argv):
-            if word == "--span-dir":
-                sid, _, path = argv[i + 1].partition("=")
-                if sid in dirs and path:
-                    dirs[sid] = Path(path)
+        dirs = look_minirepo.stage_span_dirs(argv)         # read below ``open``: a test's spy does not see it
+        if dirs is None:
+            return []
         if "--stage-archives" in argv:       # a staged span exists only after the run: its pins are its SHA256SUMS
             import tarfile
             from joulewise.cadence_looks import custody_pins
             staged = {}
-            for entry in rj(argv[argv.index("--stage-archives") + 1]):
-                with tarfile.open(entry["archive"]) as tar:
+            for entry in json.loads(fixture.quiet_bytes(argv[argv.index("--stage-archives") + 1])):
+                with tarfile.open(fileobj=io.BytesIO(fixture.quiet_bytes(entry["archive"]))) as tar:
                     sizes = {m.name.split("/", 1)[1]: m.size for m in tar if m.isfile()}
                 staged[entry["span_id"]] = custody_pins.span_pins(
-                    entry["span_id"], Path(entry["manifest"]).read_bytes(), sizes, runner_commit="0" * 40,
+                    entry["span_id"], fixture.quiet_bytes(entry["manifest"]), sizes, runner_commit="0" * 40,
                     close_item=2, check_item=1)
-            doc = synth.synthetic_pins({sid: path for sid, path in dirs.items() if sid not in staged})
+            doc = fixture.synthetic_pins({sid: path for sid, path in dirs.items() if sid not in staged})
             doc["spans"] += list(staged.values())
         else:
-            doc = synth.synthetic_pins(dirs)
+            doc = fixture.synthetic_pins(dirs)
     except Exception:  # noqa: BLE001 - a malformed roster, plan or custody is the CLI's to refuse, not the harness's
         return []
+    _pin_dir()
     path = os.path.join(_PIN_DIR, f"custody-pins-{len(os.listdir(_PIN_DIR))}.json")
-    with open(path, "wb") as f:
-        f.write(synth.dump(doc))
+    with io.FileIO(path, "w") as handle:
+        handle.write(fixture.dump(doc))
     return ["--custody-pins", path]
 
 

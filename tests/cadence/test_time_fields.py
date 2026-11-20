@@ -487,9 +487,14 @@ class Perturbation(unittest.TestCase):
                                   "--allow-draft", "--out", "v.json", "--detail-out", "detail.json"],
                                  cwd=cwd, capture_output=True, text=True, timeout=600)
             self.assertEqual(inc.returncode, 0, inc.stdout + inc.stderr)
+            # RL-194: each generated custody is pinned as generated; its perturbed twin has its own pin list
+            from tests.cadence import custody_pin_fixture as PF
+            (cwd / "pins.json").write_bytes(PF.dump(PF.synthetic_pins(
+                {span["span_id"]: cwd / "custody" / span["span_id"] for span in rj(cwd / "custody/roster.json")})))
             s1 = subprocess.run([sys.executable, "-I", "-B", str(REPO / "scripts/cadence_look_run.py"), "stage1",
                                  "--roster", "custody/roster.json", "--custody", "custody", "--rules-3-4", "v.json",
-                                 "--write-input", "li.json", "--out", "s1.json", "--manifest", man, "--allow-draft"],
+                                 "--write-input", "li.json", "--out", "s1.json", "--manifest", man, "--allow-draft",
+                                 "--custody-pins", "pins.json"],
                                 cwd=cwd, capture_output=True, text=True, timeout=600)
             self.assertEqual(s1.returncode, 0, s1.stdout + s1.stderr)
             outs[name] = {f: (cwd / f).read_bytes() for f in ("v.json", "detail.json", "li.json", "s1.json")}
@@ -1056,11 +1061,12 @@ class SupersededStage1(unittest.TestCase):
         (self.mini / M.LOOK_LEDGER_PATH).write_text(json.dumps(led, indent=2) + "\n")
         self.mr.git_commit(self.mini, "ledger", publish=publish)
 
-    def stage1(self, *extra):
+    def stage1(self, *extra, pin=True):
         out = self.d / f"s1-{len(list(self.d.iterdir()))}.json"
         r = self.mr.py(self.mini, "scripts/cadence_look_run.py", "stage1", "--roster", self.c.paths["roster.json"],
                        "--custody", self.c.root, "--rules-3-4", self.c.paths["rules_3_4.json"], "--out", out,
-                       "--manifest", self.mini / self.mr.MANIFEST, "--write-input", out.with_suffix(".input.json"), *extra)
+                       "--manifest", self.mini / self.mr.MANIFEST, "--write-input", out.with_suffix(".input.json"), *extra,
+                       pin=pin)
         return r, out
 
     def stage2(self, s1p):
@@ -1192,10 +1198,12 @@ class SupersededStage1(unittest.TestCase):
                 reading["values"]["sensors"]["Tf08"] += 8.0                  # the cleaned value and its raw reading
                 reading["values"]["readings"]["Tf08"]["value"] = reading["values"]["sensors"]["Tf08"]
         p.write_text("".join(json.dumps(reading) + "\n" for reading in readings))
+        # RL-194: the committed look pins its inputs, so a changed source is refused at the pin check, before the
+        # rerun's own comparison of level R (which stays behind it). The copy's pins are left as committed.
         r, out = self.stage1(*args, "--superseded-stage1", old, "--superseded-input", old_input,
-                             "--span-dir", f"dev-01-s02={changed}")
+                             "--span-dir", f"dev-01-s02={changed}", pin=False)
         self.assertEqual(r.returncode, 2)
-        self.assertIn("changes the superseded level-R source", r.stderr)
+        self.assertRegex(r.stderr, r"REFUSED custody pins: dev-01-s02/.*align_thermal\.jsonl: its bytes are not its pin")
         self.assertFalse(out.exists())
 
     def test_rerun_preserves_manifest_and_refuses_any_completed_history(self):

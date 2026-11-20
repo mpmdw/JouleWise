@@ -251,13 +251,14 @@ class Admission(unittest.TestCase):
         fields[1] = "ENERGY_CANARY_NEVER_DECODE"
         rows[-1] = ",".join(fields)
         path.write_text("\n".join(rows) + "\n")
-        rc, stdout, err = TLR._cli_subprocess(["stage2", *args, "--out", fit], repo=mini)
-        self.assertEqual(rc, 1, stdout + err)
-        self.assertEqual((stdout, err), ("", "stage2_error\nOtherError\n"))
-        diagnostic = TLR.LAST_RUN["private_stderr"]
-        self.assertIn(key, diagnostic)
-        self.assertIn("row stamps", diagnostic)
-        self.assertNotIn("ENERGY_CANARY", diagnostic)
+        # RL-194: the committed look pins its inputs. The changed trace is not its pin, so stage 2 refuses at its
+        # first act: before the reservation, and before the time-only custody guard above or any decoder sees it.
+        rc, stdout, err = TLR._cli_subprocess(["stage2", *args, "--out", fit], repo=mini,
+                                              extra={"pin_custody": False, "twin_path": "no-twin-is-launched"})
+        self.assertEqual((rc, stdout), (2, ""), err)
+        self.assertRegex(err, r"^REFUSED custody pins: .*power_trace\.csv: its bytes are not its pin")
+        self.assertNotIn("ENERGY_CANARY", err)
+        self.assertEqual((TLR.LAST_RUN["reservation_attempts"], TLR.LAST_RUN["served"]), (0, []))
         self.assertFalse(fit.exists())
 
     def test_committed_verdicts_cannot_admit_changed_meter_or_journal(self):
