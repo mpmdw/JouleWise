@@ -1066,3 +1066,33 @@ cases remain open.
 
 Hosted CI and workflow self-test started on the code head.
 [CI](https://github.com/mpmdw/JouleWise/actions/runs/44751935898) · [Self-test](https://github.com/mpmdw/JouleWise/actions/runs/44751935953)
+
+## 2026-11-20 audit round 2 after the RL-190 index changes
+
+The worktree, remote branch, and draft PR #868 agreed at
+`f4cea0c72ebef61274c27c7854a4ddc8a8431f3d` at intake. The
+active audit reproduced three defects and reported two gates
+with outstanding owner inputs. The older audit reports supplied
+the native loader, interval cadence, coverage, and recovery
+regression inventory.
+[Active audit](/Volumes/JW-EXT/scratch/pl-d-desc-looks-executor/audit-2/FINAL-MESSAGE.md)
+
+| Finding | Commit and regression | Result |
+| --- | --- | --- |
+| HIGH. Ancillary row boundaries shortened the observed capture. | `d8e1ce54b`, `test_rail_return_coverage_is_invariant_to_ancillary_capture_partition` and the independent `tail_partition.py` | **PASS**. The scorer derives capture end from every powermetrics interval's end stamp. Scored rail rows still require their registered sample grid. With either one or two ancillary rows, two of four required samples yield `coverage` with `bound_s=1` on both rails. The regression supplies an invalid ancillary value to check that the stamp pass ignores it. |
+| HIGH. The frozen positive instrument case omits mandatory wall evidence. | `805becf17`, `test_signed_member_without_wall_evidence_refuses_stage1` and `test_wall_budget_uses_exact_equality_and_requires_all_evidence` | **Blocked on the independent successor.** The current frozen `test_lm_inst_01_all_prints_and_partial` expects exit 0 for missing operational wall evidence. The resolved contract requires exit 2. Both builder regressions pass. |
+| HIGH. The current stack still binds a hostname. | Existing frozen hardware controls, including the matching-board rename control | **Blocked on the integration owner.** PR #795 is open and draft. The authorized combined base has yet to arrive. The `hw1:` binding and hardware controls remain outstanding. |
+| MED. Missing start-sensor means lost their keys and quality reason. | `d8e1ce54b`, `test_start_sensor_keys_keep_the_coverage_reason_at_593_of_600` and the independent `missing_sensors.py` | **PASS**. The support scan retains the sensor keys from JSON structure. At 593 samples, fan and both named sensors print `coverage` nulls. At 594, the means print after value admission. |
+| MED. A small positive spread rounded to zero before publication. | `d8e1ce54b`, `test_near_equal_sd10_date_means_preserve_the_positive_spread`, exact midpoint control and independent `near_equal_dates.py` | **PASS**. Adaptive rational bounds determine the final float of the symbolic sum or deviation. Equal radicals still cancel exactly. The independent spread is `1.94074169913194e-66 W`. The regression also covers a smaller positive spread and both binary midpoint parities. |
+
+All six frozen-input files match the published SHA-256 manifest.
+All 53 protected paths match the previous stack. Current frozen
+acceptance retains 16,899 IDs pending the authorized successor.
+The audit's six literal reservation cases still require hosted
+evidence. No new research ruling is required.
+[Frozen-input hashes](/Volumes/JW-EXT/scratch/astra-desc-suite-rl192b/SUITE.sha256) · [Protected paths](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/audit2-protected-blobs.tsv) · [Owner PR #795](https://github.com/mpmdw/JouleWise/pull/795)
+
+The independent probes passed. The focused, unchanged frozen
+tail, and canonical sharded runs started on the builder host.
+The draft PR will carry the hosted run for the pushed head.
+[Tail probe](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/audit2-tail_partition.log) · [Sensor probe](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/audit2-missing_sensors.log) · [Spread probe](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/audit2-near_equal_dates.log)
