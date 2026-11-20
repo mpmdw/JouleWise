@@ -632,9 +632,25 @@ admitted GPU rows before the exact values enter the cache.
 
 Both frozen modules match their authorized source bytes. The 697
 selected frozen cases passed with zero skips, and all 53 protected
-paths match. The pushed audit head has its own hosted run.
+paths match. The complete local v2.2.1 sweep passed 13,303 cases with
+zero skips. The local v2.1 matrix recorded 3,259 passes and the same 122
+reservation-dependent outcomes by case ID. Direct scoring exposed the
+v2.1 expectation conflict below. The paired CPU measurement over 20
+invented instrument legs took 1.687 s on the predecessor and 2.368 s
+with exact arithmetic. Commit `e2251d0eb` also computes the predecessor
+gap in fractions and retargets the native preflight test to the exact
+scoring entry point. The two focused compatibility checks passed.
 
-**NEEDS_SPEC.** An unconditional one-second rail-return interval changes
+**NEEDS_SPEC (E1).** The exact binary64 value of the recorded 15.6 W GPU
+step is `1/2814749767106560` W below the rational 90% threshold. The exact
+comparison gives a 0.75 s rise on both rails where
+`test_lm_inst_01_all_prints_and_partial` expects 0.50 s. The corresponding
+rail-sum onset lag is 0.25 s where the independent RL-188 oracle used by
+`test_lm_inst_01_edge_hand_table_exact` expects 0.50 s. Both frozen
+artifacts retain their authorized bytes. The comparison convention and
+oracle agreement need a ruling.
+
+**NEEDS_SPEC (E2).** An unconditional one-second rail-return interval changes
 `test_C_tail_gpu_power_ok_ok_750` from `stream_end` to `coverage` at a
 genuine 0.75 s EOF. It also changes
 `test_A_duration_eof_instrument_gpu_power_left_exact_n0_local` from
@@ -642,4 +658,4 @@ genuine 0.75 s EOF. It also changes
 25 s recorded tail. The implementation gates the full observed capture
 under RL-191 §1.5 while the fixed-width interpretation is pending.
 
-[Audit round 2](/Volumes/JW-EXT/scratch/pl-d-desc-looks-executor/audit-2/FINAL-MESSAGE.md) · [Red reproductions](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/rl191-audit2-red.log) · [Green reproductions](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/rl191-audit2-new-regressions.log) · [Frozen focus](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/rl191-audit2-frozen-focus.log) · [Fixed-window conflict](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/rl191-audit2-e2-conflict.log) · [Protected blobs](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/rl191-audit2-protected-blobs.tsv) · [Current PR checks](https://github.com/mpmdw/JouleWise/pull/868/checks)
+[Audit round 2](/Volumes/JW-EXT/scratch/pl-d-desc-looks-executor/audit-2/FINAL-MESSAGE.md) · [Red reproductions](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/rl191-audit2-red.log) · [Green reproductions](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/rl191-audit2-new-regressions.log) · [Frozen focus](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/rl191-audit2-frozen-focus.log) · [Local results](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/rl191-audit2-final-summary.txt) · [Exact crossing conflict](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/rl191-audit2-e1-conflict.log) · [Fixed-window conflict](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/rl191-audit2-e2-conflict.log) · [Protected blobs](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/rl191-audit2-protected-blobs.tsv) · [Current PR checks](https://github.com/mpmdw/JouleWise/pull/868/checks)
