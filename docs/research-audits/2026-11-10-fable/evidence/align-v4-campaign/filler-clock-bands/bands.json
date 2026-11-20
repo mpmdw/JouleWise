@@ -1,0 +1,2245 @@
+{
+  "timezone": "America/Los_Angeles",
+  "cases": [
+    {
+      "pin": "B",
+      "kit": "f2-stab-15",
+      "legs": [
+        "L003"
+      ],
+      "batch_window": null,
+      "days": [
+        {
+          "date": "2026-11-20",
+          "bands": [
+            {
+              "from": "2026-11-20T00:00:00-08:00",
+              "through": "2026-11-20T23:59:59-08:00",
+              "admitted": true
+            }
+          ],
+          "witnesses": [],
+          "minute_samples": 1440,
+          "final_second_samples": 1
+        },
+        {
+          "date": "2026-11-21",
+          "bands": [
+            {
+              "from": "2026-11-21T00:00:00-08:00",
+              "through": "2026-11-21T23:59:59-08:00",
+              "admitted": true
+            }
+          ],
+          "witnesses": [],
+          "minute_samples": 1440,
+          "final_second_samples": 1
+        }
+      ]
+    },
+    {
+      "pin": "B",
+      "kit": "f2-stab-15",
+      "legs": [
+        "L003"
+      ],
+      "batch_window": "02:00-02:35",
+      "days": [
+        {
+          "date": "2026-11-20",
+          "bands": [
+            {
+              "from": "2026-11-20T00:00:00-08:00",
+              "through": "2026-11-20T00:22:30-08:00",
+              "admitted": true
+            },
+            {
+              "from": "2026-11-20T00:22:31-08:00",
+              "through": "2026-11-20T02:34:59-08:00",
+              "admitted": false
+            },
+            {
+              "from": "2026-11-20T02:35:00-08:00",
+              "through": "2026-11-20T23:59:59-08:00",
+              "admitted": true
+            }
+          ],
+          "witnesses": [
+            {
+              "before": {
+                "epoch": 1795162950,
+                "local": "2026-11-20T00:22:30-08:00",
+                "admitted": true,
+                "worst_case_s": 5850
+              },
+              "at": {
+                "epoch": 1795162951,
+                "local": "2026-11-20T00:22:31-08:00",
+                "admitted": false,
+                "refusal": "the worst-case span [t0, t0 + 5850 s] meets a batch blackout (02:00-02:35); arm after it or earlier"
+              },
+              "after": {
+                "epoch": 1795162952,
+                "local": "2026-11-20T00:22:32-08:00",
+                "admitted": false,
+                "refusal": "the worst-case span [t0, t0 + 5850 s] meets a batch blackout (02:00-02:35); arm after it or earlier"
+              }
+            },
+            {
+              "before": {
+                "epoch": 1795170899,
+                "local": "2026-11-20T02:34:59-08:00",
+                "admitted": false,
+                "refusal": "the worst-case span [t0, t0 + 5850 s] meets a batch blackout (02:00-02:35); arm after it or earlier"
+              },
+              "at": {
+                "epoch": 1795170900,
+                "local": "2026-11-20T02:35:00-08:00",
+                "admitted": true,
+                "worst_case_s": 5850
+              },
+              "after": {
+                "epoch": 1795170901,
+                "local": "2026-11-20T02:35:01-08:00",
+                "admitted": true,
+                "worst_case_s": 5850
+              }
+            }
+          ],
+          "minute_samples": 1440,
+          "final_second_samples": 1
+        },
+        {
+          "date": "2026-11-21",
+          "bands": [
+            {
+              "from": "2026-11-21T00:00:00-08:00",
+              "through": "2026-11-21T00:22:30-08:00",
+              "admitted": true
+            },
+            {
+              "from": "2026-11-21T00:22:31-08:00",
+              "through": "2026-11-21T02:34:59-08:00",
+              "admitted": false
+            },
+            {
+              "from": "2026-11-21T02:35:00-08:00",
+              "through": "2026-11-21T23:59:59-08:00",
+              "admitted": true
+            }
+          ],
+          "witnesses": [
+            {
+              "before": {
+                "epoch": 1795249350,
+                "local": "2026-11-21T00:22:30-08:00",
+                "admitted": true,
+                "worst_case_s": 5850
+              },
+              "at": {
+                "epoch": 1795249351,
+                "local": "2026-11-21T00:22:31-08:00",
+                "admitted": false,
+                "refusal": "the worst-case span [t0, t0 + 5850 s] meets a batch blackout (02:00-02:35); arm after it or earlier"
+              },
+              "after": {
+                "epoch": 1795249352,
+                "local": "2026-11-21T00:22:32-08:00",
+                "admitted": false,
+                "refusal": "the worst-case span [t0, t0 + 5850 s] meets a batch blackout (02:00-02:35); arm after it or earlier"
+              }
+            },
+            {
+              "before": {
+                "epoch": 1795257299,
+                "local": "2026-11-21T02:34:59-08:00",
+                "admitted": false,
+                "refusal": "the worst-case span [t0, t0 + 5850 s] meets a batch blackout (02:00-02:35); arm after it or earlier"
+              },
+              "at": {
+                "epoch": 1795257300,
+                "local": "2026-11-21T02:35:00-08:00",
+                "admitted": true,
+                "worst_case_s": 5850
+              },
+              "after": {
+                "epoch": 1795257301,
+                "local": "2026-11-21T02:35:01-08:00",
+                "admitted": true,
+                "worst_case_s": 5850
+              }
+            }
+          ],
+          "minute_samples": 1440,
+          "final_second_samples": 1
+        }
+      ]
+    },
+    {
+      "pin": "A",
+      "kit": "f2-inst-02",
+      "legs": [
+        "L005"
+      ],
+      "batch_window": "02:00-02:35",
+      "days": [
+        {
+          "date": "2026-11-20",
+          "bands": [
+            {
+              "from": "2026-11-20T00:00:00-08:00",
+              "through": "2026-11-20T02:34:59-08:00",
+              "admitted": false
+            },
+            {
+              "from": "2026-11-20T02:35:00-08:00",
+              "through": "2026-11-20T10:50:00-08:00",
+              "admitted": true
+            },
+            {
+              "from": "2026-11-20T10:50:01-08:00",
+              "through": "2026-11-20T13:14:59-08:00",
+              "admitted": false
+            },
+            {
+              "from": "2026-11-20T13:15:00-08:00",
+              "through": "2026-11-20T23:48:10-08:00",
+              "admitted": true
+            },
+            {
+              "from": "2026-11-20T23:48:11-08:00",
+              "through": "2026-11-20T23:59:59-08:00",
+              "admitted": false
+            }
+          ],
+          "witnesses": [
+            {
+              "before": {
+                "epoch": 1795170899,
+                "local": "2026-11-20T02:34:59-08:00",
+                "admitted": false,
+                "refusal": "the worst-case span [t0, t0 + 5850 s] meets a batch blackout (02:00-02:35); arm after it or earlier"
+              },
+              "at": {
+                "epoch": 1795170900,
+                "local": "2026-11-20T02:35:00-08:00",
+                "admitted": true,
+                "worst_case_s": 5850
+              },
+              "after": {
+                "epoch": 1795170901,
+                "local": "2026-11-20T02:35:01-08:00",
+                "admitted": true,
+                "worst_case_s": 5850
+              }
+            },
+            {
+              "before": {
+                "epoch": 1795200600,
+                "local": "2026-11-20T10:50:00-08:00",
+                "admitted": true,
+                "worst_case_s": 5850
+              },
+              "at": {
+                "epoch": 1795200601,
+                "local": "2026-11-20T10:50:01-08:00",
+                "admitted": false,
+                "refusal": "no launch between 10:50 and 13:15: the soak path waits out 11:45-13:15 unbudgeted (RL-155a section 3)"
+              },
+              "after": {
+                "epoch": 1795200602,
+                "local": "2026-11-20T10:50:02-08:00",
+                "admitted": false,
+                "refusal": "no launch between 10:50 and 13:15: the soak path waits out 11:45-13:15 unbudgeted (RL-155a section 3)"
+              }
+            },
+            {
+              "before": {
+                "epoch": 1795209299,
+                "local": "2026-11-20T13:14:59-08:00",
+                "admitted": false,
+                "refusal": "no launch between 10:50 and 13:15: the soak path waits out 11:45-13:15 unbudgeted (RL-155a section 3)"
+              },
+              "at": {
+                "epoch": 1795209300,
+                "local": "2026-11-20T13:15:00-08:00",
+                "admitted": true,
+                "worst_case_s": 5850
+              },
+              "after": {
+                "epoch": 1795209301,
+                "local": "2026-11-20T13:15:01-08:00",
+                "admitted": true,
+                "worst_case_s": 5850
+              }
+            },
+            {
+              "before": {
+                "epoch": 1795247290,
+                "local": "2026-11-20T23:48:10-08:00",
+                "admitted": true,
+                "worst_case_s": 5850
+              },
+              "at": {
+                "epoch": 1795247291,
+                "local": "2026-11-20T23:48:11-08:00",
+                "admitted": false,
+                "refusal": "the fence end (worst case + 1460 s) at 01:50:01 passes 01:50:00, 10 min before the 02:00-02:35 blackout (RL-155a section 3)"
+              },
+              "after": {
+                "epoch": 1795247292,
+                "local": "2026-11-20T23:48:12-08:00",
+                "admitted": false,
+                "refusal": "the fence end (worst case + 1460 s) at 01:50:02 passes 01:50:00, 10 min before the 02:00-02:35 blackout (RL-155a section 3)"
+              }
+            }
+          ],
+          "minute_samples": 1440,
+          "final_second_samples": 1
+        },
+        {
+          "date": "2026-11-21",
+          "bands": [
+            {
+              "from": "2026-11-21T00:00:00-08:00",
+              "through": "2026-11-21T02:34:59-08:00",
+              "admitted": false
+            },
+            {
+              "from": "2026-11-21T02:35:00-08:00",
+              "through": "2026-11-21T10:50:00-08:00",
+              "admitted": true
+            },
+            {
+              "from": "2026-11-21T10:50:01-08:00",
+              "through": "2026-11-21T13:14:59-08:00",
+              "admitted": false
+            },
+            {
+              "from": "2026-11-21T13:15:00-08:00",
+              "through": "2026-11-21T23:48:10-08:00",
+              "admitted": true
+            },
+            {
+              "from": "2026-11-21T23:48:11-08:00",
+              "through": "2026-11-21T23:59:59-08:00",
+              "admitted": false
+            }
+          ],
+          "witnesses": [
+            {
+              "before": {
+                "epoch": 1795257299,
+                "local": "2026-11-21T02:34:59-08:00",
+                "admitted": false,
+                "refusal": "the worst-case span [t0, t0 + 5850 s] meets a batch blackout (02:00-02:35); arm after it or earlier"
+              },
+              "at": {
+                "epoch": 1795257300,
+                "local": "2026-11-21T02:35:00-08:00",
+                "admitted": true,
+                "worst_case_s": 5850
+              },
+              "after": {
+                "epoch": 1795257301,
+                "local": "2026-11-21T02:35:01-08:00",
+                "admitted": true,
+                "worst_case_s": 5850
+              }
+            },
+            {
+              "before": {
+                "epoch": 1795287000,
+                "local": "2026-11-21T10:50:00-08:00",
+                "admitted": true,
+                "worst_case_s": 5850
+              },
+              "at": {
+                "epoch": 1795287001,
+                "local": "2026-11-21T10:50:01-08:00",
+                "admitted": false,
+                "refusal": "no launch between 10:50 and 13:15: the soak path waits out 11:45-13:15 unbudgeted (RL-155a section 3)"
+              },
+              "after": {
+                "epoch": 1795287002,
+                "local": "2026-11-21T10:50:02-08:00",
+                "admitted": false,
+                "refusal": "no launch between 10:50 and 13:15: the soak path waits out 11:45-13:15 unbudgeted (RL-155a section 3)"
+              }
+            },
+            {
+              "before": {
+                "epoch": 1795295699,
+                "local": "2026-11-21T13:14:59-08:00",
+                "admitted": false,
+                "refusal": "no launch between 10:50 and 13:15: the soak path waits out 11:45-13:15 unbudgeted (RL-155a section 3)"
+              },
+              "at": {
+                "epoch": 1795295700,
+                "local": "2026-11-21T13:15:00-08:00",
+                "admitted": true,
+                "worst_case_s": 5850
+              },
+              "after": {
+                "epoch": 1795295701,
+                "local": "2026-11-21T13:15:01-08:00",
+                "admitted": true,
+                "worst_case_s": 5850
+              }
+            },
+            {
+              "before": {
+                "epoch": 1795333690,
+                "local": "2026-11-21T23:48:10-08:00",
+                "admitted": true,
+                "worst_case_s": 5850
+              },
+              "at": {
+                "epoch": 1795333691,
+                "local": "2026-11-21T23:48:11-08:00",
+                "admitted": false,
+                "refusal": "the fence end (worst case + 1460 s) at 01:50:01 passes 01:50:00, 10 min before the 02:00-02:35 blackout (RL-155a section 3)"
+              },
+              "after": {
+                "epoch": 1795333692,
+                "local": "2026-11-21T23:48:12-08:00",
+                "admitted": false,
+                "refusal": "the fence end (worst case + 1460 s) at 01:50:02 passes 01:50:00, 10 min before the 02:00-02:35 blackout (RL-155a section 3)"
+              }
+            }
+          ],
+          "minute_samples": 1440,
+          "final_second_samples": 1
+        }
+      ]
+    },
+    {
+      "pin": "A",
+      "kit": "f2-inst-02",
+      "legs": [
+        "L005"
+      ],
+      "batch_window": "13:14-13:15",
+      "days": [
+        {
+          "date": "2026-11-20",
+          "bands": [
+            {
+              "from": "2026-11-20T00:00:00-08:00",
+              "through": "2026-11-20T10:50:00-08:00",
+              "admitted": true
+            },
+            {
+              "from": "2026-11-20T10:50:01-08:00",
+              "through": "2026-11-20T13:14:59-08:00",
+              "admitted": false
+            },
+            {
+              "from": "2026-11-20T13:15:00-08:00",
+              "through": "2026-11-20T23:59:59-08:00",
+              "admitted": true
+            }
+          ],
+          "witnesses": [
+            {
+              "before": {
+                "epoch": 1795200600,
+                "local": "2026-11-20T10:50:00-08:00",
+                "admitted": true,
+                "worst_case_s": 5850
+              },
+              "at": {
+                "epoch": 1795200601,
+                "local": "2026-11-20T10:50:01-08:00",
+                "admitted": false,
+                "refusal": "no launch between 10:50 and 13:15: the soak path waits out 11:45-13:15 unbudgeted (RL-155a section 3)"
+              },
+              "after": {
+                "epoch": 1795200602,
+                "local": "2026-11-20T10:50:02-08:00",
+                "admitted": false,
+                "refusal": "no launch between 10:50 and 13:15: the soak path waits out 11:45-13:15 unbudgeted (RL-155a section 3)"
+              }
+            },
+            {
+              "before": {
+                "epoch": 1795209299,
+                "local": "2026-11-20T13:14:59-08:00",
+                "admitted": false,
+                "refusal": "the worst-case span [t0, t0 + 5850 s] meets a batch blackout (13:14-13:15); arm after it or earlier"
+              },
+              "at": {
+                "epoch": 1795209300,
+                "local": "2026-11-20T13:15:00-08:00",
+                "admitted": true,
+                "worst_case_s": 5850
+              },
+              "after": {
+                "epoch": 1795209301,
+                "local": "2026-11-20T13:15:01-08:00",
+                "admitted": true,
+                "worst_case_s": 5850
+              }
+            }
+          ],
+          "minute_samples": 1440,
+          "final_second_samples": 1
+        },
+        {
+          "date": "2026-11-21",
+          "bands": [
+            {
+              "from": "2026-11-21T00:00:00-08:00",
+              "through": "2026-11-21T10:50:00-08:00",
+              "admitted": true
+            },
+            {
+              "from": "2026-11-21T10:50:01-08:00",
+              "through": "2026-11-21T13:14:59-08:00",
+              "admitted": false
+            },
+            {
+              "from": "2026-11-21T13:15:00-08:00",
+              "through": "2026-11-21T23:59:59-08:00",
+              "admitted": true
+            }
+          ],
+          "witnesses": [
+            {
+              "before": {
+                "epoch": 1795287000,
+                "local": "2026-11-21T10:50:00-08:00",
+                "admitted": true,
+                "worst_case_s": 5850
+              },
+              "at": {
+                "epoch": 1795287001,
+                "local": "2026-11-21T10:50:01-08:00",
+                "admitted": false,
+                "refusal": "no launch between 10:50 and 13:15: the soak path waits out 11:45-13:15 unbudgeted (RL-155a section 3)"
+              },
+              "after": {
+                "epoch": 1795287002,
+                "local": "2026-11-21T10:50:02-08:00",
+                "admitted": false,
+                "refusal": "no launch between 10:50 and 13:15: the soak path waits out 11:45-13:15 unbudgeted (RL-155a section 3)"
+              }
+            },
+            {
+              "before": {
+                "epoch": 1795295699,
+                "local": "2026-11-21T13:14:59-08:00",
+                "admitted": false,
+                "refusal": "the worst-case span [t0, t0 + 5850 s] meets a batch blackout (13:14-13:15); arm after it or earlier"
+              },
+              "at": {
+                "epoch": 1795295700,
+                "local": "2026-11-21T13:15:00-08:00",
+                "admitted": true,
+                "worst_case_s": 5850
+              },
+              "after": {
+                "epoch": 1795295701,
+                "local": "2026-11-21T13:15:01-08:00",
+                "admitted": true,
+                "worst_case_s": 5850
+              }
+            }
+          ],
+          "minute_samples": 1440,
+          "final_second_samples": 1
+        }
+      ]
+    },
+    {
+      "pin": "A",
+      "kit": "f2-inst-02",
+      "legs": [
+        "L005",
+        "L006"
+      ],
+      "batch_window": "02:00-02:35",
+      "days": [
+        {
+          "date": "2026-11-20",
+          "bands": [
+            {
+              "from": "2026-11-20T00:00:00-08:00",
+              "through": "2026-11-20T02:34:59-08:00",
+              "admitted": false
+            },
+            {
+              "from": "2026-11-20T02:35:00-08:00",
+              "through": "2026-11-20T10:50:00-08:00",
+              "admitted": true
+            },
+            {
+              "from": "2026-11-20T10:50:01-08:00",
+              "through": "2026-11-20T13:14:59-08:00",
+              "admitted": false
+            },
+            {
+              "from": "2026-11-20T13:15:00-08:00",
+              "through": "2026-11-20T23:03:10-08:00",
+              "admitted": true
+            },
+            {
+              "from": "2026-11-20T23:03:11-08:00",
+              "through": "2026-11-20T23:59:59-08:00",
+              "admitted": false
+            }
+          ],
+          "witnesses": [
+            {
+              "before": {
+                "epoch": 1795170899,
+                "local": "2026-11-20T02:34:59-08:00",
+                "admitted": false,
+                "refusal": "the worst-case span [t0, t0 + 8550 s] meets a batch blackout (02:00-02:35); arm after it or earlier"
+              },
+              "at": {
+                "epoch": 1795170900,
+                "local": "2026-11-20T02:35:00-08:00",
+                "admitted": true,
+                "worst_case_s": 8550
+              },
+              "after": {
+                "epoch": 1795170901,
+                "local": "2026-11-20T02:35:01-08:00",
+                "admitted": true,
+                "worst_case_s": 8550
+              }
+            },
+            {
+              "before": {
+                "epoch": 1795200600,
+                "local": "2026-11-20T10:50:00-08:00",
+                "admitted": true,
+                "worst_case_s": 8550
+              },
+              "at": {
+                "epoch": 1795200601,
+                "local": "2026-11-20T10:50:01-08:00",
+                "admitted": false,
+                "refusal": "no launch between 10:50 and 13:15: the soak path waits out 11:45-13:15 unbudgeted (RL-155a section 3)"
+              },
+              "after": {
+                "epoch": 1795200602,
+                "local": "2026-11-20T10:50:02-08:00",
+                "admitted": false,
+                "refusal": "no launch between 10:50 and 13:15: the soak path waits out 11:45-13:15 unbudgeted (RL-155a section 3)"
+              }
+            },
+            {
+              "before": {
+                "epoch": 1795209299,
+                "local": "2026-11-20T13:14:59-08:00",
+                "admitted": false,
+                "refusal": "no launch between 10:50 and 13:15: the soak path waits out 11:45-13:15 unbudgeted (RL-155a section 3)"
+              },
+              "at": {
+                "epoch": 1795209300,
+                "local": "2026-11-20T13:15:00-08:00",
+                "admitted": true,
+                "worst_case_s": 8550
+              },
+              "after": {
+                "epoch": 1795209301,
+                "local": "2026-11-20T13:15:01-08:00",
+                "admitted": true,
+                "worst_case_s": 8550
+              }
+            },
+            {
+              "before": {
+                "epoch": 1795244590,
+                "local": "2026-11-20T23:03:10-08:00",
+                "admitted": true,
+                "worst_case_s": 8550
+              },
+              "at": {
+                "epoch": 1795244591,
+                "local": "2026-11-20T23:03:11-08:00",
+                "admitted": false,
+                "refusal": "the fence end (worst case + 1460 s) at 01:50:01 passes 01:50:00, 10 min before the 02:00-02:35 blackout (RL-155a section 3)"
+              },
+              "after": {
+                "epoch": 1795244592,
+                "local": "2026-11-20T23:03:12-08:00",
+                "admitted": false,
+                "refusal": "the fence end (worst case + 1460 s) at 01:50:02 passes 01:50:00, 10 min before the 02:00-02:35 blackout (RL-155a section 3)"
+              }
+            }
+          ],
+          "minute_samples": 1440,
+          "final_second_samples": 1
+        },
+        {
+          "date": "2026-11-21",
+          "bands": [
+            {
+              "from": "2026-11-21T00:00:00-08:00",
+              "through": "2026-11-21T02:34:59-08:00",
+              "admitted": false
+            },
+            {
+              "from": "2026-11-21T02:35:00-08:00",
+              "through": "2026-11-21T10:50:00-08:00",
+              "admitted": true
+            },
+            {
+              "from": "2026-11-21T10:50:01-08:00",
+              "through": "2026-11-21T13:14:59-08:00",
+              "admitted": false
+            },
+            {
+              "from": "2026-11-21T13:15:00-08:00",
+              "through": "2026-11-21T23:03:10-08:00",
+              "admitted": true
+            },
+            {
+              "from": "2026-11-21T23:03:11-08:00",
+              "through": "2026-11-21T23:59:59-08:00",
+              "admitted": false
+            }
+          ],
+          "witnesses": [
+            {
+              "before": {
+                "epoch": 1795257299,
+                "local": "2026-11-21T02:34:59-08:00",
+                "admitted": false,
+                "refusal": "the worst-case span [t0, t0 + 8550 s] meets a batch blackout (02:00-02:35); arm after it or earlier"
+              },
+              "at": {
+                "epoch": 1795257300,
+                "local": "2026-11-21T02:35:00-08:00",
+                "admitted": true,
+                "worst_case_s": 8550
+              },
+              "after": {
+                "epoch": 1795257301,
+                "local": "2026-11-21T02:35:01-08:00",
+                "admitted": true,
+                "worst_case_s": 8550
+              }
+            },
+            {
+              "before": {
+                "epoch": 1795287000,
+                "local": "2026-11-21T10:50:00-08:00",
+                "admitted": true,
+                "worst_case_s": 8550
+              },
+              "at": {
+                "epoch": 1795287001,
+                "local": "2026-11-21T10:50:01-08:00",
+                "admitted": false,
+                "refusal": "no launch between 10:50 and 13:15: the soak path waits out 11:45-13:15 unbudgeted (RL-155a section 3)"
+              },
+              "after": {
+                "epoch": 1795287002,
+                "local": "2026-11-21T10:50:02-08:00",
+                "admitted": false,
+                "refusal": "no launch between 10:50 and 13:15: the soak path waits out 11:45-13:15 unbudgeted (RL-155a section 3)"
+              }
+            },
+            {
+              "before": {
+                "epoch": 1795295699,
+                "local": "2026-11-21T13:14:59-08:00",
+                "admitted": false,
+                "refusal": "no launch between 10:50 and 13:15: the soak path waits out 11:45-13:15 unbudgeted (RL-155a section 3)"
+              },
+              "at": {
+                "epoch": 1795295700,
+                "local": "2026-11-21T13:15:00-08:00",
+                "admitted": true,
+                "worst_case_s": 8550
+              },
+              "after": {
+                "epoch": 1795295701,
+                "local": "2026-11-21T13:15:01-08:00",
+                "admitted": true,
+                "worst_case_s": 8550
+              }
+            },
+            {
+              "before": {
+                "epoch": 1795330990,
+                "local": "2026-11-21T23:03:10-08:00",
+                "admitted": true,
+                "worst_case_s": 8550
+              },
+              "at": {
+                "epoch": 1795330991,
+                "local": "2026-11-21T23:03:11-08:00",
+                "admitted": false,
+                "refusal": "the fence end (worst case + 1460 s) at 01:50:01 passes 01:50:00, 10 min before the 02:00-02:35 blackout (RL-155a section 3)"
+              },
+              "after": {
+                "epoch": 1795330992,
+                "local": "2026-11-21T23:03:12-08:00",
+                "admitted": false,
+                "refusal": "the fence end (worst case + 1460 s) at 01:50:02 passes 01:50:00, 10 min before the 02:00-02:35 blackout (RL-155a section 3)"
+              }
+            }
+          ],
+          "minute_samples": 1440,
+          "final_second_samples": 1
+        }
+      ]
+    },
+    {
+      "pin": "A",
+      "kit": "f2-inst-02",
+      "legs": [
+        "L005",
+        "L006"
+      ],
+      "batch_window": "13:14-13:15",
+      "days": [
+        {
+          "date": "2026-11-20",
+          "bands": [
+            {
+              "from": "2026-11-20T00:00:00-08:00",
+              "through": "2026-11-20T10:17:10-08:00",
+              "admitted": true
+            },
+            {
+              "from": "2026-11-20T10:17:11-08:00",
+              "through": "2026-11-20T13:14:59-08:00",
+              "admitted": false
+            },
+            {
+              "from": "2026-11-20T13:15:00-08:00",
+              "through": "2026-11-20T23:59:59-08:00",
+              "admitted": true
+            }
+          ],
+          "witnesses": [
+            {
+              "before": {
+                "epoch": 1795198630,
+                "local": "2026-11-20T10:17:10-08:00",
+                "admitted": true,
+                "worst_case_s": 8550
+              },
+              "at": {
+                "epoch": 1795198631,
+                "local": "2026-11-20T10:17:11-08:00",
+                "admitted": false,
+                "refusal": "the fence end (worst case + 1460 s) at 13:04:01 passes 13:04:00, 10 min before the 13:14-13:15 blackout (RL-155a section 3)"
+              },
+              "after": {
+                "epoch": 1795198632,
+                "local": "2026-11-20T10:17:12-08:00",
+                "admitted": false,
+                "refusal": "the fence end (worst case + 1460 s) at 13:04:02 passes 13:04:00, 10 min before the 13:14-13:15 blackout (RL-155a section 3)"
+              }
+            },
+            {
+              "before": {
+                "epoch": 1795209299,
+                "local": "2026-11-20T13:14:59-08:00",
+                "admitted": false,
+                "refusal": "the worst-case span [t0, t0 + 8550 s] meets a batch blackout (13:14-13:15); arm after it or earlier"
+              },
+              "at": {
+                "epoch": 1795209300,
+                "local": "2026-11-20T13:15:00-08:00",
+                "admitted": true,
+                "worst_case_s": 8550
+              },
+              "after": {
+                "epoch": 1795209301,
+                "local": "2026-11-20T13:15:01-08:00",
+                "admitted": true,
+                "worst_case_s": 8550
+              }
+            }
+          ],
+          "minute_samples": 1440,
+          "final_second_samples": 1
+        },
+        {
+          "date": "2026-11-21",
+          "bands": [
+            {
+              "from": "2026-11-21T00:00:00-08:00",
+              "through": "2026-11-21T10:17:10-08:00",
+              "admitted": true
+            },
+            {
+              "from": "2026-11-21T10:17:11-08:00",
+              "through": "2026-11-21T13:14:59-08:00",
+              "admitted": false
+            },
+            {
+              "from": "2026-11-21T13:15:00-08:00",
+              "through": "2026-11-21T23:59:59-08:00",
+              "admitted": true
+            }
+          ],
+          "witnesses": [
+            {
+              "before": {
+                "epoch": 1795285030,
+                "local": "2026-11-21T10:17:10-08:00",
+                "admitted": true,
+                "worst_case_s": 8550
+              },
+              "at": {
+                "epoch": 1795285031,
+                "local": "2026-11-21T10:17:11-08:00",
+                "admitted": false,
+                "refusal": "the fence end (worst case + 1460 s) at 13:04:01 passes 13:04:00, 10 min before the 13:14-13:15 blackout (RL-155a section 3)"
+              },
+              "after": {
+                "epoch": 1795285032,
+                "local": "2026-11-21T10:17:12-08:00",
+                "admitted": false,
+                "refusal": "the fence end (worst case + 1460 s) at 13:04:02 passes 13:04:00, 10 min before the 13:14-13:15 blackout (RL-155a section 3)"
+              }
+            },
+            {
+              "before": {
+                "epoch": 1795295699,
+                "local": "2026-11-21T13:14:59-08:00",
+                "admitted": false,
+                "refusal": "the worst-case span [t0, t0 + 8550 s] meets a batch blackout (13:14-13:15); arm after it or earlier"
+              },
+              "at": {
+                "epoch": 1795295700,
+                "local": "2026-11-21T13:15:00-08:00",
+                "admitted": true,
+                "worst_case_s": 8550
+              },
+              "after": {
+                "epoch": 1795295701,
+                "local": "2026-11-21T13:15:01-08:00",
+                "admitted": true,
+                "worst_case_s": 8550
+              }
+            }
+          ],
+          "minute_samples": 1440,
+          "final_second_samples": 1
+        }
+      ]
+    },
+    {
+      "pin": "A",
+      "kit": "f2-inst-03",
+      "legs": [
+        "L001",
+        "L002"
+      ],
+      "batch_window": "02:00-02:35",
+      "days": [
+        {
+          "date": "2026-11-20",
+          "bands": [
+            {
+              "from": "2026-11-20T00:00:00-08:00",
+              "through": "2026-11-20T02:34:59-08:00",
+              "admitted": false
+            },
+            {
+              "from": "2026-11-20T02:35:00-08:00",
+              "through": "2026-11-20T10:50:00-08:00",
+              "admitted": true
+            },
+            {
+              "from": "2026-11-20T10:50:01-08:00",
+              "through": "2026-11-20T13:14:59-08:00",
+              "admitted": false
+            },
+            {
+              "from": "2026-11-20T13:15:00-08:00",
+              "through": "2026-11-20T23:03:10-08:00",
+              "admitted": true
+            },
+            {
+              "from": "2026-11-20T23:03:11-08:00",
+              "through": "2026-11-20T23:59:59-08:00",
+              "admitted": false
+            }
+          ],
+          "witnesses": [
+            {
+              "before": {
+                "epoch": 1795170899,
+                "local": "2026-11-20T02:34:59-08:00",
+                "admitted": false,
+                "refusal": "the worst-case span [t0, t0 + 8550 s] meets a batch blackout (02:00-02:35); arm after it or earlier"
+              },
+              "at": {
+                "epoch": 1795170900,
+                "local": "2026-11-20T02:35:00-08:00",
+                "admitted": true,
+                "worst_case_s": 8550
+              },
+              "after": {
+                "epoch": 1795170901,
+                "local": "2026-11-20T02:35:01-08:00",
+                "admitted": true,
+                "worst_case_s": 8550
+              }
+            },
+            {
+              "before": {
+                "epoch": 1795200600,
+                "local": "2026-11-20T10:50:00-08:00",
+                "admitted": true,
+                "worst_case_s": 8550
+              },
+              "at": {
+                "epoch": 1795200601,
+                "local": "2026-11-20T10:50:01-08:00",
+                "admitted": false,
+                "refusal": "no launch between 10:50 and 13:15: the soak path waits out 11:45-13:15 unbudgeted (RL-155a section 3)"
+              },
+              "after": {
+                "epoch": 1795200602,
+                "local": "2026-11-20T10:50:02-08:00",
+                "admitted": false,
+                "refusal": "no launch between 10:50 and 13:15: the soak path waits out 11:45-13:15 unbudgeted (RL-155a section 3)"
+              }
+            },
+            {
+              "before": {
+                "epoch": 1795209299,
+                "local": "2026-11-20T13:14:59-08:00",
+                "admitted": false,
+                "refusal": "no launch between 10:50 and 13:15: the soak path waits out 11:45-13:15 unbudgeted (RL-155a section 3)"
+              },
+              "at": {
+                "epoch": 1795209300,
+                "local": "2026-11-20T13:15:00-08:00",
+                "admitted": true,
+                "worst_case_s": 8550
+              },
+              "after": {
+                "epoch": 1795209301,
+                "local": "2026-11-20T13:15:01-08:00",
+                "admitted": true,
+                "worst_case_s": 8550
+              }
+            },
+            {
+              "before": {
+                "epoch": 1795244590,
+                "local": "2026-11-20T23:03:10-08:00",
+                "admitted": true,
+                "worst_case_s": 8550
+              },
+              "at": {
+                "epoch": 1795244591,
+                "local": "2026-11-20T23:03:11-08:00",
+                "admitted": false,
+                "refusal": "the fence end (worst case + 1460 s) at 01:50:01 passes 01:50:00, 10 min before the 02:00-02:35 blackout (RL-155a section 3)"
+              },
+              "after": {
+                "epoch": 1795244592,
+                "local": "2026-11-20T23:03:12-08:00",
+                "admitted": false,
+                "refusal": "the fence end (worst case + 1460 s) at 01:50:02 passes 01:50:00, 10 min before the 02:00-02:35 blackout (RL-155a section 3)"
+              }
+            }
+          ],
+          "minute_samples": 1440,
+          "final_second_samples": 1
+        },
+        {
+          "date": "2026-11-21",
+          "bands": [
+            {
+              "from": "2026-11-21T00:00:00-08:00",
+              "through": "2026-11-21T02:34:59-08:00",
+              "admitted": false
+            },
+            {
+              "from": "2026-11-21T02:35:00-08:00",
+              "through": "2026-11-21T10:50:00-08:00",
+              "admitted": true
+            },
+            {
+              "from": "2026-11-21T10:50:01-08:00",
+              "through": "2026-11-21T13:14:59-08:00",
+              "admitted": false
+            },
+            {
+              "from": "2026-11-21T13:15:00-08:00",
+              "through": "2026-11-21T23:03:10-08:00",
+              "admitted": true
+            },
+            {
+              "from": "2026-11-21T23:03:11-08:00",
+              "through": "2026-11-21T23:59:59-08:00",
+              "admitted": false
+            }
+          ],
+          "witnesses": [
+            {
+              "before": {
+                "epoch": 1795257299,
+                "local": "2026-11-21T02:34:59-08:00",
+                "admitted": false,
+                "refusal": "the worst-case span [t0, t0 + 8550 s] meets a batch blackout (02:00-02:35); arm after it or earlier"
+              },
+              "at": {
+                "epoch": 1795257300,
+                "local": "2026-11-21T02:35:00-08:00",
+                "admitted": true,
+                "worst_case_s": 8550
+              },
+              "after": {
+                "epoch": 1795257301,
+                "local": "2026-11-21T02:35:01-08:00",
+                "admitted": true,
+                "worst_case_s": 8550
+              }
+            },
+            {
+              "before": {
+                "epoch": 1795287000,
+                "local": "2026-11-21T10:50:00-08:00",
+                "admitted": true,
+                "worst_case_s": 8550
+              },
+              "at": {
+                "epoch": 1795287001,
+                "local": "2026-11-21T10:50:01-08:00",
+                "admitted": false,
+                "refusal": "no launch between 10:50 and 13:15: the soak path waits out 11:45-13:15 unbudgeted (RL-155a section 3)"
+              },
+              "after": {
+                "epoch": 1795287002,
+                "local": "2026-11-21T10:50:02-08:00",
+                "admitted": false,
+                "refusal": "no launch between 10:50 and 13:15: the soak path waits out 11:45-13:15 unbudgeted (RL-155a section 3)"
+              }
+            },
+            {
+              "before": {
+                "epoch": 1795295699,
+                "local": "2026-11-21T13:14:59-08:00",
+                "admitted": false,
+                "refusal": "no launch between 10:50 and 13:15: the soak path waits out 11:45-13:15 unbudgeted (RL-155a section 3)"
+              },
+              "at": {
+                "epoch": 1795295700,
+                "local": "2026-11-21T13:15:00-08:00",
+                "admitted": true,
+                "worst_case_s": 8550
+              },
+              "after": {
+                "epoch": 1795295701,
+                "local": "2026-11-21T13:15:01-08:00",
+                "admitted": true,
+                "worst_case_s": 8550
+              }
+            },
+            {
+              "before": {
+                "epoch": 1795330990,
+                "local": "2026-11-21T23:03:10-08:00",
+                "admitted": true,
+                "worst_case_s": 8550
+              },
+              "at": {
+                "epoch": 1795330991,
+                "local": "2026-11-21T23:03:11-08:00",
+                "admitted": false,
+                "refusal": "the fence end (worst case + 1460 s) at 01:50:01 passes 01:50:00, 10 min before the 02:00-02:35 blackout (RL-155a section 3)"
+              },
+              "after": {
+                "epoch": 1795330992,
+                "local": "2026-11-21T23:03:12-08:00",
+                "admitted": false,
+                "refusal": "the fence end (worst case + 1460 s) at 01:50:02 passes 01:50:00, 10 min before the 02:00-02:35 blackout (RL-155a section 3)"
+              }
+            }
+          ],
+          "minute_samples": 1440,
+          "final_second_samples": 1
+        }
+      ]
+    },
+    {
+      "pin": "A",
+      "kit": "f2-inst-03",
+      "legs": [
+        "L001",
+        "L002"
+      ],
+      "batch_window": "13:14-13:15",
+      "days": [
+        {
+          "date": "2026-11-20",
+          "bands": [
+            {
+              "from": "2026-11-20T00:00:00-08:00",
+              "through": "2026-11-20T10:17:10-08:00",
+              "admitted": true
+            },
+            {
+              "from": "2026-11-20T10:17:11-08:00",
+              "through": "2026-11-20T13:14:59-08:00",
+              "admitted": false
+            },
+            {
+              "from": "2026-11-20T13:15:00-08:00",
+              "through": "2026-11-20T23:59:59-08:00",
+              "admitted": true
+            }
+          ],
+          "witnesses": [
+            {
+              "before": {
+                "epoch": 1795198630,
+                "local": "2026-11-20T10:17:10-08:00",
+                "admitted": true,
+                "worst_case_s": 8550
+              },
+              "at": {
+                "epoch": 1795198631,
+                "local": "2026-11-20T10:17:11-08:00",
+                "admitted": false,
+                "refusal": "the fence end (worst case + 1460 s) at 13:04:01 passes 13:04:00, 10 min before the 13:14-13:15 blackout (RL-155a section 3)"
+              },
+              "after": {
+                "epoch": 1795198632,
+                "local": "2026-11-20T10:17:12-08:00",
+                "admitted": false,
+                "refusal": "the fence end (worst case + 1460 s) at 13:04:02 passes 13:04:00, 10 min before the 13:14-13:15 blackout (RL-155a section 3)"
+              }
+            },
+            {
+              "before": {
+                "epoch": 1795209299,
+                "local": "2026-11-20T13:14:59-08:00",
+                "admitted": false,
+                "refusal": "the worst-case span [t0, t0 + 8550 s] meets a batch blackout (13:14-13:15); arm after it or earlier"
+              },
+              "at": {
+                "epoch": 1795209300,
+                "local": "2026-11-20T13:15:00-08:00",
+                "admitted": true,
+                "worst_case_s": 8550
+              },
+              "after": {
+                "epoch": 1795209301,
+                "local": "2026-11-20T13:15:01-08:00",
+                "admitted": true,
+                "worst_case_s": 8550
+              }
+            }
+          ],
+          "minute_samples": 1440,
+          "final_second_samples": 1
+        },
+        {
+          "date": "2026-11-21",
+          "bands": [
+            {
+              "from": "2026-11-21T00:00:00-08:00",
+              "through": "2026-11-21T10:17:10-08:00",
+              "admitted": true
+            },
+            {
+              "from": "2026-11-21T10:17:11-08:00",
+              "through": "2026-11-21T13:14:59-08:00",
+              "admitted": false
+            },
+            {
+              "from": "2026-11-21T13:15:00-08:00",
+              "through": "2026-11-21T23:59:59-08:00",
+              "admitted": true
+            }
+          ],
+          "witnesses": [
+            {
+              "before": {
+                "epoch": 1795285030,
+                "local": "2026-11-21T10:17:10-08:00",
+                "admitted": true,
+                "worst_case_s": 8550
+              },
+              "at": {
+                "epoch": 1795285031,
+                "local": "2026-11-21T10:17:11-08:00",
+                "admitted": false,
+                "refusal": "the fence end (worst case + 1460 s) at 13:04:01 passes 13:04:00, 10 min before the 13:14-13:15 blackout (RL-155a section 3)"
+              },
+              "after": {
+                "epoch": 1795285032,
+                "local": "2026-11-21T10:17:12-08:00",
+                "admitted": false,
+                "refusal": "the fence end (worst case + 1460 s) at 13:04:02 passes 13:04:00, 10 min before the 13:14-13:15 blackout (RL-155a section 3)"
+              }
+            },
+            {
+              "before": {
+                "epoch": 1795295699,
+                "local": "2026-11-21T13:14:59-08:00",
+                "admitted": false,
+                "refusal": "the worst-case span [t0, t0 + 8550 s] meets a batch blackout (13:14-13:15); arm after it or earlier"
+              },
+              "at": {
+                "epoch": 1795295700,
+                "local": "2026-11-21T13:15:00-08:00",
+                "admitted": true,
+                "worst_case_s": 8550
+              },
+              "after": {
+                "epoch": 1795295701,
+                "local": "2026-11-21T13:15:01-08:00",
+                "admitted": true,
+                "worst_case_s": 8550
+              }
+            }
+          ],
+          "minute_samples": 1440,
+          "final_second_samples": 1
+        }
+      ]
+    },
+    {
+      "pin": "A",
+      "kit": "f2-stab-01",
+      "legs": [
+        "L001"
+      ],
+      "batch_window": "02:00-02:35",
+      "days": [
+        {
+          "date": "2026-11-20",
+          "bands": [
+            {
+              "from": "2026-11-20T00:00:00-08:00",
+              "through": "2026-11-20T02:34:59-08:00",
+              "admitted": false
+            },
+            {
+              "from": "2026-11-20T02:35:00-08:00",
+              "through": "2026-11-20T10:50:00-08:00",
+              "admitted": true
+            },
+            {
+              "from": "2026-11-20T10:50:01-08:00",
+              "through": "2026-11-20T13:14:59-08:00",
+              "admitted": false
+            },
+            {
+              "from": "2026-11-20T13:15:00-08:00",
+              "through": "2026-11-20T23:48:10-08:00",
+              "admitted": true
+            },
+            {
+              "from": "2026-11-20T23:48:11-08:00",
+              "through": "2026-11-20T23:59:59-08:00",
+              "admitted": false
+            }
+          ],
+          "witnesses": [
+            {
+              "before": {
+                "epoch": 1795170899,
+                "local": "2026-11-20T02:34:59-08:00",
+                "admitted": false,
+                "refusal": "the worst-case span [t0, t0 + 5850 s] meets a batch blackout (02:00-02:35); arm after it or earlier"
+              },
+              "at": {
+                "epoch": 1795170900,
+                "local": "2026-11-20T02:35:00-08:00",
+                "admitted": true,
+                "worst_case_s": 5850
+              },
+              "after": {
+                "epoch": 1795170901,
+                "local": "2026-11-20T02:35:01-08:00",
+                "admitted": true,
+                "worst_case_s": 5850
+              }
+            },
+            {
+              "before": {
+                "epoch": 1795200600,
+                "local": "2026-11-20T10:50:00-08:00",
+                "admitted": true,
+                "worst_case_s": 5850
+              },
+              "at": {
+                "epoch": 1795200601,
+                "local": "2026-11-20T10:50:01-08:00",
+                "admitted": false,
+                "refusal": "no launch between 10:50 and 13:15: the soak path waits out 11:45-13:15 unbudgeted (RL-155a section 3)"
+              },
+              "after": {
+                "epoch": 1795200602,
+                "local": "2026-11-20T10:50:02-08:00",
+                "admitted": false,
+                "refusal": "no launch between 10:50 and 13:15: the soak path waits out 11:45-13:15 unbudgeted (RL-155a section 3)"
+              }
+            },
+            {
+              "before": {
+                "epoch": 1795209299,
+                "local": "2026-11-20T13:14:59-08:00",
+                "admitted": false,
+                "refusal": "no launch between 10:50 and 13:15: the soak path waits out 11:45-13:15 unbudgeted (RL-155a section 3)"
+              },
+              "at": {
+                "epoch": 1795209300,
+                "local": "2026-11-20T13:15:00-08:00",
+                "admitted": true,
+                "worst_case_s": 5850
+              },
+              "after": {
+                "epoch": 1795209301,
+                "local": "2026-11-20T13:15:01-08:00",
+                "admitted": true,
+                "worst_case_s": 5850
+              }
+            },
+            {
+              "before": {
+                "epoch": 1795247290,
+                "local": "2026-11-20T23:48:10-08:00",
+                "admitted": true,
+                "worst_case_s": 5850
+              },
+              "at": {
+                "epoch": 1795247291,
+                "local": "2026-11-20T23:48:11-08:00",
+                "admitted": false,
+                "refusal": "the fence end (worst case + 1460 s) at 01:50:01 passes 01:50:00, 10 min before the 02:00-02:35 blackout (RL-155a section 3)"
+              },
+              "after": {
+                "epoch": 1795247292,
+                "local": "2026-11-20T23:48:12-08:00",
+                "admitted": false,
+                "refusal": "the fence end (worst case + 1460 s) at 01:50:02 passes 01:50:00, 10 min before the 02:00-02:35 blackout (RL-155a section 3)"
+              }
+            }
+          ],
+          "minute_samples": 1440,
+          "final_second_samples": 1
+        },
+        {
+          "date": "2026-11-21",
+          "bands": [
+            {
+              "from": "2026-11-21T00:00:00-08:00",
+              "through": "2026-11-21T02:34:59-08:00",
+              "admitted": false
+            },
+            {
+              "from": "2026-11-21T02:35:00-08:00",
+              "through": "2026-11-21T10:50:00-08:00",
+              "admitted": true
+            },
+            {
+              "from": "2026-11-21T10:50:01-08:00",
+              "through": "2026-11-21T13:14:59-08:00",
+              "admitted": false
+            },
+            {
+              "from": "2026-11-21T13:15:00-08:00",
+              "through": "2026-11-21T23:48:10-08:00",
+              "admitted": true
+            },
+            {
+              "from": "2026-11-21T23:48:11-08:00",
+              "through": "2026-11-21T23:59:59-08:00",
+              "admitted": false
+            }
+          ],
+          "witnesses": [
+            {
+              "before": {
+                "epoch": 1795257299,
+                "local": "2026-11-21T02:34:59-08:00",
+                "admitted": false,
+                "refusal": "the worst-case span [t0, t0 + 5850 s] meets a batch blackout (02:00-02:35); arm after it or earlier"
+              },
+              "at": {
+                "epoch": 1795257300,
+                "local": "2026-11-21T02:35:00-08:00",
+                "admitted": true,
+                "worst_case_s": 5850
+              },
+              "after": {
+                "epoch": 1795257301,
+                "local": "2026-11-21T02:35:01-08:00",
+                "admitted": true,
+                "worst_case_s": 5850
+              }
+            },
+            {
+              "before": {
+                "epoch": 1795287000,
+                "local": "2026-11-21T10:50:00-08:00",
+                "admitted": true,
+                "worst_case_s": 5850
+              },
+              "at": {
+                "epoch": 1795287001,
+                "local": "2026-11-21T10:50:01-08:00",
+                "admitted": false,
+                "refusal": "no launch between 10:50 and 13:15: the soak path waits out 11:45-13:15 unbudgeted (RL-155a section 3)"
+              },
+              "after": {
+                "epoch": 1795287002,
+                "local": "2026-11-21T10:50:02-08:00",
+                "admitted": false,
+                "refusal": "no launch between 10:50 and 13:15: the soak path waits out 11:45-13:15 unbudgeted (RL-155a section 3)"
+              }
+            },
+            {
+              "before": {
+                "epoch": 1795295699,
+                "local": "2026-11-21T13:14:59-08:00",
+                "admitted": false,
+                "refusal": "no launch between 10:50 and 13:15: the soak path waits out 11:45-13:15 unbudgeted (RL-155a section 3)"
+              },
+              "at": {
+                "epoch": 1795295700,
+                "local": "2026-11-21T13:15:00-08:00",
+                "admitted": true,
+                "worst_case_s": 5850
+              },
+              "after": {
+                "epoch": 1795295701,
+                "local": "2026-11-21T13:15:01-08:00",
+                "admitted": true,
+                "worst_case_s": 5850
+              }
+            },
+            {
+              "before": {
+                "epoch": 1795333690,
+                "local": "2026-11-21T23:48:10-08:00",
+                "admitted": true,
+                "worst_case_s": 5850
+              },
+              "at": {
+                "epoch": 1795333691,
+                "local": "2026-11-21T23:48:11-08:00",
+                "admitted": false,
+                "refusal": "the fence end (worst case + 1460 s) at 01:50:01 passes 01:50:00, 10 min before the 02:00-02:35 blackout (RL-155a section 3)"
+              },
+              "after": {
+                "epoch": 1795333692,
+                "local": "2026-11-21T23:48:12-08:00",
+                "admitted": false,
+                "refusal": "the fence end (worst case + 1460 s) at 01:50:02 passes 01:50:00, 10 min before the 02:00-02:35 blackout (RL-155a section 3)"
+              }
+            }
+          ],
+          "minute_samples": 1440,
+          "final_second_samples": 1
+        }
+      ]
+    },
+    {
+      "pin": "A",
+      "kit": "f2-stab-01",
+      "legs": [
+        "L001"
+      ],
+      "batch_window": "13:14-13:15",
+      "days": [
+        {
+          "date": "2026-11-20",
+          "bands": [
+            {
+              "from": "2026-11-20T00:00:00-08:00",
+              "through": "2026-11-20T10:50:00-08:00",
+              "admitted": true
+            },
+            {
+              "from": "2026-11-20T10:50:01-08:00",
+              "through": "2026-11-20T13:14:59-08:00",
+              "admitted": false
+            },
+            {
+              "from": "2026-11-20T13:15:00-08:00",
+              "through": "2026-11-20T23:59:59-08:00",
+              "admitted": true
+            }
+          ],
+          "witnesses": [
+            {
+              "before": {
+                "epoch": 1795200600,
+                "local": "2026-11-20T10:50:00-08:00",
+                "admitted": true,
+                "worst_case_s": 5850
+              },
+              "at": {
+                "epoch": 1795200601,
+                "local": "2026-11-20T10:50:01-08:00",
+                "admitted": false,
+                "refusal": "no launch between 10:50 and 13:15: the soak path waits out 11:45-13:15 unbudgeted (RL-155a section 3)"
+              },
+              "after": {
+                "epoch": 1795200602,
+                "local": "2026-11-20T10:50:02-08:00",
+                "admitted": false,
+                "refusal": "no launch between 10:50 and 13:15: the soak path waits out 11:45-13:15 unbudgeted (RL-155a section 3)"
+              }
+            },
+            {
+              "before": {
+                "epoch": 1795209299,
+                "local": "2026-11-20T13:14:59-08:00",
+                "admitted": false,
+                "refusal": "the worst-case span [t0, t0 + 5850 s] meets a batch blackout (13:14-13:15); arm after it or earlier"
+              },
+              "at": {
+                "epoch": 1795209300,
+                "local": "2026-11-20T13:15:00-08:00",
+                "admitted": true,
+                "worst_case_s": 5850
+              },
+              "after": {
+                "epoch": 1795209301,
+                "local": "2026-11-20T13:15:01-08:00",
+                "admitted": true,
+                "worst_case_s": 5850
+              }
+            }
+          ],
+          "minute_samples": 1440,
+          "final_second_samples": 1
+        },
+        {
+          "date": "2026-11-21",
+          "bands": [
+            {
+              "from": "2026-11-21T00:00:00-08:00",
+              "through": "2026-11-21T10:50:00-08:00",
+              "admitted": true
+            },
+            {
+              "from": "2026-11-21T10:50:01-08:00",
+              "through": "2026-11-21T13:14:59-08:00",
+              "admitted": false
+            },
+            {
+              "from": "2026-11-21T13:15:00-08:00",
+              "through": "2026-11-21T23:59:59-08:00",
+              "admitted": true
+            }
+          ],
+          "witnesses": [
+            {
+              "before": {
+                "epoch": 1795287000,
+                "local": "2026-11-21T10:50:00-08:00",
+                "admitted": true,
+                "worst_case_s": 5850
+              },
+              "at": {
+                "epoch": 1795287001,
+                "local": "2026-11-21T10:50:01-08:00",
+                "admitted": false,
+                "refusal": "no launch between 10:50 and 13:15: the soak path waits out 11:45-13:15 unbudgeted (RL-155a section 3)"
+              },
+              "after": {
+                "epoch": 1795287002,
+                "local": "2026-11-21T10:50:02-08:00",
+                "admitted": false,
+                "refusal": "no launch between 10:50 and 13:15: the soak path waits out 11:45-13:15 unbudgeted (RL-155a section 3)"
+              }
+            },
+            {
+              "before": {
+                "epoch": 1795295699,
+                "local": "2026-11-21T13:14:59-08:00",
+                "admitted": false,
+                "refusal": "the worst-case span [t0, t0 + 5850 s] meets a batch blackout (13:14-13:15); arm after it or earlier"
+              },
+              "at": {
+                "epoch": 1795295700,
+                "local": "2026-11-21T13:15:00-08:00",
+                "admitted": true,
+                "worst_case_s": 5850
+              },
+              "after": {
+                "epoch": 1795295701,
+                "local": "2026-11-21T13:15:01-08:00",
+                "admitted": true,
+                "worst_case_s": 5850
+              }
+            }
+          ],
+          "minute_samples": 1440,
+          "final_second_samples": 1
+        }
+      ]
+    },
+    {
+      "pin": "A",
+      "kit": "f2-inst-01",
+      "legs": [
+        "L001",
+        "L002",
+        "L003"
+      ],
+      "batch_window": "02:00-02:35",
+      "days": [
+        {
+          "date": "2026-11-17",
+          "bands": [
+            {
+              "from": "2026-11-17T00:00:00-08:00",
+              "through": "2026-11-17T02:34:59-08:00",
+              "admitted": false
+            },
+            {
+              "from": "2026-11-17T02:35:00-08:00",
+              "through": "2026-11-17T10:50:00-08:00",
+              "admitted": true
+            },
+            {
+              "from": "2026-11-17T10:50:01-08:00",
+              "through": "2026-11-17T13:14:59-08:00",
+              "admitted": false
+            },
+            {
+              "from": "2026-11-17T13:15:00-08:00",
+              "through": "2026-11-17T22:18:10-08:00",
+              "admitted": true
+            },
+            {
+              "from": "2026-11-17T22:18:11-08:00",
+              "through": "2026-11-17T23:59:59-08:00",
+              "admitted": false
+            }
+          ],
+          "witnesses": [
+            {
+              "before": {
+                "epoch": 1794911699,
+                "local": "2026-11-17T02:34:59-08:00",
+                "admitted": false,
+                "refusal": "the worst-case span [t0, t0 + 11250 s] meets a batch blackout (02:00-02:35); arm after it or earlier"
+              },
+              "at": {
+                "epoch": 1794911700,
+                "local": "2026-11-17T02:35:00-08:00",
+                "admitted": true,
+                "worst_case_s": 11250
+              },
+              "after": {
+                "epoch": 1794911701,
+                "local": "2026-11-17T02:35:01-08:00",
+                "admitted": true,
+                "worst_case_s": 11250
+              }
+            },
+            {
+              "before": {
+                "epoch": 1794941400,
+                "local": "2026-11-17T10:50:00-08:00",
+                "admitted": true,
+                "worst_case_s": 11250
+              },
+              "at": {
+                "epoch": 1794941401,
+                "local": "2026-11-17T10:50:01-08:00",
+                "admitted": false,
+                "refusal": "no launch between 10:50 and 13:15: the soak path waits out 11:45-13:15 unbudgeted (RL-155a section 3)"
+              },
+              "after": {
+                "epoch": 1794941402,
+                "local": "2026-11-17T10:50:02-08:00",
+                "admitted": false,
+                "refusal": "no launch between 10:50 and 13:15: the soak path waits out 11:45-13:15 unbudgeted (RL-155a section 3)"
+              }
+            },
+            {
+              "before": {
+                "epoch": 1794950099,
+                "local": "2026-11-17T13:14:59-08:00",
+                "admitted": false,
+                "refusal": "no launch between 10:50 and 13:15: the soak path waits out 11:45-13:15 unbudgeted (RL-155a section 3)"
+              },
+              "at": {
+                "epoch": 1794950100,
+                "local": "2026-11-17T13:15:00-08:00",
+                "admitted": true,
+                "worst_case_s": 11250
+              },
+              "after": {
+                "epoch": 1794950101,
+                "local": "2026-11-17T13:15:01-08:00",
+                "admitted": true,
+                "worst_case_s": 11250
+              }
+            },
+            {
+              "before": {
+                "epoch": 1794982690,
+                "local": "2026-11-17T22:18:10-08:00",
+                "admitted": true,
+                "worst_case_s": 11250
+              },
+              "at": {
+                "epoch": 1794982691,
+                "local": "2026-11-17T22:18:11-08:00",
+                "admitted": false,
+                "refusal": "the fence end (worst case + 1460 s) at 01:50:01 passes 01:50:00, 10 min before the 02:00-02:35 blackout (RL-155a section 3)"
+              },
+              "after": {
+                "epoch": 1794982692,
+                "local": "2026-11-17T22:18:12-08:00",
+                "admitted": false,
+                "refusal": "the fence end (worst case + 1460 s) at 01:50:02 passes 01:50:00, 10 min before the 02:00-02:35 blackout (RL-155a section 3)"
+              }
+            }
+          ],
+          "minute_samples": 1440,
+          "final_second_samples": 1
+        },
+        {
+          "date": "2026-11-20",
+          "bands": [
+            {
+              "from": "2026-11-20T00:00:00-08:00",
+              "through": "2026-11-20T02:34:59-08:00",
+              "admitted": false
+            },
+            {
+              "from": "2026-11-20T02:35:00-08:00",
+              "through": "2026-11-20T10:50:00-08:00",
+              "admitted": true
+            },
+            {
+              "from": "2026-11-20T10:50:01-08:00",
+              "through": "2026-11-20T13:14:59-08:00",
+              "admitted": false
+            },
+            {
+              "from": "2026-11-20T13:15:00-08:00",
+              "through": "2026-11-20T22:18:10-08:00",
+              "admitted": true
+            },
+            {
+              "from": "2026-11-20T22:18:11-08:00",
+              "through": "2026-11-20T23:59:59-08:00",
+              "admitted": false
+            }
+          ],
+          "witnesses": [
+            {
+              "before": {
+                "epoch": 1795170899,
+                "local": "2026-11-20T02:34:59-08:00",
+                "admitted": false,
+                "refusal": "the worst-case span [t0, t0 + 11250 s] meets a batch blackout (02:00-02:35); arm after it or earlier"
+              },
+              "at": {
+                "epoch": 1795170900,
+                "local": "2026-11-20T02:35:00-08:00",
+                "admitted": true,
+                "worst_case_s": 11250
+              },
+              "after": {
+                "epoch": 1795170901,
+                "local": "2026-11-20T02:35:01-08:00",
+                "admitted": true,
+                "worst_case_s": 11250
+              }
+            },
+            {
+              "before": {
+                "epoch": 1795200600,
+                "local": "2026-11-20T10:50:00-08:00",
+                "admitted": true,
+                "worst_case_s": 11250
+              },
+              "at": {
+                "epoch": 1795200601,
+                "local": "2026-11-20T10:50:01-08:00",
+                "admitted": false,
+                "refusal": "no launch between 10:50 and 13:15: the soak path waits out 11:45-13:15 unbudgeted (RL-155a section 3)"
+              },
+              "after": {
+                "epoch": 1795200602,
+                "local": "2026-11-20T10:50:02-08:00",
+                "admitted": false,
+                "refusal": "no launch between 10:50 and 13:15: the soak path waits out 11:45-13:15 unbudgeted (RL-155a section 3)"
+              }
+            },
+            {
+              "before": {
+                "epoch": 1795209299,
+                "local": "2026-11-20T13:14:59-08:00",
+                "admitted": false,
+                "refusal": "no launch between 10:50 and 13:15: the soak path waits out 11:45-13:15 unbudgeted (RL-155a section 3)"
+              },
+              "at": {
+                "epoch": 1795209300,
+                "local": "2026-11-20T13:15:00-08:00",
+                "admitted": true,
+                "worst_case_s": 11250
+              },
+              "after": {
+                "epoch": 1795209301,
+                "local": "2026-11-20T13:15:01-08:00",
+                "admitted": true,
+                "worst_case_s": 11250
+              }
+            },
+            {
+              "before": {
+                "epoch": 1795241890,
+                "local": "2026-11-20T22:18:10-08:00",
+                "admitted": true,
+                "worst_case_s": 11250
+              },
+              "at": {
+                "epoch": 1795241891,
+                "local": "2026-11-20T22:18:11-08:00",
+                "admitted": false,
+                "refusal": "the fence end (worst case + 1460 s) at 01:50:01 passes 01:50:00, 10 min before the 02:00-02:35 blackout (RL-155a section 3)"
+              },
+              "after": {
+                "epoch": 1795241892,
+                "local": "2026-11-20T22:18:12-08:00",
+                "admitted": false,
+                "refusal": "the fence end (worst case + 1460 s) at 01:50:02 passes 01:50:00, 10 min before the 02:00-02:35 blackout (RL-155a section 3)"
+              }
+            }
+          ],
+          "minute_samples": 1440,
+          "final_second_samples": 1
+        },
+        {
+          "date": "2026-11-21",
+          "bands": [
+            {
+              "from": "2026-11-21T00:00:00-08:00",
+              "through": "2026-11-21T02:34:59-08:00",
+              "admitted": false
+            },
+            {
+              "from": "2026-11-21T02:35:00-08:00",
+              "through": "2026-11-21T10:50:00-08:00",
+              "admitted": true
+            },
+            {
+              "from": "2026-11-21T10:50:01-08:00",
+              "through": "2026-11-21T13:14:59-08:00",
+              "admitted": false
+            },
+            {
+              "from": "2026-11-21T13:15:00-08:00",
+              "through": "2026-11-21T22:18:10-08:00",
+              "admitted": true
+            },
+            {
+              "from": "2026-11-21T22:18:11-08:00",
+              "through": "2026-11-21T23:59:59-08:00",
+              "admitted": false
+            }
+          ],
+          "witnesses": [
+            {
+              "before": {
+                "epoch": 1795257299,
+                "local": "2026-11-21T02:34:59-08:00",
+                "admitted": false,
+                "refusal": "the worst-case span [t0, t0 + 11250 s] meets a batch blackout (02:00-02:35); arm after it or earlier"
+              },
+              "at": {
+                "epoch": 1795257300,
+                "local": "2026-11-21T02:35:00-08:00",
+                "admitted": true,
+                "worst_case_s": 11250
+              },
+              "after": {
+                "epoch": 1795257301,
+                "local": "2026-11-21T02:35:01-08:00",
+                "admitted": true,
+                "worst_case_s": 11250
+              }
+            },
+            {
+              "before": {
+                "epoch": 1795287000,
+                "local": "2026-11-21T10:50:00-08:00",
+                "admitted": true,
+                "worst_case_s": 11250
+              },
+              "at": {
+                "epoch": 1795287001,
+                "local": "2026-11-21T10:50:01-08:00",
+                "admitted": false,
+                "refusal": "no launch between 10:50 and 13:15: the soak path waits out 11:45-13:15 unbudgeted (RL-155a section 3)"
+              },
+              "after": {
+                "epoch": 1795287002,
+                "local": "2026-11-21T10:50:02-08:00",
+                "admitted": false,
+                "refusal": "no launch between 10:50 and 13:15: the soak path waits out 11:45-13:15 unbudgeted (RL-155a section 3)"
+              }
+            },
+            {
+              "before": {
+                "epoch": 1795295699,
+                "local": "2026-11-21T13:14:59-08:00",
+                "admitted": false,
+                "refusal": "no launch between 10:50 and 13:15: the soak path waits out 11:45-13:15 unbudgeted (RL-155a section 3)"
+              },
+              "at": {
+                "epoch": 1795295700,
+                "local": "2026-11-21T13:15:00-08:00",
+                "admitted": true,
+                "worst_case_s": 11250
+              },
+              "after": {
+                "epoch": 1795295701,
+                "local": "2026-11-21T13:15:01-08:00",
+                "admitted": true,
+                "worst_case_s": 11250
+              }
+            },
+            {
+              "before": {
+                "epoch": 1795328290,
+                "local": "2026-11-21T22:18:10-08:00",
+                "admitted": true,
+                "worst_case_s": 11250
+              },
+              "at": {
+                "epoch": 1795328291,
+                "local": "2026-11-21T22:18:11-08:00",
+                "admitted": false,
+                "refusal": "the fence end (worst case + 1460 s) at 01:50:01 passes 01:50:00, 10 min before the 02:00-02:35 blackout (RL-155a section 3)"
+              },
+              "after": {
+                "epoch": 1795328292,
+                "local": "2026-11-21T22:18:12-08:00",
+                "admitted": false,
+                "refusal": "the fence end (worst case + 1460 s) at 01:50:02 passes 01:50:00, 10 min before the 02:00-02:35 blackout (RL-155a section 3)"
+              }
+            }
+          ],
+          "minute_samples": 1440,
+          "final_second_samples": 1
+        }
+      ]
+    },
+    {
+      "pin": "A",
+      "kit": "f2-inst-01",
+      "legs": [
+        "L001",
+        "L002",
+        "L003"
+      ],
+      "batch_window": "13:14-13:15",
+      "days": [
+        {
+          "date": "2026-11-17",
+          "bands": [
+            {
+              "from": "2026-11-17T00:00:00-08:00",
+              "through": "2026-11-17T09:32:10-08:00",
+              "admitted": true
+            },
+            {
+              "from": "2026-11-17T09:32:11-08:00",
+              "through": "2026-11-17T13:14:59-08:00",
+              "admitted": false
+            },
+            {
+              "from": "2026-11-17T13:15:00-08:00",
+              "through": "2026-11-17T23:59:59-08:00",
+              "admitted": true
+            }
+          ],
+          "witnesses": [
+            {
+              "before": {
+                "epoch": 1794936730,
+                "local": "2026-11-17T09:32:10-08:00",
+                "admitted": true,
+                "worst_case_s": 11250
+              },
+              "at": {
+                "epoch": 1794936731,
+                "local": "2026-11-17T09:32:11-08:00",
+                "admitted": false,
+                "refusal": "the fence end (worst case + 1460 s) at 13:04:01 passes 13:04:00, 10 min before the 13:14-13:15 blackout (RL-155a section 3)"
+              },
+              "after": {
+                "epoch": 1794936732,
+                "local": "2026-11-17T09:32:12-08:00",
+                "admitted": false,
+                "refusal": "the fence end (worst case + 1460 s) at 13:04:02 passes 13:04:00, 10 min before the 13:14-13:15 blackout (RL-155a section 3)"
+              }
+            },
+            {
+              "before": {
+                "epoch": 1794950099,
+                "local": "2026-11-17T13:14:59-08:00",
+                "admitted": false,
+                "refusal": "the worst-case span [t0, t0 + 11250 s] meets a batch blackout (13:14-13:15); arm after it or earlier"
+              },
+              "at": {
+                "epoch": 1794950100,
+                "local": "2026-11-17T13:15:00-08:00",
+                "admitted": true,
+                "worst_case_s": 11250
+              },
+              "after": {
+                "epoch": 1794950101,
+                "local": "2026-11-17T13:15:01-08:00",
+                "admitted": true,
+                "worst_case_s": 11250
+              }
+            }
+          ],
+          "minute_samples": 1440,
+          "final_second_samples": 1
+        },
+        {
+          "date": "2026-11-20",
+          "bands": [
+            {
+              "from": "2026-11-20T00:00:00-08:00",
+              "through": "2026-11-20T09:32:10-08:00",
+              "admitted": true
+            },
+            {
+              "from": "2026-11-20T09:32:11-08:00",
+              "through": "2026-11-20T13:14:59-08:00",
+              "admitted": false
+            },
+            {
+              "from": "2026-11-20T13:15:00-08:00",
+              "through": "2026-11-20T23:59:59-08:00",
+              "admitted": true
+            }
+          ],
+          "witnesses": [
+            {
+              "before": {
+                "epoch": 1795195930,
+                "local": "2026-11-20T09:32:10-08:00",
+                "admitted": true,
+                "worst_case_s": 11250
+              },
+              "at": {
+                "epoch": 1795195931,
+                "local": "2026-11-20T09:32:11-08:00",
+                "admitted": false,
+                "refusal": "the fence end (worst case + 1460 s) at 13:04:01 passes 13:04:00, 10 min before the 13:14-13:15 blackout (RL-155a section 3)"
+              },
+              "after": {
+                "epoch": 1795195932,
+                "local": "2026-11-20T09:32:12-08:00",
+                "admitted": false,
+                "refusal": "the fence end (worst case + 1460 s) at 13:04:02 passes 13:04:00, 10 min before the 13:14-13:15 blackout (RL-155a section 3)"
+              }
+            },
+            {
+              "before": {
+                "epoch": 1795209299,
+                "local": "2026-11-20T13:14:59-08:00",
+                "admitted": false,
+                "refusal": "the worst-case span [t0, t0 + 11250 s] meets a batch blackout (13:14-13:15); arm after it or earlier"
+              },
+              "at": {
+                "epoch": 1795209300,
+                "local": "2026-11-20T13:15:00-08:00",
+                "admitted": true,
+                "worst_case_s": 11250
+              },
+              "after": {
+                "epoch": 1795209301,
+                "local": "2026-11-20T13:15:01-08:00",
+                "admitted": true,
+                "worst_case_s": 11250
+              }
+            }
+          ],
+          "minute_samples": 1440,
+          "final_second_samples": 1
+        },
+        {
+          "date": "2026-11-21",
+          "bands": [
+            {
+              "from": "2026-11-21T00:00:00-08:00",
+              "through": "2026-11-21T09:32:10-08:00",
+              "admitted": true
+            },
+            {
+              "from": "2026-11-21T09:32:11-08:00",
+              "through": "2026-11-21T13:14:59-08:00",
+              "admitted": false
+            },
+            {
+              "from": "2026-11-21T13:15:00-08:00",
+              "through": "2026-11-21T23:59:59-08:00",
+              "admitted": true
+            }
+          ],
+          "witnesses": [
+            {
+              "before": {
+                "epoch": 1795282330,
+                "local": "2026-11-21T09:32:10-08:00",
+                "admitted": true,
+                "worst_case_s": 11250
+              },
+              "at": {
+                "epoch": 1795282331,
+                "local": "2026-11-21T09:32:11-08:00",
+                "admitted": false,
+                "refusal": "the fence end (worst case + 1460 s) at 13:04:01 passes 13:04:00, 10 min before the 13:14-13:15 blackout (RL-155a section 3)"
+              },
+              "after": {
+                "epoch": 1795282332,
+                "local": "2026-11-21T09:32:12-08:00",
+                "admitted": false,
+                "refusal": "the fence end (worst case + 1460 s) at 13:04:02 passes 13:04:00, 10 min before the 13:14-13:15 blackout (RL-155a section 3)"
+              }
+            },
+            {
+              "before": {
+                "epoch": 1795295699,
+                "local": "2026-11-21T13:14:59-08:00",
+                "admitted": false,
+                "refusal": "the worst-case span [t0, t0 + 11250 s] meets a batch blackout (13:14-13:15); arm after it or earlier"
+              },
+              "at": {
+                "epoch": 1795295700,
+                "local": "2026-11-21T13:15:00-08:00",
+                "admitted": true,
+                "worst_case_s": 11250
+              },
+              "after": {
+                "epoch": 1795295701,
+                "local": "2026-11-21T13:15:01-08:00",
+                "admitted": true,
+                "worst_case_s": 11250
+              }
+            }
+          ],
+          "minute_samples": 1440,
+          "final_second_samples": 1
+        }
+      ]
+    }
+  ]
+}
