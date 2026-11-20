@@ -229,6 +229,31 @@ class ContrastWriterTests(unittest.TestCase):
         self.assertEqual((code, calls), (0, list(chain.STEPS)))
         self.assert_preserved(before)
 
+    def test_insertion_preserves_authored_deadline_spelling(self):
+        matching_cap = dict(self.base_policy, contrast_g0_cap_s=238)
+        deadline = b'"T_dead": 1277.03797646727251'
+        before = self.write_inputs(matching_cap).replace(
+            b'"thermal_policy":', deadline + b',\n    "thermal_policy":'
+        )
+        self.inputs.write_bytes(before)
+
+        code, calls, _, err = self.run_writer('--write-contrast')
+
+        self.assertEqual((code, calls, err), (0, list(chain.STEPS), ''))
+        after = self.inputs.read_bytes()
+        self.assertIn(deadline, after)
+        expected = json.loads(before)
+        expected['R1']['thermal_policy']['contrast_fit'] = self.derived['contrast_fit']
+        self.assertEqual(json.loads(after), expected)
+
+    def test_duplicate_cap_with_missing_fit_is_refused(self):
+        matching_cap = dict(self.base_policy, contrast_g0_cap_s=238)
+        before = self.write_inputs(matching_cap).replace(
+            b'"contrast_g0_cap_s": 238', b'"contrast_g0_cap_s": 239, "contrast_g0_cap_s": 238'
+        )
+        self.inputs.write_bytes(before)
+        self.assert_step_five_refusal(before, 'duplicate JSON key')
+
 
 if __name__ == '__main__':
     unittest.main()
