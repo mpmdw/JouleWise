@@ -45,6 +45,17 @@ git diff 82542232d..HEAD --check
 
 The focused helper suite passed 9 tests covering 55 CLI invocations. The combined focused suite passed 41 tests. Diff check passed. The same commit and equal trees at distinct commits returned 0 with identical invented maps. Changes confined to an unrelated top-level function, the phase module or both returned 0 and named every changed file. The eight one-byte mutants and a single LF-to-CRLF change returned 1. Missing, duplicate and rebound definitions on either side, invalid syntax, an unreadable tree, invalid commit IDs, missing or non-regular module paths and missing, empty, duplicate-key or malformed maps returned 2. A changed key set and a changed digest returned 1 with the relevant identifiers. Canonical full-suite evidence is the hosted `ci` workflow on the draft PR, including its twelve Python 3.13 shards and exclusive jobs.
 
+### CI fixture correction
+
+At initial draft head `8c9489541e20063e2b5ba0230355e9a8c40d2a09`, shard 12 reproduced one MED integration-seam finding. The repository-wide Git fixture maintenance guard flagged the direct Git initialization in the new test setup. The fix uses `tests.git_fixture.init_git_fixture`, which disables detached maintenance for disposable repositories. All nine frozen cases and the comparator are preserved. [Failing shard](https://github.com/mpmdw/JouleWise/actions/runs/44690615074/job/136135409032)
+
+```sh
+PYTHONPATH=tests:. python3.13 -B -m unittest tests.test_git_fixture_maintenance.GitFixtureMaintenanceTests.test_every_test_module_routes_git_initialization_through_shared_helper
+PYTHONPATH=tests:. python3.13 -B -m unittest tests.test_git_fixture_maintenance
+```
+
+The first command confirmed the original failure locally. The full five-test maintenance module and the two focused commands above passed with the shared helper. The builder verified zero HIGH, one MED and zero LOW findings in CI triage. The independent audit round count remains zero.
+
 ### Synthetic invocation
 
 The following full IDs are from the seat's temporary fixture Git repository, built from the `ProtectedSourceComparisonTests` toy source and maps with author and committer date `2020-01-01T00:00:00+00:00`. `ROW10_TOY` names the fixture directory.

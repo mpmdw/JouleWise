@@ -11,6 +11,8 @@ import sys
 import tempfile
 import unittest
 
+from tests.git_fixture import init_git_fixture
+
 
 ROOT = Path(__file__).resolve().parents[2]
 FIXTURES = Path(__file__).with_name("fixtures") / "rl182"
@@ -180,7 +182,7 @@ def unrelated():
         self.scratch = Path(self.enterContext(tempfile.TemporaryDirectory()))
         self.repo = self.scratch / "repo"
         self.repo.mkdir()
-        self.git("init", "--quiet", "--object-format=sha1")
+        init_git_fixture(self.repo, "--quiet", "--object-format=sha1")
         self.w1 = self.commit()
 
     def git(self, *args, data=None):
