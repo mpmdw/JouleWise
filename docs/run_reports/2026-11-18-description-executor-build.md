@@ -547,3 +547,37 @@ gaps and onset operands. The executable cases surfaced no new referral.
 [Local case matrix](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/class-sweep-local) · [Final targeted controls](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/class-sweep-final-targeted.log) · [Focused checks](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/class-sweep-focused.log) · [Gate checks](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/class-sweep-guard.log) · [Protected blobs](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/class-sweep-protected-blobs.tsv)
 
 [Predecessor hosted v2.1 result](https://github.com/mpmdw/JouleWise/actions/runs/44685496628/job/136118994012) · [Current PR checks](https://github.com/mpmdw/JouleWise/pull/868/checks)
+
+## 2026-11-19 RL-191 and frozen v2.2.1
+
+After fetch, the clean worktree, remote branch and draft PR #868 all
+named `cd060b1d2b51538b179c6149d51774ef340ca8fe`. The independent v2.2.1
+baseline passed 13,215 cases and failed 88, all newly activated under
+RL-191. Five local representative methods reproduced the failures.
+
+Commit `454f670a58ef9b415987534f1d0b1a2e78ba5521` applies RL-191 §1.8
+and installs the independently frozen v2.2.1 bytes. All 152 newly
+activated methods passed individually with zero skips.
+
+| Ruling | Regression | Result |
+| --- | --- | --- |
+| §1.2. DC health veto before interval checks | Absent and contaminated captures paired with count, gap and bracket faults, plus cross-channel lags | **PASS.** 23 cases. |
+| §1.3. One reason rank across operands | Turn and decode ratio matrix and lag pairs, including a refused numerator with a measured nonpositive denominator | **PASS.** 41 cases. |
+| §1.4. Level and crossing reasons | Nonpositive onset and decode levels, already-crossed and exhausted search spans, and opposite-channel refusals | **PASS.** 40 cases. |
+| §1.5. Rail tail bound | Bounds on all nulls with a positive capture tail, including rejected sum metadata and failed holds, plus `no_tail` when capture ends at or before the last token | **PASS.** 34 cases. |
+| §1.6. Closed DC crossing endpoint | Exact endpoint and one-second decode lag fixtures on both clock origins | **PASS.** 13 cases. The existing crossing implementation satisfies the ruling. |
+| §1.7. Per-cadence gap limits | A gap crossing the cadence transition passes both part limits | **PASS.** 1 case. |
+
+The v2.2.1 SHA-256 is
+`89e202e40281937920e39bff828378891de1629cdb4a9c435d5232521279dd03`.
+The unchanged v2.1 SHA-256 is
+`26bcfd126736d2ae490d82e221a5d53232fa0888301972e464b57641c0377426`.
+Both files match their independent source copies byte for byte. All
+53 protected paths matched. The local combined rerun uses a physical
+temporary path under the builder seat. The hosted PR checks cover the
+full sharded suite and reservation-dependent v2.1 cases.
+
+**NEEDS_SPEC.** RL-191 answers all 11 referrals in the class sweep.
+The 152-case activation run surfaced no new referral.
+
+[RL-191](/Volumes/JW-EXT/scratch/fable-rl191.md) · [Independent delta](/Volumes/JW-EXT/scratch/astra-desc-suite-v2-3/DELTA.md) · [Case inventory](/Volumes/JW-EXT/scratch/astra-desc-suite-v2-3/CASE-RESULTS.tsv) · [Red reproduction](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/rl191-red.log) · [Activation run](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/rl191-green.log) · [Protected blobs](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/rl191-protected-blobs.tsv) · [Hosted checks](https://github.com/mpmdw/JouleWise/pull/868/checks)
