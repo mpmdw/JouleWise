@@ -244,7 +244,32 @@ class PostW1SeriesAdmissionTests(unittest.TestCase):
     EVIDENCE = (*PRE_W1_EVIDENCE, 'w1_clearance')
 
     def setUp(self):
-        self.fail('synthetic admission fixture pending')
+        temp = tempfile.TemporaryDirectory(prefix='jw-series-admission-')
+        self.addCleanup(temp.cleanup)
+        self.root = Path(temp.name)
+        self.manifest = s.candidate()
+        self.manifest_path = write(self.root, s.MANIFEST, self.manifest)
+        self.w1_collection_path = write(self.root, w1.KIT / 'collection_plan.json',
+                                        {'fixture': 'SYNTHETIC-ONLY', 'window_id': 'W1'})
+
+        evidence = {}
+        for name in self.EVIDENCE:
+            path = write(self.root, f'evidence/{name}.json', {
+                'obligation': name,
+                'verdict': {'accepted': 'pass', 'rejected': 'fail'},
+            })
+            evidence[name] = ref(path, '/verdict/accepted')
+
+        self.receipt = dict(
+            schema=s.ADMISSION_SCHEMA,
+            manifest_sha256=s.sha(self.manifest_path.read_bytes()),
+            w1_collection_sha256=s.sha(self.w1_collection_path.read_bytes()),
+            lead_signature='lead: SYNTHETIC-ONLY 2026-11-19',
+            choices={name: deepcopy(self.manifest[name])
+                     for name in ('d_mapping', 'test_windows', 'test_shape', 'sentinel')},
+            evidence=evidence,
+        )
+        self.write_receipt(self.receipt)
 
     def write_receipt(self, receipt):
         write(self.root, s.ADMISSION, receipt)
