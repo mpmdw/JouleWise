@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 import random
 import unittest
 from collections.abc import Mapping
@@ -508,6 +509,49 @@ class GammaMidpointLostTests(unittest.TestCase):
         roster, _spans = harvest.l4_exclusion_inputs({"pack_id": self.GAMMA, "cells": [], "members": []}, {},
                                                     plan_id=PLAN, attempt=1)
         self.assertEqual(roster["pack_id"], self.GAMMA)
+
+
+class Block5DefaultEquivalenceTests(unittest.TestCase):
+    """RL-144 addendum M2: compute() with the default pack_scoped gives the Block 5 commit's result."""
+
+    B5_ANALYSIS_COMMIT = "b13a510dc15b5e280309f7dd6b280426bf44afc6"
+    GAMMA = "d117_contrast_qwen3-1p7b_vs_qwen3-8b_v5"
+    BETA = "d117_floor_qwen3-8b_v5"
+
+    @classmethod
+    def block5_compute(cls):
+        import subprocess
+        import sys
+        import types
+        root = Path(__file__).resolve().parents[2]
+        source = subprocess.run(["git", "-C", str(root), "show", f"{cls.B5_ANALYSIS_COMMIT}:joulewise/flags/exclusions.py"],
+                                check=True, capture_output=True).stdout.decode("utf-8")
+        module = types.ModuleType("block5_flags_exclusions")
+        sys.modules[module.__name__] = module
+        try:
+            exec(compile(source, f"{cls.B5_ANALYSIS_COMMIT}:joulewise/flags/exclusions.py", "exec"), module.__dict__)
+        finally:
+            del sys.modules[module.__name__]
+        return module.compute
+
+    def test_default_equals_the_block5_commit_on_each_pack_and_pack_scoped_false_differs_only_on_gamma(self) -> None:
+        block5 = self.block5_compute()
+        for pack_id in (self.GAMMA, self.BETA, None):
+            for lost in (True, False):
+                with self.subTest(pack_id=pack_id, lost=lost):
+                    roster = dict(floor_roster(), pack_id=pack_id)
+                    flags = [window_flag("neg8.midpoint_lost", family="NEG8")] if lost else []
+                    spans = spans_for(roster)
+                    expected = block5(flags, roster, spans, CATALOG)
+                    self.assertEqual(compute(flags, roster, spans, CATALOG), expected)
+                    self.assertEqual(compute(flags, roster, spans, CATALOG, pack_scoped=True), expected)
+                    unscoped = compute(flags, roster, spans, CATALOG, pack_scoped=False)
+                    if pack_id == self.GAMMA and lost:
+                        self.assertEqual(expected["reasons"], ["neg8.midpoint_lost_primary"])
+                        self.assertNotEqual(unscoped, expected)
+                        self.assertEqual(unscoped["reasons"], [])
+                    else:
+                        self.assertEqual(unscoped, expected)
 
 
 if __name__ == "__main__":

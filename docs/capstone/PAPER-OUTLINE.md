@@ -1,5 +1,12 @@
 # Capstone paper — mid-December 2026
 
+> **Status note, 2026-11-10 (research lead RL-27 (4), amending RL-1 item 3).** Under `RUN_STATE.md` item 256 no
+> tripwire manuscript is in production. This file is superseded as a manuscript plan and is kept as the source
+> register and evidence ledger for Paper 1's outlook and for the talk. Its Block 5 exclusion is historical: neither
+> in force nor reversed. Block 5 numbers are placed in Paper 1 only (RL-2), and on slides under RL-10; a later
+> tripwire or v4 manuscript needs its own placement ruling. Lines are not edited one by one. Ruling:
+> `docs/research-audits/2026-11-10-fable/RESEARCH-LEAD-DECISIONS.md`, branch `audit/2026-11-10-fable`.
+
 **Working title:** Sabotage Leaves an Energy Signature: A Pilot Study of Physical Auditing for AI Agents
 
 **Thesis:** measured energy can supply evidence about computation omitted from a log. Reported pilots motivate a registered test; they do not establish a semantic sabotage detector or an adaptive monitor–meter squeeze.

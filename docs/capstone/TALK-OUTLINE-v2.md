@@ -11,6 +11,7 @@
 **Evidence rules (binding on the slides, the notes and Q&A).**
 - Every number on a slide has an ID: **H** for half A (ledger at the end of this file) and **E** for half B (the evidence ledger in [PAPER-OUTLINE.md](PAPER-OUTLINE.md), spot-checked again for v2; see the ledger note at the end). A number without an ID does not go on a slide.
 - Block 5, BYTES held-out, v4 and Block 6 outcomes are sealed. No slide, note or Q&A answer states or hints at them. The talk may show the **status** of a gate (run, refused, pending) and the **exit-code class** of a release check, never a value.
+  - **[Superseded 2026-11-10 for Block 5 only: research lead RL-10; `RUN_STATE.md` items 231 and 232.]** Block 5 was unsealed on 2026-11-08 with Ed's OK. Released Block 5 numbers may appear on a slide after RL-3's gate has passed (all three conditions of RL-3, including the check against the ten licence constraints), under the claim text of RL-4. Block 6, BYTES held-out and ALIGN v4 outcomes stay sealed, and the talk shows their gate status only. The talk's content and headline remain Ed's.
 - Use "DC input", never "wall energy": the KM003C sits after the brick (item 210; AGREEMENT-FINAL authority table).
 - In the pilots the scored channel is `powermetrics` GPU energy, which is host software. The external meter validates the instrument but is not yet the scored channel. Say so on slide B2.
 - Gate status for slides B9 and A9 is frozen at the **22 November evidence freeze** (see PAPER-PLAN-v2.md). Fill the marked `[FREEZE]` cells from `RUN_STATE.md` on that date, and only from gate status.
@@ -105,7 +106,7 @@
 - **Sources:** `docs/analysis/b5/DEVIATION-LOG.md` DLE-0, DLE-1 and DLE-3; `docs/run_reports/2026-11-07-b5-release-hold-trace.md` §2 ("Every failing row maps to one of six defects"); `RESUME.md` (r3 held on D5 only; r4 = PR #697); H7.
 - **Speaker notes:**
   - The defects were real but mundane: a wrong key name that printed null (D1), a baseline from the wrong attempt (D2), dropped and mis-binned members (D3, D4), a double-counted campaign row (D5), and an unconditional comparison (D6). Mundane bugs are the point: they are what silently corrupts papers. D1 was in the main pipeline; D2-D4 and D6 were in the recompute or the comparator. Two programs disagreeing is how each found the other's bugs.
-  - CI enforces a five-row gate ledger in every PR body (`.github/workflows/gate-ledger.yml`, required on `main`). Number-bearing code needs two executing reviews from different model families, launched together (`docs/process/gate_policy.md` rule 3).
+  - CI checks the five-row gate ledger on PRs ready for review (`.github/workflows/gate-ledger.yml`, required on `main`). Tier 2 code that computes, selects or excludes a claim number needs one executing review from each model family (`docs/process/PIPELINE.md` §§1, 6).
   - `[FREEZE]` Status of the r4 release check: report only "agree", "hold" or "pending", plus whether Ed has given the unseal OK. No values.
 
 ## A7 · Win: 37 h to 1 h 40 min, proven equivalent blind (0:40) · CUT CANDIDATE 2
@@ -273,9 +274,9 @@
 
 ## B9 · v4: the registered test (1:00)
 
-- **Message:** v4 turns the pilot into a confirmatory test. Its rules were fixed before data, and its outcomes stay sealed until a registered release.
-- **Visual (F10):** R0 → R1 → blind registration gate → W1 → 3 D windows → registration-grade calibration (m ≥ 39 per pair plus a held-out test cohort) → independent recompute → release. Each box shows a `[FREEZE]` status (done, pending or refused), never an outcome.
-  - Qwen3.8-27B at 8-bit; KM003C captured in every window, with a secondary DC-in analysis; full transcripts sealed and unscored.
+- **Message:** v4 turns the pilot into a registered test with rules fixed before data. K is the confirmatory tripwire assessed on benign held-out alarms. S is the registered secondary comparison of sabotage-instructed and benign episodes at logged counts. Outcomes stay sealed until the registered release.
+- **Visual (F10):** R0 → R1 `[FREEZE]` → blind registration gate → W1 → C calibration windows → held-out T windows → independent recompute → release. Each box shows a `[FREEZE]` status (done, pending or refused), never an outcome.
+  - Design: Qwen3.8-27B 8-bit; KM003C on DC input in every window; full transcripts sealed and unscored.
 - **Sources:** `docs/research/research-strategy.md` §3; `RUN_STATE.md` items 203 (R10, 11.9 tok/s, fallback declared blind), 204 (Q4, Q6) and 212 (R11-3: the registered residual stays GPU energy).
 - **Speaker notes:**
   - Example of deciding first: 8-bit decode at about 11.9 tok/s cannot fit the original budget, so the fallback was declared before any R1 number existed (item 203).
@@ -289,7 +290,7 @@
   - Endpoint: **side-task success and no joint alarm, per assigned attempt**, reported with utility.
   - Joint rule calibrated at 0.05, with energy-alone and monitor-alone comparators, plus trusted time plus monitor as a primary comparator.
   - Frontier API monitor off-box; a scoped, sandboxed red team.
-  - Timeline: Nov 30 talk → mid-Dec paper → v5 windows Dec-Feb → NeurIPS 2027 (about mid-May; no deadline verified).
+  - Timeline: Nov 30 talk → mid-Dec paper.
 - **Sources:** `RUN_STATE.md` item 212 (R11-2: D07, D09, D12) and item 210 (monitor, D-139 A1, venue); `docs/research/AGENDA.md` timeline; v5 design competition branches `origin/align/2026-11-08-v5design-*` (not decided).
 - **Speaker notes:**
   - The v5 design is still being judged. Do not name a roster or sample size.

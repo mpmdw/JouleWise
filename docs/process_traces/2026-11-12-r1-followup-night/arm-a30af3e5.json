@@ -1,0 +1,54 @@
+{
+  "derivation": {
+    "authority": "RL-72 E2 (span 108,768 s, window_max_s 126,480 s); encounters inside the span",
+    "base_s": 117768,
+    "base_terms_s": {
+      "bookends_s": 3600,
+      "close_s": 1200,
+      "display_dwell_s": 300,
+      "harvest_s": 600,
+      "hazard_arm_s": 3300,
+      "r1_driver_span_s": 108768
+    },
+    "batch_crossings_epoch_s": [
+      1794599100.0
+    ],
+    "batch_window_crossings": 1,
+    "latest_driver_end_offset_s": 114198,
+    "programmed_span_s": 108768,
+    "window_max_s": 126480,
+    "writer_window_max_s": 126480
+  },
+  "flags": [
+    "disk.allocation_unsized; shared headroom and live disk floor remain"
+  ],
+  "plan": "/Users/edr/night-align/r1fu-20261112T223055Z/night_plan.json",
+  "plan_sha256": "4877bdb9eec5ae09bbaa20d2044aa8db458a9530cd4efa6c5910d1948a70b8d4",
+  "prepare_packet": {
+    "path": "/Users/edr/night-custody/measurement/JouleWise-measurement-20261102-align-pilot2/.align-r1-prepare.json",
+    "sha256": "8d63766da71bcc85ade0a60672758793fe8b3c3a490dad405c948a85f232eab9"
+  },
+  "schedule": {
+    "deadman_calendar": {
+      "Hour": 3,
+      "Minute": 4
+    },
+    "deadman_epoch_s": 1794654240.0,
+    "install_close_epoch_s": 1794523560.0,
+    "install_spans_today": [
+      [
+        1794470400.0,
+        1794556800.0
+      ]
+    ],
+    "night_calendar": {
+      "Day": 12,
+      "Hour": 14,
+      "Minute": 51,
+      "Month": 11
+    },
+    "t0_epoch_s": 1794523860.0
+  },
+  "schema": "joulewise.align.r1_arm.v1",
+  "window_max_s": 126480
+}

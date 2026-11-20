@@ -39,11 +39,11 @@ expectations below continue to apply.
 
 For any substantial task:
 
-1. Read the targeted sections of `RUN_STATE.md`: `ACTIVE_STOP_CARD`, Current
-   Project Status, Known Workspace State, and What Is Next. An active stop card
-   overrides every other restart or queue pointer.
-2. Read the Current Queue and Do-Not-Do-Yet sections of `TASK_QUEUE.md`. Triage
-   a new user request there before treating it as ordinary next work.
+1. Read `CANONICAL.md`, then `RUN_STATE.md`'s top numbered item (the highest
+   number) and `docs/process/CURRENT.json`. An active stop card overrides
+   every other restart or queue pointer.
+2. Follow `docs/process/POINTER_RULE.md` for the current observable, deadline,
+   and refusal branch. Treat the state kernel and generated queue as backlog.
 3. Run Mission M0 in `docs/agent_playbook.md`. For delegation, review, or
    multi-stream work, also read `docs/orchestration.md` before landing changes.
 4. Consult the owning plan, contract, exit checklist, and targeted decision-log
@@ -124,7 +124,9 @@ changes.
 ## Handoff
 
 Return a concise summary with findings, changed files, verification, blockers,
-and the next exact step. A substantial run must also update `RUN_STATE.md`,
-`TASK_QUEUE.md`, and a dated report under `docs/run_reports/`; update
+and the next exact step. A substantial run must also write a dated report under
+`docs/run_reports/`. Do not edit `RUN_STATE.md` or `TASK_QUEUE.md` in a PR:
+parallel PRs conflict there and the MBP magistrate executes `RUN_STATE.md`,
+so only the lead posts typed items (`scripts/run_state_add.py`). Update
 `PROJECT_STATUS.md` only when advisor-visible state changed. Record delegated
 process evidence at the level required by D-050 and `docs/orchestration.md`.

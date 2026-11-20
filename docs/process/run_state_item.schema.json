@@ -1,0 +1,26 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "docs/process/run_state_item.schema.json",
+  "title": "JouleWise typed RUN_STATE item header (v1)",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "number", "owner", "status", "issued_epoch_s", "expires_epoch_s", "supersedes", "sets"],
+  "properties": {
+    "schema": {"const": "joulewise.run_state_item.v1"},
+    "number": {"type": "integer", "minimum": 1},
+    "owner": {"enum": ["lead", "magistrate", "research_lead", "ed"]},
+    "status": {"enum": ["DRAFT", "ISSUED", "CLOSED"]},
+    "issued_epoch_s": {"$ref": "#/$defs/epoch"},
+    "expires_epoch_s": {"oneOf": [{"type": "null"}, {"$ref": "#/$defs/epoch"}]},
+    "supersedes": {"type": "array", "uniqueItems": true,
+                   "items": {"type": "string", "pattern": "^[1-9][0-9]*[a-z]?$"}},
+    "sets": {"type": "array", "items": {
+      "type": "object", "additionalProperties": false,
+      "required": ["item", "status", "at_epoch_s"],
+      "properties": {
+        "item": {"type": "integer", "minimum": 1},
+        "status": {"enum": ["ISSUED", "ARMED", "CLOSED", "VOID", "EXPIRED"]},
+        "at_epoch_s": {"$ref": "#/$defs/epoch"}}}}
+  },
+  "$defs": {"epoch": {"type": "integer", "minimum": 1767225600, "maximum": 1893456000}}
+}

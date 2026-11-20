@@ -1,0 +1,46 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "DRAFT lm-transfer-01 public success",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "transfer_interval",
+    "stage2_error",
+    "manifest_sha256",
+    "stage1_roster_sha256",
+    "freeze2_sha256"
+  ],
+  "properties": {
+    "transfer_interval": {
+      "type": "string",
+      "enum": [
+        "estimated",
+        "not_evaluable"
+      ]
+    },
+    "stage2_error": {
+      "type": "string",
+      "enum": [
+        "no"
+      ]
+    },
+    "manifest_sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$",
+      "minLength": 64,
+      "maxLength": 64
+    },
+    "stage1_roster_sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$",
+      "minLength": 64,
+      "maxLength": 64
+    },
+    "freeze2_sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$",
+      "minLength": 64,
+      "maxLength": 64
+    }
+  }
+}

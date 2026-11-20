@@ -1,0 +1,573 @@
+{
+  "counts": {
+    "planning-release-3a": 4,
+    "released": 9
+  },
+  "g0_intervals": [
+    {
+      "band_edge_c": 35.852768,
+      "classification": "released",
+      "delta_slow_c": 1.0,
+      "delta_slow_source": "member config.json thermal.delta_slow_c",
+      "duration_s": 12.222223,
+      "exit_slope_c_per_min": 0.198099,
+      "heater_key": "TVh0",
+      "heater_key_max_last_300s_c": 35.0,
+      "journal": "D_bank_benign_s1_gated_held/runs/align-v4-r1-d-bank-benign-s1/outputs/align_thermal.jsonl",
+      "journal_sha256": "1738db22565f70f98b01d22bdbf97c183e2fea2a5043e4e0722c54cd8693a65a",
+      "last_300s_count_ge_threshold": 0,
+      "last_300s_median_c": 35.0,
+      "margin_to_threshold_c": -0.552768,
+      "nominal_throughout": true,
+      "os_level_max": 0,
+      "os_levels": [
+        0
+      ],
+      "outcome": "released",
+      "phase": "D_bank_benign_s1_gated_held",
+      "planning_turn": false,
+      "pm_states": [
+        "Nominal"
+      ],
+      "reasons": [],
+      "samples": 12,
+      "samples_last_300s": 12,
+      "short_interval": true,
+      "stale_power_state_samples": 0,
+      "status_unobserved_samples": 0,
+      "superseded": false,
+      "target_c": 34.852768,
+      "threshold_c": 35.552768,
+      "turn": 0,
+      "turn_label": "D_bank_benign_s1_gated_held",
+      "whole_g0_max_c": 35.0
+    },
+    {
+      "band_edge_c": 35.852768,
+      "classification": "released",
+      "delta_slow_c": 1.0,
+      "delta_slow_source": "member config.json thermal.delta_slow_c",
+      "duration_s": 16.337216,
+      "exit_slope_c_per_min": 0.145561,
+      "heater_key": "TVh0",
+      "heater_key_max_last_300s_c": 35.0,
+      "journal": "D_spam_benign_s1_gated_held_a/runs/align-v4-r1-d-spam-benign-s1-a/outputs/align_thermal.jsonl",
+      "journal_sha256": "5b10440e0b87fcd1ae9a887188d808f749e3b19f327fa4a9a908be0e5293f0fb",
+      "last_300s_count_ge_threshold": 0,
+      "last_300s_median_c": 35.0,
+      "margin_to_threshold_c": -0.552768,
+      "nominal_throughout": true,
+      "os_level_max": 0,
+      "os_levels": [
+        0
+      ],
+      "outcome": "released",
+      "phase": "D_spam_benign_s1_gated_held_a",
+      "planning_turn": false,
+      "pm_states": [
+        "Nominal"
+      ],
+      "reasons": [],
+      "samples": 16,
+      "samples_last_300s": 16,
+      "short_interval": true,
+      "stale_power_state_samples": 0,
+      "status_unobserved_samples": 0,
+      "superseded": false,
+      "target_c": 34.852768,
+      "threshold_c": 35.552768,
+      "turn": 0,
+      "turn_label": "D_spam_benign_s1_gated_held_a",
+      "whole_g0_max_c": 35.0
+    },
+    {
+      "band_edge_c": 35.852768,
+      "classification": "released",
+      "delta_slow_c": 1.0,
+      "delta_slow_source": "member config.json thermal.delta_slow_c",
+      "duration_s": 15.21637,
+      "exit_slope_c_per_min": 0.211209,
+      "heater_key": "TVh0",
+      "heater_key_max_last_300s_c": 35.0,
+      "journal": "D_spam_benign_s1_gated_held_b/runs/align-v4-r1-d-spam-benign-s1-b/outputs/align_thermal.jsonl",
+      "journal_sha256": "7075388cfffe03834632626cb7ae6bd3fbf00d6f1537d5bb2f521bce8a09ed31",
+      "last_300s_count_ge_threshold": 0,
+      "last_300s_median_c": 35.0,
+      "margin_to_threshold_c": -0.552768,
+      "nominal_throughout": true,
+      "os_level_max": 0,
+      "os_levels": [
+        0
+      ],
+      "outcome": "released",
+      "phase": "D_spam_benign_s1_gated_held_b",
+      "planning_turn": false,
+      "pm_states": [
+        "Nominal"
+      ],
+      "reasons": [],
+      "samples": 15,
+      "samples_last_300s": 15,
+      "short_interval": true,
+      "stale_power_state_samples": 0,
+      "status_unobserved_samples": 0,
+      "superseded": false,
+      "target_c": 34.852768,
+      "threshold_c": 35.552768,
+      "turn": 0,
+      "turn_label": "D_spam_benign_s1_gated_held_b",
+      "whole_g0_max_c": 35.0
+    },
+    {
+      "band_edge_c": 35.852768,
+      "classification": "released",
+      "delta_slow_c": 1.0,
+      "delta_slow_source": "member config.json thermal.delta_slow_c",
+      "duration_s": 9.182268,
+      "exit_slope_c_per_min": 0.148501,
+      "heater_key": "TVh0",
+      "heater_key_max_last_300s_c": 35.0,
+      "journal": "X_G_contrast/runs/align-v4-r1-x-g/outputs/align_thermal.jsonl",
+      "journal_sha256": "abf798d07e1a81abdad99190ee83bf854e90958c2c31e69d5ab67d8ae472ec2d",
+      "last_300s_count_ge_threshold": 0,
+      "last_300s_median_c": 35.0,
+      "margin_to_threshold_c": -0.552768,
+      "nominal_throughout": true,
+      "os_level_max": 0,
+      "os_levels": [
+        0
+      ],
+      "outcome": "released",
+      "phase": "X_G_contrast",
+      "planning_turn": false,
+      "pm_states": [
+        "Nominal"
+      ],
+      "reasons": [],
+      "samples": 9,
+      "samples_last_300s": 9,
+      "short_interval": true,
+      "stale_power_state_samples": 0,
+      "status_unobserved_samples": 0,
+      "superseded": false,
+      "target_c": 34.852768,
+      "threshold_c": 35.552768,
+      "turn": 0,
+      "turn_label": "X_G_contrast",
+      "whole_g0_max_c": 35.0
+    },
+    {
+      "band_edge_c": 35.403158,
+      "classification": "released",
+      "delta_slow_c": 1.0,
+      "delta_slow_source": "member config.json thermal.delta_slow_c",
+      "duration_s": 114.192472,
+      "exit_slope_c_per_min": 0.0,
+      "heater_key": "TVh0",
+      "heater_key_max_last_300s_c": 83.972916,
+      "journal": "high_power_A1/runs/align-v4-r1-high-power-aba-a1/outputs/align_thermal.jsonl",
+      "journal_sha256": "71f2d520a916724fc926bd49d386b1c6ed929ebe8a60f52431b16260716dd944",
+      "last_300s_count_ge_threshold": 42,
+      "last_300s_median_c": 35.0,
+      "margin_to_threshold_c": 48.869757,
+      "nominal_throughout": true,
+      "os_level_max": 0,
+      "os_levels": [
+        0
+      ],
+      "outcome": "released",
+      "phase": "high_power_A1",
+      "planning_turn": false,
+      "pm_states": [
+        "Nominal"
+      ],
+      "reasons": [],
+      "samples": 115,
+      "samples_last_300s": 115,
+      "short_interval": true,
+      "stale_power_state_samples": 0,
+      "status_unobserved_samples": 0,
+      "superseded": false,
+      "target_c": 34.403158,
+      "threshold_c": 35.103158,
+      "turn": 0,
+      "turn_label": "high_power_A1",
+      "whole_g0_max_c": 83.972916
+    },
+    {
+      "band_edge_c": 35.727278,
+      "classification": "released",
+      "delta_slow_c": 1.0,
+      "delta_slow_source": "member config.json thermal.delta_slow_c",
+      "duration_s": 116.256575,
+      "exit_slope_c_per_min": 0.0,
+      "heater_key": "TVh0",
+      "heater_key_max_last_300s_c": 83.964905,
+      "journal": "high_power_A2/runs/align-v4-r1-high-power-aba-a2/outputs/align_thermal.jsonl",
+      "journal_sha256": "7a90d638980adad70f590c4b13558a20bb090d8efa125eb6de33e83296b29b47",
+      "last_300s_count_ge_threshold": 46,
+      "last_300s_median_c": 35.0,
+      "margin_to_threshold_c": 48.537627,
+      "nominal_throughout": true,
+      "os_level_max": 0,
+      "os_levels": [
+        0
+      ],
+      "outcome": "released",
+      "phase": "high_power_A2",
+      "planning_turn": false,
+      "pm_states": [
+        "Nominal"
+      ],
+      "reasons": [],
+      "samples": 116,
+      "samples_last_300s": 116,
+      "short_interval": true,
+      "stale_power_state_samples": 0,
+      "status_unobserved_samples": 0,
+      "superseded": false,
+      "target_c": 34.727278,
+      "threshold_c": 35.427278,
+      "turn": 0,
+      "turn_label": "high_power_A2",
+      "whole_g0_max_c": 83.964905
+    },
+    {
+      "band_edge_c": 35.720734,
+      "classification": "released",
+      "delta_slow_c": 1.0,
+      "delta_slow_source": "member config.json thermal.delta_slow_c",
+      "duration_s": 114.200929,
+      "exit_slope_c_per_min": 0.0,
+      "heater_key": "TVh0",
+      "heater_key_max_last_300s_c": 84.242157,
+      "journal": "high_power_B/runs/align-v4-r1-high-power-aba-b/outputs/align_thermal.jsonl",
+      "journal_sha256": "195d9d9a4a4e3dfd82a75a3fef11e92e4ea66629d1e6c9a5f38e4f5ca11b4fae",
+      "last_300s_count_ge_threshold": 45,
+      "last_300s_median_c": 35.0,
+      "margin_to_threshold_c": 48.821423,
+      "nominal_throughout": true,
+      "os_level_max": 0,
+      "os_levels": [
+        0
+      ],
+      "outcome": "released",
+      "phase": "high_power_B",
+      "planning_turn": false,
+      "pm_states": [
+        "Nominal"
+      ],
+      "reasons": [],
+      "samples": 115,
+      "samples_last_300s": 115,
+      "short_interval": true,
+      "stale_power_state_samples": 0,
+      "status_unobserved_samples": 0,
+      "superseded": false,
+      "target_c": 34.720734,
+      "threshold_c": 35.420734,
+      "turn": 0,
+      "turn_label": "high_power_B",
+      "whole_g0_max_c": 84.242157
+    },
+    {
+      "band_edge_c": 35.852768,
+      "classification": "planning-release-3a",
+      "delta_slow_c": 1.0,
+      "delta_slow_source": "member config.json thermal.delta_slow_c",
+      "duration_s": 1200.036922,
+      "exit_slope_c_per_min": -0.809806,
+      "heater_key": "TVh0",
+      "heater_key_max_last_300s_c": 40.0,
+      "journal": "planning_turn_R_plus_0C/runs/align-v4-r1-d-planning-turn-r-plus-0c/outputs/align_thermal.jsonl",
+      "journal_sha256": "3908a63b347d346816010811870ce07b7917b6b2126e7c109fc867a0269ca6b6",
+      "last_300s_count_ge_threshold": 227,
+      "last_300s_median_c": 40.0,
+      "margin_to_threshold_c": 4.447232,
+      "nominal_throughout": true,
+      "os_level_max": 0,
+      "os_levels": [
+        0
+      ],
+      "outcome": "timeout",
+      "phase": "planning_turn_R_plus_0C",
+      "planning_turn": true,
+      "pm_states": [
+        "Nominal"
+      ],
+      "precool": {
+        "last_curve_c": 35.0,
+        "phase": "planning_turn_R_plus_0C.precool",
+        "released": true
+      },
+      "reasons": [],
+      "samples": 1200,
+      "samples_last_300s": 300,
+      "short_interval": false,
+      "stale_power_state_samples": 0,
+      "status_unobserved_samples": 0,
+      "superseded": false,
+      "target_c": 34.852768,
+      "threshold_c": 35.552768,
+      "turn": 0,
+      "turn_label": "planning R+0",
+      "whole_g0_max_c": 84.046715
+    },
+    {
+      "band_edge_c": 37.852768,
+      "classification": "planning-release-3a",
+      "delta_slow_c": 1.0,
+      "delta_slow_source": "member config.json thermal.delta_slow_c",
+      "duration_s": 1200.045026,
+      "exit_slope_c_per_min": 1.269286,
+      "heater_key": "TVh0",
+      "heater_key_max_last_300s_c": 45.0,
+      "journal": "planning_turn_R_plus_2C/runs/align-v4-r1-d-planning-turn-r-plus-2c/outputs/align_thermal.jsonl",
+      "journal_sha256": "fad723284d92ba518ef375cf342c39b38242d61f2e904f33c344c4a10cb617d4",
+      "last_300s_count_ge_threshold": 266,
+      "last_300s_median_c": 40.0,
+      "margin_to_threshold_c": 7.447232,
+      "nominal_throughout": true,
+      "os_level_max": 0,
+      "os_levels": [
+        0
+      ],
+      "outcome": "timeout",
+      "phase": "planning_turn_R_plus_2C",
+      "planning_turn": true,
+      "pm_states": [
+        "Nominal"
+      ],
+      "precool": {
+        "last_curve_c": 35.0,
+        "phase": "planning_turn_R_plus_2C.precool",
+        "released": true
+      },
+      "reasons": [],
+      "samples": 1200,
+      "samples_last_300s": 300,
+      "short_interval": false,
+      "stale_power_state_samples": 0,
+      "status_unobserved_samples": 0,
+      "superseded": false,
+      "target_c": 36.852768,
+      "threshold_c": 37.552768,
+      "turn": 0,
+      "turn_label": "planning R+2",
+      "whole_g0_max_c": 83.939232
+    },
+    {
+      "band_edge_c": 39.852768,
+      "classification": "planning-release-3a",
+      "delta_slow_c": 1.0,
+      "delta_slow_source": "member config.json thermal.delta_slow_c",
+      "duration_s": 1200.015468,
+      "exit_slope_c_per_min": -2.228665,
+      "heater_key": "TVh0",
+      "heater_key_max_last_300s_c": 45.0,
+      "journal": "planning_turn_R_plus_4C/runs/align-v4-r1-d-planning-turn-r-plus-4c/outputs/align_thermal.jsonl",
+      "journal_sha256": "865e9f8e3c032cc4e28929a30e859207c572978ed18a7858ece4e8d1d1c9ede6",
+      "last_300s_count_ge_threshold": 257,
+      "last_300s_median_c": 40.0,
+      "margin_to_threshold_c": 5.447232,
+      "nominal_throughout": true,
+      "os_level_max": 0,
+      "os_levels": [
+        0
+      ],
+      "outcome": "timeout",
+      "phase": "planning_turn_R_plus_4C",
+      "planning_turn": true,
+      "pm_states": [
+        "Nominal"
+      ],
+      "precool": {
+        "last_curve_c": 35.0,
+        "phase": "cooldown_after_D",
+        "released": true
+      },
+      "reasons": [],
+      "samples": 1200,
+      "samples_last_300s": 300,
+      "short_interval": false,
+      "stale_power_state_samples": 0,
+      "status_unobserved_samples": 0,
+      "superseded": false,
+      "target_c": 38.852768,
+      "threshold_c": 39.552768,
+      "turn": 0,
+      "turn_label": "planning R+4",
+      "whole_g0_max_c": 84.261078
+    },
+    {
+      "band_edge_c": 39.852768,
+      "classification": "planning-release-3a",
+      "delta_slow_c": 1.0,
+      "delta_slow_source": "member config.json thermal.delta_slow_c",
+      "duration_s": 1200.034143,
+      "exit_slope_c_per_min": 3.183679,
+      "heater_key": "TVh0",
+      "heater_key_max_last_300s_c": 45.0,
+      "journal": "planning_turn_R_plus_4C.rejected1/runs/align-v4-r1-d-planning-turn-r-plus-4c/outputs/align_thermal.jsonl",
+      "journal_sha256": "d46d1861c35ff2b3a8d9a40a58dac8904299f4aab678fd3f8ddde8bc0767872e",
+      "last_300s_count_ge_threshold": 256,
+      "last_300s_median_c": 40.0,
+      "margin_to_threshold_c": 5.447232,
+      "nominal_throughout": true,
+      "os_level_max": 0,
+      "os_levels": [
+        0
+      ],
+      "outcome": "timeout",
+      "phase": "planning_turn_R_plus_4C.rejected1",
+      "planning_turn": true,
+      "pm_states": [
+        "Nominal"
+      ],
+      "precool": {
+        "last_curve_c": 35.0,
+        "phase": "cooldown_after_D",
+        "released": true
+      },
+      "reasons": [],
+      "samples": 1200,
+      "samples_last_300s": 300,
+      "short_interval": false,
+      "stale_power_state_samples": 0,
+      "status_unobserved_samples": 0,
+      "superseded": true,
+      "target_c": 38.852768,
+      "threshold_c": 39.552768,
+      "turn": 0,
+      "turn_label": "planning R+4",
+      "whole_g0_max_c": 60.0
+    },
+    {
+      "band_edge_c": 35.146631,
+      "classification": "released",
+      "delta_slow_c": 1.0,
+      "delta_slow_source": "member config.json thermal.delta_slow_c",
+      "duration_s": 107.939243,
+      "exit_slope_c_per_min": -0.054976,
+      "heater_key": "TVh0",
+      "heater_key_max_last_300s_c": 50.0,
+      "journal": "step_30b/runs/align-v4-r1-step-30b/outputs/align_thermal.jsonl",
+      "journal_sha256": "d272ef7d4fe7647eca89b526fd9f5fed0051fe9ca0ab1a45778d93d4e73028d7",
+      "last_300s_count_ge_threshold": 108,
+      "last_300s_median_c": 35.0,
+      "margin_to_threshold_c": 15.153369,
+      "nominal_throughout": true,
+      "os_level_max": 0,
+      "os_levels": [
+        0
+      ],
+      "outcome": "released",
+      "phase": "step_30b",
+      "planning_turn": false,
+      "pm_states": [
+        "Nominal"
+      ],
+      "reasons": [],
+      "samples": 108,
+      "samples_last_300s": 108,
+      "short_interval": true,
+      "stale_power_state_samples": 0,
+      "status_unobserved_samples": 0,
+      "superseded": false,
+      "target_c": 34.146631,
+      "threshold_c": 34.846631,
+      "turn": 0,
+      "turn_label": "step_30b",
+      "whole_g0_max_c": 50.0
+    },
+    {
+      "band_edge_c": 35.852768,
+      "classification": "released",
+      "delta_slow_c": 1.0,
+      "delta_slow_source": "member config.json thermal.delta_slow_c",
+      "duration_s": 118.22065,
+      "exit_slope_c_per_min": 0.0,
+      "heater_key": "TVh0",
+      "heater_key_max_last_300s_c": 84.292946,
+      "journal": "step_D_prefill_10k_decode_4096/runs/align-v4-r1-step-d/outputs/align_thermal.jsonl",
+      "journal_sha256": "8a958d48be612e6e5328e52f4dbdaa3d19c38420cf19522662fa97a943838dc1",
+      "last_300s_count_ge_threshold": 49,
+      "last_300s_median_c": 35.0,
+      "margin_to_threshold_c": 48.740178,
+      "nominal_throughout": true,
+      "os_level_max": 0,
+      "os_levels": [
+        0
+      ],
+      "outcome": "released",
+      "phase": "step_D_prefill_10k_decode_4096",
+      "planning_turn": false,
+      "pm_states": [
+        "Nominal"
+      ],
+      "reasons": [],
+      "samples": 118,
+      "samples_last_300s": 118,
+      "short_interval": true,
+      "stale_power_state_samples": 0,
+      "status_unobserved_samples": 0,
+      "superseded": false,
+      "target_c": 34.852768,
+      "threshold_c": 35.552768,
+      "turn": 0,
+      "turn_label": "step_D_prefill_10k_decode_4096",
+      "whole_g0_max_c": 84.292946
+    }
+  ],
+  "kit_record_segments": {
+    "planning_turn_R_plus_0C": {
+      "band_edge_c": 35.852768,
+      "heater_key": "TVh0",
+      "heater_key_max_last_300s_c": 40.0,
+      "os_levels": [
+        0
+      ],
+      "pm_states": [
+        "Nominal"
+      ]
+    },
+    "planning_turn_R_plus_2C": {
+      "band_edge_c": 37.852768,
+      "heater_key": "TVh0",
+      "heater_key_max_last_300s_c": 45.0,
+      "os_levels": [
+        0
+      ],
+      "pm_states": [
+        "Nominal"
+      ]
+    },
+    "planning_turn_R_plus_4C": {
+      "band_edge_c": 39.852768,
+      "heater_key": "TVh0",
+      "heater_key_max_last_300s_c": 45.0,
+      "os_levels": [
+        0
+      ],
+      "pm_states": [
+        "Nominal"
+      ]
+    }
+  },
+  "kit_record_segments_note": null,
+  "night": "align-r1",
+  "reconciliation": {
+    "desk_rows": 12,
+    "mismatches": [],
+    "phases_with_g0_outcome": 12,
+    "status": "reconciled: 12 r1_result phase(s) with g0_outcome, 12 desk row(s)"
+  },
+  "rule": {
+    "authority": "RL-122 item 3(a), RL-122 amendment 2026-11-13, RL-124",
+    "band_edge": "reference.slow_c (target) + delta_slow_c",
+    "heater_key": "session s_slow",
+    "measure": "heater key peak over the last 300 s of the G0 interval >= band edge - 0.3 C",
+    "precool": "preceding idle-until-soak phase must report released: true (RL-124 5(a))"
+  },
+  "schema": "joulewise.align_w1_3a_desk.v1"
+}

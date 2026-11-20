@@ -50,7 +50,9 @@ and measurement parents are created before comparing, before cloning.
 Preparation checkpoints selection before cloning, then:
 
 1. Clone the remote without hardlinks, detach at H,
-   run `git -C R fetch -q origin main`, then verify main ancestry.
+   run `git -C R fetch --no-auto-maintenance -q origin main`, then verify main
+   ancestry. The fetch must not detach automatic Git maintenance: a builder
+   failure can return immediately, leaving that child writing into the clone.
 2. Probe `python3.13 --version` (inside the venv builder, so an injected
    offline builder needs no python3.13; a missing interpreter therefore
    surfaces after the clone, with the clone checkpoint recorded and

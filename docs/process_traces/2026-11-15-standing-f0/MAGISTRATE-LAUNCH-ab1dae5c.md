@@ -1,0 +1,17 @@
+# STANDING-F0 run 10 (item 346, item 412 waiver): pre-launch record, magistrate ab1dae5c
+
+2026-11-17 19:03-19:10 PST. The fourth F0 t0 of Tue 17 Nov, under the lead's one-time waiver of rule 5's three-per-day cap (item 412; pointer item 413). Trigger (c) NO_STAGED after F2 p01's close (18:34:13; Check item 411): `dev-05-s01` (item 393) cannot arm before Wed 00:00:00; F2 p2 lacks piece 1's hand-read and queue b; hp-02 is not issued. R1 READY (items 397/400) is effective only from `dev-05-s02`'s launch record, so SESSION_READY=no. No pre-notice; no refusal outstanding.
+
+Activation: spawned 19:03:46 PST; no pending notices; no unread mail from Ed; directive list unchanged (587/422/421/417/416/408/405); no standdown request. Canonical fast-forwarded `f1a9c3d08` -> `11874d2a8` (items 412-413) with no night or align label loaded and no night plist on disk.
+
+Scripts: custody `f0-startcheck-ab1dae5c.sh` and `f0-run-ab1dae5c.sh`, equal to c6a5728a's except:
+- header: MAGISTRATE_PID 34894, TRIGGER_SPAN after-f2-p01-close-item412-waiver, TMPDIR tmp-ab1dae5c;
+- COUNTED_LATEST=1794988800 (Wed 18 Nov 00:00:00 PST, `dev-05-s01`'s earliest arm; item 412 keeps rule 7 protecting it, so launch + 12,180 s + 1,200 s must be at or before it: latest launch 20:17:00 PST);
+- rule 5's day cap: `CAP = 4` on 2026-11-17 only, else 3 (item 412's waiver; the 14,400 s spacing is unchanged).
+The c3cdda76 ls-remote deviation (no fetch in the canonical root) is kept. Start-and-check output: custody `f0-startcheck-out-ab1dae5c.txt`.
+
+Start-and-check, 19:05:23-19:05:28 PST, every line passed: W1-line head `b2e01464d` (ls-remote); 17 hashes equal to item 346's table; `verify_r1_executed_sources` returns `b2e01464d…`; RL-89 MAC CHECK OK with item 346's line; plist test OK; night.lock no holder; sudo kill rc 0; no r12; no campaign span; no stray monitor or root powermetrics; Network Time Off; powermode 0; ntp_adjtime frequency word 0, status 0x2081; no night/smoke agent; AC, not charging, InstantAmperage 0; free 288 GB; agent processes only this magistrate (34894) and its three MCP children. `F0 ELIGIBLE at 1794971126; trigger no_staged after-f2-p01-close-item412-waiver; host last close 1794969254 (other, gap 1200 s)`. Census 25 receipts, newest `/Users/edr/campaign-out/f2-inst-01/cq-f2-inst-p1-a1-20261118T004954Z/runner_receipt.json` (non-campaign path pattern, as item 411's "kind other"); copy gate: its Check covers it (and its marker `cq-f2-inst-p1-a1.ok` exists, item 411). OUTSTANDING_REFUSAL none; HOST_RESTORE_OK 1 (item 411: restore 0, every stop step rc 0); UNPROVEN_GROUP 0; HOLDING_STOP none; OTHER_CLOSE_EPOCH 0; LAST_CLOSE_KIND other; SESSION_READY no; RESTART_PENDING no. Spacing: run 9 t0 1794954550 (14:29:10) + 14,400 s = 18:29:10. Batch print: next OS batch Wed 02:08:39 PST.
+
+Expected end ~21:10 PST; worst case launch + 12,180 s (~22:33); its 1,200 s close interval ends ~22:53, before 00:00; fence launch + 14,400 s (~23:10). The run script re-checks eligibility and writes t0, OUT, DEADLINE, rc and the launcher JSON to custody `r1-partc-f0-out-ab1dae5c.txt` (a STOP, WAIT, HOLD or LAUNCH_RC other than 0 there means nothing ran).
+
+Next activation after the fence: item 346's Check of run 10 (copy custody `standing-f0/check-c6a5728a/check.sh` or the latest, change TMPDIR, OUT and the r0-launches plist id), report it with its G1 row and F0 series-table row (item 396), close items 412 and 413; then `dev-05-s01` from Wed 00:00:00 under item 393 with this F0 as the latest close (kind other, 1,200 s).

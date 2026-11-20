@@ -3,7 +3,8 @@
 
 Stdlib-only. Validates docs/process/state_kernel.json, canonicalizes it,
 and renders the RUN_STATE intake/restart region and the TASK_QUEUE current
-queue region between marker fences.
+queue region between marker fences. On the live RUN_STATE.md it also generates
+and checks docs/process/CURRENT.json through scripts/gen_current.py.
 
 Modes:
   python3 scripts/gen_state.py                 generate (replace marker interiors)
@@ -804,6 +805,17 @@ def load_kernel(path: str):
     return kernel, raw.encode("utf-8")
 
 
+def _current_pointer(check: bool, run_state: str) -> int:
+    """docs/process/CURRENT.json rides the live RUN_STATE.md (scripts/gen_current.py).
+
+    Fixture runs that pass another --run-state leave the pointer alone.
+    """
+    if os.path.abspath(run_state) != os.path.join(ROOT, "RUN_STATE.md"):
+        return 0
+    import gen_current
+    return gen_current.check_default() if check else gen_current.generate_default()
+
+
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--check", action="store_true")
@@ -836,7 +848,8 @@ def main(argv=None) -> int:
                 if replace_region(text, rendered, begin, end, path) != text:
                     print(f"DRIFT: {path} generated region differs", file=sys.stderr)
                     drift = True
-            return 1 if drift else 0
+            pointer = _current_pointer(True, args.run_state)
+            return 2 if pointer == 2 else 1 if drift or pointer else 0
 
         if raw != canonical:
             _atomic_write(args.kernel, canonical)
@@ -845,7 +858,7 @@ def main(argv=None) -> int:
             updated = replace_region(text, rendered, begin, end, path)
             if updated != text:
                 _atomic_write(path, updated.encode("utf-8"))
-        return 0
+        return _current_pointer(False, args.run_state)
     except KernelError as exc:
         print(f"gen_state: {exc}", file=sys.stderr)
         return 2

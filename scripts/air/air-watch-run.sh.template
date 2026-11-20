@@ -1,0 +1,22 @@
+#!/bin/sh
+# Rendered by scripts/air/install_air_watch.sh into the internal disk.
+# If the checkout (on JW-EXT) is missing, post one WATCHER_EXIT per hour and exit.
+REPO='@REPO@'
+PYTHON='@PYTHON@'
+LOG='@LOG@'
+STAMP='@STATEDIR@/repo-missing.stamp'
+OSA=${JW_OSASCRIPT:-/usr/bin/osascript}
+if [ -f "$REPO/scripts/air/air_watch_agent.py" ] && [ -x "$PYTHON" ]; then
+  exec "$PYTHON" "$REPO/scripts/air/air_watch_agent.py" run --python "$PYTHON" --log "$LOG" "$@"
+fi
+mkdir -p "$(dirname "$LOG")" "$(dirname "$STAMP")"
+now=$(date -u '+%Y-%m-%d %H:%M:%S')
+if [ -z "$(find "$STAMP" -mmin -60 2>/dev/null)" ]; then
+  "$OSA" -e 'display notification "ALARM WATCHER_EXIT agent repo_missing" with title "JouleWise Air watch"' >/dev/null 2>&1 \
+    && status=ok || status=failed
+  echo "$now NOTIFY $status ALARM WATCHER_EXIT agent repo_missing" >> "$LOG"
+  touch "$STAMP"
+else
+  echo "$now INFO WATCHER_EXIT_SUPPRESSED agent repo_missing" >> "$LOG"
+fi
+exit 78

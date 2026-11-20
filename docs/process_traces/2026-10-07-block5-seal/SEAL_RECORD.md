@@ -623,10 +623,76 @@ Like the earlier harvest lanes, this lane is not merged into main; the branch is
 
 ## Release event
 
-Nothing is recorded here yet. This section is written when the withheld energies are opened: after the block has
-closed, and after the analysis has been run end to end on the real bytes with every output kept closed (the blind
-dry run of the analysis plan's section 3.2). It will tie the digests of section 4 to the final harvest records.
+### Recorded late (2026-11-13)
 
+This section was owed at the release event, on 2026-11-08, and was written on 2026-11-13 (`date`: Fri Nov 13 2026,
+PST), by the lead's builder under research-lead ruling RL-147 section 4 item 1. It replaces the paragraph that said
+nothing was recorded. The event and the released bytes are unchanged by this record; it adds no number to either.
+Every digest below was taken again from the file named, with `shasum -a 256` (the files under `/Users/edr` are
+Block 5 custody, read only); none was copied from RUN_STATE or from a ruling.
+
+**The event.** Ed's unseal OK for Block 5 was given on 2026-11-08 at 11:17 PST and is recorded in `RUN_STATE.md`
+item 231, written before any outcome was read. Item 231 quotes Ed's words: `"sounds good on all 3", followed by
+"unseal".` Scope: Block 5 only, that is `/Users/edr/jw-b5-custody/dry-m` and the release-check output
+`release-check-final-20261108T0942Z`, read only.
+
+**The release check it followed.** `release-check-final-20261108T0942Z` ran on main `02ef89f5c67c5bec2b04ab6521129e3f878cdfa6`
+with the analysis pinned to the tag `b5/analysis-r4`, which is commit `ab1e0098dbd0ab839c8f278088221aa8aa4de8d2`
+(`git rev-parse` on both; `02ef89f5c` is an ancestor of main). Its `verdict.json` reads `verdict` `agree`,
+`release_checkout.commit` `02ef89f5c67c5bec2b04ab6521129e3f878cdfa6`, `pinned_commit`
+`ab1e0098dbd0ab839c8f278088221aa8aa4de8d2`, recompute exit 0, comparator `agree` over 24 families with no
+undetermined row, and digests `verified` (390 outputs, 78,389 census inputs). RUN_STATE item 229 and item 231 give
+the same commits.
+
+**The released output.** `/Users/edr/jw-b5-custody/release-check-final-20261108T0942Z/recompute.json`, SHA-256
+`c06ee7c8cbf85a68dcebc24a73e0372fd6f8d825fc3acf30ec352304dd93cacc`.
+
+**The three analysed sessions' final `harvest.json`** (`/Users/edr/night-archive/harvest-v5-b5-<attempt>/harvest.json`;
+each equals `harvest_record_sha256` in `configs/analysis/b5/analysed_windows.json`; BETA and GAMMA also equal the
+values in RUN_STATE items 28 and 31):
+
+| Pack | Attempt | SHA-256 |
+|---|---|---|
+| ALPHA | `v5-b5-alpha-a1-20261009T2312Z` | `baf397d620845bbd92e6efa69646daafa5c731d552e568e7a4be6b72ac797ab5` |
+| BETA | `v5-b5-beta-a6-20261011T2011Z` | `80398a5deb1d55f19c13f8e4057debd296b8dbb30dfa4de914cacc11aa8a97fe` |
+| GAMMA | `v5-b5-gamma-a1-20261012T0420Z` | `4bb49435f33d481b8404c9e5540ea515a4ba2910cc98316e34467d2424a8d1c7` |
+
+The three harvest records name the program that made them: ALPHA by `224a264c5faaae90cdf56118df37e773a932700b`, BETA
+and GAMMA by `b039c0257d1b1d407ee9598222db3f78f6ad7beb`. The records do not carry the digests of section 4, so the tie
+below is made through the files, not through the records.
+
+**The digests of section 4, tied.** For each file section 4 lists, the second column is the digest section 4 printed
+and the third is the digest of the same path at main `02ef89f5c`, the release checkout. Eight of the twenty-two
+rows differ, and all eight are files the second seal (Erratum 1 above) replaced: for each, the third-column
+digest equals the one Erratum 1 prints (the registration, the analysis plan, the sealed inventory, the sizing
+output, the identity pins and the three plan trees). The other fourteen are unchanged. The checker
+`bench/check_seal_record.py` was not re-run for this: it reads section 4's first-seal values and already reports
+the second seal's differences.
+
+| File | Section 4 | At `02ef89f5c` | Status |
+|---|---|---|---|
+| `configs/campaigns/v5_claim_25g83/sealed_inventory.json` | `57ee5d4a8ce632dfca7858f8f834d75dce463276b35fffc4edad91af2d76312a` | `80852d98c13472e502411c2131d420b442fec2852350c3c520b2666a6826c4dc` | superseded by the second seal |
+| `configs/campaigns/v5_claim_25g83/registration_block5.md` | `4d321fe3756076aed508dbed4284b2103cdc4e9c1adc18f496e9d3a617410841` | `c7b3fdf78dde0a403bbc0b63262d1f8b1a697695bdeb2fb737a90cedde1ddb3f` | superseded by the second seal |
+| `configs/campaigns/v5_claim_25g83/analysis_plan_block5.md` | `1172a4501e2311a98508e6102420de657daa88c8c455603717b8ff7b2a1e1b8a` | `23ef67f56cc3cd2346e3ace87ec1d9390ef8b5727bd3bad169ea66d30a374859` | superseded by the second seal |
+| `configs/campaigns/v5_claim_25g83/flag_catalog.json` | `5d77c725d4bf482bd667ca4c3a926e2f6471d55d196cd4b4addee435da01ee8d` | `5d77c725d4bf482bd667ca4c3a926e2f6471d55d196cd4b4addee435da01ee8d` | unchanged |
+| `configs/campaigns/d117_floor_qwen3-1p7b_v5/plan_tree.json` | `1d87a30955fa978d3a3a22dc0048720691e0128e4a3fe83477fc375d13dd031a` | `2ec3625a31b796e3fa37e2c39f37508618b649d0d9f61ddbd3fdfe2c5a282809` | superseded by the second seal |
+| `configs/campaigns/d117_floor_qwen3-8b_v5/plan_tree.json` | `0cdb33836f4632827bc74be194e388450c53b3314db1c72d9e9904e625868670` | `e77e4f6e74f663190d1acfe95c3e2499ec69c1b27ba9e3564c531affee980707` | superseded by the second seal |
+| `configs/campaigns/d117_contrast_qwen3-1p7b_vs_qwen3-8b_v5/plan_tree.json` | `8b1d1d7176f5ee2286038e91df6427e47476c3a4bdee45a1c24687d49d80e3bf` | `da8028977dfe44b3bf1d13e79e7bfea2b1390aa985bef7faa891369c8e3985bc` | superseded by the second seal |
+| `configs/model_panels/qwen3_4bit.json` | `78875a0e8b2c6d9f573cd42b0d27de6498cdfc8de57af4b4a502e1f93a02513a` | `78875a0e8b2c6d9f573cd42b0d27de6498cdfc8de57af4b4a502e1f93a02513a` | unchanged |
+| `configs/campaign_policies/quiet_mac_p2_b5.json` | `ba0f7b7f1538fe87f6281362efbba4b05f7dff74b4bfd78e84c98b9e8859bc60` | `ba0f7b7f1538fe87f6281362efbba4b05f7dff74b4bfd78e84c98b9e8859bc60` | unchanged |
+| `configs/calibration/calibration_acceptance_d079_v2_n24_25g83_r2.json` | `f949f511254e03b50b0be1cea37f74c1e8e6b4c49926c6c197024beea07b3660` | `f949f511254e03b50b0be1cea37f74c1e8e6b4c49926c6c197024beea07b3660` | unchanged |
+| `configs/campaigns/d117_floor_qwen3-1p7b_v5/prefill_pin/prefill_prompt_pin.json` | `d1209f6d5998e4a48ac0dae7ed04a8f6a2c5ec9950d768f0df9ef8839a32dccb` | `d1209f6d5998e4a48ac0dae7ed04a8f6a2c5ec9950d768f0df9ef8839a32dccb` | unchanged |
+| `configs/campaigns/d117_floor_qwen3-1p7b_v5/prefill_pin/selection.json` | `c694c4884ff7f31b677b5ade1ab9710a4797c4529eaad61fba85fea080a88222` | `c694c4884ff7f31b677b5ade1ab9710a4797c4529eaad61fba85fea080a88222` | unchanged |
+| `configs/campaigns/d117_floor_qwen3-1p7b_v5/prefill_pin/prefill-prompt-ladder.json` | `43a77ea99cb2ac1f087f19d2f672444727b3e73a839e5dcfd8db1198d1352885` | `43a77ea99cb2ac1f087f19d2f672444727b3e73a839e5dcfd8db1198d1352885` | unchanged |
+| `configs/campaigns/d117_floor_qwen3-8b_v5/prefill_pin/prefill_prompt_pin.json` | `d1209f6d5998e4a48ac0dae7ed04a8f6a2c5ec9950d768f0df9ef8839a32dccb` | `d1209f6d5998e4a48ac0dae7ed04a8f6a2c5ec9950d768f0df9ef8839a32dccb` | unchanged |
+| `configs/campaigns/d117_floor_qwen3-8b_v5/prefill_pin/selection.json` | `c694c4884ff7f31b677b5ade1ab9710a4797c4529eaad61fba85fea080a88222` | `c694c4884ff7f31b677b5ade1ab9710a4797c4529eaad61fba85fea080a88222` | unchanged |
+| `configs/campaigns/d117_floor_qwen3-8b_v5/prefill_pin/prefill-prompt-ladder.json` | `43a77ea99cb2ac1f087f19d2f672444727b3e73a839e5dcfd8db1198d1352885` | `43a77ea99cb2ac1f087f19d2f672444727b3e73a839e5dcfd8db1198d1352885` | unchanged |
+| `configs/campaigns/d117_contrast_qwen3-1p7b_vs_qwen3-8b_v5/prefill_pin/prefill_prompt_pin.json` | `d1209f6d5998e4a48ac0dae7ed04a8f6a2c5ec9950d768f0df9ef8839a32dccb` | `d1209f6d5998e4a48ac0dae7ed04a8f6a2c5ec9950d768f0df9ef8839a32dccb` | unchanged |
+| `configs/campaigns/d117_contrast_qwen3-1p7b_vs_qwen3-8b_v5/prefill_pin/selection.json` | `c694c4884ff7f31b677b5ade1ab9710a4797c4529eaad61fba85fea080a88222` | `c694c4884ff7f31b677b5ade1ab9710a4797c4529eaad61fba85fea080a88222` | unchanged |
+| `configs/campaigns/d117_contrast_qwen3-1p7b_vs_qwen3-8b_v5/prefill_pin/prefill-prompt-ladder.json` | `43a77ea99cb2ac1f087f19d2f672444727b3e73a839e5dcfd8db1198d1352885` | `43a77ea99cb2ac1f087f19d2f672444727b3e73a839e5dcfd8db1198d1352885` | unchanged |
+| `configs/campaigns/v5_claim_25g83/sizing_b5.json` | `89e7ea70be34d855285c7d2c87df42b646d179a632a1e05ed57a4682a961b3aa` | `a8e8d53036f08b5d6edc648ec77f01f75890ae904a817204600d6daac912cfad` | superseded by the second seal |
+| `configs/campaigns/v5_claim_25g83/identity_pins.json` | `a0865895dc7eeb4ecea28c611b65fab9eee69d5e16f5f8126dbe08ac5255bda9` | `513d7d4a98f464c7236b34c53f51cd523a9f45b4d9f05f2282a4a22424b4841d` | superseded by the second seal |
+| `docs/phase_2/window_runbook.md` | `c4e8bf416269ba3a9fb5ffda3404414ce7227d162c1329cea92817a38ea384c5` | `c4e8bf416269ba3a9fb5ffda3404414ce7227d162c1329cea92817a38ea384c5` | unchanged |
 
 **Declared deviation (2026-10-20, lead activation 6cff3515; L9 ruling Q-RENDERER).** Plan §3 row 11 names
 `render_results_fills.py --validate-rendered` with output "validated Markdown". The block-5 dry run ends step 11 at the

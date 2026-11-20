@@ -1,5 +1,31 @@
 # Results fill registry
 
+## Adoption ruling for Block 5 placement — 2026-11-10 (RL-2)
+
+Dated addendum. Research-lead ruling RL-2, 2026-11-10 18:44 PST,
+`docs/research-audits/2026-11-10-fable/RESEARCH-LEAD-DECISIONS.md` on
+`origin/audit/2026-11-10-fable` @ `5de56400f`, lines 42-54, verbatim:
+
+> **Ruling.** Every row the Block 5 analysis plan §9 registers for print is placed in Paper 1 at the sites
+> `fill_index.md` names for it (§5.1 to §5.6 and §5.8, the abstract and conclusion sentences assembled from
+> them), beside its registered fixed sentence. Both contrasts print with their issued status; nothing is selected
+> or omitted. Dominance prints as branch B, with every ratio, numerator, denominator and n, and no subtitle. This
+> supersedes the 2026-09-05 "D-174 SELECT FALLBACK" disposition for these rows, on Ed's written instruction of
+> 2026-11-08 (item 232), which is one of the two events at which D-174 says it expires. The lead records it as a
+> dated addendum at the head of `docs/paper/results-fill-registry.md` and in the Block 5 deviation log.
+
+> **Reason.** Item 232 settles that Block 5 is in the paper. It does not say which rows, where, or what happens to
+> the registry's standing disposition, and the registration requires an adoption ruling before anything prints.
+
+> **Blind status.** Not blind: Block 5 is released and I have read it. The ruling places every registered row and
+> selects none, so knowing the outcomes cannot shape it.
+
+Also logged as DLE-7 in `docs/analysis/b5/DEVIATION-LOG.md`. Before any Block 5
+value is rendered from this registry, RL-3's gate must be met (DLE-6), and the
+claim text of RL-4 binds every sentence; RL-4 (x) and (xi) are DLE-8 and DLE-9.
+The 2026-09-05 submission disposition below is unchanged except as RL-2 supersedes
+it for the rows RL-2 places.
+
 ## Submission disposition — 2026-09-05
 
 D-174 SELECT FALLBACK selects the single methods/diagnostic draft in

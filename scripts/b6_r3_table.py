@@ -1,0 +1,558 @@
+#!/usr/bin/env python3
+"""Block 6 §17-R3 printed-quantity table, regenerated from code (OPEN[R3-TABLE]).
+
+Inputs (code and configuration only; no custody, no outcome):
+- configs/b6/recompute/production_comparison_keys.json: every printed key;
+- configs/b6/recompute/precision.json: the S-13 print precision (bars);
+- joulewise/b6_analysis_check.py: the option (c) second side. Which keys it
+  produces is read from its source (``check_block`` is one function with no
+  importable key table), with ``ast``;
+- scripts/independent_recompute_b6.py: RC-B6-1, the production program. Its
+  producing functions and the pinned Block 5 functions they call are read
+  with ``ast``; ``decimals_for`` and ``quantity_class`` are imported.
+
+Label rules (each row cites the rule it used; RL-101 to RL-104):
+- the key is a row of the option (c) comparison table -> "computed and
+  compared" (§17-R3 decision 6 (a));
+- block-scope rows -> "§10-§11 arithmetic computed and compared; session
+  inputs as labelled at session scope" (RL-102 item 4);
+- the key's result field is checked inside the option (c) gate but is not a
+  table row -> RL-103's gate label as amended by RL-114, with the gate's own bar;
+- every GAMMA contrast label carries RL-114's "verdict is not `undefined`"
+  clause, which is printed only if check_block's undefined-screen branch
+  (no twin call, `engine_screen_undefined` guard) is found in its source;
+- the per-phase whole-machine line -> the literal RC-B6-1 stamps on it
+  (§17-R8), which must also be b6_analysis_check's single_implementation;
+- one producer, value a field of the Block 5 cell or floor estimator's output
+  for the registered selection (B5.make_reported / B5.make_floors), or a copy
+  of one (dominance R, R_cm) -> `single-source` (RL-99 item 1, RL-101);
+- any other one-producer key -> "not independently recomputed" (§17-R3).
+- the eight copied-disclosure families (COPIED_FAMILIES, RL-104) are
+  hand-entered decision 6 (b) rows naming their record files, read from
+  scripts/b6_r12_verify.py; none may be a comparison key.
+
+Exit 1, naming the groups, when any key has no stated producer or label.
+Output is deterministic: no clock, no environment, sorted rows.
+"""
+import argparse
+import ast
+import collections
+import hashlib
+import importlib.util
+import json
+from pathlib import Path
+import re
+import sys
+
+ROOT = Path(__file__).resolve().parents[1]
+DEFAULTS = {
+    "keys": "configs/b6/recompute/production_comparison_keys.json",
+    "precision": "configs/b6/recompute/precision.json",
+    "check": "joulewise/b6_analysis_check.py",
+    "recompute": "scripts/independent_recompute_b6.py",
+    "verify": "scripts/b6_r12_verify.py",
+}
+R8_LITERAL = "single implementation; not independently recomputed"
+UNSTATED = "UNSTATED"
+LABEL_COMPARED = "computed and compared (decision 6 (a))"
+# RL-110: two groups are compared only conditionally; exact strings, character for character.
+LABEL_NEG8 = ("computed and compared (decision 6 (a)) when the session's NEG-8 verdict is not `undefined`, "
+              "otherwise not independently recomputed")
+# RL-114 amends RL-110 and RL-103 for the GAMMA contrast rows: a session whose NEG-8 verdict is `undefined` is
+# not fed to the engine twin; check_block guards its word instead (`engine_screen_undefined`).
+LABEL_CONTRAST = ("computed and compared (decision 6 (a)) when the session's NEG-8 verdict is not `undefined` and the "
+                  "twin returns an estimate, otherwise not independently recomputed")
+# RL-102 item 4: the second side recomputes §10-§11 arithmetic over RC-B6-1's session values.
+LABEL_BLOCK = "§10-§11 arithmetic computed and compared; session inputs as labelled at session scope"
+# RL-103 as amended by RL-114: exact gate labels; the check family goes in the Source column.
+LABEL_GATE = ("computed and compared in the option (c) gate when the session's NEG-8 verdict is not `undefined` and "
+              "the twin returns an estimate, otherwise not independently recomputed; not an S-13 table row")
+# RL-133 §1a amends RL-114 for `p`, `holm_p` and the word: below five quads the gate guards them
+# (`engine_below_minimum`) and the session's Holm family counts the short contrast at p = 1.0 on both sides.
+LABEL_GATE_WORD = ("computed and compared in the option (c) gate when the session's NEG-8 verdict is not `undefined` "
+                   "and either the twin refuses or the contrast has five or more quads; with two to four quads the "
+                   "gate requires only that the word is `not_estimable`; with an undefined verdict the gate requires "
+                   "only that the word is `not_resolvable` or `not_estimable`; otherwise not independently "
+                   "recomputed; not an S-13 table row")
+LABEL_CONTRAST_P = ("computed and compared (decision 6 (a)) when the session's NEG-8 verdict is not `undefined`, the "
+                    "twin returns an estimate and the contrast has five or more quads; with two to four quads the gate "
+                    "requires only that the value is 1.0; otherwise not independently recomputed")
+LABEL_CONTRAST_HOLM = ("computed and compared (decision 6 (a)) when the session's NEG-8 verdict is not `undefined`, the "
+                       "twin returns an estimate and the contrast has five or more quads, with a family member below "
+                       "five quads counted at p = 1.0 on both sides; with two to four quads the gate requires only "
+                       "that the value is 1.0; otherwise not independently recomputed")
+MINIMUM_GUARD = "engine_below_minimum"
+ENGINE_FAMILIES = ("engine", "engine_refusal", "engine_word")
+SCREEN_GUARD = "engine_screen_undefined"
+LABEL_SINGLE_SOURCE = "`single-source` (RL-99 item 1)"
+LABEL_ONE = "not independently recomputed"
+# RL-104: decision 6 (b) rows, hand-entered. Never comparison keys; their record files are read from
+# scripts/b6_r12_verify.py's copied_records map.
+COPIED_FAMILIES = ("monitor_cost", "arm_host", "battery_phase", "subject_temperature", "reference_history",
+                   "attempt_history", "g10_history", "block5_codes_carried")
+LABEL_COPIED = '"copied from the harvest or acceptance record, bound by digest, not recomputed" (decision 6 (b))'
+VERIFY = "scripts/b6_r12_verify.py"
+LABEL_R8 = '"' + R8_LITERAL + '" (§17-R8)'
+B5_ESTIMATORS = ("make_reported", "make_floors")
+
+# Which RC-B6-1 function writes each key family, and the pinned Block 5 calls
+# it must contain. Verified against the source below; a missing function or
+# call leaves the family UNSTATED.
+PRODUCERS = (
+    # (regex on the concrete key, packs, RC-B6-1 function, required B5 calls, estimator output?)
+    (r"^calibration/b_op_s$", None, "Session.calibration", (), False),
+    (r"^neg8/", None, "Session.screen", (), False),
+    (r"^reported/", ("ALPHA", "BETA"), "floor_session", ("make_reported",), True),
+    (r"^floor/", ("ALPHA", "BETA"), "floor_session", ("make_floors",), True),
+    (r"^dominance/qwen3-[^/]+/", ("ALPHA", "BETA"), "dominance_rows", (), True),
+    (r"^dominance/branch$", ("GAMMA",), "attach_gamma", (), False),
+    (r"^lines/(load_sensitivity|battery_assist|waited_runs|outside_processor_alternative)/qwen3-",
+     ("ALPHA", "BETA"), "subset_estimate", ("make_reported",), False),
+    (r"^lines/(load_sensitivity|battery_assist|waited_runs|outside_processor_alternative)/(decode|prefill-p2048)",
+     ("GAMMA",), "subset_estimate", ("contrast_stats", "quad_difference"), False),
+    (r"^lines/single_step_reconstruction/", ("ALPHA", "BETA"), "single_step_cell",
+     ("single_step_member", "diagnostic_estimate"), False),
+    (r"^lines/scaled_allowance/qwen3-", ("ALPHA", "BETA"), "floor_session",
+     ("allowance_factor", "scaled_reported", "scaled_floor"), False),
+    (r"^lines/scaled_allowance/(decode|prefill-p2048)/", ("GAMMA",), "finish_gamma",
+     ("scaled_gamma_inputs", "finish_contrast"), False),
+    (r"^lines/whole_machine/", ("ALPHA", "BETA"), "add_session_machine", ("add_machine",), False),
+    (r"^contrast/(decode|prefill-p2048)/(energy_ratio|energy_ratio_lower|energy_ratio_upper|per_token_j)$",
+     ("GAMMA",), "finish_gamma", ("descriptive_estimate",), False),
+    (r"^contrast/", ("GAMMA",), "finish_gamma", ("finish_contrast",), False),
+    (r"^cross_session/", ("GAMMA",), "finish_gamma", ("cross_window",), False),
+)
+BLOCK_PRODUCER = "block_lines"
+
+
+def sha256(path):
+    return hashlib.sha256(Path(path).read_bytes()).hexdigest()
+
+
+def functions(tree):
+    """{qualified name: FunctionDef} for module functions and class methods."""
+    out = {}
+    for node in tree.body:
+        if isinstance(node, ast.FunctionDef):
+            out[node.name] = node
+        elif isinstance(node, ast.ClassDef):
+            for item in node.body:
+                if isinstance(item, ast.FunctionDef):
+                    out[node.name + "." + item.name] = item
+    return out
+
+
+def b5_calls(fn):
+    return {n.func.attr for n in ast.walk(fn) if isinstance(n, ast.Call) and isinstance(n.func, ast.Attribute)
+            and isinstance(n.func.value, ast.Name) and n.func.value.id == "B5"}
+
+
+def strings(node):
+    return [n.value for n in ast.walk(node) if isinstance(n, ast.Constant) and isinstance(n.value, str)]
+
+
+def leftmost(node):
+    """The first string of a left-nested ``a + b + c`` chain, or None."""
+    while isinstance(node, ast.BinOp):
+        node = node.left
+    return node.value if isinstance(node, ast.Constant) and isinstance(node.value, str) else None
+
+
+def is_name(node, name):
+    return isinstance(node, ast.Name) and node.id == name
+
+
+def is_undefined_test(test):
+    """``<x>["verdict"] == "undefined"``."""
+    return (isinstance(test, ast.Compare) and len(test.ops) == 1 and isinstance(test.ops[0], ast.Eq)
+            and isinstance(test.left, ast.Subscript) and isinstance(test.left.slice, ast.Constant)
+            and test.left.slice.value == "verdict" and len(test.comparators) == 1
+            and isinstance(test.comparators[0], ast.Constant) and test.comparators[0].value == "undefined")
+
+
+def check_calls(nodes, families):
+    return [c for n in nodes for c in ast.walk(n) if isinstance(c, ast.Call) and is_name(c.func, "check")
+            and c.args and isinstance(c.args[0], ast.Constant) and c.args[0].value in families]
+
+
+def read_screen_branch(fn):
+    """RL-114's GAMMA branch: ``if verdict == "undefined"`` guards the word and the else arm holds every engine check.
+
+    Returns {"if": line, "guard": line} or None when check_block does not have that shape."""
+    every = {id(c) for c in check_calls([fn], ENGINE_FAMILIES)}
+    for node in ast.walk(fn):
+        if not (isinstance(node, ast.If) and is_undefined_test(node.test)):
+            continue
+        guards = check_calls(node.body, (SCREEN_GUARD,))
+        words = set(strings(ast.Module(body=node.body, type_ignores=[])))
+        twin = any(isinstance(c, ast.Call) and isinstance(c.func, ast.Attribute) and c.func.attr == "family"
+                   and is_name(c.func.value, "engine") for n in node.orelse for c in ast.walk(n))
+        inside = {id(c) for c in check_calls(node.orelse, ENGINE_FAMILIES)}
+        if (guards and {"not_resolvable", "not_estimable"} <= words and twin and every and inside == every
+                and not check_calls(node.body, ENGINE_FAMILIES)):
+            return {"if": node.lineno, "guard": guards[0].lineno}
+    return None
+
+
+# ---------------------------------------------------------------- the option (c) side
+
+def read_check(path):
+    """What check_block writes into its comparison table, and which result fields it checks."""
+    tree = ast.parse(Path(path).read_text(encoding="utf-8"))
+    fn = functions(tree).get("check_block")
+    if fn is None:
+        raise SystemExit("b6_r3_table: check_block not found in " + str(path))
+    session_keys, contrast_fields, phases = {}, {}, set()
+    gate_fields, block_heads, single = {}, {}, []
+    default_bar = next((n.args.defaults[-1].value for n in ast.walk(fn) if isinstance(n, ast.FunctionDef)
+                        and n.name == "check" and n.args.defaults), None)
+
+    def bar_of(call):
+        if len(call.args) >= 5:
+            # A positional bar that is not a literal cannot be read: refuse rather than print the default.
+            if isinstance(call.args[4], ast.Constant):
+                return call.args[4].value
+            raise SystemExit("b6_r3_table: `check` bar at line {} is not a literal".format(call.lineno))
+        for kw in call.keywords:
+            if kw.arg == "bar":
+                if isinstance(kw.value, ast.Constant):
+                    return kw.value.value
+                raise SystemExit("b6_r3_table: `check` bar at line {} is not a literal".format(call.lineno))
+        return default_bar
+    for node in ast.walk(fn):
+        # q["calibration/b_op_s"] = ...  and  q["contrast/" + phase + "/" + exposed[key]] = expected
+        if isinstance(node, ast.Assign):
+            for target in node.targets:
+                if isinstance(target, ast.Subscript) and is_name(target.value, "q"):
+                    if isinstance(target.slice, ast.Constant):
+                        session_keys[target.slice.value] = node.lineno
+                    elif isinstance(target.slice, ast.BinOp):
+                        parts = strings(target.slice)
+                        if leftmost(target.slice) == "contrast/":
+                            phases.update(p for p in parts if p in ("decode", "prefill-p2048"))
+                            contrast_fields["__line__"] = node.lineno
+        # q.update({"neg8/allowance_j": ..., ...})
+        if (isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute) and node.func.attr == "update"
+                and is_name(node.func.value, "q") and node.args and isinstance(node.args[0], ast.Dict)):
+            for k in node.args[0].keys:
+                if isinstance(k, ast.Constant):
+                    session_keys[k.value] = node.lineno
+        # exposed = {"n": "n", ...}: the contrast fields that become table rows
+        if (isinstance(node, ast.Assign) and any(is_name(t, "exposed") for t in node.targets)
+                and isinstance(node.value, ast.Dict)):
+            for v in node.value.values:
+                contrast_fields[v.value] = node.lineno
+        # check("engine", cid + "/" + key, original[key], expected) over a literal tuple of (field, value)
+        if isinstance(node, ast.For) and isinstance(node.iter, ast.Tuple):
+            fams = [c.args[0].value for c in ast.walk(node) if isinstance(c, ast.Call) and is_name(c.func, "check")
+                    and c.args and isinstance(c.args[0], ast.Constant)]
+            firsts = [e.elts[0].value for e in node.iter.elts if isinstance(e, ast.Tuple) and e.elts
+                      and isinstance(e.elts[0], ast.Constant)]
+            if "engine" in fams:
+                call = next(c for c in ast.walk(node) if isinstance(c, ast.Call) and is_name(c.func, "check")
+                            and isinstance(c.args[0], ast.Constant) and c.args[0].value == "engine")
+                for f in firsts:
+                    gate_fields[f] = (("engine",), (call.lineno,), (bar_of(call),))
+            if "section10" in fams:
+                for f in firsts:
+                    block_heads[f] = node.lineno
+        if isinstance(node, ast.Call) and is_name(node.func, "check") and len(node.args) >= 3:
+            fam = node.args[0].value if isinstance(node.args[0], ast.Constant) else None
+            actual = node.args[2]
+            # original["outcome"], original["decision_interval_j"][i]
+            while isinstance(actual, ast.Subscript) and not (is_name(actual.value, "original")):
+                actual = actual.value
+            if (fam and isinstance(actual, ast.Subscript) and is_name(actual.value, "original")
+                    and isinstance(actual.slice, ast.Constant)):
+                prior = gate_fields.get(actual.slice.value, ((), (), ()))
+                gate_fields[actual.slice.value] = (tuple(sorted(set(prior[0]) | {fam})),
+                                                   tuple(sorted(set(prior[1]) | {node.lineno})),
+                                                   tuple(sorted(set(prior[2]) | {bar_of(node)})))
+            # table["block"]["quantities"][name] for "side_by_side/" + ... and "replication/" + ...
+        if isinstance(node, ast.Assign):
+            for expr in [node.value] + [t.slice for t in node.targets if isinstance(t, ast.Subscript)]:
+                head = leftmost(expr)
+                if head in ("side_by_side/", "replication/"):
+                    block_heads[head.rstrip("/")] = node.lineno
+        if isinstance(node, ast.Return) and isinstance(node.value, ast.Dict):
+            for k, v in zip(node.value.keys, node.value.values):
+                if isinstance(k, ast.Constant) and k.value == "single_implementation":
+                    single = [e.value for e in v.elts]
+    line = contrast_fields.pop("__line__", None)
+    if line is None or not phases:
+        raise SystemExit("b6_r3_table: contrast row form not found in check_block")
+    return {"session_keys": session_keys, "contrast_fields": contrast_fields, "contrast_line": line,
+            "phases": phases, "gate_fields": gate_fields, "default_bar": default_bar, "block_heads": block_heads, "single": single,
+            "screen": read_screen_branch(fn), "lines": (fn.lineno, fn.end_lineno),
+            # RL-133: the below-minimum labels are printed only if check_block has the guard.
+            "below_minimum": bool(check_calls([fn], (MINIMUM_GUARD,)))}
+
+
+# ---------------------------------------------------------------- RC-B6-1
+
+def read_recompute(path):
+    tree = ast.parse(Path(path).read_text(encoding="utf-8"))
+    fns = functions(tree)
+    # contrast_keys: printed suffix -> result field (decision_lower_j -> decision_interval_j)
+    printed = {}
+    ck = fns.get("contrast_keys")
+    if ck is not None:
+        for node in ast.walk(ck):
+            if isinstance(node, ast.Dict):
+                for k, v in zip(node.keys, node.values):
+                    ks, vs = strings(k) if k is not None else [], strings(v)
+                    if ks and ks[-1].startswith("/") and vs:
+                        printed[ks[-1][1:]] = vs[0]
+            if isinstance(node, ast.Assign) and isinstance(node.targets[0], ast.Subscript):
+                ks, vs = strings(node.targets[0].slice), strings(node.value)
+                if ks and ks[-1].startswith("/") and vs:
+                    printed[ks[-1][1:]] = vs[0]
+    machine = fns.get("add_session_machine")
+    r8 = None if machine is None else next((n.lineno for n in ast.walk(machine) if isinstance(n, ast.Constant)
+                                            and n.value == R8_LITERAL), None)
+    return {"fns": fns, "printed": printed, "r8": r8}
+
+
+def load_module(path):
+    spec = importlib.util.spec_from_file_location("b6_r3_recompute", path)
+    module = importlib.util.module_from_spec(spec)
+    sys.path.insert(0, str(Path(path).resolve().parents[1]))
+    spec.loader.exec_module(module)
+    return module
+
+
+# ---------------------------------------------------------------- grouping
+
+def generalize(key):
+    key = re.sub(r"qwen3-[0-9a-z]+", "<model>", key)
+    key = re.sub(r"/(decode|prefill-p2048)(/|$)", r"/<phase>\2", key)
+    return re.sub(r"/(absolute|comparative)(/|$)", r"/<mode>\2", key)
+
+
+def split_block(key):
+    parts = key.split("/")
+    if parts[0] in ("summary", "inclusive", "side_by_side"):
+        return "/".join(parts[:-1]), parts[-1]
+    return key, None
+
+
+def classify_session(key, pack, check, rc):
+    """(producers, label) for one session key; UNSTATED where nothing in the code states it."""
+    fns, rows = rc["fns"], []
+    for pattern, packs, fname, needs, estimator in PRODUCERS:
+        if re.search(pattern, key) and (packs is None or pack in packs):
+            rows.append((fname, needs, estimator))
+            break
+    if not rows:
+        return UNSTATED, UNSTATED, "no RC-B6-1 producer declared"
+    fname, needs, estimator = rows[0]
+    fn = fns.get(fname)
+    missing = sorted(set(needs) - b5_calls(fn)) if fn is not None else list(needs)
+    if fn is None or missing:
+        return UNSTATED, UNSTATED, "RC-B6-1 `{}` missing or lacks B5.{}".format(fname, ",".join(missing))
+    calls = ", ".join("B5." + c for c in needs)
+    primary = "RC-B6-1 `{}` (RC:{}){}".format(fname, fn.lineno, "; " + calls if calls else "")
+    c0, c1 = check["lines"]
+    field = key.rsplit("/", 1)[-1]
+    # 1. a row of the option (c) comparison table
+    if key in check["session_keys"]:
+        return (primary + "; second: `check_block` (CHK:{})".format(check["session_keys"][key]),
+                LABEL_NEG8 if key.startswith("neg8/") else LABEL_COMPARED,
+                "CHK:{}".format(check["session_keys"][key]))
+    # RL-114's first clause ("verdict is not `undefined`") must be read from check_block, not assumed.
+    screen = check["screen"]
+    no_screen = (UNSTATED, UNSTATED, "RL-114 undefined-screen branch (skip and `{}` guard) not found in "
+                 "check_block".format(SCREEN_GUARD))
+    no_minimum = (UNSTATED, UNSTATED, "RL-133 below-minimum guard (`{}`) not found in check_block".format(MINIMUM_GUARD))
+    if key.startswith("contrast/") and field in check["contrast_fields"]:
+        if screen is None:
+            return no_screen
+        if field in ("p", "holm_p") and not check["below_minimum"]:
+            return no_minimum
+        label = {"p": LABEL_CONTRAST_P, "holm_p": LABEL_CONTRAST_HOLM}.get(field, LABEL_CONTRAST)
+        return (primary + "; second: engine twin via `check_block` (CHK:{})".format(check["contrast_line"]),
+                label, "CHK:{}; skipped when verdict undefined (CHK:{})".format(
+                    check["contrast_line"], screen["if"]))
+    # 2. checked inside the gate on the result field the printed key reads
+    if key.startswith("contrast/"):
+        source = rc["printed"].get(field)
+        if source in check["gate_fields"]:
+            if screen is None:
+                return no_screen
+            fams, lines, bars = check["gate_fields"][source]
+            line = ",".join(str(x) for x in lines)
+            word = "engine_word" in fams
+            # RL-103 wording describes exactly the refusal check plus the word check on `outcome`.
+            if (source == "outcome" or word) and set(fams) != {"engine_refusal", "engine_word"}:
+                return UNSTATED, UNSTATED, "`{}` checked by {}, not exactly engine_refusal and engine_word".format(
+                    source, ", ".join(fams))
+            if len(bars) != 1:
+                return UNSTATED, UNSTATED, "gate bars differ for `{}`".format(source)
+            if word and not check["below_minimum"]:
+                return no_minimum
+            gate_bar = ("gate: exact (word)" if word else
+                        "gate: {:g} absolute, unrounded (CHK `check` bar)".format(bars[0]))
+            guard = ("; undefined verdict: `{}` CHK:{}".format(SCREEN_GUARD, screen["guard"]) if word else
+                     "; skipped when verdict undefined (CHK:{})".format(screen["if"]))
+            return (primary + "; second: engine twin via `check_block` (CHK:{})".format(line),
+                    LABEL_GATE_WORD if word else LABEL_GATE,
+                    "CHK:{}, check family {} (result field `{}`){}".format(
+                        line, ", ".join("`" + f + "`" for f in fams), source, guard), gate_bar)
+    # 3. the per-phase whole-machine line (R8)
+    if key.startswith("lines/whole_machine/"):
+        if not (rc["r8"] and any("per-phase whole-machine" in s for s in check["single"])):
+            return UNSTATED, UNSTATED, "R8 literal or single_implementation entry missing"
+        return (primary + "; per-phase line only (request-level line is `request_cross_check`, not a printed key)",
+                LABEL_R8, "RC:{} literal; CHK:{} single_implementation".format(rc["r8"], c1))
+    # 4. one producer
+    if estimator and set(needs) & set(B5_ESTIMATORS) or estimator and fname == "dominance_rows":
+        return (primary + "; no second producer in `check_block`", LABEL_SINGLE_SOURCE,
+                "CHK:{}-{} (absent); RL-99 item 1, RL-101".format(c0, c1))
+    return (primary + "; no second producer in `check_block`", LABEL_ONE,
+            "CHK:{}-{} (absent); §17-R3 one-producer default".format(c0, c1))
+
+
+def classify_block(key, check, rc):
+    head = key.split("/", 1)[0]
+    fn = rc["fns"].get(BLOCK_PRODUCER)
+    if fn is None or head not in check["block_heads"]:
+        return UNSTATED, UNSTATED, "no §10-§11 producer for `{}`".format(head)
+    line = check["block_heads"][head]
+    return ("RC-B6-1 `{}` (RC:{}); second: `check_block` §10-§11 arithmetic (CHK:{}) over RC-B6-1's session values"
+            .format(BLOCK_PRODUCER, fn.lineno, line), LABEL_BLOCK, "CHK:{}; RL-102 item 4".format(line))
+
+
+def bar(key, rc_module, spec):
+    places = rc_module.decimals_for(key, spec)
+    family = rc_module.quantity_class(key)
+    if places is None:
+        return "`{}`, exact (count or word)".format(family)
+    return "`{}`, {} decimals, bar {:g}".format(family, places, 0.5 * 10.0 ** -places)
+
+
+def build(paths):
+    keys = json.loads(Path(paths["keys"]).read_text(encoding="utf-8"))
+    spec = tuple((p, d) for p, d in json.loads(Path(paths["precision"]).read_text(encoding="utf-8"))["decimals"])
+    check, rc = read_check(paths["check"]), read_recompute(paths["recompute"])
+    module = load_module(paths["recompute"])
+    groups = collections.OrderedDict()
+
+    def add(scope, pack, key, stat, result, bar_text):
+        if len(result) == 4:
+            result, bar_text = result[:3], result[3]
+        name = generalize(key)
+        row = groups.setdefault((scope, name), {"packs": set(), "stats": set(), "n": 0, "result": set(),
+                                                "bar": set()})
+        row["packs"].add(pack)
+        row["n"] += 1
+        row["result"].add(result)
+        row["bar"].add(bar_text)
+        if stat:
+            row["stats"].add(stat)
+
+    for pack in sorted(keys["session_quantity_keys"]):
+        for key in keys["session_quantity_keys"][pack]:
+            add("session", pack, key, None, classify_session(key, pack, check, rc), bar(key, module, spec))
+    for key in keys["block_quantity_keys"]:
+        base, stat = split_block(key)
+        m = re.search(r"/(ALPHA|BETA|GAMMA)/", key)
+        add("block", m.group(1) if m else "all", base, stat, classify_block(key, check, rc), bar(key, module, spec))
+    return keys, groups
+
+
+def copied_records(path):
+    """{family: [record path]} from the copied_records literal in b6_r12_verify.py (names only)."""
+    tree = ast.parse(Path(path).read_text(encoding="utf-8"))
+    for fn in ast.walk(tree):
+        if not isinstance(fn, ast.FunctionDef):
+            continue
+        local = {}
+        for node in ast.walk(fn):
+            if (isinstance(node, ast.Assign) and len(node.targets) == 1 and isinstance(node.targets[0], ast.Name)
+                    and isinstance(node.value, ast.Constant) and isinstance(node.value.value, str)):
+                local[node.targets[0].id] = node.value.value
+        for node in ast.walk(fn):
+            if (isinstance(node, ast.Assign) and isinstance(node.targets[0], ast.Subscript)
+                    and isinstance(node.targets[0].slice, ast.Constant)
+                    and node.targets[0].slice.value == "copied_records" and isinstance(node.value, ast.Dict)):
+                def text(e):
+                    if isinstance(e, ast.Constant):
+                        return e.value
+                    if isinstance(e, ast.Name):
+                        return local[e.id]
+                    return text(e.left) + text(e.right)
+                return {k.value: [text(e) for e in v.elts] for k, v in zip(node.value.keys, node.value.values)}, \
+                    node.lineno
+    return {}, None
+
+
+def copied_overlap(keys):
+    """Copied-family names that are a key, or a key prefix, in the comparison key registry."""
+    every = list(keys["block_quantity_keys"]) + [k for v in keys["session_quantity_keys"].values() for k in v]
+    return sorted({f for f in COPIED_FAMILIES for k in every
+                   if k == f or k.startswith(f + "/") or ("/" + f + "/") in "/" + k + "/"})
+
+
+def render(paths, keys, groups):
+    out = ["# Block 6 §17-R3 printed-quantity table (generated by scripts/b6_r3_table.py)", "",
+           "Inputs (SHA-256):", ""]
+    for name in ("keys", "precision", "check", "recompute", "verify"):
+        out.append("- `{}` `{}`".format(DEFAULTS[name], sha256(paths[name])))
+    out += ["", "CHK = `joulewise/b6_analysis_check.py`, RC = `scripts/independent_recompute_b6.py` (line numbers).",
+            "", "| # | Scope | Key group | Packs | Stats | Keys | Producer(s) | Comparator family, bar | Label | Source |",
+            "|---|---|---|---|---|---|---|---|---|---|"]
+    unstated = []
+    labels = collections.Counter()
+    for i, ((scope, name), row) in enumerate(sorted(groups.items()), 1):
+        if len(row["result"]) != 1:
+            prod = label = UNSTATED
+            src = "keys in this group disagree: " + "; ".join(sorted(r[1] for r in row["result"]))
+        else:
+            prod, label, src = next(iter(row["result"]))
+        if UNSTATED in (prod, label):
+            unstated.append("{} `{}`: {}".format(scope, name, src))
+        labels[label] += row["n"]
+        out.append("| {} | {} | `{}` | {} | {} | {} | {} | {} | {} | {} |".format(
+            i, scope, name, ",".join(sorted(row["packs"])), ",".join(sorted(row["stats"])) or "—", row["n"], prod,
+            " / ".join(sorted(row["bar"])), label, src))
+    records, line = copied_records(paths["verify"])
+    for j, family in enumerate(COPIED_FAMILIES, len(groups) + 1):
+        files = records.get(family)
+        if not files:
+            unstated.append("copied `{}`: no record file in {}".format(family, VERIFY))
+            files = [UNSTATED]
+        out.append("| {} | session (copied) | `{}` | ALPHA,BETA,GAMMA | — | — | none: copied from {} | none (hand "
+                   "check, item 83 ruling 3) | {} | {}:{} `copied_records`; RL-104 |".format(
+                       j, family, ", ".join("`" + f + "`" for f in files), LABEL_COPIED, VERIFY, line))
+    for family in copied_overlap(keys):
+        unstated.append("copied `{}` is also a comparison key or key prefix (RL-104 check 1)".format(family))
+    if set(records) != set(COPIED_FAMILIES):
+        unstated.append("copied families differ from {}: {}".format(VERIFY, sorted(set(records) ^ set(COPIED_FAMILIES))))
+    total = len(keys["block_quantity_keys"]) + sum(len(v) for v in keys["session_quantity_keys"].values())
+    covered = sum(r["n"] for r in groups.values())
+    out += ["", "Keys covered: {} of {}; {} groups; UNSTATED groups: {}.".format(covered, total, len(groups),
+                                                                             len(unstated)), "",
+            "Keys by label:", ""]
+    out += ["- {}: {}".format(k, v) for k, v in sorted(labels.items())]
+    return "\n".join(out) + "\n", unstated, covered, total
+
+
+def main(argv=None):
+    parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    for name, default in DEFAULTS.items():
+        parser.add_argument("--" + name, default=str(ROOT / default))
+    args = parser.parse_args(argv)
+    paths = {k: Path(getattr(args, k)) for k in DEFAULTS}
+    keys, groups = build(paths)
+    text, unstated, covered, total = render(paths, keys, groups)
+    sys.stdout.write(text)
+    if unstated or covered != total:
+        sys.stderr.write("b6_r3_table: {} UNSTATED group(s):\n".format(len(unstated)))
+        for row in unstated:
+            sys.stderr.write("  " + row + "\n")
+        return 1
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

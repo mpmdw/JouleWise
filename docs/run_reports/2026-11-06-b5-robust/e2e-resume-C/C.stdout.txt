@@ -1,6 +1,0 @@
-restoring committed synthetic S10 windows
-running joined driver: workers 2 custody /tmp/jwr/run/custody
-interrupted; resuming
-{"label": "run", "exit_code": 2, "wall_s": 1705.8992263540022, "record_sha256": "5d561618daa4ba0e8966bb443c911fd4b2b5dc2e658ec2d645fed3ca16e7306a", "manifest_sha256": "244b3333aa165e7d83e1d0a0453bad8b94879110dc252267b55853d5cc3dc3f1", "code_sha256": "0bf6b26db9f0519ccd1a7ea51d673d4abe1ea06b89df385c2a117f1ddd03ab8e"}
-step   5:     989.9 s
-step   8:       0.0 s

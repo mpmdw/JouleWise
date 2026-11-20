@@ -1,0 +1,26 @@
+# hp-01-s03 (L008-L012, High Power): launch by magistrate ef6153c3 (2026-11-15, RUN_STATE item 341)
+
+Written just before the launch, which is this activation's last act. Campaign span 6 (hp-01's third and last span, five type-H legs); no session, no W1, nothing else queued.
+
+- Scratch worktree: `/Users/edr/code/jw-wt/cadence-hp01-s03`, fresh, detached at `dd206025abb30fd5c07515cd4b34b3e653174810`, clean (`align/2026-11-14-hp01` fetched first).
+- PY: `/Users/edr/night-custody/measurement/JouleWise-measurement-20261102-align-pilot2/.venv/bin/python` (not symlink-resolved; same venv as items 338/339).
+- MAGISTRATE_PID: 98399 (`/Users/edr/.local/bin/claude`; supervisor 98395).
+- KIT `/Users/edr/campaign-out/kits/cl-hp-01-bbd34dc87.json`, re-written from `bbd34dc87`, sha256 `7eaf2660312ce6b3af90e8a1d9da1e05a6c409366a88a7e5e558d3bebb9d2965`.
+- OUT `/Users/edr/campaign-out/cl-hp-01/cq-hp-01-s03-a1-20261115T152452Z`; DEADLINE 1794779802.70 (check time + 23,510 s = 13:56:42 PST).
+- ARG `02:00-02:35` (check time 07:24:52 PST is in the 02:35:00-10:50:00 band). LAST_CLOSE_KIND campaign, GAP 300 s. PRIOR_CLOSE_EPOCH 1794755724 (the later of the hp-01-s02 receipt end 1794755379.34 = 07:09:39 and the 07:14:24 Check that saw the fence gone, taken at a one-minute upper bound 07:15:24).
+- Dry tests (own TMPDIR, `JW_B5_SYNTHETIC_ONLY=1`, `/opt/homebrew/bin/python3.13 -B -m unittest`, one module at a time, 07:24 PST): `test_high_power` 50 OK; `test_legs_runner` 42 OK; `test_kit` 18 OK; `test_stops_desk` 14 OK; `test_runner_guards` 8 OK; `test_r1_smoke_launcher` 58 OK.
+- Start and check: script `cadence-hp01-s03-check-ef6153c3.sh` (the s02 script with item 341's values; diff recorded in-session: worktree, PID, prior close, two band ends 1794795750 and 1794882150, OUT prefix, roster, 23,510 s), output `cadence-hp01-s03-out-ef6153c3.txt` (custody). Run 07:24:50-07:24:52 PST, rc 0, every line passed:
+  - `verify_r1_executed_sources` returned `dd206025abb30fd5c07515cd4b34b3e653174810`.
+  - Receipt census: 8 receipts; effective close 1794755380, newest receipt `/Users/edr/campaign-out/cl-hp-01/cq-hp-01-s02-a1-20261115T130957Z/runner_receipt.json` (campaign, agrees with LAST_CLOSE_KIND).
+  - Journal-copy line: `cq-hp-01-s02-a1 copied 2026-11-15 07:19:50 PST | cq-hp-01-s02-a1-20261115T130957Z files=158 manifest_sha256=02d997efd17bc9bc80c2480dafa5a194c8c7ac484dcabd916c757e4f68a048ba`.
+  - `validate-kit --batch-window 02:00-02:35`: ok true, campaign_id cl-hp-01, frozen_commit `dd206025a…`, frozen_paths_verified true, kit sha `7eaf2660…d2965`, legs 12.
+  - measurement_mode verify rc 1, one FAIL: "agent process present: 98422;98414 node scripts/codex-mcp-server.mjs;98415 npm exec @modelcontextprotocol/server-pdf". All in this magistrate's tree (98414 and 98415 are children of 98399; 98417 <- 98414; 98422 <- 98417), so NOTE 1 admits it. WARN: battery charge limit (want 80, got none); softwareupdate schedule (want off, got on; item 201). Every other line PASS or SKIP (kernel frequency word 0, network time Off, not charging, free disk 68 GiB among them).
+  - `systemsetup -getusingnetworktime`: Off. Batch print: boot 2026-10-14 15:07:51 PDT; next OS batch 2026-11-16 02:08:39 PST.
+  - No desk fence; `sudo -n -l /bin/kill` rc 0; no r12; other agent processes = only the four above (this magistrate's MCP children); no stray monitor; no root powermetrics; no night/smoke agent; `pmset -g` powermode 0; preflight `ac_power` true (free 73,464,934,400 bytes). Battery (#421): ExternalConnected Yes, IsCharging No, InstantAmperage 0.
+  - High Power preflight: `JOULEWISE_HOST_STATE_DIR` unset; no marker (no file, no link); `pmset -g custom` AC powermode 0; both sudo rules listed (`/usr/bin/pmset -c powermode 0` and `2`); `night.lock` no holder.
+  - Plan rc 0: batch_windows `["02:00-02:35"]`, blackout_clear true, roster L008-L012 (seeds 1180804720, 3701535075, 2827066148, 2178814401, 1042807770), budget_s 1251 each, expected_s 9405, worst_case_s 22050, soak_s 1950, redo_quota 2, leg_cap_s 2700. Whole plan in the custody output file.
+- Line 6: no open `cadence-stop` issue; no open `directive` issue by `mpmdw` is a STOP/NO/HALT/VETO (seven open, all older standing directives); no RESTORE_UNPROVEN open; no `high_power.revoked` (hp-01-s02 null, item 340).
+- Host gate inputs for the Run block: HOST_RESTORE_OK=1 (latest close = `hp-01-s02`, restore proven and every restore line OK per item 340); OTHER_CLOSE_EPOCH=0 (no slot session or W1 since); SESSION_READY=no (no lead record of a READY v4 session; item 341 is the top item). The Run block (`cadence-hp01-s03-launch-ef6153c3.sh`) re-runs the census, copy gate, band and marker checks; its printed host last close, the launch epoch (t0), rc and launcher JSON go to the custody output file. A "LAUNCH FAILED" or "STOP" line there means nothing ran.
+- The lead's alarm: t0 + 22,050 s (worst-case end) and t0 + 23,510 s (fence end); t0 is the `LAUNCH_EPOCH` line in the custody output file (expected about 07:30 PST, so worst-case end about 13:38, fence end about 14:02).
+- Owner mail: no unread from Ed at launch; no new directive issue. Ed is emailed a short arm note before the launch.
+- Record numbering: this launch record takes 342, so the Check that item 341 calls "RUN_STATE 342" will be the next free item (343).

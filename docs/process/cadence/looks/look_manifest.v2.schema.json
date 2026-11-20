@@ -1,0 +1,819 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:joulewise:cadence:look-manifest:v2",
+  "title": "Cadence look manifest v2",
+  "oneOf": [
+    {"$ref": "#/$defs/qualification"},
+    {"$ref": "#/$defs/description"},
+    {"$ref": "#/$defs/transfer"}
+  ],
+  "$defs": {
+    "text": {"type": "string", "minLength": 1},
+    "textList": {"type": "array", "items": {"$ref": "#/$defs/text"}},
+    "unsignedInteger": {"type": "integer", "minimum": 0},
+    "path": {"type": "string", "pattern": "^(?!/|~)(?!.*(?:^|/)\\.\\.(?:/|$))[A-Za-z0-9._/-]+(?![\\s\\S])"},
+    "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}(?![\\s\\S])"},
+    "codeHash": {"type": "string", "pattern": "^(?:PENDING:CODE|[0-9a-f]{64})(?![\\s\\S])"},
+    "codePin": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "sha256"],
+      "properties": {"path": {"$ref": "#/$defs/path"}, "sha256": {"$ref": "#/$defs/codeHash"}}
+    },
+    "lookKitCommitmentsPin": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "sha256"],
+      "properties": {
+        "path": {"const": "docs/process/cadence/looks/look-kit-commitments.v2.json"},
+        "sha256": {"$ref": "#/$defs/codeHash"}
+      }
+    },
+    "block": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["block_id", "phase", "role", "kit_sha256", "spans", "cite"],
+      "properties": {
+        "block_id": {"$ref": "#/$defs/text"},
+        "phase": {"const": "qualification"},
+        "role": {"const": "describe"},
+        "kit_sha256": {"$ref": "#/$defs/sha256"},
+        "spans": {"type": "array", "minItems": 2, "maxItems": 2, "items": {"$ref": "#/$defs/text"}},
+        "cite": {"$ref": "#/$defs/textList"}
+      }
+    },
+    "inclusionRule": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["rule", "id", "text", "judged_at", "reads_energy", "cite"],
+      "properties": {
+        "rule": {"$ref": "#/$defs/unsignedInteger"},
+        "id": {"$ref": "#/$defs/text"},
+        "text": {"$ref": "#/$defs/text"},
+        "judged_at": {"enum": ["runner", "look"]},
+        "reads_energy": {"const": false},
+        "code": {"$ref": "#/$defs/codePin"},
+        "cite": {"$ref": "#/$defs/textList"}
+      }
+    },
+    "tailSegment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["decode_tokens", "first_stamp", "last_stamp", "gaps"],
+      "properties": {
+        "decode_tokens": {"$ref": "#/$defs/unsignedInteger"},
+        "first_stamp": {"$ref": "#/$defs/unsignedInteger"},
+        "last_stamp": {"$ref": "#/$defs/unsignedInteger"},
+        "gaps": {"$ref": "#/$defs/unsignedInteger"}
+      }
+    },
+    "pairDesign": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["block_id", "ratio_1_10", "ratio_1_30"],
+      "properties": {
+        "block_id": {"$ref": "#/$defs/text"},
+        "ratio_1_10": {"$ref": "#/$defs/text"},
+        "ratio_1_30": {"$ref": "#/$defs/text"}
+      }
+    },
+    "publicField": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["type", "source"],
+      "properties": {
+        "type": {"enum": ["fixed_id", "sha256", "git_commit", "nonnegative_json_integer", "word"]},
+        "source": {"$ref": "#/$defs/text"}
+      }
+    },
+    "qualification": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema",
+        "look_id",
+        "look_kind",
+        "status",
+        "title",
+        "rulings",
+        "registration",
+        "reads",
+        "inclusion",
+        "freeze2",
+        "pins",
+        "scoring",
+        "decision",
+        "pair_description",
+        "outputs",
+        "release",
+        "oracle",
+        "paper_sentences"
+      ],
+      "properties": {
+        "schema": {"const": "joulewise.cadence_look_manifest.v2"},
+        "look_id": {"type": "string", "pattern": "^lm-qual-[0-9]{2}(?![\\s\\S])"},
+        "look_kind": {"const": "qualification"},
+        "status": {"const": "registered"},
+        "title": {"$ref": "#/$defs/text"},
+        "rulings": {"$ref": "#/$defs/textList"},
+        "registration": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["ledger_path", "registration_deadline", "final_deadline", "finalization"],
+          "properties": {
+            "ledger_path": {"$ref": "#/$defs/path"},
+            "registration_deadline": {"$ref": "#/$defs/text"},
+            "final_deadline": {"$ref": "#/$defs/text"},
+            "finalization": {"$ref": "#/$defs/text"}
+          }
+        },
+        "reads": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "blocks",
+            "leg_types_read",
+            "leg_types_never",
+            "attempts",
+            "day_rule",
+            "excluded_inputs",
+            "required_per_span",
+            "first_span_hand_read"
+          ],
+          "properties": {
+            "blocks": {"type": "array", "minItems": 3, "maxItems": 3, "items": {"$ref": "#/$defs/block"}},
+            "leg_types_read": {"$ref": "#/$defs/textList"},
+            "leg_types_never": {"$ref": "#/$defs/textList"},
+            "attempts": {"$ref": "#/$defs/text"},
+            "day_rule": {"$ref": "#/$defs/text"},
+            "excluded_inputs": {"$ref": "#/$defs/textList"},
+            "required_per_span": {"$ref": "#/$defs/textList"},
+            "first_span_hand_read": {"$ref": "#/$defs/text"}
+          }
+        },
+        "inclusion": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "rules",
+            "interval",
+            "inclusion_reads_no_energy",
+            "no_drop_by_outcome",
+            "verdicts_frozen_before_energy",
+            "cite"
+          ],
+          "properties": {
+            "rules": {"type": "array", "minItems": 6, "maxItems": 6, "items": {"$ref": "#/$defs/inclusionRule"}},
+            "interval": {"$ref": "#/$defs/text"},
+            "inclusion_reads_no_energy": {"type": "boolean"},
+            "no_drop_by_outcome": {"type": "boolean"},
+            "verdicts_frozen_before_energy": {"type": "boolean"},
+            "cite": {"$ref": "#/$defs/textList"}
+          }
+        },
+        "freeze2": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "direction",
+            "look_id",
+            "commitment_ref",
+            "public_file",
+            "commitment_field",
+            "effective_if",
+            "coefficient_file",
+            "verification",
+            "required_before",
+            "refit_on_qualification"
+          ],
+          "properties": {
+            "direction": {"const": "input"},
+            "look_id": {"$ref": "#/$defs/text"},
+            "commitment_ref": {"$ref": "#/$defs/text"},
+            "public_file": {"$ref": "#/$defs/text"},
+            "commitment_field": {"$ref": "#/$defs/text"},
+            "effective_if": {"$ref": "#/$defs/text"},
+            "coefficient_file": {"$ref": "#/$defs/text"},
+            "verification": {"$ref": "#/$defs/text"},
+            "required_before": {"$ref": "#/$defs/textList"},
+            "refit_on_qualification": {"const": false}
+          }
+        },
+        "pins": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["scorer", "code", "schemas"],
+          "properties": {
+            "scorer": {"$ref": "#/$defs/codePin"},
+            "code": {"type": "array", "items": {"$ref": "#/$defs/codePin"}, "minItems": 1},
+            "schemas": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["manifest", "stage1", "public", "coefficients"],
+              "properties": {
+                "manifest": {"$ref": "#/$defs/codePin"},
+                "stage1": {"$ref": "#/$defs/codePin"},
+                "public": {"$ref": "#/$defs/codePin"},
+                "coefficients": {"$ref": "#/$defs/codePin"}
+              }
+            }
+          }
+        },
+        "scoring": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["entry_point", "channels", "equivalence", "native_short_legs", "tail_segments", "tail_rule"],
+          "properties": {
+            "entry_point": {"$ref": "#/$defs/text"},
+            "channels": {"type": "array", "minItems": 2, "maxItems": 2, "items": {"enum": ["gpu_rail", "dc_in"]}},
+            "equivalence": {"$ref": "#/$defs/text"},
+            "native_short_legs": {"$ref": "#/$defs/text"},
+            "tail_segments": {"type": "array", "minItems": 2, "maxItems": 2, "items": {"$ref": "#/$defs/tailSegment"}},
+            "tail_rule": {"$ref": "#/$defs/text"}
+          }
+        },
+        "decision": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["word", "series", "scale", "interval", "support", "containment", "mapping"],
+          "properties": {
+            "word": {"const": "qualified_qualification"},
+            "series": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "channel",
+                "decode_ratio",
+                "leg_type",
+                "included_only",
+                "long_decode_tokens",
+                "short_own_prefix_tokens",
+                "residual",
+                "independent_l_pairs_gate_word"
+              ],
+              "properties": {
+                "channel": {"$ref": "#/$defs/text"},
+                "decode_ratio": {"$ref": "#/$defs/text"},
+                "leg_type": {"$ref": "#/$defs/text"},
+                "included_only": {"const": true},
+                "long_decode_tokens": {"$ref": "#/$defs/unsignedInteger"},
+                "short_own_prefix_tokens": {"$ref": "#/$defs/unsignedInteger"},
+                "residual": {"$ref": "#/$defs/text"},
+                "independent_l_pairs_gate_word": {"const": false}
+              }
+            },
+            "scale": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["source", "ddof", "sd_floor_joules"],
+              "properties": {
+                "source": {"$ref": "#/$defs/text"},
+                "ddof": {"$ref": "#/$defs/unsignedInteger"},
+                "sd_floor_joules": {"type": "number"}
+              }
+            },
+            "interval": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["per_leg", "estimate", "day_weight", "day_source", "confidence", "formula"],
+              "properties": {
+                "per_leg": {"$ref": "#/$defs/text"},
+                "estimate": {"$ref": "#/$defs/text"},
+                "day_weight": {"$ref": "#/$defs/text"},
+                "day_source": {"$ref": "#/$defs/text"},
+                "confidence": {"type": "number"},
+                "formula": {"$ref": "#/$defs/text"}
+              }
+            },
+            "support": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["min_legs", "min_days"],
+              "properties": {
+                "min_legs": {"$ref": "#/$defs/unsignedInteger"},
+                "min_days": {"$ref": "#/$defs/unsignedInteger"}
+              }
+            },
+            "containment": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["lower", "upper", "inclusive", "round_before_comparison"],
+              "properties": {
+                "lower": {"type": "number"},
+                "upper": {"type": "number"},
+                "inclusive": {"const": true},
+                "round_before_comparison": {"const": false}
+              }
+            },
+            "mapping": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["not_evaluable", "yes", "no"],
+              "properties": {
+                "not_evaluable": {"$ref": "#/$defs/text"},
+                "yes": {"$ref": "#/$defs/text"},
+                "no": {"$ref": "#/$defs/text"}
+              }
+            }
+          }
+        },
+        "pair_description": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["population", "status", "design", "pooled"],
+          "properties": {
+            "population": {"$ref": "#/$defs/text"},
+            "status": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["not_evaluable", "pairs_only", "described"],
+              "properties": {
+                "not_evaluable": {"$ref": "#/$defs/text"},
+                "pairs_only": {"$ref": "#/$defs/text"},
+                "described": {"$ref": "#/$defs/text"}
+              }
+            },
+            "design": {"type": "array", "minItems": 3, "maxItems": 3, "items": {"$ref": "#/$defs/pairDesign"}},
+            "pooled": {"$ref": "#/$defs/text"}
+          }
+        },
+        "outputs": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["public_file", "fields", "words", "energy_dependent_words", "format", "destinations"],
+          "properties": {
+            "public_file": {"$ref": "#/$defs/text"},
+            "fields": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": [
+                "look_id",
+                "manifest_sha256",
+                "commit",
+                "stage1_sha256",
+                "coefficients_sha256",
+                "development_config_sha256",
+                "qualification_config_sha256",
+                "included_legs",
+                "qualified_qualification",
+                "type_m_residual",
+                "stage2_error"
+              ],
+              "properties": {
+                "look_id": {"$ref": "#/$defs/publicField"},
+                "manifest_sha256": {"$ref": "#/$defs/publicField"},
+                "commit": {"$ref": "#/$defs/publicField"},
+                "stage1_sha256": {"$ref": "#/$defs/publicField"},
+                "coefficients_sha256": {"$ref": "#/$defs/publicField"},
+                "development_config_sha256": {"$ref": "#/$defs/publicField"},
+                "qualification_config_sha256": {"$ref": "#/$defs/publicField"},
+                "included_legs": {"$ref": "#/$defs/publicField"},
+                "qualified_qualification": {"$ref": "#/$defs/publicField"},
+                "type_m_residual": {"$ref": "#/$defs/publicField"},
+                "stage2_error": {"$ref": "#/$defs/publicField"}
+              }
+            },
+            "words": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["qualified_qualification", "type_m_residual", "stage2_error"],
+              "properties": {
+                "qualified_qualification": {"const": ["yes", "no", "not_evaluable"]},
+                "type_m_residual": {"const": ["not_run"]},
+                "stage2_error": {"const": ["no"]}
+              }
+            },
+            "energy_dependent_words": {"const": ["qualified_qualification", "stage2_error"]},
+            "format": {"$ref": "#/$defs/text"},
+            "destinations": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["public_manifest", "committed_stage1", "RESTRICTED/scores.json"],
+              "properties": {
+                "public_manifest": {"$ref": "#/$defs/textList"},
+                "committed_stage1": {"$ref": "#/$defs/textList"},
+                "RESTRICTED/scores.json": {"$ref": "#/$defs/textList"}
+              }
+            }
+          }
+        },
+        "release": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "custody_names",
+            "twin",
+            "disclosure",
+            "stage2_time_budget_s",
+            "preflight",
+            "reservation",
+            "failure"
+          ],
+          "properties": {
+            "custody_names": {"const": ["scores.json", "stdout", "stderr"]},
+            "twin": {"const": false},
+            "disclosure": {"$ref": "#/$defs/text"},
+            "stage2_time_budget_s": {"$ref": "#/$defs/unsignedInteger"},
+            "preflight": {"$ref": "#/$defs/textList"},
+            "reservation": {"$ref": "#/$defs/text"},
+            "failure": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["first_stderr_line", "second_stderr_line", "exit_status", "rule"],
+              "properties": {
+                "first_stderr_line": {"$ref": "#/$defs/text"},
+                "second_stderr_line": {"$ref": "#/$defs/text"},
+                "exit_status": {"$ref": "#/$defs/unsignedInteger"},
+                "rule": {"$ref": "#/$defs/text"}
+              }
+            }
+          }
+        },
+        "oracle": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["author_rule", "tests"],
+          "properties": {"author_rule": {"$ref": "#/$defs/text"}, "tests": {"$ref": "#/$defs/textList"}}
+        },
+        "paper_sentences": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["independent_seeds", "order_and_position"],
+          "properties": {"independent_seeds": {"$ref": "#/$defs/text"}, "order_and_position": {"$ref": "#/$defs/text"}}
+        }
+      }
+    },
+    "artifactHash": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["path", "sha256"],
+      "properties": {"path": {"$ref": "#/$defs/path"}, "sha256": {"$ref": "#/$defs/sha256"}}
+    },
+    "freeze2Input": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["look_id", "hash_key", "authority"],
+      "properties": {
+        "look_id": {"const": "lm-interim-01"},
+        "hash_key": {"const": "freeze2_sha256"},
+        "authority": {"$ref": "#/$defs/text"}
+      }
+    },
+    "description": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema",
+        "look_kind",
+        "look_id",
+        "status",
+        "title",
+        "rulings",
+        "kits",
+        "channels",
+        "when",
+        "stage1",
+        "prints",
+        "code_pins",
+        "outputs",
+        "freeze2"
+      ],
+      "properties": {
+        "schema": {"const": "joulewise.cadence_look_manifest.v2"},
+        "look_kind": {"const": "description"},
+        "look_id": {"enum": ["lm-inst-01", "lm-stab-01", "lm-stab-02"]},
+        "status": {"enum": ["draft", "committed"]},
+        "title": {"$ref": "#/$defs/text"},
+        "rulings": {"$ref": "#/$defs/textList"},
+        "kits": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["kit_id", "sha256"],
+            "properties": {
+              "kit_id": {"type": "string", "pattern": "^f2-(?:inst|stab)-[0-9]{2}(?![\\s\\S])"},
+              "sha256": {"$ref": "#/$defs/sha256"}
+            }
+          },
+          "minItems": 1
+        },
+        "channels": {
+          "type": "array",
+          "items": {"enum": ["gpu_rail", "rail_sum", "dc_in"]},
+          "minItems": 1,
+          "maxItems": 3
+        },
+        "when": {"$ref": "#/$defs/text"},
+        "stage1": {"$ref": "#/$defs/text"},
+        "stage2": {"$ref": "#/$defs/text"},
+        "rail_sum_columns": {"const": ["cpu_power", "gpu_power", "ane_power"]},
+        "kit_index_path": {"$ref": "#/$defs/path"},
+        "prints": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["description", "destination"],
+            "properties": {
+              "description": {"$ref": "#/$defs/text"},
+              "destination": {
+                "enum": ["hold.json", "turn.json", "gain.json", "edges.json", "date_spreads.json", "context.json"]
+              }
+            }
+          },
+          "minItems": 1
+        },
+        "code_pins": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kit_commitments", "reader", "manifest_schema", "stage1_schema", "output_schema"],
+          "properties": {
+            "kit_commitments": {"$ref": "#/$defs/lookKitCommitmentsPin"},
+            "reader": {"$ref": "#/$defs/codePin"},
+            "manifest_schema": {"$ref": "#/$defs/codePin"},
+            "stage1_schema": {"$ref": "#/$defs/codePin"},
+            "output_schema": {"$ref": "#/$defs/codePin"},
+            "restricted_schema": {"$ref": "#/$defs/codePin"},
+            "validator": {"$ref": "#/$defs/codePin"},
+            "schema_validator": {"$ref": "#/$defs/codePin"}
+          }
+        },
+        "outputs": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["public_file", "hashes", "identifiers", "counts", "custody_names"],
+          "properties": {
+            "public_file": {"const": "PUBLIC.json"},
+            "hashes": {"const": ["manifest_sha256", "stage1_sha256"]},
+            "identifiers": {"const": ["look_id", "commit"]},
+            "counts": {"enum": [["n_legs"], ["n_legs", "n_local_dates"]]},
+            "custody_names": {
+              "enum": [
+                ["hold.json", "turn.json", "gain.json", "edges.json", "stdout", "stderr"],
+                ["hold.json", "turn.json", "date_spreads.json", "context.json", "stdout", "stderr"]
+              ]
+            }
+          }
+        },
+        "freeze2": {"$ref": "#/$defs/freeze2Input"}
+      }
+    },
+    "transfer": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "schema",
+        "look_kind",
+        "look_id",
+        "status",
+        "title",
+        "rulings",
+        "registered_paths",
+        "registration",
+        "reads",
+        "inclusion",
+        "estimate",
+        "code_pins",
+        "outputs",
+        "reservation",
+        "cold_pass_checks"
+      ],
+      "properties": {
+        "schema": {"const": "joulewise.cadence_look_manifest.v2"},
+        "look_kind": {"const": "transfer"},
+        "look_id": {"const": "lm-transfer-01"},
+        "status": {"enum": ["draft", "registered"]},
+        "title": {"$ref": "#/$defs/text"},
+        "rulings": {"$ref": "#/$defs/textList"},
+        "registered_paths": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["manifest", "ledger"],
+          "properties": {
+            "manifest": {"const": "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/looks/lm-transfer-01.manifest.json"},
+            "ledger": {"const": "docs/process/cadence/looks/LOOKS.json"}
+          }
+        },
+        "registration": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["before", "final", "review"],
+          "properties": {
+            "before": {"$ref": "#/$defs/text"},
+            "final": {"$ref": "#/$defs/text"},
+            "review": {"$ref": "#/$defs/text"}
+          }
+        },
+        "reads": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "planned_date_places",
+            "kits",
+            "timezone",
+            "max_dates",
+            "max_legs",
+            "leg_budget",
+            "opportunity",
+            "stop",
+            "when",
+            "stage1",
+            "freeze2"
+          ],
+          "properties": {
+            "planned_date_places": {"$ref": "#/$defs/artifactHash"},
+            "kits": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["kit_id", "path", "sha256"],
+                "properties": {
+                  "kit_id": {"type": "string", "pattern": "^cl-transfer-(?:0[1-9]|1[0-9]|20)(?![\\s\\S])"},
+                  "path": {"$ref": "#/$defs/path"},
+                  "sha256": {"$ref": "#/$defs/sha256"}
+                }
+              },
+              "minItems": 20,
+              "maxItems": 20
+            },
+            "timezone": {"const": "America/Los_Angeles"},
+            "max_dates": {"const": 20},
+            "max_legs": {"const": 120},
+            "leg_budget": {"$ref": "#/$defs/text"},
+            "opportunity": {"$ref": "#/$defs/text"},
+            "stop": {"$ref": "#/$defs/text"},
+            "when": {"$ref": "#/$defs/text"},
+            "stage1": {"$ref": "#/$defs/text"},
+            "freeze2": {"$ref": "#/$defs/freeze2Input"}
+          }
+        },
+        "inclusion": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["stage1", "stage2", "short_legs", "tail_rule"],
+          "properties": {
+            "stage1": {"$ref": "#/$defs/text"},
+            "stage2": {"$ref": "#/$defs/text"},
+            "short_legs": {
+              "const": [
+                {"decode_cap": 3724, "closing_stamp": 3583, "last_token_stamp": 3723, "gaps": 140},
+                {"decode_cap": 3151, "closing_stamp": 3071, "last_token_stamp": 3150, "gaps": 79}
+              ]
+            },
+            "tail_rule": {"$ref": "#/$defs/text"}
+          }
+        },
+        "estimate": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "channels",
+            "daily_error",
+            "minimum_hot_legs_per_date",
+            "denominator",
+            "across_dates",
+            "interval",
+            "support",
+            "comparison_only_abs_error_cutoff",
+            "restricted_prints",
+            "pair_description"
+          ],
+          "properties": {
+            "channels": {"const": ["gpu_rail", "dc_in"]},
+            "daily_error": {"const": "(sum(predicted) - sum(measured)) / sum(measured)"},
+            "minimum_hot_legs_per_date": {"const": 3},
+            "denominator": {"$ref": "#/$defs/text"},
+            "across_dates": {"$ref": "#/$defs/text"},
+            "interval": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["series", "level", "quantile", "ddof", "formula", "minimum_dates"],
+              "properties": {
+                "series": {"const": "signed_daily_error"},
+                "level": {"const": 0.9},
+                "quantile": {"const": 0.95},
+                "ddof": {"const": 1},
+                "formula": {"const": "mean(e) ± t(0.95, D - 1) × SD(e, ddof=1) / sqrt(D)"},
+                "minimum_dates": {"const": 2}
+              }
+            },
+            "support": {"$ref": "#/$defs/text"},
+            "comparison_only_abs_error_cutoff": {"const": 0.02},
+            "restricted_prints": {
+              "type": "array",
+              "items": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["id", "description", "destination"],
+                "properties": {
+                  "id": {
+                    "enum": [
+                      "daily_errors",
+                      "evaluable_dates",
+                      "largest_absolute_daily_error",
+                      "days_within_comparison_cutoff",
+                      "mean_signed_error_and_interval",
+                      "pooled_signed_error",
+                      "date_map"
+                    ]
+                  },
+                  "description": {"$ref": "#/$defs/text"},
+                  "destination": {"const": "scores.json"}
+                }
+              },
+              "minItems": 7,
+              "maxItems": 7
+            },
+            "pair_description": {"$ref": "#/$defs/text"}
+          }
+        },
+        "code_pins": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "kit_commitments",
+            "predictor",
+            "inclusion",
+            "scorer",
+            "manifest_schema",
+            "stage1_schema",
+            "output_schema",
+            "predictor_equivalence",
+            "validator",
+            "schema_validator",
+            "release_boundary"
+          ],
+          "properties": {
+            "kit_commitments": {"$ref": "#/$defs/lookKitCommitmentsPin"},
+            "predictor": {"$ref": "#/$defs/codePin"},
+            "inclusion": {"$ref": "#/$defs/codePin"},
+            "scorer": {"$ref": "#/$defs/codePin"},
+            "manifest_schema": {"$ref": "#/$defs/codePin"},
+            "stage1_schema": {"$ref": "#/$defs/codePin"},
+            "output_schema": {"$ref": "#/$defs/codePin"},
+            "predictor_equivalence": {"$ref": "#/$defs/text"},
+            "validator": {"$ref": "#/$defs/codePin"},
+            "schema_validator": {"$ref": "#/$defs/codePin"},
+            "release_boundary": {"$ref": "#/$defs/codePin"}
+          }
+        },
+        "outputs": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "public_file",
+            "audit_output_schema",
+            "words",
+            "hashes",
+            "interval_status_rule",
+            "custody_names",
+            "after_read_failure",
+            "pre_read_refusal_exit_status"
+          ],
+          "properties": {
+            "public_file": {"const": "PUBLIC.json"},
+            "audit_output_schema": {"$ref": "#/$defs/artifactHash"},
+            "words": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["transfer_interval", "stage2_error"],
+              "properties": {
+                "transfer_interval": {"const": ["estimated", "not_evaluable"]},
+                "stage2_error": {"const": ["no"]}
+              }
+            },
+            "hashes": {"const": ["manifest_sha256", "stage1_roster_sha256", "freeze2_sha256"]},
+            "interval_status_rule": {"$ref": "#/$defs/text"},
+            "custody_names": {"const": ["scores.json", "stdout", "stderr"]},
+            "after_read_failure": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["stderr_lines", "type_allowlist", "exit_status", "behavior"],
+              "properties": {
+                "stderr_lines": {"const": ["stage2_error", "<allowed error type or OtherError>"]},
+                "type_allowlist": {"const": ["builtins", "numpy.linalg.LinAlgError", "json.JSONDecodeError", "OtherError"]},
+                "exit_status": {"const": 1},
+                "behavior": {"$ref": "#/$defs/text"}
+              }
+            },
+            "pre_read_refusal_exit_status": {"const": 2}
+          }
+        },
+        "reservation": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["host", "preflight", "exclusive", "spent_id"],
+          "properties": {
+            "host": {"$ref": "#/$defs/text"},
+            "preflight": {"$ref": "#/$defs/text"},
+            "exclusive": {"$ref": "#/$defs/text"},
+            "spent_id": {"$ref": "#/$defs/text"}
+          }
+        },
+        "cold_pass_checks": {"$ref": "#/$defs/textList"}
+      }
+    }
+  }
+}
