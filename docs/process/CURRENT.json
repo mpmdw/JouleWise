@@ -1,16 +1,16 @@
 {
   "armed": null,
-  "next_observable": "NOT BEFORE Sat 21 Nov 00:00 PST (queue-b not_before). At the first clean close where hp-02 wins rank 3, the activation's start-check.out (rc 0) and an hp-02-s01 ISSUED item rendered from the spec's \"Text to issue for hp-02-s01\", launched as the last act.",
+  "next_observable": "f2stab01-9ffcf3f6/run-out.txt shows LAUNCH_RC=0 with the fence (launch ~13:53, expected end ~15:08, fence ~15:53; read the true fence deadline and pid from run-out.txt). The next activation after the fence pid is gone and runner_receipt.json exists Checks cq-f2-stab-01-l008-a1 under /Users/edr/campaign-out/f2-stab-01/ with f2stab01-check-template-9ffcf3f6/check.sh (LEGS L008, kit sha dbad…70fe, campaign_id f2-stab-01 and batch_windows == ['02:00-02:35'] asserted; replace REPLACE_STAMP in OUT with the actual directory's stamp and NEWACT in TMPDIR with the activation id; grep the leg_record for max_busy_cores/max_gap_s), and copies at once with f2stab01-check-template-9ffcf3f6/offload-run.sh (replace NEWACT everywhere with the activation id). Then continue down the ladder (items 422, 447, 463, 464, 480, 489): rank 2 only for an f2-inst kit whose executing delta PASS is recorded on main; rank 3 hp-02 only from Sat 21 Nov 00:00 (item 489); otherwise rank 4 f2-stab-01 L009 (seq 9) on pin 2d347f721 with ARG 02:00-02:35 (inputs f2stab01-9ffcf3f6/inputs.sh with SPAN/LEGS/SEQ/MAGISTRATE_PID changed; check template L008 -> L009) while its blackout_clear holds; a t0 whose plan reports blackout_clear false (fence reaching the 02:00-02:35 window) takes the next eligible rung instead. Saturday's rank-1 stability leg is due at the first dispatch after 00:00.",
   "open_items": [
     {
       "expires_epoch_s": null,
-      "item": 489,
+      "item": 490,
       "owner": "magistrate",
       "status": "ISSUED"
     },
     {
       "expires_epoch_s": null,
-      "item": 488,
+      "item": 489,
       "owner": "magistrate",
       "status": "ISSUED"
     },
@@ -167,11 +167,11 @@
   ],
   "owner": "magistrate",
   "schema": "joulewise.current_pointer.v2",
-  "source_item": "489",
-  "source_item_heading_date": null,
+  "source_item": "490",
+  "source_item_heading_date": "2026-11-20",
   "wait": {
-    "deadline_epoch_s": 1796025600,
+    "deadline_epoch_s": 1795222800,
     "observable": "none",
-    "on_early_or_refused": "a failed start-check precondition is a timing cede or a hold per the spec; take the next eligible rung (items 464, 472, 480) and record the reason. Any refusal, failed or unproven restore, or revocation holds cl-hp-02 and notifies the lead and Ed."
+    "on_early_or_refused": "a launcher refusal or non-clean close: record it, hold kit f2-stab-01 until an input changes (item 422, RL-179 F-6), mail the lead and Ed, and continue down the ladder. R1 stays unarmed."
   }
 }
