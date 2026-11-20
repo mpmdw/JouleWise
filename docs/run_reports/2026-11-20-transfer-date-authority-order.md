@@ -5,8 +5,10 @@ Tier 2, fixture-only. Signing target none. Draft PR [#911](https://github.com/mp
 | Ref | Commit |
 | --- | --- |
 | Untouched audit base | `eaaa1fd560cd457f4e4ccef316be62af920d08e1` |
-| Executable acceptance freeze | `5e43ddc25c6e2e8485d540c580449214e6a6e117` |
-| Final implementation and frozen tests | `cc51b0d84b86f32f18028f62db9d9bf678f601e3` |
+| Original executable acceptance freeze | `5e43ddc25c6e2e8485d540c580449214e6a6e117` |
+| Original authority-order implementation | `cc51b0d84b86f32f18028f62db9d9bf678f601e3` |
+| RL-193 acceptance freeze | `f7a318ac1eb73d495ee6a09cde01b538812200f4` |
+| RL-193 implementation | `ea754a861d9e1c0154fe43d66bd99c50ba362a37` |
 
 The published head includes this report as its last commit. Resolve that commit with `git log -1 --format=%H -- docs/run_reports/2026-11-20-transfer-date-authority-order.md`. PR #911 records the published head and links to its CI.
 
@@ -27,12 +29,18 @@ All rows below map to implementation commit `cc51b0d84`. Every test name refers 
 
 The later stage-1 owner can call `issue_gates.verify_transfer_start` with structural windows, previous verified starts, the original issue, its arm snapshot, the committed queue bytes and the pinned child's receipt projection. The frozen test's `snapshot` shows the input fields. Refresh registration and date authority at the arm observation, and supply the same resolved main commit for the public freeze and registration projections. Authenticate the public inputs, any naming ruling and the exact predecessor proof before calling. The verifier checks their bindings without I/O. The caller records a refusal on `ValueError` and passes only successful `VerifiedTransferStart` values to `date_places` and `date_dispositions`. The exact child stamp and its original bounds retain nanosecond precision. A started attempt can serve even when the receipt carries a post-t0 abort.
 
-## NEEDS_SPEC for Opus to take to Fable
+## RL-193 §8 resolves both held fixtures
 
-1. `test_pre_freeze_w1_crossing_needs_fable`. W1 starts before the first eligible calendar date and its verified close falls on the effective freeze date. Does the date filter apply before or after close-date substitution?
-2. `test_shared_start_date_with_only_one_crossing_needs_fable`. W1 and C1 start on D, W1 closes on D, C1 holds the host across midnight, and no transfer takes t0 on D. Does the single shared opportunity move to the close date, or does W1 spend D and C1 supply another place on close?
+The original freeze expected `NEEDS_SPEC` for both cases. The research lead ruled that eligibility is decided window by window and the freeze-date filter applies after close-date substitution. [RL-193 §8](https://github.com/mpmdw/JouleWise/blob/bceb204a1ec65d7ef2e815e4f929135ede868a80/docs/research-audits/2026-11-10-fable/RESEARCH-LEAD-DECISIONS.md#L23219-L23230)
 
-The two tests pass by requiring `NEEDS_SPEC` only. Fable owns the eligible dates, counts, dispositions and ordinals under RL-181 §§3.1–3.2 and RL-183 §3.1. The ruling request is addressed to Opus for Fable in the draft PR body. The session exposed no direct Opus channel, so delivery to the seat remains unconfirmed. The lead should route that request and obtain Tier 2 independent review before advancing the draft.
+The two ruled expectations were frozen at `f7a318ac1` before implementation. Both errored with `UnresolvedDateRule` on the previous draft code at `3077c689a`. The other 22 tests passed. The checker change at `ea754a861` removes the two holds and runs the existing substitution independently for each window. The remaining original expectations stayed byte-for-byte intact.
+
+| Ruled result | Regression | Result |
+| --- | --- | --- |
+| W1 starts before the effective freeze date. Its verified close on the freeze date supplies place 1. An unused place 1 becomes a miss, and a transfer start must follow effective freeze. | `test_pre_freeze_w1_close_on_freeze_date_is_place_one` | PASS |
+| W1 and C1 start on D, W1 closes on D, C1 holds the host at midnight, and no transfer starts on D. D spends its ordinal as a miss. C1 supplies the next ordinal on verified close on D+1, which can serve or expire as a miss. | `test_shared_start_date_misses_before_crossing_close_takes_next_place` | PASS |
+
+Both ruling questions are closed. The existing regression for a transfer already served on D still passes. Tier 2 independent review is pending on this draft.
 
 ## Verification
 
@@ -44,10 +52,12 @@ seat=/Volumes/JW-EXT/scratch/d-transfer-date-authority-order
 git show "4e5c2ad1d:$dated/date_rules.py" > "$seat/historical/date_rules.py"
 python3.13 -B -m unittest discover -s "$dated/tests" -p test_dated_issue.py -v
 PYTHONPATH="$seat/historical" python3.13 -B -m unittest discover -s "$dated/tests" -p test_dated_issue.py -v
+python3 -B -m unittest discover -s "$dated/tests" -p test_dated_issue.py
 PYTHONPATH="$dated/tests" python3.13 -B "$seat/check_pin.py"
 git diff --check eaaa1fd56...HEAD
-git diff --exit-code 5e43ddc25 HEAD -- "$dated/tests/test_dated_issue.py"
+git diff --exit-code 5e43ddc25 3077c689a -- "$dated/tests/test_dated_issue.py"
+git diff --exit-code f7a318ac1 HEAD -- "$dated/tests/test_dated_issue.py"
 gh pr checks 911 --repo mpmdw/JouleWise
 ```
 
-The first unittest command was red against the untouched audit implementations and passed all 24 tests after implementation. The historical command ran before implementation. The pinned check extracted only `runner_argv`, `validate_t0_authority` and `_authorized_start` from public source at `6e9d42f1d` into the seat scratch directory. It passed launcher argument forwarding and five invented clock boundaries without loading or running either host entry point. The audit PR runs repository CI. The focused suite runs directly because its path is outside the root test discovery directory. The full local suite was left to CI under the fixture-only input restriction.
+The original first unittest command was red against the untouched audit base. The historical command ran before original implementation. The full 24-test focused suite passed after RL-193 on Python 3.13 and 3.14. The pinned check extracted only `runner_argv`, `validate_t0_authority` and `_authorized_start` from public source at `6e9d42f1d` into the seat scratch directory. It passed launcher argument forwarding and five invented clock boundaries without loading or running either host entry point. The audit PR runs repository CI. The focused suite runs directly because its path is outside the root test discovery directory. The full local suite was left to CI under the fixture-only input restriction.
