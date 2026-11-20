@@ -748,3 +748,61 @@ PR #868 was read back as a draft at
 `78cef0a8883efa0a8b38cab009d67ad91ffac305`. Hosted CI was
 queued on that revision. No hosted result is available for the six
 reservation errors on this revision. [Draft PR](https://github.com/mpmdw/JouleWise/pull/868) · [Hosted CI](https://github.com/mpmdw/JouleWise/actions/runs/44725564352) · [Supplement findings](/Volumes/JW-EXT/scratch/d-inst01-stage1-rl190-supplement/FINAL-MESSAGE.md)
+
+## 2026-11-20 RL-192b loaded members
+
+The fetched worktree, upstream and draft PR #868 agreed at `1e83cb835`
+with a clean worktree. Commit `f935e32da` applies the loaded flag at
+the shared stage-1 eligibility gate. The receipt-backed member
+remains in the census with `not_qualified:loaded`. It leaves
+`n_legs`, the stage-2 source set, and every scientific print.
+Stability preserves its recorded token counts and carries `loaded`
+in the existing missing-reason field. The member is absent from
+position-pair comparison and contributes no qualifying date.
+[RL-192b](/Volumes/JW-EXT/scratch/fable-rl192b.md)
+
+| Finding | Commit | Regression and result |
+| --- | --- | --- |
+| Loaded flag alone had no effect on eligibility or value opens | `f935e32da` | **PASS**. `test_loaded_leg_is_accounted_for_and_never_read_or_printed` passes for all three IDs. It observes admitted scoring opens and verifies zero opens of the loaded member's synthetic files. |
+| A loaded singleton could qualify a stability date or complete a token pair | `f935e32da` | **PASS**. `test_loaded_leg_does_not_supply_the_fourteenth_date` refuses first stability at 13 dates and verifies 13 in the later census under its lock gate. The loaded-member test verifies the missing reason and wording for both looks. |
+| Stage-1 schemas omitted the loaded disposition | `f935e32da` | **PASS**. Each look's complete synthetic census with a loaded row validates against its shipped schema in the private test environment. |
+| RL-190 supplement's loaded L005 and loaded L006 | `f935e32da` | **PASS** with the original v2.1 fixture. `test_disposition_loaded`, `test_disposition_count`, `test_disposition_single_gate_loaded`, and `test_wall_flag_loaded` pass, including the exact 34-leg assertion. |
+
+The builder's existing numerical tests use a source fixture that marks
+their invented scoring witnesses unloaded. The new loaded regressions
+select explicit keys and leave their invented value files present.
+The three frozen modules match their unchanged SHA-256 digests. All
+53 protected paths match. [Loaded regressions](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/rl192b-loaded-regressions.log) · [Original-fixture supplement controls](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/rl192b-original-supplement-loaded.log) · [Schema validation](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/rl192b-stage1-schemas.log) · [Protected blob comparison](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/rl192b-protected-blobs.tsv)
+
+### NEEDS_SPEC under RL-192b
+
+The frozen `World` marks ordinal zero loaded and includes it in its
+expected eligible roster. The inherited `Checks.stage1` oracle therefore
+affects more than the end-to-end cases. These twelve IDs were reproduced.
+The exact 34-leg case belongs to the RL-190 supplement and passes.
+
+| Frozen module | Case IDs | Actual vs frozen eligible count |
+| --- | --- | --- |
+| v2.1.2 | `test_lm_inst_01_all_prints_and_partial`, `test_lm_inst_01_edge_hand_table_exact`, `test_lm_stab_lock_coalesces` | 2 vs 3 |
+| v2.1.2 | `test_lm_stab_01_all_prints_and_partial` | 16 vs 17 |
+| v2.1.2 | `test_lm_stab_02_all_prints_and_partial` | 17 vs 18 |
+| v2.1.2 | `test_lm_inst_01_split_receipt` | 4 vs 5 |
+| v2.1.2 | `test_lm_stab_01_token_same_work`, `test_lm_stab_01_token_different_work` | 23 vs 24 |
+| v2.2.1 | `test_A_authenticated_clock_instrument`, `test_B_authenticated_energy_instrument` | 2 vs 3 |
+| v2.2.1 | `test_A_authenticated_clock_stability`, `test_B_authenticated_energy_stability` | 16 vs 17 |
+
+The v2.2.1 authenticated cases also choose the loaded ordinal-zero
+member as their scoring witness. The hand-table case expects that leg
+in the private print. Both are suite-author changes.
+[Frozen count conflicts](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/rl192b-frozen-count-conflicts.log) · [Frozen pair and split conflicts](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/rl192b-frozen-pair-conflicts.log)
+
+RL-192b gives the load flag an explicit disposition. Its reference to
+RL-191 §1.1 for simultaneous failures points to the scientific null
+rank, which contains none of the operational eligibility reasons.
+The current classifier records `loaded` when that flag is present.
+If the ruling intends a different printed reason when another
+operational predicate also fails, its rank needs to be specified.
+The earlier generator-keyword mismatch and hardware integration remain open.
+
+Draft PR #868 was read back at `f935e32da`. Hosted CI was queued on
+that code revision. [Hosted run](https://github.com/mpmdw/JouleWise/actions/runs/44727587543)
