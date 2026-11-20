@@ -1052,6 +1052,25 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 
 <!-- RUN_STATE TYPED ITEMS: newest first. Add with scripts/run_state_add.py; never edit by hand. -->
 
+485. **Magistrate aeecce64 (headless, Opus 5.5), 2026-11-20 09:03-09:07 PST (`date`): f2-stab-01-l005 CHECK: RECEIPT OK (1/1 leg, MEASURED_OK, admitted, restored), copied at once; f2-stab-01-l006 ISSUED at rank 4 under 02:00-02:35 (items 425, 463, 464), launches as the last act**
+
+```pointer
+owner: magistrate
+wait: none
+deadline: 2026-11-20T12:30:00-08:00
+on_early_or_refused: a launcher refusal or non-clean close: record it, hold kit f2-stab-01 until an input changes (item 422, RL-179 F-6), mail the lead and Ed, and continue down the ladder. R1 stays unarmed.
+next_observable: f2stab01-aeecce64/run-out.txt shows LAUNCH_RC=0 with the fence (launch ~09:07, expected end ~10:25, fence ~11:08; read the true fence deadline from run-out.txt). The next activation after the fence pid is gone and runner_receipt.json exists Checks cq-f2-stab-01-l006-a1 under /Users/edr/campaign-out/f2-stab-01/ with f2stab01-check-template-aeecce64/check.sh (LEGS L006, kit sha dbad…70fe, campaign_id f2-stab-01 and batch_windows == ['02:00-02:35'] asserted; replace REPLACE_STAMP in OUT with the actual directory's stamp and NEWACT in TMPDIR with the activation id; grep the leg_record for max_busy_cores/max_gap_s), and copies at once with f2stab01-check-template-aeecce64/offload-run.sh (replace NEWACT everywhere with the activation id). Then continue down the ladder (items 422, 447, 463, 464, 480): rank 2 only for an f2-inst kit whose executing delta PASS is recorded on main; otherwise rank 3 hp-02 if issued; otherwise rank 4. A pin-A one-leg t0 in 10:50:01-13:14:59 refuses on both ARGs, so if the Check lands in that gap the rung is f2-stab-15/16 on pin 6e9d42f1d with no window (item 463); from 13:15:00 rank 4 resumes f2-stab-01 L007 (seq 7) on pin 2d347f721 with ARG 02:00-02:35 (inputs f2stab01-aeecce64/inputs.sh with SPAN/LEGS/SEQ/MAGISTRATE_PID changed). Saturday's rank-1 stability leg is due at the first dispatch after 00:00.
+```
+
+```item
+{"expires_epoch_s": null, "issued_epoch_s": 1795194378, "number": 485, "owner": "magistrate", "schema": "joulewise.run_state_item.v1", "sets": [{"at_epoch_s": 1795194378, "item": 484, "status": "CLOSED"}], "status": "ISSUED", "supersedes": []}
+```
+
+- **Spawn.** Activation aeecce64 spawned 09:03:27 PST, after f2-stab-01 L005's span had closed (receipt 09:01:57; fence pid 86871 gone; no align-r0 label loaded). No notices pending, no unread mail from Ed, directive list unchanged (standing 587/422/421/417/416/408/405), no standdown request. Origin main = canonical = `553e951df`.
+- **f2-stab-01 L005 Check** (custody `f2stab01-check-aeecce64/check.out`, from `f2stab01-check-template-39e112d4`): RECEIPT OK. rc 0, 1/1 leg, MEASURED_OK, chain COMPLETE, no fault; batch_windows `['02:00-02:35']`; kit sha `dbad…70fe`, frozen commit `2d347f721`, campaign f2-stab-01; every step rc 0 including restore and all stop/close steps; all feeds proven stopped; meter 16,703 polls, 0 bad, 0 USB errors, 0 restarts. L005: complete, g0 released after 88.6 s, decode 512 (cap reached), prefill 284, wall 1,236.8 s of 1,361 budget, contaminated_redos 0, admitted; max_busy_cores 2.616, max_gap_s 1.21. Maintenance log 08:06:06-09:01:57: 21,985 lines (dasd, cloudd, mobileassetd steady; backupd 39, softwareupdated 8, mds 3). measurement_mode verify: the one FAIL is this magistrate's own MCP children (codex-mcp-server, server-pdf), as in earlier items; network time Off, frequency word 0, powermode 0, AC, not charging (InstantAmperage 0), no High Power marker, no desk fence, no runner/monitor group, no root powermetrics, free disk 226 GiB.
+- **Copied at once** (item 409): `cq-f2-stab-01-l005-a1.ok` written 09:05:07; manifest 56 files, enc sha256 `3f598576…edaa`; iCloud caught up and idle after the copy.
+- **Ladder.** Rank 1 already served today. Rank 2: no f2-inst executing delta PASS on main (main unchanged since item 484). Rank 3: hp-02 not issued. So rank 4: **f2-stab-01 L006 (seq 6)** on pin `2d347f721`, ARG `02:00-02:35` (t0 ~09:06 is inside item 463's one-leg 02:35:00-10:50:00 band). Start and check at 09:05:42 OK: kit/queue shas, validate_kit, queue entry seq 6, blackout_clear true, expected 4,703 s, worst case 5,850 s, fence end ~11:07:32 (planned at that t0; the Run block replans at actual t0). Custody `f2stab01-aeecce64/` (inputs.sh, start-check.out, run-block.sh); launches as this activation's last act, output in `run-out.txt`.
+
 484. **Magistrate 39e112d4 (headless, Opus 5.5), 2026-11-20 08:03-08:06 PST (`date`): f2-stab-01-l004 CHECK: RECEIPT OK (1/1 leg, MEASURED_OK, admitted, restored), copied at once; f2-stab-01-l005 ISSUED at rank 4 under 02:00-02:35 (items 425, 463, 464), launches as the last act**
 
 ```pointer
