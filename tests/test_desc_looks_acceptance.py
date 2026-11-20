@@ -905,6 +905,23 @@ def matrix(self,look,cls,issue):
     self.refused(w)
 
 
+class WallEvidenceWorld(World):
+    def leg(self, kit, pos, v, day, ordinal, status):
+        # RL-190 §3.2, resolver §1. Every receipted leg carries the kit's wall allowance.
+        refs = super().leg(kit, pos, v, day, ordinal, status)
+        op = self.records[refs["key"]][0]
+        allowance = read(self.repo / "kits" / f"f2-{self.family}-{kit:02}.json")["span_template"]["leg_budget_s"]
+        op.update(wall_s=allowance, leg_budget_s=allowance, over_time_budget=False)
+        put(self.repo / refs["leg_record"], op)
+        return refs
+
+
+def instrument_happy(self, look):
+    # RL-190 §3.2, resolver §1. Equality is in budget, including on excluded receipts.
+    with patch.object(self, "world", partial(WallEvidenceWorld, self.base)):
+        happy(self, look)
+
+
 def happy(self,look):
     w=self.world(look)
     self.stage1(w)
@@ -1194,12 +1211,101 @@ def exact_rail_rows(self):
     self.assertEqual(json.loads(r.stdout),{"description":expected,"pinned_step3":expected})
 
 
+def missing_wall_evidence(self):
+    # RL-190 §3.2, resolver §1. Omit one field from one signed member in an otherwise admitted cut.
+    from test_desc_looks_rl190 import AsRun, SOLO, stage
+
+    class MissingField(AsRun):
+        def group_members(world):
+            super().group_members()
+            row = next(row for row in world.rows if row["key"] == SOLO)
+            op = world.records[SOLO][0]
+            del op[field]
+            put(world.repo / row["leg_record"], op)
+
+    stage(self, AsRun(self.base / "complete"))
+    for field in ("wall_s", "leg_budget_s", "over_time_budget"):
+        with self.subTest(field=field):
+            w = MissingField(self.base / field)
+            stage(self, w, allowed=False)
+            self.assertFalse(w.private.exists() or w.public.exists())
+
+
 def coalescence(self):
-    w=self.world(IDS[1],"lock_first")
-    self.stage1(w)
+    # RL-190 §1.5 reverses the old one-date lock. Even a ledger offering 01 and retiring 02 must refuse.
+    w = WallEvidenceWorld(self.base, IDS[1], "lock_first")
+    self.assertEqual(len(w.qualified_dates()), 1)
+    self.refused(w, "stage1")
+    self.assertFalse(w.stage.exists())
+
+
+class EarlyLockWorld(WallEvidenceWorld):
+    def named(self, name, rel, doc):
+        # RL-190 §1.5 uses the full §1.3 roster at the lock, including the extension kit.
+        if name == "kit_index":
+            doc = []
+            for path in sorted((self.repo / "kits").glob("f2-stab-*.json")):
+                doc.append(dict(kit_id=path.stem, path=str(path.relative_to(self.repo)),
+                                sha256=sha(path.read_bytes()), runner_pin=read(path)["frozen"]["commit"]))
+        if name == "event":
+            doc.update(previous_read=None, previous_status=None, coalesced=[IDS[1]])
+        super().named(name, rel, doc)
+
+    def save_row(self):
+        # RL-190 §1.5 records 01 as coalesced before 02's single reservation.
+        for row in self.events_ledger:
+            if row.get("look_id") == IDS[1]:
+                row["status"] = "coalesced"
+        super().save_row()
+
+
+def early_lock(self, date_count):
+    # RL-190 §1.5. Both cuts run 02 alone, even below fourteen dates. One date has null between-date SD.
+    roster = layout(IDS[2])
+    if date_count == 1:
+        roster = [(kit, pos, v, 0) for kit, pos, v, day in (*roster[:3], roster[-1])]
+    else:
+        roster = [row for row in roster if row[3] < date_count]
+    with patch.dict(World.__init__.__globals__, layout=lambda look: roster):
+        w = EarlyLockWorld(self.base, IDS[2])
+    self.assertEqual(len(w.qualified_dates()), date_count)
+    self.assertIn("f2-stab-15/L001", w.good)
+    rows = read(w.ledger)["looks"]
+    self.assertEqual([r["status"] for r in rows if r.get("look_id") == IDS[1]], ["coalesced"])
+    self.assertEqual([r for r in rows if r.get("event") == "paper1_data_lock"],
+                     [{"event": "paper1_data_lock", "receipt_commit": w.receipts}])
+    with self.subTest(look=IDS[1]), patch.object(w, "look", IDS[1]):
+        self.refused(w, "stage1")
+        self.assertFalse((w.stage.parent / (IDS[1] + ".json")).exists())
+
+    rc, out, err, events = invoke(w, "stage1")
+    self.assertEqual((rc, out, err), (0, b"", b""))
+    self.assertFalse(any(kind == "open" for kind, _ in events))
+    doc = read(w.stage)
+    self.assertEqual(doc["counts"], {"n_legs": len(w.good), "n_local_dates": date_count})
+    self.assertEqual({k for k, v in doc["positions"].items() if v["disposition"] == "qualified"}, set(w.good))
+    # §1.5 puts both populations' date counts in the committed cut. The lock row carries no count.
+    for view in ("all", "base14"):
+        self.assertEqual(doc["by_kit_set"][view]["n_local_dates"], date_count)
+    self.assertEqual(reservation_boundary(self, w), [])
+    w.bind()
     self.success(w)
-    self.scientific(w)
-    self.assertEqual(read(w.targets["event"])["coalesced"],[IDS[2]])
+    self.refused(w, reserved=True)
+
+    # §1.5 retains the fourteen-kit tables inside the only read. Apply the inherited
+    # numerical oracle to each §1.3 view, checking its receipt pin on the leg rows.
+    full = w.good
+    for view, keys in (("all", full), ("base14", {k: v for k, v in full.items() if not k.startswith("f2-stab-15/")})):
+        def table(world, name):
+            data = read(world.private / (name + ".json"))[view]
+            groups = data.values() if name == "context" else [data]
+            if name != "date_spreads":
+                for group in groups:
+                    for key, record in group.items():
+                        self.assertEqual(record.pop("runner_pin"), world.records[key][1]["runner_pin"])
+            return data
+        with self.subTest(view=view), patch.object(w, "good", keys), patch.dict(self.scientific.__globals__, by_key=table):
+            self.scientific(w)
 
 
 def cut(self,look):
@@ -1309,7 +1415,7 @@ def add(name, fn, *args):
 for look in IDS:
     prefix=look.replace("-","_")
     add(prefix+"_public_type",public_test,look)
-    add(prefix+"_all_prints_and_partial",happy,look)
+    add(prefix+"_all_prints_and_partial",instrument_happy if look==IDS[0] else happy,look)
     add(prefix+"_roster_foreign_series",foreign,look)
     for cls in classes(look):
         for issue in MUTATIONS:
@@ -1342,6 +1448,9 @@ for look in IDS:
         add(f"{prefix}_print_null_{mode}",coverage,look,mode)
     add(prefix+"_named_freeze",repaired_freeze,look)
 add("lm_stab_lock_coalesces",coalescence)
+add("lm_stab_02_early_lock_one_date",early_lock,1)
+add("lm_stab_02_early_lock_thirteen_dates",early_lock,13)
+add("lm_inst_01_missing_wall_evidence_refuses",missing_wall_evidence)
 add("lm_inst_01_edge_hand_table_exact",exact_edges)
 add("lm_inst_01_hand_table_exact_zero_guard", hand_table_guard)
 for i, key in enumerate(HAND_TABLE_LEGS):
