@@ -581,3 +581,32 @@ full sharded suite and reservation-dependent v2.1 cases.
 The 152-case activation run surfaced no new referral.
 
 [RL-191](/Volumes/JW-EXT/scratch/fable-rl191.md) · [Independent delta](/Volumes/JW-EXT/scratch/astra-desc-suite-v2-3/DELTA.md) · [Case inventory](/Volumes/JW-EXT/scratch/astra-desc-suite-v2-3/CASE-RESULTS.tsv) · [Red reproduction](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/rl191-red.log) · [Activation run](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/rl191-green.log) · [Protected blobs](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/rl191-protected-blobs.tsv) · [Hosted checks](https://github.com/mpmdw/JouleWise/pull/868/checks)
+
+## 2026-11-20 audit round 1 after RL-191
+
+Fetch, the clean worktree and draft PR #868 agreed at
+`ab3a1bb0dba66589bddac845f4ade23b70029f9f`. The current audit reproduced
+two highs and one medium. The regression methods reproduced all three
+findings before the repair in `537bfe9a0d4e757520b68cd0c02f1206f982f4b5`.
+
+| Finding | Repair and regression | Result |
+| --- | --- | --- |
+| HIGH. The level window rounded a half-nanosecond midpoint down, admitting 7 of 8 required starts. | Preserve the rational midpoint through membership, exact count ceilings, gaps and integration. The trace has first token at 606.000000001 s and omits the GPU row at 606 s. GPU and sum rise and onset return `coverage`. Exact-tick, even-nanosecond and complete-stream controls cover both sides. | **PASS** |
+| HIGH. The first stability read could count 14 dates from 13 qualifying Los Angeles dates. | Decode authenticated receipt and predecessor epochs as decimals and resolve calendar fields from the containing whole second. Stage 1 refuses the audit epoch and the one-nanosecond-before-midnight case without attempting a write or opening a scoring input. At midnight and one nanosecond after it, stage 1 and public validation bind 14 dates. | **PASS** |
+| MED. A nonpositive level hid failed coverage on the crossing's own search span. | Apply the interval gate to the prefill and tail search spans even when their thresholds are unavailable. Missing GPU starts at 602.25 s and 610.25 s give `coverage` on rise, onset and decode-end lag. The complete-span control retains `nonpositive_level`. | **PASS** |
+
+The five earlier audits cover the native reader, cadence-specific rail
+gaps, sparse DC, the shared per-channel admission gate, and the
+raw-read, recovery and tail boundaries. Their repairs and regressions
+are mapped in the frozen v2.1 round 1 table above. The later recovery
+rulings count an indeterminate complete window as a skip and permit
+a later admitted window to establish the return. The predecessor
+hosted run passed the complete frozen v2.1 and v2.2.1 suites, including
+success-path release and reservation cases blocked by local `EPERM`.
+
+Both frozen source files match their authorized digests and all 53
+protected path entries match. The current PR checks track full hosted
+verification of the audit repair. **NEEDS_SPEC.** No new referral from
+the reproduced findings.
+
+[Current audit](/Volumes/JW-EXT/scratch/pl-d-desc-looks-executor/audit-1/FINAL-MESSAGE.md) · [Red reproduction](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/rl191-audit1-red.log) · [Audit regressions](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/rl191-audit1-green.log) · [Focused checks](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/rl191-audit1-focused.log) · [Protected blobs](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/rl191-audit1-protected-blobs.tsv) · [Predecessor CI](https://github.com/mpmdw/JouleWise/actions/runs/44697247147) · [Current PR checks](https://github.com/mpmdw/JouleWise/pull/868/checks)
