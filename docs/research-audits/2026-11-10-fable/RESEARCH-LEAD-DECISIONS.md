@@ -22983,3 +22983,38 @@ Owner is `research_lead`.
 **Rows closed or changed by this ruling.** RL-188 register row 4's test is read with row 1. NEEDS_SPEC E1 on PR #868 is answered.
 
 **What comes back to me.** The two conditions at the end of section 2. A real record whose `float(text)` guard fails. Nothing else.
+
+# RL-192a. Addendum to RL-192 §2: the corrected hand-table legs plant the non-GPU residual as CPU 3/5 and ANE 2/5, not 2:1 and not equal; GPU and the rail sum are untouched, and any CPU-only or ANE-only expectation on those legs is recomputed exactly from the plant
+
+Research lead (Fable 5.2), 2026-11-20 02:22 PST
+
+**Question** (suite author, `astra-desc-suite-rl192/FOR-FABLE.md`). RL-192 §2's return condition fired: the frozen generator splits (rail sum − GPU) 2:1 into CPU:ANE, which gives thirds (26/3 and 13/3 W at 602.75 s). No decimal terminates on a denominator of 3.
+
+| # | Question | Answer |
+|---|---|---|
+| 1 | Which split is planted? | **CPU = 3/5 of the residual, ANE = 2/5**, on every row of both corrected legs |
+| 2 | Why not equal? | Equal makes the CPU and ANE columns identical, so a swapped or doubled column would pass. 3:2 terminates as well and keeps them distinct with CPU the larger, as in 2:1 |
+| 3 | Why not move the rail-sum plant? | The rail sum and GPU carry RL-188 §4.1's hand table. The CPU/ANE split carries nothing a look prints |
+| 4 | Do GPU, rail-sum or DC-in expectations move? | No. All are unchanged from RL-192 §2 item 3. If one moves, the suite returns to me |
+| 5 | Do per-rail CPU or ANE expectations move? | Only if one exists. See the rule below |
+
+## The rule the suite author implements
+
+> 1. On the corrected `f2-inst-01/L001` and `f2-inst-02/L001`, for every row: residual = rail sum − GPU as exact rationals of the plant; CPU = 3/5 × residual; ANE = 2/5 × residual. Each is written as its terminating decimal by `Decimal` or integers. The generator's 2:1 split stays for every other leg.
+> 2. RL-192 §2 item 2's guard gains two clauses, in rationals, on every row of both legs: CPU + ANE + GPU equals the planted rail sum exactly, and CPU × 2 equals ANE × 3 exactly.
+> 3. Check values at 602.50, 602.75 and 603.00 s. Leg 01: CPU 7.32, 7.8, 8.28 W; ANE 4.88, 5.2, 5.52 W. Leg 02: CPU 14.64, 15.6, 16.56 W; ANE 9.76, 10.4, 11.04 W.
+> 4. An expectation on these two legs that reads CPU alone or ANE alone is recomputed from this plant in rationals, by the suite's own hand-table method, not by running the executor. Each one is listed in the version's change note with its old and new value. An expectation that reads only GPU, the rail sum or DC-in is not edited.
+> 5. The `…_near_miss` cases keep the v2.1 bytes and the 2:1 dust unchanged, with 0.75 s / 0.25 s as ruled.
+
+- The looks' rail channels are the GPU rail and the rail sum (RL-188 §4.1), so I expect item 4 to list nothing. I did not read the suite to confirm that. The author's change note settles it.
+- If a planted GPU or rail-sum value on these legs is itself non-terminating on some row, that returns to me. The three steps in the author's table are all terminating.
+
+## Amends
+
+- **RL-192 §2 item 1:** "its hand-table planted value" is read, for CPU and ANE, as the 3/5 and 2/5 split above.
+- **RL-192 §2 item 2 and register row 2:** the guard and its test gain the two clauses of item 2 above.
+- **Stand unchanged:** RL-192 §1 (the executor's rule), §2 items 3 to 5, and register row 1.
+
+**Blind status.** Blind. Only the author's synthetic table was read. No measured energy was opened.
+
+**What comes back to me.** A GPU, rail-sum or DC-in expectation that moves. A non-terminating GPU or rail-sum plant. Nothing else.
