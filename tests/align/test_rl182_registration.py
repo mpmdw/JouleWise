@@ -217,7 +217,7 @@ def unrelated():
             path.write_bytes(payload)
         cmd = [sys.executable, "-B", ROOT / "scripts/compare_c1_protected_sources.py",
                "--repo", self.repo, "--w1-commit", w1 or self.w1, "--c1-commit", c1,
-               "--w1-prompts", w1_prompts, "--c1-prompts", c1_prompts]
+               "--w1-prompts", w1_prompts, "--c1-prompts", c1_prompts, "--static-only"]
         result = subprocess.run(cmd, capture_output=True, text=True)
         self.assertEqual(result.returncode, status, (result.stdout, result.stderr))
         self.assertEqual(result.stderr, "")
@@ -562,6 +562,18 @@ rl176._holm = decorate(CAPTURED)
         self.assertEqual(result["runtime_changes"], {})
         self.assertEqual(result["protected_changes"], {})
         self.assertEqual(result["research_lead_review"], [self.SCORER])
+
+    def test_runtime_identity_distinguishes_shared_mutable_defaults(self):
+        module = b"""from joulewise.align.apple import rl176
+left = [1]
+twin = [1]
+def replacement(a=left, b=left): return a is b
+rl176._holm = replacement
+"""
+        path = self.PACKAGE + "/wire.py"
+        w1 = self.commit({path: module})
+        c1 = self.commit({path: module.replace(b"b=left", b"b=twin")})
+        self.assertEqual(list(self.compare(w1, c1, 2)["runtime_changes"]), ["_holm"])
 
     def test_default_comparison_requires_offline_runtime(self):
         w1 = self.commit()
