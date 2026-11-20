@@ -2,7 +2,7 @@
 
 2026-11-19 · Tier 2 · Sol 6.2 builder · draft against `align/2026-11-17-rl176-build`
 
-The helper compares the eight RL-182 source bindings and the two supplied prompt-hash maps. The comparison is offline and reads raw Git blobs from the named commits. It reports the identity of each scorer and phase module and lists any changed file for ordinary diff review, including if all eight bindings match. Exit 0 supplies one input to row 10. The signatory owns the actual comparison inputs, the authoritative prompt population and the anti-hindsight review.
+The helper compares the eight RL-182 source bindings and the two supplied prompt-hash maps. Spec v2 adds an isolated runtime identity comparison and a research-lead review flag for unapproved bytes in the scorer and phase modules. The helper reads Git blobs from the named commits and retains the ordinary changed-file inventory. Exit 0 in combined mode supplies one input to row 10. The signatory owns the actual comparison inputs, the authoritative prompt population and the anti-hindsight review.
 
 ## Spec freeze and assessed trees
 
@@ -56,32 +56,34 @@ PYTHONPATH=tests:. python3.13 -B -m unittest tests.test_git_fixture_maintenance
 
 The first command confirmed the original failure locally. The full five-test maintenance module and the two focused commands above passed with the shared helper. The builder verified zero HIGH, one MED and zero LOW findings in CI triage. The independent audit round count remains zero.
 
-### Synthetic invocation
+### Synthetic static diagnostic
 
 The following full IDs are from the seat's temporary fixture Git repository, built from the `ProtectedSourceComparisonTests` toy source and maps with author and committer date `2020-01-01T00:00:00+00:00`. `ROW10_TOY` names the fixture directory.
 
 ```sh
 python3.13 -B scripts/compare_c1_protected_sources.py \
+  --static-only \
   --repo "$ROW10_TOY/repo" \
   --w1-commit 546e6481910bdd3cb43ca2f527046f8e5a926785 \
   --c1-commit d0d28d564fb31f1ec1303a4511ca74d7a298cc3c \
   --w1-prompts "$ROW10_TOY/w1.json" --c1-prompts "$ROW10_TOY/c1.json"
 ```
 
-This returned 0, with `rl176.py` in `files_for_review` and both change maps empty. Substituting `546e6481910bdd3cb43ca2f527046f8e5a926785` for C1 returned 0 with no changed files. Substituting `6bb5615be138b728d0f026777de333d11e1941b7` returned 1 and named `_decode_rows`.
+This returned 0, with `rl176.py` in `files_for_review` and both static change maps empty. Substituting `546e6481910bdd3cb43ca2f527046f8e5a926785` for C1 returned 0 with no changed files. Substituting `6bb5615be138b728d0f026777de333d11e1941b7` returned 1 and named `_decode_rows`. Static-only mode preserves the original exit codes and emits `mode: static-only`. These are diagnostic examples.
 
 ### Lead invocation template
 
-The lead supplies full commit IDs from the signed bindings and two privately verified, public-safe identifier-to-digest projections. The helper takes only the projections.
+The lead supplies full commit IDs from the signed bindings, two privately verified public-safe identifier-to-digest projections and a trusted preloaded Python 3.13 Docker image ID. Both Git commits must carry the production release entry point. The isolation and wiring rules are specified below.
 
 ```sh
 python3.13 -B scripts/compare_c1_protected_sources.py \
+  --runtime-image "$ROW10_RUNTIME_IMAGE" \
   --repo "$ROW10_PUBLIC_CODE_REPO" \
   --w1-commit "$ROW10_W1_COMMIT" --c1-commit "$ROW10_C1_COMMIT" \
   --w1-prompts "$ROW10_W1_PROJECTION" --c1-prompts "$ROW10_C1_PROJECTION"
 ```
 
-Use the paths in `files_for_review` for the ordinary public source diff. For both ruled modules the corresponding command is:
+Use the paths in `files_for_review` for the ordinary public source diff. The command below covers both ruled modules.
 
 ```sh
 git --no-replace-objects -C "$ROW10_PUBLIC_CODE_REPO" diff --no-ext-diff --no-textconv \
@@ -112,7 +114,7 @@ The ten paths are the literal `R1_EXECUTED_SOURCES` tuple at the anchor. For eac
 | --- | --- |
 | Row 10 tooling | Builder fixture proof complete. Actual W1-to-C1 comparison and row disposition open with the signatory. |
 | RL-182 register row 3 | Send each changed protected binding to Fable before rebind. Any changed scientific meaning or protected rule requires Fable's ruling. |
-| RL-182 register row 7 | Lead privately verifies extraction against the authoritative population and attests that it is complete, no prompt was padded and no fourth timing term entered. The helper compares only the supplied keys, hashes and protected source spans. |
+| RL-182 register row 7 | Lead privately verifies extraction against the authoritative population and attests that it is complete, no prompt was padded and no fourth timing term entered. The prompt check compares the supplied keys and hashes. |
 | Ordinary diff and anti-hindsight | Lead reviews every listed scorer or phase diff and assembles the rule changes since R1, with ruling IDs, for Fable under RLD:20269–20272. |
 | Builder exit and merge | Astra executing audit, integration owner acceptance and Opus final-tree acceptance remain open at this report's build cutoff. Opus owns the merge. |
 | Live receipt evidence | Signatures and other arm gates remain with their owners. PR #813 and PR #836 are references in the public workflow. |
@@ -144,11 +146,11 @@ PYTHONPATH=tests:. python3.13 -B -m unittest align.test_rl182_registration align
 The exact audit fixture checks use the retained invented Git repository and map in `AUDIT_FIXTURES`.
 
 ```sh
-python3.13 -B scripts/compare_c1_protected_sources.py --repo "$AUDIT_FIXTURES/repo" \
+python3.13 -B scripts/compare_c1_protected_sources.py --static-only --repo "$AUDIT_FIXTURES/repo" \
   --w1-commit 1d49220cd74f86248be22db49d60600cb834a001 \
   --c1-commit 37fcf2f44021a2719e540705a6ae80e543b785ba \
   --w1-prompts "$AUDIT_FIXTURES/map.json" --c1-prompts "$AUDIT_FIXTURES/map.json"
-python3.13 -B scripts/compare_c1_protected_sources.py --repo "$AUDIT_FIXTURES/repo" \
+python3.13 -B scripts/compare_c1_protected_sources.py --static-only --repo "$AUDIT_FIXTURES/repo" \
   --w1-commit 94f1d185daec9bf5ee988fc2a99b60efaa1eed31 \
   --c1-commit 63bfaf4ceb611720ae95cae4f6feeb16a2c3d6e8 \
   --w1-prompts "$AUDIT_FIXTURES/map.json" --c1-prompts "$AUDIT_FIXTURES/map.json"
@@ -169,10 +171,43 @@ The guard refuses a protected callable reference used as a value, including expo
 ```sh
 PYTHONPATH=tests:. python3.13 -B -m unittest align.test_rl182_registration.ProtectedSourceComparisonTests
 PYTHONPATH=tests:. python3.13 -B -m unittest align.test_rl182_registration align.test_rl176
-python3.13 -B scripts/compare_c1_protected_sources.py --repo "$AUDIT_FIXTURES/repo" \
+python3.13 -B scripts/compare_c1_protected_sources.py --static-only --repo "$AUDIT_FIXTURES/repo" \
   --w1-commit 406c3abeb29412197d1de6d53dba09dab6a07d73 \
   --c1-commit 3e17c928df2df49e4412dc1b1a70e6500b672ec0 \
   --w1-prompts "$AUDIT_FIXTURES/map.json" --c1-prompts "$AUDIT_FIXTURES/map.json"
 ```
 
 The focused class passed 12 tests and 102 synthetic CLI invocations. The combined suite passed 44 tests. The audited aggregate is 3 VERIFIED HIGH, 0 MED and 0 LOW across two independent rounds. Round 2 decays under §3 with `H₂ = 1 ≤ floor(2 / 2)` and the existing `impl-bug` root cause. A VERIFIED HIGH in round 3 returns to spec. Integration-owner and Opus acceptance and the signatory's actual receipt comparison, attestation and review remain open.
+
+## Astra round 3 and spec v2
+
+Astra assessed `d0fb89a78b417bc43986366c01fe3b3ec7322e55`, tree `f1086f105d50964396437f6ae8d661218ac95ef0`, and blocked. The exact invented pair `b409e110b1531ffade1f130bb267cc466321ec83` → `7769e46b0c5fef95d8e6006079b1b3665357b148` changes only the phase module. At import it sets the scorer's level to 0.75 from 0.25. The old static comparator returned 0 in both directions. The round had 1 VERIFIED HIGH, 0 MED and 0 LOW. The `spec-gap` was that static scorer extraction could establish the source span while a sibling changed the effective binding. The three v1 audits ended with 4 VERIFIED HIGH, 0 MED and 0 LOW, and the round 3 finding returned the work to spec under Pipeline §3.
+
+The lead's P1/P2 engineering rule is spec v2. Its executable freeze is `46dc0bbfbf3dadbd6f27b0d3b8395131b532d069`, tree `74f6737555b47c9f5c9984b115b161a40dc5cc40`, on assessed v1 head `d0fb89a78`. Before implementation, the original 12 static tests passed and the seven new tests gave 102 failing assertions on the old helper. Expected failures included absent runtime and wiring options, the phase-only false negative, lack of unapproved-byte review and default equality without runtime evidence. The new phase fixture keeps Astra's circular import and uses an invented release entry point carrying the production module name. Both directions must refuse and name the level. The 96-case sweep covers all eight protected names through each of the three other modules in the invented package, exercising direct assignment, `setattr`, `sys.modules` and a class-body import-time effect.
+
+### Runtime identity
+
+The combined command requires an approved, preloaded local Docker image by full `sha256:` image ID. It must provide Linux Python 3.13 at `/usr/local/bin/python3` and GNU `timeout` at `/usr/bin/timeout`. The tool uses the local Unix Docker socket and requests no pull, no network, a read-only root, non-root execution, dropped capabilities and bounded workers. The only read-only mounts are a private projection of committed, regular `.py` blobs under `joulewise/` and `scripts/` and a snapshot of the trusted worker. The repository checkout, Git administration, projection JSON and measurement roots stay outside the mounts. Each side uses the same trusted worker snapshot in a fresh interpreter. [Docker run reference](https://docs.docker.com/reference/cli/docker/container/run/) · [None network driver](https://docs.docker.com/engine/network/drivers/none/) · [Read-only bind mounts](https://docs.docker.com/engine/storage/bind-mounts/)
+
+The worker imports `scripts.align_v4_series_release` and follows its top-level production import graph. It observes the scorer from that graph after the import. It fingerprints recursive code-object fields, defaults and keyword defaults, closure cells, function state and wrapper links such as `__wrapped__`, and the level's value. Repeated references to a mutable object remain distinct from independent copies with equal contents. Source staging prefixes are normalized, and source line metadata remains part of the code identity. Static spans retain declared decorator bytes. Runtime evidence covers effective wrapper state visible after import. An import failure, missing object or unsupported runtime representation requires review.
+
+The assigned seat has no usable Docker backend and denied a nested sandbox attempt on invented files. The synthetic tests use a fixture transport that verifies the isolation arguments and starts the real worker in fresh interpreters over invented code. The suite establishes worker and comparison behavior. Execution with a real, approved isolated image on the lead's authorized desk host remains open. The pinned `82542232d` anchor lacks the release entry point. A missing entry point on either receipt commit returns 2. The lead still owns any ruling for an actual W1 receipt that predates the release entry.
+
+### Wiring spans and dispositions
+
+The default wiring allowlist is empty because RL-182 §1.5 identifies the wiring exception without enumerating admitted spans. The lead can supply `--wiring-allowlist "$ROW10_APPROVED_WIRING"` with a public JSON array of entries. Each entry has `path`, `before` and `after`. Each side has the complete blob's lowercase `sha256` and a `spans` array of sorted, disjoint, zero-based half-open byte ranges `[start, end]`. An insertion or deletion can use an empty spans array on one side. An entry applies in either direction to that exact blob pair. The bytes outside the ranges must match and the ranges must avoid the eight static protected bindings. The lead owns approval of what qualifies as wiring.
+
+`files_for_review` continues the ordinary file inventory. `research_lead_review` names either ruled module with uncovered bytes, including when runtime hashes match or runtime evidence fails. Combined mode returns 2 for a runtime difference or unresolved input, 1 for static differences or uncovered bytes with a complete matching runtime comparison, and 0 for complete equal protected inputs with no uncovered bytes. Diagnostic `--static-only` preserves the previous static return codes and the new review inventory.
+
+The revised builder checks use the following commands in seat scratch.
+
+```sh
+PYTHONPATH=tests:. python3.13 -B -m unittest align.test_rl182_registration.ProtectedSourceComparisonTests
+PYTHONPATH=tests:. python3.13 -B -m unittest align.test_rl182_registration.ProtectedRuntimeComparisonTests
+PYTHONPATH=tests:. python3.13 -B -m unittest align.test_rl182_registration align.test_rl176
+git diff 82542232d..HEAD --check
+```
+
+The implementation was assessed at `74334dbabbed1d9e65c291ed380fb4d59f4e57fe`, tree `44a92c533d668b24914d550c008b330b76a16ee3`. The final focused run passed 52 tests. The v2 class made 113 synthetic comparison invocations, including the 96 mutations, and both directions of the adapted phase-only reproduction reported the level and phase-review flag. The exact retained audit pair still reports the phase-review flag and fails combined mode because its original invented commits have no release entry. All 12 v1 static cases and all seven frozen v2 cases were preserved. An extra aliasing regression was red against the first encoder and passes with reference tracking. The first sweep overlapped a worker edit and observed mismatched encoder versions. An invented concurrent-edit probe passed after the parent pinned one worker snapshot for both sides.
+
+The lead's signatory and anti-hindsight work, new-spec acceptance, and integration-owner and Opus decisions remain open. The v1 audit count stays at three.
