@@ -610,3 +610,36 @@ verification of the audit repair. **NEEDS_SPEC.** No new referral from
 the reproduced findings.
 
 [Current audit](/Volumes/JW-EXT/scratch/pl-d-desc-looks-executor/audit-1/FINAL-MESSAGE.md) · [Red reproduction](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/rl191-audit1-red.log) · [Audit regressions](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/rl191-audit1-green.log) · [Focused checks](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/rl191-audit1-focused.log) · [Protected blobs](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/rl191-audit1-protected-blobs.tsv) · [Predecessor CI](https://github.com/mpmdw/JouleWise/actions/runs/44697247147) · [Current PR checks](https://github.com/mpmdw/JouleWise/pull/868/checks)
+
+## 2026-11-20 audit round 2 after RL-191
+
+Fetch, the clean worktree and draft PR #868 agreed at
+`a0a56433788ffefe035c61538a777681e1822165`. All three audit reproductions
+failed on that revision and passed on the changes in `1c3153207`.
+
+| Finding | Repair and regression | Result |
+| --- | --- | --- |
+| E1. Roundoff turned the flat 2.042 W GPU decode denominator positive. | Cache the exact binary64 input values as fractions after interval admission. Perform integrations, means, gains and other rational calculations before conversion for output. The audit case prints zero above hold and `nonpositive_denominator`. The property test crosses 200 levels with every pair of leading, internal and trailing gap masks in the rail and DC grid. | **PASS** on the audit reproduction. |
+| E2. Scoring used the last retained component row as capture EOF. | Index capture stamps from all powermetrics rows and continue to admit values only for the registered rails. With two of four required component starts and capture stamps through 611 s, the audited returns are `coverage` with `bound_s=1`. The full-count control returns 0.25 s. | **PASS** on the audit reproduction. The fixed-width interpretation is referred below. |
+| M1. A date with only coverage refusals disappeared. | Group by the context's observed date before filtering values. The refused November 3 date has the closed `n`, `mean` and `sd` fields, each carrying a `coverage` null. Only numeric observations contribute to the aggregates. The stability restricted schema admits these explicit nulls. | **PASS** |
+
+Sample variance remains rational. Recovery compares squared differences
+to the exact variance. Token floors carry their rational scale in the
+squared quantity. Exact square roots stay rational. Irrational roots
+use a 60-significant-digit rational approximation for stability
+aggregates and number output. The pinned GPU loader reads only newly
+admitted GPU rows before the exact values enter the cache.
+
+Both frozen modules match their authorized source bytes. The 697
+selected frozen cases passed with zero skips, and all 53 protected
+paths match. The pushed audit head has its own hosted run.
+
+**NEEDS_SPEC.** An unconditional one-second rail-return interval changes
+`test_C_tail_gpu_power_ok_ok_750` from `stream_end` to `coverage` at a
+genuine 0.75 s EOF. It also changes
+`test_A_duration_eof_instrument_gpu_power_left_exact_n0_local` from
+`coverage` to `stream_end` by judging just the first second of a
+25 s recorded tail. The implementation gates the full observed capture
+under RL-191 §1.5 while the fixed-width interpretation is pending.
+
+[Audit round 2](/Volumes/JW-EXT/scratch/pl-d-desc-looks-executor/audit-2/FINAL-MESSAGE.md) · [Red reproductions](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/rl191-audit2-red.log) · [Green reproductions](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/rl191-audit2-new-regressions.log) · [Frozen focus](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/rl191-audit2-frozen-focus.log) · [Fixed-window conflict](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/rl191-audit2-e2-conflict.log) · [Protected blobs](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/rl191-audit2-protected-blobs.tsv) · [Current PR checks](https://github.com/mpmdw/JouleWise/pull/868/checks)
