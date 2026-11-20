@@ -16,6 +16,7 @@ from unittest.mock import patch
 
 from joulewise.cadence_looks import description as reader
 from tests import test_desc_looks_acceptance as fixture
+from tests.fixtures.description_worlds import DescriptionWorld
 
 
 RAIL_FOR_CHANNEL = {
@@ -179,7 +180,7 @@ class DescriptionIntervalTests(unittest.TestCase):
 
     def test_stability_keeps_a_date_with_only_refused_observations(self):
         with TemporaryDirectory() as temporary:
-            world = fixture.World(Path(temporary).resolve() / "world", fixture.IDS[1])
+            world = DescriptionWorld(Path(temporary).resolve() / "world", fixture.IDS[1])
             key = "f2-stab-06/L001"
             path = world.copy / key / "support.json"
             support = fixture.read(path)
@@ -210,7 +211,7 @@ class DescriptionIntervalTests(unittest.TestCase):
                     fixture.assert_scalar(self, edges["onset_lag_s"][channel], expected)
 
     def test_stability_calendar_gate_respects_the_exact_receipt_epoch(self):
-        class LastDateReceipt(fixture.World):
+        class LastDateReceipt(DescriptionWorld):
             def leg(self, kit, pos, v, day, ordinal, status):
                 refs = super().leg(kit, pos, v, day, ordinal, status)
                 if day == 13 and status == "qualified":
@@ -262,7 +263,7 @@ class DescriptionIntervalTests(unittest.TestCase):
     def test_hold_admission_uses_the_recorded_span_even_with_a_support_offset(self):
         for look in fixture.IDS[:2]:
             with self.subTest(look=look), TemporaryDirectory() as temporary:
-                world = fixture.World(Path(temporary).resolve() / "world", look)
+                world = DescriptionWorld(Path(temporary).resolve() / "world", look)
                 keys = list(world.good)[:2]
                 missing_stamps = {581, 583, 585, 587, 589, 591, 593}
                 for key, projected_start in zip(keys, (None, -20)):
@@ -290,7 +291,7 @@ class DescriptionIntervalTests(unittest.TestCase):
 
     def test_decode_end_lag_requires_a_qualifying_in_span_dc_sample(self):
         with TemporaryDirectory() as temporary:
-            world = fixture.World(Path(temporary).resolve() / "world", fixture.IDS[0])
+            world = DescriptionWorld(Path(temporary).resolve() / "world", fixture.IDS[0])
             key = next(iter(world.good))
             path = world.copy / key / "dc_points.csv"
             with path.open(encoding="utf-8", newline="") as stream:
@@ -323,7 +324,7 @@ class DescriptionIntervalTests(unittest.TestCase):
 
     def test_dependent_turn_decode_and_floor_keep_the_interval_refusal(self):
         with TemporaryDirectory() as temporary:
-            world = fixture.World(Path(temporary).resolve() / "world", fixture.IDS[0])
+            world = DescriptionWorld(Path(temporary).resolve() / "world", fixture.IDS[0])
             key = next(iter(world.good))
             _filter_csv(world.copy / key / "power_trace.csv", lambda row: not (
                 row["source"] == "powermetrics" and row["rail"] == "gpu_power"
@@ -359,7 +360,7 @@ class DescriptionIntervalTests(unittest.TestCase):
     def test_file_backed_fan_and_sensor_values_decode_only_after_hold_admission(self):
         for look in fixture.IDS[:2]:
             with self.subTest(look=look), TemporaryDirectory() as temporary:
-                world = fixture.World(Path(temporary).resolve() / "world", look)
+                world = DescriptionWorld(Path(temporary).resolve() / "world", look)
                 omitted = (set(range(1, 600, 2)), {100, 101}, set())
                 readings = ((37.8125, 901.125), (37.9375, 902.125), (38.0625, 903.125))
                 keys = list(world.good)[:3]
@@ -414,7 +415,7 @@ class DescriptionIntervalTests(unittest.TestCase):
     def test_turn_coverage_takes_precedence_over_failed_hold(self):
         for look in fixture.IDS[:2]:
             with self.subTest(look=look), TemporaryDirectory() as temporary:
-                world = fixture.World(Path(temporary).resolve() / "world", look)
+                world = DescriptionWorld(Path(temporary).resolve() / "world", look)
                 key = next(iter(world.good))
                 source = world.copy / key
                 support_path = source / "support.json"
@@ -475,7 +476,7 @@ class DescriptionIntervalTests(unittest.TestCase):
         coverage = {"value": None, "reason": "coverage"}
         for look in fixture.IDS[:2]:
             with self.subTest(look=look), TemporaryDirectory() as temporary:
-                world = fixture.World(Path(temporary).resolve() / "world", look)
+                world = DescriptionWorld(Path(temporary).resolve() / "world", look)
                 first, second = list(world.good)[:2]
                 missing_rail = world.copy / first
                 support = fixture.read(missing_rail / "support.json")

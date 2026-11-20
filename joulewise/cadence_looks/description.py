@@ -45,6 +45,7 @@ LEDGER_SCHEMA = "joulewise.cadence_look_ledger.v1"
 POSITION_FIELDS = ("leg_id", "prefill_tokens", "decode_tokens", "start_band", "g0_shape")
 SPAN_FIELDS = ("kit_id", "kit_sha256", "span_id", "attempt", "runner_pin", "legs")
 DESK_RECORDS = ("hand_table", "q1", "desk_final")
+LOADED_DISPOSITION = "not_qualified:loaded"
 FINISHED = {"completed", "coalesced", "failed", "interrupted"}
 AUTHORITY = {
     "first_native": "authority/native.json",
@@ -516,6 +517,8 @@ def _admitted_kits(snapshot, rows):
 
 
 def _disposition(op, receipt, cap):
+    if op["loaded_flag"]:
+        return LOADED_DISPOSITION
     if op["g0_outcome"] != "released":
         return "unreleased"
     if op["leg_status"] != "complete":
@@ -604,6 +607,11 @@ def _token_row(snapshot, references, kit, plan, closes):
     require(type(op["leg_status"]) is str and type(op["g0_outcome"]) is str
             and type(receipt["power_mode"]) is str, "invalid operational disposition input")
     disposition = _disposition(op, receipt, plan["decode_tokens"])
+    missing_count_reason = None
+    if disposition == LOADED_DISPOSITION:
+        missing_count_reason = "loaded"
+    elif op["prefill_tokens"] is None:
+        missing_count_reason = op["leg_status"]
     # Date, hour and UTC offset apply to the containing whole second. A
     # sub-microsecond stamp before a boundary belongs to the earlier second.
     instant = datetime.fromtimestamp(math.floor(_epoch_seconds(receipt["t0_epoch_s"])), LOCAL)
@@ -615,7 +623,7 @@ def _token_row(snapshot, references, kit, plan, closes):
         "local_t0_date": instant.date().isoformat(), "leg_status": op["leg_status"],
         "decode_cap_reached": op["decode_cap_reached"], "loaded_flag": op["loaded_flag"],
         "disposition": disposition,
-        "missing_count_reason": (op["leg_status"] if op["prefill_tokens"] is None else None),
+        "missing_count_reason": missing_count_reason,
     }
     position = {
         "disposition": disposition, "loaded_flag": op["loaded_flag"],

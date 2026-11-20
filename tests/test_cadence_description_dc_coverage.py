@@ -7,6 +7,7 @@ import unittest
 
 from joulewise.cadence_looks import description as reader
 from tests import test_desc_looks_acceptance as fixture
+from tests.fixtures.description_worlds import DescriptionWorld
 
 
 def _select_meter_points(directory, keep, *, poison=None):
@@ -36,7 +37,7 @@ class DCCoverageTests(unittest.TestCase):
     def test_span_trailer_fault_counts_do_not_contaminate_clean_dc_intervals(self):
         for look in fixture.IDS[:2]:
             with self.subTest(look=look), TemporaryDirectory() as temporary:
-                world = fixture.World(Path(temporary).resolve() / "world", look)
+                world = DescriptionWorld(Path(temporary).resolve() / "world", look)
                 expected = {}
                 for key, counter in zip(world.good, ("bad", "usb_errors")):
                     path = world.copy / key / "support.json"
@@ -65,7 +66,7 @@ class DCCoverageTests(unittest.TestCase):
     def test_sparse_decode_nulls_dc_turn_and_plateau_even_with_short_gaps(self):
         for look in fixture.IDS:
             with self.subTest(look=look), TemporaryDirectory() as directory:
-                world = fixture.World(Path(directory).resolve() / "world", look)
+                world = DescriptionWorld(Path(directory).resolve() / "world", look)
                 key = next(iter(world.good))
                 copy = world.copy / key
                 original = fixture.read(copy / "support.json")

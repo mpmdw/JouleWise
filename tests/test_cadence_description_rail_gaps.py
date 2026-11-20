@@ -7,6 +7,7 @@ import unittest
 
 from joulewise.cadence_looks import description as reader
 from tests import test_desc_looks_acceptance as fixture
+from tests.fixtures.description_worlds import DescriptionWorld
 
 
 def _omit_ane(directory, start, stop, *, announced, poison=False):
@@ -39,7 +40,7 @@ class RailGapPeriodTests(unittest.TestCase):
         # The round-two witness has sixteen missing 250 ms ANE rows.
         for look in fixture.IDS:
             with self.subTest(look=look), TemporaryDirectory() as temporary:
-                world = fixture.World(Path(temporary).resolve() / "world", look)
+                world = DescriptionWorld(Path(temporary).resolve() / "world", look)
                 key = next(iter(world.good))
                 directory = world.copy / key
                 support = fixture.read(directory / "support.json")

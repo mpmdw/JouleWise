@@ -8,6 +8,7 @@ from unittest.mock import patch
 
 from joulewise.cadence_looks import description as reader
 from tests import test_desc_looks_acceptance as fixture
+from tests.fixtures.description_worlds import DescriptionWorld
 
 
 def _native_path(name):
@@ -23,7 +24,7 @@ class NativeStep3PreflightTests(unittest.TestCase):
         temporary = self.enterContext(TemporaryDirectory())
         self.root = Path(temporary).resolve()
         self.look = fixture.IDS[0]
-        self.world = fixture.World(self.root / "projection", self.look)
+        self.world = DescriptionWorld(self.root / "projection", self.look)
         self.book = fixture.Book(self.root / "native-book")
         self.ledger = self.book.path / reader.CONTROL / "LOOKS.json"
         self.stage_name = f"{reader.CONTROL}/stage1/{self.look}.json"
@@ -129,6 +130,80 @@ class NativeStep3PreflightTests(unittest.TestCase):
         self.assertEqual(self.fallback_calls, [])
 
 
+class LoadedLegAdmissionTests(unittest.TestCase):
+    def test_loaded_leg_is_accounted_for_and_never_read_or_printed(self):
+        class LoadedFirstMember(DescriptionWorld):
+            loaded_keys = {"f2-inst-01/L001", "f2-stab-01/L001"}
+
+        for look in fixture.IDS:
+            with self.subTest(look=look), TemporaryDirectory() as temporary:
+                root = Path(temporary).resolve()
+                instrument = look == fixture.IDS[0]
+                world = LoadedFirstMember(root / "world", look, None if instrument else "same_work")
+                key = "f2-inst-01/L001" if instrument else "f2-stab-01/L001"
+                eligible = set(world.good) - {key}
+                rc, stdout, stderr, events = fixture.invoke(world, "stage1")
+                self.assertEqual((rc, stdout, stderr), (0, b"", b""))
+                self.assertFalse([event for event, _ in events if event == "open"])
+                document = fixture.read(world.stage)
+                position = document["positions"][key]
+                self.assertIs(position["loaded_flag"], True)
+                self.assertEqual(position["disposition"], "not_qualified:loaded")
+                refs = next(row for row in world.rows if row["key"] == key)
+                self.assertEqual(position["receipt"], refs["receipt"])
+                self.assertEqual(document["counts"]["n_legs"], len(eligible))
+                self.assertEqual(document["by_kit"][key.split("/")[0]]["not_qualified:loaded"], 1)
+                if not instrument:
+                    token = next(row for row in document["token_table"]
+                                 if f'{row["kit_id"]}/{row["leg_id"]}' == key)
+                    original = world.records[key][0]
+                    self.assertEqual(token["realised_prefill_tokens"], original["prefill_tokens"])
+                    self.assertEqual(token["realised_decode_tokens"], original["decode_tokens"])
+                    self.assertEqual(token["missing_count_reason"], "loaded")
+                    self.assertIs(token["loaded_flag"], True)
+                    self.assertEqual(document["paper_wording"], "the same cell of work")
+                    self.assertEqual(document["counts"]["n_local_dates"], 14)
+
+                world.bind()
+                snapshot = reader.Snapshot(world.repo, look, "stage2")
+                census, qualified = reader.census(snapshot)
+                snapshot.check_stage1(census)
+                self.assertEqual(snapshot.public_record(census)["n_legs"], len(eligible))
+                sources = reader.verify_gates(snapshot, qualified)
+                self.assertEqual(set(sources), eligible)
+                opened = []
+                open_path = Path.open
+
+                def watch(path, *args, **kwargs):
+                    if path.is_relative_to(world.copy):
+                        opened.append(path)
+                    return open_path(path, *args, **kwargs)
+
+                with patch.object(Path, "open", watch):
+                    prints = reader.score(snapshot, sources, qualified, lambda: None)
+                self.assertTrue(opened)
+                self.assertFalse(any(path.is_relative_to(world.copy / key) for path in opened))
+                for name in ("hold", "turn", "gain", "edges") if instrument else ("hold", "turn"):
+                    self.assertEqual(set(prints[name]), eligible)
+                if not instrument:
+                    self.assertTrue(all(key not in cell for cell in prints["context"].values()))
+
+    def test_loaded_leg_does_not_supply_the_fourteenth_date(self):
+        class LoadedLastDate(DescriptionWorld):
+            loaded_keys = {"f2-stab-13/L002"}
+
+        with TemporaryDirectory() as temporary:
+            root = Path(temporary).resolve()
+            first = LoadedLastDate(root / "first", fixture.IDS[1])
+            fixture.Checks().refused(first, "stage1")
+            self.assertFalse(first.stage.exists())
+            last = LoadedLastDate(root / "last", fixture.IDS[2])
+            rc, stdout, stderr, _ = fixture.invoke(last, "stage1")
+            self.assertEqual((rc, stdout, stderr), (0, b"", b""))
+            counts = fixture.read(last.stage)["counts"]
+            self.assertEqual(counts, {"n_legs": len(last.good) - 1, "n_local_dates": 13})
+
+
 class SpentDescriptionLookTests(unittest.TestCase):
     def test_spent_look_refuses_before_launching_final_validator(self):
         # Simulate the existing reservation for the worker and its observer.
@@ -141,7 +216,7 @@ os.path.lexists = _with_reservation
 """
         for look in fixture.IDS:
             with self.subTest(look=look), TemporaryDirectory() as temporary:
-                world = fixture.World(Path(temporary).resolve() / "world", look)
+                world = DescriptionWorld(Path(temporary).resolve() / "world", look)
                 checks = fixture.Checks()
                 checks.stage1(world)
                 with patch.object(fixture, "PROBE", fixture.PROBE + spent):

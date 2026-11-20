@@ -102,6 +102,10 @@
               "type": "integer",
               "minimum": 1
             },
+            "not_qualified:loaded": {
+              "type": "integer",
+              "minimum": 1
+            },
             "short": {
               "type": "integer",
               "minimum": 1
@@ -167,6 +171,7 @@
             "disposition": {
               "enum": [
                 "qualified",
+                "not_qualified:loaded",
                 "short",
                 "unreleased",
                 "short_hold",
@@ -311,6 +316,7 @@
         "disposition": {
           "enum": [
             "qualified",
+            "not_qualified:loaded",
             "short",
             "unreleased",
             "short_hold",
@@ -320,6 +326,7 @@
           ]
         },
         "missing_count_reason": {
+          "description": "Reason the position lacks an eligible count pair. The recorded counts are retained for a loaded leg.",
           "oneOf": [
             {
               "type": "string",
