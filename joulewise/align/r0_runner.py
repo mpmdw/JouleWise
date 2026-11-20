@@ -108,13 +108,11 @@ def save_report(output, report):
         temp.replace(output / name)
 
 
-def _end_guard(guard, *, verify=False):
-    finish = getattr(guard, "finish", None) if verify else None
+def _end_guard(guard, *, admitted):
+    finish = getattr(guard, "finish", None) if admitted else None
     end = finish if finish is not None else getattr(guard, "close", None)
     if end is not None:
         end()
-    if verify:
-        _reject_contention(guard)
 
 
 def _verify_publication(guard):
@@ -381,7 +379,11 @@ def execute(config, output, checks, models, *, guard, backend_factory, per_check
         flags_before = len(getattr(guard, "contention_flags", []))
         try:
             # Retain the final sampler evidence even when a check failed.
-            _end_guard(guard, verify=guard_admitted)
+            # A completed run still owes the terminal admission, including
+            # when an earlier flag already bars publication.
+            _end_guard(guard, admitted=guard_admitted)
+            if guard_admitted and report["status"] != "pass":
+                _reject_contention(guard)
         except Refused as exc:
             _record_guard_refusal(report, exc)
         report["decisions_pending_lead_action"] = [
@@ -447,14 +449,18 @@ def _main(argv, *, backend_factory, guard_factory, lock_path, display_probe):
             parser.exit(2, "Another R0 runner owns the machine lock\n")
         if args.inventory:
             admitted = False
+            scanned = False
             try:
                 guard.check(force=True)
                 admitted = True
                 rows = inventory(_path(str(args.inventory)), guard.check)
+                scanned = True
             finally:
                 # A latched census refusal still governs when scanning the
                 # input raises. Verify before propagating an inventory error.
-                _end_guard(guard, verify=admitted)
+                _end_guard(guard, admitted=admitted)
+                if admitted and not scanned:
+                    _reject_contention(guard)
             payload = json.dumps(rows, indent=2, sort_keys=True) + "\n"
             _verify_publication(guard)
             with args.output.open("x") as handle:

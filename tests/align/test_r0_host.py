@@ -2560,9 +2560,12 @@ class R0QuietIntervalTest(unittest.TestCase):
         guard.check(force=True)
         self.tick(guard, clock, 45, 60, 75)
         guard.check(force=True)
-        self.assertEqual(guard.receipts[-1]["cpu_interval"]["start_monotonic_s"], 45)
-        self.assertTrue(any(flag["interval"]["end_monotonic_s"] == 30 for flag in guard.contention_flags))
-        self.assertFalse(any(flag["interval"]["end_monotonic_s"] == 75 for flag in guard.contention_flags))
+        interval = guard.receipts[-1]["cpu_interval"]
+        self.assertEqual(interval["start_monotonic_s"], 45)
+        self.assertEqual(interval["contaminants"], [])
+        carried, = [flag for flag in guard.contention_flags if flag["interval"]["end_monotonic_s"] == 75]
+        self.assertEqual(carried["interval"]["start_monotonic_s"], 30)
+        self.assertIn("previous interval", carried["busy"][0]["basis"])
 
     def test_report_floor_filters_only_the_receipt(self):
         # 0.005 * 30 = 0.15 CPU-s; 0.14 / 0.16 are one TIME quantum
@@ -2622,7 +2625,7 @@ class R0QuietIntervalTest(unittest.TestCase):
                 self.assertEqual([(row["pid"], row["contaminant"]) for row in interval["regressed_counters"]],
                                  [(42, contaminant)])
 
-    def test_contaminant_regression_discloses_drop_and_preserves_earlier_flag(self):
+    def test_contaminant_regression_discloses_drop_and_carries_admitted_flag(self):
         # (0.05 + 0.01) * 30 = 1.80 CPU-s, then TIME drops to zero.
         guard, clock, _ = self.guard([
             cpu_table((42, OLD_START, "0:00.00", "mdworker_shared")),
@@ -2634,8 +2637,11 @@ class R0QuietIntervalTest(unittest.TestCase):
         interval = guard.receipts[-1]["cpu_interval"]
         self.assertEqual(interval["exited_over_limit"], [])
         self.assertTrue(interval["regressed_counters"][0]["contaminant"])
-        flag, = guard.contention_flags
-        self.assertEqual(flag["interval"]["end_monotonic_s"], 30)
+        original, carried = guard.contention_flags
+        self.assertEqual(original["interval"]["end_monotonic_s"], 30)
+        self.assertEqual(carried["interval"]["start_monotonic_s"], 30)
+        self.assertEqual(carried["interval"]["end_monotonic_s"], 60)
+        self.assertIn("previous interval", carried["busy"][0]["basis"])
 
     def test_interval_regression_after_missing_snapshot_is_recorded_for_every_identity(self):
         # Opening at 30 s, missing at 1.5 * 30, reappearing at 2 * 30:
@@ -2892,7 +2898,7 @@ class R0QuietIntervalTest(unittest.TestCase):
                 self.assertEqual(calls[i + 1][0], prewindow.PS_ARGV)
                 self.assertEqual(calls[i + 1][1]["timeout"], contention.PROBE_TIMEOUT_S)
 
-    def test_args_ps_time_does_not_stretch_cpu_denominator(self):
+    def test_args_ps_time_is_included_in_the_admitted_midpoint(self):
         clock = GuardClock()
         samples = iter([cpu_table((42, OLD_START, "0:00.00", "mdworker_shared")),
                         cpu_table((42, OLD_START, "0:00.90", "mdworker_shared")),
@@ -2911,8 +2917,11 @@ class R0QuietIntervalTest(unittest.TestCase):
         guard = QuietGuard([], run=run, inspect_custody=lambda **kw: Census(), clock=clock,
                            sleep=clock.sleep, host_reader=None)
         self.addCleanup(guard.close)
-        self.assert_flagged(guard, "0.06 CPU-s/s")
+        self.assert_flagged(guard, "0.0553846 CPU-s/s")
         self.assertEqual(guard.receipts[-1]["cpu_interval"]["elapsed_s"], 30)
+        flag, = guard.contention_flags
+        self.assertEqual(flag["interval"]["end_monotonic_s"], 32.5)
+        self.assertAlmostEqual(flag["busy"][0]["cpu_s_per_s"], 1.8 / 32.5)
 
     def test_host_aggregate_is_flagged_but_never_judged(self):
         hosts = iter([[[0, 0, 0, 0]], [[150, 0, 1350, 0]], [[300, 0, 2700, 0]]])

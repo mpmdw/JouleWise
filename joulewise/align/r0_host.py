@@ -133,6 +133,20 @@ class _ArgumentsRead:
     contenders: frozenset[int]
 
 
+@dataclass(frozen=True, kw_only=True)
+class _AccountingRead(contention.Snapshot):
+    admitted_start_ns: int
+    admitted_finish: Stamp
+
+    @property
+    def admitted_midpoint_ns(self):
+        return (self.admitted_start_ns + self.admitted_finish.monotonic_ns) // 2
+
+    def admitted_endpoint(self):
+        start = Stamp(self.started.wall_ns, self.admitted_start_ns, self.admitted_start_ns)
+        return replace(self, started=start, finished=self.admitted_finish)
+
+
 def _read_finished_ns(read):
     return read.finished_ns if isinstance(read, _ArgumentsRead) else read.finished.monotonic_ns
 
@@ -182,7 +196,11 @@ def _overlap_cpu_evidence(opening, current, reads):
         reliable_start = (abs(wall_offset - opening_offset) <= 1_000_000_000
                           and birth_floor <= first.finished.monotonic_ns)
         start_bound = max(window_start, birth_floor) if reliable_start else window_start
-        overlap_ns = min(last_possible, current.finished.monotonic_ns) - start_bound
+        resident = first is opening and identity in current.rows
+        if resident:
+            overlap_ns = current.admitted_midpoint_ns - opening.admitted_midpoint_ns
+        else:
+            overlap_ns = min(last_possible, current.finished.monotonic_ns) - start_bound
         if overlap_ns <= 0:
             continue
         # On a backwards wall step the printed start can be older than the
@@ -204,7 +222,11 @@ def _overlap_cpu_evidence(opening, current, reads):
         if rate > contention.REPORT_FLOOR_CPU_S_PER_S:
             contenders.append({"pid": pid, "lstart": start, "name": last_row["command"],
                                "matched_on": sorted(matches), "cpu_s": growth_cs / 100, "cpu_s_per_s": rate})
-        if growth_cs * 1_000_000_000 * _CPU_LIMIT_DEN > _CPU_LIMIT_NUM * overlap_ns:
+        # The endpoint decision owns the ordinary resident comparison,
+        # including ties. A larger interior peak can prove growth after a reset.
+        endpoint_growth = (resident and peak == current.rows[identity]["cumulative_cpu_seconds"]
+                           and (first_row["contaminant"] or current.rows[identity]["contaminant"]))
+        if not endpoint_growth and growth_cs * 1_000_000_000 * _CPU_LIMIT_DEN > _CPU_LIMIT_NUM * overlap_ns:
             evidence.append({"pid": pid, "command": last_row["command"], "start": start,
                              "cpu_s_per_s": rate, "basis": basis})
     evidence.sort(key=lambda row: (-row["cpu_s_per_s"], row["pid"], row["start"]))
@@ -218,9 +240,10 @@ class QuietGuard:
     Additional argv matching covers hand-run measurement chains. Custody parents
     include shared defaults and configured extras; missing roots fail closed.
     A refusal is latched even if an endpoint catches the raised exception.
-    CPU windows span at least prewindow.INTERVAL_S. Each contaminant's rate
-    uses its observed TIME growth over the overlap of its lifetime and that
-    window. The first admission waits for the baseline, with a mid-baseline
+    CPU windows span at least prewindow.INTERVAL_S. The admitted endpoint
+    comparison uses paired-read midpoints. Interior readings also bound CPU
+    across a transient worker's observed lifetime. The first admission waits
+    for the baseline, with a mid-baseline
     snapshot so the daemon can close its first window after one more cadence.
 
     After that admission a daemon thread repeats the census and takes a CPU
@@ -263,6 +286,7 @@ class QuietGuard:
         self._cpu_probe_lock = threading.Lock()
         self._snapshots = []
         self._admission_snapshots = []
+        self._admission_previous_over = {}
         self._process_observations = []
         self._process_history = {}  # pid -> (start identity, highest CPU, contaminant matches)
         # Index into _snapshots of the snapshot that closed the last judged
@@ -305,8 +329,8 @@ class QuietGuard:
             result = self.run(contention.PS_ARGV, capture_output=True, text=True,
                               timeout=contention.PROBE_TIMEOUT_S,
                               env={**os.environ, "LC_ALL": "C"})
-            # Only the accounting read establishes the closing time. A later
-            # args read can tighten a lifetime bound if it confirms absence.
+            # Keep the accounting bracket for lifetime evidence and record
+            # the full paired read below for the admitted midpoint.
             finished = self._now()
             finished_wall = self.wall_clock_ns()
         except Exception as exc:
@@ -329,15 +353,19 @@ class QuietGuard:
             raise Refused(f"census indeterminate: process args table: {exc}") from exc
         if table.returncode:
             raise Refused("census indeterminate: process args table unavailable")
-        args = self._process_table(table.stdout, {}, finished_ns=round(self._now() * 1e9))
+        admitted_finished = self._now()
+        admitted_wall = self.wall_clock_ns() if admitted_finished != finished else finished_wall
+        admitted_ns = int(admitted_finished * 1e9)
+        args = self._process_table(table.stdout, {}, finished_ns=round(admitted_finished * 1e9))
         for row in rows.values():
             if row["pid"] in args.contenders:
                 row["contaminant_matches"].append("args")
             row["contaminant"] = bool(row["contaminant_matches"])
-        return contention.Snapshot(
+        return _AccountingRead(
             Stamp(wall, round(started * 1e9), round(started * 1e9)),
             Stamp(finished_wall, round(finished * 1e9), round(finished * 1e9)), rows, None,
-            host=host, host_error=host_error), args
+            host=host, host_error=host_error, admitted_start_ns=int(started * 1e9),
+            admitted_finish=Stamp(admitted_wall, admitted_ns, admitted_ns)), args
 
     def _cpu_snapshot(self, *, census_summary=None, admission=False):
         with self._cpu_probe_lock:
@@ -581,6 +609,14 @@ class QuietGuard:
             self.contention_flags.append({"monotonic_s": receipt.get("monotonic_s", interval["end_monotonic_s"]),
                                           "flag": flag, "interval": interval, "busy": fresh})
 
+    def _record_interval_flags(self, receipt, details, endpoint, endpoint_busy, lifetime_busy):
+        if (endpoint["start_monotonic_s"], endpoint["end_monotonic_s"]) == (
+                details["start_monotonic_s"], details["end_monotonic_s"]):
+            self._record_cpu_flags(receipt, details, endpoint_busy + lifetime_busy)
+        else:
+            self._record_cpu_flags(receipt, endpoint, endpoint_busy)
+            self._record_cpu_flags(receipt, details, lifetime_busy)
+
     def _admission_interval(self, receipt, current=None):
         if current is None:
             current = self._cpu_snapshot(admission=True)
@@ -589,17 +625,18 @@ class QuietGuard:
         samples = self._admission_snapshots
         dwell_ns = prewindow.INTERVAL_S * 1_000_000_000
         start = next((i for i in range(len(samples) - 1, -1, -1)
-                      if current.midpoint_ns - samples[i].midpoint_ns >= dwell_ns), None)
+                      if current.admitted_midpoint_ns - samples[i].admitted_midpoint_ns >= dwell_ns), None)
         if start is not None:
             details = {"regressed_counters": [], "regressed_noncontaminant": []}
             opening = samples[start]
             with self._snapshot_lock:
                 reads = _window_reads(self._process_observations, opening, current)
-            busy = self._judge_cpu_interval(opening, current, details, reads=reads)
-            self._record_cpu_flags(receipt, details, busy)
+            endpoint, endpoint_busy, lifetime_busy = self._judge_cpu_interval(
+                opening, current, details, reads=reads, previous_over=self._admission_previous_over)
+            self._record_interval_flags(receipt, details, endpoint, endpoint_busy, lifetime_busy)
             receipt.setdefault("admission_cpu_intervals", []).append(details)
             del samples[:start]
-        if not samples or samples[-1].midpoint_ns != current.midpoint_ns:
+        if not samples or samples[-1].admitted_midpoint_ns != current.admitted_midpoint_ns:
             samples.append(current)
         else:
             samples[-1] = current
@@ -636,18 +673,18 @@ class QuietGuard:
                     continue  # only the admission's mid-baseline snapshot
                 interval_details = {"regressed_counters": [], "regressed_noncontaminant": []}
                 reads = _window_reads(observations, snapshots[start], snapshots[end])
-                interval_busy = self._judge_cpu_interval(
+                endpoint, endpoint_busy, lifetime_busy = self._judge_cpu_interval(
                     snapshots[start], snapshots[end], interval_details, reads=reads)
                 receipt["cpu_intervals"].append(interval_details)
                 details = interval_details
                 self._judged_end, opening = end, start
-                busy.extend(interval_busy)
+                busy.extend(endpoint_busy + lifetime_busy)
                 if interval_details["long_interval"]:
                     receipt["long_interval"] = True
                     raise Refused(
                         f"census indeterminate: judged CPU window of {interval_details['elapsed_s']:.1f} s "
                         f"exceeds {self.MAX_WINDOW_S:g} s (background snapshots stalled)")
-                self._record_cpu_flags(receipt, interval_details, interval_busy)
+                self._record_interval_flags(receipt, interval_details, endpoint, endpoint_busy, lifetime_busy)
         finally:
             for row in pending["regressed_counters"]:
                 for key in ("regressed_counters", "regressed_noncontaminant"):
@@ -675,24 +712,26 @@ class QuietGuard:
             self._require_fresh_background(receipt["monotonic_s"], snapshots[-1] if snapshots else None)
         return busy
 
-    def _judge_cpu_interval(self, opening, current, details, *, reads):
+    def _judge_cpu_interval(self, opening, current, details, *, reads, previous_over=None):
         limit = prewindow.CPU_LIMIT_PERCENT / 100
 
-        def measure(before, after):
+        def measure(before, after, prior=None):
             return contention.interval(before, after, tree_roots=(), include_kernel_task=True,
-                                       limit=limit)
+                                       limit=limit, previous_over=prior)
 
-        raw = measure(opening, current)
+        before, after = opening.admitted_endpoint(), current.admitted_endpoint()
+        raw = measure(before, after, previous_over)
         # Endpoint counters provide the existing regression and host aggregate
-        # diagnostics. Only the observed overlap decides contention flags.
-        peak_opening, peak_current = _with_peak_counters(opening), _with_peak_counters(current)
-        measured = raw if peak_opening is opening and peak_current is current else measure(peak_opening, peak_current)
+        # diagnostics. The admitted verdict uses the raw endpoint counters.
+        peak_opening, peak_current = _with_peak_counters(before), _with_peak_counters(after)
+        measured = raw if peak_opening is before and peak_current is after else measure(peak_opening, peak_current)
+        sampled_elapsed = (current.midpoint_ns - opening.midpoint_ns) / 1e9
         details.update({
             "start_monotonic_s": opening.midpoint_ns / 1e9,
             "end_monotonic_s": current.midpoint_ns / 1e9,
-            "elapsed_s": measured["elapsed_s"], "contaminants": [],
+            "elapsed_s": sampled_elapsed, "contaminants": [],
             "unaccounted": raw["unaccounted"],
-            "long_interval": measured["elapsed_s"] > self.MAX_WINDOW_S})
+            "long_interval": sampled_elapsed > self.MAX_WINDOW_S})
         # Journaled like CpuQuietProbe's aggregate: flagged, never judged.
         aggregate = measured["outside_aggregate_cpu_s_per_s"]
         details["outside_aggregate_cpu_s_per_s"] = aggregate
@@ -717,9 +756,25 @@ class QuietGuard:
         # An unproven regression alone is disclosure.
         if measured["error"] and measured["error"] != contention.REGRESSED_COUNTER_ERROR:
             raise Refused(f"census indeterminate: {measured['error']}")
+        endpoint = {"start_monotonic_s": before.midpoint_ns / 1e9, "end_monotonic_s": after.midpoint_ns / 1e9,
+                    "elapsed_s": raw["elapsed_s"]}
+        details["endpoint_interval"] = endpoint
+        endpoint_evidence = raw if previous_over is not None else measured
+        endpoint_busy = {(row["pid"], row["start"]): row for row in endpoint_evidence["outside_over_limit"] if contaminant(row)}
+        if previous_over is not None:
+            previous_over.clear()
+            previous_over.update((key, rate) for key, rate in contention.over_limit(raw).items() if key in matches)
         evidence, details["contaminants"] = _overlap_cpu_evidence(opening, current, reads)
-        details["exited_over_limit"] = [row for row in evidence if (row["pid"], row["start"]) not in current.rows]
-        return evidence
+        same_window = before.midpoint_ns == opening.midpoint_ns and after.midpoint_ns == current.midpoint_ns
+        lifetime_busy = []
+        for row in evidence:
+            key = row["pid"], row["start"]
+            if key in opening.rows and key in current.rows:
+                endpoint_busy.setdefault(key, row)
+            elif key not in endpoint_busy or not same_window:
+                lifetime_busy.append(row)
+        details["exited_over_limit"] = [row for row in lifetime_busy if (row["pid"], row["start"]) not in current.rows]
+        return endpoint, list(endpoint_busy.values()), lifetime_busy
 
     def _record_refusal(self, receipt, error):
         if not any(item is receipt for item in self.receipts):

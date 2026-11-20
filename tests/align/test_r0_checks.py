@@ -332,8 +332,13 @@ class R0ChecksTest(unittest.TestCase):
             self.assertFalse(refused_output.exists())
 
     def test_inventory_withholds_output_on_a_guard_flag(self):
+        admissions = []
+
         class Flagged(FakeGuard):
             contention_flags = [{"flag": "synthetic CPU contention"}]
+
+            def verify_publication(self):
+                admissions.append("terminal")
 
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
@@ -347,6 +352,7 @@ class R0ChecksTest(unittest.TestCase):
                         guard_factory=Flagged, lock_path=root / "r0.lock")
             self.assertEqual(code, 2)
             self.assertFalse(output.exists())
+            self.assertEqual(admissions, ["terminal"])
 
     def test_coherence_format_and_echo_are_diagnostics_but_nll_is_a_bar(self):
         from dataclasses import replace
@@ -488,6 +494,9 @@ class R0ChecksTest(unittest.TestCase):
                 super().check(force=force)
                 if self.armed:
                     self.contention_flags.append({"flag": "contaminating CPU contention: 61967 frauddefensed"})
+
+            def verify_publication(self):
+                self.contention_flags.append({"flag": "synthetic terminal admission contention"})
         guard = Contended()
         guard.contention_flags = []
         def template(backend):
@@ -504,18 +513,18 @@ class R0ChecksTest(unittest.TestCase):
             self.assertEqual(report["status"], "refused")
             self.assertIn("R0-L3 contention flagged", report["refusal"])
             template_row = next(r for r in report["checks"] if r["check"] == "template")
-            self.assertEqual(len(guard.contention_flags), 1)  # the census after the armed unit
+            self.assertEqual(len(guard.contention_flags), 2)  # the post-unit and terminal admissions
             self.assertEqual(template_row["contention_flags"], guard.contention_flags)
             self.assertEqual(report["contention"]["smc_contended"], True)
             self.assertEqual(report["contention"]["smc_redo"], 1)
             self.assertEqual(report["contention"]["smc_flagged_intervals"], 2)
             self.assertEqual(report["contention"]["flagged_checks"],
-                             [{"check": "template", "model": "D", "flags": 1}])
+                             [{"check": "template", "model": "D", "flags": 2}])
             self.assertEqual(json.loads((root / "report.json").read_text())["contention"], report["contention"])
             markdown = (root / "report.md").read_text()
             self.assertIn("## Contention (R0-L3 guard flags block publication)", markdown)
             self.assertIn("SMC capture contended: **True**", markdown)
-            self.assertIn("- template (D): 1 guard flag(s)", markdown)
+            self.assertIn("- template (D): 2 guard flag(s)", markdown)
 
     def test_r0l3_display_wake_during_smc_is_a_flag_never_a_refusal(self):
         import time as clock
