@@ -1376,13 +1376,14 @@ class Signals:
         # trailer counters describe the span. Each print judges its own stamps.
         self.meter_clean = (
             support["meter_present"] is True and support["meter_clean"] is True
-            and integer(counts["decoded"], 2) and counts["decoded"] == len(self.meter_ns)
+            and integer(counts["decoded"]) and counts["decoded"] == len(self.meter_ns)
             and integer(counts["bad"]) and integer(counts["usb_errors"])
         )
-        self.bounds = [tuple(map(_time_ns, row)) for row in support["rail_intervals"]]
-        require(all(len(row) == 2 and row[0] < row[1]
-                    for row in self.bounds)
-                and all(first[1] <= second[0] for first, second in zip(self.bounds, self.bounds[1:])),
+        # The support ledger is the ordered union of component intervals. It
+        # can contain overlapping bounds from different rails.
+        bounds = [tuple(map(_time_ns, row)) for row in support["rail_intervals"]]
+        require(all(len(row) == 2 and row[0] < row[1] for row in bounds)
+                and all(first < second for first, second in zip(bounds, bounds[1:])),
                 "invalid support interval ledger")
         missing_rails = {rail: [tuple(map(_time_ns, gap)) for gap in gaps]
                          for rail, gaps in support.get("rail_missing", {}).items()}
@@ -1390,7 +1391,7 @@ class Signals:
             require(rail in RAILS and all(len(row) == 2 and row[0] < row[1] for row in gaps),
                     "invalid missing-rail support")
         self._declared_rails = self._rail_support({
-            channel: [(a, b) for a, b in self.bounds
+            channel: [(a, b) for a, b in bounds
                       if not any(a < end and b > start for start, end in missing_rails.get(rail, ()))]
             for channel, rail in RAIL_CHANNELS.items()
         })
@@ -1473,10 +1474,13 @@ class Signals:
                     continue
                 require(key not in stamps, "repeated rail in the same interval")
                 stamps[key] = stamp
-        self._observed_rails = self._rail_support({
+        individual = {
             name: [bounds for bounds in self._declared_rails[name].bounds if (bounds, rail) in stamps]
             for name, rail in RAIL_CHANNELS.items()
-        })
+        }
+        require(all(first[1] <= second[0] for series in individual.values()
+                    for first, second in zip(series, series[1:])), "overlapping intervals for one rail")
+        self._observed_rails = self._rail_support(individual)
         # Ancillary rows can preserve the capture end even when their
         # partition differs from the registered sample grid.
         self._rail_end = capture_end
@@ -1484,10 +1488,10 @@ class Signals:
 
     def recovery_start(self):
         self._index_rails()
+        # Stamps define the common grid even when a channel's values refuse.
         observed = [self._observed_rails[channel].starts[0] for channel in CHANNELS[:2]
-                    if (channel != "rail_sum" or self.sum_admitted)
-                    and self._observed_rails[channel].starts]
-        if self.meter_clean:
+                    if self._observed_rails[channel].starts]
+        if self.meta["meter_present"] is True and self.meter_ns:
             observed.append(self.meter_ns[0])
         return max(observed, default=None)
 

@@ -11,6 +11,47 @@ from tests import test_desc_looks_acceptance as fixture
 
 
 class RegisteredRecoveryGridTests(unittest.TestCase):
+    def test_dc_cleanliness_cannot_move_the_common_recovery_anchor(self):
+        with TemporaryDirectory() as directory:
+            folder = Path(directory)
+            fixture.traces(folder, 1, 0)
+            support = fixture.read(folder / "support.json")
+            paths = {name: folder / name for name in (fixture.RAIL_FILE, fixture.DC_FILE)}
+            with paths[fixture.DC_FILE].open(newline="") as stream:
+                header, *rows = csv.reader(stream)
+            fixture.put(paths[fixture.DC_FILE], fixture.csvbytes([
+                header, *(row for row in rows if Fraction(row[0]) >= -10),
+            ]))
+            support["meter_times"] = [time for time in support["meter_times"] if time >= -10]
+            support["meter_counts"]["decoded"] = len(support["meter_times"])
+            for clean in (True, False):
+                with self.subTest(clean=clean):
+                    signal = reader.Signals(dict(support, meter_clean=clean), paths,
+                                            lambda: None, fixture.fixture_step3())
+                    self.assertEqual(signal.recovery_start(), -10 * reader.NS_PER_SECOND)
+                    edges = fixture.print_one(signal, fixture.IDS[0])["edges"]
+                    self.assertEqual(edges["unobserved_s"], 19)
+                    for channel in ("gpu_rail", "rail_sum"):
+                        self.assertEqual(edges["recovery_s"][channel], fixture.null("under", bound_s=19))
+                    if not clean:
+                        self.assertEqual(edges["recovery_s"]["dc_in"], fixture.null("hold_or_sd_undefined"))
+
+    def test_rail_manifest_refusal_cannot_move_the_common_recovery_anchor(self):
+        with TemporaryDirectory() as directory:
+            folder = Path(directory)
+            fixture.traces(folder, 1, 0)
+            support = fixture.read(folder / "support.json")
+            paths = {name: folder / name for name in (fixture.RAIL_FILE, fixture.DC_FILE)}
+            with paths[fixture.RAIL_FILE].open(newline="") as stream:
+                header, *rows = csv.reader(stream)
+            fixture.put(paths[fixture.RAIL_FILE], fixture.csvbytes([
+                header, *(row for row in rows if row[4] == "gpu_power" or Fraction(row[0]) >= -10),
+            ]))
+            for manifest in (fixture.COLS, fixture.COLS[::-1]):
+                signal = reader.Signals(dict(support, rail_manifest=manifest), paths,
+                                        lambda: None, fixture.fixture_step3())
+                self.assertEqual(signal.recovery_start(), -10 * reader.NS_PER_SECOND)
+
     def _replay(self, marker):
         with TemporaryDirectory() as directory:
             world = fixture.World(Path(directory).resolve() / "world", fixture.IDS[0])

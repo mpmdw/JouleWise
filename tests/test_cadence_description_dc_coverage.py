@@ -34,6 +34,25 @@ def _select_meter_points(directory, keep, *, poison=None):
 
 
 class DCCoverageTests(unittest.TestCase):
+    def test_sparse_clean_stream_reports_interval_coverage_before_value_access(self):
+        with TemporaryDirectory() as temporary:
+            directory = Path(temporary)
+            paths = {fixture.DC_FILE: directory / fixture.DC_FILE}
+            for count in (0, 1, 2):
+                with self.subTest(decoded=count):
+                    fixture.traces(directory, 1, 0)
+                    support = _select_meter_points(directory, lambda t: 0 <= t < count, poison=0)
+                    self.assertEqual(support["meter_counts"]["decoded"], count)
+                    self.assertTrue(support["meter_present"] and support["meter_clean"])
+                    for clean in (True, False):
+                        with self.subTest(clean=clean):
+                            support["meter_clean"] = clean
+                            opens = []
+                            signal = reader.Signals(support, paths, lambda: opens.append(True), None)
+                            reason = "coverage" if clean else "meter_contaminated"
+                            self.assertEqual(signal.average("dc_in", 0, 100), fixture.null(reason))
+                            self.assertEqual(opens, [])
+
     def test_span_trailer_fault_counts_do_not_contaminate_clean_dc_intervals(self):
         for look in fixture.IDS[:2]:
             with self.subTest(look=look), TemporaryDirectory() as temporary:

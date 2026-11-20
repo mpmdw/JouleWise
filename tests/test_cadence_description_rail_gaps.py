@@ -1,9 +1,12 @@
 """Exercise the description rail U1 limit on invented native-format rows."""
 
 import csv
+from decimal import Decimal
+import os
 from pathlib import Path
 from tempfile import TemporaryDirectory
 import unittest
+from unittest.mock import patch
 
 from joulewise.cadence_looks import description as reader
 from tests import test_desc_looks_acceptance as fixture
@@ -35,7 +38,78 @@ def _omit_ane(directory, start, stop, *, announced, poison=False):
     return support, omitted
 
 
+def _with_rail_intervals(directory, rows):
+    fixture.put(directory / fixture.RAIL_FILE, fixture.csvbytes([
+        fixture.RAIL_HEADER, *(tuple(row[field] for field in fixture.RAIL_HEADER) for row in rows),
+    ]))
+    support_path = directory / "support.json"
+    support = fixture.read(support_path)
+    bounds = sorted({(Decimal(row["interval_start_s"]), Decimal(row["interval_end_s"]))
+                     for row in rows if row["source"] == "powermetrics"})
+    support["rail_intervals"] = [[float(left), float(right)] for left, right in bounds]
+    fixture.put(support_path, support)
+    return support
+
+
 class RailGapPeriodTests(unittest.TestCase):
+    def test_rail_sum_joins_exact_intervals_at_the_coverage_boundary(self):
+        with TemporaryDirectory() as temporary:
+            folder = Path(temporary)
+            fixture.traces(folder, 1, 0)
+            paths = {fixture.RAIL_FILE: folder / fixture.RAIL_FILE}
+            pinned = fixture.fixture_step3()
+            for changed in (0, 1, 2):
+                with self.subTest(changed=changed):
+                    rows = []
+                    for i in range(100):
+                        for rail, watts in zip(fixture.COLS, (1, 2, 3)):
+                            end = Decimal(i + 1)
+                            if rail == "ane_power" and 50 <= i < 50 + changed:
+                                end -= Decimal("0.000000001")
+                            rows.append(dict(zip(fixture.RAIL_HEADER,
+                                                 (i, end, end, "powermetrics", rail, watts))))
+                    support = _with_rail_intervals(folder, rows)
+                    signal = reader.Signals(support, paths, lambda: None, pinned)
+                    self.assertEqual(signal.average("gpu_rail", 0, 100), 2)
+                    self.assertEqual(signal.average("rail_sum", 0, 100),
+                                     (6, 5.94, fixture.null("coverage"))[changed])
+
+            # A single rail may not contribute overlapping intervals.
+            rows.append(dict(zip(fixture.RAIL_HEADER,
+                                 (50, "51", "51", "powermetrics", "ane_power", "DO_NOT_PARSE"))))
+            support = _with_rail_intervals(folder, rows)
+            signal = reader.Signals(support, paths, lambda: None, pinned)
+            with self.assertRaisesRegex(reader.Refusal, "overlapping intervals for one rail"):
+                signal.average("rail_sum", 0, 100)
+
+    def test_authenticated_scorers_keep_gpu_when_rail_intervals_do_not_join(self):
+        with patch.object(reader.socket, "gethostname", return_value=fixture.FIXTURE_BOARD), \
+                patch.dict(os.environ, R190_NODENAME=fixture.FIXTURE_BOARD):
+            for look in fixture.IDS[:2]:
+                with self.subTest(look=look), TemporaryDirectory() as temporary:
+                    world = DescriptionWorld(Path(temporary).resolve() / "world", look)
+                    key = sorted(world.good)[0]
+                    folder = world.copy / key
+                    with (folder / fixture.RAIL_FILE).open(newline="") as stream:
+                        rows = list(csv.DictReader(stream))
+                    changes = {50, 120, 190, 260, 330, 400, 470}
+                    for row in rows:
+                        if ((row["source"], row["rail"]) == ("powermetrics", "ane_power")
+                                and Decimal(row["interval_start_s"]) in changes):
+                            end = Decimal(row["interval_end_s"]) - Decimal("0.000000001")
+                            row["interval_end_s"] = row["timestamp_s"] = str(end)
+                    _with_rail_intervals(folder, rows)
+                    fixture.copy_attestation(world)
+                    world.commit_stage1(self)
+                    snapshot = reader.Snapshot(world.repo, look, "stage2")
+                    census, qualified = reader.census(snapshot)
+                    snapshot.check_stage1(census)
+                    self.assertEqual(snapshot.public_record(census), world.public_truth())
+                    sources = reader.verify_gates(snapshot, qualified)
+                    hold = reader.score(snapshot, sources, qualified, lambda: None)["hold"][key]
+                    self.assertEqual(hold["gpu_rail"]["mean_w"], 12 * world.good[key][0])
+                    self.assertEqual(hold["rail_sum"]["mean_w"], fixture.null("coverage"))
+
     def test_four_second_ane_decode_gap_nulls_turn_and_plateau(self):
         # The round-two witness has sixteen missing 250 ms ANE rows.
         for look in fixture.IDS:
