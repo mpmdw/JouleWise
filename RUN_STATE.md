@@ -1052,6 +1052,21 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 
 <!-- RUN_STATE TYPED ITEMS: newest first. Add with scripts/run_state_add.py; never edit by hand. -->
 
+480. **Instrument legs avoid the OS batch window 02:00-02:35 (L007 lost to the 02:00 maintenance burst); amends 463 for f2-inst-* only**
+
+```item
+{"expires_epoch_s": null, "issued_epoch_s": 1795172721, "number": 480, "owner": "magistrate", "schema": "joulewise.run_state_item.v1", "sets": [], "status": "ISSUED", "supersedes": []}
+```
+
+- **Why:** item 479's f2-inst-03 L007 (01:46:43-02:07:01) was NOT admitted for cpu_load. Its span crossed 02:00, where the maintenance log shows the OS's nightly burst (dasd 5,528, cloudd 4,043, mobileassetd 2,227 lines in the 02:00 bucket). Item 463's pin-A rule passes `13:14-13:15` for t0 between 00:00 and 02:34:59, which lets a span's work run straight through the OS batch window 02:00-02:35. Instrument legs are unique positions with redo_quota 0, so a loaded leg is a lost cell (RL-190 4(b)).
+- **New rule (lead, under RL-180 §2(b); amends item 463 for finite instrument kits only):** an f2-inst-* span is issued only if its planned worst-case work interval [t0, t0 + worst) does NOT intersect 02:00:00-02:35:00 local. When it would, take the next eligible rung that is not an instrument kit:
+  - the date's rank-1 stability leg (kits 01-14, item 464) if still unrun;
+  - otherwise an f2-stab-15/16 leg on pin B (`6e9d42f1d`, no window);
+  - otherwise wait for 02:35:00.
+  The instrument queue resumes at the first clean close after 02:35.
+- **Unchanged:** item 463 for stability legs and every other rung; items 464, 465, 471 and 472; L007 stays recorded as not admitted, with no redo (RL-169a §4; RL-190 4(b)).
+- No qualification items and no W1-line merges yet (item 471 stands).
+
 479. **Magistrate 021bd39d (headless, Opus 5.5), 2026-11-20 02:58-03:05 PST (`date`): f2-inst-03-l007-l008 CHECK: RECEIPT OK (2/2 legs, MEASURED_OK, restored), L008 admitted, L007 NOT admitted (cpu_load, recorded not a stop), copied at once; f2-inst-03-l009-l010 ISSUED at rank 2 under 02:00-02:35 (items 463, 472), launches as the last act**
 
 ```pointer
