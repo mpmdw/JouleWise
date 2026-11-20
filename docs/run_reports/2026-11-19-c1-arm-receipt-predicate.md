@@ -1,7 +1,8 @@
 # Row 11 · C1 arm receipt predicate
 
 Tier 2. Draft stacked on PR #836. Item 471 keeps W1 at the issued R1
-pin. All execution evidence below is synthetic.
+pin. All execution evidence below is synthetic. The final section records
+the lead's answers and the revised implementation.
 
 ## Public pins
 
@@ -186,7 +187,7 @@ Those hashes come from `git show <pin>:scripts/align_v4_kit.py | shasum -a 256`.
 The focused fixture doubles the materializer and exercises the subsequent
 generated-byte comparison against invented matching bytes.
 
-## NEEDS_SPEC and acceptance
+## Decision requests before the lead's answers
 
 **Row 11, ordinary kit generated-byte check at
 `scripts/align_v4_kit.py:1652,1699,1768–1781`.** The smallest witness
@@ -224,9 +225,111 @@ refusal. No predecessor evidence or signing relationship was altered.
 | Independent executing cross-family round 1 | Pending | The dispatcher or lead records the reviewer disposition on the exact candidate. |
 | Integration owner and lead | Pending | The integration owner accepts the composed candidate. The lead rules on the timing conflict and retains W1 promotion and landing authority under item 471. |
 
-Remain draft pending both rulings, executing review, both owner
-dispositions and green canonical sharded CI on the accepted integration
-head. The stacked draft's CI belongs to its own SHA, which still has the
-base-level scorer and row-builder absences. The local fixture orphan
+At this stage the draft required both rulings, executing review, both
+owner dispositions and green canonical sharded CI on the accepted
+integration head. The stacked draft's CI belongs to its own SHA, which
+still has the base-level scorer and row-builder absences. The local fixture orphan
 census command `python3.13 -B scripts/fixture_orphan_census.py --fail-on-orphans`
 exited 2 because `ps` was denied. The census count is unknown.
+
+## Lead-ruling follow-up
+
+The lead resolved both decision requests. The generator is byte-identical
+to the base, blob `010644f1b9638d962adb68efdd327a33d5be56fd`.
+The unchanged ordinary kit calls the shared registration verifier.
+Verified post-W1 selections scope that call to the expanded inventory.
+An ordinary W1 call accepts both exact forms. Explicit verifier calls
+retain their strict W1-only or expanded inventory selection. The
+signed registration tree, generated artifacts and issued W1 pin remain
+at their original Git IDs.
+
+| Role | Commit or tree |
+|---|---|
+| New acceptance freeze | `9a56addebed5662ede27776ce20b6855c69512ba` |
+| Arm and release binding implementation | `a1e64c745491a251ef2a409ab4a32dd7100ffae6` |
+| Code and test projection of the three dependency pins | `ed71ebb45b44aa74e0af4191fd4e83ef625c64d8` (tree) |
+| Keep the minimal proof outside the full arm-record glob | `5d01794220726092064401af9eec231dfc5e7080` |
+
+For the single-receipt route, C1 binds the canonical receipt at the
+authenticated W1 predecessor. For re-signing, the signing owner supplies
+`registration/series_registration_receipt.json` and the full commit
+via `prepare --series-receipt-commit`. The separate filename preserves
+the W1 receipt at its existing path. Prepare and install check the file
+against the selected commit and the existing expanded verifier. The
+arm checks the pair on the pushed W1 line before dwell and records the
+receipt commit, receipt SHA-256, arm checkout commit, and exact W1
+predecessor. The binding checks the original W1 receipt bytes at the
+new receipt commit and the arm commit.
+
+The admitted local arm writes `staging/c1-registration-NNN.json`
+as the minimal evidence for the committed C1 window record. The
+record publisher binds that file in `sources.arm` using its
+repository-relative path and SHA-256. This evidence carries Git and
+digest identities. The full local arm record stays with its existing
+operational evidence. Release authenticates the committed arm
+source, compares the exact W1 predecessor and verifies that the
+receipt commit was already reachable at arm. It verifies both the
+committed and working receipt bytes before opening release members.
+The release and its synthetic tests were extended under the lead's
+follow-up. The signing and record owners supply any actual inputs.
+
+The pre-implementation arm test exited 1 with a missing binding for
+the combined route and an incomplete inventory for the re-signed
+route. The three new release tests on the dependency projection
+exited 1 with four failing outcomes. The diagnostic assertion now
+checks the exact reason at the real history verifier and separately
+checks the CLI's exit 1 and absent report. The CLI retains its
+generic public refusal. The arm fixture also uses the authenticated
+packet's nested pushed-tip field. The original acceptance outcomes
+remain intact.
+
+On the stacked branch the full focused command passed all 11 tests at
+`a1e64c745`. At `5d017942`, the targeted
+`test_c1_arm_record_binds_receipt_at_selected_commit` passed both
+histories, the exact proof contents and the existing arm-record glob.
+
+```sh
+PYTHONPATH=tests:. python3.13 -B -m unittest align.test_v4_registration.C1ArmReceiptTests
+PYTHONPATH=tests:. python3.13 -B -m unittest \
+  align.test_v4_registration.C1ArmReceiptTests.test_c1_arm_record_binds_receipt_at_selected_commit
+```
+
+The following commands ran in the dependency projection at
+`ed71ebb4`. The dependencies, frozen U3 design manifest and mock
+example were populated as in the earlier projection.
+
+```sh
+PYTHONPATH=tests:. python3.13 -B -m unittest align.test_v4_registration.C1ArmReceiptTests \
+  align.test_rl176 align.test_s_rows align.test_v4_next_arm_packet.UnpackReceiptTests \
+  align.test_v4_receipt_tiers
+
+PYTHONPATH=tests:. python3.13 -B -m unittest \
+  align.test_align_v4_series_release.SeriesReleaseTests.test_c1_arm_bound_receipt_after_w1_releases \
+  align.test_align_v4_series_release.SeriesReleaseTests.test_c1_arm_bound_receipt_rejects_w1_record_change_and_wrong_sha \
+  align.test_align_v4_series_release.SeriesReleaseTests.test_c1_arm_bound_resigned_receipt_rejects_later_replacement \
+  align.test_align_v4_series_release.SeriesReleaseTests.test_receipt_from_after_t3_cannot_replace_the_c1_predecessors_receipt \
+  align.test_align_v4_series_release.SeriesReleaseTests.test_stored_series_through_787_and_release_script_s_signature_at_102_not_101_of_154 \
+  align.test_align_v4_series_release.SeriesReleaseTests.test_each_executing_release_binding_is_required_before_loading_members \
+  align.test_align_v4_series_release.SeriesReleaseTests.test_receipt_covers_static_release_import_closure
+```
+
+The dependency command exited 0 with 117 tests and four opt-in
+skips. The release command exited 0 with all seven tests passing.
+The re-signed history reaches the release report. Changed W1
+record bytes, a wrong arm-bound SHA-256 and the late replacement
+refuse before release data loading and leave no report. The
+combined route still gives the 102/101 result and retains the
+existing post-T3 substitution refusal.
+
+Author review of the lead-ruling candidate recorded 0 HIGH,
+2 MED and 0 LOW. The `integration-seam` finding was that the
+initial proof filename could match existing arm-record discovery.
+`5d017942` uses a separate prefix and checks the old glob.
+The `test-gap` finding concerned the original diagnostic
+assertion against the CLI's intentionally generic error.
+`a1e64c745` observes the specific refusal at the history
+verifier and asserts the same CLI outcome. Independent executing
+review and the integration-owner and lead dispositions remain
+pending. The accepted integration head still requires green
+canonical CI. No research ruling remains open from the two
+original decision requests.
