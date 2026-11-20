@@ -239,3 +239,17 @@ The fixed resident replay saw 1.52 CPU-seconds over the admitted 30.2-second int
 | Total | 7,683 | 3,816 | 0 |
 
 All 116 focused tests and 12 publication audit tests passed. They include `test_args_ps_time_is_included_in_the_admitted_midpoint`, `test_host_probe_time_precedes_the_admitted_cpu_sample`, the guard's exit and regression cases, and both terminal-admission checks with an earlier flag. The previous candidate's shard 5 repeated `test_every_refusal_site_is_listed_with_its_exact_count`. Exact-candidate CI and the two-family delta review are tracked on draft PR #824. NEEDS_SPEC has no entries.
+
+## Audit round 1 after frozen differential v3
+
+The audit reviewed `9fd1181cdfc1c8a379de2f513d3cc33f4b61cffd`. The new caller-gap regression in `c929cfc78` reproduced a false pass with 0.5 s and 2.0 s arguments-read delays. Draft PR #694 judged the same accounting window at 0.0503333 CPU-s/s. Repair `6258f14e80f24319a74c1d446966e78789f3f17d` restores that result.
+
+| Finding | Regression | Result |
+| --- | --- | --- |
+| HIGH, arguments latency diluted a background contention flag. | `test_background_resident_rate_excludes_arguments_read_latency`, `test_args_ps_time_only_extends_the_admitted_midpoint` | PASS |
+
+The background guard uses the accounting-read midpoints for window selection, endpoint rates, and resident lower bounds. Foreground admissions use the paired-read midpoint and the admitted R0-L3 endpoint decision. Arguments rows can still identify workers and bound the lifetime of a worker that exits. Both auditor replay variants flagged the 30–60 s window, exited 2, and withheld publication. The exact-threshold control published.
+
+Frozen v3 remains byte-identical and passed 7,683 cases. The separately executed v2 archive matched SHA-256 `0752ccc152ec4c93b710337be6d9ff6e5de7f50c6997ff6db3d046391d91fcca` and passed 3,094 cases. All 116 focused tests, 13 publication audit tests, and the foreground midpoint check passed. Exact-candidate CI is tracked on draft PR #824.
+
+**NEEDS_SPEC** — The audit checklist expects the v2 hash at the repository path. The lead explicitly installed v3 at that path with hash `afd360c29d390f7d39400e1363a25add5c13ace71bca55c80d11ec0ceb4e5009`. Confirm the expected repository hash for the next audit and use the archived v2 run as separate evidence.
