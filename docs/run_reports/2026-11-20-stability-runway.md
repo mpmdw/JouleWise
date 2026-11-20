@@ -125,14 +125,20 @@ the modeled Dec 2 02:02:46 close of kit 14 L007, if every date qualifies.
 Five A and five B positions are then unstarted. The wider roster can
 still cover Dec 3–4 via B alone, so its base table stops at Dec 2. These
 counts assume each started date has a qualified leg by the read's
-stage-1 cutoff.
+stage-1 cutoff. A newly minted successor can supply wider-roster dates
+under RL-190 once its KITS row is committed in its mint PR before first
+issue. The first read's population is fixed at kits 01–14. Counting a
+successor toward the three missing nominal base dates, or the four
+missing fast-case base dates, would require a scientific ruling.
 [RS477](https://github.com/mpmdw/JouleWise/blob/c05bcfc45/RUN_STATE.md#L1214)
 · [RL-190 populations and rank](https://github.com/mpmdw/JouleWise/blob/04d8aa778/docs/research-audits/2026-11-10-fable/RESEARCH-LEAD-DECISIONS.md#L22330-L22367).
 
 - **Ordinary route.** `lm-stab-01` reads the fixed 14-kit A population at
-  its due close once its preconditions hold. `lm-stab-02` follows the lead's
-  committed `paper1_data_lock`. It uses every indexed kit and prints both
-  the full-population and 14-kit tables. The first read does not direct a
+  its due close once its preconditions hold. Both manifests are committed
+  before the first reservation. `lm-stab-02` follows the lead's committed
+  `paper1_data_lock`. It uses every indexed kit and prints both the
+  full-population and 14-kit tables. Each read takes closes at its own
+  stage-1 cutoff. The first read does not direct a
   hold. RL-181 ties the end of daily rank to the second read.
   [RL-181 §2.6](https://github.com/mpmdw/JouleWise/blob/04d8aa778/docs/research-audits/2026-11-10-fable/RESEARCH-LEAD-DECISIONS.md#L19436-L19447)
   · [RL-190 §1.3](https://github.com/mpmdw/JouleWise/blob/04d8aa778/docs/research-audits/2026-11-10-fable/RESEARCH-LEAD-DECISIONS.md#L22340-L22356).
@@ -140,7 +146,9 @@ stage-1 cutoff.
   `lm-stab-01` has run, `lm-stab-02` runs once on the full roster, even with
   fewer than 14 qualified base dates. It also prints the base tables.
   `lm-stab-01` is coalesced. Committed stage 1 records the actual counts.
-  A third read requires a ruling.
+  A population with no qualified leg prints null with `no_qualified_leg`.
+  The between-date SD is null below two dates. A third read requires a
+  ruling.
   [RL-190 §1.5](https://github.com/mpmdw/JouleWise/blob/04d8aa778/docs/research-audits/2026-11-10-fable/RESEARCH-LEAD-DECISIONS.md#L22369-L22382).
 
 ## Reproduce and verify
@@ -410,8 +418,10 @@ PY
 The focused replay checks the 16 kit hashes and queue identities, all 192
 unique positions, per-pin totals, the L004 exclusion, admissible start
 boundaries, rank transitions, and the conditional exhaustion dates. Its
-ledger reproduces byte for byte. The change consists of planning data and
-this report, so local verification used the focused replay and diff checks.
+ledger reproduces byte for byte. A separate TSV recount passed for all 192
+keys, statuses, and successor totals. The change consists of planning data
+and this report. Local verification used the focused replay, recount, and
+diff checks.
 
 **Opus owner inputs.** Choose whether continuous fallback is needed and
 which successor to prepare before the applicable gap. Confirm actual
@@ -420,3 +430,16 @@ rulings settle the two read routes and their populations. Any proposal to
 change what qualifies as a base date or what enters either population goes
 to Fable through Opus before adoption. NEEDS_SPEC for the calculation is
 empty.
+
+### Hosted verification
+
+Draft PR #916 targets `audit/2026-11-10-fable`. GitHub reported base
+`d6016f406496ac4d0c82f70811da2a5bab82ea35` and calculation head
+`42b89dc27af88612f2973a899dbdacdf0ead8d16`. Both matched the remote
+refs. The calculation head's hosted CI passed all 20 jobs. The gate-ledger
+job was skipped for the draft. This receipt is a report-only follow-up to
+that calculation head. GitHub lists its exact current head and check
+results on the PR.
+[Calculation CI run](https://github.com/mpmdw/JouleWise/actions/runs/44768109309)
+· [PR head history](https://github.com/mpmdw/JouleWise/pull/916/commits)
+· [Current hosted checks](https://github.com/mpmdw/JouleWise/pull/916/checks).
