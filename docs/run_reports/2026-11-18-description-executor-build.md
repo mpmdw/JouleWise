@@ -1096,3 +1096,51 @@ The independent probes passed. The focused, unchanged frozen
 tail, and canonical sharded runs started on the builder host.
 The draft PR will carry the hosted run for the pushed head.
 [Tail probe](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/audit2-tail_partition.log) · [Sensor probe](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/audit2-missing_sensors.log) · [Spread probe](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/audit2-near_equal_dates.log)
+
+## 2026-11-20 independent suite v2 and early-lock replay
+
+The checkout, remote branch, and draft PR #868 agreed at
+`da5db2802eddccc9f7eedaf4b1ac1110fdbc84a1` at intake. Commit
+`5b573f4a7` adopts all four published suite modules byte-for-byte.
+Collection found 16,902 cases. The design archive and independent
+edge ruling also match the v2 manifest.
+[Freeze pointer](/Volumes/JW-EXT/scratch/desc-suites-current-v2.md) · [Hash manifest](/Volumes/JW-EXT/scratch/astra-desc-suite-amend3/SUITE.sha256)
+
+| Module | SHA-256 |
+| --- | --- |
+| `test_desc_looks_acceptance.py` | `0b40e19b26c51dbaeaed9c4c084e94bbd62af779b23258fae1ba153bed22b38b` |
+| `test_desc_looks_v22.py` | `aa315fed2ba1f6847c381dda688db8e711f920de89bb120352415a7576ca981f` |
+| `test_desc_looks_rl190.py` | `9871f41909854c68eee0b387594dc1c9a16a3ff1aa36b33efdb610ed6cae5400` |
+| `test_desc_looks_rl192b.py` | `107352689ad889b0c6856b2b08025801c8a01a91c857e902248d2e44e9c905ee` |
+
+The v2 handoff's replay pin `85e7655f3` precedes the existing
+schedule fix `899ce422c` and index fix `30bd013b0`. On the
+builder head, `test_lm_stab_lock_coalesces` refuses the obsolete
+`01` route. Both v2 early-lock cases admit `02` at stage 1.
+Before the stage-1 commit, the reservation observer records zero
+attempts. After it, each cut reaches one observed attempt. The
+one-date cut has three qualified legs overall and two in
+`base14`. The thirteen-date cut has sixteen qualified legs
+overall and fifteen in `base14`. The in-memory scorer passes
+the frozen scientific assertions on both views of both cuts.
+The new builder regression covers the one-date commit boundary
+and `fewer_than_two` for the between-date SD in both views.
+[Focused replay](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/amend3-final-focused.log) · [Scientific checks](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/amend3-scientific.log)
+
+The unmodified frozen early-lock publication cases still refuse
+at the host's reservation mkdir. A plain mkdir at the same
+invented path independently returned `EPERM`. Hosted publication,
+the second-attempt refusals, and the six literal once cases need
+hosted results.
+[Reservation diagnosis](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/amend3-stage2-diagnosis.log)
+
+The frozen missing-wall-evidence control passes. The instrument
+positive carries complete wall evidence for all five receipt-backed
+members and now stops at `unproven terminal drop`. The independent
+v3 fixture still needs terminal evidence for the 31 legacy drops.
+Hardware acceptance awaits the combined base with PR #795's shared
+`host-id`. All 53 protected paths match the current predecessor
+stack. The governing-pin comparison on the combined base remains
+pending. The prior hosted run concluded with four failed shards.
+The draft PR will carry CI for the v2 head.
+[Previous hosted CI](https://github.com/mpmdw/JouleWise/actions/runs/44755879602) · [Owner PR #795](https://github.com/mpmdw/JouleWise/pull/795)

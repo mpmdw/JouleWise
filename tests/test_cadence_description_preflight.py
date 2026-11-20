@@ -417,6 +417,37 @@ class EarlyDataLockTests(unittest.TestCase):
                 if dates:
                     self.assertIn("f2-stab-15/L001", qualified)
 
+    def test_one_date_early_lock_binds_both_views_before_reservation(self):
+        look = fixture.IDS[2]
+        roster = fixture.layout(look)
+        one_day = [(kit, pos, value, 0) for kit, pos, value, _ in (*roster[:3], roster[-1])]
+        with TemporaryDirectory() as directory:
+            with patch.object(fixture, "layout", return_value=one_day):
+                world = fixture.EarlyLockWorld(Path(directory).resolve() / "world", look)
+            rc, out, err, events = fixture.invoke(world, "stage1")
+            self.assertEqual((rc, out, err), (0, b"", b""))
+            self.assertFalse(any(kind == "open" for kind, _ in events))
+            self.assertEqual(fixture.reservation_boundary(self, world), [])
+            world.bind()
+            self.assertEqual(fixture.reservation_boundary(self, world), [str(world.private)])
+
+            snapshot = reader.Snapshot(world.repo, look, "stage2")
+            census, qualified = reader.census(snapshot)
+            snapshot.check_stage1(census)
+            self.assertEqual(census["counts"], {"n_legs": 3, "n_local_dates": 1})
+            sources = reader.verify_gates(snapshot, qualified)
+            tables = reader.score(snapshot, sources, qualified, lambda: None)
+            for view, legs in (("all", 3), ("base14", 2)):
+                with self.subTest(view=view):
+                    count = census["by_kit_set"][view]
+                    self.assertEqual((count["n_legs"], count["n_local_dates"]), (legs, 1))
+                    self.assertEqual(len(tables["hold"][view]), legs)
+                    cells = [cell for cell in tables["date_spreads"][view].values() if cell["dates"]]
+                    self.assertTrue(cells)
+                    for cell in cells:
+                        self.assertEqual(len(cell["dates"]), 1)
+                        self.assertEqual(cell["sd_date_means"], fixture.null("fewer_than_two"))
+
 
 class LaterStabilityPopulationTests(unittest.TestCase):
     def _score(self, world):
