@@ -1260,3 +1260,40 @@ passed both of that module's cases and measured 6.464 seconds.
 The timing map now uses that observation. The timing coverage
 check passed on the discovered module set.
 [Quick failure](https://github.com/mpmdw/JouleWise/actions/runs/44780097203/job/136440379763) · [Hosted timing](https://github.com/mpmdw/JouleWise/actions/runs/44774076476/job/136419344567)
+
+## 2026-11-20 v5 freeze and RL-193 census authentication
+
+The worktree, remote branch, and draft PR #868 agreed at
+`2fd475d4649adaaec1b5a9bd4f829821795be999` at intake. Commit
+`bc9a6ac72` installs the eight published files byte-for-byte. All
+eight entries match the independent manifest with SHA-256
+`ef0cb3b37c370f33bda8cf6f04e82a221ea40842057068bada39b126488aeb17`.
+The freeze has 16,955 individually discoverable methods across five
+modules.
+[Checked-in hashes](../../tests/description-v5.sha256) · [Independent delta and baseline replay](/Volumes/JW-EXT/scratch/astra-desc-suite-amend5/v5/DELTA.md)
+
+| Finding | Repair and regression at `a52abc954` |
+| --- | --- |
+| A power-mode failure could mask incomplete leg status. | The seven-predicate list follows RL-193 §4 in all three looks. The independent `RL193_status_before_power`, all-defect, loaded-and-short, and wall-and-coverage controls cover the first reason, the ordered array, the stability missing-member reason, and the independent overtime flag. |
+| A typed drop with two agreeing witnesses refused. | Stage 1 authenticates the committed queue and receipt individually, including each exact position and typed digest. The independent `test_sq3_queue_and_receipt_agree`, `test_sq3_queue_disagrees_with_receipt`, and `test_sq3_receipt_disagrees_with_queue` exercise admission and both directions of disagreement. |
+| A census first appearing with its manifest could reach reservation. | Final manifest registration must precede the artifact named by the committed ledger row. That artifact must in turn precede the row, contain the bound bytes, and match recomputation. The independent SQ5 and SQ7 tests exercise same-commit, omitted, wrong-byte, missing and sibling bindings. Public validation remains tied to the historical ledger row. |
+| By-kit counts had no category totals. | Both stage-1 schemas require the three count categories with separate closed reason subcounts. The independent SQ8 test checks those totals, and the stage-1 checks cover their relation to qualified counts. |
+
+The two previously authorized RL-190 §1.3 ADMIT corrections retain
+their original IDs and now authenticate the v5 manifest. The
+specifically assigned hosted schema dependency remains test-only.
+The 53 protected-path blob entries match the intake stack. Governing
+pin verification remains with the integration owner.
+[Protected blobs](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/v5-protected-blobs.tsv) · [RL-193 §§4–5](/Volumes/JW-EXT/scratch/fable-rl193.md#4-b1-stage-1-reason-order)
+
+The focused replay uses at most two local workers and the suite
+owner's synthetic device shim. The shim supplies the invented
+booked token as its nodename to isolate census and ancestry from the
+shared host-ID dependency. Ordinary v5 worlds now book an
+`hw1:` token. Authenticating that token remains a PR #795
+integration gate affecting those controls as well as the 18 dedicated
+hardware methods. Reservation permission errors, when present, are
+reported separately at the observed mkdir or occupied-reservation
+fixture. A local reservation attempt alone establishes no publication.
+The read-back PR records the hosted result for the pushed head.
+[Independent nonpass ledger](/Volumes/JW-EXT/scratch/astra-desc-suite-amend5/v5/replay/nonpass.tsv) · [Focused replay results](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/v5-focused-replay.jsonl) · [Draft PR #868](https://github.com/mpmdw/JouleWise/pull/868) · [PR #795](https://github.com/mpmdw/JouleWise/pull/795)
