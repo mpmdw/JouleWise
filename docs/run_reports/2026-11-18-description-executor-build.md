@@ -855,3 +855,66 @@ was separate. Integrated acceptance awaits the authorized successor
 freeze and hardware integration. The operational reason order
 remains **PROVISIONAL** pending research-lead confirmation.
 [Predecessor hosted CI](https://github.com/mpmdw/JouleWise/actions/runs/44728051179) · [Hosted frozen failure IDs](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/provisional-predecessor-frozen-failures.tsv)
+
+## 2026-11-20 independent RL-192b successor freeze
+
+At intake the clean worktree and draft PR #868 both pointed to
+`133f97878`. The prior implementation of the provisional reason
+order was already present at `8b86c4395`. Commit `948f2aa76`
+copies the four authorized modules byte for byte. All six entries in
+the suite manifest verify, including the existing design archive and
+hand-table oracle. All 53 protected path entries match.
+[Authorized suite list](/Volumes/JW-EXT/scratch/desc-suites-current.md) · [Suite manifest](/Volumes/JW-EXT/scratch/astra-desc-suite-rl192b/SUITE.sha256) · [Protected paths](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/successor-protected-blobs.tsv)
+
+| Frozen module | Discovered IDs | SHA-256 |
+| --- | ---: | --- |
+| `test_desc_looks_acceptance.py` | 3,384 | `a497094e035a7869de81540a912c92d029b09563181ae71f9a9f3572924ab08e` |
+| `test_desc_looks_v22.py` | 13,303 | `aa315fed2ba1f6847c381dda688db8e711f920de89bb120352415a7576ca981f` |
+| `test_desc_looks_rl190.py` | 187 | `9871f41909854c68eee0b387594dc1c9a16a3ff1aa36b33efdb610ed6cae5400` |
+| `test_desc_looks_rl192b.py` | 25 | `107352689ad889b0c6856b2b08025801c8a01a91c857e902248d2e44e9c905ee` |
+
+| Finding | Commit | Regression and result |
+| --- | --- | --- |
+| First lifecycle failure and full ordered `reasons` array | `8b86c4395` | **PASS**. All 18 frozen `PROVISIONAL` methods pass on the three looks, with zero skips. |
+| Loaded count, print and stability rules | `f935e32da`, `8b86c4395` | **PASS**. All seven frozen RL-192b methods pass. The amended RL-190 loaded controls still pass, including the exact 34-leg check. |
+| Builder fixture expectations and shard discovery | `f0176d8b1` | **PASS**. All five selected builder controls pass after synchronizing their invented rosters with the amended fixture. The new frozen module has a measured scheduling entry. The timing inventory covers 532 discovered paths. |
+| Legacy bare dispositions and required provisional dispositions | Frozen expectation conflict | **FAIL**. `test_lm_inst_01_all_prints_and_partial`, `test_lm_stab_01_token_same_work`, and `test_A_authenticated_clock_stability` reach the census and disagree with the prefixed rollup. `test_disposition_single_gate_tokens` passes with the prefixed disposition. |
+| Typed drop and hardware identity | Open | **FAIL**. `test_disposition_drop_queue` expects `dropped:queue_retired`. `test_host_lm_inst_01_hostname` reaches the blocked synthetic reservation with a hostname. Both reproduce on the successor. |
+
+[New frozen cases](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/successor-rl192b.log) · [Builder controls](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/successor-builder-fixture.log) · [Frozen conflict reproductions](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/successor-cross-freeze-conflicts.log) · [Discovery counts](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/successor-method-inventory.log) · [Timing inventory](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/successor-timing-inventory.log)
+
+The amended RL-190 module ran all 187 cases locally. It passed 159
+with 28 failures, zero errors, and zero skips. The failures are the 17
+hardware cases, nine typed-drop protections, `test_schema_drop`,
+and `test_schema_missing_flag`. The stage-1 disposition and wall
+cases pass with the lifecycle change. The complete observation
+replaces the earlier truncated RL-190 scheduling weight.
+[Full RL-190 log](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/successor-rl190.log)
+
+### NEEDS_SPEC
+
+- The successor's shared `Checks.stage1` oracle still requires bare
+  `short` and `unreleased` dispositions. The provisional
+  `count_stop_without_load` cases and RL-190 single-gate case require
+  `not_qualified:short` under the same authenticated projection.
+  The suite author states this remains outside the loaded-only
+  amendment. The legacy typed-drop and wall-evidence expectations
+  also remain open. [Independent delta](/Volumes/JW-EXT/scratch/astra-desc-suite-rl192b/DELTA.md)
+- The RL-190 schema cases import `jsonschema`. Local execution used
+  the builder's isolated dependency environment. The ordinary hosted
+  shard is standard-library only under D-009. [D-009](../decision_log.md#d-009-dependency-policy-stdlib-core-optional-extras)
+- The dispatcher on `origin/main` is blob `40d8dcdef258bfcc06dfcf0f649d2149f72af57`
+  from merged PR #854 at `d9e3d512`. The builder stack still has
+  `075d0d3a1faa7628b77a25c6baab2e671c61985c`. PR #795 remains open
+  and its shared `host-id` command is absent from main and this
+  branch. Final pins and hardware acceptance require the accepted
+  combined integration base. [Merged dispatcher](https://github.com/mpmdw/JouleWise/pull/854) · [Interim owner PR](https://github.com/mpmdw/JouleWise/pull/795)
+
+The six reservation cases are `once_abandoned` and
+`once_other_checkout` on each look. They still need hosted
+confirmation on an accepted freeze. [Author's reservation observations](/Volumes/JW-EXT/scratch/astra-desc-suite-rl192b/tmp/reservation-observation.txt)
+
+The successor code-and-fixture head `f0176d8b1` started hosted CI.
+The base and class-sweep reruns were still in progress locally when
+this report was written. Integrated acceptance is blocked by the
+demonstrated frozen contract conflict. [Hosted CI](https://github.com/mpmdw/JouleWise/actions/runs/44742513284)

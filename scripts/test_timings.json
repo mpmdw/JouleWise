@@ -13,7 +13,7 @@
   "_local_observation_2026_11_11_b6_analysis": "ADDED for the Block 6 analysis lane: tests.independent_recompute.test_block6 (26 tests, 10.372 s process wall) and tests.independent_recompute.test_b6_production (15 tests, 20.055 s process wall), each run separately with JW_B5_SYNTHETIC_ONLY=1, TMPDIR unset and Python 3.13. Local observations under current load, not hosted medians or production speed evidence. See docs/run_reports/2026-11-11-p1-seat7-r2.md; replace with hosted observations when available.",
   "_local_observation_2026_11_18_flashnext_stream": "tests.test_align_stream_qwen4_exp took 0.139 s in one local Python 3.13 unittest run on the engineering MacBook Air. Eleven synthetic tests passed and native parity was skipped. This is a shard scheduling hint.",
   "_description_observations_2026_11_19": "Description executor scheduling weights. The three earlier focused modules and the 1046-case frozen acceptance module use their MODULE PASS or FAIL times from PR 868 hosted run 44440645998. The shared interval tests use one local synthetic Python 3.13 run on the engineering Air. These weights are scheduling hints.",
-  "_description_observations_2026_11_20": "The RL-190 supplement weight is the MODULE FAIL time from hosted PR 868 run 44728051179. Most executor cases exited at the frozen fixture's generator mismatch. Replace this incomplete observation with a full-run time when the successor fixture is available.",
+  "_description_observations_2026_11_20": "The successor RL-190 supplement took 447.204 seconds for all 187 cases in one local Python 3.13 synthetic run on the engineering Air with other description tests running. The local test environment supplied jsonschema. This replaces the incomplete hosted generator-error timing.",
   "_description_rl192b_timing_2026_11_20": "The RL-192b and provisional reason-order module took 251.500 seconds in one Python 3.13 synthetic run on the engineering Air with other description tests running. All 25 cases passed. This is a scheduling hint.",
   "exclusive_modules": {
     "tests.test_calibration_exits": {
@@ -539,7 +539,7 @@
     "tests.test_dependence_sensitivity": 6.425,
     "tests.test_derive_estate_anchors": 6.081,
     "tests.test_desc_looks_acceptance": 1086.764,
-    "tests.test_desc_looks_rl190": 5.916,
+    "tests.test_desc_looks_rl190": 447.204,
     "tests.test_desc_looks_rl192b": 251.500,
     "tests.test_desc_looks_v22": 2529.529,
     "tests.test_desk_compress": 1.442,
