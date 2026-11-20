@@ -12,6 +12,7 @@ import contextlib
 import copy
 import hashlib
 import io
+from itertools import combinations
 import json
 import os
 from pathlib import Path
@@ -284,7 +285,7 @@ class C1PacketRebuildTests(Base):
             self.addCleanup(trap.assert_not_called)
 
     def c1_scenario(self, *, bad_history_link=False, older_desk=False, desk='passed', extra_sentinels=True,
-                    wrong_cohort=False):
+                    wrong_cohort=False, receipt=None):
         root = Path(self.enterContext(tempfile.TemporaryDirectory(prefix='jw-c1-records-')))
         self.fixture_roots.add(root)
         r1 = Scenario(root, 'R1')
@@ -318,6 +319,8 @@ class C1PacketRebuildTests(Base):
             w1.omit_sources.add('desk')
         elif desk == 'pending':
             w1.sources['desk'] = {'plan_id': w1.sources['plan']['plan_id'], 'status': 'running_off_mbp'}
+        if receipt is not None:
+            w1.sources['registration_receipt'] = receipt
         w1.finish()
         w1.series_sha256 = builder.digest((root / w1.series_path).read_bytes())
         if older_desk:
@@ -498,6 +501,65 @@ class C1PacketRebuildTests(Base):
         packet = self.refused_packet(w1)
         self.assertEqual(packet['checks']['full_desk_gate']['status'], 'pass')
         self.assert_packet_failure(packet, 'sentinel_roster', 'two extra sentinels after a U4 inconclusive')
+
+    def assert_wrong_sentinel_positions_refuse(self, *, use_frozen_names):
+        w1 = self.c1_scenario(extra_sentinels=False)
+        roster = w1.next_plan['members']
+        for ordinal, name in zip((20, 21, 22), (22, 23, 24), strict=True):
+            member = roster[ordinal - 1]
+            member['role'] = 'sentinel'
+            if use_frozen_names:
+                member['run_id'] = f'align-v4-c1-e{name:02}'
+        self.assertEqual(len(roster), 22)
+        self.assertEqual([m['ordinal'] for m in roster if m['role'] == 'sentinel'], [5, 20, 21, 22])
+        w1.series['sentinel_ids'] = [m['run_id'] for m in roster if m['role'] == 'sentinel']
+        w1.series['next_plan'] = w1.write(w1.series['next_plan']['path'], w1.next_plan)
+        self.commit_series(w1)
+
+        packet = self.refused_packet(w1)
+        rebuilt, matches = self.rebuild(w1, packet)
+        self.assertTrue(matches)
+        self.assertTrue(session._record_bound(w1.root, rebuilt))
+        self.assertFalse(rebuilt['packet_preflight']['ready'])
+        self.assertEqual(rebuilt['checks']['full_desk_gate']['status'], 'pass')
+        self.assert_packet_failure(rebuilt, 'sentinel_roster', 'two extra sentinels after a U4 inconclusive')
+
+    def test_relabelled_ordinary_members_cannot_substitute_for_escalation_sentinels(self):
+        self.assert_wrong_sentinel_positions_refuse(use_frozen_names=False)
+
+    def test_canonical_sentinel_ids_at_wrong_ordinals_refuse(self):
+        self.assert_wrong_sentinel_positions_refuse(use_frozen_names=True)
+
+    def test_only_the_frozen_pair_of_supplemental_ordinals_passes(self):
+        w1 = self.c1_scenario()
+        manifest = json.loads((w1.root / series.MANIFEST).read_bytes())
+        expected = w1.series['sentinel_ids']
+        base = w1.next_plan['members']
+        candidates = [m['ordinal'] for m in base if m['ordinal'] not in (5, 22)]
+        for pair in combinations(candidates, 2):
+            with self.subTest(pair=pair):
+                members = [dict(m, role=(
+                    'sentinel' if m['ordinal'] in (5, 22, *pair) else 'D' if m['role'] == 'sentinel' else m['role']
+                )) for m in base]
+                plan = {**w1.next_plan, 'members': members}
+                if pair == (23, 24):
+                    self.assertEqual(builder.frozen_sentinel_ids(manifest, plan, needs_supplemental=True), expected)
+                else:
+                    with self.assertRaisesRegex(ValueError, 'two extra sentinels after a U4 inconclusive'):
+                        builder.frozen_sentinel_ids(manifest, plan, needs_supplemental=True)
+
+    def test_w1_receipt_digest_carries_through_the_rebuild(self):
+        receipt = {'schema': registration.RECEIPT_SCHEMA, 'signer': 'invented fixture'}
+        w1 = self.c1_scenario(receipt=receipt)
+        packet = self.ready_packet(w1)
+        rebuilt, matches = self.rebuild(w1, packet)
+        self.assertTrue(matches)
+        sources = w1.record['sources']
+        full_desk = rebuilt['checks']['full_desk_gate']
+        self.assertEqual(full_desk['desk_sha256'], sources['desk']['sha256'])
+        self.assertEqual(full_desk['registration_receipt_sha256'], sources['registration_receipt']['sha256'])
+        self.assertEqual(rebuilt['last_desk_passed_artifact_set_sha256'],
+                         registration.artifact_set_digest_at(w1.root, w1.code_commit))
 
     def test_a_changed_next_plan_cohort_cannot_carry_the_w1_pool(self):
         w1 = self.c1_scenario(wrong_cohort=True)
