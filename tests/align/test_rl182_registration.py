@@ -4,8 +4,10 @@ import ast
 from decimal import Decimal
 import hashlib
 import json
+import os
 from pathlib import Path
 import re
+import shlex
 import subprocess
 import sys
 import tempfile
@@ -385,3 +387,218 @@ def unrelated():
         self.assertEqual(self.compare(self.w1, 1, c1_map=changed_hash)["prompt_changes"], {
             "invented-B": {"w1": "b" * 64, "c1": "c" * 64},
         })
+
+
+class ProtectedRuntimeComparisonTests(unittest.TestCase):
+    """Spec v2 on invented source and a test-only local worker transport."""
+
+    PACKAGE = "joulewise/align/apple"
+    SCORER = PACKAGE + "/rl176.py"
+    PHASES = PACKAGE + "/rl176_phases.py"
+    ENTRY = "scripts/align_v4_series_release.py"
+    LEVEL = "S_SUPERIORITY_ALPHA"
+    FUNCTIONS = ("_decode_design", "_decode_rows", "_residual_scores", "_tail_test",
+                 "_s_rank", "_holm", "_q_energies")
+    SIBLINGS = ("rl176_phases", "wire", "nested.helper")
+    SOURCE = ("S_SUPERIORITY_ALPHA = 0.25\n" + "".join(
+        f"def {name}(): return 1\n" for name in FUNCTIONS
+    ) + "from . import rl176_phases\n").encode("ascii")
+    RELEASE = b"""from joulewise.align.apple import rl176, rl176_phases, wire
+from joulewise.align.apple.nested import helper
+if __name__ == '__main__':
+    raise AssertionError('production main must stay closed')
+"""
+    IMAGE = "sha256:" + "a" * 64
+
+    def setUp(self):
+        self.scratch = Path(self.enterContext(tempfile.TemporaryDirectory())).resolve()
+        self.repo = self.scratch / "git"
+        self.repo.mkdir()
+        init_git_fixture(self.repo, "--quiet", "--object-format=sha1")
+        self.prompt_map = self.scratch / "prompts.json"
+        self.prompt_map.write_text(json.dumps({"invented-A": "a" * 64}), encoding="ascii")
+        self.bin = self.scratch / "bin"
+        self.bin.mkdir()
+        transport = self.bin / "docker"
+        transport.write_text(f"#!/bin/sh\nexec {shlex.quote(sys.executable)} -IBS -c {shlex.quote(self.TRANSPORT)} \"$@\"\n",
+                             encoding="utf-8")
+        transport.chmod(0o700)
+        self.env = os.environ | {"PATH": str(self.bin) + os.pathsep + os.environ["PATH"]}
+
+    # The fixture transport runs only the test's invented modules. Assert the
+    # production sandbox arguments and exercise the real worker in a new child.
+    TRANSPORT = """
+import os, pathlib, sys
+args = sys.argv[1:]
+assert args[0:2] == ['--host', 'unix:///var/run/docker.sock']
+for flag in ('--pull=never', '--network=none', '--read-only', '--cap-drop=ALL',
+             '--security-opt=no-new-privileges', '--user=65534:65534', '--entrypoint=/usr/bin/timeout'):
+    assert flag in args, flag
+mounts = {}
+for index, arg in enumerate(args):
+    if arg == '--mount':
+        mode, source, target, access = args[index + 1].split(',')
+        assert mode == 'type=bind' and access == 'readonly'
+        mounts[target.removeprefix('dst=')] = source.removeprefix('src=')
+assert set(mounts) == {'/source', '/row10_worker.py'}
+assert all(not path.is_file() or path.suffix == '.py' for path in pathlib.Path(mounts['/source']).rglob('*'))
+index = args.index('sha256:' + 'a' * 64)
+assert args[index + 1:index + 4] == ['--kill-after=2s', '30s', '/usr/local/bin/python3']
+python_args = [mounts.get(arg, arg) for arg in args[index + 4:]]
+assert '-I' in python_args and '-B' in python_args and '-S' in python_args
+os.execve(sys.executable, [sys.executable, *python_args], {'PATH': os.defpath})
+"""
+
+    def git(self, *args, data=None):
+        return subprocess.check_output([
+            "git", "-C", self.repo, "-c", "user.name=Toy", "-c", "user.email=toy@example.invalid",
+            "-c", "commit.gpgsign=false", *args,
+        ], input=data).strip().decode("ascii")
+
+    def commit(self, changes=None):
+        files = {self.SCORER: self.SOURCE, self.ENTRY: self.RELEASE,
+                 self.PHASES: b"from . import rl176\n",
+                 self.PACKAGE + "/wire.py": b"WIRE = 1\n",
+                 self.PACKAGE + "/nested/helper.py": b"WIRE = 1\n",
+                 self.PACKAGE + "/ignored.txt": b"invented non-source control\n"}
+        files.update(changes or {})
+        tree = {}
+        for path, content in files.items():
+            if content is None:
+                continue
+            *directories, filename = path.split("/")
+            node = tree
+            for directory in directories:
+                node = node.setdefault(directory, {})
+            node[filename] = self.git("hash-object", "-w", "--stdin", data=content)
+
+        def write_tree(node):
+            entries = []
+            for name, value in node.items():
+                if isinstance(value, dict):
+                    entries.append(f"040000 tree {write_tree(value)}\t{name}\n")
+                else:
+                    entries.append(f"100644 blob {value}\t{name}\n")
+            return self.git("mktree", data="".join(entries).encode("ascii"))
+
+        return self.git("commit-tree", write_tree(tree), "-m", "invented runtime inputs")
+
+    def compare(self, w1, c1, expected, *extra, runtime=True):
+        command = [sys.executable, "-B", ROOT / "scripts/compare_c1_protected_sources.py",
+                   "--repo", self.repo, "--w1-commit", w1, "--c1-commit", c1,
+                   "--w1-prompts", self.prompt_map, "--c1-prompts", self.prompt_map, *extra]
+        if runtime:
+            command.extend(("--runtime-image", self.IMAGE))
+        output = subprocess.run(command, capture_output=True, env=self.env, text=True)
+        self.assertEqual(output.returncode, expected, (output.stdout, output.stderr))
+        self.assertEqual(output.stderr, "")
+        return json.loads(output.stdout)
+
+    def test_audit_three_phase_only_rebinding_requires_refusal(self):
+        # Both sides carry an invented release entry point so this replays
+        # Astra's circular import in the revised production-import contract.
+        w1 = self.commit()
+        c1 = self.commit({self.PHASES: b"from . import rl176\nrl176.S_SUPERIORITY_ALPHA = 0.75\n"})
+        for old, new in ((w1, c1), (c1, w1)):
+            result = self.compare(old, new, 2)
+            self.assertEqual(list(result["runtime_changes"]), [self.LEVEL])
+            self.assertEqual(result["protected_changes"], {})
+            self.assertEqual(result["research_lead_review"], [self.PHASES])
+
+    def test_reassignment_sweep_reaches_each_protected_name_from_every_toy_sibling(self):
+        w1 = self.commit()
+        for module in self.SIBLINGS:
+            path = self.PACKAGE + "/" + module.replace(".", "/") + ".py"
+            for name in (self.LEVEL, *self.FUNCTIONS):
+                expression = "0.75" if name == self.LEVEL else "replacement"
+                for label, action in (
+                    ("assignment", f"rl176.{name} = {expression}\n"),
+                    ("setattr", f"setattr(rl176, {name!r}, {expression})\n"),
+                    ("registry", f"sys.modules[rl176.__name__].{name} = {expression}\n"),
+                    ("import hook", f"class OnImport:\n    rl176.{name} = {expression}\n"),
+                ):
+                    with self.subTest(module=module, name=name, via=label):
+                        source = ("import sys\nfrom joulewise.align.apple import rl176\n"
+                                  "def replacement(): return 2\n" + action).encode("ascii")
+                        c1 = self.commit({path: source})
+                        result = self.compare(w1, c1, 2)
+                        self.assertEqual(list(result["runtime_changes"]), [name])
+                        self.assertEqual(result["protected_changes"], {})
+
+    def test_runtime_identity_covers_nested_code_defaults_closures_and_decorators(self):
+        wrapper = """from functools import wraps
+from joulewise.align.apple import rl176
+original = rl176._holm
+def decorate(captured):
+    @wraps(original)
+    def wrapped(item=DEFAULT, *, shift=KEYWORD):
+        def inner(): return NESTED
+        return item + shift + captured + inner()
+    return wrapped
+rl176._holm = decorate(CAPTURED)
+"""
+        fields = ("DEFAULT", "KEYWORD", "NESTED", "CAPTURED")
+
+        def variant(changed=None):
+            source = wrapper
+            for field in fields:
+                source = source.replace(field, "2" if field == changed else "1")
+            if changed == "decorator":
+                source += "rl176._holm.__wrapped__ = lambda: 2\n"
+            return source.encode("ascii")
+
+        path = self.PACKAGE + "/wire.py"
+        w1 = self.commit({path: variant()})
+        self.assertEqual(self.compare(w1, w1, 0)["runtime_changes"], {})
+        for changed in (*fields, "decorator"):
+            with self.subTest(changed=changed):
+                self.assertEqual(list(self.compare(w1, self.commit({path: variant(changed)}), 2)
+                                      ["runtime_changes"]), ["_holm"])
+
+    def test_outside_wiring_review_is_independent_of_equal_runtime_identity(self):
+        w1 = self.commit()
+        c1 = self.commit({self.SCORER: self.SOURCE + b"\n# invented unapproved byte change\n"})
+        result = self.compare(w1, c1, 1)
+        self.assertEqual(result["runtime_changes"], {})
+        self.assertEqual(result["protected_changes"], {})
+        self.assertEqual(result["research_lead_review"], [self.SCORER])
+
+    def test_default_comparison_requires_offline_runtime(self):
+        w1 = self.commit()
+        self.assertIn("error", self.compare(w1, w1, 2, runtime=False))
+
+    def test_missing_release_entry_point_fails_closed_on_either_side(self):
+        with_release = self.commit()
+        missing = self.commit({self.ENTRY: None})
+        for old, new in ((with_release, missing), (missing, with_release)):
+            self.assertIn("entry point", self.compare(old, new, 2)["error"])
+
+    def test_approved_exact_wiring_spans_do_not_exempt_other_bytes(self):
+        phase = b"from . import rl176\n# invented wiring note A\n"
+        c1_phase = phase.replace(b"note A", b"note B")
+        span = [[phase.index(b"note A"), phase.index(b"note A") + len(b"note A")]]
+        permit = self.scratch / "wiring.json"
+
+        def allow(path, before, after, spans):
+            permit.write_text(json.dumps([{
+                "path": path,
+                "before": {"sha256": hashlib.sha256(before).hexdigest(), "spans": spans},
+                "after": {"sha256": hashlib.sha256(after).hexdigest(), "spans": spans},
+            }]), encoding="ascii")
+
+        allow(self.PHASES, phase, c1_phase, span)
+        w1, c1 = self.commit({self.PHASES: phase}), self.commit({self.PHASES: c1_phase})
+        for old, new in ((w1, c1), (c1, w1)):
+            result = self.compare(old, new, 0, "--wiring-allowlist", permit)
+            self.assertEqual(result["research_lead_review"], [])
+            self.assertEqual(result["files_for_review"], [self.PHASES])
+        other = self.commit({self.PHASES: c1_phase + b"# invented extra byte change\n"})
+        result = self.compare(w1, other, 1, "--wiring-allowlist", permit)
+        self.assertEqual(result["research_lead_review"], [self.PHASES])
+
+        altered = self.SOURCE.replace(b"0.25", b"0.75")
+        level_at = self.SOURCE.index(b"0.25")
+        allow(self.SCORER, self.SOURCE, altered, [[level_at, level_at + 4]])
+        result = self.compare(self.commit(), self.commit({self.SCORER: altered}), 2,
+                              "--wiring-allowlist", permit)
+        self.assertEqual(result["research_lead_review"], [self.SCORER])
