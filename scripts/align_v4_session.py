@@ -2076,7 +2076,7 @@ def _arm_and_install(session, state, measurement_root, plan, high, *, runner, vo
         if record['admitted'] and c1_registration:
             # The committed window record can carry this evidence without copying
             # the full local arm record or its host and capture fields.
-            arm_proof = path.with_suffix('.registration.json')
+            arm_proof = path.parent / f'c1-registration-{attempt:03d}.json'
             raw = kit.raw_json({'schema': ARM_RECORD_SCHEMA, 'admitted': True, 'series_window': 'C1',
                                 'series_packet': {key: built[key] for key in
                                                   ('record_commit', 'record_path', 'record_sha256')},

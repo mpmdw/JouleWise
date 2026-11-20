@@ -832,6 +832,8 @@ class C1ArmReceiptTests(unittest.TestCase):
                 self.assertEqual(arm['series_packet']['record_commit'], prior)
                 locator = self.session.pilot.h.read(work / 'session.json')['v4_arm_records'][0]['registration_evidence']
                 proof = Path(locator['path']).read_bytes()
+                self.assertEqual(sorted(p.name for p in (work / 'staging').glob('v4-arm-*.json')),
+                                 ['v4-arm-001.dwell.json', 'v4-arm-001.json'])
                 self.assertEqual(locator['sha256'], reg.digest(proof))
                 self.assertEqual(json.loads(proof), {
                     'schema': self.session.ARM_RECORD_SCHEMA, 'admitted': True, 'series_window': 'C1',
