@@ -855,20 +855,17 @@ def step3_reader():
 def _time_ns(seconds):
     if type(seconds) is int:
         return seconds * NS_PER_SECOND
+    if isinstance(seconds, Fraction):
+        return seconds * NS_PER_SECOND
     require(isinstance(seconds, Decimal) or number(seconds), "invalid timestamp")
     decimal = seconds if isinstance(seconds, Decimal) else Decimal(str(seconds))
     require(decimal.is_finite(), "invalid timestamp")
-    return round(decimal * NS_PER_SECOND)
+    ticks = Fraction(decimal) * NS_PER_SECOND
+    return ticks.numerator if ticks.denominator == 1 else ticks
 
 
 def _csv_time_ns(text):
     return _time_ns(Decimal(text))
-
-
-def _window_ns(seconds):
-    # Recorded timestamps have integer nanoseconds. A derived endpoint,
-    # such as the midpoint between two stamps, can lie between ticks.
-    return seconds * NS_PER_SECOND if isinstance(seconds, Fraction) else _time_ns(seconds)
 
 
 def _seconds(ns):
@@ -916,8 +913,8 @@ def _meter_slice(times, a, b):
 
 
 def _sample(text):
-    value = float(text)
-    require(math.isfinite(value), "invalid numeric stream value")
+    value = Decimal(text)
+    require(value.is_finite(), "invalid numeric stream value")
     return Fraction(value)
 
 
@@ -933,12 +930,12 @@ def _rail_csv(stream):
 @dataclass(frozen=True, slots=True)
 class RailStamp:
     row_number: int
-    stamp_ns: int
+    stamp_ns: int | Fraction
     identity: tuple[str, ...]
 
 
 def _rail_rows(stream):
-    """Index structural identities and integer stamps without retrieving power."""
+    """Index structural identities and exact stamps without retrieving power."""
     for row_number, row in enumerate(_rail_csv(stream)):
         if row["source"] != "powermetrics":
             continue
@@ -993,8 +990,8 @@ class RailSupport:
 
     def __iter__(self):
         """Expose interval evidence in seconds for the admission observer."""
-        return iter(([lo / NS_PER_SECOND for lo in self.starts],
-                     [(lo / NS_PER_SECOND, hi / NS_PER_SECOND) for lo, hi in self.bounds]))
+        return iter(([_seconds(lo) for lo in self.starts],
+                     [(_seconds(lo), _seconds(hi)) for lo, hi in self.bounds]))
 
 
 class Signals:
@@ -1080,7 +1077,7 @@ class Signals:
 
     def _interval_refusal(self, channel, a, b, rail_support):
         """Judge interval admission in priority order before retrieving values."""
-        a, b = _window_ns(a), _window_ns(b)
+        a, b = _time_ns(a), _time_ns(b)
         if not self._coverage_passes(channel, a, b, rail_support):
             return "coverage"
 
@@ -1183,26 +1180,24 @@ class Signals:
             require(not pending, "rail row disappeared after admission")
 
         if gpu:
-            # The pinned loader parses only newly admitted GPU rows. Its float
-            # values are converted to rationals before entering the cache.
-            keys = sorted(gpu)
-            origin = keys[0][0][0]
+            # Compare the pinned reader's full float projection with the same
+            # admitted source literals. Score using the literals' exact values.
             buffer = io.StringIO()
             writer = csv.writer(buffer)
             writer.writerow(RAIL_CSV_COLUMNS)
-            for bounds, rail in keys:
-                left, right = bounds
-                stamp = self._rail_stamps[(bounds, rail)].stamp_ns
-                writer.writerow((_seconds(left - origin), _seconds(right - origin),
-                                 _seconds(stamp - origin), "powermetrics", rail, gpu[(bounds, rail)]))
+            expected = []
+            for key, raw in gpu.items():
+                left, right, stamp, source, rail = self._rail_stamps[key].identity
+                writer.writerow((left, right, stamp, source, rail, raw))
+                expected.append(tuple(map(float, (left, right, raw, stamp))))
             buffer.seek(0)
             self.pinned.open = lambda *_args, **_kwargs: buffer
             try:
                 projected = self.pinned.load_gpu_trace(".")
             finally:
                 del self.pinned.open
-            for key, (_, _, watts, _) in zip(keys, projected, strict=True):
-                self._rail_values[key] = _sample(watts)
+            require(projected == sorted(expected), "pinned GPU reader disagrees with source literals")
+            self._rail_values.update({key: _sample(raw) for key, raw in gpu.items()})
 
         stamp_rail = "gpu_power" if channel == "rail_sum" else names[0]
         return [(left, right, sum(self._rail_values[((left, right), rail)] for rail in names),
@@ -1241,7 +1236,7 @@ class Signals:
         return None
 
     def _interval_quality(self, channel, a, b):
-        start, stop = _window_ns(a), _window_ns(b)
+        start, stop = _time_ns(a), _time_ns(b)
         require(start < stop, "invalid print interval")
         require(channel in (*RAIL_CHANNELS, "rail_sum", "dc_in", "sidecar"), "unknown channel")
         if reason := self._stream_refusal(channel):
@@ -1279,8 +1274,8 @@ class Signals:
             stream, (start, end) = self._sensor_source
             self._start_read()
             stream.seek(start)
-            return decode(stream.read(end - start))
-        start, stop = _window_ns(a), _window_ns(b)
+            return decode(stream.read(end - start), parse_float=_sample, parse_int=_sample)
+        start, stop = _time_ns(a), _time_ns(b)
         if channel == "dc_in":
             return self._admitted_meter(start, stop)
         return self._admitted_rails(channel, start, stop)
@@ -1289,7 +1284,7 @@ class Signals:
         rows = self.interval_values(channel, (a, b))
         if isinstance(rows, dict):
             return rows
-        start, stop = _window_ns(a), _window_ns(b)
+        start, stop = _time_ns(a), _time_ns(b)
         if channel != "dc_in":
             area = sum(((watts - baseline) * (min(right, stop) - max(left, start))
                         for left, right, watts, _ in rows), Fraction())
@@ -1310,12 +1305,12 @@ class Signals:
 
     def average(self, channel, a, b, *, exact=False):
         energy = self._energy(channel, a, b, 0)
-        value = energy * NS_PER_SECOND / (_window_ns(b) - _window_ns(a)) if number(energy) else energy
+        value = energy * NS_PER_SECOND / (_time_ns(b) - _time_ns(a)) if number(energy) else energy
         return value if exact else _printed(value)
 
     def cross(self, channel, a, b, threshold, *, falls=False):
-        crossing = self._cross_ns(channel, _window_ns(a), _window_ns(b), threshold, falls=falls)
-        return crossing if isinstance(crossing, dict) else float(crossing / NS_PER_SECOND)
+        crossing = self._cross_ns(channel, _time_ns(a), _time_ns(b), threshold, falls=falls)
+        return crossing if isinstance(crossing, dict) else _printed(Fraction(crossing, NS_PER_SECOND))
 
     def _cross_ns(self, channel, a, b, threshold, *, falls=False):
         rows = self.interval_values(channel, (_seconds(a), _seconds(b)))
@@ -1409,10 +1404,11 @@ def _sensors(keys, readings):
     for record in readings:
         fans = record["fan_keys"]
         if keys and all(key in fans and number(fans[key]) for key in keys):
-            rpm.append(mean(Fraction(fans[key]) for key in keys))
+            rpm.append(mean(value if isinstance(value, Fraction) else _sample(str(value))
+                            for value in (fans[key] for key in keys)))
         for name, value in record.items():
             if name != "fan_keys" and number(value):
-                sensors[name].append(Fraction(value))
+                sensors[name].append(value if isinstance(value, Fraction) else _sample(str(value)))
     fan = mean(rpm) if rpm else missing("no_complete_fan_reading")
     return fan, {name: mean(values) for name, values in sensors.items()}
 
