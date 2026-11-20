@@ -433,3 +433,67 @@ Its disk-usage call is a stand-in. Neither fixture performs host probes.
 JW_B5_SYNTHETIC_ONLY=1 PYTHONPATH=tests:. python3.13 -B -m unittest -v \
   align.test_v4_next_arm_packet.ArmOrderWitness align.test_v4_series_e2e
 ```
+
+## K2 and K3 · bind the staged dispatch
+
+The supplied audit assessed `314867f42360a4862ccfc310ef6135db3f0a817e`,
+tree `aa4cfc5596b6a9743c166c9fc99e1c13cf60c550`, against W1 `b2e01464d`.
+It verified two HIGH integration seams and zero MED or LOW findings. A stale
+second-stage order manifest removed members 23 and 24 while K1 still accepted.
+The genuine linked staging view refused because the W1 artifact digest treated
+its links as missing. The lead supplied K2 and K3 and directed a return to spec.
+The existing freezes remain in the history.
+
+Freeze `9a50d8f02d1986a5d09e06b59491e63d0c742074`, tree
+`1480d8c4036c4d5743bd3995104bf439b0e9b047`, committed six executable
+acceptance methods before the build. The baseline with the validator at
+`314867f42` exited 1 with nine expected failed assertions. The edited same-roster
+bytes, reordered manifests, ordinary second-stage manifest, changed staged kit
+copy, and escaping links escaped their intended refusals. The normal linked
+view refused. The byte-identical copy control admitted.
+
+Fix `c6887e3f2dcaa1176175c06b6afb52a48ea27885`, tree
+`cc21bbcb6c3e0fcbf002af4e7322132fe30af559`, has two parts.
+
+| Finding | Contract and regression |
+| --- | --- |
+| K2 staged dispatch | The builder binds ordered science IDs and per-stage manifest and config digests using the committed campaign inputs and the production relocation. At install and arm rebuild, the consumer resolves the actual staged argv with the existing dispatch resolver. It checks every manifest, including auxiliary stages, and validates the ordered C1 IDs and frozen sentinel positions. The real ordinary second-stage substitution, the ordered and byte-only sweeps, and a changed staged kit copy refuse before host access. |
+| K3 staged artifact identity | The consumer computes W1's current artifact digest from the actual staged bytes. Source and staging are the allowed roots. Confined links and identical copies admit. A manifest or registered artifact link escaping the roots refuses with exit 2 and `packet_kit_mismatch`. The guarded tests trap any access to an escaping target. |
+
+The production-shaped series witness sweeps every science and scaffold order
+manifest. The earlier K1, roster, predecessor and desk tests remain. The
+lead's post-close command above uses the selected kit, auxiliary order manifests
+and configs in the same committed series tree. Any launch input substitution
+after the packet requires rebuilding from the authorized committed selection.
+W1's desk and receipt digests still carry forward. The signer, integration
+owner and Opus retain their existing acceptance holds.
+
+The invented replay at clock 111 names W1 record
+`f08685d0743810a635162d8073062b39695577f9` at `w-W1/record.json` and series
+`3f1cec3d6076c90f5404bbeb26c205198e8dbc4d` at `series/state.json`. Its tracking
+ref is `refs/remotes/synthetic/records`. The builder exits 0 for this packet.
+The plan SHA-256 is `2c92ea12419c0f59d8d50929bd70be8e78fd01ebe4f81d66b1c18ec9a9fab772`.
+Its staged science order manifests have these expected digests.
+
+| Synthetic stage | Staged order SHA-256 |
+| --- | --- |
+| C1 episodes A | `df379a2f9d36fd4b0fd289c8ce45b8796aee103982bf0a976839dca615a9c6aa` |
+| C1 episodes B | `29e763ab46835ae566c3a2c3c293f2df4d608aafbee7d94b9c1371bc875f7652` |
+
+The genuine linked view admits with the rebuilt packet. Substituting the
+ordinary episodes B manifest resolves 22 members. The same packet still
+rebuilds identically and the arm refuses at `packet_kit_mismatch`. Its CLI
+exits 2 before the host checkpoint.
+
+```sh
+PYTHONPATH=tests:. python3.13 -B -m unittest -v align.test_v4_next_arm_packet.C1PacketRebuildTests -k test_k2 -k test_k3
+PYTHONPATH=tests:. python3.13 -B -m unittest align.test_v4_next_arm_packet.C1PacketRebuildTests
+JW_B5_SYNTHETIC_ONLY=1 PYTHONPATH=tests:. python3.13 -B -m unittest -v \
+  align.test_r11_delta5_sol1 align.test_r11_delta5_sol2 align.test_v4_series_e2e \
+  align.test_v4_next_arm_packet.ArmOrderWitness
+git diff --check b2e01464d HEAD
+```
+
+`NEEDS_SPEC: none`. The ten condition-13 identities remain identical to W1,
+with zero inherited absences. Exact-head hosted results and final-tree holds are
+in the draft PR ledger and seat handoff.
