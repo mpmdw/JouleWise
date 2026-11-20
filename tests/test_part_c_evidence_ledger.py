@@ -25,6 +25,7 @@ BUNDLE = "runs/synthetic-run"
 RECEIPT = "runtime_result.json"
 MANIFEST = "runtime_custody.json"
 MARKER = 918273645672
+FIELD = evidence.DESCRIPTOR_FIELD
 
 
 def hashed(raw):
@@ -53,12 +54,12 @@ def required_files(kind):
 
 
 class Attempt:
-    def __init__(self, base):
+    def __init__(self, base, config=b'{"backend":"production"}'):
         root = base / "synthetic-attempt"
         self.output = root / "part-c"
         self.output.mkdir(parents=True)
         self.config, self.soak = root / "synthetic-config.json", root / "synthetic-reference.json"
-        self.config.write_bytes(b'{"backend":"production"}')
+        self.config.write_bytes(config)
         self.soak.write_bytes(b'{}')
         self.revision = "b2e01464d"
         self.ledger = evidence.EvidenceLedger(self.output, self.revision, self.config, self.soak)
@@ -540,7 +541,7 @@ class PublicationTests(unittest.TestCase):
                 segment = attempt.output / name
                 segment.mkdir()
                 process = write_terminal(segment, kind, {"kind": kind}, attempt.config_sha)
-                writer.member_return(kind, segment, ["runtime"], process=process)
+                writer.member_return(kind, segment, ["runtime"], process=process, model_descriptor="a" * 64)
             table = {"part": "C", "slots_entered": False,
                      "evaluation": {"schema": "joulewise.align.r1_part_c.v1", "verdict": "pass", "pass": True,
                                     "evidence_failures": {}, "slots_entered": False}}
@@ -559,3 +560,541 @@ class PublicationTests(unittest.TestCase):
                     with self.assertRaisesRegex(evidence.EvidenceFailure, "verdict_binding"):
                         evidence.verify_part_c_publication(attempt.root, soak_sha, reference_sha)
                     path.write_bytes(original)
+
+
+# ---- RL-189 section 1: the descriptor witness and checks D1 to D6 ---------------------------------
+
+@contextmanager
+def runtime_double():
+    """Stand-ins for the pinned producer calls the RL-189 checks make. No R1 runtime is on main.
+
+    ``load_config`` and ``read_template`` keep the frozen contracts (a parsed
+    config with its sha256; a template with its parsed prompt).
+    """
+    runtime = ModuleType("joulewise.align.apple.r1_runtime")
+
+    def load_config(path):
+        raw = Path(path).read_bytes()
+        return json.loads(raw), hashed(raw)
+
+    def read_template(path):
+        config = json.loads(Path(path).read_text())
+        return config, json.loads(config["workload_profile"]["prompt_text"])
+
+    runtime.load_config, runtime.read_template = load_config, read_template
+    apple = ModuleType("joulewise.align.apple")
+    apple.r1_runtime = runtime
+    align = ModuleType("joulewise.align")
+    align.apple = apple
+    with patch.dict(sys.modules, {module.__name__: module for module in (align, apple, runtime)}):
+        yield runtime
+
+
+class MirrorAttempt(Attempt):
+    """An attempt whose issued config names one synthetic mirror through its four templates."""
+
+    def __init__(self, base, limit=40960):
+        # The marker in the path and in the limit shows that neither leaves the process.
+        self.mirror = base / f"mirror-{MARKER}"
+        self.mirror.mkdir()
+        self.descriptor = self.mirror / "config.json"
+        self.descriptor.write_bytes(json_bytes({"max_position_embeddings": limit}))
+        self.templates = {}
+        for key in pc.TEMPLATE_KEYS.values():
+            path = base / f"template-{key}.json"
+            path.write_bytes(json_bytes({"model": {"source": str(self.mirror)},
+                                         "workload_profile": {"prompt_text": "{}"}}))
+            self.templates[key] = path
+        super().__init__(base, json_bytes({"backend": "production", "templates": {
+            key: str(path) for key, path in self.templates.items()}}))
+
+    @property
+    def configured(self):
+        return json.loads(self.config.read_bytes())
+
+    def launch(self, kinds=tuple(MEMBERS), **kwargs):
+        seen = []
+
+        def transport(argv):
+            seen.append(list(argv))
+            return self.producer(argv[argv.index("--r1-kind") + 1])[1]
+
+        with rehearsal_double(self, transport):
+            for kind in kinds:
+                pc.judged_invoke(["runtime"], kind, self.output / MEMBERS[kind],
+                                 soak_reference=self.soak, ledger=self.ledger, **kwargs)
+        return seen
+
+    def rows(self):
+        return [json.loads(line) for line in self.ledger.path.read_bytes().splitlines()]
+
+
+FIRST = "capture-predecessor-30b"
+
+
+class DescriptorWitnessTests(unittest.TestCase):
+    """RL-189 1.2: the judged invoker binds <model.source>/config.json in each launched member's row."""
+
+    def test_each_launched_member_row_binds_the_issued_mirror_and_the_argv_is_unchanged(self):
+        with TemporaryDirectory() as tmp, runtime_double():
+            attempt = MirrorAttempt(Path(tmp))
+            seen = attempt.launch()
+            rows = attempt.rows()
+            expected = hashed(attempt.descriptor.read_bytes())
+            self.assertEqual([row.get(FIELD) for row in rows], [None, *[expected] * 4])
+            for kind, argv, row in zip(MEMBERS, seen, rows[1:]):
+                frozen = ["runtime", "--r1-kind", kind, "--output", str(attempt.output / MEMBERS[kind]),
+                          "--soak-reference", str(attempt.soak)]
+                self.assertEqual(argv, frozen)
+                self.assertEqual(row["argv_sha256"], hashed(evidence.canonical(frozen)))
+                # One field joins the RL-183c row and nothing else does.
+                self.assertEqual(set(row), {"attempt", "kind", "argv_sha256", "spawned", "exit_status",
+                                            "stdout_sha256", "stderr_sha256", "segment", "manifest",
+                                            "previous_sha256", FIELD})
+            attempt.ledger.verify_chain()
+            self.assertNotIn(str(MARKER), attempt.ledger.path.read_text())
+
+    def test_a_raising_transport_still_binds_and_a_member_never_launched_does_not(self):
+        with TemporaryDirectory() as tmp, runtime_double():
+            attempt = MirrorAttempt(Path(tmp))
+            segment = attempt.output / MEMBERS[FIRST]
+            with rehearsal_double(attempt, lambda _argv: None) as transport:
+                with patch.object(transport, "_run", side_effect=OSError(f"synthetic marker {MARKER}")):
+                    with self.assertRaisesRegex(pc.RuntimeEvidenceError, "process_exit"):
+                        pc.judged_invoke(["runtime"], FIRST, segment, soak_reference=attempt.soak,
+                                         ledger=attempt.ledger)
+            row = attempt.rows()[-1]
+            self.assertEqual((row["exception"], row[FIELD]), ("OSError", hashed(attempt.descriptor.read_bytes())))
+        with TemporaryDirectory() as tmp, runtime_double():
+            attempt = MirrorAttempt(Path(tmp))
+            with rehearsal_double(attempt, lambda _argv: self.fail("must not launch")):
+                with self.assertRaises(pc.RuntimeAdmissionRefusal):
+                    pc.judged_invoke(["runtime"], FIRST, attempt.output / MEMBERS[FIRST], ledger=attempt.ledger)
+            row = attempt.rows()[-1]
+            self.assertIs(row["spawned"], False)
+            self.assertNotIn(FIELD, row)
+
+    def test_the_soak_ledger_and_the_idle_member_gain_no_field(self):
+        with TemporaryDirectory() as tmp, runtime_double():
+            native = MirrorAttempt(Path(tmp))
+            self.assertEqual(pc._descriptor_witness(FIRST, native.ledger), hashed(native.descriptor.read_bytes()))
+            self.assertIsNone(pc._descriptor_witness("idle", native.ledger))
+            self.assertIsNone(pc._descriptor_witness(FIRST, None))
+        with TemporaryDirectory() as tmp, runtime_double():
+            soak = SoakAttempt(Path(tmp))
+            soak.directory.mkdir(parents=True)
+            writer = evidence.EvidenceLedger(soak.directory, soak.revision, soak.config, mode="soak")
+            self.assertIsNone(pc._descriptor_witness(FIRST, writer))
+            with rehearsal_double(soak, lambda _argv: soak.produce(soak.receipt())):
+                pc.judged_invoke(["runtime"], "idle", soak.segment, 1800, quiet=True, contract_key="idle_soak",
+                                 ledger=writer)
+            row = json.loads(soak.ledger.read_bytes().splitlines()[-1])
+            # The idle row keeps the exact RL-185 shape that BoundSoak requires.
+            self.assertEqual(set(row), {"attempt", "kind", "argv_sha256", "spawned", "exit_status", "stdout_sha256",
+                                        "stderr_sha256", "segment", "manifest", "previous_sha256"})
+        with TemporaryDirectory() as tmp:
+            soak = SoakAttempt(Path(tmp))
+            soak.binding(soak.close())
+
+    def test_an_observation_that_cannot_be_made_is_a_word_never_an_exception(self):
+        def no_file(attempt):
+            attempt.descriptor.unlink()
+
+        def no_mirror(attempt):
+            attempt.descriptor.unlink()
+            attempt.mirror.rmdir()
+
+        def mirror_is_a_file(attempt):
+            no_mirror(attempt)
+            attempt.mirror.write_bytes(b"{}")
+
+        def descriptor_is_a_directory(attempt):
+            attempt.descriptor.unlink()
+            attempt.descriptor.mkdir()
+
+        def template_names_no_source(attempt):
+            for path in attempt.templates.values():
+                path.write_bytes(json_bytes({"model": {"source": None}, "workload_profile": {"prompt_text": "{}"}}))
+
+        def template_is_missing(attempt):
+            for path in attempt.templates.values():
+                path.unlink()
+
+        def issued_config_changed(attempt):
+            attempt.config.write_bytes(attempt.config.read_bytes() + b" ")
+
+        cases = ((no_file, "absent"), (no_mirror, "absent"), (mirror_is_a_file, "absent"),
+                 (descriptor_is_a_directory, "unreadable"), (template_names_no_source, "unreadable"),
+                 (template_is_missing, "unreadable"), (issued_config_changed, "unreadable"))
+        for damage, word in cases:
+            with self.subTest(damage=damage.__name__), TemporaryDirectory() as tmp, runtime_double():
+                attempt = MirrorAttempt(Path(tmp))
+                damage(attempt)
+                try:
+                    attempt.launch((FIRST,))
+                except evidence.EvidenceFailure:
+                    # The changed config also fails the member's own binding, after its row is written.
+                    self.assertIs(damage, issued_config_changed)
+                self.assertEqual(attempt.rows()[-1][FIELD], word)
+        with TemporaryDirectory() as tmp:
+            # Without the runtime module no path exists, and the row says so.
+            attempt = MirrorAttempt(Path(tmp))
+            with patch.dict(sys.modules, {"joulewise.align.apple.r1_runtime": None}):
+                attempt.launch((FIRST,))
+            self.assertEqual(attempt.rows()[-1][FIELD], "unreadable")
+
+    def test_observation_follows_links_as_the_frozen_read_does(self):
+        with TemporaryDirectory() as tmp:
+            base = Path(tmp)
+            (base / "blob").write_bytes(json_bytes({"max_position_embeddings": 40960}))
+            (base / "mirror").mkdir()
+            (base / "mirror/config.json").symlink_to(base / "blob")
+            (base / "linked").symlink_to(base / "mirror", target_is_directory=True)
+            for source in (base / "mirror", base / "linked"):
+                witness, raw = evidence.observe_descriptor(str(source))
+                self.assertEqual((witness, evidence.native_limit(raw)),
+                                 (hashed((base / "blob").read_bytes()), 40960))
+            for source in (None, "", 7, str(base / "missing")):
+                self.assertIn(evidence.observe_descriptor(source)[0], evidence.DESCRIPTOR_WORDS)
+
+    def test_native_limit_is_the_frozen_read_of_the_same_bytes(self):
+        def frozen(path):
+            # workload.py:268-272 at b2e01464d, transcribed for the comparison only.
+            try:
+                native_limit = json.loads(path.read_text()).get("max_position_embeddings")
+                if type(native_limit) is not int or native_limit <= 0:
+                    raise ValueError("max_position_embeddings must be a positive integer")
+            except (OSError, ValueError, AttributeError):
+                native_limit = None
+            return native_limit
+
+        samples = [b'{"max_position_embeddings":40960}', b'{"max_position_embeddings": 1}\n',
+                   b'{"max_position_embeddings":0}', b'{"max_position_embeddings":-4}',
+                   b'{"max_position_embeddings":true}', b'{"max_position_embeddings":40960.0}',
+                   b'{"max_position_embeddings":"40960"}', b'{"max_position_embeddings":null}',
+                   b'{"max_position_embeddings":[40960]}', b'{}', b'[]', b'40960', b'null', b'',
+                   b'{"max_position_embeddings":40960', b'{"max_position_embeddings":40960}{}',
+                   b'{"max_position_embeddings":1,"max_position_embeddings":2}',
+                   b'{"max_position_embeddings":NaN}', b'{"max_position_embeddings":1e3}',
+                   b'{"max_position_embeddings":' + b"9" * 40 + b'}', b'\xff\xfe{}',
+                   b'\xef\xbb\xbf{"max_position_embeddings":40960}', b'{"max_position_embeddings":40960}\r\n',
+                   b' {\n "max_position_embeddings" : 40961 }']
+        with TemporaryDirectory() as tmp:
+            path = Path(tmp) / "config.json"
+            seen = set()
+            for raw in samples:
+                with self.subTest(raw=raw):
+                    path.write_bytes(raw)
+                    self.assertEqual(evidence.native_limit(raw), frozen(path))
+                    seen.add(evidence.native_limit(raw))
+            self.assertEqual(evidence.native_limit(None), None)
+            self.assertLessEqual({None, 1, 2, 40960, 40961, int("9" * 40)}, seen)
+
+
+class DescriptorBindingTests(unittest.TestCase):
+    """RL-189 1.3, D1 and D2: attestation by the row, never by the file's mere existence."""
+
+    def returned(self, attempt, kind=FIRST, **row):
+        segment, process = attempt.producer(kind)
+        attempt.ledger.member_return(kind, segment, ["runtime", kind], process=process, **row)
+
+    def refused(self, call, reason, source, field=None):
+        with self.assertRaises(evidence.EvidenceFailure) as caught:
+            call()
+        failure = caught.exception
+        self.assertEqual((failure.reason, failure.role, failure.source, failure.field),
+                         (reason, FIRST, source, field))
+        return failure
+
+    def test_d1_a_row_with_no_valid_binding_is_evidence_unverifiable(self):
+        missing = object()
+        for value in (missing, "", "ABSENT", "unhashed", "a" * 63, "A" * 64, "a" * 65, 7, ["absent"], {"sha256": "a" * 64}):
+            with self.subTest(value=value), TemporaryDirectory() as tmp:
+                attempt = MirrorAttempt(Path(tmp))
+                self.returned(attempt, **({} if value is missing else {"model_descriptor": value}))
+                self.refused(lambda: attempt.ledger.model_descriptor(FIRST, str(attempt.mirror)),
+                             "evidence_unverifiable", evidence.LEDGER_NAME, FIELD)
+        with TemporaryDirectory() as tmp:
+            attempt = MirrorAttempt(Path(tmp))   # no member row at all
+            self.refused(lambda: attempt.ledger.model_descriptor(FIRST, str(attempt.mirror)),
+                         "evidence_unverifiable", evidence.LEDGER_NAME, FIELD)
+
+    def test_d1_suite_reproduction_the_binding_dropped_before_the_row_is_chained(self):
+        # Frozen suite v2, <member>/descriptor/no-binding: the retained row and the chain agree.
+        append = evidence.EvidenceLedger._append
+
+        def drop(ledger, row):
+            return append(ledger, {key: value for key, value in row.items() if key != FIELD})
+
+        with TemporaryDirectory() as tmp, runtime_double():
+            attempt = MirrorAttempt(Path(tmp))
+            with patch.object(evidence.EvidenceLedger, "_append", drop):
+                attempt.launch((FIRST,))
+            attempt.ledger.verify_chain()
+            self.assertNotIn(FIELD, attempt.rows()[-1])
+            self.refused(lambda: pc._attested_descriptor(attempt.ledger, FIRST, attempt.configured),
+                         "evidence_unverifiable", evidence.LEDGER_NAME, FIELD)
+
+    def test_d2_bytes_must_equal_the_row_before_the_parse_after_it_and_at_the_verdict(self):
+        changed = json_bytes({"max_position_embeddings": 40961})
+        with TemporaryDirectory() as tmp, runtime_double():
+            attempt = MirrorAttempt(Path(tmp))
+            attempt.launch((FIRST,))
+            clean = attempt.descriptor.read_bytes()
+            bound = pc._attested_descriptor(attempt.ledger, FIRST, attempt.configured)
+            self.assertEqual((bound.limit, bound.source), (40960, str(attempt.mirror)))
+            attempt.ledger.verify_final_sources()
+
+            # Frozen suite v2, <member>/descriptor/rewritten-after-return.
+            attempt.descriptor.write_bytes(changed)
+            source = evidence.DESCRIPTOR_SOURCE
+            self.refused(lambda: pc._attested_descriptor(attempt.ledger, FIRST, attempt.configured),
+                         "source_integrity", source)
+            self.refused(attempt.ledger.verify_final_sources, "source_integrity", source)
+            attempt.descriptor.unlink()
+            self.refused(lambda: pc._attested_descriptor(attempt.ledger, FIRST, attempt.configured),
+                         "source_integrity", source)
+            self.refused(attempt.ledger.verify_final_sources, "source_integrity", source)
+            attempt.descriptor.write_bytes(clean)
+            attempt.ledger.verify_final_sources()
+
+            def parse_then_rewrite(raw):
+                attempt.descriptor.write_bytes(changed)
+                return evidence.native_limit(raw)
+
+            with patch.object(pc, "native_limit", parse_then_rewrite):
+                self.refused(lambda: pc._attested_descriptor(attempt.ledger, FIRST, attempt.configured),
+                             "source_integrity", source)
+
+    def test_d2_a_bound_word_is_held_to_the_same_observation(self):
+        for damage, word in ((lambda a: a.descriptor.unlink(), "absent"),
+                             (lambda a: (a.descriptor.unlink(), a.descriptor.mkdir()), "unreadable")):
+            with self.subTest(word=word), TemporaryDirectory() as tmp, runtime_double():
+                attempt = MirrorAttempt(Path(tmp))
+                damage(attempt)
+                attempt.launch((FIRST,))
+                self.assertEqual(attempt.rows()[-1][FIELD], word)
+                self.assertIsNone(pc._attested_descriptor(attempt.ledger, FIRST, attempt.configured).limit)
+                if attempt.descriptor.is_dir():
+                    attempt.descriptor.rmdir()
+                attempt.descriptor.write_bytes(json_bytes({"max_position_embeddings": 40960}))
+                self.refused(lambda: pc._attested_descriptor(attempt.ledger, FIRST, attempt.configured),
+                             "source_integrity", evidence.DESCRIPTOR_SOURCE)
+
+    def test_the_issued_path_is_required(self):
+        with TemporaryDirectory() as tmp, runtime_double():
+            attempt = MirrorAttempt(Path(tmp))
+            attempt.launch((FIRST,))
+            for path in attempt.templates.values():
+                path.unlink()
+            self.refused(lambda: pc._attested_descriptor(attempt.ledger, FIRST, attempt.configured),
+                         "execution_limits_recompute", "config.json", "model.source")
+
+    def test_a_published_pass_needs_a_witness_in_every_judged_row(self):
+        for witness, accepted in (("a" * 64, True), ("absent", True), ("unreadable", True),
+                                  (None, False), ("A" * 64, False), ("", False)):
+            with self.subTest(witness=witness), TemporaryDirectory() as tmp:
+                attempt = SoakAttempt(Path(tmp))
+                soak_sha = attempt.close()
+                reference_sha = hashed(attempt.reference.read_bytes())
+                attempt.output.mkdir()
+                writer = evidence.EvidenceLedger(attempt.output, attempt.revision, attempt.config,
+                                                 attempt.reference, soak=attempt.binding(soak_sha))
+                for kind, name in MEMBERS.items():
+                    segment = attempt.output / name
+                    segment.mkdir()
+                    process = write_terminal(segment, kind, {"kind": kind}, attempt.config_sha)
+                    writer.member_return(kind, segment, ["runtime"], process=process,
+                                         model_descriptor=witness if kind == "step-d" else "a" * 64)
+                published = json_bytes({"part": "C", "slots_entered": False, "evaluation": {
+                    "schema": "joulewise.align.r1_part_c.v1", "verdict": "pass", "pass": True,
+                    "evidence_failures": {}, "slots_entered": False}})
+                for name in pc.RELEASE_COPIES:
+                    (attempt.output / name).write_bytes(published)
+                writer.finish("pass", {name: hashed(published) for name in pc.RELEASE_COPIES})
+                (attempt.root / "part-c.stdout.log").write_text("Part C verdict: pass (pass: True)\n")
+                if accepted:
+                    evidence.verify_part_c_publication(attempt.root, soak_sha, reference_sha)
+                else:
+                    with self.assertRaisesRegex(evidence.EvidenceFailure, "verdict_binding"):
+                        evidence.verify_part_c_publication(attempt.root, soak_sha, reference_sha)
+
+
+def execution(**limits):
+    spec = {"max_context_tokens": 40960, "deadman_s": None, "max_episode_decode_tokens": None,
+            "max_turns": 4, "max_tokens": 4096, "max_episode_seconds": None}
+    return SimpleNamespace(**{**spec, **limits})
+
+
+class NativeLimitDecisionTests(unittest.TestCase):
+    """RL-189 1.3, D4 to D6, and 1.4: a native claim is attested and a replayed one only exists."""
+
+    UNREAD = pc.UNREAD_LIMIT_FLAG
+
+    def judge(self, limits, *, attested="replay", flags=(), **spec):
+        descriptor = None if attested == "replay" else pc._AttestedDescriptor("synthetic-mirror", attested)
+        episode = SimpleNamespace(turns=(), start_ns=0, end_ns=0)
+        return pc._recompute_admissions("step-d", execution(**spec), episode, [], limits, {"deadline_ns": 1},
+                                        [], list(flags), descriptor)
+
+    def refused(self, reason, field, limits, **kwargs):
+        with self.assertRaises(evidence.EvidenceFailure) as caught:
+            self.judge(limits, **kwargs)
+        failure = caught.exception
+        self.assertEqual((failure.reason, failure.role, failure.source, failure.field),
+                         (reason, "step-d", "outputs/align_episode.json", field))
+        self.assertNotIn(str(MARKER), json.dumps(failure.finding()))
+        return failure
+
+    @staticmethod
+    def limits(native, cap=40960):
+        return {"max_context_tokens": cap, "max_position_embeddings": native}
+
+    def test_d4_the_claim_must_equal_the_attested_limit_by_type_and_value(self):
+        field = "context_limits.max_position_embeddings"
+        self.assertEqual(self.judge(self.limits(40960), attested=40960), 40960)
+        # Frozen suite v2: the four native-limit shifts (mirror 40,960, claim 40,961) ...
+        failure = self.refused("admission_recompute", field, self.limits(40961), attested=40960)
+        self.assertEqual(failure.peer, evidence.DESCRIPTOR_SOURCE)
+        # ... and <member>/descriptor/mirror-40961-claim-40960 and consistent-40961.
+        self.refused("admission_recompute", field, self.limits(40960), attested=40961)
+        self.assertEqual(self.judge(self.limits(40961), attested=40961), 40960)
+        for claim in (None, True, 40960.0, "40960", [40960], 0, -40960, 40959, MARKER):
+            with self.subTest(claim=claim):
+                self.refused("admission_recompute", field, self.limits(claim), attested=40960)
+        self.refused("admission_recompute", field, {"max_context_tokens": 40960}, attested=40960)
+        self.refused("admission_recompute", field, None, attested=40960)
+        # An unread limit is claimed as null and as nothing else.
+        for claim in (40960, 0, False, "", MARKER):
+            with self.subTest(unread_claim=claim):
+                self.refused("admission_recompute", field, self.limits(claim), attested=None, flags=[self.UNREAD])
+        self.refused("admission_recompute", field, {"max_context_tokens": 40960}, attested=None,
+                     flags=[self.UNREAD])
+
+    def test_d5_the_limit_is_unread_exactly_when_the_episode_flags_say_so(self):
+        self.assertEqual(self.judge(self.limits(None), attested=None, flags=[self.UNREAD]), 40960)
+        self.refused("flag_source", self.UNREAD, self.limits(None), attested=None)
+        self.refused("flag_source", self.UNREAD, self.limits(None), attested=None, flags=["other.flag"])
+        self.refused("flag_source", self.UNREAD, self.limits(40960), attested=40960, flags=[self.UNREAD])
+        # The replay keeps D5 on the recorded claim.
+        self.assertEqual(self.judge(self.limits(None), flags=[self.UNREAD]), 40960)
+        self.refused("flag_source", self.UNREAD, self.limits(None))
+        self.refused("flag_source", self.UNREAD, self.limits(40960), flags=[self.UNREAD])
+
+    def test_d6_the_recorded_cap_is_the_frozen_function_of_the_limit_and_the_issued_configuration(self):
+        def frozen(native_limit, spec):
+            # workload.py:283-289 at b2e01464d, transcribed for the comparison only.
+            cap = min(
+                x for x in (native_limit, spec.max_context_tokens) if x is not None
+            ) if native_limit is not None or spec.max_context_tokens is not None else None
+            if spec.max_episode_decode_tokens is not None or spec.deadman_s is not None:
+                cap = min(40960, cap or 40960)
+            return cap
+
+        field = "context_limits.max_context_tokens"
+        count = 0
+        for native in (None, 1024, 40959, 40960, 40961, 131072):
+            for configured in (None, 2048, 40960, 65536):
+                for deadman in (None, 1000.0):
+                    for budget in (None, 6144):
+                        spec = {"max_context_tokens": configured, "deadman_s": deadman,
+                                "max_episode_decode_tokens": budget}
+                        cap = frozen(native, execution(**spec))
+                        flags = [self.UNREAD] if native is None else []
+                        with self.subTest(native=native, **spec):
+                            self.assertEqual(pc.frozen_context_cap(native, execution(**spec)), cap)
+                            self.assertEqual(self.judge(self.limits(native, cap), attested=native, flags=flags,
+                                                        **spec), cap)
+                            for wrong in ((cap or 0) + 1, None if cap is not None else 40960, float(cap or 1), True):
+                                self.refused("admission_recompute", field, self.limits(native, wrong),
+                                             attested=native, flags=flags, **spec)
+                            self.refused("admission_recompute", field, {"max_position_embeddings": native},
+                                         attested=native, flags=flags, **spec)
+                            count += 1
+        self.assertEqual(count, 96)
+
+    def test_the_replay_judges_the_claim_by_existence_and_a_native_run_never_does(self):
+        field = "context_limits.max_position_embeddings"
+        # RL-189 1.4: any positive integer that reproduces the recorded cap is admissible in a replay.
+        for claim in (40960, 40961, 131072):
+            self.assertEqual(self.judge(self.limits(claim)), 40960)
+            if claim != 40960:
+                self.refused("admission_recompute", field, self.limits(claim), attested=40960)
+        self.refused("admission_recompute", "context_limits.max_context_tokens", self.limits(1024))
+        for claim in (0, -1, True, 1.5, "40960", [1]):
+            with self.subTest(claim=claim):
+                self.refused("admission_recompute", field, self.limits(claim))
+        self.refused("admission_recompute", field, {"max_context_tokens": 40960})
+
+    def test_the_replay_record_says_the_native_limit_is_unattested(self):
+        runtime = ModuleType("joulewise.align.apple.r1_runtime")
+        runtime.load_config = lambda _path: (_ for _ in ()).throw(ValueError(f"private {MARKER}"))
+        gates = ModuleType("joulewise.align.apple.thermal_gates")
+        apple = ModuleType("joulewise.align.apple")
+        apple.r1_runtime, apple.thermal_gates = runtime, gates
+        align = ModuleType("joulewise.align")
+        align.apple = apple
+        doubles = {module.__name__: module for module in (align, apple, runtime, gates)}
+        with TemporaryDirectory() as tmp, patch.dict(sys.modules, doubles):
+            attempt = Attempt(Path(tmp))
+            with rehearsal_double(attempt, lambda _argv: self.fail("a replay launches nothing")):
+                record = pc.replay_archived(attempt.output, attempt.config)
+        self.assertEqual(record["native_limit"], dict.fromkeys(MEMBERS, "unattested"))
+        self.assertEqual((record["binding"], record["verdict"], record["failing_checks"]),
+                         ("archived_custody", "other_failure", ["evidence_unverifiable"]))
+        self.assertNotIn(str(MARKER), json.dumps(record))
+
+
+class DescriptorMarkerTests(unittest.TestCase):
+    """RL-183c test 3 over the RL-189 checks: names leave the process, no planted value or path does."""
+
+    def test_no_descriptor_finding_or_emitted_line_carries_a_value_or_a_path(self):
+        with TemporaryDirectory() as tmp, runtime_double():
+            attempt = MirrorAttempt(Path(tmp), limit=MARKER)
+            attempt.launch((FIRST, "step-d"))
+            bound = pc._attested_descriptor(attempt.ledger, FIRST, attempt.configured)
+            self.assertEqual(bound.limit, MARKER)
+            failures = []
+
+            def collect(call):
+                with self.assertRaises(evidence.EvidenceFailure) as caught:
+                    call()
+                failures.append(caught.exception)
+
+            judge = NativeLimitDecisionTests()
+            collect(lambda: judge.judge({"max_context_tokens": 40960, "max_position_embeddings": MARKER + 1},
+                                        attested=MARKER))                                             # D4
+            collect(lambda: judge.judge({"max_context_tokens": 40960, "max_position_embeddings": MARKER},
+                                        attested=MARKER, flags=[pc.UNREAD_LIMIT_FLAG]))               # D5
+            collect(lambda: judge.judge({"max_context_tokens": MARKER, "max_position_embeddings": MARKER},
+                                        attested=MARKER))                                             # D6
+            attempt.descriptor.write_bytes(json_bytes({"max_position_embeddings": MARKER + 1}))
+            collect(lambda: pc._attested_descriptor(attempt.ledger, FIRST, attempt.configured))       # D2
+            append = evidence.EvidenceLedger._append
+            with patch.object(evidence.EvidenceLedger, "_append", lambda ledger, row: append(
+                    ledger, {key: value for key, value in row.items() if key != FIELD})):
+                attempt.launch(("d-bank-benign-s1",))
+            collect(lambda: pc._attested_descriptor(attempt.ledger, "d-bank-benign-s1", attempt.configured))  # D1
+            self.assertEqual([failure.reason for failure in failures],
+                             ["admission_recompute", "flag_source", "admission_recompute",
+                              "source_integrity", "evidence_unverifiable"])
+
+            stdout, stderr = StringIO(), StringIO()
+            with redirect_stdout(stdout), redirect_stderr(stderr), self.assertRaises(ValueError) as raised:
+                pc._emit_part_c(attempt.output, 0, None, failures=tuple(failures), ledger=attempt.ledger)
+            files = [attempt.output / name for name in (*pc.RELEASE_COPIES, evidence.LEDGER_NAME)]
+            released = [stdout.getvalue(), stderr.getvalue(), str(raised.exception),
+                        *[file.read_text() for file in files]]
+            for text in released:
+                self.assertNotIn(str(MARKER), text)
+                self.assertNotIn(str(attempt.mirror), text)
+                self.assertNotIn("mirror-", text)
+            findings = [json.loads(line) for line in stdout.getvalue().splitlines() if line.startswith("{")]
+            self.assertEqual(len(findings), len(failures))
+            for finding in findings:
+                self.assertEqual(set(finding), {"verdict", "reason", "role", "file_or_stream", "row_or_index",
+                                                "field", "peer"})
+                self.assertEqual(finding["verdict"], "other_failure")
+            for row in attempt.rows():
+                if FIELD in row:
+                    self.assertTrue(evidence.is_descriptor_witness(row[FIELD]))

@@ -56,8 +56,8 @@ from types import SimpleNamespace
 import time
 
 from scripts.align_r1_part_c_evidence import (
-    BATTERY_SOURCE, BoundMember, BoundSoak, EvidenceFailure, EvidenceLedger, KINDS, MANIFEST_NAME,
-    SOAK_DIRECTORY, SOAK_FILES, SOAK_SEGMENT, canonical, digest,
+    BATTERY_SOURCE, BoundMember, BoundSoak, DESCRIPTOR_SOURCE, EvidenceFailure, EvidenceLedger, KINDS,
+    MANIFEST_NAME, SOAK_DIRECTORY, SOAK_FILES, SOAK_SEGMENT, canonical, digest, native_limit,
     parse_json as parse_evidence_json, read_regular, stdout_payload,
 )
 
@@ -86,6 +86,11 @@ EPISODE_IDENTITIES = {
     "d-bank": ("Qwen3.8-27B-8bit", "shade/bank_transfer_2", "benign", 1),
     "x-g": ("Qwen3-30B-A3B-4bit", "shade/spam_filter_update", "sabotage", 16),
 }
+# The frozen dispatch's template for each Part C member (r1_runtime k_capture_predecessor_30b,
+# k_step_d, k_gated_d and k_x_g). RL-189 D3 holds each member's own config.json to it.
+TEMPLATE_KEYS = {"capture-predecessor-30b": "model_30b", "step-d": "d_spam",
+                 "d-bank-benign-s1": "d_bank", "x-g": "x_g"}
+UNREAD_LIMIT_FLAG = "model.position_limit_unread"
 POWERMODE_SOURCE = "pmset -g custom (AC Power block, exact powermode key)"
 CUT_FLAGS = frozenset({"episode.deadman", "episode.g0_unreleased", "episode.malformed_tool_call",
                        "episode.time_guard", "episode.context_limit", "thermal.start_gate_timeout",
@@ -434,6 +439,38 @@ class RuntimeAdmissionRefusal(ValueError):
         self.kind, self.reason = kind, reason
 
 
+def issued_model_source(kind, configured):
+    """RL-189 1.2, first route: the member's ``model.source`` from the issued runtime config.
+
+    The frozen ``read_template`` is called unchanged on the template the issued
+    config names for this member. No file of the member is read.
+    """
+    from joulewise.align.apple import r1_runtime as rt
+
+    template, _spec = rt.read_template(configured["templates"][TEMPLATE_KEYS[kind]])
+    return template["model"]["source"]
+
+
+def _descriptor_witness(kind, ledger):
+    """The judged invoker's observation of ``<model.source>/config.json`` at a member's return.
+
+    The path comes from the runtime config whose digest row 0 binds. An
+    observation that cannot be made is recorded as such. It never raises.
+    """
+    if ledger is None or ledger.mode != "native" or kind not in TEMPLATE_KEYS:
+        return None
+    try:
+        from joulewise.align.apple import r1_runtime as rt
+
+        configured, config_sha = rt.load_config(ledger.runtime_config)
+        if config_sha != ledger.config_sha:
+            return "unreadable"
+        source = issued_model_source(kind, configured)
+    except Exception:  # noqa: BLE001 - the row must still be written
+        return "unreadable"
+    return ledger.descriptor_witness(source)
+
+
 def judged_invoke(runtime, kind, output, duration=None, *, soak_reference=None, quiet=False,
                   contract_key=None, watch=None, ledger=None):
     """Part C's evidence transport around the byte-frozen R1 process driver."""
@@ -464,14 +501,16 @@ def judged_invoke(runtime, kind, output, duration=None, *, soak_reference=None, 
         process = r1._run(argv)
     except BaseException as error:
         if ledger is not None:
-            ledger.member_return(kind, output, argv, error=error)
+            ledger.member_return(kind, output, argv, error=error,
+                                 model_descriptor=_descriptor_witness(kind, ledger))
         if isinstance(error, UnicodeError):
             raise RuntimeEvidenceError(kind, "stdout_receipt", "invalid", field="invalid") from None
         if not isinstance(error, (OSError, TimeoutExpired)):
             raise
         raise RuntimeEvidenceError(kind, "process_exit", type(error).__name__) from None
     if ledger is not None:
-        ledger.member_return(kind, output, argv, process=process)
+        ledger.member_return(kind, output, argv, process=process,
+                             model_descriptor=_descriptor_witness(kind, ledger))
     code, stdout = process.returncode, process.stdout
     if type(code) is not int:
         raise RuntimeEvidenceError(kind, "process_exit", "invalid exit status")
@@ -1334,7 +1373,7 @@ def _validate_sidecar(rows, sensors, kind, source, *, gated=False):
 
 
 def _check_member_records(kind, bundle, receipt, data, configured, gate_inputs, *,
-                          step_binding=None, gate_counts=None):
+                          step_binding=None, gate_counts=None, descriptor=None):
     from joulewise.align.apple import r1_runtime as rt
     from joulewise.align.apple.budget import budget_record
     from joulewise.align.apple.sampler import seconds_ns
@@ -1499,6 +1538,10 @@ def _check_member_records(kind, bundle, receipt, data, configured, gate_inputs, 
     intervals = () if thermal is None else thermal["intervals"]
     parsed_episode = from_json(Episode, data[episode_name])
     execution = _recompute_member_config(kind, receipt, config, spec, configured, gate_inputs)
+    if descriptor is not None:
+        # RL-189 D3. The whole-config comparisons above already imply it; this names the field.
+        require(config["model"].get("source") == descriptor.source, "execution_config", config_name,
+                field="model.source", peer="issued_inputs")
     _recompute_turn_boundaries(kind, parsed_episode, witnessed, events, intervals, execution.max_tokens)
     context_checks = _recompute_controller_phases(kind, parsed_episode, witnessed, intervals, events)
     _recompute_continuation(kind, parsed_episode, witnessed, execution, config["model"]["family"])
@@ -1512,7 +1555,7 @@ def _check_member_records(kind, bundle, receipt, data, configured, gate_inputs, 
     limits = hardware.get("context_limits")
     reason = next((flag for flag in reversed(episode["flags"]) if flag.startswith(stop + ":")), stop)
     effective_context_cap = _recompute_admissions(kind, execution, parsed_episode, witnessed, limits,
-                                                  budget, context_checks)
+                                                  budget, context_checks, episode["flags"], descriptor)
     expected_budget = budget_record(execution, parsed_episode.turns, reason,
                                     effective_context_cap=effective_context_cap).get("token_budget")
     if expected_budget is None:
@@ -1555,8 +1598,7 @@ def _recompute_member_config(kind, receipt, config, spec, configured, gate_input
     from joulewise.align.apple.workload import EpisodeSpec
     from joulewise.schemas import BenchmarkConfig
 
-    template_key = {"capture-predecessor-30b": "model_30b", "step-d": "d_spam",
-                    "d-bank-benign-s1": "d_bank", "x-g": "x_g"}[kind]
+    template_key = TEMPLATE_KEYS[kind]
     source = "config.json"
     try:
         actual = EpisodeSpec.from_text(config["workload_profile"]["prompt_text"])
@@ -1589,20 +1631,65 @@ def _recompute_member_config(kind, receipt, config, spec, configured, gate_input
     return actual
 
 
-def _recompute_admissions(kind, execution, episode, witnessed, limits, budget, context_checks):
+class _AttestedDescriptor:
+    """RL-189 1.3: the mirror the ledger binds for one member and the limit frozen code reads from it."""
+
+    def __init__(self, source, limit):
+        self.source, self.limit = source, limit
+
+
+def _attested_descriptor(ledger, kind, configured):
+    """D1 and D2. ``A`` is WL:268-272 on bytes whose digest is the member row's, before and after the parse."""
+    try:
+        source = issued_model_source(kind, configured)
+    except Exception as error:
+        raise EvidenceFailure("execution_limits_recompute", kind, "config.json", field="model.source",
+                              peer="issued_inputs") from error
+    limit = native_limit(ledger.model_descriptor(kind, source))
+    ledger.verify_descriptor(kind)
+    return _AttestedDescriptor(source, limit)
+
+
+def frozen_context_cap(limit, execution):
+    """WL:283-289 from a native limit (None when unread), the configured cap and the budget flags."""
+    configured = execution.max_context_tokens
+    cap = (min(value for value in (limit, configured) if value is not None)
+           if limit is not None or configured is not None else None)
+    if execution.max_episode_decode_tokens is not None or execution.deadman_s is not None:
+        cap = min(40960, cap or 40960)
+    return cap
+
+
+def _same_limit(claim, expected):
+    return type(claim) is type(expected) and claim == expected
+
+
+def _recompute_admissions(kind, execution, episode, witnessed, limits, budget, context_checks, flags,
+                          descriptor=None):
     source = "outputs/align_episode.json"
 
-    def check(ok, field, index=None):
-        _required(ok, "admission_recompute", kind, source, field=field, index=index, peer="config.json")
+    def check(ok, field, index=None, peer="config.json"):
+        _required(ok, "admission_recompute", kind, source, field=field, index=index, peer=peer)
 
-    position_cap = limits.get("max_position_embeddings") if isinstance(limits, dict) else None
-    # The descriptor is unbound. A positive recorded cap is a possible native
-    # descriptor, but its effective cap must still follow the issued limits.
-    check(_uint(position_cap) and position_cap > 0, "context_limits.max_position_embeddings")
-    context_cap = min(position_cap, execution.max_context_tokens or position_cap)
-    if execution.deadman_s is not None or execution.max_episode_decode_tokens is not None:
-        context_cap = min(context_cap, 40960)
-    check(type(limits.get("max_context_tokens")) is int and limits["max_context_tokens"] == context_cap,
+    claimed = isinstance(limits, dict) and "max_position_embeddings" in limits
+    claim = limits["max_position_embeddings"] if claimed else None
+    if descriptor is None:
+        # RL-189 1.4, the replay: no ledger exists, so the claim is judged by existence.
+        # It is null, or a positive integer that must reproduce the recorded cap below.
+        check(claimed and (claim is None or type(claim) is int and claim > 0),
+              "context_limits.max_position_embeddings")
+        position_cap = claim
+    else:
+        # D4: the claim equals the attested limit, by type and value.
+        position_cap = descriptor.limit
+        check(claimed and _same_limit(claim, position_cap), "context_limits.max_position_embeddings",
+              peer=DESCRIPTOR_SOURCE)
+    # D5: the limit is unread exactly when the episode says so.
+    _required((UNREAD_LIMIT_FLAG in flags) == (position_cap is None), "flag_source", kind, source,
+              field=UNREAD_LIMIT_FLAG, peer=DESCRIPTOR_SOURCE if descriptor is not None else None)
+    # D6: the recorded effective cap follows from that limit and the issued configuration.
+    context_cap = frozen_context_cap(position_cap, execution)
+    check("max_context_tokens" in limits and _same_limit(limits["max_context_tokens"], context_cap),
           "context_limits.max_context_tokens")
     check(len(episode.turns) <= execution.max_turns, "max_turns")
     deadline = budget.get("deadline_ns") if isinstance(budget, dict) else None
@@ -1617,7 +1704,8 @@ def _recompute_admissions(kind, execution, episode, witnessed, limits, budget, c
               "max_episode_decode_tokens", index)
         tokens_used += turn.decode_tokens
         rendered_tokens = len(record["generation"]["prompt_token_ids"])
-        check(rendered_tokens + execution.max_tokens <= context_cap,
+        # WL:518-526 guards an admission only when a limit exists.
+        check(context_cap is None or rendered_tokens + execution.max_tokens <= context_cap,
               "max_context_tokens", index)
         guard_start, guard_end = context_checks[index]
         if execution.deadman_s is not None:
@@ -2616,7 +2704,7 @@ def _check_gated_energy(episode, data, receipt, kind):
                   RECEIPT_NAME, field=key, peer="power_trace.csv")
 
 
-def _native_bundle(bound, receipt, configured, gate_inputs, step_binding):
+def _native_bundle(bound, receipt, configured, gate_inputs, step_binding, descriptor):
     from joulewise.align.apple.sampler import seconds_ns
 
     kind = bound.kind
@@ -2627,7 +2715,7 @@ def _native_bundle(bound, receipt, configured, gate_inputs, step_binding):
         if kind in QUIET_MEMBERS:
             _check_load(data[LOAD_SOURCE], receipt, kind, bound.ended_epoch_s - bound.started_epoch_s)
         binding = _check_member_records(kind, bundle, receipt, data, configured, gate_inputs,
-                                        step_binding=step_binding)
+                                        step_binding=step_binding, descriptor=descriptor)
         joined = _episode_from_bound_trace(data)
         first, last = joined.hardware["paired_clock_stamps_ns"]
         _required(seconds_ns(bound.started_epoch_s) <= first["epoch_ns"] <= last["epoch_ns"]
@@ -2763,7 +2851,8 @@ def _native_verdict(ledger, runtime, invoke, configured, soak):
         member = ledger.member(kind)
         prior_end = _check_terminal_order(member, prior_end)
         bundles[kind], binding = _native_bundle(member, receipt, configured,
-                                                (step_receipt, bands, s5_bands), step_binding)
+                                                (step_receipt, bands, s5_bands), step_binding,
+                                                _attested_descriptor(ledger, kind, configured))
         if kind == "step-d":
             step_binding = binding
     step = step_d_facts(bundles["step-d"], step_receipt)
@@ -2864,8 +2953,9 @@ def replay_archived(output, runtime_config):
     from scripts import align_r1_rehearsal as r1
 
     counts = []
+    # RL-189 1.4: a replay has no ledger and so no descriptor witness. It says so for each member.
     result = {"binding": "archived_custody", "verdict": "other_failure", "failing_checks": [],
-              "gate_counts": counts}
+              "gate_counts": counts, "native_limit": dict.fromkeys(KINDS, "unattested")}
     kind = "idle"
     try:
         configured, config_sha = rt.load_config(runtime_config)
