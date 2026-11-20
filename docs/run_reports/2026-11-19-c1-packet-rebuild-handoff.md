@@ -178,3 +178,68 @@ for ref in ('b2e01464d', 'HEAD'):
    [PR #844](https://github.com/mpmdw/JouleWise/pull/844)
 
 **NEEDS_SPEC** · None identified by the builder.
+
+## Lead audit round 1 · R20 sentinel positions
+
+The independent lead audit on `d5fd0a5d7` reproduced one inherited VERIFIED HIGH, an
+integration seam. Both a 22-member projection with ordinary members 20 and 21 relabelled
+and a projection with all four canonical sentinel IDs at 5/20/21/22 returned CLI 0 and
+matched the arm rebuild. Cohort, full desk, committed-record and C1 history binding did
+not catch the missing supplemental positions. The lead authorized the correction in the
+single, still-unsigned W1 candidate. The one W1 signing receipt binds that candidate.
+[Protocol R20](https://github.com/mpmdw/JouleWise/blob/b2e01464d6d4fbf2901ff4d4154df9455104a12a/docs/align/pilot_protocol_v4.md#L1024-L1035) ·
+[RL-182 §1.5](https://github.com/mpmdw/JouleWise/blob/00a28dcf2d0dc424bd3438678913d4f393d3ed3a/docs/research-audits/2026-11-10-fable/RESEARCH-LEAD-DECISIONS.md#L19777-L19802)
+
+The original executable spec remains at `9fba97178`. Supplemental freeze
+`49ac71d4e8ef5b63ef02e30d46dc37a276ec0ee0`, tree
+`39c94a488f9d9bbd9d180d1f9143c1b4340847f4`, added both reproductions, the ordinal sweep,
+and the W1 digest carry witness before implementation. Its run of 17 methods exited 1
+with two incorrect CLI admissions, 231 missing-validator sweep errors, and one missing
+desk/receipt-proof assertion. The original assertions stayed in place.
+
+The fix at `e0fc1392fc95adcd31812a781423e8f4452a3db7`, assessed code tree
+`03faa3637f463e26018de2764de908bad4dde89d`, reads the same committed series manifest
+whose SHA-256 the series binding checks. The series producer's ordinary and R20 allocations
+supply the expected ordinal and run-ID pairs. The packet verifies the digest-bound
+next-plan projection against those pairs, including roster shape and unique identities.
+The ledger list must agree with the derived IDs. The validator also checks later series
+windows, and the U4-only trigger still governs when supplemental members are mandatory.
+The W1 desk artifact-set digest is derived and compared as before. The packet carries the
+committed W1 desk SHA-256 and the SHA-256 of its registration receipt when W1 exports it
+or the canonical receipt is committed with its record. Both receipt copies must match
+when present. The signing gate and all issued artifacts stay with their owners.
+
+None of RL-182 §1.5's eight protected functions or constants changed. All ten
+condition-13 Git blob IDs match the W1 baseline, with zero inherited absences.
+The original fixture identities above describe the first published tree. The shared
+fixture now uses a full digest-bound next-plan projection for the stricter check.
+
+The finalized focused class passed 18/18. Both audit cases and the swapped-ID control write
+CLI exit 2 diagnostics with `sentinel_roster` failed. The sweep passes only the frozen pair
+over all 276 pairs of the 24 positions and refuses five additional wrong-cardinality sets.
+The genuine roster and the receipt replay are ready. An uncommitted edit to the canonical
+receipt does not replace the digest from W1's committed evidence.
+
+| Synthetic case | W1 record commit | Series state commit | CLI |
+| --- | --- | --- | --- |
+| Genuine 24-member C1 | `ae3e2dfce849af3a03565c5e636f4949c384ef6f` | `7ee21ffaa9ae590e2cae83fc1b72687299666822` | 0, ready |
+| Ordinary 20/21 relabelled | `ae3e2dfce849af3a03565c5e636f4949c384ef6f` | `7677caebf66af4e4d0e3e92412924b7c0d14c72f` | 2, refused |
+| Exact sentinel IDs moved to wrong positions | `ae3e2dfce849af3a03565c5e636f4949c384ef6f` | `2a99c6e0d59915282ae5e11564b2f976ad61c07a` | 2, refused |
+| IDs swapped across positions 23 and 24 | `ae3e2dfce849af3a03565c5e636f4949c384ef6f` | `a2c57ad37deec57caf4ccc0773cba94c03721bb4` | 2, refused |
+| Committed synthetic W1 receipt | `1cf442dd6f717a9244aa0bc362e2466fd57b1973` | `9a3409a9c53deab9a94bc255e685299356b42744` | 0, ready |
+
+```sh
+PYTHONPATH=tests:. python3.13 -B -m unittest align.test_v4_next_arm_packet.C1PacketRebuildTests
+JW_B5_SYNTHETIC_ONLY=1 PYTHONPATH=tests:. python3.13 -B -m unittest \
+  align.test_v4_next_arm_packet.PacketTests align.test_v4_next_arm_packet.SentinelTriggerTests \
+  align.test_v4_next_arm_packet.DeskDerivationTests tests.align.test_v4_claim_b_packet \
+  tests.align.test_v4_series.PacketTests tests.align.test_v4_series_delta5
+JW_B5_SYNTHETIC_ONLY=1 PYTHONPATH=tests:. python3.13 -B -m unittest \
+  tests.align.test_r11_delta6_sol1.Delta6Witnesses.test_u5_inconclusive_does_not_trigger_sentinels_but_u4_does
+git diff --check b2e01464d HEAD
+```
+
+`NEEDS_SPEC: none`. The lead's engineering ruling resolves the prior scope and projection
+hold. The exact final-head CI is recorded in the draft PR ledger and the seat handoff.
+W1 signing, the final post-close packet, and integration-owner and Opus acceptance
+remain with their owners.
