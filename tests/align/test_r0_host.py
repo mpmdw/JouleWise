@@ -1961,6 +1961,35 @@ class R0PublicationAuditTest(unittest.TestCase):
     def assert_withheld(self, result):
         self.assertEqual((result["rc"], result["status"], result["published"]), (2, "refused", False), result)
 
+    def test_background_resident_rate_excludes_arguments_read_latency(self):
+        from tests.align import test_r0_vs_l3_differential as fixture
+
+        class Resident(fixture.Process):
+            def row(self, now):
+                pid, born, cpu, command, argv = super().row(now)
+                return pid, born, 75 if 45 <= now < 60 else cpu, command, argv
+
+        for delay, cpu, busy in ((0, 151, True), (0.5, 151, True), (2, 151, True), (0.5, 150, False)):
+            with self.subTest(delay=delay, cpu=cpu):
+                paired = False
+
+                def run(original, model, argv, **kwargs):
+                    nonlocal paired
+                    result = original(model, argv, **kwargs)
+                    if paired and tuple(argv) == prewindow.PS_ARGV and model.now == 60:
+                        model.now += delay
+                    paired = tuple(argv) == contention.PS_ARGV
+                    return result
+
+                worker = Resident(fixture.WORKER, cpu_at=60, centiseconds=cpu)
+                result = self.trial(fixture.Case("background_args_latency", (worker,), end=65), command=run)
+                if busy:
+                    self.assert_withheld(result)
+                    self.assertTrue(any(flag[:3] == (30.0, 60.0, fixture.PID) for flag in result["flags"]), result)
+                    self.assertIn((30.0, 60.0), result["report_intervals"])
+                else:
+                    self.assertEqual((result["rc"], result["published"], result["flags"]), (0, True, []), result)
+
     def test_contaminant_substrings_keep_admitted_cpu_flags(self):
         from tests.align import test_r0_vs_l3_differential as fixture
 
