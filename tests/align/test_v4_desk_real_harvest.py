@@ -5,6 +5,7 @@ bundles with planted sources), the harvest side is ``tests.test_harvest_b5_windo
 bundles) run through the real ``scripts/harvest_b6_session.py`` as a child process, joined by run id.
 """
 import contextlib
+import hashlib
 import io
 import json
 import os
@@ -38,7 +39,9 @@ def tearDownModule():  # noqa: N802 (unittest hook)
 
 def build(root, scope):
     """A synthetic v4 session for ``scope`` (W1, C3 or T2) whose harvest is the real one (exec seat's build)."""
-    window = w.Window(root / 'window')
+    start, end = w.member_span_ns('b5t-cmp-b01-b1')
+    excursion = ((start + end) // 2, {'instant_amperage_ma': 447, 'amperage_ma': 380})
+    window = w.Window(root / 'window', journals={'extra_publications': [excursion]})
     plan = json.loads(window.plan_path.read_bytes())
     plan['hazard_window']['bindings']['capture_screen'] = {}
     support.write_json(window.plan_path, plan)
@@ -105,6 +108,47 @@ class RealHarvestDeskTests(unittest.TestCase):
             full = json.loads((run['sroot'] / 'archive/withheld/PILOT.full.json').read_text())
             self.assertTrue(full['session_harvest_flags'], scope)          # the control: the full record has them
 
+    def test_rl183b_real_harvest_final_refuses_without_unpack_receipt(self):
+        from scripts import align_v4_harvest_off as runner
+
+        run = self.runs['C3']
+        self.assertIn(run['status']['harvest_exit'], (0, 6))
+        self.assertTrue(run['fx'].runs.is_dir())
+        with contextlib.redirect_stdout(io.StringIO()) as out, contextlib.redirect_stderr(io.StringIO()) as err:
+            status = runner.main(['final', '--session-root', str(run['sroot']), '--window-id', 'C3'])
+        self.assertEqual(status, 1)
+        self.assertIn('final eligibility refused: unpack receipt missing for a window with captures', err.getvalue())
+        self.assertEqual(out.getvalue(), '')
+
+    def test_rl183b_cli_final_rejects_wrong_identity_and_receipt_encoding(self):
+        from scripts import align_v4_harvest_off as runner
+
+        run = self.runs['C3']
+        sha = 'a' * 64
+        receipt = {'schema': 'joulewise.align_v4.unpack_receipt.v1', 'window': 'C3',
+                   'plan_id': 'align-v4-c3', 'finalized_manifest_sha256': sha}
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / 'receipt.json'
+            cmd = ['final', '--session-root', str(run['sroot']), '--window-id', 'C3',
+                   '--unpack-receipt', str(path), '--finalized-sha256', sha]
+            for change, reason in (({}, None), ({'window': 'C4'}, 'another window'),
+                                   ({'plan_id': 'another'}, 'another plan'),
+                                   ({'finalized_manifest_sha256': 'b' * 64}, 'manifest digest'),
+                                   ({'file_count': 1}, 'exactly'), (None, 'not canonical')):
+                with self.subTest(change=change):
+                    raw = json.dumps({**receipt, **(change or {})}, sort_keys=True, separators=(',', ':')).encode()
+                    path.write_bytes(raw if change is not None else raw + b'\n')
+                    with contextlib.redirect_stdout(io.StringIO()) as out, contextlib.redirect_stderr(io.StringIO()) as err:
+                        status = runner.main(cmd)
+                    if reason is None:
+                        self.assertEqual(status, 0, err.getvalue())
+                        report = json.loads(out.getvalue())
+                        self.assertEqual(report['unpack_receipt_sha256'], hashlib.sha256(raw).hexdigest())
+                    else:
+                        self.assertEqual(status, 1)
+                        self.assertIn(reason, err.getvalue())
+                        self.assertEqual(out.getvalue(), '')
+
     def test_e1_w1_prints_window_harvest_flags_as_code_names_only(self):
         run = self.runs['W1']
         pilot = json.loads((run['sroot'] / 'PILOT.json').read_text())
@@ -152,18 +196,40 @@ class RealHarvestDeskTests(unittest.TestCase):
             rebuilt = (json.dumps(guess, indent=2, sort_keys=True) + '\n').encode()
             if rebuilt == raw:
                 self.assertNotIn(hashlib.sha256(rebuilt).hexdigest(), committed_text)
-        # The exec seat's subtraction attack (exec_subtract.py) on the committed source recovers nothing.
+        # Attack the committed view and a positive control with the true all-member totals restored.
         run = self.runs['W1']
         committed = json.loads((run['sroot'] / 'exclusions.json').read_text())
-        all_counts = (committed.get('flag_counts') or {}).get('by_code') or {}
-        benign, session = Counter(), Counter()
+        full = json.loads((run['sroot'] / 'archive/derived/exclusions.json').read_text())
+        benign, window_codes = Counter(), set()
         for line in run['printed'].splitlines():
             rid, sep, rest = line.partition(' harvest_flags: ')
-            if sep and rid != 'session':
-                for f in json.loads(rest).get('flags') or []:
-                    benign[f['code']] += 1
-        recovered = {c: n - benign[c] - session[c] for c, n in all_counts.items() if n - benign[c] - session[c]}
-        self.assertEqual(recovered, {})
+            if sep and rid == 'session':
+                window_codes.update(json.loads(rest)['flag_codes'])
+            elif sep:
+                benign.update(f['code'] for f in json.loads(rest).get('flags') or [])
+
+        def recover(view):
+            # Skip codes with an unknown window component. The remainder is measurable by subtraction.
+            totals = {code: n for code, n in view['flag_counts'].get('by_code', {}).items()
+                      if code not in window_codes}
+            return Counter(totals) - benign
+
+        self.assertTrue(benign)
+        recovered = recover({**committed, 'flag_counts': full['flag_counts']})
+        original = json.loads((run['sroot'] / 'archive/withheld/PILOT.full.json').read_text())
+        hidden = Counter(flag['code'] for member in original['members'] if member['run_id'] in run['fx'].nonbenign
+                         for flag in member['harvest_flags'] if flag['code'] not in window_codes)
+        self.assertTrue(hidden)
+        self.assertEqual(recovered, hidden)
+        self.assertEqual(recover(committed), {})
+
+    def test_rl163_synthetic_exclusion_rows_carry_only_roster_and_code_fields(self):
+        for scope, run in self.runs.items():
+            committed = json.loads((run['sroot'] / 'exclusions.json').read_text())
+            rows = committed['members_excluded']
+            self.assertTrue(rows, scope)
+            for row in rows:
+                self.assertEqual(set(row), {'run_id', 'position', 'codes', 'families'}, scope)
 
     def test_e5_w1_benign_harvest_lines_carry_no_timing(self):
         run = self.runs['W1']

@@ -102,16 +102,20 @@ do not enter triage pass/fail values or eligible totals in the index:
   `PILOT.json`'s `plan_id` equal this record's `sources.plan.plan_id`,
   `PILOT.json`'s `status` is `instrument_ok` or `instrument_incomplete`, and any
   `members_excluded` the desk or PILOT recorded equals the exclusions source.
-  A completed desk that did not pass stays final. Window binding is the thermal
+  A captured window after R1 also needs `unpack_receipt` in the same final source
+  set, as written by verified unpack (RL-183b). Its window, plan and digest must
+  match the record being judged, including when the receipt rides in its successor.
+  Zero captures can finalize by light triage without a receipt. A supplied receipt
+  must still verify. R1 is exempt. Window binding is also the thermal
   section's `model/window` keys and roster. Otherwise the record is provisional
   (it needs `sources.light_triage`), and every window of the hash chain other than
   the previous one, test windows included, must be final (R17: k final before
   the arm of k+2), or `member_eligibility` fails.
-* `finalized_manifest` (required after R1, R17 review F2): descriptor of the
-  record-bound tree manifest `harvest_offload.finalized_manifest` wrote at
-  finalize (`joulewise.align_v4.finalized_manifest.v2`, canonical JSON bytes, so
-  its SHA-256 is the digest `unpack --finalized-sha256` checks). It binds the
-  restore namespace, every tree entry and the finite external-input closure.
+* `finalized_manifest` (required after R1, RL-163): the lowercase SHA-256 string
+  of the canonical tree manifest. `unpack --finalized-sha256` verifies that digest
+  over the body and binds the restore namespace, tree and finite external-input
+  closure. The packet builder reads only the digest and the receipt. The body
+  stays out of Git before release.
 * `captures`: an exhaustive map from every planned run id to a descriptor for
   its captured measurement artifact, or null for no capture. A nonempty captured
   artifact counts even if its member later fails; eligibility is separate.
