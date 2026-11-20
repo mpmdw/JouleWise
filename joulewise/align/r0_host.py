@@ -128,6 +128,7 @@ def _require_clear_sighting(pid, command, receipt, *, argv=None, line=None):
 
 @dataclass(frozen=True)
 class _ArgumentsRead:
+    started_ns: int
     finished_ns: int
     pids: frozenset[int]
     contenders: frozenset[int]
@@ -151,8 +152,7 @@ def _read_finished_ns(read):
     return read.finished_ns if isinstance(read, _ArgumentsRead) else read.finished.monotonic_ns
 
 
-# Darwin prints lstart in whole seconds. Wall offsets that agree within one
-# second are treated as one clock, as in _overlap_cpu_evidence.
+# Darwin prints lstart in whole seconds: the floor of the start time.
 _START_RESOLUTION_NS = 1_000_000_000
 
 
@@ -166,16 +166,18 @@ def _birth_floor_ns(row, read):
 
 
 def _born_after(row, read, monotonic_ns, reference):
-    """Whether ``row``'s printed start proves a birth after ``monotonic_ns``.
+    """Whether ``row``'s printed start second proves a birth after ``monotonic_ns``.
 
-    ``read`` listed the row; ``reference`` is an earlier accounting read.
-    Nothing is proven without one, across a wall step, or by a start dated
-    after its own listing. The start must clear the instant by a full second.
+    ``read`` listed the row. ``reference`` is an accounting read taken no
+    later than ``monotonic_ns``. Any wall step between the two shows as a
+    difference of their offsets, and the start must clear the instant by
+    that much. Nothing is proven without a reference or by a start dated
+    after its own listing.
     """
-    if reference is None or abs(_wall_offset_ns(read) - _wall_offset_ns(reference)) > _START_RESOLUTION_NS:
+    if reference is None:
         return False
-    floor = _birth_floor_ns(row, read)
-    return monotonic_ns + _START_RESOLUTION_NS < floor <= read.finished.monotonic_ns
+    shift = abs(_wall_offset_ns(read) - _wall_offset_ns(reference))
+    return monotonic_ns + shift < _birth_floor_ns(row, read) <= read.finished.monotonic_ns
 
 
 def _window_reads(reads, opening, current):
@@ -217,34 +219,55 @@ def _overlap_cpu_evidence(opening, current, reads, *, endpoint_elapsed_ns):
                 lifetime_end = index
                 break
         # A reused PID keeps the arguments table's row. This identity had
-        # released it before the next holder's printed start second ended.
+        # released it before the next holder's printed start second ended,
+        # and before the read that listed that holder. A forward wall step
+        # since this identity's last row can only have dated the start early.
+        released = None
         for index, read, other, row in holders[pid]:
             if other == identity or index <= last_index:
                 continue
-            floor = _birth_floor_ns(row, read)
-            released = floor + _START_RESOLUTION_NS
-            if (abs(_wall_offset_ns(read) - opening_offset) <= _START_RESOLUTION_NS
-                    and floor <= read.finished.monotonic_ns and released >= last.started.monotonic_ns):
-                last_possible = min(last_possible, released)
+            step = max(0, _wall_offset_ns(read) - _wall_offset_ns(last))
+            bound = min(read.finished.monotonic_ns,
+                        _birth_floor_ns(row, read) + _START_RESOLUTION_NS + step)
+            if last.started.monotonic_ns <= bound < last_possible:
+                released = bound if released is None else min(released, bound)
 
         # Darwin prints lstart at whole-second precision. Its floor and
         # the opening read's beginning bound the largest possible overlap.
         wall_offset = _wall_offset_ns(first)
         birth_floor = _birth_floor_ns(first_row, first)
-        reliable_start = (abs(wall_offset - opening_offset) <= _START_RESOLUTION_NS
+        reliable_start = (abs(wall_offset - opening_offset) <= 1_000_000_000
                           and birth_floor <= first.finished.monotonic_ns)
         start_bound = max(window_start, birth_floor) if reliable_start else window_start
 
-        # An arguments sighting of the PID counts from the first read this
-        # identity's start cannot postdate until its confirmed absence. An
-        # earlier holder of the PID cannot hide a sighting that precedes
-        # this identity's first accounting row.
-        seen_from = next(index for index, read in enumerate(reads[:first_index + 1])
-                         if not (reliable_start
-                                 and _read_finished_ns(read) + _START_RESOLUTION_NS < birth_floor))
+        # An arguments sighting of the PID counts until this identity's
+        # confirmed absence. One that precedes its first accounting row
+        # counts too, unless the printed start proves a later birth: an
+        # earlier holder of the PID cannot hide it.
+        def sighted(until=None):
+            for index, read in enumerate(reads[:lifetime_end]):
+                if not isinstance(read, _ArgumentsRead) or pid not in read.contenders:
+                    continue
+                if index < first_index:
+                    reference = next(earlier for earlier in reversed(reads[:index])
+                                     if isinstance(earlier, contention.Snapshot))
+                    if _born_after(first_row, first, read.finished_ns, reference):
+                        continue
+                elif index > last_index and until is not None and read.started_ns > until:
+                    continue  # it began after the later holder had the PID
+                return True
+            return False
+
+        # The later holder's bound applies when this identity is named by
+        # its own rows or by a sighting from inside the bounded lifetime.
+        # Otherwise the lifetime stays as long as the PID was listed, so
+        # that the bound only ever adds evidence.
         matches = {match for _, _, row in observed for match in row["contaminant_matches"]}
-        if any(isinstance(read, _ArgumentsRead) and pid in read.contenders
-               for read in reads[seen_from:lifetime_end]):
+        if released is not None and (matches or sighted(released)):
+            last_possible = released
+            if sighted(released):
+                matches.add("args")
+        elif sighted():
             matches.add("args")
         if not matches:
             continue
@@ -315,6 +338,8 @@ class QuietGuard:
     A process is its (pid, start) pair. The arguments table prints no start,
     so its rows are joined by the printed start second and the confirmed
     lifetime; an earlier or later holder of a PID is a different process.
+    A later holder that only an arguments table lists cannot be told from
+    the earlier process and extends its supported lifetime.
     finish() stops sampling and judges the final state before success can
     be published. An unfinished census at the join bound is indeterminate.
     """
@@ -346,7 +371,7 @@ class QuietGuard:
         self._admission_snapshots = []
         self._admission_previous_over = {}
         self._process_observations = []
-        # (pid, start) -> (highest CPU, contaminant matches). One entry per
+        # pid -> start -> (highest CPU, contaminant matches). One entry per
         # process seen; a PID's next holder never reads or replaces it.
         self._process_history = {}
         # Index into _snapshots of the snapshot that closed the last judged
@@ -418,7 +443,8 @@ class QuietGuard:
         admitted_finished = self._now()
         admitted_wall = self.wall_clock_ns() if admitted_finished != finished else finished_wall
         admitted_finish_ns = int(admitted_finished * 1e9)
-        args = self._process_table(table.stdout, {}, finished_ns=round(admitted_finished * 1e9))
+        args = self._process_table(table.stdout, {}, started_ns=round(finished * 1e9),
+                                   finished_ns=round(admitted_finished * 1e9))
         for row in rows.values():
             if row["pid"] in args.contenders:
                 row["contaminant_matches"].append("args")
@@ -443,14 +469,16 @@ class QuietGuard:
         sighted = previous_read.contenders if isinstance(previous_read, _ArgumentsRead) else frozenset()
         reference = next((read for read in reversed(self._process_observations)
                           if isinstance(read, contention.Snapshot)), None)
-        for identity, row in rows.items():
+        for (pid, start), row in rows.items():
             cpu = row["cumulative_cpu_seconds"]
             matches = set(row["contaminant_matches"])
-            known = self._process_history.get(identity)
+            holders = self._process_history.setdefault(pid, {})
+            known = holders.get(start)
             # The arguments table prints no start time. Its sighting of this
-            # PID belongs to this row unless the row's start proves a later
-            # birth. What an earlier holder of the PID was decides nothing.
-            if identity[0] in sighted and (known is not None or not _born_after(
+            # PID stays with this row unless accounting has another holder
+            # of the PID on record and this row's start proves a birth after
+            # the sighting. An earlier holder alone decides nothing.
+            if pid in sighted and (known is not None or not holders or not _born_after(
                     row, snapshot, previous_read.finished_ns, reference)):
                 matches.add("args")
             if known is not None:
@@ -461,7 +489,7 @@ class QuietGuard:
                     cpu = prior_cpu
             row["contaminant_matches"] = sorted(matches)
             row["contaminant"] = bool(matches)
-            self._process_history[identity] = (cpu, matches)
+            holders[start] = (cpu, matches)
         if not admission:
             backwards = snapshot.finished.wall_ns < snapshot.started.wall_ns
             if self._snapshots:
@@ -499,7 +527,7 @@ class QuietGuard:
         if agent.exit_code != 1 or agent.stdout.strip():
             raise Refused(f"agent census refused: {receipt[field]}")
 
-    def _process_table(self, stdout, receipt, *, finished_ns):
+    def _process_table(self, stdout, receipt, *, started_ns, finished_ns):
         if not stdout.strip():
             raise ValueError("empty process census")
         receipt["pcpu_diagnostic"] = []
@@ -526,7 +554,7 @@ class QuietGuard:
         if candidates:
             self._require_clear_agent_result(
                 ProbeResult(PS_ARGV, 0, "".join(candidates), "", time.monotonic_ns()), receipt, "process_table_agent")
-        return _ArgumentsRead(finished_ns, frozenset(pids), frozenset(contenders))
+        return _ArgumentsRead(started_ns, finished_ns, frozenset(pids), frozenset(contenders))
 
     def _census(self, receipt):
         fs = measurement_liveness.census_fs
@@ -554,10 +582,12 @@ class QuietGuard:
         receipt["resolved_custody_parents"] = custody.resolved_parents
         receipt["custody"] = {"refusals": custody.refusals, "warnings": custody.warnings}
         with self._cpu_probe_lock:
+            started = self._now()
             table = self._probe(PS_ARGV)
             if table.exit_code != 0:
                 raise Refused("process table unavailable")
-            args = self._process_table(table.stdout, receipt, finished_ns=round(self._now() * 1e9))
+            args = self._process_table(table.stdout, receipt, started_ns=round(started * 1e9),
+                                       finished_ns=round(self._now() * 1e9))
             with self._snapshot_lock:
                 self._process_observations.append(args)
         if not custody.clear:
@@ -622,7 +652,7 @@ class QuietGuard:
 
     def finish(self):
         """Stop and drain the sampler before an entry point publishes success."""
-        if self.failure:
+        if self.failure is not None:
             raise Refused(self.failure)
         receipt = {"resolved_custody_parents": []}
         try:
@@ -644,7 +674,7 @@ class QuietGuard:
 
     def verify_publication(self):
         """Take a fresh census at the point that a pass can be published."""
-        if self.failure:
+        if self.failure is not None:
             raise Refused(self.failure)
         receipt = {}
         try:
@@ -875,12 +905,13 @@ class QuietGuard:
     def _record_refusal(self, receipt, error):
         if not any(item is receipt for item in self.receipts):
             self.receipts.append(receipt)
-        self.failure = str(error)
+        # An exception without a message still latches.
+        self.failure = str(error) or type(error).__name__
         receipt["refusal"] = self.failure
         return Refused(self.failure)
 
     def check(self, *, force=False):
-        if self.failure:
+        if self.failure is not None:
             raise Refused(self.failure)
         receipt = {"resolved_custody_parents": []}
         try:

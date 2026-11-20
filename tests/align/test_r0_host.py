@@ -2476,6 +2476,25 @@ class R0LatchedCensusAdmissionTest(unittest.TestCase):
         self.assertIn("Errno 5", guard.receipts[-1]["refusal"])
         self.assertTrue(guard._stop_sampler.is_set())
 
+    def test_refusal_without_a_message_still_latches(self):
+        # str(MemoryError()) is empty. The refusal it causes must still
+        # refuse every later verdict, for a caller that caught the first.
+        for error in (MemoryError(), OSError(), TimeoutError()):
+            with self.subTest(error=type(error).__name__):
+                fault = [error]
+                guard, clock, _ = self.admitted_guard()
+                clear = guard.inspect_custody
+                guard.inspect_custody = lambda **kwargs: (_ for _ in ()).throw(fault.pop()) if fault else clear(**kwargs)
+                clock.now += 1
+                with self.assertRaises(Refused):
+                    guard.check(force=True)
+                self.assertEqual(guard.failure, type(error).__name__)
+                self.assertEqual(guard.receipts[-1]["refusal"], type(error).__name__)
+                clock.now += 1
+                for verdict in (lambda: guard.check(force=True), guard.check, guard.finish, guard.verify_publication):
+                    with self.assertRaisesRegex(Refused, type(error).__name__):
+                        verdict()
+
     def test_finish_refuses_a_failure_latched_after_its_windows_were_judged(self):
         guard, clock, _ = self.admitted_guard()
         judged = guard._cpu_interval
@@ -2497,14 +2516,24 @@ class R0ProcessIdentityTest(unittest.TestCase):
     trial = R0PublicationAuditTest.trial
     assert_withheld = R0PublicationAuditTest.assert_withheld
 
-    def tables(self, rows, *, slow_reads=(45, 46)):
-        """Frozen-suite fixture with extra rows; ps reads in ``slow_reads`` take 10 ms."""
+    def tables(self, rows, *, slow_reads=(45, 46), wall_step=None):
+        """Frozen-suite fixture with extra rows; ps reads in ``slow_reads`` take 10 ms.
+
+        ``wall_step`` is (fixture time, seconds): the wall clock steps then.
+        ``rows`` prints the start of a process born later on the stepped clock.
+        """
         from tests.align import test_r0_vs_l3_differential as fixture
+
+        def stepped(at):
+            return wall_step[1] if wall_step and at >= wall_step[0] else 0
 
         class Tables(fixture.Fixture):
             def __init__(self, case, root):
                 super().__init__(case, root)
                 self.log = []
+
+            def wall_ns(self):
+                return int((fixture.EPOCH + self.now + stepped(self.now)) * 1_000_000_000)
 
             def processes(self):
                 return [*super().processes(), *rows(self.case, self.now)]
@@ -2573,6 +2602,8 @@ class R0ProcessIdentityTest(unittest.TestCase):
             elif now >= 15.005 and "reused" in case.name:
                 yield (fixture.PID, 15, 0, "ordinary", "ordinary")
 
+        # reused_55: the holder's start second leaves the worker up to 16 s,
+        # and 0.55 / 11 s ties the limit. lstart cannot place it more finely.
         for name, busy in (("exited_60", True), ("reused_60", True), ("reused_55", False), ("exited_50", False)):
             with self.subTest(case=name):
                 result, model = self.run_tables(fixture.Case(name, end=40),
@@ -2583,6 +2614,30 @@ class R0ProcessIdentityTest(unittest.TestCase):
                     self.assert_withheld(result)
                     self.assertIn((0.0, 30.02, fixture.PID), [flag[:3] for flag in result["flags"]], result)
                     self.assertIn((0.0, 30.02), result["report_intervals"])
+                else:
+                    self.assertEqual((result["rc"], result["published"], result["flags"]), (0, True, []), result)
+
+    def test_later_holder_bounds_the_lifetime_after_an_earlier_wall_step(self):
+        # The same history after the wall clock stepped back 5 s at 10 s,
+        # before the worker's only row and before the holder's birth. The
+        # holder's start is dated on the clock of the worker's last row, so
+        # the bound still holds: 0.90 / 16 s. Without it, 0.90 / 30 s.
+        from tests.align import test_r0_vs_l3_differential as fixture
+
+        def rows(case, now):
+            growth = int(case.name.rsplit("_", 1)[1])
+            if 5 <= now < 15.005:
+                yield (fixture.PID, 5, growth if now >= 10 else 0, fixture.WORKER, fixture.WORKER)
+            elif now >= 15.005 and "reused" in case.name:
+                yield (fixture.PID, 15.005 - 5, 0, "ordinary", "ordinary")
+
+        for name, busy in (("exited_90", True), ("reused_90", True), ("reused_80", False)):
+            with self.subTest(case=name):
+                result, _ = self.run_tables(fixture.Case(name, end=40), self.tables(
+                    rows, slow_reads=(15, 16), wall_step=(10, -5)))
+                if busy:
+                    self.assert_withheld(result)
+                    self.assertIn((0.0, 30.02, fixture.PID), [flag[:3] for flag in result["flags"]], result)
                 else:
                     self.assertEqual((result["rc"], result["published"], result["flags"]), (0, True, []), result)
 
@@ -2608,9 +2663,10 @@ class R0ProcessIdentityTest(unittest.TestCase):
         self.assertEqual((result["rc"], result["published"], result["flags"]), (0, True, []), result)
 
     def test_earlier_holders_name_does_not_follow_the_pid_to_a_later_process(self):
-        # The start time decides in both directions. A named worker holds the
-        # PID until 5 s without using CPU. An ordinary process started at 10 s
-        # under the same PID uses 1.80 CPU-s: it is not a contaminant.
+        # A named worker holds the PID until 5 s without using CPU. An
+        # ordinary process started at 10 s under the same PID uses 1.80
+        # CPU-s: its start second begins after every sighting of the worker,
+        # and accounting has the worker on record, so it is not a contaminant.
         from tests.align import test_r0_vs_l3_differential as fixture
 
         def rows(case, now):
@@ -2627,7 +2683,90 @@ class R0ProcessIdentityTest(unittest.TestCase):
         self.assert_withheld(result)
         self.assertIn((0.0, 30.0, fixture.PID), [flag[:3] for flag in result["flags"]], result)
 
-    def test_printed_start_proves_a_later_birth_only_on_one_consistent_clock(self):
+    def test_later_process_is_cleared_only_by_a_start_second_after_the_sighting(self):
+        # A resident worker without CPU exits at 30.5 s; its last arguments
+        # sighting is the 30 s census. An ordinary process born later under
+        # the PID uses 1.80 CPU-s by 40 s.
+        from tests.align import test_r0_vs_l3_differential as fixture
+
+        def rows(case, now):
+            kind, born = case.name.split("_")
+            if kind != "alone" and now < 30.5:
+                yield (fixture.PID, -100, 0, fixture.WORKER, fixture.WORKER)
+            if now >= float(born):
+                # After the step the kernel dates a new process on the stepped clock.
+                printed = float(born) - 5 if kind == "stepped" else float(born)
+                yield (fixture.PID, printed, 180 if now >= 42 else 0, "ordinary", "ordinary")
+
+        # 31.0 and 31.9 print start second 31, after the sighting at 30.0.
+        # 30.6 prints second 30, which holds the sighting: lstart cannot
+        # tell that process from the one sighted, and the name stays.
+        for name, named in (("succ_31.9", False), ("succ_31.0", False), ("succ_30.6", True), ("alone_30.6", False)):
+            with self.subTest(case=name):
+                result, _ = self.run_tables(fixture.Case(name, end=65), self.tables(rows, slow_reads=(0, 0)))
+                if named:
+                    self.assert_withheld(result)
+                    self.assertIn("ordinary", result["reason"])
+                else:
+                    self.assertEqual((result["rc"], result["published"], result["flags"]), (0, True, []), result)
+
+        # A 5 s backward wall step at 35 s, after the sighting. The process
+        # born at 40 s clears the sighting by more than the step.
+        result, _ = self.run_tables(fixture.Case("stepped_40", end=65), self.tables(
+            rows, slow_reads=(0, 0), wall_step=(35, -5)))
+        self.assertEqual((result["rc"], result["published"], result["flags"]), (0, True, []), result)
+
+    def test_later_workers_name_does_not_reach_back_to_an_earlier_process(self):
+        # An ordinary process uses 0.60 CPU-s and exits at 32.599 s. A named
+        # worker is born under the PID one millisecond later and is first
+        # sighted by the 45 s census. Its start second ends at 33 s, which
+        # bounds the ordinary process to 0.06 CPU-s/s; the sighting began
+        # twelve seconds after that and is not the ordinary process's.
+        from tests.align import test_r0_vs_l3_differential as fixture
+
+        def rows(case, now):
+            if 23.6 <= now < 32.599:
+                name = fixture.WORKER if case.name == "earlier_worker" else "ordinary"
+                yield (fixture.PID, 23.6, 60 if now >= 26 else 0, name, name)
+            elif 32.6 <= now < 47:
+                yield (fixture.PID, 32.6, 0, fixture.WORKER, fixture.WORKER)
+
+        result, _ = self.run_tables(fixture.Case("earlier_ordinary", end=65), self.tables(rows, slow_reads=(0, 0)))
+        self.assertEqual((result["rc"], result["published"], result["flags"]), (0, True, []), result)
+
+        # The same earlier process as a named worker is flagged on that bound.
+        result, _ = self.run_tables(fixture.Case("earlier_worker", end=65), self.tables(rows, slow_reads=(0, 0)))
+        self.assert_withheld(result)
+        self.assertIn((15.0, 45.0, fixture.PID), [flag[:3] for flag in result["flags"]], result)
+
+    def test_sighting_without_another_holder_on_record_stays_with_the_pid(self):
+        # An args-named process is listed only by the 0 s arguments read and
+        # never by accounting. A second process takes the PID at 5 s, reaches
+        # 1.80 CPU-s and is listed once by accounting at 15 s; its own
+        # arguments are never read. Accounting has no other holder to give
+        # the sighting to, so it stays with this row, as on 9ed986bec.
+        from tests.align import test_r0_vs_l3_differential as fixture
+
+        def rows(case, now):
+            if 0.015 <= now < 2:
+                yield (fixture.PID, 0.015, 0, "python3", fixture.ARG_WORKER)
+            if 5 <= now < 15.035:
+                yield (fixture.PID, 5, 180 if now >= 10 else 0, "python3", fixture.ARG_WORKER)
+
+        class Baseline(self.tables(rows, slow_reads=(0, 1))):
+            def run(self, argv, **kwargs):
+                start = self.now
+                reply = super().run(argv, **kwargs)
+                if 15 <= start < 16 and tuple(argv) in (contention.PS_ARGV, prewindow.PS_ARGV):
+                    self.now += 0.01
+                return reply
+
+        result, _ = self.run_tables(fixture.Case("unowned_sighting", end=40), Baseline)
+        self.assert_withheld(result)
+        self.assertIn("python3", result["reason"])
+        self.assertTrue(any(flag[2] == fixture.PID and flag[1] < 31 for flag in result["flags"]), result)
+
+    def test_printed_start_proves_a_later_birth_only_beyond_any_clock_shift(self):
         from joulewise.align.r0_host import _born_after
 
         def read(started_s, finished_s, wall_offset_s=1_000):
@@ -2636,15 +2775,20 @@ class R0ProcessIdentityTest(unittest.TestCase):
 
         row = {"start_epoch_s": 1_010.0}  # monotonic 10 s on the default offset
         reference, listing = read(0, 0.01), read(15, 15.01)
-        self.assertTrue(_born_after(row, listing, int(8.9e9), reference))
-        # lstart is whole seconds: a start within one second proves nothing.
-        self.assertFalse(_born_after(row, listing, int(9e9), reference))
+        self.assertTrue(_born_after(row, listing, int(9.999e9), reference))
+        # lstart is the floor of the start: a sighting inside that second
+        # could have listed the process.
+        self.assertFalse(_born_after(row, listing, int(10e9), reference))
         self.assertFalse(_born_after(row, listing, int(12e9), reference))
-        # No earlier accounting read, a wall step, or a start dated after its
-        # own listing: the sighting stays with the row.
-        self.assertFalse(_born_after(row, listing, int(8.9e9), None))
-        self.assertFalse(_born_after(row, read(15, 15.01, 998.9), int(8.9e9), reference))
-        self.assertFalse(_born_after({"start_epoch_s": 1_016.0}, listing, int(8.9e9), reference))
+        # A 2 s wall step between the reference and the listing moves the
+        # printed start by up to 2 s: the start must clear the instant by it.
+        back, forward = read(15, 15.01, 998), read(15, 15.01, 1_002)
+        for stepped, floor_s in ((back, 12), (forward, 8)):
+            self.assertFalse(_born_after(row, stepped, int((floor_s - 2) * 1e9), reference))
+            self.assertTrue(_born_after(row, stepped, int((floor_s - 2.001) * 1e9), reference))
+        # No reference, or a start dated after its own listing: no proof.
+        self.assertFalse(_born_after(row, listing, int(9e9), None))
+        self.assertFalse(_born_after({"start_epoch_s": 1_016.0}, listing, int(9e9), reference))
 
     def test_history_is_kept_per_identity_across_pid_reuse(self):
         # Two holders of PID 42 alternate in the tables. Each keeps its own
@@ -2665,7 +2809,7 @@ class R0ProcessIdentityTest(unittest.TestCase):
         self.assertEqual((other["contaminant"], other.get("peak_cpu_seconds")), (False, None))
         again = remember(OLD_START, 0.0, [])
         self.assertEqual((again["contaminant_matches"], again["peak_cpu_seconds"]), (["ucomm"], 1.8))
-        self.assertEqual(guard._process_history[(42, NEW_START)], (0.2, set()))
+        self.assertEqual(guard._process_history[42][NEW_START], (0.2, set()))
 
 
 class R0QuietIntervalTest(unittest.TestCase):
