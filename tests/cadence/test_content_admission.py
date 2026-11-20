@@ -114,7 +114,9 @@ class Stage1(_Copy):
         rc, err, out = self.stage1("--run-state", self.run_state)
         self.assertEqual(rc, 0, err)
         # stage 1's output carries nothing of the pin list: it must not vary with the bytes of an energy file
-        self.assertFalse([key for key in json.loads(out.read_bytes())["code_sha256"] if "pins" in key])
+        recorded = json.loads(out.read_bytes())["code_sha256"]
+        self.assertEqual(sorted(key for key in recorded if key.startswith("input:")),
+                         ["input:roster_sha256", "input:rules_3_4_sha256"])
         served = TLR.LAST_RUN["served"]
         self.assertIn(f"{self.ids[0]}/runner_receipt.json", served)          # the stage parsed the verified bytes
         self.assertTrue(protected(served))                                   # the time fields of the energy files too
