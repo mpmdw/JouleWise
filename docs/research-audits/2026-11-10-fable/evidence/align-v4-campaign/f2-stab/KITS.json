@@ -1,0 +1,118 @@
+{
+  "base_kits": [
+    "f2-stab-01",
+    "f2-stab-02",
+    "f2-stab-03",
+    "f2-stab-04",
+    "f2-stab-05",
+    "f2-stab-06",
+    "f2-stab-07",
+    "f2-stab-08",
+    "f2-stab-09",
+    "f2-stab-10",
+    "f2-stab-11",
+    "f2-stab-12",
+    "f2-stab-13",
+    "f2-stab-14"
+  ],
+  "rows": [
+    {
+      "kit_id": "f2-stab-01",
+      "path": "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/f2-stab/f2-stab-01.v1.1.json",
+      "runner_pin": "2d347f721",
+      "sha256": "dbad9c7b79088bb6f06aac1c1148c3631a0c616fd2ece596bab0f56657ce70fe"
+    },
+    {
+      "kit_id": "f2-stab-02",
+      "path": "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/f2-stab/f2-stab-02.v1.1.json",
+      "runner_pin": "2d347f721",
+      "sha256": "1fe8dd1d0fb60fe1d481ecb0d4358fda595668c1e889a35a75695e290fcad505"
+    },
+    {
+      "kit_id": "f2-stab-03",
+      "path": "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/f2-stab/f2-stab-03.v1.1.json",
+      "runner_pin": "2d347f721",
+      "sha256": "ac4b303e228233765efda120b2d63f2f6e59d7f8565c4b913880c4a1aa1dc404"
+    },
+    {
+      "kit_id": "f2-stab-04",
+      "path": "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/f2-stab/f2-stab-04.v1.1.json",
+      "runner_pin": "2d347f721",
+      "sha256": "494739dedbc07f2ee3a02b1e5f9561bb4812d765c7630e6931c24ea138525bff"
+    },
+    {
+      "kit_id": "f2-stab-05",
+      "path": "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/f2-stab/f2-stab-05.v1.1.json",
+      "runner_pin": "2d347f721",
+      "sha256": "023febe9afc8532b8f06bb40dfe32dd64a933c99e8e080a51e2686e888246b11"
+    },
+    {
+      "kit_id": "f2-stab-06",
+      "path": "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/f2-stab/f2-stab-06.v1.1.json",
+      "runner_pin": "2d347f721",
+      "sha256": "a02d18bafca780c580ae7dfe970e3a81e3e12b4051b269699db329f02c33172c"
+    },
+    {
+      "kit_id": "f2-stab-07",
+      "path": "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/f2-stab/f2-stab-07.v1.1.json",
+      "runner_pin": "2d347f721",
+      "sha256": "fb22cadce8be3c7d7642c9b55802aa0bd4ea90e41c7c0e9a5038e7a8dc88746d"
+    },
+    {
+      "kit_id": "f2-stab-08",
+      "path": "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/f2-stab/f2-stab-08.v1.1.json",
+      "runner_pin": "2d347f721",
+      "sha256": "aaba2ad04cbc88e9872c292699dfa9f98dfb15ad9f7e0af23a1faf0091bebf00"
+    },
+    {
+      "kit_id": "f2-stab-09",
+      "path": "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/f2-stab/f2-stab-09.v1.1.json",
+      "runner_pin": "2d347f721",
+      "sha256": "9a2b863f7abbffdc2d33a3af6bee7d8381d0c54883dbb4a7cac41378572c5ce8"
+    },
+    {
+      "kit_id": "f2-stab-10",
+      "path": "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/f2-stab/f2-stab-10.v1.1.json",
+      "runner_pin": "2d347f721",
+      "sha256": "bb54fdaff1292ab24f53204698649d0925fa00beedca70604f760a340c9ee926"
+    },
+    {
+      "kit_id": "f2-stab-11",
+      "path": "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/f2-stab/f2-stab-11.v1.1.json",
+      "runner_pin": "2d347f721",
+      "sha256": "e8cb23471f556d21514fb5ba37ffa409b9b697cfbd2519d3c2ab0c6922ed36fe"
+    },
+    {
+      "kit_id": "f2-stab-12",
+      "path": "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/f2-stab/f2-stab-12.v1.1.json",
+      "runner_pin": "2d347f721",
+      "sha256": "7a0440d3f15823760179782f85cad560e8ca917bf66201c02b1b911d79af35f9"
+    },
+    {
+      "kit_id": "f2-stab-13",
+      "path": "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/f2-stab/f2-stab-13.v1.1.json",
+      "runner_pin": "2d347f721",
+      "sha256": "47c3d2f5f6133112e7a209c9522e48bb3388c7fa27f56e5ffdf86962d95f7de3"
+    },
+    {
+      "kit_id": "f2-stab-14",
+      "path": "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/f2-stab/f2-stab-14.v1.1.json",
+      "runner_pin": "2d347f721",
+      "sha256": "73fe743e013cddd6d5294e95e076c64933a81eb95933fb4aa5dfb85471b9402d"
+    },
+    {
+      "kit_id": "f2-stab-15",
+      "path": "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/f2-stab/qual-pin/f2-stab-15.v1.1.json",
+      "runner_pin": "6e9d42f1d",
+      "sha256": "8dceffc2e1a10a03d25c6c06487756fe37f8f5a1c57d52e242a64faabcbc36a1"
+    },
+    {
+      "kit_id": "f2-stab-16",
+      "path": "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/f2-stab/qual-pin/f2-stab-16.v1.1.json",
+      "runner_pin": "6e9d42f1d",
+      "sha256": "0fc1139dfb4b92ab18e5fb4c0b66e0d211a02e218e841a4cf94fde1fb19f2b96"
+    }
+  ],
+  "ruling": "RL-190 1.3",
+  "schema": "joulewise.f2_stab_kit_index.v1"
+}

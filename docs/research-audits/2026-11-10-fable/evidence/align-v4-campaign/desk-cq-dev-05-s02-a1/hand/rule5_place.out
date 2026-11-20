@@ -1,0 +1,6 @@
+L007 {"attempt": 1, "runs_ge_3s": []}
+L008 {"attempt": 1, "runs_ge_3s": []}
+L009 {"attempt": 1, "runs_ge_3s": []}
+L010 {"attempt": 1, "runs_ge_3s": [{"len_samples": 6, "t_s": [321.1, 326.1], "pst": ["05:09:10", "05:09:15"], "max_cores": 3.254}]}
+L011 {"attempt": 1, "runs_ge_3s": []}
+L012 {"attempt": 1, "runs_ge_3s": []}

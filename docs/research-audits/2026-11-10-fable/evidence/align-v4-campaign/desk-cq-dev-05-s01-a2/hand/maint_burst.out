@@ -1,0 +1,38 @@
+== 00:45-01:00
+00:48 mobileassetd 3
+00:52 mobileassetd 1003
+00:53 mobileassetd 10
+00:58 mobileassetd 1
+first {'mobileassetd': '00:48:09'} last {'mobileassetd': '00:58:10'}
+== 01:15-01:30
+01:22 mobileassetd 3652
+01:24 mobileassetd 3
+first {'mobileassetd': '01:22:09'} last {'mobileassetd': '01:24:09'}
+== 02:00-02:20
+02:08 XProtect 13
+02:08 XProtectPluginService 281
+02:08 mobileassetd 1510
+02:09 XProtectPluginService 12
+02:09 mds 23
+02:09 mobileassetd 916
+02:09 softwareupdated 1
+02:10 XProtect 13
+02:10 XProtectPluginService 305
+02:10 mds 18
+02:10 mobileassetd 9
+02:11 XProtectPluginService 57
+02:11 mds 15
+02:11 mobileassetd 157
+02:12 XProtectPluginService 9
+02:12 mds 15
+02:12 mobileassetd 8
+02:12 softwareupdated 8
+02:13 XProtect 35
+02:13 XProtectPluginService 8
+02:14 XProtectPluginService 24
+02:15 mobileassetd 525
+02:17 mobileassetd 206
+02:18 XProtect 35
+02:18 XProtectPluginService 2
+02:18 mobileassetd 28
+first {'XProtect': '02:08:39', 'mobileassetd': '02:08:39', 'XProtectPluginService': '02:08:39', 'softwareupdated': '02:09:12', 'mds': '02:09:12'} last {'XProtect': '02:18:38', 'mobileassetd': '02:18:50', 'XProtectPluginService': '02:18:38', 'softwareupdated': '02:12:44', 'mds': '02:12:39'}

@@ -1,0 +1,260 @@
+{
+ "built": "2026-11-19 14:25:02 PST on the Air (desk builder for the lead; PROPOSED)",
+ "audit_ref": "origin/audit/2026-11-10-fable",
+ "rows": [
+  {
+   "span": "dev-01-s01",
+   "plan": "cq-dev-01-s01-a1",
+   "attempt": 1,
+   "desk_final": "present (pilot-desk-cq-dev-01-s01-a1/auto/stops.json [] @ c73e78227, stops sha 37517e5f3dc6, plan cq-dev-01-s01-a1; Laptop lead, RUN_STATE 320 (2026-11-14 16:46:24 PST))",
+   "q1": "not applicable (v1 kit, own-shaped, no span reference; RL-158 Q1 / RLD:17262 apply to v1.1 spans): nothing owed",
+   "hand": "present (pilot-desk-cq-dev-01-s01-a1/hand_table.json @ c73e78227, sha 22712d0089a1, diffs [], legs 3 all included)",
+   "draw": {
+    "stratum": "c76344c5/own",
+    "value": 1,
+    "triggers": [
+     "first of group",
+     "schema change (no earlier summary)"
+    ],
+    "selected": true,
+    "retried_soak": "none (one soak step, rc 0)",
+    "exclusion": "none"
+   }
+  },
+  {
+   "span": "dev-01-s03",
+   "plan": "cq-dev-01-s03-a1",
+   "attempt": 1,
+   "desk_final": "present (desk-cq-dev-01-s03-a1/auto/stops.json [] @ 8e59f38cd, stops sha 37517e5f3dc6, plan cq-dev-01-s03-a1; Laptop lead, RUN_STATE 329 (2026-11-14 23:30:14 PST))",
+   "q1": "not applicable (v1 kit, own-shaped, no span reference; RL-158 Q1 / RLD:17262 apply to v1.1 spans): nothing owed",
+   "hand": "present (desk-cq-dev-01-s03-a1/hand_table.json @ 8e59f38cd, sha 00be8c2b4265, diffs [], legs 4 all included)",
+   "draw": {
+    "stratum": "c76344c5/own",
+    "value": 1,
+    "triggers": [],
+    "selected": false,
+    "retried_soak": "none (one soak step, rc 0)",
+    "exclusion": "none"
+   }
+  },
+  {
+   "span": "dev-01-s04",
+   "plan": "cq-dev-01-s04-a1",
+   "attempt": 1,
+   "desk_final": "present (desk-cq-dev-01-s04-a1/auto/stops.json [] @ c9fc0339d, stops sha 37517e5f3dc6, plan cq-dev-01-s04-a1; Laptop lead, RUN_STATE 336 (2026-11-15 03:08:24 PST))",
+   "q1": "not applicable (v1 kit, own-shaped, no span reference; RL-158 Q1 / RLD:17262 apply to v1.1 spans): nothing owed",
+   "hand": "present (desk-cq-dev-01-s04-a1/hand/hand_table.json @ c9fc0339d, sha 5a5def81e184, diffs [], legs 5 all included)",
+   "draw": {
+    "stratum": "c76344c5/own",
+    "value": 2,
+    "triggers": [
+     "redo (L012.a1 cpu_load)"
+    ],
+    "selected": true,
+    "retried_soak": "none (one soak step, rc 0)",
+    "exclusion": "none"
+   }
+  },
+  {
+   "span": "dev-02-s02",
+   "plan": "cq-dev-02-s02-a1",
+   "attempt": 1,
+   "desk_final": "present (desk-cq-dev-02-s02-a1/auto/stops.json [] @ 522815544, stops sha 37517e5f3dc6, plan cq-dev-02-s02-a1; Laptop lead, RUN_STATE 355 lines 6 and 9 (read 2026-11-15 15:42:10 PST))",
+   "q1": "present (evidence/cadence-standing/q1/cq-dev-02-s02-a1.json @ 522815544, sha ff1495486316, signer 'Laptop lead (interactive, Opus 5.5), desk-builder lane', recorded_at 2026-11-15T15:36:14-08:00, legacy v1 kit record kept)",
+   "hand": "present (desk-cq-dev-02-s02-a1/hand/hand_table.json @ 522815544, sha 160aaafba390, diffs [], legs 6 all included)",
+   "draw": {
+    "stratum": "d963500b/own",
+    "value": 3,
+    "triggers": [
+     "first of group (dev-02-s01 WITHDRAWN UNARMED, RUN_STATE 344)"
+    ],
+    "selected": true,
+    "retried_soak": "none (one soak step, rc 0)",
+    "exclusion": "none"
+   }
+  },
+  {
+   "span": "dev-02-s03",
+   "plan": "cq-dev-02-s03-a1",
+   "attempt": 1,
+   "desk_final": "present (desk-cq-dev-02-s03-a1/auto/stops.json [] @ 4a53c34a4, stops sha 37517e5f3dc6, plan cq-dev-02-s03-a1; Laptop lead, RUN_STATE 365 (2026-11-16 05:38:41 PST))",
+   "q1": "present (evidence/cadence-standing/q1/cq-dev-02-s03-a1.json @ 4a53c34a4, sha 8c8992cfb831, signer 'Laptop lead (interactive, Opus 5.5), desk-builder lane', recorded_at 2026-11-16T05:33:03-08:00, legacy v1 kit record kept)",
+   "hand": "present (desk-cq-dev-02-s03-a1/hand/hand_table.json @ 4a53c34a4, sha 797c78db0d46, diffs [], legs 6 all included)",
+   "draw": {
+    "stratum": "d963500b/own",
+    "value": 0,
+    "triggers": [
+     "redo (L011.a1 cpu_load)",
+     "hash value 0"
+    ],
+    "selected": true,
+    "retried_soak": "none (one soak step, rc 0)",
+    "exclusion": "none"
+   }
+  },
+  {
+   "span": "dev-03-s01",
+   "plan": "cq-dev-03-s01-a1",
+   "attempt": 1,
+   "desk_final": "present (pilot-desk-cq-dev-03-s01-a1/auto/stops.json [] @ 734e7f6be, stops sha 37517e5f3dc6, plan cq-dev-03-s01-a1; Laptop lead, RUN_STATE 365 (hand-read signed, 2026-11-16 05:38:41 PST))",
+   "q1": "present (evidence/cadence-standing/q1/cq-dev-03-s01-a1.json @ 734e7f6be, sha f790ec21689c, signer 'Laptop lead (interactive, Opus 5.5), desk-builder lane', recorded_at 2026-11-16T05:36:37-08:00)",
+   "hand": "present (pilot-desk-cq-dev-03-s01-a1/hand/hand_table.json @ 734e7f6be, sha 18355e555e6e, diffs [], legs 3 all included)",
+   "draw": {
+    "stratum": "0f535774/span",
+    "value": 2,
+    "triggers": [
+     "first of group",
+     "schema change (first v1.1 leg-field set: +g0_role,g0_shape,prefill_tokens,span_reference)"
+    ],
+    "selected": true,
+    "retried_soak": "none (one soak step, rc 0)",
+    "exclusion": "none"
+   }
+  },
+  {
+   "span": "dev-03-s02",
+   "plan": "cq-dev-03-s02-a1",
+   "attempt": 1,
+   "desk_final": "present (desk-cq-dev-03-s02-a1/auto/stops.json [] @ 38aa22e50, stops sha 37517e5f3dc6, plan cq-dev-03-s02-a1; Laptop lead, RUN_STATE 372 line 9 (issued 2026-11-16 11:40:40 PST))",
+   "q1": "present (evidence/cadence-standing/q1/cq-dev-03-s02-a1.json @ 38aa22e50, sha 20a3afa11b19, signer 'Laptop lead (interactive, Opus 5.5), desk-builder lane', recorded_at 2026-11-16T11:39:54-08:00)",
+   "hand": "present (desk-cq-dev-03-s02-a1/hand/hand_table.json @ 38aa22e50, sha b1a2b783427b, diffs [], legs 9 all included)",
+   "draw": {
+    "stratum": "0f535774/span",
+    "value": 1,
+    "triggers": [],
+    "selected": false,
+    "retried_soak": "none (one soak step, rc 0)",
+    "exclusion": "none"
+   }
+  },
+  {
+   "span": "dev-04-s01",
+   "plan": "cq-dev-04-s01-a1",
+   "attempt": 1,
+   "desk_final": "present (desk-cq-dev-04-s01-a1/auto/stops.json [] @ a8d34609b, stops sha 37517e5f3dc6, plan cq-dev-04-s01-a1; Magistrate cb24533b as interim lead (RUN_STATE 384 item 1), REPORT.md 'Lead signature' + RUN_STATE 386 (2026-11-17 ~08:50 PST))",
+   "q1": "owed (evidence/cadence-standing/q1/cq-dev-04-s01-a1.json @ a8d34609b, sha 80dc7ff86091, signer 'Codex desk builder for magistrate lead (PROPOSED; lead signs)', recorded_at 2026-11-17T08:44:15-08:00; SIGNER FIELD IS THE BUILDER'S PROPOSED TEXT: smallest action = lead commits a successor record with signer = the signing lead (RUN_STATE 386) or records that 386 covers it)",
+   "hand": "present (desk-cq-dev-04-s01-a1/hand/hand_table.json @ a8d34609b, sha 7f2c77fa1132, diffs [], legs 6 all included)",
+   "draw": {
+    "stratum": "1cc6673d/span",
+    "value": 2,
+    "triggers": [
+     "first of group",
+     "redo (L006.a1 cpu_load)"
+    ],
+    "selected": true,
+    "retried_soak": "none (one soak step, rc 0)",
+    "exclusion": "none"
+   }
+  },
+  {
+   "span": "dev-04-s02",
+   "plan": "cq-dev-04-s02-a1",
+   "attempt": 1,
+   "desk_final": "present (desk-cq-dev-04-s02-a1/auto/stops.json [] @ a5ffa385f, stops sha 37517e5f3dc6, plan cq-dev-04-s02-a1; Magistrate cb24533b as interim lead (RUN_STATE 384 item 1), REPORT.md 'Lead signature' + RUN_STATE 386 (2026-11-17 ~08:50 PST))",
+   "q1": "owed (evidence/cadence-standing/q1/cq-dev-04-s02-a1.json @ a5ffa385f, sha 579e121ff6f9, signer 'Codex desk builder for magistrate lead (PROPOSED; lead signs)', recorded_at 2026-11-17T08:44:15-08:00; SIGNER FIELD IS THE BUILDER'S PROPOSED TEXT: smallest action = lead commits a successor record with signer = the signing lead (RUN_STATE 386) or records that 386 covers it)",
+   "hand": "present (desk-cq-dev-04-s02-a1/hand/hand_table.json @ a5ffa385f, sha 5ce9667fd685, diffs [], legs 6 all included)",
+   "draw": {
+    "stratum": "1cc6673d/span",
+    "value": 0,
+    "triggers": [
+     "hash value 0"
+    ],
+    "selected": true,
+    "retried_soak": "none (one soak step, rc 0)",
+    "exclusion": "none"
+   }
+  },
+  {
+   "span": "dev-05-s01",
+   "plan": "cq-dev-05-s01-a2",
+   "attempt": 2,
+   "desk_final": "owed (lead signs PROPOSED FINAL and commits /Volumes/JW-EXT/scratch/desk-dev05-s01-a2/ as evidence/align-v4-campaign/desk-cq-dev-05-s01-a2/; auto/stops.json [] sha 37517e5f3dc6; 0 of 114 per-leg and 0 span-level values differ; 6 of 6 included by hand, 6 of 6 admitted by desk; stops.json [] and hand stops [])",
+   "q1": "owed (lead sets signer + recorded_at in /Volumes/JW-EXT/scratch/desk-dev05-s01-a2/q1/cq-dev-05-s01-a2.json (draft sha 61904d45b6b4, validator rules pass) and commits it to evidence/cadence-standing/q1/)",
+   "hand": "owed (commit with the desk: hand/hand_table.json sha 99c64b296b1c, diffs [], OPENED.txt with per-file sha256; lead signs)",
+   "draw": {
+    "stratum": "2747381b/span",
+    "value": 3,
+    "triggers": [
+     "first of group (a1 zero-capture refusal keeps first)",
+     "redo (L004.a1 cpu_load)"
+    ],
+    "selected": true,
+    "retried_soak": "none (one soak step, rc 0)",
+    "exclusion": "none"
+   }
+  },
+  {
+   "span": "dev-05-s02",
+   "plan": "cq-dev-05-s02-a1",
+   "attempt": 1,
+   "desk_final": "owed (lead signs PROPOSED FINAL and commits /Volumes/JW-EXT/scratch/desk-dev05-s02-a1/ as evidence/align-v4-campaign/desk-cq-dev-05-s02-a1/; auto/stops.json [] sha 37517e5f3dc6; 0 of 114 per-leg and 0 span-level values differ; 6 of 6 included by hand, 6 of 6 admitted by desk; stops.json [] and hand stops [])",
+   "q1": "owed (lead sets signer + recorded_at in /Volumes/JW-EXT/scratch/desk-dev05-s02-a1/q1/cq-dev-05-s02-a1.json (draft sha a48ba3dd0f28, validator rules pass) and commits it to evidence/cadence-standing/q1/)",
+   "hand": "owed (commit with the desk: hand/hand_table.json sha 05841ef763dd, diffs [], OPENED.txt with per-file sha256; lead signs)",
+   "draw": {
+    "stratum": "2747381b/span",
+    "value": 2,
+    "triggers": [],
+    "selected": false,
+    "retried_soak": "none (one soak step, rc 0)",
+    "exclusion": "none"
+   }
+  },
+  {
+   "span": "hp-01-s01",
+   "plan": "cq-hp-01-s01-a1",
+   "attempt": 1,
+   "desk_final": "present (desk-cq-hp-01-s01-a1/auto/stops.json [] @ e78597784, stops sha 37517e5f3dc6, plan cq-hp-01-s01-a1; Laptop lead, RUN_STATE 338 (cited in 341 line 9))",
+   "q1": "not applicable (v1 kit, own-shaped, no span reference; RL-158 Q1 / RLD:17262 apply to v1.1 spans): nothing owed",
+   "hand": "present (desk-cq-hp-01-s01-a1/hand/hand_table.json @ e78597784, sha 3e9b7ce961d6, diffs [], legs 3 all included)",
+   "draw": {
+    "stratum": "7eaf2660/own",
+    "value": 3,
+    "triggers": [
+     "first of group"
+    ],
+    "selected": true,
+    "retried_soak": "none (one soak step, rc 0)",
+    "exclusion": "none"
+   }
+  },
+  {
+   "span": "hp-01-s02",
+   "plan": "cq-hp-01-s02-a1",
+   "attempt": 1,
+   "desk_final": "present (desk-cq-hp-01-s02-a1/auto/stops.json [] @ 37afda2a4, stops sha 37517e5f3dc6, plan cq-hp-01-s02-a1; Laptop lead, RUN_STATE 344 line 9 (issued 2026-11-15 09:55:43 PST))",
+   "q1": "not applicable (v1 kit, own-shaped, no span reference; RL-158 Q1 / RLD:17262 apply to v1.1 spans): nothing owed",
+   "hand": "present (desk-cq-hp-01-s02-a1/hand/hand_table.json @ 37afda2a4, sha ff5f59ebdbb5, diffs [], legs 4 all included)",
+   "draw": {
+    "stratum": "7eaf2660/own",
+    "value": 3,
+    "triggers": [],
+    "selected": false,
+    "retried_soak": "none (one soak step, rc 0)",
+    "exclusion": "none"
+   }
+  },
+  {
+   "span": "hp-01-s03",
+   "plan": "cq-hp-01-s03-a1",
+   "attempt": 1,
+   "desk_final": "present (desk-cq-hp-01-s03-a1/auto/stops.json [] @ 05c681ac4, stops sha 37517e5f3dc6, plan cq-hp-01-s03-a1; Laptop lead, RUN_STATE 354 line 9)",
+   "q1": "not applicable (v1 kit, own-shaped, no span reference; RL-158 Q1 / RLD:17262 apply to v1.1 spans): nothing owed",
+   "hand": "present (desk-cq-hp-01-s03-a1/hand/hand_table.json @ 05c681ac4, sha e4f229b2d80b, diffs [], legs 5 all included)",
+   "draw": {
+    "stratum": "7eaf2660/own",
+    "value": 1,
+    "triggers": [],
+    "selected": false,
+    "retried_soak": "none (one soak step, rc 0)",
+    "exclusion": "none"
+   }
+  }
+ ],
+ "draw_law": "sha256-hand-sample-v3, seed 2026111501, rate 4; group = (queue kit sha256, span shape: span if a leg after the roster's first is span-shaped in the kit); joulewise/cadence/desk_final.py hand_sample at origin/align/2026-11-15-desk-final 3747167f4",
+ "notes": [
+  "dev-01-s01 and dev-01-s03 OPENED.txt record no manifest check; their Air copies re-verified hash-only 2026-11-19 14:25 PST: 122/122 and 156/156 OK against .mbp.SHA256SUMS (dev01-copy-verify.out)",
+  "dev-04-s01/s02 Q1 records: signer field is the builder PROPOSED text; desk-final signature is in REPORT.md and RUN_STATE 386",
+  "Check 437 prose places the 05:00 OS batch at L010 end / L011; by hand it is L010 pre-G0 (print only, gates nothing)",
+  "REPORT.md and ROW7.md: the harness refused writing report .md files from this seat; text delivered in the handback"
+ ]
+}

@@ -3,7 +3,7 @@
  "plan_id": "cq-dev-04-s02-a1",
  "span_id": "dev-04-s02",
  "attempt": 1,
- "signer": "Codex desk builder for magistrate lead (PROPOSED; lead signs)",
+ "signer": "Magistrate cb24533b as interim lead (RUN_STATE 386: re-executed and signed 2026-11-17); signer field corrected by the Laptop lead 2026-11-19 (row-7 reconciliation)",
  "recorded_at": "2026-11-17T08:44:15-08:00",
  "print_ref": "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/desk-cq-dev-04-s02-a1/hand/r1print.out (RESULT.json keys RL150_R1_part3_print and RL158_Q1)"
 }
