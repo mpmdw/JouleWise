@@ -1,4 +1,6 @@
 """CI coverage for the frozen hp-02 item and occupancy contracts."""
+import importlib.util
+import json
 from pathlib import Path
 import subprocess
 import sys
@@ -33,6 +35,7 @@ class HP02SuccessorItemsTests(unittest.TestCase):
             fixture = scratch / "fixtures"
             output = check(DRAFTS / "tests/test_hp_gates.py", scratch, scratch)
             self.assertIn("175 scope/runway/latency cases and 256 publication interleavings", output)
+            self.assertIn("PASS latching rules: 40 phase/block/disposition cases and receipt tamper replay", output)
             self.assertRegex(output, r"PASS handoff rules: [1-9][0-9]+ guard offsets, "
                                      r"32 launcher races and 24 read-last cases")
             self.assertIn("60 original decisions, 54 timing decisions, 1764 clock cases, 11 dated pairs, "
@@ -45,6 +48,52 @@ class HP02SuccessorItemsTests(unittest.TestCase):
             self.assertIn("FAIL 27 mismatches / 54 decisions",
                           check(fixture / "successor_regression.py", want=1))
             self.assertIn("60 successor decisions specified", check(fixture / "replay_contract.py"))
+
+    def test_hold_disposition_requires_exact_published_run_state_item(self):
+        spec = importlib.util.spec_from_file_location("hp02_gate", DRAFTS / "prepare_hp_items.py")
+        gate = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(gate)
+        hold = {"id": "1" * 64, "source_digest": "2" * 64, "observed_at": 100}
+        authority = {"role": "magistrate", "run_state_item": 501}
+        payload = {"schema": gate.HOLD_DISPOSITION_SCHEMA, "action": "clear", "issue_id": "3" * 64,
+                   "hold_id": hold["id"], "source_digest": hold["source_digest"], "authority": authority}
+        item = {"schema": "joulewise.run_state_item.v1", "number": 501, "status": "ISSUED",
+                "owner": "magistrate", "issued_epoch_s": 101}
+        fence = chr(96) * 3
+
+        with tempfile.TemporaryDirectory(prefix="hp02-hold-authority-") as scratch:
+            repo = Path(scratch)
+
+            def git(*args):
+                return subprocess.check_output(
+                    ["git", "-C", str(repo), "-c", "user.name=Fixture", "-c", "user.email=fixture@example.com",
+                     *args], stderr=subprocess.PIPE, text=True, timeout=30,
+                ).strip()
+
+            def record_authority(row):
+                (repo / "RUN_STATE.md").write_text(
+                    f"501. **Synthetic published item**\n\n{fence}item\n{json.dumps(item)}\n{fence}\n"
+                    f"\n{fence}hp-02-hold-disposition\n{json.dumps(row)}\n{fence}\n"
+                )
+                git("add", "RUN_STATE.md")
+                git("commit", "-m", "Record synthetic authority")
+                return git("rev-parse", "HEAD")
+
+            def disposition(row, commit):
+                return {**row, "authority": {**authority, "commit": commit}}
+
+            git("init", "--initial-branch=main")
+            committed = record_authority(payload)
+            git("update-ref", "refs/remotes/origin/main", committed)
+            gate.verify_disposition(repo, disposition(payload, committed), hold, payload["issue_id"], 102)
+            unapproved = {**payload, "issue_id": "4" * 64}
+            with self.assertRaisesRegex(gate.Refusal, "exact disposition"):
+                gate.verify_disposition(repo, disposition(unapproved, committed), hold, unapproved["issue_id"], 102)
+            unpublished = record_authority(unapproved)
+            with self.assertRaisesRegex(gate.Refusal, "outside published main"):
+                gate.verify_disposition(repo, disposition(unapproved, unpublished), hold, unapproved["issue_id"], 102)
+            with self.assertRaisesRegex(gate.Refusal, "chronology"):
+                gate.verify_disposition(repo, disposition(payload, committed), hold, payload["issue_id"], 100)
 
     def test_legacy_held_items_replay(self):
         root = Path(__file__).resolve().parents[1]

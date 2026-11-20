@@ -440,8 +440,8 @@ def audit_transition_regressions(output):
 
     expiry = unix("2026-11-30T00:00:00-08:00")
     handoff_cases = (
-        ("expires-in-claim", expiry - 601, expiry + 5, "NEED_FRESH_QUEUE"),
-        ("handoff-validity", now, now + 601, "WAIT_EVIDENCE"),
+        ("queue-runway-guard", expiry - 602, expiry + 5, "WAIT_EVIDENCE"),
+        ("handoff-validity", now, now + 722, "WAIT_EVIDENCE"),
     )
     for name, started, valid_through, want in handoff_cases:
         with transition_runtime(output / name, BASE["span"], started) as (args, record, invoke, launch, clock):
@@ -458,7 +458,7 @@ def audit_transition_regressions(output):
                 invoke(run, started + 1, want)
             launch.assert_not_called()
             assert not list((args.custody / "hp-02-arms").glob("*-a1.json"))
-            if want == "WAIT_EVIDENCE":
+            if name == "handoff-validity":
                 # Fresh evidence can proceed after a refusal before dispatch.
                 invoke(record("Run", started + 2), started + 2, "ELIGIBLE")
                 launch.assert_called_once()
@@ -565,7 +565,7 @@ def audit_close_history_regressions(output, now):
         invoke(record("Start", now + 4), now + 4, "HALT_AND_PAGE")
         launch.assert_not_called()
 
-    with transition_runtime(output / "restore-disposition", span, now) as (_, record, invoke, launch, _):
+    with transition_runtime(output / "restore-disposition", span, now) as (args, record, invoke, launch, _):
         invoke(record("Start", now), now, "ELIGIBLE")
         run = record("Run", now + 1)
         close = replace_close(run, "fixture-close-18", now, "e")
@@ -581,7 +581,9 @@ def audit_close_history_regressions(output, now):
             "pinned successful recovery", same_close=close["record"], safe_route_proven=True,
             result="proven", residual_refusal="clear",
         ))
-        invoke(run, now + 3, "ELIGIBLE")
+        invoke(run, now + 3, "HOLD_HOST")
+        with supply_clearances(args, run, now + 4):
+            invoke(run, now + 4, "ELIGIBLE")
         launch.assert_called_once()
 
     with transition_runtime(output / "scoped-restore-stop", span, now) as (_, record, invoke, launch, _):
@@ -706,8 +708,11 @@ def launch_margin_properties(output):
             launch.side_effect = launch_after_delay
             with patch.object(hp, "HP", rendered):
                 invoke(record("Start", now - 2), now - 2, "ELIGIBLE")
-                allowed = remaining >= 600 and remaining > latency
-                failure = "WAIT_EVIDENCE" if remaining == 1 else failures[field]
+                in_guard = remaining == 1 or 600 < remaining <= 720
+                crosses_runway = (remaining == 600 and latency > 0
+                                  or 600 < remaining <= 600 + latency)
+                allowed = remaining >= 600 and remaining > latency and not (in_guard or crosses_runway)
+                failure = "WAIT_EVIDENCE" if in_guard or crosses_runway else failures[field]
                 invoke(run, now, "ELIGIBLE" if allowed else failure)
             assert launch.call_count == int(allowed)
             assert launched_at == ([now + latency] if allowed else [])
@@ -915,6 +920,7 @@ def guard_sweep():
             item["expires_epoch_s"], issue["expires_epoch_s"], obs["valid_through_epoch_s"],
             obs["watcher"]["expires_epoch_s"], obs["latest_close"]["ended_epoch_s"] + hp.COPY_WAIT_S,
         }
+        required.update(expiry - 600 for _, expiry, _ in hp.run_expiries(item, issue, queue, obs))
         assert required <= set(edges), (span, required - set(edges))
         assert "soak wait" in edges.values() and "leg start wait" in edges.values()
         for edge in edges:
@@ -991,9 +997,9 @@ def last_read_properties(output):
                     events.append(names[path])
                 return read_bytes(path)
 
-            def read_admission(*args, read_only=False):
+            def read_admission(*args, read_only=False, holds=None):
                 events.append("admission-read" if read_only else "admission-preflight")
-                return remember(*args, read_only=read_only)
+                return remember(*args, read_only=read_only, holds=holds)
 
             def read_census(*args):
                 events.append("census")
@@ -1034,8 +1040,9 @@ def last_read_properties(output):
             disk = args.custody / "hp-02-arms"
             assert bool(list(disk.glob("*-a1.json"))) == (want == "ELIGIBLE")
             assert launch.call_count == int(want == "ELIGIBLE")
-            after_sync = events[events.index("sync") + 1:]
-            assert after_sync[:5] == ["item", "start", "issue", "evidence", "queue"], events
+            claim_index = events.index("write-claim")
+            after_sync = events[events.index("sync", claim_index) + 1:]
+            assert after_sync[:5] == ["item", "start", "issue", "queue", "evidence"], events
             if want == "ELIGIBLE":
                 assert {"admission-read", "kit", "census", "fence", "mode"} <= set(after_sync)
                 assert after_sync.index("census") < after_sync.index("fence") < after_sync.index("mode")
@@ -1077,6 +1084,214 @@ def launch_edge_regressions(output):
     return count
 
 
+
+def issue_holds(args):
+    issue = json.loads(args.issue.read_bytes())
+    return hp.HoldJournal(args.custody / "hp-02-arms", ITEMS[args.span], issue)
+
+
+def disposition_document(rows, at, *, owner=None):
+    sections = []
+    for number, group in rows.items():
+        role = group[0]["authority"]["role"]
+        item = {"schema": "joulewise.run_state_item.v1", "number": number,
+                "issued_epoch_s": at, "owner": owner or role, "status": "ISSUED"}
+        fence = chr(96) * 3
+        sections.append(f"{number}. **Synthetic hold disposition**\n\n"
+                        f"{fence}item\n{json.dumps(item)}\n{fence}\n")
+        for row in group:
+            payload = {**row, "authority": {k: row["authority"][k] for k in ("role", "run_state_item")}}
+            sections.append(f"{fence}hp-02-hold-disposition\n{json.dumps(payload)}\n{fence}\n")
+    return "\n".join(sections)
+
+
+def prepare_clearances(args, at):
+    journal = issue_holds(args)
+    rows = [{"schema": hp.HOLD_DISPOSITION_SCHEMA, "action": "clear", "issue_id": journal.issue_id,
+             "hold_id": hold["id"], "source_digest": hold["source_digest"],
+             "authority": {"role": "lead", "run_state_item": 999, "commit": "a" * 40}}
+            for hold in journal.open.values()]
+    assert rows
+    return rows, disposition_document({999: rows}, at)
+
+
+def supply_clearances(args, observation, at):
+    rows, document = prepare_clearances(args, at)
+    observation["hold_dispositions"] = rows
+    return patch.object(hp, "trusted_run_state", return_value=document)
+
+
+def change_issue_status(args, status):
+    issue = json.loads(args.issue.read_bytes())
+    issue["status"] = status
+    args.issue.write_text(json.dumps(issue))
+    args.issue_sha = hp.sha256(args.issue.read_bytes())
+
+
+def latch_properties(output):
+    now = unix("2026-11-21T14:00:00-08:00")
+
+    def close_group(obs, phase):
+        if phase != "Issue":
+            replace_close(obs, "latch-close-18", now, "e")
+        obs["latest_close"]["groups"][0]["receipt_stop"] = "unproven"
+
+    def stop(obs, scope):
+        obs["stops"]["open"] = [{"code": "LATCH-TEST", "scope": scope}]
+
+    cases = (
+        ("look-execution", "NOT_ADMITTED", lambda row, _: row["look"].update(
+            status="ran", record="observed-lm-hp-01-execution")),
+        ("look-reservation", "WAIT_EVIDENCE", lambda row, _: row["look"].update(
+            status="reserved", pending_conflict=True, record="observed-look-reservation")),
+        ("hp01-on-date", "INELIGIBLE_DATE", lambda row, _: row["hp01_dates"].update(t0_dates=[*row["hp01_dates"]["t0_dates"], "2026-11-21"])),
+        ("close-stop", "HOLD_CLOSE", close_group),
+        ("stop:LATCH-TEST:host", "HOLD_HOST", lambda row, _: stop(row, "host")),
+        ("stop:LATCH-TEST:hp-02", "HOLD_KIT", lambda row, _: stop(row, "hp-02")),
+        ("host-safety", "HOLD_HOST", lambda row, _: row["safety"].update(foreign_process_census=["owned record"])),
+        ("open-fence", "WAIT_FENCE", lambda row, _: row.update(fence_clear=False)),
+        ("history:L001:ambiguous", "WAIT_EVIDENCE", lambda row, _: row["history"]["legs"].update(L001="ambiguous")),
+        ("copy-still-running", "HOLD_FOREIGN_LOAD", lambda row, _: row["copy"].update(transfer_stopped=False)),
+    )
+    count = 0
+    for (fact, verdict, mutate), when in product(cases, ("Issue", "Start", "Run", "final-read")):
+        with transition_runtime(output / f"latch-{count}", BASE["span"], now) as (
+                args, record, invoke, launch, clock):
+            phase = "Run" if when == "final-read" else when
+            if phase == "Issue":
+                change_issue_status(args, "PROPOSED")
+            elif phase == "Run":
+                invoke(record("Start", now), now, "ELIGIBLE")
+            bad = record(phase, now + 1)
+            if fact == "look-execution":
+                for entry in bad["priority"]["entries"]:
+                    if entry["rung"] == "further-stability":
+                        entry["status"] = "unavailable"
+            mutate(bad, phase)
+            if when == "final-read":
+                original = hp.write_exclusive
+
+                def receive_final_block(path, data):
+                    original(path, data)
+                    clock[0] = now + 2
+                    args.observation.write_text(json.dumps(bad))
+
+                with patch.object(hp, "write_exclusive", side_effect=receive_final_block):
+                    invoke(record("Run", now + 1), now + 1, "WAIT_EVIDENCE")
+            else:
+                invoke(bad, now + 1, verdict)
+            journal = issue_holds(args)
+            matching = [hold for hold in journal.open.values() if hold["fact"] == fact]
+            assert len(matching) == 1, (fact, when, journal.open)
+            assert matching[0]["observed_at"] == now + (2 if when == "final-read" else 1)
+            before = {path.name: path.read_bytes() for path in journal.path.iterdir()}
+            if phase == "Issue":
+                change_issue_status(args, "ISSUED")
+                assert issue_holds(args).issue_id == journal.issue_id
+            retry_phase = "Run" if phase == "Run" else "Start"
+
+            def clean(at):
+                observation = record(retry_phase, at)
+                if fact == "close-stop":
+                    replace_close(observation, "latch-close-19", now + 2, "f")
+                return observation
+
+            invoke(clean(now + 3), now + 3, verdict)
+            launch.assert_not_called()
+            with supply_clearances(args, clean(now + 4), now + 4):
+                # A different source digest cannot borrow this authority.
+                forged = clean(now + 4)
+                rows, _ = prepare_clearances(args, now + 4)
+                rows[0]["source_digest"] = "0" * 64
+                forged["hold_dispositions"] = rows
+                invoke(forged, now + 4, "WAIT_EVIDENCE")
+            cleared = clean(now + 5)
+            rows, _ = prepare_clearances(args, now + 5)
+            cleared["hold_dispositions"] = rows
+            with patch.object(hp, "trusted_run_state", return_value=disposition_document({999: rows}, now + 5, owner="builder")):
+                invoke(cleared, now + 5, "WAIT_EVIDENCE")
+            stripped = disposition_document({999: rows}, now + 5).split(chr(96) * 3 + "hp-02-hold-disposition")[0]
+            with patch.object(hp, "trusted_run_state", return_value=stripped):
+                invoke(cleared, now + 5, "WAIT_EVIDENCE")
+            launch.assert_not_called()
+            with supply_clearances(args, cleared, now + 6):
+                if retry_phase == "Start":
+                    cleared["valid_through_epoch_s"] = now + 6
+                invoke(cleared, now + 6, "ELIGIBLE")
+            final = issue_holds(args)
+            assert not final.open and matching[0]["id"] in final.closed
+            assert all((final.path / name).read_bytes() == data for name, data in before.items())
+            assert launch.call_count == int(retry_phase == "Run")
+            count += 1
+    return count
+
+
+def receipt_flap_regressions(output):
+    now = unix("2026-11-21T14:00:00-08:00")
+    with transition_runtime(output / "receipt-flap", BASE["span"], now) as (args, record, invoke, launch, _):
+        invoke(record("Start", now), now, "ELIGIBLE")
+        adverse = record("Run", now + 1)
+        adverse["latest_close"]["groups"][0]["receipt_stop"] = "unproven"
+        digest = adverse["latest_close"]["receipt_sha256"]
+        invoke(adverse, now + 1, "HOLD_CLOSE")
+        retry = record("Run", now + 2)
+        invoke(retry, now + 2, "HOLD_CLOSE")
+        journal = issue_holds(args)
+        assert len(journal.open) == 2 and all(row["source_digest"] == digest for row in journal.open.values())
+        assert any(row["fact"].startswith("receipt-content-changed:") for row in journal.open.values())
+        launch.assert_not_called()
+        clean = record("Run", now + 3)
+        rows, _ = prepare_clearances(args, now + 3)
+        clean["hold_dispositions"] = [row for row in rows if journal.open[row["hold_id"]]["fact"] == "close-stop"]
+        document = disposition_document({999: clean["hold_dispositions"]}, now + 3)
+        with patch.object(hp, "trusted_run_state", return_value=document):
+            invoke(clean, now + 3, "WAIT_EVIDENCE")
+        assert len(issue_holds(args).open) == 1
+        launch.assert_not_called()
+        with supply_clearances(args, clean, now + 4):
+            invoke(clean, now + 4, "ELIGIBLE")
+        launch.assert_called_once()
+
+
+def hold_write_failure(output):
+    now = unix("2026-11-21T14:00:00-08:00")
+    with transition_runtime(output / "hold-write-failure", BASE["span"], now) as (args, record, invoke, launch, _):
+        invoke(record("Start", now), now, "ELIGIBLE")
+        write_claim = hp.write_exclusive
+        publish = hp.publish_new_file
+
+        def receive_block(path, data):
+            write_claim(path, data)
+            changed = record("Run", now + 1)
+            changed["look"].update(status="reserved", pending_conflict=True)
+            args.observation.write_text(json.dumps(changed))
+
+        def fail_hold_write(path, data):
+            if path.parent.name.startswith("holds-") and hp.read_json(data)["holds"]:
+                raise OSError("synthetic hold disk write failure")
+            publish(path, data)
+
+        with (patch.object(hp, "write_exclusive", side_effect=receive_block),
+              patch.object(hp, "publish_new_file", side_effect=fail_hold_write)):
+            result = invoke(record("Run", now + 1), now + 1, "WAIT_EVIDENCE")
+        assert "cannot record issue hold ledger" in result["detail"]
+        assert len(list((args.custody / "hp-02-arms").glob("*-a1.json"))) == 1
+        invoke(record("Run", now + 2), now + 2, "SKIP_SPENT")
+        launch.assert_not_called()
+
+    with transition_runtime(output / "initial-hold-write-failure", BASE["span"], now) as (args, record, invoke, launch, _):
+        invoke(record("Start", now), now, "ELIGIBLE")
+        adverse = record("Run", now + 1)
+        adverse["look"].update(status="reserved", pending_conflict=True)
+        with patch.object(hp, "publish_new_file", side_effect=fail_hold_write):
+            result = invoke(adverse, now + 1, "WAIT_EVIDENCE")
+        assert "cannot record issue hold ledger" in result["detail"]
+        assert len(list((args.custody / "hp-02-arms").glob("reading-*.json"))) == 1
+        retry = invoke(record("Run", now + 2), now + 2, "WAIT_EVIDENCE")
+        assert "earlier observation" in retry["detail"]
+        launch.assert_not_called()
+
+
 if __name__ == "__main__":
     output = Path(sys.argv[2])
     original = original_vectors()
@@ -1095,8 +1310,12 @@ if __name__ == "__main__":
         receipt_integrity_regressions(session)
         read_last_cases = last_read_properties(session)
         launch_edge_cases = launch_edge_regressions(session)
+        latch_cases = latch_properties(session)
+        receipt_flap_regressions(session)
+        hold_write_failure(session)
     rank1_properties()
     guard_cases = guard_sweep()
+    print(f"PASS latching rules: {latch_cases} phase/block/disposition cases and receipt tamper replay, fail-closed custody")
     print(f"PASS handoff rules: {guard_cases} guard offsets, {launch_edge_cases} launcher races "
           f"and {read_last_cases} read-last cases")
     print(f"PASS lead rules: {margin_cases} scope/runway/latency cases and {ordering_cases} publication interleavings")

@@ -12,11 +12,11 @@ right after item 167 below. [`CANONICAL.md`](CANONICAL.md) is the tool map:
 the one current tool or document per job. [`docs/ARCHIVE.md`](docs/ARCHIVE.md)
 says how to get back files removed from `main` in the 2026-11-06 prune.
 
-**2026-11-20 hp-02 successor builder handoff [AGENT].** The round-four
-repair adds the lead's launch guard and read-last ordering while preserving
-the expiry, Start publication and rank-one evidence rules. Independent
-delta execution and lead acceptance precede issue.
-[Round-four repair report](docs/run_reports/2026-11-20-hp02-successor-audit-4.md).
+**2026-11-20 hp-02 successor builder handoff [AGENT].** The round-six
+repair latches issue-scoped blocking observations and adds the runway
+cutoffs to the launch guard. Independent delta execution and lead
+acceptance precede issue.
+[Round-six repair report](docs/run_reports/2026-11-20-hp02-successor-audit-6.md).
 
 **2026-11-18 qualification draft handoff [AGENT].** Six unissued items
 for Nov 20–22 and two qualification-pin stability fillers bind the PR #812
