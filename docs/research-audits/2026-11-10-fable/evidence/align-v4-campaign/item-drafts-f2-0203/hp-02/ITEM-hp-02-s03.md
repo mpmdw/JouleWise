@@ -40,7 +40,7 @@ CUSTODY=/Users/edr/night-custody/magistrate
 hp_gate Start "$HP_START_OBSERVATION" || exit 1
 ```
 
-**Run.** Refresh the records, native census, marker, fence and clock after Start. Invoke the same gate with the Run observation immediately before launch. The gate verifies the successful Start and atomically claims the roster once. The claim records the exact argument, t0 and deadline. On bootstrap refusal hold this attempt for the lead. Exit the session as soon as the launcher reports a claimed fence.
+**Run.** Refresh the records, native census, marker, fence and clock after Start. Invoke the same gate with the Run observation immediately before launch. Run requires evidence sampled after the successful Start verdict on the same host. The gate reserves the roster, then rechecks the handoff clock after the claim is durable. The claim records the exact argument, t0 and deadline. On bootstrap refusal hold this attempt for the lead. Exit the session as soon as the launcher reports a claimed fence.
 
 ```sh
 hp_gate Run "$HP_RUN_OBSERVATION" || exit 1
@@ -63,7 +63,8 @@ assert r['kit']['frozen_commit']=='dd206025abb30fd5c07515cd4b34b3e653174810'
 assert r['rc']==0 and not r.get('error') and r['legs_finished']==len(roster)==r['legs_planned']
 assert r['span_result']['outcome']=='MEASURED_OK' and r['span_result']['chain_outcome']=='COMPLETE'
 hp=r['high_power']; proof=hp['close_proof']
-assert proof['proven'] is True and proof['ac_powermode']==0 and proof['host_marker_present'] is False
+assert proof['proven'] is True and type(proof['ac_powermode']) is int and proof['ac_powermode']==0
+assert proof['host_marker_present'] is False
 assert not hp.get('revoked'), 'HP admission revoked: hold for the research lead'
 assert set(r['feeds'])=={'agents','meter','volumes'}
 assert all(f['stop']['proven_stopped'] is True for f in r['feeds'].values())

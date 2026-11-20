@@ -12,10 +12,11 @@ right after item 167 below. [`CANONICAL.md`](CANONICAL.md) is the tool map:
 the one current tool or document per job. [`docs/ARCHIVE.md`](docs/ARCHIVE.md)
 says how to get back files removed from `main` in the 2026-11-06 prune.
 
-**2026-11-19 hp-02 successor builder handoff [AGENT].** The three
-successor drafts bind RL-190 §2, the finite queue-b and composed occupancy on
-`dd206025a`. They await independent execution, lead acceptance and fresh desk
-evidence for issue. [Builder report](docs/run_reports/2026-11-19-hp02-successor-items.md).
+**2026-11-19 hp-02 successor builder handoff [AGENT].** Audit round 1
+blocked the initial draft. The repair binds Run to the successful Start,
+rechecks the dispatch boundary and reconciles host, restore, dates and rank
+evidence. Independent delta execution and lead acceptance precede issue.
+[Round-one repair report](docs/run_reports/2026-11-19-hp02-successor-audit-1.md).
 
 **2026-11-18 qualification draft handoff [AGENT].** Six unissued items
 for Nov 20–22 and two qualification-pin stability fillers bind the PR #812

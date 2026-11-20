@@ -1,5 +1,5 @@
 """Translate the frozen synthetic observations into the successor record schema."""
-from contextlib import redirect_stdout
+from contextlib import contextmanager, redirect_stdout
 from copy import deepcopy
 import csv
 import io
@@ -134,7 +134,7 @@ def candidate(over, now, phase, queue=None):
     day = hp.local_date(now)
     priority = evidence("synthetic complete ladder", date=day.isoformat(), complete=True, r1_post_close=True, entries=[
         evidence(f"entry {rung}", rung=rung, status="eligible" if eligible else "unavailable",
-                 entry_id=over.get("stability_kit") if rung == "first-stability" else rung)
+                 entry_id=over.get("stability_kit", rung) if rung == "first-stability" else rung)
         for rung, eligible in ranks.items()
     ])
     spent = {}
@@ -150,7 +150,7 @@ def candidate(over, now, phase, queue=None):
         previous = item["predecessor"]
         history["prior_check"] = evidence(
             "synthetic prior HP Check", span=previous, kit_sha256=item["kit_sha"], attempt=1,
-            legs=hp.ROSTERS[previous], ended_epoch_s=now - 1200, status=over["hp_prior_check"],
+            legs=hp.ROSTERS[previous], host=BASE["host"], ended_epoch_s=now - 1200, status=over["hp_prior_check"],
         )
     starts = []
     for pair in over.get("dated_pending", BASE["dated_pending"]):
@@ -188,7 +188,7 @@ def close_chain_for_timing(args):
     if prior:
         obs["history"]["prior_check"] = evidence(
             "synthetic clean prior HP Check", status="clean", span=prior, attempt=1, kit_sha256=item["kit_sha"],
-            legs=hp.ROSTERS[prior], ended_epoch_s=obs["observed_epoch_s"] - 1300,
+            legs=hp.ROSTERS[prior], host=obs["host"], ended_epoch_s=obs["observed_epoch_s"] - 1300,
             receipt_sha256="b" * 64, fence_gone=True, restore_proven=True,
         )
         for span, roster in hp.ROSTERS.items():
@@ -309,16 +309,20 @@ def additional_checks():
     assert hp.decide(*args)["decision"] == "CEDE_DATED"
 
 
-def run_transition(output):
-    """Exercise the launcher boundary with fake readbacks and zero native calls."""
-    now = unix(BASE["clock"])
+def transition_record(span, phase, sampled, queue, **over):
+    vector = candidate({"span": span, **over}, sampled, phase, queue=queue)
+    close_chain_for_timing(vector)
+    return vector[2]
+
+
+@contextmanager
+def transition_runtime(root, span, now):
+    """Drive the real Start and Run entry with a mutable fake clock and no native calls."""
+    from joulewise.align.apple import powermode
+
+    root.mkdir()
     queue = (HP / "queue-b.json").read_bytes()
-    span = BASE["span"]
-    _, issue, start, *_ = candidate({}, now, "Start", queue=queue)
-    _, _, run, *_ = candidate({}, now + 1, "Run", queue=queue)
-    _, _, higher, *_ = candidate({"finite_ready": ["inst-03"]}, now + 1, "Run", queue=queue)
-    root = output / "transition"
-    root.mkdir(exist_ok=True)
+    _, issue, *_ = candidate({"span": span}, now, "Start", queue=queue)
     args = SimpleNamespace(
         repo=SEAT / "tmp/pin", kit=HP / "cl-hp-02.json", span=span, phase="Start",
         queue=root / "queue.json", issue=root / "issue.json", observation=root / "obs.json",
@@ -327,34 +331,157 @@ def run_transition(output):
     args.issue.write_text(json.dumps(issue))
     args.issue_sha = hp.sha256(args.issue.read_bytes())
     args.queue.write_bytes(queue)
-    from joulewise.align.apple import powermode
+    clock = [now]
 
-    def invoke(record, want, status):
-        args.observation.write_text(json.dumps(record))
+    def record(phase, sampled, **over):
+        return transition_record(span, phase, sampled, queue, **over)
+
+    def invoke(observation, at, want):
+        clock[0] = at
+        args.phase = observation["phase"]
+        args.observation.write_text(json.dumps(observation))
         captured = io.StringIO()
-        with patch.object(hp.time, "time", return_value=record["observed_epoch_s"]), redirect_stdout(captured):
-            assert hp.run_gate(args) == status, captured.getvalue()
-        assert json.loads(captured.getvalue())["decision"] == want
+        with redirect_stdout(captured):
+            assert hp.run_gate(args) == int(want not in hp.PASS), (root.name, want, captured.getvalue())
+        decision = json.loads(captured.getvalue())
+        assert decision["decision"] == want, (root.name, want, decision)
+        return decision
 
     with (
         patch.object(hp, "assert_source_bindings", return_value=queue), patch.object(hp, "runtime_files"),
         patch.object(hp, "check_agent_census"), patch.object(powermode, "observe_ac_powermode", return_value=0),
+        patch.object(hp.time, "time", side_effect=lambda: clock[0]),
         patch.object(hp.subprocess, "call", return_value=0) as launch,
     ):
-        invoke(start, "ELIGIBLE", 0)
-        args.phase = "Run"
+        yield args, record, invoke, launch, clock
+
+
+def run_transition(output):
+    now = unix(BASE["clock"])
+    span = BASE["span"]
+    with transition_runtime(output / "usual-transition", span, now) as (args, record, invoke, launch, _):
+        invoke(record("Start", now), now, "ELIGIBLE")
+        queue = args.queue.read_bytes()
+        run = record("Run", now + 1)
         args.queue.write_bytes(queue + b"\n")
-        invoke(run, "WAIT_BINDING", 1)
+        invoke(run, now + 1, "WAIT_BINDING")
         args.queue.write_bytes(queue)
-        invoke(higher, "CEDE_INST_03", 1)
+        invoke(record("Run", now + 1, finite_ready=["inst-03"]), now + 1, "CEDE_INST_03")
         launch.assert_not_called()
-        invoke(run, "ELIGIBLE", 0)
+        invoke(run, now + 1, "ELIGIBLE")
         launch.assert_called_once()
         assert launch.call_args.args[0][-6:] == [
             "--deadline", str(now + 1 + ITEMS[span]["deadline_s"]),
             "--exit-wait-seconds", "180", "--start-wait-seconds", "30",
         ]
-        invoke(run, "SKIP_SPENT", 1)
+        invoke(run, now + 1, "SKIP_SPENT")
+        launch.assert_called_once()
+
+
+def audit_transition_regressions(output):
+    now = unix("2026-11-21T13:15:00-08:00")
+    with transition_runtime(output / "start-high-water", BASE["span"], now) as (_, record, invoke, launch, _):
+        start = record("Start", now - 60)
+        start["valid_through_epoch_s"] = now + 1
+        invoke(start, now, "ELIGIBLE")
+        # An observation can be newer than Start's observation while still
+        # predating the successful verdict. Equality also lacks a fresh read.
+        for sampled in (now - 30, now):
+            run = record("Run", sampled)
+            run["valid_through_epoch_s"] = now + 1
+            invoke(run, now + 1, "WAIT_EVIDENCE")
+        invoke(record("Run", now + 1, look_attestation="ran"), now + 1, "NOT_ADMITTED")
+        launch.assert_not_called()
+        invoke(record("Run", now + 1), now + 1, "ELIGIBLE")
+        launch.assert_called_once()
+
+    with transition_runtime(output / "same-host", BASE["span"], now) as (_, record, invoke, launch, _):
+        invoke(record("Start", now), now, "ELIGIBLE")
+        run = record("Run", now + 1)
+        for section in (run, run["latest_close"], run["safety"]):
+            section["host"] = "another-synthetic-host"
+        invoke(run, now + 1, "WAIT_EVIDENCE")
+        launch.assert_not_called()
+
+    expiry = unix("2026-11-30T00:00:00-08:00")
+    handoff_cases = (
+        ("expires-in-claim", expiry - 2, expiry + 5, "NEED_FRESH_QUEUE"),
+        ("handoff-validity", now, now + 1, "WAIT_EVIDENCE"),
+    )
+    for name, started, valid_through, want in handoff_cases:
+        with transition_runtime(output / name, BASE["span"], started) as (args, record, invoke, launch, clock):
+            invoke(record("Start", started), started, "ELIGIBLE")
+            run = record("Run", started + 1)
+            run["valid_through_epoch_s"] = valid_through
+            original = hp.write_exclusive
+
+            def slow_claim(path, data):
+                original(path, data)
+                clock[0] += 1
+
+            with patch.object(hp, "write_exclusive", side_effect=slow_claim):
+                invoke(run, started + 1, want)
+            launch.assert_not_called()
+            assert not list((args.custody / "hp-02-arms").glob("*-a1.json"))
+            if want == "WAIT_EVIDENCE":
+                # Fresh evidence can proceed after a refusal before dispatch.
+                invoke(record("Run", started + 2), started + 2, "ELIGIBLE")
+                launch.assert_called_once()
+
+
+def audit_evidence_regressions(output):
+    def inverted_close(obs):
+        obs["history"]["prior_check"]["ended_epoch_s"] = obs["latest_close"]["ended_epoch_s"] + 1
+
+    def different_prior_host(obs):
+        obs["history"]["prior_check"]["host"] = "another-synthetic-host"
+
+    def failed_recovery(obs):
+        close = obs["latest_close"]
+        close["recovery"] = evidence("pinned restore retry", safe_route_proven=True, same_close=close["record"],
+                                     result="failed", residual_refusal="open")
+
+    def bool_mode(obs):
+        for row in (obs["latest_close"], obs["safety"]):
+            row["ac_powermode"] = False
+
+    def missing_instrument(obs):
+        for row in obs["priority"]["entries"]:
+            if row["rung"] == "f2-inst-03":
+                del row["entry_id"]
+
+    now = unix(BASE["clock"])
+    cases = (
+        ("inverted-close", "hp-02-s02", inverted_close, "WAIT_EVIDENCE"),
+        ("different-prior-host", "hp-02-s02", different_prior_host, "WAIT_EVIDENCE"),
+        ("contradictory-recovery", BASE["span"], failed_recovery, "HALT_AND_PAGE"),
+        ("boolean-mode", BASE["span"], bool_mode, "HOLD_HOST"),
+        ("blank-date-text", BASE["span"], lambda obs: obs["hp01_dates"].update(t0_dates=""), "WAIT_EVIDENCE"),
+        ("empty-date-list", BASE["span"], lambda obs: obs["hp01_dates"].update(t0_dates=[]), "WAIT_EVIDENCE"),
+        ("omitted-historical-date", BASE["span"],
+         lambda obs: obs["hp01_dates"].update(t0_dates=["2026-11-14"]), "WAIT_EVIDENCE"),
+        ("missing-unavailable-instrument", BASE["span"], missing_instrument, "WAIT_EVIDENCE"),
+    )
+    for name, span, modify, want in cases:
+        with transition_runtime(output / (name + "-start"), span, now) as (_, record, invoke, launch, _):
+            start = record("Start", now)
+            modify(start)
+            invoke(start, now, want)
+            launch.assert_not_called()
+        with transition_runtime(output / (name + "-run"), span, now) as (_, record, invoke, launch, _):
+            invoke(record("Start", now), now, "ELIGIBLE")
+            run = record("Run", now + 1)
+            modify(run)
+            invoke(run, now + 1, want)
+            launch.assert_not_called()
+
+    with transition_runtime(output / "same-close-receipt", "hp-02-s02", now) as (_, record, invoke, launch, _):
+        for phase, at in (("Start", now), ("Run", now + 1)):
+            obs = record(phase, at)
+            prior = obs["history"]["prior_check"]
+            obs["latest_close"].update(ended_epoch_s=prior["ended_epoch_s"], receipt_sha256=prior["receipt_sha256"])
+            obs["safety"]["close_sha256"] = prior["receipt_sha256"]
+            invoke(obs, at, "ELIGIBLE")
         launch.assert_called_once()
 
 
@@ -366,7 +493,10 @@ if __name__ == "__main__":
     pairs = counted_pairs()
     additional_checks()
     with TemporaryDirectory(dir=output) as run_session:
-        run_transition(Path(run_session))
+        session = Path(run_session)
+        run_transition(session)
+        audit_transition_regressions(session)
+        audit_evidence_regressions(session)
     (output / "item-decisions.json").write_text(json.dumps(original, indent=2))
     (output / "timing-decisions.json").write_text(json.dumps(timing_decisions, indent=2))
     assert not freeze.NATIVE

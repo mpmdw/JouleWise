@@ -15,6 +15,7 @@ from zoneinfo import ZoneInfo
 HERE = Path(__file__).resolve().parent
 HP = HERE / "hp-02"
 ZONE = ZoneInfo("America/Los_Angeles")
+HP01_RECORDED_DATES = frozenset({date(2026, 11, 15)})  # RUN_STATE 335–344, ITEM-GATES-SPEC
 PIN = "dd206025abb30fd5c07515cd4b34b3e653174810"
 KIT_PATH = "hp-02/cl-hp-02.json"
 KIT_SHA = "7693b8293b42b8ba20cbd321e201974745b172dc53c4f1397d2c1494f38fbe66"
@@ -169,7 +170,7 @@ def check_look(look, now, sampled_at):
     require(look["status"] == "not_run" and look["pending_conflict"] is False, "WAIT_EVIDENCE", "look unresolved")
 
 
-def check_history(item, obs):
+def check_history(item, obs, close):
     history = obs["history"]
     require(record(history) and history["complete"] is True and history["kit_sha256"] == KIT_SHA,
             "WAIT_EVIDENCE", "complete per-leg execution history required")
@@ -181,8 +182,9 @@ def check_history(item, obs):
     if previous is not None:
         prior = history["prior_check"]
         require(record(prior) and prior["span"] == previous and prior["kit_sha256"] == KIT_SHA
-                and prior["attempt"] == 1 and prior["legs"] == ROSTERS[previous]
-                and number(prior["ended_epoch_s"]) and prior["ended_epoch_s"] <= obs["observed_epoch_s"],
+                and type(prior["attempt"]) is int and prior["attempt"] == 1 and prior["legs"] == ROSTERS[previous]
+                and prior["host"] == obs["host"] and number(prior["ended_epoch_s"])
+                and prior["ended_epoch_s"] <= close["ended_epoch_s"],
                 "WAIT_EVIDENCE", "exact prior HP Check required")
         require(prior["status"] != "dirty", "HOLD_KIT", "prior HP Check dirty")
         require(prior["status"] == "clean" and is_sha(prior["receipt_sha256"])
@@ -190,15 +192,24 @@ def check_history(item, obs):
                 and all(states.get(leg) == "spent" for span, roster in ROSTERS.items()
                         if span < item["span"] for leg in roster),
                 "WAIT_EVIDENCE", "prior HP Check/roster unresolved")
+        same_receipt = prior["receipt_sha256"] == close["receipt_sha256"]
+        same_end = prior["ended_epoch_s"] == close["ended_epoch_s"]
+        require(same_receipt == same_end, "WAIT_EVIDENCE", "latest and prior close receipt chronology conflicts")
 
 
-def check_close(close, obs, now):
+def automatic(value):
+    return type(value) is int and value == 0
+
+
+def check_close(close, obs):
     require(record(close) and close["identity"] == "latest-unambiguous" and close["host"] == obs["host"]
             and is_sha(close["receipt_sha256"])
-            and number(close["ended_epoch_s"]) and close["ended_epoch_s"] <= now,
-            "WAIT_EVIDENCE", "latest identified Check required")
+            and number(close["ended_epoch_s"]) and close["ended_epoch_s"] <= obs["observed_epoch_s"],
+            "WAIT_EVIDENCE", "latest identified Check at observation time required")
+    restore_status = close.get("restore_status")
+    require(restore_status in ("proven", "unproven"), "HOLD_HOST", "unknown initial restore status")
     recovery = close.get("recovery")
-    if close.get("restore_status") == "unproven":
+    if recovery is not None or restore_status == "unproven":
         require(record(recovery) and recovery.get("safe_route_proven") is True
                 and recovery.get("same_close") == close["record"],
                 "HOLD_HOST", "restore unproven; use the safe pinned recovery route")
@@ -211,7 +222,7 @@ def check_close(close, obs, now):
     require(close["fence_gone"] is True, "WAIT_FENCE", "shared fence clearance unproven")
     require(
         close["receipt_ok"] is True and close["restores_read_back"] is True
-        and close["restore_status"] in ("proven", "unproven") and close["ac_powermode"] == 0
+        and automatic(close["ac_powermode"])
         and close["marker_present_or_link"] is False and close["host_lock_free"] is True,
         "HOLD_HOST", "latest close restore/readbacks incomplete",
     )
@@ -231,15 +242,17 @@ def check_safety(obs, close):
     safety = obs["safety"]
     require(
         record(safety) and safety["close_record"] == close["record"]
-        and safety["close_sha256"] == close["receipt_sha256"] and safety["host"] == obs["host"] and safety["ac_powermode"] == 0
+        and safety["close_sha256"] == close["receipt_sha256"] and safety["host"] == obs["host"]
+        and automatic(safety["ac_powermode"])
         and safety["marker_present_or_link"] is False
         and safety["foreign_agent_census_casefold"] == [] and safety["foreign_process_census"] == []
         and all(safety["preflight"].get(line) is True for line in PREFLIGHT),
         "HOLD_HOST", "current scoped restore, census or preflight failed",
     )
     verify = safety["mode_verify"]
-    require(record(verify) and (verify["rc"] == 0 and verify["exceptions"] == []
-            or verify["rc"] == 1 and verify["exceptions"] == ["own-agent-tree-or-permitted-jobs"]),
+    require(record(verify) and type(verify["rc"]) is int
+            and (verify["rc"] == 0 and verify["exceptions"] == []
+                 or verify["rc"] == 1 and verify["exceptions"] == ["own-agent-tree-or-permitted-jobs"]),
             "HOLD_HOST", "measurement mode verify failed beyond the documented exception")
     stops = obs["stops"]
     require(record(stops) and stops["complete"] is True, "WAIT_EVIDENCE", "scoped stop register required")
@@ -275,7 +288,8 @@ def check_rank(priority, day):
             and priority["r1_post_close"] is True, "WAIT_EVIDENCE", "current complete ladder required")
     by_rung = {}
     for entry in priority["entries"]:
-        require(entry["rung"] in (*HIGHER, "further-stability") and record(entry)
+        require(record(entry) and is_text(entry.get("entry_id"))
+                and entry["rung"] in (*HIGHER, "further-stability")
                 and entry["status"] in ("eligible", "unavailable"),
                 "WAIT_EVIDENCE", "unknown ladder entry eligibility")
         rung = entry["rung"]
@@ -418,7 +432,7 @@ def decide(item, issue, obs, phase, now, kit_path, queue_bytes, *, planner=None,
         if obs.get("fence_clear") is not True:
             raise Refusal("WAIT_FENCE", "shared fence still live or status unknown")
         close = obs["latest_close"]
-        check_close(close, obs, now)
+        check_close(close, obs)
         if phase == "Issue":
             require(close["record"] == issue["latest_close_at_issue"], "WAIT_EVIDENCE", "issue close mismatch")
         check_safety(obs, close)
@@ -432,9 +446,15 @@ def decide(item, issue, obs, phase, now, kit_path, queue_bytes, *, planner=None,
         census = obs["hp01_dates"]
         require(record(census) and census["complete"] is True and census["kit_sha256"] == HP01_SHA,
                 "WAIT_EVIDENCE", "complete hp-01 date census required")
-        dates = {date.fromisoformat(day) for day in census["t0_dates"]}
+        rows = census["t0_dates"]
+        require(isinstance(rows, list) and rows and all(isinstance(day, str) for day in rows),
+                "WAIT_EVIDENCE", "hp-01 t0-dates must be a nonempty list of local dates")
+        dates = {date.fromisoformat(day) for day in rows}
+        require({day.isoformat() for day in dates} == set(rows),
+                "WAIT_EVIDENCE", "hp-01 t0-dates must use YYYY-MM-DD")
         require(local_date(now) not in dates, "INELIGIBLE_DATE", "hp-01 leg on this t0-date")
-        check_history(item, obs)
+        require(HP01_RECORDED_DATES <= dates, "WAIT_EVIDENCE", "hp-01 census omits a documented t0-date")
+        check_history(item, obs, close)
         debt = check_copy(obs["copy"], close, now)
         timing = occupancy(item, kit_path, now, obs.get("timing"), planner=planner, resample=resample)
         t0 = timing["t0"]
@@ -460,7 +480,8 @@ assert r['kit']['frozen_commit']=='dd206025abb30fd5c07515cd4b34b3e653174810'
 assert r['rc']==0 and not r.get('error') and r['legs_finished']==len(roster)==r['legs_planned']
 assert r['span_result']['outcome']=='MEASURED_OK' and r['span_result']['chain_outcome']=='COMPLETE'
 hp=r['high_power']; proof=hp['close_proof']
-assert proof['proven'] is True and proof['ac_powermode']==0 and proof['host_marker_present'] is False
+assert proof['proven'] is True and type(proof['ac_powermode']) is int and proof['ac_powermode']==0
+assert proof['host_marker_present'] is False
 assert not hp.get('revoked'), 'HP admission revoked: hold for the research lead'
 assert set(r['feeds'])=={'agents','meter','volumes'}
 assert all(f['stop']['proven_stopped'] is True for f in r['feeds'].values())
@@ -580,7 +601,7 @@ CUSTODY=/Users/edr/night-custody/magistrate
 hp_gate Start "$HP_START_OBSERVATION" || exit 1
 ```
 
-**Run.** Refresh the records, native census, marker, fence and clock after Start. Invoke the same gate with the Run observation immediately before launch. The gate verifies the successful Start and atomically claims the roster once. The claim records the exact argument, t0 and deadline. On bootstrap refusal hold this attempt for the lead. Exit the session as soon as the launcher reports a claimed fence.
+**Run.** Refresh the records, native census, marker, fence and clock after Start. Invoke the same gate with the Run observation immediately before launch. Run requires evidence sampled after the successful Start verdict on the same host. The gate reserves the roster, then rechecks the handoff clock after the claim is durable. The claim records the exact argument, t0 and deadline. On bootstrap refusal hold this attempt for the lead. Exit the session as soon as the launcher reports a claimed fence.
 
 ```sh
 hp_gate Run "$HP_RUN_OBSERVATION" || exit 1
@@ -665,6 +686,15 @@ def write_exclusive(path, data):
         os.fsync(stream.fileno())
 
 
+def check_handoff_time(item, queue, obs, decision, now):
+    queue_entry(item, queue, now)
+    require(decision["t0"] <= now <= min(
+                obs["valid_through_epoch_s"], decision["t0"] + obs["timing"]["runner_start_max_s"]),
+            "WAIT_EVIDENCE", "handoff window elapsed; make a fresh Run decision")
+    require(local_date(now) == local_date(decision["t0"]),
+            "WAIT_EVIDENCE", "launch date changed; refresh dated observations")
+
+
 def run_gate(args):
     # The pure fixture entry is decide(); this command is reserved for the
     # authorized desk. Do not invoke it as a builder or with synthetic data.
@@ -679,7 +709,8 @@ def run_gate(args):
         issue_bytes = args.issue.read_bytes()
         require(sha256(issue_bytes) == args.issue_sha, "WAIT_BINDING", "issue bytes differ")
         issue = read_json(issue_bytes)
-        obs = read_json(args.observation.read_bytes())
+        observation_bytes = args.observation.read_bytes()
+        obs = read_json(observation_bytes)
         require(issue.get("synthetic_only") is not True and obs.get("synthetic_only") is not True,
                 "WAIT_EVIDENCE", "synthetic records cannot issue or arm")
         from joulewise.align.apple.powermode import observe_ac_powermode
@@ -689,54 +720,73 @@ def run_gate(args):
         ledger.mkdir(exist_ok=True)
         # Use stable identities independent of queue renewal or output naming.
         claim = ledger / f"{KIT_SHA}-{item['span']}-a1.json"
-        started = ledger / f"start-{args.issue_sha}.json"
+        started = ledger / f"start-{args.issue_sha}.v2.json"
         with (ledger / "arm.lock").open("a") as lock:
             fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
             runtime_files(args, item)
             require(not os.path.lexists(claim), "SKIP_SPENT", "roster already has a launch claim")
             if args.phase == "Run":
                 start = read_json(started.read_bytes())
-                require(start["output"] == str(args.output) and start["issue_sha"] == args.issue_sha
-                        and obs["observed_epoch_s"] > start["observed_epoch_s"],
-                        "WAIT_EVIDENCE", "Run requires a successful Start and a fresh observation")
+                require(start["decision"] in PASS and start["span"] == args.span
+                        and start["output"] == str(args.output) and start["issue_sha"] == args.issue_sha
+                        and start["host"] == obs["host"] and number(start["passed_epoch_s"])
+                        and number(obs["observed_epoch_s"]) and obs["observed_epoch_s"] > start["passed_epoch_s"],
+                        "WAIT_EVIDENCE", "Run evidence must follow a successful Start on the same host")
             current_queue = args.queue.read_bytes()
             require(current_queue == queue, "WAIT_BINDING", "staged queue changed during the arm check")
-            require(observe_ac_powermode() == 0, "HOLD_HOST", "AC powermode is not Automatic")
+            require(automatic(observe_ac_powermode()), "HOLD_HOST", "AC powermode is not Automatic")
             check_agent_census(obs, args.magistrate_pid)
             decision = decide(item, issue, obs, args.phase, time.time(), args.kit, current_queue, resample=time.time)
             if decision["decision"] not in PASS:
                 print(json.dumps(decision), flush=True)
                 return 1
             result = {**decision, "span": item["span"], "output": str(args.output), "issue_sha": args.issue_sha,
-                      "observed_epoch_s": obs["observed_epoch_s"], "observation": obs["record"]}
+                      "host": obs["host"], "observed_epoch_s": obs["observed_epoch_s"], "observation": obs["record"]}
             if args.phase == "Start":
-                write_exclusive(started, result)
+                passed = time.time()
+                require(decision["t0"] <= passed <= obs["valid_through_epoch_s"]
+                        and local_date(passed) == local_date(decision["t0"]),
+                        "WAIT_EVIDENCE", "Start evidence expired before the verdict")
+                queue_entry(item, read_json(queue), passed)
+                write_exclusive(started, {**result, "passed_epoch_s": passed})
             if args.phase == "Run":
-                runtime_files(args, item)
-                require(args.queue.read_bytes() == queue and sha256(args.kit.read_bytes()) == KIT_SHA,
-                        "WAIT_BINDING", "staged queue or kit changed after Run decision")
-                launch_sample = time.time()
-                require(decision["t0"] <= launch_sample <= min(
-                            obs["valid_through_epoch_s"], decision["t0"] + obs["timing"]["runner_start_max_s"]),
-                        "WAIT_EVIDENCE", "handoff window elapsed; make a fresh Run decision")
-                queue_entry(item, read_json(queue), launch_sample)
-                require(local_date(launch_sample) == local_date(decision["t0"]),
-                        "WAIT_EVIDENCE", "launch date changed; refresh dated observations")
                 from scripts import launch_cadence_span as launcher
 
-                plan = launcher.cadence_plan(args.kit, ",".join(item["legs"]), decision["argument"], t0=launch_sample)
-                require(launch_sample + launcher.cadence_minimum_seconds(plan) <= decision["deadline"],
-                        "WAIT_PIN", "deadline no longer fits at the launcher handoff")
-                write_exclusive(claim, result)
-                print(json.dumps(decision), flush=True)
-                return subprocess.call([
+                bound_queue = read_json(queue)
+                launch_sample = time.time()
+                check_handoff_time(item, bound_queue, obs, decision, launch_sample)
+                roster = ",".join(item["legs"])
+                plan = launcher.cadence_plan(args.kit, roster, decision["argument"], t0=launch_sample)
+                minimum = launcher.cadence_minimum_seconds(plan)
+                argv = [
                     sys.executable, "-B", "scripts/launch_cadence_span.py", "launch",
                     "--repo", str(args.repo), "--python-bin", sys.executable, "--kit", str(args.kit),
-                    "--legs", ",".join(item["legs"]), "--batch-window", decision["argument"],
+                    "--legs", roster, "--batch-window", decision["argument"],
                     "--output", str(args.output), "--disk-path", str(args.repo), "--custody-root", str(args.custody),
                     "--magistrate-pid", str(args.magistrate_pid), "--deadline", str(decision["deadline"]),
                     "--exit-wait-seconds", "180", "--start-wait-seconds", "30",
-                ], cwd=args.repo)
+                ]
+                write_exclusive(claim, result)
+                # Finish blocking custody and input checks before sampling the actual
+                # dispatch clock. A refusal here precedes any launcher invocation.
+                try:
+                    runtime_files(args, item)
+                    require(args.queue.read_bytes() == queue and sha256(args.kit.read_bytes()) == KIT_SHA
+                            and args.issue.read_bytes() == issue_bytes,
+                            "WAIT_BINDING", "staged queue, kit or issue changed after the Run decision")
+                    require(args.observation.read_bytes() == observation_bytes,
+                            "WAIT_EVIDENCE", "Run observation changed before dispatch")
+                    dispatch = time.time()
+                    check_handoff_time(item, bound_queue, obs, decision, dispatch)
+                    require(dispatch + minimum <= decision["deadline"],
+                            "WAIT_PIN", "deadline no longer fits at the launcher handoff")
+                except (Refusal, OSError):
+                    claim.unlink()
+                    raise
+                # Retain the claim on ambiguous or refused launcher invocations.
+                rc = subprocess.call(argv, cwd=args.repo)
+                print(json.dumps(decision), flush=True)
+                return rc
             print(json.dumps(decision), flush=True)
         return 0
     except Refusal as ex:
