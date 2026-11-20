@@ -155,6 +155,7 @@ class Desk:
 
     def row(self, phase, sampled, variant="resampled-same-source"):
         obs = deepcopy(SEED["observation"])
+        obs["issue_record"] = self.issue["record"]
         day = day_at(sampled)
         obs.update(phase=phase, observed_epoch_s=sampled, valid_through_epoch_s=sampled+7200,
                    binding=deepcopy(self.issue["binding"]))
