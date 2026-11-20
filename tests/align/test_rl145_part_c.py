@@ -18,6 +18,7 @@ from unittest.mock import patch
 
 from joulewise.align.apple import r1_runtime as rt
 from scripts import align_r1_followup_kit as kit, align_r1_part_c as pc, launch_align_r0 as launcher
+from scripts import align_r1_part_c_evidence as evidence
 from scripts import run_align_r1_smoke as smoke
 from tests.test_part_c_evidence_ledger import MARKER, SoakAttempt, hashed, json_bytes, write_terminal
 from tests.test_part_c_gate_evidence import (
@@ -1055,6 +1056,13 @@ class SoakLauncherBindingTests(unittest.TestCase):
         tuning = patch.object(rt, "registered_s6", return_value={"slots": {"S6": 1.0}, "s6_tuning": {}})
         tuning.start()
         self.addCleanup(tuning.stop)
+        mirror = Path(temp.name) / "synthetic-model"
+        mirror.mkdir()
+        (mirror / "config.json").write_bytes(json_bytes({"max_position_embeddings": 40960}))
+        observe = evidence.observe_descriptor
+        descriptor = patch.object(evidence, "observe_descriptor", side_effect=lambda _: observe(str(mirror)))
+        descriptor.start()
+        self.addCleanup(descriptor.stop)
         self.attempt = SoakAttempt(Path(temp.name))
         self.attempt.config = kit.ROOT / kit.r1.DEFAULT_RUNTIME_CONFIG
         self.attempt.config_sha = hashed(self.attempt.config.read_bytes())
