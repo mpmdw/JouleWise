@@ -48,107 +48,294 @@ The guarded checkout initially refused the stock S6 read for `ChainScriptTests.t
 The full differential run was started before the fixture-only commit. Frozen v2 uses the fixture at its own Git pin and imports the evaluator and evidence helper from the candidate. Those files and the suite are byte-identical before and after the fixture commit. The descriptor-only run was executed on the exact updated variant 3 head.
 | Check | Issued W1 | Variant 1 | Variant 2 | Variant 3 |
 |---|---|---|---|---|
-| desk-release | RUNNING | RUNNING | RUNNING | RUNNING |
+| contrast-writer | PASS | FAIL | FAIL | FAIL |
+| desk-offload | FAIL | FAIL | FAIL | FAIL |
+| desk-packet | PASS | PASS | PASS | PASS |
+| desk-release | PASS | PASS | PASS | PASS |
+| desk-u3 | PASS | PASS | PASS | PASS |
 | dynamic-closure | PASS | FAIL | FAIL | FAIL |
 | executed-closure | PASS | PASS | PASS | FAIL |
 | opus-cold-witness | PASS | PASS | PASS | PASS |
 | r1-frozen-named | PASS | PASS | PASS | PASS |
 | registration | FAIL | FAIL | FAIL | FAIL |
+| step4-synthetic | PASS | PASS | PASS | PASS |
 | w1-reliability | FAIL | FAIL | FAIL | FAIL |
 | w1-synthetic | FAIL | PASS | FAIL | PASS |
-| wp22-full | FAIL | — | — | — |
+| wp22-full | PASS | PASS | PASS | PASS |
 | PREQUAL ordinary / stack | PASS | PASS | PASS | PASS |
 | PREQUAL ordinary / r0-config | PASS | PASS | PASS | PASS |
 | PREQUAL ordinary / d-pin-verifier | PASS | PASS | PASS | PASS |
 | PREQUAL ordinary / template-rewrites | NEEDS-REAL-INPUT | NEEDS-REAL-INPUT | NEEDS-REAL-INPUT | NEEDS-REAL-INPUT |
 | PREQUAL ordinary / checkpoint-native | PASS | PASS | PASS | PASS |
+| PREQUAL w1 / weight-digest-preflight | PASS | PASS | PASS | PASS |
+| PREQUAL w1 / runtime-stack-preflight | PASS | PASS | PASS | PASS |
+| PREQUAL w1 / held-window | PASS | PASS | PASS | PASS |
+| PREQUAL w1 / watchdog-hold-rollback | FAIL | PASS | PASS | PASS |
+| PREQUAL w1 / arm-cli | FAIL | FAIL | FAIL | FAIL |
+| PREQUAL w1 / packet-rebuild | PASS | PASS | PASS | PASS |
+| PREQUAL w1 / packet-tamper | FAIL | FAIL | FAIL | FAIL |
+| PREQUAL w1 / calibration-stop | PASS | PASS | PASS | PASS |
+| PREQUAL w1 / cal-escalation-exit | PASS | PASS | PASS | PASS |
+| PREQUAL w1 / r1-w1-chain | PASS | PASS | PASS | PASS |
+| PREQUAL w1 / km003c-launch | PASS | PASS | PASS | PASS |
+| PREQUAL w1 / km003c-crash-radius | PASS | PASS | PASS | PASS |
+| PREQUAL w1 / wp22-dry-run | FAIL | PASS | PASS | PASS |
+| PREQUAL w1 / optin-required | PASS (advisory) | PASS (advisory) | PASS (advisory) | PASS (advisory) |
+| PREQUAL w1 / arm-route | PASS | PASS | PASS | PASS |
 | sharded | RUNNING | — | — | — |
-| contrast-writer | PASS | — | — | — |
 | dynamic-live | FAIL | — | — | — |
 | w1-minimal | PASS | — | — | — |
-| canonical | — | — | — | RUNNING |
-| desk-release (repeat) | — | — | — | RUNNING |
+| test_rl176 | — | PASS | PASS | PASS |
+| test_rl182_registration | — | PASS | PASS | PASS |
+| test_s_rows | — | PASS | PASS | PASS |
+| PREQUAL w1 / smoke-kit | — | PASS | PASS | PASS |
 | partc-attack-repros | — | — | — | PASS |
-| partc-rl145 | — | — | — | RUNNING |
+| partc-evidence-ledger | — | — | — | PASS |
+| partc-gate-evidence | — | — | — | PASS |
+| partc-rl145 | — | — | — | PASS |
+| canonical | — | — | — | RUNNING |
 | Refusal census | PASS | PASS | PASS | FAIL |
 | S/Q and S-row modules | — | PASS | PASS | PASS |
 | Contrast chain with synthetic S6 | PASS | PASS | PASS | PASS |
+| step4 | PASS | PASS | PASS | PASS |
+| offload | FAIL | FAIL | FAIL | FAIL |
+| w1-synthetic with synthetic slot payload | PASS | — | PASS | — |
+| Frozen v2 full matrix | — | — | — | RUNNING |
+| Frozen v2 descriptor subset | — | — | — | PASS |
+| Frozen v2 original native-limit shifts | — | — | — | PASS |
 
 ### Exceptions by test ID
 
 | Check | Test ID | Issued W1 | Variant 1 | Variant 2 | Variant 3 |
 |---|---|---|---|---|---|
+| signing | `R0 binding` | NEEDS-REAL-INPUT | NEEDS-REAL-INPUT | NEEDS-REAL-INPUT | NEEDS-REAL-INPUT |
+| canonical | `align.test_budget.BudgetItemsTests.test_optional_parquet_uses_verified_bytes_offline` | — | — | — | SKIP |
+| canonical | `align.test_cache_checkpoint_native.NativeCheckpointTests.test_manual_prefill_native_stream_wiring_and_chunks` | — | — | — | SKIP |
+| canonical | `align.test_cache_checkpoint_native.NativeCheckpointTests.test_qwen3_5_bfloat16` | — | — | — | SKIP |
+| canonical | `align.test_cache_checkpoint_native.NativeCheckpointTests.test_qwen3_5_float32` | — | — | — | SKIP |
+| canonical | `align.test_cache_checkpoint_native.NativeCheckpointTests.test_qwen3_next_bfloat16` | — | — | — | SKIP |
+| canonical | `align.test_cache_checkpoint_native.NativeCheckpointTests.test_qwen3_next_float32` | — | — | — | SKIP |
+| canonical | `align.test_decode_budget.DeadmanTests.test_mlx_evaluated_token_survives_alarm_during_disarm` | — | — | — | SKIP |
+| canonical | `align.test_energy_residual.TestEnergyResidual.test_numpy_reference` | — | — | — | SKIP |
+| canonical | `align.test_energy_residual_regressions.TestEnergyResidualTokenRepresentations.test_numpy_int64_counts_are_bit_identical_to_plain_ints` | — | — | — | SKIP |
+| canonical | `align.test_external_volume.GuardTests.test_loss_switches_internal_for_good_and_journals_once` | — | — | — | FAIL |
+| canonical | `align.test_external_volume.GuardTests.test_unmounted_at_bind_is_lost` | — | — | — | FAIL |
+| canonical | `align.test_frontier_inputs.FrontierInputRegressionTests.test_numpy_integer_inputs` | — | — | — | SKIP |
+| canonical | `align.test_harvest_off_review_sol1.CustodyWitnesses.test_record_bound_serial_mbp_and_pooled_air_equal_all_177_files` | — | — | — | FAIL |
+| canonical | `align.test_harvest_off_review_sol1.TurnTableWitnesses.test_real_desk_equality_and_clock_evidence_input_binding` | — | — | — | FAIL |
+| canonical | `align.test_history_rendering.NativeHistoryRenderingTests.test_pinned_ids_do_not_count_literal_think_in_arguments` | — | — | — | SKIP |
+| canonical | `align.test_history_rendering.NativeHistoryRenderingTests.test_pinned_tokenizer_closed_reasoning_has_zero_rewritten_tokens` | — | — | — | SKIP |
+| canonical | `align.test_history_rendering.RealTemplateHistoryTests.test_effort_ladder_and_scrub_use_the_same_render_path` | — | — | — | SKIP |
+| canonical | `align.test_history_rendering.RealTemplateHistoryTests.test_untyped_xml_arguments_match_the_emitted_prefix_exactly` | — | — | — | SKIP |
+| canonical | `align.test_hoff_delta_sol1.FenceWitnesses.test_a_forbidden_open_audit_event_must_fail_the_test_not_only_log` | — | — | — | EXPECTED FAILURE |
+| canonical | `align.test_km003c.KitTests.test_generated_collection_plan_explicitly_enables_the_existing_reader` | — | — | — | FAIL |
+| canonical | `align.test_measurement_view_identity.MeasurementViewIdentityTests.test_an_align_config_without_one_model_tag_is_refused` | — | — | — | FAIL |
+| canonical | `align.test_measurement_view_identity.MeasurementViewIdentityTests.test_series_window_d_members_are_projected_as_d` | — | — | — | FAIL |
+| canonical | `align.test_measurement_view_identity.MeasurementViewIdentityTests.test_w1_d_members_are_projected_as_d_not_neg8_reference` | — | — | — | FAIL |
+| canonical | `align.test_moe_hooks.RouterHookTests.test_cached_multitoken_tool_prefill_is_unflagged` | — | — | — | SKIP |
+| canonical | `align.test_moe_hooks.RouterHookTests.test_one_token_prefill_explicit_phase_and_snapshot` | — | — | — | SKIP |
+| canonical | `align.test_moe_hooks.RouterHookTests.test_padding_and_batch_coverage_are_flags` | — | — | — | SKIP |
+| canonical | `align.test_moe_hooks.RouterHookTests.test_qwen2_and_mixtral_layouts` | — | — | — | SKIP |
+| canonical | `align.test_moe_hooks.RouterHookTests.test_routes_match_hf_logits_and_hooks_do_not_change_output` | — | — | — | SKIP |
+| canonical | `align.test_moe_hooks.RouterHookTests.test_sparse_layer_indices_follow_model` | — | — | — | SKIP |
+| canonical | `align.test_moe_hooks.RouterHookTests.test_two_prompts_generate_router_logs_and_stats` | — | — | — | SKIP |
+| canonical | `align.test_moe_hooks.RouterHookTests.test_uncached_generate_records_repeated_work_flag` | — | — | — | SKIP |
+| canonical | `align.test_pilot3.KitTests.test_fresh_mac_identity_pins_survive_generate_and_check` | — | — | — | FAIL |
+| canonical | `align.test_pilot3.KitTests.test_sizing_receipts_replay_exactly_from_the_named_sources` | — | — | — | SKIP |
+| canonical | `align.test_pilot4.KitTests.test_real_offline_factory_seeds_equal_preregistration` | — | — | — | SKIP |
+| canonical | `align.test_power_nvml.NvmlSamplerTests.test_optional_pynvml_uses_the_same_sampler_path` | — | — | — | SKIP |
+| canonical | `align.test_power_preflight.PreflightTests.test_owned_group_cleanup_reaps_a_term_resistant_child_after_leader_exit` | — | — | — | SKIP |
+| canonical | `align.test_r0_checks.R0ChecksTest.test_deadline_bypasses_native_exception_handlers_and_is_recorded` | — | — | — | FAIL |
+| canonical | `align.test_r0_checks.R0ChecksTest.test_decisions_are_successful_checks_and_template_is_diagnostic` | — | — | — | FAIL |
+| canonical | `align.test_r0_checks.R0ChecksTest.test_display_probe_failure_never_changes_the_outcome` | — | — | — | FAIL |
+| canonical | `align.test_r0_checks.R0ChecksTest.test_mocked_full_r0_completes_at_66_gb_without_offloads` | — | — | — | FAIL |
+| canonical | `align.test_r0_checks.R0ChecksTest.test_r0l3_display_wake_during_smc_is_a_flag_never_a_refusal` | — | — | — | FAIL |
+| canonical | `align.test_r0_checks.R0ChecksTest.test_r0l3_guard_and_smc_contention_are_recorded_flagged_and_not_fatal` | — | — | — | FAIL |
+| canonical | `align.test_r0_checks.R0ChecksTest.test_unattended_fake_cli_writes_both_outputs_and_never_claims_live` | — | — | — | FAIL |
+| canonical | `align.test_r0_host.R0HostTest.test_erratum5_real_capture_has_uncensored_onset_and_prints_flags` | — | — | — | SKIP |
+| canonical | `align.test_r0_host.R0HostTest.test_inventory_hashes_and_refuses_links_or_restricted_directory` | — | — | — | FAIL |
+| canonical | `align.test_r0_load_reference.ReferenceVerdictTest.test_explicit_mode_required` | — | — | — | FAIL |
+| canonical | `align.test_r0_load_reference.ReferenceVerdictTest.test_load_check_fails_closed_on_missing_or_unlisted_table` | — | — | — | FAIL |
+| canonical | `align.test_r0_load_reference.ReferenceVerdictTest.test_localized_fault_cannot_hide_in_the_mean` | — | — | — | FAIL |
+| canonical | `align.test_r0_load_reference.ReferenceVerdictTest.test_mean_tolerance` | — | — | — | FAIL |
+| canonical | `align.test_r0_load_reference.ReferenceVerdictTest.test_non_finite_and_wrong_count_fail` | — | — | — | FAIL |
+| canonical | `align.test_r0_load_reference.ReproductionTierTest.test_drift_inside_reproduction_tolerance_passes_but_is_not_bit_identical` | — | — | — | FAIL |
+| canonical | `align.test_r0_load_reference.ReproductionTierTest.test_exact_match_passes_bit_identical` | — | — | — | FAIL |
+| canonical | `align.test_r0_load_reference.ReproductionTierTest.test_malformed_or_tampered_pin_invalidates_the_table` | — | — | — | FAIL |
+| canonical | `align.test_r0_load_reference.ReproductionTierTest.test_mismatch_fails_even_inside_the_reference_tolerance` | — | — | — | FAIL |
+| canonical | `align.test_r0_load_reference.ReproductionTierTest.test_not_pinned_is_reported_and_is_not_a_fail` | — | — | — | FAIL |
+| canonical | `align.test_r0_load_reference.ReproductionTierTest.test_reproduction_failure_combines_with_reference_failure` | — | — | — | FAIL |
+| canonical | `align.test_r0_load_reference.ReproductionTierTest.test_stack_version_mismatch_is_not_comparable_and_fails_closed` | — | — | — | FAIL |
+| canonical | `align.test_r0_load_reference.RunnerReportTest.test_authority_names_the_load_reference_note_and_ruling` | — | — | — | FAIL |
+| canonical | `align.test_r0_load_reference.RunnerReportTest.test_finite_losses_are_stored_and_kept_out_of_the_markdown` | — | — | — | FAIL |
+| canonical | `align.test_r0_load_reference.RunnerReportTest.test_unserializable_row_is_recorded_as_a_fail` | — | — | — | FAIL |
+| canonical | `align.test_r0_load_reference.ShippedTableTest.test_anchor_absolute_mode` | — | — | — | FAIL |
+| canonical | `align.test_r0_load_reference.ShippedTableTest.test_d_observed_r0_value_passes_by_reference_but_failed_the_old_absolute_bar` | — | — | — | FAIL |
+| canonical | `align.test_r0_load_reference.ShippedTableTest.test_table_is_valid_and_every_model_names_its_mode` | — | — | — | FAIL |
+| canonical | `align.test_r0_load_reference_adversarial.SilentPassProbes.test_absolute_wildcard_beside_reference_entry_is_never_a_fallback` | — | — | — | FAIL |
+| canonical | `align.test_r0_load_reference_adversarial.SilentPassProbes.test_bins_are_positional_so_a_reordered_profile_fails` | — | — | — | FAIL |
+| canonical | `align.test_r0_load_reference_adversarial.SilentPassProbes.test_localized_fault_detection_floor_is_tolerance_times_bin_width` | — | — | — | FAIL |
+| canonical | `align.test_r0_load_reference_adversarial.SilentPassProbes.test_non_finite_or_bool_table_values_invalidate_the_table` | — | — | — | FAIL |
+| canonical | `align.test_r0_load_reference_adversarial.SilentPassProbes.test_one_bad_entry_invalidates_the_whole_table_including_d` | — | — | — | FAIL |
+| canonical | `align.test_r0_mlx_native.NativeMemoryTest.test_synchronized_tiny_hybrid_cache_trend_and_absent_metadata` | — | — | — | SKIP |
+| canonical | `align.test_r0_progress.ProgressTest.test_generated_error_keeps_prior_transition_and_current_turn` | — | — | — | FAIL |
+| canonical | `align.test_r0_progress.ProgressTest.test_rung_exception_keeps_completed_rung_and_episode` | — | — | — | FAIL |
+| canonical | `align.test_r0_progress.ProgressTest.test_second_attempt_timeout_keeps_first_and_incremental_samples` | — | — | — | FAIL |
+| canonical | `align.test_r0_scheduling.GenerationSchedulingTest.test_long_decode_failure_retries_once_with_unchanged_per_attempt_timeout` | — | — | — | FAIL |
+| canonical | `align.test_r0_scheduling.GenerationSchedulingTest.test_long_decode_pass_runs_exactly_one_attempt_and_one_deadline_unit` | — | — | — | FAIL |
+| canonical | `align.test_r0_scheduling.SchedulingTest.test_canonical_order_even_for_reversed_subset_and_unloaded_smc` | — | — | — | FAIL |
+| canonical | `align.test_r0_scheduling.SchedulingTest.test_cli_options_reach_runner_and_retry_can_be_disabled` | — | — | — | FAIL |
+| canonical | `align.test_r0_scheduling.SchedulingTest.test_keep_going_never_bypasses_host_identity_gate` | — | — | — | FAIL |
+| canonical | `align.test_r0_scheduling.SchedulingTest.test_keep_going_runs_later_checks_after_failure_and_still_fails` | — | — | — | FAIL |
+| canonical | `align.test_r0_scheduling.SchedulingTest.test_keep_going_still_stops_on_census_refusal_and_times_the_phase` | — | — | — | FAIL |
+| canonical | `align.test_r0_scheduling.SchedulingTest.test_live_desk_label_requires_smc_pass_for_complete_r0` | — | — | — | FAIL |
+| canonical | `align.test_r0_scheduling.SchedulingTest.test_opus_f3_smc_inconclusive_still_runs_host_disk_and_models` | — | — | — | FAIL |
+| canonical | `align.test_r0_scheduling.SchedulingTest.test_smc_only_does_not_load_or_probe_model_identity` | — | — | — | FAIL |
+| canonical | `align.test_r0_step.StepTest.test_runner_passes_configured_profile_and_reports_scaled_budget` | — | — | — | FAIL |
+| canonical | `align.test_r11_delta3_sol1.ExecutedTierWitnesses.test_actual_harvest_imports_are_strict` | — | — | — | FAIL |
+| canonical | `align.test_r11_delta3_sol1.ExecutedTierWitnesses.test_measured_member_cli_imports_are_strict` | — | — | — | FAIL |
+| canonical | `align.test_r11_delta3_sol1.ExecutedTierWitnesses.test_production_night_imports_are_strict` | — | — | — | FAIL |
+| canonical | `align.test_r11_delta3_sol1.ExecutedTierWitnesses.test_watchdog_imports_are_strict` | — | — | — | FAIL |
+| canonical | `align.test_r11_delta3_sol2.ProductionImportWitnesses.test_production_entry_imports_are_receipt_bound` | — | — | — | FAIL |
+| canonical | `align.test_r1_followup.DriverTests.test_order_cuts_timeout_candidates_and_receipt_preservation` | — | — | — | FAIL |
+| canonical | `align.test_r1_followup.DriverTests.test_redo_repeats_capture_pair_and_each_planning_precool` | — | — | — | FAIL |
+| canonical | `align.test_r1_r0_classes.R0ClassesTests.test_fixture_equals_saved_record` | — | — | — | SKIP |
+| canonical | `align.test_r1_rehearsal.R1Tests.test_a_first_signal_during_teardown_still_writes_r1_result` | — | — | — | FAIL |
+| canonical | `align.test_r1_rehearsal.R1Tests.test_aba_leg_without_g0_release_makes_adoption_inconclusive` | — | — | — | FAIL |
+| canonical | `align.test_r1_rehearsal.R1Tests.test_aba_legs_avoid_the_os_batch_window_and_are_redone_on_load` | — | — | — | FAIL |
+| canonical | `align.test_r1_rehearsal.R1Tests.test_accepted_attempt_owns_the_canonical_directory` | — | — | — | FAIL |
+| canonical | `align.test_r1_rehearsal.R1Tests.test_battery_drain_and_charge_resume_are_contract_fields_and_registered` | — | — | — | FAIL |
+| canonical | `align.test_r1_rehearsal.R1Tests.test_clean_r1_records_every_volume_census` | — | — | — | FAIL |
+| canonical | `align.test_r1_rehearsal.R1Tests.test_every_post_soak_runtime_call_gets_the_soak_reference` | — | — | — | FAIL |
+| canonical | `align.test_r1_rehearsal.R1Tests.test_heavy_redo_waits_for_a_g0_release_against_the_soak` | — | — | — | FAIL |
+| canonical | `align.test_r1_rehearsal.R1Tests.test_l1_is_evaluated_on_the_r1_record_and_bounds_the_duty_share` | — | — | — | FAIL |
+| canonical | `align.test_r1_rehearsal.R1Tests.test_planning_release_band_end_to_end` | — | — | — | FAIL |
+| canonical | `align.test_r1_rehearsal.R1Tests.test_power_helper_uses_only_the_two_allowed_sudo_commands` | — | — | — | FAIL |
+| canonical | `align.test_r1_rehearsal.R1Tests.test_quiet_segment_redone_on_sustained_cpu_load` | — | — | — | FAIL |
+| canonical | `align.test_r1_rehearsal.R1Tests.test_series_powermode_is_the_aba_adoption_outcome` | — | — | — | FAIL |
+| canonical | `align.test_r1_rehearsal.R1Tests.test_soak_with_failed_reads_end_to_end` | — | — | — | FAIL |
+| canonical | `align.test_r1_rehearsal.R1Tests.test_synthetic_rehearsal_fills_every_slot_and_entire_plan` | — | — | — | FAIL |
+| canonical | `align.test_r1_rehearsal.R1Tests.test_turn_count_backfill_never_overwrites_and_refuses_a_mismatched_export` | — | — | — | FAIL |
+| canonical | `align.test_r1_rehearsal.R1Tests.test_u5_is_declared_with_c_equal_one_and_evaluated` | — | — | — | FAIL |
+| canonical | `align.test_r1_rehearsal.Round5RulingTests.test_a_gated_g0_timeout_makes_that_run_inconclusive_not_a_refusal` | — | — | — | FAIL |
+| canonical | `align.test_r1_rehearsal.Round5RulingTests.test_an_aba_leg_whose_own_g0_does_not_release_is_inconclusive_and_r1_continues` | — | — | — | FAIL |
+| canonical | `align.test_r1_rehearsal.Round5RulingTests.test_designed_start_states_run_warmest_first` | — | — | — | FAIL |
+| canonical | `align.test_r1_rehearsal.Round5RulingTests.test_each_gated_d_run_follows_a_d_turn_with_w1_s_schedule_and_consumes_the_soak` | — | — | — | FAIL |
+| canonical | `align.test_r1_rehearsal.Round5RulingTests.test_full_inventory_thermometry_is_registered_and_a_null_pick_fails_the_bar` | — | — | — | FAIL |
+| canonical | `align.test_r1_rehearsal.Round5RulingTests.test_s6_stays_delta_slow_with_a_todo_tied_to_the_gated_g1_median` | — | — | — | FAIL |
+| canonical | `align.test_r1_rehearsal.Round5RulingTests.test_step_d_and_later_d_measurements_run_under_the_adopted_series_mode` | — | — | — | FAIL |
+| canonical | `align.test_r1_rehearsal.Round6RulingTests.test_a_released_g0_that_decoded_nothing_is_not_a_d_turn_predecessor` | — | — | — | FAIL |
+| canonical | `align.test_r1_rehearsal.Round6RulingTests.test_a_step_d_g0_timeout_is_retried_once_after_another_precool` | — | — | — | FAIL |
+| canonical | `align.test_r1_rehearsal.Round6RulingTests.test_a_twice_timed_out_designed_state_is_inconclusive_and_u5_too` | — | — | — | FAIL |
+| canonical | `align.test_r1_rehearsal.Round6RulingTests.test_a_twice_timed_out_step_d_is_inconclusive_and_the_kit_refuses_w1` | — | — | — | FAIL |
+| canonical | `align.test_r1_rehearsal.Round6RulingTests.test_changed_pick_s7_records_the_accepted_quiet_window_reference` | — | — | — | FAIL |
+| canonical | `align.test_r1_rehearsal.Round6RulingTests.test_ruling_1f_decode_rate_is_the_minimum_over_step_d_and_the_gated_runs` | — | — | — | FAIL |
+| contrast-writer | `align.test_r1_to_w1_chain.ChainScriptTests.test_steps_one_to_three_run_for_real_on_a_synthetic_lane_record` | FAIL/PASS | FAIL/PASS | FAIL/PASS | FAIL/PASS |
+| partc-rl145 | `align.test_rl145_part_c.SoakLauncherBindingTests.test_audit3_decode_ends_are_ordered_and_attributed` | — | — | — | FAIL/PASS |
+| partc-rl145 | `align.test_rl145_part_c.SoakLauncherBindingTests.test_audit3_gate_entry_coverage` | — | — | — | FAIL/PASS |
+| partc-rl145 | `align.test_rl145_part_c.SoakLauncherBindingTests.test_audit3_receipt_fields` | — | — | — | FAIL/PASS |
+| partc-rl145 | `align.test_rl145_part_c.SoakLauncherBindingTests.test_audit4_decline_requires_raw_observations` | — | — | — | FAIL/PASS |
+| partc-rl145 | `align.test_rl145_part_c.SoakLauncherBindingTests.test_audit4_endpoint_and_context_guards` | — | — | — | FAIL/PASS |
+| partc-rl145 | `align.test_rl145_part_c.SoakLauncherBindingTests.test_audit4_executed_template_parameters` | — | — | — | FAIL/PASS |
+| partc-rl145 | `align.test_rl145_part_c.SoakLauncherBindingTests.test_audit4_source_binding_and_nullable_types` | — | — | — | FAIL/PASS |
+| partc-rl145 | `align.test_rl145_part_c.SoakLauncherBindingTests.test_audit4_thermometry_confirmation_recomputed` | — | — | — | FAIL/PASS |
+| partc-rl145 | `align.test_rl145_part_c.SoakLauncherBindingTests.test_audit4_tool_intervals_and_terminal_tool` | — | — | — | FAIL/PASS |
+| partc-rl145 | `align.test_rl145_part_c.SoakLauncherBindingTests.test_audit4_unselected_reading_and_finalization` | — | — | — | FAIL/PASS |
+| partc-rl145 | `align.test_rl145_part_c.SoakLauncherBindingTests.test_audit4_w1_roster_is_required_and_agrees_with_templates` | — | — | — | FAIL/PASS |
+| partc-rl145 | `align.test_rl145_part_c.SoakLauncherBindingTests.test_bound_member_terminal_intervals_must_be_sequential` | — | — | — | FAIL/PASS |
+| partc-rl145 | `align.test_rl145_part_c.SoakLauncherBindingTests.test_clean_own_stop_and_proven_x_refusal_still_pass` | — | — | — | FAIL/PASS |
+| partc-rl145 | `align.test_rl145_part_c.SoakLauncherBindingTests.test_each_thermal_boundary_must_agree_in_the_ordered_event_stream` | — | — | — | FAIL/PASS |
+| partc-rl145 | `align.test_rl145_part_c.SoakLauncherBindingTests.test_native_launcher_passes_through_the_soak_and_member_ledgers` | — | — | — | FAIL/PASS |
+| partc-rl145 | `align.test_rl145_part_c.SoakLauncherBindingTests.test_no_soak_values_leave_either_process_or_ledger` | — | — | — | FAIL/PASS |
+| partc-rl145 | `align.test_rl145_part_c.SoakLauncherBindingTests.test_quiet_member_load_bytes_and_frozen_redo` | — | — | — | FAIL/PASS |
+| partc-rl145 | `align.test_rl145_part_c.SoakLauncherBindingTests.test_recomputed_decisions_require_their_raw_inputs` | — | — | — | FAIL/PASS |
+| partc-rl145 | `align.test_rl145_part_c.SoakLauncherBindingTests.test_released_g1_needs_the_entire_consecutive_in_band_streak` | — | — | — | FAIL/PASS |
+| partc-rl145 | `align.test_rl145_part_c.SoakLauncherBindingTests.test_rl186_archive_replays_with_names_and_counts` | — | — | — | FAIL/PASS |
+| partc-rl145 | `align.test_rl145_part_c.SoakLauncherBindingTests.test_rl186_step_wall_rearm_context_and_gate_stamps` | — | — | — | FAIL/PASS |
+| partc-rl145 | `align.test_rl145_part_c.SoakLauncherBindingTests.test_same_summary_failure_before_and_after_member_return` | — | — | — | FAIL/PASS |
+| partc-rl145 | `align.test_rl145_part_c.SoakLauncherBindingTests.test_sealed_phase_receipts_must_match_frozen_reduction_on_d_and_x` | — | — | — | FAIL/PASS |
+| partc-rl145 | `align.test_rl145_part_c.SoakLauncherBindingTests.test_step_recovery_and_selected_thermometry_match_sources` | — | — | — | FAIL/PASS |
+| partc-rl145 | `align.test_rl145_part_c.SoakLauncherBindingTests.test_step_reference_reconciles_warmup_events` | — | — | — | FAIL/PASS |
+| partc-rl145 | `align.test_rl145_part_c.SoakLauncherBindingTests.test_timed_x_coverage_loss_stays_distinct_from_a_released_gate` | — | — | — | FAIL/PASS |
+| partc-rl145 | `align.test_rl145_part_c.SoakLauncherBindingTests.test_xml_malformed_flag_cannot_be_reported_as_clean_stop` | — | — | — | FAIL/PASS |
+| partc-rl145 | `align.test_rl145_part_c.SoakLauncherBindingTests.test_zero_exit_requires_all_four_public_verdict_witnesses` | — | — | — | FAIL/PASS |
+| S/Q and S-row modules, test_s_rows | `align.test_s_rows.Step0WorldTests.test_deadman_bundles_give_rows_from_runtime_events` | ABSENT | SKIP | SKIP | SKIP |
+| S/Q and S-row modules, test_s_rows | `align.test_s_rows.Step0WorldTests.test_desk_reads_every_ending` | ABSENT | SKIP | SKIP | SKIP |
+| S/Q and S-row modules, test_s_rows | `align.test_s_rows.Step0WorldTests.test_g1_timeout_member_is_kept_on_its_rows` | ABSENT | SKIP | SKIP | SKIP |
+| S/Q and S-row modules, test_s_rows | `align.test_s_rows.Step0WorldTests.test_prefill_deadman_turn_gives_no_row` | ABSENT | SKIP | SKIP | SKIP |
+| dynamic-closure, dynamic-live | `align.test_v4_dynamic_closure.LiveTraceTests.test_a_fresh_process_running_the_minimal_dry_run_stays_inside_the_committed_trace` | FAIL/PASS | FAIL | FAIL | FAIL |
+| executed-closure | `align.test_v4_executed_closure.ExecutedClosureBindingTests.test_every_executed_module_and_script_is_in_the_receipt_artifact_set` | PASS | PASS | PASS | FAIL |
+| wp22-full | `align.test_v4_opus_cold_witnesses.Wp22DryRunReachesTheDesk.test_minimal_synthetic_w1_produces_a_desk_record` | FAIL/PASS | PASS | PASS | PASS |
+| registration | `align.test_v4_registration.RegistrationTests.test_d_max_turns_is_part_of_frozen_kit` | FAIL | FAIL | FAIL | FAIL |
+| wp22-full | `align.test_v4_w1_synthetic.CleanWindowTests` | FAIL | — | — | — |
+| w1-synthetic, w1-synthetic with synthetic slot payload | `align.test_v4_w1_synthetic.CleanWindowTests.test_all_members_succeed_without_exclusions` | PASS/SKIP | PASS/SKIP | PASS/SKIP | PASS/SKIP |
+| w1-synthetic, w1-synthetic with synthetic slot payload | `align.test_v4_w1_synthetic.CleanWindowTests.test_clean_window_passes_the_signed_battery_consequence` | PASS/SKIP | PASS/SKIP | PASS/SKIP | PASS/SKIP |
+| w1-synthetic, w1-synthetic with synthetic slot payload | `align.test_v4_w1_synthetic.CleanWindowTests.test_desk_energy_matches_independent_world_integral` | PASS/SKIP | PASS/SKIP | PASS/SKIP | PASS/SKIP |
+| w1-synthetic, w1-synthetic with synthetic slot payload | `align.test_v4_w1_synthetic.CleanWindowTests.test_u1_u3_and_contrast_match_design` | PASS/SKIP | PASS/SKIP | PASS/SKIP | PASS/SKIP |
+| wp22-full | `align.test_v4_w1_synthetic.InjectedWindowTests` | FAIL | — | — | — |
+| w1-synthetic, w1-synthetic with synthetic slot payload | `align.test_v4_w1_synthetic.InjectedWindowTests.test_30b_u1_counts_the_x1_member_and_passes` | PASS/SKIP | PASS/SKIP | PASS/SKIP | PASS/SKIP |
+| w1-synthetic, w1-synthetic with synthetic slot payload | `align.test_v4_w1_synthetic.InjectedWindowTests.test_clean_members_succeed` | PASS/SKIP | PASS/SKIP | PASS/SKIP | PASS/SKIP |
+| w1-synthetic, w1-synthetic with synthetic slot payload, wp22-full | `align.test_v4_w1_synthetic.InjectedWindowTests.test_collector_death_is_x4_and_episode_continues` | EXPECTED FAILURE/SKIP | EXPECTED FAILURE/SKIP | EXPECTED FAILURE/SKIP | EXPECTED FAILURE/SKIP |
+| w1-synthetic, w1-synthetic with synthetic slot payload | `align.test_v4_w1_synthetic.InjectedWindowTests.test_contrast_verdict_matches_design_rule` | PASS/SKIP | PASS/SKIP | PASS/SKIP | PASS/SKIP |
+| w1-synthetic, w1-synthetic with synthetic slot payload | `align.test_v4_w1_synthetic.InjectedWindowTests.test_d_u1_counts_two_thermal_exclusions_and_fails` | PASS/SKIP | PASS/SKIP | PASS/SKIP | PASS/SKIP |
+| w1-synthetic, w1-synthetic with synthetic slot payload | `align.test_v4_w1_synthetic.InjectedWindowTests.test_deadman_is_x7` | PASS/SKIP | PASS/SKIP | PASS/SKIP | PASS/SKIP |
+| w1-synthetic, w1-synthetic with synthetic slot payload | `align.test_v4_w1_synthetic.InjectedWindowTests.test_desk_runs_on_a_window_with_failed_members` | PASS/SKIP | PASS/SKIP | PASS/SKIP | PASS/SKIP |
+| w1-synthetic, w1-synthetic with synthetic slot payload | `align.test_v4_w1_synthetic.InjectedWindowTests.test_g0_timeout_ends_the_member_promptly_as_x2` | PASS/SKIP | PASS/SKIP | PASS/SKIP | PASS/SKIP |
+| w1-synthetic, w1-synthetic with synthetic slot payload | `align.test_v4_w1_synthetic.InjectedWindowTests.test_malformed_xml_stops_and_is_excluded` | PASS/SKIP | PASS/SKIP | PASS/SKIP | PASS/SKIP |
+| w1-synthetic, w1-synthetic with synthetic slot payload | `align.test_v4_w1_synthetic.InjectedWindowTests.test_os_level_nonzero_is_x1` | PASS/SKIP | PASS/SKIP | PASS/SKIP | PASS/SKIP |
+| w1-synthetic, w1-synthetic with synthetic slot payload | `align.test_v4_w1_synthetic.InjectedWindowTests.test_u4_to_u6_inconclusive_in_w1` | PASS/SKIP | PASS/SKIP | PASS/SKIP | PASS/SKIP |
+| w1-synthetic, wp22-full | `align.test_v4_w1_synthetic.KitBridgeTests.test_consumer_custody_rebinds_to_synthesized_capture_bytes` | FAIL/PASS | PASS | FAIL/PASS | FAIL/PASS |
+| w1-synthetic, wp22-full | `align.test_v4_w1_synthetic.KitBridgeTests.test_contrast_deadman_follows_the_30b_member_law_and_admits_a_g0_timeout` | FAIL/PASS | PASS | FAIL/PASS | FAIL/PASS |
+| w1-synthetic, wp22-full | `align.test_v4_w1_synthetic.KitBridgeTests.test_synthetic_inputs_pass_admission_and_roster_is_a1` | FAIL/PASS | PASS | FAIL/PASS | FAIL/PASS |
+| w1-synthetic, wp22-full | `align.test_v4_w1_synthetic.KitBridgeTests.test_synthetic_t_dead_is_bound_by_l1_and_the_r1_tail` | FAIL/PASS | PASS | FAIL/PASS | FAIL/PASS |
+| w1-synthetic, wp22-full | `align.test_v4_w1_synthetic.MinimalDryRunTests.test_minimal_synthetic_w1_reaches_the_desk` | FAIL/PASS | PASS | FAIL/PASS | FAIL/PASS |
+| w1-synthetic, wp22-full | `align.test_v4_w1_synthetic.MinimalDryRunTests.test_the_synthetic_contrast_is_rederived_after_the_wp18_update` | FAIL/PASS | PASS | FAIL/PASS | FAIL/PASS |
+| PREQUAL w1 / arm-cli | `arm-cli` | FAIL | FAIL | FAIL | FAIL |
+| PREQUAL ordinary / checkpoint-native | `checkpoint-native` | FAIL | FAIL | FAIL | FAIL |
 | PREQUAL ordinary | `d-pins` | NEEDS-REAL-INPUT | NEEDS-REAL-INPUT | NEEDS-REAL-INPUT | NEEDS-REAL-INPUT |
 | PREQUAL ordinary | `d-tokenizer-files` | NEEDS-REAL-INPUT | NEEDS-REAL-INPUT | NEEDS-REAL-INPUT | NEEDS-REAL-INPUT |
+| PREQUAL w1 | `deadline` | NEEDS-REAL-INPUT | NEEDS-REAL-INPUT | NEEDS-REAL-INPUT | NEEDS-REAL-INPUT |
 | PREQUAL ordinary | `generated` | NEEDS-REAL-INPUT | NEEDS-REAL-INPUT | NEEDS-REAL-INPUT | NEEDS-REAL-INPUT |
+| Refusal census | `hazards.test_refusal_allowlist.RefusalAllowlistTests.test_every_refusal_site_is_listed_with_its_exact_count` | PASS | PASS | PASS | FAIL |
+| Refusal census | `hazards.test_refusal_allowlist.RefusalAllowlistTests.test_the_scan_covers_every_module_the_hazard_path_imports` | PASS | PASS | PASS | FAIL |
 | PREQUAL ordinary | `kit` | NEEDS-REAL-INPUT | NEEDS-REAL-INPUT | NEEDS-REAL-INPUT | NEEDS-REAL-INPUT |
+| PREQUAL w1 | `kit-ready` | NEEDS-REAL-INPUT | NEEDS-REAL-INPUT | NEEDS-REAL-INPUT | NEEDS-REAL-INPUT |
 | PREQUAL ordinary | `launcher` | NEEDS-REAL-INPUT | NEEDS-REAL-INPUT | NEEDS-REAL-INPUT | NEEDS-REAL-INPUT |
 | PREQUAL ordinary | `load` | NEEDS-REAL-INPUT | NEEDS-REAL-INPUT | NEEDS-REAL-INPUT | NEEDS-REAL-INPUT |
 | PREQUAL ordinary | `model-load` | NEEDS-REAL-INPUT | NEEDS-REAL-INPUT | NEEDS-REAL-INPUT | NEEDS-REAL-INPUT |
 | PREQUAL ordinary | `nll-fixture-ids` | NEEDS-REAL-INPUT | NEEDS-REAL-INPUT | NEEDS-REAL-INPUT | NEEDS-REAL-INPUT |
-| PREQUAL ordinary | `template-render` | NEEDS-REAL-INPUT | NEEDS-REAL-INPUT | NEEDS-REAL-INPUT | NEEDS-REAL-INPUT |
-| PREQUAL ordinary | `tool-roundtrip` | NEEDS-REAL-INPUT | NEEDS-REAL-INPUT | NEEDS-REAL-INPUT | NEEDS-REAL-INPUT |
-| PREQUAL ordinary | `w1-plan` | NEEDS-REAL-INPUT | NEEDS-REAL-INPUT | NEEDS-REAL-INPUT | NEEDS-REAL-INPUT |
-| PREQUAL ordinary / checkpoint-native | `checkpoint-native` | FAIL | — | — | — |
-| PREQUAL ordinary / stack | `stack` | FAIL | — | — | — |
-| PREQUAL ordinary / template-rewrites | `template-rewrites` | NEEDS-REAL-INPUT | NEEDS-REAL-INPUT | NEEDS-REAL-INPUT | NEEDS-REAL-INPUT |
-| PREQUAL w1 | `deadline` | NEEDS-REAL-INPUT | NEEDS-REAL-INPUT | NEEDS-REAL-INPUT | NEEDS-REAL-INPUT |
-| PREQUAL w1 | `kit-ready` | NEEDS-REAL-INPUT | NEEDS-REAL-INPUT | NEEDS-REAL-INPUT | NEEDS-REAL-INPUT |
+| PREQUAL w1 / packet-tamper | `packet-tamper` | FAIL | FAIL | FAIL | FAIL |
 | PREQUAL w1 | `receipt` | NEEDS-REAL-INPUT | NEEDS-REAL-INPUT | NEEDS-REAL-INPUT | NEEDS-REAL-INPUT |
 | PREQUAL w1 | `series-manifest` | NEEDS-REAL-INPUT | NEEDS-REAL-INPUT | NEEDS-REAL-INPUT | NEEDS-REAL-INPUT |
-| PREQUAL w1 | `w1-window-max` | NEEDS-REAL-INPUT | NEEDS-REAL-INPUT | NEEDS-REAL-INPUT | NEEDS-REAL-INPUT |
-| Refusal census | `hazards.test_refusal_allowlist.RefusalAllowlistTests.test_every_refusal_site_is_listed_with_its_exact_count.test_every_refusal_site_is_listed_with_its_exact_count` | PASS | PASS | PASS | FAIL |
-| Refusal census | `hazards.test_refusal_allowlist.RefusalAllowlistTests.test_the_scan_covers_every_module_the_hazard_path_imports.test_the_scan_covers_every_module_the_hazard_path_imports` | PASS | PASS | PASS | FAIL |
-| S/Q and S-row modules | `align.test_s_rows.Step0WorldTests.test_deadman_bundles_give_rows_from_runtime_events.test_deadman_bundles_give_rows_from_runtime_events` | ABSENT | SKIP | SKIP | SKIP |
-| S/Q and S-row modules | `align.test_s_rows.Step0WorldTests.test_desk_reads_every_ending.test_desk_reads_every_ending` | ABSENT | SKIP | SKIP | SKIP |
-| S/Q and S-row modules | `align.test_s_rows.Step0WorldTests.test_g1_timeout_member_is_kept_on_its_rows.test_g1_timeout_member_is_kept_on_its_rows` | ABSENT | SKIP | SKIP | SKIP |
-| S/Q and S-row modules | `align.test_s_rows.Step0WorldTests.test_prefill_deadman_turn_gives_no_row.test_prefill_deadman_turn_gives_no_row` | ABSENT | SKIP | SKIP | SKIP |
-| dynamic-closure | `align.test_v4_dynamic_closure.LiveTraceTests.test_a_fresh_process_running_the_minimal_dry_run_stays_inside_the_committed_trace.test_a_fresh_process_running_the_minimal_dry_run_stays_inside_the_committed_trace` | FAIL/PASS | FAIL | FAIL | FAIL |
-| dynamic-live | `align.test_v4_dynamic_closure.LiveTraceTests.test_a_fresh_process_running_the_minimal_dry_run_stays_inside_the_committed_trace.test_a_fresh_process_running_the_minimal_dry_run_stays_inside_the_committed_trace` | FAIL | FAIL | FAIL | FAIL |
-| executed-closure | `align.test_v4_executed_closure.ExecutedClosureBindingTests.test_every_executed_module_and_script_is_in_the_receipt_artifact_set.test_every_executed_module_and_script_is_in_the_receipt_artifact_set` | PASS | PASS | PASS | FAIL |
-| registration | `align.test_v4_registration.RegistrationTests.test_d_max_turns_is_part_of_frozen_kit.test_d_max_turns_is_part_of_frozen_kit` | FAIL | FAIL | FAIL | FAIL |
-| signing | `R0 binding` | NEEDS-REAL-INPUT | NEEDS-REAL-INPUT | NEEDS-REAL-INPUT | NEEDS-REAL-INPUT |
+| PREQUAL ordinary / stack | `stack` | FAIL | FAIL | FAIL | FAIL |
 | signing | `step4-exporter-selection-roster` | NEEDS-REAL-INPUT | NEEDS-REAL-INPUT | NEEDS-REAL-INPUT | NEEDS-REAL-INPUT |
 | signing | `stored F0-run-11 replay` | NEEDS-REAL-INPUT | NEEDS-REAL-INPUT | NEEDS-REAL-INPUT | NEEDS-REAL-INPUT |
 | signing | `stored counted-Part-C replay` | NEEDS-REAL-INPUT | NEEDS-REAL-INPUT | NEEDS-REAL-INPUT | NEEDS-REAL-INPUT |
-| w1-reliability | `test_w1_reliability.TerminalDeliveryTests.test_actual_program_courier_parses_prompt_and_pushes_to_local_remote.test_actual_program_courier_parses_prompt_and_pushes_to_local_remote` | FAIL | FAIL | FAIL | FAIL |
-| w1-reliability | `test_w1_reliability.TerminalDeliveryTests.test_repeat_snapshot_fast_forwards_and_preserves_byte_identical_result.test_repeat_snapshot_fast_forwards_and_preserves_byte_identical_result` | PASS | FAIL | PASS | PASS |
-| w1-synthetic | `align.test_v4_w1_synthetic.CleanWindowTests.test_all_members_succeed_without_exclusions.test_all_members_succeed_without_exclusions` | SKIP | SKIP | SKIP | SKIP |
-| w1-synthetic | `align.test_v4_w1_synthetic.CleanWindowTests.test_clean_window_passes_the_signed_battery_consequence.test_clean_window_passes_the_signed_battery_consequence` | SKIP | SKIP | SKIP | SKIP |
-| w1-synthetic | `align.test_v4_w1_synthetic.CleanWindowTests.test_desk_energy_matches_independent_world_integral.test_desk_energy_matches_independent_world_integral` | SKIP | SKIP | SKIP | SKIP |
-| w1-synthetic | `align.test_v4_w1_synthetic.CleanWindowTests.test_u1_u3_and_contrast_match_design.test_u1_u3_and_contrast_match_design` | SKIP | SKIP | SKIP | SKIP |
-| w1-synthetic | `align.test_v4_w1_synthetic.InjectedWindowTests.test_30b_u1_counts_the_x1_member_and_passes.test_30b_u1_counts_the_x1_member_and_passes` | SKIP | SKIP | SKIP | SKIP |
-| w1-synthetic | `align.test_v4_w1_synthetic.InjectedWindowTests.test_clean_members_succeed.test_clean_members_succeed` | SKIP | SKIP | SKIP | SKIP |
-| w1-synthetic | `align.test_v4_w1_synthetic.InjectedWindowTests.test_collector_death_is_x4_and_episode_continues.test_collector_death_is_x4_and_episode_continues` | SKIP | SKIP | SKIP | SKIP |
-| w1-synthetic | `align.test_v4_w1_synthetic.InjectedWindowTests.test_contrast_verdict_matches_design_rule.test_contrast_verdict_matches_design_rule` | SKIP | SKIP | SKIP | SKIP |
-| w1-synthetic | `align.test_v4_w1_synthetic.InjectedWindowTests.test_d_u1_counts_two_thermal_exclusions_and_fails.test_d_u1_counts_two_thermal_exclusions_and_fails` | SKIP | SKIP | SKIP | SKIP |
-| w1-synthetic | `align.test_v4_w1_synthetic.InjectedWindowTests.test_deadman_is_x7.test_deadman_is_x7` | SKIP | SKIP | SKIP | SKIP |
-| w1-synthetic | `align.test_v4_w1_synthetic.InjectedWindowTests.test_desk_runs_on_a_window_with_failed_members.test_desk_runs_on_a_window_with_failed_members` | SKIP | SKIP | SKIP | SKIP |
-| w1-synthetic | `align.test_v4_w1_synthetic.InjectedWindowTests.test_g0_timeout_ends_the_member_promptly_as_x2.test_g0_timeout_ends_the_member_promptly_as_x2` | SKIP | SKIP | SKIP | SKIP |
-| w1-synthetic | `align.test_v4_w1_synthetic.InjectedWindowTests.test_malformed_xml_stops_and_is_excluded.test_malformed_xml_stops_and_is_excluded` | SKIP | SKIP | SKIP | SKIP |
-| w1-synthetic | `align.test_v4_w1_synthetic.InjectedWindowTests.test_os_level_nonzero_is_x1.test_os_level_nonzero_is_x1` | SKIP | SKIP | SKIP | SKIP |
-| w1-synthetic | `align.test_v4_w1_synthetic.InjectedWindowTests.test_u4_to_u6_inconclusive_in_w1.test_u4_to_u6_inconclusive_in_w1` | SKIP | SKIP | SKIP | SKIP |
-| w1-synthetic | `align.test_v4_w1_synthetic.KitBridgeTests.test_consumer_custody_rebinds_to_synthesized_capture_bytes.test_consumer_custody_rebinds_to_synthesized_capture_bytes` | FAIL | PASS | FAIL | FAIL |
-| w1-synthetic | `align.test_v4_w1_synthetic.KitBridgeTests.test_contrast_deadman_follows_the_30b_member_law_and_admits_a_g0_timeout.test_contrast_deadman_follows_the_30b_member_law_and_admits_a_g0_timeout` | FAIL | PASS | FAIL | FAIL |
-| w1-synthetic | `align.test_v4_w1_synthetic.KitBridgeTests.test_synthetic_inputs_pass_admission_and_roster_is_a1.test_synthetic_inputs_pass_admission_and_roster_is_a1` | FAIL | PASS | FAIL | FAIL |
-| w1-synthetic | `align.test_v4_w1_synthetic.KitBridgeTests.test_synthetic_t_dead_is_bound_by_l1_and_the_r1_tail.test_synthetic_t_dead_is_bound_by_l1_and_the_r1_tail` | FAIL | PASS | FAIL | FAIL |
-| w1-synthetic | `align.test_v4_w1_synthetic.MinimalDryRunTests.test_minimal_synthetic_w1_reaches_the_desk.test_minimal_synthetic_w1_reaches_the_desk` | FAIL | PASS | FAIL | FAIL |
-| w1-synthetic | `align.test_v4_w1_synthetic.MinimalDryRunTests.test_the_synthetic_contrast_is_rederived_after_the_wp18_update.test_the_synthetic_contrast_is_rederived_after_the_wp18_update` | FAIL | PASS | FAIL | FAIL |
-| wp22-full | `align.test_v4_opus_cold_witnesses.Wp22DryRunReachesTheDesk.test_minimal_synthetic_w1_produces_a_desk_record.test_minimal_synthetic_w1_produces_a_desk_record` | FAIL | PASS | PASS | PASS |
-| wp22-full | `align.test_v4_w1_synthetic.CleanWindowTests` | FAIL | — | — | — |
-| wp22-full | `align.test_v4_w1_synthetic.InjectedWindowTests` | FAIL | — | — | — |
-| wp22-full | `align.test_v4_w1_synthetic.KitBridgeTests.test_consumer_custody_rebinds_to_synthesized_capture_bytes.test_consumer_custody_rebinds_to_synthesized_capture_bytes` | FAIL | PASS | FAIL | FAIL/PASS |
-| wp22-full | `align.test_v4_w1_synthetic.KitBridgeTests.test_contrast_deadman_follows_the_30b_member_law_and_admits_a_g0_timeout.test_contrast_deadman_follows_the_30b_member_law_and_admits_a_g0_timeout` | FAIL | PASS | FAIL | FAIL/PASS |
-| wp22-full | `align.test_v4_w1_synthetic.KitBridgeTests.test_synthetic_inputs_pass_admission_and_roster_is_a1.test_synthetic_inputs_pass_admission_and_roster_is_a1` | FAIL | PASS | FAIL | FAIL/PASS |
-| wp22-full | `align.test_v4_w1_synthetic.KitBridgeTests.test_synthetic_t_dead_is_bound_by_l1_and_the_r1_tail.test_synthetic_t_dead_is_bound_by_l1_and_the_r1_tail` | FAIL | PASS | FAIL | FAIL/PASS |
-| wp22-full | `align.test_v4_w1_synthetic.MinimalDryRunTests.test_minimal_synthetic_w1_reaches_the_desk.test_minimal_synthetic_w1_reaches_the_desk` | FAIL | PASS | FAIL | FAIL/PASS |
-| wp22-full | `align.test_v4_w1_synthetic.MinimalDryRunTests.test_the_synthetic_contrast_is_rederived_after_the_wp18_update.test_the_synthetic_contrast_is_rederived_after_the_wp18_update` | FAIL | PASS | FAIL | FAIL/PASS |
+| PREQUAL ordinary | `template-render` | NEEDS-REAL-INPUT | NEEDS-REAL-INPUT | NEEDS-REAL-INPUT | NEEDS-REAL-INPUT |
+| PREQUAL ordinary / template-rewrites | `template-rewrites` | NEEDS-REAL-INPUT | NEEDS-REAL-INPUT | NEEDS-REAL-INPUT | NEEDS-REAL-INPUT |
+| desk-offload, offload | `test_offload_window.Envelope.test_git_and_restricted_members_refuse_without_entering` | FAIL | FAIL | FAIL | FAIL |
+| w1-reliability | `test_w1_reliability.TerminalDeliveryTests.test_actual_program_courier_parses_prompt_and_pushes_to_local_remote` | FAIL | FAIL | FAIL | FAIL |
+| w1-reliability | `test_w1_reliability.TerminalDeliveryTests.test_repeat_snapshot_fast_forwards_and_preserves_byte_identical_result` | PASS | FAIL | PASS | PASS |
+| stock-desk-harvest | `tests.align.test_v4_desk_real_harvest.RealHarvestDeskTests.test_e1_w1_prints_window_harvest_flags_as_code_names_only` | NEEDS-REAL-INPUT | NEEDS-REAL-INPUT | NEEDS-REAL-INPUT | NEEDS-REAL-INPUT |
+| stock-desk-harvest | `tests.align.test_v4_desk_real_harvest.RealHarvestDeskTests.test_e2_the_committed_exclusions_source_carries_no_flag_counts` | NEEDS-REAL-INPUT | NEEDS-REAL-INPUT | NEEDS-REAL-INPUT | NEEDS-REAL-INPUT |
+| stock-desk-harvest | `tests.align.test_v4_desk_real_harvest.RealHarvestDeskTests.test_e3_sweep_refuses_an_unreleased_v4_session_outside_its_withheld_archive` | NEEDS-REAL-INPUT | NEEDS-REAL-INPUT | NEEDS-REAL-INPUT | NEEDS-REAL-INPUT |
+| stock-desk-harvest | `tests.align.test_v4_desk_real_harvest.RealHarvestDeskTests.test_e5_w1_benign_harvest_lines_carry_no_timing` | NEEDS-REAL-INPUT | NEEDS-REAL-INPUT | NEEDS-REAL-INPUT | NEEDS-REAL-INPUT |
+| stock-desk-harvest | `tests.align.test_v4_desk_real_harvest.RealHarvestDeskTests.test_e6_a_rerun_refuses_before_any_write` | NEEDS-REAL-INPUT | NEEDS-REAL-INPUT | NEEDS-REAL-INPUT | NEEDS-REAL-INPUT |
+| stock-desk-harvest | `tests.align.test_v4_desk_real_harvest.RealHarvestDeskTests.test_rl163_synthetic_exclusion_rows_carry_only_roster_and_code_fields` | ABSENT | NEEDS-REAL-INPUT | NEEDS-REAL-INPUT | NEEDS-REAL-INPUT |
+| stock-desk-harvest | `tests.align.test_v4_desk_real_harvest.RealHarvestDeskTests.test_rl183b_cli_final_rejects_wrong_identity_and_receipt_encoding` | ABSENT | NEEDS-REAL-INPUT | NEEDS-REAL-INPUT | NEEDS-REAL-INPUT |
+| stock-desk-harvest | `tests.align.test_v4_desk_real_harvest.RealHarvestDeskTests.test_rl183b_real_harvest_final_refuses_without_unpack_receipt` | ABSENT | NEEDS-REAL-INPUT | NEEDS-REAL-INPUT | NEEDS-REAL-INPUT |
+| stock-desk-harvest | `tests.align.test_v4_desk_real_harvest.RealHarvestDeskTests.test_the_real_harvest_ran_and_its_window_flags_are_present` | NEEDS-REAL-INPUT | NEEDS-REAL-INPUT | NEEDS-REAL-INPUT | NEEDS-REAL-INPUT |
+| PREQUAL ordinary | `tool-roundtrip` | NEEDS-REAL-INPUT | NEEDS-REAL-INPUT | NEEDS-REAL-INPUT | NEEDS-REAL-INPUT |
+| PREQUAL ordinary | `w1-plan` | NEEDS-REAL-INPUT | NEEDS-REAL-INPUT | NEEDS-REAL-INPUT | NEEDS-REAL-INPUT |
+| PREQUAL w1 | `w1-window-max` | NEEDS-REAL-INPUT | NEEDS-REAL-INPUT | NEEDS-REAL-INPUT | NEEDS-REAL-INPUT |
+| PREQUAL w1 / watchdog-hold-rollback | `watchdog-hold-rollback` | FAIL | — | — | — |
+| PREQUAL w1 / wp22-dry-run | `wp22-dry-run` | FAIL | — | — | — |
 
 ### Frozen v2 outcome
 
 - `clean control verdict=pass; descriptor rows PASS (4/4) ; 2760 decision sites in frozen call-graph closure`
 - `generated 19477 case IDs`
-- The unfiltered synthetic run remains in progress. Last recorded count `progress 400 / 19477 {'REFUSED': 381, 'OTHER_REFUSAL': 14, 'AGREES_PASS': 5}`.
+- The unfiltered synthetic run remains in progress. Last recorded count `progress 3800 / 19477 {'REFUSED': 3435, 'OTHER_REFUSAL': 264, 'AGREES_PASS': 101}`.
 - The exact updated variant 3 tree completed the separate 16-case descriptor run.
 
 | Member | False passes | Wrong verdicts | Harness errors |
@@ -179,12 +366,12 @@ The full differential run was started before the fixture-only commit. Frozen v2 
 | `x-g/descriptor/rewritten-after-return` | REFUSED |
 ## GitHub Actions
 
-Status captured at 2026-11-20 02:50:06 PST.
+Status captured at 2026-11-20 06:44:27 PST.
 
 | Workflow | Status | Jobs |
 |---|---|---|
-| [variant2](https://github.com/mpmdw/JouleWise/actions/runs/44714672257) | in_progress | 9 in_progress, 12 success |
-| [variant3](https://github.com/mpmdw/JouleWise/actions/runs/44715774772) | queued | 10 in_progress, 2 queued, 9 success |
+| [variant2](https://github.com/mpmdw/JouleWise/actions/runs/44714672257) | success | 21 success |
+| [variant3](https://github.com/mpmdw/JouleWise/actions/runs/44715774772) | failure | 2 failure, 19 success |
 | [variant3-initial](https://github.com/mpmdw/JouleWise/actions/runs/44714678802) | cancelled | 9 cancelled |
 | [ledger2](https://github.com/mpmdw/JouleWise/actions/runs/44714672194) | skipped | 1 skipped |
 | [ledger3](https://github.com/mpmdw/JouleWise/actions/runs/44715774928) | skipped | 1 skipped |
@@ -202,18 +389,18 @@ Status captured at 2026-11-20 02:50:06 PST.
 | variant2 | [fences](https://github.com/mpmdw/JouleWise/actions/runs/44714672257/job/136214890365) | success |
 | variant2 | [installed-wheel](https://github.com/mpmdw/JouleWise/actions/runs/44714672257/job/136215671392) | success |
 | variant2 | [quick](https://github.com/mpmdw/JouleWise/actions/runs/44714672257/job/136215941238) | success |
-| variant2 | [test (3.13, 1)](https://github.com/mpmdw/JouleWise/actions/runs/44714672257/job/136215941705) | in_progress |
-| variant2 | [test (3.13, 10)](https://github.com/mpmdw/JouleWise/actions/runs/44714672257/job/136215941653) | in_progress |
-| variant2 | [test (3.13, 11)](https://github.com/mpmdw/JouleWise/actions/runs/44714672257/job/136215941617) | in_progress |
+| variant2 | [test (3.13, 1)](https://github.com/mpmdw/JouleWise/actions/runs/44714672257/job/136215941705) | success |
+| variant2 | [test (3.13, 10)](https://github.com/mpmdw/JouleWise/actions/runs/44714672257/job/136215941653) | success |
+| variant2 | [test (3.13, 11)](https://github.com/mpmdw/JouleWise/actions/runs/44714672257/job/136215941617) | success |
 | variant2 | [test (3.13, 12)](https://github.com/mpmdw/JouleWise/actions/runs/44714672257/job/136215941714) | success |
 | variant2 | [test (3.13, 2)](https://github.com/mpmdw/JouleWise/actions/runs/44714672257/job/136215941620) | success |
-| variant2 | [test (3.13, 3)](https://github.com/mpmdw/JouleWise/actions/runs/44714672257/job/136215941640) | in_progress |
-| variant2 | [test (3.13, 4)](https://github.com/mpmdw/JouleWise/actions/runs/44714672257/job/136215941631) | in_progress |
-| variant2 | [test (3.13, 5)](https://github.com/mpmdw/JouleWise/actions/runs/44714672257/job/136215941728) | in_progress |
+| variant2 | [test (3.13, 3)](https://github.com/mpmdw/JouleWise/actions/runs/44714672257/job/136215941640) | success |
+| variant2 | [test (3.13, 4)](https://github.com/mpmdw/JouleWise/actions/runs/44714672257/job/136215941631) | success |
+| variant2 | [test (3.13, 5)](https://github.com/mpmdw/JouleWise/actions/runs/44714672257/job/136215941728) | success |
 | variant2 | [test (3.13, 6)](https://github.com/mpmdw/JouleWise/actions/runs/44714672257/job/136215941626) | success |
-| variant2 | [test (3.13, 7)](https://github.com/mpmdw/JouleWise/actions/runs/44714672257/job/136215941757) | in_progress |
-| variant2 | [test (3.13, 8)](https://github.com/mpmdw/JouleWise/actions/runs/44714672257/job/136215941725) | in_progress |
-| variant2 | [test (3.13, 9)](https://github.com/mpmdw/JouleWise/actions/runs/44714672257/job/136215941660) | in_progress |
+| variant2 | [test (3.13, 7)](https://github.com/mpmdw/JouleWise/actions/runs/44714672257/job/136215941757) | success |
+| variant2 | [test (3.13, 8)](https://github.com/mpmdw/JouleWise/actions/runs/44714672257/job/136215941725) | success |
+| variant2 | [test (3.13, 9)](https://github.com/mpmdw/JouleWise/actions/runs/44714672257/job/136215941660) | success |
 | variant3 | [align-templates](https://github.com/mpmdw/JouleWise/actions/runs/44715774772/job/136223624714) | success |
 | variant3 | [build](https://github.com/mpmdw/JouleWise/actions/runs/44715774772/job/136218673855) | success |
 | variant3 | [calibration-exits-exclusive (3.13)](https://github.com/mpmdw/JouleWise/actions/runs/44715774772/job/136223624789) | success |
@@ -223,18 +410,18 @@ Status captured at 2026-11-20 02:50:06 PST.
 | variant3 | [fences](https://github.com/mpmdw/JouleWise/actions/runs/44715774772/job/136218674123) | success |
 | variant3 | [installed-wheel](https://github.com/mpmdw/JouleWise/actions/runs/44715774772/job/136222381880) | success |
 | variant3 | [quick](https://github.com/mpmdw/JouleWise/actions/runs/44715774772/job/136223624658) | success |
-| variant3 | [test (3.13, 1)](https://github.com/mpmdw/JouleWise/actions/runs/44715774772/job/136223624940) | in_progress |
-| variant3 | [test (3.13, 10)](https://github.com/mpmdw/JouleWise/actions/runs/44715774772/job/136223625216) | in_progress |
-| variant3 | [test (3.13, 11)](https://github.com/mpmdw/JouleWise/actions/runs/44715774772/job/136223625111) | in_progress |
-| variant3 | [test (3.13, 12)](https://github.com/mpmdw/JouleWise/actions/runs/44715774772/job/136223625179) | queued |
-| variant3 | [test (3.13, 2)](https://github.com/mpmdw/JouleWise/actions/runs/44715774772/job/136223625011) | in_progress |
-| variant3 | [test (3.13, 3)](https://github.com/mpmdw/JouleWise/actions/runs/44715774772/job/136223624999) | in_progress |
-| variant3 | [test (3.13, 4)](https://github.com/mpmdw/JouleWise/actions/runs/44715774772/job/136223624986) | in_progress |
-| variant3 | [test (3.13, 5)](https://github.com/mpmdw/JouleWise/actions/runs/44715774772/job/136223625036) | in_progress |
-| variant3 | [test (3.13, 6)](https://github.com/mpmdw/JouleWise/actions/runs/44715774772/job/136223624937) | in_progress |
-| variant3 | [test (3.13, 7)](https://github.com/mpmdw/JouleWise/actions/runs/44715774772/job/136223625147) | queued |
-| variant3 | [test (3.13, 8)](https://github.com/mpmdw/JouleWise/actions/runs/44715774772/job/136223624928) | in_progress |
-| variant3 | [test (3.13, 9)](https://github.com/mpmdw/JouleWise/actions/runs/44715774772/job/136223625017) | in_progress |
+| variant3 | [test (3.13, 1)](https://github.com/mpmdw/JouleWise/actions/runs/44715774772/job/136223624940) | success |
+| variant3 | [test (3.13, 10)](https://github.com/mpmdw/JouleWise/actions/runs/44715774772/job/136223625216) | success |
+| variant3 | [test (3.13, 11)](https://github.com/mpmdw/JouleWise/actions/runs/44715774772/job/136223625111) | success |
+| variant3 | [test (3.13, 12)](https://github.com/mpmdw/JouleWise/actions/runs/44715774772/job/136223625179) | failure |
+| variant3 | [test (3.13, 2)](https://github.com/mpmdw/JouleWise/actions/runs/44715774772/job/136223625011) | failure |
+| variant3 | [test (3.13, 3)](https://github.com/mpmdw/JouleWise/actions/runs/44715774772/job/136223624999) | success |
+| variant3 | [test (3.13, 4)](https://github.com/mpmdw/JouleWise/actions/runs/44715774772/job/136223624986) | success |
+| variant3 | [test (3.13, 5)](https://github.com/mpmdw/JouleWise/actions/runs/44715774772/job/136223625036) | success |
+| variant3 | [test (3.13, 6)](https://github.com/mpmdw/JouleWise/actions/runs/44715774772/job/136223624937) | success |
+| variant3 | [test (3.13, 7)](https://github.com/mpmdw/JouleWise/actions/runs/44715774772/job/136223625147) | success |
+| variant3 | [test (3.13, 8)](https://github.com/mpmdw/JouleWise/actions/runs/44715774772/job/136223624928) | success |
+| variant3 | [test (3.13, 9)](https://github.com/mpmdw/JouleWise/actions/runs/44715774772/job/136223625017) | success |
 | variant3-initial | [align-templates](https://github.com/mpmdw/JouleWise/actions/runs/44714678802/job/136218672693) | cancelled |
 | variant3-initial | [build](https://github.com/mpmdw/JouleWise/actions/runs/44714678802/job/136214914613) | cancelled |
 | variant3-initial | [calibration-exits-exclusive](https://github.com/mpmdw/JouleWise/actions/runs/44714678802/job/136218672103) | cancelled |
@@ -249,9 +436,27 @@ Status captured at 2026-11-20 02:50:06 PST.
 | ledger3-sync | [gate-ledger](https://github.com/mpmdw/JouleWise/actions/runs/44715774607/job/136218682796) | skipped |
 | ledger3-initial | [gate-ledger](https://github.com/mpmdw/JouleWise/actions/runs/44714679151/job/136214992351) | skipped |
 
-## Refetch checkpoint
+The exact variant 2 and 3 hosted jobs passed all 58 R1 launcher tests and all 17 fixture-orphan census tests. Issued W1 passed the same modules, and rehearsal B's required branch shares the exact variant 1 tree and passed both. [Variant 2 launcher and census](https://github.com/mpmdw/JouleWise/actions/runs/44714672257/job/136215941653) · [Variant 3 launcher](https://github.com/mpmdw/JouleWise/actions/runs/44715774772/job/136223625017) · [Variant 3 census](https://github.com/mpmdw/JouleWise/actions/runs/44715774772/job/136223624940) · [Issued launcher](https://github.com/mpmdw/JouleWise/actions/runs/43712204542/job/132806132512) · [Issued census](https://github.com/mpmdw/JouleWise/actions/runs/43712204542/job/132806132331) · [Variant 1 equivalent tree](https://github.com/mpmdw/JouleWise/actions/runs/44426633402/job/135237052380)
 
-The scoped refetch matched the intake snapshot for all seven component heads. The issued W1 base and protected R1 line match their intake values. The final fetch follows the exact-tree verification.
+Variant 3 reproduced the executed-closure failure and both refusal-census failures in hosted CI. [Executed closure](https://github.com/mpmdw/JouleWise/actions/runs/44715774772/job/136223625011) · [Refusal census](https://github.com/mpmdw/JouleWise/actions/runs/44715774772/job/136223625179)
+
+### Complete frozen differential on the exact hosted tree
+
+The exact variant 3 hosted run passed all 19,477 frozen v2 cases. The clean control passed and bound four of four descriptor digests. Totals were 15,390 `REFUSED`, 3,696 `OTHER_REFUSAL` and 391 `AGREES_PASS`, with zero harness errors, wrong verdicts or false passes. [Frozen v2 job](https://github.com/mpmdw/JouleWise/actions/runs/44715774772/job/136223625216)
+
+| Member | False passes |
+|---|---:|
+| Idle soak | 0 |
+| Predecessor 30B | 0 |
+| Step D | 0 |
+| D bank benign S1 | 0 |
+| X_G | 0 |
+
+The sixteen descriptor cases matched the separate laptop replay in the local checks. The laptop's four original native-limit shift cases also refused.
+
+## Refetch after hosted CI
+
+A scoped refetch after both exact assembly workflows finished found zero component head moves. The issued W1 base and protected R1 line both matched intake. No refresh assembly was needed at that checkpoint.
 ## Signing closure and lead handoff
 
 - Update the approved executed inventory in `joulewise/align/apple/v4_registration.py`, including a strict artifact entry for `scripts/align_r1_part_c_evidence.py`. The executed-closure test identifies that helper as the missing path on variant 3. The two S/Q artifacts already have template declarations.
