@@ -56,6 +56,11 @@
             "dc_in"
           ],
           "properties": {
+            "reference_source_leg_id": {
+              "description": "The span member whose reference applies to this leg.",
+              "type": "string",
+              "pattern": "^L(00[1-9]|01[0-2])$"
+            },
             "gpu_rail": {
               "type": "object",
               "required": [

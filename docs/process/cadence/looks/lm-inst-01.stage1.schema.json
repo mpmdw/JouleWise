@@ -111,7 +111,8 @@
             "loaded_flag",
             "receipt",
             "span_id",
-            "attempt"
+            "attempt",
+            "span_leg_index"
           ],
           "properties": {
             "disposition": {
@@ -139,6 +140,15 @@
             "attempt": {
               "type": "integer",
               "minimum": 1
+            },
+            "span_leg_index": {
+              "description": "Zero-based index in the authenticated span receipt.",
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 2
+            },
+            "over_time_budget": {
+              "type": "boolean"
             }
           },
           "additionalProperties": false

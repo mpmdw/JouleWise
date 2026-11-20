@@ -127,6 +127,7 @@ class DescriptionIntervalTests(unittest.TestCase):
             folder = Path(temporary)
             for level, rail_mask, dc_mask in product(levels, masks, masks):
                 with self.subTest(level=level, rail_mask=rail_mask, dc_mask=dc_mask):
+                    recorded = Fraction(Decimal(str(level)))
                     leading, middle, trailing = rail_mask
                     spans = turn.copy()
                     if leading:
@@ -147,7 +148,7 @@ class DescriptionIntervalTests(unittest.TestCase):
                     levels_above_hold = {}
                     for channel in fixture.CHANNEL:
                         reference = signal.average(channel, 0, 4, exact=True)
-                        self.assertEqual(reference, Fraction(level) * (3 if channel == "rail_sum" else 1))
+                        self.assertEqual(reference, recorded * (3 if channel == "rail_sum" else 1))
                         energy = reader._above_hold(signal, channel, reference, 4_000_000_000,
                                                     8_000_000_000, average=False)
                         self.assertIsInstance(energy, Fraction)

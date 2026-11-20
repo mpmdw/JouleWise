@@ -549,12 +549,28 @@ def _predecessor(snapshot, receipt, closes):
     return previous
 
 
+def _time_budget(op, kit):
+    fields = {"wall_s", "leg_budget_s", "over_time_budget"}
+    if fields.isdisjoint(op):
+        return {}
+    budget = kit["span_template"]["leg_budget_s"]
+    wall = op["wall_s"]
+    require(type(wall) is int or (type(wall) is Decimal and wall.is_finite()),
+            "invalid operational wall time")
+    require(wall >= 0 and integer(budget, 1) and integer(op["leg_budget_s"], 1)
+            and op["leg_budget_s"] == budget,
+            "invalid operational leg budget")
+    over_budget = wall > budget
+    require(op["over_time_budget"] is over_budget, "incorrect operational over-time flag")
+    return {"over_time_budget": over_budget}
+
+
 def _token_row(snapshot, references, kit, plan, closes):
     require(references.keys() == {"key", "issue", "receipt", "leg_record", *DESK_RECORDS},
             "invalid position source inventory")
     issue = snapshot.source(references["issue"])
     receipt = snapshot.source(references["receipt"], parse_float=Decimal)
-    op = snapshot.source(references["leg_record"])
+    op = snapshot.source(references["leg_record"], parse_float=Decimal)
     key = references["key"]
     kit_id, leg_id = key.split("/")
     kit_sha = snapshot.hashes[_kit_path(snapshot, kit_id)]
@@ -604,7 +620,11 @@ def _token_row(snapshot, references, kit, plan, closes):
     position = {
         "disposition": disposition, "loaded_flag": op["loaded_flag"],
         "receipt": references["receipt"], "span_id": span_id, "attempt": attempt,
+        "span_leg_index": roster.index(leg_id),
+        **_time_budget(op, kit),
     }
+    if "reference_source_leg_id" in op:
+        require(op["reference_source_leg_id"] == roster[0], "reference differs from the issued span order")
     predecessor = None if snapshot.instrument else _predecessor(snapshot, receipt, closes)
     detail = (op, receipt, instant, predecessor, token_row)
     return position, token_row, detail
@@ -646,6 +666,38 @@ def _check_schedule(snapshot, dates):
                 "second stability read is not due")
 
 
+def _reconcile_member_bundles(snapshot, kits, issued):
+    """Check the closed operational tree as well as the selected roster."""
+    receipts = {path: members for _, path, members in issued.values()}
+    bundles = defaultdict(set)
+    for name in snapshot.book.tree(snapshot.receipts):
+        parts = name.split("/")
+        if parts[0] != "ops":
+            continue
+        if len(parts) >= 3 and parts[-1] in ("issue.json", "runner_receipt.json"):
+            bundles["/".join(parts[:-1])].add(parts[-1])
+        if len(parts) >= 5 and parts[-3] == "legs" and parts[-1] == "leg_record.json":
+            bundles["/".join(parts[:-3])].add("/".join(parts[-3:]))
+    for prefix, entries in bundles.items():
+        receipt_path = f"{prefix}/runner_receipt.json"
+        if receipt_path in receipts:
+            expected = {"issue.json", "runner_receipt.json"}
+            expected.update(f"legs/{leg}/leg_record.json" for leg in receipts[receipt_path])
+            require(entries == expected, "operational bundle differs from its issued roster")
+            continue
+        # An unlisted receipt or issue for an admitted kit is itself an
+        # inconsistency, including a partially materialized second bundle.
+        identity_members = ("issue.json", "runner_receipt.json")
+        require(any(entry in entries for entry in identity_members),
+                "operational member bundle has no source identity")
+        for entry in identity_members:
+            if entry in entries:
+                name = f"{prefix}/{entry}"
+                public_path(relative(name))
+                identity = decode(snapshot.book.blob(snapshot.receipts, name))
+                require(identity["kit_id"] not in kits, "unlisted operational bundle for admitted kit")
+
+
 def census(snapshot):
     rows = snapshot.roster["rows"]
     require(type(rows) is list and all(type(row["key"]) is str for row in rows),
@@ -683,6 +735,7 @@ def census(snapshot):
             "receipt names positions absent from the snapshot")
     if snapshot.instrument:
         require(len(positions) == 36, "instrument population is not terminal")
+        _reconcile_member_bundles(snapshot, kits, issued)
     qualified = [row for row in table if row["disposition"] == "qualified"]
     counts = {"n_legs": len(qualified)}
     result = {
@@ -1549,6 +1602,8 @@ def _leg_values(signal, detail, instrument):
     result = {"hold": hold, "turn": turn}
     if not instrument:
         return result
+    if "reference_source_leg_id" in op:
+        hold["reference_source_leg_id"] = op["reference_source_leg_id"]
     prompt = row["nominal_prefill_tokens"]
     turn["ratios"] = _ratios(energy)
     decode_w = {channel: _above_hold(signal, channel, baseline[channel], first, last, average=True)
