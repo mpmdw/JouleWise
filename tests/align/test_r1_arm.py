@@ -66,8 +66,8 @@ class ArmTests(unittest.TestCase):
         self.assertTrue(any(f.startswith('r1.prepare_packet_absent_at_arm') for f in record['flags']))
         mapping = json.loads(self.plan_path.read_text())
         # RL-72 E2 sizing on the plan itself (W1 PREQUAL's installed-R1-plan check, w1_prequal.py:1396-1404).
-        self.assertEqual(mapping['hazard_window']['programmed_span_s'], 108768)
-        self.assertEqual(mapping['window_max_s'], 126480)
+        self.assertEqual(mapping['hazard_window']['programmed_span_s'], 102168)   # RL-149 section 2.9 item 4
+        self.assertEqual(mapping['window_max_s'], 119880)
         # Admission at Automatic is the default (night_gate: absent means 0); the R1 driver owns
         # every A-B-A/series power transition. The key is omitted so main's watchdog can read the plan.
         self.assertNotIn('ac_powermode', mapping)
@@ -88,27 +88,34 @@ class ArmTests(unittest.TestCase):
             arm.prepare(ROOT, self.custody, int(self.plan.t0_epoch_s))
 
     def test_follow_up_sizing_is_rl72_e2_for_every_t0(self):
-        # RL-72 E2: programmed span 108,768 s (the driver's own two whole-unit redos, two batch
-        # encounters and 9,000 s in-driver overhead), window_max_s 126,480 s.
+        # RL-72 E2: the driver's own two whole-unit redos, two batch encounters and 9,000 s in-driver
+        # overhead (108,768 s, window_max_s 126,480 s at the 5,400 s blackout). RL-149 section 2.9 item 4:
+        # the blackout is 02:00-02:35 (2,100 s), so the span is 102,168 s and window_max_s 119,880 s.
         from scripts import align_r1_rehearsal as r1
         from joulewise.b6 import plan_inputs
         driver = r1.night_worst_case_s(['--config', str(ROOT / 'configs/align/v4/r1_runtime.json')])
-        self.assertEqual(driver['programmed_span_s'], 108768)
+        self.assertEqual(driver['programmed_span_s'], 102168)
         cases = [((2026, 11, 12), 19, 26), ((2026, 11, 8), 13, 30), ((2026, 11, 8), 8, 0),
                  ((2026, 10, 31), 5, 0), ((2026, 3, 7), 6, 0)]
         for date, hour, minute in cases:
             with self.subTest(date=date, hour=hour):
                 t0 = int(datetime(*date, hour, minute, tzinfo=arm.BATCH_ZONE).timestamp())
                 sizing = arm.size_window(t0)
-                self.assertEqual(sizing['programmed_span_s'], 108768)
+                self.assertEqual(sizing['programmed_span_s'], 102168)
                 self.assertEqual(sizing['writer_window_max_s'],
-                                 plan_inputs.window_max_s({'programmed_span_s': {'seconds': 108768}}))
-                self.assertEqual(sizing['window_max_s'], 126480)
+                                 plan_inputs.window_max_s({'programmed_span_s': {'seconds': 102168}}))
+                self.assertEqual(sizing['window_max_s'], 119880)
                 # No batch allowance is added on top: the span already holds two encounters.
                 self.assertLessEqual(sizing['batch_window_crossings'], 2)
                 for epoch in sizing['batch_crossings_epoch_s']:
                     local = datetime.fromtimestamp(epoch, arm.BATCH_ZONE)
-                    self.assertEqual((local.hour, local.minute), (11, 45))
+                    # RL-149: 02:00 local, built on the local date (on a spring-forward day 02:00 is no
+                    # wall time and zoneinfo places it at 03:00 PDT, as the driver's own window does).
+                    start = datetime(local.year, local.month, local.day, *r1.OS_BATCH_WINDOW_LOCAL[0],
+                                     tzinfo=arm.BATCH_ZONE).timestamp()
+                    self.assertEqual(epoch, start)
+                    self.assertEqual(r1.OS_BATCH_WINDOW_LOCAL[0], arm.BATCH_START_LOCAL)
+                    self.assertIn((local.hour, local.minute), ((2, 0), (3, 0)))
                     self.assertTrue(t0 <= epoch < t0 + sizing['window_max_s'])
                 cli = subprocess.run([sys.executable, '-B', str(ROOT / 'scripts/arm_align_r1.py'),
                                       'size', '--t0', str(t0)], capture_output=True, text=True, check=True)
@@ -119,13 +126,13 @@ class ArmTests(unittest.TestCase):
         # the driver's own calibration brackets are inside its span (align_r1_rehearsal.phase_bound).
         sizing = arm.size_window(int(datetime(2026, 11, 12, 19, 26, tzinfo=arm.BATCH_ZONE).timestamp()))
         terms = sizing['base_terms_s']
-        self.assertEqual(terms, {'r1_driver_span_s': 108768, 'hazard_arm_s': arm.b5_plan.T0_STAGE_CAP_S,
+        self.assertEqual(terms, {'r1_driver_span_s': 102168, 'hazard_arm_s': arm.b5_plan.T0_STAGE_CAP_S,
                                  'display_dwell_s': 300, 'bookends_s': 2 * 1800, 'close_s': 2 * 600,
                                  'harvest_s': 600})
         self.assertEqual(sizing['base_s'], sum(terms.values()))
         # Latest driver end: arm cap + dwell + pre bookend (+ its budget grace) + the driver's whole span
         # (its work deadline is chain start + span - 900, then its 900 s close reserve).
-        latest_driver_end = (arm.b5_plan.T0_STAGE_CAP_S + 300 + 1800 + arm.chain.BUDGET_GRACE_S + 108768)
+        latest_driver_end = (arm.b5_plan.T0_STAGE_CAP_S + 300 + 1800 + arm.chain.BUDGET_GRACE_S + 102168)
         self.assertEqual(sizing['latest_driver_end_offset_s'], latest_driver_end)
         self.assertLessEqual(latest_driver_end + 1800 + arm.chain.BUDGET_GRACE_S + 600, sizing['window_max_s'])
         self.assertLessEqual(sizing['base_s'], sizing['window_max_s'])

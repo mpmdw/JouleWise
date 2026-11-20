@@ -354,7 +354,7 @@ class ReadBackTests(unittest.TestCase):
         self.assertIsNone(rt.configured_n_chunk({}))
         production = json.loads((REPO / "configs/align/v4/r1_runtime.json").read_text())
         self.assertEqual(rt.configured_n_chunk(production), 4096)
-        self.assertIn("not adopted", production["d_n_chunk_status"])
+        self.assertIn("adopted (RL-149 section 1.1", production["d_n_chunk_status"])     # PR #777 row-2 finding 10
         self.assertEqual(rt.configured_n_chunk({"d_n_chunk": 2048}), 2048)
         for bad in (0, 100, 4352, 2048.0, "4096", None, True):
             with self.subTest(bad=bad), self.assertRaises(rt.Refused):
