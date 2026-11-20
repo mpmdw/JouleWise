@@ -526,13 +526,8 @@ class SeriesReleaseTests(unittest.TestCase):
             with self.subTest(defect=defect), tempfile.TemporaryDirectory() as tmp:
                 root = Path(tmp)
                 stored_series(root, resign_after_w1=True, c1_arm_defect=defect)
-                output = root / "report.json"
-                result = invoke(root, output)
-                self.assertEqual(result.returncode, 1, result.stderr)
-                self.assertIn("SHA-256 mismatch", result.stderr)
                 expected = "records/W1/record.json" if defect == "changed W1" else "series_registration_receipt.json"
-                self.assertIn(expected, result.stderr)
-                self.assertFalse(output.exists())
+                self.assert_c1_receipt_refusal(root, expected)
 
     def test_c1_arm_bound_resigned_receipt_rejects_later_replacement(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -544,12 +539,19 @@ class SeriesReleaseTests(unittest.TestCase):
             write_json(root / path, late)
             tip = commit_fixture(root, [path])
             fixture_git(root, "update-ref", "refs/remotes/origin/align-v4-series-release", tip)
-            output = root / "report.json"
-            result = invoke(root, output)
-            self.assertEqual(result.returncode, 1, result.stderr)
-            self.assertIn("SHA-256 mismatch", result.stderr)
-            self.assertIn(path, result.stderr)
-            self.assertFalse(output.exists())
+            self.assert_c1_receipt_refusal(root, path)
+
+    def assert_c1_receipt_refusal(self, root, path):
+        from scripts import align_v4_series_release as caller
+
+        metadata = {name: (root / name).read_bytes() for name in caller.RELEASE_METADATA}
+        with self.assertRaisesRegex(ValueError, "source SHA-256 mismatch") as refusal:
+            caller.bound_history(root.resolve(), metadata)
+        self.assertIn(path, str(refusal.exception))
+        output = root / "report.json"
+        result = invoke(root, output)
+        self.assertEqual(result.returncode, 1, result.stderr)
+        self.assertFalse(output.exists())
 
     def test_declared_mirror_missing_without_links_refuses_release(self):
         from scripts.align_v4_harvest_off import checkout_identity

@@ -95,7 +95,7 @@ with _release_sources.installed():
 
 
 RELEASE_REF = "refs/remotes/origin/align-v4-series-release"
-REGISTRATION_RECEIPT = v4_registration.REGISTRATION + "registration_receipt.json"
+REGISTRATION_RECEIPT = v4_registration.W1_RECEIPT
 RELEASE_METADATA = (seal.SERIES_COMPLETE, seal.SERIES_MANIFEST, seal.RELEASE_RECEIPT)
 LAYOUT = "powermetrics-rails-v1"
 PM_ROWS = "outputs/align_s_pm_rows.json"
@@ -245,15 +245,29 @@ def bound_history(root, guarded_metadata):
         link = record.previous_link
     packet.require(chain[-1].window in ("R1", "W1"), "incomplete series history")
     first_c1, = (record for record in chain if record.window == "C1")
-    packet.require(first_c1.previous_link is not None, "C1 has no bound predecessor")
-    predecessor = first_c1.previous_link["commit"]
-    registration_bytes = evidence.read(predecessor, REGISTRATION_RECEIPT)
-    receipt_digest = packet.digest(registration_bytes)
-    evidence.read(tip, REGISTRATION_RECEIPT, receipt_digest)
-    packet.require(packet.digest(named_bytes(root, REGISTRATION_RECEIPT)) == receipt_digest,
-                   "registration receipt differs from C1 predecessor")
-    registered_commit = evidence.commit(packet.decode(registration_bytes)["commit"])
-    evidence.git("merge-base", "--is-ancestor", registered_commit, predecessor)
+    predecessor = first_c1.previous_link
+    packet.require(predecessor is not None and any(r.window == "W1" and r.commit == predecessor["commit"]
+                                                  for r in chain), "C1 has no bound W1 predecessor")
+    arm = first_c1.source("arm")
+    packet.require(isinstance(arm, dict) and set(arm) == {"schema", "admitted", "series_window",
+                   "series_packet", "arm_source_commit", "series_registration"}
+                   and arm.get("schema") == "joulewise.align_v4_arm.v1"
+                   and arm.get("admitted") is True and arm.get("series_window") == "C1",
+                   "C1 record requires its admitted arm")
+    arm_packet = arm["series_packet"]
+    packet.require(isinstance(arm_packet, dict) and set(arm_packet) == {"record_commit", "record_path", "record_sha256"} and
+                   {key: arm_packet.get("record_" + key) for key in ("commit", "path", "sha256")} == predecessor,
+                   "C1 arm binds a different W1 record")
+    arm_commit = evidence.commit(arm["arm_source_commit"])
+    packet.require(arm_commit != first_c1.commit, "C1 arm source must predate its window record")
+    evidence.git("merge-base", "--is-ancestor", arm_commit, first_c1.commit)
+    path, registration_bytes = v4_registration.verify_c1_receipt_binding(
+        evidence, predecessor, arm_commit, arm["series_registration"])
+    evidence.read(tip, predecessor["path"], predecessor["sha256"])
+    original = evidence.read(predecessor["commit"], REGISTRATION_RECEIPT)
+    for relative, raw in {REGISTRATION_RECEIPT: original, path: registration_bytes}.items():
+        evidence.read(tip, relative, packet.digest(raw))
+        packet.require(named_bytes(root, relative) == raw, "registration receipt differs from C1 arm: " + relative)
     return completion, ledger, reversed(chain), registration_bytes
 
 
@@ -893,8 +907,8 @@ class ReleasedInputs:
         self.manifest = series.load(root)
         packet.require(packet.digest(series.raw_json(self.manifest)) == completion["series_manifest_sha256"],
                        "completion does not bind the loaded manifest")
-        self.registration_receipt = v4_registration.require_registration(root, series_release=True)
-        packet.require(self.registration_receipt == packet.decode(registered), "registration receipt changed")
+        self.registration_receipt = v4_registration.require_registration(root, series_release=True,
+                                                                         receipt_bytes=registered)
         require_executing_bindings(self.registration_receipt)
         self.input_ledger = InputLedger()
         assignments, self.restored = final_roster(root, self.manifest, completion, ledger, chain, self.input_ledger)

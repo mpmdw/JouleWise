@@ -810,7 +810,7 @@ class C1ArmReceiptTests(unittest.TestCase):
                 state['plan_path'] = str(plan)
                 self.session.pilot.h.write(work / 'session.json', state)
                 built = {'record_commit': prior, 'record_path': record_path, 'record_sha256': self.sha(record_path),
-                         'previous_window': 'W1', 'pushed_tip': pin}
+                         'previous_window': 'W1', 'checks': {'record_committed': {'pushed_tip': pin}}}
                 def fake_arm(*_args, series_bind, pre_dwell, **_kwargs):
                     reasons = series_bind(built)
                     record = {'schema': self.session.ARM_RECORD_SCHEMA, 'admitted': not reasons, 'reasons': [],
@@ -830,6 +830,14 @@ class C1ArmReceiptTests(unittest.TestCase):
                 self.assertEqual(arm['series_registration'], {'commit': pin, 'sha256': self.sha(receipt_path)})
                 self.assertEqual(arm['arm_source_commit'], pin)
                 self.assertEqual(arm['series_packet']['record_commit'], prior)
+                locator = self.session.pilot.h.read(work / 'session.json')['v4_arm_records'][0]['registration_evidence']
+                proof = Path(locator['path']).read_bytes()
+                self.assertEqual(locator['sha256'], reg.digest(proof))
+                self.assertEqual(json.loads(proof), {
+                    'schema': self.session.ARM_RECORD_SCHEMA, 'admitted': True, 'series_window': 'C1',
+                    'series_registration': arm['series_registration'], 'arm_source_commit': pin,
+                    'series_packet': {key: built[key] for key in ('record_commit', 'record_path', 'record_sha256')},
+                })
 
 
 if __name__ == '__main__':

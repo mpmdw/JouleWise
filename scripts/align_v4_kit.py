@@ -1348,8 +1348,8 @@ def validate_wp18_fixtures(inputs, root=ROOT):
         check_wp18_turn_contents(fixture, relative)
 
 
-def require_w1_ready(root=ROOT, *, series_release=False):
-    """Check W1 kit inputs and registration, with expanded coverage for a C/T selection."""
+def require_w1_ready(root=ROOT):
+    """Everything W1 prepare/arm needs from the kit: inputs, D identity, R1 sizing, WP18 fixtures."""
     try:
         collection_plan = json.loads((Path(root) / KIT / 'collection_plan.json').read_bytes())
     except (OSError, ValueError) as exc:
@@ -1366,7 +1366,7 @@ def require_w1_ready(root=ROOT, *, series_release=False):
     require_sizing(root)
     validate_wp18_fixtures(inputs, root)
     from joulewise.align.apple.v4_registration import require_registration
-    require_registration(root, series_release=series_release, allow_combined=not series_release)
+    require_registration(root)
 
 
 def valid_digest(value):
@@ -1765,7 +1765,7 @@ def arm_powermode_check(plan, observed_ac_powermode):
         raise ValueError(f'AC powermode mismatch: expected {expected}, observed {observed_ac_powermode}')
 
 
-def generate(output_root=ROOT, *, check=False, source_root=ROOT, series_release=False):
+def generate(output_root=ROOT, *, check=False, source_root=ROOT):
     files = build_files(source_root)
     for path, raw in files.items():
         target = Path(output_root) / path
@@ -1776,7 +1776,7 @@ def generate(output_root=ROOT, *, check=False, source_root=ROOT, series_release=
             target.parent.mkdir(parents=True, exist_ok=True)
             target.write_bytes(raw)
     if check:
-        require_w1_ready(source_root, series_release=series_release)
+        require_w1_ready(source_root)
     return files
 
 

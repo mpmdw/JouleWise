@@ -44,6 +44,7 @@ def series_ac_powermode(measurement_root, kit_path=kit.KIT):
 
 
 def prepare(measurement_root, session_root, *, power_runner=None, window_id=None, extra_sentinels=0,
+            series_receipt_commit=None,
             frequency_reader=None, frequency_runner=None, frequency_preflight=None, weight_identity_fn=None,
             runtime_runner=None, runtime_reader=None, **kwargs):
     from joulewise.align.apple import powermode
@@ -66,7 +67,11 @@ def prepare(measurement_root, session_root, *, power_runner=None, window_id=None
         series_state = dict(window_id=selected['id'], role=selected['role'], extra_sentinels=extra_sentinels,
             manifest_sha256=kit.sha((Path(measurement_root) / series.MANIFEST).read_bytes()),
             admission_sha256=kit.sha((Path(measurement_root) / series.ADMISSION).read_bytes()))
-    kit.generate(measurement_root, check=True, source_root=measurement_root, series_release=post_w1)
+    if series_receipt_commit is not None:
+        if not post_w1:
+            raise ValueError('a separate series receipt applies only after W1')
+        series_state['series_receipt_commit'] = series_receipt_commit
+    _check_source_kit(measurement_root, post_w1=post_w1, receipt_commit=series_receipt_commit)
     if post_w1:
         series.generate(measurement_root, selected['id'], check=True, extra_sentinels=extra_sentinels)
         kwargs.update(kit=series.kit_path(selected['id']), pack_id=series.pack_id(selected['id']))
@@ -1174,7 +1179,17 @@ def _check_prepared_series_kit(state, directory, pack):
         raise ValueError('prepared series window differs from the staged kit; prepare a new session')
 
 
-def validate_series_state(state):
+def _check_source_kit(root, *, post_w1, receipt_commit):
+    if not post_w1:
+        kit.generate(root, check=True, source_root=root)
+        return None
+    from joulewise.align.apple import v4_registration
+    with v4_registration.series_registration_check(root, receipt_commit=receipt_commit) as check:
+        kit.generate(root, check=True, source_root=root)
+    return check.sha256
+
+
+def validate_series_state(state, *, include_registration=False):
     """Recheck source kit and exact admission after prepare, before any arm."""
     from scripts import align_v4_series as series
     selection = state['v4_series']
@@ -1190,10 +1205,11 @@ def validate_series_state(state):
     directory = series.kit_path(window['id']) if post_w1 else kit.KIT
     _check_prepared_series_kit(state, directory, series.pack_id(window['id']) if post_w1 else kit.PACK_ID)
     series.require_admission(root, manifest, post_w1=post_w1)
-    kit.generate(root, check=True, source_root=root, series_release=post_w1)
+    receipt_sha256 = _check_source_kit(root, post_w1=post_w1, receipt_commit=selection.get('series_receipt_commit'))
     if post_w1:
         series.generate(root, window['id'], check=True, extra_sentinels=selection.get('extra_sentinels', 0))
-    return json.loads((root / directory / 'collection_plan.json').read_bytes())
+    plan = json.loads((root / directory / 'collection_plan.json').read_bytes())
+    return (plan, receipt_sha256) if include_registration else plan
 
 
 ARM_RECORD_SCHEMA = 'joulewise.align_v4_arm.v1'
@@ -1745,8 +1761,9 @@ def install(session_root, *, runner=None, volume_runner=None, now=None, w1_disk_
     measurement_root = state['measurement_root']
     # Council ruling 7: the frozen series powermode comes from the measurement
     # checkout's r1_slots, and arm refuses on a mismatch with the host.
+    series_receipt_sha256 = None
     if state.get('v4_series'):
-        plan = validate_series_state(state)
+        plan, series_receipt_sha256 = validate_series_state(state, include_registration=True)
     else:
         _check_prepared_series_kit(state, kit.KIT, kit.PACK_ID)
         source_root = state.get('source_measurement_root', measurement_root)
@@ -1804,6 +1821,7 @@ def install(session_root, *, runner=None, volume_runner=None, now=None, w1_disk_
             result = _arm_and_install(session, state, measurement_root, plan, high, runner=runner,
                                       volume_runner=volume_runner, now=now, w1_disk_config=w1_disk_config,
                                       disk_gate=disk_gate, lock=lock,
+                                      series_receipt_sha256=series_receipt_sha256,
                                       owner=owner if any(owner.values()) else None,
                                       watchdog_undo_closing=closing,
                                       frequency_preflight_record=frequency,
@@ -1925,6 +1943,28 @@ def _watchdog_post_install(state, dwell, *, runner=None, plist_path=None, check=
     raise ValueError(_watchdog_refusal('post_install', result) + '; ' + detail)
 
 
+def _c1_arm_registration(root, built, receipt_commit, receipt_sha256):
+    from joulewise.align.apple import v4_registration
+    from scripts import align_v4_next_arm_packet as builder
+
+    class ArmEvidence(builder.GitEvidence):
+        def git(self, *args):
+            return super().git('--no-replace-objects', *args)
+
+    evidence = ArmEvidence(root)
+    predecessor = {key: built['record_' + key] for key in ('commit', 'path', 'sha256')}
+    if built.get('previous_window') != 'W1':
+        raise ValueError('C1 arm requires a W1 predecessor')
+    arm_source_commit = evidence.git('rev-parse', '--verify', 'HEAD^{commit}').decode().strip()
+    pair = {'commit': receipt_commit or predecessor['commit'], 'sha256': receipt_sha256}
+    path, raw = v4_registration.verify_c1_receipt_binding(evidence, predecessor, arm_source_commit, pair)
+    pushed_tip = built['checks']['record_committed']['pushed_tip']
+    evidence.git('merge-base', '--is-ancestor', pair['commit'], evidence.commit(pushed_tip))
+    if v4_registration._local(root, path).read_bytes() != raw:
+        raise ValueError('C1 registration receipt changed during arm')
+    return {'arm_source_commit': arm_source_commit, 'series_registration': pair}
+
+
 def _arm_and_install(session, state, measurement_root, plan, high, *, runner, volume_runner, now,
                      w1_disk_config, disk_gate, lock=None, owner=None,
                      obc_off_attested_by=None, battery_runner=None, battery_log=None,
@@ -1932,20 +1972,26 @@ def _arm_and_install(session, state, measurement_root, plan, high, *, runner, vo
                      packet_builder=None, meter_probe=None, dwell_start=None,
                      frequency_preflight_record=None, frequency_pre_t0_check=None,
                      watchdog_plist=None, watchdog_check=None, watchdog_undo_closing=None,
-                     weight_digests_attested=None, runtime_stack_attested=None, held_window_ruling=None, **kwargs):
+                     weight_digests_attested=None, runtime_stack_attested=None, held_window_ruling=None,
+                     series_receipt_sha256=None, **kwargs):
     # RUN_STATE 226 R15: every arm, W1 included, binds the frozen series. W1 binds an empty history after
     # R1; a C/T window the next frozen window. The packet bound is the arm's OWN rebuild (a supplied
     # packet is only a pointer), whose history is derived from the hash-chained, authenticated records.
     # R17 review F7: arm_checks runs this binding before the meter probe and the recorded dwell start.
     from scripts import align_v4_series as series
-    window_id = (state.get('v4_series') or {}).get('window_id', 'W1')
+    selection = state.get('v4_series') or {}
+    window_id = selection.get('window_id', 'W1')
     binding_root = state.get('source_measurement_root') or measurement_root
+    c1_registration = {}
 
     def series_bind(built):
         try:
             if not isinstance(built, dict):
                 raise ValueError('the arm could not rebuild the packet')
             series.bind_packet(binding_root, window_id, built, authenticated_by_rebuild=True)
+            if window_id == 'C1':
+                c1_registration.update(_c1_arm_registration(
+                    binding_root, built, selection.get('series_receipt_commit'), series_receipt_sha256))
             return []
         except (OSError, ValueError, KeyError, TypeError) as exc:
             return [f'series_binding: {window_id}: {exc}']
@@ -1986,6 +2032,7 @@ def _arm_and_install(session, state, measurement_root, plan, high, *, runner, vo
         record['series_window'] = window_id
         record['series_binding'] = binding
         record['series_packet'] = built
+        record.update(c1_registration)
         if binding:
             record['admitted'] = False
             record['reasons'] = binding + record['reasons']
@@ -2023,10 +2070,21 @@ def _arm_and_install(session, state, measurement_root, plan, high, *, runner, vo
         path.parent.mkdir(parents=True, exist_ok=True)
         with path.open('x') as handle:
             handle.write(json.dumps(record, indent=2, sort_keys=True) + '\n')
-        state.setdefault('v4_arm_records', []).append({'path': str(path), 'admitted': record['admitted'],
-                                                        'ac_powermode': record['ac_powermode'].get('observed'),
-                                                        'reasons': record['reasons'],
-                                                        'dwell_record': str(dwell_path)})
+        attempt_record = {'path': str(path), 'admitted': record['admitted'],
+                          'ac_powermode': record['ac_powermode'].get('observed'),
+                          'reasons': record['reasons'], 'dwell_record': str(dwell_path)}
+        if record['admitted'] and c1_registration:
+            # The committed window record can carry this evidence without copying
+            # the full local arm record or its host and capture fields.
+            arm_proof = path.with_suffix('.registration.json')
+            raw = kit.raw_json({'schema': ARM_RECORD_SCHEMA, 'admitted': True, 'series_window': 'C1',
+                                'series_packet': {key: built[key] for key in
+                                                  ('record_commit', 'record_path', 'record_sha256')},
+                                **c1_registration})
+            with arm_proof.open('xb') as handle:
+                handle.write(raw)
+            attempt_record['registration_evidence'] = {'path': str(arm_proof), 'sha256': _sha256(raw)}
+        state.setdefault('v4_arm_records', []).append(attempt_record)
         pilot.h.write(session / 'session.json', state)
         if receipt is not None:
             pilot.h.write(session / 'staging/w1_disk_gate.json', receipt)
@@ -2075,6 +2133,8 @@ def main(argv=None):
                       session_prefix='align-v4-', prepare_fn=prepare, install_fn=install,
                       desk_fn=desk,
                       prepare_options=(('--window-id', dict(help='frozen series window or D alias; requires series admission')),
+                                       ('--series-receipt-commit', dict(
+                                           help='signing owner’s full commit for a separately signed series receipt')),
                                        ('--extra-sentinels', dict(type=int, default=0, choices=(0, 2),
                                            help='R20: two supplemental escalation sentinels (ordinals 23, 24) '
                                                 'after a U4-inconclusive window; ceiling 62,400 s'))),
