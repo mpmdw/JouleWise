@@ -20,13 +20,16 @@ import shutil
 import subprocess
 import tempfile
 import time
+from types import SimpleNamespace
 import unittest
 from unittest.mock import patch
 
 from scripts import align_v4_kit as w1_kit, align_v4_next_arm_packet as builder
 from scripts import align_v4_series as series
 from scripts import align_v4_session as session
+from scripts import bytes_h_session as staging
 from joulewise.b5.chain import TOOLS
+from joulewise.b5.plan import resolve_stage_dispatches
 from joulewise.schemas import BenchmarkConfig, CONFIG_SCHEMA_VERSION
 from joulewise.align.apple import v4_cadence as cad
 from joulewise.align.apple import v4_registration as registration
@@ -66,6 +69,11 @@ def synthetic_stage_graph():
     graph = []
     for pos, ((_, kind, tool, args), name) in enumerate(zip(layout, names, strict=True)):
         argv = [{"kind": "literal", "value": value} for value in args]
+        if kind == "campaign_collection":
+            argv = [dict(kind="repo_path", value="fixture"), dict(kind="literal", value="--runs-dir"),
+                    dict(kind="binding", value="claim_runs_root")]
+        if kind == "bracket_reservation":
+            argv = [dict(kind="literal", value="--plan"), dict(kind="repo_path", value="fixture-plan.json")]
         graph.append(dict(
             stage_id=name, kind=kind, ordinal=pos + 1, expected_count=1,
             predecessor=names[pos - 1] if pos else None,
@@ -82,7 +90,8 @@ def synthetic_stage_config(run_id):
         schema_version=CONFIG_SCHEMA_VERSION, run_id=run_id,
         model=dict(name="synthetic-anchor"), quantization=dict(name="fixture"),
         hardware_target=dict(id="fixture", transport="local", runtime_backend="mock", telemetry_backend="mock"),
-        workload_profile=dict(name="fixture", prompt_text=json.dumps(dict(max_turns=12, task_kwargs={}))),
+        workload_profile=dict(name=staging.ALIGN_EPISODE, prompt_text=json.dumps(dict(max_turns=12, task_kwargs={}))),
+        run_metadata=dict(tags=['align-model=invented-anchor']),
     )
     return w1_kit.bundle_config_bytes(BenchmarkConfig.from_mapping(config))
 
@@ -495,10 +504,11 @@ class C1PacketRebuildTests(Base):
             self.assertEqual(series.main(['materialize', *args, '--check']), 0)
         return json.loads((directory / 'collection_plan.json').read_bytes())
 
-    def k1_arm(self, scenario, packet, plan):
+    def k1_arm(self, scenario, packet, plan, *, view=None, night=None):
         # Restore the real guard with only invented host inputs from the arm-rebuild suite.
         with patch.object(session, 'arm_checks', side_effect=lambda root, _, **kw: self.real_arm(root, plan, **kw)):
-            return ArmRebuildTests().arm(scenario, packet, series_bind=lambda rebuilt: (
+            return ArmRebuildTests().arm(SimpleNamespace(root=view or scenario.root), packet,
+                c1_kit_root=scenario.root, watchdog_plan_path=night, series_bind=lambda rebuilt: (
                 series.bind_packet(scenario.root, 'C1', rebuilt, authenticated_by_rebuild=True) and []))
 
     def assert_k1_refusal(self, scenario, packet, plan):
@@ -601,6 +611,124 @@ class C1PacketRebuildTests(Base):
                 for i, member in enumerate(members, 1):
                     member['ordinal'] = i
                 self.assert_k1_refusal(w1, packet, plan)
+
+    def staged_c1(self, w1):
+        w1.write(staging.plan.HEAD_PIN_RELATIVE, b'invented fixture pin\n')
+        w1.write('configs/campaigns/bytes_v1/roster.json', {'models': []})
+        w1.write('configs/campaigns/d117_floor_qwen3-1p7b_v5/plan_tree.json',
+                 {'arm_attachments': {'launch': {'bindings': []}}, 'external_inputs': {'manifests': []}})
+        target = Path(self.enterContext(tempfile.TemporaryDirectory(dir=self.output_dir)))
+        view, pack = staging.measurement_view(w1.root, target, kit=series.kit_path('C1'),
+                                              pack_id=series.pack_id('C1'))
+        self.fixture_roots.add(view)
+        tree_raw = (pack / 'plan_tree.json').read_bytes()
+        night = target / 'fixture-night.json'
+        staging.write(night, {'hazard_window': {'pack': {'pack_root': str(pack),
+                                                         'plan_tree_sha256': builder.digest(tree_raw)}}})
+        return view, pack, night, json.loads(tree_raw)
+
+    def copy_bound_fixture_links(self, w1, view):
+        """Copy the invented linked bytes relevant to the staged digest."""
+        for relative in ('scripts', 'configs/campaigns/align_v4'):
+            link = view / relative
+            self.assertTrue(link.is_symlink())
+            link.unlink()
+            shutil.copytree(w1.root / relative, link)
+
+    def staged_state(self, w1, view, night):
+        return {'measurement_root': str(view), 'source_measurement_root': str(w1.root),
+                'plan_path': str(night), 'v4_series': {'window_id': 'C1', 'extra_sentinels': 2}}
+
+    def test_k2_ordinary_manifest_cannot_drop_23_and_24_from_staged_dispatch(self):
+        w1 = self.c1_scenario(materialized=True)
+        packet = self.ready_packet(w1)
+        directory = w1.root / series.kit_path('C1')
+        plan = json.loads((directory / series.C1_PLAN).read_bytes())
+        view, pack, night, tree = self.staged_c1(w1)
+        self.copy_bound_fixture_links(w1, view)
+        manifest = pack / 'members' / plan['members'][-1]['stage_id'] / 'order_manifest.json'
+        complete = directory.with_name('complete-kit')
+        directory.rename(complete)
+        self.materialize_c1(w1, 0)
+        _, ordinary, _, _ = self.staged_c1(w1)
+        raw = (ordinary / manifest.relative_to(pack)).read_bytes()
+        shutil.rmtree(directory)
+        complete.rename(directory)
+        manifest.write_bytes(raw)
+        dispatches = resolve_stage_dispatches(tree, view)
+        self.assertEqual(sum(len(dispatch.run_ids) for dispatch in dispatches), 22)
+        record = self.k1_arm(w1, packet, plan, view=view, night=night)
+        self.assertTrue(record['next_arm_triage']['supplied_packet_matches_rebuild'])
+        self.assertIn('packet_kit_mismatch', record['reasons'])
+        self.assertFalse(record['admitted'])
+        self.assert_k1_cli_refusal(w1, packet, plan, self.staged_state(w1, view, night))
+
+    def test_k2_every_stage_manifest_requires_its_exact_bytes_and_order(self):
+        w1 = self.c1_scenario(materialized=True)
+        packet = self.ready_packet(w1)
+        plan = json.loads((w1.root / series.kit_path('C1') / series.C1_PLAN).read_bytes())
+        view, _, night, tree = self.staged_c1(w1)
+        for dispatch in resolve_stage_dispatches(tree, view):
+            path = view / dispatch.config_dir / 'order_manifest.json'
+            original = path.read_bytes()
+            order = json.loads(original)
+            order['executed_order'][:2] = reversed(order['executed_order'][:2])
+            for label, raw in (('same roster, edited bytes', original + b' '),
+                               ('reordered roster', json.dumps(order).encode())):
+                with self.subTest(stage=dispatch.stage_id, mutation=label):
+                    path.write_bytes(raw)
+                    self.assert_k1_cli_refusal(w1, packet, plan, self.staged_state(w1, view, night))
+            path.write_bytes(original)
+
+    def test_k2_staged_kit_copy_must_match_committed_content(self):
+        w1 = self.c1_scenario(materialized=True)
+        packet = self.ready_packet(w1)
+        plan = json.loads((w1.root / series.kit_path('C1') / series.C1_PLAN).read_bytes())
+        view, pack, night, _ = self.staged_c1(w1)
+        registration_dir = pack / 'registration'
+        registration_dir.unlink()
+        shutil.copytree(w1.root / series.kit_path('C1') / 'registration', registration_dir)
+        changed = registration_dir / 'seed_manifest.json'
+        changed.write_bytes(changed.read_bytes() + b' ')
+        self.assert_k1_cli_refusal(w1, packet, plan, self.staged_state(w1, view, night))
+
+    def test_k3_real_staged_links_and_identical_copies_both_admit(self):
+        w1 = self.c1_scenario(materialized=True)
+        packet = self.ready_packet(w1)
+        plan = json.loads((w1.root / series.kit_path('C1') / series.C1_PLAN).read_bytes())
+        for copies in (False, True):
+            with self.subTest(copies=copies):
+                view, pack, night, _ = self.staged_c1(w1)
+                if copies:
+                    self.copy_bound_fixture_links(w1, view)
+                    collection = pack / series.C1_PLAN
+                    raw = collection.read_bytes()
+                    collection.unlink()
+                    collection.write_bytes(raw)
+                record = self.k1_arm(w1, packet, plan, view=view, night=night)
+                self.assertTrue(record['next_arm_triage']['supplied_packet_matches_rebuild'], record['reasons'])
+                self.assertTrue(record['admitted'], record['reasons'])
+
+    def test_k3_stage_artifact_link_escaping_roots_refuses_before_host_access(self):
+        w1 = self.c1_scenario(materialized=True)
+        packet = self.ready_packet(w1)
+        self.copy_stage_artifact_escape(w1, packet, CODE_PATH)
+
+    def test_k3_manifest_link_escaping_roots_refuses_before_host_access(self):
+        w1 = self.c1_scenario(materialized=True)
+        packet = self.ready_packet(w1)
+        view, _, _, tree = self.staged_c1(w1)
+        path = view / resolve_stage_dispatches(tree, view)[0].config_dir / 'order_manifest.json'
+        self.copy_stage_artifact_escape(w1, packet, path.relative_to(view))
+
+    def copy_stage_artifact_escape(self, w1, packet, path):
+        view, _, night, _ = self.staged_c1(w1)
+        self.copy_bound_fixture_links(w1, view)
+        plan = json.loads((w1.root / series.kit_path('C1') / series.C1_PLAN).read_bytes())
+        target = view / path
+        target.unlink()
+        target.symlink_to(self.output_dir / 'DO-NOT-FOLLOW' / 'exit')
+        self.assert_k1_cli_refusal(w1, packet, plan, self.staged_state(w1, view, night))
 
     def test_committed_w1_rebuild_binds_c1_with_live_checks_pending(self):
         w1 = self.c1_scenario()
