@@ -142,18 +142,46 @@ class DateAccountingTests(unittest.TestCase):
         self.assertEqual(places([w1, c1], freeze_date=TOMORROW, as_of=midnight(TOMORROW) + 2),
                          {TOMORROW: (1, ("later",))})
 
-    def test_pre_freeze_w1_crossing_needs_fable(self):
+    def test_pre_freeze_w1_close_on_freeze_date_is_place_one(self):
         boundary = midnight(TOMORROW)
         w1 = Window("w1", "W1", boundary - 90, boundary + 90, True)
-        with self.assertRaisesRegex(ValueError, "NEEDS_SPEC"):
-            places([w1], freeze_date=TOMORROW, as_of=boundary + 100)
+        self.assertEqual(places([w1], freeze_date=TOMORROW, as_of=w1.close - 1), {})
+        as_of = FakeClock(TOMORROW).at(3)
+        current = places([w1], freeze_date=TOMORROW, as_of=as_of)
+        self.assertEqual(current, {TOMORROW: (1, ("w1",))})
+        expiry = midnight(TOMORROW + timedelta(days=1))
+        self.assertEqual(date_dispositions(current, (), as_of=expiry),
+                         {TOMORROW: {"place": 1, "window_attempts": ("w1",), "status": "missed"}})
 
-    def test_shared_start_date_with_only_one_crossing_needs_fable(self):
+        case = snapshot(TOMORROW, window=w1, eligible_at=w1.close)
+        start = verify(case)
+        self.assertEqual(date_dispositions(current, (start,), as_of=as_of)[TOMORROW]["status"], "served")
+        case["arm"]["freeze"]["published_at_ns"] = start.t0_ns + 1
+        with self.assertRaises(ValueError):
+            verify(case)
+
+    def test_shared_start_date_misses_before_crossing_close_takes_next_place(self):
         boundary = midnight(TOMORROW)
         w1 = Window("w1", "W1", midnight(DAY) + 1, midnight(DAY) + 2)
         c1 = Window("c1", "C", boundary - 90, boundary + 90, True)
-        with self.assertRaisesRegex(ValueError, "NEEDS_SPEC"):
-            places([w1, c1], as_of=boundary + 100)
+        windows = [w1, c1]
+        first_miss = {"place": 1, "window_attempts": ("w1",), "status": "missed"}
+        before_close = places(windows, as_of=c1.close - 1)
+        self.assertEqual(date_dispositions(before_close, (), as_of=c1.close - 1), {DAY: first_miss})
+
+        as_of = FakeClock(TOMORROW).at(3)
+        current = places(windows, as_of=as_of)
+        self.assertEqual(current, {DAY: (1, ("w1",)), TOMORROW: (2, ("c1",))})
+        expiry = midnight(TOMORROW + timedelta(days=1))
+        self.assertEqual(date_dispositions(current, (), as_of=expiry),
+                         {DAY: first_miss, TOMORROW: {"place": 2, "window_attempts": ("c1",), "status": "missed"}})
+
+        case = snapshot(TOMORROW, window=c1, eligible_at=c1.close, place=2)
+        case["windows"] = windows
+        case["arm"]["freeze"]["published_at_ns"] = FakeClock().at(0, 10) * NS
+        start = verify(case)
+        self.assertEqual(date_dispositions(current, (start,), as_of=as_of),
+                         {DAY: first_miss, TOMORROW: {"place": 2, "window_attempts": ("c1",), "status": "served"}})
 
     def test_final_place_rolls_forward_with_one_miss_and_no_place_21(self):
         days = [DAY + timedelta(days=i) for i in range(22)]
