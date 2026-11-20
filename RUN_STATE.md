@@ -1052,6 +1052,28 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 
 <!-- RUN_STATE TYPED ITEMS: newest first. Add with scripts/run_state_add.py; never edit by hand. -->
 
+489. **hp-02: queue-b ADMITTED; issue via the standard filler ladder from Sat 21 Nov 00:00 (gate automaton retired)**
+
+```pointer
+owner: magistrate
+wait: none
+deadline: 2026-11-30T00:00:00-08:00
+on_early_or_refused: a failed start-check precondition is a timing cede or a hold per the spec; take the next eligible rung (items 464, 472, 480) and record the reason. Any refusal, failed or unproven restore, or revocation holds cl-hp-02 and notifies the lead and Ed.
+next_observable: NOT BEFORE Sat 21 Nov 00:00 PST (queue-b not_before). At the first clean close where hp-02 wins rank 3, the activation's start-check.out (rc 0) and an hp-02-s01 ISSUED item rendered from the spec's "Text to issue for hp-02-s01", launched as the last act.
+```
+
+```item
+{"expires_epoch_s": null, "issued_epoch_s": 1795206297, "number": 489, "owner": "magistrate", "schema": "joulewise.run_state_item.v1", "sets": [], "status": "ISSUED", "supersedes": []}
+```
+
+- **Lead admission of queue-b for cl-hp-02 (hp-02):** queue `cq-hp-02-b` at `e3eaa282f9d4cea3b579eeb7bde989ff897df45e`, file `…/item-drafts-f2-0203/hp-02/queue-b.json`, sha256 `078eb24c3149f2a7bc522a432098e51e21bd36278d288b0f41efbb5d57da528f`. Not before Sat 21 Nov 00:00 PST; expires Mon 30 Nov 00:00 PST (exclusive). It supersedes queue-a, which is not to be used.
+- **How hp-02 is issued: the standard filler ladder.** The magistrate issues hp-02 one span at a time, exactly as for f2-inst and f2-stab: a typed item, then its start-check, then the standard Run block, then the Check. The spec, start-check additions and s01 item text are at audit branch `fb2e5f6a9`, `docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/hp-02-ladder/SPEC.md` (executing audit r6: ISSUE-READY). The earlier self-contained hp-02 gate automaton (hp02-successor drafts, PR #890 line) is RETIRED; do not use its items or gates.
+- **Rank 3** per items 464, 472 and 480: after the date's rank-1 stability leg and any eligible instrument work (none remains; f2-inst kits are complete). Item 480's 02:00-02:35 exclusion applies to HP spans too (spec R-c).
+- **The eight preconditions** are in the spec: look status, the hp-01 t0-date exclusion (Nov 15), LINE2_OK (RS338 + HP02-DELTA + the RL-190 §2.2 sentence), binding and margin, composed occupancy, host power and restore, predecessor, rank. **Run P1:** fetch origin/main and refuse on any later revocation, hold or halt. **Run P2:** a failed or unproven restore holds the host until a LEAD RUN_STATE item clears it.
+- **Look reservations are frozen** (lead and analysts) from hp-02 issue until its HP Check (spec precondition 1).
+- **Threat model:** honest but fallible writers. The start-check defends against faults and stale reads.
+- Ruling basis: RL-174 B, RL-175 D.3, RL-190 §2 (line 2 carries), RL-193 C3 (no research objection to the ladder).
+
 488. **Magistrate e1134a0f (headless, Opus 5.5), 2026-11-20 12:13-12:20 PST (`date`): f2-stab-15-l003 CHECK: RECEIPT OK (1/1 leg, MEASURED_OK, admitted, restored), copied at once; f2-stab-15-l004 ISSUED at rank 4 as the 10:50-13:15 gap filler on pin B, no batch window (items 463, 464), launches as the last act**
 
 ```pointer
