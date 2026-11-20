@@ -1,4 +1,4 @@
-"""Synthetic supplement to the byte-pinned v2.1 description acceptance module."""
+"""Synthetic v2.2.1 description acceptance supplement. See DELTA.md for the RL-191 case map."""
 from contextlib import contextmanager
 import csv
 from fractions import Fraction
@@ -557,19 +557,22 @@ register_edges()
 # and observations. Distinguish that state from a dirty, populated stream.
 COUNTS = {"own_count","side_count"}
 GAPS = {"own_gap","side_gap","left_bracket","right_bracket"}
-QUESTIONS = {
-    "health": "On a DC interval with an absent or contaminated stream and a count, bracket or U1 failure, which exact reason prints? Is absence tested before counts on its necessarily empty tape?",
-    "operands": "For one derived print whose two independently judged operands fail for different specific reasons, which operand or reason takes precedence? Does the per-channel table also rank failures across operands?",
-    "nonpositive": "When the rail denominator is known nonpositive and DC has an admission refusal, which reason prints on the ratio?",
-    "clean_tail": "If the rail tail passes admission and has a recorded EOF but the hold supplies no threshold, what reason and bound print on rail_return_censor_s?",
-    "manifest_tail": "When the sum manifest vetoes the tail before any coverage read, does rail_return_censor_s carry the actual EOF bound along with rail_manifest?",
-    "cross_pair": "When one channel is already across at search start and the other fails admission, which specific reason prints on their decode-end lag?",
-    "tail_endpoint": "Does a first qualifying DC sample exactly at last token +1.000 s count for the decode-end crossing? Counts use [a,b), while the clipped DC integral uses b as a bracket.",
-}
-
-
+# The original shared scenarios below also serve cases whose expectations did
+# not change. Registration selects the ruled scenario only for a former skip.
 def defer(test, key):
-    test.skipTest(f"FOR-FABLE/{key}: {QUESTIONS[key]}")
+    test.fail("Unresolved v2.2 scenario selected by registration: " + key)
+
+
+# RL-191 §1.1, §1.3 and §1.4. Both operands are independently established by
+# the fixture. Select the first applicable reason without consulting the output.
+REASON_RANK = (
+    "rail_manifest", "meter_absent", "meter_contaminated", "coverage", "meter_gap",
+    "nonpositive_level", "nonpositive_denominator", "crossed_before_span", "over 1 s",
+)
+
+
+def ranked_reason(*operand_reasons):
+    return next(reason for reason in REASON_RANK if reason in operand_reasons)
 
 
 def admission_faults(ch):
@@ -613,6 +616,36 @@ def admission_case(test, ch, pair):
     frozen.assert_scalar(test,v,reason)
 
 
+def admission_case_rl191(test, ch, pair):
+    a,b = T,T+20*S
+    faults = set(pair)
+    n = 80 if "own_count" not in faults else 79
+    side_n = 20 if "side_count" not in faults else 19
+    rail = ch!="dc_in"
+    spans = segments(a,b,3*S if rail and "own_gap" in faults else 0,"middle",n if rail else 80)
+    rails = {r:[(s,z,1) for s,z in spans] for r in COLS}
+    def point_grid(k,broken):
+        return stamp_gap(a,b,3*S,"middle",k) if broken else [a-S//8,*even(a,b,k),b+S//8]
+    side = point_grid(side_n,"side_gap" in faults)
+    values = point_grid(n if not rail else 80,not rail and "own_gap" in faults)
+    if "left_bracket" in faults:
+        values = [s for s in values if s>=a]
+    if "right_bracket" in faults:
+        values = [s for s in values if s<b]
+    dc = [(s,40) for s in values] if "absent" not in faults else []
+    paths = write_tape(test.folder,rails,dc,side,a,a+3*S,b-S,dc_tick=S//4,
+                       rail_manifest=list(reversed(COLS)) if "manifest" in faults else list(COLS),
+                       meter_present="absent" not in faults,meter_clean="dirty" not in faults)
+    test.assertEqual(count(side,a,b),side_n)
+    test.assertEqual(count(judged_stamps(rails,dc,side,"dc_in" if not rail else "cpu_power"),a,b),
+                     0 if "absent" in faults else n)
+    with open_signal(paths) as sig:
+        v = sig.average(ch,a//S,b//S)
+    # RL-191 §1.2. A stream veto precedes every count, gap and bracket test.
+    reason = "meter_absent" if "absent" in faults else "meter_contaminated"
+    test.assertEqual(v, frozen.null(reason))
+
+
 def set_hold_fault(leg,kind):
     if kind=="coverage":
         leg.omit("sidecar",range(50,400,50))
@@ -646,6 +679,26 @@ def physical_tail(test, hold, tail, end, raw):
         defer(test,"clean_tail")
     reason = "coverage" if "count" in tail else "meter_gap" if "gap" in tail else "stream_end"
     test.assertEqual(v,frozen.null(reason,bound_s=end-610))
+
+
+def physical_tail_rl191(test, hold, tail, end, raw):
+    leg = frozen.TraceLeg(test.folder)
+    set_hold_fault(leg,hold)
+    leg.meta["rail_intervals"] = [row for row in leg.meta["rail_intervals"] if row[1]<=end]
+    leg.rows[frozen.RAIL_FILE] = [r for r in leg.rows[frozen.RAIL_FILE] if float(r["interval_end_s"])<=end]
+    if "count" in tail:
+        leg.omit(raw,[610.25])
+    if "gap" in tail:
+        # Right point brackets the interval but is 3 s from the previous one.
+        leg.meta["sidecar_times"] = [t for t in leg.meta["sidecar_times"] if t<end]+[end+3]
+    obj = frozen.print_one(leg.signal(),frozen.IDS[0])
+    ch = "gpu_rail" if raw=="gpu_power" else "rail_sum"
+    h = obj["hold"][ch]["mean_w"]
+    frozen.assert_scalar(test,h,None if hold=="ok" else hold)
+    v = obj["edges"]["rail_return_censor_s"][ch]
+    # RL-191 §1.5. A manifest veto or a clean tail with a refused hold
+    # carries the stamp-only EOF bound, even when no threshold was readable.
+    test.assertEqual(v, frozen.null(hold, bound_s=end - 610))
 
 
 def recovery_pair(test, left, right):
@@ -724,6 +777,55 @@ def dependent(test, dc_fault, rail_fault, print_name, ch):
         test.assertAlmostEqual(ratio["value"],ratio["numerator"]/ratio["denominator"])
 
 
+def dependent_rl191(test, dc_fault, rail_fault, print_name, ch):
+    # Distinct faults in the same physical phase; use the actual energy and
+    # gain operands to verify that the intended collision was reached.
+    leg = frozen.TraceLeg(test.folder)
+    raw = "gpu_power" if ch=="gpu_rail" else "ane_power"
+    if dc_fault=="coverage":
+        leg.omit("dc_in",[607,608,609])
+    elif dc_fault=="meter_gap":
+        # Leave all 80 decode points, move them on either side of a 2.25 s
+        # hole. Also retain both brackets and keep the independent turn count.
+        rows = [r for r in leg.rows[frozen.DC_FILE] if not 606<=float(r["epoch_s"])<610]
+        marks = stamp_gap(606*S,610*S,9*S//4,"middle",80)[1:-1]
+        rows += [dict(epoch_s=seconds(s),watts=55) for s in marks]
+        leg.rows[frozen.DC_FILE] = sorted(rows,key=lambda r:float(r["epoch_s"]))
+        leg.meta["meter_times"] = [float(r["epoch_s"]) for r in leg.rows[frozen.DC_FILE]]
+    elif dc_fault=="meter_contaminated":
+        leg.meta["meter_clean"] = False
+    if rail_fault=="coverage":
+        leg.omit(raw,[607.25])
+    elif rail_fault=="meter_gap":
+        # A 1.5 s uncovered run despite a full decode count at 4 Hz.
+        rowset = [r for r in leg.rows[frozen.RAIL_FILE] if not 606<=float(r["interval_start_s"])<610]
+        spans = segments(606*S,610*S,3*S//2,"middle",16)
+        leg.meta["rail_intervals"] = sorted([r for r in leg.meta["rail_intervals"] if not 606<=r[0]<610]
+                                            + [[s/S,z/S] for s,z in spans])
+        for s,z in spans:
+            for r,w in zip(COLS,(12,20,6)):
+                rowset.append(dict(zip(frozen.RAIL_HEADER,(s/S,z/S,z/S,"powermetrics",r,w))))
+        leg.rows[frozen.RAIL_FILE] = sorted(rowset,key=lambda r:float(r["interval_start_s"]))
+    elif rail_fault=="rail_manifest":
+        leg.meta["rail_manifest"] = list(reversed(COLS))
+    elif rail_fault=="nonpositive_denominator":
+        for r in leg.rows[frozen.RAIL_FILE]:
+            if r["source"]=="powermetrics" and float(r["interval_start_s"])>=602:
+                r["power_w"] = 0
+    printed = frozen.print_one(leg.signal(),frozen.IDS[0])
+    ratio = printed["turn"]["ratios"][ch] if print_name=="turn" else printed["gain"]["decode_gain"][ch]
+    for operand,why in (("numerator",dc_fault),("denominator",rail_fault)):
+        if why=="nonpositive_denominator":
+            test.assertLessEqual(ratio[operand],0)
+        else:
+            frozen.assert_scalar(test,ratio[operand],None if why=="ok" else why)
+    # RL-191 §1.3. A measured nonpositive denominator is preserved even
+    # when the refused numerator supplies the ratio's reason.
+    reason = ranked_reason(dc_fault, rail_fault)
+    payload = {k: v for k, v in ratio.items() if k not in ("numerator", "denominator")}
+    test.assertEqual(payload, frozen.null(reason))
+
+
 def floor_pair(test, decode, sd):
     leg = frozen.TraceLeg(test.folder)
     if sd=="fewer_than_two":
@@ -774,8 +876,8 @@ def cross_pair(test, bad, crossing):
                 row["watts"]=0
         leg.omit("gpu_power",[610.5])
     e = frozen.print_one(leg.signal(),frozen.IDS[0])["edges"]
-    test.assertIsNone(e["decode_end_lag_s"]["gpu_rail"]["value"])
-    defer(test,"cross_pair")
+    # RL-191 §1.4. The opposite interval refusal outranks crossed_before_span.
+    test.assertEqual(e["decode_end_lag_s"]["gpu_rail"], frozen.null(bad))
 
 
 def endpoint_case(test):
@@ -786,8 +888,13 @@ def endpoint_case(test):
             row["watts"]=60
     rows[-2].update(epoch_s=611,watts=40)
     leg.meta["meter_times"] = [float(r["epoch_s"]) for r in rows]
-    frozen.print_one(leg.signal(),frozen.IDS[0])
-    defer(test,"tail_endpoint")
+    # RL-191 §1.6. The 60-to-40 W segment reaches 49.6875 W at
+    # 610.97578125 s. Subtract the two rail crossings at 610.25 and 610.5.
+    lags = frozen.print_one(leg.signal(), frozen.IDS[0])["edges"]["decode_end_lag_s"]
+    for ch, expected in (("gpu_rail", 0.72578125), ("rail_sum", 0.47578125)):
+        with test.subTest(channel=ch):
+            test.assertIn(type(lags[ch]), (int, float), lags[ch])
+            test.assertAlmostEqual(lags[ch], expected, delta=0.5 / S)
 
 
 def register_reasons():
@@ -798,12 +905,16 @@ def register_reasons():
             # own gap. It cannot also be a present dirty stream.
             if "absent" in q and ("own_gap" in q or "dirty" in q):
                 continue
-            add(f"C_interval_{ch}_{'_'.join(q) or 'clean'}",admission_case,ch,q)
+            ruled = "absent" in q or ("dirty" in q and len(q) > 1)
+            scenario = admission_case_rl191 if ruled else admission_case
+            add(f"C_interval_{ch}_{'_'.join(q) or 'clean'}",scenario,ch,q)
     for raw,hold,tail,end in product(COLS,("ok","coverage","meter_gap","rail_manifest"),
                                       ("ok","count","gap","count_gap"),(610.75,611)):
         if raw=="gpu_power" and hold=="rail_manifest":
             continue
-        add(f"C_tail_{raw}_{hold}_{tail}_{int((end-610)*1000)}",physical_tail,hold,tail,end,raw)
+        ruled = hold == "rail_manifest" or (tail == "ok" and hold != "ok")
+        scenario = physical_tail_rl191 if ruled else physical_tail
+        add(f"C_tail_{raw}_{hold}_{tail}_{int((end-610)*1000)}",scenario,hold,tail,end,raw)
     for a,b in combinations(("own_count","side_count","own_gap","side_gap"),2):
         add(f"C_recovery_{a}_{b}",recovery_pair,a,b)
     for dc,rail,name,ch in product(("ok","coverage","meter_gap","meter_contaminated"),
@@ -811,7 +922,9 @@ def register_reasons():
             ("turn","decode"),PRINTS[:2]):
         if ch=="gpu_rail" and rail=="rail_manifest":
             continue
-        add(f"C_ratio_{name}_{ch}_{dc}_{rail}",dependent,dc,rail,name,ch)
+        ruled = dc != "ok" and rail != "ok" and dc != rail
+        scenario = dependent_rl191 if ruled else dependent
+        add(f"C_ratio_{name}_{ch}_{dc}_{rail}",scenario,dc,rail,name,ch)
     for decode,sd in product(("ok","coverage","meter_gap","nonpositive"),("ok","fewer_than_two")):
         add(f"C_floor_{decode}_{sd}",floor_pair,decode,sd)
     for bad,cross in (("coverage","rail"),("meter_gap","rail"),("coverage","dc")):
@@ -971,10 +1084,6 @@ def register_additions():
 
 register_additions()
 
-QUESTIONS.update({
-    "threshold_lag": "If admission passes but a nonpositive decode plateau prevents the threshold for one operand of a lag, what is the normalized lag reason and bound, alone and when the other operand has a distinct refusal or an exhausted search?",
-    "no_support": "What reason and bound does a rail return carry if the observed capture ends exactly at or before the last token and no nonempty tail exists?",
-})
 
 
 def lag_collision(test, ch, dc, rail):
@@ -1035,6 +1144,54 @@ def lag_collision(test, ch, dc, rail):
     test.assertEqual(v,frozen.null(issues.pop()))
 
 
+def lag_collision_rl191(test, ch, dc, rail):
+    leg = frozen.TraceLeg(test.folder)
+    raw = "gpu_power" if ch=="gpu_rail" else "ane_power"
+    if dc in ("crossed_before_span","unobserved","no_threshold"):
+        for r in leg.rows[frozen.DC_FILE]:
+            t = float(r["epoch_s"])
+            if dc=="no_threshold" and 606<=t<=610:
+                r["watts"]=0
+            if dc!="no_threshold" and t>=610:
+                r["watts"]=0 if dc=="crossed_before_span" else 100
+    elif dc=="coverage":
+        leg.omit("dc_in",[610.5])
+    elif dc=="meter_gap":
+        rows = leg.rows[frozen.DC_FILE]
+        rows[-2]["epoch_s"],rows[-1]["epoch_s"]=614,614.05
+        leg.meta["meter_times"] = [float(r["epoch_s"]) for r in rows]
+    elif dc=="meter_contaminated":
+        leg.meta["meter_clean"]=False
+    elif dc=="absent":
+        leg.meta.update(meter_present=False,meter_times=[],meter_counts={"decoded":0,"bad":0,"usb_errors":0})
+        # TraceLeg only writes a CSV with a header when it has a row. Meter
+        # absence is authenticated metadata and the DC file must not be used.
+        frozen.put(test.folder/frozen.DC_FILE,frozen.csvbytes([("epoch_s","watts")]))
+    if rail in ("crossed_before_span","unobserved","no_threshold"):
+        for r in leg.rows[frozen.RAIL_FILE]:
+            t = float(r["interval_start_s"])
+            if r["source"]!="powermetrics":
+                continue
+            if rail=="no_threshold" and 606<=t<610:
+                r["power_w"]=0
+            if rail!="no_threshold" and t>=610:
+                r["power_w"]=0 if rail=="crossed_before_span" else 100
+    elif rail=="coverage":
+        leg.omit(raw,[610.25])
+    elif rail=="rail_manifest":
+        leg.meta["rail_manifest"]=list(reversed(COLS))
+    if dc=="absent":
+        del leg.rows[frozen.DC_FILE]
+    printed = frozen.print_one(leg.signal(),frozen.IDS[0])
+    v = printed["edges"]["decode_end_lag_s"][ch]
+    # RL-191 §1.2, §1.3 and §1.4. Use the same rank for health, distinct
+    # refusals and unavailable thresholds. All of these collisions omit bound_s.
+    labels = {"absent": "meter_absent", "no_threshold": "nonpositive_level",
+              "unobserved": "over 1 s"}
+    reason = ranked_reason(labels.get(dc, dc), labels.get(rail, rail))
+    test.assertEqual(v, frozen.null(reason))
+
+
 def no_tail(test, hold, shift):
     leg = frozen.TraceLeg(test.folder)
     set_hold_fault(leg,hold)
@@ -1042,9 +1199,11 @@ def no_tail(test, hold, shift):
     leg.rows[frozen.RAIL_FILE] = [r for r in leg.rows[frozen.RAIL_FILE] if float(r["interval_end_s"])<=end]
     leg.meta["rail_intervals"] = [r for r in leg.meta["rail_intervals"] if r[1]<=end]
     obj = frozen.print_one(leg.signal(),frozen.IDS[0])
+    # RL-191 §1.5. At or before the last token neither rail has a positive
+    # tail. These fixtures have a valid manifest, including the refused holds.
     for ch in PRINTS[:2]:
-        test.assertIsNone(obj["edges"]["rail_return_censor_s"][ch]["value"])
-    defer(test,"no_support")
+        with test.subTest(channel=ch):
+            test.assertEqual(obj["edges"]["rail_return_censor_s"][ch], frozen.null("no_tail"))
 
 
 def crossing_time(test, channel, direction, edge, off, era):
@@ -1085,17 +1244,47 @@ def crossing_time(test, channel, direction, edge, off, era):
             test.assertAlmostEqual(result,float(target/S),delta=math.ulp(float(result)))
 
 
+def crossing_time_rl191(test, channel, direction, edge, off, era):
+    # Search admission uses half-open counts. Independently move the first
+    # qualifying *value* through both edges, including bracket-only points.
+    origin = EPOCH if era=="epoch" else 0
+    a,b = origin+610*S,origin+611*S
+    p = S//20 if channel=="dc_in" else S//4
+    probe = (a if edge=="left" else b)+offsets(p)[off]
+    grid = sorted({a-S-S//8,a-S//8,*even(a,b,24),probe,b+S//8,b+S+S//8})
+    falls = direction=="fall"
+    def value(s):
+        return 0 if (s<probe)!=falls else 8
+    # Constant over each rail row; the DC midpoint is its linear crossing.
+    rails = {r:[(s,z,value(s)) for s,z in zip(grid,grid[1:])] for r in COLS}
+    dc = [(s,value(s)) for s in grid]
+    side = [a-S//8,a,b,b+S//8]
+    paths = write_tape(test.folder,rails,dc,side,a-8*S,a-4*S,a)
+    with open_signal(paths) as sig:
+        result = sig.cross(channel,a//S,b//S,12 if channel=="rail_sum" else 4,falls=falls)
+    # RL-191 §1.6. The closed DC span includes b. Its predecessor is at
+    # a + 979166666 ns, so the qualifying segment crosses at a + 989583333 ns.
+    expected = float(Fraction(a + 989_583_333, S))
+    test.assertIn(type(result), (int, float), result)
+    test.assertAlmostEqual(result, expected, delta=math.ulp(expected))
+
+
 def register_lags():
     for ch,dc,rail in product(PRINTS[:2],
             ("ok","coverage","meter_gap","meter_contaminated","absent","crossed_before_span","unobserved","no_threshold"),
             ("ok","coverage","rail_manifest","crossed_before_span","unobserved","no_threshold")):
         if ch=="gpu_rail" and rail=="rail_manifest":
             continue
-        add(f"C_lag_pair_{ch}_{dc}_{rail}",lag_collision,ch,dc,rail)
+        issues = {dc, rail} - {"ok", "unobserved"}
+        ruled = "absent" in issues or "no_threshold" in issues or len(issues) > 1
+        scenario = lag_collision_rl191 if ruled else lag_collision
+        add(f"C_lag_pair_{ch}_{dc}_{rail}",scenario,ch,dc,rail)
     for hold,shift in product(("ok","meter_gap","coverage"),(0,-.25)):
         add(f"C_tail_no_support_{hold}_{int(-shift*1000)}",no_tail,hold,shift)
     for ch,direction,edge,off,era in product(PRINTS,("rise","fall"),("left","right"),offsets(S),("local","epoch")):
-        add(f"A_cross_{ch}_{direction}_{edge}_{off}_{era}",crossing_time,ch,direction,edge,off,era)
+        endpoint = ch == "dc_in" and (edge, off) in (("right", "exact"), ("left", "p1s"))
+        scenario = crossing_time_rl191 if endpoint else crossing_time
+        add(f"A_cross_{ch}_{direction}_{edge}_{off}_{era}",scenario,ch,direction,edge,off,era)
 
 
 register_lags()
@@ -1149,6 +1338,37 @@ def projected_cross(test,raw,edge,off,origin):
     test.assertLessEqual(abs(Fraction(str(v))*S-expected),Fraction(1,2))
 
 
+def projected_cross_rl191(test,raw,edge,off,origin):
+    a = origin+610*S
+    b = a+S
+    p = ticks(raw)
+    probe = (a if edge=="left" else b)+offsets(p)[off]
+    def tape(key):
+        stride = ticks(key)
+        lead = list(range(origin-10*S,origin+602*S,S))
+        lead += list(range(origin+602*S,a-S//8,stride//2))
+        normal = (a,*even(a,a+3*S//8,12),a+3*S//8,a+5*S//8,*even(a+5*S//8,b,12),b)
+        if key=="rail":
+            normal = (*normal,a+S//2)
+        mid = even(a,b,24)
+        active = (key=="rail")==(raw in COLS)
+        series = sorted({*lead,a-S//8,*(mid if active else normal),
+                         *([probe] if active else []), b+S//8,b+S+S//8})
+        when = probe if active else (a+S//2 if key=="rail" else a+5*S//8)
+        return [(s,8 if origin+602*S<=s<when else 0) for s in series]
+    pairs = tape("rail")
+    rails = {r:[(s,z,w) for (s,w),(z,_) in zip(pairs,pairs[1:])] for r in COLS}
+    dc = tape("dc_in")
+    side = list(range(origin-10*S,b+3*S,S))
+    paths = write_tape(test.folder,rails,dc,side,origin+602*S,origin+606*S,a)
+    with open_signal(paths) as sig:
+        v = report(sig,origin,"instrument")["edges"]["decode_end_lag_s"]["gpu_rail"]
+    # RL-191 §1.6. Subtract the rail crossing at a + 500000000 ns from
+    # the interpolated DC crossing at a + 989583333 ns on either clock.
+    test.assertIn(type(v), (int, float), v)
+    test.assertLessEqual(abs(Fraction(str(v)) * S - 489_583_333), Fraction(1, 2))
+
+
 def clipped_energy(test,look,shape,place,width):
     rails,dc,side = energy_tape(shape,0,137)
     for r in COLS:
@@ -1170,9 +1390,6 @@ def clipped_energy(test,look,shape,place,width):
     assert_energy(test,look,shape,rails,dc,side)
 
 
-QUESTIONS["mixed_gap"] = ("When one uncovered rail interval straddles the 1 Hz to 4 Hz cadence transition, "
-                           "does U1 compare each part to its local limit, compare the whole gap to one limit "
-                           "(which one), or apply a different rule?")
 
 
 def mixed_gap(test,placement):
@@ -1194,13 +1411,34 @@ def mixed_gap(test,placement):
     frozen.assert_scalar(test,value,None if placement=="slow" else "meter_gap")
 
 
+def mixed_gap_rl191(test,placement):
+    a,b,split = 598*S,606*S,602*S
+    s = split+{"slow":-3*S,"fast":S//2,"straddles":-S}[placement]
+    z = s+2*S
+    cuts1 = [a+i*(s-a)//10 for i in range(11)]
+    cuts2 = [z+i*(b-z)//10 for i in range(11)]
+    spans = list(zip(cuts1,cuts1[1:]))+list(zip(cuts2,cuts2[1:]))
+    test.assertEqual(len(spans),expected_samples(a,b,split,S,S//4))
+    rails = {r:[(x,y,1) for x,y in spans] for r in COLS}
+    side = list(range(a-S,b+S,S))
+    dc = [(t,1) for t in range(a-S,b+S,S//20)]
+    paths = write_tape(test.folder,rails,dc,side,split,split+2*S,split+4*S)
+    with open_signal(paths) as sig:
+        value = sig.average("rail_sum",a//S,b//S)
+    # RL-191 §1.7. The two one-second parts pass limits of 5 s and 1.25 s.
+    frozen.assert_scalar(test, value, None)
+
+
 for raw,edge,off,era in product(("gpu_power","dc_in"),("left","right"),offsets(S),("local","epoch")):
-    add(f"A_printed_lag_{raw}_{edge}_{off}_{era}",projected_cross,raw,edge,off,0 if era=="local" else EPOCH)
+    endpoint = raw == "dc_in" and (edge, off) in (("right", "exact"), ("left", "p1s"))
+    scenario = projected_cross_rl191 if endpoint else projected_cross
+    add(f"A_printed_lag_{raw}_{edge}_{off}_{era}",scenario,raw,edge,off,0 if era=="local" else EPOCH)
 for look,shape,place,width in product(LOOKS,("identity","flat","step","ramp"),
                                      ("near_start","middle","near_end"),(1,2,S//8)):
     add(f"B_clipped_{look}_{shape}_{place}_{width}",clipped_energy,look,shape,place,width)
 for place in ("slow","fast","straddles"):
-    add(f"A_mixed_u1_{place}",mixed_gap,place)
+    scenario = mixed_gap_rl191 if place == "straddles" else mixed_gap
+    add(f"A_mixed_u1_{place}",scenario,place)
 
 
 
@@ -1276,9 +1514,6 @@ for look,mode in product(LOOKS,("clock","energy")):
 
 
 NAMED = ("coverage","meter_gap","gap_over_u1","stream_end","missing_operand","decode_or_sd_undefined")
-QUESTIONS["onset_operand"] = ("With clean prefill admission, a nonpositive GPU level and a measurable DC onset, "
-                              "which exact reason prints on the onset lag: missing_operand, the specific level "
-                              "reason, or another token?")
 
 
 def named_pair(test, p, q):
@@ -1320,8 +1555,48 @@ def named_pair(test, p, q):
         defer(test,"onset_operand")
 
 
+def named_pair_rl191(test, p, q):
+    # All fifteen unordered pairs on the brief's named axis can coexist on
+    # one leg. These fields have different interval/operand domains. The
+    # same-output collisions are separately exercised by the C_* tables.
+    leg,start,_ = frozen.recovery_fixture(test.folder,0,10)
+    pair = {p,q}
+    if "coverage" in pair:
+        leg.omit("ane_power",[607.5])
+    if "meter_gap" in pair:
+        rows = leg.rows[frozen.DC_FILE]
+        rows[-2]["epoch_s"],rows[-1]["epoch_s"] = 614,614.05
+        leg.meta["meter_times"] = [float(r["epoch_s"]) for r in rows]
+    if "gap_over_u1" in pair:
+        frozen.plant_rail_gap(leg,"gpu_power",start)
+    for r in leg.rows[frozen.RAIL_FILE]:
+        if r["source"]=="powermetrics" and r["rail"]=="gpu_power":
+            s = float(r["interval_start_s"])
+            if ("missing_operand" in pair and 604<=s<606) or ("decode_or_sd_undefined" in pair and 606<=s<610):
+                r["power_w"]=0
+    obj = frozen.print_one(leg.signal(),frozen.IDS[0])
+    if "coverage" in pair:
+        test.assertEqual(obj["turn"]["energy_j"]["rail_sum"],frozen.null("coverage"))
+    if "meter_gap" in pair:
+        test.assertEqual(obj["turn"]["energy_j"]["dc_in"],frozen.null("meter_gap"))
+    if "gap_over_u1" in pair:
+        test.assertEqual(obj["edges"]["recovery_skip_reasons"]["gpu_rail"],["gap_over_u1"])
+        test.assertEqual(obj["edges"]["recovery_s"]["gpu_rail"],19)
+    if "stream_end" in pair:
+        test.assertEqual(obj["edges"]["rail_return_censor_s"]["gpu_rail"],frozen.null("stream_end",bound_s=1))
+    if "decode_or_sd_undefined" in pair:
+        test.assertLessEqual(obj["gain"]["decode_w"]["gpu_rail"],0)
+        test.assertEqual(obj["gain"]["floor_tokens"]["gpu_rail"],[frozen.null("decode_or_sd_undefined")]*3)
+    if "missing_operand" in pair:
+        v = obj["edges"]["onset_lag_s"]["gpu_rail"]
+        # RL-191 §1.4. The GPU prefill level supplies no threshold. Its
+        # historical case label is preserved and the onset lag has no bound.
+        test.assertEqual(v, frozen.null("nonpositive_level"))
+
+
 for p,q in combinations(NAMED,2):
-    add(f"C_named_{p}_and_{q}",named_pair,p,q)
+    scenario = named_pair_rl191 if "missing_operand" in (p, q) else named_pair
+    add(f"C_named_{p}_and_{q}",scenario,p,q)
 
 if __name__=="__main__":
     unittest.main()

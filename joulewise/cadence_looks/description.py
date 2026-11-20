@@ -751,8 +751,11 @@ def missing(reason, bound=None):
 
 
 def _quality_null(*operands):
-    for reason in ("rail_manifest", "coverage", "meter_gap", "crossed_before_span",
-                   "meter_absent", "meter_contaminated"):
+    # RL-191 §1.1 ranks independently judged operands by stream, interval,
+    # then value. Crossing exhaustion uses the same rank as its censor.
+    for reason in ("rail_manifest", "meter_absent", "meter_contaminated",
+                   "coverage", "meter_gap", "nonpositive_level", "nonpositive_denominator",
+                   "crossed_before_span", "crossing_unobserved", "over 1 s", "stream_end"):
         for operand in operands:
             if isinstance(operand, dict) and operand["reason"] == reason:
                 return operand
@@ -777,12 +780,11 @@ def _ratios(levels):
         ratio = {"numerator": numerator, "denominator": denominator}
         if number(numerator) and number(denominator) and denominator > 0:
             ratio["value"] = numerator / denominator
-        elif refused := _quality_null(numerator, denominator):
-            ratio.update(missing(refused["reason"]))
         else:
-            reason = ("nonpositive_denominator" if number(denominator) and denominator <= 0
-                      else "missing_operand")
-            ratio.update(missing(reason))
+            refusal = (missing("nonpositive_denominator") if number(denominator) and denominator <= 0
+                       else denominator)
+            refused = _quality_null(numerator, refusal) or missing("missing_operand")
+            ratio.update(missing(refused["reason"]))
         ratios[channel] = ratio
     return ratios
 
@@ -1052,12 +1054,12 @@ class Signals:
             lo, hi = limits
             if any(self.meter_ns[i + 1] - self.meter_ns[i] > limit for i in range(lo, hi)):
                 return "meter_gap"
-            if not self.meter_clean:
-                return "meter_absent" if self.meta["meter_present"] is False else "meter_contaminated"
+        slow_gap = max(NS_PER_SECOND, 5 * self.periods_ns["hold"])
+        fast_gap = max(NS_PER_SECOND, 5 * self.periods_ns["rail_edge"])
         for rail in rail_support:
             for left, right in _rail_gaps(rail.bounds, a, b):
-                period = self.periods_ns["hold" if right <= self.turn_ns else "rail_edge"]
-                if right - left > max(NS_PER_SECOND, 5 * period):
+                split = min(right, max(left, self.turn_ns))
+                if split - left > slow_gap or right - split > fast_gap:
                     return "meter_gap"
         return None
 
@@ -1176,12 +1178,19 @@ class Signals:
         return [(self.meter_ns[i], self.meter_ns[i + 1], self._meter_values[i],
                  self._meter_values[i + 1]) for i in range(lo, hi)]
 
+    def _stream_refusal(self, channel):
+        if channel == "rail_sum" and not self.sum_admitted:
+            return "rail_manifest"
+        if channel == "dc_in" and not self.meter_clean:
+            return "meter_absent" if self.meta["meter_present"] is False else "meter_contaminated"
+        return None
+
     def _interval_quality(self, channel, a, b):
         start, stop = _time_ns(a), _time_ns(b)
         require(start < stop, "invalid print interval")
         require(channel in (*RAIL_CHANNELS, "rail_sum", "dc_in", "sidecar"), "unknown channel")
-        if channel == "rail_sum" and not self.sum_admitted:
-            return "rail_manifest"
+        if reason := self._stream_refusal(channel):
+            return reason
 
         if channel == "rail_sum":
             rail_channels = (*RAIL_CHANNELS, "rail_sum")
@@ -1198,13 +1207,10 @@ class Signals:
             channel, a, b, [self._observed_rails[name] for name in rail_channels],
         )
 
-    def _interval_null(self, channel, a, b, *, eof_bound=None):
-        """Use one admission result for ordinary, dependent and censored prints."""
+    def _interval_null(self, channel, a, b):
+        """Use one admission result for ordinary and dependent prints."""
         reason = self._interval_quality(channel, a, b)
-        if reason is not None:
-            bound = eof_bound if reason in ("coverage", "meter_gap") else None
-            return missing(reason, bound)
-        return None
+        return missing(reason) if reason is not None else None
 
     def interval_values(self, channel, interval):
         """Admit a seconds-based request and return rows on the nanosecond clock."""
@@ -1371,16 +1377,18 @@ def _recovery(signal, channel, start, origin, hold, spread, stop):
     return missing("not returned", (last_end - origin) / NS_PER_SECOND), reasons
 
 
-def _crossing_lag(left, right):
+def _crossing_lag(left, right, *, decode_end=False):
     if not isinstance(left, dict) and not isinstance(right, dict):
         return float((left - right) / NS_PER_SECOND)
-    return _quality_null(left, right) or missing("missing_operand")
+    refused = _quality_null(left, right) or missing("missing_operand")
+    if decode_end and refused["reason"] == "crossing_unobserved":
+        return missing("over 1 s", 1.0)
+    return refused
 
 
 def _rail_return(signal, channel, last, end, baseline):
-    unavailable = baseline if isinstance(baseline, dict) else missing("rail_return_undefined")
     if end is None or end <= last:
-        return unavailable
+        return missing(signal._stream_refusal(channel) or "no_tail")
     bound = (end - last) / NS_PER_SECOND
     if number(baseline):
         crossing = signal._cross_ns(channel, last, end, baseline, falls=True)
@@ -1388,12 +1396,11 @@ def _rail_return(signal, channel, last, end, baseline):
             return (crossing - last) / NS_PER_SECOND
         reason = crossing["reason"]
         if reason == "crossing_unobserved":
-            return missing("stream_end", bound)
-        if reason in ("coverage", "meter_gap"):
-            return missing(reason, bound)
-        return crossing
-    return (signal._interval_null(channel, _seconds(last), _seconds(end), eof_bound=bound)
-            or unavailable)
+            reason = "stream_end"
+    else:
+        refused = signal._interval_null(channel, _seconds(last), _seconds(end)) or baseline
+        reason = refused["reason"]
+    return missing(reason, bound)
 
 
 def _edge_prints(signal, hold, decode, turn, first, last, quiet_start, prompt):
@@ -1429,24 +1436,17 @@ def _edge_prints(signal, hold, decode, turn, first, last, quiet_start, prompt):
                 onsets[channel] = crosses[1]
             else:
                 rise[channel] = onsets[channel] = (
-                    level if isinstance(level, dict) else missing("prefill_level_undefined")
+                    level if isinstance(level, dict) else missing("nonpositive_level")
                 )
         plateau = decode[channel]
         if number(baseline) and number(plateau) and plateau > 0:
             offsets[channel] = signal._cross_ns(channel, last, end, baseline + plateau / 2, falls=True)
         else:
-            offsets[channel] = plateau if isinstance(plateau, dict) else missing("decode_plateau_undefined")
+            offsets[channel] = plateau if isinstance(plateau, dict) else missing("nonpositive_level")
         if channel != "dc_in":
             censored[channel] = _rail_return(signal, channel, last, stream_end, baseline)
-    decode_lags = {}
-    for channel in CHANNELS[:2]:
-        lag = _crossing_lag(offsets["dc_in"], offsets[channel])
-        if not number(lag):
-            reasons = {value.get("reason") for value in (offsets["dc_in"], offsets[channel])
-                       if isinstance(value, dict)}
-            if reasons == {"crossing_unobserved"}:
-                lag = missing("over 1 s", 1.0)
-        decode_lags[channel] = lag
+    decode_lags = {channel: _crossing_lag(offsets["dc_in"], offsets[channel], decode_end=True)
+                   for channel in CHANNELS[:2]}
     onset_lags = {channel: _crossing_lag(onsets["dc_in"], onsets[channel]) for channel in CHANNELS[:2]}
     if prompt == 256:
         onset_lags = {channel: onsets[channel] for channel in CHANNELS[:2]}
