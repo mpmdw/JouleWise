@@ -61,14 +61,20 @@ MARKER = Path("/Users/Shared/JouleWise/host-power/high-power.marker")
 
 
 class Refusal(ValueError):
-    def __init__(self, decision, detail):
+    def __init__(self, decision, detail, *, cause=None, failed_read=False):
         super().__init__(detail)
         self.decision = decision
+        self.cause = cause
+        self.failed_read = failed_read
 
 
-def require(condition, decision, detail):
+class OpenHold(Refusal):
+    """A previously recorded refusal is not a new observation."""
+
+
+def require(condition, decision, detail, **classification):
     if not condition:
-        raise Refusal(decision, detail)
+        raise Refusal(decision, detail, **classification)
 
 
 def sha256(data):
@@ -137,7 +143,9 @@ def queue_entry(item, queue, now):
                 "WAIT_BINDING", "invalid queue interval")
         if span == item["span"]:
             entry = row
-            require(start <= now < expiry.timestamp(), "NEED_FRESH_QUEUE", "outside the finite queue interval")
+            require(now >= start, "NEED_FRESH_QUEUE", "before the finite queue interval",
+                    cause="only before not_before")
+            require(now < expiry.timestamp(), "NEED_FRESH_QUEUE", "outside the finite queue interval")
     require(entry is not None and entry["seq"] == item["piece"] and entry["attempt"] == item["attempt"]
             and entry["legs"] == item["legs"], "WAIT_BINDING", "queue entry does not match the issue binding")
     return entry
@@ -193,7 +201,9 @@ def check_look_binding(look, now, sampled_at):
 def check_look(look, now, sampled_at):
     check_look_binding(look, now, sampled_at)
     require(look["status"] != "ran", "NOT_ADMITTED", "lm-hp-01 already started")
-    require(look["status"] == "not_run" and look["pending_conflict"] is False, "WAIT_EVIDENCE", "look unresolved")
+    require(look["status"] == "not_run" and look["pending_conflict"] is False, "WAIT_EVIDENCE", "look unresolved",
+            failed_read=look["status"] not in ("not_run", "reserved", "pending", "queued")
+            and look["pending_conflict"] is not True)
 
 
 def history_states(history):
@@ -323,7 +333,12 @@ def check_safety(obs, close, *, include_stops=True):
             and (verify["rc"] == 0 and verify["exceptions"] == []
                  or verify["rc"] == 1 and verify["exceptions"] == ["own-agent-tree-or-permitted-jobs"]),
             "HOLD_HOST", "measurement mode verify failed beyond the documented exception")
-    for stop in open_stops(obs) if include_stops else ():
+    if include_stops:
+        check_scoped_stops(obs)
+
+
+def check_scoped_stops(obs):
+    for stop in open_stops(obs):
         code = stop["code"]
         require(code not in RESTORE_STOPS | {"DISK_FLOOR", "HOST_STATE"}
                 and stop["scope"] != "host", "HOLD_HOST", f"host-wide stop {code}")
@@ -371,6 +386,8 @@ def check_rank1(entry, day):
         return
     if entry.get("basis") == "spent-for-date":
         complete = entry.get("completion")
+        require(record(complete) and is_text(complete.get("leg_id")) and is_text(complete.get("t0_date")),
+                "WAIT_EVIDENCE", "rank 1 completion evidence is missing", failed_read=True)
         require(record(complete) and complete.get("status") == "completed"
                 and complete.get("kit_id") in RANK1_KITS
                 and complete["kit_id"] == entry["entry_id"]
@@ -388,7 +405,8 @@ def check_rank1(entry, day):
 
 def check_rank(priority, day):
     require(record(priority) and priority["complete"] is True and priority["date"] == day.isoformat()
-            and priority["r1_post_close"] is True, "WAIT_EVIDENCE", "current complete ladder required")
+            and priority["r1_post_close"] is True, "WAIT_EVIDENCE", "current complete ladder required",
+            failed_read=True)
     by_rung = {}
     for entry in priority["entries"]:
         require(record(entry) and is_text(entry.get("entry_id"))
@@ -409,11 +427,10 @@ def check_rank(priority, day):
     return by_rung["further-stability"]["status"] == "eligible"
 
 
-def check_dated(calendar, now, fence_s, boundaries=None):
+def dated_limits(calendar):
     require(record(calendar) and calendar["complete"] is True, "WAIT_EVIDENCE", "complete dated starts required")
     transfer = calendar["post_fence_transfer_s"]
     require(number(transfer) and 0 <= transfer <= 600, "WAIT_EVIDENCE", "unbounded post-fence transition")
-    earliest = math.ceil(now + fence_s + transfer)
     latest_start = math.inf
     starts = calendar["starts"]
     require(isinstance(starts, list) and len({row["span"] for row in starts}) == len(starts),
@@ -432,12 +449,24 @@ def check_dated(calendar, now, fence_s, boundaries=None):
                     "WAIT_EVIDENCE", "invalid pin start window for counted date")
             if lo <= upper:
                 choices.append(min(hi, upper))
-        require(choices, "CEDE_DATED", f"no legal counted start for {row['span']}")
+        if not choices:
+            yield row["span"], None
+            return
         latest_start = max(choices)
-        if boundaries is not None:
-            boundaries[latest_start - fence_s - transfer] = f"last HP start preserving {row['span']}"
-            check_guard_band(boundaries, now)
-        require(latest_start >= earliest, "CEDE_DATED", f"would block counted start {row['span']}")
+        yield row["span"], latest_start
+
+
+def check_dated(calendar, now, fence_s, boundaries=None):
+    limits = list(dated_limits(calendar))
+    transfer = calendar["post_fence_transfer_s"]
+    if boundaries is not None:
+        for span, latest in limits:
+            if latest is not None:
+                boundaries[latest - fence_s - transfer] = f"last HP start preserving {span}"
+        check_guard_band(boundaries, now)
+    earliest = math.ceil(now + fence_s + transfer)
+    for span, latest in limits:
+        require(latest is not None and latest >= earliest, "CEDE_DATED", f"would block counted start {span}")
 
 
 def add_window_boundaries(boundaries, epoch, windows, label, *, offset=0, duration=0):
@@ -491,7 +520,7 @@ def occupancy(item, kit_path, now, timing, arguments=ARGUMENTS, planner=None, re
             "pre_leg_max_s", "leg_wait_overshoot_max_s", "post_last_cap_max_s",
             "restore_and_close_max_s", "outer_clear_max_s")
     require(all(number(timing.get(k)) and timing[k] >= 0 for k in keys),
-            "WAIT_EVIDENCE", "missing or unbounded timing component")
+            "WAIT_EVIDENCE", "missing or unbounded timing component", failed_read=True)
 
     soak_s = base.r1_soak_cap_s()
     inner_s = next(seconds for name, _, seconds, _ in r1.phase_plan() if name == "idle_soak")
@@ -558,8 +587,61 @@ def check_observation(item, issue, obs, phase, now, *, binding_only=False):
             "WAIT_EVIDENCE", "fresh phase- and issue-bound operational observation required")
 
 
+def check_fence(obs):
+    require(obs.get("fence_clear") is True, "WAIT_FENCE", "shared fence still live or status unknown")
+
+
+def check_issue_close(issue, obs, phase):
+    check_close(obs["latest_close"], obs)
+    if phase == "Issue":
+        require(obs["latest_close"]["record"] == issue["latest_close_at_issue"],
+                "WAIT_EVIDENCE", "issue close mismatch")
+
+
+def check_look_priority(obs, now):
+    try:
+        check_look(obs["look"], now, obs["observed_epoch_s"])
+    except Refusal as ex:
+        if ex.decision == "NOT_ADMITTED" and any(
+            entry.get("rung") == "further-stability" and entry.get("status") == "eligible"
+            for entry in (obs.get("priority") or {}).get("entries", [])
+        ):
+            raise Refusal("SELECT_RANK_4", str(ex)) from ex
+        raise
+
+
+def check_dates(obs, now):
+    dates = hp01_dates(obs)
+    require(local_date(now) not in dates, "INELIGIBLE_DATE", "hp-01 leg on this t0-date")
+    require(HP01_RECORDED_DATES <= dates, "WAIT_EVIDENCE", "hp-01 census omits a documented t0-date")
+
+
+def phase_checks(item, issue, obs, phase, now):
+    # These are the same validators used by the pure replay. Section names
+    # supply provenance when more than one independent input refuses.
+    yield "fence", lambda: check_fence(obs)
+    yield "latest_close", lambda: check_issue_close(issue, obs, phase)
+    yield "safety", lambda: check_safety(obs, obs["latest_close"], include_stops=False)
+    yield "stops", lambda: check_scoped_stops(obs)
+    yield "priority", lambda: check_rank(obs["priority"], local_date(now))
+    yield "look", lambda: check_look_priority(obs, now)
+    yield "hp01_dates", lambda: check_dates(obs, now)
+    yield "history", lambda: check_history(item, obs, obs["latest_close"])
+    yield "copy", lambda: check_copy(obs["copy"], obs["latest_close"], now)
+
+
+def tagged(source, check, *args, **kwargs):
+    try:
+        return check(*args, **kwargs)
+    except (Refusal, KeyError, ValueError, OSError, TypeError, AttributeError, OverflowError, RuntimeError,
+            subprocess.SubprocessError) as ex:
+        if not hasattr(ex, "source"):
+            ex.source = source
+        raise
+
+
 def decide(item, issue, obs, phase, now, kit_path, queue_bytes, *, planner=None, resample=None,
-           boundaries=None):
+           boundaries=None, raise_refusal=False):
     """Evaluate the phase snapshot; run_gate adds custody and dispatch preconditions."""
     from joulewise.cadence import kit as kitmod, queue as queuemod
 
@@ -573,37 +655,24 @@ def decide(item, issue, obs, phase, now, kit_path, queue_bytes, *, planner=None,
         queuemod.validate_queue(queue, {KIT_PATH: (kit, sha)})
         queue_entry(item, queue, now)
         check_observation(item, issue, obs, phase, now)
-        if obs.get("fence_clear") is not True:
-            raise Refusal("WAIT_FENCE", "shared fence still live or status unknown")
-        close = obs["latest_close"]
-        check_close(close, obs)
-        if phase == "Issue":
-            require(close["record"] == issue["latest_close_at_issue"], "WAIT_EVIDENCE", "issue close mismatch")
-        check_safety(obs, close)
-        further = check_rank(obs["priority"], local_date(now))
-        try:
-            check_look(obs["look"], now, obs["observed_epoch_s"])
-        except Refusal as ex:
-            if ex.decision == "NOT_ADMITTED" and further:
-                return {"decision": "SELECT_RANK_4", "detail": str(ex)}
-            raise
-        dates = hp01_dates(obs)
-        require(local_date(now) not in dates, "INELIGIBLE_DATE", "hp-01 leg on this t0-date")
-        require(HP01_RECORDED_DATES <= dates, "WAIT_EVIDENCE", "hp-01 census omits a documented t0-date")
-        check_history(item, obs, close)
-        debt = check_copy(obs["copy"], close, now)
-        timing = occupancy(item, kit_path, now, obs.get("timing"), planner=planner, resample=resample,
-                           boundaries=boundaries)
+        for source, check in phase_checks(item, issue, obs, phase, now):
+            debt = tagged(source, check)
+        timing = tagged("timing", occupancy, item, kit_path, now, obs.get("timing"), planner=planner,
+                        resample=resample, boundaries=boundaries)
         t0 = timing["t0"]
         if t0 != now:
             queue_entry(item, queue, t0)
             require(t0 <= obs["valid_through_epoch_s"] and local_date(t0) == local_date(now),
                     "WAIT_EVIDENCE", "alternate plan needs a fresh dated observation")
-        check_dated(obs["calendar"], t0, timing["fence_s"], boundaries)
+        tagged("calendar", check_dated, obs["calendar"], t0, timing["fence_s"], boundaries)
         return {"decision": "ELIGIBLE_WITH_COPY_DEBT" if debt else "ELIGIBLE", **timing}
     except Refusal as ex:
+        if raise_refusal:
+            raise
         return {"decision": ex.decision, "detail": str(ex)}
     except (KeyError, ValueError, OSError, TypeError, AttributeError, OverflowError) as ex:
+        if raise_refusal:
+            raise
         return {"decision": "WAIT_EVIDENCE", "detail": f"incomplete or invalid input: {ex}"}
 CHECK=r'''import json, sys
 from pathlib import Path
@@ -740,7 +809,7 @@ hp_gate Start "$HP_START_OBSERVATION" || exit 1
 
 **Run.** Refresh the records, native census, marker, fence and clock after Start. Invoke the same gate with the Run observation immediately before launch. Run first verifies the atomically published Start receipt. It reads the operational observation afterward and requires its sample time to follow publication on the same host. The shared admission record retains observed close, restore, look-execution and spent-leg facts across issues and retries. Run returns WAIT in the 120 seconds before a derived clock boundary, including local midnight, pin and argument edges, finite queue endpoints and a higher rung's next eligible start. The guard includes the runway cutoff 600 seconds before each applicable expiry and the latest startup bound. The gate writes admission custody and the roster claim first, then re-reads the bound records, current rank, fence, census and AC mode before invoking the pinned launcher. The claim records the exact argument, decision t0 and deadline. The write-free interval ends at invocation. The frozen launcher then writes its runner specification, plist and fence. A state change after the final read remains the residual risk. The MBP is quiet under the magistrate, and host mode changes only through `measurement_mode`. On bootstrap refusal hold this attempt for the lead. Exit the session as soon as the launcher reports a claimed fence.
 
-**Issue holds.** Issue, Start and Run retain observed blocking facts in the same append-only issue ledger, including facts first seen on Run's final read. Later Start and Run require all holds to have a typed disposition. An observation may carry `hold_dispositions` with an exact cited lead or magistrate RUN_STATE item from published main. A later clean observation alone gives no clearance. A changed receipt projection under the same digest records a separate hold. See [README.md](README.md) for the ledger and disposition schema.
+**Issue holds.** Issue, Start and Run use the frozen gate-machine table. Pure clock waits are transient. The sequenced ledger retains fact-dependent refusals, including blocks first seen on Run's final read. Unreadable issue identity or custody holds the admitted queue position separately. Later Start and Run require verified dispositions and current evidence. An observation may carry `hold_dispositions` with an exact cited lead or magistrate RUN_STATE item from published main. A later clean observation leaves holds open. An observed lm-hp-01 execution requires a separate lead attestation correction. A changed receipt projection under the same digest records a separate hold. See [README.md](README.md) for the ledger and disposition schema.
 
 ```sh
 hp_gate Run "$HP_RUN_OBSERVATION" || exit 1
@@ -870,6 +939,10 @@ def remember_admission(path, obs, now, *, read_only=False, holds=None):
             current_look_ran = look.get("status") == "ran"
             if current_look_ran and state["look_execution"] is None:
                 state["look_execution"] = look
+                originals = [h["ledger_sequence"] for h in holds.open.values()
+                             if h["decision"] in ("NOT_ADMITTED", "SELECT_RANK_4")
+                             and h["source_digest"] == source_digest(look)]
+                state["execution_ledger_sequence"] = min(originals, default=1)
 
         try:
             states = history_states(obs["history"])
@@ -921,8 +994,7 @@ def remember_admission(path, obs, now, *, read_only=False, holds=None):
             for known in seen.values():
                 check_close_identity_agreement(prior, known)
 
-        if (state["look_execution"] is not None and not current_look_ran
-                and not (holds and holds.disposed("look-execution", state["look_execution"]))):
+        if state["look_execution"] is not None and not current_look_ran:
             raise Refusal("NOT_ADMITTED", f"lm-hp-01 execution recorded by {state['look_execution']['record']}")
         if states is not None:
             require(all(states[leg] == "spent" for leg in state["spent"]),
@@ -966,85 +1038,38 @@ def immutable_receipts(obs):
         yield section, source["receipt_sha256"], sha256(receipt_bytes(content))
 
 
-def observed_block(check, *args, **kwargs):
-    try:
-        check(*args, **kwargs)
-    except Refusal as ex:
-        return ex
-    except (KeyError, TypeError, ValueError, AttributeError):
-        pass  # A malformed record needs fresh evidence, never positive admission.
-    return None
-
-
-def holding_input(read, *args):
-    try:
-        return read(*args)
-    except (ValueError, KeyError, TypeError, AttributeError):
-        return None
-
-
-def blocking_facts(item, obs, now):
-    look = obs.get("look")
-    if record(look) and look.get("scope") == "lm-hp-01" and look.get("kit_sha256") == KIT_SHA:
-        if look.get("status") == "ran":
-            yield "look-execution", "NOT_ADMITTED", "lm-hp-01 already started", look
-        status = look.get("status")
-        if look.get("pending_conflict") is True or is_text(status) and status not in ("not_run", "ran"):
-            yield "look-reservation", "WAIT_EVIDENCE", "look reservation requires a disposition", look
-
-    dates = holding_input(hp01_dates, obs)
-    if dates is not None and dates.intersection((local_date(now), local_date(obs["observed_epoch_s"]))):
-        yield "hp01-on-date", "INELIGIBLE_DATE", "hp-01 leg on this t0-date", obs["hp01_dates"]
-
-    close = obs.get("latest_close")
-    if obs.get("fence_clear") is False:
-        proof = {key: obs[key] for key in ("record", "by", "host", "fence_clear")}
-        yield "open-fence", "WAIT_FENCE", "shared fence reported live", proof
-    if record(close) and observed_block(check_close_binding, close, obs) is None:
-        if close.get("fence_gone") is False:
-            yield "close-fence", "WAIT_FENCE", "close did not prove the fence clear", close
-        for fact, check in (("close-restore", check_close_restore), ("close-proof", check_close_proof),
-                            ("close-stop", check_close_stops)):
-            refusal = observed_block(check, close)
-            if refusal:
-                yield fact, refusal.decision, str(refusal), close
-        refusal = observed_block(check_safety, obs, close, include_stops=False)
-        if refusal:
-            yield "host-safety", refusal.decision, str(refusal), obs["safety"]
-
-    stops = obs.get("stops")
-    if record(stops):
-        for stop in holding_input(open_stops, obs) or ():
-            code, scope = stop["code"], stop["scope"]
-            if code in RESTORE_STOPS | {"DISK_FLOOR", "HOST_STATE"} or scope == "host":
-                yield f"stop:{code}:{scope}", "HOLD_HOST", f"host-wide stop {code}", stops
-            elif scope in ("measured", "hp-02", item["span"]):
-                yield f"stop:{code}:{scope}", "HOLD_KIT", f"applicable stop {code}", stops
-            elif scope not in ("counted", "v4", "other-kit"):
-                yield f"stop:{code}:{scope}", "WAIT_EVIDENCE", f"unresolved stop scope for {code}", stops
-
-    history = obs.get("history")
-    states = holding_input(history_states, history)
-    if states is not None:
-        blockers = [leg for span, roster in ROSTERS.items() if span >= item["span"]
-                    for leg in roster if states[leg] != "unrun"]
-        for leg in blockers:
-            spent = leg in item["legs"] and states[leg] == "spent"
-            yield f"history:{leg}:{states[leg]}", "SKIP_SPENT" if spent else "WAIT_EVIDENCE", (
-                f"execution history lists {leg} as {states[leg]}"
-            ), history
-        prior = history.get("prior_check")
-        if item["predecessor"] and record(prior) and prior.get("status") == "dirty":
-            yield "prior-check-dirty", "HOLD_KIT", "prior HP Check dirty", prior
-
-    copy = obs.get("copy")
-    if record(copy) and copy.get("transfer_stopped") is False:
-        yield "copy-still-running", "HOLD_FOREIGN_LOAD", "copy transfer has not stopped", copy
-
-
+MACHINE_PATH = HERE.parents[5] / "tests/hp02_gate_machine/GATE-MACHINE.json"
+MACHINE = read_json(MACHINE_PATH.read_bytes())
+OUTCOMES = MACHINE["outcomes"]
+TRANSITIONS = {(row["from"], row["event"]): row for row in MACHINE["transitions"]}
+QUEUE_HOLD_ROOT = Path("/Users/Shared/JouleWise/hp02-holds")
+ENTRY_STATE = {"Issue": "proposed", "Start": "start_pending", "Run": "run_assessed", "FinalRun": "final_read"}
 HOLD_DISPOSITION_SCHEMA = "hp-02.hold-disposition.v1"
 HOLD_EVENT_SCHEMA = "hp-02.hold-event.v1"
 HOLD_ROLE_OWNERS = {"lead": {"lead", "research-lead"}, "magistrate": {"magistrate"}}
+READ_ERRORS = (OSError, ValueError, TypeError, KeyError, AttributeError, OverflowError, RuntimeError,
+               StopIteration, subprocess.SubprocessError)
+
+
+def transition(state, event=None, *, outcome=None, cause=None, verified=()):
+    """Apply an event or classified outcome from the frozen machine."""
+    if outcome is not None:
+        rule = OUTCOMES[outcome]
+        wire = rule.get("normalize", outcome)
+        if event is None:
+            policy = rule["policy"]
+            if policy == "BY_CAUSE":
+                policy = "TRANSIENT" if cause in rule["transient"] else rule["otherwise"]
+            if policy == "ADVANCE" or "state" in rule:
+                raise ValueError(f"{outcome} needs a phase event")
+            event = ("clock_only" if policy == "TRANSIENT" else
+                     "observe_execution" if rule.get("execution_recovery") else "bound_block_or_unknown")
+    else:
+        wire = None
+    row = TRANSITIONS[state, event]
+    if not set(row["requires"]) <= set(verified):
+        raise ValueError(f"unproved gate transition {state} / {event}")
+    return row["to"], wire
 
 
 def trusted_run_state(repo, commit):
@@ -1056,12 +1081,8 @@ def trusted_run_state(repo, commit):
     return git(repo, "show", f"{commit}:RUN_STATE.md").decode()
 
 
-def verify_disposition(repo, disposition, hold, issue_id, now):
-    require(isinstance(disposition, dict) and disposition.get("schema") == HOLD_DISPOSITION_SCHEMA
-            and disposition.get("action") == "clear" and disposition.get("issue_id") == issue_id
-            and disposition.get("hold_id") == hold["id"] and disposition.get("source_digest") == hold["source_digest"],
-            "WAIT_EVIDENCE", "disposition does not match the issue, hold and source digest")
-    authority = disposition.get("authority")
+def verify_authority(repo, payload, fence, now):
+    authority = payload.get("authority")
     require(isinstance(authority, dict) and set(authority) == {"role", "run_state_item", "commit"}
             and authority["role"] in HOLD_ROLE_OWNERS and type(authority["run_state_item"]) is int
             and authority["run_state_item"] > 0,
@@ -1071,159 +1092,211 @@ def verify_disposition(repo, disposition, hold, issue_id, now):
     sections = re.split(r"(?m)^(\d+)\. \*\*", markdown)
     matches = [body for n, body in zip(sections[1::2], sections[2::2]) if int(n) == item_number]
     require(len(matches) == 1, "WAIT_EVIDENCE", "authority RUN_STATE item is missing or ambiguous")
-    items = re.findall(r"(?ms)^```item\n(.+?)^```[ \t]*$", matches[0])
+    items = re.findall(r"(?ms)^\x60\x60\x60item\n(.+?)^\x60\x60\x60[ \t]*$", matches[0])
     require(len(items) == 1, "WAIT_EVIDENCE", "authority item lacks a typed item record")
     item = read_json(items[0])
-    require(item.get("schema") == "joulewise.run_state_item.v1" and item.get("number") == item_number
-            and item.get("status") == "ISSUED" and item.get("owner") in HOLD_ROLE_OWNERS[authority["role"]]
-            and number(item.get("issued_epoch_s"))
-            and hold["observed_at"] <= item["issued_epoch_s"] <= now,
-            "WAIT_EVIDENCE", "RUN_STATE authority or chronology does not match")
-    payload = {**disposition, "authority": {k: authority[k] for k in ("role", "run_state_item")}}
-    blocks = re.findall(r"(?ms)^```hp-02-hold-disposition\n(.+?)^```[ \t]*$", matches[0])
-    require(any(read_json(block) == payload for block in blocks),
+    require(item.get("schema") == "joulewise.run_state_item.v1" and type(item.get("number")) is int
+            and item["number"] == item_number and item.get("status") == "ISSUED" and item.get("owner") in HOLD_ROLE_OWNERS[authority["role"]]
+            and number(item.get("issued_epoch_s")) and item["issued_epoch_s"] <= now,
+            "WAIT_EVIDENCE", "RUN_STATE authority or publication time does not match")
+    exact = {**payload, "authority": {k: authority[k] for k in ("role", "run_state_item")}}
+    blocks = re.findall(rf"(?ms)^\x60\x60\x60{re.escape(fence)}\n(.+?)^\x60\x60\x60[ \t]*$", matches[0])
+    require(any(receipt_bytes(read_json(block)) == receipt_bytes(exact) for block in blocks),
             "WAIT_EVIDENCE", "RUN_STATE item does not publish the exact disposition")
 
 
+def verify_disposition(repo, disposition, hold, issue_id, now):
+    scope = {k: hold[k] for k in ("queue_sha", "queue_seq") if k in hold}
+    if not scope:
+        scope["issue_id"] = issue_id
+    require(isinstance(disposition, dict) and disposition.get("schema") == HOLD_DISPOSITION_SCHEMA
+            and disposition.get("action") == "clear"
+            and all(type(disposition.get(key)) is type(value) and disposition[key] == value
+                    for key, value in scope.items())
+            and set(disposition).intersection(("issue_id", "queue_sha", "queue_seq")) == set(scope)
+            and disposition.get("hold_id") == hold["id"] and disposition.get("source_digest") == hold["source_digest"]
+            and type(disposition.get("ledger_sequence")) is int
+            and disposition["ledger_sequence"] > hold["ledger_sequence"],
+            "WAIT_EVIDENCE", "disposition does not match the scope, hold, source digest and later ledger sequence")
+    verify_authority(repo, disposition, "hp-02-hold-disposition", now)
+
+
 class HoldCustodyError(RuntimeError):
-    """Keep an existing claim if the observation could not be durably recorded."""
+    def __init__(self, source, error, *, marker=None):
+        super().__init__(f"{source}: {error}")
+        self.source = source
+        self.error = error
+        self.marker = marker
 
 
 class HoldJournal:
-    """Immutable per-issue events, serialized by the existing arm lock."""
+    """One sequenced, append-only record format for issue and queue custody."""
 
-    def __init__(self, ledger, item, issue):
-        self.issue_id = sha256(receipt_bytes({"span": item["span"], "issue_record": issue["record"]}))
-        self.path = ledger / f"holds-{self.issue_id}"
-        self.inflight = ledger / f"reading-{self.issue_id}.json"
-        if os.path.lexists(self.inflight):
-            raise HoldCustodyError("an earlier observation did not finish recording issue holds")
+    def __init__(self, ledger, item, issue=None, *, queue_root=None):
+        self.root = ledger
+        self.queue_scope = issue is None
+        if self.queue_scope:
+            self.scope = {"queue_sha": item["queue"]["sha256"], "queue_seq": item["piece"]}
+            key = f"{self.scope['queue_sha']}-{self.scope['queue_seq']}"
+            self.path = queue_root / f"{key}.records"
+            self.seed = queue_root / f"{key}.json"
+            self.inflight = None
+        else:
+            self.issue_id = sha256(receipt_bytes({"span": item["span"], "issue_record": issue["record"]}))
+            self.scope = {"issue_id": self.issue_id}
+            self.path = ledger / f"holds-{self.issue_id}"
+            self.inflight = ledger / f"reading-{self.issue_id}.json"
+            self.seed = None
         self.tail = None
         self.sequence = 0
         self.fingerprints = {}
         self.open = {}
         self.closed = {}
         try:
-            if not os.path.lexists(self.path):
-                return
-            require(self.path.is_dir() and not self.path.is_symlink(),
-                    "WAIT_EVIDENCE", "invalid hold ledger directory")
-            for path in sorted(self.path.iterdir()):
-                # An interrupted atomic publication can leave a temporary
-                # file. Refuse while custody is unresolved.
-                data = read_receipt_file(path)
-                digest = sha256(data)
-                event = read_json(data)
-                require(path.name == f"{self.sequence + 1:08d}-{digest}.json"
-                        and event["schema"] == HOLD_EVENT_SCHEMA and event["issue_id"] == self.issue_id
-                        and event["previous"] == self.tail,
-                        "WAIT_EVIDENCE", "invalid hold ledger sequence or digest")
-                self.apply(event, digest)
-        except (Refusal, OSError, ValueError, TypeError, KeyError) as ex:
-            raise HoldCustodyError(f"cannot verify issue hold ledger: {ex}") from ex
+            if self.seed is not None and os.path.lexists(self.seed):
+                data = read_receipt_file(self.seed)
+                self.apply(read_json(data), sha256(data))
+            if os.path.lexists(self.path):
+                require(self.path.is_dir() and not self.path.is_symlink(),
+                        "WAIT_EVIDENCE", "invalid hold ledger directory")
+                for path in sorted(self.path.iterdir()):
+                    data = read_receipt_file(path)
+                    digest = sha256(data)
+                    event = read_json(data)
+                    require(path.name == f"{self.sequence + 1:08d}-{digest}.json"
+                            and event["schema"] == HOLD_EVENT_SCHEMA and event["previous"] == self.tail,
+                            "WAIT_EVIDENCE", "invalid hold ledger sequence or digest")
+                    self.apply(event, digest)
+        except READ_ERRORS as ex:
+            raise HoldCustodyError("issue ledger read" if issue is not None else "queue ledger read", ex) from ex
 
     def begin_read(self):
         try:
-            publish_new_file(self.inflight, receipt_bytes({"issue_id": self.issue_id}) + b"\n")
+            publish_new_file(self.inflight, receipt_bytes(self.scope) + b"\n")
         except OSError as ex:
-            raise HoldCustodyError(f"cannot establish issue hold read: {ex}") from ex
+            raise HoldCustodyError("issue ledger in-flight marker", ex) from ex
 
     def finish_read(self):
-        self.inflight.unlink()
-        sync_directory(self.inflight.parent)
+        try:
+            self.inflight.unlink()
+            sync_directory(self.root)
+        except OSError as ex:
+            raise HoldCustodyError("issue ledger write", ex, marker=self.inflight) from ex
 
     def apply(self, event, digest):
-        require(self.fingerprints.keys().isdisjoint(event["sources"]),
+        require(all(event.get(k) == v for k, v in self.scope.items()),
+                "WAIT_EVIDENCE", "hold ledger scope differs")
+        self.sequence += 1
+        require(self.fingerprints.keys().isdisjoint(event.get("sources", {})),
                 "WAIT_EVIDENCE", "hold ledger rewrites an existing source")
-        self.fingerprints.update(event["sources"])
+        self.fingerprints.update(event.get("sources", {}))
         for hold in event["holds"]:
-            require(hold["id"] not in self.open and hold["id"] not in self.closed,
-                    "WAIT_EVIDENCE", "duplicate hold identity")
-            self.open[hold["id"]] = hold
+            require(hold["id"] not in self.open and hold["id"] not in self.closed
+                    and hold.get("ledger_sequence", self.sequence) == self.sequence,
+                    "WAIT_EVIDENCE", "duplicate hold identity or invalid sequence")
+            self.open[hold["id"]] = {**hold, **self.scope, "ledger_sequence": self.sequence}
         for clearance in event["clears"]:
             hold_id = clearance["hold_id"]
             hold = self.open.pop(hold_id)
-            require(clearance["issue_id"] == self.issue_id and clearance["source_digest"] == hold["source_digest"],
+            require(all(clearance.get(k) == v for k, v in self.scope.items())
+                    and clearance["source_digest"] == hold["source_digest"]
+                    and clearance.get("ledger_sequence", self.sequence) > hold["ledger_sequence"],
                     "WAIT_EVIDENCE", "hold ledger disposition does not bind the open hold")
             self.closed[hold_id] = (hold, clearance)
-        self.sequence += 1
         self.tail = digest
 
-    def append(self, now, *, sources=None, holds=(), clears=()):
-        if not (sources or holds or clears):
+    def append(self, now, *, sources=None, holds=(), clears=(), corrections=(), initialize=False):
+        if not (sources or holds or clears or corrections or initialize):
             return False
-        event = {"schema": HOLD_EVENT_SCHEMA, "issue_id": self.issue_id, "previous": self.tail,
+        event = {"schema": HOLD_EVENT_SCHEMA, **self.scope, "previous": self.tail,
                  "recorded_at": now, "sources": sources or {}, "holds": holds, "clears": clears}
+        if corrections:
+            event["attestation_corrections"] = corrections
         data = receipt_bytes(event) + b"\n"
         digest = sha256(data)
         try:
             if not self.path.exists():
-                self.path.mkdir()
+                self.path.mkdir(parents=True)
                 sync_directory(self.path.parent)
             publish_new_file(self.path / f"{self.sequence + 1:08d}-{digest}.json", data)
         except OSError as ex:
-            raise HoldCustodyError(f"cannot record issue hold ledger: {ex}") from ex
+            raise HoldCustodyError("queue ledger write" if self.queue_scope else "issue ledger write",
+                                   ex, marker=self.inflight) from ex
         self.apply(event, digest)
         return True
 
-    def record_facts(self, now, facts, *, sources=None):
-        existing = {(hold["fact"], hold["source_digest"]) for hold in self.open.values()}
-        new = []
-        for fact, decision, detail, digest in facts:
-            identity = (fact, digest)
-            if identity not in existing:
-                hold_id = sha256(receipt_bytes([self.issue_id, self.sequence + 1, fact, digest]))
-                new.append({"id": hold_id, "fact": fact, "decision": decision, "detail": detail,
-                            "source_digest": digest, "observed_at": now})
-                existing.add(identity)
-        return self.append(now, sources=sources, holds=new)
-
-    def observe(self, item, obs, now):
+    def observe(self, now, failures, *, obs=None, initialize=False):
         sources = {}
-        facts = [(fact, decision, detail, source_digest(source))
-                 for fact, decision, detail, source in blocking_facts(item, obs, now)]
-        for section, digest, fingerprint in immutable_receipts(obs):
-            key = f"{section}:{digest}"
-            previous = self.fingerprints.get(key)
-            if previous is None:
-                sources[key] = fingerprint
-            elif previous != fingerprint:
-                facts.append((f"receipt-content-changed:{section}:{fingerprint}", "WAIT_EVIDENCE",
-                              f"{section} content changed under receipt digest {digest}", digest))
-        return self.record_facts(now, facts, sources=sources)
-
-    def clear(self, repo, dispositions, now):
-        require(isinstance(dispositions, list), "WAIT_EVIDENCE", "hold dispositions must be a list")
-        verified = {}
-        for row in dispositions:
-            hold_id = row.get("hold_id") if isinstance(row, dict) else None
-            require(is_sha(hold_id), "WAIT_EVIDENCE", "invalid disposition hold id")
-            if hold_id in self.closed:
-                require(row == self.closed[hold_id][1], "WAIT_EVIDENCE", "conflicting hold disposition")
+        failures = list(failures)
+        if obs is not None:
+            for section, digest, fingerprint in immutable_receipts(obs):
+                key = f"{section}:{digest}"
+                previous = self.fingerprints.get(key)
+                if previous is None:
+                    sources[key] = fingerprint
+                elif previous != fingerprint:
+                    ex = Refusal("WAIT_EVIDENCE", f"{section} content changed under receipt digest {digest}")
+                    failures.append((f"receipt-content-changed:{section}:{fingerprint}", ex,
+                                     {"receipt_sha256": digest}, None))
+        sequence = self.sequence + 1
+        new = []
+        existing = {(hold["fact"], hold["source_digest"]) for hold in self.open.values()}
+        failed_sources = {(h["failed_read"]["source"], h["failed_read"]["error_class"])
+                          for h in self.open.values() if "failed_read" in h}
+        for source, ex, proof, marker in failures:
+            read_error = not isinstance(ex, Refusal) or ex.failed_read or self.queue_scope
+            outcome = ("CUSTODY_ERROR" if self.queue_scope else "READ_ERROR") if read_error else ex.decision
+            event = "identity_or_issue_custody_failure" if self.queue_scope else None
+            state, decision = transition(
+                ENTRY_STATE[self.phase], event, outcome=outcome, cause=getattr(ex, "cause", None),
+                verified=("append all newly observed blocking facts",
+                          "retain original execution attestation digest across issues",
+                          "durably identify failure independently by admitted queue SHA and sequence",
+                          "open_holds empty", "preserve return phase"),
+            )
+            if state == "clock_wait":
                 continue
-            require(hold_id in self.open and hold_id not in verified,
-                    "WAIT_EVIDENCE", "disposition must name an open hold")
-            verify_disposition(repo, row, self.open[hold_id], self.issue_id, now)
-            verified[hold_id] = row
-        self.append(now, clears=list(verified.values()))
+            if read_error:
+                error_class = type(ex).__name__
+                if (source, error_class) in failed_sources:
+                    continue
+                failed_sources.add((source, error_class))
+                failed = {"source": source, "error_class": error_class,
+                          "attempt_time": now, "ledger_sequence": sequence}
+                digest = sha256(receipt_bytes(failed))
+                fact = "failed-read"
+            else:
+                failed = None
+                digest = source_digest(proof)
+                fact = f"{source}:{decision}"
+            identity = (fact, digest)
+            if identity in existing:
+                continue
+            hold_id = sha256(receipt_bytes([self.scope, sequence, fact, digest]))
+            hold = {"id": hold_id, "fact": fact, "decision": decision, "detail": str(ex),
+                    "source_digest": digest, "observed_at": now, "ledger_sequence": sequence}
+            if failed:
+                hold["failed_read"] = failed
+            if marker is not None:
+                hold["inflight"] = marker.name
+            new.append(hold)
+            existing.add(identity)
+        return self.append(now, sources=sources, holds=new, initialize=initialize and not self.sequence)
 
-    def disposed(self, fact, source):
-        digest = source_digest(source)
-        return any(hold["fact"] == fact and hold["source_digest"] == digest for hold, _ in self.closed.values())
+    def verified_clearance(self, repo, row, now):
+        hold_id = row.get("hold_id")
+        if hold_id in self.closed:
+            require(row == self.closed[hold_id][1], "WAIT_EVIDENCE", "conflicting hold disposition")
+            return None
+        require(hold_id in self.open, "WAIT_EVIDENCE", "disposition must name an open hold")
+        hold = self.open[hold_id]
+        verify_disposition(repo, row, hold, self.scope.get("issue_id"), now)
+        return hold
 
     def require_clear(self):
         if self.open:
             hold = min(self.open.values(), key=lambda row: row["decision"] != "HALT_AND_PAGE")
-            raise Refusal(hold["decision"], f"open hold {hold['id']} ({hold['source_digest']}): {hold['detail']}")
-
-    def check_live(self, label, check, *args):
-        try:
-            return check(*args)
-        except Refusal as ex:
-            if ex.decision in ("HOLD_HOST", "WAIT_FENCE"):
-                proof = {"input": label, "decision": ex.decision, "fact": str(ex)}
-                self.record_facts(time.time(), [(f"live:{label}", ex.decision, str(ex), source_digest(proof))])
-            raise
+            raise OpenHold(hold["decision"], f"open hold {hold['id']} ({hold['source_digest']}): {hold['detail']}")
 
 
 def publish_new_file(path, data):
@@ -1300,8 +1373,9 @@ def check_run_observation_times(obs, start, published_at, read_at):
     fields = RUN_OBSERVATIONS + (("watcher",) if obs.get("watcher") is not None else ())
     for field in fields:
         observation = obs.get(field)
-        require(isinstance(observation, dict) and number(observation.get("sampled_at"))
-                and sampled <= observation["sampled_at"] <= read_at,
+        require(isinstance(observation, dict) and number(observation.get("sampled_at")),
+                "WAIT_EVIDENCE", f"{field} is missing its Run sample", failed_read=True)
+        require(sampled <= observation["sampled_at"] <= read_at,
                 "WAIT_EVIDENCE", f"{field} must have a sample after published Start and before being read")
 
 
@@ -1331,7 +1405,7 @@ def check_guard_band(boundaries, now, *, since=None, through=None):
     upcoming = min((edge for edge in boundaries if first < edge <= last), default=None)
     if upcoming is not None:
         boundary = datetime.fromtimestamp(upcoming, ZONE).isoformat()
-        raise Refusal("WAIT_EVIDENCE", f"launch guard at {boundary}: {boundaries[upcoming]}")
+        raise Refusal("WAIT_EVIDENCE", f"launch guard at {boundary}: {boundaries[upcoming]}", cause="clock guard")
 
 
 def add_start_windows(boundaries, windows, first, last, label):
@@ -1380,10 +1454,16 @@ def run_boundaries(item, issue, queue, obs, now):
             add_start_windows(boundaries, windows, first, end - 1, entry["rung"])
             require(entry.get("basis") != "spent-for-date" or windows == [],
                     "WAIT_EVIDENCE", "spent rank 1 cannot have another eligible start")
-    for row in obs["calendar"]["starts"]:
+    calendar = obs["calendar"]
+    for row in calendar["starts"]:
         start_day = date.fromisoformat(row["date"])
         add_start_windows(boundaries, row["windows"], midnight(start_day),
                           midnight(start_day + timedelta(days=1)) - 1, row["span"])
+    for span, latest in dated_limits(calendar):
+        if latest is not None:
+            cutoff = latest - item["deadline_s"] - calendar["post_fence_transfer_s"]
+            boundaries[cutoff] = f"last HP start preserving {span}"
+            boundaries[cutoff - lag] = f"last HP startup preserving {span}"
     return boundaries
 
 
@@ -1400,60 +1480,14 @@ def check_run_rank_clock(priority, now):
                     f"{entry['rung']} eligibility changed; refresh the census")
 
 
-def read_gate_records(args, item, started, *, before_observation=None):
-    if args.phase == "Run":
-        start, published_at = read_published_start(started, args)
-    queue = assert_source_bindings(args, item)
-    issue_bytes = args.issue.read_bytes()
-    require(sha256(issue_bytes) == args.issue_sha, "WAIT_BINDING", "issue bytes differ")
-    issue = read_json(issue_bytes)
-    require(args.queue.read_bytes() == queue, "WAIT_BINDING", "staged queue changed during the arm check")
-    if before_observation:
-        before_observation(issue)
-    observation_read_at = time.time()
-    observation_bytes = args.observation.read_bytes()
-    obs = read_json(observation_bytes)
-    if args.phase == "Run":
-        check_run_observation_times(obs, start, published_at, observation_read_at)
-    require(issue.get("synthetic_only") is not True and obs.get("synthetic_only") is not True,
-            "WAIT_EVIDENCE", "synthetic records cannot issue or arm")
-    return issue, obs, queue, observation_bytes
-
-
-def read_initial_observation(args, item, started, ledger):
-    holds = None
-
-    def begin(issue):
-        nonlocal holds
-        check_issue(item, issue, time.time(), args.phase, binding_only=True)
-        journal = HoldJournal(ledger, item, issue)
-        journal.begin_read()
-        holds = journal
-
-    try:
-        issue, obs, queue, obs_bytes = read_gate_records(args, item, started, before_observation=begin)
-        now = time.time()
-        check_observation(item, issue, obs, args.phase, now, binding_only=True)
-    except (Refusal, OSError, ValueError, TypeError, KeyError, AttributeError, subprocess.SubprocessError):
-        if holds:
-            holds.finish_read()  # No valid bound observation was admitted.
-        raise
-
-    # If the process or the ledger fails while recording a bound observation,
-    # the durable read marker keeps the next attempt from losing that read.
-    holds.observe(item, obs, now)
-    holds.finish_read()
-    return issue, obs, queue, obs_bytes, holds, now
-
-
 def run_decision(args, item, issue, obs, queue_bytes, now):
     queue = read_json(queue_bytes)
     boundaries = run_boundaries(item, issue, queue, obs, now)
     check_guard_band(boundaries, now)
-    check_run_expiries(item, issue, queue, obs, now)
-    check_run_rank_clock(obs["priority"], now)
-    result = decide(item, issue, obs, "Run", now, args.kit, queue_bytes, boundaries=boundaries)
-    require(result["decision"] in PASS, result["decision"], result.get("detail", "Run refused"))
+    tagged("expiry", check_run_expiries, item, issue, queue, obs, now)
+    tagged("priority", check_run_rank_clock, obs["priority"], now)
+    result = decide(item, issue, obs, "Run", now, args.kit, queue_bytes, boundaries=boundaries, raise_refusal=True)
+    tagged("calendar", check_dated, obs["calendar"], now + obs["timing"]["runner_start_max_s"], result["fence_s"])
     return result, queue, boundaries
 
 
@@ -1470,150 +1504,462 @@ def result_record(args, decision, obs):
             "host": obs["host"], "observed_epoch_s": obs["observed_epoch_s"], "observation": obs["record"]}
 
 
-def dispatch_run(args, item, claim, started, admission, approved_obs, decision, holds):
-    from joulewise.align.apple.powermode import observe_ac_powermode
-
-    roster = ",".join(item["legs"])
-    argv = [
-        sys.executable, "-B", "scripts/launch_cadence_span.py", "launch",
-        "--repo", str(args.repo), "--python-bin", sys.executable, "--kit", str(args.kit),
-        "--legs", roster, "--batch-window", decision["argument"],
-        "--output", str(args.output), "--disk-path", str(args.repo), "--custody-root", str(args.custody),
-        "--magistrate-pid", str(args.magistrate_pid), "--deadline", str(decision["deadline"]),
-        "--exit-wait-seconds", "180", "--start-wait-seconds", "30",
-    ]
-    try:
-        # The successful path from here to launcher invocation is read-only.
-        # A newly observed block is recorded on the refusal path.
-        require(item in read_json((HP / "items.json").read_bytes()),
-                "WAIT_BINDING", "item changed during the claim write")
-        issue, obs, queue_bytes, obs_bytes = read_gate_records(args, item, started)
-        read_at = time.time()
-        check_observation(item, issue, obs, "Run", read_at, binding_only=True)
-        final_holds = HoldJournal(claim.parent, item, issue)
-        if final_holds.tail != holds.tail:
-            raise HoldCustodyError("issue hold ledger changed during the claim write")
-        recorded = final_holds.observe(item, obs, read_at)
-        if obs_bytes != approved_obs or recorded:
-            # The claim remains held while we retain cross-issue facts from
-            # this refused read. The issue hold has already been persisted.
-            try:
-                remember_admission(admission, obs, read_at, holds=final_holds)
-            except Refusal as ex:
-                if ex.decision == "HALT_AND_PAGE":
-                    raise
-            raise Refusal("WAIT_EVIDENCE", "Run observation changed during the claim write")
-        final_holds.require_clear()
-        require(read_json(claim.read_bytes()) == result_record(args, decision, obs),
-                "WAIT_EVIDENCE", "durable claim changed before dispatch")
-        remember_admission(admission, obs, read_at, read_only=True, holds=final_holds)
-        fresh, queue, boundaries = run_decision(args, item, issue, obs, queue_bytes, read_at)
-        require(fresh["argument"] == decision["argument"], "WAIT_EVIDENCE", "claim argument needs a fresh decision")
-        check_claims(item, claim, owned=True)
-        final_holds.check_live("agent-census", check_agent_census, obs, args.magistrate_pid)
-        final_holds.check_live("host-files", runtime_files, args, item)
-        mode = observe_ac_powermode()
-        final_holds.check_live("ac-mode", check_automatic, mode)
-        dispatch = time.time()
-        latest_start = decision["t0"] + obs["timing"]["runner_start_max_s"]
-        boundaries[decision["deadline"] - fresh["minimum_s"]] = "launcher deadline fit"
-        check_guard_band(boundaries, dispatch, since=decision["t0"])
-        check_run_expiries(item, issue, queue, obs, dispatch, latest_start)
-        check_guard_band(boundaries, dispatch, since=decision["t0"], through=latest_start)
-        require(decision["t0"] <= read_at <= dispatch <= latest_start
-                and local_date(dispatch) == local_date(decision["t0"]),
-                "WAIT_EVIDENCE", "handoff window or date elapsed; make a fresh Run decision")
-        # The inclusive calendar cutoff can be legal at equality. The same
-        # composed fence must still preserve the dated starts at launcher t0.
-        check_dated(obs["calendar"], latest_start, fresh["fence_s"])
-        require(latest_start + fresh["minimum_s"] <= decision["deadline"],
-                "WAIT_PIN", "deadline no longer fits at the launcher handoff")
-    except (Refusal, OSError, ValueError, TypeError, KeyError, AttributeError, OverflowError,
-            subprocess.SubprocessError):
-        claim.unlink()
-        raise
-    # Retain the claim on ambiguous or refused launcher invocations.
-    rc = subprocess.call(argv, cwd=args.repo)
-    print(json.dumps(decision), flush=True)
-    return rc
-
-
 def check_automatic(mode):
     require(automatic(mode), "HOLD_HOST", f"AC powermode is not Automatic (observed {mode!r})")
 
 
+def check_observation_sections(obs):
+    for field in RUN_OBSERVATIONS:
+        require(isinstance(obs.get(field), dict), "WAIT_EVIDENCE",
+                f"{field} operational evidence is absent", failed_read=True)
+
+
+def failure(source, ex, obs):
+    proof = obs.get(source) if isinstance(obs, dict) else None
+    if source == "history" and isinstance(proof, dict) and isinstance(ex, Refusal) and ex.decision == "HOLD_KIT":
+        proof = proof.get("prior_check")
+    if not isinstance(proof, dict):
+        proof = {"source": source, "detail": str(ex)}
+    return source, ex, proof, None
+
+
+class GateInvocation:
+    """Bind the current phase and apply machine events to the two custody scopes."""
+
+    def __init__(self, args, item, ledger):
+        self.args, self.item, self.ledger = args, item, ledger
+        self.phase = args.phase
+        self.claim = ledger / f"{KIT_SHA}-{item['span']}-a1.json"
+        self.started = ledger / f"start-{args.issue_sha}.v4.json"
+        self.admission = ledger / "admission-state.json"
+        self.issue_holds = None
+        self.queue_root = getattr(args, "queue_hold_root", QUEUE_HOLD_ROOT)
+        self.queue_holds = HoldJournal(ledger, item, queue_root=self.queue_root)
+        self.queue_holds.phase = self.phase
+        self.owns_claim = False
+        self.invoked = False
+        self.state = {"Issue": MACHINE["initial_state"], "Start": "issued", "Run": "start_published"}[self.phase]
+
+    def stage(self, event, *, outcome=None):
+        # These phase edges are reached only after the named predicates,
+        # custody and once-only roster checks have succeeded.
+        self.state, _ = transition(
+            self.state, event, outcome=outcome,
+            verified=("all current phase predicates pass", "open_holds empty", "roster unconsumed",
+                      "phase prerequisites verified again"),
+        )
+
+    def bound_issue(self):
+        try:
+            data = self.args.issue.read_bytes()
+            require(is_sha(self.args.issue_sha) and sha256(data) == self.args.issue_sha,
+                    "WAIT_BINDING", "issue identity digest differs")
+            issue = read_json(data)
+            check_issue(self.item, issue, time.time(), self.args.phase, binding_only=True)
+            return issue
+        except READ_ERRORS as ex:
+            raise HoldCustodyError("issue identity", ex) from ex
+
+    def current_journal(self, issue):
+        journal = HoldJournal(self.ledger, self.item, issue)
+        journal.phase = self.phase
+        pending = os.path.lexists(journal.inflight)
+        if pending and not any(h.get("inflight") == journal.inflight.name for h in self.queue_holds.open.values()):
+            raise HoldCustodyError("in-flight issue ledger read", RuntimeError("unfinished issue observation"),
+                                   marker=journal.inflight)
+        return journal
+
+    def apply_dispositions(self, obs, now):
+        rows = obs.get("hold_dispositions", [])
+        require(isinstance(rows, list), "WAIT_EVIDENCE", "hold dispositions must be a list")
+        # Verify the entire submission before appending any clearance.
+        proposed = {self.issue_holds: [], self.queue_holds: []}
+        seen = set()
+        for row in rows:
+            require(isinstance(row, dict) and is_sha(row.get("hold_id")) and row["hold_id"] not in seen,
+                    "WAIT_EVIDENCE", "invalid or duplicate disposition hold id")
+            seen.add(row["hold_id"])
+            journal = self.queue_holds if "queue_sha" in row or "queue_seq" in row else self.issue_holds
+            hold = journal.verified_clearance(self.args.repo, row, now)
+            if hold:
+                proposed[journal].append((row, hold))
+        for journal, events in proposed.items():
+            if not events:
+                continue
+            if journal.queue_scope:
+                for _, hold in events:
+                    marker = hold.get("inflight")
+                    if isinstance(marker, str) and re.fullmatch(r"reading-[0-9a-f]{64}\.json", marker):
+                        # Q2 refers to this exact interrupted observation.
+                        # Keep its marker until authenticated recovery.
+                        (self.ledger / marker).unlink(missing_ok=True)
+                        sync_directory(self.ledger)
+                transition("queue_position_held", "typed_disposition", verified=(
+                    "name queue-position hold ID and canonical source digest", "verified later ledger sequence",
+                    "reevaluate all ordinary predicates"))
+            else:
+                event = "typed_clear_all" if len(events) == len(journal.open) else "typed_partial_clear"
+                transition("held", event, verified=("valid dispositions for exact issue, IDs and source digests",
+                                                    "independent blockers still apply", "one or more unresolved hold IDs"))
+            journal.append(now, clears=[row for row, _ in events])
+        return any(proposed.values())
+
+    def apply_corrections(self, obs, now):
+        rows = obs.get("attestation_corrections", [])
+        require(isinstance(rows, list), "WAIT_EVIDENCE", "attestation corrections must be a list")
+        if not rows:
+            return False
+        state = read_json(self.admission.read_bytes())
+        attestation = state["look_execution"]
+        require(attestation is not None and len(rows) == 1, "WAIT_EVIDENCE", "no unique execution to correct")
+        row = rows[0]
+        require(isinstance(row, dict) and row.get("schema") == "hp-02.attestation-correction.v1"
+                and row.get("action") == "ATTESTATION-CORRECTION" and row.get("look_id") == "lm-hp-01"
+                and row.get("original_source_digest") == source_digest(attestation)
+                and isinstance(row.get("authority"), dict) and row["authority"].get("role") == "lead"
+                and type(row.get("ledger_sequence")) is int
+                and row["ledger_sequence"] > state.get("execution_ledger_sequence", 1)
+                and isinstance(row.get("evidence"), dict) and is_text(row["evidence"].get("record"))
+                and is_sha(row["evidence"].get("sha256")),
+                "WAIT_EVIDENCE", "attestation correction does not bind the original execution and evidence")
+        verify_authority(self.args.repo, row, "hp-02-attestation-correction", now)
+        transition("execution_attested", "verified_attestation_correction", verified=(
+            "published lead RUN_STATE with evidence of mistake and original digest",
+            "other holds, claim and current evidence still bind"))
+        self.issue_holds.append(now, corrections=[row])
+        state["look_execution"] = None
+        write_admission_state(self.admission, receipt_bytes(state) + b"\n")
+        return True
+
+    def require_clear(self):
+        if self.queue_holds.open:
+            transition("queue_position_held", "retry", verified=("same admitted queue SHA and sequence",))
+            self.queue_holds.require_clear()
+        if self.issue_holds.open:
+            transition("held", "retry", verified=("one or more unresolved hold IDs",))
+            self.issue_holds.require_clear()
+
+    def read_records(self, issue):
+        args = self.args
+        queue = tagged("bound sources", assert_source_bindings, args, self.item)
+        require(args.queue.read_bytes() == queue, "WAIT_BINDING", "staged queue changed during the arm check")
+        if args.phase == "Run":
+            try:
+                start, published_at = tagged("Start receipt", read_published_start, self.started, args)
+            except READ_ERRORS as ex:
+                # A held Start that never published cannot create a second
+                # failure solely because Run correctly refused its absence.
+                if not os.path.lexists(self.started):
+                    self.require_clear()
+                if isinstance(ex, Refusal):
+                    ex.failed_read = True
+                raise
+        read_at = time.time()
+        data = tagged("observation", args.observation.read_bytes)
+        obs = tagged("observation", read_json, data)
+        if args.phase == "Run":
+            try:
+                tagged("observation", check_run_observation_times, obs, start, published_at, read_at)
+            except Refusal as ex:
+                # A replay outside the Start publication interval is not new
+                # evidence for an already-held phase. Missing data remains a
+                # failed read and is recorded independently.
+                if not ex.failed_read:
+                    self.require_clear()
+                raise
+        require(issue.get("synthetic_only") is not True and obs.get("synthetic_only") is not True,
+                "WAIT_EVIDENCE", "synthetic records cannot issue or arm")
+        tagged("observation", check_observation, self.item, issue, obs, args.phase, read_at, binding_only=True)
+        return obs, queue, data
+
+    def collect(self, issue, obs, now):
+        for source, check in phase_checks(self.item, issue, obs, self.args.phase, now):
+            try:
+                check()
+            except READ_ERRORS as ex:
+                yield failure(source, ex, obs)
+
+    def remember(self, obs, now, *, read_only=False):
+        try:
+            remember_admission(self.admission, obs, now, read_only=read_only, holds=self.issue_holds)
+        except Refusal:
+            raise
+        except (OSError, RuntimeError, ValueError) as ex:
+            raise HoldCustodyError("issue ledger admission custody", ex) from ex
+
+    def evaluate(self, issue, obs, queue, now):
+        args, item = self.args, self.item
+        tagged("observation", check_observation_sections, obs)
+        if args.phase == "Run":
+            return run_decision(args, item, issue, obs, queue, now)
+        decision = decide(item, issue, obs, args.phase, now, args.kit, queue,
+                          resample=time.time, raise_refusal=True)
+        return decision, read_json(queue), None
+
+    def assess(self, *, final=False):
+        args, item = self.args, self.item
+        issue = self.bound_issue()
+        approved_journal = self.issue_holds
+        journal = self.current_journal(issue)
+        if final and (journal.scope != approved_journal.scope or journal.tail != approved_journal.tail):
+            raise HoldCustodyError("issue ledger final read", RuntimeError("issue custody changed after claim"))
+        self.issue_holds = journal
+        previously_held = bool(journal.open or self.queue_holds.open)
+        marker = not final and not os.path.lexists(journal.inflight)
+        if marker:
+            journal.begin_read()
+        obs = None
+        error = None
+        additional = []
+        try:
+            obs, queue, data = self.read_records(issue)
+            now = time.time()
+            try:
+                decision, bound_queue, boundaries = self.evaluate(issue, obs, queue, now)
+            except READ_ERRORS as ex:
+                error = ex
+                additional = list(self.collect(issue, obs, now))
+            if error is None:
+                tagged("roster claim", check_claims, item, self.claim, owned=final)
+        except READ_ERRORS as ex:
+            error = ex
+        now = time.time()
+        if error is not None and not isinstance(error, OpenHold):
+            source = getattr(error, "source", "phase evidence")
+            # The assessment may fail before the separate evidence checks,
+            # or report the same fault. Preserve independently sourced facts.
+            if not any(type(ex) is type(error) and str(ex) == str(error) for _, ex, _, _ in additional):
+                additional.insert(0, failure(source, error, obs))
+        recorded = journal.observe(now, additional, obs=obs, initialize=not final)
+        if marker:
+            journal.finish_read()
+        sticky = any(isinstance(ex, Refusal) and (
+            OUTCOMES[ex.decision].get("execution_recovery") or ex.decision == "HALT_AND_PAGE"
+            or ex.decision == "SKIP_SPENT" and source == "history")
+            for source, ex, _, _ in additional)
+        if obs is not None and not final:
+            try:
+                reassess = self.apply_dispositions(obs, now)
+                reassess = self.apply_corrections(obs, now) or reassess
+            except HoldCustodyError:
+                raise
+            except READ_ERRORS as ex:
+                if sticky:
+                    try:
+                        self.remember(obs, now)
+                    except Refusal:
+                        pass
+                if self.queue_holds.open:
+                    transition("queue_position_held", "invalid_disposition",
+                               verified=("same admitted queue SHA and sequence",))
+                elif self.issue_holds.open:
+                    transition("held", "wrong_authority", verified=("one or more unresolved hold IDs",))
+                ex.assessed = True
+                raise
+            if reassess and error is None and not (journal.open or self.queue_holds.open):
+                self.state, _ = transition("reassess", f"{args.phase}.retry",
+                                           verified=("phase prerequisites verified again",))
+                try:
+                    decision, bound_queue, boundaries = self.evaluate(issue, obs, queue, time.time())
+                    tagged("roster claim", check_claims, item, self.claim)
+                except READ_ERRORS as ex:
+                    raise self.record_refusal(getattr(ex, "source", "phase evidence"), ex, obs)
+
+        still_held = bool(journal.open or self.queue_holds.open)
+        remember_read = not previously_held or not still_held or sticky
+        if obs is not None and remember_read and (not final or error is not None or recorded):
+            try:
+                self.remember(obs, now)
+            except Refusal as ex:
+                # The historical execution, spent and halt bars survive
+                # an otherwise clean observation and ordinary disposition.
+                if error is None:
+                    error = ex
+            except (KeyError, TypeError, AttributeError):
+                if error is None:
+                    raise
+        if error is not None:
+            raise self.assessed_error(error)
+        self.require_clear()
+        if final and recorded:
+            raise self.record_refusal("final evidence", Refusal("WAIT_EVIDENCE", "final read added custody facts"), obs)
+        return decision, bound_queue, boundaries, obs, data
+
+    def assessed_error(self, error):
+        if not isinstance(error, Refusal) or error.failed_read:
+            error = Refusal(OUTCOMES["READ_ERROR"]["normalize"], str(error))
+        error.assessed = True
+        return error
+
+    def record_refusal(self, source, error, obs=None):
+        self.issue_holds.observe(time.time(), [failure(source, error, obs)])
+        return self.assessed_error(error)
+
+    def live(self, obs):
+        from joulewise.align.apple.powermode import observe_ac_powermode
+
+        for source, check in (
+            ("agent census", lambda: check_agent_census(obs, self.args.magistrate_pid)),
+            ("host fence", lambda: runtime_files(self.args, self.item)),
+            ("AC powermode", lambda: check_automatic(observe_ac_powermode())),
+        ):
+            try:
+                check()
+            except READ_ERRORS as ex:
+                raise self.record_refusal(source, ex, obs)
+
+    def dispatch(self, initial, approved):
+        args, item = self.args, self.item
+        self.phase = "FinalRun"
+        approved_queue_tail = self.queue_holds.tail
+        self.queue_holds = HoldJournal(self.ledger, item, queue_root=self.queue_root)
+        self.queue_holds.phase = self.phase
+        if self.queue_holds.tail != approved_queue_tail:
+            self.queue_holds.require_clear()
+            raise HoldCustodyError("queue ledger final read", RuntimeError("queue custody changed after claim"))
+        require(item in read_json((HP / "items.json").read_bytes()),
+                "WAIT_BINDING", "item changed during the claim write")
+        fresh, queue, boundaries, obs, actual = self.assess(final=True)
+        require(actual == approved, "WAIT_EVIDENCE", "Run observation changed during the claim write")
+        require(read_json(self.claim.read_bytes()) == result_record(args, initial, obs),
+                "WAIT_EVIDENCE", "durable claim changed before dispatch")
+        require(fresh["argument"] == initial["argument"], "WAIT_EVIDENCE", "claim argument needs a fresh decision")
+        read_at = time.time()
+        self.remember(obs, read_at, read_only=True)
+        argv = [
+            sys.executable, "-B", "scripts/launch_cadence_span.py", "launch",
+            "--repo", str(args.repo), "--python-bin", sys.executable, "--kit", str(args.kit),
+            "--legs", ",".join(item["legs"]), "--batch-window", initial["argument"],
+            "--output", str(args.output), "--disk-path", str(args.repo), "--custody-root", str(args.custody),
+            "--magistrate-pid", str(args.magistrate_pid), "--deadline", str(initial["deadline"]),
+            "--exit-wait-seconds", "180", "--start-wait-seconds", "30",
+        ]
+        self.live(obs)
+        dispatch = time.time()
+        latest_start = initial["t0"] + obs["timing"]["runner_start_max_s"]
+        boundaries[initial["deadline"] - fresh["minimum_s"]] = "launcher deadline fit"
+        try:
+            check_guard_band(boundaries, dispatch, since=initial["t0"])
+            issue = self.issue
+            check_run_expiries(item, issue, queue, obs, dispatch, latest_start)
+            check_guard_band(boundaries, dispatch, since=initial["t0"], through=latest_start)
+            require(initial["t0"] <= read_at <= dispatch <= latest_start
+                    and local_date(dispatch) == local_date(initial["t0"]),
+                    "WAIT_EVIDENCE", "handoff window or date elapsed; make a fresh Run decision")
+            check_dated(obs["calendar"], latest_start, fresh["fence_s"])
+            require(latest_start + fresh["minimum_s"] <= initial["deadline"],
+                    "WAIT_PIN", "deadline no longer fits at the launcher handoff")
+        except Refusal as ex:
+            raise self.record_refusal("handoff", ex, obs)
+        self.stage("Run.final_reread", outcome=fresh["decision"])
+        self.stage("Run.invoke", outcome=fresh["decision"])
+        self.invoked = True
+        try:
+            rc = subprocess.call(argv, cwd=args.repo)
+        except READ_ERRORS as ex:
+            transition(self.state, "spent_or_uncertain_invocation", outcome="LAUNCHER_EXCEPTION")
+            raise Refusal("LAUNCHER_EXCEPTION", str(ex)) from ex
+        if rc:
+            _, wire = transition(self.state, "spent_or_uncertain_invocation", outcome="LAUNCHER_NONZERO")
+            print(json.dumps({"decision": wire, "launcher_rc": rc}), flush=True)
+        else:
+            print(json.dumps(initial), flush=True)
+        return rc
+
+    def execute(self):
+        args, item = self.args, self.item
+        if self.phase == "Issue":
+            self.stage("bind_proposal")
+        decision, queue, _, obs, obs_bytes = self.assess()
+        if self.phase == "Run":
+            self.stage("Run.verify_and_read", outcome=decision["decision"])
+            self.issue = self.bound_issue()
+            write_exclusive(self.claim, result_record(args, decision, obs))
+            self.owns_claim = True
+            self.stage("Run.pass_and_claim", outcome=decision["decision"])
+            return self.dispatch(decision, obs_bytes)
+
+        self.live(obs)
+        if self.phase == "Start":
+            self.stage("Start.read", outcome=decision["decision"])
+            issue = self.bound_issue()
+            passed = time.time()
+            require(decision["t0"] <= passed <= obs["valid_through_epoch_s"]
+                    and local_date(passed) == local_date(decision["t0"]),
+                    "WAIT_EVIDENCE", "Start evidence expired before the verdict")
+            queue_entry(item, queue, passed)
+            publish_start(self.started, result_record(args, decision, obs))
+            try:
+                _, published_at = read_published_start(self.started, args)
+                check_observation(item, issue, obs, self.phase, published_at)
+                check_issue(item, issue, published_at, self.phase)
+                queue_entry(item, queue, published_at)
+                require(local_date(published_at) == local_date(decision["t0"]),
+                        "WAIT_EVIDENCE", "Start date changed before publication")
+            except READ_ERRORS:
+                start_seal_path(self.started).unlink()
+                self.started.unlink()
+                sync_directory(self.ledger)
+                raise
+            self.stage("Start.pass_and_publish", outcome=decision["decision"])
+        else:
+            self.stage("Issue.pass", outcome=decision["decision"])
+        print(json.dumps(decision), flush=True)
+        return 0
+
+    def queue_failure(self, error):
+        self.queue_holds.phase = self.phase
+        self.queue_holds.observe(time.time(), [(error.source, error.error, {}, error.marker)])
+        self.release_unused_claim()
+        raise Refusal(OUTCOMES["CUSTODY_ERROR"]["normalize"], str(error)) from error
+
+    def release_unused_claim(self):
+        if self.owns_claim and not self.invoked:
+            self.claim.unlink()
+
+
 def run_gate(args):
-    # The pure fixture entry is decide(); this command is reserved for the
-    # authorized desk. Do not invoke it as a builder or with synthetic data.
     import fcntl
 
     try:
         items = read_json((HP / "items.json").read_bytes())
         item = next(row for row in items if row["span"] == args.span)
         runtime_files(args, item, binding_only=True)
+        require(is_sha(item["queue"]["sha256"]) and type(item["piece"]) is int and item["piece"] > 0,
+                "WAIT_BINDING", "invalid admitted queue position")
         ledger = args.custody / "hp-02-arms"
-        ledger.mkdir(parents=True, exist_ok=True)
-        require(is_sha(args.issue_sha), "WAIT_BINDING", "invalid issue digest")
-        # Stable identities independent of queue renewal or output naming.
-        claim = ledger / f"{KIT_SHA}-{item['span']}-a1.json"
-        started = ledger / f"start-{args.issue_sha}.v4.json"
-        admission = ledger / "admission-state.json"
-        with (ledger / "arm.lock").open("a") as lock:
-            fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-            issue, obs, queue, obs_bytes, holds, now = read_initial_observation(args, item, started, ledger)
-            sys.path.insert(0, str(args.repo))
-            holds.clear(args.repo, obs.get("hold_dispositions", []), now)
-            check_issue(item, issue, now, args.phase)
-            check_observation(item, issue, obs, args.phase, now)
-            if args.phase == "Issue":
-                require(obs["latest_close"]["record"] == issue["latest_close_at_issue"],
-                        "WAIT_EVIDENCE", "issue close mismatch")
-            remember_admission(admission, obs, now, holds=holds)
-            if args.phase == "Run":
-                check_claims(item, claim)
-                decision, _, _ = run_decision(args, item, issue, obs, queue, time.time())
-                holds.require_clear()
-                write_exclusive(claim, result_record(args, decision, obs))
-                return dispatch_run(args, item, claim, started, admission, obs_bytes, decision, holds)
-
-            from joulewise.align.apple.powermode import observe_ac_powermode
-
-            holds.check_live("host-files", runtime_files, args, item)
-            check_claims(item, claim)
-            holds.check_live("ac-mode", check_automatic, observe_ac_powermode())
-            holds.check_live("agent-census", check_agent_census, obs, args.magistrate_pid)
-            decision = decide(item, issue, obs, args.phase, time.time(), args.kit, queue, resample=time.time)
-            if decision["decision"] not in PASS:
-                print(json.dumps(decision), flush=True)
-                return 1
-            holds.require_clear()
-            if args.phase == "Start":
-                passed = time.time()
-                bound_queue = read_json(queue)
-                require(decision["t0"] <= passed <= obs["valid_through_epoch_s"]
-                        and local_date(passed) == local_date(decision["t0"]),
-                        "WAIT_EVIDENCE", "Start evidence expired before the verdict")
-                queue_entry(item, bound_queue, passed)
-                publish_start(started, result_record(args, decision, obs))
+        queue_root = getattr(args, "queue_hold_root", QUEUE_HOLD_ROOT)
+        queue_root.mkdir(parents=True, exist_ok=True)
+        # The queue lock remains available even when issue custody fails.
+        lock_path = queue_root / f"{item['queue']['sha256']}-{item['piece']}.lock"
+        with lock_path.open("a") as queue_lock:
+            fcntl.flock(queue_lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            gate = GateInvocation(args, item, ledger)
+            try:
+                ledger.mkdir(parents=True, exist_ok=True)
+                lock = (ledger / "arm.lock").open("a")
+            except OSError as ex:
+                gate.queue_failure(HoldCustodyError("issue ledger lock", ex))
+            with lock:
+                fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                sys.path.insert(0, str(args.repo))
                 try:
-                    _, published_at = read_published_start(started, args)
-                    check_observation(item, issue, obs, args.phase, published_at)
-                    check_issue(item, issue, published_at, args.phase)
-                    queue_entry(item, bound_queue, published_at)
-                    require(local_date(published_at) == local_date(decision["t0"]),
-                            "WAIT_EVIDENCE", "Start date changed before publication")
-                except (Refusal, OSError, ValueError, TypeError, KeyError):
-                    start_seal_path(started).unlink()
-                    started.unlink()
-                    sync_directory(ledger)
-                    raise
-            print(json.dumps(decision), flush=True)
-        return 0
+                    try:
+                        return gate.execute()
+                    except HoldCustodyError:
+                        raise
+                    except READ_ERRORS as ex:
+                        if (gate.issue_holds is not None and not gate.invoked and not isinstance(ex, OpenHold)
+                                and not getattr(ex, "assessed", False)):
+                            ex = gate.record_refusal(getattr(ex, "source", "phase custody"), ex)
+                        gate.release_unused_claim()
+                        raise ex
+                except HoldCustodyError as ex:
+                    gate.queue_failure(ex)
     except Refusal as ex:
         print(json.dumps({"decision": ex.decision, "detail": str(ex)}))
-    except (OSError, ValueError, TypeError, KeyError, StopIteration, AttributeError, OverflowError,
-            HoldCustodyError, subprocess.SubprocessError) as ex:
-        print(json.dumps({"decision": "WAIT_EVIDENCE", "detail": str(ex)}))
+    except READ_ERRORS as ex:
+        print(json.dumps({"decision": OUTCOMES["READ_ERROR"]["normalize"], "detail": str(ex)}))
     return 1
 
 

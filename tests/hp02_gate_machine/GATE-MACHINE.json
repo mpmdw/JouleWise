@@ -1,0 +1,1949 @@
+{
+  "schema": "hp-02.gate-machine.acceptance.v2",
+  "target": "9ad335eeddceba3e1dfb83c458915535c8dcf6f6",
+  "states": [
+    "draft",
+    "proposed",
+    "proposal_passed",
+    "issued",
+    "start_pending",
+    "start_published",
+    "run_assessed",
+    "claimed",
+    "final_read",
+    "clock_wait",
+    "held",
+    "reassess",
+    "check_owed_or_ambiguous",
+    "spent",
+    "execution_attested",
+    "queue_position_held"
+  ],
+  "transitions": [
+    {
+      "from": "draft",
+      "event": "bind_proposal",
+      "to": "proposed",
+      "requires": []
+    },
+    {
+      "from": "proposed",
+      "event": "Issue.pass",
+      "to": "proposal_passed",
+      "requires": [
+        "all current phase predicates pass",
+        "open_holds empty",
+        "roster unconsumed"
+      ]
+    },
+    {
+      "from": "issued",
+      "event": "Start.read",
+      "to": "start_pending",
+      "requires": [
+        "all current phase predicates pass",
+        "open_holds empty",
+        "roster unconsumed"
+      ]
+    },
+    {
+      "from": "start_pending",
+      "event": "Start.pass_and_publish",
+      "to": "start_published",
+      "requires": [
+        "all current phase predicates pass",
+        "open_holds empty",
+        "roster unconsumed"
+      ]
+    },
+    {
+      "from": "start_published",
+      "event": "Run.verify_and_read",
+      "to": "run_assessed",
+      "requires": [
+        "all current phase predicates pass",
+        "open_holds empty",
+        "roster unconsumed"
+      ]
+    },
+    {
+      "from": "run_assessed",
+      "event": "Run.pass_and_claim",
+      "to": "claimed",
+      "requires": [
+        "all current phase predicates pass",
+        "open_holds empty",
+        "roster unconsumed"
+      ]
+    },
+    {
+      "from": "claimed",
+      "event": "Run.final_reread",
+      "to": "final_read",
+      "requires": [
+        "all current phase predicates pass",
+        "open_holds empty",
+        "roster unconsumed"
+      ]
+    },
+    {
+      "from": "final_read",
+      "event": "Run.invoke",
+      "to": "check_owed_or_ambiguous",
+      "requires": [
+        "all current phase predicates pass",
+        "open_holds empty",
+        "roster unconsumed"
+      ]
+    },
+    {
+      "from": "proposal_passed",
+      "event": "authorized_issuance",
+      "to": "issued",
+      "requires": []
+    },
+    {
+      "from": "check_owed_or_ambiguous",
+      "event": "spent_or_uncertain_invocation",
+      "to": "spent",
+      "requires": []
+    },
+    {
+      "from": "spent",
+      "event": "retry_same_roster",
+      "to": "spent",
+      "requires": []
+    },
+    {
+      "from": "proposed",
+      "event": "bound_block_or_unknown",
+      "to": "held",
+      "requires": [
+        "append all newly observed blocking facts"
+      ]
+    },
+    {
+      "from": "issued",
+      "event": "bound_block_or_unknown",
+      "to": "held",
+      "requires": [
+        "append all newly observed blocking facts"
+      ]
+    },
+    {
+      "from": "start_pending",
+      "event": "bound_block_or_unknown",
+      "to": "held",
+      "requires": [
+        "append all newly observed blocking facts"
+      ]
+    },
+    {
+      "from": "start_published",
+      "event": "bound_block_or_unknown",
+      "to": "held",
+      "requires": [
+        "append all newly observed blocking facts"
+      ]
+    },
+    {
+      "from": "run_assessed",
+      "event": "bound_block_or_unknown",
+      "to": "held",
+      "requires": [
+        "append all newly observed blocking facts"
+      ]
+    },
+    {
+      "from": "claimed",
+      "event": "bound_block_or_unknown",
+      "to": "held",
+      "requires": [
+        "append all newly observed blocking facts"
+      ]
+    },
+    {
+      "from": "final_read",
+      "event": "bound_block_or_unknown",
+      "to": "held",
+      "requires": [
+        "append all newly observed blocking facts"
+      ]
+    },
+    {
+      "from": "clock_wait",
+      "event": "bound_block_or_unknown",
+      "to": "held",
+      "requires": [
+        "append all newly observed blocking facts"
+      ]
+    },
+    {
+      "from": "reassess",
+      "event": "bound_block_or_unknown",
+      "to": "held",
+      "requires": [
+        "append all newly observed blocking facts"
+      ]
+    },
+    {
+      "from": "held",
+      "event": "bound_block_or_unknown",
+      "to": "held",
+      "requires": [
+        "append all newly observed blocking facts"
+      ]
+    },
+    {
+      "from": "proposed",
+      "event": "clock_only",
+      "to": "clock_wait",
+      "requires": [
+        "open_holds empty",
+        "preserve return phase"
+      ]
+    },
+    {
+      "from": "issued",
+      "event": "clock_only",
+      "to": "clock_wait",
+      "requires": [
+        "open_holds empty",
+        "preserve return phase"
+      ]
+    },
+    {
+      "from": "start_pending",
+      "event": "clock_only",
+      "to": "clock_wait",
+      "requires": [
+        "open_holds empty",
+        "preserve return phase"
+      ]
+    },
+    {
+      "from": "start_published",
+      "event": "clock_only",
+      "to": "clock_wait",
+      "requires": [
+        "open_holds empty",
+        "preserve return phase"
+      ]
+    },
+    {
+      "from": "run_assessed",
+      "event": "clock_only",
+      "to": "clock_wait",
+      "requires": [
+        "open_holds empty",
+        "preserve return phase"
+      ]
+    },
+    {
+      "from": "claimed",
+      "event": "clock_only",
+      "to": "clock_wait",
+      "requires": [
+        "open_holds empty",
+        "preserve return phase"
+      ]
+    },
+    {
+      "from": "final_read",
+      "event": "clock_only",
+      "to": "clock_wait",
+      "requires": [
+        "open_holds empty",
+        "preserve return phase"
+      ]
+    },
+    {
+      "from": "held",
+      "event": "clear_read",
+      "to": "held",
+      "requires": [
+        "one or more unresolved hold IDs"
+      ]
+    },
+    {
+      "from": "held",
+      "event": "missing_authority",
+      "to": "held",
+      "requires": [
+        "one or more unresolved hold IDs"
+      ]
+    },
+    {
+      "from": "held",
+      "event": "wrong_authority",
+      "to": "held",
+      "requires": [
+        "one or more unresolved hold IDs"
+      ]
+    },
+    {
+      "from": "held",
+      "event": "typed_partial_clear",
+      "to": "held",
+      "requires": [
+        "one or more unresolved hold IDs"
+      ]
+    },
+    {
+      "from": "held",
+      "event": "retry",
+      "to": "held",
+      "requires": [
+        "one or more unresolved hold IDs"
+      ]
+    },
+    {
+      "from": "held",
+      "event": "typed_clear_all",
+      "to": "reassess",
+      "requires": [
+        "valid dispositions for exact issue, IDs and source digests",
+        "independent blockers still apply"
+      ]
+    },
+    {
+      "from": "clock_wait",
+      "event": "clock_recheck",
+      "to": "reassess",
+      "requires": []
+    },
+    {
+      "from": "reassess",
+      "event": "Issue.retry",
+      "to": "proposed",
+      "requires": [
+        "phase prerequisites verified again"
+      ]
+    },
+    {
+      "from": "reassess",
+      "event": "Start.retry",
+      "to": "issued",
+      "requires": [
+        "phase prerequisites verified again"
+      ]
+    },
+    {
+      "from": "reassess",
+      "event": "Run.retry",
+      "to": "start_published",
+      "requires": [
+        "phase prerequisites verified again"
+      ]
+    },
+    {
+      "from": "proposed",
+      "event": "observe_execution",
+      "to": "execution_attested",
+      "requires": [
+        "retain original execution attestation digest across issues"
+      ]
+    },
+    {
+      "from": "proposed",
+      "event": "identity_or_issue_custody_failure",
+      "to": "queue_position_held",
+      "requires": [
+        "durably identify failure independently by admitted queue SHA and sequence"
+      ]
+    },
+    {
+      "from": "start_pending",
+      "event": "observe_execution",
+      "to": "execution_attested",
+      "requires": [
+        "retain original execution attestation digest across issues"
+      ]
+    },
+    {
+      "from": "start_pending",
+      "event": "identity_or_issue_custody_failure",
+      "to": "queue_position_held",
+      "requires": [
+        "durably identify failure independently by admitted queue SHA and sequence"
+      ]
+    },
+    {
+      "from": "run_assessed",
+      "event": "observe_execution",
+      "to": "execution_attested",
+      "requires": [
+        "retain original execution attestation digest across issues"
+      ]
+    },
+    {
+      "from": "run_assessed",
+      "event": "identity_or_issue_custody_failure",
+      "to": "queue_position_held",
+      "requires": [
+        "durably identify failure independently by admitted queue SHA and sequence"
+      ]
+    },
+    {
+      "from": "final_read",
+      "event": "observe_execution",
+      "to": "execution_attested",
+      "requires": [
+        "retain original execution attestation digest across issues"
+      ]
+    },
+    {
+      "from": "final_read",
+      "event": "identity_or_issue_custody_failure",
+      "to": "queue_position_held",
+      "requires": [
+        "durably identify failure independently by admitted queue SHA and sequence"
+      ]
+    },
+    {
+      "from": "held",
+      "event": "observe_execution",
+      "to": "execution_attested",
+      "requires": [
+        "retain original execution attestation digest across issues"
+      ]
+    },
+    {
+      "from": "held",
+      "event": "identity_or_issue_custody_failure",
+      "to": "queue_position_held",
+      "requires": [
+        "durably identify failure independently by admitted queue SHA and sequence"
+      ]
+    },
+    {
+      "from": "clock_wait",
+      "event": "observe_execution",
+      "to": "execution_attested",
+      "requires": [
+        "retain original execution attestation digest across issues"
+      ]
+    },
+    {
+      "from": "clock_wait",
+      "event": "identity_or_issue_custody_failure",
+      "to": "queue_position_held",
+      "requires": [
+        "durably identify failure independently by admitted queue SHA and sequence"
+      ]
+    },
+    {
+      "from": "reassess",
+      "event": "observe_execution",
+      "to": "execution_attested",
+      "requires": [
+        "retain original execution attestation digest across issues"
+      ]
+    },
+    {
+      "from": "reassess",
+      "event": "identity_or_issue_custody_failure",
+      "to": "queue_position_held",
+      "requires": [
+        "durably identify failure independently by admitted queue SHA and sequence"
+      ]
+    },
+    {
+      "from": "execution_attested",
+      "event": "ordinary_clear",
+      "to": "execution_attested",
+      "requires": [
+        "shared execution bar"
+      ]
+    },
+    {
+      "from": "execution_attested",
+      "event": "clear_read",
+      "to": "execution_attested",
+      "requires": [
+        "shared execution bar"
+      ]
+    },
+    {
+      "from": "execution_attested",
+      "event": "retry",
+      "to": "execution_attested",
+      "requires": [
+        "shared execution bar"
+      ]
+    },
+    {
+      "from": "execution_attested",
+      "event": "invalid_correction",
+      "to": "execution_attested",
+      "requires": [
+        "shared execution bar"
+      ]
+    },
+    {
+      "from": "execution_attested",
+      "event": "verified_attestation_correction",
+      "to": "reassess",
+      "requires": [
+        "published lead RUN_STATE with evidence of mistake and original digest",
+        "other holds, claim and current evidence still bind"
+      ]
+    },
+    {
+      "from": "queue_position_held",
+      "event": "fresh_identity",
+      "to": "queue_position_held",
+      "requires": [
+        "same admitted queue SHA and sequence"
+      ]
+    },
+    {
+      "from": "queue_position_held",
+      "event": "clear_read",
+      "to": "queue_position_held",
+      "requires": [
+        "same admitted queue SHA and sequence"
+      ]
+    },
+    {
+      "from": "queue_position_held",
+      "event": "retry",
+      "to": "queue_position_held",
+      "requires": [
+        "same admitted queue SHA and sequence"
+      ]
+    },
+    {
+      "from": "queue_position_held",
+      "event": "invalid_disposition",
+      "to": "queue_position_held",
+      "requires": [
+        "same admitted queue SHA and sequence"
+      ]
+    },
+    {
+      "from": "queue_position_held",
+      "event": "unreconciled_inflight",
+      "to": "queue_position_held",
+      "requires": [
+        "same admitted queue SHA and sequence"
+      ]
+    },
+    {
+      "from": "queue_position_held",
+      "event": "typed_disposition",
+      "to": "reassess",
+      "requires": [
+        "name queue-position hold ID and canonical source digest",
+        "verified later ledger sequence",
+        "reevaluate all ordinary predicates"
+      ]
+    }
+  ],
+  "identity": {
+    "issue": "stable record and span across proposal, publication and retries",
+    "claim": "kit SHA, span, attempt",
+    "hold": [
+      "issue",
+      "id",
+      "fact",
+      "source_digest",
+      "observed_at",
+      "ledger_sequence"
+    ],
+    "clear": "exact published main item and payload, matching ID and source digest, authorized role, disposition sequence greater than hold sequence",
+    "independent": "disposed issue hold never by itself revives a spent roster or clears a host halt",
+    "queue_position": [
+      "admitted queue SHA-256",
+      "queue spans[].seq"
+    ]
+  },
+  "outcomes": {
+    "CEDE_READY": {
+      "policy": "LATCHES",
+      "cases": [
+        "ready-session"
+      ]
+    },
+    "CEDE_COUNTED": {
+      "policy": "LATCHES",
+      "cases": [
+        "counted"
+      ]
+    },
+    "CEDE_RANK_1": {
+      "policy": "LATCHES",
+      "cases": [
+        "first-stability"
+      ]
+    },
+    "CEDE_INST_01": {
+      "policy": "LATCHES",
+      "cases": [
+        "f2-inst-01"
+      ]
+    },
+    "CEDE_INST_02": {
+      "policy": "LATCHES",
+      "cases": [
+        "f2-inst-02"
+      ]
+    },
+    "CEDE_INST_03": {
+      "policy": "LATCHES",
+      "cases": [
+        "f2-inst-03"
+      ]
+    },
+    "NOT_ADMITTED": {
+      "policy": "LATCHES",
+      "cases": [
+        "ran"
+      ],
+      "execution_recovery": "lead ATTESTATION-CORRECTION only"
+    },
+    "WAIT_EVIDENCE": {
+      "policy": "BY_CAUSE",
+      "cases": [
+        "reservation",
+        "ambiguous",
+        "rank1-wrong-pool",
+        "run-prepublication-sample",
+        "admission-runway",
+        "watcher-runway",
+        "receipt-flap",
+        "later-claim"
+      ],
+      "transient": [
+        "clock guard"
+      ],
+      "otherwise": "LATCHES"
+    },
+    "INELIGIBLE_DATE": {
+      "policy": "LATCHES",
+      "cases": [
+        "hp01-date"
+      ]
+    },
+    "HOLD_KIT": {
+      "policy": "LATCHES",
+      "cases": [
+        "kit-stop",
+        "unsafe-predecessor"
+      ]
+    },
+    "HOLD_HOST": {
+      "policy": "LATCHES",
+      "cases": [
+        "host-stop",
+        "preflight",
+        "mode"
+      ]
+    },
+    "SKIP_SPENT": {
+      "policy": "LATCHES",
+      "cases": [
+        "spent",
+        "existing-claim"
+      ]
+    },
+    "WAIT_FENCE": {
+      "policy": "LATCHES",
+      "cases": [
+        "fence"
+      ]
+    },
+    "HOLD_CLOSE": {
+      "policy": "LATCHES",
+      "cases": [
+        "group"
+      ]
+    },
+    "HOLD_FOREIGN_LOAD": {
+      "policy": "LATCHES",
+      "cases": [
+        "copy-running"
+      ]
+    },
+    "WAIT_COPY": {
+      "policy": "LATCHES",
+      "cases": [
+        "debt-missing"
+      ]
+    },
+    "HOLD_UNKNOWN": {
+      "policy": "LATCHES",
+      "cases": [
+        "rank-incomplete",
+        "rank1-missing-leg",
+        "rank1-missing-date",
+        "timing-unknown",
+        "look-unknown",
+        "missing-look",
+        "missing-hp01_dates",
+        "missing-latest_close",
+        "missing-history",
+        "missing-safety",
+        "missing-stops",
+        "missing-copy",
+        "missing-priority",
+        "missing-calendar",
+        "missing-timing",
+        "mode-error",
+        "census-error",
+        "input-io",
+        "bad-json",
+        "invalid-start-seal",
+        "source-io",
+        "missing-start",
+        "missing-issue-bytes"
+      ]
+    },
+    "SELECT_RANK_4": {
+      "policy": "LATCHES",
+      "cases": [
+        "ran-further"
+      ],
+      "execution_recovery": "lead ATTESTATION-CORRECTION only"
+    },
+    "HALT_AND_PAGE": {
+      "policy": "LATCHES",
+      "cases": [
+        "failed-recovery"
+      ]
+    },
+    "CEDE_DATED": {
+      "policy": "LATCHES",
+      "cases": [
+        "dated"
+      ]
+    },
+    "CEDE_FENCE": {
+      "policy": "LATCHES",
+      "cases": [
+        "fence-budget"
+      ]
+    },
+    "WAIT_PIN": {
+      "policy": "LATCHES",
+      "cases": [
+        "pin-refusal"
+      ]
+    },
+    "WITHHOLD_REPLAN": {
+      "policy": "LATCHES",
+      "cases": [
+        "replan"
+      ]
+    },
+    "WAIT_BINDING": {
+      "policy": "LATCHES",
+      "cases": [
+        "binding",
+        "issue-runway",
+        "item-runway"
+      ]
+    },
+    "NEED_FRESH_QUEUE": {
+      "policy": "BY_CAUSE",
+      "cases": [
+        "queue-expired",
+        "queue-runway"
+      ],
+      "transient": [
+        "only before not_before"
+      ],
+      "otherwise": "LATCHES"
+    },
+    "ELIGIBLE": {
+      "policy": "ADVANCE",
+      "effect_by_phase": {
+        "Issue": "proposal_passed",
+        "Start": "start_published",
+        "Run": "claim_then_final_read",
+        "FinalRun": "invoke_once"
+      }
+    },
+    "ELIGIBLE_WITH_COPY_DEBT": {
+      "policy": "ADVANCE",
+      "effect_by_phase": {
+        "Issue": "proposal_passed",
+        "Start": "start_published",
+        "Run": "claim_then_final_read",
+        "FinalRun": "invoke_once"
+      }
+    },
+    "WAIT": {
+      "policy": "TRANSIENT",
+      "causes": [
+        "clock guard",
+        "only before not_before"
+      ],
+      "encoding": "semantic wait; current wire aliases above"
+    },
+    "READ_ERROR": {
+      "policy": "LATCHES",
+      "normalize": "HOLD_UNKNOWN",
+      "identity": "authenticated issue, otherwise admitted queue SHA and sequence",
+      "includes": [
+        "malformed",
+        "absent",
+        "exception",
+        "uncertain read"
+      ]
+    },
+    "LAUNCHER_NONZERO": {
+      "policy": "LATCHES",
+      "state": "check_owed_or_ambiguous",
+      "effect": "retain roster claim; never retry on an eligible payload alone"
+    },
+    "LAUNCHER_EXCEPTION": {
+      "policy": "LATCHES",
+      "state": "check_owed_or_ambiguous",
+      "effect": "retain roster claim; never retry on an eligible payload alone"
+    },
+    "CUSTODY_ERROR": {
+      "policy": "LATCHES",
+      "normalize": "HOLD_UNKNOWN",
+      "scope": "queue_position_held"
+    },
+    "INVALID_RESPONSE": {
+      "policy": "LATCHES",
+      "normalize": "HOLD_UNKNOWN",
+      "scope": "failed gate result for an identifiable issue, no launch"
+    },
+    "ESCAPED_EXCEPTION": {
+      "policy": "LATCHES",
+      "normalize": "HOLD_UNKNOWN",
+      "scope": "failed gate result for an identifiable issue, no launch"
+    }
+  },
+  "origins": [
+    "Issue",
+    "Start",
+    "Run",
+    "FinalRun"
+  ],
+  "clear_reads": [
+    "saved-clear",
+    "resampled-same-source",
+    "same-receipt-flap",
+    "replacement-source",
+    "clear-with-copy-debt"
+  ],
+  "retry_paths": [
+    "same-issue",
+    "fresh-Start",
+    "fresh-Run"
+  ],
+  "invalid_dispositions": [
+    "fabricated-authority",
+    "wrong-issue",
+    "wrong-hold",
+    "wrong-source",
+    "older-sequence",
+    "equal-sequence",
+    "missing-sequence",
+    "wrong-role",
+    "unpublished-payload"
+  ],
+  "facts": [
+    {
+      "id": "ready-session",
+      "wire": "CEDE_READY",
+      "edit": {
+        "rank": "ready-session"
+      },
+      "at": [
+        "Issue",
+        "Start",
+        "Run",
+        "FinalRun"
+      ]
+    },
+    {
+      "id": "counted",
+      "wire": "CEDE_COUNTED",
+      "edit": {
+        "rank": "counted"
+      },
+      "at": [
+        "Issue",
+        "Start",
+        "Run",
+        "FinalRun"
+      ]
+    },
+    {
+      "id": "first-stability",
+      "wire": "CEDE_RANK_1",
+      "edit": {
+        "rank": "first-stability"
+      },
+      "at": [
+        "Issue",
+        "Start",
+        "Run",
+        "FinalRun"
+      ]
+    },
+    {
+      "id": "f2-inst-01",
+      "wire": "CEDE_INST_01",
+      "edit": {
+        "rank": "f2-inst-01"
+      },
+      "at": [
+        "Issue",
+        "Start",
+        "Run",
+        "FinalRun"
+      ]
+    },
+    {
+      "id": "f2-inst-02",
+      "wire": "CEDE_INST_02",
+      "edit": {
+        "rank": "f2-inst-02"
+      },
+      "at": [
+        "Issue",
+        "Start",
+        "Run",
+        "FinalRun"
+      ]
+    },
+    {
+      "id": "f2-inst-03",
+      "wire": "CEDE_INST_03",
+      "edit": {
+        "rank": "f2-inst-03"
+      },
+      "at": [
+        "Issue",
+        "Start",
+        "Run",
+        "FinalRun"
+      ]
+    },
+    {
+      "id": "ran",
+      "wire": "NOT_ADMITTED",
+      "edit": {
+        "set": {
+          "look.status": "ran"
+        }
+      },
+      "at": [
+        "Issue",
+        "Start",
+        "Run",
+        "FinalRun"
+      ],
+      "execution_bar": true
+    },
+    {
+      "id": "reservation",
+      "wire": "WAIT_EVIDENCE",
+      "edit": {
+        "set": {
+          "look.status": "reserved",
+          "look.pending_conflict": true
+        }
+      },
+      "at": [
+        "Issue",
+        "Start",
+        "Run",
+        "FinalRun"
+      ]
+    },
+    {
+      "id": "hp01-date",
+      "wire": "INELIGIBLE_DATE",
+      "edit": {
+        "set": {
+          "hp01_dates.t0_dates": [
+            "2026-11-15",
+            "2026-11-21"
+          ]
+        }
+      },
+      "at": [
+        "Issue",
+        "Start",
+        "Run",
+        "FinalRun"
+      ]
+    },
+    {
+      "id": "kit-stop",
+      "wire": "HOLD_KIT",
+      "edit": {
+        "set": {
+          "stops.open": [
+            {
+              "code": "synthetic kit stop",
+              "scope": "hp-02"
+            }
+          ]
+        }
+      },
+      "at": [
+        "Issue",
+        "Start",
+        "Run",
+        "FinalRun"
+      ]
+    },
+    {
+      "id": "host-stop",
+      "wire": "HOLD_HOST",
+      "edit": {
+        "set": {
+          "stops.open": [
+            {
+              "code": "synthetic host stop",
+              "scope": "host"
+            }
+          ]
+        }
+      },
+      "at": [
+        "Issue",
+        "Start",
+        "Run",
+        "FinalRun"
+      ]
+    },
+    {
+      "id": "ambiguous",
+      "wire": "WAIT_EVIDENCE",
+      "edit": {
+        "set": {
+          "history.legs.L001": "ambiguous"
+        }
+      },
+      "at": [
+        "Issue",
+        "Start",
+        "Run",
+        "FinalRun"
+      ]
+    },
+    {
+      "id": "spent",
+      "wire": "SKIP_SPENT",
+      "edit": {
+        "set": {
+          "history.legs.L001": "spent"
+        }
+      },
+      "at": [
+        "Issue",
+        "Start",
+        "Run",
+        "FinalRun"
+      ],
+      "sticky": true
+    },
+    {
+      "id": "fence",
+      "wire": "WAIT_FENCE",
+      "edit": {
+        "set": {
+          "fence_clear": false
+        }
+      },
+      "at": [
+        "Issue",
+        "Start",
+        "Run",
+        "FinalRun"
+      ]
+    },
+    {
+      "id": "group",
+      "wire": "HOLD_CLOSE",
+      "edit": {
+        "set": {
+          "latest_close.groups.0.receipt_stop": "unproven"
+        }
+      },
+      "at": [
+        "Issue",
+        "Start",
+        "Run",
+        "FinalRun"
+      ]
+    },
+    {
+      "id": "copy-running",
+      "wire": "HOLD_FOREIGN_LOAD",
+      "edit": {
+        "set": {
+          "copy.transfer_stopped": false
+        }
+      },
+      "at": [
+        "Issue",
+        "Start",
+        "Run",
+        "FinalRun"
+      ]
+    },
+    {
+      "id": "debt-missing",
+      "wire": "WAIT_COPY",
+      "edit": {
+        "set": {
+          "copy.status": "unverified"
+        }
+      },
+      "at": [
+        "Issue",
+        "Start",
+        "Run",
+        "FinalRun"
+      ]
+    },
+    {
+      "id": "preflight",
+      "wire": "HOLD_HOST",
+      "edit": {
+        "set": {
+          "safety.preflight.maintenance_clear": false
+        }
+      },
+      "at": [
+        "Issue",
+        "Start",
+        "Run",
+        "FinalRun"
+      ]
+    },
+    {
+      "id": "rank-incomplete",
+      "wire": "HOLD_UNKNOWN",
+      "edit": {
+        "set": {
+          "priority.complete": false
+        }
+      },
+      "at": [
+        "Issue",
+        "Start",
+        "Run",
+        "FinalRun"
+      ]
+    },
+    {
+      "id": "rank1-missing-leg",
+      "wire": "HOLD_UNKNOWN",
+      "edit": {
+        "set": {
+          "priority.entries.6.completion.leg_id": null
+        }
+      },
+      "at": [
+        "Issue",
+        "Start",
+        "Run",
+        "FinalRun"
+      ]
+    },
+    {
+      "id": "rank1-wrong-pool",
+      "wire": "WAIT_EVIDENCE",
+      "edit": {
+        "set": {
+          "priority.entries.6.completion.kit_id": "f2-stab-15"
+        }
+      },
+      "at": [
+        "Issue",
+        "Start",
+        "Run",
+        "FinalRun"
+      ]
+    },
+    {
+      "id": "rank1-missing-date",
+      "wire": "HOLD_UNKNOWN",
+      "edit": {
+        "set": {
+          "priority.entries.6.completion.t0_date": null
+        }
+      },
+      "at": [
+        "Issue",
+        "Start",
+        "Run",
+        "FinalRun"
+      ]
+    },
+    {
+      "id": "timing-unknown",
+      "wire": "HOLD_UNKNOWN",
+      "edit": {
+        "set": {
+          "timing.selector_sample_max_s": null
+        }
+      },
+      "at": [
+        "Issue",
+        "Start",
+        "Run",
+        "FinalRun"
+      ]
+    },
+    {
+      "id": "look-unknown",
+      "wire": "HOLD_UNKNOWN",
+      "edit": {
+        "set": {
+          "look.status": "unknown"
+        }
+      },
+      "at": [
+        "Issue",
+        "Start",
+        "Run",
+        "FinalRun"
+      ]
+    },
+    {
+      "id": "missing-look",
+      "wire": "HOLD_UNKNOWN",
+      "edit": {
+        "set": {
+          "look": null
+        }
+      },
+      "at": [
+        "Issue",
+        "Start",
+        "Run",
+        "FinalRun"
+      ]
+    },
+    {
+      "id": "missing-hp01_dates",
+      "wire": "HOLD_UNKNOWN",
+      "edit": {
+        "set": {
+          "hp01_dates": null
+        }
+      },
+      "at": [
+        "Issue",
+        "Start",
+        "Run",
+        "FinalRun"
+      ]
+    },
+    {
+      "id": "missing-latest_close",
+      "wire": "HOLD_UNKNOWN",
+      "edit": {
+        "set": {
+          "latest_close": null
+        }
+      },
+      "at": [
+        "Issue",
+        "Start",
+        "Run",
+        "FinalRun"
+      ]
+    },
+    {
+      "id": "missing-history",
+      "wire": "HOLD_UNKNOWN",
+      "edit": {
+        "set": {
+          "history": null
+        }
+      },
+      "at": [
+        "Issue",
+        "Start",
+        "Run",
+        "FinalRun"
+      ]
+    },
+    {
+      "id": "missing-safety",
+      "wire": "HOLD_UNKNOWN",
+      "edit": {
+        "set": {
+          "safety": null
+        }
+      },
+      "at": [
+        "Issue",
+        "Start",
+        "Run",
+        "FinalRun"
+      ]
+    },
+    {
+      "id": "missing-stops",
+      "wire": "HOLD_UNKNOWN",
+      "edit": {
+        "set": {
+          "stops": null
+        }
+      },
+      "at": [
+        "Issue",
+        "Start",
+        "Run",
+        "FinalRun"
+      ]
+    },
+    {
+      "id": "missing-copy",
+      "wire": "HOLD_UNKNOWN",
+      "edit": {
+        "set": {
+          "copy": null
+        }
+      },
+      "at": [
+        "Issue",
+        "Start",
+        "Run",
+        "FinalRun"
+      ]
+    },
+    {
+      "id": "missing-priority",
+      "wire": "HOLD_UNKNOWN",
+      "edit": {
+        "set": {
+          "priority": null
+        }
+      },
+      "at": [
+        "Issue",
+        "Start",
+        "Run",
+        "FinalRun"
+      ]
+    },
+    {
+      "id": "missing-calendar",
+      "wire": "HOLD_UNKNOWN",
+      "edit": {
+        "set": {
+          "calendar": null
+        }
+      },
+      "at": [
+        "Issue",
+        "Start",
+        "Run",
+        "FinalRun"
+      ]
+    },
+    {
+      "id": "missing-timing",
+      "wire": "HOLD_UNKNOWN",
+      "edit": {
+        "set": {
+          "timing": null
+        }
+      },
+      "at": [
+        "Issue",
+        "Start",
+        "Run",
+        "FinalRun"
+      ]
+    },
+    {
+      "id": "ran-further",
+      "wire": "SELECT_RANK_4",
+      "edit": {
+        "scenario": "ran-further"
+      },
+      "at": [
+        "Issue",
+        "Start",
+        "Run",
+        "FinalRun"
+      ],
+      "execution_bar": true
+    },
+    {
+      "id": "failed-recovery",
+      "wire": "HALT_AND_PAGE",
+      "edit": {
+        "scenario": "failed-recovery"
+      },
+      "at": [
+        "Issue",
+        "Start",
+        "Run",
+        "FinalRun"
+      ],
+      "sticky": true
+    },
+    {
+      "id": "dated",
+      "wire": "CEDE_DATED",
+      "edit": {
+        "scenario": "dated"
+      },
+      "at": [
+        "Issue",
+        "Start",
+        "Run",
+        "FinalRun"
+      ]
+    },
+    {
+      "id": "fence-budget",
+      "wire": "CEDE_FENCE",
+      "edit": {
+        "scenario": "fence-budget"
+      },
+      "at": [
+        "Issue",
+        "Start",
+        "Run",
+        "FinalRun"
+      ]
+    },
+    {
+      "id": "pin-refusal",
+      "wire": "WAIT_PIN",
+      "edit": {
+        "scenario": "pin-refusal"
+      },
+      "at": [
+        "Issue",
+        "Start",
+        "Run",
+        "FinalRun"
+      ]
+    },
+    {
+      "id": "replan",
+      "wire": "WITHHOLD_REPLAN",
+      "edit": {
+        "scenario": "replan"
+      },
+      "at": [
+        "Issue",
+        "Start"
+      ]
+    },
+    {
+      "id": "binding",
+      "wire": "WAIT_BINDING",
+      "edit": {
+        "scenario": "binding"
+      },
+      "at": [
+        "Issue",
+        "Start",
+        "Run",
+        "FinalRun"
+      ]
+    },
+    {
+      "id": "queue-expired",
+      "wire": "NEED_FRESH_QUEUE",
+      "edit": {
+        "scenario": "queue-expired"
+      },
+      "at": [
+        "Issue",
+        "Start",
+        "Run"
+      ]
+    },
+    {
+      "id": "mode",
+      "wire": "HOLD_HOST",
+      "edit": {
+        "scenario": "mode"
+      },
+      "at": [
+        "Issue",
+        "Start",
+        "FinalRun"
+      ]
+    },
+    {
+      "id": "mode-error",
+      "wire": "HOLD_UNKNOWN",
+      "edit": {
+        "scenario": "mode-error"
+      },
+      "at": [
+        "Issue",
+        "Start",
+        "FinalRun"
+      ]
+    },
+    {
+      "id": "census-error",
+      "wire": "HOLD_UNKNOWN",
+      "edit": {
+        "scenario": "census-error"
+      },
+      "at": [
+        "Issue",
+        "Start",
+        "FinalRun"
+      ]
+    },
+    {
+      "id": "input-io",
+      "wire": "HOLD_UNKNOWN",
+      "edit": {
+        "scenario": "input-io"
+      },
+      "at": [
+        "Issue",
+        "Start",
+        "Run",
+        "FinalRun"
+      ]
+    },
+    {
+      "id": "bad-json",
+      "wire": "HOLD_UNKNOWN",
+      "edit": {
+        "scenario": "bad-json"
+      },
+      "at": [
+        "Issue",
+        "Start",
+        "Run",
+        "FinalRun"
+      ]
+    },
+    {
+      "id": "invalid-start-seal",
+      "wire": "HOLD_UNKNOWN",
+      "edit": {
+        "scenario": "invalid-start-seal"
+      },
+      "at": [
+        "Run",
+        "FinalRun"
+      ]
+    },
+    {
+      "id": "run-prepublication-sample",
+      "wire": "WAIT_EVIDENCE",
+      "edit": {
+        "scenario": "run-prepublication-sample"
+      },
+      "at": [
+        "Run",
+        "FinalRun"
+      ]
+    },
+    {
+      "id": "admission-runway",
+      "wire": "WAIT_EVIDENCE",
+      "edit": {
+        "scenario": "admission-runway"
+      },
+      "at": [
+        "Run",
+        "FinalRun"
+      ]
+    },
+    {
+      "id": "queue-runway",
+      "wire": "NEED_FRESH_QUEUE",
+      "edit": {
+        "scenario": "queue-runway"
+      },
+      "at": [
+        "Run"
+      ]
+    },
+    {
+      "id": "watcher-runway",
+      "wire": "WAIT_EVIDENCE",
+      "edit": {
+        "scenario": "watcher-runway"
+      },
+      "at": [
+        "Run",
+        "FinalRun"
+      ]
+    },
+    {
+      "id": "issue-runway",
+      "wire": "WAIT_BINDING",
+      "edit": {
+        "scenario": "issue-runway"
+      },
+      "at": [
+        "Run"
+      ]
+    },
+    {
+      "id": "item-runway",
+      "wire": "WAIT_BINDING",
+      "edit": {
+        "scenario": "item-runway"
+      },
+      "at": [
+        "Run"
+      ]
+    },
+    {
+      "id": "receipt-flap",
+      "wire": "WAIT_EVIDENCE",
+      "edit": {
+        "scenario": "receipt-flap"
+      },
+      "at": [
+        "Run",
+        "FinalRun"
+      ]
+    },
+    {
+      "id": "unsafe-predecessor",
+      "wire": "HOLD_KIT",
+      "edit": {
+        "scenario": "unsafe-predecessor"
+      },
+      "at": [
+        "Issue",
+        "Start",
+        "Run",
+        "FinalRun"
+      ],
+      "span": 2
+    },
+    {
+      "id": "source-io",
+      "wire": "HOLD_UNKNOWN",
+      "edit": {
+        "scenario": "source-io"
+      },
+      "at": [
+        "Issue",
+        "Start",
+        "Run",
+        "FinalRun"
+      ]
+    },
+    {
+      "id": "missing-start",
+      "wire": "HOLD_UNKNOWN",
+      "edit": {
+        "scenario": "missing-start"
+      },
+      "at": [
+        "Run"
+      ]
+    },
+    {
+      "id": "missing-issue-bytes",
+      "wire": "HOLD_UNKNOWN",
+      "edit": {
+        "scenario": "missing-issue-bytes"
+      },
+      "at": [
+        "Run",
+        "FinalRun"
+      ]
+    },
+    {
+      "id": "existing-claim",
+      "wire": "SKIP_SPENT",
+      "edit": {
+        "scenario": "existing-claim"
+      },
+      "at": [
+        "Issue",
+        "Start",
+        "Run"
+      ]
+    },
+    {
+      "id": "later-claim",
+      "wire": "WAIT_EVIDENCE",
+      "edit": {
+        "scenario": "later-claim"
+      },
+      "at": [
+        "Issue",
+        "Start",
+        "Run",
+        "FinalRun"
+      ]
+    }
+  ],
+  "guard": {
+    "seconds": 120,
+    "interval": "[boundary-120,boundary)",
+    "offsets": {
+      "first": -121,
+      "last": 1,
+      "step": 1
+    },
+    "startup": [
+      0,
+      17,
+      60
+    ],
+    "expiry_scopes": [
+      "queue",
+      "admission",
+      "watcher",
+      "issue",
+      "item"
+    ],
+    "r1_margin": 600,
+    "edge_families": [
+      "midnight",
+      "queue opening",
+      "raw expiry",
+      "expiry - 600",
+      "expiry - startup",
+      "whole-work overlap",
+      "runner handoff overlap",
+      "parent soak selector",
+      "child soak guarantee",
+      "each leg and redo start",
+      "work/close/clearance fit",
+      "competitor opening and closing",
+      "copy threshold",
+      "dated window endpoints",
+      "every backwards-feasible latest start - fence - transfer",
+      "every backwards-feasible latest start - fence - transfer - startup",
+      "issue/observation admissible time",
+      "launcher minimum deadline"
+    ],
+    "operating_profile": {
+      "plan_arguments": [
+        "02:00-02:35",
+        "13:14-13:15"
+      ],
+      "implicit_soak_window": "11:45-13:15",
+      "soak_s": 1950,
+      "inner_soak_s": 1800,
+      "fixed_s": 1200,
+      "leg_s": 2700,
+      "redo_quota": 2,
+      "fence_extra_s": 1460,
+      "work_reserve_s": 370,
+      "close_reserve_s": 190,
+      "launcher_minimum_extra_s": 560
+    },
+    "command_calendar_shapes": [
+      "one-start",
+      "remaining-half",
+      "calendar",
+      "calendar-two-dates"
+    ]
+  },
+  "fixture_sha256": {
+    "item-cases.json": "fa13f60290d7830a69b77a3e0734378009bca15a18a8498d94b253924a9ac8dd",
+    "check_contract.py": "c73506b716e770c1590bcb6bf5b5e7d10eb7c194a60b24249952e008eca1223b",
+    "replay_legacy.py": "92f386d454a31c8c7f2bbdc8fbe5b5dc3860fdce954f4bcbe3262caba84ec112",
+    "review_kit.py": "d3344f2e628a35632ea1d2f3d37480cc6a66837d44d307f784e76c4fcfea2a9d",
+    "successor_regression.py": "f28df8c505128d360de4345cb16fec4a7d1f7575fcda451b627c72c3decf3aab",
+    "hp02-occupancy-fixture.zip": "9ae11ae62e91a79ca26eb5e742371a86f7b57e7b940d2a622e13f2ef56e7244f"
+  },
+  "protocol": {
+    "R1": {
+      "expiry_scopes": [
+        "queue",
+        "admission",
+        "watcher",
+        "issue",
+        "item"
+      ],
+      "runway_s": 600,
+      "startup_latencies_s": [
+        0,
+        1,
+        599,
+        600,
+        601
+      ]
+    },
+    "R2": {
+      "condition": "Start sample <= publication < every Run sample <= Run read; verify Start before reading Run inputs",
+      "grid_s": [
+        0,
+        1,
+        2,
+        3
+      ]
+    },
+    "R3": {
+      "eligible_pool": "f2-stab-01..14",
+      "excluded": [
+        "f2-stab-15",
+        "f2-stab-16"
+      ],
+      "completion": [
+        "kit_id",
+        "pin",
+        "leg_id",
+        "t0_date",
+        "status"
+      ]
+    },
+    "G2": {
+      "order": [
+        "write claim",
+        "reopen bound inputs and Start seal",
+        "final live reads",
+        "invoke pinned launcher once"
+      ],
+      "write_free_interval": "final reads through launcher invocation",
+      "residual": "post-read host change and launcher-internal writes"
+    },
+    "L1": {
+      "order": [
+        "recognize adverse fact or unknown read",
+        "persist digest-bound identified hold",
+        "refuse",
+        "verify typed disposition",
+        "reevaluate current facts"
+      ]
+    },
+    "Q1": {
+      "terminal_fact": "actual lm-hp-01 execution",
+      "ordinary_clear": "refuse launch",
+      "correction": "lead ATTESTATION-CORRECTION in RUN_STATE with original digest and evidence of error",
+      "after_correction": "reassess current evidence and remaining independent holds"
+    },
+    "Q2": {
+      "origins": [
+        "Issue",
+        "Start",
+        "Run",
+        "FinalRun"
+      ],
+      "faults": [
+        "missing-identity",
+        "wrong-identity-digest",
+        "ledger-read",
+        "ledger-write",
+        "in-flight"
+      ],
+      "scope": [
+        "queue_sha",
+        "queue_seq"
+      ],
+      "storage": "independently durable from issue journal",
+      "unresolved": "HOLD_UNKNOWN",
+      "recovery": "typed disposition naming the hold, source digest and position, then fresh assessment",
+      "clear_read_restoration": "replacement-source also models disappearance of the original in-flight marker when the primary volume is restored"
+    },
+    "Q3": {
+      "failed_read": [
+        "source",
+        "error_class",
+        "attempt_time",
+        "ledger_sequence"
+      ],
+      "source_digest": "SHA-256 of canonical failed-read bytes",
+      "sequence": "disposition ledger sequence > hold ledger sequence",
+      "wall_clock": "not an ordering witness",
+      "order_cases": [
+        [
+          "older",
+          -1,
+          5,
+          false
+        ],
+        [
+          "equal",
+          0,
+          5,
+          false
+        ],
+        [
+          "same-tick-older",
+          -1,
+          0,
+          false
+        ],
+        [
+          "same-tick-equal",
+          0,
+          0,
+          false
+        ],
+        [
+          "same-tick-later",
+          1,
+          0,
+          true
+        ],
+        [
+          "earlier-wall-later-sequence",
+          1,
+          -1,
+          true
+        ],
+        [
+          "later-wall-later-sequence",
+          1,
+          5,
+          true
+        ],
+        [
+          "missing",
+          null,
+          5,
+          false
+        ]
+      ],
+      "canonical_fixture_encoding": "existing receipt convention: UTF-8 JSON with sorted keys and compact separators; the digest covers the failure record only"
+    }
+  },
+  "initial_state": "draft",
+  "hold_history": {
+    "key": "issue stable across phases and publications",
+    "open": "set of distinct hold IDs",
+    "closed": "append-only typed dispositions",
+    "projection": "held is an overlay. Keep return phase, Start publication, independent durable history and spent claim. A clock wait cannot erase a hold."
+  },
+  "artifact_scope": {
+    "read_error_normalization": "An identified, clearable HOLD_UNKNOWN binds the failed-read record at issue scope, or at separately durable queue scope under Q2.",
+    "terminal_outcomes": "Launcher rc and exception are transport outcomes after invocation. The same kit/span/attempt stays unavailable while its claim or independent spent fact remains.",
+    "fresh_run": "reload module, recreate CLI arguments and verify persistent Start and issue bytes",
+    "final_run": "second bound read or live read after writing the claim",
+    "replan_reachability": "Within the frozen 60-second profile, a natural unstable selected plan at Run is already inside G1. Exercise the unmasked WITHHOLD_REPLAN at Issue and Start and the guard at Run.",
+    "authority_seam": "Synthetic published-main content. The verifier must check the exact payload, role, item, hold ID, source digest and ledger sequence.",
+    "fixture_transport": "tests/hp02_gate_machine/records.py projects independent synthetic queue and issue records. tests/test_hp02_gate_machine_rulings.py encodes corrections and typed authority. These are replaceable wire adapters for the specified semantics."
+  },
+  "terminal_cases": {
+    "launcher-nonzero": "LAUNCHER_NONZERO",
+    "ambiguous-invocation": "LAUNCHER_EXCEPTION",
+    "failed-append": "CUSTODY_ERROR"
+  },
+  "companion_read_cases": [
+    {
+      "id": "backend-exception",
+      "wire": "HOLD_UNKNOWN",
+      "at": [
+        "Issue",
+        "Start",
+        "Run",
+        "FinalRun"
+      ],
+      "edit": {
+        "exception": "RuntimeError on reading bound observation"
+      }
+    }
+  ]
+}
