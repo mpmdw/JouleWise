@@ -117,4 +117,39 @@ The ten paths are the literal `R1_EXECUTED_SOURCES` tuple at the anchor. For eac
 | Builder exit and merge | Astra executing audit, integration owner acceptance and Opus final-tree acceptance remain open at this report's build cutoff. Opus owns the merge. |
 | Live receipt evidence | Signatures and other arm gates remain with their owners. PR #813 and PR #836 are references in the public workflow. |
 
-Independent audit rounds at build cutoff were 0 of 3. VERIFIED findings by severity were 0 HIGH, 0 MED and 0 LOW across zero completed rounds. Apply the round cap and return to spec for a VERIFIED HIGH spec gap or contract conflict in any round, a non-decaying second round, or a VERIFIED HIGH in round three. [Pipeline at the process pin](https://github.com/mpmdw/JouleWise/blob/1a060309679be06db4831009749f83e269bc7f61/docs/process/PIPELINE.md#L36-L68)
+At initial builder handoff, independent audit rounds were 0 of 3. Apply the round cap and return to spec for a VERIFIED HIGH spec gap or contract conflict in any round, a non-decaying second round, or a VERIFIED HIGH in round three. [Pipeline at the process pin](https://github.com/mpmdw/JouleWise/blob/1a060309679be06db4831009749f83e269bc7f61/docs/process/PIPELINE.md#L36-L68)
+
+## Astra round 1 corrections
+
+Astra assessed `e291acc786926397f2a04a4b35019d9005584154`, tree `09838f079d11674176a7ebf5fe4df92d7022f11f`, and blocked. The builder replicated both findings against the exact audit Git objects and added the two red regressions. The correction was assessed at `86453f6b191434d8605b09dc34e2d1f8aaadc3be`, tree `02675e12800ab7175c8cbd3561f055f90c4a9a16`.
+
+| Round | VERIFIED HIGH | VERIFIED MED | VERIFIED LOW | Root cause |
+| --- | ---: | ---: | ---: | --- |
+| 1 | 2 | 0 | 0 | Both implementation bugs in the frozen contract |
+
+| Finding | Correction and regression | Exact audit fixture result |
+| --- | --- | --- |
+| A form feed before the first `_holm` decorator hid it from the span | Use Python's tokenizer and module indentation to locate the actual `@` tokens, require the token count to match the AST decorator count, and hash the original physical bytes. `test_first_decorator_is_hashed_after_form_feed_indentation_reset` covers the original prefix and mixed whitespace with a multiline expression, verifying independently calculated hashes in both directions. | Before 0 with an empty change map. After 1 with `_holm` and both expected SHA-256 values. |
+| A write through `sys.modules[__name__]` hid a level rebound | Refuse protected attribute stores or deletes and visible dynamic namespace access throughout the scorer, including nested functions and aliased namespace primitives. `test_indirect_module_namespace_rebindings_fail_closed` covers the audit write, attribute deletion, aliased registry and mapping access, a function's global dictionary and aliased reflection. Each variant is refused on either side and when identical. | Before 0 with an empty change map. After 2 naming `S_SUPERIORITY_ALPHA`. |
+
+The namespace guard is conservative. A scorer with visible reflection or mutable namespace access requires manual review before a byte comparison can support row 10. The ordinary scorer and phase diff and the anti-hindsight review remain with the lead. Both findings were implementation bugs, so the §3 criteria permit a repair in this round. Round 2 must have at most one VERIFIED HIGH or MED in total and any VERIFIED HIGH must have a root cause seen in round 1.
+
+The two new regressions produced eight failing subtests on the old helper. All nine frozen cases were preserved. These commands passed with the correction, with 11 tests and 77 synthetic CLI invocations in the named class and 43 tests in the combined run. All eight protected bindings also extracted from the public anchor without executing it.
+
+```sh
+PYTHONPATH=tests:. python3.13 -B -m unittest align.test_rl182_registration.ProtectedSourceComparisonTests
+PYTHONPATH=tests:. python3.13 -B -m unittest align.test_rl182_registration align.test_rl176
+```
+
+The exact audit fixture checks use the retained invented Git repository and map in `AUDIT_FIXTURES`.
+
+```sh
+python3.13 -B scripts/compare_c1_protected_sources.py --repo "$AUDIT_FIXTURES/repo" \
+  --w1-commit 1d49220cd74f86248be22db49d60600cb834a001 \
+  --c1-commit 37fcf2f44021a2719e540705a6ae80e543b785ba \
+  --w1-prompts "$AUDIT_FIXTURES/map.json" --c1-prompts "$AUDIT_FIXTURES/map.json"
+python3.13 -B scripts/compare_c1_protected_sources.py --repo "$AUDIT_FIXTURES/repo" \
+  --w1-commit 94f1d185daec9bf5ee988fc2a99b60efaa1eed31 \
+  --c1-commit 63bfaf4ceb611720ae95cae4f6feeb16a2c3d6e8 \
+  --w1-prompts "$AUDIT_FIXTURES/map.json" --c1-prompts "$AUDIT_FIXTURES/map.json"
+```
