@@ -564,52 +564,184 @@ def _write_meter(path, pieces, t_lo, t_hi, off_ns, holes=()):
                             "stop_reason": "signal 15"}, sort_keys=True) + "\n")
 
 
-def _write_bundle(bdir, turn, tok, fan_keys=("F0Ac", "F1Ac")):
+# ------------------------------------------------------------------------------------------- writer-shaped journals
+# The bundle journals below have the shapes the pinned leg runtime writes (joulewise/cadence_looks/admission_journals
+# is their grammar), so a synthetic bundle passes the same admission as a written one. Only their values are synthetic.
+MONO_OFFSET_NS = 7 * 10**15                 # synthetic monotonic clock = wall clock - this
+SELECTED_SENSORS = ("TV0h", "TV1h", "F0Ac", "F1Ac", "Tf08")
+_POLICY = {"s_fast": "TV0h", "s_slow": "TV1h", "fan_keys": ["F0Ac", "F1Ac"], "record_keys": ["Tf08"],
+           "r0_sha256": "e6231a8f3e6ab6177bbedbf12b878c958a7b4d4331e36472c74c2a192588769b"}
+_EPISODE_SPEC = {"schema": "joulewise.align.apple.episode_spec.v1", "max_turns": 1, "max_tokens": 4096,
+                 "task_factory": "joulewise.align.apple.r1_runtime:step_task", "prompt_cache": "episode_prefix",
+                 "thermal": {"sensors": _POLICY, "g0_cap_s": 1200}}
+
+
+def _config(run_id, leg_id):
+    """BenchmarkConfig.to_dict() of the registered template, as the leg runtime writes config.json."""
+    return {"schema_version": "0.1", "run_id": run_id,
+            "hardware_target": {"device_kind": "apple_silicon_unified_memory", "host": None, "id": "macbook_m3_max",
+                                "notes": "Synthetic cadence leg (generated; no measurement).",
+                                "runtime_backend": "mlx", "telemetry_backend": "powermetrics", "transport": "local"},
+            "interconnect": {"link_speed_mbps": None, "name": "local", "notes": None},
+            "model": {"context_window": None, "family": "synthetic", "name": "synthetic-model", "revision": "0" * 40,
+                      "source": "synthetic", "weight_format": "mlx"},
+            "quantization": {"bits": 8, "group_size": 64, "name": "int8"},
+            "run_metadata": {"ambient_temp_c": None, "notes": None, "operator": "lead", "project": "capstone-joulewise",
+                             "tags": ["align", "align_episode", "cadence-campaign", f"cadence-leg={leg_id}"]},
+            "sampling": {"idle_seconds": 300.0, "power_hz": 1.0, "warmup_seconds": 5.0},
+            "workload_profile": {"dataset_ref": None, "name": "align_episode", "output_tokens": None,
+                                 "prompt_text": json.dumps(_EPISODE_SPEC, sort_keys=True), "prompt_tokens": None,
+                                 "repetitions": 1, "warmup_runs": 1}}
+
+
+def _ns(t):
+    return int(round(t * 1e9))
+
+
+def _ns_stamp(t):
+    """thermal_gates._stamp_record."""
+    return {"epoch_ns": _ns(t), "monotonic_before_ns": _ns(t) - MONO_OFFSET_NS,
+            "monotonic_after_ns": _ns(t) - MONO_OFFSET_NS, "wall_resolution_ns": 0, "monotonic_resolution_ns": 0}
+
+
+def _side_stamp(t):
+    mono = _ns(t) - MONO_OFFSET_NS
+    return {"wall_ns": _ns(t), "monotonic_ns": mono, "monotonic_raw_ns": mono}
+
+
+def _s_stamp(t):
+    return {"epoch_s": t, "monotonic_before_s": t, "monotonic_after_s": t, "wall_resolution_s": 0.0,
+            "monotonic_resolution_s": 0.0}
+
+
+def _g0_interval(entry, exit_, sensors, outcome="released"):
+    """ThermalSession._wait's row for a G0 from the span's captured reference."""
+    start, end = _ns(entry) - MONO_OFFSET_NS, _ns(exit_) - MONO_OFFSET_NS
+    released = outcome == "released"
+    return {"kind": "G0", "turn": 0, "token_count": None, "start_ns": start, "end_ns": end,
+            "entry_stamp": _ns_stamp(entry), "exit_stamp": _ns_stamp(exit_), "entry_epoch_s": entry,
+            "exit_epoch_s": exit_, "clock": "episode_monotonic_ns", "duration_s": (end - start) / 1e9,
+            "reference": {"fast_c": sensors["TV0h"], "slow_c": sensors["TV1h"], "source_member": "first",
+                          "span_ns": [start - 60 * 10**9, start]},
+            "release": {"fast_c": sensors["TV0h"], "slow_c": sensors["TV1h"]},
+            "slope_c_per_min": 0.0 if released else None, "entry_slope_c_per_min": 0.0, "entry_sensors": {},
+            "exit_sample_ns": end, "outcome": outcome}
+
+
+def _event(t, kind, phase, message, metadata):
+    """joulewise/bundle.py _append_event_record: the five members."""
+    return {"timestamp_s": t, "event_type": kind, "phase": phase, "message": message, "metadata": metadata}
+
+
+def _write_jsonl(path, rows):
+    with open(path, "w") as f:
+        for row in rows:
+            f.write(json.dumps(row) + "\n")
+
+
+def _thermal_rows(readings, gate, g0_start, g0_end):
+    """The collector's journal: session_start, readings with the gate's begin and end rows in time order, and
+    session_end. ``readings`` are (t_s, values) with full reading values."""
+    timed = [(t, "reading", values) for t, values in readings]
+    timed.append((g0_start, "align_thermal_gate", {"state": "begin", "gate_kind": "G0", "turn": 0, "token_count": None,
+                                                   "entry_stamp": _ns_stamp(g0_start)}))
+    timed.append((g0_end, "align_thermal_gate", {"state": "end", "gate": gate}))
+    timed.sort(key=lambda item: item[0])
+    first = min(t for t, _, _ in timed) - 1.0
+    last = max(t for t, _, _ in timed) + 1.0
+    session = f"align-{_ns(first) - MONO_OFFSET_NS}"
+    valid = sum(1 for _, kind, _ in timed if kind == "reading")
+    per_key = {"expected_samples": valid, "gaps_ns": [], "max_consecutive_empty_cells": 0,
+               "max_interval_ns": 1_000_000_000, "sample_fraction": 1.0, "valid_samples": valid}
+    rows = [(first, "session_start", {"thermal": dict(_POLICY)}), *timed,
+            (last, "session_end", {"collector_error": None, "coverage": {
+                "all_keys": dict(per_key), "clock": "monotonic_ns", "edge_policy": "partial cells excluded",
+                "per_key": {k: dict(per_key) for k in SELECTED_SENSORS}, "period_ns": 1_000_000_000,
+                "sampling_grid_ns": _ns(first) - MONO_OFFSET_NS, "span_ns": [_ns(first) - MONO_OFFSET_NS,
+                                                                            _ns(last) - MONO_OFFSET_NS],
+                "tolerance_ns": 100_000_000}})]
+    out = []
+    for seq, (t, kind, values) in enumerate(rows, 1):
+        started = t - 0.05 if kind == "reading" else t
+        out.append({"schema": "joulewise.align_thermal.v1", "module": "temperature", "kind": kind, "session": session,
+                    "seq": seq, "started": _side_stamp(started), "finished": _side_stamp(t), "values": values,
+                    "raw": [], "error": None})
+    return out
+
+
+def _reading_values(sensors, status):
+    return {"source": "smc", "sensors": dict(sensors),
+            "units": {k: "degC" if k.startswith("T") else "rpm" for k in sensors},
+            "errors": {}, "readings": {k: {"value": v, "error": None} for k, v in sensors.items()}, "status": status}
+
+
+def _write_bundle(bdir, turn, tok, leg_id="L000", fan_keys=("F0Ac", "F1Ac")):
     """A bundle that inclusion_34.py can judge: a G0 gate event, config.json's sampling.power_hz, TV1h in the
     journal, and journal and powermetrics rows from the G0 start on (outside level R's window, so level R is
-    unchanged)."""
+    unchanged). Its journals have the writer's shapes."""
+    assert tuple(fan_keys) == ("F0Ac", "F1Ac")
     os.makedirs(os.path.join(bdir, "outputs"), exist_ok=True)
     os.makedirs(os.path.join(bdir, "raw"), exist_ok=True)
     ts = turn["turn_start_s"]
     g0 = ts - G0_LEAD_S
     with open(os.path.join(bdir, "config.json"), "w") as f:
-        json.dump({"sampling": {"power_hz": 1.0}, "sensors": {"s_fast": "TV0h", "s_slow": "TV1h",
-                                                               "fan_keys": list(fan_keys), "record_keys": ["Tf08"]}}, f)
-    with open(os.path.join(bdir, "events.jsonl"), "w") as f:
-        f.write(json.dumps({"event_type": "phase_start", "phase": "align_thermal_gate", "timestamp_s": g0,
-                            "metadata": {"kind": "G0"}}) + "\n")
-        f.write(json.dumps({"event_type": "phase_end", "phase": "align_thermal_gate", "timestamp_s": ts - 2.0,
-                            "metadata": {"kind": "G0"}}) + "\n")
-        f.write(json.dumps({"event_type": "run_started", "timestamp_s": ts - 1}) + "\n")
-        for i, x in enumerate(tok):
-            f.write(json.dumps({"event_type": "token", "timestamp_s": x,
-                                "metadata": {"index": i, "align_turn_index": 0, "text": "SYNTH"}}) + "\n")
-    with open(os.path.join(bdir, "outputs/align_turns.jsonl"), "w") as f:
-        f.write(json.dumps({"turn": 0, "start_stamp": {"epoch_s": ts}, "end_stamp": {"epoch_s": turn["last_token_s"]},
-                            "generation": {"output_token_ids": [7] * turn["decode_tokens"],
-                                           "prefill_tokens": turn["prefill_tokens"]}}) + "\n")
-    with open(os.path.join(bdir, "outputs/align_thermal.jsonl"), "w") as f:
-        f.write(json.dumps({"kind": "session_start"}) + "\n")
-        first = turn["journal"][0]
-        pre = []
-        x = first["t_s"] - 1.0
-        while x >= g0 - 1.0:
-            pre.append({**first, "t_s": int(round(x * 1e9)) / 1e9, "pm_fresh": True})
-            x -= 1.0
-        for r in pre[::-1] + turn["journal"]:
-            wall = r["t_s"]
-            fin = int(round(wall * 1e9))
-            mono = fin - 7 * 10**15
-            age = 300_000_000 if r["pm_fresh"] else 5_000_000_000
-            sensors = {"TV0h": r["tv0h_c"], "TV1h": r["tv0h_c"] + 1.0, "Tf08": r["tf08_c"]}
-            for k in fan_keys:
-                sensors[k] = r["fan_rpm"]
-            f.write(json.dumps({"kind": "reading", "module": "temperature", "error": None,
-                                "started": {"wall_ns": fin - 50_000_000, "monotonic_ns": mono - 50_000_000},
-                                "finished": {"wall_ns": fin, "monotonic_ns": mono},
-                                "values": {"sensors": sensors,
-                                           "status": {"os_level": r["os_level"], "pm_state": r["pm_state"],
-                                                      "pm_observed_ns": mono - 50_000_000 - age}}}) + "\n")
+        json.dump(_config(f"cadence-synthetic-{leg_id}", leg_id), f)
+    first = turn["journal"][0]
+    pre = []
+    x = first["t_s"] - 1.0
+    while x >= g0 - 1.0:
+        pre.append({**first, "t_s": int(round(x * 1e9)) / 1e9, "pm_fresh": True})
+        x -= 1.0
+    readings = []
+    for r in pre[::-1] + turn["journal"]:
+        mono = _ns(r["t_s"]) - MONO_OFFSET_NS
+        age = 300_000_000 if r["pm_fresh"] else 5_000_000_000
+        sensors = {"TV0h": r["tv0h_c"], "TV1h": r["tv0h_c"] + 1.0, "Tf08": r["tf08_c"]}
+        for k in fan_keys:
+            sensors[k] = r["fan_rpm"]
+        readings.append((r["t_s"], _reading_values(sensors, {"os_level": r["os_level"], "pm_state": r["pm_state"],
+                                                             "pm_observed_ns": mono - 50_000_000 - age})))
+    at_g0 = readings[0][1]["sensors"]
+    gate = _g0_interval(g0, ts - 2.0, at_g0)
+    _write_jsonl(os.path.join(bdir, "outputs/align_thermal.jsonl"), _thermal_rows(readings, gate, g0, ts - 2.0))
+    turn0 = {"align_turn_index": 0}
+    prompt_ids = list(range(256))
+    events = [_event(g0, "phase_start", "align_thermal_gate", "G0", gate),
+              _event(ts - 2.0, "phase_end", "align_thermal_gate", "G0", gate),
+              _event(ts, "phase_start", "tokenize", "mlx tokenization started", dict(turn0)),
+              _event(ts, "phase_end", "tokenize", "mlx tokenization completed", {**turn0, "prompt_tokens": 256}),
+              _event(ts, "phase_start", "generation_setup", "mlx generation setup started", dict(turn0)),
+              _event(ts, "phase_end", "generation_setup", "mlx generation setup completed",
+                     {**turn0, "requested_output_tokens": 4096, "eos_suppressed": False}),
+              _event(ts, "phase_start", "prefill", "mlx prefill started",
+                     {**turn0, "phase_boundary_method": "first_token", "prompt_tokens": 256,
+                      "requested_output_tokens": 4096, "eos_suppressed": False}),
+              _event(tok[0], "phase_end", "prefill", "mlx prefill completed",
+                     {**turn0, "phase_boundary_method": "first_token"}),
+              _event(tok[0], "phase_start", "decode", "mlx decode started",
+                     {**turn0, "phase_boundary_method": "first_token", "max_tokens": 4096, "eos_suppressed": False,
+                      "original_eos_token_ids": None})]
+    events += [_event(x, "token", "decode", f"mlx token {i}", {"index": i, **turn0}) for i, x in enumerate(tok)]
+    events.append(_event(tok[-1], "phase_end", "decode", "mlx decode completed",
+                         {**turn0, "phase_boundary_method": "first_token", "emitted_tokens": len(tok),
+                          "requested_output_tokens": 4096}))
+    _write_jsonl(os.path.join(bdir, "events.jsonl"), events)
+    generation = {"finish_reason": None, "output_token_ids": [7] * turn["decode_tokens"],
+                  "prior_hidden_prefill_method": "chat_template_token_count_difference", "prior_hidden_prefill_tokens": 0,
+                  "prompt_token_ids": prompt_ids,
+                  "prompt_token_ids_sha256": hashlib.sha256(json.dumps(prompt_ids, separators=(",", ":")).encode()
+                                                            ).hexdigest(),
+                  "reasoning_token_accounting": "output_ids_between_think_delimiters_before_visible_xml_call",
+                  "runtime_stop_condition": "stream_exhausted",
+                  "sampler": {"api": "mlx_lm.make_sampler", "kind": "greedy", "parameter": "temp", "pinned": True,
+                              "temperature": 0.0},
+                  "stop_condition": "stream_exhausted"}
+    _write_jsonl(os.path.join(bdir, "outputs/align_turns.jsonl"),
+                 [{"turn": 0, "flags": ["seed_recorded_greedy_generation"], "generation": generation,
+                   "start_stamp": _s_stamp(ts), "end_stamp": _s_stamp(turn["last_token_s"]),
+                   "clock_mapping": {"trace_domain": "joulewise.controller.epoch_ns",
+                                     "episode_domain": "synthetic.monotonic", "offset_ns": 0, "uncertainty_ns": 0,
+                                     "method": "synthetic"}}])
     import plistlib
     with open(os.path.join(bdir, "rich_telemetry.jsonl"), "w") as fr, \
             open(os.path.join(bdir, "raw/powermetrics.plist"), "wb") as fp:
@@ -628,18 +760,20 @@ def _write_bundle(bdir, turn, tok, fan_keys=("F0Ac", "F1Ac")):
             fp.write(plistlib.dumps(doc) + b"\0")
 
 
-def _write_g0_timeout_bundle(bdir, g0_start):
+def _write_g0_timeout_bundle(bdir, g0_start, leg_id="L000"):
     """A G0 timeout's bundle: config, the G0 gate events, a journal; no tokens and no align_turns.jsonl."""
     os.makedirs(os.path.join(bdir, "outputs"), exist_ok=True)
     with open(os.path.join(bdir, "config.json"), "w") as f:
-        json.dump({"sampling": {"power_hz": 1.0}}, f)
-    with open(os.path.join(bdir, "events.jsonl"), "w") as f:
-        f.write(json.dumps({"event_type": "phase_start", "phase": "align_thermal_gate", "timestamp_s": g0_start,
-                            "metadata": {"kind": "G0"}}) + "\n")
-        f.write(json.dumps({"event_type": "phase_end", "phase": "align_thermal_gate", "timestamp_s": g0_start + 1200.0,
-                            "metadata": {"kind": "G0", "outcome": "timeout"}}) + "\n")
-    with open(os.path.join(bdir, "outputs/align_thermal.jsonl"), "w") as f:
-        f.write(json.dumps({"kind": "session_start"}) + "\n")
+        json.dump(_config(f"cadence-synthetic-{leg_id}", leg_id), f)
+    sensors = {"TV0h": 60.0, "TV1h": 61.0, "F0Ac": 1200.0, "F1Ac": 1200.0, "Tf08": 45.0}
+    gate = _g0_interval(g0_start, g0_start + 1200.0, sensors, outcome="timeout")
+    _write_jsonl(os.path.join(bdir, "events.jsonl"),
+                 [_event(g0_start, "phase_start", "align_thermal_gate", "G0", gate),
+                  _event(g0_start + 1200.0, "phase_end", "align_thermal_gate", "G0", gate)])
+    status = {"os_level": 0, "pm_state": "Nominal", "pm_observed_ns": _ns(g0_start) - MONO_OFFSET_NS}
+    _write_jsonl(os.path.join(bdir, "outputs/align_thermal.jsonl"),
+                 _thermal_rows([(g0_start + 1.0, _reading_values(sensors, status))], gate, g0_start,
+                               g0_start + 1200.0))
 
 
 def write_custody(root, look_input, energy, tokens):
@@ -665,8 +799,13 @@ def write_custody(root, look_input, energy, tokens):
                        "roster": [leg["leg_id"] for leg in legs], "synthetic": True, "rc": 0,
                        "steps": [{"name": "soak", "rc": 0}]}, f)
         with open(os.path.join(sdir, "soak/soak_reference.json"), "w") as f:
-            json.dump({"schema": "joulewise.align.r1_soak_reference.v1",
-                       "sensors_c": {"TV0h": span["soak_reference_tv0h_c"], "TV1h": 55.0}}, f)
+            # scripts/align_r1_rehearsal.py write_soak_reference: sensors_c are the detrended means
+            means = {"TV0h": span["soak_reference_tv0h_c"], "TV1h": 55.0}
+            json.dump({"schema": "joulewise.align.r1_soak_reference.v1", "source_segment": "idle_soak",
+                       "source_output": "span/soak/idle_soak", "attempt": 0, "window_s": 1200, "sensors_c": means,
+                       "detrended": {k: {"mean_c": v, "detrended_sd_c": 0.0, "slope_c_per_min": 0.0, "settled": True,
+                                         "window_s": 1200, "window_reads": 1200} for k, v in means.items()},
+                       "sensor_roles": None}, f)
         dc_pieces, holes = [], []
         t_lo, t_hi = span["t0_epoch_s"], span["t0_epoch_s"] + 600.0
         mode = 2 if span["power_mode"] == "high_power" else 0
@@ -701,12 +840,12 @@ def write_custody(root, look_input, energy, tokens):
                 json.dump(summ, f)
             if g0_timeout:                           # the bundle exists; it holds the G0 and no turn
                 _write_g0_timeout_bundle(os.path.join(ldir, "runtime", "runs/cadence-leg"),
-                                         span["t0_epoch_s"] + 600.0 + 900.0 * legs.index(leg))
+                                         span["t0_epoch_s"] + 600.0 + 900.0 * legs.index(leg), leg["leg_id"])
                 continue
             if not turn:
                 continue
             bdir = os.path.join(ldir, "runtime", "runs/cadence-leg")
-            _write_bundle(bdir, turn, tokens[leg["leg_key"]])
+            _write_bundle(bdir, turn, tokens[leg["leg_key"]], leg["leg_id"])
             if not inc["km003c_clean"]:
                 holes.append((turn["turn_start_s"] + METER_HOLE_S[0], turn["turn_start_s"] + METER_HOLE_S[1]))
             e = energy["legs"].get(leg["leg_key"])

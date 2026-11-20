@@ -60,6 +60,7 @@ from joulewise.cadence_looks import interim_release as release  # noqa: E402
 from joulewise.cadence_looks import manifest as M  # noqa: E402
 from joulewise.cadence_looks import inclusion_34 as I34  # noqa: E402
 from joulewise.cadence_looks import time_fields as TF  # noqa: E402
+from joulewise.cadence_looks import admission as ADM  # noqa: E402
 # the reader runs the pinned decoder's unwrap and clock fit on counters (RL-173 E.1): loaded up front, so every stage-1
 # run records one code set (manifest.STAGE1_CODE) whatever its input
 from joulewise.external import km003c_parse as _kp  # noqa: E402,F401
@@ -140,16 +141,6 @@ def _whole(value, what):
     if type(value) is not int or value < 0:
         raise WriterShape(f"{what}: not a count as the pinned writers serialize it")
     return value
-
-
-def _member(doc, *keys):
-    """The nested member, or None where a level is absent, null or not an object: the reader's own rule for a
-    missing field then applies (a leg without a readable turn), never a conversion."""
-    for key in keys:
-        if not isinstance(doc, dict):
-            return None
-        doc = doc.get(key)
-    return doc
 
 
 def write_canonical(path, obj):
@@ -638,130 +629,18 @@ def read_look_input(roster, sdir_of, rules34, fan_keys=FAN_KEYS, ruled=None):
             "spans": spans, "legs": legs}
 
 
-_WRITER_PHASES = {"tokenize", "generation_setup", "prefill", "decode", "align_thermal_gate", "align_thermal_hold",
-                  "align_context_check", "align_context_stop_observation", "align_g0_unreleased_stop_observation"}
-# joulewise/align/apple/workload.py:587 at the three pins formats ``range`` and ``enumerate`` integers: ASCII digits,
-# no sign, no leading zero. ``\d`` would also take every other Unicode decimal digit.
-_TOOL_PHASE = re.compile(r"align_tool_(0|[1-9][0-9]*)_(0|[1-9][0-9]*)")
-
-
-def _writer_json(path):
-    """One operational file decoded as the pinned writers serialize it: ``M.strict_json`` on the file, or on each
-    line of a ``.jsonl``; None when the file is absent. Duplicate keys, a nonfinite number or text that is not
-    UTF-8 JSON refuses the look (ManifestError)."""
-    path = Path(path)
-    if not path.is_file():
-        return None
-    data = path.read_bytes()
-    if path.suffix == ".jsonl":
-        return [M.strict_json(line) for line in data.split(b"\n") if line.strip(b" \t\r")]
-    return M.strict_json(data)
-
-
-def _check_event(event):
-    """One ``events.jsonl`` row as ``joulewise/bundle.py`` ``_append_event_record`` writes it at the three pins: a
-    string type, a finite numeric stamp, metadata that is an object. A token row's index is an integer and a phase
-    row names a phase the leg runtime opens."""
-    if not isinstance(event, dict) or not isinstance(event.get("event_type"), str):
-        raise F.LookInputError("events: invalid writer event")
-    kind, metadata = event["event_type"], event.get("metadata")
-    if "timestamp_s" in event or kind in ("token", "phase_start", "phase_end"):
-        if not _finite(event.get("timestamp_s")):
-            raise F.LookInputError("events: invalid writer timestamp")
-    if kind == "token":
-        # joulewise/adapters/mlx_runtime.py:916 at the three pins: ``{"index": index}``, an enumerated integer. An
-        # absent or null ``align_turn_index`` is turn 0 (RL-184 section 3.1, T05); a recorded one is an integer.
-        # Both stage-2 readers index the metadata, so a token row without it would fail under the reservation.
-        if (not isinstance(metadata, dict) or type(metadata.get("index")) is not int or metadata["index"] < 0
-                or (metadata.get("align_turn_index") is not None
-                    and (type(metadata["align_turn_index"]) is not int or metadata["align_turn_index"] < 0))):
-            raise F.LookInputError("events: invalid writer token")
-    if not kind.startswith("phase_"):
-        return
-    phase = event.get("phase")
-    if (kind not in ("phase_start", "phase_end") or not isinstance(phase, str)
-            or (phase not in _WRITER_PHASES and not _TOOL_PHASE.fullmatch(phase))
-            or (metadata is not None and not isinstance(metadata, dict))):
-        raise F.LookInputError("events: invalid writer phase")
-
-
 def validate_runtime_bundles(roster, sdir_of):
-    """RL-184 section 3.3, in both stages and before any trace, telemetry or meter file opens. For every rostered
-    span: the receipt has a pinned writer's exit path and soak history (``inclusion_34.check_writer_receipt``);
-    every bundle locator is the literal F01 spelling; every operational file the look reads or hashes decodes
-    without a duplicate key or a nonfinite number; every event row carries the writers' types."""
+    """RL-184 section 3.3, the one admission check of both stages, before any trace, telemetry or meter file opens
+    and before the reservation: every rostered span's receipt, soak reference, leg records and summaries and each
+    selected runtime bundle's journals are a shape one pinned writer revision issues
+    (``joulewise.cadence_looks.admission``). Then each bundle locator stays inside its leg's runtime directory."""
+    spans = [(span["span_id"], ADM.SpanFiles(sdir_of(span["span_id"]))) for span in roster]
+    try:
+        ADM.validate_roster(spans)
+    except ADM.Refusal as exc:
+        raise F.LookInputError(f"admission: {exc}") from None
     for span in roster:
-        sdir = Path(sdir_of(span["span_id"]))
-        receipt, bundles = M.check_runtime_bundles(sdir)
-        try:
-            I34.check_writer_receipt(receipt)
-        except ValueError as exc:
-            raise F.LookInputError(str(exc)) from None
-        decoded = {rel: _writer_json(sdir / rel) for rel in M.operational_paths(sdir) if (sdir / rel).is_file()}
-        _check_values(receipt, decoded, [bundle.relative_to(sdir).as_posix() for bundle in bundles])
-
-
-def _check_values(receipt, decoded, bundles):
-    """Every value the reader takes has the writers' JSON type, checked here so that no trace or meter file opens
-    first. A document, a journal row and each member the reader indexes is an object; a number, a count or a
-    length is never converted from text or a boolean. A wrong type is refused, never read as an absent value."""
-    def number(value, what):
-        if value is not None:
-            _real(value, what)
-
-    def count(value, what):
-        if value is not None:
-            _whole(value, what)
-
-    def objects(doc, what, *members):
-        """``doc`` is an object, and so is each named member where it is present and not null."""
-        for name, value in ((None, doc), *((m, doc.get(m) if type(doc) is dict else None) for m in members)):
-            if type(value) is not dict and (name is None or value is not None):
-                raise WriterShape(f"{what}{'.' + name if name else ''}: not an object as the pinned writers serialize it")
-
-    for rel, doc in decoded.items():              # each present file: an object, or one object per journal row
-        for row in (doc if rel.endswith(".jsonl") else [doc]):
-            objects(row, rel.rsplit("/", 1)[-1])
-    objects(receipt, "runner receipt", "started")
-    number(_member(receipt, "started", "epoch_s"), "runner receipt: started.epoch_s")
-    if "soak/soak_reference.json" in decoded:
-        objects(decoded["soak/soak_reference.json"], "soak_reference", "sensors_c")
-    number(_member(decoded.get("soak/soak_reference.json"), "sensors_c", "TV0h"), "soak_reference: sensors_c.TV0h")
-    for leg_id in receipt["roster"]:
-        record = decoded.get(f"legs/{leg_id}/leg_record.json")
-        if record is not None:
-            objects(record, "leg record", "spec", "result")
-            attempts = record.get("attempts")
-            if attempts is not None and (type(attempts) is not list or any(type(a) is not dict for a in attempts)):
-                raise WriterShape("leg record: attempts is not a list of objects")
-        summary = decoded.get(f"legs/{leg_id}/leg_summary.json")
-        if summary is not None:
-            objects(summary, "leg summary", "span_reference")
-        count(_member(record, "spec", "prefill_tokens"), "leg record: spec.prefill_tokens")
-        count(_member(record, "result", "prefill_tokens"), "leg record: result.prefill_tokens")
-    for bundle in bundles:
-        if f"{bundle}/config.json" in decoded:
-            objects(decoded[f"{bundle}/config.json"], "config", "sampling")
-        for event in decoded.get(f"{bundle}/events.jsonl") or []:
-            _check_event(event)
-        for row in decoded.get(f"{bundle}/outputs/align_turns.jsonl") or []:
-            objects(row, "align_turns", "start_stamp", "end_stamp", "generation")
-            for stamp in ("start_stamp", "end_stamp"):
-                number(_member(row, stamp, "epoch_s"), f"align_turns: {stamp}.epoch_s")
-            count(_member(row, "generation", "prefill_tokens"), "align_turns: prefill_tokens")
-            ids = _member(row, "generation", "output_token_ids")
-            if ids is not None and type(ids) is not list:
-                raise WriterShape("align_turns: output_token_ids is not a list")
-        for row in decoded.get(f"{bundle}/outputs/align_thermal.jsonl") or []:
-            if row.get("kind") != "reading":
-                continue
-            objects(row, "align_thermal", "started", "finished", "values")
-            objects(row.get("values") or {}, "align_thermal: values", "status", "sensors")
-            for stamp in ("started", "finished"):
-                for clock in ("wall_ns", "monotonic_ns"):
-                    number(_member(row, stamp, clock), f"align_thermal: {stamp}.{clock}")
-            for key in ("Tf08", "TV0h", *FAN_KEYS):
-                number(_member(row, "values", "sensors", key), f"align_thermal: {key}")
+        M.check_runtime_bundles(Path(sdir_of(span["span_id"])))
 
 
 def stage2_preflight(stage1_out, sdir_of):

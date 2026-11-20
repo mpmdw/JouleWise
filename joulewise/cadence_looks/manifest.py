@@ -86,7 +86,12 @@ REQUIRED_CODE_PATHS = {"interim": {"joulewise/cadence_looks/fit_interim.py", "jo
                                    "joulewise/cadence_looks/interim_release.py", "joulewise/cadence_looks/interim_twin.py",
                                    "scripts/cadence_look_manifest.py",
                                    "joulewise/cadence_looks/schema_check.py",
-                                   "joulewise/cadence_looks/time_fields.py"}}   # RL-166 Q1; Sol N3; RL-173 E.1
+                                   "joulewise/cadence_looks/time_fields.py",
+                                   # RL-184 section 3.3: the one stage-1 admission validator and its grammar
+                                   "joulewise/cadence_looks/admission.py", "joulewise/cadence_looks/admission_shape.py",
+                                   "joulewise/cadence_looks/admission_journals.py",
+                                   "joulewise/cadence_looks/admission_synthetic.py",
+                                   "joulewise/cadence_looks/admission_kits.py"}}   # RL-166 Q1; Sol N3; RL-173 E.1
 
 # Which block phases each look may read, by role (RL-149 sections 2.3 and 2.6; RL-157 section 4).
 # Phases are BLOCK-QUEUE's (joulewise/cadence/blocks.py PHASES). hp-01 is phase "extension".
@@ -1898,8 +1903,13 @@ _DECODER_CODE = ("joulewise/aggregate.py", "joulewise/authentication_io.py",
                  "joulewise/bundle_read.py", "joulewise/desk_compress.py", "joulewise/desk_restore.py",
                  "joulewise/external/__init__.py",
                  "joulewise/external/km003c_parse.py", "joulewise/provenance.py", "joulewise/suite.py")
+# RL-184 section 3.3: the stage-1 admission validator and its grammar run before any trace opens, in both stages
+_ADMISSION_CODE = ("joulewise/cadence_looks/admission.py", "joulewise/cadence_looks/admission_shape.py",
+                   "joulewise/cadence_looks/admission_journals.py", "joulewise/cadence_looks/admission_synthetic.py",
+                   "joulewise/cadence_looks/admission_kits.py")
 STAGE1_CODE = _SHARED_CODE + ("joulewise/cadence_looks/fit_interim.py", "joulewise/cadence_looks/inclusion_34.py",
-                              "joulewise/cadence_looks/time_fields.py", "scripts/cadence_look_run.py") + _DECODER_CODE
+                              "joulewise/cadence_looks/time_fields.py", "scripts/cadence_look_run.py"
+                              ) + _ADMISSION_CODE + _DECODER_CODE
 def coefficients_schema(repo):
     """The coefficient file's schema (freeze 2; RL-173 E) as it stands in ``repo`` (verify_pins has checked its pin)."""
     return json.loads((Path(repo) / "docs/process/cadence/looks/lm-interim-01.coefficients.schema.json")

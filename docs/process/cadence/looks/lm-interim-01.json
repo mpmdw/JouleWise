@@ -529,7 +529,7 @@
       },
       {
         "path": "scripts/cadence_look_run.py",
-        "sha256": "31b365421f0aac38701cdeb57b6de3df3e2772e3729736827e07fc3ba42c63d7"
+        "sha256": "8d75081846294d40555af34cbecfbc8838743ada5a17057c50000ba985025ff4"
       },
       {
         "path": "scripts/cadence_look_manifest.py",
@@ -546,6 +546,26 @@
       {
         "path": "joulewise/cadence_looks/interim_twin.py",
         "sha256": "19cd748f21f8a30c4fb1aee5af78fbd485ec5e2342e46531fd349a0ef89b839e"
+      },
+      {
+        "path": "joulewise/cadence_looks/admission.py",
+        "sha256": "a3f3221e4fdb42246edd8d70393ab321eaa1b269d1a8199c22b83cde8722211e"
+      },
+      {
+        "path": "joulewise/cadence_looks/admission_shape.py",
+        "sha256": "7062310a660860960303538db0a4ffdcb716df84bd364b21e2fc4984356a8ab8"
+      },
+      {
+        "path": "joulewise/cadence_looks/admission_journals.py",
+        "sha256": "8d0245dcae11dbd6534845d6a35d5c76a7e91237d09c550462fd2206e070be26"
+      },
+      {
+        "path": "joulewise/cadence_looks/admission_synthetic.py",
+        "sha256": "90d82a8d14731bbd86438392c059fb746811a4d37e8b3d3b4d20a300a46241e1"
+      },
+      {
+        "path": "joulewise/cadence_looks/admission_kits.py",
+        "sha256": "28d9f77526384d24830371539a008382e83acb20c496ea49fa2f9d0c50727887"
       }
     ],
     "runtime": "Python standard library plus numpy, no scipy, run with -I. Stage 2 refuses, before the first energy read, unless its numpy version equals the one in the committed stage-1 output.",
@@ -844,7 +864,7 @@
       },
       {
         "path": "joulewise/cadence_looks/manifest.py",
-        "sha256": "e0145615b9095c093a947e5371284406145d644940471d220a3bd07d7937101a"
+        "sha256": "f9b34584de955635167e6a474e1457ecd81e84fa1b4961d5528837a0b4096307"
       },
       {
         "path": "joulewise/desk_compress.py",
