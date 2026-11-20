@@ -21,6 +21,7 @@ The clean worktree was already at the target tip and the named branch
 | The 16 kits preserve the positional layout of `f2-inst-01`. The two extensions change frozen runner provenance as well as the design identity and seeds. | Compare each parsed design after accounting for the exact declared differences. | PASS |
 | The first-read draft still has the old coalescence and receipt chronology. The companion file is absent at the target snapshot. | Check draft and index bytes on pinned refs, companion path absence, and the matrix against RL-190 §§1.3 and 1.5. | PASS |
 | The six public fields and the two private views survive the later rulings. | Hand-check the seven invented cuts against RL-181, RL-190, RL-192b and the v3 DELTA's one- and thirteen-date expected counts. Read the manifest matrix against the draft release inventory. | PASS (documentary) |
+| Sources resolve at their cited revisions. | Verify the exhibit's 30 pinned Git object links, object types and cited line bounds. | PASS |
 
 Sources were the audit ruling and index at `04d8aa778`, the public draft
 and registries at `c05bcfc45`, and the requested MANIFEST-GAPS, PACKET and
@@ -188,8 +189,23 @@ PY
 
 ## Publication and remaining owner inputs
 
-The audit-target PR is a draft. The PR and hosted check state will be
-recorded after publication.
+Draft [PR #915][pr] targets `audit/2026-11-10-fable`. GitHub confirmed the
+initial head `b1a0892af07b1420208da78ed890d3c2f882fa1d` and base
+`d6016f406496ac4d0c82f70811da2a5bab82ea35`, with exactly the two authorized
+Markdown paths. Every finding above is in that exhibit commit.
+
+Hosted `changes`, `fences`, and `build` passed on the verified exhibit head.
+The audit workflow scheduled the full hosted matrix. GitHub keeps the
+conclusion for the report-only follow-up head in the [PR checks][checks].
+The initial run and the draft-skipped gate ledger are recorded separately.
+[Initial CI run][initial-ci] · [Initial gate-ledger run][initial-ledger]
+
+Verify the current hosted head, base, draft state and CI rollup together.
+
+```sh
+gh pr view 915 --repo mpmdw/JouleWise \
+  --json headRefOid,baseRefName,baseRefOid,isDraft,statusCheckRollup
+```
 
 - PR #868 supplies the integrated executor and schema byte records, final
   validation, synthetic verification, rehearsal and once-per-ID evidence.
@@ -200,3 +216,12 @@ recorded after publication.
   Opus supplies the paired exact-hash ruling and applicable signatures.
 - NEEDS_SPEC: none found. Any new scientific choice goes to Fable through
   Opus. Depletion forecasting stays with its assigned owner.
+
+Next owner action is for PR #868's author to supply accepted artifacts and
+verification. Opus then assembles the two final manifests and exact-byte
+evidence for Fable's paired review.
+
+[pr]: https://github.com/mpmdw/JouleWise/pull/915
+[checks]: https://github.com/mpmdw/JouleWise/pull/915/checks
+[initial-ci]: https://github.com/mpmdw/JouleWise/actions/runs/44767894237
+[initial-ledger]: https://github.com/mpmdw/JouleWise/actions/runs/44767894225
