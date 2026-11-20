@@ -1010,17 +1010,17 @@ class RunnerTracebackTest(unittest.TestCase):
         source = inspect.getsource(dry_run)
         self.assertIn(cmp.RUNNER_ESCAPE_SOURCE, source)
         self.assertIn(cmp.DRIVER_FAIL_SOURCE, source)
+        backport = _git_show(R1_FIX_TAG, 'configs/analysis/b5/dry_run_refusal_classes.json')
+        self.assertIsNotNone(backport, 'required tag b5/analysis-r1-9bfix-ref is not available')
+        self.assertEqual(tuple(json.loads(backport)['outcome_class']), cmp.OUTCOME_CODES)
         r1 = _git_show(R1_TAG, 'joulewise/b5_analysis/dry_run.py')
         if r1 is None:
             self.skipTest('tag b5/analysis-r1 is not available')
         r1_classes = json.loads(_git_show(R1_TAG, 'configs/analysis/b5/dry_run_refusal_classes.json'))
         # D-189: the tag predates step 9b's one outcome code; the reference commit
-        # (lane/b5-r1-9b-fix, the tag plus the same driver change) carries it.
+        # (b5/analysis-r1-9bfix-ref, the tag plus the same driver change) carries it.
         self.assertEqual(tuple(sorted({*r1_classes['outcome_class'], cmp.CLAIM_SIDE_BOUND_NOT_ISSUABLE})),
                          cmp.OUTCOME_CODES)
-        backport = _git_show(R1_FIX_BRANCH, 'configs/analysis/b5/dry_run_refusal_classes.json')
-        if backport is not None:
-            self.assertEqual(tuple(json.loads(backport)['outcome_class']), cmp.OUTCOME_CODES)
         self.assertIn(cmp.RUNNER_ESCAPE_SOURCE, r1)
         self.assertIn(cmp.DRIVER_FAIL_SOURCE, r1)
         for name in ('refusal_token', 'mint_refusal_code'):
@@ -1051,7 +1051,7 @@ class RunnerTracebackTest(unittest.TestCase):
 
 R1_TAG = 'b5/analysis-r1'
 # D-189: the equivalence-reference commit, b5/analysis-r1 plus the step-9b driver change.
-R1_FIX_BRANCH = 'origin/lane/b5-r1-9b-fix'
+R1_FIX_TAG = 'b5/analysis-r1-9bfix-ref^{commit}'
 
 
 def _git_show(rev, path):

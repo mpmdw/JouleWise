@@ -1,0 +1,171 @@
+{
+  "armed": null,
+  "next_observable": "f2inst03-5de758cd/run-out.txt shows LAUNCH_RC=0 with the fence (launch ~04:36, expected end ~06:14, fence ~07:23). The next activation after the fence is gone Checks cq-f2-inst-03-l011-l012-a1 under /Users/edr/campaign-out/f2-inst-03/ with the ready template f2inst03-check-template-5de758cd/check.sh (LEGS L011,L012, kit sha 2868…cf25, campaign_id f2-inst-03 and batch_windows == ['02:00-02:35'] asserted; replace REPLACE_STAMP in OUT with the actual directory's stamp and NEWACT in TMPDIR with the activation id; read each leg_summary's admitted/contaminated_redos and grep each leg_record for max_busy_cores/max_gap_s), and copies at once with f2inst03-check-template-5de758cd/offload-run.sh (replace NEWACT everywhere with the activation id). That closes kit f2-inst-03 (all six spans run; L007 a recorded not-admitted cell). Then continue down the ladder (items 422, 447, 463, 464, 480): rank 2 only for an f2-inst kit whose executing delta PASS is recorded on main; otherwise rank 3 hp-02 if issued; otherwise rank 4 further stability from kits f2-stab-01..14 on pin 2d347f721 (lowest-numbered kit with an unrun leg, item 425 issue checks, ARG per item 463), or f2-stab-15/16 on pin 6e9d42f1d with no window in the 10:50:01-13:14:59 gap. Saturday's rank-1 stability leg is due at the first dispatch after 00:00.",
+  "open_items": [
+    {
+      "expires_epoch_s": null,
+      "item": 481,
+      "owner": "magistrate",
+      "status": "ISSUED"
+    },
+    {
+      "expires_epoch_s": null,
+      "item": 480,
+      "owner": "magistrate",
+      "status": "ISSUED"
+    },
+    {
+      "expires_epoch_s": null,
+      "item": 473,
+      "owner": "lead",
+      "status": "ISSUED"
+    },
+    {
+      "expires_epoch_s": null,
+      "item": 471,
+      "owner": "magistrate",
+      "status": "ISSUED"
+    },
+    {
+      "expires_epoch_s": null,
+      "item": 465,
+      "owner": "magistrate",
+      "status": "ISSUED"
+    },
+    {
+      "expires_epoch_s": null,
+      "item": 464,
+      "owner": "magistrate",
+      "status": "ISSUED"
+    },
+    {
+      "expires_epoch_s": null,
+      "item": 463,
+      "owner": "magistrate",
+      "status": "ISSUED"
+    },
+    {
+      "expires_epoch_s": null,
+      "item": 462,
+      "owner": "magistrate",
+      "status": "ISSUED"
+    },
+    {
+      "expires_epoch_s": null,
+      "item": 459,
+      "owner": "magistrate",
+      "status": "ISSUED"
+    },
+    {
+      "expires_epoch_s": null,
+      "item": 447,
+      "owner": "magistrate",
+      "status": "ISSUED"
+    },
+    {
+      "expires_epoch_s": null,
+      "item": 445,
+      "owner": "magistrate",
+      "status": "ISSUED"
+    },
+    {
+      "expires_epoch_s": null,
+      "item": 443,
+      "owner": "magistrate",
+      "status": "ISSUED"
+    },
+    {
+      "expires_epoch_s": null,
+      "item": 442,
+      "owner": "magistrate",
+      "status": "ISSUED"
+    },
+    {
+      "expires_epoch_s": null,
+      "item": 441,
+      "owner": "magistrate",
+      "status": "ISSUED"
+    },
+    {
+      "expires_epoch_s": null,
+      "item": 434,
+      "owner": "magistrate",
+      "status": "ISSUED"
+    },
+    {
+      "expires_epoch_s": null,
+      "item": 433,
+      "owner": "magistrate",
+      "status": "ISSUED"
+    },
+    {
+      "expires_epoch_s": null,
+      "item": 432,
+      "owner": "magistrate",
+      "status": "ISSUED"
+    },
+    {
+      "expires_epoch_s": null,
+      "item": 431,
+      "owner": "magistrate",
+      "status": "ISSUED"
+    },
+    {
+      "expires_epoch_s": null,
+      "item": 430,
+      "owner": "magistrate",
+      "status": "ISSUED"
+    },
+    {
+      "expires_epoch_s": null,
+      "item": 428,
+      "owner": "magistrate",
+      "status": "ISSUED"
+    },
+    {
+      "expires_epoch_s": null,
+      "item": 425,
+      "owner": "magistrate",
+      "status": "ISSUED"
+    },
+    {
+      "expires_epoch_s": null,
+      "item": 424,
+      "owner": "magistrate",
+      "status": "ISSUED"
+    },
+    {
+      "expires_epoch_s": null,
+      "item": 423,
+      "owner": "magistrate",
+      "status": "ISSUED"
+    },
+    {
+      "expires_epoch_s": null,
+      "item": 422,
+      "owner": "magistrate",
+      "status": "ISSUED"
+    },
+    {
+      "expires_epoch_s": null,
+      "item": 418,
+      "owner": "magistrate",
+      "status": "ISSUED"
+    },
+    {
+      "expires_epoch_s": null,
+      "item": 410,
+      "owner": "lead",
+      "status": "ISSUED"
+    }
+  ],
+  "owner": "magistrate",
+  "schema": "joulewise.current_pointer.v2",
+  "source_item": "481",
+  "source_item_heading_date": "2026-11-20",
+  "wait": {
+    "deadline_epoch_s": 1795192200,
+    "observable": "none",
+    "on_early_or_refused": "a launcher refusal or non-clean close: record it, hold kit f2-inst-03 until an input changes (item 422, RL-179 F-6), mail the lead and Ed, and continue down the ladder. R1 stays unarmed."
+  }
+}

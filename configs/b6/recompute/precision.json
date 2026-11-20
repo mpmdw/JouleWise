@@ -1,0 +1,46 @@
+{
+ "decimals": [
+  [
+   "calibration/b_op_s",
+   6
+  ],
+  [
+   "*/per_token_j",
+   8
+  ],
+  [
+   "*/R",
+   4
+  ],
+  [
+   "*/R_cm",
+   4
+  ],
+  [
+   "*/factor",
+   4
+  ],
+  [
+   "*/energy_ratio*",
+   4
+  ],
+  [
+   "contrast/*/t",
+   3
+  ],
+  [
+   "contrast/*/p",
+   4
+  ],
+  [
+   "contrast/*/holm_p",
+   4
+  ],
+  [
+   "*_j",
+   5
+  ]
+ ],
+ "schema": "joulewise.b6_print_precision.v1",
+ "source": "Block 6 S17-R2: strictest family precision (2026-11-10 draft; RL-6, RL-24)"
+}

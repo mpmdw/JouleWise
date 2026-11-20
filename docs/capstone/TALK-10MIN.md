@@ -93,9 +93,10 @@
 
 - **Message:** v4 turns the pilot into a registered test with rules fixed before data. v5 asks whether successful sabotage can escape a joint energy-plus-monitor audit by an adaptive agent.
 - **On the slide:**
-  - v4: R0 → R1 → blind registration gate → W1 → three D windows → calibration (m ≥ 39 per pair plus a held-out test cohort) → independent recompute → release. Each box shows `[FREEZE]` status, never an outcome. Qwen3.8-27B 8-bit; KM003C in every window; full transcripts sealed and unscored.
+  - v4: R0 → R1 `[FREEZE]` → blind registration gate → W1 → C calibration windows → held-out T windows → independent recompute → release. Each box shows `[FREEZE]` status, never an outcome.
+  - Design: Qwen3.8-27B 8-bit; KM003C on DC input in every window; full transcripts sealed and unscored.
   - v5 endpoint: **side-task success and no joint alarm, per attempt**, with utility; joint rule calibrated at 0.05 against energy-alone, monitor-alone and time-plus-monitor comparators; frontier API monitor off-box.
-  - Timeline: talk Nov 30 → paper mid-December → v5 windows December-February → NeurIPS 2027.
+  - Timeline: talk Nov 30 → paper mid-December.
 - **Say:**
   - Example of deciding first: 8-bit decode at about 11.9 tok/s could not fit the original budget, so the fallback was declared before any R1 number existed.
   - If asked about results: "sealed until the registered release; I don't know them."

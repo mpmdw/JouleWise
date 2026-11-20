@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!-- Rendered by scripts/air/install_pipeline_watch.sh; do not edit the installed copy.
+     RL-127 term 8: a non-agent watcher on the Air, one poll every 120 s. -->
+<plist version="1.0"><dict>
+  <key>Label</key><string>com.joulewise.pipeline-watch</string>
+  <key>ProgramArguments</key><array>
+    <string>/bin/sh</string>
+    <string>@STATEDIR@/pipeline-watch-run.sh</string>
+  </array>
+  <key>WorkingDirectory</key><string>@STATEDIR@</string>
+  <key>EnvironmentVariables</key><dict>
+    <key>PATH</key><string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
+    <key>GIT_TERMINAL_PROMPT</key><string>0</string>
+    <key>GH_PROMPT_DISABLED</key><string>1</string>
+    <key>GH_NO_UPDATE_NOTIFIER</key><string>1</string>
+  </dict>
+  <key>StartInterval</key><integer>120</integer>
+  <key>RunAtLoad</key><true/>
+  <key>ProcessType</key><string>Background</string>
+  <key>Nice</key><integer>10</integer>
+  <key>StandardOutPath</key><string>@LOG@</string>
+  <key>StandardErrorPath</key><string>@LOG@</string>
+</dict></plist>

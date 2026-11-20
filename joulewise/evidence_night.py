@@ -513,7 +513,9 @@ def prepare(*, kind, t0, head=None, remote=REMOTE, roots_under="/Users/edr",
             root.parent.mkdir(parents=True, exist_ok=True)
             run(["git", "clone", "-q", "--no-hardlinks", remote, root])
             run(["git", "-C", root, "checkout", "-q", "--detach", resolved_head])
-            run(["git", "-C", root, "fetch", "-q", "origin", "main"])
+            # Waiting for fetch does not wait for its detached auto-maintenance
+            # writer. An immediate builder error must leave the clone quiescent.
+            run(["git", "-C", root, "fetch", "--no-auto-maintenance", "-q", "origin", "main"])
             run(["git", "-C", root, "merge-base", "--is-ancestor", resolved_head, "refs/remotes/origin/main"])
             checkout_ok(root, resolved_head)
             checkpoint(state_path, state, "clone")

@@ -19,3 +19,5 @@ A focused Q2 replay first created a custody hold at the queue SHA and position. 
 All six original hp-02 fixtures match their deliveries byte for byte. The three original CI-discovered hp-02 tests passed locally, covering 60 contract vectors, 54 occupancy decisions, 1,764 occupancy clock cases, 43 runner traces, 11 runner pairs and 360 legacy replay cases. The checks used synthetic inputs and recorded zero native-command attempts and zero measured energy data.
 
 The full repository suite runs on draft PR #890. Local unittest discovery for the shard-invariant test hit filesystem permissions on optional historical archives. The shard discoverer and its timing coverage check run without opening those archives.
+
+The audit base advanced to `eaaa1fd560cd457f4e4ccef316be62af920d08e1` before CI could start. The merge preserves both qualification and hp-02 handoffs in `RUN_STATE.md` and both branches' module weights. The hp-02 item, generator, test and fixture paths are byte-identical to the locally verified tree.

@@ -29,8 +29,7 @@ from tests.custody_isolation import (
 TESTS = Path(__file__).resolve().parent
 
 # Modules observed reaching custody_parent() in a full-suite probe
-# (CUSTODY-T1, 2026-10-30), plus the window_status.sh caller, which runs
-# measurement_liveness.py as a script.
+# (CUSTODY-T1, 2026-10-30). The retired status publisher's test is excluded.
 REACHING_MODULES = frozenset({
     "test_axi_controller_events.py",
     "test_axi_mock_spec.py",
@@ -40,7 +39,6 @@ REACHING_MODULES = frozenset({
     "test_run_campaign_hazard_flags.py",
     "test_run_campaign_max_blocks.py",
     "test_run_campaign_p2_rc.py",
-    "test_window_status_guard.py",
 })
 
 # Source shapes that drive a real custody writer or reader. A module whose

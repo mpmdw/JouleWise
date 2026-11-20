@@ -1,0 +1,11 @@
+{
+  "source": {
+    "commit": "6ffcb3c3d2b4ed6f4e925faa4cc41ce6669ef52c",
+    "path": "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/looks/lm-qual-01.manifest.json"
+  },
+  "kit_sha256_by_block": {
+    "qual-01": "fe5b692a39b8646b81fc4e7b738a1802ba00ab51bd09158d1525e2bec0ccbac4",
+    "qual-02": "a1b964faec281cf351e6387759a84178097ad6f8c94011a0856647a3197e2742",
+    "qual-03": "f977eff89859d3111b9dee7afee7e9ac0c5232463dd7f980b2dfa7015b4ba4b1"
+  }
+}

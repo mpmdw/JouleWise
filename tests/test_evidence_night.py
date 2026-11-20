@@ -825,12 +825,21 @@ class PrepareTests(unittest.TestCase):
             raise RuntimeError("unexpected builder defect")
         self.kw["builder"] = broken
         errors = io.StringIO()
-        with patch.object(entry, "prepare", side_effect=lambda **kwargs: original(**self.kw)):
+        trace = self.base_dir / "git-trace.jsonl"
+        with patch.dict(os.environ, {"GIT_TRACE2_EVENT": str(trace)}), \
+                patch.object(entry, "prepare", side_effect=lambda **kwargs: original(**self.kw)):
             with contextlib.redirect_stderr(errors):
                 result = entry.main(["prepare", "--kind", entry.KIND, "--t0", "next"])
         self.assertEqual(result, 1)
         self.assertIn("ERROR: RuntimeError: unexpected builder defect", errors.getvalue())
         self.assertIn("Traceback (most recent call last)", errors.getvalue())
+        # subprocess.run waits for fetch, but fetch can detach maintenance.
+        # Observe real Git launches even when a small fixture's writer happens
+        # to finish before cleanup; polling for a live PID would race it again.
+        events = [json.loads(line) for line in trace.read_text().splitlines()]
+        maintenance = [event for event in events if event.get("event") == "child_start"
+                       and "maintenance" in event.get("argv", ())]
+        self.assertEqual(maintenance, [], "prepare must not launch detached Git maintenance")
 
 
     def test_default_selection_is_pinned_across_resume(self):

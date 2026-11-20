@@ -1,0 +1,229 @@
+"""R12 scheduler of the pinned loop and its real production lane adapters.
+
+This is generator code. It never constructs a lane result or edits session
+records. Scheduling, clocks, machine observations and installer return values
+are inputs; every transition and attempt is written by the pinned loop.
+"""
+from __future__ import annotations
+
+import json
+from pathlib import Path
+
+
+def seed_calibration(root, clock, sources, source):
+    """Obtain the initial ledger through a pinned reduced driver, not a fixture record."""
+    import datetime as dt
+    import hashlib
+    from joulewise.b5 import plan
+    from joulewise.b6 import smoke, plan_inputs
+    from scripts.write_derivation_night_inputs import _derive_planned_vectors
+    from scripts.run_night import run_night
+    ledger = source / plan.DEFAULT_LEDGER_RELATIVE
+    if ledger.exists() and ledger.stat().st_size:
+        return
+    prior_path = root / "prior-seed-input.json"
+    if prior_path.exists():
+        # A prior, chain-written ledger is an external input, just as in a
+        # production restart. The pinned copier writes both destination
+        # files and authenticates the unchanged source/destination bytes.
+        prior = json.loads(prior_path.read_text())
+        for name, expected in prior["files"].items():
+            if hashlib.sha256(Path(name).read_bytes()).hexdigest() != expected:
+                raise ValueError("prior synthetic prerequisite input changed: " + name)
+        copied = smoke.copy_ledger(Path(prior["measurement"]), source, root)
+        sources.subprocess_run(["git", "-C", str(source), "add", plan.HEAD_PIN_RELATIVE], check=True)
+        sources.subprocess_run(["git", "-C", str(source), "-c", "commit.gpgsign=false", "commit", "-qm",
+                               "Import prior chain-written synthetic prerequisite pin"], check=True)
+        clock.sleep(max(0, prior["clock_ns"] / 1e9 - clock.monotonic()))
+        (root / "seed-receipt.json").write_text(json.dumps({"driver_rc": None,
+            "prior_chain_input": prior, "copied_input_paths": list(copied)}, indent=2) + "\n")
+        print("prior_chain_prerequisite_imported", flush=True)
+        return
+    ledger.parent.mkdir(parents=True, exist_ok=True)
+    ledger.touch()
+    identities = {}
+    epoch, t1 = _derive_planned_vectors(plan.POWER_POLICY)
+    for name, value in (("identity-epoch.json", epoch), ("t1-bindings.json", t1)):
+        path = root / "inputs" / name
+        path.write_text(json.dumps(value, sort_keys=True) + "\n")
+        identities[name] = {"path": str(path), "sha256": hashlib.sha256(path.read_bytes()).hexdigest()}
+    parent = root / "seed-inputs"
+    (parent / "runs").mkdir(parents=True)
+    inputs = plan_inputs.build(source, source / "configs/b6/registration", "d117_floor_qwen3-1p7b_v5",
+        "R12-seed", identities, custody_root=parent / "custody", runs_parent=parent / "runs",
+        claim_backup=parent / "backup-claim", bound_backup=parent / "backup-bound", run=sources.subprocess_run)
+    tree = json.loads((source / "configs/campaigns/d117_floor_qwen3-1p7b_v5/plan_tree.json").read_text())
+    first = next(row for row in tree["stage_graph"] if row["kind"] == "campaign_collection"
+                 and "bound" not in row["stage_id"])
+    head = sources.subprocess_run(["git", "-C", str(source), "rev-parse", "HEAD"], capture_output=True,
+                                   text=True, check=True).stdout.strip()
+    seed = smoke.prepare("d117_floor_qwen3-1p7b_v5", head, source, root / "prerequisite",
+        plan_inputs=inputs, fp={}, state_root=root / "seed-state", now=dt.datetime.now(dt.timezone.utc),
+        run=sources.subprocess_run, defer_plan=True, keep={first["stage_id"]: 1})
+    seed_inputs = json.loads((seed.smoke_dir / "smoke-state.json").read_text())["plan_inputs"]
+    seed_inputs["t0_epoch_s"] = 60 * ((int(clock.time()) + 479) // 60)
+    record = plan.write_window_plan(seed_inputs, now=clock.time)
+    clock.sleep(seed_inputs["t0_epoch_s"] - clock.time())
+    rc = run_night(Path(record["plan"]["path"]))
+    print("prerequisite_driver", rc, flush=True)
+    if rc not in (0, 6):
+        raise RuntimeError("prerequisite chain did not finish")
+    captures = [json.loads(path.read_text()) for path in (seed.smoke_dir / "runs-parent").glob(
+        "*/instrument_validation/*/instrument_evidence.json")]
+    if len(captures) != 2 or any(value.get("status") != "valid" for value in captures):
+        raise RuntimeError("the real prerequisite writer did not produce two valid captures")
+    plan.advance_ledger_pin(seed.measurement, session_id=seed.bracket_session_id,
+        operator_identity="R12 synthetic prerequisite", attestation_reason="real synthetic prerequisite ended")
+    # The pinned copier supplies a prior ledger input to the new source
+    # checkout. Source capture bytes stay untouched at their original paths.
+    copied = smoke.copy_ledger(seed.measurement, source, root)
+    sources.subprocess_run(["git", "-C", str(source), "add", plan.HEAD_PIN_RELATIVE], check=True)
+    sources.subprocess_run(["git", "-C", str(source), "-c", "commit.gpgsign=false", "commit", "-qm",
+                           "Import chain-written synthetic prerequisite pin"], check=True)
+    (root / "seed-receipt.json").write_text(json.dumps({"driver_rc": rc,
+        "smoke": seed.to_json(), "copied_input_paths": list(copied)}, indent=2) + "\n")
+
+
+def session_policy(pack, round_number, base):
+    """Predeclared external source schedule, independent of all verdicts."""
+    value = dict(base)
+    value.update(scenario=f"r{round_number}-{pack}", denied_off=False,
+                 gpu_busy_primary_ordinals=[], gpu_busy_after_primary=10**9,
+                 native_timestamp_offsets_s={}, gpu_busy_science=False)
+    full = (pack, round_number) in {("alpha", 3), ("beta", 1), ("gamma", 1)}
+    value.update(volume="full" if full else "reduced", primary_stream_duration_s=335 if full else 65,
+                 token_first_s=1.0 if full else .5, token_next_s=.05 if full else .001)
+    if (pack, round_number) == ("alpha", 1):
+        value["gpu_busy_science"] = True
+    if (pack, round_number) == ("alpha", 2):
+        value["gpu_busy_primary_ordinals"] = [1]
+    if (pack, round_number) == ("beta", 2):
+        value["native_timestamp_offsets_s"] = {"27": 5.0}
+    return value
+
+
+def pending_driver(state):
+    """Dispatch only an active, not-yet-terminal original driver handle."""
+    if state["state"] not in {"SMOKE_RUN", "SESSION_RUN"}:
+        return None
+    session = state.get("session") or {}
+    prefix = "smoke_" if state["state"] == "SMOKE_RUN" else ""
+    prepared = session.get(prefix + "prepared")
+    if (not prepared or not session.get(prefix + "handle")
+            or Path(prepared["terminal_path"]).exists()):
+        return None
+    return prefix, prepared
+
+
+def loop_fixture(root, clock, pack="alpha", limit="1", boundary="continuous"):
+    from runtime import install_sources, source_root
+    from joulewise.b6.loop import Loop
+    from joulewise.b6 import precheck
+    from joulewise.b6.lanes import Lanes
+    from joulewise.b6.precheck_lane import PrecheckLane
+    from joulewise.b6.driver_lane import DriverLane
+    from joulewise.b6.desk_lane import DeskLane
+    from joulewise.b6.analysis_lane import AnalysisLane, HarvestLane
+    from joulewise.b6.pack_registration import open_packs
+    from joulewise.hazards.base import Context
+
+    source = source_root(root)
+    sources = install_sources(root, clock)
+    def run(argv, **kwargs):
+        return sources.subprocess_run(argv, **{"capture_output": True, "text": True, **kwargs})
+    base_path = root / "base-source-policy.json"
+    if not base_path.exists():
+        base_path.write_bytes((root / "source-policy.json").read_bytes())
+    base_policy = json.loads(base_path.read_text())
+    declarations = [session_policy(p, r, base_policy) for r in (1, 2, 3) for p in ("alpha", "beta", "gamma")]
+    declarations.append(session_policy("alpha", 4, base_policy))
+    declaration_path = root / "fixture-plan.json"
+    declared = json.dumps(declarations, indent=2) + "\n"
+    if declaration_path.exists():
+        if declaration_path.read_text() != declared:
+            raise ValueError("predeclared source schedule changed")
+    else:
+        declaration_path.write_text(declared)
+        (root / "source-policy.json").write_text(json.dumps({**base_policy, "denied_off": False}, indent=2) + "\n")
+    seed_calibration(root, clock, sources, source)
+    loop_root = root / "loop"
+    config = json.loads((source / "configs/b6/loop.json").read_text())
+    config.update(loop_root=str(loop_root), base_order=[pack] if pack != "all" else ["alpha", "beta", "gamma"], wake_argv=[])
+    rejected = []
+    regs = {reg.pack_id: reg for reg in open_packs(source, run=run,
+                                                rejected=lambda path, reasons: rejected.append([path, reasons]))
+            if pack == "all" or reg.pack_id == pack}
+    if not regs:
+        raise ValueError("no open synthetic registration: " + repr(rejected))
+    seams = precheck.Seams(frequency_reader=sources.frequency_reader,
+        stat=sources.stat, statvfs=sources.statvfs, host_reader=sources.host_reader,
+        smc_read=None, orphan_collect=lambda: [])
+    lanes = Lanes(
+        PrecheckLane(source, loop_root, run, block_root=root, seams=seams,
+                     context_factory=lambda out: Context(run=sources.run, clocks=clock, raw_dir=out.parent / "raw")),
+        DriverLane(source, loop_root, run, config=config, clock=clock.time,
+                   block_root=root, group_alive=lambda pgid: False),
+        DeskLane(source, loop_root, run), HarvestLane(), AnalysisLane())
+    loop = Loop(source, loop_root, config=config, regs=regs, lanes=lanes,
+                clock=clock.time, run=run)
+    scheduled = set()
+    for tick in range(300):
+        previous = loop.read_state()["state"]
+        loop.tick()
+        state = loop.read_state()
+        print("loop", tick, state["state"], flush=True)
+        if state["state"] in {"HOLD_LOOP", "DONE"}:
+            return 0 if state["state"] == "DONE" else 2
+        if (base_policy.get("denied_off") and not base_policy.get("denied_normal")
+                and state["state"] == "ARM_WAIT" and (state.get("session") or {}).get("smoke_done")):
+            (root / "denied-fixture-receipt.json").write_text(json.dumps({
+                "kind": "denied-action non-claim smoke session", "state": state["state"],
+                "session": state["session"], "loop_wrote_attempt": False,
+                "reason": "the original loop does not count a smoke session"}, indent=2) + "\n")
+            return 0
+        if pack != "all" and len(state.get("attempts", [])) >= int(limit):
+            return 0
+        if boundary == "one" and ((previous == "SESSION_DESK" and state["state"] == "ROTATE")
+                or (previous == "SMOKE_DESK" and state["state"] == "ARM_WAIT")):
+            print("scheduler_boundary", state["state"], flush=True)
+            return 0
+        session = state.get("session") or {}
+        pending = pending_driver(state)
+        if pending and pending[1]["plan_path"] not in scheduled:
+            prefix, prepared = pending
+            from scripts.run_night import run_night
+            plan_path = Path(prepared["plan_path"])
+            plan = json.loads(plan_path.read_text())
+            scheduled.add(str(plan_path))
+            policy = dict(base_policy)
+            if prefix:
+                policy.update(scenario="smoke-" + session["id"],
+                              denied_off=bool(base_policy.get("denied_off")) and not base_policy.get("denied_normal"),
+                              primary_stream_duration_s=65, volume="reduced")
+            else:
+                policy = session_policy(session["packs"][0], session["round"], base_policy) if pack == "all" else policy
+                if policy.get("volume") == "prerequisite":
+                    policy["volume"] = "reduced"
+                policy["scenario"] = session["id"]
+            (root / "source-policy.json").write_text(json.dumps(policy, indent=2) + "\n")
+            manifests = root / "fixture-manifests"
+            manifests.mkdir(exist_ok=True)
+            common = json.loads((root / "manifest.json").read_text())
+            (manifests / (session["id"] + ("-smoke" if prefix else "") + ".json")).write_text(
+                json.dumps({**common, "source_policy": policy, "plan_path": str(plan_path),
+                            "prediction": "option (c) exit 0 with comparator agreement; registered collection flags retained",
+                            "kind": "smoke prerequisite" if prefix else "R12 session",
+                            "shared_manifest": str(root / "manifest.json")}, indent=2) + "\n")
+            clock.sleep(max(0, plan["t0_epoch_s"] - clock.time()))
+            code = run_night(plan_path)
+            print("scheduled_driver", code, str(plan_path), flush=True)
+            if boundary == "one":
+                if not Path(prepared["terminal_path"]).is_file():
+                    raise RuntimeError("driver returned without its original terminal record")
+                print("scheduler_boundary", state["state"], flush=True)
+                return 0
+        if state["state"] == "ARM_WAIT":
+            clock.sleep(max(0, session["notice_sent"] + 1800 - clock.time()))
+        if state["state"] == "WAIT_PHYSICS":
+            return 3
+    raise RuntimeError("development tick bound reached")

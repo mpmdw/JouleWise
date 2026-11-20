@@ -26,15 +26,10 @@ and its last `state` decision without importing the watchdog. Operational
 liveness is 15 minutes: an age greater than 900 seconds, a missing file, or an
 unreadable decision means the watchdog is dead and must be reported as such.
 
-For a status update through `scripts/window_status.sh`, the script inventories
-recorded measurement processes before any status-file or Git change. A
-**campaign** is one execution of the program controlling a set of measurements,
-within a chain or launched separately. Handback delivery alone does not permit
-an update: `courier.sent`, the delivery record, does not clear either process
-check; `chain.exited`, the chain's end record, clears only the chain check when
-its required fields are acceptable. A running recorded campaign, or
-**indeterminate** evidence (insufficient to establish whether it still runs),
-still stops the update. The [window-liveness contract](../contracts/window_liveness.md)
+For the current declared wait and next activation, read
+[`CURRENT.json`](CURRENT.json) and [the pointer rule](POINTER_RULE.md).
+Handback delivery alone does not establish that measurement processes ended.
+The [window-liveness contract](../contracts/window_liveness.md)
 gives the exact record checks, shared custody-parent settings, decision table,
 and operator repair for records whose processes have ended or whose numbers
 have been assigned to later processes.

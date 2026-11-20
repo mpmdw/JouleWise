@@ -1,0 +1,81 @@
+dir	kind	kb	inbound	worktrees	dirty	ignored	stash	head_in_mirror	active_pid	branch	last_commit
+align-v4-assembly-tmp	nogit	281100
+align-v4-assembly	clone	432272	inbound=1	wt=1	dirty=0	ignored=12	stash=0	head_in_mirror=y	active=none	lane/2026-11-05-align-v4-assembled	2026-11-05
+b5-care-audit	worktree	395080	inbound=0	wt=0	dirty=0	ignored=0	stash=1	head_in_mirror=y	active=none	lane/2026-11-06-b5-care-audit	2026-11-06
+b5-lean-A-out	nogit	0
+b5-lean-A	worktree	395292	inbound=0	wt=0	dirty=11	ignored=0	stash=1	head_in_mirror=y	active=none	HEAD	2026-11-06
+b5-lean-data	nogit	1227444
+b5-lean-spec	worktree	395128	inbound=0	wt=0	dirty=1	ignored=0	stash=1	head_in_mirror=y	active=none	HEAD	2026-11-04
+b5-lean	worktree	395172	inbound=0	wt=0	dirty=1	ignored=0	stash=1	head_in_mirror=y	active=none	lane/2026-11-06-b5-lean	2026-11-06
+b5-lr-sol-logs	nogit	1772
+b5-r3-assembly	worktree	216896	inbound=0	wt=0	dirty=0	ignored=11	stash=1	head_in_mirror=y	active=none	lane/2026-11-07-b5-analysis-r3	2026-11-07
+b5-r3-run	worktree	203600	inbound=0	wt=0	dirty=0	ignored=8	stash=1	head_in_mirror=y	active=none	HEAD	2026-11-07
+b5-r4-run	worktree	197788	inbound=0	wt=0	dirty=0	ignored=0	stash=1	head_in_mirror=y	active=none	HEAD	2026-11-07
+b5-r4	worktree	211084	inbound=0	wt=0	dirty=0	ignored=9	stash=1	head_in_mirror=y	active=none	lane/2026-11-07-b5-analysis-r4	2026-11-07
+b5-release-check	worktree	199260	inbound=0	wt=0	dirty=0	ignored=8	stash=1	head_in_mirror=y	active=none	HEAD	2026-11-06
+b5-release-final	worktree	198428	inbound=0	wt=0	dirty=0	ignored=0	stash=1	head_in_mirror=y	active=none	HEAD	2026-11-08
+b5-results	worktree	198436	inbound=0	wt=0	dirty=0	ignored=0	stash=1	head_in_mirror=y	active=none	analysis/2026-11-08-b5-results	2026-11-08
+b5-robust-fc	worktree	399208	inbound=0	wt=0	dirty=0	ignored=0	stash=1	head_in_mirror=y	active=none	lane/2026-11-07-b5-r3-speed-fix	2026-11-07
+b5-robust-rev-sol	clone	695788	inbound=0	wt=0	dirty=0	ignored=0	stash=0	head_in_mirror=y	active=none	lane/2026-11-06-b5-robust	2026-11-06
+b5-robust-rev-solrun	nogit	4
+b5-robust-rev	clone	697172	inbound=0	wt=0	dirty=0	ignored=0	stash=0	head_in_mirror=y	active=none	lane/2026-11-06-b5-robust	2026-11-06
+b5-robust	worktree	398460	inbound=0	wt=0	dirty=1	ignored=0	stash=1	head_in_mirror=y	active=none	lane/2026-11-06-b5-robust	2026-11-06
+b5-u90-r2	worktree	395072	inbound=0	wt=0	dirty=1	ignored=0	stash=1	head_in_mirror=y	active=none	HEAD	2026-11-04
+b5-under-90	worktree	397996	inbound=0	wt=0	dirty=0	ignored=0	stash=1	head_in_mirror=y	active=none	lane/2026-11-06-b5-under-90	2026-11-06
+capmerge	worktree	198032	inbound=0	wt=0	dirty=0	ignored=0	stash=1	head_in_mirror=y	active=none	HEAD	2026-11-07
+ci-rootcause-b6-pr657	worktree	365676	inbound=0	wt=0	dirty=2	ignored=21	stash=1	head_in_mirror=y	active=none	HEAD	2026-11-05
+ci-rootcause-b6-pr661	worktree	358232	inbound=0	wt=0	dirty=2	ignored=7	stash=1	head_in_mirror=y	active=none	HEAD	2026-11-05
+ci-rootcause-b6-tmp	nogit	164760
+ci-rootcause-b6	clone	385656	inbound=2	wt=2	dirty=1	ignored=12	stash=1	head_in_mirror=y	active=none	HEAD	2026-11-05
+cloud-fixgold	clone	418696	inbound=1	wt=1	dirty=0	ignored=3	stash=0	head_in_mirror=y	active=none	gold-fix	2026-11-05
+cmp-dryij	clone	409012	inbound=0	wt=0	dirty=0	ignored=0	stash=0	head_in_mirror=y	active=none	HEAD	2026-11-05
+council-align9	clone	379928	inbound=0	wt=0	dirty=0	ignored=2	stash=0	head_in_mirror=y	active=none	HEAD	2026-11-04
+council-pr	clone	295688	inbound=3	wt=0	dirty=0	ignored=0	stash=0	head_in_mirror=y	active=none	main	2026-11-06
+d5	worktree	360312	inbound=0	wt=0	dirty=15	ignored=1	stash=1	head_in_mirror=y	active=8581	d5	2026-11-08
+fable-w1gate	worktree	360956	inbound=0	wt=0	dirty=0	ignored=4	stash=1	head_in_mirror=y	active=none	HEAD	2026-11-07
+fable686	worktree	357244	inbound=0	wt=0	dirty=0	ignored=8	stash=1	head_in_mirror=y	active=none	HEAD	2026-11-06
+gold-l3-run	worktree	399064	inbound=0	wt=0	dirty=0	ignored=0	stash=0	head_in_mirror=y	active=none	HEAD	2026-11-06
+handoff	clone	849952	inbound=52	wt=32	dirty=0	ignored=8	stash=1	head_in_mirror=y	active=none	HEAD	2026-11-06
+opus-flashnext-twin	clone	383180	inbound=0	wt=0	dirty=0	ignored=21	stash=0	head_in_mirror=y	active=none	lane/2026-11-05-align-flashnext-twin	2026-11-05
+opus-port-evals	clone	412256	inbound=0	wt=0	dirty=0	ignored=3	stash=0	head_in_mirror=y	active=none	lane/2026-11-05-qwen4exp-port-evals	2026-11-05
+opus-port-perf	clone	412032	inbound=0	wt=0	dirty=0	ignored=5	stash=0	head_in_mirror=y	active=none	lane/2026-11-05-qwen4exp-port-perf	2026-11-05
+opus-port-upstream	clone	421308	inbound=0	wt=0	dirty=0	ignored=12	stash=0	head_in_mirror=y	active=none	lane/2026-11-05-qwen4exp-port-upstream	2026-11-05
+opus-realparity	clone	438672	inbound=0	wt=0	dirty=0	ignored=0	stash=0	head_in_mirror=y	active=none	lane/2026-11-05-align-flashnext-realparity	2026-11-05
+p10-review	worktree	396080	inbound=0	wt=0	dirty=1	ignored=2	stash=1	head_in_mirror=y	active=none	p10-review-local	2026-11-06
+prune-exec	worktree	211608	inbound=0	wt=0	dirty=0	ignored=0	stash=1	head_in_mirror=y	active=25575	ops/2026-11-08-prune-execution	2026-11-08
+prune-work	nogit	432344
+r0-load-ref-review	worktree	357296	inbound=0	wt=0	dirty=0	ignored=9	stash=1	head_in_mirror=y	active=none	HEAD	2026-11-06
+r0-load-reference	worktree	354956	inbound=0	wt=0	dirty=0	ignored=0	stash=1	head_in_mirror=y	active=none	lane/2026-11-06-r0-load-reference	2026-11-06
+r0fix3	worktree	360176	inbound=0	wt=0	dirty=0	ignored=10	stash=1	head_in_mirror=y	active=none	HEAD	2026-11-06
+rec-l3ref	worktree	198412	inbound=0	wt=0	dirty=0	ignored=0	stash=1	head_in_mirror=y	active=none	records/2026-11-07-qwen4-l3-reference-top64	2026-11-07
+runstate-176	worktree	395640	inbound=0	wt=0	dirty=0	ignored=0	stash=0	head_in_mirror=y	active=none	HEAD	2026-11-06
+runstate-196	worktree	197872	inbound=0	wt=0	dirty=0	ignored=0	stash=1	head_in_mirror=y	active=none	HEAD	2026-11-07
+sol-cw-fix	clone	417640	inbound=0	wt=0	dirty=0	ignored=48	stash=0	head_in_mirror=y	active=none	align/2026-11-08-condition-waits-impl	2026-11-08
+sol-cw-impl	clone	374496	inbound=0	wt=0	dirty=0	ignored=0	stash=0	head_in_mirror=y	active=none	align/2026-11-08-condition-waits-impl	2026-11-08
+sol-engine-fix	clone	417096	inbound=0	wt=0	dirty=0	ignored=50	stash=0	head_in_mirror=y	active=none	align/2026-11-08-v4-analysis-engine-sol	2026-11-08
+sol-fix-finalize	clone	212900	inbound=0	wt=0	dirty=0	ignored=1	stash=0	head_in_mirror=y	active=none	perf/2026-11-08-eng-finalize	2026-11-08
+sol-prune-fixes	clone	213164	inbound=0	wt=0	dirty=0	ignored=0	stash=0	head_in_mirror=y	active=none	ops/2026-11-08-prune-plan	2026-11-08
+sol-r11-delta4-sol1	clone	374784	inbound=0	wt=0	dirty=0	ignored=1	stash=0	head_in_mirror=y	active=none	align/2026-11-08-v4-r11-delta4-sol1	2026-11-08
+sol-r11-delta4-sol2	clone	374760	inbound=0	wt=0	dirty=0	ignored=0	stash=0	head_in_mirror=y	active=none	align/2026-11-08-v4-r11-delta4-sol2	2026-11-08
+sol-r11-delta5-sol1	clone	375180	inbound=0	wt=0	dirty=0	ignored=0	stash=0	head_in_mirror=y	active=none	align/2026-11-08-v4-r11-delta5-sol1	2026-11-08
+sol-r11-delta5-sol2	clone	417704	inbound=0	wt=0	dirty=0	ignored=48	stash=0	head_in_mirror=y	active=none	align/2026-11-08-v4-r11-delta5-sol2	2026-11-08
+sol-receipts-fix	clone	423792	inbound=0	wt=0	dirty=0	ignored=51	stash=0	head_in_mirror=y	active=none	perf/2026-11-08-timing-receipts	2026-11-08
+sol-receipts-rereview	clone	377028	inbound=0	wt=1	dirty=0	ignored=0	stash=0	head_in_mirror=y	active=none	perf/2026-11-08-timing-receipts-rereview	2026-11-08
+sol-reduce-sol	clone	416396	inbound=0	wt=0	dirty=0	ignored=49	stash=0	head_in_mirror=y	active=none	perf/2026-11-08-reduce-sol	2026-11-08
+sol-seed-check	clone	374636	inbound=0	wt=0	dirty=0	ignored=0	stash=0	head_in_mirror=y	active=none	align/2026-11-08-series-seed-check-sol	2026-11-08
+sol-smoke-delta-sol1	clone	377236	inbound=1	wt=0	dirty=0	ignored=0	stash=0	head_in_mirror=y	active=none	align/2026-11-08-w1-smoke-delta-sol1	2026-11-08
+sol-smoke-delta-sol2	clone	377492	inbound=1	wt=0	dirty=0	ignored=2	stash=0	head_in_mirror=y	active=none	align/2026-11-08-w1-smoke-delta-sol2	2026-11-08
+sol-smoke-review-sol1	clone	418864	inbound=0	wt=0	dirty=0	ignored=48	stash=0	head_in_mirror=y	active=none	align/2026-11-08-w1-smoke-review-sol1	2026-11-08
+sol-smoke-review-sol2	clone	377368	inbound=1	wt=0	dirty=0	ignored=4	stash=0	head_in_mirror=y	active=none	align/2026-11-08-w1-smoke-review-sol2	2026-11-08
+sol-timing-receipts	clone	374676	inbound=0	wt=0	dirty=0	ignored=0	stash=0	head_in_mirror=y	active=none	perf/2026-11-08-timing-receipts	2026-11-08
+sol-u90-item3	clone	399792	inbound=0	wt=0	dirty=0	ignored=0	stash=0	head_in_mirror=y	active=none	sol/u90-item3	2026-11-06
+sol-u90-item5	clone	399816	inbound=0	wt=0	dirty=0	ignored=0	stash=0	head_in_mirror=y	active=none	sol/u90-item5	2026-11-06
+sol-v4-engine-sol	clone	374508	inbound=0	wt=0	dirty=0	ignored=0	stash=0	head_in_mirror=y	active=none	align/2026-11-08-v4-analysis-engine-sol	2026-11-08
+sol-v4-plan	clone	409404	inbound=0	wt=0	dirty=2	ignored=0	stash=0	head_in_mirror=y	active=none	lane/2026-11-05-align-v4-window1-plan	2026-11-05
+sol-v4-wp5	clone	367912	inbound=0	wt=0	dirty=1	ignored=0	stash=0	head_in_mirror=y	active=none	lane/2026-11-05-align-v4-wp5-b6	2026-11-05
+u90-item3-int	worktree	398072	inbound=0	wt=0	dirty=0	ignored=0	stash=1	head_in_mirror=y	active=none	u90-item3-int	2026-11-06
+u90-item5-int	worktree	398076	inbound=0	wt=0	dirty=0	ignored=0	stash=1	head_in_mirror=y	active=none	u90-item5-int	2026-11-06
+w1-smoke-merged	worktree	362676	inbound=0	wt=0	dirty=11	ignored=0	stash=1	head_in_mirror=y	active=37920	align/2026-11-08-w1-smoke-merged	2026-11-08
+wp19-tools	nogit	44
+wp7-review	worktree	364364	inbound=0	wt=0	dirty=1	ignored=18	stash=1	head_in_mirror=y	active=none	HEAD	2026-11-05
+wp8-cold	worktree	360248	inbound=0	wt=0	dirty=1	ignored=8	stash=1	head_in_mirror=y	active=none	HEAD	2026-11-05

@@ -1,0 +1,21 @@
+RL-122 3(a) desk: night align-r1
+turn  outcome  dur_s  key  target  edge  last300  margin  whole  os  nom  median300  n>=thr  slope  stale_pm  precool  class
+D_bank_benign_s1_gated_held  released  12.2  TVh0  34.853  35.853  35.000  -0.553  35.000*  0  yes  35.000+  0+  +0.198+  0+  -  released
+D_spam_benign_s1_gated_held_a  released  16.3  TVh0  34.853  35.853  35.000  -0.553  35.000*  0  yes  35.000+  0+  +0.146+  0+  -  released
+D_spam_benign_s1_gated_held_b  released  15.2  TVh0  34.853  35.853  35.000  -0.553  35.000*  0  yes  35.000+  0+  +0.211+  0+  -  released
+X_G_contrast  released  9.2  TVh0  34.853  35.853  35.000  -0.553  35.000*  0  yes  35.000+  0+  +0.149+  0+  -  released
+high_power_A1  released  114.2  TVh0  34.403  35.403  83.973  +48.870  83.973*  0  yes  35.000+  42+  +0.000+  0+  -  released
+high_power_A2  released  116.3  TVh0  34.727  35.727  83.965  +48.538  83.965*  0  yes  35.000+  46+  +0.000+  0+  -  released
+high_power_B  released  114.2  TVh0  34.721  35.721  84.242  +48.821  84.242*  0  yes  35.000+  45+  +0.000+  0+  -  released
+planning R+0 [planning_turn_R_plus_0C]  timeout  1200.0  TVh0  34.853  35.853  40.000  +4.447  84.047*  0  yes  40.000+  227+  -0.810+  0+  released  planning-release-3a
+    precool planning_turn_R_plus_0C.precool: released True, last curve value 35.000
+planning R+2 [planning_turn_R_plus_2C]  timeout  1200.0  TVh0  36.853  37.853  45.000  +7.447  83.939*  0  yes  40.000+  266+  +1.269+  0+  released  planning-release-3a
+    precool planning_turn_R_plus_2C.precool: released True, last curve value 35.000
+planning R+4 [planning_turn_R_plus_4C]  timeout  1200.0  TVh0  38.853  39.853  45.000  +5.447  84.261*  0  yes  40.000+  257+  -2.229+  0+  released  planning-release-3a
+    precool cooldown_after_D: released True, last curve value 35.000
+planning R+4 [planning_turn_R_plus_4C.rejected1] (superseded)  timeout  1200.0  TVh0  38.853  39.853  45.000  +5.447  60.000*  0  yes  40.000+  256+  +3.184+  0+  released  planning-release-3a
+    precool cooldown_after_D: released True, last curve value 35.000
+step_30b  released  107.9  TVh0  34.147  35.147  50.000  +15.153  50.000*  0  yes  35.000+  108+  -0.055+  0+  -  released
+step_D_prefill_10k_decode_4096  released  118.2  TVh0  34.853  35.853  84.293  +48.740  84.293*  0  yes  35.000+  49+  +0.000+  0+  -  released
+reconciliation: reconciled: 12 r1_result phase(s) with g0_outcome, 12 desk row(s)
+margin = last-300-s peak - (band edge - 0.3); >= 0 meets the pattern. * whole-G0 peak and + columns: disclosure only.

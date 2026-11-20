@@ -1,0 +1,5 @@
+== G9 2026-11-12T20:01:46Z
+rc=0
+['analysis_head', 'checked_utc', 'estimator_sha256', 'historical_metadata_revisions_checked', 'origin_ref', 'origin_tip_at_push', 'origin_tip_checked', 'predictions_sha256', 'push_time_authority', 'pushed_utc', 'stage1_commit', 'unblinding_journal']
+2026-11-12T20:00:59Z None 569591e53ffcd91efbab7a9ebaff1d580bbc78ba a6cb172c58462b76609be5ec532f1a9bcfbe474ea64d7e004e948b3ffaeb5f19
+       0

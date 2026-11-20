@@ -412,7 +412,14 @@ class MeterDisclosureTests(unittest.TestCase):
 
     def test_an_unproven_chain_leaves_the_meter_running_for_the_dead_man(self):
         # Sol mutation M10: the meter is never stopped while the chain may live.
-        harness = self.harness("/bin/sleep 120 &\nexit 0\n")
+        harness = self.harness()
+        # The chain leaves a live child behind and exits; it first waits (bounded) for the meter's first stream file,
+        # so the assertion below does not race the fake meter's start-up (CI: one failure in ~30 runs, widened by the
+        # test-only host-command guard's child start-up cost).
+        stream = harness.custody / "hazards/meter/stream-001.jsonl"
+        harness.replace_chain("#!/bin/zsh -f\n"
+                              f"i=0; while [ ! -e '{stream}' ] && [ $i -lt 400 ]; do /bin/sleep 0.05; i=$((i+1)); done\n"
+                              "/bin/sleep 120 &\nexit 0\n")
         attempts = []
 
         def unproven(process, *args, **kwargs):

@@ -1,5 +1,8 @@
 # Repo-trim mission: report (2026-10-30)
 
+2026-11-10: the retired prompt-cache script citation is archive-qualified;
+the original report remains at the retaining tag.
+
 > **Status as of 2026-11-04 (committed copy).** This is the 2026-10-30 report, committed unchanged below this note so
 > that every agent and machine can find it. It is the deletion list for Phase 2 of
 > [`freeze_by_commit.md`](freeze_by_commit.md), kernel task `FREEZE-BY-COMMIT-01`. **That task is the first
@@ -269,7 +272,7 @@ Timing labels follow `docs/process/pruning_list_2026-10-14.md`:
      lanes first.
 3. **Unreachable sealed scripts** (no root reaches them). Recommendation for each:
    - **Retire after the seal lifts:** AXI one-shot spikes `axi_sb_static_batch_spike.py` and
-     `axi_sc_spec_decode_spike.py` (3,015 lines with `spike_mlx_prompt_cache.py`). Their verdicts are recorded in
+     `axi_sc_spec_decode_spike.py` (3,015 lines with `archive/process-traces-before-release-prune-2026-11-08:scripts/spike_mlx_prompt_cache.py`). Their verdicts are recorded in
      `docs/specs/axi/s{b,c}_*_verdict.md`. Also `codex_usage_probe.py`, `measure_claude_cold_start.sh`,
      `gen_affine_smoke.py`, `gen_gsm8k_scored.py`, `gen_jw_mixed.py` and `scripts/ed_session/*.sh`.
    - **Ask the owning lane** (process tools reachable only from their own tests): `land_window_records.py`,

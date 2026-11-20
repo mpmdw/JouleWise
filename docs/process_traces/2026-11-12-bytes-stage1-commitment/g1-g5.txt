@@ -1,0 +1,39 @@
+== G1 2026-11-12T19:58:22Z
+rc=0
+READY_TO_COMMIT 0 1e78224cdd5b49bd0c0fc5ada98d07f93cfb1e30 False True
+[0, 0]
+== G2
+a6cb172c58462b76609be5ec532f1a9bcfbe474ea64d7e004e948b3ffaeb5f19  /Users/edr/night-archive/bytes-stage1-20261111/run-sesscodes/out/a-fit/predictions.json
+a6cb172c58462b76609be5ec532f1a9bcfbe474ea64d7e004e948b3ffaeb5f19
+IDENTICAL
+== G3 (before moving W)
+1e78224cdd5b49bd0c0fc5ada98d07f93cfb1e30
+       0
+18582818c7e03bad148b54dce8b8d60a62e2ffc5597e701ae3ab0418dffc0a71  /Users/edr/code/jw-wt/bytes-stage1/joulewise/bytes_analysis.py
+4820dc2e4d6c2b717ae7d1e70c9d66bc28b3c2ad622497604d3ea487b10a03de  /Users/edr/code/jw-wt/bytes-stage1/scripts/bytes_twin.py
+== G4
+d7098081df6812ead4e87bfe8ec9f55c32307b02
+ANCESTOR
+SAME_BYTES
+       0
+configs/gates/hazard_refusals.json
+docs/decision_log.md
+docs/registrations/bytes_deviation_log.md
+docs/run_reports/2026-11-12-bytes-run-line-ci-coldreview.md
+tests/b6/round_support.py
+tests/bytes_commitment_support.py
+tests/fixtures/bytes/output_coverage.json
+tests/fixtures/bytes/repro/harness.py
+tests/test_agent_identity.py
+tests/test_battery_float_sweep.py
+tests/test_bytes_agreement.py
+tests/test_bytes_analysis.py
+tests/test_bytes_roster_drop.py
+d7098081df6812ead4e87bfe8ec9f55c32307b02
+18582818c7e03bad148b54dce8b8d60a62e2ffc5597e701ae3ab0418dffc0a71  /Users/edr/code/jw-wt/bytes-stage1/joulewise/bytes_analysis.py
+4820dc2e4d6c2b717ae7d1e70c9d66bc28b3c2ad622497604d3ea487b10a03de  /Users/edr/code/jw-wt/bytes-stage1/scripts/bytes_twin.py
+success	5ce8b5df62e4312f288667ea0f820ed7ac56ad1c
+== G5
+1
+1
+1

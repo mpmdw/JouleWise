@@ -54,7 +54,8 @@ branches built from it). The annotated tag is what keeps it reachable if those b
 | --- | --- | --- | --- |
 | `b6/collection` | `f31aca19f90473231c41cb31643afb0d6c85d355` | `db97a5409ecd3d99872ed725735bc02551a4eb76` | ready |
 | `b6/collection-n<k>` | none | none | not proposed: one code state (above) |
-| `b6/analysis` | UNRECORDED | UNRECORDED | later: S-14 is `OPEN` (`block6_replication_DRAFT.md:1207`; §13 line 1186). It is cut when the analysis commit is pinned before the blind dry run |
+| `b6/analysis` | `3551e1a7d4f3bb455b8bfb810d2f406b0fb4b93b` | `27770d960cc403989189e7fbfa2077ab2ef65225` | cut at the S-14 pin (registration §14 row S-14, §17-R4), annotated tag object `082652f25983ccd335acd834861f19455b9ff6fe`; recorded 2026-11-13; **revised 2026-11-13 (§17-R13, RL-142):** RC-B6-1 at this commit drops Block 5's four whole-machine values; the release runs at `b6/analysis-r2`. The R12 reads stand under `90e22603…` |
+| `b6/analysis-r2` | `6e6d1b18a9dffbba675c3abd28db2e4c6a484fde` | `726501c9d0a421abcc341f0e0cfe7140cb811300` | cut 2026-11-13 under RL-142 (§17-R13): S-14 revision 2, RC-B6-1 `4a9f594471652581737b6cd02bd2922592f2e7cf9d575a164adb10162a5211ea` (one function, `pack_block5_keys`; PR #762, fix `aaa2f30861a4e49c4b8d2b4746f770931d713e84`); annotated tag object `e11a600328e45d067c732c039c309c4a024f85f9`; the other 23 closure files unchanged; recorded 2026-11-13 |
 
 ## 2. Calibration acceptance (F4)
 

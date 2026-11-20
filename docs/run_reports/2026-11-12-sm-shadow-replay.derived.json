@@ -1,0 +1,3089 @@
+{
+ "custody": false,
+ "derived": true,
+ "families": [
+  "align-r1-",
+  "align-pilot-"
+ ],
+ "nights": [
+  {
+   "agreement": {
+    "checks": [
+     {
+      "detail": "records imply REFUSED_PRE_CHAIN; shadow derives REFUSED_PRE_CHAIN",
+      "id": "outcome",
+      "status": "agree"
+     },
+     {
+      "detail": "consistent",
+      "id": "chain_lifecycle",
+      "status": "agree"
+     },
+     {
+      "detail": "no exit code recorded",
+      "id": "exit_code_sources",
+      "status": "n/a"
+     },
+     {
+      "detail": "no exit code or no verdict",
+      "id": "verdict_vs_exit_class",
+      "status": "n/a"
+     },
+     {
+      "detail": "state matches courier records",
+      "id": "delivery",
+      "status": "agree"
+     },
+     {
+      "detail": "courier send recorded; delivery receipt and courier_mode (night_plan.json) are not observable from the allowlist; the shadow reader needs a legacy-courier rule or a courier_mode input",
+      "id": "invariant:COURIER_SENT_WITHOUT_DELIVERY",
+      "kind": "input_gap",
+      "status": "disagree"
+     },
+     {
+      "detail": "no network-time-off action record or restore record present",
+      "id": "restore_records",
+      "status": "n/a"
+     }
+    ],
+    "disagreements": [
+     {
+      "detail": "courier send recorded; delivery receipt and courier_mode (night_plan.json) are not observable from the allowlist; the shadow reader needs a legacy-courier rule or a courier_mode input",
+      "id": "invariant:COURIER_SENT_WITHOUT_DELIVERY",
+      "kind": "input_gap",
+      "status": "disagree"
+     }
+    ],
+    "notes": []
+   },
+   "custody": false,
+   "derived": true,
+   "exit_class": null,
+   "files_present": [
+    "censuses.jsonl",
+    "courier.heartbeat",
+    "courier.json",
+    "courier.sent",
+    "hazard_result.json",
+    "refusal.json",
+    "result.json"
+   ],
+   "night": "align-pilot-20261101T211851626086Z",
+   "owed_effects": [
+    {
+     "effect": "NETWORK_TIME_OFF",
+     "reason": "EFFECT_UNOBSERVED",
+     "status": "unknown",
+     "subject": "network_time"
+    },
+    {
+     "effect": "AC_HIGH_POWER",
+     "reason": "EFFECT_UNOBSERVED",
+     "status": "unknown",
+     "subject": "ac_powermode"
+    },
+    {
+     "effect": "HIGH_POWER_MARKERS",
+     "reason": "EFFECT_UNOBSERVED",
+     "status": "unknown",
+     "subject": "markers"
+    },
+    {
+     "effect": "NIGHT_PLISTS",
+     "reason": "EFFECT_UNOBSERVED",
+     "status": "unknown",
+     "subject": "com.joulewise.night"
+    },
+    {
+     "effect": "NIGHT_PLISTS",
+     "reason": "EFFECT_UNOBSERVED",
+     "status": "unknown",
+     "subject": "com.joulewise.night.deadman"
+    },
+    {
+     "effect": "NIGHT_LOCK",
+     "reason": "EFFECT_UNOBSERVED",
+     "status": "unknown",
+     "subject": "night.lock"
+    },
+    {
+     "effect": "SPOTLIGHT_STOPPED",
+     "reason": "EFFECT_UNOBSERVED",
+     "status": "unknown",
+     "subject": "spotlight"
+    },
+    {
+     "effect": "KEEP_AWAKE_AGENT",
+     "reason": "EFFECT_UNOBSERVED",
+     "status": "unknown",
+     "subject": "local.jwbench.keepawake"
+    }
+   ],
+   "recorded": {
+    "chain_exited": false,
+    "chain_outcome": null,
+    "chain_started": false,
+    "courier_sent_field": true,
+    "courier_sent_marker": true,
+    "exit_census_survivor_count": null,
+    "exit_code_chain_exited": null,
+    "exit_code_hazard_result": null,
+    "exit_code_result": null,
+    "fault_boolean_present": false,
+    "host_restoration_in_result": false,
+    "network_time_off_action_record": false,
+    "refusal_present": true,
+    "restore_record_in_delivered_tree": false,
+    "result_present": true,
+    "verdict": "REFUSED"
+   },
+   "shadow": {
+    "markers": [
+     "censuses.jsonl",
+     "courier.heartbeat",
+     "courier.json",
+     "courier.sent",
+     "hazard_result.json",
+     "refusal.json",
+     "result.json"
+    ],
+    "outcome": "REFUSED_PRE_CHAIN",
+    "outcome_reasons": [
+     "ARM_REFUSED_BEFORE_CHAIN"
+    ],
+    "reader_errors": [],
+    "reasons": [
+     "STATE_FROM_OBSERVED_MARKERS"
+    ],
+    "state": "Delivered",
+    "state_sequence": [
+     "RefusedPreChain",
+     "ResultWritten",
+     "Delivered"
+    ],
+    "violated_invariants": [
+     "COURIER_SENT_WITHOUT_DELIVERY"
+    ]
+   },
+   "source_commit": "f3f9b34f3d1fe402ce87d3655b6c3b908bdcba73"
+  },
+  {
+   "agreement": {
+    "checks": [
+     {
+      "detail": "records imply MEASURED; shadow derives MEASURED_OK",
+      "id": "outcome",
+      "status": "agree"
+     },
+     {
+      "detail": "consistent",
+      "id": "chain_lifecycle",
+      "status": "agree"
+     },
+     {
+      "detail": "single value across exit_code_chain_exited, exit_code_hazard_result, exit_code_result",
+      "id": "exit_code_sources",
+      "status": "agree"
+     },
+     {
+      "detail": "GO is admission only; unknown word unclassed, class unknown; undeclared code",
+      "id": "verdict_vs_exit_class",
+      "status": "note"
+     },
+     {
+      "detail": "state matches courier records",
+      "id": "delivery",
+      "status": "agree"
+     },
+     {
+      "detail": "courier send recorded; delivery receipt and courier_mode (night_plan.json) are not observable from the allowlist; the shadow reader needs a legacy-courier rule or a courier_mode input",
+      "id": "invariant:COURIER_SENT_WITHOUT_DELIVERY",
+      "kind": "input_gap",
+      "status": "disagree"
+     },
+     {
+      "detail": "network-time-off action recorded; no restore record is delivered (host effect unobserved)",
+      "id": "restore_records",
+      "status": "note"
+     }
+    ],
+    "disagreements": [
+     {
+      "detail": "courier send recorded; delivery receipt and courier_mode (night_plan.json) are not observable from the allowlist; the shadow reader needs a legacy-courier rule or a courier_mode input",
+      "id": "invariant:COURIER_SENT_WITHOUT_DELIVERY",
+      "kind": "input_gap",
+      "status": "disagree"
+     }
+    ],
+    "notes": [
+     {
+      "detail": "GO is admission only; unknown word unclassed, class unknown; undeclared code",
+      "id": "verdict_vs_exit_class",
+      "status": "note"
+     },
+     {
+      "detail": "network-time-off action recorded; no restore record is delivered (host effect unobserved)",
+      "id": "restore_records",
+      "status": "note"
+     }
+    ]
+   },
+   "custody": false,
+   "derived": true,
+   "exit_class": {
+    "class": "unknown",
+    "declared": false,
+    "tool": "unknown",
+    "word": "unclassed"
+   },
+   "files_present": [
+    "arm_decision.json",
+    "censuses.jsonl",
+    "chain.exit-census.json",
+    "chain.exited",
+    "chain.started",
+    "courier.heartbeat",
+    "courier.json",
+    "courier.sent",
+    "hazard_result.json",
+    "network_time_off.action.json",
+    "result.json"
+   ],
+   "night": "align-pilot-20261102T110644108800Z",
+   "owed_effects": [
+    {
+     "effect": "NETWORK_TIME_OFF",
+     "reason": "EFFECT_UNOBSERVED",
+     "status": "unknown",
+     "subject": "network_time"
+    },
+    {
+     "effect": "AC_HIGH_POWER",
+     "reason": "EFFECT_UNOBSERVED",
+     "status": "unknown",
+     "subject": "ac_powermode"
+    },
+    {
+     "effect": "HIGH_POWER_MARKERS",
+     "reason": "EFFECT_UNOBSERVED",
+     "status": "unknown",
+     "subject": "markers"
+    },
+    {
+     "effect": "NIGHT_PLISTS",
+     "reason": "EFFECT_UNOBSERVED",
+     "status": "unknown",
+     "subject": "com.joulewise.night"
+    },
+    {
+     "effect": "NIGHT_PLISTS",
+     "reason": "EFFECT_UNOBSERVED",
+     "status": "unknown",
+     "subject": "com.joulewise.night.deadman"
+    },
+    {
+     "effect": "NIGHT_LOCK",
+     "reason": "EFFECT_UNOBSERVED",
+     "status": "unknown",
+     "subject": "night.lock"
+    },
+    {
+     "effect": "SPOTLIGHT_STOPPED",
+     "reason": "EFFECT_UNOBSERVED",
+     "status": "unknown",
+     "subject": "spotlight"
+    },
+    {
+     "effect": "KEEP_AWAKE_AGENT",
+     "reason": "EFFECT_UNOBSERVED",
+     "status": "unknown",
+     "subject": "local.jwbench.keepawake"
+    }
+   ],
+   "recorded": {
+    "chain_exited": true,
+    "chain_outcome": null,
+    "chain_started": true,
+    "courier_sent_field": true,
+    "courier_sent_marker": true,
+    "exit_census_survivor_count": 0,
+    "exit_code_chain_exited": 0,
+    "exit_code_hazard_result": 0,
+    "exit_code_result": 0,
+    "fault_boolean_present": false,
+    "host_restoration_in_result": false,
+    "network_time_off_action_record": true,
+    "refusal_present": false,
+    "restore_record_in_delivered_tree": false,
+    "result_present": true,
+    "verdict": "GO"
+   },
+   "shadow": {
+    "markers": [
+     "arm_decision.json",
+     "censuses.jsonl",
+     "chain.exited",
+     "chain.started",
+     "courier.heartbeat",
+     "courier.json",
+     "courier.sent",
+     "hazard_result.json",
+     "result.json"
+    ],
+    "outcome": "MEASURED_OK",
+    "outcome_reasons": [
+     "CHAIN_COMPLETED"
+    ],
+    "reader_errors": [],
+    "reasons": [
+     "STATE_FROM_OBSERVED_MARKERS"
+    ],
+    "state": "Delivered",
+    "state_sequence": [
+     "ChainOpen",
+     "ChainExited",
+     "ResultWritten",
+     "Delivered"
+    ],
+    "violated_invariants": [
+     "COURIER_SENT_WITHOUT_DELIVERY"
+    ]
+   },
+   "source_commit": "6cb7a025ad1d8cdd2358267c1b43583f15e25a9e"
+  },
+  {
+   "agreement": {
+    "checks": [
+     {
+      "detail": "records imply MEASURED; shadow derives MEASURED_OK",
+      "id": "outcome",
+      "status": "agree"
+     },
+     {
+      "detail": "consistent",
+      "id": "chain_lifecycle",
+      "status": "agree"
+     },
+     {
+      "detail": "single value across exit_code_chain_exited, exit_code_hazard_result, exit_code_result",
+      "id": "exit_code_sources",
+      "status": "agree"
+     },
+     {
+      "detail": "GO is admission only; unknown word unclassed, class unknown; undeclared code",
+      "id": "verdict_vs_exit_class",
+      "status": "note"
+     },
+     {
+      "detail": "state matches courier records",
+      "id": "delivery",
+      "status": "agree"
+     },
+     {
+      "detail": "courier send recorded; delivery receipt and courier_mode (night_plan.json) are not observable from the allowlist; the shadow reader needs a legacy-courier rule or a courier_mode input",
+      "id": "invariant:COURIER_SENT_WITHOUT_DELIVERY",
+      "kind": "input_gap",
+      "status": "disagree"
+     },
+     {
+      "detail": "network-time-off action recorded; no restore record is delivered (host effect unobserved)",
+      "id": "restore_records",
+      "status": "note"
+     }
+    ],
+    "disagreements": [
+     {
+      "detail": "courier send recorded; delivery receipt and courier_mode (night_plan.json) are not observable from the allowlist; the shadow reader needs a legacy-courier rule or a courier_mode input",
+      "id": "invariant:COURIER_SENT_WITHOUT_DELIVERY",
+      "kind": "input_gap",
+      "status": "disagree"
+     }
+    ],
+    "notes": [
+     {
+      "detail": "GO is admission only; unknown word unclassed, class unknown; undeclared code",
+      "id": "verdict_vs_exit_class",
+      "status": "note"
+     },
+     {
+      "detail": "network-time-off action recorded; no restore record is delivered (host effect unobserved)",
+      "id": "restore_records",
+      "status": "note"
+     }
+    ]
+   },
+   "custody": false,
+   "derived": true,
+   "exit_class": {
+    "class": "unknown",
+    "declared": false,
+    "tool": "unknown",
+    "word": "unclassed"
+   },
+   "files_present": [
+    "arm_decision.json",
+    "censuses.jsonl",
+    "chain.exit-census.json",
+    "chain.exited",
+    "chain.started",
+    "courier.heartbeat",
+    "courier.json",
+    "courier.sent",
+    "hazard_result.json",
+    "network_time_off.action.json",
+    "result.json"
+   ],
+   "night": "align-pilot-20261102T183609942060Z",
+   "owed_effects": [
+    {
+     "effect": "NETWORK_TIME_OFF",
+     "reason": "EFFECT_UNOBSERVED",
+     "status": "unknown",
+     "subject": "network_time"
+    },
+    {
+     "effect": "AC_HIGH_POWER",
+     "reason": "EFFECT_UNOBSERVED",
+     "status": "unknown",
+     "subject": "ac_powermode"
+    },
+    {
+     "effect": "HIGH_POWER_MARKERS",
+     "reason": "EFFECT_UNOBSERVED",
+     "status": "unknown",
+     "subject": "markers"
+    },
+    {
+     "effect": "NIGHT_PLISTS",
+     "reason": "EFFECT_UNOBSERVED",
+     "status": "unknown",
+     "subject": "com.joulewise.night"
+    },
+    {
+     "effect": "NIGHT_PLISTS",
+     "reason": "EFFECT_UNOBSERVED",
+     "status": "unknown",
+     "subject": "com.joulewise.night.deadman"
+    },
+    {
+     "effect": "NIGHT_LOCK",
+     "reason": "EFFECT_UNOBSERVED",
+     "status": "unknown",
+     "subject": "night.lock"
+    },
+    {
+     "effect": "SPOTLIGHT_STOPPED",
+     "reason": "EFFECT_UNOBSERVED",
+     "status": "unknown",
+     "subject": "spotlight"
+    },
+    {
+     "effect": "KEEP_AWAKE_AGENT",
+     "reason": "EFFECT_UNOBSERVED",
+     "status": "unknown",
+     "subject": "local.jwbench.keepawake"
+    }
+   ],
+   "recorded": {
+    "chain_exited": true,
+    "chain_outcome": null,
+    "chain_started": true,
+    "courier_sent_field": true,
+    "courier_sent_marker": true,
+    "exit_census_survivor_count": 0,
+    "exit_code_chain_exited": 0,
+    "exit_code_hazard_result": 0,
+    "exit_code_result": 0,
+    "fault_boolean_present": false,
+    "host_restoration_in_result": false,
+    "network_time_off_action_record": true,
+    "refusal_present": false,
+    "restore_record_in_delivered_tree": false,
+    "result_present": true,
+    "verdict": "GO"
+   },
+   "shadow": {
+    "markers": [
+     "arm_decision.json",
+     "censuses.jsonl",
+     "chain.exited",
+     "chain.started",
+     "courier.heartbeat",
+     "courier.json",
+     "courier.sent",
+     "hazard_result.json",
+     "result.json"
+    ],
+    "outcome": "MEASURED_OK",
+    "outcome_reasons": [
+     "CHAIN_COMPLETED"
+    ],
+    "reader_errors": [],
+    "reasons": [
+     "STATE_FROM_OBSERVED_MARKERS"
+    ],
+    "state": "Delivered",
+    "state_sequence": [
+     "ChainOpen",
+     "ChainExited",
+     "ResultWritten",
+     "Delivered"
+    ],
+    "violated_invariants": [
+     "COURIER_SENT_WITHOUT_DELIVERY"
+    ]
+   },
+   "source_commit": "234ea270899ec8a9c055e79049ee54dd409bc5b4"
+  },
+  {
+   "agreement": {
+    "checks": [
+     {
+      "detail": "records imply MEASURED; shadow derives MEASURED_OK",
+      "id": "outcome",
+      "status": "agree"
+     },
+     {
+      "detail": "consistent",
+      "id": "chain_lifecycle",
+      "status": "agree"
+     },
+     {
+      "detail": "single value across exit_code_chain_exited, exit_code_hazard_result, exit_code_result",
+      "id": "exit_code_sources",
+      "status": "agree"
+     },
+     {
+      "detail": "GO is admission only; unknown word unclassed, class unknown; undeclared code",
+      "id": "verdict_vs_exit_class",
+      "status": "note"
+     },
+     {
+      "detail": "state matches courier records",
+      "id": "delivery",
+      "status": "agree"
+     },
+     {
+      "detail": "courier send recorded; delivery receipt and courier_mode (night_plan.json) are not observable from the allowlist; the shadow reader needs a legacy-courier rule or a courier_mode input",
+      "id": "invariant:COURIER_SENT_WITHOUT_DELIVERY",
+      "kind": "input_gap",
+      "status": "disagree"
+     },
+     {
+      "detail": "network-time-off action recorded; no restore record is delivered (host effect unobserved)",
+      "id": "restore_records",
+      "status": "note"
+     }
+    ],
+    "disagreements": [
+     {
+      "detail": "courier send recorded; delivery receipt and courier_mode (night_plan.json) are not observable from the allowlist; the shadow reader needs a legacy-courier rule or a courier_mode input",
+      "id": "invariant:COURIER_SENT_WITHOUT_DELIVERY",
+      "kind": "input_gap",
+      "status": "disagree"
+     }
+    ],
+    "notes": [
+     {
+      "detail": "GO is admission only; unknown word unclassed, class unknown; undeclared code",
+      "id": "verdict_vs_exit_class",
+      "status": "note"
+     },
+     {
+      "detail": "network-time-off action recorded; no restore record is delivered (host effect unobserved)",
+      "id": "restore_records",
+      "status": "note"
+     }
+    ]
+   },
+   "custody": false,
+   "derived": true,
+   "exit_class": {
+    "class": "unknown",
+    "declared": false,
+    "tool": "unknown",
+    "word": "unclassed"
+   },
+   "files_present": [
+    "arm_decision.json",
+    "censuses.jsonl",
+    "chain.exit-census.json",
+    "chain.exited",
+    "chain.started",
+    "courier.heartbeat",
+    "courier.json",
+    "courier.sent",
+    "hazard_result.json",
+    "network_time_off.action.json",
+    "result.json"
+   ],
+   "night": "align-pilot-20261103T035513011728Z",
+   "owed_effects": [
+    {
+     "effect": "NETWORK_TIME_OFF",
+     "reason": "EFFECT_UNOBSERVED",
+     "status": "unknown",
+     "subject": "network_time"
+    },
+    {
+     "effect": "AC_HIGH_POWER",
+     "reason": "EFFECT_UNOBSERVED",
+     "status": "unknown",
+     "subject": "ac_powermode"
+    },
+    {
+     "effect": "HIGH_POWER_MARKERS",
+     "reason": "EFFECT_UNOBSERVED",
+     "status": "unknown",
+     "subject": "markers"
+    },
+    {
+     "effect": "NIGHT_PLISTS",
+     "reason": "EFFECT_UNOBSERVED",
+     "status": "unknown",
+     "subject": "com.joulewise.night"
+    },
+    {
+     "effect": "NIGHT_PLISTS",
+     "reason": "EFFECT_UNOBSERVED",
+     "status": "unknown",
+     "subject": "com.joulewise.night.deadman"
+    },
+    {
+     "effect": "NIGHT_LOCK",
+     "reason": "EFFECT_UNOBSERVED",
+     "status": "unknown",
+     "subject": "night.lock"
+    },
+    {
+     "effect": "SPOTLIGHT_STOPPED",
+     "reason": "EFFECT_UNOBSERVED",
+     "status": "unknown",
+     "subject": "spotlight"
+    },
+    {
+     "effect": "KEEP_AWAKE_AGENT",
+     "reason": "EFFECT_UNOBSERVED",
+     "status": "unknown",
+     "subject": "local.jwbench.keepawake"
+    }
+   ],
+   "recorded": {
+    "chain_exited": true,
+    "chain_outcome": null,
+    "chain_started": true,
+    "courier_sent_field": true,
+    "courier_sent_marker": true,
+    "exit_census_survivor_count": 0,
+    "exit_code_chain_exited": 0,
+    "exit_code_hazard_result": 0,
+    "exit_code_result": 0,
+    "fault_boolean_present": false,
+    "host_restoration_in_result": false,
+    "network_time_off_action_record": true,
+    "refusal_present": false,
+    "restore_record_in_delivered_tree": false,
+    "result_present": true,
+    "verdict": "GO"
+   },
+   "shadow": {
+    "markers": [
+     "arm_decision.json",
+     "censuses.jsonl",
+     "chain.exited",
+     "chain.started",
+     "courier.heartbeat",
+     "courier.json",
+     "courier.sent",
+     "hazard_result.json",
+     "result.json"
+    ],
+    "outcome": "MEASURED_OK",
+    "outcome_reasons": [
+     "CHAIN_COMPLETED"
+    ],
+    "reader_errors": [],
+    "reasons": [
+     "STATE_FROM_OBSERVED_MARKERS"
+    ],
+    "state": "Delivered",
+    "state_sequence": [
+     "ChainOpen",
+     "ChainExited",
+     "ResultWritten",
+     "Delivered"
+    ],
+    "violated_invariants": [
+     "COURIER_SENT_WITHOUT_DELIVERY"
+    ]
+   },
+   "source_commit": "6176903335edede9d8507ae63c9ba7d02e74a105"
+  },
+  {
+   "agreement": {
+    "checks": [
+     {
+      "detail": "records imply MEASURED; shadow derives MEASURED_OK",
+      "id": "outcome",
+      "status": "agree"
+     },
+     {
+      "detail": "consistent",
+      "id": "chain_lifecycle",
+      "status": "agree"
+     },
+     {
+      "detail": "single value across exit_code_chain_exited, exit_code_hazard_result, exit_code_result",
+      "id": "exit_code_sources",
+      "status": "agree"
+     },
+     {
+      "detail": "GO is admission only; unknown word unclassed, class unknown; undeclared code",
+      "id": "verdict_vs_exit_class",
+      "status": "note"
+     },
+     {
+      "detail": "state matches courier records",
+      "id": "delivery",
+      "status": "agree"
+     },
+     {
+      "detail": "courier send recorded; delivery receipt and courier_mode (night_plan.json) are not observable from the allowlist; the shadow reader needs a legacy-courier rule or a courier_mode input",
+      "id": "invariant:COURIER_SENT_WITHOUT_DELIVERY",
+      "kind": "input_gap",
+      "status": "disagree"
+     },
+     {
+      "detail": "network-time-off action recorded; no restore record is delivered (host effect unobserved)",
+      "id": "restore_records",
+      "status": "note"
+     }
+    ],
+    "disagreements": [
+     {
+      "detail": "courier send recorded; delivery receipt and courier_mode (night_plan.json) are not observable from the allowlist; the shadow reader needs a legacy-courier rule or a courier_mode input",
+      "id": "invariant:COURIER_SENT_WITHOUT_DELIVERY",
+      "kind": "input_gap",
+      "status": "disagree"
+     }
+    ],
+    "notes": [
+     {
+      "detail": "GO is admission only; unknown word unclassed, class unknown; undeclared code",
+      "id": "verdict_vs_exit_class",
+      "status": "note"
+     },
+     {
+      "detail": "network-time-off action recorded; no restore record is delivered (host effect unobserved)",
+      "id": "restore_records",
+      "status": "note"
+     }
+    ]
+   },
+   "custody": false,
+   "derived": true,
+   "exit_class": {
+    "class": "unknown",
+    "declared": false,
+    "tool": "unknown",
+    "word": "unclassed"
+   },
+   "files_present": [
+    "arm_decision.json",
+    "censuses.jsonl",
+    "chain.exit-census.json",
+    "chain.exited",
+    "chain.started",
+    "courier.heartbeat",
+    "courier.json",
+    "courier.sent",
+    "hazard_result.json",
+    "network_time_off.action.json",
+    "result.json"
+   ],
+   "night": "align-pilot-20261103T134903416190Z",
+   "owed_effects": [
+    {
+     "effect": "NETWORK_TIME_OFF",
+     "reason": "EFFECT_UNOBSERVED",
+     "status": "unknown",
+     "subject": "network_time"
+    },
+    {
+     "effect": "AC_HIGH_POWER",
+     "reason": "EFFECT_UNOBSERVED",
+     "status": "unknown",
+     "subject": "ac_powermode"
+    },
+    {
+     "effect": "HIGH_POWER_MARKERS",
+     "reason": "EFFECT_UNOBSERVED",
+     "status": "unknown",
+     "subject": "markers"
+    },
+    {
+     "effect": "NIGHT_PLISTS",
+     "reason": "EFFECT_UNOBSERVED",
+     "status": "unknown",
+     "subject": "com.joulewise.night"
+    },
+    {
+     "effect": "NIGHT_PLISTS",
+     "reason": "EFFECT_UNOBSERVED",
+     "status": "unknown",
+     "subject": "com.joulewise.night.deadman"
+    },
+    {
+     "effect": "NIGHT_LOCK",
+     "reason": "EFFECT_UNOBSERVED",
+     "status": "unknown",
+     "subject": "night.lock"
+    },
+    {
+     "effect": "SPOTLIGHT_STOPPED",
+     "reason": "EFFECT_UNOBSERVED",
+     "status": "unknown",
+     "subject": "spotlight"
+    },
+    {
+     "effect": "KEEP_AWAKE_AGENT",
+     "reason": "EFFECT_UNOBSERVED",
+     "status": "unknown",
+     "subject": "local.jwbench.keepawake"
+    }
+   ],
+   "recorded": {
+    "chain_exited": true,
+    "chain_outcome": null,
+    "chain_started": true,
+    "courier_sent_field": true,
+    "courier_sent_marker": true,
+    "exit_census_survivor_count": 0,
+    "exit_code_chain_exited": 0,
+    "exit_code_hazard_result": 0,
+    "exit_code_result": 0,
+    "fault_boolean_present": false,
+    "host_restoration_in_result": false,
+    "network_time_off_action_record": true,
+    "refusal_present": false,
+    "restore_record_in_delivered_tree": false,
+    "result_present": true,
+    "verdict": "GO"
+   },
+   "shadow": {
+    "markers": [
+     "arm_decision.json",
+     "censuses.jsonl",
+     "chain.exited",
+     "chain.started",
+     "courier.heartbeat",
+     "courier.json",
+     "courier.sent",
+     "hazard_result.json",
+     "result.json"
+    ],
+    "outcome": "MEASURED_OK",
+    "outcome_reasons": [
+     "CHAIN_COMPLETED"
+    ],
+    "reader_errors": [],
+    "reasons": [
+     "STATE_FROM_OBSERVED_MARKERS"
+    ],
+    "state": "Delivered",
+    "state_sequence": [
+     "ChainOpen",
+     "ChainExited",
+     "ResultWritten",
+     "Delivered"
+    ],
+    "violated_invariants": [
+     "COURIER_SENT_WITHOUT_DELIVERY"
+    ]
+   },
+   "source_commit": "5343f979096869b72c0c934b050918048d111b49"
+  },
+  {
+   "agreement": {
+    "checks": [
+     {
+      "detail": "records imply MEASURED; shadow derives MEASURED_OK",
+      "id": "outcome",
+      "status": "agree"
+     },
+     {
+      "detail": "consistent",
+      "id": "chain_lifecycle",
+      "status": "agree"
+     },
+     {
+      "detail": "single value across exit_code_chain_exited, exit_code_hazard_result, exit_code_result",
+      "id": "exit_code_sources",
+      "status": "agree"
+     },
+     {
+      "detail": "GO is admission only; unknown word unclassed, class unknown; undeclared code",
+      "id": "verdict_vs_exit_class",
+      "status": "note"
+     },
+     {
+      "detail": "state matches courier records",
+      "id": "delivery",
+      "status": "agree"
+     },
+     {
+      "detail": "courier send recorded; delivery receipt and courier_mode (night_plan.json) are not observable from the allowlist; the shadow reader needs a legacy-courier rule or a courier_mode input",
+      "id": "invariant:COURIER_SENT_WITHOUT_DELIVERY",
+      "kind": "input_gap",
+      "status": "disagree"
+     },
+     {
+      "detail": "network-time-off action recorded; no restore record is delivered (host effect unobserved)",
+      "id": "restore_records",
+      "status": "note"
+     }
+    ],
+    "disagreements": [
+     {
+      "detail": "courier send recorded; delivery receipt and courier_mode (night_plan.json) are not observable from the allowlist; the shadow reader needs a legacy-courier rule or a courier_mode input",
+      "id": "invariant:COURIER_SENT_WITHOUT_DELIVERY",
+      "kind": "input_gap",
+      "status": "disagree"
+     }
+    ],
+    "notes": [
+     {
+      "detail": "GO is admission only; unknown word unclassed, class unknown; undeclared code",
+      "id": "verdict_vs_exit_class",
+      "status": "note"
+     },
+     {
+      "detail": "network-time-off action recorded; no restore record is delivered (host effect unobserved)",
+      "id": "restore_records",
+      "status": "note"
+     }
+    ]
+   },
+   "custody": false,
+   "derived": true,
+   "exit_class": {
+    "class": "unknown",
+    "declared": false,
+    "tool": "unknown",
+    "word": "unclassed"
+   },
+   "files_present": [
+    "arm_decision.json",
+    "censuses.jsonl",
+    "chain.exit-census.json",
+    "chain.exited",
+    "chain.started",
+    "courier.heartbeat",
+    "courier.json",
+    "courier.sent",
+    "hazard_result.json",
+    "network_time_off.action.json",
+    "result.json"
+   ],
+   "night": "align-pilot-20261103T224628898457Z",
+   "owed_effects": [
+    {
+     "effect": "NETWORK_TIME_OFF",
+     "reason": "EFFECT_UNOBSERVED",
+     "status": "unknown",
+     "subject": "network_time"
+    },
+    {
+     "effect": "AC_HIGH_POWER",
+     "reason": "EFFECT_UNOBSERVED",
+     "status": "unknown",
+     "subject": "ac_powermode"
+    },
+    {
+     "effect": "HIGH_POWER_MARKERS",
+     "reason": "EFFECT_UNOBSERVED",
+     "status": "unknown",
+     "subject": "markers"
+    },
+    {
+     "effect": "NIGHT_PLISTS",
+     "reason": "EFFECT_UNOBSERVED",
+     "status": "unknown",
+     "subject": "com.joulewise.night"
+    },
+    {
+     "effect": "NIGHT_PLISTS",
+     "reason": "EFFECT_UNOBSERVED",
+     "status": "unknown",
+     "subject": "com.joulewise.night.deadman"
+    },
+    {
+     "effect": "NIGHT_LOCK",
+     "reason": "EFFECT_UNOBSERVED",
+     "status": "unknown",
+     "subject": "night.lock"
+    },
+    {
+     "effect": "SPOTLIGHT_STOPPED",
+     "reason": "EFFECT_UNOBSERVED",
+     "status": "unknown",
+     "subject": "spotlight"
+    },
+    {
+     "effect": "KEEP_AWAKE_AGENT",
+     "reason": "EFFECT_UNOBSERVED",
+     "status": "unknown",
+     "subject": "local.jwbench.keepawake"
+    }
+   ],
+   "recorded": {
+    "chain_exited": true,
+    "chain_outcome": null,
+    "chain_started": true,
+    "courier_sent_field": true,
+    "courier_sent_marker": true,
+    "exit_census_survivor_count": 0,
+    "exit_code_chain_exited": 0,
+    "exit_code_hazard_result": 0,
+    "exit_code_result": 0,
+    "fault_boolean_present": false,
+    "host_restoration_in_result": false,
+    "network_time_off_action_record": true,
+    "refusal_present": false,
+    "restore_record_in_delivered_tree": false,
+    "result_present": true,
+    "verdict": "GO"
+   },
+   "shadow": {
+    "markers": [
+     "arm_decision.json",
+     "censuses.jsonl",
+     "chain.exited",
+     "chain.started",
+     "courier.heartbeat",
+     "courier.json",
+     "courier.sent",
+     "hazard_result.json",
+     "result.json"
+    ],
+    "outcome": "MEASURED_OK",
+    "outcome_reasons": [
+     "CHAIN_COMPLETED"
+    ],
+    "reader_errors": [],
+    "reasons": [
+     "STATE_FROM_OBSERVED_MARKERS"
+    ],
+    "state": "Delivered",
+    "state_sequence": [
+     "ChainOpen",
+     "ChainExited",
+     "ResultWritten",
+     "Delivered"
+    ],
+    "violated_invariants": [
+     "COURIER_SENT_WITHOUT_DELIVERY"
+    ]
+   },
+   "source_commit": "dda334736ded1f636b805b6a1bb5b1e49852c78e"
+  },
+  {
+   "agreement": {
+    "checks": [
+     {
+      "detail": "records imply MEASURED; shadow derives MEASURED_OK",
+      "id": "outcome",
+      "status": "agree"
+     },
+     {
+      "detail": "consistent",
+      "id": "chain_lifecycle",
+      "status": "agree"
+     },
+     {
+      "detail": "single value across exit_code_chain_exited, exit_code_hazard_result, exit_code_result",
+      "id": "exit_code_sources",
+      "status": "agree"
+     },
+     {
+      "detail": "GO is admission only; unknown word unclassed, class unknown; undeclared code",
+      "id": "verdict_vs_exit_class",
+      "status": "note"
+     },
+     {
+      "detail": "state matches courier records",
+      "id": "delivery",
+      "status": "agree"
+     },
+     {
+      "detail": "courier send recorded; delivery receipt and courier_mode (night_plan.json) are not observable from the allowlist; the shadow reader needs a legacy-courier rule or a courier_mode input",
+      "id": "invariant:COURIER_SENT_WITHOUT_DELIVERY",
+      "kind": "input_gap",
+      "status": "disagree"
+     },
+     {
+      "detail": "network-time-off action recorded; no restore record is delivered (host effect unobserved)",
+      "id": "restore_records",
+      "status": "note"
+     }
+    ],
+    "disagreements": [
+     {
+      "detail": "courier send recorded; delivery receipt and courier_mode (night_plan.json) are not observable from the allowlist; the shadow reader needs a legacy-courier rule or a courier_mode input",
+      "id": "invariant:COURIER_SENT_WITHOUT_DELIVERY",
+      "kind": "input_gap",
+      "status": "disagree"
+     }
+    ],
+    "notes": [
+     {
+      "detail": "GO is admission only; unknown word unclassed, class unknown; undeclared code",
+      "id": "verdict_vs_exit_class",
+      "status": "note"
+     },
+     {
+      "detail": "network-time-off action recorded; no restore record is delivered (host effect unobserved)",
+      "id": "restore_records",
+      "status": "note"
+     }
+    ]
+   },
+   "custody": false,
+   "derived": true,
+   "exit_class": {
+    "class": "unknown",
+    "declared": false,
+    "tool": "unknown",
+    "word": "unclassed"
+   },
+   "files_present": [
+    "arm_decision.json",
+    "censuses.jsonl",
+    "chain.exit-census.json",
+    "chain.exited",
+    "chain.started",
+    "courier.heartbeat",
+    "courier.json",
+    "courier.sent",
+    "hazard_result.json",
+    "network_time_off.action.json",
+    "result.json"
+   ],
+   "night": "align-pilot-20261104T074612673532Z",
+   "owed_effects": [
+    {
+     "effect": "NETWORK_TIME_OFF",
+     "reason": "EFFECT_UNOBSERVED",
+     "status": "unknown",
+     "subject": "network_time"
+    },
+    {
+     "effect": "AC_HIGH_POWER",
+     "reason": "EFFECT_UNOBSERVED",
+     "status": "unknown",
+     "subject": "ac_powermode"
+    },
+    {
+     "effect": "HIGH_POWER_MARKERS",
+     "reason": "EFFECT_UNOBSERVED",
+     "status": "unknown",
+     "subject": "markers"
+    },
+    {
+     "effect": "NIGHT_PLISTS",
+     "reason": "EFFECT_UNOBSERVED",
+     "status": "unknown",
+     "subject": "com.joulewise.night"
+    },
+    {
+     "effect": "NIGHT_PLISTS",
+     "reason": "EFFECT_UNOBSERVED",
+     "status": "unknown",
+     "subject": "com.joulewise.night.deadman"
+    },
+    {
+     "effect": "NIGHT_LOCK",
+     "reason": "EFFECT_UNOBSERVED",
+     "status": "unknown",
+     "subject": "night.lock"
+    },
+    {
+     "effect": "SPOTLIGHT_STOPPED",
+     "reason": "EFFECT_UNOBSERVED",
+     "status": "unknown",
+     "subject": "spotlight"
+    },
+    {
+     "effect": "KEEP_AWAKE_AGENT",
+     "reason": "EFFECT_UNOBSERVED",
+     "status": "unknown",
+     "subject": "local.jwbench.keepawake"
+    }
+   ],
+   "recorded": {
+    "chain_exited": true,
+    "chain_outcome": null,
+    "chain_started": true,
+    "courier_sent_field": true,
+    "courier_sent_marker": true,
+    "exit_census_survivor_count": 0,
+    "exit_code_chain_exited": 0,
+    "exit_code_hazard_result": 0,
+    "exit_code_result": 0,
+    "fault_boolean_present": false,
+    "host_restoration_in_result": false,
+    "network_time_off_action_record": true,
+    "refusal_present": false,
+    "restore_record_in_delivered_tree": false,
+    "result_present": true,
+    "verdict": "GO"
+   },
+   "shadow": {
+    "markers": [
+     "arm_decision.json",
+     "censuses.jsonl",
+     "chain.exited",
+     "chain.started",
+     "courier.heartbeat",
+     "courier.json",
+     "courier.sent",
+     "hazard_result.json",
+     "result.json"
+    ],
+    "outcome": "MEASURED_OK",
+    "outcome_reasons": [
+     "CHAIN_COMPLETED"
+    ],
+    "reader_errors": [],
+    "reasons": [
+     "STATE_FROM_OBSERVED_MARKERS"
+    ],
+    "state": "Delivered",
+    "state_sequence": [
+     "ChainOpen",
+     "ChainExited",
+     "ResultWritten",
+     "Delivered"
+    ],
+    "violated_invariants": [
+     "COURIER_SENT_WITHOUT_DELIVERY"
+    ]
+   },
+   "source_commit": "4ce9d8e026ece2674a6acb0c116d3b8b8f40862d"
+  },
+  {
+   "agreement": {
+    "checks": [
+     {
+      "detail": "records imply MEASURED; shadow derives MEASURED_OK",
+      "id": "outcome",
+      "status": "agree"
+     },
+     {
+      "detail": "consistent",
+      "id": "chain_lifecycle",
+      "status": "agree"
+     },
+     {
+      "detail": "single value across exit_code_chain_exited, exit_code_hazard_result, exit_code_result",
+      "id": "exit_code_sources",
+      "status": "agree"
+     },
+     {
+      "detail": "GO is admission only; unknown word unclassed, class unknown; undeclared code",
+      "id": "verdict_vs_exit_class",
+      "status": "note"
+     },
+     {
+      "detail": "state matches courier records",
+      "id": "delivery",
+      "status": "agree"
+     },
+     {
+      "detail": "courier send recorded; delivery receipt and courier_mode (night_plan.json) are not observable from the allowlist; the shadow reader needs a legacy-courier rule or a courier_mode input",
+      "id": "invariant:COURIER_SENT_WITHOUT_DELIVERY",
+      "kind": "input_gap",
+      "status": "disagree"
+     },
+     {
+      "detail": "network-time-off action recorded; no restore record is delivered (host effect unobserved)",
+      "id": "restore_records",
+      "status": "note"
+     }
+    ],
+    "disagreements": [
+     {
+      "detail": "courier send recorded; delivery receipt and courier_mode (night_plan.json) are not observable from the allowlist; the shadow reader needs a legacy-courier rule or a courier_mode input",
+      "id": "invariant:COURIER_SENT_WITHOUT_DELIVERY",
+      "kind": "input_gap",
+      "status": "disagree"
+     }
+    ],
+    "notes": [
+     {
+      "detail": "GO is admission only; unknown word unclassed, class unknown; undeclared code",
+      "id": "verdict_vs_exit_class",
+      "status": "note"
+     },
+     {
+      "detail": "network-time-off action recorded; no restore record is delivered (host effect unobserved)",
+      "id": "restore_records",
+      "status": "note"
+     }
+    ]
+   },
+   "custody": false,
+   "derived": true,
+   "exit_class": {
+    "class": "unknown",
+    "declared": false,
+    "tool": "unknown",
+    "word": "unclassed"
+   },
+   "files_present": [
+    "arm_decision.json",
+    "censuses.jsonl",
+    "chain.exit-census.json",
+    "chain.exited",
+    "chain.started",
+    "courier.heartbeat",
+    "courier.json",
+    "courier.sent",
+    "hazard_result.json",
+    "network_time_off.action.json",
+    "result.json"
+   ],
+   "night": "align-pilot-20261104T164323823784Z",
+   "owed_effects": [
+    {
+     "effect": "NETWORK_TIME_OFF",
+     "reason": "EFFECT_UNOBSERVED",
+     "status": "unknown",
+     "subject": "network_time"
+    },
+    {
+     "effect": "AC_HIGH_POWER",
+     "reason": "EFFECT_UNOBSERVED",
+     "status": "unknown",
+     "subject": "ac_powermode"
+    },
+    {
+     "effect": "HIGH_POWER_MARKERS",
+     "reason": "EFFECT_UNOBSERVED",
+     "status": "unknown",
+     "subject": "markers"
+    },
+    {
+     "effect": "NIGHT_PLISTS",
+     "reason": "EFFECT_UNOBSERVED",
+     "status": "unknown",
+     "subject": "com.joulewise.night"
+    },
+    {
+     "effect": "NIGHT_PLISTS",
+     "reason": "EFFECT_UNOBSERVED",
+     "status": "unknown",
+     "subject": "com.joulewise.night.deadman"
+    },
+    {
+     "effect": "NIGHT_LOCK",
+     "reason": "EFFECT_UNOBSERVED",
+     "status": "unknown",
+     "subject": "night.lock"
+    },
+    {
+     "effect": "SPOTLIGHT_STOPPED",
+     "reason": "EFFECT_UNOBSERVED",
+     "status": "unknown",
+     "subject": "spotlight"
+    },
+    {
+     "effect": "KEEP_AWAKE_AGENT",
+     "reason": "EFFECT_UNOBSERVED",
+     "status": "unknown",
+     "subject": "local.jwbench.keepawake"
+    }
+   ],
+   "recorded": {
+    "chain_exited": true,
+    "chain_outcome": null,
+    "chain_started": true,
+    "courier_sent_field": true,
+    "courier_sent_marker": true,
+    "exit_census_survivor_count": 0,
+    "exit_code_chain_exited": 0,
+    "exit_code_hazard_result": 0,
+    "exit_code_result": 0,
+    "fault_boolean_present": false,
+    "host_restoration_in_result": false,
+    "network_time_off_action_record": true,
+    "refusal_present": false,
+    "restore_record_in_delivered_tree": false,
+    "result_present": true,
+    "verdict": "GO"
+   },
+   "shadow": {
+    "markers": [
+     "arm_decision.json",
+     "censuses.jsonl",
+     "chain.exited",
+     "chain.started",
+     "courier.heartbeat",
+     "courier.json",
+     "courier.sent",
+     "hazard_result.json",
+     "result.json"
+    ],
+    "outcome": "MEASURED_OK",
+    "outcome_reasons": [
+     "CHAIN_COMPLETED"
+    ],
+    "reader_errors": [],
+    "reasons": [
+     "STATE_FROM_OBSERVED_MARKERS"
+    ],
+    "state": "Delivered",
+    "state_sequence": [
+     "ChainOpen",
+     "ChainExited",
+     "ResultWritten",
+     "Delivered"
+    ],
+    "violated_invariants": [
+     "COURIER_SENT_WITHOUT_DELIVERY"
+    ]
+   },
+   "source_commit": "f9b5a1380837807efde0866b5a60b6d7018729f6"
+  },
+  {
+   "agreement": {
+    "checks": [
+     {
+      "detail": "records imply MEASURED; shadow derives MEASURED_OK",
+      "id": "outcome",
+      "status": "agree"
+     },
+     {
+      "detail": "consistent",
+      "id": "chain_lifecycle",
+      "status": "agree"
+     },
+     {
+      "detail": "single value across exit_code_chain_exited, exit_code_hazard_result, exit_code_result",
+      "id": "exit_code_sources",
+      "status": "agree"
+     },
+     {
+      "detail": "GO is admission only; unknown word unclassed, class unknown; undeclared code",
+      "id": "verdict_vs_exit_class",
+      "status": "note"
+     },
+     {
+      "detail": "state matches courier records",
+      "id": "delivery",
+      "status": "agree"
+     },
+     {
+      "detail": "courier send recorded; delivery receipt and courier_mode (night_plan.json) are not observable from the allowlist; the shadow reader needs a legacy-courier rule or a courier_mode input",
+      "id": "invariant:COURIER_SENT_WITHOUT_DELIVERY",
+      "kind": "input_gap",
+      "status": "disagree"
+     },
+     {
+      "detail": "network-time-off action recorded; no restore record is delivered (host effect unobserved)",
+      "id": "restore_records",
+      "status": "note"
+     }
+    ],
+    "disagreements": [
+     {
+      "detail": "courier send recorded; delivery receipt and courier_mode (night_plan.json) are not observable from the allowlist; the shadow reader needs a legacy-courier rule or a courier_mode input",
+      "id": "invariant:COURIER_SENT_WITHOUT_DELIVERY",
+      "kind": "input_gap",
+      "status": "disagree"
+     }
+    ],
+    "notes": [
+     {
+      "detail": "GO is admission only; unknown word unclassed, class unknown; undeclared code",
+      "id": "verdict_vs_exit_class",
+      "status": "note"
+     },
+     {
+      "detail": "network-time-off action recorded; no restore record is delivered (host effect unobserved)",
+      "id": "restore_records",
+      "status": "note"
+     }
+    ]
+   },
+   "custody": false,
+   "derived": true,
+   "exit_class": {
+    "class": "unknown",
+    "declared": false,
+    "tool": "unknown",
+    "word": "unclassed"
+   },
+   "files_present": [
+    "arm_decision.json",
+    "censuses.jsonl",
+    "chain.exit-census.json",
+    "chain.exited",
+    "chain.started",
+    "courier.heartbeat",
+    "courier.json",
+    "courier.sent",
+    "hazard_result.json",
+    "network_time_off.action.json",
+    "result.json"
+   ],
+   "night": "align-pilot-20261105T015948125148Z",
+   "owed_effects": [
+    {
+     "effect": "NETWORK_TIME_OFF",
+     "reason": "EFFECT_UNOBSERVED",
+     "status": "unknown",
+     "subject": "network_time"
+    },
+    {
+     "effect": "AC_HIGH_POWER",
+     "reason": "EFFECT_UNOBSERVED",
+     "status": "unknown",
+     "subject": "ac_powermode"
+    },
+    {
+     "effect": "HIGH_POWER_MARKERS",
+     "reason": "EFFECT_UNOBSERVED",
+     "status": "unknown",
+     "subject": "markers"
+    },
+    {
+     "effect": "NIGHT_PLISTS",
+     "reason": "EFFECT_UNOBSERVED",
+     "status": "unknown",
+     "subject": "com.joulewise.night"
+    },
+    {
+     "effect": "NIGHT_PLISTS",
+     "reason": "EFFECT_UNOBSERVED",
+     "status": "unknown",
+     "subject": "com.joulewise.night.deadman"
+    },
+    {
+     "effect": "NIGHT_LOCK",
+     "reason": "EFFECT_UNOBSERVED",
+     "status": "unknown",
+     "subject": "night.lock"
+    },
+    {
+     "effect": "SPOTLIGHT_STOPPED",
+     "reason": "EFFECT_UNOBSERVED",
+     "status": "unknown",
+     "subject": "spotlight"
+    },
+    {
+     "effect": "KEEP_AWAKE_AGENT",
+     "reason": "EFFECT_UNOBSERVED",
+     "status": "unknown",
+     "subject": "local.jwbench.keepawake"
+    }
+   ],
+   "recorded": {
+    "chain_exited": true,
+    "chain_outcome": null,
+    "chain_started": true,
+    "courier_sent_field": true,
+    "courier_sent_marker": true,
+    "exit_census_survivor_count": 0,
+    "exit_code_chain_exited": 0,
+    "exit_code_hazard_result": 0,
+    "exit_code_result": 0,
+    "fault_boolean_present": false,
+    "host_restoration_in_result": false,
+    "network_time_off_action_record": true,
+    "refusal_present": false,
+    "restore_record_in_delivered_tree": false,
+    "result_present": true,
+    "verdict": "GO"
+   },
+   "shadow": {
+    "markers": [
+     "arm_decision.json",
+     "censuses.jsonl",
+     "chain.exited",
+     "chain.started",
+     "courier.heartbeat",
+     "courier.json",
+     "courier.sent",
+     "hazard_result.json",
+     "result.json"
+    ],
+    "outcome": "MEASURED_OK",
+    "outcome_reasons": [
+     "CHAIN_COMPLETED"
+    ],
+    "reader_errors": [],
+    "reasons": [
+     "STATE_FROM_OBSERVED_MARKERS"
+    ],
+    "state": "Delivered",
+    "state_sequence": [
+     "ChainOpen",
+     "ChainExited",
+     "ResultWritten",
+     "Delivered"
+    ],
+    "violated_invariants": [
+     "COURIER_SENT_WITHOUT_DELIVERY"
+    ]
+   },
+   "source_commit": "1832b78fbd38953eedce9cceb7e92aade69dfb89"
+  },
+  {
+   "agreement": {
+    "checks": [
+     {
+      "detail": "records imply MEASURED; shadow derives MEASURED_OK",
+      "id": "outcome",
+      "status": "agree"
+     },
+     {
+      "detail": "consistent",
+      "id": "chain_lifecycle",
+      "status": "agree"
+     },
+     {
+      "detail": "single value across exit_code_chain_exited, exit_code_hazard_result, exit_code_result",
+      "id": "exit_code_sources",
+      "status": "agree"
+     },
+     {
+      "detail": "GO is admission only; unknown word unclassed, class unknown; undeclared code",
+      "id": "verdict_vs_exit_class",
+      "status": "note"
+     },
+     {
+      "detail": "state matches courier records",
+      "id": "delivery",
+      "status": "agree"
+     },
+     {
+      "detail": "courier send recorded; delivery receipt and courier_mode (night_plan.json) are not observable from the allowlist; the shadow reader needs a legacy-courier rule or a courier_mode input",
+      "id": "invariant:COURIER_SENT_WITHOUT_DELIVERY",
+      "kind": "input_gap",
+      "status": "disagree"
+     },
+     {
+      "detail": "network-time-off action recorded; no restore record is delivered (host effect unobserved)",
+      "id": "restore_records",
+      "status": "note"
+     }
+    ],
+    "disagreements": [
+     {
+      "detail": "courier send recorded; delivery receipt and courier_mode (night_plan.json) are not observable from the allowlist; the shadow reader needs a legacy-courier rule or a courier_mode input",
+      "id": "invariant:COURIER_SENT_WITHOUT_DELIVERY",
+      "kind": "input_gap",
+      "status": "disagree"
+     }
+    ],
+    "notes": [
+     {
+      "detail": "GO is admission only; unknown word unclassed, class unknown; undeclared code",
+      "id": "verdict_vs_exit_class",
+      "status": "note"
+     },
+     {
+      "detail": "network-time-off action recorded; no restore record is delivered (host effect unobserved)",
+      "id": "restore_records",
+      "status": "note"
+     }
+    ]
+   },
+   "custody": false,
+   "derived": true,
+   "exit_class": {
+    "class": "unknown",
+    "declared": false,
+    "tool": "unknown",
+    "word": "unclassed"
+   },
+   "files_present": [
+    "arm_decision.json",
+    "censuses.jsonl",
+    "chain.exit-census.json",
+    "chain.exited",
+    "chain.started",
+    "courier.heartbeat",
+    "courier.json",
+    "courier.sent",
+    "hazard_result.json",
+    "network_time_off.action.json",
+    "result.json"
+   ],
+   "night": "align-pilot-20261105T102850144782Z",
+   "owed_effects": [
+    {
+     "effect": "NETWORK_TIME_OFF",
+     "reason": "EFFECT_UNOBSERVED",
+     "status": "unknown",
+     "subject": "network_time"
+    },
+    {
+     "effect": "AC_HIGH_POWER",
+     "reason": "EFFECT_UNOBSERVED",
+     "status": "unknown",
+     "subject": "ac_powermode"
+    },
+    {
+     "effect": "HIGH_POWER_MARKERS",
+     "reason": "EFFECT_UNOBSERVED",
+     "status": "unknown",
+     "subject": "markers"
+    },
+    {
+     "effect": "NIGHT_PLISTS",
+     "reason": "EFFECT_UNOBSERVED",
+     "status": "unknown",
+     "subject": "com.joulewise.night"
+    },
+    {
+     "effect": "NIGHT_PLISTS",
+     "reason": "EFFECT_UNOBSERVED",
+     "status": "unknown",
+     "subject": "com.joulewise.night.deadman"
+    },
+    {
+     "effect": "NIGHT_LOCK",
+     "reason": "EFFECT_UNOBSERVED",
+     "status": "unknown",
+     "subject": "night.lock"
+    },
+    {
+     "effect": "SPOTLIGHT_STOPPED",
+     "reason": "EFFECT_UNOBSERVED",
+     "status": "unknown",
+     "subject": "spotlight"
+    },
+    {
+     "effect": "KEEP_AWAKE_AGENT",
+     "reason": "EFFECT_UNOBSERVED",
+     "status": "unknown",
+     "subject": "local.jwbench.keepawake"
+    }
+   ],
+   "recorded": {
+    "chain_exited": true,
+    "chain_outcome": null,
+    "chain_started": true,
+    "courier_sent_field": true,
+    "courier_sent_marker": true,
+    "exit_census_survivor_count": 0,
+    "exit_code_chain_exited": 0,
+    "exit_code_hazard_result": 0,
+    "exit_code_result": 0,
+    "fault_boolean_present": false,
+    "host_restoration_in_result": false,
+    "network_time_off_action_record": true,
+    "refusal_present": false,
+    "restore_record_in_delivered_tree": false,
+    "result_present": true,
+    "verdict": "GO"
+   },
+   "shadow": {
+    "markers": [
+     "arm_decision.json",
+     "censuses.jsonl",
+     "chain.exited",
+     "chain.started",
+     "courier.heartbeat",
+     "courier.json",
+     "courier.sent",
+     "hazard_result.json",
+     "result.json"
+    ],
+    "outcome": "MEASURED_OK",
+    "outcome_reasons": [
+     "CHAIN_COMPLETED"
+    ],
+    "reader_errors": [],
+    "reasons": [
+     "STATE_FROM_OBSERVED_MARKERS"
+    ],
+    "state": "Delivered",
+    "state_sequence": [
+     "ChainOpen",
+     "ChainExited",
+     "ResultWritten",
+     "Delivered"
+    ],
+    "violated_invariants": [
+     "COURIER_SENT_WITHOUT_DELIVERY"
+    ]
+   },
+   "source_commit": "1e5942d1db5681722d0e2cf8688ab3e72aebb799"
+  },
+  {
+   "agreement": {
+    "checks": [
+     {
+      "detail": "records imply MEASURED; shadow derives MEASURED_OK",
+      "id": "outcome",
+      "status": "agree"
+     },
+     {
+      "detail": "consistent",
+      "id": "chain_lifecycle",
+      "status": "agree"
+     },
+     {
+      "detail": "single value across exit_code_chain_exited, exit_code_hazard_result, exit_code_result",
+      "id": "exit_code_sources",
+      "status": "agree"
+     },
+     {
+      "detail": "GO is admission only; unknown word unclassed, class unknown; undeclared code",
+      "id": "verdict_vs_exit_class",
+      "status": "note"
+     },
+     {
+      "detail": "state matches courier records",
+      "id": "delivery",
+      "status": "agree"
+     },
+     {
+      "detail": "courier send recorded; delivery receipt and courier_mode (night_plan.json) are not observable from the allowlist; the shadow reader needs a legacy-courier rule or a courier_mode input",
+      "id": "invariant:COURIER_SENT_WITHOUT_DELIVERY",
+      "kind": "input_gap",
+      "status": "disagree"
+     },
+     {
+      "detail": "network-time-off action recorded; no restore record is delivered (host effect unobserved)",
+      "id": "restore_records",
+      "status": "note"
+     }
+    ],
+    "disagreements": [
+     {
+      "detail": "courier send recorded; delivery receipt and courier_mode (night_plan.json) are not observable from the allowlist; the shadow reader needs a legacy-courier rule or a courier_mode input",
+      "id": "invariant:COURIER_SENT_WITHOUT_DELIVERY",
+      "kind": "input_gap",
+      "status": "disagree"
+     }
+    ],
+    "notes": [
+     {
+      "detail": "GO is admission only; unknown word unclassed, class unknown; undeclared code",
+      "id": "verdict_vs_exit_class",
+      "status": "note"
+     },
+     {
+      "detail": "network-time-off action recorded; no restore record is delivered (host effect unobserved)",
+      "id": "restore_records",
+      "status": "note"
+     }
+    ]
+   },
+   "custody": false,
+   "derived": true,
+   "exit_class": {
+    "class": "unknown",
+    "declared": false,
+    "tool": "unknown",
+    "word": "unclassed"
+   },
+   "files_present": [
+    "arm_decision.json",
+    "censuses.jsonl",
+    "chain.exit-census.json",
+    "chain.exited",
+    "chain.started",
+    "courier.heartbeat",
+    "courier.json",
+    "courier.sent",
+    "hazard_result.json",
+    "network_time_off.action.json",
+    "result.json"
+   ],
+   "night": "align-pilot-20261105T231016638759Z",
+   "owed_effects": [
+    {
+     "effect": "NETWORK_TIME_OFF",
+     "reason": "EFFECT_UNOBSERVED",
+     "status": "unknown",
+     "subject": "network_time"
+    },
+    {
+     "effect": "AC_HIGH_POWER",
+     "reason": "EFFECT_UNOBSERVED",
+     "status": "unknown",
+     "subject": "ac_powermode"
+    },
+    {
+     "effect": "HIGH_POWER_MARKERS",
+     "reason": "EFFECT_UNOBSERVED",
+     "status": "unknown",
+     "subject": "markers"
+    },
+    {
+     "effect": "NIGHT_PLISTS",
+     "reason": "EFFECT_UNOBSERVED",
+     "status": "unknown",
+     "subject": "com.joulewise.night"
+    },
+    {
+     "effect": "NIGHT_PLISTS",
+     "reason": "EFFECT_UNOBSERVED",
+     "status": "unknown",
+     "subject": "com.joulewise.night.deadman"
+    },
+    {
+     "effect": "NIGHT_LOCK",
+     "reason": "EFFECT_UNOBSERVED",
+     "status": "unknown",
+     "subject": "night.lock"
+    },
+    {
+     "effect": "SPOTLIGHT_STOPPED",
+     "reason": "EFFECT_UNOBSERVED",
+     "status": "unknown",
+     "subject": "spotlight"
+    },
+    {
+     "effect": "KEEP_AWAKE_AGENT",
+     "reason": "EFFECT_UNOBSERVED",
+     "status": "unknown",
+     "subject": "local.jwbench.keepawake"
+    }
+   ],
+   "recorded": {
+    "chain_exited": true,
+    "chain_outcome": null,
+    "chain_started": true,
+    "courier_sent_field": true,
+    "courier_sent_marker": true,
+    "exit_census_survivor_count": 0,
+    "exit_code_chain_exited": 0,
+    "exit_code_hazard_result": 0,
+    "exit_code_result": 0,
+    "fault_boolean_present": false,
+    "host_restoration_in_result": false,
+    "network_time_off_action_record": true,
+    "refusal_present": false,
+    "restore_record_in_delivered_tree": false,
+    "result_present": true,
+    "verdict": "GO"
+   },
+   "shadow": {
+    "markers": [
+     "arm_decision.json",
+     "censuses.jsonl",
+     "chain.exited",
+     "chain.started",
+     "courier.heartbeat",
+     "courier.json",
+     "courier.sent",
+     "hazard_result.json",
+     "result.json"
+    ],
+    "outcome": "MEASURED_OK",
+    "outcome_reasons": [
+     "CHAIN_COMPLETED"
+    ],
+    "reader_errors": [],
+    "reasons": [
+     "STATE_FROM_OBSERVED_MARKERS"
+    ],
+    "state": "Delivered",
+    "state_sequence": [
+     "ChainOpen",
+     "ChainExited",
+     "ResultWritten",
+     "Delivered"
+    ],
+    "violated_invariants": [
+     "COURIER_SENT_WITHOUT_DELIVERY"
+    ]
+   },
+   "source_commit": "bc50b8106221724cf75aba773aa4751e09d350d5"
+  },
+  {
+   "agreement": {
+    "checks": [
+     {
+      "detail": "records imply CHAIN_FAILED; shadow derives CHAIN_FAILED",
+      "id": "outcome",
+      "status": "agree"
+     },
+     {
+      "detail": "result verdict GO (admission) while the derived outcome is CHAIN_FAILED; the record's verdict word does not carry the chain's failure (audit finding A-01; fixed on the W1 line, 99622e96c scripts/run_night.py:2308-2324; in-chain refusal, not a crash)",
+      "id": "verdict_masks_outcome",
+      "kind": "known_writer_defect",
+      "status": "disagree"
+     },
+     {
+      "detail": "consistent",
+      "id": "chain_lifecycle",
+      "status": "agree"
+     },
+     {
+      "detail": "single value across exit_code_chain_exited, exit_code_hazard_result, exit_code_result",
+      "id": "exit_code_sources",
+      "status": "agree"
+     },
+     {
+      "detail": "GO is admission only; r1_driver word refused, class refused",
+      "id": "verdict_vs_exit_class",
+      "status": "agree"
+     },
+     {
+      "detail": "state matches courier records",
+      "id": "delivery",
+      "status": "agree"
+     },
+     {
+      "detail": "pre-W1 writer recorded no fault for a non-zero chain exit (audit A-01; fixed on the W1 line, 99622e96c scripts/run_night.py:2308-2324, by chain_exit_nonzero and fault: true). The driver's word for this exit is refused: an in-chain refusal, not a crash. The invariant is not loosened.",
+      "id": "invariant:NONZERO_EXIT_WITHOUT_FAULT",
+      "kind": "known_writer_defect",
+      "status": "disagree"
+     },
+     {
+      "detail": "courier send recorded; delivery receipt and courier_mode (night_plan.json) are not observable from the allowlist; the shadow reader needs a legacy-courier rule or a courier_mode input; see audit A-02 (file-only courier marks courier.sent)",
+      "id": "invariant:COURIER_SENT_WITHOUT_DELIVERY",
+      "kind": "input_gap",
+      "status": "disagree"
+     },
+     {
+      "detail": "network-time-off action recorded; no restore record is delivered (host effect unobserved)",
+      "id": "restore_records",
+      "status": "note"
+     }
+    ],
+    "disagreements": [
+     {
+      "detail": "result verdict GO (admission) while the derived outcome is CHAIN_FAILED; the record's verdict word does not carry the chain's failure (audit finding A-01; fixed on the W1 line, 99622e96c scripts/run_night.py:2308-2324; in-chain refusal, not a crash)",
+      "id": "verdict_masks_outcome",
+      "kind": "known_writer_defect",
+      "status": "disagree"
+     },
+     {
+      "detail": "pre-W1 writer recorded no fault for a non-zero chain exit (audit A-01; fixed on the W1 line, 99622e96c scripts/run_night.py:2308-2324, by chain_exit_nonzero and fault: true). The driver's word for this exit is refused: an in-chain refusal, not a crash. The invariant is not loosened.",
+      "id": "invariant:NONZERO_EXIT_WITHOUT_FAULT",
+      "kind": "known_writer_defect",
+      "status": "disagree"
+     },
+     {
+      "detail": "courier send recorded; delivery receipt and courier_mode (night_plan.json) are not observable from the allowlist; the shadow reader needs a legacy-courier rule or a courier_mode input; see audit A-02 (file-only courier marks courier.sent)",
+      "id": "invariant:COURIER_SENT_WITHOUT_DELIVERY",
+      "kind": "input_gap",
+      "status": "disagree"
+     }
+    ],
+    "notes": [
+     {
+      "detail": "network-time-off action recorded; no restore record is delivered (host effect unobserved)",
+      "id": "restore_records",
+      "status": "note"
+     }
+    ]
+   },
+   "custody": false,
+   "derived": true,
+   "exit_class": {
+    "class": "refused",
+    "declared": true,
+    "tool": "r1_driver",
+    "word": "refused"
+   },
+   "files_present": [
+    "arm_decision.json",
+    "censuses.jsonl",
+    "chain.exit-census.json",
+    "chain.exited",
+    "chain.started",
+    "courier.heartbeat",
+    "courier.json",
+    "courier.sent",
+    "hazard_result.json",
+    "network_time_off.action.json",
+    "result.json"
+   ],
+   "night": "align-r1-20261108T0917Z",
+   "owed_effects": [
+    {
+     "effect": "NETWORK_TIME_OFF",
+     "reason": "EFFECT_UNOBSERVED",
+     "status": "unknown",
+     "subject": "network_time"
+    },
+    {
+     "effect": "AC_HIGH_POWER",
+     "reason": "EFFECT_UNOBSERVED",
+     "status": "unknown",
+     "subject": "ac_powermode"
+    },
+    {
+     "effect": "HIGH_POWER_MARKERS",
+     "reason": "EFFECT_UNOBSERVED",
+     "status": "unknown",
+     "subject": "markers"
+    },
+    {
+     "effect": "NIGHT_PLISTS",
+     "reason": "EFFECT_UNOBSERVED",
+     "status": "unknown",
+     "subject": "com.joulewise.night"
+    },
+    {
+     "effect": "NIGHT_PLISTS",
+     "reason": "EFFECT_UNOBSERVED",
+     "status": "unknown",
+     "subject": "com.joulewise.night.deadman"
+    },
+    {
+     "effect": "NIGHT_LOCK",
+     "reason": "EFFECT_UNOBSERVED",
+     "status": "unknown",
+     "subject": "night.lock"
+    },
+    {
+     "effect": "SPOTLIGHT_STOPPED",
+     "reason": "EFFECT_UNOBSERVED",
+     "status": "unknown",
+     "subject": "spotlight"
+    },
+    {
+     "effect": "KEEP_AWAKE_AGENT",
+     "reason": "EFFECT_UNOBSERVED",
+     "status": "unknown",
+     "subject": "local.jwbench.keepawake"
+    }
+   ],
+   "recorded": {
+    "chain_exited": true,
+    "chain_outcome": null,
+    "chain_started": true,
+    "courier_sent_field": true,
+    "courier_sent_marker": true,
+    "exit_census_survivor_count": 0,
+    "exit_code_chain_exited": 3,
+    "exit_code_hazard_result": 3,
+    "exit_code_result": 3,
+    "fault_boolean_present": false,
+    "host_restoration_in_result": false,
+    "network_time_off_action_record": true,
+    "refusal_present": false,
+    "restore_record_in_delivered_tree": false,
+    "result_present": true,
+    "verdict": "GO"
+   },
+   "shadow": {
+    "markers": [
+     "arm_decision.json",
+     "censuses.jsonl",
+     "chain.exited",
+     "chain.started",
+     "courier.heartbeat",
+     "courier.json",
+     "courier.sent",
+     "hazard_result.json",
+     "result.json"
+    ],
+    "outcome": "CHAIN_FAILED",
+    "outcome_reasons": [
+     "NONZERO_CHAIN_EXIT"
+    ],
+    "reader_errors": [],
+    "reasons": [
+     "STATE_FROM_OBSERVED_MARKERS"
+    ],
+    "state": "Delivered",
+    "state_sequence": [
+     "ChainOpen",
+     "ChainExited",
+     "ResultWritten",
+     "Delivered"
+    ],
+    "violated_invariants": [
+     "NONZERO_EXIT_WITHOUT_FAULT",
+     "COURIER_SENT_WITHOUT_DELIVERY"
+    ]
+   },
+   "source_commit": "594770497626e8b9c175c2258ddcdff637215761"
+  },
+  {
+   "agreement": {
+    "checks": [
+     {
+      "detail": "records imply REFUSED_PRE_CHAIN; shadow derives REFUSED_PRE_CHAIN",
+      "id": "outcome",
+      "status": "agree"
+     },
+     {
+      "detail": "consistent",
+      "id": "chain_lifecycle",
+      "status": "agree"
+     },
+     {
+      "detail": "no exit code recorded",
+      "id": "exit_code_sources",
+      "status": "n/a"
+     },
+     {
+      "detail": "no exit code or no verdict",
+      "id": "verdict_vs_exit_class",
+      "status": "n/a"
+     },
+     {
+      "detail": "state matches courier records",
+      "id": "delivery",
+      "status": "agree"
+     },
+     {
+      "detail": "courier send recorded; delivery receipt and courier_mode (night_plan.json) are not observable from the allowlist; the shadow reader needs a legacy-courier rule or a courier_mode input; see audit A-02 (file-only courier marks courier.sent)",
+      "id": "invariant:COURIER_SENT_WITHOUT_DELIVERY",
+      "kind": "input_gap",
+      "status": "disagree"
+     },
+     {
+      "detail": "network-time-off action recorded; no restore record is delivered (host effect unobserved)",
+      "id": "restore_records",
+      "status": "note"
+     }
+    ],
+    "disagreements": [
+     {
+      "detail": "courier send recorded; delivery receipt and courier_mode (night_plan.json) are not observable from the allowlist; the shadow reader needs a legacy-courier rule or a courier_mode input; see audit A-02 (file-only courier marks courier.sent)",
+      "id": "invariant:COURIER_SENT_WITHOUT_DELIVERY",
+      "kind": "input_gap",
+      "status": "disagree"
+     }
+    ],
+    "notes": [
+     {
+      "detail": "network-time-off action recorded; no restore record is delivered (host effect unobserved)",
+      "id": "restore_records",
+      "status": "note"
+     }
+    ]
+   },
+   "custody": false,
+   "derived": true,
+   "exit_class": null,
+   "files_present": [
+    "arm_decision.json",
+    "censuses.jsonl",
+    "courier.heartbeat",
+    "courier.json",
+    "courier.sent",
+    "hazard_result.json",
+    "network_time_off.action.json",
+    "refusal.json",
+    "result.json"
+   ],
+   "night": "align-r1-20261110T2146Z",
+   "owed_effects": [
+    {
+     "effect": "NETWORK_TIME_OFF",
+     "reason": "EFFECT_UNOBSERVED",
+     "status": "unknown",
+     "subject": "network_time"
+    },
+    {
+     "effect": "AC_HIGH_POWER",
+     "reason": "EFFECT_UNOBSERVED",
+     "status": "unknown",
+     "subject": "ac_powermode"
+    },
+    {
+     "effect": "HIGH_POWER_MARKERS",
+     "reason": "EFFECT_UNOBSERVED",
+     "status": "unknown",
+     "subject": "markers"
+    },
+    {
+     "effect": "NIGHT_PLISTS",
+     "reason": "EFFECT_UNOBSERVED",
+     "status": "unknown",
+     "subject": "com.joulewise.night"
+    },
+    {
+     "effect": "NIGHT_PLISTS",
+     "reason": "EFFECT_UNOBSERVED",
+     "status": "unknown",
+     "subject": "com.joulewise.night.deadman"
+    },
+    {
+     "effect": "NIGHT_LOCK",
+     "reason": "EFFECT_UNOBSERVED",
+     "status": "unknown",
+     "subject": "night.lock"
+    },
+    {
+     "effect": "SPOTLIGHT_STOPPED",
+     "reason": "EFFECT_UNOBSERVED",
+     "status": "unknown",
+     "subject": "spotlight"
+    },
+    {
+     "effect": "KEEP_AWAKE_AGENT",
+     "reason": "EFFECT_UNOBSERVED",
+     "status": "unknown",
+     "subject": "local.jwbench.keepawake"
+    }
+   ],
+   "recorded": {
+    "chain_exited": false,
+    "chain_outcome": null,
+    "chain_started": false,
+    "courier_sent_field": true,
+    "courier_sent_marker": true,
+    "exit_census_survivor_count": null,
+    "exit_code_chain_exited": null,
+    "exit_code_hazard_result": null,
+    "exit_code_result": null,
+    "fault_boolean_present": false,
+    "host_restoration_in_result": false,
+    "network_time_off_action_record": true,
+    "refusal_present": true,
+    "restore_record_in_delivered_tree": false,
+    "result_present": true,
+    "verdict": "REFUSED"
+   },
+   "shadow": {
+    "markers": [
+     "arm_decision.json",
+     "censuses.jsonl",
+     "courier.heartbeat",
+     "courier.json",
+     "courier.sent",
+     "hazard_result.json",
+     "refusal.json",
+     "result.json"
+    ],
+    "outcome": "REFUSED_PRE_CHAIN",
+    "outcome_reasons": [
+     "ARM_REFUSED_BEFORE_CHAIN"
+    ],
+    "reader_errors": [],
+    "reasons": [
+     "STATE_FROM_OBSERVED_MARKERS"
+    ],
+    "state": "Delivered",
+    "state_sequence": [
+     "RefusedPreChain",
+     "ResultWritten",
+     "Delivered"
+    ],
+    "violated_invariants": [
+     "COURIER_SENT_WITHOUT_DELIVERY"
+    ]
+   },
+   "source_commit": "d30fed4946874eeded34971e4014cbba583ab234"
+  },
+  {
+   "agreement": {
+    "checks": [
+     {
+      "detail": "records imply CHAIN_FAILED; shadow derives CHAIN_FAILED",
+      "id": "outcome",
+      "status": "agree"
+     },
+     {
+      "detail": "result verdict GO (admission) while the derived outcome is CHAIN_FAILED; the record's verdict word does not carry the chain's failure (audit finding A-01; fixed on the W1 line, 99622e96c scripts/run_night.py:2308-2324; in-chain refusal, not a crash)",
+      "id": "verdict_masks_outcome",
+      "kind": "known_writer_defect",
+      "status": "disagree"
+     },
+     {
+      "detail": "consistent",
+      "id": "chain_lifecycle",
+      "status": "agree"
+     },
+     {
+      "detail": "single value across exit_code_chain_exited, exit_code_hazard_result, exit_code_result",
+      "id": "exit_code_sources",
+      "status": "agree"
+     },
+     {
+      "detail": "GO is admission only; r1_driver word refused, class refused",
+      "id": "verdict_vs_exit_class",
+      "status": "agree"
+     },
+     {
+      "detail": "state matches courier records",
+      "id": "delivery",
+      "status": "agree"
+     },
+     {
+      "detail": "pre-W1 writer recorded no fault for a non-zero chain exit (audit A-01; fixed on the W1 line, 99622e96c scripts/run_night.py:2308-2324, by chain_exit_nonzero and fault: true). The driver's word for this exit is refused: an in-chain refusal, not a crash. The invariant is not loosened.",
+      "id": "invariant:NONZERO_EXIT_WITHOUT_FAULT",
+      "kind": "known_writer_defect",
+      "status": "disagree"
+     },
+     {
+      "detail": "courier send recorded; delivery receipt and courier_mode (night_plan.json) are not observable from the allowlist; the shadow reader needs a legacy-courier rule or a courier_mode input; see audit A-02 (file-only courier marks courier.sent)",
+      "id": "invariant:COURIER_SENT_WITHOUT_DELIVERY",
+      "kind": "input_gap",
+      "status": "disagree"
+     },
+     {
+      "detail": "network-time-off action recorded; no restore record is delivered (host effect unobserved)",
+      "id": "restore_records",
+      "status": "note"
+     }
+    ],
+    "disagreements": [
+     {
+      "detail": "result verdict GO (admission) while the derived outcome is CHAIN_FAILED; the record's verdict word does not carry the chain's failure (audit finding A-01; fixed on the W1 line, 99622e96c scripts/run_night.py:2308-2324; in-chain refusal, not a crash)",
+      "id": "verdict_masks_outcome",
+      "kind": "known_writer_defect",
+      "status": "disagree"
+     },
+     {
+      "detail": "pre-W1 writer recorded no fault for a non-zero chain exit (audit A-01; fixed on the W1 line, 99622e96c scripts/run_night.py:2308-2324, by chain_exit_nonzero and fault: true). The driver's word for this exit is refused: an in-chain refusal, not a crash. The invariant is not loosened.",
+      "id": "invariant:NONZERO_EXIT_WITHOUT_FAULT",
+      "kind": "known_writer_defect",
+      "status": "disagree"
+     },
+     {
+      "detail": "courier send recorded; delivery receipt and courier_mode (night_plan.json) are not observable from the allowlist; the shadow reader needs a legacy-courier rule or a courier_mode input; see audit A-02 (file-only courier marks courier.sent)",
+      "id": "invariant:COURIER_SENT_WITHOUT_DELIVERY",
+      "kind": "input_gap",
+      "status": "disagree"
+     }
+    ],
+    "notes": [
+     {
+      "detail": "network-time-off action recorded; no restore record is delivered (host effect unobserved)",
+      "id": "restore_records",
+      "status": "note"
+     }
+    ]
+   },
+   "custody": false,
+   "derived": true,
+   "exit_class": {
+    "class": "refused",
+    "declared": true,
+    "tool": "r1_driver",
+    "word": "refused"
+   },
+   "files_present": [
+    "arm_decision.json",
+    "censuses.jsonl",
+    "chain.exit-census.json",
+    "chain.exited",
+    "chain.started",
+    "courier.heartbeat",
+    "courier.json",
+    "courier.sent",
+    "hazard_result.json",
+    "network_time_off.action.json",
+    "result.json"
+   ],
+   "night": "align-r1-20261111T0208Z",
+   "owed_effects": [
+    {
+     "effect": "NETWORK_TIME_OFF",
+     "reason": "EFFECT_UNOBSERVED",
+     "status": "unknown",
+     "subject": "network_time"
+    },
+    {
+     "effect": "AC_HIGH_POWER",
+     "reason": "EFFECT_UNOBSERVED",
+     "status": "unknown",
+     "subject": "ac_powermode"
+    },
+    {
+     "effect": "HIGH_POWER_MARKERS",
+     "reason": "EFFECT_UNOBSERVED",
+     "status": "unknown",
+     "subject": "markers"
+    },
+    {
+     "effect": "NIGHT_PLISTS",
+     "reason": "EFFECT_UNOBSERVED",
+     "status": "unknown",
+     "subject": "com.joulewise.night"
+    },
+    {
+     "effect": "NIGHT_PLISTS",
+     "reason": "EFFECT_UNOBSERVED",
+     "status": "unknown",
+     "subject": "com.joulewise.night.deadman"
+    },
+    {
+     "effect": "NIGHT_LOCK",
+     "reason": "EFFECT_UNOBSERVED",
+     "status": "unknown",
+     "subject": "night.lock"
+    },
+    {
+     "effect": "SPOTLIGHT_STOPPED",
+     "reason": "EFFECT_UNOBSERVED",
+     "status": "unknown",
+     "subject": "spotlight"
+    },
+    {
+     "effect": "KEEP_AWAKE_AGENT",
+     "reason": "EFFECT_UNOBSERVED",
+     "status": "unknown",
+     "subject": "local.jwbench.keepawake"
+    }
+   ],
+   "recorded": {
+    "chain_exited": true,
+    "chain_outcome": null,
+    "chain_started": true,
+    "courier_sent_field": true,
+    "courier_sent_marker": true,
+    "exit_census_survivor_count": 0,
+    "exit_code_chain_exited": 3,
+    "exit_code_hazard_result": 3,
+    "exit_code_result": 3,
+    "fault_boolean_present": false,
+    "host_restoration_in_result": false,
+    "network_time_off_action_record": true,
+    "refusal_present": false,
+    "restore_record_in_delivered_tree": false,
+    "result_present": true,
+    "verdict": "GO"
+   },
+   "shadow": {
+    "markers": [
+     "arm_decision.json",
+     "censuses.jsonl",
+     "chain.exited",
+     "chain.started",
+     "courier.heartbeat",
+     "courier.json",
+     "courier.sent",
+     "hazard_result.json",
+     "result.json"
+    ],
+    "outcome": "CHAIN_FAILED",
+    "outcome_reasons": [
+     "NONZERO_CHAIN_EXIT"
+    ],
+    "reader_errors": [],
+    "reasons": [
+     "STATE_FROM_OBSERVED_MARKERS"
+    ],
+    "state": "Delivered",
+    "state_sequence": [
+     "ChainOpen",
+     "ChainExited",
+     "ResultWritten",
+     "Delivered"
+    ],
+    "violated_invariants": [
+     "NONZERO_EXIT_WITHOUT_FAULT",
+     "COURIER_SENT_WITHOUT_DELIVERY"
+    ]
+   },
+   "source_commit": "851661f7f64361eb9efadc0285cca6ab1735ee12"
+  },
+  {
+   "agreement": {
+    "checks": [
+     {
+      "detail": "records imply MEASURED; shadow derives MEASURED_OK",
+      "id": "outcome",
+      "status": "agree"
+     },
+     {
+      "detail": "consistent",
+      "id": "chain_lifecycle",
+      "status": "agree"
+     },
+     {
+      "detail": "single value across exit_code_chain_exited, exit_code_hazard_result, exit_code_result",
+      "id": "exit_code_sources",
+      "status": "agree"
+     },
+     {
+      "detail": "GO is admission only; r1_driver word complete, class success",
+      "id": "verdict_vs_exit_class",
+      "status": "agree"
+     },
+     {
+      "detail": "state matches courier records",
+      "id": "delivery",
+      "status": "agree"
+     },
+     {
+      "detail": "courier send recorded; delivery receipt and courier_mode (night_plan.json) are not observable from the allowlist; the shadow reader needs a legacy-courier rule or a courier_mode input; see audit A-02 (file-only courier marks courier.sent)",
+      "id": "invariant:COURIER_SENT_WITHOUT_DELIVERY",
+      "kind": "input_gap",
+      "status": "disagree"
+     },
+     {
+      "detail": "network-time-off action recorded; no restore record is delivered (host effect unobserved)",
+      "id": "restore_records",
+      "status": "note"
+     }
+    ],
+    "disagreements": [
+     {
+      "detail": "courier send recorded; delivery receipt and courier_mode (night_plan.json) are not observable from the allowlist; the shadow reader needs a legacy-courier rule or a courier_mode input; see audit A-02 (file-only courier marks courier.sent)",
+      "id": "invariant:COURIER_SENT_WITHOUT_DELIVERY",
+      "kind": "input_gap",
+      "status": "disagree"
+     }
+    ],
+    "notes": [
+     {
+      "detail": "network-time-off action recorded; no restore record is delivered (host effect unobserved)",
+      "id": "restore_records",
+      "status": "note"
+     }
+    ]
+   },
+   "custody": false,
+   "derived": true,
+   "exit_class": {
+    "class": "success",
+    "declared": true,
+    "tool": "r1_driver",
+    "word": "complete"
+   },
+   "files_present": [
+    "arm_decision.json",
+    "censuses.jsonl",
+    "chain.exit-census.json",
+    "chain.exited",
+    "chain.started",
+    "courier.heartbeat",
+    "courier.json",
+    "courier.sent",
+    "hazard_result.json",
+    "network_time_off.action.json",
+    "result.json"
+   ],
+   "night": "align-r1-20261111T0453Z",
+   "owed_effects": [
+    {
+     "effect": "NETWORK_TIME_OFF",
+     "reason": "EFFECT_UNOBSERVED",
+     "status": "unknown",
+     "subject": "network_time"
+    },
+    {
+     "effect": "AC_HIGH_POWER",
+     "reason": "EFFECT_UNOBSERVED",
+     "status": "unknown",
+     "subject": "ac_powermode"
+    },
+    {
+     "effect": "HIGH_POWER_MARKERS",
+     "reason": "EFFECT_UNOBSERVED",
+     "status": "unknown",
+     "subject": "markers"
+    },
+    {
+     "effect": "NIGHT_PLISTS",
+     "reason": "EFFECT_UNOBSERVED",
+     "status": "unknown",
+     "subject": "com.joulewise.night"
+    },
+    {
+     "effect": "NIGHT_PLISTS",
+     "reason": "EFFECT_UNOBSERVED",
+     "status": "unknown",
+     "subject": "com.joulewise.night.deadman"
+    },
+    {
+     "effect": "NIGHT_LOCK",
+     "reason": "EFFECT_UNOBSERVED",
+     "status": "unknown",
+     "subject": "night.lock"
+    },
+    {
+     "effect": "SPOTLIGHT_STOPPED",
+     "reason": "EFFECT_UNOBSERVED",
+     "status": "unknown",
+     "subject": "spotlight"
+    },
+    {
+     "effect": "KEEP_AWAKE_AGENT",
+     "reason": "EFFECT_UNOBSERVED",
+     "status": "unknown",
+     "subject": "local.jwbench.keepawake"
+    }
+   ],
+   "recorded": {
+    "chain_exited": true,
+    "chain_outcome": null,
+    "chain_started": true,
+    "courier_sent_field": true,
+    "courier_sent_marker": true,
+    "exit_census_survivor_count": 0,
+    "exit_code_chain_exited": 0,
+    "exit_code_hazard_result": 0,
+    "exit_code_result": 0,
+    "fault_boolean_present": false,
+    "host_restoration_in_result": false,
+    "network_time_off_action_record": true,
+    "refusal_present": false,
+    "restore_record_in_delivered_tree": false,
+    "result_present": true,
+    "verdict": "GO"
+   },
+   "shadow": {
+    "markers": [
+     "arm_decision.json",
+     "censuses.jsonl",
+     "chain.exited",
+     "chain.started",
+     "courier.heartbeat",
+     "courier.json",
+     "courier.sent",
+     "hazard_result.json",
+     "result.json"
+    ],
+    "outcome": "MEASURED_OK",
+    "outcome_reasons": [
+     "CHAIN_COMPLETED"
+    ],
+    "reader_errors": [],
+    "reasons": [
+     "STATE_FROM_OBSERVED_MARKERS"
+    ],
+    "state": "Delivered",
+    "state_sequence": [
+     "ChainOpen",
+     "ChainExited",
+     "ResultWritten",
+     "Delivered"
+    ],
+    "violated_invariants": [
+     "COURIER_SENT_WITHOUT_DELIVERY"
+    ]
+   },
+   "source_commit": "ad19c062d90f22d0e70b21ba17c36cdcfedfcfe6"
+  },
+  {
+   "agreement": {
+    "checks": [
+     {
+      "detail": "records imply MEASURED; shadow derives MEASURED_OK",
+      "id": "outcome",
+      "status": "agree"
+     },
+     {
+      "detail": "record carries chain_outcome COMPLETE; shadow derives MEASURED_OK",
+      "id": "recorded_chain_outcome",
+      "status": "agree"
+     },
+     {
+      "detail": "consistent",
+      "id": "chain_lifecycle",
+      "status": "agree"
+     },
+     {
+      "detail": "single value across exit_code_chain_exited, exit_code_hazard_result, exit_code_result",
+      "id": "exit_code_sources",
+      "status": "agree"
+     },
+     {
+      "detail": "GO is admission only; r1_driver word complete, class success",
+      "id": "verdict_vs_exit_class",
+      "status": "agree"
+     },
+     {
+      "detail": "state matches courier records",
+      "id": "delivery",
+      "status": "agree"
+     },
+     {
+      "detail": "restore_record: present (result.json carries a host_restoration object; presence only, values not inspected)",
+      "id": "restore_records",
+      "status": "n/a"
+     }
+    ],
+    "disagreements": [],
+    "notes": []
+   },
+   "custody": false,
+   "derived": true,
+   "exit_class": {
+    "class": "success",
+    "declared": true,
+    "tool": "r1_driver",
+    "word": "complete"
+   },
+   "files_present": [
+    "arm_decision.json",
+    "censuses.jsonl",
+    "chain.exit-census.json",
+    "chain.exited",
+    "chain.started",
+    "courier.delivery.json",
+    "courier.heartbeat",
+    "courier.json",
+    "courier.sent",
+    "hazard_result.json",
+    "network_time_off.action.json",
+    "result.json"
+   ],
+   "night": "align-r1-20261112T2251Z",
+   "owed_effects": [
+    {
+     "effect": "NETWORK_TIME_OFF",
+     "reason": "EFFECT_UNOBSERVED",
+     "status": "unknown",
+     "subject": "network_time"
+    },
+    {
+     "effect": "AC_HIGH_POWER",
+     "reason": "EFFECT_UNOBSERVED",
+     "status": "unknown",
+     "subject": "ac_powermode"
+    },
+    {
+     "effect": "HIGH_POWER_MARKERS",
+     "reason": "EFFECT_UNOBSERVED",
+     "status": "unknown",
+     "subject": "markers"
+    },
+    {
+     "effect": "NIGHT_PLISTS",
+     "reason": "EFFECT_UNOBSERVED",
+     "status": "unknown",
+     "subject": "com.joulewise.night"
+    },
+    {
+     "effect": "NIGHT_PLISTS",
+     "reason": "EFFECT_UNOBSERVED",
+     "status": "unknown",
+     "subject": "com.joulewise.night.deadman"
+    },
+    {
+     "effect": "NIGHT_LOCK",
+     "reason": "EFFECT_UNOBSERVED",
+     "status": "unknown",
+     "subject": "night.lock"
+    },
+    {
+     "effect": "SPOTLIGHT_STOPPED",
+     "reason": "EFFECT_UNOBSERVED",
+     "status": "unknown",
+     "subject": "spotlight"
+    },
+    {
+     "effect": "KEEP_AWAKE_AGENT",
+     "reason": "EFFECT_UNOBSERVED",
+     "status": "unknown",
+     "subject": "local.jwbench.keepawake"
+    }
+   ],
+   "recorded": {
+    "chain_exited": true,
+    "chain_outcome": "COMPLETE",
+    "chain_started": true,
+    "courier_sent_field": true,
+    "courier_sent_marker": true,
+    "exit_census_survivor_count": 0,
+    "exit_code_chain_exited": 0,
+    "exit_code_hazard_result": 0,
+    "exit_code_result": 0,
+    "fault_boolean_present": true,
+    "host_restoration_in_result": true,
+    "network_time_off_action_record": true,
+    "refusal_present": false,
+    "restore_record_in_delivered_tree": false,
+    "result_present": true,
+    "verdict": "GO"
+   },
+   "shadow": {
+    "markers": [
+     "arm_decision.json",
+     "censuses.jsonl",
+     "chain.exited",
+     "chain.started",
+     "courier.delivery.json",
+     "courier.heartbeat",
+     "courier.json",
+     "courier.sent",
+     "hazard_result.json",
+     "result.json"
+    ],
+    "outcome": "MEASURED_OK",
+    "outcome_reasons": [
+     "CHAIN_COMPLETED"
+    ],
+    "reader_errors": [],
+    "reasons": [
+     "STATE_FROM_OBSERVED_MARKERS"
+    ],
+    "state": "Delivered",
+    "state_sequence": [
+     "ChainOpen",
+     "ChainExited",
+     "ResultWritten",
+     "Delivered"
+    ],
+    "violated_invariants": []
+   },
+   "source_commit": "d544ff40b4a5e1002dbb4da92625bc4705748746"
+  }
+ ],
+ "schema": "joulewise.sm_shadow_replay.v1",
+ "skipped_by_family_gate": 84,
+ "structure_only": true,
+ "summary": {
+  "agree": 1,
+  "disagree": 15,
+  "nights": 16,
+  "rows": [
+   {
+    "agree": false,
+    "disagreements": [
+     "invariant:COURIER_SENT_WITHOUT_DELIVERY"
+    ],
+    "night": "align-pilot-20261101T211851626086Z",
+    "outcome": "REFUSED_PRE_CHAIN",
+    "state": "Delivered"
+   },
+   {
+    "agree": false,
+    "disagreements": [
+     "invariant:COURIER_SENT_WITHOUT_DELIVERY"
+    ],
+    "night": "align-pilot-20261102T110644108800Z",
+    "outcome": "MEASURED_OK",
+    "state": "Delivered"
+   },
+   {
+    "agree": false,
+    "disagreements": [
+     "invariant:COURIER_SENT_WITHOUT_DELIVERY"
+    ],
+    "night": "align-pilot-20261102T183609942060Z",
+    "outcome": "MEASURED_OK",
+    "state": "Delivered"
+   },
+   {
+    "agree": false,
+    "disagreements": [
+     "invariant:COURIER_SENT_WITHOUT_DELIVERY"
+    ],
+    "night": "align-pilot-20261103T035513011728Z",
+    "outcome": "MEASURED_OK",
+    "state": "Delivered"
+   },
+   {
+    "agree": false,
+    "disagreements": [
+     "invariant:COURIER_SENT_WITHOUT_DELIVERY"
+    ],
+    "night": "align-pilot-20261103T134903416190Z",
+    "outcome": "MEASURED_OK",
+    "state": "Delivered"
+   },
+   {
+    "agree": false,
+    "disagreements": [
+     "invariant:COURIER_SENT_WITHOUT_DELIVERY"
+    ],
+    "night": "align-pilot-20261103T224628898457Z",
+    "outcome": "MEASURED_OK",
+    "state": "Delivered"
+   },
+   {
+    "agree": false,
+    "disagreements": [
+     "invariant:COURIER_SENT_WITHOUT_DELIVERY"
+    ],
+    "night": "align-pilot-20261104T074612673532Z",
+    "outcome": "MEASURED_OK",
+    "state": "Delivered"
+   },
+   {
+    "agree": false,
+    "disagreements": [
+     "invariant:COURIER_SENT_WITHOUT_DELIVERY"
+    ],
+    "night": "align-pilot-20261104T164323823784Z",
+    "outcome": "MEASURED_OK",
+    "state": "Delivered"
+   },
+   {
+    "agree": false,
+    "disagreements": [
+     "invariant:COURIER_SENT_WITHOUT_DELIVERY"
+    ],
+    "night": "align-pilot-20261105T015948125148Z",
+    "outcome": "MEASURED_OK",
+    "state": "Delivered"
+   },
+   {
+    "agree": false,
+    "disagreements": [
+     "invariant:COURIER_SENT_WITHOUT_DELIVERY"
+    ],
+    "night": "align-pilot-20261105T102850144782Z",
+    "outcome": "MEASURED_OK",
+    "state": "Delivered"
+   },
+   {
+    "agree": false,
+    "disagreements": [
+     "invariant:COURIER_SENT_WITHOUT_DELIVERY"
+    ],
+    "night": "align-pilot-20261105T231016638759Z",
+    "outcome": "MEASURED_OK",
+    "state": "Delivered"
+   },
+   {
+    "agree": false,
+    "disagreements": [
+     "verdict_masks_outcome",
+     "invariant:NONZERO_EXIT_WITHOUT_FAULT",
+     "invariant:COURIER_SENT_WITHOUT_DELIVERY"
+    ],
+    "night": "align-r1-20261108T0917Z",
+    "outcome": "CHAIN_FAILED",
+    "state": "Delivered"
+   },
+   {
+    "agree": false,
+    "disagreements": [
+     "invariant:COURIER_SENT_WITHOUT_DELIVERY"
+    ],
+    "night": "align-r1-20261110T2146Z",
+    "outcome": "REFUSED_PRE_CHAIN",
+    "state": "Delivered"
+   },
+   {
+    "agree": false,
+    "disagreements": [
+     "verdict_masks_outcome",
+     "invariant:NONZERO_EXIT_WITHOUT_FAULT",
+     "invariant:COURIER_SENT_WITHOUT_DELIVERY"
+    ],
+    "night": "align-r1-20261111T0208Z",
+    "outcome": "CHAIN_FAILED",
+    "state": "Delivered"
+   },
+   {
+    "agree": false,
+    "disagreements": [
+     "invariant:COURIER_SENT_WITHOUT_DELIVERY"
+    ],
+    "night": "align-r1-20261111T0453Z",
+    "outcome": "MEASURED_OK",
+    "state": "Delivered"
+   },
+   {
+    "agree": true,
+    "disagreements": [],
+    "night": "align-r1-20261112T2251Z",
+    "outcome": "MEASURED_OK",
+    "state": "Delivered"
+   }
+  ]
+ }
+}
