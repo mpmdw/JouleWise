@@ -221,7 +221,11 @@ class DescriptionIntervalTests(unittest.TestCase):
                     return value
 
                 def observe_loads(payload, **kwargs):
-                    return original_loads(payload, parse_float=observe_number, **kwargs)
+                    parser = kwargs.pop("parse_float", float)
+                    def read_number(raw):
+                        observe_number(raw)
+                        return parser(raw)
+                    return original_loads(payload, parse_float=read_number, **kwargs)
 
                 def observe_gate(signal, channel, a, b, rails):
                     reason = original_refusal(signal, channel, a, b, rails)
@@ -362,7 +366,7 @@ class DescriptionIntervalTests(unittest.TestCase):
                    root / "scripts/cadence_description_run.py")
         raw = re.compile(r'\b(?:_rail_values|_meter_values|_sensor_source|load_gpu_trace)\b'
                          r'|\[["\'](?:power_w|watts|sensors)["\']\]')
-        stamps = re.compile(r'\.(?:sidecar|meter)\b|\[["\'](?:sidecar_times|meter_times)["\']\]')
+        stamps = re.compile(r'\.(?:sidecar_ns|meter_ns)\b|\[["\'](?:sidecar_times|meter_times)["\']\]')
         io = re.compile(r'\b(?:open|read_bytes|read_text)\(')
         structural_io = {
             "description.py": {"working", "validate_manifest", "_step3_code",

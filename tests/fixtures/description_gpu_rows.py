@@ -9,7 +9,7 @@ import tempfile
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from joulewise.cadence_looks.description import Signals, step3_reader
+from joulewise.cadence_looks.description import NS_PER_SECOND, Signals, step3_reader
 from tests.test_desc_looks_acceptance import read, traces
 
 
@@ -27,7 +27,9 @@ def main():
         signal = Signals(support, {"power_trace.csv": source / "power_trace.csv"}, lambda: None, pinned)
         bounds = support["rail_intervals"]
         rows = signal.interval_values("gpu_rail", (bounds[0][0], bounds[-1][1]))
-        print(json.dumps({"description": rows, "pinned_step3": pinned.load_gpu_trace(source)},
+        seconds_rows = [(a / NS_PER_SECOND, b / NS_PER_SECOND, watts, t / NS_PER_SECOND)
+                        for a, b, watts, t in rows]
+        print(json.dumps({"description": seconds_rows, "pinned_step3": pinned.load_gpu_trace(source)},
                          separators=(",", ":"), allow_nan=False))
 
 

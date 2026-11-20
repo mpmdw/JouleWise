@@ -537,6 +537,7 @@
     "tests.test_dependence_sensitivity": 6.425,
     "tests.test_derive_estate_anchors": 6.081,
     "tests.test_desc_looks_acceptance": 1086.764,
+    "tests.test_desc_looks_v22": 2529.529,
     "tests.test_desk_compress": 1.442,
     "tests.test_desk_compressed_readers": 359.196,
     "tests.test_detection_floor": 4.998,
