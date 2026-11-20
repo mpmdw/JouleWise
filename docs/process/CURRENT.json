@@ -1,16 +1,16 @@
 {
   "armed": null,
-  "next_observable": "f2inst03-021bd39d/run-out.txt shows LAUNCH_RC=0 with the fence (launch ~03:05, expected end ~04:46, fence ~05:52). The next activation after the fence is gone Checks cq-f2-inst-03-l009-l010-a1 under /Users/edr/campaign-out/f2-inst-03/ with the ready template f2inst03-check-template-021bd39d/check.sh (LEGS L009,L010, kit sha 2868…cf25, campaign_id f2-inst-03 and batch_windows == ['02:00-02:35'] asserted; replace REPLACE_STAMP in OUT with the actual directory's stamp and NEWACT in TMPDIR with the activation id; read each leg_summary's admitted/contaminated_redos and grep each leg_record for max_busy_cores/max_gap_s), and copies at once with f2inst03-check-template-021bd39d/offload-run.sh (replace NEWACT everywhere with the activation id). L010 is the 19,458-token prefill that overran its budget three times (L003, L005, L008); a fourth overrun is print only. Then rank 2 continues with the last f2-inst-03 span: seq 11 L011-L012 (inputs f2inst03-021bd39d/inputs.sh with SPAN/LEGS/SEQ/MAGISTRATE_PID changed; ARG per item 463's two-leg rule: 02:00-02:35 from 02:35:00 to 10:50:00, else 13:14-13:15; the Run block's 8,550 s assert re-checked against that span's start-check plan; check templates f2inst03-check-template-021bd39d/ with LEGS/plan id/batch_windows changed). L007 (item 479) is a recorded not-admitted cell; any redo span is the lead's call, not a magistrate launch.",
+  "next_observable": "f2inst03-5de758cd/run-out.txt shows LAUNCH_RC=0 with the fence (launch ~04:36, expected end ~06:14, fence ~07:23). The next activation after the fence is gone Checks cq-f2-inst-03-l011-l012-a1 under /Users/edr/campaign-out/f2-inst-03/ with the ready template f2inst03-check-template-5de758cd/check.sh (LEGS L011,L012, kit sha 2868…cf25, campaign_id f2-inst-03 and batch_windows == ['02:00-02:35'] asserted; replace REPLACE_STAMP in OUT with the actual directory's stamp and NEWACT in TMPDIR with the activation id; read each leg_summary's admitted/contaminated_redos and grep each leg_record for max_busy_cores/max_gap_s), and copies at once with f2inst03-check-template-5de758cd/offload-run.sh (replace NEWACT everywhere with the activation id). That closes kit f2-inst-03 (all six spans run; L007 a recorded not-admitted cell). Then continue down the ladder (items 422, 447, 463, 464, 480): rank 2 only for an f2-inst kit whose executing delta PASS is recorded on main; otherwise rank 3 hp-02 if issued; otherwise rank 4 further stability from kits f2-stab-01..14 on pin 2d347f721 (lowest-numbered kit with an unrun leg, item 425 issue checks, ARG per item 463), or f2-stab-15/16 on pin 6e9d42f1d with no window in the 10:50:01-13:14:59 gap. Saturday's rank-1 stability leg is due at the first dispatch after 00:00.",
   "open_items": [
     {
       "expires_epoch_s": null,
-      "item": 480,
+      "item": 481,
       "owner": "magistrate",
       "status": "ISSUED"
     },
     {
       "expires_epoch_s": null,
-      "item": 479,
+      "item": 480,
       "owner": "magistrate",
       "status": "ISSUED"
     },
@@ -161,10 +161,10 @@
   ],
   "owner": "magistrate",
   "schema": "joulewise.current_pointer.v2",
-  "source_item": "479",
+  "source_item": "481",
   "source_item_heading_date": "2026-11-20",
   "wait": {
-    "deadline_epoch_s": 1795186800,
+    "deadline_epoch_s": 1795192200,
     "observable": "none",
     "on_early_or_refused": "a launcher refusal or non-clean close: record it, hold kit f2-inst-03 until an input changes (item 422, RL-179 F-6), mail the lead and Ed, and continue down the ladder. R1 stays unarmed."
   }
