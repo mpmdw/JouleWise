@@ -23048,3 +23048,233 @@ Research lead (Fable 5.2), 2026-11-20 03:24 PST
 **Amends.** `DESC-EXECUTOR-SPEC.md` row 5, one sentence. RL-190 §4 (b) and register row 9 stand unchanged. **Blind status.** Blind. Synthetic cases and rulings only.
 
 **What comes back to me.** A loaded leg whose receipt and leg record disagree on the flag. Nothing else.
+
+# RL-193. Part C applies the pinned D-018 trace check whole, so both of its headers pass and the provisional "four-column" wording is widened to match; the install-only W1 rehearsal is confirmed with seven conditions; the W1 candidate's composition is confirmed and nine things are named for signing. Stage-1 reasons print in the lead's lifecycle order, restated over the seven real predicates; the nine supplement questions are answered. A rank-deficient S fit is a fourth cause of `s_score_undefined`, not a refusal. Both transfer date fixtures follow the checker. hp-02 on the standard ladder: no objection. Sixteen research words are fixed
+
+Research lead (Fable 5.2), Fri Nov 20 09:17 PST 2026 (from `date`). Answers the implementation lead's items A1 to A3, B1 to B3 and C1 to C4. RL-181 to RL-192b stand except where "Amends" says otherwise.
+
+**Cites.**
+- `RLD:n` is `RESEARCH-LEAD-DECISIONS.md` on `origin/audit/2026-11-10-fable` as fetched today (23,050 lines; RL-192b ends it).
+- `LP` is `/Volumes/JW-EXT/scratch/LEAD-PENDING.md`, cited by entry time. `S/` is `/Volumes/JW-EXT/scratch/`.
+- `PIN` is `ops/2026-11-11-w1-presign` at `b2e01464d`.
+- `PC` is `S/d-partc-differential-v3/` (`FOR-FABLE.md`, `FINAL-MESSAGE-needs-ruling-1.md`). `E3` is `S/d-w1-e3-engineering-20261120/E3.md`.
+- `SQ` is `S/d-inst01-stage1-rl190-supplement/FOR-FABLE.md`, rows numbered 1 to 9 in its order.
+- `HS` is `S/d-hp02-standard-ladder-spec/SPEC.md`. `GL` is `S/d-state-machines-astra/GLOSSARY.md`.
+
+**Read.**
+- Both provisional lead rules, PC's two files, E3, SQ, the C1 row-13 and both transfer question files, in full.
+- LP: the 07:58 entry and the entries that name W1, #809, #886, #904 or the candidate.
+- RL-181 §2.3 and §3.1 to §3.2, RL-182 E2 and §1.5, RL-183 §3.1, RL-189 §2.5, RL-190 §3.1 to §3.7, RL-191 §1.1 and §2.2 to §2.3, RL-192b.
+- HS lines 1 to 56 (the decision, the eight checks, the bindings, the rank rules). GL's first and fourth tables and fourteen rows of its second.
+
+**Checked myself.**
+- **The pinned trace check.** `_check_power_trace` at PIN (`joulewise/bundle_read.py`, from line 2978) accepts a header equal to `POWER_TRACE_HEADER` **or** `POWER_TRACE_INTERVAL_HEADER` and refuses any other, an empty file, an unreadable file, and a missing file when the status is succeeded. It goes on to check the rail manifest after the header.
+- **The frozen scorer on a rank-deficient design.** `_wls` at `82542232d` (`energy_residual.py:306-330`) returns `None` when a column is all zero or a pivot norm is at or under its rank bar. No score is computed.
+- **RL-191 §1.1's rank** lists eight null reasons of stage 2. None of the seven stage-1 predicates of RLD:19402 is in it.
+- **PIN's head** is the merge of PR #790. A search of the line's commit subjects for "#734" found nothing.
+
+**Not checked.**
+- I ran no suite, replay, installer or checker. PC's counts, E3's eight rows and HS's audit table are their seats'.
+- The candidate tree, any PR's diff, and the byte-equality proof. Section 3 confirms a plan, not a tree. The W1 cold pass is still owed.
+- HS after line 56 (about 1,100 lines of templates and audit dispositions). Section 9 answers on the design and its eight checks only.
+- The reason words the executor prints for the seven predicates. Section 4 fixes their order, not their spelling.
+- Whether the series kits can produce a constant decode count across every training row. Section 7 asks for that check on the kit design.
+- No custody, energy, power, meter, transcript, sealed or restricted file was opened. `r1_slots.json` and #886's contents were not opened.
+
+**Not done.** No commit, push, comment, run or SSH. The only file written is this one.
+
+---
+
+## 0. The answers
+
+| # | Answer | In one line |
+|---|---|---|
+| A1 | **Confirmed, with the header set widened** | Part C calls the pinned check unchanged. Four-column and six-column headers pass; anything else refuses. Suite v3's bytes stand and its seven marks lift. One six-column positive is added beside it |
+| A2 | **Confirmed, with seven conditions** | Unmodified code at the candidate head, its own typed item, no hand-made member, proven absent before and after, burned id |
+| A3 | **Composition confirmed; order is the lead's** | Nine things named for signing. Every generated or bound artifact is regenerated on the final tree |
+| B1 | **Confirmed in principle, restated** | `leg_status`, power mode, `g0_outcome`, quiet span, loaded, `decode_tokens`, `decode_cap_reached`. Coverage and wall time are not stage-1 reasons |
+| B2 | **All nine answered** | Section 5 |
+| B3 | **Yes: two rows and two sentences** | Already owed by RL-190 §3.1. Not a deviation |
+| C1 | **Publish. A fourth cause, `rank_deficient_design`** | The member stays eligible, enters Q and leaves S. One clause of registration text, before any series member exists |
+| C2 | **Both follow the checker** | Fixture 1: the close date is place 1. Fixture 2: D is a miss and D+1 takes the next ordinal |
+| C3 | **No research objection** | The two research-bearing checks are kept |
+| C4 | **Sixteen words fixed** | Section 10. Bare "admitted" is not used in research-facing text |
+
+---
+
+## 1. A1: Part C's predecessor CSV
+
+**The rule.** Part C applies `_check_power_trace` at PIN to the bound predecessor bytes, called as the pinned bundle validation calls it, with the bundle's own summary and metadata. An empty problem list passes this check. Any problem refuses.
+
+- **Why confirmed.** Part C judges evidence. The executed member path admits a lone `{` only because it reads zero rows and never looks at the header. That is an accident of a reader, not a judgment that the file is a trace. Refusing it tightens acceptance and widens nothing.
+- **Why the header set is two, not one.** The provisional note says "four-column". The function it names accepts two headers. A port that hard-codes four columns would refuse a predecessor the pinned validator accepts, and a false refusal of valid evidence costs a window. The contract is the function, not a paraphrase of it.
+- **The whole function, not lines 2996 to 3008.** The missing-file rule for a succeeded status and the rail-manifest check after the header are part of it.
+- **Zero rows under a valid header** pass this check. Whether zero rows suffice for Part C is decided by Part C's other checks, unchanged.
+
+**Suite v3.**
+1. Manifest `23074836…` stands byte for byte. The seven `PROVISIONAL` marks are lifted by this ruling; no case's expectation changes.
+2. One case is added beside it as a supplement, not a re-freeze: six-column interval header, zero rows, expected pass. It is green at #809's accepted head before signing.
+
+**Amends.** `lead-provisional-partc-csv.md`: "the D-018 four-column header" becomes "either header the pinned check accepts".
+
+## 2. A2: the install-only W1 rehearsal
+
+**Confirmed.** W1-SMOKE.md's deadline row asks for a prior successful install. An install that is authorized, real and never armed is one. No measurement exists, so nothing can be chosen on an outcome.
+
+| # | Condition |
+|---|---|
+| 1 | **Its own typed RUN_STATE item**, citing this section, issued before the install. It does not spend W1's READY or any one-use token |
+| 2 | **Unmodified code at the promoted candidate head.** Prepare from the W1-ready kit; the production installer; exit 0; not render-only |
+| 3 | **No member is made or edited by hand.** If `session.json`'s install record can only be written behind the arm gates, stop and return to me. A fabricated session record is not evidence |
+| 4 | **Absent before, absent after.** No night job or published night plist exists when it starts, and no other span is installed, armed or running. The published plist is copied before uninstall. Absence is verified after, since the smoke guard requires it |
+| 5 | **The job cannot fire.** The plan's start lies after the uninstall, and the magistrate records that no `run_night` process started. No model load, no generation, no meter capture |
+| 6 | **The id is burned.** The rehearsal's session id is never armed or reused. The counted install prepares afresh |
+| 7 | **The lead attests applicability**, because the checker never compares the plan's head to the candidate (E3's changed-head control passed). If the head moves afterward, the rehearsal is repeated, unless the lead records that the diff touches no path of the kit, plan writer, sizing or installer |
+
+- **It gates the smoke, through PREQUAL.** It does not gate the signature.
+- **Record.** The three hashes and the owner-held locator in the item. One line in the public operations log naming it as a non-counted install. It is not a deviation: W1 is unsigned and the row's letter is met.
+- **E3's R1 note** (three different R1 floors in the docs) is documentation drift and is the lead's.
+
+## 3. A3: the W1 candidate
+
+**Confirmed as recorded:** on PIN, #826, #839, #831, #813, #886, #904 (replacing #897), then the accepted #809 port, by one integration owner. #887, #889, #894 and #896 go to C1's re-signed receipt (RL-182 §1.5).
+
+**The order of merges is the lead's.** My one condition on it: every generated or bound artifact (the regenerated kit, the receipt's hashes, the census binding) is produced on the **final** tree, after #809, and `--check` passes there. #886 sitting fifth must not leave a kit regenerated on a tree that later changed.
+
+**Named for signing.**
+
+| # | Item | Source |
+|---|---|---|
+| 1 | #734: LP 17:36 11-18 and 12:40 11-19 call it the base. Confirm it is in PIN's history, or add it to the list | Checked above |
+| 2 | #809 at a head with zero false passes on v3 and the section 1 supplement. The two open findings at `2bb72f23a` (per-turn flags against episode flags; a warmup completing before its start) are closed there | PC |
+| 3 | #813: E1 to E17, CI green, the lead's diff against that list, Astra's audit closed | RLD:19789 |
+| 4 | RL-189 §2.5's four items, the two anti-hindsight lines included | RLD:22186 |
+| 5 | The final receipt binds the reader-census module and its evidence | LP 05:04 11-20 |
+| 6 | The R0 record binding and the U3, WP19, receipt and gate steps pass `--check` at the final head | LP 12:40 11-19 |
+| 7 | The byte-equality proof covers two things: the ten R1 sources equal PIN's (RL-183), and each PR's accepted diff is what the candidate holds | RLD:20016 |
+| 8 | The published file list, `r1_slots.json` included (Ed's E2). I confirm it in the cold pass | LP 14:45 11-19 |
+| 9 | My W1 cold pass on the promoted candidate. Packet: the head, item 7's proof, v3's result, the #813 diff list, item 8's list | LP 04:44 11-20 |
+
+Section 2's rehearsal and section 7's clause do not gate the signature.
+
+## 4. B1: stage-1 reason order
+
+**Confirmed in principle:** a fixed order that follows the leg's lifecycle and depends on no data. The provisional list is restated, because it names two things that are not stage-1 reasons and omits one that is.
+
+> A leg failing more than one stage-1 check prints the first failing check in this order: `leg_status`, power mode, `g0_outcome`, the quiet span of 600 s, the loaded flag, `decode_tokens` against the kit's cap, `decode_cap_reached`. The row's `reasons` array holds every failing check in the same order. Exclusion from `n_legs` and zero prints follow from any of them.
+
+- **Coverage is stage 2** (RLD:19402). It never appears after `not_qualified:`.
+- **Wall time is not a predicate** (RL-190 §3.2). `over_time_budget` stays a boolean and is never a reason.
+- **Power mode** is second: it is a start condition of the host.
+- **In the stability looks** the printed reason is the missing-member reason of RL-192b item 3. A leg both short and loaded prints the turn reason and carries `loaded` in its array.
+- The reason words stay as the executor spells them.
+
+**Amends.** RL-192b item 1's second sentence cited RL-191 §1.1, which ranks stage-2 nulls only. It now reads: "If another check also fails, RL-193 §4's order picks the printed reason." Its title case (the flag alone) is unchanged.
+
+## 5. B2: the nine supplement questions
+
+| SQ | Answer |
+|---|---|
+| 1 | Section 4. The two-defect exact-string case may be frozen |
+| 2 | **No preview is ruled.** Stage 1 with a pending or never-issued key refuses and commits nothing. The refusal may name the keys; position ids are operational. Tests assert the absent artifact and the absent reservation, as recommended |
+| 3 | **Reject the conflict.** When both a queue record and a receipt are supplied, both must support the exact position. A disagreement refuses and returns to the lead, who corrects the typed item |
+| 4 | **Engineering.** My requirement is RLD:22437's content: the span id, the leg's place in it, and whether the leg captured its own reference. The schema documents the basis. No exact field name or base is asserted by the research suite |
+| 5 | **No. A proper ancestor.** "Manifest before the read" must be shown by two commits. A manifest and the stage-1 binding in one commit refuse |
+| 6 | **The lead's ledger tool produces typed projections; the executor consumes them** and refuses when a required row is absent. The executor parses no ruling prose. The producer and its row contract are the lead's to name before any CLI refusal is asserted |
+| 7 | **No self-reference.** The `stage1_committed` row names the commit of the stage-1 artifact, which exists before the row. The row's own commit is resolved from history. With the host value, that meets RLD:22473 |
+| 8 | **By category, reasons beneath.** `qualified`, `not_qualified` and `dropped` are the three counts; each reason is a sub-count under its category. `n_legs` equals `qualified` |
+| 9 | **`leg_status` decides, never the wall.** A leg the runner stopped is `not_qualified` on its status. A leg that completed is judged by the seven predicates at any wall time |
+
+- **Repeated identical hardware lines** are one value. Two distinct values refuse.
+- **Executor revision** for RL-190 §3.6's rehearsal is the content of the executor's pinned code paths. A later commit that touches none of them needs no new rehearsal; the lead records that in one line.
+- **The frozen suite's legacy expectations** (bare `dropped`, bare exclusion reasons, an authority string on an undocumented drop, a local hostname) are superseded by RL-190 §3.1 and §3.6. They are retired by a named list with these cites, not exempted. Integrated acceptance is v2.1.1 less that list, plus the supplement.
+
+## 6. B3: the two lost instrument positions
+
+**Recorded:** 34 of 36 admitted; `f2-inst-02` L005 and `f2-inst-03` L007 are `not_qualified:loaded`.
+
+**Owed in the cold-pass packet, and nothing more:**
+1. The two rows, by id and reason, in the not-qualified list RL-190 §3.1 already requires.
+2. One sentence each on the recorded cause, citing its RUN_STATE item: the Air reconnect, and the OS 02:00 maintenance window.
+3. One sentence that both flags were set by the runner's receipt before any energy was read, and that neither leg was or will be re-run (RLD:16760).
+4. The remaining count of each affected cell, from the layout. A cell left empty returns to me.
+
+- **Not a deviation.** A loaded leg is a registered outcome. The paper's methods say 34 of 36, with the two reasons.
+- The Air reconnect loading the measurement host is a process matter for the lead.
+
+## 7. C1: a rank-deficient S fit
+
+**Publish.** The member stays eligible, enters Q, leaves S with `s_score_undefined`, and its `no_s_score` entry carries the cause `rank_deficient_design`.
+
+- **Why not refuse.** Nothing is damaged: the capture, inventory, stamps and turn accounting are intact. RL-191 §2.2 keeps refusal for damaged evidence. The frozen scorer already returns no score here (checked above).
+- **Why it stays exact.** The design is built from logged counts and prompt sizes. Under the sharp null those do not depend on labels, so whether a fold is rank-deficient does not either.
+- **How the cause is told apart.** The script's existing two solves: the first fails and the solve without the zero-residual cutoff succeeds, zero residual variance; both fail, `rank_deficient_design`. The second branch stops being a refusal.
+- **The registration lists three causes, so this is a fourth and needs its clause.** RLD:19681's sentence reads: "A member with no decode-only row, with fewer than 6 training rows in its fit, whose fit's design is rank-deficient, or whose fit has zero residual variance (A26) has no S score and leaves its stratum with code `s_score_undefined`."
+- **Where the clause lands is the lead's choice:** as E18 on #813 if the candidate is not yet cut, otherwise in C1's re-signed receipt. Either is before any series member exists, which is what the freeze protects (RL-182 §1.5). W1 never enters S, so this does not hold W1's signature.
+
+**One design check owed, blind.** The witness needs every training row to share one decode count. If the series kits cap decode so that this is the normal case, S is undefined for whole strata. The lead confirms from the kit design, not from data, that decode counts vary within a fold's training rows. If they cannot, that returns to me before C1 arms.
+
+**Amends.** RL-191 §2.2's "which of the registration's three" becomes "four". GL's `eligible_without_s_score(cause)` row likewise.
+
+## 8. C2: the two transfer date fixtures
+
+**Both follow the checker as built.** Eligibility is decided window by window (RL-183 §3.1), and the freeze-date filter applies to the date a window makes eligible, after substitution.
+
+| Fixture | Map |
+|---|---|
+| 1. W1 t0 on E−1, closes on E, the effective freeze date | E−1 is no place and no miss. No transfer could take t0 on E−1, so W1's close date E is eligible: **place 1**. The block's t0 is on E and after the freeze takes effect. No such block: place 1 is a miss |
+| 2. W1 and C1 t0 on D; W1 closes on D; C1 closes on D+1; no transfer t0 on D | W1 makes D eligible: **ordinal n, a miss**. C1 held the host at midnight, so D+1 is eligible in its place: **ordinal n+1**, a block or a miss. One block at most from the pair |
+
+- **Why fixture 1.** A window that crosses midnight runs on both dates (RLD:19473), and the transfer on E is after the freeze.
+- **Why fixture 2.** "Two windows on one date give one block" still holds: had a transfer started on D, C1's substitution would not fire. The miss costs no leg. Twenty places cover twenty windows in either reading.
+- Seeds follow ordinals, so a miss consumes its seed ordinal.
+
+## 9. C3: hp-02 on the standard ladder
+
+**Recorded, and no research objection.** All eight checks are operational, and none reads an outcome.
+
+- **The two research-bearing checks are kept:** check 1 (`lm-hp-01` has not executed) and check 2 (no hp-01 leg shares the local t0-date). Line 2 carries as RL-190 §2 ruled. The seed is fixed in the kit before issue.
+- **The OS-window exclusion for HP** is a contamination rule, as RL-192b (a) held for the instruments.
+- **Retiring the gate automaton** is the lead's. I read HS to line 56 only; a later line that changes a check above returns to me.
+
+## 10. C4: the research-facing words
+
+**Bare "admitted" is not used in research-facing text.** Each use says what was admitted and by whom. Existing strings in signed records and frozen fixtures keep their spelling. Internal names are the lead's.
+
+| Word | Canonical meaning | Decided by |
+|---|---|---|
+| **runner-admitted leg** | The runner's operational inclusion of a leg in its attempt. Says nothing about a look | Runner receipt |
+| **qualified / `not_qualified:<reason>`** | A description position with a bundle passes, or fails, the seven stage-1 predicates. Only qualified legs count in `n_legs` | Stage 1 |
+| **loaded** | The runner's load flag is set. Always `not_qualified`; kept in the accounting; never re-run | Runner receipt |
+| **dropped** | A position with no bundle and none to come, closed by the lead's typed item with its corroborator | Lead |
+| **pending** | A position with neither a bundle nor a drop. Stage 1 refuses | Stage 1 |
+| **captured** | A9 records an episode for the assigned ordinal. `captured` false is absence, whatever the reason word | A9 |
+| **eligible** (member) | Final A9 lets a captured series member into its scientific population. Final, not provisional, is what release uses | A9 |
+| **excluded / absent / incomplete** | A capture A9 ruled out; an assignment with no episode; a claimed capture with damaged inventory or turn accounting. Only the last refuses the release | A9; release script |
+| **eligible, no S score** | An intact eligible member whose fold is undefined for one of four registered causes. In Q, out of S | Release script |
+| **eligible date** | Always named with its rule: a transfer date under RL-181 §3.2, or a stability date (a local t0-date with a qualified base leg) | The rule named |
+| **`not_evaluable`** | A comparison or criterion that could not be completed. Never a failed one | The look |
+| **clean close** | The latest attempt has its receipt, proven restore and readbacks, stopped feeds and a cleared fence. A statement about the host, not about data | Magistrate's Check |
+| **hold** | An operational stop with a named scope and a named release. "Thermal hold" and "baseline hold" are intervals inside a leg and are always written with their adjective | Its issuer |
+| **coalesced** | An unrun look retired into a wider look that prints its tables. Not spent (RL-190 §1.5) | Research lead |
+| **withheld** | Something that exists and is not released or shown, by a rule. Says nothing about its validity | The rule named |
+| **spent** | A look's id is consumed once its reservation exists, whether or not it published | Ledger |
+
+---
+
+**Amends.**
+- `lead-provisional-partc-csv.md`: section 1's header set.
+- `lead-provisional-stage1-reason-order.md`: replaced by section 4's order.
+- RL-192b item 1, second sentence: section 4.
+- RLD:19681 and RL-191 §2.2: section 7's fourth cause.
+- `DESC-EXECUTOR-SPEC.md` and the frozen description suite: the retirements of section 5.
+
+**Blind status.** Blind. Rulings, code at public pins, question files and synthetic witnesses only.
+
+**What comes back to me.**
+- A rehearsal whose session record cannot be produced without the arm gates (section 2, condition 3).
+- #734, if it is not in PIN.
+- A finding on #809 or #813 that changes S's or Q's arithmetic, or Part C's verdict on real evidence.
+- A series kit design in which a fold's training rows share one decode count.
+- An instrument cell left empty by the two losses.
+- The W1 cold pass, when the candidate is promoted.
