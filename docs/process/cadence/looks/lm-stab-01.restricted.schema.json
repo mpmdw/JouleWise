@@ -1,29 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "urn:joulewise:cadence-description:lm-stab-01.restricted",
-  "description": "Restricted JSON file set indexed by kit/leg or prompt/channel/measure. stdout and stderr are separate streams.",
+  "description": "Restricted stability file set. The later look contains all and base14 views in every table.",
   "type": "object",
-  "required": [
-    "hold.json",
-    "turn.json",
-    "date_spreads.json",
-    "context.json"
-  ],
-  "properties": {
-    "hold.json": {
-      "$ref": "#/$defs/hold"
-    },
-    "turn.json": {
-      "$ref": "#/$defs/turn"
-    },
-    "date_spreads.json": {
-      "$ref": "#/$defs/date_spreads"
-    },
-    "context.json": {
-      "$ref": "#/$defs/context"
-    }
-  },
-  "additionalProperties": false,
   "$defs": {
     "undefined": {
       "type": "object",
@@ -53,7 +32,8 @@
           "required": [
             "gpu_rail",
             "rail_sum",
-            "dc_in"
+            "dc_in",
+            "runner_pin"
           ],
           "properties": {
             "gpu_rail": {
@@ -328,12 +308,17 @@
                 }
               },
               "additionalProperties": false
+            },
+            "runner_pin": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{40}$"
             }
           },
           "additionalProperties": false
         }
       },
-      "additionalProperties": false
+      "additionalProperties": false,
+      "minProperties": 1
     },
     "turn": {
       "type": "object",
@@ -342,7 +327,8 @@
           "type": "object",
           "required": [
             "energy_j",
-            "dc_tail_cut"
+            "dc_tail_cut",
+            "runner_pin"
           ],
           "properties": {
             "energy_j": {
@@ -391,12 +377,17 @@
             },
             "dc_tail_cut": {
               "const": true
+            },
+            "runner_pin": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{40}$"
             }
           },
           "additionalProperties": false
         }
       },
-      "additionalProperties": false
+      "additionalProperties": false,
+      "minProperties": 1
     },
     "date_spreads": {
       "type": "object",
@@ -500,7 +491,8 @@
           "additionalProperties": false
         }
       },
-      "additionalProperties": false
+      "additionalProperties": false,
+      "minProperties": 1
     },
     "context": {
       "type": "object",
@@ -517,7 +509,8 @@
                 "utc_offset_s",
                 "predecessor_kind",
                 "gap_s",
-                "status"
+                "status",
+                "runner_pin"
               ],
               "properties": {
                 "value": {
@@ -573,6 +566,10 @@
                     "unknown",
                     "negative_gap"
                   ]
+                },
+                "runner_pin": {
+                  "type": "string",
+                  "pattern": "^[0-9a-f]{40}$"
                 }
               },
               "additionalProperties": false
@@ -581,7 +578,8 @@
           "additionalProperties": false
         }
       },
-      "additionalProperties": false
+      "additionalProperties": false,
+      "minProperties": 1
     },
     "admissionRejectionList": {
       "type": "array",
@@ -596,6 +594,182 @@
         ]
       },
       "description": "Reasons for refused complete windows, in search order."
+    },
+    "empty_population": {
+      "const": {
+        "value": null,
+        "reason": "no_qualified_leg"
+      }
+    },
+    "hold_views": {
+      "type": "object",
+      "required": [
+        "all",
+        "base14"
+      ],
+      "properties": {
+        "all": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/hold"
+            },
+            {
+              "$ref": "#/$defs/empty_population"
+            }
+          ]
+        },
+        "base14": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/hold"
+            },
+            {
+              "$ref": "#/$defs/empty_population"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "turn_views": {
+      "type": "object",
+      "required": [
+        "all",
+        "base14"
+      ],
+      "properties": {
+        "all": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/turn"
+            },
+            {
+              "$ref": "#/$defs/empty_population"
+            }
+          ]
+        },
+        "base14": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/turn"
+            },
+            {
+              "$ref": "#/$defs/empty_population"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "date_spreads_views": {
+      "type": "object",
+      "required": [
+        "all",
+        "base14"
+      ],
+      "properties": {
+        "all": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/date_spreads"
+            },
+            {
+              "$ref": "#/$defs/empty_population"
+            }
+          ]
+        },
+        "base14": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/date_spreads"
+            },
+            {
+              "$ref": "#/$defs/empty_population"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "context_views": {
+      "type": "object",
+      "required": [
+        "all",
+        "base14"
+      ],
+      "properties": {
+        "all": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/context"
+            },
+            {
+              "$ref": "#/$defs/empty_population"
+            }
+          ]
+        },
+        "base14": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/context"
+            },
+            {
+              "$ref": "#/$defs/empty_population"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false
     }
-  }
+  },
+  "oneOf": [
+    {
+      "type": "object",
+      "required": [
+        "hold.json",
+        "turn.json",
+        "date_spreads.json",
+        "context.json"
+      ],
+      "properties": {
+        "hold.json": {
+          "$ref": "#/$defs/hold"
+        },
+        "turn.json": {
+          "$ref": "#/$defs/turn"
+        },
+        "date_spreads.json": {
+          "$ref": "#/$defs/date_spreads"
+        },
+        "context.json": {
+          "$ref": "#/$defs/context"
+        }
+      },
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "required": [
+        "hold.json",
+        "turn.json",
+        "date_spreads.json",
+        "context.json"
+      ],
+      "properties": {
+        "hold.json": {
+          "$ref": "#/$defs/hold_views"
+        },
+        "turn.json": {
+          "$ref": "#/$defs/turn_views"
+        },
+        "date_spreads.json": {
+          "$ref": "#/$defs/date_spreads_views"
+        },
+        "context.json": {
+          "$ref": "#/$defs/context_views"
+        }
+      },
+      "additionalProperties": false
+    }
+  ]
 }

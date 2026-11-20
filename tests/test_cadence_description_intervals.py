@@ -97,7 +97,7 @@ def _score_world(test, world):
     census, qualified = reader.census(snapshot)
     snapshot.check_stage1(census)
     sources = reader.verify_gates(snapshot, qualified)
-    return reader.score(snapshot, sources, qualified, lambda: None)
+    return world.full_roster_prints(reader.score(snapshot, sources, qualified, lambda: None))
 
 
 class DescriptionIntervalTests(unittest.TestCase):
@@ -556,7 +556,7 @@ class DescriptionIntervalTests(unittest.TestCase):
                 isolated = reader.Signals(support, sources[second],
                                           lambda: self.fail("rejected DC interval opened"), None)
                 self.assertEqual(isolated.interval_values("dc_in", (602, 611)), coverage)
-                output = reader.score(snapshot, sources, qualified, lambda: None)
+                output = world.full_roster_prints(reader.score(snapshot, sources, qualified, lambda: None))
                 for channel in ("gpu_rail", "rail_sum"):
                     self.assertEqual(output["turn"][first]["energy_j"][channel], coverage)
                     if world.inst:

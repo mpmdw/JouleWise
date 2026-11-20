@@ -56,6 +56,7 @@ class DCCoverageTests(unittest.TestCase):
                 snapshot.check_stage1(census)
                 sources = reader.verify_gates(snapshot, qualified)
                 report = reader.score(snapshot, sources, qualified, lambda: None)
+                report = world.full_roster_prints(report)
                 for key, watts in expected.items():
                     with self.subTest(key=key):
                         mean = report["hold"][key]["dc_in"]["mean_w"]
@@ -89,6 +90,7 @@ class DCCoverageTests(unittest.TestCase):
                 self.assertEqual(snapshot.public_record(census), world.public_truth())
                 prints = reader.score(snapshot, reader.verify_gates(snapshot, qualified),
                                       qualified, lambda: None)
+                prints = world.full_roster_prints(prints)
 
                 missing = {"value": None, "reason": "coverage"}
                 self.assertEqual(prints["hold"][key]["dc_in"]["mean_w"], 40.0)

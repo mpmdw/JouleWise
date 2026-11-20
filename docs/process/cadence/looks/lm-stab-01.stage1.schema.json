@@ -155,6 +155,22 @@
         "the same work",
         "the same cell of work"
       ]
+    },
+    "by_kit_set": {
+      "type": "object",
+      "required": [
+        "all",
+        "base14"
+      ],
+      "properties": {
+        "all": {
+          "$ref": "#/$defs/kit_set_counts"
+        },
+        "base14": {
+          "$ref": "#/$defs/kit_set_counts"
+        }
+      },
+      "additionalProperties": false
     }
   },
   "additionalProperties": false,
@@ -171,7 +187,8 @@
             "span_id",
             "attempt",
             "span_leg_index",
-            "over_time_budget"
+            "over_time_budget",
+            "runner_pin"
           ],
           "properties": {
             "disposition": {
@@ -214,6 +231,10 @@
             },
             "over_time_budget": {
               "type": "boolean"
+            },
+            "runner_pin": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{40}$"
             }
           },
           "additionalProperties": false,
@@ -283,7 +304,8 @@
         "decode_cap_reached",
         "loaded_flag",
         "disposition",
-        "missing_count_reason"
+        "missing_count_reason",
+        "runner_pin"
       ],
       "properties": {
         "kit_id": {
@@ -364,6 +386,10 @@
               "type": "null"
             }
           ]
+        },
+        "runner_pin": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}$"
         }
       },
       "additionalProperties": false
@@ -378,6 +404,73 @@
         "not_qualified:loaded",
         "not_qualified:short",
         "not_qualified:cap_not_reached"
+      ]
+    },
+    "kit_set_counts": {
+      "type": "object",
+      "required": [
+        "n_legs",
+        "n_local_dates",
+        "by_runner_pin"
+      ],
+      "properties": {
+        "n_legs": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "n_local_dates": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "by_runner_pin": {
+          "type": "object",
+          "patternProperties": {
+            "^[0-9a-f]{40}$": {
+              "$ref": "#/properties/counts"
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "if": {
+    "properties": {
+      "look_id": {
+        "const": "lm-stab-02"
+      }
+    }
+  },
+  "then": {
+    "required": [
+      "by_kit_set"
+    ],
+    "properties": {
+      "source_snapshot": {
+        "required": [
+          "kit_index_sha256"
+        ]
+      }
+    }
+  },
+  "else": {
+    "not": {
+      "anyOf": [
+        {
+          "required": [
+            "by_kit_set"
+          ]
+        },
+        {
+          "properties": {
+            "source_snapshot": {
+              "required": [
+                "kit_index_sha256"
+              ]
+            }
+          }
+        }
       ]
     }
   }

@@ -184,6 +184,7 @@ class LoadedLegAdmissionTests(unittest.TestCase):
 
                 with patch.object(Path, "open", watch):
                     prints = reader.score(snapshot, sources, qualified, lambda: None)
+                prints = world.full_roster_prints(prints)
                 self.assertTrue(opened)
                 self.assertFalse(any(path.is_relative_to(world.copy / key) for path in opened))
                 for name in ("hold", "turn", "gain", "edges") if instrument else ("hold", "turn"):
@@ -401,7 +402,12 @@ class EarlyDataLockTests(unittest.TestCase):
         for change, dates in (("thirteen", 13), ("all_terminal", 0)):
             with self.subTest(dates=dates), TemporaryDirectory() as directory:
                 world = EarlyLock(Path(directory).resolve() / "world", fixture.IDS[2], change)
-                world.commit_stage1(self)
+                rc, out, err, events = fixture.invoke(world, "stage1")
+                self.assertEqual((rc, out, err), (0, b"", b""))
+                self.assertFalse([path for event, path in events if event == "open"])
+                self.assertEqual(fixture.reservation_boundary(self, world), [])
+                world.bind()
+                self.assertEqual(fixture.reservation_boundary(self, world), [str(world.private)])
                 snapshot = reader.Snapshot(world.repo, world.look, "stage2")
                 census, qualified = reader.census(snapshot)
                 snapshot.check_stage1(census)
@@ -410,6 +416,153 @@ class EarlyDataLockTests(unittest.TestCase):
                 self.assertEqual(set(reader.verify_gates(snapshot, qualified)), set(world.good))
                 if dates:
                     self.assertIn("f2-stab-15/L001", qualified)
+
+
+class LaterStabilityPopulationTests(unittest.TestCase):
+    def _score(self, world):
+        world.commit_stage1(self)
+        snapshot = reader.Snapshot(world.repo, world.look, "stage2")
+        census, qualified = reader.census(snapshot)
+        snapshot.check_stage1(census)
+        self.assertEqual(snapshot.public_record(census), world.public_truth())
+        sources = reader.verify_gates(snapshot, qualified)
+        read_started = []
+        opened = []
+        open_path = Path.open
+
+        def observe(path, *args, **kwargs):
+            if path.is_relative_to(world.copy):
+                opened.append(path)
+            return open_path(path, *args, **kwargs)
+
+        with patch.object(Path, "open", observe), patch.object(reader, "_leg_values", wraps=reader._leg_values) as leg:
+            prints = reader.score(snapshot, sources, qualified, lambda: read_started.append(True))
+        self.assertEqual(leg.call_count, len(qualified))
+        self.assertEqual({path.parent.relative_to(world.copy).as_posix() for path in opened}, set(qualified))
+        self.assertEqual(bool(read_started), bool(qualified))
+        if qualified:
+            full = world.full_roster_prints(prints)
+            for name in ("hold", "turn"):
+                self.assertEqual({key: row["runner_pin"] for key, row in full[name].items()},
+                                 {key: world.records[key][1]["runner_pin"] for key in qualified})
+            for cell in full["context"].values():
+                for key, row in cell.items():
+                    self.assertEqual(row["runner_pin"], world.records[key][1]["runner_pin"])
+        return census, prints
+
+    def test_committed_index_can_follow_the_later_receipt_and_binds_pin_counts(self):
+        with TemporaryDirectory() as directory:
+            world = DescriptionWorld(Path(directory).resolve() / "world", fixture.IDS[2], "late_index")
+            index_path = "f2-stab/KITS.json"
+            book = reader.Book(world.repo)
+            self.assertNotIn(index_path, book.tree(world.receipts))
+            world.commit_stage1(self)
+            census = fixture.read(world.stage)
+            index = fixture.read(world.repo / index_path)
+            self.assertEqual(census["source_snapshot"]["kit_index_sha256"],
+                             fixture.sha((world.repo / index_path).read_bytes()))
+            self.assertEqual({row["kit_id"] for row in index}, {f"f2-stab-{i:02}" for i in range(1, 16)})
+            expected = {}
+            for name, included in (("all", index), ("base14", index[:-1])):
+                by_pin = {row["runner_pin"]: [] for row in included}
+                kit_ids = {row["kit_id"] for row in included}
+                dates = set()
+                for key in world.good:
+                    if key.split("/")[0] in kit_ids:
+                        receipt = world.records[key][1]
+                        date = fixture.datetime.fromtimestamp(receipt["t0_epoch_s"], fixture.LA).date()
+                        by_pin[receipt["runner_pin"]].append(date)
+                        dates.add(date)
+                expected[name] = {"n_legs": sum(map(len, by_pin.values())), "n_local_dates": len(dates),
+                                  "by_runner_pin": {pin: {"n_legs": len(days), "n_local_dates": len(set(days))}
+                                                    for pin, days in by_pin.items()}}
+            self.assertEqual(census["by_kit_set"], expected)
+            for row in census["token_table"]:
+                key = f'{row["kit_id"]}/{row["leg_id"]}'
+                self.assertEqual(row["runner_pin"], world.records[key][1]["runner_pin"])
+                self.assertEqual(census["positions"][key]["runner_pin"], row["runner_pin"])
+
+    def test_later_index_refuses_missing_rows_and_mismatched_receipts(self):
+        class BadIndex(DescriptionWorld):
+            def project_index(self, rows):
+                result = super().project_index(rows)
+                missing = {"base": "f2-stab-14", "unindexed": "f2-stab-15",
+                           "hidden": "f2-stab-15"}.get(self.defect)
+                return [row for row in result if row["kit_id"] != missing]
+
+            def named(self, name, rel, doc):
+                if name == "roster" and self.defect == "hidden":
+                    doc = dict(doc, rows=[row for row in doc["rows"] if not row["key"].startswith("f2-stab-15/")])
+                super().named(name, rel, doc)
+
+            def leg(self, kit, pos, v, day, ordinal, status):
+                refs = super().leg(kit, pos, v, day, ordinal, status)
+                if kit == 15 and self.defect in ("digest", "pin"):
+                    receipt = self.records[refs["key"]][1]
+                    field, changed = {"digest": ("kit_sha256", "7" * 64),
+                                      "pin": ("runner_pin", "7" * 40)}[self.defect]
+                    receipt[field] = changed
+                    fixture.put(self.repo / refs["receipt"], receipt)
+                    issue = fixture.read(self.repo / refs["issue"])
+                    fixture.put(self.repo / refs["issue"], dict(issue, **{field: changed}))
+                return refs
+
+        for defect in ("base", "unindexed", "hidden", "digest", "pin"):
+            with self.subTest(defect=defect), TemporaryDirectory() as directory:
+                BadIndex.defect = defect
+                world = BadIndex(Path(directory).resolve() / "world", fixture.IDS[2], "late_index")
+                fixture.Checks().refused(world, "stage1")
+                self.assertFalse(world.stage.exists())
+
+    def test_base14_matches_first_look_and_ignores_a_later_value_perturbation(self):
+        later_key = "f2-stab-15/L001"
+        with TemporaryDirectory() as directory:
+            root = Path(directory).resolve()
+            _, first = self._score(DescriptionWorld(root / "first", fixture.IDS[1]))
+            _, second = self._score(DescriptionWorld(root / "second", fixture.IDS[2]))
+            changed = DescriptionWorld(root / "changed", fixture.IDS[2])
+            v, ordinal = changed.good[later_key]
+            fixture.traces(changed.copy / later_key, v, ordinal, delta=1.005)
+            fixture.copy_attestation(changed)
+            _, perturbed = self._score(changed)
+            for name in first:
+                self.assertEqual(set(second[name]), {"all", "base14"})
+                self.assertEqual(second[name]["base14"], first[name])
+                self.assertEqual(perturbed[name]["base14"], first[name])
+                self.assertNotEqual(perturbed[name]["all"], second[name]["all"])
+            for name in ("hold", "turn"):
+                self.assertEqual({k for k, row in second[name]["all"].items() if row != perturbed[name]["all"][k]},
+                                 {later_key})
+            for cell, rows in second["context"]["all"].items():
+                updated = perturbed["context"]["all"][cell]
+                self.assertEqual({key for key, row in rows.items() if row != updated[key]},
+                                 {later_key} if later_key in rows else set())
+                if later_key not in rows:
+                    self.assertEqual(perturbed["date_spreads"]["all"][cell], second["date_spreads"]["all"][cell])
+
+    def test_empty_base_and_empty_full_population_print_exact_missing_values(self):
+        later_key = "f2-stab-15/L001"
+        null = {"value": None, "reason": "no_qualified_leg"}
+        for layout in ([(15, 1, 8, 2)], []):
+            with self.subTest(n=len(layout)), TemporaryDirectory() as directory:
+                with patch.object(fixture, "layout", return_value=layout):
+                    world = DescriptionWorld(Path(directory).resolve() / "world", fixture.IDS[2], "late_index")
+                census, prints = self._score(world)
+                self.assertEqual(census["counts"], {"n_legs": len(layout), "n_local_dates": len(layout)})
+                self.assertEqual(census["by_kit_set"]["base14"]["n_legs"], 0)
+                self.assertEqual(census["by_kit_set"]["base14"]["n_local_dates"], 0)
+                self.assertTrue(all(value == {"n_legs": 0, "n_local_dates": 0}
+                                    for value in census["by_kit_set"]["base14"]["by_runner_pin"].values()))
+                for views in prints.values():
+                    self.assertEqual(views["base14"], null)
+                    if not layout:
+                        self.assertEqual(views["all"], null)
+                if layout:
+                    self.assertEqual(set(prints["turn"]["all"]), {later_key})
+                    cell = f'{world.records[later_key][2]["prefill_tokens"]}/gpu_rail/mean_w'
+                    spread = prints["date_spreads"]["all"][cell]
+                    self.assertEqual(len(spread["dates"]), 1)
+                    self.assertEqual(spread["sd_date_means"], {"value": None, "reason": "fewer_than_two"})
 
 
 class SpentDescriptionLookTests(unittest.TestCase):

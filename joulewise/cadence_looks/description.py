@@ -42,6 +42,7 @@ SHA = re.compile(r"[0-9a-f]{64}")
 OID = re.compile(r"[0-9a-f]{40}")
 LEG = re.compile(r"L00[1-9]|L01[0-2]")
 STABILITY_KIT = re.compile(r"f2-stab-[0-9]{2}")
+BASE_STABILITY_KITS = frozenset(f"f2-stab-{number:02}" for number in range(1, 15))
 POSITION_KEY = re.compile(r"f2-(?:inst|stab)-[0-9]{2}/(?:L00[1-9]|L01[0-2])")
 DROP_WITNESSES = {"ended_without_member": "receipt", "queue_retired": "queue"}
 SINGLE_TYPED_ITEM = re.compile(
@@ -462,10 +463,15 @@ def _mode_rule(kit):
     return rules[0]
 
 
-def _kit(snapshot, kit_id, expected, parallel=None):
+def _kit(snapshot, kit_id, expected, parallel=None, *, index_row=None):
     path = _kit_path(snapshot, kit_id)
     require(snapshot.hashes[path] == expected, "wrong kit bytes")
-    kit = snapshot.source(path)
+    if index_row is None:
+        kit = snapshot.source(path)
+    else:
+        require(index_row["path"] == path, "wrong kit index path binding")
+        kit = snapshot.doc(path)
+        require(kit["frozen"]["commit"] == index_row["runner_pin"], "wrong kit index runner pin")
     require(kit["campaign_id"] == kit_id and token(kit["frozen"]["commit"], OID),
             "wrong kit identity")
     positions = _positions(kit)
@@ -482,25 +488,22 @@ def _kit(snapshot, kit_id, expected, parallel=None):
     return kit
 
 
-def _later_member(snapshot, index_path, kit_id, expected, receipt_paths):
-    # Each receipt path has a separately proved first appearance. A strict
-    # ancestor must already name this exact ID and hash on the main line.
-    first_receipts = []
-    for path in receipt_paths:
-        history = snapshot.book.history(snapshot.receipts, path)
-        require(bool(history), "later kit has no receipt provenance")
-        first_receipts.append(history[-1])
-    for commit in snapshot.book.history(snapshot.receipts, index_path):
-        if index_path not in snapshot.book.tree(commit):
-            continue
-        if _row_pairs(decode(snapshot.book.blob(commit, index_path))).get(kit_id) == expected:
-            if all(commit != receipt and snapshot.book.ancestor(commit, receipt)
-                   for receipt in first_receipts):
-                return
-    raise Refusal("index did not name the exact kit before its first receipt")
+def _stability_index(rows):
+    require(type(rows) is list, "invalid stability kit index")
+    index = {}
+    for row in rows:
+        require(type(row) is dict and row.keys() == {"kit_id", "sha256", "runner_pin", "path"},
+                "invalid stability kit index row")
+        kit_id = row["kit_id"]
+        require(token(kit_id, STABILITY_KIT) and int(kit_id[-2:]) > 0 and kit_id not in index
+                and token(row["sha256"], SHA) and token(row["runner_pin"], OID),
+                "invalid or repeated stability kit index row")
+        relative(row["path"])
+        index[kit_id] = row
+    return index
 
 
-def _admitted_kits(snapshot, rows):
+def _admitted_kits(snapshot):
     commitments = snapshot.doc(f"{CONTROL}/look-kit-commitments.v2.json")
     series = IDS[0] if snapshot.instrument else IDS[1]
     required = commitments[series]["kit_sha256_by_id"]
@@ -511,22 +514,17 @@ def _admitted_kits(snapshot, rows):
 
     base = None if snapshot.instrument else _kit(
         snapshot, "f2-inst-01", commitments[IDS[0]]["kit_sha256_by_id"]["f2-inst-01"])
-    kits = {kit_id: _kit(snapshot, kit_id, bound, base) for kit_id, bound in required.items()}
-    if snapshot.look == IDS[2]:
-        index_path = snapshot.manifest["kit_index_path"]
-        index = _row_pairs(snapshot.doc(index_path))
-        require(all(token(kit_id, STABILITY_KIT) and int(kit_id[-2:]) > 14
-                    for kit_id in index), "invalid later stability kit ID")
-        receipt_paths = defaultdict(set)
-        for row in rows:
-            kit_id = row["key"].split("/", 1)[0]
-            if kit_id not in kits and "receipt" in row:
-                receipt_paths[kit_id].add(row["receipt"])
-        for kit_id, paths in receipt_paths.items():
-            expected = index[kit_id]
-            _later_member(snapshot, index_path, kit_id, expected, paths)
-            kits[kit_id] = _kit(snapshot, kit_id, expected, base)
-    return kits
+    if snapshot.look != IDS[2]:
+        return {kit_id: _kit(snapshot, kit_id, bound, base) for kit_id, bound in required.items()}
+
+    index = _stability_index(snapshot.doc(snapshot.manifest["kit_index_path"]))
+    require(BASE_STABILITY_KITS <= index.keys() and
+            all(index[kit_id]["sha256"] == bound for kit_id, bound in required.items()),
+            "stability index omits or changes a base kit")
+    # A closed receipt independently binds the kit and runner that actually
+    # ran. The authoritative index may have been committed after collection.
+    return {kit_id: _kit(snapshot, kit_id, row["sha256"], base, index_row=row)
+            for kit_id, row in index.items()}
 
 
 def _eligibility_reasons(op, receipt, cap):
@@ -622,7 +620,7 @@ def _drop_authorizations(snapshot):
     return statements
 
 
-def _drop_position(snapshot, row, kit_id):
+def _drop_position(snapshot, row, kit_id, kit):
     require(row.keys() == {"key", "drop"}, "invalid terminal drop roster row")
     # The decision may follow collection. Its independent witness must
     # already belong to the closed operational projection.
@@ -652,6 +650,9 @@ def _drop_position(snapshot, row, kit_id):
                 and all(key.startswith(kit_id + "/") and key.rsplit("/", 1)[1] not in members
                         for key in unrun),
                 "drop witness is not a closed span for the committed kit")
+        if snapshot.look == IDS[2]:
+            require(witness.get("runner_pin") == kit["frozen"]["commit"],
+                    "closed span drop witness has the wrong indexed runner")
     else:
         require(witness["final"] is True and type(witness["queue_id"]) is str
                 and bool(witness["queue_id"]), "drop witness is not a final queue record")
@@ -736,6 +737,8 @@ def _token_row(snapshot, references, kit, plan, closes):
         "span_leg_index": roster.index(leg_id),
         **_time_budget(op, kit),
     }
+    if not snapshot.instrument:
+        token_row["runner_pin"] = position["runner_pin"] = receipt["runner_pin"]
     if "reference_source_leg_id" in op:
         require(op["reference_source_leg_id"] == roster[0], "reference differs from the issued span order")
     predecessor = None if snapshot.instrument else _predecessor(snapshot, receipt, closes)
@@ -816,14 +819,34 @@ def _reconcile_member_bundles(snapshot, kits, issued, empty_closes):
                 name = f"{prefix}/{entry}"
                 public_path(relative(name))
                 identity = decode(snapshot.book.blob(snapshot.receipts, name))
+                if snapshot.look == IDS[2] and entry == "runner_receipt.json":
+                    require(identity["kit_id"] in kits,
+                            "stability receipt is absent from the committed index")
                 require(identity["kit_id"] not in kits, "unlisted operational bundle for admitted kit")
+
+
+def _stability_counts(rows):
+    return {"n_legs": len(rows), "n_local_dates": len({row["local_t0_date"] for row in rows})}
+
+
+def _kit_set_counts(kits, qualified):
+    populations = {}
+    for name, members in (("all", kits.keys()), ("base14", BASE_STABILITY_KITS)):
+        by_pin = {kits[kit_id]["frozen"]["commit"]: [] for kit_id in members}
+        rows = [row for row in qualified if row["kit_id"] in members]
+        for row in rows:
+            by_pin[row["runner_pin"]].append(row)
+        populations[name] = dict(_stability_counts(rows), by_runner_pin={
+            pin: _stability_counts(group) for pin, group in by_pin.items()
+        })
+    return populations
 
 
 def census(snapshot):
     rows = snapshot.roster["rows"]
     require(type(rows) is list and all(type(row["key"]) is str for row in rows),
             "malformed commitment roster")
-    kits = _admitted_kits(snapshot, rows)
+    kits = _admitted_kits(snapshot)
     closes = {} if snapshot.instrument else snapshot.source(AUTHORITY["host_closes"], parse_float=Decimal)
     positions, details, table = {}, {}, []
     counts_by_kit = defaultdict(Counter)
@@ -838,7 +861,7 @@ def census(snapshot):
         kit = kits[kit_id]
         plan = kit["legs"][int(leg_id[1:]) - 1]
         if "drop" in row:
-            position, empty_close = _drop_position(snapshot, row, kit_id)
+            position, empty_close = _drop_position(snapshot, row, kit_id, kit)
             if empty_close is not None:
                 path, close = empty_close
                 empty_closes[path] = close
@@ -867,13 +890,13 @@ def census(snapshot):
         "by_kit": {kit: dict(counts) for kit, counts in counts_by_kit.items()},
     }
     if not snapshot.instrument:
-        dates = len({row["local_t0_date"] for row in qualified})
-        _check_schedule(snapshot, dates)
-        counts["n_local_dates"] = dates
+        counts.update(_stability_counts(qualified))
+        _check_schedule(snapshot, counts["n_local_dates"])
         result.update(token_table=table, paper_wording=_paper_wording(table))
         if snapshot.look == IDS[2]:
             result["source_snapshot"]["kit_index_sha256"] = snapshot.hashes[
                 snapshot.manifest["kit_index_path"]]
+            result["by_kit_set"] = _kit_set_counts(kits, qualified)
     return result, {key: detail for key, detail in details.items()
                     if positions[key]["disposition"] == "qualified"}
 
@@ -1871,6 +1894,7 @@ def _context(hold, turn, qualified):
         gap = (Fraction(receipt["t0_epoch_s"]) - Fraction(predecessor["close_epoch_s"])
                if predecessor else None)
         location = {
+            "runner_pin": receipt["runner_pin"],
             "date": instant.date().isoformat(), "hour": instant.hour,
             "utc_offset_s": int(instant.utcoffset().total_seconds()),
             "predecessor_kind": predecessor["kind"] if predecessor else None,
@@ -1886,6 +1910,13 @@ def _context(hold, turn, qualified):
     return context
 
 
+def _stability_view(files, qualified):
+    hold = {key: files["hold"][key] for key in qualified}
+    turn = {key: files["turn"][key] for key in qualified}
+    context = _context(hold, turn, qualified)
+    return {"hold": hold, "turn": turn, "context": context, "date_spreads": _date_summaries(context)}
+
+
 def score(snapshot, sources, qualified, mark_read):
     files = {name.removesuffix(".json"): {} for name in private_names(snapshot.instrument)
              if name.endswith(".json")}
@@ -1899,10 +1930,18 @@ def score(snapshot, sources, qualified, mark_read):
             sensor_source = (stream, sensor_span) if snapshot.instrument and sensor_span else None
             signal = Signals(support, paths, mark_read, pinned, sensor_source=sensor_source)
             for name, value in _leg_values(signal, detail, snapshot.instrument).items():
+                if not snapshot.instrument:
+                    value["runner_pin"] = detail[1]["runner_pin"]
                 files[name][key] = value
     if not snapshot.instrument:
-        files["context"] = _context(files["hold"], files["turn"], qualified)
-        files["date_spreads"] = _date_summaries(files["context"])
+        if snapshot.look == IDS[2]:
+            base = {key: detail for key, detail in qualified.items() if detail[4]["kit_id"] in BASE_STABILITY_KITS}
+            populations = {"all": qualified, "base14": base}
+            views = {name: (_stability_view(files, group) if group else
+                            {file: missing("no_qualified_leg") for file in files})
+                     for name, group in populations.items()}
+            return _printed({file: {name: table[file] for name, table in views.items()} for file in files})
+        files = _stability_view(files, qualified)
     return _printed(files)
 
 

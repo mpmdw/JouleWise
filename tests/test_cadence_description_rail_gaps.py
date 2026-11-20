@@ -62,6 +62,7 @@ class RailGapPeriodTests(unittest.TestCase):
                 self.assertEqual(public, world.public_truth())
                 prints = reader.score(snapshot, reader.verify_gates(snapshot, qualified),
                                       qualified, lambda: None)
+                prints = world.full_roster_prints(prints)
 
                 gap = {"value": None, "reason": "coverage"}
                 energy = prints["turn"][key]["energy_j"]
