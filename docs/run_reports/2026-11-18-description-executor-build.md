@@ -458,3 +458,39 @@ successful publication and confinement path. The protected blob audit
 matched all 53 paths, and both frozen companion digests matched.
 
 [Full local result summary](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/audit-v21-round1-full-summary.txt) · [Protected blob comparison](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/audit-v21-round1-protected-blobs.tsv) · [PR checks](https://github.com/mpmdw/JouleWise/pull/868/checks)
+
+## 2026-11-19 round 2 audit on frozen v2.1
+
+The clean worktree, upstream branch and draft PR #868 matched
+`3d249c80466caf75622309878a3018c858dfd67b` after fetch. Both new highs
+and the dependent-print finding reproduced with synthetic fixtures.
+The audit refuted the previous sensor decoding, DC span-counter and
+turn-refusal findings on both looks.
+
+| Verified finding | Repair | Regression |
+| --- | --- | --- |
+| HIGH. The support file could shift a hold away from the recorded quiet span. | `17ec6f2dd` | **PASS.** All hold-dependent prints use the first eligible operational span. Both looks keep the recorded 593/600-sample hold null with `coverage`, including when the attested support asserts an alternate start. The instrument fan print uses the same hold gate. |
+| HIGH. A DC sample outside the tail could establish a decode-end crossing. | `17ec6f2dd` | **PASS.** RL-188 §4.1 requires two observed samples within the search span. The 20 above-threshold samples and first qualifying sample at 611.025 s produce `over 1 s` for both lags, bounded at 1 s. Boundary controls cover a leading integration bracket, a sample at the endpoint and an already-crossed first sample. |
+| MED. Ratios and token floors lost the underlying interval refusal. | `17ec6f2dd` | **PASS.** The turn and decode ratios retain their operands and report `coverage` after the 35/36 frame loss. The corresponding floors carry that reason and the DC sibling remains numeric. |
+| MED. Audit configuration expected the 1,046-case v1 digest and observer. | Lead audit configuration | Follow-up. The current v2.1 freeze and its sanctioned descriptor observer are the lead's later instruction. Both current foreign-roster refusals passed. |
+
+The five void reports' earlier verified highs are mapped to their
+repairs and regressions in the round 1 table above. The published
+field inventory and pinned GPU comparator remain positive controls.
+The frozen v2.1, design and oracle digests match, as do all 53 protected
+blob paths.
+
+[Round 2 audit](/Volumes/JW-EXT/scratch/pl-d-desc-looks-executor/audit-2/FINAL-MESSAGE.md) · [Regression reproductions before repair](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/audit-v21-round2-red.log) · [Focused tests](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/audit-v21-round2-focused.log) · [Direct scientific comparisons](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/audit-v21-round2-science.log) · [Protected blob comparison](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/audit-v21-round2-protected-blobs.tsv)
+
+Local verification ran all 3,381 frozen cases with 3,259 passes and
+the same 122 reservation-dependent outcomes. The six direct errors
+were abandoned and other-checkout fixture creation on the three looks.
+The other 116 cases require the worker's synthetic reservation.
+The prior per-case diagnostic established `EPERM` for that same set.
+The focused suite had 69 passes and the existing dispatcher skip.
+All 44 command-census and gate-ledger tests passed. Both negative
+controls failed for their intended reasons. Direct scoring matched
+the complete synthetic outputs on all three looks and the independent
+RL-188 edge oracle.
+
+[Full local result summary](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/audit-v21-round2-full-summary.txt) · [Current PR checks](https://github.com/mpmdw/JouleWise/pull/868/checks)
