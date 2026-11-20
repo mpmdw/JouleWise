@@ -476,6 +476,7 @@
     "tests.test_cadence_description_intervals": 24.241,
     "tests.test_cadence_description_preflight": 1.3,
     "tests.test_cadence_description_rail_gaps": 12.565,
+    "tests.test_cadence_description_registered_grid": 6.464,
     "tests.test_cadence_manifest_dispatch": 5.567,
     "tests.test_cadence_transfer_release": 3.107,
     "tests.test_calibration_bracketing": 10.571,

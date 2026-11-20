@@ -1246,3 +1246,17 @@ records worker exceptions at the literal reservation to distinguish
 any further local `EPERM` from an admission refusal. Hosted
 publication and the combined-base hardware gate remain pending.
 [Independent classification](/Volumes/JW-EXT/scratch/astra-desc-suite-amend4/v4/replay/nonpass.tsv) · [Builder replay ledger](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/v4-final-executor-replay.jsonl)
+
+The replay accounted for all 356 assigned IDs. There were
+312 passes, 42 worker reservation `EPERM` cases, and two
+occupied-reservation fixture `EPERM` cases. Both separately
+corrected cases passed as ADMIT. The wider local unittest
+discovery check encountered permission errors probing optional
+archives. Three synthetic sharder checks passed.
+
+Hosted quick on `f51991677` identified one missing timing entry
+for the audit-3 recovery-grid module. The preceding hosted shard
+passed both of that module's cases and measured 6.464 seconds.
+The timing map now uses that observation. The timing coverage
+check passed on the discovered module set.
+[Quick failure](https://github.com/mpmdw/JouleWise/actions/runs/44780097203/job/136440379763) · [Hosted timing](https://github.com/mpmdw/JouleWise/actions/runs/44774076476/job/136419344567)
