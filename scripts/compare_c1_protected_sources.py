@@ -1,5 +1,9 @@
 #!/usr/bin/env python3
-"""Compare RL-182 protected source bytes and public-safe prompt hash projections."""
+"""Gate row 10 on the committed closure byte freeze (B1) and report prompt hashes.
+
+Runtime identity (P1) and the behavioural oracle (B2) are advisory. They never
+affect the exit code. The oracle reports fixed-case coverage and unread evidence.
+"""
 
 import argparse
 import ast
@@ -36,6 +40,12 @@ PROTECTED = (
     "_residual_scores", "_s_rank", "_q_energies",
 )
 PROTECTED_FUNCTIONS = frozenset(PROTECTED) - {LEVEL}
+MISSING_BINDING = "protected binding is missing"
+NOT_FUNCTION = "protected object is not a Python function"
+UNREADABLE_IDENTITY = "runtime identity could not be encoded"
+UNREADABLE_SIGNATURE = "signature could not be inspected"
+INCOMPATIBLE_SIGNATURE = "signature does not accept input"
+UNREADABLE_OUTCOME = "oracle outcome could not be encoded"
 FUNCTION = (ast.FunctionDef, ast.AsyncFunctionDef)
 PHYSICAL_LINES = re.compile(rb"(?<=\n)|(?<=\r)(?!\n)")
 NAMESPACE_APIS = frozenset({
@@ -554,23 +564,39 @@ def oracle_inputs():
     }
 
 
-def oracle_outputs(namespace):
+def oracle_case_labels():
+    return {name: [label for label, _, _ in cases] for name, cases in oracle_inputs().items()}
+
+
+def oracle_outputs(namespace, skipped=None):
+    skipped = {} if skipped is None else skipped
     table = {}
     if LEVEL in namespace:
         table[LEVEL] = {"value": namespace[LEVEL]}
+    else:
+        skipped[f"{LEVEL}/value"] = MISSING_BINDING
     for name, cases in oracle_inputs().items():
         function = namespace.get(name)
-        if type(function) is not FunctionType:
-            continue
-        try:
-            parameters = signature(function, follow_wrapped=False)
-        except (TypeError, ValueError):
+        reason = None
+        if name not in namespace:
+            reason = MISSING_BINDING
+        elif type(function) is not FunctionType:
+            reason = NOT_FUNCTION
+        else:
+            try:
+                parameters = signature(function, follow_wrapped=False)
+            except (TypeError, ValueError):
+                reason = UNREADABLE_SIGNATURE
+        if reason:
+            skipped.update({f"{name}/{label}": reason for label, _, _ in cases})
             continue
         results = {}
         for label, args, kwargs in [("defaults", (), {}), *cases]:
             try:
                 parameters.bind(*args, **kwargs)
             except TypeError:
+                if label != "defaults":
+                    skipped[f"{name}/{label}"] = INCOMPATIBLE_SIGNATURE
                 continue
             args, kwargs = deepcopy((args, kwargs))
             try:
@@ -605,8 +631,8 @@ def runtime_worker(source_root):
     sys.path.insert(0, str(root))
     fingerprints = {}
     oracle = {}
-    unresolved = []
-    oracle_unresolved = []
+    unresolved = {}
+    oracle_unresolved = {}
     loaded = False
     with open(os.devnull, "w", encoding="utf-8") as silent, redirect_stdout(silent), redirect_stderr(silent):
         sys.addaudithook(observe)
@@ -622,28 +648,24 @@ def runtime_worker(source_root):
         if loaded:
             namespace = vars(scorer).copy()
             for name in PROTECTED:
+                if name not in namespace:
+                    unresolved[name] = MISSING_BINDING
+                    continue
+                value = namespace[name]
+                if name in PROTECTED_FUNCTIONS and type(value) is not FunctionType:
+                    unresolved[name] = NOT_FUNCTION
+                    continue
                 try:
-                    value = namespace[name]
-                    if name in PROTECTED_FUNCTIONS and type(value) is not FunctionType:
-                        raise InvalidInput("unsupported protected callable")
                     fingerprints[name] = identity_hash(value, root)
-                except (KeyError, AttributeError, ValueError, TypeError, RecursionError):
-                    unresolved.append(name)
-            try:
-                table = oracle_outputs(namespace)
-            except (AttributeError, ValueError, TypeError, RecursionError):
-                table = {}
-            for name in PROTECTED:
-                outcomes = table.get(name, {})
-                hashes = {}
+                except (AttributeError, ValueError, TypeError, RecursionError):
+                    unresolved[name] = UNREADABLE_IDENTITY
+            for name, outcomes in oracle_outputs(namespace, oracle_unresolved).items():
+                hashes = oracle[name] = {}
                 for label, value in outcomes.items():
                     try:
                         hashes[label] = identity_hash(value, root)
                     except (AttributeError, ValueError, TypeError, RecursionError):
-                        oracle_unresolved.append(f"{name}/{label}")
-                if not outcomes:
-                    oracle_unresolved.append(name)
-                oracle[name] = hashes
+                        oracle_unresolved[f"{name}/{label}"] = UNREADABLE_OUTCOME
 
     print(json.dumps({"loaded": loaded, "fingerprints": fingerprints, "unresolved": unresolved,
                       "oracle": oracle, "oracle_unresolved": oracle_unresolved,
@@ -697,34 +719,42 @@ def read_runtime_result(raw):
         raise invalid
 
     def validate_digests(mapping, allowed):
-        return (isinstance(mapping, dict) and allowed(mapping)
+        return (isinstance(mapping, dict) and mapping.keys() <= allowed
                 and all(isinstance(value, str) and re.fullmatch(r"[0-9a-f]{64}", value)
                         for value in mapping.values()))
 
-    if not validate_digests(evidence["fingerprints"], lambda row: row.keys() <= set(PROTECTED)):
+    def validate_reasons(mapping, allowed, reasons):
+        return (isinstance(mapping, dict) and mapping.keys() <= allowed
+                and all(isinstance(value, str) and value in reasons for value in mapping.values()))
+
+    identities = evidence["fingerprints"]
+    unresolved = evidence["unresolved"]
+    if not validate_digests(identities, set(PROTECTED)) or not validate_reasons(
+        unresolved, set(PROTECTED), {MISSING_BINDING, NOT_FUNCTION, UNREADABLE_IDENTITY},
+    ):
         raise invalid
-    if (not isinstance(evidence["oracle"], dict) or not evidence["oracle"].keys() <= set(PROTECTED)
-            or any(not validate_digests(row, lambda cases: all(re.fullmatch(r"[a-z0-9-]{1,48}", case)
-                                                             for case in cases))
-                   for row in evidence["oracle"].values())):
+    fixed = oracle_case_labels() | {LEVEL: ["value"]}
+    allowed = {name: {*labels, "defaults"} if name != LEVEL else set(labels)
+               for name, labels in fixed.items()}
+    oracle = evidence["oracle"]
+    oracle_unresolved = evidence["oracle_unresolved"]
+    allowed_keys = {f"{name}/{label}" for name, labels in allowed.items() for label in labels}
+    if (not isinstance(oracle, dict) or not oracle.keys() <= allowed.keys()
+            or any(not validate_digests(row, allowed[name]) for name, row in oracle.items())
+            or not validate_reasons(oracle_unresolved, allowed_keys, {
+                MISSING_BINDING, NOT_FUNCTION, UNREADABLE_SIGNATURE, INCOMPATIBLE_SIGNATURE, UNREADABLE_OUTCOME,
+            })):
         raise invalid
-    for key in ("unresolved", "oracle_unresolved", "static_paths", "import_reads"):
+    for key in ("static_paths", "import_reads"):
         if not isinstance(evidence[key], list) or any(not isinstance(value, str) for value in evidence[key]):
             raise invalid
-    if any(name not in PROTECTED for name in evidence["unresolved"]):
-        raise invalid
-    if any(label.split("/", 1)[0] not in PROTECTED or not re.fullmatch(r"[A-Za-z0-9_/-]{1,80}", label)
-           for label in evidence["oracle_unresolved"]):
-        raise invalid
-    identities = set(evidence["fingerprints"])
-    unresolved = set(evidence["unresolved"])
-    oracle_unresolved = {label.split("/", 1)[0] for label in evidence["oracle_unresolved"]}
     if evidence["loaded"]:
-        if (identities & unresolved or identities | unresolved != set(PROTECTED)
-                or evidence["oracle"].keys() != set(PROTECTED)
-                or any(not cases and name not in oracle_unresolved for name, cases in evidence["oracle"].items())):
+        required = {f"{name}/{label}" for name, labels in fixed.items() for label in labels}
+        evaluated = {f"{name}/{label}" for name, cases in oracle.items() for label in cases}
+        if (identities.keys() & unresolved.keys() or identities.keys() | unresolved.keys() != set(PROTECTED)
+                or evaluated & oracle_unresolved.keys() or not required <= evaluated | oracle_unresolved.keys()):
             raise invalid
-    elif identities or unresolved or evidence["oracle"] or oracle_unresolved:
+    elif identities or unresolved or oracle or oracle_unresolved:
         raise invalid
     return evidence
 
@@ -742,7 +772,7 @@ def compare(args):
     scopes = {"import-time-open": set(), "static-import": set(),
               "potential-module": importable_paths(old_tree) | importable_paths(new_tree)}
     result = {
-        "mode": "static-only" if args.static_only else "static-and-runtime",
+        "mode": "static-only" if args.static_only else "byte-gate",
         "revisions": {"w1": w1, "c1": c1},
         "protected_changes": {},
         "prompt_changes": {},
@@ -770,8 +800,15 @@ def compare(args):
     except InvalidInput as error:
         errors.append(str(error))
 
+    entry_errors = {}
     if not args.static_only:
-        compare_runtime(args, w1, c1, old_tree, new_tree, result, scopes, errors)
+        for side, tree in (("w1", old_tree), ("c1", new_tree)):
+            if ENTRY not in tree:
+                entry_errors[side] = "runtime release entry point is missing"
+            elif not regular_source(tree[ENTRY]):
+                entry_errors[side] = "runtime release entry point requires a regular Git blob"
+        errors.extend(f"{side.upper()} {reason}" for side, reason in entry_errors.items())
+    compare_runtime(args, w1, c1, old_tree, new_tree, result, scopes, entry_errors)
 
     changed = closure_changes(old_tree, new_tree, scopes)
     result["closure_changes"] = changed
@@ -782,25 +819,45 @@ def compare(args):
     return result
 
 
-def compare_runtime(args, w1, c1, old_tree, new_tree, result, scopes, errors):
-    result["runtime_changes"] = {}
-    result["oracle_changes"] = {}
-    if not args.runtime_image or not re.fullmatch(r"sha256:[0-9a-f]{64}", args.runtime_image):
-        errors.append("runtime requires a preloaded Python 3.13 image ID")
-        return
-    try:
-        worker_source = Path(__file__).read_bytes()
-    except OSError:
-        errors.append("runtime worker source is unreadable")
-        return
+def compare_runtime(args, w1, c1, old_tree, new_tree, result, scopes, entry_errors):
+    tracked = old_tree.keys() | new_tree.keys()
+    unprojected_changes = []
+    for path in sorted(tracked):
+        old, new = old_tree.get(path), new_tree.get(path)
+        if old != new and (not path.endswith(".py") or any(
+            entry is not None and not regular_source(entry) for entry in (old, new)
+        )):
+            unprojected_changes.append(path)
+
+    unavailable = None
+    if args.static_only:
+        unavailable = "runtime was skipped by --static-only"
+    elif not args.runtime_image:
+        unavailable = "runtime image was not supplied"
+    elif not re.fullmatch(r"sha256:[0-9a-f]{64}", args.runtime_image):
+        unavailable = "runtime image must be a preloaded Python 3.13 image ID"
+    elif unprojected_changes:
+        unavailable = "changed files outside the source-only runtime projection: " + ", ".join(unprojected_changes)
+    else:
+        try:
+            worker_source = Path(__file__).read_bytes()
+        except OSError:
+            unavailable = "runtime worker source is unreadable"
 
     available = {}
-    tracked = old_tree.keys() | new_tree.keys()
-    for side, label, revision, tree in (("w1", "W1", w1, old_tree), ("c1", "C1", c1, new_tree)):
+    side_failures = {}
+    for side, revision, tree in (("w1", w1, old_tree), ("c1", c1, new_tree)):
+        reason = entry_errors.get(side) or unavailable
+        if reason:
+            side_failures[side] = reason
+            continue
         try:
             evidence = isolated_identity(args.repo, revision["commit"], args.runtime_image, worker_source)
         except InvalidInput as error:
-            errors.append(f"{label} {error}")
+            side_failures[side] = str(error)
+            continue
+        except (OSError, RecursionError):
+            side_failures[side] = "runtime isolation or release import failed"
             continue
         observed = tracked.intersection(evidence["import_reads"])
         scopes["import-time-open"].update(observed)
@@ -808,35 +865,76 @@ def compare_runtime(args, w1, c1, old_tree, new_tree, result, scopes, errors):
         unprojected = sorted(path for path in observed
                              if Path(path).suffix != ".py" or not regular_source(tree.get(path)))
         if unprojected:
-            errors.append(f"{label} unresolved import-time file " + ", ".join(unprojected))
-        if not evidence["loaded"]:
-            errors.append(f"{label} release import or scorer identity failed")
-            continue
-        available[side] = evidence
-        if evidence["unresolved"]:
-            errors.append(f"{label} unresolved runtime identity for " + ", ".join(evidence["unresolved"]))
-        if evidence["oracle_unresolved"]:
-            errors.append(f"{label} unresolved oracle cases " + ", ".join(evidence["oracle_unresolved"]))
+            side_failures[side] = "unprojected import-time files: " + ", ".join(unprojected)
+        elif not evidence["loaded"]:
+            side_failures[side] = "release import or scorer identity failed"
+        else:
+            available[side] = evidence
 
-    if available.keys() == {"w1", "c1"}:
+    report_runtime_advice(result, available, side_failures)
+
+
+def report_runtime_advice(result, available, side_failures):
+    def collect_gaps(names, field):
+        gaps = {}
+        for name in names:
+            reasons = side_failures.copy()
+            for side, evidence in available.items():
+                if name in evidence[field]:
+                    reasons[side] = evidence[field][name]
+            if reasons:
+                gaps[name] = reasons
+        return gaps
+
+    result["runtime_unread"] = collect_gaps(PROTECTED, "unresolved")
+    fixed_cases = [f"{name}/{label}" for name, labels in oracle_case_labels().items() for label in labels]
+    skipped = collect_gaps(fixed_cases, "oracle_unresolved")
+    level_case = f"{LEVEL}/value"
+    result["oracle_coverage"] = {
+        "summary": f"evaluated {len(fixed_cases) - len(skipped)} of {len(fixed_cases)} fixed cases",
+        "not_evaluated": skipped,
+        "unread_level": collect_gaps([level_case], "oracle_unresolved").get(level_case, {}),
+    }
+    unread_defaults = {}
+    for side, evidence in available.items():
+        for case, reason in evidence["oracle_unresolved"].items():
+            if case.endswith("/defaults"):
+                unread_defaults.setdefault(case, {})[side] = reason
+    if unread_defaults:
+        result["oracle_coverage"]["unread_defaults"] = unread_defaults
+
+    if not side_failures:
         old, new = available["w1"], available["c1"]
-        result["runtime_changes"] = changed_hashes(old["fingerprints"], new["fingerprints"])
+        runtime_changes = comparable_hash_changes(old["fingerprints"], new["fingerprints"])
+        if runtime_changes or not result["runtime_unread"]:
+            result["runtime_changes"] = runtime_changes
+        oracle_changes = {}
         for name in PROTECTED:
-            changes = changed_hashes(old["oracle"].get(name, {}), new["oracle"].get(name, {}))
+            changes = comparable_hash_changes(old["oracle"].get(name, {}), new["oracle"].get(name, {}))
             if changes:
-                result["oracle_changes"][name] = changes
+                oracle_changes[name] = changes
+        if oracle_changes:
+            result["oracle_changes"] = oracle_changes
+
+
+def comparable_hash_changes(w1, c1):
+    return {name: {"w1": w1[name], "c1": c1[name]} for name in sorted(w1.keys() & c1.keys()) if w1[name] != c1[name]}
 
 
 def main():
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = argparse.ArgumentParser(description=__doc__, epilog=(
+        "Exit 2 for a changed closure or invalid committed inputs or prompt maps. "
+        "Exit 1 for prompt hash or key changes only. Exit 0 when the byte gate and prompt check pass. "
+        "The default comparison requires the committed release entry on both sides."
+    ))
     parser.add_argument("--repo", required=True, type=Path, help="local public-code Git repository")
     for label in ("w1", "c1"):
         parser.add_argument(f"--{label}-commit", required=True, help="full commit ID")
         parser.add_argument(f"--{label}-prompts", required=True, type=Path,
                             help="public-safe JSON object mapping prompt identifiers to SHA-256")
     mode = parser.add_mutually_exclusive_group()
-    mode.add_argument("--runtime-image", help="full image ID of a preloaded trusted Python 3.13 Docker image")
-    mode.add_argument("--static-only", action="store_true", help="diagnostic only, skip runtime identity")
+    mode.add_argument("--runtime-image", help="optional preloaded trusted Python 3.13 Docker image ID for P1 and B2")
+    mode.add_argument("--static-only", action="store_true", help="diagnostic only, skip advisory P1 and B2 and the caller check")
     args = parser.parse_args()
     try:
         result = compare(args)
@@ -844,9 +942,9 @@ def main():
         print(json.dumps({"error": str(error)}))
         return 2
     print(json.dumps(result, indent=2))
-    if any(result.get(key) for key in ("error", "closure_changes", "runtime_changes", "oracle_changes")):
+    if result.get("error") or result["closure_changes"]:
         return 2
-    return int(bool(result["protected_changes"] or result["prompt_changes"]))
+    return int(bool(result["prompt_changes"]))
 
 
 if __name__ == "__main__":
