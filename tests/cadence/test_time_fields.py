@@ -910,9 +910,9 @@ class CustodyBinding(unittest.TestCase):
         lid = self.L["leg_key"].split("/")[1]
 
         def receipt(sdir):
+            # a layout-only change: admission ignores layout (F3), the custody digest binding does not
             rec = rj(sdir / "runner_receipt.json")
-            rec["note"] = "another copy"
-            (sdir / "runner_receipt.json").write_text(json.dumps(rec))
+            (sdir / "runner_receipt.json").write_text(json.dumps(rec, indent=1))
 
         def leg_record(sdir):
             p = sdir / "legs" / lid / "leg_record.json"
@@ -994,7 +994,7 @@ class CustodyBinding(unittest.TestCase):
                 sdir = d / "dev-01-s02"
                 shutil.copytree(source, sdir)
                 p = sdir / rel
-                p.write_bytes(p.read_bytes() + b" ")
+                p.write_bytes(b" " + p.read_bytes())          # layout only: admitted (F3), but not the bytes stage 1 read
                 rc, err, run = self.stage2(sdir, d / "fit.json")
                 self.assertEqual(rc, 2, err)
                 self.assertIn(f"custody: dev-01-s02/{rel}", err)
@@ -1187,7 +1187,8 @@ class SupersededStage1(unittest.TestCase):
         readings = [json.loads(line) for line in p.read_text().splitlines()]
         for reading in readings:
             if reading.get("kind") == "reading":
-                reading["values"]["sensors"]["Tf08"] += 8.0
+                reading["values"]["sensors"]["Tf08"] += 8.0                  # the cleaned value and its raw reading
+                reading["values"]["readings"]["Tf08"]["value"] = reading["values"]["sensors"]["Tf08"]
         p.write_text("".join(json.dumps(reading) + "\n" for reading in readings))
         r, out = self.stage1(*args, "--superseded-stage1", old, "--superseded-input", old_input,
                              "--span-dir", f"dev-01-s02={changed}")

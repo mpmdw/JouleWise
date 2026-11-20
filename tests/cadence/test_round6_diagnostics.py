@@ -68,7 +68,6 @@ class ReceiptKinds(unittest.TestCase):
                 ({"steps": [], "soak_attempts": []}, True, 0, False),
                 ({"steps": [], "soak_attempts": [first]}, True, 1, False)):
             with self.subTest(raw=raw):
-                I34.check_writer_receipt(dict(raw, rc=0))
                 result = I34.soak_retries_from({"s": I34.soak_fields(raw)})["spans"]["s"]
                 self.assertEqual(result, {"field_present": field_present, "attempts": attempts,
                                           "accepted": accepted, "retried": []})
@@ -76,64 +75,6 @@ class ReceiptKinds(unittest.TestCase):
         raw["soak_attempts"][0]["soak_refusals_kind"] = "slope"
         result = I34.soak_retries_from({"s": I34.soak_fields(raw)})["spans"]["s"]
         self.assertEqual(result["retried"], [{"attempt": 1, "kind": "kind not recorded", "read_from": None}])
-
-    def test_receipt_return_code_requires_a_writer_exit_path(self):
-        for fields in ({"rc": 0}, {"rc": 2}, {"rc": 130, "error": "SystemExit: 130"}):
-            with self.subTest(fields=fields):
-                I34.check_writer_receipt(dict(fields, steps=[]))
-        for fields in ({}, {"rc": None}, {"rc": -9}, {"rc": 73}, {"rc": 130}):
-            with self.subTest(fields=fields), self.assertRaisesRegex(ValueError, "span return code"):
-                I34.check_writer_receipt(dict(fields, steps=[]))
-        for receipt in ([], None, "receipt"):
-            with self.subTest(receipt=receipt), self.assertRaisesRegex(ValueError, "not an object"):
-                I34.check_writer_receipt(receipt)
-
-    def test_step_return_code_requires_the_writer_step_path(self):
-        """``step()`` at the three pins: a row's rc is null until its operation returns; a returned nonzero rc
-        raises with an error on every step but ``display``; a failure outside cleanup stops the span."""
-        refusal = "SpanRefusal: plan needs 10 s from now; the work deadline leaves 5 s"
-        failed = {"name": "plan", "rc": 2, "error": refusal}
-        fatal = {"name": "ac_power", "rc": 4, "result": {"rc": 4}, "error": "SpanRefusal: ac_power: rc 4"}
-        cleanup = [{"name": "restore", "rc": 0}, {"name": "stop-meter", "rc": 2, "error": "OSError: generated"},
-                   {"name": "close-meter", "rc": 0}]
-        first = {"attempt": 1, "started_epoch_s": 1, "refused": "generated refusal", "output_dir": "soak.rejected1"}
-        second = {"attempt": 2, "started_epoch_s": 2, "refused": None, "output_dir": "soak"}
-        refused = {"name": "soak", "rc": 2, "error": "SoakRefusal: generated refusal"}
-        admitted = (
-            {"rc": 0, "steps": [{"name": "display", "rc": 7, "result": {"rc": 7}}, {"name": "soak", "rc": 0}]},
-            {"rc": 0, "steps": [{"name": "soak", "rc": None}]},
-            {"rc": 2, "error": refusal, "steps": [{"name": "deadline", "rc": 0}, failed]},
-            {"rc": 2, "error": refusal, "steps": [failed, *cleanup]},
-            {"rc": 4, "error": "SpanRefusal: ac_power: rc 4", "steps": [fatal, *cleanup]},
-            {"rc": 2, "steps": [{"name": "soak", "rc": 0}, *cleanup]},
-            {"rc": 0, "soak_attempts": [first, second], "steps": [refused, {"name": "soak.a2", "rc": 0}]},
-            {"rc": 2, "error": "SoakRefusal: generated refusal; no retry: it needs 9 s and the work deadline leaves 1 s",
-             "soak_attempts": [dict(first, output_dir="soak")], "steps": [refused, *cleanup]},
-            {"rc": 143, "error": "SystemExit: 143", "soak_attempts": [first, second],
-             "steps": [refused, {"name": "soak.a2", "rc": 143, "error": "SystemExit: 143"}, *cleanup]},
-        )
-        for receipt in admitted:
-            with self.subTest(admitted=receipt):
-                I34.check_writer_receipt(copy.deepcopy(receipt))
-        refusals = (
-            ({"rc": 0, "steps": [{"name": "soak", "rc": 73}]}, "step return code"),
-            ({"rc": 0, "steps": [{"name": "plan", "rc": 1, "result": {"rc": 1}}]}, "step return code"),
-            ({"rc": 0, "steps": [{"name": "soak", "rc": True}]}, "invalid return code"),
-            ({"rc": 0, "steps": [{"name": "display", "rc": 7, "result": {"rc": 3}}]}, "contradicts its result"),
-            ({"rc": 0, "steps": [{"name": "soak", "rc": 0, "error": "ValueError: generated"}]}, "contradicts its error"),
-            ({"rc": 0, "steps": [failed]}, "failed step without the span's error"),
-            ({"rc": 2, "steps": [failed, *cleanup]}, "failed step without the span's error"),
-            ({"rc": 0, "soak_attempts": [dict(first, output_dir="soak")], "steps": [refused]},
-             "failed step without the span's error"),
-            ({"rc": 2, "error": refusal, "steps": [failed, {"name": "soak", "rc": 0}]}, "after the span stopped"),
-            ({"rc": 0, "steps": [{"name": "restore", "rc": 0}, {"name": "soak", "rc": 0}]}, "after the span stopped"),
-            ({"rc": 143, "error": "SystemExit: 143", "soak_attempts": [first, second],
-              "steps": [refused, {"name": "soak.a2", "rc": 143, "error": "SystemExit: 143"},
-                        {"name": "L001.a1", "rc": 0}]}, "after the span stopped"),
-        )
-        for receipt, reason in refusals:
-            with self.subTest(refused=receipt), self.assertRaisesRegex(ValueError, reason):
-                I34.check_writer_receipt(copy.deepcopy(receipt))
 
 
 class TraceTimes(unittest.TestCase):

@@ -775,7 +775,8 @@ class FreezeCommit(Base):
                "tests.cadence.test_schema_check", "tests.cadence.test_fit_interim", "tests.cadence.test_look_run",
                "tests.cadence.test_time_fields", "tests.cadence.test_predict",
                "tests.cadence.test_round6_guards", "tests.cadence.test_round6_diagnostics",
-               "tests.cadence.test_round7_admission", "tests.cadence.test_interim_release")
+               "tests.cadence.test_round7_admission", "tests.cadence.test_interim_release",
+               "tests.cadence.test_interim_admission")
 
     def test_the_look_s_tests_pass_on_the_frozen_tree(self):
         import os

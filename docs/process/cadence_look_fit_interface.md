@@ -455,31 +455,43 @@ literal nested bundle locators, including under a staged span override.
 Campaign execution awaits Astra's paired census rerun and Fable's manifest
 cold pass.
 
-Both stages check every rostered span against the pinned writers before any
-trace, telemetry or meter file opens (RL-184 §3.3). Stage 1 refuses with
-nothing consumed. Stage 2 repeats the check before the reservation.
+Both stages run one admission validator over every rostered span before any trace,
+telemetry or meter file opens and before the reservation (RL-184 §3.3):
+`joulewise/cadence_looks/admission.py` with its grammar modules
+(`admission_shape`, `admission_journals`, `admission_kits`,
+`admission_synthetic`). Stage 1 refuses with nothing consumed. Stage 2 repeats
+the check. A shape is admitted only if one of the three rostered writer
+revisions (`b4b6aeb19`, `2d347f721`, `6e9d42f1d`) issues it; the grammar mirrors
+`scripts/cadence_legs_runner.py` and `joulewise/cadence/legs.py` there, with
+the source lines cited in the modules.
 
-- **Exit paths.** The span's `rc` is 0 or 2 without an `error`, and the
-  error's own code with one. A step's `rc` without an `error` is null, 0 or,
-  for the one non-fatal step `display`, its result's `rc`. A step that failed
-  outside cleanup is the last step outside cleanup and the span carries an
-  `error`, unless a later soak attempt shows the refusal was retried.
-- **Soak history.** RL-184 F02 to F05 as ruled. A terminal soak attempt can
-  be present while its step is still absent. A legacy soak step with null or
-  missing `rc` is unaccepted.
-- **Strict JSON.** The receipt, the soak reference, each leg record and
-  summary, and each accepted bundle's `events.jsonl`, `align_turns.jsonl`,
-  `align_thermal.jsonl`, `config.json` and runtime-event fallbacks decode as
-  UTF-8 JSON with no duplicate key and no nonfinite number.
-- **Writer types.** Each document, each journal row and each member the
-  reader indexes is an object. A value the reader takes as a number, a count
-  or a length is a JSON number, integer or list. Text and booleans are never
-  converted, so digits outside ASCII cannot stand for a number, and a wrong
-  type is refused, never read as an absent value.
-- **Events.** A row has a string type and a finite numeric stamp. A token
-  row's index is an integer. A phase row names one of the nine runtime
-  phases or `align_tool_<turn>_<call>` in ASCII digits without a sign or a
-  leading zero.
+- **Strict decoding.** Every operational file is UTF-8 JSON with no duplicate
+  member, no nonfinite number and no second document. A journal is one object
+  per complete line, so a cut final record refuses. Member order and layout are
+  not shape. A refusal names a file and a member, never a value.
+- **Closed objects, exact kinds.** Each object has exactly the members its
+  writer serializes. A boolean is not an integer, an integral float is not an
+  integer, and text is never a number, so digits outside ASCII cannot stand for
+  one.
+- **The receipt.** The kit is one of the repository's registered kits, with
+  its campaign and frozen revision, and the roster is that kit's legs in its
+  seeded order. The step sequence is the writer's: the work prefix, then the
+  whole close. Each step's `rc`, `result` and `error` follow `step()`, and the
+  span's `rc` and `error` follow the handler, the close and the desk. A signal
+  after a result is stored leaves a result with a nonzero `rc` and its error.
+  The soak history follows RL-184 F02 to F05.
+- **Cross-file agreement.** A leg record, its summary and the receipt's leg
+  row are three serializations of one leg and must agree, and so must the spec
+  with the kit's seeded leg. A record for a leg the receipt never finished
+  refuses.
+- **The bundle.** Config, events, turns and the thermal journal are the
+  runtime's: event phases pair and order, tokens count, the turn agrees with
+  its events, and the thermal journal is one numbered session. The registered
+  task has one turn and no tools, so a tool phase refuses (F4). Salvage events
+  are admitted at `outputs/align_runtime_events.jsonl` only (F5).
+- **Generated spans.** The repository's synthetic generator has its own closed
+  shape. No pinned writer issues `"synthetic": true`, and a roster is all one or
+  all the other.
 
 A power-trace row whose stamps are not spelled as the writer's `repr` of a
 float excludes its leg under rule 3's trace clause (RL-173 E.1). Stage 1

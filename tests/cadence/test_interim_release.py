@@ -1118,281 +1118,73 @@ class TwinThroughCLI(unittest.TestCase):
         stage2 = ["stage2", "--stage1", committed_stage1, "--stage1-sha256", stage1_sha, "--manifest", self.manifest,
                   "--ledger-ref", "origin/main", "--custody", self.source]
 
-        first = {"attempt": 1, "started_epoch_s": 1, "refused": "generated refusal", "output_dir": "soak.rejected1"}
-        second = {"attempt": 2, "started_epoch_s": 2, "refused": None, "output_dir": "soak"}
-        failed = {"name": "soak", "rc": 2, "error": "SoakRefusal: generated refusal"}
-        success = {"name": "soak.a2", "rc": 0}
+        # One representative per class of shape no pinned writer produces. The frozen matrix
+        # (test_interim_admission_closure) covers every class exhaustively through stage 1; this test proves that
+        # stage 2 shares the one validator and refuses the same inputs before the reservation or any response read.
+        bundle = events.parent
+        thermal, soak_reference = bundle / "outputs/align_thermal.jsonl", span / "soak/soak_reference.json"
+        salvage_alias = bundle / "align_runtime_events.jsonl"
+        files = {receipt: original, events: original_events, thermal: thermal.read_bytes(),
+                 soak_reference: soak_reference.read_bytes()}
+        rows = [json.loads(line) for line in original_events.splitlines()]
+
+        def receipt_with(**change):
+            return json.dumps(dict(json.loads(original), **change)).encode()
+
+        def events_with(change):
+            copy_rows = json.loads(json.dumps(rows))
+            change(copy_rows)
+            return b"".join(json.dumps(row).encode() + b"\n" for row in copy_rows)
+
+        token = next(i for i, row in enumerate(rows) if row["event_type"] == "token")
+        phase_start = next(i for i, row in enumerate(rows) if row["event_type"] == "phase_start" and row["phase"] == "decode")
+        tool = lambda name: events_with(lambda r: r.append(dict(r[-1], event_type="phase_start", phase=name,
+                                                                message="generated", metadata={"align_turn_index": 0})))
         cases = [
-            ("duplicate", b'"rc":0,"rc":0', "duplicate keys"),
-            ("nan", b'"rc":NaN', "nonfinite"), ("infinity", b'"rc":Infinity', "nonfinite"),
-            ("overflow", b'"rc":1e999', "nonfinite"),
-            ("contradictory exit", {"rc": 0, "error": "ValueError: generated fixture", "result": {"rc": 0}}, "contradicts its error"),
-            ("unexplained exit", {"rc": 73}, "invalid span return code"),
-            ("contradictory result", {"rc": 0, "result": {"rc": 3}}, "contradicts its result"),
-            ("failed wait", {"steps": [{"name": "soak-blackout-wait", "rc": 130}, {"name": "soak", "rc": 0}]}, "failed soak wait"),
-            ("null refusals", {"soak_refusals": None}, "soak_refusals"),
-            ("missing refused", {"soak_attempts": [{k: v for k, v in first.items() if k != "refused"}], "steps": []}, "soak attempt fields"),
-            ("retry limit", {"soak_attempts": [first, second, second], "steps": [failed, success]}, "soak attempt count"),
-            ("forged provenance", {"soak_attempts": [dict(first, soak_refusals_kind="slope"), second], "steps": [failed, success]}, "soak attempt fields"),
-            ("unknown kind", {"soak_attempts": [dict(first, refusal_kind="other"), second], "steps": [failed, success]}, "soak attempt fields"),
-            ("unknown phase", {}, "invalid writer phase"),
-            ("align_tool_1\u0662_0", {}, "invalid writer phase"),
-            ("align_tool_0_1\u0662", {}, "invalid writer phase"),
-            # The same two classes one level down: a step's exit path, and text where the writers put a number.
-            ("unexplained step exit", {"steps": [{"name": "soak", "rc": 73}]}, "invalid step return code"),
-            ("unpropagated step failure", {"steps": [{"name": "plan", "rc": 2, "error": "ValueError: generated"},
-                                                     {"name": "soak", "rc": 0}]}, "failed step without the span's error"),
-            ("step after the stop", {"rc": 2, "error": "ValueError: generated",
-                                     "steps": [{"name": "plan", "rc": 2, "error": "ValueError: generated"},
-                                               {"name": "soak", "rc": 0}]}, "after the span stopped"),
-            ("text epoch", {"started": {"epoch_s": "\u0661\u0667\u0669\u0664\u0667\u0661\u0668\u0668\u0660\u0660"}},
-             "started.epoch_s"),
-        ]
-        # A journal beside the receipt carries the same refusals: a duplicated key, and a token index in digits
-        # outside ASCII, which ``int`` would read as 0.
-        soak_reference = span / "soak/soak_reference.json"
-        files = {receipt: original, events: original_events, soak_reference: soak_reference.read_bytes()}
-        token = original_events.index(b'"event_type": "token"')
-        line = original_events.rindex(b"\n", 0, token) + 1
-        token_row = json.loads(original_events[line:original_events.index(b"\n", token)])
-        token_row["metadata"]["index"] = "\u0660"
-        other = [
-            ("duplicate soak reference", soak_reference, b'{"generated":1,"generated":1,' + files[soak_reference][1:],
-             "duplicate keys"),
-            ("text token index", events, original_events[:line] + C.dump(token_row)
-             + original_events[original_events.index(b"\n", token) + 1:], "invalid writer token"),
+            ("unexplained exit", receipt, receipt_with(rc=73), "not the value the writer fixes here"),
+            # stage 2 reads the receipt's own flag one step earlier, with the same strict decoder and its wording
+            ("duplicate member", receipt, b'{"rc":0,"rc":0,' + original[1:], "a duplicate member|has duplicate keys"),
+            ("nonfinite number", receipt, original.replace(b'"rc": 0', b'"rc": NaN'),
+             "a nonfinite number|has a nonfinite number"),
+            ("unregistered schema", receipt, receipt_with(schema="unregistered"), "not the value the writer fixes here"),
+            ("unknown member", receipt, receipt_with(unissued_member=True), "a member no pinned writer serializes"),
+            ("explicit null error", receipt, receipt_with(error=None), "a member no pinned writer serializes"),
+            ("unknown phase", events, events_with(lambda r: r.append(dict(r[-1], event_type="phase_start",
+                                                                          phase="not_a_writer_phase"))),
+             "not an event a pinned writer records"),
+            ("tool phase", events, tool("align_tool_0_0"), "a tool phase"),
+            ("non-ASCII digit in a tool phase", events, tool("align_tool_1\u0662_0"), "a tool phase"),
+            ("phase without metadata", events, events_with(lambda r: r[phase_start].pop("metadata")), "lacks metadata"),
+            ("text token index", events, events_with(lambda r: r[token]["metadata"].update(index="\u0660")),
+             "not a count"),
+            ("cut final record", events, original_events.rstrip(b"\n")[:-1], "a final record without its line end"),
+            ("not UTF-8", thermal, b"\xff" + files[thermal], "not UTF-8 JSON"),
+            ("duplicate member in the soak reference", soak_reference, b'{"generated":1,"generated":1,'
+             + files[soak_reference][1:], "a duplicate member"),
+            ("salvage events outside outputs/", salvage_alias, original_events, "salvage events outside outputs/"),
         ]
         for args in ([*stage1, "--out", out], stage2):
             if args[0] == "stage2":
                 row.update(status="stage1_committed", stage1_sha256=stage1_sha)
                 ledger.write_bytes(C.dump(ledger_doc))
                 MR.git_commit(self.mini, "register generated stage-1 output")
-            for label, mutation, reason in cases + [(name, path, why) for name, path, _, why in other]:
+            for label, path, data, reason in cases:
                 with self.subTest(stage=args[0], label=label):
-                    for path, data in files.items():
+                    try:
+                        for name, saved in files.items():
+                            name.write_bytes(saved)
                         path.write_bytes(data)
-                    receipt_doc = json.loads(original)
-                    if isinstance(mutation, Path):
-                        mutation.write_bytes(next(data for name, path, data, _ in other if name == label))
-                    elif type(mutation) is bytes:
-                        receipt_doc.pop("rc", None)
-                        receipt.write_bytes(b"{" + mutation + b"," + C.dump(receipt_doc)[1:])
-                    else:
-                        receipt.write_bytes(C.dump(dict(receipt_doc, **mutation)))
-                    phase = "not_a_writer_phase" if label == "unknown phase" else label
-                    if reason == "invalid writer phase":
-                        events.write_bytes(original_events + C.dump({"event_type": "phase_start", "phase": phase,
-                                                                     "timestamp_s": 1, "metadata": {}}))
-                    with cli_fixture.spy_opens() as opened:
-                        code, stdout, stderr = cli_fixture._cli_subprocess(args, repo=self.mini,
-                                                                          extra={"host_probe": UUID_LINE,
-                                                                                 "twin_path": str(self.twin.resolve())})
+                        with cli_fixture.spy_opens() as opened:
+                            code, stdout, stderr = cli_fixture._cli_subprocess(
+                                args, repo=self.mini, extra={"host_probe": UUID_LINE,
+                                                             "twin_path": str(self.twin.resolve())})
+                    finally:
+                        salvage_alias.unlink(missing_ok=True)
                     self.assertEqual((code, stdout), (2, ""), stderr)
-                    self.assertIn(reason, stderr)
+                    self.assertRegex(stderr, "^REFUSED ")
+                    self.assertRegex(stderr, reason)
                     self.assertEqual(cli_fixture.LAST_RUN["reservation_attempts"], 0)
                     self.assertEqual(cli_fixture.LAST_RUN["twin_launches"], 0)
                     self.assertFalse([name for name in opened if "/hazards/meter/" in name or Path(name).name in
                                       ("power_trace.csv", "rich_telemetry.jsonl", "powermetrics.plist")])
                     self.assertFalse(out.exists() or private.exists() or (public / "PUBLIC.json").exists())
-
-
-@unittest.skipIf(R is None, "numpy is required")
-class WriterShapes(unittest.TestCase):
-    """RL-184 section 3.3 on generated custody. Each shape no pinned writer serializes refuses in the reader's
-    pre-pass, before a meter stream, a power trace or native telemetry opens. One file changes per case."""
-
-    @classmethod
-    def setUpClass(cls):
-        from joulewise.cadence_looks import fit_interim, time_fields
-
-        cls.F, cls.TF = fit_interim, time_fields
-        cls.root = Path(tempfile.mkdtemp(prefix="jw-writer-shapes-")).resolve()
-        cls.addClassCleanup(shutil.rmtree, cls.root, True)
-        tokens = {}
-        look_input, energy, _ = S.build("exact", tokens=tokens)
-        source = cls.root / "generated-bundles"
-        locators = S.write_custody(source, look_input, energy, tokens)
-        cls.roster = M.load_json(locators["roster.json"])[:1]
-        cls.rules = M.load_json(locators["rules_3_4.json"])
-        cls.span = source / cls.roster[0]["span_id"]
-        cls.source = source
-        control = cls.read()
-        leg = next(leg for leg in control["legs"] if leg["turn"])
-        cls.leg = cls.span / "legs" / leg["leg_id"]
-        cls.bundle = cls.leg / "runtime" / M.load_json(cls.leg / "leg_record.json")["result"]["bundle"]
-
-    @classmethod
-    def read(cls):
-        return R.read_look_input(cls.roster, R.span_dirs(cls.source, None), cls.rules)
-
-    def refuses(self, label, path, data, reason):
-        original = path.read_bytes()
-        self.addCleanup(path.write_bytes, original)
-        path.write_bytes(data)
-        late = AssertionError("a response-bearing file opened before the refusal")
-        with self.subTest(label=label), mock.patch.object(self.TF, "SpanMeter", side_effect=late), \
-                mock.patch.object(self.TF, "gpu_rows", side_effect=late), \
-                mock.patch.object(R, "native_states", side_effect=late), \
-                self.assertRaisesRegex((self.F.LookInputError, M.ManifestError), reason):
-            self.read()
-        path.write_bytes(original)
-
-    @staticmethod
-    def changed(path, change, pick=None):
-        """The file's bytes with one object changed: the document, or the first ``.jsonl`` row ``pick`` takes."""
-        if pick is None:
-            doc = json.loads(path.read_bytes())
-            change(doc)
-            return C.dump(doc)
-        rows = [json.loads(line) for line in path.read_bytes().splitlines() if line.strip()]
-        change(next(row for row in rows if pick(row)))
-        return b"".join(C.dump(row) for row in rows)
-
-    def test_the_generated_control_is_admitted(self):
-        self.assertEqual(len(self.read()["spans"]), 1)
-
-    def test_every_operational_file_is_strict_json(self):
-        files = {"leg record": self.leg / "leg_record.json", "leg summary": self.leg / "leg_summary.json",
-                 "soak reference": self.span / "soak/soak_reference.json", "config": self.bundle / "config.json",
-                 "turns": self.bundle / "outputs/align_turns.jsonl",
-                 "thermal journal": self.bundle / "outputs/align_thermal.jsonl", "events": self.bundle / "events.jsonl"}
-        for name, path in files.items():
-            data = path.read_bytes()
-            self.assertEqual(data[:1], b"{", name)
-            self.refuses(f"{name}: duplicate key", path, b'{"generated":1,"generated":1,' + data[1:], "duplicate keys")
-            for token in (b"NaN", b"Infinity", b"-Infinity", b"1e999"):
-                self.refuses(f"{name}: {token.decode()}", path, b'{"generated":' + token + b"," + data[1:], "nonfinite")
-            self.refuses(f"{name}: not JSON", path, b"{" + data, "not JSON as the pinned writers serialize it")
-            for encoding in ("utf-16", "utf-16-le", "utf-32-be", "utf-8-sig"):
-                self.refuses(f"{name}: {encoding}", path, data.decode("utf-8").encode(encoding),
-                             "not JSON as the pinned writers serialize it")
-
-    def test_step_exit_paths_refuse_through_the_reader(self):
-        receipt = self.span / "runner_receipt.json"
-        failed = {"name": "plan", "rc": 2, "error": "ValueError: generated"}
-        for label, change, reason in (
-                ("unexplained step exit", {"steps": [{"name": "soak", "rc": 73}]}, "invalid step return code"),
-                ("unpropagated failure", {"steps": [failed]}, "failed step without the span's error"),
-                ("step after the stop", {"rc": 2, "error": failed["error"], "steps": [failed, {"name": "soak", "rc": 0}]},
-                 "after the span stopped"),
-                ("roster text", {"roster": "L001"}, "invalid receipt roster")):
-            self.refuses(label, receipt, self.changed(receipt, lambda doc: doc.update(change)), reason)
-
-    def test_text_and_booleans_are_never_read_as_numbers(self):
-        """``float`` and ``int`` take digits outside ASCII, signs, spaces and underscores in text; the writers
-        serialize JSON numbers."""
-        receipt, record = self.span / "runner_receipt.json", self.leg / "leg_record.json"
-        soak, turns = self.span / "soak/soak_reference.json", self.bundle / "outputs/align_turns.jsonl"
-        thermal, events = self.bundle / "outputs/align_thermal.jsonl", self.bundle / "events.jsonl"
-        reading = lambda row: row.get("kind") == "reading"                                  # noqa: E731
-        token = lambda row: row.get("event_type") == "token"                                # noqa: E731
-        for label, path, change, pick, reason in (
-                ("receipt epoch text", receipt, lambda d: d["started"].update(epoch_s=str(d["started"]["epoch_s"])),
-                 None, "started.epoch_s"),
-                ("receipt epoch boolean", receipt, lambda d: d["started"].update(epoch_s=True), None, "started.epoch_s"),
-                ("soak reference text", soak, lambda d: d["sensors_c"].update(TV0h="\u0665\u0667"), None, "TV0h"),
-                ("cell prompt text", record, lambda d: d["spec"].update(prefill_tokens="\u0661\u0662"), None,
-                 "spec.prefill_tokens"),
-                ("cell prompt float", record, lambda d: d["spec"].update(prefill_tokens=12.0), None,
-                 "spec.prefill_tokens"),
-                ("cell prompt negative", record, lambda d: d["spec"].update(prefill_tokens=-1), None,
-                 "spec.prefill_tokens"),
-                ("recorded prefill text", record, lambda d: d["result"].update(prefill_tokens="12"), None,
-                 "result.prefill_tokens"),
-                ("turn prefill text", turns, lambda d: d["generation"].update(prefill_tokens="12"), bool,
-                 "align_turns: prefill_tokens"),
-                ("turn start text", turns, lambda d: d["start_stamp"].update(epoch_s=str(d["start_stamp"]["epoch_s"])),
-                 bool, "start_stamp.epoch_s"),
-                ("output ids text", turns, lambda d: d["generation"].update(output_token_ids="7" * 4096), bool,
-                 "output_token_ids"),
-                ("sensor text", thermal, lambda d: d["values"]["sensors"].update(Tf08="40.5"), reading, "Tf08"),
-                ("soak sensor text", thermal, lambda d: d["values"]["sensors"].update(TV0h="\u0664\u0660"), reading,
-                 "TV0h"),
-                ("fan boolean", thermal, lambda d: d["values"]["sensors"].update(F0Ac=True), reading, "F0Ac"),
-                ("journal stamp text", thermal, lambda d: d["finished"].update(wall_ns=str(d["finished"]["wall_ns"])),
-                 reading, "finished.wall_ns"),
-                ("token index text", events, lambda d: d["metadata"].update(index="\u0660"), token,
-                 "invalid writer token"),
-                ("token index boolean", events, lambda d: d["metadata"].update(index=False), token,
-                 "invalid writer token"),
-                ("token index float", events, lambda d: d["metadata"].update(index=0.0), token, "invalid writer token"),
-                ("token index negative", events, lambda d: d["metadata"].update(index=-1), token,
-                 "invalid writer token"),
-                ("turn index boolean", events, lambda d: d["metadata"].update(align_turn_index=False), token,
-                 "invalid writer token"),
-                ("token metadata list", events, lambda d: d.update(metadata=[]), token, "invalid writer token"),
-                ("token metadata null", events, lambda d: d.update(metadata=None), token, "invalid writer token"),
-                ("token without an index", events, lambda d: d["metadata"].pop("index"), token,
-                 "invalid writer token"),
-                ("turn end text", turns, lambda d: d["end_stamp"].update(epoch_s=str(d["end_stamp"]["epoch_s"])),
-                 bool, "end_stamp.epoch_s"),
-                ("journal clock text", thermal,
-                 lambda d: d["started"].update(monotonic_ns=str(d["started"]["monotonic_ns"])), reading,
-                 "started.monotonic_ns"),
-                ("token stamp text", events, lambda d: d.update(timestamp_s=str(d["timestamp_s"])), token,
-                 "invalid writer timestamp"),
-                ("token stamp boolean", events, lambda d: d.update(timestamp_s=True), token,
-                 "invalid writer timestamp"),
-                ("event type number", events, lambda d: d.update(event_type=5), token, "invalid writer event")):
-            self.refuses(label, path, self.changed(path, change, pick), reason)
-        self.refuses("event row list", events, b"[]\n" + events.read_bytes(), "not an object")
-
-    def test_a_wrong_container_is_refused_not_read_as_absent(self):
-        """A document, a journal row and each member the reader indexes is an object. Before this check a soak
-        reference that was a list read as no reference, and a list where the reader indexed crashed it only after
-        a meter stream had opened."""
-        receipt, record, summary = self.span / "runner_receipt.json", self.leg / "leg_record.json", \
-            self.leg / "leg_summary.json"
-        soak, config = self.span / "soak/soak_reference.json", self.bundle / "config.json"
-        turns, thermal = self.bundle / "outputs/align_turns.jsonl", self.bundle / "outputs/align_thermal.jsonl"
-        reading = lambda row: row.get("kind") == "reading"                                  # noqa: E731
-        for name, path in (("leg record", record), ("leg summary", summary), ("soak reference", soak),
-                           ("config", config)):
-            for label, data in (("a list", b"[]"), ("null", b"null"), ("text", b'"generated"'), ("a number", b"7")):
-                self.refuses(f"{name} is {label}", path, data, "not an object")
-        for name, path in (("turns", turns), ("thermal journal", thermal)):
-            self.refuses(f"{name} row is a list", path, b"[]\n" + path.read_bytes(), "not an object")
-            self.refuses(f"{name} row is null", path, b"null\n" + path.read_bytes(), "not an object")
-        for label, path, change, pick, reason in (
-                ("receipt started", receipt, lambda d: d.update(started=[d["started"]["epoch_s"]]), None,
-                 "runner receipt.started"),
-                ("soak sensors", soak, lambda d: d.update(sensors_c=[57.0]), None, "soak_reference.sensors_c"),
-                ("record spec", record, lambda d: d.update(spec=[]), None, "leg record.spec"),
-                ("record result", record, lambda d: d.update(result="runs/cadence-leg"), None, "leg record.result"),
-                ("record attempts", record, lambda d: d.update(attempts={"attempt": 1}), None, "attempts"),
-                ("record attempt rows", record, lambda d: d.update(attempts=["generated"]), None, "attempts"),
-                ("summary reference", summary, lambda d: d.update(span_reference="L001"), None,
-                 "leg summary.span_reference"),
-                ("config sampling", config, lambda d: d.update(sampling=[1.0]), None, "config.sampling"),
-                ("turn start stamp", turns, lambda d: d.update(start_stamp=[1.0]), bool, "align_turns.start_stamp"),
-                ("turn generation", turns, lambda d: d.update(generation=[]), bool, "align_turns.generation"),
-                ("journal finished", thermal, lambda d: d.update(finished=[1]), reading, "align_thermal.finished"),
-                ("journal values", thermal, lambda d: d.update(values=[1]), reading, "align_thermal.values"),
-                ("journal sensors", thermal, lambda d: d["values"].update(sensors=[40.5]), reading,
-                 "values.sensors"),
-                ("journal status", thermal, lambda d: d["values"].update(status="nominal"), reading,
-                 "values.status")):
-            self.refuses(label, path, self.changed(path, change, pick), reason)
-
-    def test_phase_labels_are_the_writer_grammar(self):
-        """``align_tool_<turn>_<call>`` is formatted from ``range`` and ``enumerate`` integers
-        (joulewise/align/apple/workload.py:587 at the three pins)."""
-        events = self.bundle / "events.jsonl"
-        original = events.read_bytes()
-
-        def phase(name, kind="phase_start", **more):
-            return original + C.dump({"event_type": kind, "phase": name, "timestamp_s": 1, "metadata": {}, **more})
-
-        for name in ("align_tool_0_0", "align_tool_12_3", "decode", "align_thermal_gate"):
-            events.write_bytes(phase(name))
-            with self.subTest(admitted=name):
-                self.read()
-        events.write_bytes(original)
-        for name in ("align_tool_1\u0662_0", "align_tool_0_1\u0662", "align_tool_\u0661_0", "align_tool_0_\uff11",
-                     "align_tool_01_0", "align_tool_0_00", "align_tool_-1_0", "align_tool_+1_0", "align_tool_1_ 0",
-                     "align_tool_1_0\n", "align_tool_1__0", "align_tool_1", "align_tool_1_0_0", "ALIGN_TOOL_1_0",
-                     "decode\n", " decode", "Decode", "not_a_writer_phase", "", None, 7, ["decode"]):
-            self.refuses(f"phase {name!r}", events, phase(name), "invalid writer phase")
-        self.refuses("phase kind", events, phase("decode", "phase_middle"), "invalid writer phase")
-        self.refuses("phase metadata", events, phase("decode", metadata=[]), "invalid writer phase")
-        self.refuses("phase stamp", events, phase("decode", timestamp_s="1"), "invalid writer timestamp")

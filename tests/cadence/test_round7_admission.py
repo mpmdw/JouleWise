@@ -100,7 +100,7 @@ class Admission(unittest.TestCase):
         path = root / sid / "legs/L001/leg_record.json"
         rec = read(path)
         rec["result"]["bundle"] = None
-        rec["result"]["leg_status"] = "failed"
+        rec["result"]["leg_status"] = "incomplete"
         path.write_text(json.dumps(rec))
         # Isolate A.4 from replay's other reasons to exclude an incomplete leg.
         with patch.object(R.I34, "judge_span", return_value=(self.verdicts, {}, {})):
@@ -188,7 +188,11 @@ class Admission(unittest.TestCase):
                     and row["finished"]["wall_ns"] <= round(leg["segments"][0]["wall_start_s"] * 1e9))
         for row in rows:
             if row.get("kind") == "reading" and row["finished"]["wall_ns"] == start:
-                row["values"]["sensors"]["F0Ac"] = None
+                values = row["values"]                                   # a failed read: null with its reason
+                values["sensors"]["F0Ac"] = None
+                values["errors"]["F0Ac"] = "generated read failure"
+                values["readings"]["F0Ac"] = {"value": None, "error": "generated read failure"}
+                row["error"] = "; ".join(values["errors"].values())
         journal.write_text("".join(json.dumps(row) + "\n" for row in rows))
         return key, bundle
 
@@ -266,6 +270,8 @@ class Admission(unittest.TestCase):
                     rows = [json.loads(line) for line in path.read_text().splitlines()]
                     rows = [row for row in rows if row.get("kind") != "reading"
                             or not start + 20 <= row["finished"]["wall_ns"] / 1e9 < start + 30]
+                    for number, row in enumerate(rows, 1):                   # the collector numbers the rows it wrote
+                        row["seq"] = number
                     path.write_text("".join(json.dumps(row) + "\n" for row in rows))
                 out = root.parent / "D.json"
                 result = MR.py(mini, "scripts/cadence_look_run.py", "stage1", "--roster", root / "roster.json",

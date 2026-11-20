@@ -28,6 +28,15 @@
       ],
       "fallback_rejection_threshold_seconds": 300,
       "_evidence": "CI-12 (2026-10-05): seconds is the median heavy unit (463.593 s) plus the median remainder unit (236.753 s) over runs 37402996922, 37402992313, 37402988115, 37397353773, 37397232989; the two units run in separate exclusive jobs, so this sum is not a serial observation. evidence_range_seconds is the min and max of the per-run sums. Dedicated runners and the 120-minute ceiling are unchanged."
+    },
+    "tests.cadence.test_interim_admission_closure": {
+      "seconds": 1600.0,
+      "evidence_range_seconds": [
+        1400.0,
+        1800.0
+      ],
+      "fallback_rejection_threshold_seconds": 300,
+      "_evidence": "PR #795 (2026-11-20), local single run, not hosted: 101,889 generated cases ran as eight --report shards in about 200 s each on a 10-core Mac, so about 1,600 s of one-process CPU. It needs numpy (the fit fixture's generator), which the ordinary shards do not install, and it creates 101,889 test methods, so it runs once in its own eight-shard job through tests/cadence/ci_interim_admission.py and never in an ordinary shard or the quick tier. Replace this with the hosted per-shard median after the first CI harvest."
     }
   },
   "split_modules": {

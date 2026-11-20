@@ -1,0 +1,9 @@
+{
+  "_what": "Cases of the frozen admission-closure suite that no grammar over the pinned writers' output can satisfy. The suite's module and corpus are frozen and not edited here; the cases are held open by id until the lead rules (NEEDS_SPEC in the PR #795 report).",
+  "_why": "Each is a one-member mutation of an interrupted-after-result span receipt: the soak step's result is removed, leaving rc 130, error 'SystemExit: 130' and no result. That is exactly the shape the same suite admits for a signal that arrives before the step returns (branch signal-130), and a real signal 1800 s into the soak leaves it. The two documents differ only in step timestamps, so refusing one refuses a producible receipt.",
+  "open": [
+    "missing-key/b4b6aeb19/interrupt-after-result/runner_receipt.json/steps/13/result/remove",
+    "missing-key/2d347f721/interrupt-after-result/runner_receipt.json/steps/13/result/remove",
+    "missing-key/6e9d42f1d/interrupt-after-result/runner_receipt.json/steps/13/result/remove"
+  ]
+}

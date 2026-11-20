@@ -19,7 +19,7 @@ import re
 from joulewise.cadence_looks import admission_journals as journals, admission_kits as kits, admission_synthetic
 from joulewise.cadence_looks.admission_shape import (
     BOOL, DIGEST, FLOAT, INT, NAT, NUM, POS, REVISION, STR, TEXT, Refusal, arr, const, decode, decode_lines, either,
-    enum, is_int, is_num, keys, mapping, nullable, obj, refuse, rx)
+    enum, is_int, keys, mapping, nullable, obj, refuse, rx)
 
 RECEIPT = "runner_receipt.json"
 SOAK_REFERENCE = "soak/soak_reference.json"
@@ -66,11 +66,15 @@ class SpanFiles:
         return (self.sdir / rel).is_file()
 
     def read(self, rel):
-        path = self.sdir / rel
-        if not path.is_file():
+        """The file's bytes, or None when it is absent. The open is attempted: whether a file exists is decided by
+        the open, never by a separate check that could disagree with it."""
+        try:
+            with open(self.sdir / rel, "rb") as handle:
+                return handle.read()
+        except (FileNotFoundError, NotADirectoryError):
             return None
-        with open(path, "rb") as handle:
-            return handle.read()
+        except OSError:
+            refuse(f"{self.sdir.name}/{rel}", "not readable as a file")
 
 
 def locator(name, where):

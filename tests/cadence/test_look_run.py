@@ -958,8 +958,10 @@ class ColdSeatFixes(unittest.TestCase):
             rec = rj(sdir / "runner_receipt.json")
             rec.pop("synthetic")
             wb(sdir / "runner_receipt.json", json.dumps(rec))
-            li = R.read_look_input([self.roster[0]], R.span_dirs(d, None), self.rules)
-        self.assertFalse(li["synthetic"])
+            # The generator's receipt without its flag is no pinned writer's receipt either, so admission refuses it;
+            # a written span's `synthetic` False is the frozen admission matrix's path (test_interim_admission_closure).
+            with self.assertRaisesRegex(F.LookInputError, "admission: .*runner_receipt.json"):
+                R.read_look_input([self.roster[0]], R.span_dirs(d, None), self.rules)
 
     def test_m14_unrun_leg_has_no_cell_and_cannot_be_included(self):
         with tempfile.TemporaryDirectory() as d:

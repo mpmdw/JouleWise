@@ -20,11 +20,9 @@ from __future__ import annotations
 
 import hashlib
 import json
-import re
 
 from joulewise.cadence_looks.admission_shape import (
-    BOOL, DIGEST, FLOAT, INT, NAT, NUM, STR, TEXT, arr, const, either, enum, is_num, keys, mapping, nullable, obj,
-    refuse, rx)
+    BOOL, DIGEST, FLOAT, INT, NAT, NUM, STR, TEXT, arr, const, either, enum, mapping, nullable, obj, refuse, rx)
 
 EVENTS = "events.jsonl"
 TURNS = "outputs/align_turns.jsonl"
