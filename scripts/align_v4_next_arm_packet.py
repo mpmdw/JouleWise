@@ -29,6 +29,7 @@ from joulewise.align.apple import v4_cadence as cadence
 from joulewise.align.apple import v4_registration as registration
 from joulewise.align.apple.v4_estimands import FROZEN_D_SLOT_KEYS, d_configuration_assertion
 from joulewise.arm_retry import terminal_window_release
+from scripts import align_v4_series as frozen_series
 
 RECORD_SCHEMA = 'joulewise.align_v4.window_record.v1'
 SERIES_SCHEMA = 'joulewise.align_v4.series_state.v1'
@@ -618,6 +619,34 @@ def desk_passes(desk):
             and (desk.get('pilot_status') == 'instrument_ok' or only_exempt_failed))
 
 
+def frozen_sentinel_ids(manifest, plan, *, needs_supplemental):
+    """Require the digest-bound projection to match the series producer's R20 roster."""
+    refusal = ('next frozen roster must include two extra sentinels after a U4 inconclusive'
+               if needs_supplemental else 'next sentinel roster differs from the frozen series')
+    window = frozen_series.selected(manifest, frozen_series.slot_of(plan['window']))
+    ordinary = window['members']
+    supplemental = frozen_series.escalation_allocations(window)
+    members = plan['members']
+    require(isinstance(members, list), refusal)
+    with_extras = needs_supplemental or len(members) == len(ordinary) + len(supplemental)
+    allocations = ordinary + supplemental if with_extras else ordinary
+    require(all(isinstance(m, dict) and type(m.get('ordinal')) is int
+                and isinstance(m.get('run_id'), str) and m['run_id'] for m in members)
+            and [m['ordinal'] for m in members] == [row['ordinal'] for row in allocations]
+            and len({m['run_id'] for m in members}) == len(members), refusal)
+
+    pack = frozen_series.pack_id(window['id'])
+    expected = {row['ordinal']: f"{pack}-e{row['ordinal']:02}"
+                for row in ordinary + supplemental if row['pool'] == 'sentinel'}
+    sentinel_names = set(expected.values())
+    wanted = {row['ordinal']: expected[row['ordinal']]
+              for row in allocations if row['ordinal'] in expected}
+    planned = {m['ordinal']: m['run_id'] for m in members if m.get('role') == 'sentinel'}
+    require(planned == wanted and all(m['run_id'] not in sentinel_names
+                                      for m in members if m.get('role') != 'sentinel'), refusal)
+    return list(wanted.values())
+
+
 def build_packet(repo, *, record_commit, record_path, series_commit, series_path, pushed_ref,
                  now_epoch_s, current_artifact_set_sha256):
     require(number(now_epoch_s), 'arm clock unavailable')
@@ -866,12 +895,11 @@ def build_packet(repo, *, record_commit, record_path, series_commit, series_path
     def sentinels():
         reports = previous.thermal()['model_windows']
         # A15 / R21: only a U4 inconclusive triggers the R20 escalation sentinels; U5 is inconclusive by construction
-        needed = 4 if any(r['U4']['status'] == 'inconclusive' for r in reports.values()) else 2
-        planned = [m['run_id'] for m in next_plan()['members'] if m.get('role') == 'sentinel']
-        frozen = series.get('sentinel_ids')
-        require(isinstance(frozen, list) and len(frozen) == len(set(frozen)) and len(frozen) >= needed
-                and planned == frozen, 'next frozen roster must include two extra sentinels after a U4 inconclusive')
-        return {'basis': 'next sentinel roster recorded with the U4 consequence', 'sentinel_ids': planned}
+        needs_supplemental = any(r['U4']['status'] == 'inconclusive' for r in reports.values())
+        manifest = decode(evidence.read(series_commit, MANIFEST_PATH))
+        expected = frozen_sentinel_ids(manifest, next_plan(), needs_supplemental=needs_supplemental)
+        require(series.get('sentinel_ids') == expected, 'ledger sentinel IDs disagree with the frozen next roster')
+        return {'basis': 'next sentinel roster recorded with the U4 consequence', 'sentinel_ids': expected}
 
     def eligibility():
         counts = previous.eligibility(allow_provisional=provisional_allowed())
@@ -900,7 +928,18 @@ def build_packet(repo, *, record_commit, record_path, series_commit, series_path
         require(desk.get('plan_id') == previous.source('plan')['plan_id'], 'full desk plan mismatch')
         require(last_digest == current_artifact_set_sha256 or not required,
                 'full desk passed on a different code/config state than the arm will run')
-        return {'basis': 'full desk completed and passing for the current code/config state'}
+        result = {'basis': 'full desk completed and passing for the current code/config state'}
+        if previous.window == 'W1':
+            result['desk_sha256'] = digest(previous.source('desk', json_value=False))
+            # Carry any receipt exported with W1, or its canonical committed copy. Signing stays upstream.
+            receipt = (previous.source('registration_receipt', json_value=False)
+                       if 'registration_receipt' in previous.record['sources'] else None)
+            path = registration.REGISTRATION + 'registration_receipt.json'
+            if evidence.git('ls-tree', '-z', previous.commit, '--', path):
+                receipt = evidence.read(previous.commit, path, digest(receipt) if receipt is not None else None)
+            if receipt is not None:
+                result['registration_receipt_sha256'] = digest(receipt)
+        return result
 
     for name, action in (('record_committed', committed), ('terminal_completion', terminal),
                          ('quiet_start_state', quiet), ('meter_coverage', meter_coverage),

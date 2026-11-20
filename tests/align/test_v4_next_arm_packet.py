@@ -36,6 +36,20 @@ NOW = 111.0
 CODE_PATH = 'scripts/run_night.py'      # a bound artifact: its bytes move the artifact-set digest
 
 
+def fixture_next_members(manifest, *, extra_sentinels=True):
+    window = series.selected(manifest, 'C1')
+    allocations = window['members'] + (series.escalation_allocations(window) if extra_sentinels else [])
+    roster = []
+    for allocation in allocations:
+        ordinal, pool = allocation['ordinal'], allocation['pool']
+        # The producer preserves the anchors' original IDs.
+        run_id = (f'align-pilot-v3-episodes-a-e{ordinal:02}' if pool == 'anchor'
+                  else f'{series.pack_id("C1")}-e{ordinal:02}')
+        role = {'sentinel': 'sentinel', 'anchor': 'anchor'}.get(pool, 'D')
+        roster.append({'ordinal': ordinal, 'run_id': run_id, 'role': role})
+    return roster
+
+
 class Scenario:
     """One window record (and the series state that points at it) in a synthetic Git repository."""
 
@@ -44,6 +58,8 @@ class Scenario:
         self.root = Path(directory)
         if previous is None:
             init_git_fixture(self.root, '-q')
+            if not (self.root / series.MANIFEST).exists():
+                self.write(series.MANIFEST, series.raw_json(series.candidate()))
         self.previous = previous
         self.window = window
         self.dir = 'w-' + window.replace('#', '_')
@@ -87,11 +103,13 @@ class Scenario:
         self.next_plan = {'role': 'calibration', 'window': 'C1',
                           'configuration': {**CONFIG, 'cohort_identity': dict(IDENTITY)},
                           'thermal_policy': dict(self.policy),
-                          'members': [{'run_id': f'sentinel-{i}', 'role': 'sentinel'} for i in range(4)]}
+                          'members': fixture_next_members(series.candidate())}
+        self.next_plan_slot = 'C1'
         self.series = {'schema': builder.SERIES_SCHEMA,
                        'quiet_requirements': {'cooldown_s': 300, 'display_off_s': 60, 'dwell_s': 60, 'max_age_s': 30},
                        'lead_rulings': [], 'pool_members': [],
-                       'sentinel_ids': [f'sentinel-{i}' for i in range(4)], 'escalations': []}
+                       'sentinel_ids': [m['run_id'] for m in self.next_plan['members'] if m['role'] == 'sentinel'],
+                       'escalations': []}
         self.absent_captures = set() if captured else set(ids)
         self.omit_sources = set()
         self.raw_custody = False
@@ -124,7 +142,23 @@ class Scenario:
         self.git('commit', '-qm', 'synthetic evidence', '--allow-empty')
         return self.git('rev-parse', 'HEAD')
 
+    def retarget_next_members(self):
+        """Keep fixture member IDs in the named slot, preserving roster mutations."""
+        slot = series.slot_of(self.next_plan['window'])
+        if slot in (self.next_plan_slot, 'W1'):
+            return
+        previous_pack, pack = series.pack_id(self.next_plan_slot), series.pack_id(slot)
+
+        def retarget(run_id):
+            return pack + run_id[len(previous_pack):] if run_id.startswith(previous_pack + '-e') else run_id
+
+        for member in self.next_plan['members']:
+            member['run_id'] = retarget(member['run_id'])
+        self.series['sentinel_ids'] = [retarget(run_id) for run_id in self.series['sentinel_ids']]
+        self.next_plan_slot = slot
+
     def finish(self, *, change_code=False, code=b'synthetic-code-v1\n'):
+        self.retarget_next_members()
         self.write(CODE_PATH, code)
         self.record['code_commit'] = self.code_commit = self.commit()
         d = self.dir
@@ -297,17 +331,7 @@ class C1PacketRebuildTests(Base):
         w1.raw_custody = True
         w1.manifest_sha256 = manifest_ref['sha256']
         w1.series['pool_members'] = [member['run_id'] for member in w1.members]
-        window = series.selected(manifest, 'C1')
-        ordinary, supplemental = window['members'], series.escalation_allocations(window)
-        roster = []
-        for allocation in ordinary + supplemental:
-            ordinal, pool = allocation['ordinal'], allocation['pool']
-            # As in the kit producer, anchors retain their original run IDs.
-            run_id = (f'align-pilot-v3-episodes-a-e{ordinal:02}' if pool == 'anchor'
-                      else f'{series.pack_id("C1")}-e{ordinal:02}')
-            roster.append({'ordinal': ordinal, 'run_id': run_id,
-                           'role': 'sentinel' if pool == 'sentinel' else 'anchor' if pool == 'anchor' else 'D'})
-        planned_roster = roster if extra_sentinels else roster[:len(ordinary)]
+        planned_roster = fixture_next_members(manifest, extra_sentinels=extra_sentinels)
         w1.next_plan['members'] = planned_roster
         # The omission control must fail the U4 minimum with a consistent plan and ledger.
         w1.series['sentinel_ids'] = [row['run_id'] for row in planned_roster if row['role'] == 'sentinel']
@@ -321,6 +345,7 @@ class C1PacketRebuildTests(Base):
             w1.sources['desk'] = {'plan_id': w1.sources['plan']['plan_id'], 'status': 'running_off_mbp'}
         if receipt is not None:
             w1.sources['registration_receipt'] = receipt
+            w1.write(registration.REGISTRATION + 'registration_receipt.json', receipt)
         w1.finish()
         w1.series_sha256 = builder.digest((root / w1.series_path).read_bytes())
         if older_desk:
@@ -535,18 +560,29 @@ class C1PacketRebuildTests(Base):
         manifest = json.loads((w1.root / series.MANIFEST).read_bytes())
         expected = w1.series['sentinel_ids']
         base = w1.next_plan['members']
-        candidates = [m['ordinal'] for m in base if m['ordinal'] not in (5, 22)]
-        for pair in combinations(candidates, 2):
-            with self.subTest(pair=pair):
+        candidates = [m['ordinal'] for m in base]
+        sets = [*combinations(candidates, 2), (), (23,), (24,), (20, 23, 24), tuple(candidates)]
+        for positions in sets:
+            with self.subTest(positions=positions):
                 members = [dict(m, role=(
-                    'sentinel' if m['ordinal'] in (5, 22, *pair) else 'D' if m['role'] == 'sentinel' else m['role']
+                    'sentinel' if m['ordinal'] in (5, 22, *positions) else 'D' if m['role'] == 'sentinel' else m['role']
                 )) for m in base]
                 plan = {**w1.next_plan, 'members': members}
-                if pair == (23, 24):
+                if positions == (23, 24):
                     self.assertEqual(builder.frozen_sentinel_ids(manifest, plan, needs_supplemental=True), expected)
                 else:
                     with self.assertRaisesRegex(ValueError, 'two extra sentinels after a U4 inconclusive'):
                         builder.frozen_sentinel_ids(manifest, plan, needs_supplemental=True)
+
+    def test_frozen_sentinel_ids_cannot_swap_slots(self):
+        w1 = self.c1_scenario()
+        first, second = w1.next_plan['members'][-2:]
+        first['run_id'], second['run_id'] = second['run_id'], first['run_id']
+        w1.series['sentinel_ids'][-2:] = [first['run_id'], second['run_id']]
+        w1.series['next_plan'] = w1.write(w1.series['next_plan']['path'], w1.next_plan)
+        self.commit_series(w1)
+        self.assert_packet_failure(self.refused_packet(w1), 'sentinel_roster',
+                                   'two extra sentinels after a U4 inconclusive')
 
     def test_w1_receipt_digest_carries_through_the_rebuild(self):
         receipt = {'schema': registration.RECEIPT_SCHEMA, 'signer': 'invented fixture'}
@@ -560,6 +596,8 @@ class C1PacketRebuildTests(Base):
         self.assertEqual(full_desk['registration_receipt_sha256'], sources['registration_receipt']['sha256'])
         self.assertEqual(rebuilt['last_desk_passed_artifact_set_sha256'],
                          registration.artifact_set_digest_at(w1.root, w1.code_commit))
+        w1.write(registration.REGISTRATION + 'registration_receipt.json', {'edited': True})
+        self.assertEqual(self.ready_packet(w1), packet)
 
     def test_a_changed_next_plan_cohort_cannot_carry_the_w1_pool(self):
         w1 = self.c1_scenario(wrong_cohort=True)
@@ -977,7 +1015,7 @@ class SentinelTriggerTests(Base):
 
     def roster_check(self, u4, u5):
         s = self.calibration_series([('C1', True, True)])
-        s.next_plan['members'] = s.next_plan['members'][:2]                   # the ordinary two sentinels only
+        s.next_plan['members'] = s.next_plan['members'][:-2]                  # the ordinary roster
         s.series['sentinel_ids'] = s.series['sentinel_ids'][:2]
         s.thermal['model_windows']['tiny/C1']['U4']['status'] = u4
         s.thermal['model_windows']['tiny/C1']['U5']['status'] = u5
