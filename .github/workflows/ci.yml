@@ -281,9 +281,9 @@ jobs:
           print("ORDINARY SHARD ESTIMATES", ",".join(f"{value:.3f}" for value in totals))
           index = int(os.environ["SHARD_INDEX"])
           assigned = partitions[index - 1]
-          # Only the shard running the frozen schema oracle needs this test dependency.
-          schema_module = "tests.test_desc_looks_rl190"
-          if any(shard_tests._owning_module(unit, discovered) == schema_module for unit in assigned):
+          # Only shards running the frozen schema oracles need this test dependency.
+          schema_modules = {"tests.test_desc_looks_rl190", "tests.test_desc_looks_rl193"}
+          if any(shard_tests._owning_module(unit, discovered) in schema_modules for unit in assigned):
               import subprocess
               subprocess.run([sys.executable, "-m", "pip", "install", "jsonschema==4.25.1"], check=True)
           raise SystemExit(shard_tests.run_units_in_workers(

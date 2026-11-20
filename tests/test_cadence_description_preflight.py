@@ -113,7 +113,8 @@ class NativeStep3PreflightTests(unittest.TestCase):
         census, _ = reader.census(stage1)
         stage_bytes = reader.canonical(census)
         fixture.put(self.book.path / self.stage_name, stage_bytes)
-        self.row.update(status="stage1_committed", stage1_path=self.stage_name,
+        artifact = self.book.seal("native stage-1 artifact")
+        self.row.update(status="stage1_committed", stage1_commit=artifact, stage1_path=self.stage_name,
                         stage1_sha256=fixture.sha(stage_bytes))
         self._bind_ledger("native stage 1 committed")
 
@@ -156,7 +157,8 @@ class LoadedLegAdmissionTests(unittest.TestCase):
                 refs = next(row for row in world.rows if row["key"] == key)
                 self.assertEqual(position["receipt"], refs["receipt"])
                 self.assertEqual(document["counts"]["n_legs"], len(eligible))
-                self.assertEqual(document["by_kit"][key.split("/")[0]]["not_qualified:loaded"], 1)
+                summary = document["by_kit"][key.split("/")[0]]
+                self.assertEqual(summary["reasons"]["not_qualified"]["loaded"], 1)
                 if not instrument:
                     token = next(row for row in document["token_table"]
                                  if f'{row["kit_id"]}/{row["leg_id"]}' == key)
@@ -216,8 +218,8 @@ class Stage1ReasonOrderTests(unittest.TestCase):
             "quiet_spans_ns": [[0, 600_000_000_000]], "decode_tokens": 512, "decode_cap_reached": True,
         }
         failures = (
-            ("wrong_mode", "power_mode", "High Power"),
             ("incomplete", "leg_status", "incomplete"),
+            ("wrong_mode", "power_mode", "High Power"),
             ("unreleased", "g0_outcome", "timeout"),
             ("short_hold", "quiet_spans_ns", [[0, 599_999_999_999]]),
             ("loaded", "loaded_flag", True),
@@ -258,8 +260,8 @@ class Stage1ReasonOrderTests(unittest.TestCase):
                 self.assertFalse([path for event, path in events if event == "open"])
                 document = fixture.read(world.stage)
                 row = document["positions"][key]
-                self.assertEqual(row["disposition"], "not_qualified:wrong_mode")
-                self.assertEqual(row["reasons"], ["wrong_mode", "incomplete", "unreleased",
+                self.assertEqual(row["disposition"], "not_qualified:incomplete")
+                self.assertEqual(row["reasons"], ["incomplete", "wrong_mode", "unreleased",
                                                   "short_hold", "loaded", "short", "cap_not_reached"])
                 self.assertTrue(row["loaded_flag"])
                 admitted_key = next(iter(world.good))
@@ -268,8 +270,8 @@ class Stage1ReasonOrderTests(unittest.TestCase):
                 if not world.inst:
                     token = next(row for row in document["token_table"]
                                  if f'{row["kit_id"]}/{row["leg_id"]}' == key)
-                    self.assertEqual(token["disposition"], "not_qualified:wrong_mode")
-                    self.assertEqual(token["missing_count_reason"], "loaded")
+                    self.assertEqual(token["disposition"], "not_qualified:incomplete")
+                    self.assertEqual(token["missing_count_reason"], "short")
                 world.bind()
 
                 snapshot = reader.Snapshot(world.repo, look, "stage2")

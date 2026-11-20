@@ -49,7 +49,7 @@ POSITION_KEY = re.compile(r"f2-(?:inst|stab)-[0-9]{2}/(?:L00[1-9]|L01[0-2])")
 DROP_WITNESSES = {"ended_without_member": "receipt", "queue_retired": "queue"}
 SINGLE_TYPED_ITEM = re.compile(
     r"(?P<heading>[1-9][0-9]*\. \*\*[^\n]+\*\*)\n\n"
-    r"```item\n(?P<header>[^\n]+)\n```\n\n(?P<body>[^\n]+)\n?"
+    r"```item\n(?P<header>[^\n]+)\n```\n\n(?P<body>[^\n]+(?:\n[^\n]+)*)\n?"
 )
 LEDGER_SCHEMA = "joulewise.cadence_look_ledger.v1"
 POSITION_FIELDS = ("leg_id", "prefill_tokens", "decode_tokens", "start_band", "g0_shape")
@@ -426,9 +426,17 @@ class Snapshot:
         return canonical(candidate)
 
     def check_stage1(self, census):
+        artifact = self.row.get("stage1_commit")
         require(self.row["stage1_path"] == self.stage_name
-                and token(self.row["stage1_sha256"], SHA), "invalid stage-1 binding")
+                and token(self.row["stage1_sha256"], SHA)
+                and token(artifact, OID), "invalid stage-1 binding")
+        require(artifact != self.registration and artifact != self.commit
+                and self.book.ancestor(self.registration, artifact)
+                and self.book.ancestor(artifact, self.commit), "stage-1 artifact is out of order")
+        require(self.stage_name not in self.book.tree(self.registration),
+                "stage 1 already exists at manifest registration")
         raw = self.book.working(self.stage_name, self.commit, self.row["stage1_sha256"])
+        require(self.book.blob(artifact, self.stage_name) == raw, "wrong stage-1 artifact bytes")
         require(raw == canonical(census), "stage 1 disagrees with its source snapshot")
 
 
@@ -548,11 +556,11 @@ def _admitted_kits(snapshot):
 
 
 def _eligibility_reasons(op, receipt, cap):
-    # Provisional lead order (2026-11-20). Receipt authentication happens
+    # RL-193 §4. Receipt authentication happens
     # before these checks, and planner overtime is recorded independently.
     checks = (
-        ("wrong_mode", receipt["power_mode"] == "Automatic"),
         ("incomplete", op["leg_status"] == "complete"),
+        ("wrong_mode", receipt["power_mode"] == "Automatic"),
         ("unreleased", op["g0_outcome"] == "released"),
         ("short_hold", any(end - start >= 600_000_000_000 for start, end in op["quiet_spans_ns"])),
         ("loaded", not op["loaded_flag"]),
@@ -640,25 +648,13 @@ def _drop_authorizations(snapshot):
     return statements
 
 
-def _drop_position(snapshot, row, kit_id, kit, kit_sha):
-    require(row.keys() == {"key", "drop"}, "invalid terminal drop roster row")
-    # The decision may follow collection. Its independent witness must
-    # already belong to the closed operational projection.
-    declaration = snapshot.doc(row["drop"])
-    require(type(declaration) is dict, "invalid terminal drop declaration")
-    reason = declaration.get("reason")
-    role = DROP_WITNESSES.get(reason) if type(reason) is str else None
-    require(role is not None and declaration.keys() ==
-            {"key", "status", "reason", "authority", "typed_item_ref", role}
-            and declaration["key"] == row["key"] and declaration["status"] == "dropped"
-            and declaration["authority"] == "lead", "unproven terminal drop")
-    witness_path = declaration[role]
+def _drop_witness(snapshot, key, role, witness_path, kit_id, kit, kit_sha):
     payload = snapshot.source_bytes(witness_path)
     witness = decode(payload)
     require(type(witness) is dict, "invalid terminal drop witness")
     unrun = witness.get("unrun")
     require(type(unrun) is list and all(token(key, POSITION_KEY) for key in unrun)
-            and len(set(unrun)) == len(unrun) and row["key"] in unrun,
+            and len(set(unrun)) == len(unrun) and key in unrun,
             "drop witness does not establish this position as unrun")
     if role == "receipt":
         members = witness.get("member_legs")
@@ -676,16 +672,39 @@ def _drop_position(snapshot, row, kit_id, kit, kit_sha):
     else:
         require(witness["final"] is True and type(witness["queue_id"]) is str
                 and bool(witness["queue_id"]), "drop witness is not a final queue record")
-    disposition = f"dropped:{reason}"
-    statement = (f"The lead declares {row['key']} {disposition}. No member exists or will exist. "
-                 f"Evidence {witness_path} sha256={digest(payload)}.")
+    empty_close = (witness_path, witness) if role == "receipt" and not members else None
+    return digest(payload), empty_close
+
+
+def _drop_position(snapshot, row, kit_id, kit, kit_sha):
+    require(row.keys() == {"key", "drop"}, "invalid terminal drop roster row")
+    # The decision may follow collection. Every supplied witness must agree
+    # on the position and belong to the closed operational projection.
+    declaration = snapshot.doc(row["drop"])
+    require(type(declaration) is dict, "invalid terminal drop declaration")
+    reason = declaration.get("reason")
+    primary = DROP_WITNESSES.get(reason) if type(reason) is str else None
+    fields = {"key", "status", "reason", "authority", "typed_item_ref"}
+    roles = declaration.keys() - fields
+    require(fields <= declaration.keys() and primary in roles and roles.issubset(DROP_WITNESSES.values())
+            and declaration["key"] == row["key"] and declaration["status"] == "dropped"
+            and declaration["authority"] == "lead", "unproven terminal drop")
+    require(len({declaration[role] for role in roles}) == len(roles), "repeated drop witness")
     ref = declaration["typed_item_ref"]
     require(type(ref) is dict and ref.keys() == {"path", "number"}
             and ref["path"] == "RUN_STATE.md" and integer(ref["number"], 1),
             "invalid terminal drop item reference")
-    require(statement in snapshot.drop_authorizations.get(ref["number"], ()),
-            "typed lead item does not authorize this exact drop and witness")
-    empty_close = (witness_path, witness) if role == "receipt" and not members else None
+    authorized = snapshot.drop_authorizations.get(ref["number"], ())
+    disposition = f"dropped:{reason}"
+    empty_close = None
+    for role in sorted(roles):
+        witness_path = declaration[role]
+        sha, closed = _drop_witness(snapshot, row["key"], role, witness_path, kit_id, kit, kit_sha)
+        statement = (f"The lead declares {row['key']} {disposition}. No member exists or will exist. "
+                     f"Evidence {witness_path} sha256={sha}.")
+        require(statement in authorized, "typed lead item does not authorize this exact drop and witness")
+        if closed is not None:
+            empty_close = closed
     return {"disposition": disposition, "loaded_flag": None, "drop": row["drop"]}, empty_close
 
 
@@ -733,7 +752,7 @@ def _token_row(snapshot, references, kit, kit_sha, plan, closes):
     disposition = f"not_qualified:{reasons[0]}" if reasons else "qualified"
     missing_count_reason = None
     if op["loaded_flag"]:
-        missing_count_reason = "loaded"
+        missing_count_reason = "short" if "short" in reasons else "loaded"
     elif op["prefill_tokens"] is None:
         missing_count_reason = op["leg_status"]
     # Date, hour and UTC offset apply to the containing whole second. A
@@ -868,7 +887,10 @@ def census(snapshot):
     kits, kit_hashes = _admitted_kits(snapshot)
     closes = {} if snapshot.instrument else snapshot.source(AUTHORITY["host_closes"], parse_float=Decimal)
     positions, details, table = {}, {}, []
-    counts_by_kit = defaultdict(Counter)
+    counts_by_kit = defaultdict(lambda: {
+        "qualified": 0, "not_qualified": 0, "dropped": 0,
+        "reasons": {"not_qualified": {}, "dropped": {}},
+    })
     spans = defaultdict(set)
     issued = {}
     empty_closes = {}
@@ -894,7 +916,12 @@ def census(snapshot):
             require(issued.setdefault(identity, binding) == binding, "conflicting span attempts")
             spans[identity].add(leg_id)
         positions[key] = position
-        counts_by_kit[kit_id][position["disposition"]] += 1
+        category, _, reason = position["disposition"].partition(":")
+        totals = counts_by_kit[kit_id]
+        totals[category] += 1
+        if reason:
+            subcounts = totals["reasons"][category]
+            subcounts[reason] = subcounts.get(reason, 0) + 1
     require(all(spans[identity] == set(binding[2]) for identity, binding in issued.items()),
             "receipt names positions absent from the snapshot")
     if snapshot.instrument:
@@ -907,7 +934,7 @@ def census(snapshot):
         "source_snapshot": {"receipt_commit": snapshot.receipts,
                             "input_hashes_sha256": digest(canonical(snapshot.hashes))},
         "counts": counts, "positions": positions,
-        "by_kit": {kit: dict(counts) for kit, counts in counts_by_kit.items()},
+        "by_kit": dict(counts_by_kit),
     }
     if not snapshot.instrument:
         counts.update(_stability_counts(qualified))

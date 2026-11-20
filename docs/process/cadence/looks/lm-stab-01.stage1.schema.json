@@ -96,47 +96,65 @@
       "patternProperties": {
         "^f2-(inst|stab)-[0-9]{2}$": {
           "type": "object",
-          "required": [],
+          "required": [
+            "qualified",
+            "not_qualified",
+            "dropped",
+            "reasons"
+          ],
           "properties": {
             "qualified": {
               "type": "integer",
-              "minimum": 1
+              "minimum": 0
             },
-            "not_qualified:wrong_mode": {
+            "not_qualified": {
               "type": "integer",
-              "minimum": 1
+              "minimum": 0
             },
-            "not_qualified:incomplete": {
+            "dropped": {
               "type": "integer",
-              "minimum": 1
+              "minimum": 0
             },
-            "not_qualified:unreleased": {
-              "type": "integer",
-              "minimum": 1
-            },
-            "not_qualified:short_hold": {
-              "type": "integer",
-              "minimum": 1
-            },
-            "not_qualified:loaded": {
-              "type": "integer",
-              "minimum": 1
-            },
-            "not_qualified:short": {
-              "type": "integer",
-              "minimum": 1
-            },
-            "not_qualified:cap_not_reached": {
-              "type": "integer",
-              "minimum": 1
-            },
-            "dropped:ended_without_member": {
-              "type": "integer",
-              "minimum": 1
-            },
-            "dropped:queue_retired": {
-              "type": "integer",
-              "minimum": 1
+            "reasons": {
+              "type": "object",
+              "required": [
+                "not_qualified",
+                "dropped"
+              ],
+              "properties": {
+                "not_qualified": {
+                  "type": "object",
+                  "propertyNames": {
+                    "enum": [
+                      "incomplete",
+                      "wrong_mode",
+                      "unreleased",
+                      "short_hold",
+                      "loaded",
+                      "short",
+                      "cap_not_reached"
+                    ]
+                  },
+                  "additionalProperties": {
+                    "type": "integer",
+                    "minimum": 1
+                  }
+                },
+                "dropped": {
+                  "type": "object",
+                  "propertyNames": {
+                    "enum": [
+                      "queue_retired",
+                      "ended_without_member"
+                    ]
+                  },
+                  "additionalProperties": {
+                    "type": "integer",
+                    "minimum": 1
+                  }
+                }
+              },
+              "additionalProperties": false
             }
           },
           "additionalProperties": false

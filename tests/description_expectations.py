@@ -1,4 +1,4 @@
-"""Apply the two lead-authorized ADMIT expectations to frozen v4 at test load."""
+"""Apply the two lead-authorized ADMIT expectations to frozen v5 at test load."""
 
 from functools import partialmethod
 from hashlib import sha256
@@ -58,12 +58,12 @@ def _expect_admit(test, suite, variant):
 
 def apply(suite):
     corrections = json.loads((HERE / "description_expectation_corrections.json").read_bytes())
-    manifest = (HERE / "description-v4.sha256").read_bytes()
+    manifest = (HERE / "description-v5.sha256").read_bytes()
     cases = {f"test_desc_looks_acceptance.Checks.test_lm_stab_02_refuse_{variant}": variant
              for variant in VARIANTS}
     if (corrections["version"], corrections["authority"], corrections["suite_manifest_sha256"],
-        corrections["expect_admit"]) != (1, "RL-190 §1.3", sha256(manifest).hexdigest(), cases):
-        raise ValueError("description expectation correction does not match the authorized v4 cases")
+        corrections["expect_admit"]) != (2, "RL-190 §1.3", sha256(manifest).hexdigest(), cases):
+        raise ValueError("description expectation correction does not match the authorized v5 cases")
     for line in manifest.decode("ascii").splitlines():
         digest, name = line.split()
         if Path(name).name != name or sha256((HERE / name).read_bytes()).hexdigest() != digest:
