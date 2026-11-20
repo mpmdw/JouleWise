@@ -27,32 +27,11 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 from joulewise.align.apple import harvest_offload, light_triage  # noqa: E402
-
-PY_IDENTITY = ('import sys, hashlib, importlib.metadata as m; print(sys.version); '
-               'print(hashlib.sha256("\\n".join(sorted(f"{d.metadata[\'Name\']}=={d.version}" '
-               'for d in m.distributions())).encode()).hexdigest())')
+from joulewise.align.apple.harvest_offload import checkout_identity, _usable_identity  # noqa: E402
 
 
 def _read(path):
     return json.loads(Path(path).read_bytes())
-
-
-def checkout_identity(measurement_root, run=subprocess.run):
-    """Head, cleanliness and interpreter/package identity of the measurement checkout.
-
-    Same git probes as ``harvest.harvest_checkout`` (which the archive records), so
-    a mirror that passes here gives the same harvest_checkout record on the Air.
-    """
-    root = Path(measurement_root)
-    head = run(['git', '-C', str(root), 'rev-parse', 'HEAD'], capture_output=True, text=True, check=False)
-    status = run(['git', '-C', str(root), 'status', '--porcelain=v1', '--untracked-files=all'],
-                 capture_output=True, text=True, check=False)
-    python = root / '.venv/bin/python'
-    interp = run([str(python), '-I', '-c', PY_IDENTITY], capture_output=True, text=True, check=False) \
-        if python.exists() else None
-    return {'measurement_root': str(root), 'head': head.stdout.strip() if head.returncode == 0 else None,
-            'tracked_clean': status.returncode == 0 and not status.stdout.strip(),
-            'python': interp.stdout.strip().splitlines() if interp is not None and interp.returncode == 0 else None}
 
 
 def _session(session_root):
@@ -65,10 +44,6 @@ def _session(session_root):
 def _mirror_root(state):
     """The measurement checkout the session's links point into (absolute text; never resolved)."""
     return str(Path(state.get('source_measurement_root', state['measurement_root'])).absolute())
-
-
-def _usable_identity(identity):
-    return bool(identity.get('tracked_clean')) and identity.get('head') is not None and identity.get('python') is not None
 
 
 def _ledger_input(session, plan):
