@@ -168,7 +168,40 @@ commit `10e5d3c1b65b8c1ce1e2f087749544f552bcad9e` carried blob
 record `b6d9e21db8349dc400ddec9c3470baf28a083479`. The scratch driver
 exited 0 after asserting the acceptance and the refusal.
 
+## Hosted quick failure on the author candidate
+
+On `e6d7e549c7abac992bc8c4683b8508dd4ccf58e2`, the hosted `quick`
+job failed with the inherited `rl176` import error also seen on
+`3649cfd19`. Five additional assertions in `align.test_v4_kit`
+failed. The ordinary kit and the prepare/install refusal tests reached
+`generated v4 kit drifted: configs/campaigns/align_v4/plan_tree.json`
+before registration. [Exact candidate quick job](https://github.com/mpmdw/JouleWise/actions/runs/44671103388/job/136072489714)
+
+`scripts/align_v4_kit.py:1652` includes the generator's own SHA-256
+in the plan tree, and line 1699 includes the tree digest in the
+generated identity pins. The author diff changes the generator SHA-256
+from `4f544dcfc56bbe8693f3dca95ee90b5284e318bb7d6fec23a301162e1af931e7`
+to `8e0aa029632323a8aca9162631711fa3a2794f9d7bf226a3a0ccbb139756b810`.
+Those hashes come from `git show <pin>:scripts/align_v4_kit.py | shasum -a 256`.
+The focused fixture doubles the materializer and exercises the subsequent
+generated-byte comparison against invented matching bytes.
+
 ## NEEDS_SPEC and acceptance
+
+**Row 11, ordinary kit generated-byte check at
+`scripts/align_v4_kit.py:1652,1699,1768–1781`.** The smallest witness
+keeps the committed generated kit and changes one source byte in
+the self-hashed generator. The generated plan tree changes, making
+`generate(check=True)` refuse before the receipt. The dependent
+`registration/identity_pins.json` also changes. Both generated files
+are outside this row's write scope. The lead and signing owner must
+authorize an owner-issued regeneration and bind the resulting
+`configs/campaigns/align_v4/plan_tree.json` and
+`configs/campaigns/align_v4/registration/identity_pins.json` on the
+prospective integration candidate, or rule on an admission design
+that preserves the generator bytes and the earlier API contract.
+The recommendation is owner-issued regeneration on the prospective
+pin with the existing exact-byte checks.
 
 **Row 11, RL-182 §1.5 (RLD 19785–19787 and 20896), release predecessor
 read at `scripts/align_v4_series_release.py:247–256`.** When W1 clears
@@ -187,10 +220,11 @@ refusal. No predecessor evidence or signing relationship was altered.
 | Review stage | Verified HIGH / MED / LOW | Root cause and disposition |
 |---|---|---|
 | Author baseline and integration reproduction | 2 / 2 / 0 | One HIGH integration seam and two MED defects are covered by the frozen tests. The second HIGH is the predecessor timing contract conflict above. Return that part to spec under PIPELINE §3. |
+| Hosted quick on `e6d7e549c` | 1 / 0 / 0 | HIGH `integration-seam` at the generator self-hash. The allowed source edit requires owner-generated kit bytes before the ordinary kit can reach the verifier. |
 | Independent executing cross-family round 1 | Pending | The dispatcher or lead records the reviewer disposition on the exact candidate. |
 | Integration owner and lead | Pending | The integration owner accepts the composed candidate. The lead rules on the timing conflict and retains W1 promotion and landing authority under item 471. |
 
-Remain draft pending the ruling, executing review, both owner
+Remain draft pending both rulings, executing review, both owner
 dispositions and green canonical sharded CI on the accepted integration
 head. The stacked draft's CI belongs to its own SHA, which still has the
 base-level scorer and row-builder absences. The local fixture orphan
