@@ -17,6 +17,12 @@ FIXTURES = DRAFTS / "hp-02/fixtures"
 
 
 class HP02SuccessorItemsTests(unittest.TestCase):
+    def test_gate_machine_custody_audit(self):
+        audit = Path(__file__).with_name("hp02_gate_machine") / "audit_round1.py"
+        result = subprocess.run([sys.executable, "-IB", str(audit)], capture_output=True, text=True, timeout=60)
+        self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+        self.assertIn("native command attempts: 0", result.stdout)
+
     def test_frozen_gate_vectors_and_timing(self):
         def check(script, *args, want=0):
             result = subprocess.run(

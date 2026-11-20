@@ -1,5 +1,6 @@
 """Render and evaluate the hp-02 successor items using operational records only."""
 import argparse
+from contextlib import ExitStack
 from datetime import date, datetime, time as wall_time, timedelta
 import hashlib
 import json
@@ -222,6 +223,15 @@ def check_close_identity_agreement(first, second):
     same_end = first["ended_epoch_s"] == second["ended_epoch_s"]
     if same_record or same_receipt or same_end:
         require(same_receipt and same_end, "WAIT_EVIDENCE", "close identity, receipt or chronology conflicts")
+
+
+def check_shared_close(state, close):
+    seen = state["closes"]
+    for earlier in seen.values():
+        check_close_identity_agreement(close, earlier)
+    latest = state["latest_close"]
+    require(latest is None or close["ended_epoch_s"] >= seen[latest]["ended_epoch_s"],
+            "WAIT_EVIDENCE", "latest close is older than one already observed")
 
 
 def check_history(item, obs, close):
@@ -953,21 +963,20 @@ def remember_admission(path, obs, now, *, read_only=False, holds=None):
 
         stop = state["restore_stop"]
         if stop and stop["decision"] == "HALT_AND_PAGE":
-            raise Refusal("HALT_AND_PAGE", f"failed recovery on {stop['close']['record']} remains an active host halt")
+            ex = Refusal("HALT_AND_PAGE", f"failed recovery on {stop['close']['record']} remains an active host halt")
+            ex.source, ex.proof = "latest_close", stop["close"]
+            raise ex
 
         close = obs["latest_close"]
-        check_close_binding(close, obs)
+        tagged("latest_close", check_close_binding, close, obs)
         identity = {key: close[key] for key in CLOSE_KEYS}
         seen = state["closes"]
-        for earlier in seen.values():
-            check_close_identity_agreement(identity, earlier)
-        latest = state["latest_close"]
-        require(latest is None or close["ended_epoch_s"] >= seen[latest]["ended_epoch_s"],
-                "WAIT_EVIDENCE", "latest close is older than one already observed")
+        tagged("latest_close", check_shared_close, state, identity)
         if stop:
-            check_close_identity_agreement(identity, stop["close"])
-            require(identity == stop["close"] and isinstance(close.get("recovery"), dict),
-                    stop["decision"], f"restore disposition still owed for {stop['close']['record']}")
+            tagged("latest_close", check_close_identity_agreement, identity, stop["close"])
+            tagged("latest_close", require,
+                   identity == stop["close"] and isinstance(close.get("recovery"), dict),
+                   stop["decision"], f"restore disposition still owed for {stop['close']['record']}")
 
         seen[identity["record"]] = identity
         state["latest_close"] = identity["record"]
@@ -977,8 +986,8 @@ def remember_admission(path, obs, now, *, read_only=False, holds=None):
             stops = None
         restore_owed = stops is not None and any(entry["code"] in RESTORE_STOPS for entry in stops)
         try:
-            check_close(close, obs)
-            require(not restore_owed, "HOLD_HOST", "restore stop is open in the scoped register")
+            tagged("latest_close", check_close, close, obs)
+            tagged("stops", require, not restore_owed, "HOLD_HOST", "restore stop is open in the scoped register")
         except Refusal as exc:
             if restore_owed or close.get("restore_status") != "proven" or close.get("recovery") is not None:
                 state["restore_stop"] = {
@@ -992,13 +1001,20 @@ def remember_admission(path, obs, now, *, read_only=False, holds=None):
         prior = obs["history"].get("prior_check") if states is not None else None
         if record(prior) and is_sha(prior.get("receipt_sha256")) and number(prior.get("ended_epoch_s")):
             for known in seen.values():
-                check_close_identity_agreement(prior, known)
+                try:
+                    check_close_identity_agreement(prior, known)
+                except Refusal as ex:
+                    ex.source, ex.proof = "history", prior
+                    raise
 
         if state["look_execution"] is not None and not current_look_ran:
-            raise Refusal("NOT_ADMITTED", f"lm-hp-01 execution recorded by {state['look_execution']['record']}")
+            execution = state["look_execution"]
+            ex = Refusal("NOT_ADMITTED", f"lm-hp-01 execution recorded by {execution['record']}")
+            ex.source, ex.proof = "look", execution
+            raise ex
         if states is not None:
-            require(all(states[leg] == "spent" for leg in state["spent"]),
-                    "WAIT_EVIDENCE", "history reverses a previously observed spent leg")
+            tagged("history", require, all(states[leg] == "spent" for leg in state["spent"]),
+                   "WAIT_EVIDENCE", "history reverses a previously observed spent leg")
     finally:
         serialized = json.dumps(state, sort_keys=True)
         if serialized != before:
@@ -1133,14 +1149,13 @@ class HoldJournal:
     """One sequenced, append-only record format for issue and queue custody."""
 
     def __init__(self, ledger, item, issue=None, *, queue_root=None):
-        self.root = ledger
         self.queue_scope = issue is None
         if self.queue_scope:
             self.scope = {"queue_sha": item["queue"]["sha256"], "queue_seq": item["piece"]}
             key = f"{self.scope['queue_sha']}-{self.scope['queue_seq']}"
             self.path = queue_root / f"{key}.records"
             self.seed = queue_root / f"{key}.json"
-            self.inflight = None
+            self.inflight = queue_root / f"reading-{key}.json"
         else:
             self.issue_id = sha256(receipt_bytes({"span": item["span"], "issue_record": issue["record"]}))
             self.scope = {"issue_id": self.issue_id}
@@ -1171,17 +1186,11 @@ class HoldJournal:
             raise HoldCustodyError("issue ledger read" if issue is not None else "queue ledger read", ex) from ex
 
     def begin_read(self):
+        """Publish the in-flight guard under the held queue-position lock."""
         try:
             publish_new_file(self.inflight, receipt_bytes(self.scope) + b"\n")
         except OSError as ex:
-            raise HoldCustodyError("issue ledger in-flight marker", ex) from ex
-
-    def finish_read(self):
-        try:
-            self.inflight.unlink()
-            sync_directory(self.root)
-        except OSError as ex:
-            raise HoldCustodyError("issue ledger write", ex, marker=self.inflight) from ex
+            raise HoldCustodyError("queue in-flight observation marker", ex, marker=self.inflight) from ex
 
     def apply(self, event, digest):
         require(all(event.get(k) == v for k, v in self.scope.items()),
@@ -1220,8 +1229,7 @@ class HoldJournal:
                 sync_directory(self.path.parent)
             publish_new_file(self.path / f"{self.sequence + 1:08d}-{digest}.json", data)
         except OSError as ex:
-            raise HoldCustodyError("queue ledger write" if self.queue_scope else "issue ledger write",
-                                   ex, marker=self.inflight) from ex
+            raise HoldCustodyError("queue ledger write" if self.queue_scope else "issue ledger write", ex) from ex
         self.apply(event, digest)
         return True
 
@@ -1515,9 +1523,11 @@ def check_observation_sections(obs):
 
 
 def failure(source, ex, obs):
-    proof = obs.get(source) if isinstance(obs, dict) else None
-    if source == "history" and isinstance(proof, dict) and isinstance(ex, Refusal) and ex.decision == "HOLD_KIT":
-        proof = proof.get("prior_check")
+    proof = getattr(ex, "proof", None)
+    if proof is None and isinstance(obs, dict):
+        proof = obs.get(source)
+        if source == "history" and isinstance(proof, dict) and isinstance(ex, Refusal) and ex.decision == "HOLD_KIT":
+            proof = proof.get("prior_check")
     if not isinstance(proof, dict):
         proof = {"source": source, "detail": str(ex)}
     return source, ex, proof, None
@@ -1536,6 +1546,8 @@ class GateInvocation:
         self.queue_root = getattr(args, "queue_hold_root", QUEUE_HOLD_ROOT)
         self.queue_holds = HoldJournal(ledger, item, queue_root=self.queue_root)
         self.queue_holds.phase = self.phase
+        self.active_read = None
+        self.cleared_reads = set()
         self.owns_claim = False
         self.invoked = False
         self.state = {"Issue": MACHINE["initial_state"], "Start": "issued", "Run": "start_published"}[self.phase]
@@ -1563,11 +1575,37 @@ class GateInvocation:
     def current_journal(self, issue):
         journal = HoldJournal(self.ledger, self.item, issue)
         journal.phase = self.phase
-        pending = os.path.lexists(journal.inflight)
-        if pending and not any(h.get("inflight") == journal.inflight.name for h in self.queue_holds.open.values()):
-            raise HoldCustodyError("in-flight issue ledger read", RuntimeError("unfinished issue observation"),
-                                   marker=journal.inflight)
+        # The queue-position marker survives replacement of both the issue and
+        # its custody volume. Also recognize an earlier issue-keyed marker.
+        for marker in (self.queue_holds.inflight, journal.inflight):
+            if self.read_is_pending(marker) and not any(
+                    h.get("inflight") == marker.name for h in self.queue_holds.open.values()):
+                raise HoldCustodyError(f"in-flight observation: {marker.name}",
+                                       RuntimeError("unfinished issue observation"), marker=marker)
         return journal
+
+    @staticmethod
+    def read_is_pending(marker):
+        try:
+            marker.lstat()
+        except FileNotFoundError:
+            return False
+        except OSError as ex:
+            raise HoldCustodyError("in-flight observation marker read", ex, marker=marker) from ex
+        return True
+
+    def finish_reads(self):
+        markers = self.cleared_reads
+        if self.active_read is not None:
+            markers.add(self.active_read)
+        for marker in sorted(markers):
+            try:
+                marker.unlink(missing_ok=True)
+                sync_directory(marker.parent)
+            except OSError as ex:
+                raise HoldCustodyError("in-flight observation completion", ex, marker=marker) from ex
+        self.active_read = None
+        markers.clear()
 
     def apply_dispositions(self, obs, now):
         rows = obs.get("hold_dispositions", [])
@@ -1589,11 +1627,10 @@ class GateInvocation:
             if journal.queue_scope:
                 for _, hold in events:
                     marker = hold.get("inflight")
-                    if isinstance(marker, str) and re.fullmatch(r"reading-[0-9a-f]{64}\.json", marker):
-                        # Q2 refers to this exact interrupted observation.
-                        # Keep its marker until authenticated recovery.
-                        (self.ledger / marker).unlink(missing_ok=True)
-                        sync_directory(self.ledger)
+                    if marker == journal.inflight.name:
+                        self.cleared_reads.add(journal.inflight)
+                    elif isinstance(marker, str) and re.fullmatch(r"reading-[0-9a-f]{64}\.json", marker):
+                        self.cleared_reads.add(self.ledger / marker)
                 transition("queue_position_held", "typed_disposition", verified=(
                     "name queue-position hold ID and canonical source digest", "verified later ledger sequence",
                     "reevaluate all ordinary predicates"))
@@ -1682,8 +1719,8 @@ class GateInvocation:
     def remember(self, obs, now, *, read_only=False):
         try:
             remember_admission(self.admission, obs, now, read_only=read_only, holds=self.issue_holds)
-        except Refusal:
-            raise
+        except Refusal as ex:
+            raise self.record_refusal(getattr(ex, "source", "shared admission"), ex, obs)
         except (OSError, RuntimeError, ValueError) as ex:
             raise HoldCustodyError("issue ledger admission custody", ex) from ex
 
@@ -1697,17 +1734,28 @@ class GateInvocation:
         return decision, read_json(queue), None
 
     def assess(self, *, final=False):
-        args, item = self.args, self.item
         issue = self.bound_issue()
         approved_journal = self.issue_holds
         journal = self.current_journal(issue)
         if final and (journal.scope != approved_journal.scope or journal.tail != approved_journal.tail):
             raise HoldCustodyError("issue ledger final read", RuntimeError("issue custody changed after claim"))
         self.issue_holds = journal
+        pending = self.queue_holds.inflight
+        if not final and not self.read_is_pending(pending):
+            self.queue_holds.begin_read()
+            self.active_read = pending
+        try:
+            result = self.assess_records(issue, journal, final=final)
+        except Refusal as ex:
+            if getattr(ex, "assessed", False) or isinstance(ex, OpenHold):
+                self.finish_reads()
+            raise
+        self.finish_reads()
+        return result
+
+    def assess_records(self, issue, journal, *, final):
+        args, item = self.args, self.item
         previously_held = bool(journal.open or self.queue_holds.open)
-        marker = not final and not os.path.lexists(journal.inflight)
-        if marker:
-            journal.begin_read()
         obs = None
         error = None
         additional = []
@@ -1731,8 +1779,6 @@ class GateInvocation:
             if not any(type(ex) is type(error) and str(ex) == str(error) for _, ex, _, _ in additional):
                 additional.insert(0, failure(source, error, obs))
         recorded = journal.observe(now, additional, obs=obs, initialize=not final)
-        if marker:
-            journal.finish_read()
         sticky = any(isinstance(ex, Refusal) and (
             OUTCOMES[ex.decision].get("execution_recovery") or ex.decision == "HALT_AND_PAGE"
             or ex.decision == "SKIP_SPENT" and source == "history")
@@ -1909,7 +1955,8 @@ class GateInvocation:
 
     def queue_failure(self, error):
         self.queue_holds.phase = self.phase
-        self.queue_holds.observe(time.time(), [(error.source, error.error, {}, error.marker)])
+        marker = error.marker if error.marker is not None else self.active_read
+        self.queue_holds.observe(time.time(), [(error.source, error.error, {}, marker)])
         self.release_unused_claim()
         raise Refusal(OUTCOMES["CUSTODY_ERROR"]["normalize"], str(error)) from error
 
@@ -1935,13 +1982,13 @@ def run_gate(args):
         with lock_path.open("a") as queue_lock:
             fcntl.flock(queue_lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
             gate = GateInvocation(args, item, ledger)
-            try:
-                ledger.mkdir(parents=True, exist_ok=True)
-                lock = (ledger / "arm.lock").open("a")
-            except OSError as ex:
-                gate.queue_failure(HoldCustodyError("issue ledger lock", ex))
-            with lock:
-                fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            with ExitStack() as issue_lock:
+                try:
+                    ledger.mkdir(parents=True, exist_ok=True)
+                    lock = issue_lock.enter_context((ledger / "arm.lock").open("a"))
+                    fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                except OSError as ex:
+                    gate.queue_failure(HoldCustodyError("issue ledger lock", ex))
                 sys.path.insert(0, str(args.repo))
                 try:
                     try:
