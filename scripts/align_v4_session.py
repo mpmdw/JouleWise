@@ -1229,7 +1229,10 @@ def _check_c1_packet_kit(root, packet, *, plan=None, measurement_root=None, nigh
                 source = Path(root) / series.kit_path('C1') / series.C1_PLAN
                 if os.readlink(collection) != str(source):
                     raise ValueError('staged collection plan link names a different kit')
-            tree_raw = (pack / 'plan_tree.json').read_bytes()
+            tree_path = pack / 'plan_tree.json'
+            if tree_path.is_symlink():
+                raise ValueError('staged launch tree must be a regular file')
+            tree_raw = tree_path.read_bytes()
             tree = json.loads(tree_raw)
             hazard = pilot.h.read(night_plan_path)['hazard_window']
             if (_sha256(collection.read_bytes()) != actual['plan_sha256']
@@ -1241,6 +1244,19 @@ def _check_c1_packet_kit(root, packet, *, plan=None, measurement_root=None, nigh
                     or [(row['run_id'], row['config_sha256']) for row in tree['science']] !=
                        [(row['run_id'], row['config_sha256']) for row in source_plan['members']]):
                 raise ValueError('staged launch plan differs from the materialized kit')
+            members = pack / 'members'
+            if members.is_symlink():
+                raise ValueError('staged configs must be copied inside the launch kit')
+            for projected, member in zip(tree['science'], source_plan['members'], strict=True):
+                stage = member['stage_id']
+                if Path(stage).parts != (stage,):
+                    raise ValueError('materialized plan has an invalid stage ID')
+                directory = members / stage
+                config = directory / Path(member['config_path']).name
+                if (projected['config_path'] != config.relative_to(measurement_root).as_posix()
+                        or directory.is_symlink() or config.is_symlink()
+                        or _sha256(config.read_bytes()) != member['config_sha256']):
+                    raise ValueError('staged member config differs from the materialized kit')
         return actual
     except (OSError, ValueError, KeyError, TypeError, AttributeError) as exc:
         raise PacketKitMismatch(str(exc)) from exc

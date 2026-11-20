@@ -306,6 +306,21 @@ class SeriesCadenceEndToEnd(unittest.TestCase):
         self.assertEqual(calls, 0)
         self.assertTrue(any(r.startswith('series_binding: C4') for r in record['reasons']))
 
+    def test_c1_refuses_swapped_staged_config_even_with_matching_source_kit(self):
+        self.outcome('W1', captured=18)
+        packet = self.packet('C1')
+        root = self.tmp / 'swapped-stage-session'
+        session.prepare(self.measurement, root, window_id='C1')
+        view, pack = self.views[s.pack_id('C1')]
+        tree = json.loads((pack / 'plan_tree.json').read_bytes())
+        config = view / tree['science'][0]['config_path']
+        config.write_bytes(config.read_bytes() + b' ')
+        with patch('joulewise.align.apple.powermode.host_marker_path') as host:
+            with self.assertRaisesRegex(ValueError, 'packet_kit_mismatch: staged member config'):
+                session.install(root, next_arm_triage=packet)
+        host.assert_not_called()
+        self.assertEqual(self.installed, [])
+
     def test_an_unbound_packet_cannot_arm_w1_or_a_series_window(self):
         for window in ('W1', 'C1'):
             if window == 'C1':
