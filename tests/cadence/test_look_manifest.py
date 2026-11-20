@@ -113,12 +113,16 @@ class CommittedDraft(Base):
         qualified["when"]["after_desk_final"] = ["qual-01"]
         for doc, field in ((dict(control, look_id="lm-other-01"), "look_id"),
                            (dict(control, look_id="lm-interim-02", supersedes=control["look_id"]), "look_id"),
-                           (qualified, "look_kind"), (dict(control, look_kind="controls"), "look_kind")):
-            with self.subTest(field=field, look_id=doc["look_id"], kind=doc["look_kind"]):
-                candidate.write_text(json.dumps(doc))
-                result = mr.py(mini, "scripts/cadence_look_manifest.py", *args)
-                self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
-                self.assertIn(f"REFUSE {field}: the v1 validator admits only", result.stdout)
+                           (qualified, "look_kind"), (dict(control, look_kind="controls"), "look_kind"),
+                           (dict(control, look_kind=["interim"]), "look_kind"),
+                           (dict(control, look_id=control["look_id"] + "\n"), "look_id"),
+                           (dict(control, schema=control["schema"].replace(".v1", ".v2")), "schema")):
+            candidate.write_text(json.dumps(doc))
+            for repo in ([], ["--repo", mini]):       # the audit ran both spellings of the command
+                with self.subTest(field=field, look_id=doc["look_id"], kind=doc["look_kind"], repo=bool(repo)):
+                    result = mr.py(mini, "scripts/cadence_look_manifest.py", *args, *repo)
+                    self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+                    self.assertIn(f"REFUSE {field}: the v1 validator admits only", result.stdout)
 
     def test_final_refuses_filler_ids_and_digest_aliases(self):
         from tests.cadence import look_minirepo as mr
@@ -135,15 +139,30 @@ class CommittedDraft(Base):
                                   ("reserve-01", {"block_id": "f2-inst-01", "kit_sha256": digest}),
                                   ("dev-01", {"kit_sha256": digest}),
                                   ("reserve-01", {"block_id": "cl-hp-02"}),
-                                  ("reserve-01", {"block_id": "f2-stab-99"})):
+                                  ("reserve-01", {"block_id": "f2-stab-99"}),
+                                  # every registered kit is a filler wherever a block names it
+                                  ("hp-01", {"block_id": "hp-02"}),
+                                  ("hp-01", {"kit_sha256": registry["kit_sha256_by_id"]["hp-02"]}),
+                                  ("dev-02", {"kit_sha256": registry["kit_sha256_by_id"]["f2-stab-16"]}),
+                                  ("dev-01", {"kit_sha256": digest.upper()}),
+                                  (None, "f2-inst-01"), (None, "r1-partc-f0-03")):
             doc = copy.deepcopy(control)
-            next(block for block in doc["reads"]["blocks"] if block["block_id"] == block_id).update(changes)
+            if block_id is None:                  # the wait list names blocks too
+                doc["when"]["after_desk_final"].append(changes)
+            else:
+                next(block for block in doc["reads"]["blocks"] if block["block_id"] == block_id).update(changes)
             candidate.write_text(json.dumps(doc))
             for repo in ([], ["--repo", mini]):
                 with self.subTest(block=block_id, changes=changes, repo=bool(repo)):
                     result = mr.py(mini, "scripts/cadence_look_manifest.py", *args, *repo)
                     self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
                     self.assertIn("cannot reference a filler kit", result.stdout)
+        for kit_id, kit_digest in registry["kit_sha256_by_id"].items():
+            with self.subTest(registered=kit_id):
+                self.assertTrue(lm.filler_reference(kit_id) and lm.filler_reference(kit_id.upper()))
+                self.assertTrue(lm.filler_reference(None, kit_digest) and lm.filler_reference("dev-01", kit_digest))
+        for block in control["reads"]["blocks"]:
+            self.assertFalse(lm.filler_reference(block["block_id"], block["kit_sha256"]), block["block_id"])
 
     def test_the_committed_draft_validates_with_only_code_hashes_open(self):
         pending = lm.validate_manifest(draft())
