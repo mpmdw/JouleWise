@@ -12,6 +12,7 @@ from bisect import bisect_left
 from contextlib import contextmanager
 from copy import deepcopy
 from dataclasses import dataclass
+from http.client import IncompleteRead
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -149,7 +150,8 @@ class Provider:
 
     Inputs supply repo/revision, pins mapping basenames to (size, SHA-256),
     small files as (bytes, size, Git blob SHA), and fixture Limits. The
-    opener yields a context-managed read(n). The budget broker accounts for
+    opener yields a context-managed read(n). A failed read can report
+    delivered bytes in IncompleteRead.partial. The budget broker accounts for
     the work volume, including independent incomplete files.
     """
     def __init__(self, root, inputs, open_object, budget):
@@ -206,7 +208,6 @@ class Provider:
         self.pending = self.root / ".pending"
         self.worker = self.root / ".worker"
         self.journal = self.root / "journal.json"
-        self.meter = self.root / "traffic.json"
         self.store = self.root / "store.json"
 
     @property
@@ -225,36 +226,34 @@ class Provider:
         self.prompts = deepcopy(prompts)
         self.owner = self.binding.encode()
         self.records = {}
-        if self.root.exists():
-            require(self.root.is_dir() and not self.root.is_symlink(), "unsafe provider root")
-        else:
-            self.budget.admit("provider directory", dirs=1)
-            self.root.mkdir()
-            sync_dir(self.root.parent)
+        exists = os.path.lexists(self.root)
+        require(not exists or (self.root.is_dir() and not self.root.is_symlink()), "unsafe provider root")
         marker = self.root / ".owner"
-        if not marker.exists():
-            require(not any(self.root.iterdir()), "fresh provider directory is not empty")
-            self.budget.admit("provider owner", [len(self.owner)])
-            synced_write(marker, self.owner)
-            sync_dir(self.root)
-        require(regular(marker) and marker.read_bytes() == self.owner, "provider invocation mismatch")
-        if self.journal.exists():
+        if os.path.lexists(self.journal):
+            require(regular(marker) and marker.read_bytes() == self.owner, "provider invocation mismatch")
             require(regular(self.journal), "unsafe provider journal")
             self.state = decode(self.journal.read_bytes())
             require(self.state["identity"] == self.binding, "provider invocation mismatch")
+            traffic = self._traffic()
             for tag, checksum in self.state["objects"].items():
                 self.records[tag] = self._receipt(tag, checksum)
+            require(traffic["spent"] >= sum(rec["source"][3] for rec in self.records.values()),
+                    "provider traffic ledger predates committed receipts")
             plan = self.state["plan"]
             if plan:
                 require(plan["invocation"] == self.binding and plan["digest"] == digest(plan["response"])
                         and all(self.state["objects"].get(tag) == checksum
                                 for tag, checksum in plan["buffers"].items()), "committed plan binding changed")
         else:
-            require(all(path.name in {".owner", "journal.tmp"} and regular(path) for path in self.root.iterdir()),
-                    "unowned provider files before journal")
-            self.budget.admit("initial journal inventory")
-            self.journal.with_suffix(".tmp").unlink(missing_ok=True)
-            self._save(dict(identity=self.binding, objects={}, done=[], plan=None))
+            require(not exists or not any(self.root.iterdir()), "missing provider journal in nonempty root")
+            state = dict(identity=self.binding, objects={}, done=[], plan=None, traffic=dict(spent=0, reserved=0))
+            self.budget.admit("initial provider journal", [len(self.owner), len(encode(state))], dirs=int(not exists))
+            if not exists:
+                self.root.mkdir()
+                sync_dir(self.root.parent)
+            synced_write(marker, self.owner)
+            sync_dir(self.root)
+            self._save(state)
         self.budget.admit("restart inventory")
 
     def _receipt(self, tag, checksum):
@@ -280,15 +279,13 @@ class Provider:
 
     def recover(self):
         """Reconcile and reclaim only this invocation's unfinished files."""
-        for name in ("journal.tmp", "traffic.tmp", "store.tmp"):
+        for name in ("journal.tmp", "store.tmp"):
             path = self.root / name
             if regular(path):
                 path.unlink()
-        if self.meter.exists():
-            charged = self._traffic()
-            if charged["reserved"]:
-                charged = dict(spent=charged["spent"] + charged["reserved"], reserved=0)
-                self._settle_traffic(charged)
+        charged = self._traffic()
+        if charged["reserved"]:
+            self._settle_traffic(dict(spent=charged["spent"] + charged["reserved"], reserved=0))
         for folder in self.root.iterdir():
             if folder.name not in self.records and self._owned(folder):
                 shutil.rmtree(folder)
@@ -303,11 +300,13 @@ class Provider:
         return [self._source_info["revision"], obj, ordinary, size]
 
     def _traffic(self):
-        if not self.meter.exists():
-            return dict(spent=0, reserved=0)
-        require(regular(self.meter), "unsafe provider traffic journal")
-        row = decode(self.meter.read_bytes())
-        require(row.pop("identity") == self.binding, "provider traffic identity changed")
+        row = self.state.get("traffic")
+        require(isinstance(row, dict) and all(type(row.get(k)) is int and row[k] >= 0
+                                            for k in ("spent", "reserved")), "missing or invalid provider traffic ledger")
+        if row["reserved"]:
+            obj = row.get("object")
+            require(isinstance(obj, str) and obj in self._pins and row["reserved"] == self._pins[obj][0]+1,
+                    "invalid provider traffic reservation")
         return row
 
     @property
@@ -315,13 +314,9 @@ class Provider:
         row = self._traffic()
         return row["spent"] + row["reserved"]
 
-    def _traffic_bytes(self, row):
-        return encode(dict(identity=self.binding, **row))
-
     def _settle_traffic(self, row):
-        raw = self._traffic_bytes(row)
-        self.budget.admit("traffic journal replacement", [len(raw)])
-        replace_json(self.meter, raw)
+        # Source spending and view receipts share a restore boundary.
+        self._save({**self.state, "traffic": row}, "traffic journal replacement")
 
     def _reservation(self, obj):
         row = self._traffic()
@@ -335,14 +330,30 @@ class Provider:
         whole, chunk, composite = hashlib.sha256(), hashlib.sha256(), hashlib.sha256()
         pos = received = 0
         eof = False
+
+        def read(src, n):
+            nonlocal received
+            try:
+                raw = src.read(n)
+            except IncompleteRead as error:
+                if isinstance(error.partial, bytes):
+                    received += len(error.partial)
+                else:
+                    received = max(received, reservation["reserved"])
+                raise
+            if not isinstance(raw, bytes):
+                received = max(received, reservation["reserved"])
+                raise ValueError("source read must return bytes")
+            received += len(raw)
+            return raw
+
         self._settle_traffic(reservation)
         try:
             with self.open_object(obj) as src:
                 while pos < size:
                     n = min(self.limits.block, size-pos, self.limits.chunk-pos % self.limits.chunk)
-                    raw = src.read(n)
-                    received += len(raw)
-                    require(isinstance(raw, bytes) and 0 < len(raw) <= n, "short/oversize object")
+                    raw = read(src, n)
+                    require(0 < len(raw) <= n, "short/oversize object")
                     whole.update(raw)
                     chunk.update(raw)
                     visit(pos, raw)
@@ -350,9 +361,7 @@ class Provider:
                     if pos % self.limits.chunk == 0 or pos == size:
                         composite.update(chunk.digest())
                         chunk = hashlib.sha256()
-                trailing = src.read(1)
-                received += len(trailing)
-                require(isinstance(trailing, bytes) and not trailing, "trailing object bytes")
+                require(not read(src, 1), "trailing object bytes")
                 eof = True
         finally:
             self._settle_traffic(dict(spent=reservation["spent"]+received, reserved=0))
@@ -371,14 +380,14 @@ class Provider:
     def _preflight(self, obj, tag, row, sizes, event):
         require(not os.path.lexists(self.pending) and not os.path.lexists(self.root / tag), "unrecovered candidate")
         reservation = self._reservation(obj)
-        state = {**self.state, "objects": {**self.state["objects"], tag: "0"*64}}
+        settled = {**self.state, "traffic": dict(spent=reservation["spent"]+reservation["reserved"], reserved=0)}
+        state = {**settled, "objects": {**self.state["objects"], tag: "0"*64}}
         outputs = [len(self.owner), *sizes]
-        meter = max(len(self._traffic_bytes(reservation)),
-                    len(self._traffic_bytes(dict(spent=reservation["spent"]+reservation["reserved"], reserved=0))))
-        # Reservation and settlement journals can coexist after the outputs
-        # have been filled. Publication reuses the same-volume candidate inode.
-        self.budget.admit(event, [*outputs, meter, meter], dirs=1)
-        self.budget.admit("publication batch", [*outputs, meter, len(encode(row)), len(encode(state))], dirs=1)
+        reserved = {**self.state, "traffic": reservation}
+        # Count the simultaneous journal versions and entire candidate batch.
+        self.budget.admit(event, [*outputs, len(encode(reserved)), len(encode(settled))], dirs=1)
+        self.budget.admit("publication batch", [*outputs, len(encode(settled)), len(encode(row)), len(encode(state))],
+                          dirs=1)
         return reservation
 
     def _publish(self, tag, row):

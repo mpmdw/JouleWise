@@ -6,6 +6,7 @@ import sys
 from collections import Counter
 import json
 import os
+import shutil
 import struct
 import tempfile
 import unittest
@@ -13,6 +14,7 @@ from types import SimpleNamespace
 from unittest.mock import patch
 from contextlib import contextmanager
 from dataclasses import replace
+from http.client import IncompleteRead
 from pathlib import Path
 
 from joulewise.align.qwen4_gold import stream, unit_source
@@ -71,7 +73,7 @@ class Budget:
 
     def admit(self, event, sizes=(), dirs=0):
         inodes = {}
-        for path in [self.root, *self.root.rglob("*")]:
+        for path in [self.root, *self.root.rglob("*")] if self.root.exists() else ():
             st = path.lstat()
             if path.is_symlink():
                 raise ValueError("unexpected allocation symlink")
@@ -511,6 +513,73 @@ class Acceptance(unittest.TestCase):
         self.assertEqual(self.p.impl.bytes_charged, 589+645+590)
         self.assertEqual(self.feed.visits, [[A, 589], [B, 645]])
 
+    def test_incomplete_restore_preserves_spending_with_committed_catalogues(self):
+        self.limits = replace(self.limits, quota=1235)
+        self.fresh("restore-quota")
+        self.discover()
+        restored = self.root.parent / "incomplete-backup"
+        shutil.copytree(self.root, restored, ignore=shutil.ignore_patterns("traffic.json"))
+        reopened = Provider(restored, self.inputs, self.feed.open, Budget(restored), self.limits)
+        reopened.discover(A)
+        reopened.discover(B)
+        self.assertEqual(reopened.impl.bytes_charged, 1234)
+        with self.assertRaisesRegex(ValueError, "source quota"):
+            reopened.project("needs-visit", A, [W0], "u0")
+        self.assertEqual(self.feed.visits, [[A, 589], [B, 645]])
+
+    def test_missing_or_reset_traffic_record_cannot_authorize_reuse(self):
+        self.discover()
+        journal = self.p.impl.journal
+        state = json.loads(journal.read_bytes())
+        for traffic, message in [(None, "invalid provider traffic ledger"),
+                                 ({"spent": 0, "reserved": 0}, "predates committed receipts")]:
+            with self.subTest(traffic=traffic):
+                restored = {k: v for k, v in state.items() if k != "traffic"}
+                if traffic is not None:
+                    restored["traffic"] = traffic
+                journal.write_bytes(unit_source.encode(restored))
+                with self.assertRaisesRegex(ValueError, message):
+                    self.start()
+        self.assertEqual(self.feed.visits, [[A, 589], [B, 645]])
+
+    def test_missing_authoritative_ledger_does_not_start_fresh(self):
+        source = self.p.impl
+        source._settle_traffic(source._reservation(A))
+        source.journal.unlink()
+        with self.assertRaisesRegex(ValueError, "provider journal"):
+            self.start()
+        self.assertEqual(self.feed.visits, [])
+
+    def test_incomplete_read_exception_charges_partial_bytes(self):
+        for phase, expected in (("first read", 7), ("EOF probe", 590)):
+            with self.subTest(phase=phase):
+                self.fresh(phase)
+                delivered = bytearray()
+
+                @contextmanager
+                def source(name):
+                    def read(n):
+                        remaining = self.raw[name][len(delivered):]
+                        if phase == "first read" or not remaining:
+                            partial = remaining[:7] if remaining else b"!"
+                            delivered.extend(partial)
+                            raise IncompleteRead(partial)
+                        block = remaining[:n]
+                        delivered.extend(block)
+                        return block
+                    yield SimpleNamespace(read=read)
+
+                interrupted = Provider(self.root, self.inputs, source, self.budget, self.limits)
+                with self.assertRaises(IncompleteRead):
+                    interrupted.discover(A)
+                self.assertEqual(len(delivered), expected)
+                self.assertEqual(interrupted.impl.bytes_charged, expected)
+                self.start()
+                self.assertEqual(self.p.impl.bytes_charged, expected)
+                self.assertEqual(self.p.state["objects"], {})
+                self.p.discover(A)
+                self.assertEqual(self.p.impl.bytes_charged, expected + 589)
+
     def test_damaged_projection_requires_another_authenticated_visit(self):
         self.discover()
         self.p.project("keep", A, [W0], "u0")
@@ -557,10 +626,10 @@ class DriverTests(unittest.TestCase):
         self.env.start()
         self.addCleanup(self.env.stop)
 
-    def make_driver(self, resume=False, *, work=None, runtimes=RUNTIMES, **updates):
+    def make_driver(self, resume=False, *, work=None, runtimes=RUNTIMES, budget=None, **updates):
         work = work or self.work
         work.mkdir(exist_ok=True)
-        budget = Budget(work, cap=2*1024**2)
+        budget = budget if budget is not None else Budget(work, cap=2*1024**2)
         provider = unit_source.Provider(work / "unit-source", bound(self.inputs, TOY_LIMITS),
                                         self.feed.open, budget)
         args = dict(work=work, min_free_gb=25, max_staging_gb=12, max_gb=4, timeout=60,
@@ -571,6 +640,38 @@ class DriverTests(unittest.TestCase):
         args.update(updates)
         with patch.object(stream, "HubSource", side_effect=AssertionError("hub contacted")):
             return stream.StreamDriver(SimpleNamespace(**args), runtimes=runtimes, unit_source=provider)
+
+    def test_driver_prices_large_provenance_before_writing(self):
+        for i in range(129):
+            name = f"scalar-{i:03}.safetensors"
+            tensor = f"model.layers.0.scalar_{i:03}"
+            header = json.dumps({tensor: dict(dtype="F32", shape=[], data_offsets=[0, 4])},
+                                separators=(",", ":")).encode()
+            header += b" " * (-len(header) % 8)
+            raw = struct.pack("<Q", len(header)) + header + struct.pack("<f", 0)
+            self.feed.objects[name] = raw
+            self.inputs["pins"][name] = [len(raw), hashlib.sha256(raw).hexdigest()]
+            self.inputs["weight_map"][tensor] = name
+
+        work = self.work
+        work.mkdir()
+        broker = Budget(work, cap=36_864)
+        with self.assertRaisesRegex(ValueError, "allocation cap"):
+            self.make_driver(budget=broker)
+        exact = next(need for event, _, need in broker.events if event == "fixture initialization files")
+        for cap, free, error in ((exact-1, FLOOR+exact, "allocation cap"),
+                                 (exact, FLOOR+exact-1, "free floor")):
+            with self.subTest(error=error):
+                broker = Budget(work, cap=cap, free=free)
+                with self.assertRaisesRegex(ValueError, error):
+                    self.make_driver(budget=broker)
+                self.assertTrue(all(live <= cap for _, live, _ in broker.events))
+                self.assertFalse((work / "parity").exists())
+                self.assertFalse((work / "manifest.json").exists())
+        broker = Budget(work, cap=exact)
+        self.make_driver(budget=broker)
+        self.assertEqual(broker.admit("initialized fixture"), exact)
+        self.assertEqual(self.feed.visits, [])
 
     def harness(self, driver, *, interrupt=False):
         import numpy as np

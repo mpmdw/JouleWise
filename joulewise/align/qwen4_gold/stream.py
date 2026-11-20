@@ -12,11 +12,11 @@ import sys
 from contextlib import contextmanager
 from pathlib import Path
 
-from .core import (IndexedCheckpoint, REFERENCE_VERSION, TraceFile, digest,
+from .core import (GATE_AMENDMENTS, SCHEMA, TOLERANCES, IndexedCheckpoint, REFERENCE_VERSION, TraceFile, digest,
                    file_stamp, sha256, write_json)
 from .runner import Harness, execute, failure_summary, load_prompts, runtime_identity, runtime_version
 from .stream_ple import BUFFER_SUFFIXES, copy_tensors, extract_part, header, is_table, valid_entry
-from .unit_source import Provider, encode, regular, replace_json, sync_dir
+from .unit_source import BLOCK, Provider, encode, regular, replace_json, sync_dir
 
 REPO_ID = "Qwen/Qwen3.8-Flash-Next"
 REVISION = "de4b8e4d43b917e7706784d8bb445c9af86a3540"
@@ -169,6 +169,23 @@ def storage_plan(plan, metadata, weight_map):
             "peak_unit": peak_unit, "note": "excludes traces, sparse rows, metadata and optional conversion output"}
 
 
+class FixtureHarness(Harness):
+    """Prepare the existing case harness without writing any initial files."""
+
+    def __init__(self, args, checkpoint, identity, prompts, runtimes, invocation):
+        self.args, self.checkpoint, self.prompts = args, checkpoint, prompts
+        self.out = Path(args.output).resolve()
+        self.identity, self.rows = identity, {}
+        self.adapter_dependencies = {str(Path(p).resolve()): sha256(p) for p in args.adapter_dependency}
+        sources = {p.name: sha256(p) for p in Path(__file__).parent.glob("*.py")}
+        self.fingerprint = digest([SCHEMA, invocation, sources])
+        self.provenance = encode({"schema": SCHEMA, "fingerprint": self.fingerprint,
+                                  "checkpoint": identity, "prompts": prompts, "tolerances": TOLERANCES,
+                                  "gate_amendments": GATE_AMENDMENTS, "adapter": str(args.mlx_module),
+                                  "adapter_dependencies": self.adapter_dependencies,
+                                  "runtimes": runtimes, "scope": "prefill only"})
+
+
 class StreamDriver:
     def __init__(self, args, source=None, runtimes=None, *, unit_source=None):
         self.args = args
@@ -182,6 +199,9 @@ class StreamDriver:
                 raise ValueError("select one bound offline fixture provider")
             if unit_source.root != self.work / "unit-source":
                 raise ValueError("fixture provider must live under work/unit-source")
+            if not self.work.exists():
+                unit_source.budget.admit("fixture work directory", dirs=sum(
+                    not p.exists() for p in (self.work, *self.work.parents)))
         self.work.mkdir(parents=True, exist_ok=True)
         if unit_source is not None:
             with self.driver_lock():
@@ -191,7 +211,10 @@ class StreamDriver:
 
     @contextmanager
     def driver_lock(self):
-        with (self.work / "driver.lock").open("a") as lock:
+        path = self.work / "driver.lock"
+        if self.unit_source and not os.path.lexists(path):
+            self.unit_source.budget.admit("fixture driver lock", [1])
+        with path.open("a") as lock:
             try:
                 fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
             except BlockingIOError as error:
@@ -240,8 +263,9 @@ class StreamDriver:
                                      sha256(args.mlx_module), {p: sha256(p) for p in args.adapter_dependency}])
             if previous is not None and previous["fixture_source"] != fixture_source:
                 raise ValueError("stream invocation changed; use a fresh work directory")
-            provider.budget.admit("fixture provenance", provider.limits.planner_sizes, provider.limits.planner_dirs)
-        self.harness = Harness(args, self.checkpoint, identity, self.prompts, self.runtimes)
+            self.harness = FixtureHarness(args, self.checkpoint, identity, self.prompts, self.runtimes, fixture_source)
+        else:
+            self.harness = Harness(args, self.checkpoint, identity, self.prompts, self.runtimes)
         self._verified = {}
         rerun = self.rerun_identity() if getattr(args, "rerun_from", None) else None
         fp = digest([STREAM_SCHEMA, self.harness.fingerprint, args.min_free_gb, args.max_staging_gb,
@@ -261,10 +285,71 @@ class StreamDriver:
                           "units": {}, "chain": {}, "ple": {"entries": {}}}
             if provider:
                 self.state.update(fixture_source=fixture_source, fixture_chain=self.fixture_chain)
-            if rerun:
-                self.adopt_rerun(rerun)
-            self.save()
+            else:
+                if rerun:
+                    self.adopt_rerun(rerun)
+                self.save()
+        if provider:
+            self.initialize_fixture_files(previous is None, rerun)
         self.selected = set(self.state["rerun"]["units"]) if "rerun" in self.state else None
+
+    def initialize_fixture_files(self, fresh, rerun):
+        provenance = self.harness.out / "provenance.json"
+        if provenance.parent != self.work / "parity":
+            raise ValueError("unsafe fixture provenance directory")
+        outputs, copies = {}, []
+        if os.path.lexists(provenance):
+            if not regular(provenance) or provenance.read_bytes() != self.harness.provenance:
+                raise ValueError("fixture provenance changed")
+        else:
+            outputs[provenance] = self.harness.provenance
+        if fresh:
+            if rerun:
+                for row, target in self.rerun_targets(rerun):
+                    source = Path(row["source"])
+                    copies.append((source, target, source.stat().st_size, row["sha256"]))
+                self.record_rerun(rerun)
+            outputs[self.path] = encode(self.state)
+        paths = [*outputs, *(target for _, target, _, _ in copies)]
+        if not paths:
+            return
+        parents = {parent for path in paths for parent in path.parents if self.work in parent.parents}
+        if any(parent.is_symlink() for parent in parents):
+            raise ValueError("unsafe fixture initialization directory")
+        dirs = sum(not parent.exists() for parent in parents)
+        sizes = [*(len(raw) for raw in outputs.values()), *(size for _, _, size, _ in copies)]
+        self.unit_source.budget.admit("fixture initialization files", sizes, dirs=dirs)
+        for source, target, size, checksum in copies:
+            target.parent.mkdir(parents=True, exist_ok=True)
+            self.copy_fixture_input(source, target, size, checksum)
+        for path, raw in outputs.items():
+            path.parent.mkdir(parents=True, exist_ok=True)
+            replace_json(path, raw)
+
+    @staticmethod
+    def copy_fixture_input(source, target, size, checksum):
+        # Keep a changed predecessor within the size admitted for this copy.
+        candidate = target.with_suffix(".tmp")
+        with source.open("rb") as inp, candidate.open("xb") as out:
+            try:
+                remaining = size
+                while remaining:
+                    block = inp.read(min(BLOCK, remaining))
+                    if not block:
+                        raise ValueError("reference chain input shrank while copying")
+                    out.write(block)
+                    remaining -= len(block)
+                if inp.read(1):
+                    raise ValueError("reference chain input grew while copying")
+                out.flush()
+                os.fsync(out.fileno())
+                if sha256(candidate) != checksum:
+                    raise ValueError("reference chain input changed while copying")
+            except BaseException:
+                candidate.unlink()
+                raise
+        candidate.replace(target)
+        sync_dir(target.parent)
 
     def save(self):
         if getattr(self, "unit_source", None):
@@ -554,22 +639,22 @@ class StreamDriver:
         return {"old_work": old_work, "old": old, "units": units, "inputs": inputs,
                 "identity": {"source_fingerprint": old["fingerprint"], "units": units, "inputs": inputs}}
 
-    def adopt_rerun(self, rerun):
+    def rerun_targets(self, rerun):
         directory = self.work / "rerun-inputs"
-        if self.unit_source:
-            sizes = [Path(row["source"]).stat().st_size for keys in rerun["inputs"].values() for row in keys.values()]
-            if sizes:
-                self.unit_source.budget.admit("fixture rerun chain", sizes, 1 + len(rerun["inputs"]))
         for previous, keys in rerun["inputs"].items():
             for key, row in keys.items():
                 target = directory / previous / (key.replace(":", "-") + ".npy")
-                target.parent.mkdir(parents=True, exist_ok=True)
-                shutil.copyfile(row["source"], target)
-                if sha256(target) != row["sha256"]:
-                    raise ValueError("reference chain input changed while copying")
                 row["path"] = str(target)
+                yield row, target
+
+    def adopt_rerun(self, rerun):
+        for row, target in self.rerun_targets(rerun):
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copyfile(row["source"], target)
+            if sha256(target) != row["sha256"]:
+                raise ValueError("reference chain input changed while copying")
         old_ple = rerun["old"].get("ple", {})
-        if "plans" in old_ple and not self.unit_source:
+        if "plans" in old_ple:
             # The official sparse PLE rows already extracted for these prompts:
             # copied byte-checked; prepare_ple re-binds them to the pinned shards.
             store = self.work / "sparse-ple"
@@ -579,6 +664,9 @@ class StreamDriver:
                     raise ValueError(f"--rerun-from sparse PLE rows changed: {tensor}")
                 shutil.copyfile(rerun["old_work"] / "sparse-ple" / entry["file"], store / entry["file"])
             self.state["ple"] = {k: v for k, v in old_ple.items() if k != "source_shards"}
+        self.record_rerun(rerun)
+
+    def record_rerun(self, rerun):
         self.state["rerun"] = {"source_work": str(rerun["old_work"]), "source_fingerprint": rerun["old"]["fingerprint"],
                                "units": rerun["units"], "inputs": rerun["inputs"]}
 
