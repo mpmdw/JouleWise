@@ -239,6 +239,123 @@ class ManifestTests(unittest.TestCase):
                 s.require_admission(root, self.manifest)
 
 
+class PostW1SeriesAdmissionTests(unittest.TestCase):
+    PRE_W1_EVIDENCE = ('scorer_fit_contract', 'seed_allocation', 'r13_r14_gate', 'paired_build_agreement')
+    EVIDENCE = (*PRE_W1_EVIDENCE, 'w1_clearance')
+
+    def setUp(self):
+        temp = tempfile.TemporaryDirectory(prefix='jw-series-admission-')
+        self.addCleanup(temp.cleanup)
+        self.root = Path(temp.name)
+        self.manifest = s.candidate()
+        self.manifest_path = write(self.root, s.MANIFEST, self.manifest)
+        self.w1_collection_path = write(self.root, w1.KIT / 'collection_plan.json',
+                                        {'fixture': 'SYNTHETIC-ONLY', 'window_id': 'W1'})
+
+        evidence = {}
+        for name in self.EVIDENCE:
+            path = write(self.root, f'evidence/{name}.json', {
+                'obligation': name,
+                'verdict': {'accepted': 'pass', 'rejected': 'fail'},
+            })
+            evidence[name] = ref(path, '/verdict/accepted')
+
+        self.receipt = dict(
+            schema=s.ADMISSION_SCHEMA,
+            manifest_sha256=s.sha(self.manifest_path.read_bytes()),
+            w1_collection_sha256=s.sha(self.w1_collection_path.read_bytes()),
+            lead_signature='lead: SYNTHETIC-ONLY 2026-11-19',
+            choices={name: deepcopy(self.manifest[name])
+                     for name in ('d_mapping', 'test_windows', 'test_shape', 'sentinel')},
+            evidence=evidence,
+        )
+        self.write_receipt(self.receipt)
+
+    def write_receipt(self, receipt):
+        write(self.root, s.ADMISSION, receipt)
+
+    def test_intact_receipt_admits_c1(self):
+        self.assertEqual(s.require_admission(self.root, self.manifest, post_w1=True), self.receipt)
+
+    def test_c1_refuses_each_missing_pre_w1_descriptor(self):
+        for name in self.PRE_W1_EVIDENCE:
+            with self.subTest(obligation=name):
+                receipt = deepcopy(self.receipt)
+                del receipt['evidence'][name]
+                self.write_receipt(receipt)
+                with self.assertRaisesRegex(ValueError, 'evidence needs a path, SHA-256 and JSON pointer'):
+                    s.require_admission(self.root, self.manifest, post_w1=True)
+
+    def test_c1_refuses_each_stale_evidence_digest(self):
+        for name in self.EVIDENCE:
+            with self.subTest(obligation=name):
+                path = Path(self.receipt['evidence'][name]['path'])
+                raw = path.read_bytes()
+                path.write_bytes(raw + b'\n')
+                try:
+                    with self.assertRaisesRegex(ValueError, f'series evidence bytes changed: .*{path.stem}'):
+                        s.require_admission(self.root, self.manifest, post_w1=True)
+                finally:
+                    path.write_bytes(raw)
+
+    def test_c1_refuses_existing_fail_leaf(self):
+        receipt = deepcopy(self.receipt)
+        receipt['evidence']['r13_r14_gate']['pointer'] = '/verdict/rejected'
+        self.write_receipt(receipt)
+        with self.assertRaisesRegex(ValueError, 'series admission pending: r13_r14_gate'):
+            s.require_admission(self.root, self.manifest, post_w1=True)
+
+    def test_c1_refuses_broken_pointer(self):
+        receipt = deepcopy(self.receipt)
+        missing_leaf = 'missing_synthetic_verdict'
+        receipt['evidence']['seed_allocation']['pointer'] = '/verdict/' + missing_leaf
+        self.write_receipt(receipt)
+        # The current resolver surfaces a lookup error for a missing key.
+        with self.assertRaises((LookupError, ValueError)) as raised:
+            s.require_admission(self.root, self.manifest, post_w1=True)
+        self.assertIn(missing_leaf, str(raised.exception))
+
+    def test_c1_refuses_w1_collection_byte_drift(self):
+        self.w1_collection_path.write_bytes(self.w1_collection_path.read_bytes() + b'\n')
+        with self.assertRaisesRegex(ValueError, 'series admission belongs to another W1 configuration'):
+            s.require_admission(self.root, self.manifest, post_w1=True)
+
+    def test_c1_refuses_manifest_byte_drift(self):
+        self.manifest_path.write_bytes(self.manifest_path.read_bytes() + b'\n')
+        with self.assertRaisesRegex(ValueError, 'series requires exact-byte lead admission'):
+            s.require_admission(self.root, self.manifest, post_w1=True)
+
+    def test_c1_refuses_missing_signature(self):
+        receipt = deepcopy(self.receipt)
+        del receipt['lead_signature']
+        self.write_receipt(receipt)
+        with self.assertRaisesRegex(ValueError, 'series requires exact-byte lead admission'):
+            s.require_admission(self.root, self.manifest, post_w1=True)
+
+    def test_c1_refuses_each_changed_choice(self):
+        changes = {
+            'd_mapping': 'SYNTHETIC-ONLY changed mapping',
+            'test_windows': 4,
+            'test_shape': 'SYNTHETIC-ONLY changed shape',
+            'sentinel': dict(self.receipt['choices']['sentinel'], source='SYNTHETIC-ONLY changed source'),
+        }
+        for name, changed in changes.items():
+            with self.subTest(choice=name):
+                receipt = deepcopy(self.receipt)
+                receipt['choices'][name] = changed
+                self.write_receipt(receipt)
+                with self.assertRaisesRegex(ValueError, 'lead admission must explicitly accept'):
+                    s.require_admission(self.root, self.manifest, post_w1=True)
+
+    def test_w1_clearance_omission_only_admits_w1(self):
+        receipt = deepcopy(self.receipt)
+        del receipt['evidence']['w1_clearance']
+        self.write_receipt(receipt)
+        self.assertEqual(s.require_admission(self.root, self.manifest, post_w1=False), receipt)
+        with self.assertRaisesRegex(ValueError, 'evidence needs a path, SHA-256 and JSON pointer'):
+            s.require_admission(self.root, self.manifest, post_w1=True)
+
+
 class PacketTests(unittest.TestCase):
     def setUp(self):
         self.tmp = tempfile.TemporaryDirectory()
