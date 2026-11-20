@@ -1067,16 +1067,11 @@ class TwinThroughCLI(unittest.TestCase):
         ledger_doc = {"schema": M.LOOK_LEDGER_SCHEMA, "looks": [row]}
         ledger.write_bytes(C.dump(ledger_doc))
         MR.git_commit(self.mini, "register generated stage-1 inputs")
-        inputs_commit = MR.git(self.mini, "rev-parse", "HEAD").stdout.strip()
         stage1 = [arg for arg in self.stage1_args if arg != "--allow-draft"] + ["--ledger-ref", "origin/main"]
         committed_stage1 = self.root / "committed-stage1.json"
         control = MR.py(self.mini, "scripts/cadence_look_run.py", *stage1, "--out", committed_stage1)
         self.assertEqual(control.returncode, 0, control.stderr)
         stage1_sha = digest(committed_stage1.read_bytes())
-        row.update(status="stage1_committed", stage1_sha256=stage1_sha)
-        ledger.write_bytes(C.dump(ledger_doc))
-        MR.git_commit(self.mini, "register generated stage-1 output")
-        execution_commit = MR.git(self.mini, "rev-parse", "HEAD").stdout.strip()
         stage2 = ["stage2", "--stage1", committed_stage1, "--stage1-sha256", stage1_sha, "--manifest", self.manifest,
                   "--ledger-ref", "origin/main", "--custody", self.source]
 
@@ -1101,20 +1096,23 @@ class TwinThroughCLI(unittest.TestCase):
             ("align_tool_1\u0662_0", {}, "invalid writer phase"),
             ("align_tool_0_1\u0662", {}, "invalid writer phase"),
         ]
-        for label, mutation, reason in cases:
-            with self.subTest(label=label):
-                if type(mutation) is bytes:
-                    row = json.loads(original)
-                    row.pop("rc", None)
-                    receipt.write_bytes(b"{" + mutation + b"," + C.dump(row)[1:])
-                else:
-                    receipt.write_bytes(C.dump(dict(json.loads(original), **mutation)))
-                phase = "not_a_writer_phase" if label == "unknown phase" else label
-                events.write_bytes(original_events + (C.dump({"event_type": "phase_start", "phase": phase,
-                                                              "timestamp_s": 1, "metadata": {}})
-                                                      if reason == "invalid writer phase" else b""))
-                for commit, args in ((inputs_commit, [*stage1, "--out", out]), (execution_commit, stage2)):
-                    MR.git(self.mini, "checkout", "-q", "--detach", commit)
+        for args in ([*stage1, "--out", out], stage2):
+            if args[0] == "stage2":
+                row.update(status="stage1_committed", stage1_sha256=stage1_sha)
+                ledger.write_bytes(C.dump(ledger_doc))
+                MR.git_commit(self.mini, "register generated stage-1 output")
+            for label, mutation, reason in cases:
+                with self.subTest(stage=args[0], label=label):
+                    receipt_doc = json.loads(original)
+                    if type(mutation) is bytes:
+                        receipt_doc.pop("rc", None)
+                        receipt.write_bytes(b"{" + mutation + b"," + C.dump(receipt_doc)[1:])
+                    else:
+                        receipt.write_bytes(C.dump(dict(receipt_doc, **mutation)))
+                    phase = "not_a_writer_phase" if label == "unknown phase" else label
+                    events.write_bytes(original_events + (C.dump({"event_type": "phase_start", "phase": phase,
+                                                                  "timestamp_s": 1, "metadata": {}})
+                                                          if reason == "invalid writer phase" else b""))
                     with cli_fixture.spy_opens() as opened:
                         code, stdout, stderr = cli_fixture._cli_subprocess(args, repo=self.mini,
                                                                           extra={"host_probe": UUID_LINE,
@@ -1125,4 +1123,4 @@ class TwinThroughCLI(unittest.TestCase):
                     self.assertEqual(cli_fixture.LAST_RUN["twin_launches"], 0)
                     self.assertFalse([name for name in opened if "/hazards/meter/" in name or Path(name).name in
                                       ("power_trace.csv", "rich_telemetry.jsonl", "powermetrics.plist")])
-                self.assertFalse(out.exists() or private.exists() or (public / "PUBLIC.json").exists())
+                    self.assertFalse(out.exists() or private.exists() or (public / "PUBLIC.json").exists())
