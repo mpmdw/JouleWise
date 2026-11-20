@@ -989,8 +989,10 @@ def _stage1(a, stack):
         if not isinstance(roster, list) or not all(isinstance(s, dict) and isinstance(s.get("span_id"), str) for s in roster):
             raise F.LookInputError("roster: not a list of spans")
         staging = stage_custody(a, roster)
-        # RL-194: before any roster file is read, every file of every roster span equals its pin
-        _, pins_sha = admit_custody(a, [span["span_id"] for span in roster], span_dirs(a.custody, a.span_dir), stack)
+        # RL-194: before any roster file is read, every file of every roster span equals its pin. Stage 1 records
+        # nothing of the pin list: its output stays a function of time fields and operational files alone, and a
+        # committed run's manifest hash already names the list.
+        admit_custody(a, [span["span_id"] for span in roster], span_dirs(a.custody, a.span_dir), stack)
         rules34 = _json(a.rules_3_4)
         if ruled and not a.allow_draft:
             old_input, old_ruled = superseded_source(a, row)
@@ -1020,8 +1022,7 @@ def _stage1(a, stack):
         if a.write_input:
             with open(a.write_input, "wb") as f:
                 f.write(data)
-        extra = {"roster_sha256": sha256_file(a.roster), "rules_3_4_sha256": sha256_file(a.rules_3_4),
-                 "custody_pins_sha256": pins_sha}
+        extra = {"roster_sha256": sha256_file(a.roster), "rules_3_4_sha256": sha256_file(a.rules_3_4)}
     if a.allow_draft and look_input.get("synthetic") is not True:
         raise F.LookInputError("--allow-draft runs on synthetic input only (Mythos N2)")
     out = F.stage1(look_input, input_sha, code_hashes())    # RL-172a's soak-retry print is level R's (F.stage1)

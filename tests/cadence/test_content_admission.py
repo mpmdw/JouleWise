@@ -110,11 +110,11 @@ class Stage1(_Copy):
                                   "--out", out, "--custody-pins", pins or self.pins, *extra])
         return rc, err, out
 
-    def test_the_pinned_custody_is_admitted_chained_to_its_checks_and_recorded(self):
+    def test_the_pinned_custody_is_admitted_and_chained_to_its_checks(self):
         rc, err, out = self.stage1("--run-state", self.run_state)
         self.assertEqual(rc, 0, err)
-        recorded = json.loads(out.read_bytes())["code_sha256"]["input:custody_pins_sha256"]
-        self.assertEqual(recorded, hashlib.sha256(self.pins.read_bytes()).hexdigest())
+        # stage 1's output carries nothing of the pin list: it must not vary with the bytes of an energy file
+        self.assertFalse([key for key in json.loads(out.read_bytes())["code_sha256"] if "pins" in key])
         served = TLR.LAST_RUN["served"]
         self.assertIn(f"{self.ids[0]}/runner_receipt.json", served)          # the stage parsed the verified bytes
         self.assertTrue(protected(served))                                   # the time fields of the energy files too
