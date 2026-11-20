@@ -916,10 +916,111 @@ class WallEvidenceWorld(World):
         return refs
 
 
+class TerminalInstrumentWorld(WallEvidenceWorld):
+    # RL-190 §3.1. The cold pass lists every drop separately from receipt-backed exclusions.
+    excluded = {"f2-inst-01/L001": "loaded", "f2-inst-01/L011": "short",
+                "f2-inst-01/L012": "incomplete"}
+
+    def named(self, name, path, doc):
+        if name == "host_chain":
+            self.declare_unrun_positions()
+        if name == "cold":
+            doc = dict(doc, dropped=self.dropped, not_qualified=self.excluded)
+        super().named(name, path, doc)
+
+    def declare_unrun_positions(self):
+        # RL-190 §3.1. Each typed lead item binds one absent position and the final queue
+        # record that corroborates it. Both are committed before the close snapshot.
+        keys = sorted(row["key"] for row in self.rows if "drop" in row)
+        self.dropped = dict.fromkeys(keys, "queue_retired")
+        queue_path = "ops/drop-evidence/final-queue.json"
+        queue = wire(dict(queue_id="invented-instrument-queue", final=True, unrun=keys))
+        put(self.repo / queue_path, queue)
+        items = []
+        for number, key in enumerate(keys, start=900002):
+            header = dict(schema="joulewise.run_state_item.v1", owner="lead", number=number,
+                          issued_epoch_s=1800000000, expires_epoch_s=None,
+                          status="ISSUED", sets=[], supersedes=[])
+            items.append(f"{number}. **Invented terminal declaration for {key}.**\n\n"
+                         f"```item\n{json.dumps(header, sort_keys=True)}\n```\n\n"
+                         f"The lead declares {key} dropped:queue_retired. No member exists or will exist. "
+                         f"Evidence {queue_path} sha256={sha(queue)}.\n")
+            put(self.repo / "drops" / (key + ".json"),
+                dict(key=key, status="dropped", reason="queue_retired", authority="lead",
+                     typed_item_ref={"path": "RUN_STATE.md", "number": number}, queue=queue_path))
+        state = ["<!-- RUN_STATE TYPED ITEMS: synthetic lead decisions -->", *reversed(items),
+                 "<!-- RUN_STATE LEGACY ITEMS below: prose, not typed; cutover 900002 -->"]
+        put(self.repo / "RUN_STATE.md", ("\n".join(state) + "\n").encode())
+
+
 def instrument_happy(self, look):
-    # RL-190 §3.2, resolver §1. Equality is in budget, including on excluded receipts.
-    with patch.object(self, "world", partial(WallEvidenceWorld, self.base)):
-        happy(self, look)
+    # RL-190 §§3.1–3.2. The 36 terminal rows include five receipts with wall evidence.
+    # The provisional reason order puts incomplete before unreleased on the last receipt.
+    w = TerminalInstrumentWorld(self.base, look)
+    rc, out, err, events = invoke(w, "stage1")
+    self.assertEqual((rc, out, err), (0, b"", b""))
+    self.assertFalse(any(kind == "open" for kind, _ in events))
+    doc = read(w.stage)
+    dropped = "dropped:queue_retired"
+    expected = {key: dropped for key in w.dropped}
+    expected.update({key: "not_qualified:" + reason for key, reason in w.excluded.items()})
+    expected.update(dict.fromkeys(w.good, "qualified"))
+    self.assertEqual(len(w.dropped), 31)
+    self.assertEqual(doc["counts"], {"n_legs": 2})
+    self.assertEqual({key: row["disposition"] for key, row in doc["positions"].items()}, expected)
+    self.assertEqual(doc["by_kit"], {
+        "f2-inst-01": {dropped: 9, "not_qualified:loaded": 1, "not_qualified:short": 1,
+                      "not_qualified:incomplete": 1},
+        "f2-inst-02": {dropped: 11, "qualified": 1},
+        "f2-inst-03": {dropped: 11, "qualified": 1},
+    })
+    for key, (op, _, _, _) in w.records.items():
+        self.assertIs(doc["positions"][key]["loaded_flag"], op["loaded_flag"])
+    w.bind()
+    self.success(w)
+    self.scientific(w)
+
+
+def invalid_drop_evidence(self, source, defect):
+    # RL-190 §3.1. Mutate one fact of a corroborated queue or closed-span drop before sealing.
+    from test_desc_looks_rl190 import AsRun, SOLO, stage, typed_item
+
+    class InvalidDrop(AsRun):
+        def drop(world, key, row):
+            super().drop(key, row)
+            declaration = read(world.repo / row["drop"])
+            path = declaration[source]
+            witness_file = world.repo / path
+            witness = read(witness_file)
+            reason = declaration["reason"]
+            if defect == "missing_file":
+                witness_file.unlink()
+                return
+            if defect == "nonfinal_queue":
+                witness["final"] = False
+            elif defect == "open_span":
+                witness["closed"] = False
+            elif defect == "wrong_kit_digest":
+                witness["kit_sha256"] = "0" * 64
+            elif defect == "span_names_member":
+                witness["member_legs"] = [key.split("/")[1]]
+            put(witness_file, witness)
+            digest = sha(wire(witness))
+            if defect == "item_wrong_digest":
+                digest = "0" * 64
+            elif defect == "item_wrong_path":
+                path = "ops/drop-evidence/other.json"
+                put(world.repo / path, witness)
+            elif defect == "item_wrong_reason":
+                reason = "ended_without_member"
+            item = typed_item(key, reason, path, digest)
+            if defect == "item_wrong_owner":
+                item = item.replace(b'"owner":"lead"', b'"owner":"magistrate"')
+            put(world.repo / "RUN_STATE.md", item)
+
+    w = InvalidDrop(self.base, scenario="drop", target=SOLO, defect="span" if source == "receipt" else "queue")
+    stage(self, w, allowed=False)
+    self.assertFalse(w.private.exists() or w.public.exists())
 
 
 def happy(self,look):
@@ -1451,6 +1552,11 @@ add("lm_stab_lock_coalesces",coalescence)
 add("lm_stab_02_early_lock_one_date",early_lock,1)
 add("lm_stab_02_early_lock_thirteen_dates",early_lock,13)
 add("lm_inst_01_missing_wall_evidence_refuses",missing_wall_evidence)
+for source, defects in (("queue", ("missing_file", "nonfinal_queue", "item_wrong_owner",
+                                   "item_wrong_reason", "item_wrong_path", "item_wrong_digest")),
+                        ("receipt", ("missing_file", "open_span", "wrong_kit_digest", "span_names_member"))):
+    for defect in defects:
+        add(f"lm_inst_01_drop_{source}_{defect}_refuses", invalid_drop_evidence, source, defect)
 add("lm_inst_01_edge_hand_table_exact",exact_edges)
 add("lm_inst_01_hand_table_exact_zero_guard", hand_table_guard)
 for i, key in enumerate(HAND_TABLE_LEGS):

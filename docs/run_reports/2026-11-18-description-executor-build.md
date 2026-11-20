@@ -1144,3 +1144,45 @@ stack. The governing-pin comparison on the combined base remains
 pending. The prior hosted run concluded with four failed shards.
 The draft PR will carry CI for the v2 head.
 [Previous hosted CI](https://github.com/mpmdw/JouleWise/actions/runs/44755879602) · [Owner PR #795](https://github.com/mpmdw/JouleWise/pull/795)
+
+## 2026-11-20 independent suite v3 and terminal-evidence replay
+
+The worktree, upstream, and draft PR #868 agreed at
+`c0b1b75efdd368c1fa03c2a957bfe9b629a60fc7` at intake. The four suite
+modules, design archive, and independent edge ruling were copied from
+v3 and checked against its six SHA-256 entries. Only
+`test_desc_looks_acceptance.py` has new bytes. Its digest is
+`9a3157558f6924428c5abccad2751d7cc52a12540e8ca7a5f68f4b184f2abdef`.
+The freeze collects 16,912 methods.
+[Freeze pointer](/Volumes/JW-EXT/scratch/desc-suites-current-v3.md) · [Hash manifest](/Volumes/JW-EXT/scratch/astra-desc-suite-amend3/v3/SUITE.sha256)
+
+| Verification | Result |
+| --- | --- |
+| Instrument positive, stage 1 | **PASS**. The frozen case reached stage 2. The observed stage-1 run exited 0, opened no scoring files, and accounted for 36 positions. Two qualified, three were excluded, and 31 were `dropped:queue_retired`. |
+| Ten new terminal-evidence refusals | **PASS**. Every frozen refusal case passed. |
+| Early-lock routing | **PASS through the reservation attempt**. The reversed `01` route refuses. `02` reaches one observed attempt after stage-1 binding at one and thirteen qualified dates. The one-date builder regression verifies `fewer_than_two` in both views. |
+| Instrument and early-lock publication | **Unverified locally**. All three unmodified frozen publication cases reached stage 2 and exited 2. A plain mkdir at the invented instrument reservation independently returned `EPERM`. The in-memory instrument scorer passed its frozen scientific assertions on both qualified legs. |
+| Frozen schema selection | **PASS**. All 11 selected RL-190 schema cases passed with `jsonschema==4.25.1`. |
+| Hardware acceptance | **Dependency**. The seventeen frozen host-ID cases await the shared `hw1:` implementation and combined base from PR #795. |
+
+[Instrument replay](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/amend3-v3-instrument-diagnosis.log) · [Frozen drops and publication](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/amend3-v3-terminal-focus.log) · [Early-lock controls](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/amend3-v3-focused.log) · [Schema selection](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/amend3-v3-schema.log)
+
+The four-suite replay found inherited fixture conflicts outside the
+hardware cases. The ordinary frozen `World` still omits wall evidence
+for instrument and first stability. Its `02` index still uses the old
+two-field shape. The amended v3 instrument and early-lock controls
+supply the required evidence. The inherited common census assertion
+also continues to expect bare `dropped` dispositions. Examples of
+blocked cases are `test_A_authenticated_clock_instrument`,
+`test_B_authenticated_energy_stability`,
+`test_lm_stab_02_auth_kit_index_escape`, and
+`test_lm_stab_01_RL192b_loaded_alone_zero_prints`. These set up a
+supposedly valid census before exercising their intended condition.
+The independent suite owner needs to update those fixtures and their
+census assertions. The builder's synthetic replays used the frozen
+files as published.
+[Reproduced census refusals](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/amend3-v3-inherited-contracts.log) · [Full replay log](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/amend3-v3-full.log)
+
+All 53 protected paths match the prior branch. The governing-pin
+comparison remains a combined-base gate. The draft PR will carry the
+hosted check for the v3 head.
