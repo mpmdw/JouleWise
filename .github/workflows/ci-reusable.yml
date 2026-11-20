@@ -380,8 +380,14 @@ jobs:
           )
           print("ORDINARY SHARD ESTIMATES", ",".join(f"{value:.3f}" for value in totals))
           index = int(os.environ["SHARD_INDEX"])
+          assigned = partitions[index - 1]
+          # Only the shard running the frozen schema oracle needs this test dependency.
+          if any(unit == "tests.test_desc_looks_rl190"
+                 or unit.startswith("tests.test_desc_looks_rl190.") for unit in assigned):
+              import subprocess
+              subprocess.run([sys.executable, "-m", "pip", "install", "jsonschema==4.25.1"], check=True)
           raise SystemExit(shard_tests.run_units_in_workers(
-              partitions[index - 1], weights, count, index,
+              assigned, weights, count, index,
               int(os.environ.get("SHARD_WORKERS", "1")), unknown_weight=unknown,
           ))
           PY
