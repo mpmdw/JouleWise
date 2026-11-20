@@ -1470,13 +1470,13 @@
               "type": "object",
               "properties": {
                 "gpu_rail": {
-                  "$ref": "#/$defs/admissionRejectionList"
+                  "$ref": "#/$defs/recoverySkipList"
                 },
                 "rail_sum": {
-                  "$ref": "#/$defs/admissionRejectionList"
+                  "$ref": "#/$defs/recoverySkipList"
                 },
                 "dc_in": {
-                  "$ref": "#/$defs/admissionRejectionList"
+                  "$ref": "#/$defs/recoverySkipList"
                 }
               },
               "additionalProperties": false
@@ -1500,6 +1500,17 @@
         ]
       },
       "description": "Reasons for refused complete windows, in search order."
+    },
+    "recoverySkipList": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "enum": [
+          "coverage",
+          "gap_over_u1"
+        ]
+      },
+      "description": "Reasons for skipped complete recovery windows, in search order."
     }
   }
 }

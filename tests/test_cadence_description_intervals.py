@@ -211,7 +211,7 @@ class DescriptionIntervalTests(unittest.TestCase):
                         self.assertTrue(permitted, line)
                     if stamps.search(line):
                         self.assertIn(owner, {"__init__", "_coverage_passes", "_interval_refusal",
-                                              "_admitted_meter", "recovery_start"}, line)
+                                              "_admitted_meter", "recovery_start", "stream_end"}, line)
                     if io.search(line):
                         support_only = owner == "score" and line.strip() == (
                             'support = decode(paths["support.json"].read_bytes())'

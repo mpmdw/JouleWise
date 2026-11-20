@@ -1,7 +1,7 @@
 """Black-box description look contract, disposable invented observations only."""
 import csv
 from datetime import date, datetime, timedelta
-from functools import lru_cache
+from functools import lru_cache, partial
 import hashlib
 import io
 import json
@@ -1850,7 +1850,7 @@ def assert_recovery(test, edges, values, reasons):
             test.assertEqual(resolution[channel], 10)
 
 
-def recovery_prefix(test, raw, faults, winner, stride_s):
+def recovery_prefix(test, raw, faults, winner, stride_s, window_reason=window_reason):
     leg, start, origin = recovery_fixture(test.base, winner, stride_s)
     for index, fault in faults:
         window_fault(leg, raw, start+stride_s*index, 10, fault)
@@ -1948,7 +1948,7 @@ def staggered_grid(test, late, mode, stride_s, raw=None, placement=None):
     assert_recovery(test, e, dict.fromkeys(CHANNEL, expected), reasons)
 
 
-def tail_reason(test, raw, position):
+def tail_reason(test, raw, position, null=null):
     leg = TraceLeg(test.base)
     if raw=="sidecar":
         # The ordinary sidecar is oversampled after the turn. Remove the whole
@@ -2349,7 +2349,7 @@ def manifest_first(test, variant, fault):
     test.assertNotIn("raw", events)
 
 
-def bad_tail_gap(test, raw):
+def bad_tail_gap(test, raw, null=null):
     leg = TraceLeg(test.base)
     # The right bracket is available, but too far from the last in-span stamp.
     if raw == "sidecar":
@@ -2476,6 +2476,386 @@ def retained_rows(test, channel, raw, direction):
 
 
 # Separately discoverable cases; no expected failures, skips or baseline edits.
+
+# RL-190 3.8. All return times below are read from the instrument print.
+def recovery_gap_reason(channel, raw, fault):
+    reason = window_reason(channel, raw, fault)
+    return "gap_over_u1" if reason == "meter_gap" else reason
+
+
+def tail_with_end(reason, **fields):
+    # RL-190 3.8. The rail-return field's bound is the elapsed stream end.
+    if reason in ("coverage", "meter_gap"):
+        fields["bound_s"] = 1.0
+    return null(reason, **fields)
+
+
+def prefix_edges(folder, winner, faults=(), unobserved=12.0):
+    leg, start, _ = recovery_fixture(folder, winner, STRIDE_S)
+    origin = start - unobserved
+    leg.meta.update(completion_log_raw_s=1000 + origin, warmup_stage_raw_s=1005 + origin)
+    for index, fault in faults:
+        window_fault(leg, "sidecar", start + 10*index, 10, fault)
+    return print_one(leg.signal(), IDS[0])["edges"]
+
+
+def hand_prefix(test, winner, faults, value, reasons):
+    edges = prefix_edges(test.base, winner, faults)
+    assert_recovery(test, edges, dict.fromkeys(CHANNEL, value),
+                    {channel: list(reasons) for channel in CHANNEL})
+
+
+def terminal_leg(folder, anchor):
+    # Quiet tiles average 300 per rail and 300 on DC, with zero between-tile SD.
+    # Moving the window grid by 5 or 6 s pairs a negative impulse with the
+    # next tile's larger positive impulse. Every judged recovery window fails.
+    leg = TraceLeg(folder)
+    for raw in RAW_INPUTS:
+        leg.omit(raw, range(-20, anchor))
+    leg.meta["rail_intervals"] = [r for r in leg.meta["rail_intervals"] if r[0] >= anchor]
+    leg.meta.update(sampling_started_raw_s=1000+anchor, completion_log_raw_s=988+anchor,
+                    warmup_stage_raw_s=993+anchor)
+    def level(t):
+        if t < 0:
+            return 400.0
+        tile, offset = divmod(t, 10)
+        return 300 + (tile+1) * ((offset == 2) - (offset == 7))
+    for row in leg.rows[RAIL_FILE]:
+        t = float(row["interval_start_s"])
+        if t < 600 and row["source"] == "powermetrics":
+            row["power_w"] = level(t)
+    for row in leg.rows[DC_FILE]:
+        t = float(row["epoch_s"])
+        if t <= 600:
+            row["watts"] = level(t)
+    return leg
+
+
+def terminal_edges(folder, vector):
+    anchor = -15
+    leg = terminal_leg(folder, anchor)
+    if vector == "F":
+        leg.omit("sidecar", [anchor+15])
+    else:
+        # All 61 complete recovery tiles have nine points. Alternate which
+        # half loses a point so the independently aligned quiet SD is defined.
+        starts = range(anchor, 595, 10)
+        lost = [a + (2 if j % 2 == 0 else 7) for j, a in enumerate(starts)]
+        leg.omit("sidecar", lost)
+        # Preserve 600 s hold coverage with extra distinct points in the
+        # unsearched final fragment. No inter-stamp gap exceeds two seconds.
+        leg.meta["sidecar_times"] = sorted(leg.meta["sidecar_times"] +
+                                          [596 + i/128 for i in range(1, 62)])
+    printed = print_one(leg.signal(), IDS[0])
+    return printed
+
+
+def hand_terminal(test, vector):
+    printed = terminal_edges(test.base, vector)
+    for ch in CHANNEL:
+        for field in ("mean_w", "sd10_w"):
+            test.assertIsInstance(printed["hold"][ch][field], (float, int))
+    # Last complete window ends at 595; origin is -27. [595,600) has no vote.
+    count = 1 if vector == "F" else 61
+    assert_recovery(test, printed["edges"], dict.fromkeys(CHANNEL, null("not returned", bound_s=622.)),
+                    {ch: ["coverage"]*count for ch in CHANNEL})
+
+
+def hand_stream_end(test, final_loss):
+    # Rail stream stops inside [586,596). DC and sidecar continue. The whole
+    # hold remains count- and gap-admissible on both rails at this cutoff.
+    leg = terminal_leg(test.base, -14)
+    if final_loss:
+        leg.omit("gpu_power", [580])
+    end = 595.75
+    rows = [r for r in leg.rows[RAIL_FILE] if float(r["interval_start_s"]) < end]
+    for r in rows:
+        if float(r["interval_end_s"]) > end:
+            r.update(interval_end_s=end, timestamp_s=end)
+    leg.rows[RAIL_FILE] = rows
+    leg.meta["rail_intervals"] = [(a, min(b, end)) for a, b in leg.meta["rail_intervals"] if a < end]
+    signal = leg.signal()
+    with patch.object(signal, "average", wraps=signal.average) as observed:
+        printed = print_one(signal, IDS[0])
+    edges = printed["edges"]
+    for ch in CHANNEL[:2]:
+        with test.subTest(channel=ch):
+            test.assertIsInstance(printed["hold"][ch]["mean_w"], (int, float))
+            spans = [call.args[1:] for call in observed.call_args_list if call.args[0] == ch]
+            test.assertIn((576, 586), spans)
+            test.assertFalse(any(a == 586 and b > a for a, b in spans), spans[-5:])
+            test.match(edges["recovery_s"][ch], null("not returned", bound_s=612.))
+            test.match(edges["recovery_skipped_windows"][ch], int(final_loss))
+            test.match(edges.get("recovery_skip_reasons", {}).get(ch, []),
+                       ["coverage"] if final_loss else [])
+
+
+def maximum_case(test, winner):
+    # RL-190 3.8 and RL-187 3.7. The freezing line consumes private per-leg
+    # prints. The consumer below checks their sufficiency without adding a
+    # design decision to the description executor's output inventory.
+    rows = {"ordinary": prefix_edges(test.base/"ordinary", 2),    # 32 s
+            "under": prefix_edges(test.base/"under", 0, unobserved=37.25 if winner=="under" else 12.)}
+    if winner == "not_returned":
+        rows["exhausted"] = terminal_edges(test.base/"exhausted", "G")["edges"]
+    leg = TraceLeg(test.base/"no-threshold")
+    leg.meta["rail_manifest"] = COLS[::-1]  # Other channels still contribute.
+    rows["without_sum"] = print_one(leg.signal(), IDS[0])["edges"]
+    # A genuine over-1-s lag from the third invented leg triggers the fallback.
+    cut = TraceLeg(test.base/"lag")
+    traces(cut.folder, 1, 2)
+    for name in cut.rows:
+        with (cut.folder/name).open(newline="") as stream:
+            cut.rows[name] = list(csv.DictReader(stream))
+    cut.meta = read(cut.folder/"support.json")
+    rows["cut_lag"] = print_one(cut.signal(), IDS[0])["edges"]
+    lag = rows["cut_lag"]["decode_end_lag_s"]
+    test.assertTrue(any(isinstance(x, dict) and x["reason"] == "over 1 s" for x in lag.values()))
+    contributions, excluded = {}, []
+    for key, edges in rows.items():
+        for ch in CHANNEL:
+            v = edges["recovery_s"][ch]
+            if type(v) in (int, float):
+                n = v
+            else:
+                test.assertIsNone(v["value"])
+                if v["reason"] == "under":
+                    n = v["bound_s"]
+                elif v["reason"] == "not returned":
+                    n = 600
+                else:
+                    test.assertTrue(v["reason"])
+                    excluded.append((key, ch))
+                    continue
+            contributions[key, ch] = n
+    test.assertEqual(excluded, [("without_sum", "rail_sum")])
+    test.assertEqual(len(contributions), 3*len(rows)-1)
+    # Check the winning contributor, all three normalized inputs and the
+    # unrounded maximum before either clamp can hide an incorrect mapping.
+    max_key = {"ordinary":"ordinary", "under":"under", "not_returned":"exhausted"}[winner]
+    expected = {"ordinary":32., "under":37.25, "not_returned":600}[winner]
+    for ch in CHANNEL:
+        test.assertEqual(contributions[max_key, ch], expected)
+    largest = max(contributions.values())
+    test.assertEqual(largest, expected)
+    test.assertEqual(min(600, max(120, 5*largest)),
+                     {"ordinary":160, "under":186.25, "not_returned":600}[winner])
+    test.assertEqual(min(60, max(10, math.ceil(largest))),
+                     {"ordinary":32, "under":38, "not_returned":60}[winner])
+
+
+def no_thresholds(test):
+    # RL-190 3.8 / RL-187 3.7 Amends (3.9). Leave all three leg/channel
+    # identities visible. The empty maximum has no observed contributor.
+    leg = TraceLeg(test.base)
+    leg.omit("sidecar", range(10, 100, 10))
+    printed = print_one(leg.signal(), IDS[0])
+    edges = printed["edges"]
+    test.assertEqual(set(edges["recovery_s"]), set(CHANNEL))
+    eligible = []
+    for ch in CHANNEL:
+        test.assertIsNone(printed["hold"][ch]["mean_w"]["value"])
+        result = edges["recovery_s"][ch]
+        if type(result) in (int, float):
+            eligible.append(result)
+        else:
+            test.assertIsNone(result["value"])
+            test.assertTrue(result["reason"])
+            if result["reason"] in ("under", "not returned"):
+                eligible.append(result.get("bound_s"))
+    test.assertEqual(eligible, [])
+    for lag in edges["decode_end_lag_s"].values():
+        test.assertIsNone(lag["value"])
+    # RL-190 3.9 supplies the recovery duration when there is no contributor.
+    rest = min(600, max(120, 5*max(eligible))) if eligible else 600
+    test.assertEqual(rest, 600)
+
+
+def short_rail_tail(test):
+    # RL-190 3.8. The observed stream ends 0.75 s after the last token.
+    # A count loss inside that tail and the non-unit bound must both survive.
+    leg = TraceLeg(test.base)
+    leg.omit("gpu_power", [610.25])
+    leg.rows[RAIL_FILE] = [r for r in leg.rows[RAIL_FILE] if float(r["interval_end_s"]) <= 610.75]
+    leg.meta["rail_intervals"] = [r for r in leg.meta["rail_intervals"] if r[1] <= 610.75]
+    printed = print_one(leg.signal(), IDS[0])
+    for ch in CHANNEL[:2]:
+        with test.subTest(channel=ch):
+            test.match(printed["edges"]["rail_return_censor_s"][ch], null("coverage", bound_s=.75))
+
+
+def git_ok(repo, *args):
+    return subprocess.run(["git", "-C", str(repo), *args], stdout=subprocess.DEVNULL,
+                          stderr=subprocess.DEVNULL).returncode == 0
+
+
+def reservation_boundary(test, world):
+    # Observe the real mkdir attempt and stop it before creating anything.
+    probe = """
+def reservation(event,args):
+    if event == "os.mkdir" and args[0] == os.environ["DESC_RESERVATION"]:
+        log("boundary", args[0])
+        raise PermissionError("synthetic boundary")
+sys.addaudithook(reservation)
+"""
+    with patch.dict(invoke.__globals__, PROBE=PROBE+probe):
+        rc, out, err, events = invoke(world, "stage2")
+    test.assertEqual((rc, out), (2, b""), err)
+    test.assertFalse(any(kind == "open" for kind, _ in events))
+    test.assertFalse(world.private.exists())
+    test.assertFalse(world.public.exists())
+    return [p for kind, p in events if kind == "boundary"]
+
+
+def merge_fixture(book, first, other):
+    # Add the second parent without changing the current fixture tree.
+    tree = book.tree(book.path)
+    env = dict(os.environ, GIT_AUTHOR_NAME="Fixture", GIT_AUTHOR_EMAIL="test@example.invalid",
+               GIT_COMMITTER_NAME="Fixture", GIT_COMMITTER_EMAIL="test@example.invalid")
+    book.head = subprocess.check_output(
+        ["git", "-C", str(book.path), "commit-tree", tree, "-p", first, "-p", other],
+        input=b"merge the two invented records\n", env=env).decode().strip()
+
+
+def graph_case(test, look, placement):
+    # RL-190 3.4. All loose objects, receipts and commits are synthetic.
+    # Remove the final bytes from early history; a new label on an old
+    # identical manifest would not expose a path/history-based age check.
+    seal = Book.seal
+    manifests, commits = {}, {}
+    def snapshot(book, label):
+        if label == "register public designs and identifiers before any close":
+            for path in (book.path/"manifests").glob("*.json"):
+                manifests[path] = path.read_bytes()
+                path.unlink()
+        if label == "close snapshot" and placement == "same":
+            for path, data in manifests.items():
+                put(path, data)
+        oid = seal(book, label)
+        if label == "register public designs and identifiers before any close" and placement == "parallel":
+            for path, data in manifests.items():
+                put(path, data)
+            commits["manifest"] = seal(book, "register final bytes on a separate branch")
+            for path in manifests:
+                path.unlink()
+            book.head = oid
+        if label == "close snapshot":
+            commits["receipts"] = oid
+            if placement == "same":
+                commits["manifest"] = oid
+            else:
+                for path, data in manifests.items():
+                    put(path, data)
+                if placement == "parallel":
+                    merge_fixture(book, oid, commits["manifest"])
+                else:
+                    commits["manifest"] = seal(book, "register the final manifests after close")
+        return oid
+    save = World.save_row
+    def bind_registration(world):
+        world.reg = world.row["registration_commit"] = commits["manifest"]
+        save(world)
+    with patch.object(Book, "seal", snapshot), patch.object(World, "save_row", bind_registration):
+        w = test.world(look)
+    name = str(w.man.relative_to(w.repo))
+    test.assertEqual(git_ok(w.repo, "cat-file", "-e", f"{w.receipts}:{name}"), placement=="same")
+    test.assertEqual(git_ok(w.repo, "merge-base", "--is-ancestor", w.receipts, w.reg), placement != "parallel")
+    test.assertEqual(git_ok(w.repo, "merge-base", "--is-ancestor", w.reg, w.receipts), placement == "same")
+    test.stage1(w)
+    test.assertTrue(git_ok(w.repo, "merge-base", "--is-ancestor", w.reg, w.stage1_commit))
+    test.assertEqual(reservation_boundary(test, w), [str(w.private)])
+
+
+def sibling_manifest(test, look):
+    w = test.world(look)
+    rc, _, err, _ = invoke(w, "stage1")
+    test.assertEqual(rc, 0, err)
+    # Registration bytes and the stage-1 projection are valid. The stated
+    # final registration is on a sibling of the stage-1 binding.
+    parent = w.book.head
+    w.book.head = w.reg
+    sibling = w.book.seal("register identical final bytes on an unmerged branch")
+    w.book.head = parent
+    w.row["registration_commit"] = sibling
+    w.bind()
+    name = str(w.man.relative_to(w.repo))
+    test.assertEqual(subprocess.check_output(["git","-C",str(w.repo),"show",f"{sibling}:{name}"]),
+                     w.man.read_bytes())
+    test.assertFalse(git_ok(w.repo, "merge-base", "--is-ancestor", sibling, w.stage1_commit))
+    merge_fixture(w.book, w.stage1_commit, sibling)
+    tip = w.book.seal("advance origin/main after stage one")
+    test.assertTrue(git_ok(w.repo, "merge-base", "--is-ancestor", sibling, tip))
+    test.assertEqual(reservation_boundary(test, w), [])
+
+
+def unbound_stage(test, look):
+    w = test.world(look)
+    rc, _, err, _ = invoke(w, "stage1")
+    test.assertEqual(rc, 0, err)
+    # Consistent census, working ledger and index. No commit contains them.
+    w.row.update(status="stage1_committed", stage1_path=str(w.stage.relative_to(w.repo)),
+                 stage1_sha256=sha(w.stage.read_bytes()))
+    w.save_row()
+    subprocess.run(["git","-C",str(w.repo),"add","--","LOOKS.json",w.row["stage1_path"]],check=True)
+    test.assertFalse(git_ok(w.repo, "cat-file", "-e", "HEAD:"+w.row["stage1_path"]))
+    test.assertEqual(reservation_boundary(test, w), [])
+    w.bind()
+    test.assertEqual(reservation_boundary(test, w), [str(w.private)])
+
+
+def receipt_digest(test, look, mutation, member):
+    # Rebuild the receipt snapshot and every ledger hash around the mutation.
+    # Another kit's genuine digest is a valid SHA; the issue agrees with it.
+    seal = Book.seal
+    def snapshot(book, label):
+        if label == "close snapshot":
+            family = "inst" if look == IDS[0] else "stab"
+            kit, pos = (2, 1) if member == "qualified" else (1, 11)
+            folder = book.path/"ops"/f"span-f2-{family}-{kit:02}-L{pos:03}"
+            for filename in ("runner_receipt.json", "issue.json"):
+                path = folder/filename
+                doc = read(path)
+                if mutation in ("missing", "both_missing"):
+                    if filename == "issue.json" and mutation == "missing":
+                        continue
+                    del doc["kit_sha256"]
+                else:
+                    doc["kit_sha256"] = sha((book.path/"kits"/f"f2-{family}-03.json").read_bytes())
+                put(path, doc)
+        return seal(book, label)
+    with patch.object(Book, "seal", snapshot):
+        w = test.world(look)
+    test.refused(w, "stage1")
+    test.assertFalse(w.stage.exists())
+
+
+def register_rl190():
+    for letter, winner, faults, value, reasons in (
+            ("A", 2, ((1,"count"),), 32., ("coverage",)),
+            ("B", 2, ((1,"gap"),), 32., ("gap_over_u1",)),
+            ("C", 2, ((1,"mixed"),), 32., ("coverage",)),
+            ("D", 0, ((0,"count"),), 22., ("coverage",)),
+            ("E", 0, (), null("under", bound_s=12.), ())):
+        add(f"rl190_38_{letter}", hand_prefix, winner, faults, value, reasons)
+    for letter in ("F", "G"):
+        add(f"rl190_38_{letter}", hand_terminal, letter)
+    for loss in (False, True):
+        add("rl190_38_H_"+("last_skipped" if loss else "last_judged"), hand_stream_end, loss)
+    add("rl190_38_maximum_no_contributors", no_thresholds)
+    add("rl190_38_tail_coverage_bound_075", short_rail_tail)
+    for winner in ("ordinary","under","not_returned"):
+        add(f"rl190_38_maximum_{winner}", maximum_case, winner)
+    for look in IDS:
+        prefix = "rl190_34_"+look.replace("-", "_")
+        for placement in ("after", "same", "parallel"):
+            add(f"{prefix}_manifest_{placement}_receipts", graph_case, look, placement)
+        add(f"{prefix}_manifest_off_stage1_line", sibling_manifest, look)
+        add(f"{prefix}_stage1_commit_before_reservation", unbound_stage, look)
+        for mutation, member in product(("missing","both_missing","different"), ("qualified","excluded")):
+            add(f"{prefix}_receipt_{mutation}_kit_sha_{member}", receipt_digest, look, mutation, member)
+
+
+
 def register_v2():
     def case(family, fn, *args):
         def identifier(x):
@@ -2522,14 +2902,22 @@ def register_v2():
         # multiple failures distinguish a per-channel skip list from a leg-wide flag.
         for fault in ("count", "gap", "mixed"):
             for bad,winner in ((0,0),(0,5),(2,5),(4,5),(3,3),(4,1),(4,0)):
+                # RL-190 3.8 B/C: update only a gap actually printed before the winner.
+                changed = bad <= winner and (fault == "gap" or (fault == "mixed" and raw != "sidecar"))
+                fn = partial(recovery_prefix, window_reason=recovery_gap_reason) if changed else recovery_prefix
                 add(f"v2_recovery_{raw}_{fault}_bad{bad}_winner{winner}",
-                    recovery_prefix,raw,((bad,fault),),winner,STRIDE_S)
-        add(f"v2_recovery_{raw}_multiple",recovery_prefix,raw,((0,"count"),(2,"gap"),(4,"mixed")),4,STRIDE_S)
+                    fn,raw,((bad,fault),),winner,STRIDE_S)
+        # RL-190 3.8 B: the second skipped window has a count-passing U1 gap.
+        add(f"v2_recovery_{raw}_multiple",partial(recovery_prefix, window_reason=recovery_gap_reason),raw,((0,"count"),(2,"gap"),(4,"mixed")),4,STRIDE_S)
         for pos in POSITION if raw!="sidecar" else ("first",):
-            case("tail",tail_reason,raw,pos)
+            # RL-190 3.8: failed rail-tail admission and the stream-end bound both print.
+            fn = partial(tail_reason, null=tail_with_end) if raw != "dc_in" else tail_reason
+            case("tail",fn,raw,pos)
     add("v2_recovery_audit5_9_of_10",audit5_window_zero)
     for raw in ("sidecar","dc_in"):
-        case("tailgap",bad_tail_gap,raw)
+        # RL-190 3.8: only the shared sidecar gap also vetoes the rail return.
+        fn = partial(bad_tail_gap, null=tail_with_end) if raw == "sidecar" else bad_tail_gap
+        case("tailgap",fn,raw)
     for late, mode in product((*COLS,"dc_in"),("under","nonreturn")):
         case("anchor",staggered_grid,late,mode,STRIDE_S)
     for raw, placement in product(RAW_INPUTS, ("complete","incomplete","both")):
@@ -2551,6 +2939,7 @@ def register_v2():
 
 
 register_v2()
+register_rl190()
 
 
 if __name__=="__main__":

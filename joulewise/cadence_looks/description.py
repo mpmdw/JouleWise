@@ -299,9 +299,9 @@ class Snapshot:
         self.validate_manifest(self.manifest_name, look)
         self.roster = self.doc("roster.json")
         self.receipts = self.roster["receipt_commit"]
-        require(self.registration != self.receipts
-                and self.book.ancestor(self.registration, self.receipts)
-                and self.book.ancestor(self.receipts, self.commit), "unproven receipt chronology")
+        # The manifest and receipts independently bind to this pre-read
+        # commit. The collection may have closed before final registration.
+        require(self.book.ancestor(self.receipts, self.commit), "unproven receipt chronology")
         self.copy = self.doc(AUTHORITY["copy"])
         self._destinations(root)
 
@@ -860,6 +860,7 @@ class Signals:
         self._read_started = False
         self._rail_stamps = None
         self._observed_rails = None
+        self._rail_end = None
         self._meter_verified = False
         self._rail_values = {}
         self._meter_values = {}
@@ -956,6 +957,11 @@ class Signals:
             name: [bounds for bounds in self._declared_rails[name][1] if (bounds, rail) in stamps]
             for name, rail in RAIL_CHANNELS.items()
         })
+        # The rail channels share one capture. A dropped component at its
+        # end changes that channel's coverage, not the observed capture end.
+        observed_intervals = {bounds for bounds, _ in stamps}
+        self._rail_end = max((b for a, b in self.bounds if (a, b) in observed_intervals),
+                             default=None)
         self._rail_stamps = stamps
 
     def recovery_start(self, sampling):
@@ -966,6 +972,12 @@ class Signals:
         if self.meter_clean:
             observed.append(self.meter[0])
         return max([sampling, *observed])
+
+    def stream_end(self, channel):
+        if channel == "dc_in":
+            return self.meter[-1] if self.meter else None
+        self._index_rails()
+        return self._rail_end
 
     def _admitted_rails(self, channel, a, b):
         selected = [bounds for bounds in self._observed_rails[channel][1]
@@ -1196,7 +1208,8 @@ def _recovery(signal, channel, start, origin, hold, spread, stop):
         last_end = a + RECOVERY_WINDOW_S
         value = signal.average(channel, a, last_end)
         if not number(value):
-            reasons.append(value["reason"])
+            reason = value["reason"]
+            reasons.append("gap_over_u1" if reason == "meter_gap" else reason)
         elif value <= threshold:
             elapsed = a - origin
             return (missing("under", elapsed) if index == 0 else elapsed), reasons
@@ -1218,8 +1231,10 @@ def _edge_prints(signal, hold, decode, turn, first, last, quiet_start, prompt):
     end = last + 1
     for channel in CHANNELS:
         baseline = hold[channel]["mean_w"]
+        stream_end = signal.stream_end(channel)
+        recovery_stop = min(quiet_start + 600, stream_end) if stream_end is not None else anchor
         return_times[channel], reasons = _recovery(
-            signal, channel, anchor, origin, baseline, hold[channel]["sd10_w"], quiet_start + 600,
+            signal, channel, anchor, origin, baseline, hold[channel]["sd10_w"], recovery_stop,
         )
         skip_counts[channel] = len(reasons)
         if reasons:
@@ -1243,13 +1258,14 @@ def _edge_prints(signal, hold, decode, turn, first, last, quiet_start, prompt):
         else:
             offsets[channel] = plateau if isinstance(plateau, dict) else missing("decode_plateau_undefined")
         if channel != "dc_in":
-            stream_end = signal.bounds[-1][1] if signal.bounds else last
-            if number(baseline) and stream_end > last:
+            if number(baseline) and stream_end is not None and stream_end > last:
                 rail_return = signal.cross(channel, last, stream_end, baseline, falls=True)
                 if number(rail_return):
                     censored[channel] = rail_return - last
                 elif rail_return["reason"] == "crossing_unobserved":
                     censored[channel] = missing("stream_end", stream_end - last)
+                elif rail_return["reason"] in ("coverage", "meter_gap"):
+                    censored[channel] = missing(rail_return["reason"], stream_end - last)
                 else:
                     censored[channel] = rail_return
             else:
