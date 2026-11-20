@@ -284,6 +284,18 @@ def additional_checks():
     for stamp, want in (("2026-11-20T23:59:59-08:00", "NEED_FRESH_QUEUE"), ("2026-11-21T00:00:00-08:00", "ELIGIBLE"),
                         ("2026-11-29T23:59:59-08:00", "ELIGIBLE"), ("2026-11-30T00:00:00-08:00", "NEED_FRESH_QUEUE")):
         assert hp.decide(*candidate({}, unix(stamp), "Run", queue=queue_b))["decision"] == want
+    # The alternate must carry the clock sampled after the default refuses.
+    night = unix("2026-11-21T23:30:00-08:00")
+    args = candidate({}, night, "Run", queue=queue_b)
+    args[2]["valid_through_epoch_s"] = night + 1
+    actual = hp.decide(*args, resample=lambda: night + 1)
+    assert actual["decision"] == "ELIGIBLE" and actual["argument"] == "13:14-13:15"
+    assert actual["t0"] == night + 1
+    # A fresh alternate sample also observes the exclusive expiry.
+    last = unix("2026-11-29T23:59:59-08:00")
+    args = candidate({}, last, "Run", queue=queue_b)
+    args[2]["valid_through_epoch_s"] = last + 1
+    assert hp.decide(*args, resample=lambda: last + 1)["decision"] == "NEED_FRESH_QUEUE"
     # A half-complete counted block contributes its outstanding half. The
     # later interval is disjoint from the one at which HP can actually clear.
     args = candidate({}, now, "Run")

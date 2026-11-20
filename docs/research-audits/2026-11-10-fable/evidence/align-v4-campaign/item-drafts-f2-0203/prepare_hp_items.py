@@ -317,7 +317,7 @@ def check_dated(calendar, now, fence_s):
         latest_start = max(choices)
 
 
-def occupancy(item, kit_path, now, timing, arguments=ARGUMENTS, planner=None):
+def occupancy(item, kit_path, now, timing, arguments=ARGUMENTS, planner=None, resample=None):
     """Compose the pinned stages through outer clearance; no native actions."""
     from joulewise.cadence import legs
     from scripts import align_r1_rehearsal as r1, cadence_legs_runner as runner
@@ -330,6 +330,10 @@ def occupancy(item, kit_path, now, timing, arguments=ARGUMENTS, planner=None):
             plan = planner(kit_path, roster, arg, t0=now)
         except legs.PlanError as err:
             if len(err.problems) == 1 and "meets a batch blackout" in err.problems[0]:
+                if resample is not None and arg != arguments[-1]:
+                    fresh = resample()
+                    require(number(fresh) and fresh >= now, "WAIT_EVIDENCE", "clock changed during planning")
+                    now = fresh
                 continue
             raise Refusal("WAIT_PIN", str(err)) from err
         except ValueError as err:
@@ -391,7 +395,7 @@ def occupancy(item, kit_path, now, timing, arguments=ARGUMENTS, planner=None):
     }
 
 
-def decide(item, issue, obs, phase, now, kit_path, queue_bytes, *, planner=None):
+def decide(item, issue, obs, phase, now, kit_path, queue_bytes, *, planner=None, resample=None):
     """One fail-closed decision shared by Issue, Start and Run."""
     from joulewise.cadence import kit as kitmod, queue as queuemod
 
@@ -432,8 +436,13 @@ def decide(item, issue, obs, phase, now, kit_path, queue_bytes, *, planner=None)
         require(local_date(now) not in dates, "INELIGIBLE_DATE", "hp-01 leg on this t0-date")
         check_history(item, obs)
         debt = check_copy(obs["copy"], close, now)
-        timing = occupancy(item, kit_path, now, obs.get("timing"), planner=planner)
-        check_dated(obs["calendar"], now, timing["fence_s"])
+        timing = occupancy(item, kit_path, now, obs.get("timing"), planner=planner, resample=resample)
+        t0 = timing["t0"]
+        if t0 != now:
+            queue_entry(item, queue, t0)
+            require(t0 <= obs["valid_through_epoch_s"] and local_date(t0) == local_date(now),
+                    "WAIT_EVIDENCE", "alternate plan needs a fresh dated observation")
+        check_dated(obs["calendar"], t0, timing["fence_s"])
         return {"decision": "ELIGIBLE_WITH_COPY_DEBT" if debt else "ELIGIBLE", **timing}
     except Refusal as ex:
         return {"decision": ex.decision, "detail": str(ex)}
@@ -674,8 +683,7 @@ def run_gate(args):
         require(issue.get("synthetic_only") is not True and obs.get("synthetic_only") is not True,
                 "WAIT_EVIDENCE", "synthetic records cannot issue or arm")
         from joulewise.align.apple.powermode import observe_ac_powermode
-        require(observe_ac_powermode() == 0, "HOLD_HOST", "AC powermode is not Automatic")
-        check_agent_census(obs, args.magistrate_pid)
+
         args.custody.mkdir(parents=True, exist_ok=True)
         ledger = args.custody / "hp-02-arms"
         ledger.mkdir(exist_ok=True)
@@ -693,9 +701,11 @@ def run_gate(args):
                         "WAIT_EVIDENCE", "Run requires a successful Start and a fresh observation")
             current_queue = args.queue.read_bytes()
             require(current_queue == queue, "WAIT_BINDING", "staged queue changed during the arm check")
-            decision = decide(item, issue, obs, args.phase, time.time(), args.kit, current_queue)
-            print(json.dumps(decision), flush=True)
+            require(observe_ac_powermode() == 0, "HOLD_HOST", "AC powermode is not Automatic")
+            check_agent_census(obs, args.magistrate_pid)
+            decision = decide(item, issue, obs, args.phase, time.time(), args.kit, current_queue, resample=time.time)
             if decision["decision"] not in PASS:
+                print(json.dumps(decision), flush=True)
                 return 1
             result = {**decision, "span": item["span"], "output": str(args.output), "issue_sha": args.issue_sha,
                       "observed_epoch_s": obs["observed_epoch_s"], "observation": obs["record"]}
@@ -705,9 +715,20 @@ def run_gate(args):
                 runtime_files(args, item)
                 require(args.queue.read_bytes() == queue and sha256(args.kit.read_bytes()) == KIT_SHA,
                         "WAIT_BINDING", "staged queue or kit changed after Run decision")
-                require(time.time() <= decision["t0"] + obs["timing"]["runner_start_max_s"],
+                launch_sample = time.time()
+                require(decision["t0"] <= launch_sample <= min(
+                            obs["valid_through_epoch_s"], decision["t0"] + obs["timing"]["runner_start_max_s"]),
                         "WAIT_EVIDENCE", "handoff window elapsed; make a fresh Run decision")
+                queue_entry(item, read_json(queue), launch_sample)
+                require(local_date(launch_sample) == local_date(decision["t0"]),
+                        "WAIT_EVIDENCE", "launch date changed; refresh dated observations")
+                from scripts import launch_cadence_span as launcher
+
+                plan = launcher.cadence_plan(args.kit, ",".join(item["legs"]), decision["argument"], t0=launch_sample)
+                require(launch_sample + launcher.cadence_minimum_seconds(plan) <= decision["deadline"],
+                        "WAIT_PIN", "deadline no longer fits at the launcher handoff")
                 write_exclusive(claim, result)
+                print(json.dumps(decision), flush=True)
                 return subprocess.call([
                     sys.executable, "-B", "scripts/launch_cadence_span.py", "launch",
                     "--repo", str(args.repo), "--python-bin", sys.executable, "--kit", str(args.kit),
@@ -716,6 +737,7 @@ def run_gate(args):
                     "--magistrate-pid", str(args.magistrate_pid), "--deadline", str(decision["deadline"]),
                     "--exit-wait-seconds", "180", "--start-wait-seconds", "30",
                 ], cwd=args.repo)
+            print(json.dumps(decision), flush=True)
         return 0
     except Refusal as ex:
         print(json.dumps({"decision": ex.decision, "detail": str(ex)}))
