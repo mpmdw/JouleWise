@@ -350,18 +350,21 @@ class SeriesCadenceEndToEnd(unittest.TestCase):
         view, pack = self.views[s.pack_id('C1')]
         dispatches = resolve_stage_dispatches(json.loads((pack / 'plan_tree.json').read_bytes()), view)
         self.assertTrue(any('reference' in stage.stage_id for stage in dispatches))
-        for stage in dispatches:
-            with self.subTest(stage=stage.stage_id):
-                path = view / stage.config_dir / 'order_manifest.json'
-                original = path.read_bytes()
-                path.write_bytes(original + b' ')
-                try:
-                    with patch('joulewise.align.apple.powermode.host_marker_path') as host:
-                        with self.assertRaisesRegex(ValueError, 'packet_kit_mismatch: .*order manifest'):
-                            session.install(root, next_arm_triage=packet)
-                    host.assert_not_called()
-                finally:
-                    path.write_bytes(original)
+        paths = [view / stage.config_dir / 'order_manifest.json' for stage in dispatches]
+        originals = [path.read_bytes() for path in paths]
+        for i, (stage, path, original) in enumerate(zip(dispatches, paths, originals, strict=True)):
+            alternate = originals[(i + 1) % len(originals)]
+            self.assertNotEqual(original, alternate)
+            for mutation, raw in (('another stage', alternate), ('same order, edited bytes', original + b' ')):
+                with self.subTest(stage=stage.stage_id, mutation=mutation):
+                    path.write_bytes(raw)
+                    try:
+                        with patch('joulewise.align.apple.powermode.host_marker_path') as host:
+                            with self.assertRaisesRegex(ValueError, 'packet_kit_mismatch'):
+                                session.install(root, next_arm_triage=packet)
+                        host.assert_not_called()
+                    finally:
+                        path.write_bytes(original)
         self.assertEqual(self.installed, [])
 
     def test_an_unbound_packet_cannot_arm_w1_or_a_series_window(self):
