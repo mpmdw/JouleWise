@@ -589,6 +589,22 @@ rl176._holm = replacement
         for old, new in ((with_release, missing), (missing, with_release)):
             self.assertIn("entry point", self.compare(old, new, 2)["error"])
 
+    def test_missing_release_entry_point_names_side_and_preserves_all_file_flags(self):
+        complete = self.commit()
+        missing = self.commit({
+            self.ENTRY: None,
+            self.SCORER: self.SOURCE + b"# invented scorer edit\n",
+            self.PHASES: b"from . import rl176\n# invented phase edit\n",
+        })
+        for label, w1, c1 in (("W1", missing, complete), ("C1", complete, missing)):
+            with self.subTest(missing_side=label):
+                result = self.compare(w1, c1, 2)
+                self.assertEqual(result["error"], f"{label} runtime release entry point is missing")
+                flags = [self.SCORER, self.PHASES, self.ENTRY]
+                self.assertEqual(result["files_for_review"], flags)
+                self.assertEqual(list(result["closure_changes"]), flags)
+                self.assertIsNone(result["closure_changes"][self.ENTRY][label.lower()])
+
     def test_wiring_bytes_are_flagged_without_exceptions(self):
         phase = b"from . import rl176\n# invented wiring note A\n"
         c1_phase = phase.replace(b"note A", b"note B")

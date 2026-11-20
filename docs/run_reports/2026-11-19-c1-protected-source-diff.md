@@ -242,4 +242,19 @@ git diff 82542232d..HEAD --check
 
 The implementation was assessed at `cdcbee79934a43e721d9ee668b59050f676611b4`, tree `76b2ca8c67c2da5a1e61a42f49a3f1643d28283f`. The six targeted cases passed after implementation. The 25 frozen v3 test methods are preserved and the combined focused run passed 59 tests. Condition 13 still matches all ten Git entries in the W1 baseline, the base and this implementation. The focused command site check reproduced the single unregistered launcher entry, with zero stale entries. The reviewed inventory file is outside this seat's authorized write scope.
 
-The real isolated-image run remains open. The builder exercised invented commits and the same worker through the fixture transport, plus the frozen synthetic table on the public anchor scorer. Any actual W1 input missing the release entry point still returns 2 under the combined contract. The signatory retains the actual comparison and the anti-hindsight review. The integration owner and Opus retain acceptance.
+The real isolated-image run remains open. The builder exercised invented commits and the same worker through the fixture transport, plus the frozen synthetic table on the public anchor scorer. The signatory retains the actual comparison and the anti-hindsight review. The integration owner and Opus retain acceptance.
+
+## Lead ruling on a missing release entry point
+
+If either signed commit lacks `scripts/align_v4_series_release.py`, the combined command exits 2, identifies the affected side and retains every flagged file. Row 10 stays open. Only the full release import from each commit can establish behavioural equality under this comparison. RL-182 §1.5 permits W1 to be signed before the release caller exists. The comparison refusal leaves that signing rule intact. [RL-182 §1.5](https://github.com/mpmdw/JouleWise/blob/00a28dcf2d0dc424bd3438678913d4f393d3ed3a/docs/research-audits/2026-11-10-fable/RESEARCH-LEAD-DECISIONS.md#L19776-L19796)
+
+The frozen missing-entry case remains in place. The supplemental case removes the caller and edits both ruled modules in the invented tree. With either input order it requires exit 2, the missing side in the error, and all three affected paths in both review outputs. Both tests passed without a comparator change.
+
+```sh
+TMPDIR=/Volumes/JW-EXT/scratch/pl-d-c1-protected-source-diff/build/tmp \
+JW_B5_SYNTHETIC_ONLY=1 PYTHONPATH=tests:. python3.13 -B -m unittest \
+  align.test_rl182_registration.ProtectedRuntimeComparisonTests.test_missing_release_entry_point_fails_closed_on_either_side \
+  align.test_rl182_registration.ProtectedRuntimeComparisonTests.test_missing_release_entry_point_names_side_and_preserves_all_file_flags
+```
+
+The final-head run at `85484fb881726b175690d6c8f37b152649862aa2` passed 20 of 21 jobs. The sole failure requires a reviewed row in `tests/host_command_sites.json` for `scripts/compare_c1_protected_sources.py`, locator `isolated_identity:d16cb64193a201ee`, command `python-isolated`. The builder requested lead authorization for exactly that row. `NEEDS_SCOPE` remains open until authorization. Acceptance requires zero missing or stale command sites and green final-head CI. The approved isolated-image run is a separate open check. [Failing shard](https://github.com/mpmdw/JouleWise/actions/runs/44756704940/job/136359419715)
