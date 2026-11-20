@@ -2,7 +2,7 @@
 
 2026-11-19 · Tier 2 · Sol 6.2 builder · draft against `align/2026-11-17-rl176-build`
 
-The helper compares committed dependency bytes, the eight RL-182 bindings, and the two supplied prompt-hash maps. Spec v3 adds a behavioural oracle to the isolated release import and freezes the conservative import and resource closure. A change anywhere in that byte scope returns 2. Runtime identity and the static binding hashes provide additional signals. Exit 0 in combined mode supplies one input to row 10. The signatory owns the actual comparison inputs, the authoritative prompt population and the anti-hindsight review.
+The B1 closure byte freeze is the row 10 gate. A changed file in the conservative committed closure returns 2, with all changed paths listed. The helper also checks the two supplied prompt-hash maps and reports static byte changes to the eight RL-182 bindings. Runtime identity (P1) and the behavioural oracle (B2) are advisory. They never affect the exit code. The signatory owns the actual comparison inputs, the authoritative prompt population and the anti-hindsight review.
 
 ## Spec freeze and assessed trees
 
@@ -69,11 +69,11 @@ python3.13 -B scripts/compare_c1_protected_sources.py \
   --w1-prompts "$ROW10_TOY/w1.json" --c1-prompts "$ROW10_TOY/c1.json"
 ```
 
-In spec v3 this returns 2 and lists `rl176.py` in `files_for_review`, with an empty protected binding change map. Substituting `546e6481910bdd3cb43ca2f527046f8e5a926785` for C1 returns 0 with no changed files. Substituting `6bb5615be138b728d0f026777de333d11e1941b7` returns 2 and names `_decode_rows`. Static-only mode emits `mode: static-only`. These are diagnostics without runtime evidence.
+This returns 2 and lists `rl176.py` in `files_for_review`, with an empty protected binding change map. Substituting `546e6481910bdd3cb43ca2f527046f8e5a926785` for C1 returns 0 with no changed files. Substituting `6bb5615be138b728d0f026777de333d11e1941b7` returns 2 and names `_decode_rows`. Static-only mode emits `mode: static-only` and documents the skipped advisory work. It is a diagnostic for inputs that may lack the release caller.
 
 ### Lead invocation template
 
-The lead supplies full commit IDs from the signed bindings, two privately verified public-safe identifier-to-digest projections and a trusted preloaded Python 3.13 Docker image ID. Both Git commits must carry the production release entry point. The isolation setup and spec v3 review scope are specified below.
+The lead supplies full commit IDs from the signed bindings and two privately verified public-safe identifier-to-digest projections. Both Git commits must carry the production release entry point. The optional `--runtime-image` argument takes a trusted preloaded Python 3.13 Docker image ID for advisory P1 and B2. Omit the argument to apply the same byte gate without advisory runtime execution.
 
 ```sh
 python3.13 -B scripts/compare_c1_protected_sources.py \
@@ -212,7 +212,7 @@ The implementation was assessed at `74334dbabbed1d9e65c291ed380fb4d59f4e57fe`, t
 
 The lead's signatory and anti-hindsight work, new-spec acceptance, and integration-owner and Opus decisions remain open. The v1 audit count stays at three.
 
-## Audit 4 and spec v3
+## Audit 4 and spec v3 (historical)
 
 Audit 4 assessed `e831e9149ef9c6192ac38a47a4a71a257dd155d9`, tree `72d6d66ebdd0837c166200fd2cc379b6d50c5cba`, and recorded 2 VERIFIED HIGH, 2 VERIFIED MED and 0 VERIFIED LOW. The lead replaced the v2 byte-exemption policy with B1/B2. Spec v3 froze at `5ff27161af1d7a1118384fa327b0fbb5cdce7538`, tree `805f157b909bf542de1ad5c4f8bfc0d6777c657e`, against that assessed v2 head. The six targeted cases showed four failures and two errors before implementation. The two supplemental regressions cover multiple simultaneous oracle differences and a file-existence branch skipped in the source-only projection. The latter reproduced an exit 0 on the partial implementation.
 
@@ -246,7 +246,7 @@ The real isolated-image run remains open. The builder exercised invented commits
 
 ## Lead ruling on a missing release entry point
 
-If either signed commit lacks `scripts/align_v4_series_release.py`, the combined command exits 2, identifies the affected side and retains every flagged file. Row 10 stays open. Only the full release import from each commit can establish behavioural equality under this comparison. RL-182 §1.5 permits W1 to be signed before the release caller exists. The comparison refusal leaves that signing rule intact. [RL-182 §1.5](https://github.com/mpmdw/JouleWise/blob/00a28dcf2d0dc424bd3438678913d4f393d3ed3a/docs/research-audits/2026-11-10-fable/RESEARCH-LEAD-DECISIONS.md#L19776-L19796)
+If either signed commit lacks `scripts/align_v4_series_release.py`, the regular command exits 2, identifies the affected side and retains every flagged file. Row 10 stays open. Spec v4 checks caller presence on the committed tree as an input requirement. Any behavioural observation requires a full release import from the corresponding commit. RL-182 §1.5 permits W1 to be signed before the release caller exists. The comparison refusal leaves that signing rule intact. [RL-182 §1.5](https://github.com/mpmdw/JouleWise/blob/00a28dcf2d0dc424bd3438678913d4f393d3ed3a/docs/research-audits/2026-11-10-fable/RESEARCH-LEAD-DECISIONS.md#L19776-L19796)
 
 The frozen missing-entry case remains in place. The supplemental case removes the caller and edits both ruled modules in the invented tree. With either input order it requires exit 2, the missing side in the error, and all three affected paths in both review outputs. Both tests passed without a comparator change.
 
@@ -258,3 +258,37 @@ JW_B5_SYNTHETIC_ONLY=1 PYTHONPATH=tests:. python3.13 -B -m unittest \
 ```
 
 The final-head run at `85484fb881726b175690d6c8f37b152649862aa2` passed 20 of 21 jobs. The sole failure requires a reviewed row in `tests/host_command_sites.json` for `scripts/compare_c1_protected_sources.py`, locator `isolated_identity:d16cb64193a201ee`, command `python-isolated`. The builder requested lead authorization for exactly that row. `NEEDS_SCOPE` remains open until authorization. Acceptance requires zero missing or stale command sites and green final-head CI. The approved isolated-image run is a separate open check. [Failing shard](https://github.com/mpmdw/JouleWise/actions/runs/44756704940/job/136359419715)
+
+## Audit 5 and spec v4
+
+Audit 5 assessed `ec46a5039e352153efe6e94c5991079d5ed134e6`, tree `87edaac772ea05d55f249cb8e03fe33fc31fa330`. It reported 1 VERIFIED HIGH, 2 VERIFIED MED and 0 VERIFIED LOW, with no B1 finding. The spec v4 executable freeze is `94078e8024b953d26894359a4ae2abc384b24557`, tree `cea0b5b26b45a2b853f2dfe72a845d0fa2771986`. Four focused cases gave three expected failures and one expected error against the assessed v3 comparator. The two audit reproductions assert advisory reporting in both directions. The revised expectations in the prior runtime cases follow the lead's change to the advisory contract.
+
+| Audit 5 finding | Regression and disposition |
+| --- | --- |
+| HIGH · no-argument functions silently skipped all fixed inputs | `test_audit_five_reports_every_skipped_fixed_case` expects `evaluated 0 of 21 fixed cases`, with all 21 names and the signature reason on each side. The no-argument probes are supplemental. |
+| MED · source-only projection omitted a guarded resource that changes the level | `test_audit_five_reports_level_unread_when_a_guarded_resource_is_unprojected` expects both sides' level and object gaps to identify the omitted resource, plus the complete B1 file review list. |
+| MED · CI command inventory | `test_tracked_command_sites_match_reviewed_allowlist` is held on the one reviewed row at `isolated_identity:d16cb64193a201ee`. `NEEDS_SCOPE` remains open. [Audit 5 CI evidence](https://github.com/mpmdw/JouleWise/actions/runs/44770005595/job/136406792603) |
+
+B1 uses the existing Git blob and mode inventory for the conservative import and resource scope. Exit 2 means closure changes or invalid inputs, including a missing caller in the regular command. Exit 1 means only the prompt keys or hashes differ. Exit 0 means the committed-input, byte-freeze and prompt checks pass. P1 and B2 are advisory in every case and never affect the exit code.
+
+`oracle_coverage` always reports `evaluated N of M fixed cases`, with the 21 fixed function cases counted once each when both sides supply hashable outcomes. An exception that the worker captures and hashes counts as an outcome. `not_evaluated` identifies each skipped function and input with a reason for each affected side. `unread_level` reports coverage of `S_SUPERIORITY_ALPHA` separately. `runtime_unread` lists every protected object with unavailable P1 evidence. Optional no-argument probes and the level are outside the fixed-case count. `oracle_changes` reports only differences between comparable outcomes and is omitted when there are none. The coverage and unread fields remain present.
+
+A changed tracked file outside the regular Python source projection can affect either side through an unobserved read or existence test. The helper marks runtime evidence as unavailable for both sides and gives the paths as the reason. An observed open of an unstaged tracked file also invalidates that side's runtime evidence. B1 still reports every changed path. This conservative decision can withhold advisory evidence for unrelated resources without opening their blobs.
+
+```sh
+export TMPDIR=/Volumes/JW-EXT/scratch/pl-d-c1-protected-source-diff/build/tmp
+export JW_B5_SYNTHETIC_ONLY=1
+suite=align.test_rl182_registration.ProtectedRuntimeComparisonTests
+PYTHONPATH=tests:. python3.13 -B -m unittest \
+  "$suite.test_audit_five_reports_every_skipped_fixed_case" \
+  "$suite.test_audit_five_reports_level_unread_when_a_guarded_resource_is_unprojected" \
+  "$suite.test_oracle_coverage_counts_all_fixed_cases_for_compatible_signatures" \
+  "$suite.test_default_comparison_applies_byte_gate_without_runtime"
+PYTHONPATH=tests:. python3.13 -B -m unittest align.test_rl182_registration align.test_rl176
+python3.13 -B scripts/compare_c1_protected_sources.py --help
+git diff 82542232d..HEAD --check
+```
+
+The implementation was assessed at `d1a0362dd4b60750184e778e4f567ec9bfde1e2f`, tree `cbd9d7a7021b681fa023ce629940aa3b1e015b13`. Eight targeted cases passed, including both audit 5 replays, full and zero-case coverage controls, both missing-caller cases and the file and oracle aggregation checks. The CLI help reports B1 as the gate and both runtime checks as advisory. A targeted scan of the launcher confirms that the command inventory locator is unchanged.
+
+Local tests run serially using the synthetic worker transport. The approved isolated-image run remains a separate open check. The signatory retains the actual comparison, prompt attestation and anti-hindsight decision. The integration owner and Opus retain final acceptance.
