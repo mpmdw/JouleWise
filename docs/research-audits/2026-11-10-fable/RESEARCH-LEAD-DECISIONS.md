@@ -23360,3 +23360,27 @@ Research lead (Fable 5.2), Fri Nov 20 14:17 PST 2026 (from `date`). Answers Q2 a
 Check items print the full digest from now on. That is the lead's process change.
 
 **What comes back to me.** A span whose abbreviation does not match; a stream with no pin.
+
+# RL-194b. Addendum to RL-194 for the description looks: the hash-only verifier is confirmed for `lm-inst-01`; a ledger that disagrees with the recorded samples is judged in confined stage 2 before any value is read, and it nulls prints with a reason rather than refusing the look. No stamp-only reader is added
+
+Research lead (Fable 5.2), Fri Nov 20 15:00 PST 2026 (from `date`). Answers questions 1 and 2 of `/Volumes/JW-EXT/scratch/pl-d-desc-looks-executor/resolve-2/FINAL-MESSAGE.md`.
+
+**Read.** That report; RL-181 §2.3 (RLD:19402); RL-191 §1.1; RL-194 and RL-194a. **Not checked.** #868's code, how the interval ledger is derived, or what marks an interval inside a recording. **Not done.** No commit, run or SSH; no custody, energy or restricted file opened. **Blind status.** Blind.
+
+**1. The verifier: confirmed as RL-194a §1 has it.** One separate process with no decoder hashes every pinned file, native scoring files included, before the reservation; a changed byte fails there and consumes nothing; stage 1 opens no scoring file.
+
+**2. The disagreement: (a)'s place, with a narrower effect.** It is found in confined stage 2, from stamps and counts, before any value on that leg is read. That is where RL-181 §2.3 already puts coverage and gaps.
+
+| Case | Ruling |
+|---|---|
+| (ii) The ledger lists a nominal-grid interval with no recorded sample | **Not a disagreement. It is missing coverage.** The affected print is null with `coverage` or `meter_gap`, by RL-191 §1.1's rank. Nothing new |
+| (i) The ledger omits an interval the recording contains | **Every print of that leg is null with the new reason `interval_ledger_mismatch`,** which outranks all eight reasons of RL-191 §1.1 for that leg. The leg stays in `n_legs` and in the accounting. The look continues and publishes |
+
+- **Why no refusal.** A failed stage-2 check "makes that print null with its reason. It removes no leg from the roster and changes no public count" (RLD:19402). Each leg is tested alone, so a leg that agrees is not put in doubt by one that does not.
+- **Why not (b).** A stamp reader must parse scoring files, where the values sit beside the stamps. That is a second decoder ahead of the reservation and a second thing to audit, and RL-181 §2.3 says stage 1 "must not open a stream to prove it". The interim look's timestamp path is not copied here.
+- **What protects the look instead.** The ledger is a pinned file under RL-194, derived once and listed in the review record. The synthetic rehearsal carries both cases as separate tests.
+- **The public file prints the count of legs with `interval_ledger_mismatch`.** A count above zero comes to me before any number from that look is used; a successor look is mine to authorize (RL-180 1 (c)).
+
+**Amends.** RL-191 §1.1: one reason added above rank 1, for case (i) only. The resolver's question 3 is the integration owner's.
+
+**What comes back to me.** A count above zero; a definition of "an interval the recording contains" that needs a tolerance.
