@@ -230,7 +230,51 @@ The full differential run was started before the fixture-only commit. Frozen v2 
 | canonical | `align.test_r1_rehearsal.Round6RulingTests.test_a_twice_timed_out_step_d_is_inconclusive_and_the_kit_refuses_w1` | — | — | — | FAIL |
 | canonical | `align.test_r1_rehearsal.Round6RulingTests.test_changed_pick_s7_records_the_accepted_quiet_window_reference` | — | — | — | FAIL |
 | canonical | `align.test_r1_rehearsal.Round6RulingTests.test_ruling_1f_decode_rate_is_the_minimum_over_step_d_and_the_gated_runs` | — | — | — | FAIL |
-| contrast-writer | `align.test_r1_to_w1_chain.ChainScriptTests.test_steps_one_to_three_run_for_real_on_a_synthetic_lane_record` | FAIL/PASS | FAIL/PASS | FAIL/PASS | FAIL/PASS |
+| canonical | `align.test_r1_round5_exec_review.DutyBarTests.test_a_bank_run_g0_timeout_makes_the_first_replay_run_inconclusive` | — | — | — | FAIL |
+| canonical | `align.test_r1_round5_exec_review.DutyBarTests.test_an_inconclusive_run_never_masks_a_failing_judged_run` | — | — | — | FAIL |
+| canonical | `align.test_r1_round5_exec_review.DutyBarTests.test_an_x_g_g0_timeout_leaves_u5_to_the_replay_pair` | — | — | — | FAIL |
+| canonical | `align.test_r1_round6_lows.RuntimeLowTests.test_idle_records_sensor_roles_for_the_soak_reference` | — | — | — | FAIL |
+| canonical | `align.test_r1_round6_lows.RuntimeLowTests.test_step_d_records_and_driver_preserves_s5_fast` | — | — | — | FAIL |
+| canonical | `align.test_r1_round6_power.R1DriverHostLevelTests.test_r1_keeps_the_host_level_marker_through_its_high_power_leg` | — | — | — | FAIL |
+| canonical | `align.test_r1_round6_power.R1DriverHostLevelTests.test_r1_measures_holding_the_night_lock` | — | — | — | FAIL |
+| canonical | `align.test_r1_round6_power.R1RegistrationAuthorityTests.test_a_signal_after_the_slots_are_built_leaves_no_registration` | — | — | — | FAIL |
+| canonical | `align.test_r1_round6_power.R1RegistrationAuthorityTests.test_the_registration_is_written_after_a_complete_terminal_record` | — | — | — | FAIL |
+| canonical | `align.test_r1_round7_close_deferral.CloseSignalChild.test_close` | — | — | — | SKIP |
+| canonical | `align.test_r1_round7_power.R1GuardTests.test_the_r1_result_records_the_host_state_dir` | — | — | — | FAIL |
+| canonical | `align.test_r1_round7_science.AliasGroupTests.test_the_driver_registers_the_alias_groups` | — | — | — | FAIL |
+| canonical | `align.test_r1_round7_science.G0CapW1Tests.test_registration_records_the_cap_and_every_g0_wait` | — | — | — | FAIL |
+| canonical | `align.test_r1_round7_science.GatedOrderTests.test_both_replay_runs_follow_a_full_gated_d_episode` | — | — | — | FAIL |
+| canonical | `align.test_r1_round7_science.SpanAndDeadlineTests.test_the_work_deadline_is_armed_for_every_runtime_call_and_cleared_after` | — | — | — | FAIL |
+| canonical | `align.test_r1_round8.AliasedPicksBarTests.test_aliased_picks_fail_the_bar_at_r1` | — | — | — | FAIL |
+| canonical | `align.test_r1_round8.AliasedPicksBarTests.test_aliases_elsewhere_keep_the_bar` | — | — | — | FAIL |
+| canonical | `align.test_r1_round8.R1InterruptTests.test_the_runtime_and_its_descendants_are_proven_gone_before_the_restore` | — | — | — | FAIL |
+| canonical | `align.test_r1_round8.TerminateTreeTests.test_an_orphan_holding_the_pipe_neither_hangs_nor_survives` | — | — | — | FAIL |
+| canonical | `align.test_r1_round8_exec_review.R1RepeatedSignalTests.test_signals_during_the_runtime_kill_do_not_cut_the_close_short` | — | — | — | FAIL |
+| canonical | `align.test_r1_runtime.ConformanceTests.test_every_kind_conforms_and_feeds_the_driver` | — | — | — | FAIL |
+| canonical | `align.test_r1_runtime.IncompleteMemberTests.test_planning_turn_cut_by_the_deadman_fails_the_segment` | — | — | — | FAIL |
+| canonical | `align.test_r1_runtime.IncompleteMemberTests.test_planning_turn_with_an_unreleased_g0_runs_flagged_as_a_candidate_only_turn` | — | — | — | FAIL |
+| canonical | `align.test_r1_runtime.IncompleteMemberTests.test_step_d_with_an_unreleased_g0_runs_flagged_with_slots_and_a_consumer_reads_its_reference` | — | — | — | FAIL |
+| canonical | `align.test_r1_runtime.ReadBackTests.test_step_d_n_chunk_from_config_with_the_formula_recorded_beside_it` | — | — | — | FAIL |
+| canonical | `align.test_r1_runtime.ReadBackTests.test_step_d_slot_rules` | — | — | — | FAIL |
+| canonical | `align.test_r1_runtime.Round5RuntimeTests.test_cooldown_releases_on_the_one_sided_g0_band` | — | — | — | FAIL |
+| canonical | `align.test_r1_runtime.Round5RuntimeTests.test_gated_d_run_gates_against_the_step_d_reference_not_the_soak` | — | — | — | FAIL |
+| canonical | `align.test_r1_runtime.Round5RuntimeTests.test_planning_deadman_is_armed_after_the_preheat_and_g0` | — | — | — | FAIL |
+| canonical | `align.test_r1_runtime.Round5Tests.test_step_response_with_no_rise_has_a_null_censored_t63` | — | — | — | FAIL |
+| canonical | `align.test_r1_runtime_e2e.DriverRuntimeTests.test_full_rehearsal_through_the_runtime` | — | — | — | FAIL |
+| canonical, contrast-writer | `align.test_r1_to_w1_chain.ChainScriptTests.test_steps_one_to_three_run_for_real_on_a_synthetic_lane_record` | FAIL/PASS | FAIL/PASS | FAIL/PASS | FAIL/PASS |
+| canonical | `align.test_r1_turn_counts_export.ExportTests.test_a_present_but_unusable_bundle_key_never_falls_back_to_discovery` | — | — | — | FAIL |
+| canonical | `align.test_r1_turn_counts_export.ExportTests.test_bundle_is_discovered_when_the_lane_result_has_no_bundle_key` | — | — | — | FAIL |
+| canonical | `align.test_r1_turn_counts_export.ExportTests.test_completion_flags_follow_finish_reason_and_budget_cuts` | — | — | — | FAIL |
+| canonical | `align.test_r1_turn_counts_export.ExportTests.test_compressed_turn_files_are_read_and_hashed_as_stored` | — | — | — | FAIL |
+| canonical | `align.test_r1_turn_counts_export.ExportTests.test_derive_contrast_prints_the_kits_own_rederivation` | — | — | — | FAIL |
+| canonical | `align.test_r1_turn_counts_export.ExportTests.test_discovery_finds_a_compressed_file_and_refuses_zero_or_several` | — | — | — | FAIL |
+| canonical | `align.test_r1_turn_counts_export.ExportTests.test_export_feeds_backfill_and_the_kit_binds_the_record` | — | — | — | FAIL |
+| canonical | `align.test_r1_turn_counts_export.ExportTests.test_export_matches_the_driver_and_binds_every_input_file` | — | — | — | FAIL |
+| canonical | `align.test_r1_turn_counts_export.ExportTests.test_missing_bundle_unsafe_path_and_existing_output_refuse` | — | — | — | FAIL |
+| canonical | `align.test_r1_turn_counts_export.ExportTests.test_only_the_turn_record_file_is_read` | — | — | — | FAIL |
+| canonical | `align.test_r1_turn_counts_export.ExportTests.test_refuses_a_disagreement_with_the_driver_or_a_malformed_record` | — | — | — | FAIL |
+| canonical | `align.test_r1_turn_counts_export.OsBatchWindowClockTests.test_a_rehearsal_pinned_inside_the_batch_window_waits_to_02_35_without_sleeping` | — | — | — | FAIL |
+| canonical | `align.test_r1_turn_counts_export.OsBatchWindowClockTests.test_a_rehearsal_pinned_outside_the_window_never_waits_on_the_batch` | — | — | — | FAIL |
 | partc-rl145 | `align.test_rl145_part_c.SoakLauncherBindingTests.test_audit3_decode_ends_are_ordered_and_attributed` | — | — | — | FAIL/PASS |
 | partc-rl145 | `align.test_rl145_part_c.SoakLauncherBindingTests.test_audit3_gate_entry_coverage` | — | — | — | FAIL/PASS |
 | partc-rl145 | `align.test_rl145_part_c.SoakLauncherBindingTests.test_audit3_receipt_fields` | — | — | — | FAIL/PASS |
@@ -259,10 +303,15 @@ The full differential run was started before the fixture-only commit. Frozen v2 
 | partc-rl145 | `align.test_rl145_part_c.SoakLauncherBindingTests.test_timed_x_coverage_loss_stays_distinct_from_a_released_gate` | — | — | — | FAIL/PASS |
 | partc-rl145 | `align.test_rl145_part_c.SoakLauncherBindingTests.test_xml_malformed_flag_cannot_be_reported_as_clean_stop` | — | — | — | FAIL/PASS |
 | partc-rl145 | `align.test_rl145_part_c.SoakLauncherBindingTests.test_zero_exit_requires_all_four_public_verdict_witnesses` | — | — | — | FAIL/PASS |
-| S/Q and S-row modules, test_s_rows | `align.test_s_rows.Step0WorldTests.test_deadman_bundles_give_rows_from_runtime_events` | ABSENT | SKIP | SKIP | SKIP |
-| S/Q and S-row modules, test_s_rows | `align.test_s_rows.Step0WorldTests.test_desk_reads_every_ending` | ABSENT | SKIP | SKIP | SKIP |
-| S/Q and S-row modules, test_s_rows | `align.test_s_rows.Step0WorldTests.test_g1_timeout_member_is_kept_on_its_rows` | ABSENT | SKIP | SKIP | SKIP |
-| S/Q and S-row modules, test_s_rows | `align.test_s_rows.Step0WorldTests.test_prefill_deadman_turn_gives_no_row` | ABSENT | SKIP | SKIP | SKIP |
+| S/Q and S-row modules, canonical, test_s_rows | `align.test_s_rows.Step0WorldTests.test_deadman_bundles_give_rows_from_runtime_events` | ABSENT | SKIP | SKIP | SKIP |
+| S/Q and S-row modules, canonical, test_s_rows | `align.test_s_rows.Step0WorldTests.test_desk_reads_every_ending` | ABSENT | SKIP | SKIP | SKIP |
+| S/Q and S-row modules, canonical, test_s_rows | `align.test_s_rows.Step0WorldTests.test_g1_timeout_member_is_kept_on_its_rows` | ABSENT | SKIP | SKIP | SKIP |
+| S/Q and S-row modules, canonical, test_s_rows | `align.test_s_rows.Step0WorldTests.test_prefill_deadman_turn_gives_no_row` | ABSENT | SKIP | SKIP | SKIP |
+| canonical | `align.test_shade.RealUpstreamTests.test_all_public_pairs_load_schema_and_evaluate_side_offline` | — | — | — | SKIP |
+| canonical | `align.test_shade.RealUpstreamTests.test_judge_score_tags_and_pandas_normalization_match` | — | — | — | SKIP |
+| canonical | `align.test_shade.RealUpstreamTests.test_prompts_and_monitor_views_match_pinned_upstream` | — | — | — | SKIP |
+| canonical | `align.test_shade.RealUpstreamTests.test_real_dispatch_has_no_per_tool_git_children` | — | — | — | SKIP |
+| canonical | `align.test_smc_native.NativeGpuTests.test_native_worker_starts_from_other_directory_and_is_reaped` | — | — | — | SKIP |
 | dynamic-closure, dynamic-live | `align.test_v4_dynamic_closure.LiveTraceTests.test_a_fresh_process_running_the_minimal_dry_run_stays_inside_the_committed_trace` | FAIL/PASS | FAIL | FAIL | FAIL |
 | executed-closure | `align.test_v4_executed_closure.ExecutedClosureBindingTests.test_every_executed_module_and_script_is_in_the_receipt_artifact_set` | PASS | PASS | PASS | FAIL |
 | wp22-full | `align.test_v4_opus_cold_witnesses.Wp22DryRunReachesTheDesk.test_minimal_synthetic_w1_produces_a_desk_record` | FAIL/PASS | PASS | PASS | PASS |
@@ -335,7 +384,7 @@ The full differential run was started before the fixture-only commit. Frozen v2 
 
 - `clean control verdict=pass; descriptor rows PASS (4/4) ; 2760 decision sites in frozen call-graph closure`
 - `generated 19477 case IDs`
-- The unfiltered synthetic run remains in progress. Last recorded count `progress 3800 / 19477 {'REFUSED': 3435, 'OTHER_REFUSAL': 264, 'AGREES_PASS': 101}`.
+- The unfiltered synthetic run remains in progress. Last recorded count `progress 5800 / 19477 {'REFUSED': 4751, 'OTHER_REFUSAL': 931, 'AGREES_PASS': 118}`.
 - The exact updated variant 3 tree completed the separate 16-case descriptor run.
 
 | Member | False passes | Wrong verdicts | Harness errors |
@@ -366,7 +415,7 @@ The full differential run was started before the fixture-only commit. Frozen v2 
 | `x-g/descriptor/rewritten-after-return` | REFUSED |
 ## GitHub Actions
 
-Status captured at 2026-11-20 06:44:27 PST.
+Status captured at 2026-11-20 10:07:33 PST.
 
 | Workflow | Status | Jobs |
 |---|---|---|
@@ -457,6 +506,138 @@ The sixteen descriptor cases matched the separate laptop replay in the local che
 ## Refetch after hosted CI
 
 A scoped refetch after both exact assembly workflows finished found zero component head moves. The issued W1 base and protected R1 line both matched intake. No refresh assembly was needed at that checkpoint.
+
+## Refresh after PR #809 moved
+
+At 09:16 PST, PR #809 had moved from `2bb72f23aa547c8049a9df5a029a2d1b56b249c0` to `89d705196939b6e7eca9deef6151366006d118c5`. The other six component refs matched intake. The new source adds audit round 2 verifier changes and v3 of the differential harness. The rehearsal reassembled all three variants from the same issued pin.
+
+| Variant | Refreshed commit | Exact tree | Condition 13 |
+|---|---|---|---|
+| 1 | `5c5a821ae757d81ae62df1cfe84d70a922dc0e28` | `3652381ee416a621ac76388bc54d48abb11efc4e` | PASS 10/10 |
+| 2, provisional | `94dff82c31dc0b38f65b8ccdc2ac168e9812b72e` | `7b5ce9560758909fe3693afdee5b1c4039155d53` | PASS 10/10 |
+| 3, provisional | `e119d42db74815c64dedd322e13f55cbe0cea073` | `7aa4a9acb31d9a35a7c37ab4fe6a09f92cc172f5` | PASS 10/10 |
+
+The refreshed port commit is `c3a623c57583117e7f192be2837d52811ac56009`. It carries the same five intake-port paths and adds `tests/align/partc_audit_probe.py`. All hunks applied. Git staged the new audit probe by direct application because the patch added a file. Comparing the five upstream paths against `89d705196` returned identity. The W1-only test fixture carries the same synthetic descriptor adjustment. This refresh stays local. The two hosted results refer to the intake assembly, with variants 1 and 2 repeating their intake tree IDs.
+
+The first refresh attempt stopped when the assembler required upstream to keep v2. The assembler now verifies that the port preserves the exact pushed suite bytes. The refreshed tree carries v3 with SHA-256 `2307483661347cb35f1427c674d07bbdbced25dca43eba119603a9fb28ce54e8`. The requested v2 replay uses the separately verified `f35c7bb08814785079008acd3a47a3c85993083da1e7ba731e7d2bee486d768d` copy. Both refreshed v2 invocations stop at the clean control with `other_failure`. The observed finding is `bundle_binding`, field `header`, in the synthetic predecessor's `power_trace.csv`. V2 supplies a three-column fixture header and the new rule requires a D-018 header. The pushed v3 fixture reaches a passing clean control and four matching descriptor digests on the same tree. Zero mutations ran, including the sixteen descriptor cases, so the refresh has no v2 false-pass totals. The pushed v3 suite passed the sixteen descriptor controls on the laptop, accepting all four consistent mirrors and refusing all twelve damaged cases. The v3 full matrix was outside the refresh's pinned v2 test requirement. The named modules were started on the refreshed trees.
+
+| Check | Issued W1 | Variant 1 | Variant 2 | Variant 3 |
+|---|---|---|---|---|
+| contrast-writer | PASS | PASS | PASS | PASS |
+| desk-offload | FAIL | FAIL | FAIL | FAIL |
+| desk-packet | PASS | PASS | PASS | PASS |
+| desk-release | PASS | PASS | PASS | PASS |
+| desk-u3 | PASS | PASS | PASS | PASS |
+| dynamic-closure | PASS | PASS | PASS | PASS |
+| executed-closure | PASS | PASS | PASS | FAIL |
+| opus-cold-witness | PASS | PASS | PASS | PASS |
+| r1-frozen-named | PASS | PASS | PASS | PASS |
+| registration | FAIL | FAIL | FAIL | FAIL |
+| step4-synthetic | PASS | PASS | PASS | PASS |
+| w1-reliability | FAIL | PASS | PASS | PASS |
+| w1-synthetic | FAIL | PASS | PASS | PASS |
+| wp22-full | FAIL | — | — | — |
+| PREQUAL ordinary / stack | PASS | — | — | — |
+| PREQUAL ordinary / r0-config | PASS | — | — | — |
+| PREQUAL ordinary / d-pin-verifier | PASS | — | — | — |
+| PREQUAL ordinary / template-rewrites | NEEDS-REAL-INPUT | — | — | — |
+| PREQUAL ordinary / checkpoint-native | PASS | — | — | — |
+| PREQUAL w1 / weight-digest-preflight | PASS | — | — | — |
+| PREQUAL w1 / runtime-stack-preflight | PASS | — | — | — |
+| PREQUAL w1 / held-window | PASS | — | — | — |
+| PREQUAL w1 / watchdog-hold-rollback | FAIL | — | — | — |
+| PREQUAL w1 / arm-cli | FAIL | — | — | — |
+| PREQUAL w1 / packet-rebuild | PASS | — | — | — |
+| PREQUAL w1 / packet-tamper | FAIL | — | — | — |
+| PREQUAL w1 / calibration-stop | PASS | — | — | — |
+| PREQUAL w1 / cal-escalation-exit | PASS | — | — | — |
+| PREQUAL w1 / r1-w1-chain | PASS | — | — | — |
+| PREQUAL w1 / km003c-launch | PASS | — | — | — |
+| PREQUAL w1 / km003c-crash-radius | PASS | — | — | — |
+| PREQUAL w1 / wp22-dry-run | FAIL | — | — | — |
+| PREQUAL w1 / optin-required | PASS (advisory) | — | — | — |
+| PREQUAL w1 / arm-route | PASS | — | — | — |
+| sharded | RUNNING | — | — | — |
+| dynamic-live | FAIL | — | — | — |
+| w1-minimal | PASS | — | — | — |
+| test_rl176 | — | PASS | PASS | PASS |
+| test_rl182_registration | — | PASS | PASS | PASS |
+| test_s_rows | — | PASS | PASS | PASS |
+| partc-attack-repros | — | — | — | PASS |
+| partc-rl145 | — | — | — | RUNNING |
+| partc-rl145 (repeat) | — | — | — | RUNNING |
+| Pinned v2 full matrix | — | — | — | FAIL |
+| Pinned v2 descriptor subset | — | — | — | FAIL |
+| Pushed v3 descriptor subset | — | — | — | PASS |
+
+### Exceptions by test ID
+
+| Check | Test ID | Issued W1 | Variant 1 | Variant 2 | Variant 3 |
+|---|---|---|---|---|---|
+| signing | `R0 binding` | NEEDS-REAL-INPUT | NEEDS-REAL-INPUT | NEEDS-REAL-INPUT | NEEDS-REAL-INPUT |
+| contrast-writer | `align.test_r1_to_w1_chain.ChainScriptTests.test_steps_one_to_three_run_for_real_on_a_synthetic_lane_record` | FAIL/PASS | PASS | PASS | PASS |
+| partc-rl145 (repeat) | `align.test_rl145_part_c.SoakLauncherBindingTests.test_bound_member_terminal_intervals_must_be_sequential` | — | — | — | FAIL |
+| partc-rl145 (repeat) | `align.test_rl145_part_c.SoakLauncherBindingTests.test_native_launcher_passes_through_the_soak_and_member_ledgers` | — | — | — | FAIL |
+| partc-rl145 (repeat) | `align.test_rl145_part_c.SoakLauncherBindingTests.test_no_soak_values_leave_either_process_or_ledger` | — | — | — | FAIL |
+| test_s_rows | `align.test_s_rows.Step0WorldTests.test_deadman_bundles_give_rows_from_runtime_events` | ABSENT | SKIP | SKIP | SKIP |
+| test_s_rows | `align.test_s_rows.Step0WorldTests.test_desk_reads_every_ending` | ABSENT | SKIP | SKIP | SKIP |
+| test_s_rows | `align.test_s_rows.Step0WorldTests.test_g1_timeout_member_is_kept_on_its_rows` | ABSENT | SKIP | SKIP | SKIP |
+| test_s_rows | `align.test_s_rows.Step0WorldTests.test_prefill_deadman_turn_gives_no_row` | ABSENT | SKIP | SKIP | SKIP |
+| dynamic-live | `align.test_v4_dynamic_closure.LiveTraceTests.test_a_fresh_process_running_the_minimal_dry_run_stays_inside_the_committed_trace` | FAIL/PASS | PASS | PASS | PASS |
+| executed-closure | `align.test_v4_executed_closure.ExecutedClosureBindingTests.test_every_executed_module_and_script_is_in_the_receipt_artifact_set` | PASS | PASS | PASS | FAIL |
+| wp22-full | `align.test_v4_opus_cold_witnesses.Wp22DryRunReachesTheDesk.test_minimal_synthetic_w1_produces_a_desk_record` | FAIL/PASS | PASS | PASS | PASS |
+| registration | `align.test_v4_registration.RegistrationTests.test_d_max_turns_is_part_of_frozen_kit` | FAIL | FAIL | FAIL | FAIL |
+| wp22-full | `align.test_v4_w1_synthetic.CleanWindowTests` | FAIL | — | — | — |
+| w1-synthetic | `align.test_v4_w1_synthetic.CleanWindowTests.test_all_members_succeed_without_exclusions` | SKIP | SKIP | SKIP | SKIP |
+| w1-synthetic | `align.test_v4_w1_synthetic.CleanWindowTests.test_clean_window_passes_the_signed_battery_consequence` | SKIP | SKIP | SKIP | SKIP |
+| w1-synthetic | `align.test_v4_w1_synthetic.CleanWindowTests.test_desk_energy_matches_independent_world_integral` | SKIP | SKIP | SKIP | SKIP |
+| w1-synthetic | `align.test_v4_w1_synthetic.CleanWindowTests.test_u1_u3_and_contrast_match_design` | SKIP | SKIP | SKIP | SKIP |
+| wp22-full | `align.test_v4_w1_synthetic.InjectedWindowTests` | FAIL | — | — | — |
+| w1-synthetic | `align.test_v4_w1_synthetic.InjectedWindowTests.test_30b_u1_counts_the_x1_member_and_passes` | SKIP | SKIP | SKIP | SKIP |
+| w1-synthetic | `align.test_v4_w1_synthetic.InjectedWindowTests.test_clean_members_succeed` | SKIP | SKIP | SKIP | SKIP |
+| w1-synthetic | `align.test_v4_w1_synthetic.InjectedWindowTests.test_collector_death_is_x4_and_episode_continues` | SKIP | SKIP | SKIP | SKIP |
+| w1-synthetic | `align.test_v4_w1_synthetic.InjectedWindowTests.test_contrast_verdict_matches_design_rule` | SKIP | SKIP | SKIP | SKIP |
+| w1-synthetic | `align.test_v4_w1_synthetic.InjectedWindowTests.test_d_u1_counts_two_thermal_exclusions_and_fails` | SKIP | SKIP | SKIP | SKIP |
+| w1-synthetic | `align.test_v4_w1_synthetic.InjectedWindowTests.test_deadman_is_x7` | SKIP | SKIP | SKIP | SKIP |
+| w1-synthetic | `align.test_v4_w1_synthetic.InjectedWindowTests.test_desk_runs_on_a_window_with_failed_members` | SKIP | SKIP | SKIP | SKIP |
+| w1-synthetic | `align.test_v4_w1_synthetic.InjectedWindowTests.test_g0_timeout_ends_the_member_promptly_as_x2` | SKIP | SKIP | SKIP | SKIP |
+| w1-synthetic | `align.test_v4_w1_synthetic.InjectedWindowTests.test_malformed_xml_stops_and_is_excluded` | SKIP | SKIP | SKIP | SKIP |
+| w1-synthetic | `align.test_v4_w1_synthetic.InjectedWindowTests.test_os_level_nonzero_is_x1` | SKIP | SKIP | SKIP | SKIP |
+| w1-synthetic | `align.test_v4_w1_synthetic.InjectedWindowTests.test_u4_to_u6_inconclusive_in_w1` | SKIP | SKIP | SKIP | SKIP |
+| w1-synthetic, wp22-full | `align.test_v4_w1_synthetic.KitBridgeTests.test_consumer_custody_rebinds_to_synthesized_capture_bytes` | FAIL | PASS | PASS | PASS |
+| w1-synthetic, wp22-full | `align.test_v4_w1_synthetic.KitBridgeTests.test_contrast_deadman_follows_the_30b_member_law_and_admits_a_g0_timeout` | FAIL | PASS | PASS | PASS |
+| w1-synthetic, wp22-full | `align.test_v4_w1_synthetic.KitBridgeTests.test_synthetic_inputs_pass_admission_and_roster_is_a1` | FAIL | PASS | PASS | PASS |
+| w1-synthetic, wp22-full | `align.test_v4_w1_synthetic.KitBridgeTests.test_synthetic_t_dead_is_bound_by_l1_and_the_r1_tail` | FAIL | PASS | PASS | PASS |
+| w1-synthetic, wp22-full | `align.test_v4_w1_synthetic.MinimalDryRunTests.test_minimal_synthetic_w1_reaches_the_desk` | FAIL/PASS | PASS | PASS | PASS |
+| w1-synthetic, wp22-full | `align.test_v4_w1_synthetic.MinimalDryRunTests.test_the_synthetic_contrast_is_rederived_after_the_wp18_update` | FAIL/PASS | PASS | PASS | PASS |
+| PREQUAL w1 / arm-cli | `arm-cli` | FAIL | — | — | — |
+| PREQUAL ordinary / checkpoint-native | `checkpoint-native` | FAIL | — | — | — |
+| PREQUAL ordinary | `d-pins` | NEEDS-REAL-INPUT | NEEDS-REAL-INPUT | NEEDS-REAL-INPUT | NEEDS-REAL-INPUT |
+| PREQUAL ordinary | `d-tokenizer-files` | NEEDS-REAL-INPUT | NEEDS-REAL-INPUT | NEEDS-REAL-INPUT | NEEDS-REAL-INPUT |
+| PREQUAL w1 | `deadline` | NEEDS-REAL-INPUT | NEEDS-REAL-INPUT | NEEDS-REAL-INPUT | NEEDS-REAL-INPUT |
+| PREQUAL ordinary | `generated` | NEEDS-REAL-INPUT | NEEDS-REAL-INPUT | NEEDS-REAL-INPUT | NEEDS-REAL-INPUT |
+| PREQUAL ordinary | `kit` | NEEDS-REAL-INPUT | NEEDS-REAL-INPUT | NEEDS-REAL-INPUT | NEEDS-REAL-INPUT |
+| PREQUAL w1 | `kit-ready` | NEEDS-REAL-INPUT | NEEDS-REAL-INPUT | NEEDS-REAL-INPUT | NEEDS-REAL-INPUT |
+| PREQUAL ordinary | `launcher` | NEEDS-REAL-INPUT | NEEDS-REAL-INPUT | NEEDS-REAL-INPUT | NEEDS-REAL-INPUT |
+| PREQUAL ordinary | `load` | NEEDS-REAL-INPUT | NEEDS-REAL-INPUT | NEEDS-REAL-INPUT | NEEDS-REAL-INPUT |
+| PREQUAL ordinary | `model-load` | NEEDS-REAL-INPUT | NEEDS-REAL-INPUT | NEEDS-REAL-INPUT | NEEDS-REAL-INPUT |
+| PREQUAL ordinary | `nll-fixture-ids` | NEEDS-REAL-INPUT | NEEDS-REAL-INPUT | NEEDS-REAL-INPUT | NEEDS-REAL-INPUT |
+| PREQUAL w1 / packet-tamper | `packet-tamper` | FAIL | — | — | — |
+| PREQUAL w1 | `receipt` | NEEDS-REAL-INPUT | NEEDS-REAL-INPUT | NEEDS-REAL-INPUT | NEEDS-REAL-INPUT |
+| PREQUAL w1 | `series-manifest` | NEEDS-REAL-INPUT | NEEDS-REAL-INPUT | NEEDS-REAL-INPUT | NEEDS-REAL-INPUT |
+| PREQUAL ordinary / stack | `stack` | FAIL | — | — | — |
+| signing | `step4-exporter-selection-roster` | NEEDS-REAL-INPUT | NEEDS-REAL-INPUT | NEEDS-REAL-INPUT | NEEDS-REAL-INPUT |
+| signing | `stored F0-run-11 replay` | NEEDS-REAL-INPUT | NEEDS-REAL-INPUT | NEEDS-REAL-INPUT | NEEDS-REAL-INPUT |
+| signing | `stored counted-Part-C replay` | NEEDS-REAL-INPUT | NEEDS-REAL-INPUT | NEEDS-REAL-INPUT | NEEDS-REAL-INPUT |
+| PREQUAL ordinary | `template-render` | NEEDS-REAL-INPUT | NEEDS-REAL-INPUT | NEEDS-REAL-INPUT | NEEDS-REAL-INPUT |
+| PREQUAL ordinary / template-rewrites | `template-rewrites` | NEEDS-REAL-INPUT | — | — | — |
+| desk-offload | `test_offload_window.Envelope.test_git_and_restricted_members_refuse_without_entering` | FAIL | FAIL | FAIL | FAIL |
+| w1-reliability | `test_w1_reliability.TerminalDeliveryTests.test_actual_program_courier_parses_prompt_and_pushes_to_local_remote` | FAIL | PASS | PASS | PASS |
+| PREQUAL ordinary | `tool-roundtrip` | NEEDS-REAL-INPUT | NEEDS-REAL-INPUT | NEEDS-REAL-INPUT | NEEDS-REAL-INPUT |
+| PREQUAL ordinary | `w1-plan` | NEEDS-REAL-INPUT | NEEDS-REAL-INPUT | NEEDS-REAL-INPUT | NEEDS-REAL-INPUT |
+| PREQUAL w1 | `w1-window-max` | NEEDS-REAL-INPUT | NEEDS-REAL-INPUT | NEEDS-REAL-INPUT | NEEDS-REAL-INPUT |
+| PREQUAL w1 / watchdog-hold-rollback | `watchdog-hold-rollback` | FAIL | — | — | — |
+| PREQUAL w1 / wp22-dry-run | `wp22-dry-run` | FAIL | — | — | — |
 ## Signing closure and lead handoff
 
 - Update the approved executed inventory in `joulewise/align/apple/v4_registration.py`, including a strict artifact entry for `scripts/align_r1_part_c_evidence.py`. The executed-closure test identifies that helper as the missing path on variant 3. The two S/Q artifacts already have template declarations.
@@ -479,9 +660,10 @@ run="$seat/lead-$(date +%Y%m%d-%H%M%S)"
 cat "$run/heads.json" "$run/variants.json"
 ```
 
-For exact replay of the reviewed snapshot, use `"$seat/assemble.sh" --heads "$seat/intake/heads.json" --output "$run"` in a new output directory. The assembler produces a detached checkout and records each merge parent and tree. It stops on a protected input delta or a non-union conflict. The final lead promotion uses the accepted component objects and the recorded signing inputs.
+For exact replay of the reviewed snapshot, use `"$seat/assemble.sh" --heads "$seat/intake/heads.json" --output "$run"` in a new output directory. The assembler produces a detached checkout and records each merge parent and tree. It stops on a protected input delta or a non-union conflict. The final lead promotion uses the accepted component objects and the recorded signing inputs. The separately pinned v2 test is at `$seat/frozen-v2/test_partc_frozen_differential.py` for a current source that ships a later suite.
 
 ## NEEDS_SPEC
 
 - PR #809 round 1 used a v1 audit brief while RL-189 requires frozen v2 for the descriptor witness. This rehearsal uses the exact RL-189 v2 digest. The lead owns the next audit brief and admission decision. [PR #809](https://github.com/mpmdw/JouleWise/pull/809)
+- The refreshed PR #809 tree cannot run the brief's v2 matrix because its clean predecessor fixture fails the new D-018 header check. The pushed v3 control passes. The lead owns the choice of gate version and the research lead's ratification of the provisional predecessor CSV rule, including the six-column case described in PR #809's handoff. [PR #809 handoff](https://github.com/mpmdw/JouleWise/blob/89d705196939b6e7eca9deef6151366006d118c5/docs/run_reports/2026-11-19-pr809-rl189.md#open-boundary-for-w1-signing)
 - PR #897 remains provisional until its independent fix-round disposition. [PR #897](https://github.com/mpmdw/JouleWise/pull/897)
