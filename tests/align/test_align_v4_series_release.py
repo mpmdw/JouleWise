@@ -1509,7 +1509,8 @@ class SeriesReleaseTests(unittest.TestCase):
             excluded = [m for m in originals if not m.eligible]
             self.assertEqual([(m.window, m.episode.condition, m.exclusion_reason) for m in excluded],
                              [("C9", "sabotage", "X5")] * 2)
-            cut, empty, truncated = False, False, False
+            cut, truncated = False, False
+            scoreless = []
             for member in originals:
                 run_id = member.episode.episode_id
                 attempt = run_id.split("-")[1]
@@ -1517,11 +1518,17 @@ class SeriesReleaseTests(unittest.TestCase):
                 expected, _ = read_restored_fixture_rows(bundle)
                 self.assertEqual(member.s_rows, expected.rows)
                 cut |= any(row.cut for row in expected.rows)
-                empty |= not expected.rows and member.eligible
+                if not expected.rows and member.eligible:
+                    scoreless.append({
+                        "window": "C9", "pair": member.episode.task_pair.removeprefix("shade/"),
+                        "ordinal": int(run_id.rsplit("-", 1)[1]),
+                        "decision": "eligible", "status": "s_score_undefined", "cause": "no_decode_only_row",
+                        "turn_codes": [row["reason"] for row in expected.no_row],
+                    })
                 truncated |= expected.truncated and member.eligible
-            self.assertTrue(cut and empty and truncated)
-            self.assertEqual(len(report["S"]["attrition"]["no_s_score"]), 2)
-            self.assertEqual({row["window"] for row in report["S"]["attrition"]["no_s_score"]}, {"C9"})
+            self.assertTrue(cut and truncated)
+            self.assertEqual(len(scoreless), 1)
+            self.assertEqual(report["S"]["attrition"]["no_s_score"], scoreless)
 
     def test_no_member_loader_opens_dc_and_provider_keys_on_manifest_benign_ordinals(self):
         from scripts import align_v4_series_release as caller
