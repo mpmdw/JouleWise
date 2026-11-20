@@ -1,5 +1,4 @@
 """Dated transfer accounting on structural facts, with no live I/O."""
-from collections import Counter
 from dataclasses import dataclass
 from datetime import date, datetime, time, timedelta
 from math import floor
@@ -45,10 +44,6 @@ class VerifiedTransferStart:
     t0_ns: int
 
 
-class UnresolvedDateRule(ValueError):
-    """A date's ordinal depends on a pending research lead ruling."""
-
-
 def local_day(epoch):
     return datetime.fromtimestamp(floor(epoch), ZONE).date()
 
@@ -88,15 +83,15 @@ def _check_served_places(served, places):
 def date_places(windows, transfer_starts, *, freeze_date: date, as_of):
     """Map eligible dates to the first 20 ordinal places and their supporting attempt IDs.
 
-    A running rollover can suppress its originating date. Its close date replaces the
-    originating date when the structural close exists, including for the last window.
+    An unserved window that holds the host at midnight contributes its verified
+    close date. Other windows can still contribute the original date. RL-193 §8
+    applies the freeze-date filter after this per-window substitution.
     """
     attempts = set()
     eligible = {}
     served = _transfer_start_days(transfer_starts, as_of)
     starts = [window for window in windows
               if window.kind in WINDOW_KINDS and window.t0 is not None and window.t0 <= as_of]
-    start_counts = Counter(local_day(window.t0) for window in starts)
     for window in starts:
         if window.attempt_id in attempts:
             raise ValueError("use one structural record per window attempt")
@@ -107,16 +102,11 @@ def date_places(windows, transfer_starts, *, freeze_date: date, as_of):
         if close is not None and close < window.t0:
             raise ValueError("window close precedes its t0")
         if window.held_at_midnight and as_of >= cutoff and day not in served:
-            if day >= freeze_date and start_counts[day] > 1:
-                raise UnresolvedDateRule("NEEDS_SPEC: shared start date with a midnight crossing")
             if close is None:
                 continue
             if close <= cutoff:
                 raise ValueError("midnight occupancy conflicts with window close")
-            close_day = local_day(close)
-            if day < freeze_date <= close_day:
-                raise UnresolvedDateRule("NEEDS_SPEC: pre-freeze window crossing onto an eligible date")
-            day = close_day
+            day = local_day(close)
         if day >= freeze_date:
             eligible.setdefault(day, set()).add(window.attempt_id)
 
