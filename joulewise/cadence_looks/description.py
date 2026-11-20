@@ -295,6 +295,8 @@ class Snapshot:
         self.cache = {}
         self.manifest = self._manifest(self.manifest_name, look)
         require(self.hashes[self.manifest_name] == self.row["sha256"], "wrong manifest ledger digest")
+        self.copy = self.doc(AUTHORITY["copy"])
+        self._destinations(root)
         self.step3_code = _validate_executables(integrated=self.native)
         self.validate_manifest(self.manifest_name, look)
         self.roster = self.doc("roster.json")
@@ -302,8 +304,6 @@ class Snapshot:
         # The manifest and receipts independently bind to this pre-read
         # commit. The collection may have closed before final registration.
         require(self.book.ancestor(self.receipts, self.commit), "unproven receipt chronology")
-        self.copy = self.doc(AUTHORITY["copy"])
-        self._destinations(root)
 
     def read(self, name):
         if name not in self.cache:
@@ -335,6 +335,9 @@ class Snapshot:
         registry = f"{CONTROL}/filler-kit-registry.json"
         require(exact_path(CODE_ROOT / registry).read_bytes() == self.read(registry),
                 "filler registry differs from the executing registry")
+        # The final validator sets up its standard descriptors. A spent look
+        # must refuse before starting that child, including when checking a peer.
+        self._require_unspent_destinations()
         result = subprocess.run(
             [sys.executable, "-B", "-m", "joulewise.cadence_looks.manifest_dispatch",
              "validate", str(self.book.root / name), "--final"],
@@ -379,9 +382,13 @@ class Snapshot:
         self.public = public_path(public_root / self.look / "PUBLIC.json")
         for path in (self.restricted, self.public):
             exact_path(path.parent, directory=True)
-            require(not os.path.lexists(path), "look already reserved or published")
+        self._require_unspent_destinations()
         require(self.restricted.parent.stat().st_dev == self.public.parent.stat().st_dev,
                 "publication requires one filesystem")
+
+    def _require_unspent_destinations(self):
+        require(not os.path.lexists(self.restricted) and not os.path.lexists(self.public),
+                "look already reserved or published")
 
     def public_record(self, census):
         return {

@@ -129,5 +129,28 @@ class NativeStep3PreflightTests(unittest.TestCase):
         self.assertEqual(self.fallback_calls, [])
 
 
+class SpentDescriptionLookTests(unittest.TestCase):
+    def test_spent_look_refuses_before_launching_final_validator(self):
+        # Simulate the existing reservation for the worker and its observer.
+        # The test host may deny actually creating the reservation directory.
+        spent = """
+_real_lexists = os.path.lexists
+def _with_reservation(path):
+    return os.fsdecode(path) == os.environ["DESC_RESERVATION"] or _real_lexists(path)
+os.path.lexists = _with_reservation
+"""
+        for look in fixture.IDS:
+            with self.subTest(look=look), TemporaryDirectory() as temporary:
+                world = fixture.World(Path(temporary).resolve() / "world", look)
+                checks = fixture.Checks()
+                checks.stage1(world)
+                with patch.object(fixture, "PROBE", fixture.PROBE + spent):
+                    rc, out, _, events = fixture.invoke(world, "stage2")
+                self.assertEqual((rc, out), (2, b""))
+                self.assertFalse(world.public.exists())
+                self.assertFalse(any(kind in {"open", "descriptor", "write"}
+                                     for kind, _ in events), events)
+
+
 if __name__ == "__main__":
     unittest.main()
