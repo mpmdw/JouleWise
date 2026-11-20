@@ -2,7 +2,7 @@
 
 import ast
 import csv
-from decimal import Decimal
+from decimal import Decimal, localcontext
 from fractions import Fraction
 import io
 from itertools import product
@@ -177,6 +177,72 @@ class DescriptionIntervalTests(unittest.TestCase):
                 edges = fixture.print_one(leg.signal(), fixture.IDS[0])["edges"]
                 expect = fixture.null("coverage", bound_s=1) if sparse else 0.25
                 self.assertEqual(edges["rail_return_censor_s"], dict.fromkeys(fixture.CHANNEL[:2], expect))
+
+    def test_rail_return_coverage_is_invariant_to_ancillary_capture_partition(self):
+        for stops in (("610.75", "611"), ("611",)):
+            with self.subTest(stops=stops), TemporaryDirectory() as temporary:
+                leg = fixture.TraceLeg(Path(temporary))
+                for rail in fixture.COLS:
+                    leg.omit(rail, [610.5, 610.75])
+                for row in leg.rows[fixture.RAIL_FILE]:
+                    if row["source"] == "powermetrics" and Fraction(row["interval_start_s"]) == Fraction("610.25"):
+                        row["power_w"] = "0"
+                start = "610.5"
+                for stop in stops:
+                    row = (start, stop, stop, "powermetrics", "dram_power", "unparsed")
+                    leg.rows[fixture.RAIL_FILE].append(dict(zip(fixture.RAIL_HEADER, row)))
+                    start = stop
+                edges = fixture.print_one(leg.signal(), fixture.IDS[0])["edges"]
+                self.assertEqual(edges["rail_return_censor_s"],
+                                 dict.fromkeys(fixture.CHANNEL[:2], fixture.null("coverage", bound_s=1)))
+
+    def test_start_sensor_keys_keep_the_coverage_reason_at_593_of_600(self):
+        with TemporaryDirectory() as temporary:
+            world = DescriptionWorld(Path(temporary).resolve() / "world", fixture.IDS[0])
+            keys = list(world.good)[:2]
+            for key, present in zip(keys, (593, 594)):
+                path = world.copy / key / "support.json"
+                support = fixture.read(path)
+                omitted = {10 + 70 * i for i in range(600 - present)}
+                support["sidecar_times"] = [t for t in support["sidecar_times"] if t not in omitted]
+                if present == 593:
+                    support["sensors"][0]["TV0h"] = "unparsed"
+                fixture.put(path, support)
+            gain = _score_world(self, world)["gain"]
+            self.assertEqual(gain[keys[0]]["mean_fan_rpm"], fixture.null("coverage"))
+            self.assertEqual(gain[keys[0]]["mean_start_c"],
+                             dict.fromkeys(("TV0h", "Tf08"), fixture.null("coverage")))
+            self.assertEqual(gain[keys[1]]["mean_start_c"], {"TV0h": 37, "Tf08": 41})
+
+    def test_near_equal_sd10_date_means_preserve_the_positive_spread(self):
+        for places in (16, 32, 100):
+            with self.subTest(decimal_places=places):
+                offset = Fraction(1, 10**places)
+                levels = [Fraction(1)] * 30 + [Fraction(2)] * 30
+                plain = reader.deviation(levels)
+                changed = reader.deviation([1 + offset, 1 - offset, *levels[2:]])
+                groups = {"2026-11-01": [plain] * 3, "2026-11-02": [changed] * 2, "2026-11-03": [plain]}
+                cell = {f"{day}/{index}": {"date": day, "value": spread}
+                        for day, spreads in groups.items() for index, spread in enumerate(spreads)}
+                result = reader._printed(reader._date_summaries({"cell": cell}))["cell"]
+                # Rationalize the root difference so the oracle has no subtractive cancellation.
+                with localcontext() as context:
+                    context.prec = 80
+                    delta_variance = Decimal(2).scaleb(-2 * places) / 59
+                    variance = Decimal(15) / 59
+                    delta = delta_variance / ((variance + delta_variance).sqrt() + variance.sqrt())
+                    expected = float(delta / Decimal(3).sqrt())
+                self.assertGreater(expected, 0)
+                self.assertEqual(result["sd_date_means"], expected)
+                self.assertEqual(result["pooled_within_sd"], 0)
+
+    def test_radical_variance_rounds_an_exact_binary_midpoint_to_even(self):
+        for offset, expected in ((1, 1.0), (3, 1.0000000000000004)):
+            with self.subTest(offset=offset):
+                midpoint = 1 + Fraction(offset, 2**53)
+                residual = reader.RadicalSum({Fraction(2): midpoint / 2})
+                spread = reader.ResidualDeviation([residual, residual], 1)
+                self.assertEqual(reader._printed(spread), expected)
 
     def test_stability_keeps_a_date_with_only_refused_observations(self):
         with TemporaryDirectory() as temporary:
@@ -388,7 +454,7 @@ class DescriptionIntervalTests(unittest.TestCase):
             self.assertTrue(all(isinstance(value, float) for value in gain["floor_tokens"]["dc_in"]))
 
     def test_support_projection_handles_escaped_keys_and_nested_delimiters(self):
-        readings = br'[{"label":"a\"b,[}]","temperature":37.8125}]'
+        readings = br'[{"label":"a\"b,[}]","temperat\u0075re":37.8125,"fan_keys":{"left":800}}]'
         beginning = br'{"clock":{"note":"sensors: [,}]"},"sens\u006frs":'
         end = ',"fan_label":"ventilateur été"}'.encode()
         payload = beginning + readings + end
@@ -396,7 +462,8 @@ class DescriptionIntervalTests(unittest.TestCase):
         self.assertEqual(metadata, {
             "clock": {"note": "sensors: [,}]"}, "sensors": None, "fan_label": "ventilateur été",
         })
-        self.assertEqual(payload[slice(*span)], readings)
+        self.assertEqual(payload[span.start:span.end], readings)
+        self.assertEqual(span.names, ("label", "temperature"))
         duplicate = beginning + readings + b',"sensors":[]}'
         with self.assertRaisesRegex(reader.Refusal, "duplicate JSON field"):
             reader._support_metadata(io.BytesIO(duplicate))
@@ -611,7 +678,11 @@ class DescriptionIntervalTests(unittest.TestCase):
                         support_only = owner == "score" and line.strip() == (
                             'with paths["support.json"].open("rb") as stream:'
                         )
+                        pinned_parser = owner == "_drop_item_parser" and line.strip() == (
+                            "source = exact_path(CODE_ROOT / path).read_bytes()"
+                        )
                         self.assertTrue(owner == "interval_values" or support_only
+                                        or pinned_parser
                                         or owner in structural_io.get(source.name, ()), line)
 
 

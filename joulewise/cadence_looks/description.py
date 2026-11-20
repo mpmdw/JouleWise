@@ -7,7 +7,7 @@ from collections import Counter, defaultdict
 import csv
 from dataclasses import dataclass
 from datetime import datetime
-from decimal import Decimal, localcontext
+from decimal import Decimal
 from fractions import Fraction
 from functools import cache, cached_property
 from hashlib import sha1, sha256
@@ -979,18 +979,45 @@ def _exact_root(value):
     return Fraction(n, d) if n * n == numerator and d * d == denominator else None
 
 
+def _root_bounds(squared, bits):
+    numerator, denominator = squared.as_integer_ratio()
+    scaled = numerator << (2 * bits)
+    root = math.isqrt(scaled // denominator)
+    scale = 1 << bits
+    lower = Fraction(root, scale)
+    upper = lower if root * root * denominator == scaled else Fraction(root + 1, scale)
+    return lower, upper
+
+
+def _round_enclosed(bounds, at_midpoint=None):
+    # Increase precision until both exact endpoints round to the same double.
+    bits = 64
+    while True:
+        lower, upper = map(float, bounds(bits))
+        if lower == upper and math.copysign(1, lower) == math.copysign(1, upper):
+            return lower
+        if at_midpoint and math.nextafter(lower, math.inf) == upper:
+            midpoint = (Fraction(lower) + Fraction(upper)) / 2
+            if at_midpoint(midpoint):
+                return float(midpoint)
+        bits *= 2
+
+
 @dataclass(frozen=True, slots=True)
 class StandardDeviation:
     squared: Fraction
 
-    def rational(self):
-        exact = _exact_root(self.squared)
-        if exact is not None:
-            return exact
-        numerator, denominator = self.squared.as_integer_ratio()
-        with localcontext() as context:
-            context.prec = 60
-            return Fraction((Decimal(numerator) / Decimal(denominator)).sqrt())
+    def bounds(self, bits):
+        return _root_bounds(self.squared, bits)
+
+
+def _radical_basis(squared, basis):
+    for root in basis:
+        coefficient = _exact_root(squared / root)
+        if coefficient is not None:
+            return root, coefficient
+    basis.append(squared)
+    return squared, Fraction(1)
 
 
 @dataclass(frozen=True, slots=True)
@@ -1005,12 +1032,15 @@ class RadicalSum:
                 terms[root] = coefficient
         return RadicalSum(terms)
 
-    def decimal(self):
-        # One representative per rational square class. Equal radicals
-        # cancel exactly before the remaining terms need numerical roots.
-        return sum((Decimal(c.numerator) / Decimal(c.denominator)
-                    * (Decimal(r.numerator) / Decimal(r.denominator)).sqrt()
-                    for r, c in self.terms.items()), Decimal())
+    def bounds(self, bits):
+        lower = upper = Fraction(0)
+        for radicand, coefficient in self.terms.items():
+            lo, hi = _root_bounds(radicand, bits)
+            if coefficient < 0:
+                lo, hi = hi, lo
+            lower += coefficient * lo
+            upper += coefficient * hi
+        return lower, upper
 
 
 @dataclass(frozen=True, slots=True)
@@ -1018,9 +1048,27 @@ class ResidualDeviation:
     residuals: list[RadicalSum]
     df: int
 
-    def decimal(self):
-        squared = sum((residual.decimal() ** 2 for residual in self.residuals), Decimal())
-        return (squared / self.df).sqrt()
+    def bounds(self, bits):
+        low_square = high_square = Fraction(0)
+        for residual in self.residuals:
+            lo, hi = residual.bounds(bits)
+            low_square += 0 if lo <= 0 <= hi else min(lo ** 2, hi ** 2)
+            high_square += max(lo ** 2, hi ** 2)
+        lo, _ = _root_bounds(low_square / self.df, bits)
+        _, hi = _root_bounds(high_square / self.df, bits)
+        return lo, hi
+
+    def at_midpoint(self, midpoint):
+        # Squaring can collapse distinct radical terms to an exact rational.
+        # Recognize an exact binary64 tie even when the bounds straddle it.
+        basis = [Fraction(1)]
+        terms = defaultdict(Fraction, {Fraction(1): -self.df * midpoint ** 2})
+        for residual in self.residuals:
+            for left, a in residual.terms.items():
+                for right, b in residual.terms.items():
+                    root, scale = _radical_basis(left * right, basis)
+                    terms[root] += a * b * scale
+        return not any(terms.values())
 
 
 def deviation(samples):
@@ -1028,14 +1076,12 @@ def deviation(samples):
 
 
 def _printed(value):
-    if isinstance(value, StandardDeviation):
-        return float(value.rational())
     if isinstance(value, Fraction):
         return float(value)
-    if isinstance(value, (RadicalSum, ResidualDeviation)):
-        with localcontext() as context:
-            context.prec = 60
-            return float(value.decimal())
+    if isinstance(value, (StandardDeviation, RadicalSum)):
+        return _round_enclosed(value.bounds)
+    if isinstance(value, ResidualDeviation):
+        return _round_enclosed(value.bounds, value.at_midpoint)
     if isinstance(value, dict):
         return {key: _printed(item) for key, item in value.items()}
     if isinstance(value, list):
@@ -1184,12 +1230,21 @@ _JSON_STRUCTURE = re.compile(rb'"(?:[^"\\]|\\.)*"|[{}\[\],:]')
 _JSON_CLOSERS = {ord("{"): ord("}"), ord("["): ord("]")}
 
 
+@dataclass(frozen=True, slots=True)
+class SensorSpan:
+    start: int
+    end: int
+    names: tuple[str, ...]
+
+
 def _support_metadata(stream):
-    """Decode timing and health fields and keep only the sensor byte offsets."""
+    """Decode timing and health fields and index sensor names without their values."""
     payload = stream.read()
     stack = []
     expect_key, sensor_key = True, False
     sensor_start = sensor_span = None
+    sensor_names = set()
+    previous = None
     for token in _JSON_STRUCTURE.finditer(payload):
         start = token.start()
         symbol = payload[start]
@@ -1202,17 +1257,22 @@ def _support_metadata(stream):
             elif symbol in (ord(","), ord("}")):
                 if sensor_start is not None:
                     require(sensor_span is None, "duplicate JSON field")
-                    sensor_span = (sensor_start, start)
+                    sensor_span = SensorSpan(sensor_start, start, tuple(sorted(sensor_names)))
                     sensor_start = None
                 expect_key, sensor_key = True, False
+        elif (sensor_start is not None and stack == [ord("}"), ord("]"), ord("}")]
+              and previous in (ord("{"), ord(",")) and symbol == ord('"')):
+            name = decode(token.group())
+            if name != "fan_keys":
+                sensor_names.add(name)
         if symbol in _JSON_CLOSERS:
             stack.append(_JSON_CLOSERS[symbol])
         elif symbol in (ord("]"), ord("}")):
             require(bool(stack) and stack.pop() == symbol, "unbalanced support JSON")
+        previous = symbol
     require(not stack, "unbalanced support JSON")
     if sensor_span is not None:
-        start, end = sensor_span
-        payload = payload[:start] + b"null" + payload[end:]
+        payload = payload[:sensor_span.start] + b"null" + payload[sensor_span.end:]
     metadata = decode(payload, parse_float=Decimal)
     require(type(metadata) is dict, "support metadata is not a JSON object")
     return metadata, sensor_span
@@ -1238,6 +1298,10 @@ class Signals:
         self.mark_read = mark_read
         self.pinned = pinned
         self._sensor_source = sensor_source
+        self.sensor_names = (sensor_source[1].names if sensor_source is not None
+                             else tuple(sorted({name for record in support.get("sensors") or ()
+                                                if isinstance(record, dict)
+                                                for name in record if name != "fan_keys"})))
         self.sum_admitted = support["rail_manifest"] == list(RAILS)
         self._read_started = False
         self._rail_stamps = None
@@ -1352,11 +1416,12 @@ class Signals:
         if self._rail_stamps is not None:
             return
         stamps = {}
-        observed_intervals = set()
+        capture_end = None
         with self._open_signal("power_trace.csv") as stream:
             for key, stamp in _rail_rows(stream):
                 bounds, rail = key
-                observed_intervals.add(bounds)
+                if capture_end is None or bounds[1] > capture_end:
+                    capture_end = bounds[1]
                 if rail not in RAILS:
                     continue
                 require(key not in stamps, "repeated rail in the same interval")
@@ -1365,10 +1430,9 @@ class Signals:
             name: [bounds for bounds in self._declared_rails[name].bounds if (bounds, rail) in stamps]
             for name, rail in RAIL_CHANNELS.items()
         })
-        # The rail channels share one capture. A dropped component at its
-        # end changes that channel's coverage, not the observed capture end.
-        self._rail_end = max((b for a, b in self.bounds if (a, b) in observed_intervals),
-                             default=None)
+        # Ancillary rows can preserve the capture end even when their
+        # partition differs from the registered sample grid.
+        self._rail_end = capture_end
         self._rail_stamps = stamps
 
     def recovery_start(self, sampling):
@@ -1506,10 +1570,10 @@ class Signals:
         if channel == "sidecar":
             if self._sensor_source is None:
                 return self.meta["sensors"]
-            stream, (start, end) = self._sensor_source
+            stream, span = self._sensor_source
             self._start_read()
-            stream.seek(start)
-            return decode(stream.read(end - start), parse_float=_sample, parse_int=_sample)
+            stream.seek(span.start)
+            return decode(stream.read(span.end - span.start), parse_float=_sample, parse_int=_sample)
         start, stop = _time_ns(a), _time_ns(b)
         if channel == "dc_in":
             return self._admitted_meter(start, stop)
@@ -1631,9 +1695,9 @@ def _above_hold(signal, channel, hold, start, stop, *, average):
     return energy
 
 
-def _sensors(keys, readings):
+def _sensors(keys, readings, sensor_names=()):
     if isinstance(readings, dict):
-        return readings, {}
+        return readings, dict.fromkeys(sensor_names, readings)
     rpm = []
     sensors = defaultdict(list)
     for record in readings:
@@ -1807,7 +1871,7 @@ def _leg_values(signal, detail, instrument):
                 value = StandardDeviation(sd.squared * factor ** 2)
             floors[channel].append(value)
     readings = signal.interval_values("sidecar", (_seconds(quiet), _seconds(quiet + 600 * NS_PER_SECOND)))
-    fan, sensors = _sensors(meta["host_fan_keys"], readings)
+    fan, sensors = _sensors(meta["host_fan_keys"], readings, signal.sensor_names)
     result["gain"] = {
         "decode_w": decode_w, "long_prefill_w": prefill_w, "decode_gain": _ratios(decode_w),
         "long_prefill_gain": prefill_gain, "idle_dc_minus_sum_w": difference(baseline["dc_in"],
@@ -1824,12 +1888,8 @@ def _date_value(value, basis):
     squared = Fraction(value.squared)
     if not squared:
         return RadicalSum({})
-    for root in basis:
-        coefficient = _exact_root(squared / root)
-        if coefficient is not None:
-            return RadicalSum({root: coefficient})
-    basis.append(squared)
-    return RadicalSum({squared: Fraction(1)})
+    root, coefficient = _radical_basis(squared, basis)
+    return RadicalSum({root: coefficient})
 
 
 def _date_mean(values):
