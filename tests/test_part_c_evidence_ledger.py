@@ -1097,21 +1097,38 @@ class PrefillStartWitnessTests(unittest.TestCase):
                 self.refused("prefill_start", at)
         self.refused("phase_order", 9.0)
 
-    def test_recorded_tokenize_and_setup_phases_witness_a_delay_in_order(self):
+    def test_only_the_whole_recorded_sequence_witnesses_a_delay(self):
         self.judge(11.0, self.phases(10.2, 10.6, 10.6, 10.9))
         self.judge(11.0, self.phases(10.0, 10.0, 11.0, 11.0))
         self.judge(10.0, self.phases(10.0, 10.0, 10.0, 10.0))
-        self.judge(11.0, self.phases(10.2, 10.6)[:1])
-        for name, lead in (("after the prefill start", self.phases(10.2, 10.6, 10.6, 11.5)),
-                           ("before the start stamp", self.phases(9.9, 10.6, 10.6, 10.9)),
-                           ("out of order", self.phases(10.6, 10.2, 10.7, 10.9)),
-                           ("another turn", self.phases(10.2, 10.6, 10.6, 10.9, align_turn_index=1)),
-                           ("an unrelated phase", self.phases(10.2, 10.6, 10.6, 10.9, phases=("align_note",) * 4))):
+        whole = self.phases(10.2, 10.6, 10.6, 10.9)
+        damaged = {
+            "after the prefill start": self.phases(10.2, 10.6, 10.6, 11.5),
+            "before the start stamp": self.phases(9.9, 10.6, 10.6, 10.9),
+            "out of order in time": self.phases(10.6, 10.2, 10.7, 10.9),
+            "one event": whole[:1], "no generation setup": whole[:2], "no setup end": whole[:3],
+            "no tokenize start": whole[1:], "repeated": [*whole, *whole], "reordered": [whole[2], whole[3], *whole[:2]],
+            "a start for an end": [whole[0], {**whole[1], "event_type": "phase_start"}, *whole[2:]],
+            "a stage event": [{**whole[0], "event_type": "stage_started"}, *whole[1:]],
+        }
+        for name, lead in damaged.items():
             with self.subTest(lead=name):
                 self.refused("prefill_start", 11.0, lead)
+        for name, lead in (("another turn", self.phases(10.2, 10.6, 10.6, 10.9, align_turn_index=1)),
+                           ("no turn", [{**mark, "metadata": {}} for mark in whole]),
+                           ("a turn that is not an integer", self.phases(10.2, 10.6, 10.6, 10.9, align_turn_index="0"))):
+            with self.subTest(orphan=name), self.assertRaises(evidence.EvidenceFailure) as caught:
+                self.judge(11.0, lead)
+            self.assertEqual((caught.exception.reason, caught.exception.field),
+                             ("turn_boundary_recompute", "prefill_start"))
 
-    def test_a_phase_recorded_after_the_prefill_start_is_no_witness(self):
-        late = self.phases(10.2, 10.6, 10.6, 10.9)
+    def test_audit_reproduction_an_orphan_tokenize_end_witnesses_nothing(self):
+        # Audit round 1, `orphan-tokenize`: a lone tokenize end at the old stamp, the prefill start one microsecond on.
+        orphan = self.event("phase_end", "tokenize", 10.0)
+        self.refused("prefill_start", 10.000001, [orphan])
+        self.refused("prefill_start", 10.0, [orphan])
+
+    def test_a_pre_prefill_phase_recorded_after_the_prefill_start_is_an_orphan(self):
         stamp = lambda at: {"epoch_s": at, "monotonic_before_s": at, "monotonic_after_s": at,
                             "wall_resolution_s": 1e-9, "monotonic_resolution_s": 1e-9}
         turn = SimpleNamespace(index=0, start_ns=10 * 10**9, first_token_ns=12 * 10**9, end_ns=13 * 10**9,
@@ -1119,14 +1136,16 @@ class PrefillStartWitnessTests(unittest.TestCase):
         episode = SimpleNamespace(turns=[turn], clock_domain="synthetic")
         record = {"start_stamp": stamp(10.0), "end_stamp": stamp(13.0),
                   "clock_mapping": {"offset_ns": 0, "episode_domain": "synthetic"}}
-        events = [self.event("phase_start", "prefill", 11.0), *late, self.event("phase_end", "prefill", 12.0),
-                  self.event("phase_start", "decode", 12.0, max_tokens=4096),
-                  self.event("token", "decode", 12.5, index=0),
-                  self.event("phase_end", "decode", 13.0, emitted_tokens=1, requested_output_tokens=4096)]
-        with runtime_double(), self.assertRaises(evidence.EvidenceFailure) as caught:
-            pc._recompute_turn_boundaries("step-d", episode, [record], events, (), 4096)
-        self.assertEqual((caught.exception.reason, caught.exception.field),
-                         ("turn_boundary_recompute", "prefill_start"))
+        for at in (10.0, 11.0):
+            events = [self.event("phase_start", "prefill", at), *self.phases(10.2, 10.6, 10.6, 10.9),
+                      self.event("phase_end", "prefill", 12.0),
+                      self.event("phase_start", "decode", 12.0, max_tokens=4096),
+                      self.event("token", "decode", 12.5, index=0),
+                      self.event("phase_end", "decode", 13.0, emitted_tokens=1, requested_output_tokens=4096)]
+            with self.subTest(at=at), runtime_double(), self.assertRaises(evidence.EvidenceFailure) as caught:
+                pc._recompute_turn_boundaries("step-d", episode, [record], events, (), 4096)
+            self.assertEqual((caught.exception.reason, caught.exception.field),
+                             ("turn_boundary_recompute", "prefill_start"))
 
 
 class DescriptorMarkerTests(unittest.TestCase):
@@ -1183,3 +1202,212 @@ class DescriptorMarkerTests(unittest.TestCase):
             for row in attempt.rows():
                 if FIELD in row:
                     self.assertTrue(evidence.is_descriptor_witness(row[FIELD]))
+
+
+# ---- Audit round 1: invalid raw evidence ---------------------------------------------------------
+
+class RawEvidenceTests(unittest.TestCase):
+    """A trace, an event stream and a journal each parse as the producer wrote them."""
+
+    WINDOW = (2000.0, 3800.0)
+
+    def trace(self, raw, window=None):
+        pc._check_power_trace(FIRST, raw, *(window or self.WINDOW))
+
+    def refused(self, call, field):
+        with self.assertRaises(evidence.EvidenceFailure) as caught:
+            call()
+        failure = caught.exception
+        self.assertEqual((failure.reason, failure.role, failure.field), ("bundle_binding", FIRST, field))
+        self.assertNotIn(str(MARKER), json.dumps(failure.finding()))
+        return failure
+
+    def test_the_power_trace_is_the_producers_csv(self):
+        d018 = b"timestamp_s,power_w,source,rail\n"
+        interval = b"timestamp_s,power_w,source,rail,interval_start_s,interval_end_s\n"
+        self.trace(b"timestamp_s,power_w,source\n")                 # the synthetic control's header-only trace
+        self.trace(d018)
+        self.trace(d018 + b"2001.5,0.002,powermetrics,gpu_power\n2002.5,0.002,powermetrics,cpu_power\n")
+        self.trace(interval + b"2001,0.002,powermetrics,gpu_power,2000,2001\n3800,0.5,powermetrics,gpu_power,,\n")
+        # Audit round 1, `one-byte-predecessor-trace` and the file sweep's truncation.
+        self.refused(lambda: self.trace(b"{"), "header")
+        self.refused(lambda: self.trace(b""), "header")
+        for header in (b"timestamp_s,power_w\n", b"power_w,timestamp_s,source\n", b"timestamp_s,power_w,source,rail,x\n",
+                       b"timestamp_s,power_w,source,rail,interval_start_s\n", b'{"attempt":"foreign"}\n'):
+            with self.subTest(header=header):
+                self.refused(lambda: self.trace(header), "header")
+        self.refused(lambda: self.trace(b"\xff\xfe"), "invalid")
+        for row in (b"2001.5,0.002\n", b"2001.5,0.002,powermetrics,gpu_power,extra\n", b"x,0.002,powermetrics,gpu_power\n",
+                    b"2001.5,nan,powermetrics,gpu_power\n", b"inf,0.002,powermetrics,gpu_power\n",
+                    f"2001.5,{MARKER}x,powermetrics,gpu_power\n".encode()):
+            with self.subTest(row=row):
+                self.refused(lambda: self.trace(d018 + row), "row")
+        for row in (b"2001,0.002,powermetrics,gpu_power,2000,\n", b"2001,0.002,powermetrics,gpu_power,2001.5,2001\n"):
+            with self.subTest(row=row):
+                self.refused(lambda: self.trace(interval + row), "row")
+
+    def test_a_trace_from_outside_the_members_terminal_bracket_is_another_members(self):
+        # Audit round 1, the file sweep's `swap`: D bank's trace in the predecessor's bundle.
+        interval = b"timestamp_s,power_w,source,rail,interval_start_s,interval_end_s\n"
+        foreign = interval + b"6134,0.002,powermetrics,gpu_power,6133,6134\n"
+        self.trace(foreign, (6000.0, 7800.0))
+        failure = self.refused(lambda: self.trace(foreign), "window")
+        self.assertEqual((failure.source, failure.index, failure.peer), ("power_trace.csv", 0, MANIFEST))
+        d018 = b"timestamp_s,power_w,source,rail\n"
+        self.trace(d018 + b"2000,1,p,gpu_power\n3800,1,p,gpu_power\n")
+        for row in (b"1999.999,1,p,gpu_power\n", b"3800.001,1,p,gpu_power\n"):
+            self.refused(lambda: self.trace(d018 + b"2001,1,p,gpu_power\n" + row), "window")
+        self.refused(lambda: self.trace(interval + b"2000.5,1,p,gpu_power,1999.5,2000.5\n"), "window")
+
+    def events(self, **last):
+        final = {"timestamp_s": 4.0, **pc.FINAL_EVENT, **last}
+        return [{"timestamp_s": 1.0, "event_type": "phase_start", "phase": "prefill", "message": "", "metadata": {}},
+                final]
+
+    def test_each_event_is_typed_and_the_stream_ends_with_the_producers_finalization(self):
+        pc._check_event_rows(FIRST, self.events())
+        # Audit round 1, `empty-phase`.
+        self.refused(lambda: pc._check_event_rows(FIRST, self.events(phase="")), None)
+        for change in ({"phase": "stage"}, {"message": "finalized"}, {"metadata": {"private": MARKER}},
+                       {"event_type": "run_finalised"}, {"timestamp_s": 0.5}):
+            with self.subTest(change=change):
+                self.refused(lambda: pc._check_event_rows(FIRST, self.events(**change)), "run_finalized")
+        for key, value in (("phase", ""), ("phase", None), ("event_type", ""), ("event_type", 7), ("message", None),
+                           ("metadata", []), ("timestamp_s", float("nan")), ("timestamp_s", "1")):
+            rows = self.events()
+            rows[0][key] = value
+            with self.subTest(key=key, value=value):
+                failure = self.refused(lambda: pc._check_event_rows(FIRST, rows), None)
+                self.assertEqual(failure.index, 0)
+        twice = self.events()
+        self.refused(lambda: pc._check_event_rows(FIRST, [twice[1], *twice]), "run_finalized")
+
+    @staticmethod
+    def journal():
+        sensors = {"s_fast": "TV0h", "s_slow": "TV1h"}
+
+        def stamp(at):
+            return {"wall_ns": 10**9 + at, "monotonic_ns": at, "monotonic_raw_ns": 5 * 10**8 + at}
+
+        def row(seq, kind, begin, finish, values):
+            return {"schema": "joulewise.align_thermal.v1", "module": "temperature", "session": "synthetic",
+                    "seq": seq, "kind": kind, "started": stamp(begin), "finished": stamp(finish), "values": values,
+                    "raw": [], "error": None}
+
+        def reading(seq, at):
+            temps = {key: 35.0 for key in sensors.values()}
+            return row(seq, "reading", at, at + 10, {
+                "source": "smc", "units": {key: "degC" for key in temps}, "sensors": temps, "errors": {},
+                "readings": {key: {"value": value, "error": None} for key, value in temps.items()},
+                "status": {"os_level": 0, "pm_state": "Nominal", "pm_observed_ns": at, "monotonic_ns": at + 10}})
+
+        gate = {"kind": "G0", "turn": 0, "token_count": None}
+        rows = [row(1, "session_start", 0, 0, {"thermal": sensors}), reading(2, 100),
+                row(3, "align_thermal_gate", 200, 200, {"state": "begin", "gate_kind": "G0", "turn": 0}),
+                reading(4, 300), reading(5, 400),
+                row(6, "align_thermal_gate", 500, 500, {"state": "end", "gate": gate}), reading(7, 600),
+                row(8, "session_end", 700, 700, {"collector_error": None, "coverage": {"span_ns": [0, 650]}})]
+        return sensors, rows
+
+    @staticmethod
+    @contextmanager
+    def thermal_double():
+        thermal = ModuleType("joulewise.align.apple.thermal")
+        thermal.keys = lambda sensors: (sensors["s_fast"], sensors["s_slow"])
+        thermal.valid_value = lambda key, value: type(value) in (int, float)
+        thermal.Coverage = lambda begin, selected: SimpleNamespace(
+            observe=lambda *args: None, report=lambda end: {"span_ns": [begin, end]})
+        apple = ModuleType("joulewise.align.apple")
+        apple.thermal = thermal
+        align = ModuleType("joulewise.align")
+        align.apple = apple
+        with patch.dict(sys.modules, {module.__name__: module for module in (align, apple, thermal)}):
+            yield
+
+    def test_no_journal_row_starts_before_the_row_above_it_finished_on_any_clock(self):
+        def validate(rows):
+            pc._validate_sidecar(rows, sensors, "d-bank-benign-s1", pc.THERMAL_SOURCE, gated=True)
+
+        def out_of_order(rows, index):
+            with self.assertRaises(evidence.EvidenceFailure) as caught:
+                validate(rows)
+            failure = caught.exception
+            self.assertEqual((failure.reason, failure.field, failure.index), ("reading_record", "stamp_order", index))
+
+        with self.thermal_double():
+            sensors, rows = self.journal()
+            validate(rows)
+            # Audit round 1, `G0-begin-after-end`: the begin row stamped at the session's newest time.
+            sensors, rows = self.journal()
+            rows[2]["started"]["monotonic_ns"] = rows[2]["finished"]["monotonic_ns"] = rows[-1]["finished"]["monotonic_ns"]
+            out_of_order(rows, 3)
+            # Audit round 1, `reading-out-of-order-wall_ns` and `-monotonic_raw_ns`.
+            for clock in pc.JOURNAL_CLOCKS:
+                sensors, rows = self.journal()
+                rows[4]["started"][clock] = rows[3]["started"][clock] - 1
+                with self.subTest(clock=clock):
+                    out_of_order(rows, 4)
+            for index in range(1, 8):
+                for clock in pc.JOURNAL_CLOCKS:
+                    sensors, rows = self.journal()
+                    rows[index]["started"][clock] = rows[index - 1]["finished"][clock] - 1
+                    with self.subTest(row=index, clock=clock), self.assertRaises(evidence.EvidenceFailure):
+                        validate(rows)
+
+
+class SoakArgvTests(unittest.TestCase):
+    """EVIDENCE-SPEC row 23: the soak row's argv digest is the issued soak's argument list."""
+
+    RUNTIME = ["synthetic-runtime", "--config", "runtime.json"]
+
+    def bound(self, tmp, argv):
+        attempt = SoakAttempt(Path(tmp))
+        attempt.directory.mkdir(parents=True)
+        writer = evidence.EvidenceLedger(attempt.directory, attempt.revision, attempt.config, mode="soak")
+        receipt = attempt.receipt()
+        writer.member_return("idle", attempt.segment, argv(str(attempt.segment)), process=attempt.produce(receipt))
+        attempt.row.write_bytes(json_bytes({"name": "idle_soak", "attempt": 0, "output_dir": str(attempt.segment),
+                                            "result": receipt}))
+        attempt.reference.write_bytes(json_bytes({"source_segment": "idle_soak", "source_output": str(attempt.segment),
+                                                  "attempt": 0}))
+        writer.finish_soak("accepted")
+        return attempt.binding(hashed(attempt.ledger.read_bytes()))
+
+    def idle(self, *tail, runtime=None, kind="idle"):
+        return lambda segment: [*(runtime or self.RUNTIME), "--r1-kind", kind, "--output", segment, *tail]
+
+    def test_the_frozen_invokers_lists_for_the_issued_soak_are_accepted(self):
+        for tail in (("--duration-s", "1800"), ("--duration-s", "1800.0"),
+                     ("--host-lock-fd", "0", "--duration-s", "1800.0"), ("--host-lock-fd", "16", "--duration-s", "1800"),
+                     ("--host-lock-fd", str(evidence.LOCK_FD_LIMIT - 1), "--duration-s", "1800.0")):
+            with self.subTest(tail=tail), TemporaryDirectory() as tmp:
+                self.bound(tmp, self.idle(*tail)).verify_argv(self.RUNTIME, 1800)
+        with TemporaryDirectory() as tmp:
+            self.bound(tmp, self.idle("--duration-s", "0.5")).verify_argv(self.RUNTIME, 0.5)
+
+    def test_any_other_list_is_refused(self):
+        damaged = {
+            # Audit round 1, `wrong-soak-argv-duration-1-receipt-1800`.
+            "one second": self.idle("--duration-s", "1"),
+            "no duration": self.idle(), "another spelling": self.idle("--duration-s", "1800.00"),
+            "a soak reference": self.idle("--duration-s", "1800", "--soak-reference", "reference.json"),
+            "duration before the lock": self.idle("--duration-s", "1800", "--host-lock-fd", "16"),
+            "a lock that is no descriptor": self.idle("--host-lock-fd", "-1", "--duration-s", "1800"),
+            "a lock beyond the limit": self.idle("--host-lock-fd", str(evidence.LOCK_FD_LIMIT), "--duration-s", "1800"),
+            "another runtime": self.idle("--duration-s", "1800", runtime=["other-runtime", "--config", "runtime.json"]),
+            "another kind": self.idle("--duration-s", "1800", kind="idle-until-soak"),
+            "another output": lambda segment: [*self.RUNTIME, "--r1-kind", "idle", "--output", segment + "-other",
+                                               "--duration-s", "1800"],
+            "an extra argument": self.idle("--duration-s", "1800", "--smoke-part", "A"),
+        }
+        for name, argv in damaged.items():
+            with self.subTest(argv=name), TemporaryDirectory() as tmp:
+                bound = self.bound(tmp, argv)
+                with self.assertRaises(evidence.EvidenceFailure) as caught:
+                    bound.verify_argv(self.RUNTIME, 1800)
+                failure = caught.exception
+                self.assertEqual((failure.reason, failure.role, failure.source, failure.field),
+                                 ("sequence", "idle", evidence.LEDGER_NAME, "argv_sha256"))
+        with TemporaryDirectory() as tmp:
+            with self.assertRaises(evidence.EvidenceFailure):
+                self.bound(tmp, self.idle("--duration-s", "1800")).verify_argv(self.RUNTIME, 1801)

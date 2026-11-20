@@ -91,9 +91,18 @@ EPISODE_IDENTITIES = {
 TEMPLATE_KEYS = {"capture-predecessor-30b": "model_30b", "step-d": "d_spam",
                  "d-bank-benign-s1": "d_bank", "x-g": "x_g"}
 UNREAD_LIMIT_FLAG = "model.position_limit_unread"
-# The phases the pinned producer records for a turn between the endpoint's start stamp and
-# the prefill start (mlx_runtime.generate_turn). They witness a delayed prefill start.
-PRE_PREFILL_PHASES = ("tokenize", "generation_setup")
+# The events the pinned producer records for a turn between the endpoint's start stamp and
+# the prefill start, in order (mlx_runtime._generate). Only the whole sequence witnesses a
+# delayed prefill start.
+PRE_PREFILL_EVENTS = (("tokenize", "phase_start"), ("tokenize", "phase_end"),
+                      ("generation_setup", "phase_start"), ("generation_setup", "phase_end"))
+PRE_PREFILL_PHASES = frozenset(phase for phase, _ in PRE_PREFILL_EVENTS)
+# bundle.RunBundleWriter.finalize at the pin appends exactly this event.
+FINAL_EVENT = {"event_type": "run_finalized", "phase": "run", "message": "bundle finalized", "metadata": {}}
+# D-018 (bundle_read.POWER_TRACE_INTERVAL_HEADER). A trace header is this, its four-column
+# form, or the three-column form without rails that the frozen reader also accepts.
+TRACE_HEADER = ("timestamp_s", "power_w", "source", "rail", "interval_start_s", "interval_end_s")
+JOURNAL_CLOCKS = ("wall_ns", "monotonic_ns", "monotonic_raw_ns")
 POWERMODE_SOURCE = "pmset -g custom (AC Power block, exact powermode key)"
 CUT_FLAGS = frozenset({"episode.deadman", "episode.g0_unreleased", "episode.malformed_tool_call",
                        "episode.time_guard", "episode.context_limit", "thermal.start_gate_timeout",
@@ -1333,6 +1342,10 @@ def _validate_sidecar(rows, sensors, kind, source, *, gated=False):
             for clock in ("wall_ns", "monotonic_ns", "monotonic_raw_ns")), "stamp", i)
         check(begin_ns <= a["monotonic_ns"] <= b["monotonic_ns"] <= end["finished"]["monotonic_ns"],
               "stamp", i)
+        # The frozen Sidecar takes every stamp under one lock (thermal.py tick, event and _write),
+        # so a row, reading or boundary, never starts before the row above it has finished.
+        check(i == 0 or all(rows[i - 1]["finished"][clock] <= a[clock] for clock in JOURNAL_CLOCKS),
+              "stamp_order", i)
         if i in (0, len(rows) - 1):
             continue
         check(row["kind"] == "reading" or row["kind"] in boundary_kinds, "kind", i)
@@ -1375,6 +1388,22 @@ def _validate_sidecar(rows, sensors, kind, source, *, gated=False):
     check(canonical(counter.report(span[1])) == canonical(coverage), "coverage")
 
 
+def _check_event_rows(kind, events):
+    """Every controller event is typed, and the stream ends with the producer's one finalization event."""
+    source = "events.jsonl"
+    for index, event in enumerate(events):
+        # EVIDENCE-SPEC row 38: event_type and phase are nonempty strings; a message may be empty.
+        _required(_finite(event.get("timestamp_s")) and isinstance(event.get("event_type"), str)
+                  and bool(event["event_type"]) and isinstance(event.get("phase"), str) and bool(event["phase"])
+                  and isinstance(event.get("message"), str) and isinstance(event.get("metadata"), dict),
+                  "bundle_binding", kind, source, index=index)
+    _required(all(key in events[-1] and canonical(events[-1][key]) == canonical(value)
+                  for key, value in FINAL_EVENT.items())
+              and sum(row["event_type"] == "run_finalized" for row in events) == 1
+              and all(row["timestamp_s"] <= events[-1]["timestamp_s"] for row in events[:-1]),
+              "bundle_binding", kind, source, field="run_finalized")
+
+
 def _check_member_records(kind, bundle, receipt, data, configured, gate_inputs, *,
                           step_binding=None, gate_counts=None, descriptor=None):
     from joulewise.align.apple import r1_runtime as rt
@@ -1408,14 +1437,7 @@ def _check_member_records(kind, bundle, receipt, data, configured, gate_inputs, 
             and receipt.get("failure_reason") is None, "member_status", summary_name, peer=RECEIPT_NAME)
 
     events = rows(events_name, "bundle_binding")
-    for index, event in enumerate(events):
-        require(_finite(event.get("timestamp_s")) and isinstance(event.get("event_type"), str)
-                and isinstance(event.get("phase"), str) and isinstance(event.get("message"), str)
-                and isinstance(event.get("metadata"), dict), "bundle_binding", events_name, index=index)
-    require(events[-1]["event_type"] == "run_finalized"
-            and sum(row["event_type"] == "run_finalized" for row in events) == 1
-            and all(row["timestamp_s"] <= events[-1]["timestamp_s"] for row in events[:-1]),
-            "bundle_binding", events_name, field="run_finalized")
+    _check_event_rows(kind, events)
 
     episode = doc(episode_name, "episode_identity")
     config, meta = doc(config_name), doc(metadata_name)
@@ -1784,12 +1806,16 @@ def _recompute_turn_boundaries(kind, episode, witnessed, events, intervals, turn
     by_turn = defaultdict(list)
     lead = defaultdict(list)
     previous_turn = 0
-    for event in events:
+    for position, event in enumerate(events):
         phase, event_type = event["phase"], event["event_type"]
-        if phase not in ("prefill", "decode") or event_type not in ("phase_start", "phase_end", "token"):
+        if phase in PRE_PREFILL_PHASES:
+            # Such an event belongs to one turn and precedes that turn's prefill. Anything else is an orphan.
             index = event["metadata"].get("align_turn_index")
-            if phase in PRE_PREFILL_PHASES and _uint(index) and index not in by_turn:
-                lead[index].append(event["timestamp_s"])
+            _required(_uint(index) and index < len(episode.turns) and index not in by_turn,
+                      "turn_boundary_recompute", kind, source, field="prefill_start", index=position)
+            lead[index].append((phase, event_type, event["timestamp_s"]))
+            continue
+        if phase not in ("prefill", "decode") or event_type not in ("phase_start", "phase_end", "token"):
             continue
         index = event["metadata"].get("align_turn_index")
         _required(_uint(index) and previous_turn <= index < len(episode.turns), "turn_boundary_recompute",
@@ -1831,11 +1857,14 @@ def _recompute_turn_boundaries(kind, episode, witnessed, events, intervals, turn
               and all(left.timestamp_s <= right.timestamp_s for left, right in zip(phase, phase[1:])),
               "phase_order")
         # The prefill start has no stamp of its own. A start later than the endpoint's start
-        # stamp is accepted only when the turn's recorded pre-prefill phases fill that bracket
-        # in order. With none recorded nothing witnesses a delay, and the two must coincide.
-        bracket = [start.epoch_s, *lead.get(index, ()), prefill_start.timestamp_s]
+        # stamp is accepted only when the turn records the producer's whole pre-prefill sequence,
+        # in order, inside that bracket. With none recorded nothing witnesses a delay and the
+        # two must coincide. A partial, repeated or reordered sequence witnesses nothing.
+        witnessed = lead.get(index, [])
+        bracket = [start.epoch_s, *(stamp for _, _, stamp in witnessed), prefill_start.timestamp_s]
         check(all(left <= right for left, right in zip(bracket, bracket[1:]))
-              and (len(bracket) > 2 or bracket[0] == bracket[-1]), "prefill_start")
+              and (tuple(mark[:2] for mark in witnessed) == PRE_PREFILL_EVENTS if witnessed
+                   else bracket[0] == bracket[-1]), "prefill_start")
         check(type(final_decode.metadata.get("emitted_tokens")) is int
               and final_decode.metadata["emitted_tokens"] == turn.decode_tokens
               and type(first_decode.metadata.get("max_tokens")) is int
@@ -2717,6 +2746,40 @@ def _check_gated_energy(episode, data, receipt, kind):
                   RECEIPT_NAME, field=key, peer="power_trace.csv")
 
 
+def _check_power_trace(kind, raw, started_epoch_s, ended_epoch_s):
+    """The bundle trace parses as the producer's CSV and lies inside this member's terminal bracket.
+
+    The bracket is what binds a trace to its member: the runtime stamps it around the whole
+    segment (r1_runtime.main), so another member's trace cannot fall inside it.
+    """
+    import csv
+
+    source = "power_trace.csv"
+
+    def check(ok, field, index=None):
+        _required(ok, "bundle_binding", kind, source, field=field, index=index, peer=MANIFEST_NAME)
+
+    try:
+        lines = list(csv.reader(StringIO(raw.decode("utf-8"), newline=""), strict=True))
+    except (UnicodeError, csv.Error) as error:
+        raise EvidenceFailure("bundle_binding", kind, source, field="invalid") from error
+    check(bool(lines), "header")
+    header = tuple(lines[0])
+    check(len(header) in (3, 4, 6) and header == TRACE_HEADER[:len(header)], "header")
+    for index, row in enumerate(row for row in lines[1:] if row):   # the frozen DictReader skips blank lines too
+        check(len(row) == len(header), "row", index)
+        fields = dict(zip(header, row))
+        try:
+            stamps = [float(fields["timestamp_s"]), *(float(fields[name]) for name in TRACE_HEADER[4:]
+                                                      if fields.get(name))]
+            power = float(fields["power_w"])
+        except ValueError as error:
+            raise EvidenceFailure("bundle_binding", kind, source, field="row", index=index) from error
+        check(all(map(math.isfinite, (power, *stamps))) and len(stamps) in (1, 3)
+              and (len(stamps) == 1 or stamps[1] <= stamps[2]), "row", index)
+        check(started_epoch_s <= min(stamps) and max(stamps) <= ended_epoch_s, "window", index)
+
+
 def _native_bundle(bound, receipt, configured, gate_inputs, step_binding, descriptor):
     from joulewise.align.apple.sampler import seconds_ns
 
@@ -2725,6 +2788,7 @@ def _native_bundle(bound, receipt, configured, gate_inputs, step_binding, descri
     try:
         _required({item.name for item in bundle.parent.iterdir()} == {bundle.name},
                   "bundle_binding", kind, "runs")
+        _check_power_trace(kind, data["power_trace.csv"], bound.started_epoch_s, bound.ended_epoch_s)
         if kind in QUIET_MEMBERS:
             _check_load(data[LOAD_SOURCE], receipt, kind, bound.ended_epoch_s - bound.started_epoch_s)
         binding = _check_member_records(kind, bundle, receipt, data, configured, gate_inputs,
@@ -2895,6 +2959,8 @@ def run_bound_part_c(output, runtime, *, soak_reference, soak_ledger_sha256=None
         revision = r1.executed_commit(Path(__file__).resolve().parents[1])
         config = Path(r1.runtime_config_path(runtime))
         soak = BoundSoak(output, soak_reference, soak_ledger_sha256, revision, config)
+        soak.verify_argv(runtime, next(seconds for name, _kind, seconds, _size in r1.phase_plan()
+                                       if name == SOAK_SEGMENT))
         ledger = EvidenceLedger(output, revision, config, soak_reference, soak=soak)
         with redirect_stdout(StringIO()), redirect_stderr(StringIO()):
             configured = _check_native_soak(soak, config)
@@ -3003,6 +3069,7 @@ def replay_archived(output, runtime_config):
                 receipt[kind] = row
                 _check_member_schedule(kind, row, schedule)
                 bundle, data = _bound_member_files(member, row)
+                _check_power_trace(kind, data["power_trace.csv"], member.started_epoch_s, member.ended_epoch_s)
                 if kind in QUIET_MEMBERS:
                     _check_load(data[LOAD_SOURCE], row, kind, member.ended_epoch_s - member.started_epoch_s)
                 binding = _check_member_records(kind, bundle, row, data, configured,

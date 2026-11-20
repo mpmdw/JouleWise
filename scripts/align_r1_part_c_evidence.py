@@ -27,6 +27,7 @@ D = re.compile(r"[0-9a-f]{64}\Z")
 DESCRIPTOR_FIELD = "model_descriptor_sha256"
 DESCRIPTOR_WORDS = ("absent", "unreadable")
 DESCRIPTOR_SOURCE = "model.source/config.json"
+LOCK_FD_LIMIT = 4096  # descriptor numbers a launcher may hand its child for the host lock
 KINDS = {
     "capture-predecessor-30b": "capture_predecessor_30b",
     "step-d": "step_D_prefill_10k_decode_4096",
@@ -536,6 +537,7 @@ class BoundSoak:
         self.member = BoundMember(self.root / SOAK_SEGMENT, "idle", self.config_sha,
                                   manifest_sha=manifest["sha256"])
         self.sources = {name: self.member.read(name, name) for name in SOAK_FILES}
+        self.argv_sha256 = returned["argv_sha256"]
 
         # 6. The outer row, saved receipt and stdout must be the same observation.
         self.row = self._object(outer_row, SOAK_ROW)
@@ -556,6 +558,21 @@ class BoundSoak:
         if _hash_text(line) != returned["stdout_sha256"]:
             raise EvidenceFailure("receipt_pair", "idle", SOAK_FILES[0], field="disagrees", peer="stdout")
         self.verify_reads()
+
+    def verify_argv(self, runtime, duration):
+        """EVIDENCE-SPEC row 23: the idle row binds the argument list of this soak and no other.
+
+        Only a digest is bound, so every list the frozen invoker can build for the issued soak
+        is tried: the phase table's duration as the launcher or the plan spells it, with the
+        host lock not held or held on any descriptor.
+        """
+        head = [*runtime, "--r1-kind", "idle", "--output", self.row["output_dir"]]
+        spellings = {str(float(duration))} | ({str(int(duration))} if float(duration).is_integer() else set())
+        tails = [["--duration-s", spelling] for spelling in sorted(spellings)]
+        for lock in ([], *(["--host-lock-fd", str(fd)] for fd in range(LOCK_FD_LIMIT))):
+            if any(digest(canonical([*head, *lock, *tail])) == self.argv_sha256 for tail in tails):
+                return
+        raise EvidenceFailure("sequence", "idle", LEDGER_NAME, field="argv_sha256", peer="issued_inputs")
 
     def _read(self, filename, expected, *, missing="source_integrity"):
         if not _is_digest(expected):
