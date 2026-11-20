@@ -27,7 +27,7 @@ def main():
         signal = Signals(support, {"power_trace.csv": source / "power_trace.csv"}, lambda: None, pinned)
         bounds = support["rail_intervals"]
         rows = signal.interval_values("gpu_rail", (bounds[0][0], bounds[-1][1]))
-        seconds_rows = [(a / NS_PER_SECOND, b / NS_PER_SECOND, watts, t / NS_PER_SECOND)
+        seconds_rows = [(a / NS_PER_SECOND, b / NS_PER_SECOND, float(watts), t / NS_PER_SECOND)
                         for a, b, watts, t in rows]
         print(json.dumps({"description": seconds_rows, "pinned_step3": pinned.load_gpu_trace(source)},
                          separators=(",", ":"), allow_nan=False))

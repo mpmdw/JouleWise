@@ -422,11 +422,26 @@
                   ],
                   "properties": {
                     "n": {
-                      "type": "integer",
-                      "minimum": 1
+                      "description": "Number of admitted observations, or the refusal when the date has none.",
+                      "oneOf": [
+                        {
+                          "type": "integer",
+                          "minimum": 1
+                        },
+                        {
+                          "$ref": "#/$defs/undefined"
+                        }
+                      ]
                     },
                     "mean": {
-                      "type": "number"
+                      "oneOf": [
+                        {
+                          "type": "number"
+                        },
+                        {
+                          "$ref": "#/$defs/undefined"
+                        }
+                      ]
                     },
                     "sd": {
                       "description": "Defined value in the cell's measure, or a reason and an elapsed-seconds censor bound.",

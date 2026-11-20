@@ -7,7 +7,7 @@ from collections import Counter, defaultdict
 import csv
 from dataclasses import dataclass
 from datetime import datetime
-from decimal import Decimal
+from decimal import Decimal, localcontext
 from fractions import Fraction
 from hashlib import sha1, sha256
 import io
@@ -18,7 +18,7 @@ from pathlib import Path
 import re
 import socket
 import stat
-from statistics import mean, stdev
+from statistics import mean, variance
 import subprocess
 import sys
 from types import ModuleType
@@ -79,7 +79,7 @@ def integer(value, minimum=0):
 
 
 def number(value):
-    return type(value) in (int, float) and math.isfinite(value)
+    return isinstance(value, Fraction) or (type(value) in (int, float) and math.isfinite(value))
 
 
 def canonical(document):
@@ -776,8 +776,36 @@ def difference(left, right):
     return _quality_null(left, right) or missing("missing_operand")
 
 
+@dataclass(frozen=True, slots=True)
+class StandardDeviation:
+    squared: Fraction
+
+    def rational(self):
+        numerator, denominator = self.squared.as_integer_ratio()
+        n, d = math.isqrt(numerator), math.isqrt(denominator)
+        if n * n == numerator and d * d == denominator:
+            return Fraction(n, d)
+        # The square root itself may be irrational. Keep its approximation
+        # out of threshold comparisons and use it for date aggregates and output.
+        with localcontext() as context:
+            context.prec = 60
+            return Fraction((Decimal(numerator) / Decimal(denominator)).sqrt())
+
+
 def deviation(samples):
-    return stdev(samples) if len(samples) >= 2 else missing("fewer_than_two")
+    return StandardDeviation(variance(samples)) if len(samples) >= 2 else missing("fewer_than_two")
+
+
+def _printed(value):
+    if isinstance(value, StandardDeviation):
+        return float(value.rational())
+    if isinstance(value, Fraction):
+        return float(value)
+    if isinstance(value, dict):
+        return {key: _printed(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return [_printed(item) for item in value]
+    return value
 
 
 def _ratios(levels):
@@ -887,10 +915,10 @@ def _meter_slice(times, a, b):
     return (left, right) if left >= 0 and right < len(times) else None
 
 
-def _float(text):
+def _sample(text):
     value = float(text)
     require(math.isfinite(value), "invalid numeric stream value")
-    return value
+    return Fraction(value)
 
 
 RAIL_CSV_COLUMNS = ("interval_start_s", "interval_end_s", "timestamp_s", "source", "rail", "power_w")
@@ -912,7 +940,7 @@ class RailStamp:
 def _rail_rows(stream):
     """Index structural identities and integer stamps without retrieving power."""
     for row_number, row in enumerate(_rail_csv(stream)):
-        if row["source"] != "powermetrics" or row["rail"] not in RAILS:
+        if row["source"] != "powermetrics":
             continue
         identity = tuple(row[field] for field in RAIL_CSV_COLUMNS[:-1])
         left, right, stamp = map(_csv_time_ns, identity[:3])
@@ -1092,8 +1120,13 @@ class Signals:
         if self._rail_stamps is not None:
             return
         stamps = {}
+        observed_intervals = set()
         with self._open_signal("power_trace.csv") as stream:
             for key, stamp in _rail_rows(stream):
+                bounds, rail = key
+                observed_intervals.add(bounds)
+                if rail not in RAILS:
+                    continue
                 require(key not in stamps, "repeated rail in the same interval")
                 stamps[key] = stamp
         self._observed_rails = self._rail_support({
@@ -1102,7 +1135,6 @@ class Signals:
         })
         # The rail channels share one capture. A dropped component at its
         # end changes that channel's coverage, not the observed capture end.
-        observed_intervals = {bounds for bounds, _ in stamps}
         self._rail_end = max((b for a, b in self.bounds if (a, b) in observed_intervals),
                              default=None)
         self._rail_stamps = stamps
@@ -1127,6 +1159,7 @@ class Signals:
                     if bounds[1] > a and bounds[0] < b]
         names = RAILS if channel == "rail_sum" else (RAIL_CHANNELS[channel],)
         pending = {}
+        gpu = {}
         for bounds in selected:
             for rail in names:
                 key = bounds, rail
@@ -1140,34 +1173,40 @@ class Signals:
                         key, identity = pending.pop(row_number)
                         require(identity == tuple(row[field] for field in RAIL_CSV_COLUMNS[:-1]),
                                 "rail identity changed after admission")
-                        self._rail_values[key] = _float(row["power_w"])
+                        raw = row["power_w"]
+                        if key[1] == "gpu_power":
+                            gpu[key] = str(raw)
+                        else:
+                            self._rail_values[key] = _sample(raw)
                         if not pending:
                             break
             require(not pending, "rail row disappeared after admission")
 
-        stamp_rail = "gpu_power" if channel == "rail_sum" else names[0]
-        rows = [(left, right, sum(self._rail_values[((left, right), rail)] for rail in names),
-                 self._rail_stamps[((left, right), stamp_rail)].stamp_ns) for left, right in selected]
-        if channel != "gpu_rail" or not rows:
-            return rows
+        if gpu:
+            # The pinned loader parses only newly admitted GPU rows. Its float
+            # values are converted to rationals before entering the cache.
+            keys = sorted(gpu)
+            origin = keys[0][0][0]
+            buffer = io.StringIO()
+            writer = csv.writer(buffer)
+            writer.writerow(RAIL_CSV_COLUMNS)
+            for bounds, rail in keys:
+                left, right = bounds
+                stamp = self._rail_stamps[(bounds, rail)].stamp_ns
+                writer.writerow((_seconds(left - origin), _seconds(right - origin),
+                                 _seconds(stamp - origin), "powermetrics", rail, gpu[(bounds, rail)]))
+            buffer.seek(0)
+            self.pinned.open = lambda *_args, **_kwargs: buffer
+            try:
+                projected = self.pinned.load_gpu_trace(".")
+            finally:
+                del self.pinned.open
+            for key, (_, _, watts, _) in zip(keys, projected, strict=True):
+                self._rail_values[key] = _sample(watts)
 
-        # The immutable loader sees only rows admitted for this print. Use
-        # a local origin, and keep the recorded bounds on the integer clock.
-        origin = rows[0][0]
-        buffer = io.StringIO()
-        writer = csv.writer(buffer)
-        writer.writerow(RAIL_CSV_COLUMNS)
-        for left, right, value, stamp in rows:
-            writer.writerow((_seconds(left - origin), _seconds(right - origin),
-                             _seconds(stamp - origin), "powermetrics", "gpu_power", value))
-        buffer.seek(0)
-        self.pinned.open = lambda *_args, **_kwargs: buffer
-        try:
-            projected = self.pinned.load_gpu_trace(".")
-        finally:
-            del self.pinned.open
-        return [(left, right, parsed[2], stamp)
-                for (left, right, _, stamp), parsed in zip(rows, projected, strict=True)]
+        stamp_rail = "gpu_power" if channel == "rail_sum" else names[0]
+        return [(left, right, sum(self._rail_values[((left, right), rail)] for rail in names),
+                 self._rail_stamps[((left, right), stamp_rail)].stamp_ns) for left, right in selected]
 
     def _admitted_meter(self, a, b):
         if self._meter_stamp_tokens is None:
@@ -1186,7 +1225,7 @@ class Signals:
                     if i in pending:
                         require(self._meter_stamp_tokens[i] == row["epoch_s"],
                                 "decoder stamp changed after admission")
-                        self._meter_values[i] = _float(row["watts"])
+                        self._meter_values[i] = _sample(row["watts"])
                         pending.remove(i)
                         if not pending:
                             break
@@ -1246,26 +1285,33 @@ class Signals:
             return self._admitted_meter(start, stop)
         return self._admitted_rails(channel, start, stop)
 
-    def energy(self, channel, a, b, *, baseline=0):
+    def _energy(self, channel, a, b, baseline):
         rows = self.interval_values(channel, (a, b))
         if isinstance(rows, dict):
             return rows
         start, stop = _window_ns(a), _window_ns(b)
         if channel != "dc_in":
-            return math.fsum((watts - baseline) * (min(right, stop) - max(left, start))
-                             for left, right, watts, _ in rows) / NS_PER_SECOND
+            area = sum(((watts - baseline) * (min(right, stop) - max(left, start))
+                        for left, right, watts, _ in rows), Fraction())
+            return area / NS_PER_SECOND
         areas = []
         for left, right, low, high in rows:
             lo, hi = max(left, start), min(right, stop)
             low, high = low - baseline, high - baseline
-            p0 = low + (high - low) * ((lo - left) / (right - left))
-            p1 = low + (high - low) * ((hi - left) / (right - left))
-            areas.append((p0 + p1) * 0.5 * (hi - lo))
-        return math.fsum(areas) / NS_PER_SECOND
+            if lo != left or hi != right:
+                slope = (high - low) / (right - left)
+                areas.append((2 * low + slope * (lo + hi - 2 * left)) * (hi - lo))
+            else:
+                areas.append((low + high) * (right - left))
+        return sum(areas, Fraction()) / (2 * NS_PER_SECOND)
 
-    def average(self, channel, a, b):
-        energy = self.energy(channel, a, b)
-        return energy * NS_PER_SECOND / (_window_ns(b) - _window_ns(a)) if number(energy) else energy
+    def energy(self, channel, a, b, *, baseline=0):
+        return _printed(self._energy(channel, a, b, Fraction(baseline)))
+
+    def average(self, channel, a, b, *, exact=False):
+        energy = self._energy(channel, a, b, 0)
+        value = energy * NS_PER_SECOND / (_window_ns(b) - _window_ns(a)) if number(energy) else energy
+        return value if exact else _printed(value)
 
     def cross(self, channel, a, b, threshold, *, falls=False):
         crossing = self._cross_ns(channel, _window_ns(a), _window_ns(b), threshold, falls=falls)
@@ -1311,16 +1357,16 @@ def _hold(signal, start, instrument):
     result = {}
     for channel in CHANNELS:
         printed = {"mean_w": signal.average(channel, _seconds(start),
-                                            _seconds(start + 600 * NS_PER_SECOND)),
+                                            _seconds(start + 600 * NS_PER_SECOND), exact=True),
                    "kept": [], "dropped": []}
         for width in WIDTHS:
             windows = []
             reasons = []
             for index in range(600 // width):
                 a = start + index * width * NS_PER_SECOND
-                value = signal.average(channel, _seconds(a), _seconds(a + width * NS_PER_SECOND))
+                value = signal.average(channel, _seconds(a), _seconds(a + width * NS_PER_SECOND), exact=True)
                 if number(value):
-                    windows.append((index * width + width / 2, value))
+                    windows.append((Fraction((2 * index + 1) * width, 2), value))
                 else:
                     reasons.append(value["reason"])
             if reasons:
@@ -1347,7 +1393,7 @@ def _drift(windows):
 def _above_hold(signal, channel, hold, start, stop, *, average):
     if not number(hold):
         return signal._interval_null(channel, _seconds(start), _seconds(stop)) or hold
-    energy = signal.energy(channel, _seconds(start), _seconds(stop), baseline=hold)
+    energy = signal._energy(channel, _seconds(start), _seconds(stop), hold)
     if not number(energy):
         return energy
     if average:
@@ -1363,19 +1409,19 @@ def _sensors(keys, readings):
     for record in readings:
         fans = record["fan_keys"]
         if keys and all(key in fans and number(fans[key]) for key in keys):
-            rpm.append(mean(fans[key] for key in keys))
+            rpm.append(mean(Fraction(fans[key]) for key in keys))
         for name, value in record.items():
             if name != "fan_keys" and number(value):
-                sensors[name].append(value)
+                sensors[name].append(Fraction(value))
     fan = mean(rpm) if rpm else missing("no_complete_fan_reading")
     return fan, {name: mean(values) for name, values in sensors.items()}
 
 
 def _recovery(signal, channel, start, origin, hold, spread, stop):
     reasons = []
-    if not number(hold) or not number(spread):
+    if not number(hold) or not isinstance(spread, StandardDeviation):
         return missing("hold_or_sd_undefined"), reasons
-    threshold = hold + 2 * spread
+    threshold_squared = 4 * spread.squared
     window = RECOVERY_WINDOW_S * NS_PER_SECOND
     stride = RECOVERY_WINDOW_STRIDE_S * NS_PER_SECOND
     complete = max(0, 1 + (stop - start - window) // stride)
@@ -1383,22 +1429,22 @@ def _recovery(signal, channel, start, origin, hold, spread, stop):
     for index in range(complete):
         a = start + index * stride
         last_end = a + window
-        value = signal.average(channel, _seconds(a), _seconds(last_end))
+        value = signal.average(channel, _seconds(a), _seconds(last_end), exact=True)
         if not number(value):
             reason = value["reason"]
             reasons.append("gap_over_u1" if reason == "meter_gap" else reason)
-        elif value <= threshold:
-            elapsed = (a - origin) / NS_PER_SECOND
+        elif value <= hold or (value - hold) ** 2 <= threshold_squared:
+            elapsed = Fraction(a - origin, NS_PER_SECOND)
             return (missing("under", elapsed) if index == 0 else elapsed), reasons
-    return missing("not returned", (last_end - origin) / NS_PER_SECOND), reasons
+    return missing("not returned", Fraction(last_end - origin, NS_PER_SECOND)), reasons
 
 
 def _crossing_lag(left, right, *, decode_end=False):
     if not isinstance(left, dict) and not isinstance(right, dict):
-        return float((left - right) / NS_PER_SECOND)
+        return Fraction(left - right, NS_PER_SECOND)
     refused = _quality_null(left, right) or missing("missing_operand")
     if decode_end and refused["reason"] == "crossing_unobserved":
-        return missing("over 1 s", 1.0)
+        return missing("over 1 s", 1)
     return refused
 
 
@@ -1410,11 +1456,11 @@ def _crossing_refusal(signal, channel, start, stop, level):
 def _rail_return(signal, channel, last, end, baseline):
     if end is None or end <= last:
         return missing(signal._stream_refusal(channel) or "no_tail")
-    bound = (end - last) / NS_PER_SECOND
+    bound = Fraction(end - last, NS_PER_SECOND)
     if number(baseline):
         crossing = signal._cross_ns(channel, last, end, baseline, falls=True)
         if number(crossing):
-            return (crossing - last) / NS_PER_SECOND
+            return Fraction(crossing - last, NS_PER_SECOND)
         reason = crossing["reason"]
         if reason == "crossing_unobserved":
             reason = "stream_end"
@@ -1453,7 +1499,7 @@ def _edge_prints(signal, hold, decode, turn, first, last, quiet_start, prompt):
             level = _above_hold(signal, channel, baseline, midpoint, first, average=True)
             if number(level) and level > 0:
                 crosses = [signal._cross_ns(channel, turn, first, baseline + fraction * level)
-                           for fraction in (0.1, 0.5, 0.9)]
+                           for fraction in (Fraction(1, 10), Fraction(1, 2), Fraction(9, 10))]
                 rise[channel] = _crossing_lag(crosses[2], crosses[0])
                 onsets[channel] = crosses[1]
             else:
@@ -1472,12 +1518,12 @@ def _edge_prints(signal, hold, decode, turn, first, last, quiet_start, prompt):
         onset_lags = {channel: onsets[channel] for channel in CHANNELS[:2]}
     result = {
         "fallback": fallback, "gap_outside": not fallback and not 4_500_000_000 <= gap <= 5_500_000_000,
-        "completion_to_stage_s": missing("no_completion_log") if fallback else gap / NS_PER_SECOND,
-        "unobserved_s": (anchor - origin) / NS_PER_SECOND,
+        "completion_to_stage_s": missing("no_completion_log") if fallback else Fraction(gap, NS_PER_SECOND),
+        "unobserved_s": Fraction(anchor - origin, NS_PER_SECOND),
         "recovery_s": return_times, "rail_return_censor_s": censored,
         "recovery_resolution_s": dict.fromkeys(CHANNELS, RECOVERY_WINDOW_S),
         "recovery_skipped_windows": skip_counts,
-        "resolution_s": {channel: signal.periods_ns[period] / NS_PER_SECOND
+        "resolution_s": {channel: Fraction(signal.periods_ns[period], NS_PER_SECOND)
                          for channel, period in zip(CHANNELS, ("rail_edge", "rail_edge", "dc_edge"))},
         "rise_s": rise, "onset_lag_s": onset_lags, "decode_end_lag_s": decode_lags,
     }
@@ -1487,6 +1533,10 @@ def _edge_prints(signal, hold, decode, turn, first, last, quiet_start, prompt):
 
 
 def print_leg(signal, detail, instrument):
+    return _printed(_leg_values(signal, detail, instrument))
+
+
+def _leg_values(signal, detail, instrument):
     op, _, _, _, row = detail
     meta = signal.meta
     start, first, last = (signal.stamps_ns[name]
@@ -1519,8 +1569,9 @@ def print_leg(signal, detail, instrument):
         for width in WIDTHS:
             sd = hold[channel][f"sd{width}_w"]
             value = _quality_null(watts, sd) or missing("decode_or_sd_undefined")
-            if number(sd) and number(watts) and watts > 0:
-                value = sd * width * row["realised_decode_tokens"] * NS_PER_SECOND / (watts * (last - first))
+            if isinstance(sd, StandardDeviation) and number(watts) and watts > 0:
+                factor = width * row["realised_decode_tokens"] * NS_PER_SECOND / (watts * (last - first))
+                value = StandardDeviation(sd.squared * factor ** 2)
             floors[channel].append(value)
     readings = signal.interval_values("sidecar", (_seconds(quiet), _seconds(quiet + 600 * NS_PER_SECOND)))
     fan, sensors = _sensors(meta["host_fan_keys"], readings)
@@ -1538,22 +1589,36 @@ def _date_summaries(context):
     spreads = {}
     for cell, items in context.items():
         grouped = defaultdict(list)
+        refused_by_date = defaultdict(list)
         failures = Counter()
         for detail in items.values():
-            value = detail["value"]
+            value, day = detail["value"], detail["date"]
+            values = grouped[day]
+            if isinstance(value, StandardDeviation):
+                value = value.rational()
             if number(value):
-                grouped[detail["date"]].append(value)
+                values.append(value)
             else:
                 failures[value["reason"]] += 1
-        dates = {day: {"n": len(values), "mean": mean(values), "sd": deviation(values)}
-                 for day, values in grouped.items()}
-        df = sum(len(values) - 1 for values in grouped.values())
-        variance = sum((value - dates[day]["mean"]) ** 2 for day, values in grouped.items()
-                       for value in values)
+                refused_by_date[day].append(value)
+        dates = {}
+        means = []
+        df, squared_residuals = 0, Fraction()
+        for day, values in grouped.items():
+            if not values:
+                refusals = refused_by_date[day]
+                refused = _quality_null(*refusals) or refusals[0]
+                dates[day] = dict.fromkeys(("n", "mean", "sd"), refused)
+                continue
+            center = mean(values)
+            dates[day] = {"n": len(values), "mean": center, "sd": deviation(values)}
+            means.append(center)
+            df += len(values) - 1
+            squared_residuals += sum((value - center) ** 2 for value in values)
         spread = {
             "dates": dates, "singleton_dates": sum(row["n"] == 1 for row in dates.values()),
-            "sd_date_means": deviation([row["mean"] for row in dates.values()]),
-            "pooled_within_sd": math.sqrt(variance / df) if df else missing("no_within_date_df"),
+            "sd_date_means": deviation(means),
+            "pooled_within_sd": StandardDeviation(squared_residuals / df) if df else missing("no_within_date_df"),
         }
         if failures:
             spread["missing"] = dict(failures)
@@ -1570,7 +1635,7 @@ def _context(hold, turn, qualified):
             "date": instant.date().isoformat(), "hour": instant.hour,
             "utc_offset_s": int(instant.utcoffset().total_seconds()),
             "predecessor_kind": predecessor["kind"] if predecessor else None,
-            "gap_s": float(gap) if isinstance(gap, Decimal) else gap,
+            "gap_s": Fraction(gap) if gap is not None else None,
             "status": "unknown" if gap is None else "negative_gap" if gap < 0 else "known",
         }
         for channel in CHANNELS:
@@ -1594,12 +1659,12 @@ def score(snapshot, sources, qualified, mark_read):
             support, sensor_span = _support_metadata(stream)
             sensor_source = (stream, sensor_span) if snapshot.instrument and sensor_span else None
             signal = Signals(support, paths, mark_read, pinned, sensor_source=sensor_source)
-            for name, value in print_leg(signal, detail, snapshot.instrument).items():
+            for name, value in _leg_values(signal, detail, snapshot.instrument).items():
                 files[name][key] = value
     if not snapshot.instrument:
         files["context"] = _context(files["hold"], files["turn"], qualified)
         files["date_spreads"] = _date_summaries(files["context"])
-    return files
+    return _printed(files)
 
 
 # The final manifest pins this inventory through the reader SHA-256.

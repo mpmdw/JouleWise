@@ -3,10 +3,12 @@
 import ast
 import csv
 from decimal import Decimal
+from fractions import Fraction
 import io
 from itertools import product
 import json
 from pathlib import Path
+from random import Random
 import re
 from tempfile import TemporaryDirectory
 import unittest
@@ -98,6 +100,101 @@ def _score_world(world):
 
 
 class DescriptionIntervalTests(unittest.TestCase):
+    def test_flat_gpu_has_zero_above_hold_and_no_gain(self):
+        with TemporaryDirectory() as temporary:
+            leg = fixture.TraceLeg(Path(temporary))
+            for row in leg.rows[fixture.RAIL_FILE]:
+                if row["source"] == "powermetrics" and row["rail"] == "gpu_power":
+                    row["power_w"] = "2.042"
+            printed = fixture.print_one(leg.signal(), fixture.IDS[0])
+            self.assertEqual(printed["turn"]["energy_j"]["gpu_rail"], 0)
+            self.assertEqual(printed["gain"]["decode_w"]["gpu_rail"], 0)
+            self.assertEqual(printed["gain"]["long_prefill_w"]["gpu_rail"], 0)
+            ratio = printed["gain"]["decode_gain"]["gpu_rail"]
+            self.assertGreater(ratio["numerator"], 0)
+            self.assertEqual(ratio["denominator"], 0)
+            self.assertIsNone(ratio["value"])
+            self.assertEqual(ratio["reason"], "nonpositive_denominator")
+
+    def test_flat_power_identity_over_permitted_gap_patterns(self):
+        random = Random(191)
+        levels = [2.042, *(random.uniform(-1000, 1000) for _ in range(199))]
+        hold = [(i / 2, (i + 1) / 2) for i in range(8)]
+        turn = [(i / 2, (i + 1) / 2) for i in range(8, 16)]
+        periods = dict.fromkeys(("hold", "rail_edge", "dc_edge"), 0.5)
+        masks = list(product((False, True), repeat=3))
+        with TemporaryDirectory() as temporary:
+            folder = Path(temporary)
+            for level, rail_mask, dc_mask in product(levels, masks, masks):
+                with self.subTest(level=level, rail_mask=rail_mask, dc_mask=dc_mask):
+                    leading, middle, trailing = rail_mask
+                    spans = turn.copy()
+                    if leading:
+                        spans[0] = (4.125, 4.5)
+                    if middle:
+                        spans[4] = (6.125, 6.5)
+                    if trailing:
+                        spans[-1] = (7.5, 7.875)
+                    stamps = [i / 2 for i in range(17)]
+                    for flag, i in zip(dc_mask, (8, 12, 16)):
+                        if flag:
+                            stamps[i] += 0.125
+                    signal, _ = fixture.raw_fixture(
+                        folder, {rail: [(a, b, level) for a, b in hold + spans] for rail in fixture.COLS},
+                        [(stamp, level) for stamp in stamps], [i / 2 for i in range(17)],
+                        turn_start_s=4, sample_period_s=periods,
+                    )
+                    levels_above_hold = {}
+                    for channel in fixture.CHANNEL:
+                        reference = signal.average(channel, 0, 4, exact=True)
+                        self.assertEqual(reference, Fraction(level) * (3 if channel == "rail_sum" else 1))
+                        energy = reader._above_hold(signal, channel, reference, 4_000_000_000,
+                                                    8_000_000_000, average=False)
+                        self.assertIsInstance(energy, Fraction)
+                        self.assertEqual(energy, 0)
+                        levels_above_hold[channel] = energy
+                    for ratio in reader._ratios(levels_above_hold).values():
+                        self.assertEqual(ratio, dict(fixture.null("nonpositive_denominator"),
+                                                     numerator=0, denominator=0))
+
+    def test_rail_return_uses_capture_end_when_scored_rails_drop_out(self):
+        for sparse in (False, True):
+            with self.subTest(sparse=sparse), TemporaryDirectory() as temporary:
+                leg = fixture.TraceLeg(Path(temporary))
+                for row in leg.rows[fixture.RAIL_FILE].copy():
+                    if row["source"] != "powermetrics":
+                        continue
+                    start = float(row["interval_start_s"])
+                    if start == 610.25:
+                        row["power_w"] = "0"
+                    if row["rail"] == "gpu_power" and start in (610.5, 610.75):
+                        leg.rows[fixture.RAIL_FILE].append(dict(row, rail="dram_power", power_w="1"))
+                if sparse:
+                    for rail in fixture.COLS:
+                        leg.omit(rail, [610.5, 610.75])
+                edges = fixture.print_one(leg.signal(), fixture.IDS[0])["edges"]
+                expect = fixture.null("coverage", bound_s=1) if sparse else 0.25
+                self.assertEqual(edges["rail_return_censor_s"], dict.fromkeys(fixture.CHANNEL[:2], expect))
+
+    def test_stability_keeps_a_date_with_only_refused_observations(self):
+        with TemporaryDirectory() as temporary:
+            world = fixture.World(Path(temporary).resolve() / "world", fixture.IDS[1])
+            key = "f2-stab-06/L001"
+            path = world.copy / key / "support.json"
+            support = fixture.read(path)
+            support["sidecar_times"] = [stamp for stamp in support["sidecar_times"] if stamp not in range(10, 80, 10)]
+            fixture.put(path, support)
+            output = _score_world(world)
+            cell, day = "19458/gpu_rail/mean_w", "2026-11-03"
+            refused = fixture.null("coverage")
+            context = output["context"][cell]
+            self.assertEqual([leg for leg, item in context.items() if item["date"] == day], [key])
+            self.assertEqual(context[key]["value"], refused)
+            summary = output["date_spreads"][cell]
+            self.assertEqual(summary["dates"].keys(), {item["date"] for item in context.values()})
+            self.assertEqual(summary["dates"][day], dict.fromkeys(("n", "mean", "sd"), refused))
+            self.assertEqual(summary["missing"], {"coverage": 1})
+
     def test_prefill_level_preserves_a_half_nanosecond_midpoint(self):
         for offset, omit, expected in ((0, True, None), (1, False, None),
                                        (1, True, "coverage"), (2, True, "coverage")):
@@ -358,7 +455,7 @@ class DescriptionIntervalTests(unittest.TestCase):
                         self.assertEqual(opens, [True] if channel in RAIL_FOR_CHANNEL
                                          and present >= 990 else [])
                     else:
-                        self.assertIsInstance(value, (int, float))
+                        self.assertIsInstance(value, Fraction if channel == "sidecar" else (int, float))
                         self.assertEqual(opens, [] if channel == "sidecar" else [True])
 
     def test_rail_sum_requires_admitted_components_and_complete_groups(self):
