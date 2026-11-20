@@ -621,6 +621,74 @@ class LaterStabilityPopulationTests(unittest.TestCase):
                     self.assertEqual(spread["sd_date_means"], {"value": None, "reason": "fewer_than_two"})
 
 
+class Stage1BindingHistoryTests(unittest.TestCase):
+    def _check_binding_history(self, look):
+        temporary = self.enterContext(TemporaryDirectory())
+        world = fixture.World(Path(temporary).resolve() / "world", look)
+        rc, out, err, events = fixture.invoke(world, "stage1")
+        self.assertEqual((rc, out, err), (0, b"", b""))
+        self.assertFalse([path for kind, path in events if kind == "open"])
+
+        def git(*args):
+            return subprocess.check_output(["git", "-C", str(world.repo), *args])
+
+        prior_commit = world.book.head
+        prior_row = world.row.copy()
+        prior_ledger = world.ledger.read_bytes()
+        self.assertEqual(git("show", ":LOOKS.json"), prior_ledger)
+        stage_path = world.stage.relative_to(world.repo).as_posix()
+        census = world.stage.read_bytes()
+        staged_row = dict(prior_row, status="stage1_committed", stage1_path=stage_path,
+                          stage1_sha256=fixture.sha(census))
+        world.row = staged_row.copy()
+        world.save_row()
+        staged_ledger = world.ledger.read_bytes()
+        git("add", "--", "LOOKS.json", stage_path)
+        self.assertEqual(git("show", ":LOOKS.json"), staged_ledger)
+        self.assertEqual(git("show", f":{stage_path}"), census)
+        self.assertFalse(fixture.git_ok(world.repo, "cat-file", "-e", f"HEAD:{stage_path}"))
+        self.assertEqual(fixture.reservation_boundary(self, world), [])
+
+        # Restore the prior ledger before committing the retained census.
+        world.row = prior_row
+        world.ledger.write_bytes(prior_ledger)
+        git("add", "--", "LOOKS.json")
+        self.assertEqual(git("show", ":LOOKS.json"), prior_ledger)
+        self.assertEqual(git("show", f":{stage_path}"), census)
+        world.bind()
+        book = reader.Book(world.repo)
+        self.assertNotEqual(world.reg, world.artifact_commit)
+        self.assertTrue(book.ancestor(world.reg, world.artifact_commit))
+        self.assertEqual(book.blob(world.artifact_commit, "LOOKS.json"), prior_ledger)
+        self.assertEqual(book.blob(world.artifact_commit, stage_path), census)
+        self.assertNotEqual(world.artifact_commit, world.stage1_commit)
+        self.assertTrue(book.ancestor(world.artifact_commit, world.stage1_commit))
+        self.assertEqual(world.row["stage1_commit"], world.artifact_commit)
+        self.assertEqual(reader._binding_commit(book, "LOOKS.json", world.row), world.stage1_commit)
+        self.assertEqual(fixture.reservation_boundary(self, world), [str(world.private)])
+
+        # The same bytes and ancestry cannot repair an incomplete committed binding.
+        world.book.head = prior_commit
+        world.row = staged_row
+        world.ledger.write_bytes(staged_ledger)
+        world.bind()
+        book = reader.Book(world.repo)
+        self.assertEqual(book.blob(world.artifact_commit, "LOOKS.json"), staged_ledger)
+        self.assertEqual(book.blob(world.artifact_commit, stage_path), census)
+        with self.assertRaisesRegex(reader.Refusal, "stage-1 binding changed after commitment"):
+            reader._binding_commit(book, "LOOKS.json", world.row)
+        self.assertEqual(fixture.reservation_boundary(self, world), [])
+
+    def test_lm_inst_01_stage1_commit_before_reservation(self):
+        self._check_binding_history("lm-inst-01")
+
+    def test_lm_stab_01_stage1_commit_before_reservation(self):
+        self._check_binding_history("lm-stab-01")
+
+    def test_lm_stab_02_stage1_commit_before_reservation(self):
+        self._check_binding_history("lm-stab-02")
+
+
 class SpentDescriptionLookTests(unittest.TestCase):
     def test_spent_look_refuses_before_launching_final_validator(self):
         # Simulate the existing reservation for the worker and its observer.

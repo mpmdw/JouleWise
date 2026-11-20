@@ -1305,3 +1305,54 @@ legacy host lookup for its in-process and subprocess checks, so
 they can exercise their intended refusal gates. The frozen cases
 keep their own device observation and expected results.
 [Initial hosted quick result](https://github.com/mpmdw/JouleWise/actions/runs/44807078917/job/136534035008)
+
+## 2026-11-20 stage-1 binding fixture ruling
+
+Intake head `80cac5de7ad65521859ad52f43602b0e5bced16f` matched
+the remote branch and draft PR #868. RL-190 §3.4 and RL-193 §5
+answers 5 and 7 require three ordered commits. The final manifest
+precedes the stage-1 artifact. A later ledger commit names the
+artifact commit, path, and SHA-256. The reader resolves the
+ledger commit from history. A replacement cannot repair a
+`stage1_committed` row that was committed without `stage1_commit`.
+[RL-193 §5](/Volumes/JW-EXT/scratch/fable-rl193.md#5-b2-the-nine-supplement-questions)
+
+The builder regressions cover the identical staged-only and
+restored-ledger histories for `lm-inst-01`, `lm-stab-01`, and
+`lm-stab-02`. Each also commits the malformed row and attempts
+to replace it as a separate negative control. The three
+histories must give zero, one, and zero reservation attempts,
+respectively. Every stage-2 probe checks exit 2, empty stdout,
+zero value-file opens, and absent public and private output.
+The observer intercepts the registered mkdir before creation.
+The synthetic host seam supplies the invented booked identity.
+Native host-ID acceptance remains gated on PR #795.
+[Builder regressions](../../tests/test_cadence_description_preflight.py) · [PR #795](https://github.com/mpmdw/JouleWise/pull/795)
+
+### Handoff for the independent suite owner
+
+In `unbound_stage` and in the `uncommitted` arm of `chronology`,
+save `w.row.copy()` and the exact working `LOOKS.json` bytes
+before staging the deliberate incomplete binding. Keep the
+staged-only refusal assertion. After it returns, restore the
+saved row and write the saved ledger bytes back to `w.ledger`.
+Stage only `LOOKS.json` again. Keep the census in the working
+tree and index. Now call `w.bind()`. Its first commit seals the
+census with the prior ledger intact. Its second commit writes
+the complete binding. Keep the three original
+`test_rl190_34_<look>_stage1_commit_before_reservation` IDs and
+`test_ancestry_uncommitted` in the next independently hashed
+freeze. The current v5 files retain their published bytes.
+The checked-in manifest SHA-256 remains
+`ef0cb3b37c370f33bda8cf6f04e82a221ea40842057068bada39b126488aeb17`.
+[First fixture](../../tests/test_desc_looks_acceptance.py#L3244) · [Supplement fixture](../../tests/test_desc_looks_rl190.py#L525) · [Freeze hashes](../../tests/description-v5.sha256)
+
+The two-worker synthetic replay includes the three builder
+regressions and the four original case IDs with a temporary
+fixture-only restoration in the private seat. The latter replay
+keeps the frozen case bodies and their existing boundary
+assertions. The previous hosted quick passed on the intake
+head. Its ordinary shards reported refusals in the frozen
+fixture and at the host gate. The read-back draft PR tracks
+the hosted result for this test-only update.
+[Builder replay log](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/v5-restored-binding-regressions.log) · [Original case replay](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/v5-succession-oracle-replay.log) · [Preceding hosted run](https://github.com/mpmdw/JouleWise/actions/runs/44808608230) · [Draft PR #868](https://github.com/mpmdw/JouleWise/pull/868)
