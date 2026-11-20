@@ -416,3 +416,45 @@ focused native-preflight and foreign-roster controls also pass. The
 frozen v2.1 bytes and both companion fixtures match the same digests.
 
 [Superseded hosted shard](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/acceptance-v2-hosted-shard2.log) · [Regression before repair](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/acceptance-v21-spent-red.log) · [Regression and focused controls after repair](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/acceptance-v21-spent-green.log) · [Current hosted checks](https://github.com/mpmdw/JouleWise/pull/868/checks)
+
+## 2026-11-19 round 1 audit on frozen v2.1
+
+Fetch and PR readback agreed at `5a83c6dee8d3e6de584d1ff20320b4500eeea44d`
+with a clean worktree. The current audit found two new highs and two
+mediums. The five attached void reports refer to older revisions on the
+same branch. Their reproductions remain covered by the current regressions.
+
+| Finding | Repair commit | Reproduction and result |
+| --- | --- | --- |
+| HIGH. The support decoder interpreted fan and temperature values before hold admission, including on the stability path. | `81e7d2549` | **PASS.** The file-backed reader projects metadata and keeps byte offsets for the readings. The instrument gateway decodes the selected bytes only after the sidecar interval passes. Case controls cover the 300/600 deficit, count-passing gap, instrument success, and stability. The projection also handles escaped field names, string delimiters and duplicate keys. |
+| HIGH. A nonzero trailer count vetoed an otherwise clean DC interval. | `81e7d2549` | **PASS.** RL-166 Q7 treats the counters as span diagnostics. The reader requires stream health, consistent decoded stamps, and the interval's own coverage and gap rules. The 600/600 hold reproduction and the USB-error control retain the expected DC means on both looks. |
+| MED. An undefined hold hid the turn's own coverage refusal. | `81e7d2549` | **PASS.** The metadata gate checks the requested interval even when the hold is undefined. A 598/600 hold with a 3 s gap and a 35/36 GPU turn yields `coverage` for GPU and rail sum. An admitted DC turn retains its undefined hold reason. |
+| MED. The audit was configured to expect the 1,046-case v1 digest and observer. | Lead audit configuration | Follow-up. The lead's newer direction installs v2.1 at SHA-256 `26bcfd126736d2ae490d82e221a5d53232fa0888301972e464b57641c0377426`. The v2.1 foreign-roster refusal checks exercise the sanctioned validator's descriptor classification. |
+
+| Historical verified high | Repair | Current regression |
+| --- | --- | --- |
+| Void 1. Missing native step-3 source after reservation | `cb042106c` | Native preflight refuses absent, changed and symlinked loaders. Scoring uses the compiled preflight source. |
+| Void 2. Rail turn gap used hold cadence | `d4622c221` | The four-second ANE case and the turn gap limits refuse with the current count/gap precedence. |
+| Void 3. Sparse DC turn and decode passed a gap-only gate | `ddbce2c4d` | The 108/180 turn and 8/80 decode cases refuse for coverage despite short gaps. |
+| Void 4. Rail and sidecar counts bypassed the coverage gate | `78776829b` | The 35/36 GPU, 300/600 sidecar, and 120/180 DC witness and 192 generated channel/interval cases pass. |
+| Void 5. Early GPU projection, count/gap precedence, and recovery and tail evidence | `eb13a0549`, `7a442bec8` | Decisive-row and cache spies, the 593/594/595 count boundary, and the amended recovery and tail cases exercise the class. RL-189 and RL-190 let a later judged window supply the return after a failed complete window is counted. |
+
+The focused suite ran 65 methods with the existing dispatcher skip.
+The separate support projection control passed. All 44 command-census
+and gate-ledger tests passed. Both foreign-roster refusal cases and the
+pinned GPU comparison passed with the current frozen observer. Direct
+scientific comparisons matched all three synthetic looks and the
+instrument edge oracle.
+
+[Current audit](/Volumes/JW-EXT/scratch/pl-d-desc-looks-executor/audit-1/FINAL-MESSAGE.md) · [Regression reproductions before repair](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/audit-v21-round1-red.log) · [Focused regression run](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/audit-v21-round1-focused.log) · [Support projection controls](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/audit-v21-round1-support-projection.log)
+
+All 3,381 frozen v2.1 cases ran locally on the repair. There were 3,259
+passes and the same 122 reservation-dependent outcomes seen on the
+predecessor. Six direct errors came from abandoned and other-checkout
+fixture directory creation, and 116 assertions depended on a worker
+reservable on the host. The predecessor diagnostic observed mkdir
+returning `EPERM` in all 116 cases. Hosted verification covers the
+successful publication and confinement path. The protected blob audit
+matched all 53 paths, and both frozen companion digests matched.
+
+[Full local result summary](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/audit-v21-round1-full-summary.txt) · [Protected blob comparison](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/audit-v21-round1-protected-blobs.tsv) · [PR checks](https://github.com/mpmdw/JouleWise/pull/868/checks)
