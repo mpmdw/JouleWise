@@ -1,6 +1,8 @@
 """Black-box description look contract, disposable invented observations only."""
 import csv
 from datetime import date, datetime, timedelta
+from decimal import Decimal
+from fractions import Fraction
 from functools import lru_cache, partial
 import hashlib
 import io
@@ -163,7 +165,32 @@ def watts(t, c, v, dc=False, cutoff=False, first_low=True):
     return v * (base + offset)
 
 
-def traces(where, v, ordinal, delta=1):
+# RL-192 / RL-192a. Seconds, GPU watts and total rail watts at scale one.
+HAND_TABLE_LEGS = ("f2-inst-01/L001", "f2-inst-02/L001")
+HAND_TABLE_STEPS = tuple(tuple(map(Decimal, row)) for row in (
+    ("600", "12", "24"),
+    ("602.50", "12.4", "24.6"),
+    ("602.75", "14", "27"),
+    ("603.00", "15.6", "29.4"),
+    ("603.25", "16", "30"),
+    ("606", "20", "36"),
+    ("610.25", "14", "36"),
+    ("610.50", "14", "27"),
+))
+
+
+def hand_table_watts(t, scale, ordinal):
+    if t < 0:
+        extra = 100 if ordinal == 1 and t < -10 else 0
+        return scale * Decimal(12 + extra), scale * Decimal(24 + extra)
+    if t < 600:
+        gpu = 12 + (t - 300) / 64
+        return scale * gpu, scale * 2 * gpu
+    _, gpu, total = next(row for row in reversed(HAND_TABLE_STEPS) if row[0] <= t)
+    return scale * gpu, scale * total
+
+
+def traces(where, v, ordinal, delta=1, *, hand_table=False):
     """Native interval-row format and decoded point format. Identity mapping plus nonzero clock offset."""
     # Split the DC grid at both integration boundaries and straddle the tail cut.
     ticks = list(range(-20, 603)) + [602 + i / 20 for i in range(1, 181)]
@@ -171,9 +198,17 @@ def traces(where, v, ordinal, delta=1):
     cuts = list(range(-20, 603)) + [602+i/4 for i in range(1, 37)]
     bound = [("interval_start_s", "interval_end_s", "timestamp_s", "source", "rail", "power_w")]
     for left, right in zip(cuts, cuts[1:]):
-        t = (left + right) / 2
-        g, s = (watts(t, c, v*delta, first_low=ordinal != 1) for c in (0, 1))
-        for rail, power in ((COLS[2], (s-g)/3), (COLS[0], 2*(s-g)/3), (COLS[1], g)):
+        if hand_table:
+            # The integer and quarter-second cut points convert exactly.
+            t = (Decimal(left) + Decimal(right)) / 2
+            gpu, total = hand_table_watts(t, v * delta, ordinal)
+            fifth = (total - gpu) / 5
+            powers = ((COLS[2], 2 * fifth), (COLS[0], 3 * fifth), (COLS[1], gpu))
+        else:
+            t = (left + right) / 2
+            g, s = (watts(t, c, v*delta, first_low=ordinal != 1) for c in (0, 1))
+            powers = ((COLS[2], (s-g)/3), (COLS[0], 2*(s-g)/3), (COLS[1], g))
+        for rail, power in powers:
             bound.append((left, right, right, "powermetrics", rail, power))
         bound.append((left, right, right, "unrelated", "gpu_power", 900*v*delta))
     put(where / "power_trace.csv", csvbytes(bound))
@@ -454,7 +489,7 @@ class World:
         self.rows.append(refs)
         if status=="qualified":
             self.good[key]=(v,ordinal)
-            traces(self.copy/key,v,ordinal)
+            traces(self.copy/key,v,ordinal,hand_table=key in HAND_TABLE_LEGS)
         else:
             traces(self.copy/key,v,ordinal)  # excluded legs also have tempting synthetic samples
         return refs
@@ -1049,6 +1084,84 @@ def exact_edges(self):
         self.match({k:edges[key][k] for k in expected},expected)
 
 
+# SHA-256 of power_trace.csv in leg order. RL-192 §2 and RL-192a.
+HAND_TABLE_SHA = (
+    "50870a0857f8abf305188c6e2c628e83bf94c42b63078069bf01670da98fc0e6",
+    "2bbdc841b77111e94932c3ddabee4148173f4af9db3c0bb98d536a301fa9d345",
+)
+NEAR_MISS_SHA = (
+    "a62793646f990e2df0932982765ed00af8c46de88f23eb205a7913575973829d",
+    "4603571162f73e7f145b5241a32ef1a8d59735354e082872b9e0c488444f0add",
+)
+
+
+def hand_table_guard(test):
+    world = test.world(IDS[0])
+    for i, key in enumerate(HAND_TABLE_LEGS):
+        with test.subTest(leg=key):
+            scale = i + 1
+            folder = world.copy / key
+            payload = (folder / "power_trace.csv").read_bytes()
+            meta = json.loads((folder / "support.json").read_bytes(), parse_float=Decimal)
+            intervals = [tuple(pair) for pair in meta["rail_intervals"]]
+            rows = {}
+            for row in csv.DictReader(io.StringIO(payload.decode())):
+                if row["source"] == "powermetrics":
+                    pair = Decimal(row["interval_start_s"]), Decimal(row["interval_end_s"])
+                    group = rows.setdefault(pair, {})
+                    test.assertNotIn(row["rail"], group)
+                    group[row["rail"]] = Fraction(row["power_w"])
+            test.assertEqual(list(rows), intervals)
+            totals = {}
+            for (a, b), group in rows.items():
+                test.assertEqual(set(group), set(COLS))
+                cpu, gpu, ane = (group[name] for name in COLS)
+                planted_gpu, planted_sum = hand_table_watts((a + b) / 2, scale, i)
+                totals[a] = cpu + ane + gpu
+                test.assertEqual(totals[a], Fraction(planted_sum), (key, a))
+                test.assertEqual(2 * cpu, 3 * ane, (key, a))
+                test.assertEqual(gpu, Fraction(planted_gpu), (key, a))
+
+            def mean_between(lo, hi):
+                return sum(totals[a] * Fraction(b - a) for a, b in intervals
+                           if lo <= a and b <= hi) / (hi - lo)
+
+            hold = mean_between(0, 600)
+            level = mean_between(604, 606) - hold
+            test.assertEqual(hold, 24 * scale)
+            test.assertEqual(level, 6 * scale)
+            for start, fraction, cpu_w, ane_w in (
+                ("602.50", "0.1", "7.32", "4.88"),
+                ("602.75", "0.5", "7.8", "5.2"),
+                ("603.00", "0.9", "8.28", "5.52"),
+            ):
+                a = Decimal(start)
+                test.assertEqual(totals[a] - (hold + Fraction(fraction) * level), 0, start)
+                group = rows[a, a + Decimal("0.25")]
+                test.assertEqual(group["cpu_power"], scale * Fraction(cpu_w))
+                test.assertEqual(group["ane_power"], scale * Fraction(ane_w))
+            test.assertEqual(sha(payload), HAND_TABLE_SHA[i])
+
+
+def hand_table_near_miss(test, i):
+    # Score the frozen CSV via the normal per-leg print with its own DC clock.
+    folder = test.base / HAND_TABLE_LEGS[i]
+    traces(folder, i + 1, i)
+    test.assertEqual(sha((folder / "power_trace.csv").read_bytes()), NEAR_MISS_SHA[i])
+    paths = {name: folder / name for name in (RAIL_FILE, DC_FILE)}
+    signal = executor().Signals(read(folder / "support.json"), paths, lambda: None, fixture_step3())
+    kit, leg = HAND_TABLE_LEGS[i].split("/")
+    plan = json.loads(design()[f"kits/{kit}.json"])["legs"][0]
+    test.assertEqual(plan["leg_id"], leg)
+    detail = ({"quiet_spans_ns": [(0, 600_000_000_000)]}, None, None, None,
+              {"nominal_prefill_tokens": plan["prefill_tokens"], "realised_decode_tokens": plan["decode_tokens"]})
+    edges = executor().print_leg(signal, detail, True)["edges"]
+    for field, rail_sum in (("rise_s", 0.75), ("onset_lag_s", 0.25)):
+        with test.subTest(field=field):
+            test.assertEqual(edges[field]["rail_sum"], rail_sum)
+            test.assertEqual(edges[field]["gpu_rail"], 0.5)
+
+
 def exact_rail_rows(self):
     # Fixture-only builder adapter uses the two real row readers. It constructs
     # its input from the byte-attested synthetic file and reports no live rows.
@@ -1213,6 +1326,9 @@ for look in IDS:
     add(prefix+"_named_freeze",repaired_freeze,look)
 add("lm_stab_lock_coalesces",coalescence)
 add("lm_inst_01_edge_hand_table_exact",exact_edges)
+add("lm_inst_01_hand_table_exact_zero_guard", hand_table_guard)
+for i, key in enumerate(HAND_TABLE_LEGS):
+    add(key.lower().replace("-", "_").replace("/", "_") + "_near_miss", hand_table_near_miss, i)
 add("lm_inst_01_gpu_rows_equal_step3",exact_rail_rows)
 
 
