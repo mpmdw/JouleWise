@@ -1465,6 +1465,9 @@ class Signals:
             return
         stamps = {}
         capture_end = None
+        declared = {rail: set(self._declared_rails[channel].bounds)
+                    for channel, rail in RAIL_CHANNELS.items()}
+        recorded = {rail: [] for rail in RAILS}
         with self._open_signal("power_trace.csv") as stream:
             for key, stamp in _rail_rows(stream):
                 bounds, rail = key
@@ -1473,9 +1476,11 @@ class Signals:
                 if rail not in RAILS:
                     continue
                 require(key not in stamps, "repeated rail in the same interval")
+                require(bounds in declared[rail], "recorded rail interval contradicts support")
                 stamps[key] = stamp
+                recorded[rail].append(bounds)
         individual = {
-            name: [bounds for bounds in self._declared_rails[name].bounds if (bounds, rail) in stamps]
+            name: sorted(recorded[rail])
             for name, rail in RAIL_CHANNELS.items()
         }
         require(all(first[1] <= second[0] for series in individual.values()

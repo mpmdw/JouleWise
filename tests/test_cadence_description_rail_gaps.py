@@ -52,6 +52,71 @@ def _with_rail_intervals(directory, rows):
 
 
 class RailGapPeriodTests(unittest.TestCase):
+    def test_authenticated_scorers_refuse_support_that_omits_a_recorded_interval(self):
+        with patch.object(reader.socket, "gethostname", return_value=fixture.FIXTURE_BOARD), \
+                patch.dict(os.environ, R190_NODENAME=fixture.FIXTURE_BOARD):
+            for look in fixture.IDS[:2]:
+                with self.subTest(look=look), TemporaryDirectory() as temporary:
+                    world = DescriptionWorld(Path(temporary).resolve() / "world", look)
+                    key = sorted(world.good)[0]
+                    folder = world.copy / key
+                    path = folder / fixture.RAIL_FILE
+                    with path.open(newline="") as stream:
+                        rows = list(csv.DictReader(stream))
+                    for row in rows:
+                        start = Decimal(row["interval_start_s"])
+                        if row["source"] == "powermetrics" and 0 <= start < 600:
+                            row["power_w"] = "601" if start == 50 else "1"
+                    support = _with_rail_intervals(folder, rows)
+                    clean = reader.Signals(support, {fixture.RAIL_FILE: path}, lambda: None,
+                                           fixture.fixture_step3())
+                    self.assertEqual(clean.average("gpu_rail", 0, 600), 2)
+                    self.assertEqual(clean.average("rail_sum", 0, 600), 6)
+
+                    support["rail_intervals"].remove([50, 51])
+                    fixture.put(folder / "support.json", support)
+                    fixture.copy_attestation(world)
+                    world.commit_stage1(self)
+                    snapshot = reader.Snapshot(world.repo, look, "stage2")
+                    census, qualified = reader.census(snapshot)
+                    snapshot.check_stage1(census)
+                    sources = reader.verify_gates(snapshot, qualified)
+                    with self.assertRaisesRegex(reader.Refusal, "recorded rail interval contradicts support"):
+                        reader.score(snapshot, sources, qualified, lambda: None)
+
+    def test_recorded_rail_evidence_rejects_omit_duplicate_shift_and_false_gap(self):
+        with TemporaryDirectory() as temporary:
+            folder = Path(temporary)
+            fixture.traces(folder, 1, 0)
+            paths = {fixture.RAIL_FILE: folder / fixture.RAIL_FILE}
+            support = fixture.read(folder / "support.json")
+            bounds = support["rail_intervals"]
+            # The first admitted rail window must validate all recorded rail
+            # metadata, including the intervals used by later prints.
+            for start in (-15, 50, 603.25, 607.25, 610.25):
+                index = next(i for i, pair in enumerate(bounds) if pair[0] == start)
+                left, right = bounds[index]
+                replacements = {
+                    "omitted": [],
+                    "duplicate": [[left, right], [left, right]],
+                    "shifted": [[left, right - 0.000000001]],
+                }
+                for name, replacement in replacements.items():
+                    with self.subTest(start=start, change=name):
+                        edited = bounds[:index] + replacement + bounds[index + 1:]
+                        message = ("invalid support interval ledger" if name == "duplicate"
+                                   else "recorded rail interval contradicts support")
+                        with self.assertRaisesRegex(reader.Refusal, message):
+                            signal = reader.Signals(dict(support, rail_intervals=edited), paths,
+                                                    lambda: None, None)
+                            signal.average("gpu_rail", 0, 600)
+                for rail in fixture.COLS:
+                    with self.subTest(start=start, rail=rail, change="false gap"):
+                        edited = dict(support, rail_missing={rail: [[left, right]]})
+                        signal = reader.Signals(edited, paths, lambda: None, None)
+                        with self.assertRaisesRegex(reader.Refusal, "recorded rail interval contradicts support"):
+                            signal.average("gpu_rail", 0, 600)
+
     def test_rail_sum_joins_exact_intervals_at_the_coverage_boundary(self):
         with TemporaryDirectory() as temporary:
             folder = Path(temporary)
