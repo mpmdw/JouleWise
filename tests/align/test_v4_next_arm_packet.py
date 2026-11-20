@@ -58,8 +58,6 @@ class Scenario:
         self.root = Path(directory)
         if previous is None:
             init_git_fixture(self.root, '-q')
-            if not (self.root / series.MANIFEST).exists():
-                self.write(series.MANIFEST, series.raw_json(series.candidate()))
         self.previous = previous
         self.window = window
         self.dir = 'w-' + window.replace('#', '_')
@@ -159,6 +157,8 @@ class Scenario:
 
     def finish(self, *, change_code=False, code=b'synthetic-code-v1\n'):
         self.retarget_next_members()
+        if not (self.root / series.MANIFEST).exists():
+            self.write(series.MANIFEST, series.raw_json(series.candidate()))
         self.write(CODE_PATH, code)
         self.record['code_commit'] = self.code_commit = self.commit()
         d = self.dir

@@ -243,3 +243,14 @@ git diff --check b2e01464d HEAD
 hold. The exact final-head CI is recorded in the draft PR ledger and the seat handoff.
 W1 signing, the final post-close packet, and integration-owner and Opus acceptance
 remain with their owners.
+
+### Hosted fixture compatibility
+
+The first hosted run at `a30b0fd3f` found a setup regression in shard 11.
+The shared `Scenario` created the synthetic series directory in its constructor,
+before W1 prequalification copied its own fixture directory there. That caused six failures and
+four errors in `test_w1_prequal`. Default manifest creation now runs at fixture
+finalization and preserves caller-supplied series bytes. A disposable R1 fixture
+verified the same copy sequence, retained a caller-supplied companion blob, and built
+a ready W1 packet. The production sentinel gate and both executable freezes remain
+the same. [First hosted shard 11](https://github.com/mpmdw/JouleWise/actions/runs/44702660992/job/136175741092)
