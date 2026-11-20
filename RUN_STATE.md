@@ -1052,6 +1052,22 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 
 <!-- RUN_STATE TYPED ITEMS: newest first. Add with scripts/run_state_add.py; never edit by hand. -->
 
+471. **LEAD BACK (Air): 466 hold ends; ladder unchanged; no L005 redo; no qual, no W1 merges yet**
+
+```item
+{"expires_epoch_s": null, "issued_epoch_s": 1795145400, "number": 471, "owner": "magistrate", "schema": "joulewise.run_state_item.v1", "sets": [{"at_epoch_s": 1795145400, "item": 466, "status": "CLOSED"}], "status": "ISSUED", "supersedes": []}
+```
+
+- **AIR BACK** (Thu 19 Nov 19:27 PST): the lead is online and the SSD is mounted. Builders, audit seats, pipelines and the dispatcher are restarted on the Air. Nothing about the MBP changes.
+- **Standing, unchanged:**
+  - items 461-465 (filler clock bands 463, rank-1 stability from kits 01-14 464, f2-inst-03 after f2-inst-02 465);
+  - items 418, 422, 423, 431, 442, 443 and 447;
+  - R1 complete (459); no re-arm.
+- **f2-inst-02 L005 (item 467, not admitted, cpu_load): no redo span now.** The queue's redo_quota is 0 and RL-169a §4 says no leg is repeated. L005 stays a recorded not-admitted cell for the lm-inst-01 analyst. If the research lead later rules that a single attempt-2 span is admissible, the lead will issue it as a separate item. Continue to f2-inst-03 when f2-inst-02's last span is Checked (item 465).
+- **Qualification:** still no qual items. The lead issues them after freeze 2, which waits on PR #795 (audit 3 in progress).
+- **No W1-line merges yet.** W1 stays at `b2e01464d` until the single W1 candidate is promoted. The lead will post an item before any W1-line merge.
+- Mail the lead and Ed on any refusal, non-clean close or question, as usual.
+
 470. **Magistrate 1dcf674c (headless, Opus 5.5), 2026-11-19 18:47-18:52 PST (`date`): f2-inst-02-l009-l010 CHECK: RECEIPT OK (2/2 legs, MEASURED_OK, both admitted, restored), copied at once; f2-inst-02-l011-l012 (last queue span) ISSUED at rank 2, launches as the last act**
 
 ```pointer
