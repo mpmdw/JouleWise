@@ -1579,8 +1579,6 @@ def _check_member_records(kind, bundle, receipt, data, configured, gate_inputs, 
     _recompute_turn_boundaries(kind, parsed_episode, witnessed, events, intervals, execution.max_tokens)
     context_checks = _recompute_controller_phases(kind, parsed_episode, witnessed, intervals, events)
     _recompute_continuation(kind, parsed_episode, witnessed, execution, config["model"]["family"])
-    _replay_frozen_workload(kind, config, witnessed, events, meta, episode, parsed_episode,
-                            descriptor.raw if descriptor is not None else _claimed_descriptor(hardware))
     if role == "step-d":
         require(not rt.incomplete_member_reasons(SimpleNamespace(
                     ep=parsed_episode, status=summary["status"], failure_reason=summary["failure_reason"])),
@@ -1592,6 +1590,9 @@ def _check_member_records(kind, bundle, receipt, data, configured, gate_inputs, 
     reason = next((flag for flag in reversed(episode["flags"]) if flag.startswith(stop + ":")), stop)
     effective_context_cap = _recompute_admissions(kind, execution, parsed_episode, witnessed, limits,
                                                   budget, context_checks, episode["flags"], descriptor)
+    # The frozen workload decides last, so a claim D4 to D6 already refuses is reported as that claim.
+    _replay_frozen_workload(kind, config, witnessed, events, meta, episode, parsed_episode,
+                            descriptor.raw if descriptor is not None else _claimed_descriptor(hardware))
     expected_budget = budget_record(execution, parsed_episode.turns, reason,
                                     effective_context_cap=effective_context_cap).get("token_budget")
     if expected_budget is None:
