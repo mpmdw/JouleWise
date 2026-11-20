@@ -1356,3 +1356,33 @@ head. Its ordinary shards reported refusals in the frozen
 fixture and at the host gate. The read-back draft PR tracks
 the hosted result for this test-only update.
 [Builder replay log](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/v5-restored-binding-regressions.log) · [Original case replay](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/v5-succession-oracle-replay.log) · [Preceding hosted run](https://github.com/mpmdw/JouleWise/actions/runs/44808608230) · [Draft PR #868](https://github.com/mpmdw/JouleWise/pull/868)
+
+## 2026-11-20 audit on frozen v5 rail intervals and recovery
+
+The worktree and draft PR #868 agreed at
+`aa57e9f24892992fa4d5ae0c6d10ed72144173d9` at intake.
+All three current findings reproduced on that head. The audit's
+hosted replay accounted for all 16,955 frozen cases and found
+15,915 passes. All 1,040 nonpassing IDs appeared in the
+independent v5 baseline.
+[Audit report](/Volumes/JW-EXT/scratch/pl-d-desc-looks-executor/audit-1/FINAL-MESSAGE.md) · [Intake CI](https://github.com/mpmdw/JouleWise/actions/runs/44814801838)
+
+| Finding | Repair and regression at `9913b4a5b` |
+| --- | --- |
+| HIGH. A 1 ns ANE endpoint difference aborted both looks. | The authenticated support ledger is a sorted union of bounds. Validate nonoverlap within each observed component and join rail sum on the exact start/end pair. The 100/99/98 aligned-interval controls preserve the 2 W GPU mean and produce a 6 W sum, a 5.94 W sum, and a `coverage` null, respectively. An overlapping duplicate component interval refuses before value access. The authenticated instrument and stability regressions exercise the 593/600 witness. |
+| HIGH. DC contamination moved the shared recovery anchor. | The first observed stamps determine the common grid independently of print admission. The DC-cleanliness control keeps a −10 s anchor and a 19 s bound for both healthy rails. A separate control varies only ordered rail manifest admission with a later observed sum start. |
+| MED. A clean one-point DC stream was declared contaminated. | Treat the matching nonnegative decoder tally as stream metadata. Counts of zero, one, and two all yield `coverage` for a clean 100 s interval before value access. Explicit contamination retains its stream-priority reason. |
+
+[Red audit reproductions](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/v5-audit1-red.log) · [Green audit reproductions](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/v5-audit1-green.log) · [Focused regressions](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/v5-audit1-focused.log)
+
+The older reports cover the native loader path, interval-local
+gaps, per-channel coverage, and value-access ordering. The
+recovery-window check follows RL-189's skip-and-count rule and
+the registered rail-tail bound. The earlier synthetic
+publication and pipe-confinement observations remain limited by
+the local reservation `EPERM` and the shared host-ID base.
+Ordinary v5 fixtures require the PR #795 integration. The
+stage-1 fixture correction awaits its independently hashed
+successor. The eight v5 entries are byte-identical, and the
+53 protected entries match the intake branch.
+[Earlier regression replay](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/v5-audit1-previous-regressions.log) · [Protected paths](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/v5-audit1-protected.tsv) · [Draft PR #868](https://github.com/mpmdw/JouleWise/pull/868)
