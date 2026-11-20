@@ -737,10 +737,14 @@ class RestoredFiles:
                 if entry:
                     header, name = entry.split(b"\t", 1)
                     tree[os.fsdecode(name)] = header.decode("ascii").split()
-            if link.mirror_path == "." or tree[link.mirror_path][:2] == ["040000", "tree"]:
+            entry = tree.get(link.mirror_path, ())
+            if link.mirror_path == "." or entry[:2] == ["040000", "tree"]:
                 self.verify_mirror_directory(link, tree, "sha1" if len(commit) == 40 else "sha256")
                 return
-            committed = evidence.read(commit, link.mirror_path)
+            committed = evidence.read(commit, link.mirror_path) if entry else None
+        if committed is None:
+            self.verify_ignored_mirror_target(link)
+            return
         reference = BoundInput(link.target, len(committed), packet.digest(committed))
         existing = self.ledger.entries[link.target]
         packet.require(existing is None or (isinstance(existing, BoundInput) and existing.sha256 == reference.sha256
@@ -749,6 +753,18 @@ class RestoredFiles:
         verify_ancillary_input(self.root, reference)
         self.ledger.entries[link.target] = reference
         self.ledger.verified.add(link.target)
+
+    def verify_ignored_mirror_target(self, link):
+        # The finalized closure binds ignored inputs by their working path and
+        # bytes or directory inventory. Git has no blob for these inputs.
+        packet.require(link.mirror_path in link.ignored, "mirror target has no finalized ignored binding")
+        bound = self.ledger.entries[link.target]
+        if isinstance(bound, BoundInput):
+            verify_ancillary_input(self.root, bound)
+            self.ledger.verified.add(link.target)
+        else:
+            packet.require(isinstance(bound, BoundDirectory) and link.target in self.ledger.verified,
+                           "ignored mirror directory is not verified")
 
     def verify_mirror_directory(self, link, tree, algorithm):
         scope = Path(link.mirror_path)
@@ -807,13 +823,13 @@ class RestoredFiles:
                            "restored link target lacks a manifest digest")
         self.ledger.verified.add(link.hops[0][0])
 
-    def verify_listed_inputs(self):
+    def verify_listed_inputs(self, *, member_paths=()):
         for link in self.links:
             if self.is_protected(link.hops[0][0]):
                 continue
             self.verify_link(link)
         for path in self.listed:
-            if not self.is_protected(path) and path not in self.ledger.verified:
+            if not self.is_protected(path) and path not in self.ledger.verified and path not in member_paths:
                 verify_ancillary_input(self.root, self.ledger.entries[path])
                 self.ledger.verified.add(path)
 
@@ -1009,6 +1025,12 @@ class ReleasedInputs:
         return self.members
 
     def load_for_scoring(self):
+        # Preflight links and ancillary inputs across the finalized series.
+        # Member projections and protected canonical DC retain their own readers.
+        member_paths = {f"{self.assignments[key].files.prefix}/{bound.path}"
+                        for key, bindings in self.member_inputs.items() for bound in bindings.values()}
+        for files in self.restored:
+            files.verify_listed_inputs(member_paths=member_paths)
         members = self.load_members()
         loaded = {}
         for member in members:
@@ -1027,8 +1049,6 @@ class ReleasedInputs:
                   for m in members if m.eligible and m.episode.condition == "benign"}
         self.dc_inputs = {key: self.bind_benign_dc(key) for key in benign}
         self.dc_results = {episode.episode_id: self.read_benign_dc(episode, key) for key, episode in benign.items()}
-        for files in self.restored:
-            files.verify_listed_inputs()
         self.input_ledger.require_complete()
         self.verify_score_inputs(members)
         return members

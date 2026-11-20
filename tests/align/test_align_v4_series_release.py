@@ -571,6 +571,8 @@ class SeriesReleaseTests(unittest.TestCase):
             self.assertEqual((score["strata"], score["words"]), (22, ["S SIGNATURE"]))
 
     def test_mirror_directory_verifies_the_bound_recursive_git_tree(self):
+        from scripts import align_v4_series_release as caller
+
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp).resolve()
             mirror = root / "checkout"
@@ -601,9 +603,8 @@ class SeriesReleaseTests(unittest.TestCase):
             reference.write_text("VERSION = 2\n")
             self.assertEqual(fixture_git(mirror, "status", "--porcelain"), "")
             output = root / "changed.json"
-            result = invoke(root, output)
-            self.assertEqual(result.returncode, 1, result.stderr)
-            self.assertFalse(output.exists())
+            with patch.object(caller, "read_member", side_effect=AssertionError("read before mirror verification")):
+                self.assert_release_refused(caller, root, output)
 
     def test_native_trace_and_transcript_are_never_opened(self):
         from tests.align import test_c1_release_input_completeness as frozen
@@ -1111,11 +1112,11 @@ class SeriesReleaseTests(unittest.TestCase):
                     observe(Path(os.fsdecode(path)))
                 return real_builtin_open(path, *args, **kwargs)
 
-            def verify(files):
+            def verify(files, **kwargs):
                 nonlocal verifying
                 verifying = True
                 try:
-                    return real_verify(files)
+                    return real_verify(files, **kwargs)
                 finally:
                     verifying = False
 
@@ -1931,7 +1932,31 @@ class SeriesReleaseTests(unittest.TestCase):
         for wins, tail in ((102, 0.0109278936864), (101, 0.0140103456299)):
             with self.subTest(wins=wins), tempfile.TemporaryDirectory() as tmp:
                 root = Path(tmp)
-                stored_series(root, wins=wins)
+                producer = write_bundle
+                written = {}
+
+                def with_writer_shape(bundle, window, assignment, *args, **kwargs):
+                    run_id = producer(bundle, window, assignment, *args, **kwargs)
+                    path = bundle / "outputs/align_episode.json"
+                    episode = json.loads(path.read_bytes())
+                    # EpisodeRuntimeAdapter serializes spec.seed, the bundle
+                    # identity and the controller-rail join flag.
+                    episode["seed"] = assignment["seed_index"]
+                    episode["hardware"]["run_bundle_id"] = run_id
+                    episode["flags"].append("power_trace_join_in_run_bundle")
+                    write_json(path, episode)
+                    written[run_id] = episode["seed"]
+                    return run_id
+
+                with patch(f"{__name__}.write_bundle", with_writer_shape):
+                    stored_series(root, wins=wins)
+                expected = {}
+                for window in WINDOWS:
+                    plan = json.loads((root / f"records/{window}/collection.json").read_bytes())
+                    expected.update({row["run_id"]: row["seed_index"] for row in plan["members"]
+                                     if row["ordinal"] in series.FRESH_ORDINALS})
+                self.assertEqual(len(expected), 176)
+                self.assertEqual(written, expected)
                 c1_record = json.loads((root / "records/C1/record.json").read_bytes())
                 w1_commit = c1_record["previous_record"]["commit"]
                 receipt_path = registration.REGISTRATION + "registration_receipt.json"
