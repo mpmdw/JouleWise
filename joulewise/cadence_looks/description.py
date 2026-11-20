@@ -1435,14 +1435,14 @@ class Signals:
         self._rail_end = capture_end
         self._rail_stamps = stamps
 
-    def recovery_start(self, sampling):
+    def recovery_start(self):
         self._index_rails()
         observed = [self._observed_rails[channel].starts[0] for channel in CHANNELS[:2]
                     if (channel != "rail_sum" or self.sum_admitted)
                     and self._observed_rails[channel].starts]
         if self.meter_clean:
             observed.append(self.meter_ns[0])
-        return max([sampling, *observed])
+        return max(observed, default=None)
 
     def stream_end(self, channel):
         if channel == "dc_in":
@@ -1706,15 +1706,18 @@ def _sensors(keys, readings, sensor_names=()):
             rpm.append(mean(value if isinstance(value, Fraction) else _sample(str(value))
                             for value in (fans[key] for key in keys)))
         for name, value in record.items():
-            if name != "fan_keys" and number(value):
-                sensors[name].append(value if isinstance(value, Fraction) else _sample(str(value)))
+            if name != "fan_keys":
+                values = sensors[name]
+                if number(value):
+                    values.append(value if isinstance(value, Fraction) else _sample(str(value)))
     fan = mean(rpm) if rpm else missing("no_complete_fan_reading")
-    return fan, {name: mean(values) for name, values in sensors.items()}
+    return fan, {name: mean(values) if values else missing("no_numeric_sensor_reading")
+                 for name, values in sensors.items()}
 
 
 def _recovery(signal, channel, start, origin, hold, spread, stop):
     reasons = []
-    if not number(hold) or not isinstance(spread, StandardDeviation):
+    if start is None or not number(hold) or not isinstance(spread, StandardDeviation):
         return missing("hold_or_sd_undefined"), reasons
     threshold_squared = 4 * spread.squared
     window = RECOVERY_WINDOW_S * NS_PER_SECOND
@@ -1770,9 +1773,11 @@ def _edge_prints(signal, hold, decode, turn, first, last, quiet_start, prompt):
     fallback = "completion_log_raw_s" not in stamps
     stage = stamps["warmup_stage_raw_s"] + shift
     origin = stage - 5 * NS_PER_SECOND if fallback else stamps["completion_log_raw_s"] + shift
-    sampling = stamps["sampling_started_raw_s"] + shift
     gap = stage - origin
-    anchor = signal.recovery_start(sampling)
+    anchor = signal.recovery_start()
+    # With no observed channels the sampling mark still describes the
+    # unobserved span, and there is no recovery grid to search.
+    unobserved_end = anchor if anchor is not None else stamps["sampling_started_raw_s"] + shift
     return_times, rise, onsets, offsets, censored = {}, {}, {}, {}, {}
     skip_counts, skip_reasons = {}, {}
     end = last + NS_PER_SECOND
@@ -1814,7 +1819,7 @@ def _edge_prints(signal, hold, decode, turn, first, last, quiet_start, prompt):
     result = {
         "fallback": fallback, "gap_outside": not fallback and not 4_500_000_000 <= gap <= 5_500_000_000,
         "completion_to_stage_s": missing("no_completion_log") if fallback else Fraction(gap, NS_PER_SECOND),
-        "unobserved_s": Fraction(anchor - origin, NS_PER_SECOND),
+        "unobserved_s": Fraction(unobserved_end - origin, NS_PER_SECOND),
         "recovery_s": return_times, "rail_return_censor_s": censored,
         "recovery_resolution_s": dict.fromkeys(CHANNELS, RECOVERY_WINDOW_S),
         "recovery_skipped_windows": skip_counts,

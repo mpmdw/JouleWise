@@ -214,6 +214,22 @@ class DescriptionIntervalTests(unittest.TestCase):
                              dict.fromkeys(("TV0h", "Tf08"), fixture.null("coverage")))
             self.assertEqual(gain[keys[1]]["mean_start_c"], {"TV0h": 37, "Tf08": 41})
 
+    def test_start_sensor_with_only_null_readings_is_reported(self):
+        with TemporaryDirectory() as temporary:
+            world = DescriptionWorld(Path(temporary).resolve() / "world", fixture.IDS[0])
+            keys = list(world.good)[:2]
+            for key, temperatures in zip(keys, ((None, None), (None, 0))):
+                path = world.copy / key / "support.json"
+                support = fixture.read(path)
+                for row, temperature in zip(support["sensors"], temperatures):
+                    row["TV0h"] = temperature
+                fixture.put(path, support)
+            gain = _score_world(self, world)["gain"]
+            self.assertEqual(gain[keys[0]]["mean_fan_rpm"], 1100)
+            self.assertEqual(gain[keys[0]]["mean_start_c"],
+                             {"TV0h": fixture.null("no_numeric_sensor_reading"), "Tf08": 41})
+            self.assertEqual(gain[keys[1]]["mean_start_c"], {"TV0h": 0, "Tf08": 41})
+
     def test_near_equal_sd10_date_means_preserve_the_positive_spread(self):
         for places in (16, 32, 100):
             with self.subTest(decimal_places=places):
