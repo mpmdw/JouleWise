@@ -22,12 +22,15 @@ visible calls. [RL-186 §2.3](https://github.com/mpmdw/JouleWise/blob/71a83f6660
 
 - `test_failed_envelope_counts_l001_second_call_with_tool_request` failed
   on the base with `1024 != 2048` and passed on the change with 2,048,
-  exit 3, and no result file.
+  exit 3, and no result file. The ruling update gives the returned visible
+  call two reasoning tokens and the rejected call one. The envelope's
+  `hidden_tokens` is two.
 - `test_failed_envelope_counts_and_boundaries_at_every_failure_position`
   passed 40 cases across one to four visible calls. The cases cover a
   returned tool request and exceptions before the clock stamp, before the
   first stream yield, and after it. The existing finalize-exception test
   passed and still checks the end stamp recorded before the exception.
+  All three focused tests passed on Python 3.13 after the ruling update.
 - Replayed the existing synthetic roster against the base module loaded
   from Git and against the changed module. Both used the same fixture
   config, soak, and absolute replay paths with fresh output trees. Raw
@@ -46,13 +49,21 @@ visible calls. [RL-186 §2.3](https://github.com/mpmdw/JouleWise/blob/71a83f6660
 - `git diff --check` passed. The tested production diff is confined to
   the failed-envelope aggregation.
 
-## NEEDS_SPEC
+## Resolved rulings
 
-- A rejected result's physical row has no reasoning-token count. The
-  envelope still sums reasoning counts from the visible results returned
-  to the script.
-- An exception before the endpoint returns can leave a count-less row
-  even after the stream starts. Including partial delivery would require
-  a counting rule and a source for those counts.
+- A rejected visible tool call contributes its recorded decode, cached
+  context, and fresh prefill counts. Its row carries no reasoning count.
+  `failed_envelope.hidden_tokens` sums `reasoning_tokens` from the visible
+  calls that `physical_call` returned to the script. All envelope totals
+  exclude hidden physical calls.
+- If the endpoint raises before returning a result, the row's `actual_tokens`
+  stays null, including after a stream yield. The envelope sums visible rows
+  with recorded counts. An empty sum is zero and the failed row's count stays
+  unknown. The runner omits the envelope if no visible call started.
+  Otherwise it uses the first started visible row's `started_ns` and the last
+  started visible row's `ended_ns`, falling back to that row's `started_ns`.
+
+The existing runner satisfies both rulings. NEEDS_SPEC is closed.
+[Exact-head hosted checks](https://github.com/mpmdw/JouleWise/pull/900/checks)
 
 The next step is lead review of PR #900 before selecting the ctl runner pin.

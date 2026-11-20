@@ -863,8 +863,9 @@ class RuntimeTests(unittest.TestCase):
             result = native_chat(endpoint, *args, **kwargs)
             calls += 1
             if calls == 2:
-                return replace(result, tool_calls=(ToolCallRequest("synthetic", "unexpected", "{}"),))
-            return result
+                return replace(result, reasoning_tokens=1,
+                               tool_calls=(ToolCallRequest("synthetic", "unexpected", "{}"),))
+            return replace(result, reasoning_tokens=2)
 
         with (patch.object(workload.MlxEndpoint, "chat", chat),
               redirect_stderr(io.StringIO()) as stderr):
@@ -879,8 +880,10 @@ class RuntimeTests(unittest.TestCase):
         self.assertEqual([row["actual_tokens"] for row in rows], [1024, 1024])
         self.assertFalse(rows[-1]["complete"])
         self.assertFalse(work["complete"])
-        self.assertEqual(work["failed_envelope"]["decode_tokens"], 2048)
-        self.assertEqual(work["failed_envelope"]["decode_tokens"], sum(row["actual_tokens"] for row in rows))
+        envelope = work["failed_envelope"]
+        self.assertEqual(envelope["decode_tokens"], 2048)
+        self.assertEqual(envelope["decode_tokens"], sum(row["actual_tokens"] for row in rows))
+        self.assertEqual(envelope["hidden_tokens"], 2)
 
     def test_failed_envelope_counts_and_boundaries_at_every_failure_position(self):
         from joulewise.align.apple.sampler import monotonic_ns
