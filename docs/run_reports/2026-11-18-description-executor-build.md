@@ -1218,3 +1218,31 @@ remains the fixture gate. The 17 hardware cases await the owner
 base with PR #795. The canonical local sharded run started for
 the audit fix. The draft PR will carry CI for the pushed head.
 [Preceding hosted shard](https://github.com/mpmdw/JouleWise/actions/runs/44765866585/job/136390619515) · [Extracted case results](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/audit3-prior-hosted-literal.log) · [Local shard log](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/audit3-shards.log)
+
+## 2026-11-20 v4 freeze and committed stability index
+
+The worktree, remote branch, and draft PR #868 agreed at
+`1a449433058e66aafdd5657b4f1b5b1f90e2014b` at intake.
+Commit `e9e5a9eef` installs all seven published files byte-for-byte.
+The checked-in v4 hash manifest has SHA-256
+`f00fce6b83052fb34f039d4288b21550bcf53d73a9babdbef8e48b0d254346d8`.
+All 53 protected paths match the prior stack.
+[Freeze](/Volumes/JW-EXT/scratch/desc-suites-current-v4.md) · [Protected paths](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/v4-protected-blobs.tsv)
+
+| Finding | Commit and regression | Result |
+| --- | --- | --- |
+| The wide census refused the authoritative kit index. | `8d2b92ded`, the v4 wide controls, and `test_committed_index_can_follow_the_later_receipt_and_binds_pin_counts` | **PASS at stage 1.** The reader authenticates the envelope, declared base population, indexed paths and digests, and the short pins against the full commits in the kit files. A declared normalized copy must match the same digest. The unmodified 16-row index admits 17 legs on 14 dates and its exact digest is bound into stage 1. |
+| The one- and thirteen-date early locks could not reach the reservation. | `8d2b92ded`, both frozen early-lock cuts and `EarlyDataLockTests` | **PASS through the reservation boundary.** The coalesced `01` refuses and `02` reaches one reservation attempt after binding the census. The full and base populations are 3/2 and 16/15 legs. Both one-date views retain the `fewer_than_two` SD null. |
+| Two frozen refusal oracles still require the index to predate the receipt. | `8d2b92ded`, versioned `description_expectation_corrections.json` | **PASS as ADMIT.** Both original IDs run through the ordinary CI test loader. Each preserves its receipt/index relationship, verifies final registration after the index, admits stage 1, and reaches the bound reservation before any scoring input opens. The loader verifies all seven hashes and applies only these two corrections. |
+| The recovery and sensor fixes must carry forward. | `4d4017258` and the v4 builder regressions | **PASS.** The seven-marker grid holds and all-null start sensors retain their reason. |
+
+[Builder controls](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/v4-builder-focus.log) · [Index refusals](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/v4-final-focused-auth.log) · [Early-lock replay](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/v4-early-lock-replay.log) · [Corrected cases](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/v4-corrected-cases.log)
+
+The independent v4 ledger assigns 356 methods to the executor
+index blocker, 79 to local reservation `EPERM`, 17 to the
+PR #795 hardware dependency, and two to the corrected
+expectations. The builder replay selects all 356 executor IDs and
+records worker exceptions at the literal reservation to distinguish
+any further local `EPERM` from an admission refusal. Hosted
+publication and the combined-base hardware gate remain pending.
+[Independent classification](/Volumes/JW-EXT/scratch/astra-desc-suite-amend4/v4/replay/nonpass.tsv) · [Builder replay ledger](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/v4-final-executor-replay.jsonl)
