@@ -659,3 +659,36 @@ genuine 0.75 s EOF. It also changes
 under RL-191 §1.5 while the fixed-width interpretation is pending.
 
 [Audit round 2](/Volumes/JW-EXT/scratch/pl-d-desc-looks-executor/audit-2/FINAL-MESSAGE.md) · [Red reproductions](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/rl191-audit2-red.log) · [Green reproductions](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/rl191-audit2-new-regressions.log) · [Frozen focus](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/rl191-audit2-frozen-focus.log) · [Local results](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/rl191-audit2-final-summary.txt) · [Exact crossing conflict](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/rl191-audit2-e1-conflict.log) · [Fixed-window conflict](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/rl191-audit2-e2-conflict.log) · [Protected blobs](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/rl191-audit2-protected-blobs.tsv) · [Current PR checks](https://github.com/mpmdw/JouleWise/pull/868/checks)
+
+## 2026-11-20 RL-192 recorded literals
+
+The fetched remote, draft PR and clean worktree agreed at
+`a528d9f47e091622ae249e4092254f01eaf93acd`. Commit `870e7c96a` implements
+RL-192 §1. Admitted rail, DC and file-backed sidecar samples use the
+exact rational value of each decimal literal. The GPU path checks the
+pinned reader's float projection against every newly admitted source
+row, including all three timestamp columns. A mismatch refuses.
+Timestamp arithmetic preserves the original decimal precision, and
+thresholds and lags remain rational. Recovery compares squares against
+the exact variance after checking the sign.
+
+The direct 2.042 W reproduction yields hold `1021/500` W and exact zero
+above hold. A deliberately mismatched pinned projection refuses. The
+191 focused frozen gate, crossing and tail checks pass, and direct
+science checks pass for both stability looks. The unchanged instrument
+fixtures reproduce the old-literal cases specified by RL-192. The GPU
+rise is 0.50 s. Rail-sum rise is 0.75 s and rail-sum onset lag is 0.25 s
+on both hand-table legs until the suite owner delivers the corrected
+literals. No fixture or expectation bytes changed. All 53 protected
+paths matched.
+
+The separate builder property still compares the hold with
+`Fraction(level)`. For 2.042 it expects
+`1149543804886319/562949953421312`, which differs from the exact decimal
+by `−13/70368744177664000` W. Its expectation was preserved under the
+lead's instruction. The frozen v2.1 and v2.2.1 runs were started using
+the private synthetic temporary directory. The lead's E2 ruling
+preserves the recorded capture bounds, including the 0.75 s and 25 s
+cases.
+
+[RL-192](/Volumes/JW-EXT/scratch/fable-rl192.md) · [Direct controls](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/rl192-direct.log) · [Focused frozen run](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/rl192-gate-focus.log) · [Direct scientific comparison](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/rl192-science.log) · [Protected paths](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/rl192-protected-blobs.tsv)
