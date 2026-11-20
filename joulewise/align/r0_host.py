@@ -256,7 +256,9 @@ class QuietGuard:
     from the newest snapshot at least INTERVAL_S earlier (sliding windows,
     so a burst shorter than one cadence always falls wholly inside one 30 s
     window and no stretch of time escapes judgement). A stored failure, a
-    stalled sampler or a window longer than MAX_WINDOW_S refuses.
+    stalled sampler or a window longer than MAX_WINDOW_S refuses. Every
+    clear verdict re-reads the stored failure as its last act, so a census
+    that fails while an admission's own probes run refuses that admission.
     Contention in a judged window is recorded and blocks publication.
     finish() stops sampling and judges the final state before success can
     be published. An unfinished census at the join bound is indeterminate.
@@ -521,6 +523,21 @@ class QuietGuard:
                 self._background_failure = f"{type(exc).__name__}: {exc}"
             self._stop_sampler.set()
 
+    def _latched_background_failure(self):
+        with self._snapshot_lock:
+            return self._background_failure
+
+    def _require_background_clear(self):
+        """The last act of every clear verdict.
+
+        The sampler can latch a failed census while an admission's own
+        probes are running. That admission refuses; it does not hand the
+        failure to the next one.
+        """
+        failure = self._latched_background_failure()
+        if failure:
+            raise Refused(f"census refused or indeterminate in the background sampler: {failure}")
+
     def _sampler_main(self):
         while not self._stop_sampler.wait(self.SNAPSHOT_CADENCE_S):
             self._background_snapshot()
@@ -557,6 +574,7 @@ class QuietGuard:
             self._cpu_interval(receipt)
             if not stopped:
                 raise Refused("census indeterminate: background sampler did not stop within the join bound")
+            self._require_background_clear()
         except Exception as exc:
             raise self._record_refusal(receipt, exc) from exc
 
@@ -574,6 +592,7 @@ class QuietGuard:
             current = self._cpu_snapshot(admission=True)
             self._admission_interval(receipt, current)
             self._require_fresh_background(self._now(), latest)
+            self._require_background_clear()
         except Exception as exc:
             raise self._record_refusal(receipt, exc) from exc
         if self.receipts:
@@ -710,6 +729,8 @@ class QuietGuard:
             self._judged_end -= opening
         # Completed windows precede a later failed census or stale tail.
         if background_failure:
+            # This copy belongs to the snapshots judged above. A later latch
+            # is caught where the verdict ends.
             raise Refused(f"census refused or indeterminate in the background sampler: {background_failure}")
         if "monotonic_s" in receipt:
             self._require_fresh_background(receipt["monotonic_s"], snapshots[-1] if snapshots else None)
@@ -800,7 +821,9 @@ class QuietGuard:
         receipt = {"resolved_custody_parents": []}
         try:
             now = self._now()
-            if not force and now - self.last < 15 and not self._stop_sampler.is_set():
+            # The throttle skips repeated probes, never a latched failure.
+            if (not force and now - self.last < 15 and not self._stop_sampler.is_set()
+                    and not self._latched_background_failure()):
                 return
             receipt["monotonic_s"] = now
             self.receipts.append(receipt)
@@ -825,6 +848,7 @@ class QuietGuard:
             self._admission_interval(receipt, current)
             self.last = self._now()
             self._start_sampler()
+            self._require_background_clear()
         except Exception as exc:
             refusal = self._record_refusal(receipt, exc)
             self.close()

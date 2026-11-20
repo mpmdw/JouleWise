@@ -1913,7 +1913,7 @@ class R0SamplerAdmissionSpec(unittest.TestCase):
 
 
 class R0PublicationAuditTest(unittest.TestCase):
-    def trial(self, case, *, publication_delay=0, probe_delay=0, command=None, wall_offset_ns=0):
+    def trial(self, case, *, publication_delay=0, probe_delay=0, command=None, wall_offset_ns=0, factory=None):
         from datetime import datetime
         from joulewise.align import r0_runner
         from tests.align import test_r0_vs_l3_differential as fixture
@@ -1956,7 +1956,9 @@ class R0PublicationAuditTest(unittest.TestCase):
             original_wall = fixture.Fixture.wall_ns
             with (patch.object(fixture, "datetime", LocalPsTime), patch.object(fixture.Fixture, "move", move),
                   patch.object(fixture.Fixture, "run", run), patch.object(fixture.Fixture, "wall_ns", wall)):
-                return fixture.run_case(case, root, provenance, oracle=False)
+                if factory is None:
+                    return fixture.run_case(case, root, provenance, oracle=False)
+                return fixture.run_case(case, root, provenance, oracle=False, fixture_factory=factory)
 
     def assert_withheld(self, result):
         self.assertEqual((result["rc"], result["status"], result["published"]), (2, "refused", False), result)
@@ -2241,6 +2243,253 @@ class R0PublicationAuditTest(unittest.TestCase):
         result = self.trial(case, command=run, wall_offset_ns=500_000_000)
         self.assert_withheld(result)
         self.assertTrue(any(flag[:3] == (15.0, 45.0, fixture.PID) for flag in result["flags"]), result)
+
+
+class R0LatchedCensusAdmissionTest(unittest.TestCase):
+    """Audit round 2 HIGH: no clear verdict after the sampler latched a failure."""
+    setUp = R0HostTest.setUp
+    runner = R0HostTest.runner
+    trial = R0PublicationAuditTest.trial
+
+    def fixture_type(self, *, fail_when, on_probe=None):
+        """A frozen-suite fixture whose sampler fails to list the required root."""
+        from contextlib import contextmanager
+        import errno
+        import os
+        import threading
+        from tests.align import test_r0_vs_l3_differential as fixture
+
+        class RequiredRootFault(fixture.Fixture):
+            def __init__(self, case, root):
+                super().__init__(case, root)
+                self.timeline = []
+                self.probes = 0
+
+            def run(self, argv, **kwargs):
+                if on_probe is not None and threading.current_thread() is threading.main_thread():
+                    on_probe(self, argv)
+                return super().run(argv, **kwargs)
+
+            @contextmanager
+            def io_faults(self):
+                real = os.scandir
+                required = self.parent.stat()
+
+                def scandir(fd="."):
+                    if (fail_when(self) and threading.current_thread() is not threading.main_thread()
+                            and isinstance(fd, int) and os.path.samestat(os.fstat(fd), required)):
+                        self.timeline.append(("required root enumeration fails", errno.EIO))
+                        raise OSError(errno.EIO, "fixture read fault", str(self.parent))
+                    return real(fd)
+
+                with super().io_faults(), patch.object(os, "scandir", scandir):
+                    yield
+
+            def disk(self, *args):
+                self.timeline.append(("disk work starts", bool(self.guard._background_failure)))
+                return super().disk(*args)
+
+        return RequiredRootFault
+
+    def test_audit2_forced_disk_admission_refuses_eio_latched_during_its_own_census(self):
+        # Audit round 2 census_overlap.py. "during": the sampler's 45 s cycle
+        # fails while the disk unit's forced admission waits on launchctl.
+        from tests.align import test_r0_vs_l3_differential as fixture
+
+        def overlap(model, argv):
+            if (model.case.name == "during" and model.phase == "disk_unit" and model.now == 44
+                    and argv[0] == "/bin/launchctl"):
+                model.move(45)
+                model.timeline.append(("foreground probe resumes", bool(model.guard._background_failure)))
+
+        base = self.fixture_type(fail_when=lambda model: model.case.name != "quiet" and model.now == 45,
+                                 on_probe=overlap)
+
+        class Overlap(base):
+            def move(self, end):
+                if self.phase == "disk_unit" and end == 44 and self.case.name == "before":
+                    end = 45
+                super().move(end)
+
+        admissions = ["baseline", "host_admit", "host_unit", "host_return", "disk_admit"]
+        for name in ("quiet", "before", "during"):
+            with self.subTest(case=name):
+                models = []
+
+                def factory(case, root):
+                    models.append(Overlap(case, root))
+                    return models[-1]
+
+                result = self.trial(fixture.Case(name, schedule="multi", end=56), factory=factory)
+                timeline = models[0].timeline
+                if name == "quiet":
+                    self.assertEqual((result["rc"], result["status"], result["published"]), (0, "pass", True), result)
+                    self.assertEqual(result["work_started"], ["host", "disk"])
+                    self.assertEqual(result["accepted"], [*admissions, "disk_unit", "last_forced"])
+                    self.assertEqual(timeline, [("disk work starts", False)])
+                    continue
+                self.assertEqual((result["rc"], result["status"], result["published"]), (2, "refused", False), result)
+                self.assertEqual(result["work_started"], ["host"], timeline)
+                self.assertEqual(result["accepted"], admissions, timeline)
+                self.assertIn("background sampler", result["reason"])
+                self.assertIn("errno 5", result["reason"])
+                expected = [("required root enumeration fails", 5)]
+                if name == "during":
+                    expected.append(("foreground probe resumes", True))
+                self.assertEqual(timeline, expected)
+
+    def test_sampler_failure_at_any_foreground_probe_admits_nothing_afterwards(self):
+        # The class, not the case: move the same fault to every probe the
+        # runner's thread makes once the sampler exists.
+        from tests.align import test_r0_vs_l3_differential as fixture
+
+        target = None
+
+        def latch(model, argv):
+            if model.guard._sampler is None:
+                return
+            index, model.probes = model.probes, model.probes + 1
+            if index == target:
+                model.armed = True
+                stopped = model.timer.is_set()
+                model.timer.pulse()  # one whole sampler cycle inside this probe
+                model.latched = dict(phase=model.phase, accepted=list(model.accepted),
+                                     work=list(model.work_started), stopped=stopped,
+                                     failure=model.guard._background_failure)
+
+        base = self.fixture_type(fail_when=lambda model: getattr(model, "armed", False), on_probe=latch)
+        case = fixture.Case("latch_sweep", schedule="multi", end=56)
+
+        def run():
+            models = []
+
+            def factory(case, root):
+                models.append(base(case, root))
+                return models[-1]
+
+            return self.trial(case, factory=factory), models[0]
+
+        result, model = run()
+        self.assertEqual((result["rc"], result["published"]), (0, True), result)
+        probes = model.probes
+        # Five probes for each of six forced admissions after the baseline,
+        # then two publication censuses.
+        self.assertEqual(probes, 40)
+        refused_in = {}
+        for target in range(probes):
+            with self.subTest(probe=target):
+                result, model = run()
+                latched = getattr(model, "latched", None)
+                self.assertIsNotNone(latched)
+                if latched["failure"] is None:
+                    # A publication census: finish() had stopped the sampler.
+                    self.assertTrue(latched["stopped"])
+                    self.assertGreaterEqual(target, 30)
+                    self.assertEqual((result["rc"], result["published"]), (0, True), result)
+                    continue
+                self.assertFalse(latched["stopped"])
+                self.assertEqual((result["rc"], result["status"], result["published"]), (2, "refused", False), result)
+                self.assertEqual(result["accepted"], latched["accepted"], latched)
+                self.assertEqual(result["work_started"], latched["work"], latched)
+                self.assertIn("errno 5", result["reason"])
+                refused_in[latched["phase"]] = refused_in.get(latched["phase"], 0) + 1
+        self.assertEqual(refused_in, dict.fromkeys(
+            ("host_admit", "host_unit", "host_return", "disk_admit", "disk_unit", "last_forced"), 5))
+
+    def admitted_guard(self):
+        import threading
+
+        clock = GuardClock()
+        failing = threading.local()
+
+        def custody(**kwargs):
+            if getattr(failing, "now", False):
+                raise OSError(5, "fixture read fault")
+            return Census()
+
+        guard = QuietGuard([], run=self.runner, inspect_custody=custody, clock=clock, sleep=clock.sleep,
+                           host_reader=None)
+        guard.wall_clock_ns = lambda: 1_800_000_000_000_000_000 + int(clock.now * 1e9)
+        guard.SNAPSHOT_CADENCE_S = 3600  # the fixture runs every sampler cycle
+        self.addCleanup(guard.close)
+        guard.check(force=True)
+
+        def fail_sampler_cycle():
+            def cycle():
+                failing.now = True
+                guard._background_snapshot()
+            thread = threading.Thread(target=cycle)
+            thread.start()
+            thread.join(5)
+            self.assertFalse(thread.is_alive())
+        return guard, clock, fail_sampler_cycle
+
+    def test_every_verdict_refuses_a_failure_latched_at_any_of_its_probes(self):
+        import threading
+
+        for verdict in ("check", "verify_publication"):
+            counted = []
+            guard, clock, _ = self.admitted_guard()
+            guard.run = lambda argv, **kwargs: counted.append(argv) or self.runner(argv, **kwargs)
+            clock.now += 1
+            (guard.verify_publication if verdict == "verify_publication" else lambda: guard.check(force=True))()
+            self.assertGreaterEqual(len(counted), 5)
+            for target in range(len(counted)):
+                with self.subTest(verdict=verdict, probe=target):
+                    guard, clock, fail_sampler_cycle = self.admitted_guard()
+                    seen = []
+
+                    def run(argv, **kwargs):
+                        if threading.current_thread() is threading.main_thread():
+                            seen.append(argv)
+                            if len(seen) - 1 == target:
+                                fail_sampler_cycle()
+                        return self.runner(argv, **kwargs)
+
+                    guard.run = run
+                    clock.now += 1
+                    receipts = len(guard.receipts)
+                    with self.assertRaisesRegex(Refused, r"background sampler: OSError: \[Errno 5\]"):
+                        (guard.verify_publication if verdict == "verify_publication"
+                         else lambda: guard.check(force=True))()
+                    # The verdict's own probes all ran; only its end refused.
+                    self.assertEqual(len(seen), len(counted))
+                    self.assertIn("Errno 5", guard.failure)
+                    self.assertIn("Errno 5", guard.receipts[-1]["refusal"])
+                    self.assertEqual(len(guard.receipts), receipts + 1)
+                    with self.assertRaisesRegex(Refused, "Errno 5"):
+                        guard.check()
+
+    def test_throttled_check_refuses_a_latched_failure_before_the_sampler_stops(self):
+        # The sampler latches its failure, then sets its stop flag. A tick
+        # between the two must not ride the 15 s throttle.
+        guard, clock, _ = self.admitted_guard()
+        clock.now += 1
+        guard.check()
+        self.assertIsNone(guard.failure)
+        with guard._snapshot_lock:
+            guard._background_failure = "OSError: [Errno 5] fixture read fault"
+        self.assertFalse(guard._stop_sampler.is_set())
+        clock.now += 1
+        with self.assertRaisesRegex(Refused, r"background sampler: OSError: \[Errno 5\]"):
+            guard.check()
+        self.assertIn("Errno 5", guard.receipts[-1]["refusal"])
+        self.assertTrue(guard._stop_sampler.is_set())
+
+    def test_finish_refuses_a_failure_latched_after_its_windows_were_judged(self):
+        guard, clock, _ = self.admitted_guard()
+        judged = guard._cpu_interval
+
+        def late(receipt):
+            busy = judged(receipt)
+            with guard._snapshot_lock:
+                guard._background_failure = "OSError: [Errno 5] fixture read fault"
+            return busy
+
+        guard._cpu_interval = late
+        with self.assertRaisesRegex(Refused, r"background sampler: OSError: \[Errno 5\]"):
+            guard.finish()
+        self.assertIn("Errno 5", guard.failure)
 
 
 class R0QuietIntervalTest(unittest.TestCase):
