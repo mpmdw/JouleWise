@@ -132,7 +132,7 @@ def invoke(root, output, *, observe=False):
 
 
 def write_bundle(bundle, window, assignment, signal, *, stored_condition=None, no_rows=False,
-                 hot=False, truncate=False, amount=None):
+                 hot=False, hot_at_start=False, truncate=False, amount=None):
     """Use the public episode, controller trace, event and PM schemas."""
     outputs = bundle / "outputs"
     outputs.mkdir(parents=True)
@@ -183,7 +183,8 @@ def write_bundle(bundle, window, assignment, signal, *, stored_condition=None, n
     times = range(5, 41)
     write_jsonl(outputs / "align_thermal.jsonl", (
         {"kind": "sample", "monotonic_ns": t * NS,
-         "status": {"os_level": int(hot and 16 <= t <= 17), "pm_state": "Nominal", "pm_observed_ns": t * NS}}
+         "status": {"os_level": int(hot_at_start or (hot and 16 <= t <= 17)),
+                    "pm_state": "Nominal", "pm_observed_ns": t * NS}}
         for t in times
     ))
     write_jsonl(bundle / "rich_telemetry.jsonl", (
@@ -382,7 +383,8 @@ def stored_series(root, *, wins=102, different=None, no_rows=False, spoof=False,
                 bundle = window_root / "runs" / run_id
                 write_bundle(bundle, window, {**assignment, "run_id": run_id}, signal,
                              stored_condition="benign" if spoof and condition == "sabotage" else None,
-                             no_rows=(change and no_rows) or (history and window == "C9" and ordinal == benign_ordinals[1]),
+                             no_rows=change and no_rows,
+                             hot_at_start=history and window == "C9" and ordinal == benign_ordinals[1],
                              hot=history and window == "C9" and ordinal == benign_ordinals[2],
                              truncate=history and window == "C9" and ordinal == benign_ordinals[0],
                              amount=(amount_fields or {}).get((slot, pair, condition)))
@@ -1277,7 +1279,7 @@ class SeriesReleaseTests(unittest.TestCase):
                 self.assertEqual(refusal.exception.code, 1)
                 self.assertFalse(output.exists())
 
-    def test_pre_rank_coverage_refuses_nonempty_rows_with_an_undefined_fit(self):
+    def test_zero_variance_folds_publish_with_undefined_score_entries(self):
         from scripts import align_v4_series_release as caller
 
         finalize = harvest_offload.finalized_manifest
@@ -1296,14 +1298,15 @@ class SeriesReleaseTests(unittest.TestCase):
             with patch.object(harvest_offload, "finalized_manifest", with_degenerate_fit):
                 stored_series(root)
             output = root / "report.json"
-            with patch.object(rl176, "_tail_test", side_effect=AssertionError("ranked an unidentified fit")), \
-                    patch.object(rl176, "_decode_scores", wraps=rl176._decode_scores) as fits, \
-                    redirect_stderr(StringIO()), self.assertRaises(SystemExit) as refusal:
-                caller.main(["--measurement-root", str(root), "--output", str(output)])
-            self.assertTrue(fits.call_args)
-            self.assertTrue(all(m.decode_rows for m in fits.call_args.args[0]))
-            self.assertEqual(refusal.exception.code, 1)
-            self.assertFalse(output.exists())
+            result = invoke(root, output)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            report = json.loads(output.read_bytes())[seal.RL176]
+            self.assertEqual(report["S"]["strata"], 20)
+            self.assertEqual(sum(report["q"]["entering_members_by_stratum"]["C8"].values()), 16)
+            entries = report["S"]["attrition"]["no_s_score"]
+            self.assertEqual(len(entries), 16)
+            self.assertEqual({row["window"] for row in entries}, {"C8"})
+            self.assertEqual({row["cause"] for row in entries}, {"zero_residual_variance"})
 
     def test_unadmitted_listed_trace_refuses_without_opening_it(self):
         from scripts import align_v4_series_release as caller
@@ -1496,10 +1499,8 @@ class SeriesReleaseTests(unittest.TestCase):
                 originals.extend(members)
                 return members
 
-            with patch.object(caller.ReleasedInputs, "load_members", observe), \
-                    patch.object(rl176, "_tail_test", side_effect=AssertionError("ranked before S verification")), \
-                    self.assertRaisesRegex(ValueError, "S contributors differ from the bound roster"):
-                caller.build_report(root)
+            with patch.object(caller.ReleasedInputs, "load_members", observe):
+                report = caller.build_report(root)[seal.RL176]
             self.assertEqual(len(originals), 176)
             self.assertEqual(len({m.episode.episode_id for m in originals}), 176)
             self.assertNotIn("C3", {m.window for m in originals})
@@ -1519,6 +1520,8 @@ class SeriesReleaseTests(unittest.TestCase):
                 empty |= not expected.rows and member.eligible
                 truncated |= expected.truncated and member.eligible
             self.assertTrue(cut and empty and truncated)
+            self.assertEqual(len(report["S"]["attrition"]["no_s_score"]), 2)
+            self.assertEqual({row["window"] for row in report["S"]["attrition"]["no_s_score"]}, {"C9"})
 
     def test_no_member_loader_opens_dc_and_provider_keys_on_manifest_benign_ordinals(self):
         from scripts import align_v4_series_release as caller
@@ -1973,7 +1976,7 @@ class SeriesReleaseTests(unittest.TestCase):
                 self.assertEqual("S SIGNATURE" in score["words"], wins == 102)
                 self.assertIs(report["q"]["words_frozen_before_c1"], True)
 
-    def test_uncaptured_and_captured_without_s_rows_form_two_distinct_world_pairs(self):
+    def test_uncaptured_assignments_publish_and_stripped_captures_refuse(self):
         manifest = series.candidate()
         candidate = series.selected(manifest, "T3")
         pair = series.PAIRS[-1]

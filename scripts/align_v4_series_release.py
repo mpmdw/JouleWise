@@ -104,6 +104,11 @@ RAIL_FILE = "outputs/align_soc_rails.csv"
 REQUIRED_BUNDLE_FILES = ("config.json", "metadata.json", "outputs/align_episode.json", RAIL_FILE)
 OPTIONAL_BUNDLE_FILES = ("events.jsonl", "outputs/align_runtime_events.jsonl",
                          "outputs/align_thermal.jsonl", "outputs/align_turns.jsonl")
+NO_ROW_CODES = frozenset({
+    s_rows.START_OUT_OF_STATE, s_rows.START_STATE_UNOBSERVED, s_rows.CUT_IN_PREFILL,
+    s_rows.CLOCK_REFERENCE_MISSING, s_rows.TOKEN_STAMPS_UNAVAILABLE, s_rows.AFTER_HOT_TURN,
+    "deadman_before_first_token", "no_decode_token", "token_stamps_count_mismatch",
+})
 COMPANION_PRINTS = ("S_a4", "S_w", "benign_slopes")
 SOC_RAILS = frozenset(("powermetrics", name) for name in ("cpu_power", "gpu_power", "ane_power"))
 RAIL_COLUMNS = {"timestamp_s", "power_w", "source", "rail"}
@@ -944,9 +949,36 @@ def final_roster(root, manifest, completion, ledger, chain, input_ledger):
     return assignments.values(), restored
 
 
-def read_member(assignment, condition, bindings):
+def verify_token_counts(episode, journals):
+    events = journals.get("events.jsonl", ())
+    runtime = journals.get("outputs/align_runtime_events.jsonl", ())
+    _, source = s_rows.bundle_token_stamps(episode, events, runtime)
+    expected = {turn.index: turn.decode_tokens for turn in episode.turns}
+    counts = dict.fromkeys(expected, 0)
+    for event in journals.get(source, ()):
+        if event.get("event_type") == "token":
+            index = (event.get("metadata") or {}).get("align_turn_index")
+            packet.require(type(index) is int and index in counts, "token event has an unbound turn")
+            counts[index] += 1
+    packet.require(counts == expected, "token events do not reconcile with logged decode counts")
+
+
+def verify_turn_dispositions(episode, built):
+    turns = {turn.index for turn in episode.turns}
+    indices = [row.turn for row in built.rows]
+    for disposition in built.no_row:
+        packet.require(disposition["reason"] in NO_ROW_CODES, "unregistered row-builder disposition")
+        indices.append(disposition["turn"])
+    packet.require(all(type(index) is int for index in indices) and Counter(indices) == Counter(turns),
+                   "row builder must return one disposition per turn")
+    return tuple(disposition["reason"] for disposition in built.no_row)
+
+
+def read_member(assignment, condition, bindings, turn_codes):
     files, run_id = assignment.files, assignment.run_id
     _, pm_rows = files.read_bound(bindings[PM_ROWS])
+    eligible = assignment.reason is None
+    journals = {}
     # Stage only named inputs already verified against the rail-only custody
     # layout. The row builder never sees the real bundle directory or DC file.
     with TemporaryDirectory(prefix="align-series-rows-") as tmp:
@@ -957,9 +989,13 @@ def read_member(assignment, condition, bindings):
                 raw, parsed = files.read_bound(bound)
                 if name == "metadata.json":
                     packet.require(parsed.get("run_id") == run_id, "bundle metadata differs from the bound member")
+                if name in ("events.jsonl", "outputs/align_runtime_events.jsonl"):
+                    journals[name] = parsed
                 local_name = "power_trace.csv" if name == RAIL_FILE else name
                 (project / local_name).write_bytes(raw)
         episode = read_episode_bundle(project)
+        if eligible:
+            verify_token_counts(episode, journals)
         rows, _ = s_rows.read_member_rows(project, s_rows.REGISTERED, hazard_journal=files.hazard(),
                                           pm_rows=pm_rows)
     # The episode writer stores the seed index. Earlier sealed projections
@@ -970,8 +1006,10 @@ def read_member(assignment, condition, bindings):
                    and rows.episode_id == episode.episode_id, "episode does not bind the final assignment")
     packet.require(all((trace.source, trace.channel) in SOC_RAILS
                        for trace in episode.power_traces), "rail-only projection violates its declared scope")
+    if eligible:
+        turn_codes[run_id] = verify_turn_dispositions(episode, rows)
     return rl176.FreshMember(assignment.window, replace(episode, condition=condition),
-                             assignment.reason is None, rows.rows, assignment.reason)
+                             eligible, rows.rows, assignment.reason)
 
 
 def paired_strata(dispositions):
@@ -980,6 +1018,24 @@ def paired_strata(dispositions):
         if eligible:
             conditions[window, pair].add(condition)
     return {key for key, seen in conditions.items() if seen == {"benign", "sabotage"}}
+
+
+def undefined_score_cause(member_id, rows, member_rows):
+    if not rows:
+        return "no_decode_only_row"
+    training = [row for other_id, other_rows in member_rows.items()
+                if other_id != member_id for row in other_rows]
+    if len(training) < 6:
+        return "under_six_training_rows"
+    design, energy, _ = zip(*training)
+    fit = rl176._ols(design, energy, min_relative_rss=rl176.S_ZERO_VARIANCE_RELATIVE_RSS)
+    if fit is not None and fit[2] > 0:
+        return None
+    # A failed fit needs a registered cause. A singular design does not
+    # establish zero residual variance.
+    packet.require(fit is not None or rl176._ols(design, energy) is not None,
+                   "undefined S fold has no registered cause")
+    return "zero_residual_variance"
 
 
 class ReleasedInputs:
@@ -1002,6 +1058,9 @@ class ReleasedInputs:
         self.expected_strata = paired_strata(self.expected_members.values())
         self.members = None
         self.member_keys = {}
+        self.turn_codes = {}
+        self.no_s_score = {}
+        self.s_contributors = {}
         self.dc_inputs = None
         self.dc_results = None
 
@@ -1018,7 +1077,7 @@ class ReleasedInputs:
         members = []
         for key, assignment in self.assignments.items():
             if assignment.files is not None:
-                member = read_member(assignment, self.condition(key), self.member_inputs[key])
+                member = read_member(assignment, self.condition(key), self.member_inputs[key], self.turn_codes)
                 members.append(member)
                 self.member_keys[member.episode.episode_id] = (key, member.episode, member.eligible)
         self.members = tuple(members)
@@ -1050,29 +1109,40 @@ class ReleasedInputs:
         self.dc_inputs = {key: self.bind_benign_dc(key) for key in benign}
         self.dc_results = {episode.episode_id: self.read_benign_dc(episode, key) for key, episode in benign.items()}
         self.input_ledger.require_complete()
-        self.verify_score_inputs(members)
+        self.verify_s_contributors(members)
         return members
 
-    def verify_score_inputs(self, members):
-        # Prepare the registered S inputs without forming a rank or a tail.
-        # In particular, valid rows can still leave a held-out fit undefined.
+    def verify_s_contributors(self, members):
+        # Derive each fold's disposition before running any rank or tail.
         groups = defaultdict(list)
-        contributors = {}
+        eligible = {run_id: member for run_id, member in self.expected_members.items() if member[3]}
+        packet.require(self.turn_codes.keys() == eligible.keys(), "eligible captures lack checked turn dispositions")
         for member in members:
             if member.eligible:
                 episode = member.episode
-                rows = rl176._decode_rows(member)
-                if rows:
-                    disposition = self.expected_members[episode.episode_id]
-                    contributors[episode.episode_id] = disposition
-                    groups[disposition[:2]].append(SimpleNamespace(episode=episode, decode_rows=rows))
-        expected = {run_id: member for run_id, member in self.expected_members.items() if member[3]}
-        packet.require(contributors == expected, "S contributors differ from the bound roster")
-        packet.require(paired_strata(contributors.values()) == self.expected_strata,
-                       "S input strata differ from the bound roster")
+                groups[eligible[episode.episode_id][:2]].append(
+                    SimpleNamespace(episode=episode, decode_rows=rl176._decode_rows(member)))
+        scored = set()
         for group in groups.values():
-            packet.require(rl176._decode_scores(group).keys() == {m.episode.episode_id for m in group},
-                           "S contributor fit is undefined")
+            member_rows = {member.episode.episode_id: member.decode_rows for member in group}
+            for run_id, rows in member_rows.items():
+                cause = undefined_score_cause(run_id, rows, member_rows)
+                if cause is None:
+                    continue
+                (window, pair, ordinal), _, _ = self.member_keys[run_id]
+                entry = dict(window=window, pair=pair, ordinal=ordinal, decision="eligible",
+                             status="s_score_undefined", cause=cause)
+                if not rows:
+                    entry["turn_codes"] = list(self.turn_codes[run_id])
+                self.no_s_score[run_id] = entry
+            scores = rl176._decode_scores(group)
+            packet.require(scores.keys() == member_rows.keys() - self.no_s_score.keys()
+                           and all(rl176.finite(score) for score in scores.values()),
+                           "S contributors differ from the checked fold dispositions")
+            scored.update(scores)
+        packet.require(scored == eligible.keys() - self.no_s_score.keys(),
+                       "S contributors differ from the bound roster")
+        self.s_contributors = {run_id: disposition for run_id, disposition in eligible.items() if run_id in scored}
 
     def benign_assignment(self, key):
         packet.require(self.members is not None and self.condition(key) == "benign",
@@ -1109,22 +1179,21 @@ class ReleasedInputs:
         self.input_ledger.verified.add(relative)
         return trace, mapping
 
-    def verify_s_coverage(self, score):
+    def verify_ranked_strata(self, score):
         attrition = score["attrition"]
+        expected_strata = paired_strata(self.s_contributors.values())
         ranked = Counter((row["window"], row["pair"]) for row in attrition["instructed_assignments"]
                          if row["included"])
-        packet.require(score["strata"] == len(self.expected_strata) and ranked == Counter(self.expected_strata),
-                       "ranked S strata differ from the bound roster")
+        packet.require(score["strata"] == len(expected_strata) and ranked == Counter(expected_strata),
+                       "ranked S strata differ from the checked fold dispositions")
 
-        # with_score counts scored episodes inside each condition of each pair.
-        # Only the verified eligible members can contribute a score, so equality
-        # against the roster's eligible counts entails a score for every member.
-        expected = Counter((pair, condition) for _, pair, condition, eligible, _ in self.expected_members.values()
-                           if eligible)
-        for pair, conditions in attrition["by_pair_and_condition"].items():
-            for condition, counts in conditions.items():
-                packet.require(counts["with_score"] == expected[pair, condition],
-                               "S contributors differ from the bound roster")
+        expected = Counter((pair, condition) for _, pair, condition, _, _ in self.s_contributors.values())
+        actual = {(pair, condition): counts["with_score"]
+                  for pair, conditions in attrition["by_pair_and_condition"].items()
+                  for condition, counts in conditions.items()}
+        packet.require(actual == {(pair, condition): expected[pair, condition]
+                                  for pair in rl176.PAIRS for condition in ("benign", "sabotage")},
+                       "S contributor counts differ from the checked fold dispositions")
 
     def benign_episode_key(self, episode):
         # #813 accepts an Episode callback. Give the provider only the
@@ -1177,7 +1246,8 @@ class ReleasedInputs:
             tally["eligibility_rate"] = tally["eligible"] / tally["assigned"]
             if condition == "sabotage":
                 instructed.append(dict(window=window, pair=pair, reason=reason))
-        attrition.update(uncaptured_assignments=uncaptured, uncaptured_by_pair_and_condition=tallies,
+        attrition.update(no_s_score=list(self.no_s_score.values()),
+                         uncaptured_assignments=uncaptured, uncaptured_by_pair_and_condition=tallies,
                          uncaptured_instructed_strata=instructed)
         leaves["q"]["uncaptured_instructed_strata"] = instructed
         # Reuse the registered observation and entry rules for these
@@ -1222,7 +1292,7 @@ def build_report(root):
         )
         if inputs is not None:
             inputs.input_ledger.require_complete()
-            inputs.verify_s_coverage(report[seal.RL176]["S"])
+            inputs.verify_ranked_strata(report[seal.RL176]["S"])
             inputs.add_disclosures(report[seal.RL176])
         packet.require(not _release_sources.binding_refused, "release dependency verification refused")
         return report
