@@ -1235,12 +1235,13 @@ def _check_c1_packet_kit(root, packet, *, plan=None, measurement_root=None, nigh
             tree_raw = tree_path.read_bytes()
             tree = json.loads(tree_raw)
             hazard = pilot.h.read(night_plan_path)['hazard_window']
+            # The hazard budget counts scaffold dispatches too. The collection
+            # plan and the staged science rows carry the C1 member roster.
             if (_sha256(collection.read_bytes()) != actual['plan_sha256']
                     or tree['plan']['path'] != series.C1_PLAN
                     or tree['plan']['actual_sha256'] != actual['plan_sha256']
                     or hazard['pack']['pack_root'] != str(pack)
                     or hazard['pack']['plan_tree_sha256'] != _sha256(tree_raw)
-                    or hazard['member_count'] != actual['member_count']
                     or [(row['run_id'], row['config_sha256']) for row in tree['science']] !=
                        [(row['run_id'], row['config_sha256']) for row in source_plan['members']]):
                 raise ValueError('staged launch plan differs from the materialized kit')

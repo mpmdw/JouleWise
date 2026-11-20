@@ -25,6 +25,7 @@ import unittest
 from unittest.mock import patch
 
 from joulewise.align.apple import v4_cadence as cad, v4_registration
+from joulewise.b5.chain import stage_plan
 from scripts import align_pilot_session as pilot, align_v4_kit as kit, align_v4_series as s
 from scripts import align_v4_session as session, bytes_h_session as h
 from tests.align.test_v4_cadence import arm_seams, write_battery_log
@@ -151,10 +152,16 @@ class SeriesCadenceEndToEnd(unittest.TestCase):
         if pack_id == s.pack_id('C1'):
             plan_path = Path(state['plan_path'])
             plan = json.loads(plan_path.read_bytes())
-            roster = json.loads((pack / s.C1_PLAN).read_bytes())
+            tree_raw = (pack / 'plan_tree.json').read_bytes()
+            stages = stage_plan(json.loads(tree_raw))
+            # The launch budget includes scaffold campaign stages.
+            planned = sum(stage.expected_count for stage in stages
+                          if stage.in_chain and stage.kind == 'campaign_collection')
+            roster = json.loads((pack / s.C1_PLAN).read_bytes())['members']
+            self.assertGreater(planned, len(roster))
             plan['hazard_window'] = {'pack': {'pack_root': str(pack),
-                                             'plan_tree_sha256': s.sha((pack / 'plan_tree.json').read_bytes())},
-                                     'member_count': len(roster['members'])}
+                                             'plan_tree_sha256': s.sha(tree_raw)},
+                                     'member_count': planned}
             h.write(plan_path, plan)
         h.write(target / 'session.json', state)
         return state
@@ -231,7 +238,9 @@ class SeriesCadenceEndToEnd(unittest.TestCase):
             error = None
         except ValueError as exc:
             error = str(exc)
-        record = json.loads(sorted((root / 'staging').glob('v4-arm-*.json'))[-1].read_text())
+        records = sorted((root / 'staging').glob('v4-arm-*.json'))
+        self.assertTrue(records, error or 'install produced no arm record')
+        record = json.loads(records[-1].read_text())
         return root, record, error, len(self.installed) - before
 
     def assert_armed(self, window, record, error, calls, root):

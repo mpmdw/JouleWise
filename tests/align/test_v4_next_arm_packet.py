@@ -1530,7 +1530,10 @@ class ArmOrderWitness(Base):
         from tests.align.test_v4_cadence import write_battery_log
         from scripts import align_v4_series as series
         s = self.scenario()
-        s.write(series.MANIFEST.as_posix(), series.raw_json(series.candidate()))   # W1 -> C1 binds the frozen series
+        seed_materializer(s)
+        with patch.object(kit, 'r0_heatsink_key', return_value='T002'):
+            series.generate(s.root, 'C1', extra_sentinels=2)
+        plan = json.loads((s.root / series.kit_path('C1') / 'collection_plan.json').read_bytes())
         s.finish()
         packet = s.build()
         target = Path(tempfile.mkdtemp(dir=s.root.parent)) / 'session'
@@ -1552,11 +1555,8 @@ class ArmOrderWitness(Base):
             elif event in ('os.rename', 'os.replace', 'os.remove', 'os.mkdir', 'shutil.copyfile'):
                 events.append(('write', f'{event}:{args[0]}'))
         sys.addaudithook(hook)
-        real_usage = shutil.disk_usage
-
         def usage(path):
             events.append(('disk_usage', str(path)))
-            return real_usage(path)
 
         def seam(name, value):
             def call(*_args, **_kwargs):
@@ -1589,7 +1589,7 @@ class ArmOrderWitness(Base):
              patch.object(session.pilot, 'install', side_effect=seam('INSTALL', {'synthetic': True})):
             state['on'] = True
             try:
-                session._arm_and_install(target, arm_state, s.root, s.next_plan, None,
+                session._arm_and_install(target, arm_state, s.root, plan, None,
                     watchdog_check=_watchdog_acceptance, runner=lambda argv: subprocess.CompletedProcess(argv, 0, '', ''), volume_runner=None,
                     now=lambda: NOW, w1_disk_config=None, disk_gate=None, battery_log=log,
                     obc_off_attested_by='synthetic', next_arm_triage=packet,
