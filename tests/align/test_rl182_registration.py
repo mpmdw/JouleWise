@@ -672,6 +672,37 @@ except ModuleNotFoundError:
             self.assertIn(resource, result["error"])
             self.assertEqual(result["oracle_changes"], {})
 
+    def test_reports_all_oracle_differences_alongside_all_changed_files(self):
+        w1 = self.commit()
+        wire = self.PACKAGE + "/wire.py"
+        c1 = self.commit({
+            wire: b"from . import rl176\nrl176._holm = lambda: 2\nrl176._tail_test = lambda: 3\n",
+            self.SCORER: self.SOURCE + b"# invented scorer comment\n",
+            self.PHASES: b"from . import rl176\n# invented phase comment\n",
+        })
+        result = self.compare(w1, c1, 2)
+        self.assertEqual(result["files_for_review"], [self.SCORER, self.PHASES, wire])
+        self.assertEqual({name: list(cases) for name, cases in result["oracle_changes"].items()}, {
+            "_holm": ["defaults"], "_tail_test": ["defaults"],
+        })
+
+    def test_absent_projected_resource_cannot_make_its_byte_change_pass(self):
+        # The source-only worker cannot see this path, so neither side takes
+        # the branch. The full Git tree still contains the potential input.
+        wire = self.PACKAGE + "/wire.py"
+        source = b"""from pathlib import Path
+flag = Path('invented-trigger.txt')
+if flag.is_file():
+    from joulewise.align.apple import rl176
+    rl176.S_SUPERIORITY_ALPHA = float(flag.read_text())
+"""
+        path = "invented-trigger.txt"
+        w1 = self.commit({wire: source, path: b"0.25\n"})
+        c1 = self.commit({wire: source, path: b"0.75\n"})
+        result = self.compare(w1, c1, 2)
+        self.assertEqual(list(result["closure_changes"]), [path])
+        self.assertEqual(result["oracle_changes"], {})
+
     def test_frozen_public_scorer_outputs(self):
         from fractions import Fraction
         from joulewise.align.apple import rl176

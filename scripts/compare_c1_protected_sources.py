@@ -4,9 +4,11 @@
 import argparse
 import ast
 from contextlib import redirect_stderr, redirect_stdout
+from copy import deepcopy
 from fractions import Fraction
 import hashlib
 import importlib
+from inspect import signature
 from io import BytesIO
 from itertools import accumulate
 import json
@@ -19,7 +21,7 @@ import symtable
 import sys
 from tempfile import TemporaryDirectory
 import tokenize
-from types import CellType, CodeType, FunctionType, ModuleType
+from types import CellType, CodeType, FunctionType, ModuleType, SimpleNamespace
 import unicodedata
 import warnings
 
@@ -27,6 +29,7 @@ import warnings
 SCORER = "joulewise/align/apple/rl176.py"
 MODULES = (SCORER, "joulewise/align/apple/rl176_phases.py")
 ENTRY = "scripts/align_v4_series_release.py"
+IMPORTABLE_SUFFIXES = {".py", ".pyc", ".pyo", ".so", ".pyd", ".zip", ".whl"}
 LEVEL = "S_SUPERIORITY_ALPHA"
 PROTECTED = (
     LEVEL, "_tail_test", "_holm", "_decode_design", "_decode_rows",
@@ -63,31 +66,44 @@ def read_revision(repo, label, commit, oid_pattern):
     try:
         if git(repo, "cat-file", "-t", commit) != b"commit\n":
             raise InvalidInput(f"{label} ID is not a commit")
-        entries = git(repo, "ls-tree", "-rz", "--full-tree", commit, "--", *MODULES)
+        entries = git(repo, "ls-tree", "-rz", "--full-tree", commit)
     except (OSError, subprocess.CalledProcessError):
         raise InvalidInput(f"{label} commit or tree is unreadable") from None
 
-    modules = {}
-    sources = {}
+    tree = {}
     for entry in entries.split(b"\0")[:-1]:
         metadata, _, pathname = entry.partition(b"\t")
         path = os.fsdecode(pathname)
-        if path not in MODULES or path in modules:
-            raise InvalidInput(f"{label} tree has ambiguous module entries")
+        if path in tree:
+            raise InvalidInput(f"{label} tree has ambiguous entries")
         mode, kind, oid = metadata.decode("ascii").split()
-        if kind != "blob" or mode not in ("100644", "100755"):
-            raise InvalidInput(f"{label} {path} requires a regular Git blob")
-        try:
-            if git(repo, "cat-file", "-t", oid) != b"blob\n":
-                raise InvalidInput(f"{label} {path} requires a regular Git blob")
-            sources[path] = git(repo, "cat-file", "blob", oid)
-        except (OSError, subprocess.CalledProcessError):
-            raise InvalidInput(f"{label} {path} blob is unreadable") from None
-        modules[path] = {"blob": oid, "mode": mode}
+        tree[path] = {"blob": oid, "mode": mode, "kind": kind}
+    modules = {}
+    sources = {}
+    errors = []
     for path in MODULES:
-        if path not in modules:
-            raise InvalidInput(f"{label} {path} is missing")
-    return {"commit": commit, "modules": modules}, sources
+        record = tree.get(path)
+        if record is None:
+            modules[path] = None
+            errors.append(f"{label} {path} is missing")
+        else:
+            modules[path] = {"blob": record["blob"], "mode": record["mode"]}
+            if not regular_source(record):
+                errors.append(f"{label} {path} requires a regular Git blob")
+                continue
+            oid = record["blob"]
+            try:
+                if git(repo, "cat-file", "-t", oid) != b"blob\n":
+                    errors.append(f"{label} {path} requires a regular Git blob")
+                    continue
+                sources[path] = git(repo, "cat-file", "blob", oid)
+            except (OSError, subprocess.CalledProcessError):
+                errors.append(f"{label} {path} blob is unreadable")
+    return {"commit": commit, "modules": modules}, tree, sources, errors
+
+
+def regular_source(entry):
+    return entry is not None and entry["kind"] == "blob" and entry["mode"] in ("100644", "100755")
 
 
 def unique_keys(pairs):
@@ -328,87 +344,42 @@ def changed_hashes(w1, c1):
     }
 
 
-def wiring_allowlist(path):
-    """Read approved half-open byte spans keyed by exact whole-blob SHA-256s."""
-    if path is None:
-        return {}
-    error = InvalidInput("malformed wiring allowlist")
-    try:
-        entries = json.loads(path.read_text(encoding="utf-8"), object_pairs_hook=unique_keys)
-    except (OSError, ValueError, RecursionError):
-        raise error from None
-    if not isinstance(entries, list):
-        raise error
-    result = {}
-    for entry in entries:
-        if not isinstance(entry, dict) or entry.keys() != {"path", "before", "after"} or entry["path"] not in MODULES:
-            raise error
-        before, after = entry["before"], entry["after"]
-        for side in (before, after):
-            if (not isinstance(side, dict) or side.keys() != {"sha256", "spans"}
-                    or not isinstance(side["sha256"], str)
-                    or not re.fullmatch(r"[0-9a-f]{64}", side["sha256"])
-                    or not isinstance(side["spans"], list)):
-                raise error
-            previous = 0
-            for span in side["spans"]:
-                if (not isinstance(span, list) or len(span) != 2
-                        or any(type(offset) is not int for offset in span)
-                        or not previous <= span[0] < span[1]):
-                    raise error
-                previous = span[1]
-        path = entry["path"]
-        forward = (path, before["sha256"], after["sha256"])
-        reverse = (path, after["sha256"], before["sha256"])
-        if forward == reverse or forward in result:
-            raise error
-        result[forward] = before["spans"], after["spans"]
-        result[reverse] = after["spans"], before["spans"]
-    return result
+def importable_paths(tree):
+    # The checkout root is on sys.path. Static imports are covered by keeping
+    # the entire repository import space, including dynamic import candidates.
+    # Native and archived modules participate in the byte freeze as metadata.
+    return {path for path in tree if Path(path).suffix in IMPORTABLE_SUFFIXES} | {ENTRY, *MODULES}
 
 
-def outside_spans(source, spans, protected):
-    result = bytearray()
-    previous = 0
-    for start, end in spans:
-        if end > len(source) or any(start < stop and end > begin for begin, stop in protected):
-            return None
-        result.extend(source[previous:start])
-        previous = end
-    result.extend(source[previous:])
-    return result
-
-
-def research_lead_review(w1, c1, w1_regions, c1_regions, allowlist):
-    result = []
-    for path in MODULES:
-        if w1[path] == c1[path]:
-            continue
-        key = (path, hashlib.sha256(w1[path]).hexdigest(), hashlib.sha256(c1[path]).hexdigest())
-        if key in allowlist:
-            w1_spans, c1_spans = allowlist[key]
-            old = outside_spans(w1[path], w1_spans, w1_regions.values() if path == SCORER else ())
-            new = outside_spans(c1[path], c1_spans, c1_regions.values() if path == SCORER else ())
-            if old is not None and old == new:
-                continue
-        result.append(path)
-    return result
+def closure_changes(w1_tree, c1_tree, scopes):
+    # Only Python source is projected. A read guarded by is_file() can be
+    # absent from both import traces when its tracked resource is unstaged.
+    # Freeze remaining candidates by Git metadata without opening their blobs.
+    return {
+        path: {
+            "w1": w1_tree.get(path), "c1": c1_tree.get(path),
+            "scope": next((name for name, paths in scopes.items() if path in paths),
+                          "potential-import-resource"),
+        }
+        for path in sorted(w1_tree.keys() | c1_tree.keys())
+        if w1_tree.get(path) != c1_tree.get(path)
+    }
 
 
 def project_python_sources(repo, commit, directory):
     """Materialize only regular Python source blobs from the requested Git tree."""
     files = {}
-    entries = git(repo, "ls-tree", "-rz", "--full-tree", commit, "--", "joulewise", "scripts")
+    entries = git(repo, "ls-tree", "-rz", "--full-tree", commit)
     for entry in entries.split(b"\0")[:-1]:
         metadata, path = entry.split(b"\t", 1)
         if not path.endswith(b".py"):
             continue
         mode, kind, oid = metadata.split()
         parts = os.fsdecode(path).split("/")
-        if (kind != b"blob" or mode not in (b"100644", b"100755")
-                or parts[0] not in ("joulewise", "scripts")
-                or any(part in ("", ".", "..") for part in parts) or path in files):
+        if any(part in ("", ".", "..") for part in parts) or path in files:
             raise InvalidInput("runtime projection contains an ambiguous source path")
+        if kind != b"blob" or mode not in (b"100644", b"100755"):
+            raise InvalidInput("runtime projection requires regular Python source blobs")
         files[path] = oid
     if os.fsencode(ENTRY) not in files:
         raise InvalidInput("runtime release entry point is missing")
@@ -426,6 +397,45 @@ def project_python_sources(repo, commit, directory):
         destination.parent.mkdir(parents=True, exist_ok=True)
         with destination.open("xb") as output:
             output.write(blob)
+
+
+def static_import_closure(root):
+    """Resolve literal imports transitively within the source projection."""
+    closure = set()
+    pending = set()
+
+    def queue(parts):
+        for index in range(1, len(parts) + 1):
+            package = "/".join(parts[:index])
+            pending.update((package + "/__init__.py", package + ".py"))
+
+    for path in (ENTRY, SCORER):
+        queue(path.removesuffix(".py").split("/"))
+
+    while pending:
+        path = pending.pop()
+        if path in closure or not (root / path).is_file():
+            continue
+        closure.add(path)
+        try:
+            syntax = ast.parse((root / path).read_bytes())
+        except (SyntaxError, ValueError, RecursionError):
+            continue  # All potential code files are still frozen by the parent.
+        for node in ast.walk(syntax):
+            if isinstance(node, ast.Import):
+                for alias in node.names:
+                    queue(alias.name.split("."))
+            elif isinstance(node, ast.ImportFrom):
+                package = path.split("/")[:-1]
+                if node.level > len(package):
+                    continue
+                prefix = package[:len(package) - node.level + 1] if node.level else []
+                source = prefix + (node.module.split(".") if node.module else [])
+                queue(source)
+                for alias in node.names:
+                    if alias.name != "*":
+                        queue([*source, alias.name])
+    return closure
 
 
 CODE_FIELDS = (
@@ -455,10 +465,6 @@ class RuntimeIdentity:
             return [kind.__name__, value]
         if kind is bytes:
             return ["bytes", value.hex()]
-        if kind is float:
-            return ["float", struct.pack("!d", value).hex()]
-        if kind is complex:
-            return ["complex", struct.pack("!dd", value.real, value.imag).hex()]
         if kind is Fraction:
             return ["Fraction", value.numerator, value.denominator]
         if kind is type and value in (bool, int, float, complex, str, bytes, tuple, list, dict, set, frozenset, type(None)):
@@ -469,6 +475,10 @@ class RuntimeIdentity:
             return ["reference", self.seen[identity][0]]
         # Retain the object so its ID cannot be reused while encoding.
         self.seen[identity] = len(self.seen), value
+        if kind is float:
+            return ["float", struct.pack("!d", value).hex()]
+        if kind is complex:
+            return ["complex", struct.pack("!dd", value.real, value.imag).hex()]
         if kind is CodeType:
             filename = value.co_filename
             if filename.startswith(self.source_prefix):
@@ -499,30 +509,145 @@ class RuntimeIdentity:
         raise InvalidInput("unsupported runtime state")
 
 
+def oracle_inputs():
+    """Frozen invented input cases. Construct mutable arguments anew per side."""
+    def row(decode):
+        return SimpleNamespace(context_tokens=3, prefill_tokens=2, decode_tokens=decode, turn=0, end_ns=2)
+
+    turn = SimpleNamespace(index=0, start_ns=0, end_ns=2, first_token_ns=2)
+    trace = SimpleNamespace(source="powermetrics", channel="gpu_power", unit="W",
+                            t_ns=(0, 2), clock_domain="invented")
+    episode = SimpleNamespace(power_traces=(trace,), turns=(turn,), hardware={}, flags=(), clock_domain="invented")
+    with_trace = SimpleNamespace(episode=episode, s_rows=(row(1),))
+    without_trace = SimpleNamespace(episode=SimpleNamespace(power_traces=()), s_rows=(row(1),))
+    segment = SimpleNamespace(start_ns=2, end_ns=3, turn=0, kind="decode", energy=SimpleNamespace(joules=2.0))
+    rows = {"a": ({"strata": 8}, Fraction(1, 40)), "b": ({"strata": 8}, Fraction(1, 20))}
+
+    def rank_strata(count):
+        return [("invented", 2.0, [1.0]) for _ in range(count)]
+
+    def training(count):
+        return {"held": [((1.0,), 8.0, 0.0)],
+                "training": [((1.0,), float(index), 0.0) for index in range(count)]}
+
+    return {
+        "_decode_design": [(label, (row(value),), {}) for label, value in (
+            ("zero", 0), ("one", 1), ("nan", float("nan")), ("infinity", float("inf")),
+        )],
+        "_decode_rows": [("no-trace", (without_trace,), {}), ("stamp-at-end", (with_trace,), {})],
+        "_residual_scores": [(label, (value,), {"edges_per_row": 3}) for label, value in (
+            ("empty", {}), ("five-training", training(5)), ("six-training", training(6)),
+        )],
+        "_tail_test": [(label, (value,), {}) for label, value in (
+            ("empty", []), ("tie", [(1.0, [1.0, 1.0])]), ("infinity", [(float("inf"), [0.0, 1.0])]),
+        )],
+        "_s_rank": [(label, (value,), {"decide": True}) for label, value in (
+            ("empty", []), ("tie", [("invented", 1.0, [1.0])]),
+            ("above-level", rank_strata(6)), ("below-level", rank_strata(7)),
+        )],
+        "_holm": [("empty", ({},), {"frozen": True}), ("boundary", (rows,), {"frozen": True})],
+        "_q_energies": [
+            ("empty", (SimpleNamespace(turns=()), (), None, None), {}),
+            ("no-trace-with-stamp", (episode, (), None, None), {}),
+            ("stamp-at-segment-start", (episode, (segment,), trace, None), {}),
+        ],
+    }
+
+
+def oracle_outputs(namespace):
+    table = {}
+    if LEVEL in namespace:
+        table[LEVEL] = {"value": namespace[LEVEL]}
+    for name, cases in oracle_inputs().items():
+        function = namespace.get(name)
+        if type(function) is not FunctionType:
+            continue
+        try:
+            parameters = signature(function, follow_wrapped=False)
+        except (TypeError, ValueError):
+            continue
+        results = {}
+        for label, args, kwargs in [("defaults", (), {}), *cases]:
+            try:
+                parameters.bind(*args, **kwargs)
+            except TypeError:
+                continue
+            args, kwargs = deepcopy((args, kwargs))
+            try:
+                value = function(*args, **kwargs)
+                results[label] = (value, args[0]) if name == "_holm" and args else value
+            except (Exception, SystemExit, KeyboardInterrupt) as error:
+                results[label] = {"raised": (type(error).__module__, type(error).__qualname__)}
+        table[name] = results
+    return table
+
+
+def identity_hash(value, root):
+    return hashlib.sha256(json.dumps(RuntimeIdentity(root).encode(value)).encode("ascii")).hexdigest()
+
+
 def runtime_worker(source_root):
     """Import the release module inside the isolated worker and emit only evidence."""
     if sys.version_info[:2] != (3, 13):
         raise InvalidInput("runtime requires Python 3.13")
     root = Path(source_root).resolve()
+    static_paths = static_import_closure(root)
+    import_reads = set()
+    measuring_import = True
+
+    def observe(event, args):
+        if measuring_import and event == "open" and isinstance(args[0], (bytes, str)):
+            path = os.path.abspath(os.fsdecode(args[0]))
+            prefix = str(root) + os.sep
+            if path.startswith(prefix):
+                import_reads.add(path.removeprefix(prefix))
+
     sys.path.insert(0, str(root))
+    fingerprints = {}
+    oracle = {}
+    unresolved = []
+    oracle_unresolved = []
+    loaded = False
     with open(os.devnull, "w", encoding="utf-8") as silent, redirect_stdout(silent), redirect_stderr(silent):
-        importlib.import_module("scripts.align_v4_series_release")
-        scorer = sys.modules.get("joulewise.align.apple.rl176")
-        if type(scorer) is not ModuleType or Path(scorer.__file__).resolve() != root / SCORER:
-            raise InvalidInput("runtime scorer was not loaded from its projected source")
-        fingerprints = {}
-        unresolved = []
-        namespace = vars(scorer)
-        for name in PROTECTED:
+        sys.addaudithook(observe)
+        try:
+            importlib.import_module("scripts.align_v4_series_release")
+            scorer = sys.modules.get("joulewise.align.apple.rl176")
+            loaded = type(scorer) is ModuleType and Path(scorer.__file__).resolve() == root / SCORER
+        except (Exception, SystemExit, KeyboardInterrupt):
+            loaded = False
+        finally:
+            measuring_import = False
+
+        if loaded:
+            namespace = vars(scorer).copy()
+            for name in PROTECTED:
+                try:
+                    value = namespace[name]
+                    if name in PROTECTED_FUNCTIONS and type(value) is not FunctionType:
+                        raise InvalidInput("unsupported protected callable")
+                    fingerprints[name] = identity_hash(value, root)
+                except (KeyError, AttributeError, ValueError, TypeError, RecursionError):
+                    unresolved.append(name)
             try:
-                value = namespace[name]
-                if name in PROTECTED_FUNCTIONS and type(value) is not FunctionType:
-                    raise InvalidInput("unsupported protected callable")
-                encoded = RuntimeIdentity(root).encode(value)
-                fingerprints[name] = hashlib.sha256(json.dumps(encoded).encode("ascii")).hexdigest()
-            except (KeyError, AttributeError, ValueError, TypeError, RecursionError):
-                unresolved.append(name)
-    print(json.dumps({"fingerprints": fingerprints, "unresolved": unresolved}))
+                table = oracle_outputs(namespace)
+            except (AttributeError, ValueError, TypeError, RecursionError):
+                table = {}
+            for name in PROTECTED:
+                outcomes = table.get(name, {})
+                hashes = {}
+                for label, value in outcomes.items():
+                    try:
+                        hashes[label] = identity_hash(value, root)
+                    except (AttributeError, ValueError, TypeError, RecursionError):
+                        oracle_unresolved.append(f"{name}/{label}")
+                if not outcomes:
+                    oracle_unresolved.append(name)
+                oracle[name] = hashes
+
+    print(json.dumps({"loaded": loaded, "fingerprints": fingerprints, "unresolved": unresolved,
+                      "oracle": oracle, "oracle_unresolved": oracle_unresolved,
+                      "static_paths": sorted(static_paths), "import_reads": sorted(import_reads)}))
 
 
 def isolated_identity(repo, commit, image, worker_source):
@@ -562,24 +687,46 @@ def isolated_identity(repo, commit, image, worker_source):
 
 
 def read_runtime_result(raw):
-    invalid = InvalidInput("malformed runtime fingerprint evidence")
+    invalid = InvalidInput("malformed runtime evidence")
     try:
         evidence = json.loads(raw, object_pairs_hook=unique_keys)
     except (ValueError, RecursionError):
         raise invalid from None
-    if not isinstance(evidence, dict) or evidence.keys() != {"fingerprints", "unresolved"}:
+    keys = {"loaded", "fingerprints", "unresolved", "oracle", "oracle_unresolved", "static_paths", "import_reads"}
+    if not isinstance(evidence, dict) or evidence.keys() != keys or type(evidence["loaded"]) is not bool:
         raise invalid
-    fingerprints, unresolved = evidence["fingerprints"], evidence["unresolved"]
-    if (not isinstance(fingerprints, dict) or not isinstance(unresolved, list)
-            or any(name not in PROTECTED for name in unresolved)
-            or any(not isinstance(digest, str) or not re.fullmatch(r"[0-9a-f]{64}", digest)
-                   for digest in fingerprints.values())
-            or set(fingerprints).intersection(unresolved)
-            or set(fingerprints).union(unresolved) != set(PROTECTED)):
+
+    def validate_digests(mapping, allowed):
+        return (isinstance(mapping, dict) and allowed(mapping)
+                and all(isinstance(value, str) and re.fullmatch(r"[0-9a-f]{64}", value)
+                        for value in mapping.values()))
+
+    if not validate_digests(evidence["fingerprints"], lambda row: row.keys() <= set(PROTECTED)):
         raise invalid
-    if unresolved:
-        raise InvalidInput("unresolved runtime identity for " + ", ".join(sorted(set(unresolved))))
-    return fingerprints
+    if (not isinstance(evidence["oracle"], dict) or not evidence["oracle"].keys() <= set(PROTECTED)
+            or any(not validate_digests(row, lambda cases: all(re.fullmatch(r"[a-z0-9-]{1,48}", case)
+                                                             for case in cases))
+                   for row in evidence["oracle"].values())):
+        raise invalid
+    for key in ("unresolved", "oracle_unresolved", "static_paths", "import_reads"):
+        if not isinstance(evidence[key], list) or any(not isinstance(value, str) for value in evidence[key]):
+            raise invalid
+    if any(name not in PROTECTED for name in evidence["unresolved"]):
+        raise invalid
+    if any(label.split("/", 1)[0] not in PROTECTED or not re.fullmatch(r"[A-Za-z0-9_/-]{1,80}", label)
+           for label in evidence["oracle_unresolved"]):
+        raise invalid
+    identities = set(evidence["fingerprints"])
+    unresolved = set(evidence["unresolved"])
+    oracle_unresolved = {label.split("/", 1)[0] for label in evidence["oracle_unresolved"]}
+    if evidence["loaded"]:
+        if (identities & unresolved or identities | unresolved != set(PROTECTED)
+                or evidence["oracle"].keys() != set(PROTECTED)
+                or any(not cases and name not in oracle_unresolved for name, cases in evidence["oracle"].items())):
+            raise invalid
+    elif identities or unresolved or evidence["oracle"] or oracle_unresolved:
+        raise invalid
+    return evidence
 
 
 def compare(args):
@@ -590,69 +737,94 @@ def compare(args):
         raise InvalidInput("local Git repository or object format is unreadable") from None
 
     oid_pattern = re.compile(rf"[0-9a-fA-F]{{{oid_length}}}")
-    w1, w1_sources = read_revision(args.repo, "W1", args.w1_commit, oid_pattern)
-    c1, c1_sources = read_revision(args.repo, "C1", args.c1_commit, oid_pattern)
-    scorer_equal = w1_sources[SCORER] == c1_sources[SCORER]
-    files_for_review = [path for path in MODULES
-                        if w1["modules"][path] != c1["modules"][path]
-                        or w1_sources[path] != c1_sources[path]]
-
+    w1, old_tree, old_sources, w1_errors = read_revision(args.repo, "W1", args.w1_commit, oid_pattern)
+    c1, new_tree, new_sources, c1_errors = read_revision(args.repo, "C1", args.c1_commit, oid_pattern)
+    scopes = {"import-time-open": set(), "static-import": set(),
+              "potential-module": importable_paths(old_tree) | importable_paths(new_tree)}
     result = {
         "mode": "static-only" if args.static_only else "static-and-runtime",
         "revisions": {"w1": w1, "c1": c1},
-        "files_for_review": files_for_review,
-        "research_lead_review": [path for path in MODULES if w1_sources[path] != c1_sources[path]],
         "protected_changes": {},
         "prompt_changes": {},
     }
+    errors = w1_errors + c1_errors
+
+    source_regions = {}
+    for side, label, sources in (("w1", "W1", old_sources), ("c1", "C1", new_sources)):
+        if SCORER in sources:
+            try:
+                source_regions[side] = protected_sources(sources[SCORER])
+            except (InvalidInput, RecursionError) as error:
+                errors.append(f"{label} {error}")
+    if source_regions.keys() == {"w1", "c1"}:
+        for name in PROTECTED:
+            old, new = source_regions["w1"][name], source_regions["c1"][name]
+            if old != new:
+                result["protected_changes"][name] = {
+                    "w1": hashlib.sha256(old).hexdigest(), "c1": hashlib.sha256(new).hexdigest(),
+                }
     try:
-        old_regions = protected_regions(w1_sources[SCORER])
-        new_regions = old_regions if scorer_equal else protected_regions(c1_sources[SCORER])
-        result["research_lead_review"] = research_lead_review(
-            w1_sources, c1_sources, old_regions, new_regions, wiring_allowlist(args.wiring_allowlist)
-        )
         result["prompt_changes"] = changed_hashes(
             read_prompts(args.w1_prompts, "W1"), read_prompts(args.c1_prompts, "C1")
         )
     except InvalidInput as error:
-        result["error"] = str(error)
-        return result
-    except RecursionError:
-        result["error"] = "scorer source nesting is too deep"
-        return result
-    for name in PROTECTED:
-        start, end = old_regions[name]
-        old = w1_sources[SCORER][start:end]
-        start, end = new_regions[name]
-        new = c1_sources[SCORER][start:end]
-        if old != new:
-            result["protected_changes"][name] = {
-                "w1": hashlib.sha256(old).hexdigest(),
-                "c1": hashlib.sha256(new).hexdigest(),
-            }
-    if args.static_only:
-        return result
+        errors.append(str(error))
+
+    if not args.static_only:
+        compare_runtime(args, w1, c1, old_tree, new_tree, result, scopes, errors)
+
+    changed = closure_changes(old_tree, new_tree, scopes)
+    result["closure_changes"] = changed
+    result["files_for_review"] = list(changed)
+    result["research_lead_review"] = [path for path in MODULES if path in changed]
+    if errors:
+        result["error"] = ". ".join(errors)
+    return result
+
+
+def compare_runtime(args, w1, c1, old_tree, new_tree, result, scopes, errors):
+    result["runtime_changes"] = {}
+    result["oracle_changes"] = {}
     if not args.runtime_image or not re.fullmatch(r"sha256:[0-9a-f]{64}", args.runtime_image):
-        result["error"] = "runtime requires a preloaded Python 3.13 image ID"
-        return result
+        errors.append("runtime requires a preloaded Python 3.13 image ID")
+        return
     try:
         worker_source = Path(__file__).read_bytes()
     except OSError:
-        result["error"] = "runtime worker source is unreadable"
-        return result
+        errors.append("runtime worker source is unreadable")
+        return
 
-    identities = []
-    errors = []
-    for label, revision in (("W1", w1), ("C1", c1)):
+    available = {}
+    tracked = old_tree.keys() | new_tree.keys()
+    for side, label, revision, tree in (("w1", "W1", w1, old_tree), ("c1", "C1", c1, new_tree)):
         try:
-            identities.append(isolated_identity(args.repo, revision["commit"], args.runtime_image, worker_source))
+            evidence = isolated_identity(args.repo, revision["commit"], args.runtime_image, worker_source)
         except InvalidInput as error:
             errors.append(f"{label} {error}")
-    if errors:
-        result["error"] = ". ".join(errors)
-    else:
-        result["runtime_changes"] = changed_hashes(*identities)
-    return result
+            continue
+        observed = tracked.intersection(evidence["import_reads"])
+        scopes["import-time-open"].update(observed)
+        scopes["static-import"].update(tracked.intersection(evidence["static_paths"]))
+        unprojected = sorted(path for path in observed
+                             if Path(path).suffix != ".py" or not regular_source(tree.get(path)))
+        if unprojected:
+            errors.append(f"{label} unresolved import-time file " + ", ".join(unprojected))
+        if not evidence["loaded"]:
+            errors.append(f"{label} release import or scorer identity failed")
+            continue
+        available[side] = evidence
+        if evidence["unresolved"]:
+            errors.append(f"{label} unresolved runtime identity for " + ", ".join(evidence["unresolved"]))
+        if evidence["oracle_unresolved"]:
+            errors.append(f"{label} unresolved oracle cases " + ", ".join(evidence["oracle_unresolved"]))
+
+    if available.keys() == {"w1", "c1"}:
+        old, new = available["w1"], available["c1"]
+        result["runtime_changes"] = changed_hashes(old["fingerprints"], new["fingerprints"])
+        for name in PROTECTED:
+            changes = changed_hashes(old["oracle"].get(name, {}), new["oracle"].get(name, {}))
+            if changes:
+                result["oracle_changes"][name] = changes
 
 
 def main():
@@ -665,7 +837,6 @@ def main():
     mode = parser.add_mutually_exclusive_group()
     mode.add_argument("--runtime-image", help="full image ID of a preloaded trusted Python 3.13 Docker image")
     mode.add_argument("--static-only", action="store_true", help="diagnostic only, skip runtime identity")
-    parser.add_argument("--wiring-allowlist", type=Path, help="public lead-approved exact byte spans")
     args = parser.parse_args()
     try:
         result = compare(args)
@@ -673,10 +844,9 @@ def main():
         print(json.dumps({"error": str(error)}))
         return 2
     print(json.dumps(result, indent=2))
-    if result.get("error") or result.get("runtime_changes"):
+    if any(result.get(key) for key in ("error", "closure_changes", "runtime_changes", "oracle_changes")):
         return 2
-    return int(bool(result["protected_changes"] or result["prompt_changes"]
-                    or (not args.static_only and result["research_lead_review"])))
+    return int(bool(result["protected_changes"] or result["prompt_changes"]))
 
 
 if __name__ == "__main__":
