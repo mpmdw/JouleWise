@@ -1471,7 +1471,8 @@ def authenticated_case(test,look,mode):
     class World(frozen.World):
         def leg(self,kit,pos,v,day,ordinal,status):
             refs = super().leg(kit,pos,v,day,ordinal,status)
-            if ordinal!=0:
+            # RL-192b: ordinal zero stays loaded; authenticate the tape on qualified ordinal one.
+            if ordinal!=1:
                 return refs
             self.witness = refs["key"]
             folder = self.copy/self.witness

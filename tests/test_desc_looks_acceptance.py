@@ -485,10 +485,13 @@ class World:
             self.named(n if ordinal==0 else None,refs[n],obj)
         if ordinal==0:
             self.targets["kit"]=kitpath
-        self.records[key]=(doc,receipt,leg,status)
+        # RL-192b: keep the authenticated row and all its tempting synthetic traces.
+        disposition = "not_qualified:loaded" if doc["loaded_flag"] else status
+        self.records[key]=(doc,receipt,leg,disposition)
         self.rows.append(refs)
         if status=="qualified":
-            self.good[key]=(v,ordinal)
+            if not doc["loaded_flag"]:  # RL-192b: only contributors enter any print or date.
+                self.good[key]=(v,ordinal)
             traces(self.copy/key,v,ordinal,hand_table=key in HAND_TABLE_LEGS)
         else:
             traces(self.copy/key,v,ordinal)  # excluded legs also have tempting synthetic samples
@@ -501,10 +504,15 @@ class World:
         self.targets["stage1"]=self.stage
         self.stage1_commit=self.book.seal("bind stage one")
 
+    def qualified_dates(self):
+        # RL-192b: a date counts only when at least one qualified member supplies it.
+        return {datetime.fromtimestamp(self.records[key][1]["t0_epoch_s"], LA).date()
+                for key in self.good}
+
     def public_truth(self):
         counts={"n_legs":len(self.good)}
         if not self.inst:
-            counts["n_local_dates"]=len({day for *_,day in self.specimens})
+            counts["n_local_dates"]=len(self.qualified_dates())
         return dict(look_id=self.look, manifest_sha256=sha(self.man.read_bytes()),
                     commit=self.stage1_commit,stage1_sha256=sha(self.stage.read_bytes()),**counts)
 
@@ -666,11 +674,12 @@ class Checks(unittest.TestCase):
             if "drop" in row:
                 self.assertEqual(doc["positions"][row["key"]]["disposition"],"dropped")
         if not w.inst:
-            self.assertEqual(doc["counts"]["n_local_dates"],len({r[-1] for r in w.specimens}))
+            self.assertEqual(doc["counts"]["n_local_dates"],len(w.qualified_dates()))
             table=doc["token_table"]
             self.assertEqual(len(table),len(w.records))
             self.assertEqual([r["kit_id"]+"/"+r["leg_id"] for r in table],sorted(w.records))
-            self.assertEqual(doc["paper_wording"],"the same work" if w.change=="same_work" else "the same cell of work")
+            # RL-192b: even the matching-pairs fixture lacks kit 01's loaded position.
+            self.assertEqual(doc["paper_wording"],"the same cell of work")
             for r in table:
                 k=r["kit_id"]+"/"+r["leg_id"]
                 op,rc,plan,disp=w.records[k]
@@ -681,7 +690,8 @@ class Checks(unittest.TestCase):
                      local_t0_date=datetime.fromtimestamp(rc["t0_epoch_s"],LA).date().isoformat(),
                      leg_status=op["leg_status"],decode_cap_reached=op["decode_cap_reached"],
                      loaded_flag=op["loaded_flag"],disposition=disp,
-                     missing_count_reason="g0_unreleased" if op["prefill_tokens"] is None else None))
+                     missing_count_reason="loaded" if op["loaded_flag"] else
+                         "g0_unreleased" if op["prefill_tokens"] is None else None))
         w.bind()
 
     def match(self,actual,expected):
@@ -1078,8 +1088,12 @@ def exact_edges(self):
     self.stage1(w)
     self.success(w)
     edges=by_key(w,"edges")
-    self.assertEqual(set(table["legs"]),set(w.good))
-    for key,expected in table["legs"].items():
+    # RL-192b: the signed hand table still describes all three source legs.
+    loaded = "f2-inst-01/L001"
+    self.assertEqual(set(table["legs"]),set(w.good) | {loaded})
+    self.assertEqual(set(edges),set(table["legs"]) - {loaded})
+    for key in w.good:
+        expected = table["legs"][key]
         self.assertEqual(set(expected),{"onset_lag_s","decode_end_lag_s","recovery_s"})
         self.match({k:edges[key][k] for k in expected},expected)
 
@@ -1166,7 +1180,8 @@ def exact_rail_rows(self):
     # Fixture-only builder adapter uses the two real row readers. It constructs
     # its input from the byte-attested synthetic file and reports no live rows.
     w=self.world(IDS[0])
-    key=next(iter(w.good))
+    # RL-192b: this raw-reader equivalence check still uses the first input CSV.
+    key=HAND_TABLE_LEGS[0]
     source=w.copy/key/"power_trace.csv"
     expected=[]
     for row in csv.DictReader(io.StringIO(source.read_text())):
@@ -1204,6 +1219,8 @@ def cut(self,look):
 def coverage(self,look,mode):
     w=self.world(look)
     key=next(iter(w.good))
+    # RL-192b: the first qualified scoring witness has a different planted amplitude.
+    scale = w.good[key][0]
     where=w.copy/key
     meta=read(where/"support.json")
     if mode=="rail_manifest":
@@ -1234,7 +1251,7 @@ def coverage(self,look,mode):
         rows=list(csv.DictReader(io.StringIO(p.read_text())))
         for row in rows:
             if row["source"]=="powermetrics" and row["rail"]=="gpu_power" and float(row["interval_start_s"])>=602:
-                row["power_w"]=12 if mode=="zero_denominator" else 11
+                row["power_w"]=scale*(12 if mode=="zero_denominator" else 11)
         put(p,csvbytes([list(rows[0]),*(r.values() for r in rows)]))
     put(where/"support.json",meta)
     copy_attestation(w)
@@ -1248,8 +1265,8 @@ def coverage(self,look,mode):
         self.assertTrue(x["reason"])
     if mode=="rail_manifest":
         undefined(hold["rail_sum"]["mean_w"])
-        self.match(hold["gpu_rail"]["mean_w"],12.)
-        self.match(hold["dc_in"]["mean_w"],40.)
+        self.match(hold["gpu_rail"]["mean_w"],12.*scale)
+        self.match(hold["dc_in"]["mean_w"],40.*scale)
     elif mode in ("rail_gap","few_windows"):
         h=hold["rail_sum"]
         self.assertEqual(h["kept"],[1,0,0] if mode=="few_windows" else [59,14,3])
@@ -1261,9 +1278,9 @@ def coverage(self,look,mode):
         else:
             for j,width in enumerate(WIDTH):
                 n=h["kept"][j]
-                self.match(h[MEASURES[j+1]],(2/64)*width*math.sqrt(n*(n+1)/12))
+                self.match(h[MEASURES[j+1]],scale*(2/64)*width*math.sqrt(n*(n+1)/12))
     elif mode=="sidecar_gap":
-        self.match(hold["gpu_rail"]["mean_w"],12.)
+        self.match(hold["gpu_rail"]["mean_w"],12.*scale)
         for value in turn["energy_j"].values():
             undefined(value)
     elif mode.startswith("meter_"):
@@ -1457,13 +1474,14 @@ def missing_fan(self):
 def token_evidence(self,change):
     w=self.world(IDS[1],change)
     self.stage1(w)
-    self.assertEqual(read(w.stage)["counts"],{"n_legs":24,"n_local_dates":14})
+    # RL-192b: 23 pair members qualify. Another member still supplies date zero.
+    self.assertEqual(read(w.stage)["counts"],{"n_legs":23,"n_local_dates":14})
 
 def split(self):
     w=self.world(IDS[0],"split")
     self.stage1(w)
     self.success(w)
-    self.assertEqual(len(w.good),5)
+    self.assertEqual(len(w.good),4)  # RL-192b: two qualified siblings still supply the split span.
     self.assertEqual(len({rc["span_id"] for _,rc,_,status in w.records.values()
                           if status=="qualified"}),3)
 

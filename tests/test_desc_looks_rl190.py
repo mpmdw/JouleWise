@@ -105,7 +105,7 @@ sys.addaudithook(intercept)
         yield
 
 
-def placeholders(folder, *unused):
+def placeholders(folder, *unused, hand_table=False):
     # A frozen-copy inventory needs paths and hashes. Preflight must never open them.
     for name in ("support.json", "dc_points.csv", "power_trace.csv"):
         put(folder / name, b"invented unopened input\n")
@@ -232,7 +232,9 @@ class AsRun(frozen.World):
                                        "tokens":"short", "cap":"cap_not_reached",
                                        "mode":"wrong_mode", "loaded":"loaded"}[self.defect]
         if not self.inst:
-            exclusions = {key: rec[-1] for key, rec in self.records.items() if rec[-1] != "qualified"}
+            # RL-192b: the cold record lists the reason for a loaded stability member.
+            exclusions = {key: rec[-1].removeprefix("not_qualified:") for key, rec in self.records.items()
+                          if rec[-1] != "qualified"}
         stanza = (f"RESTRICTED-READ ruling=RL-900002 look={self.look} "
                   f"manifest_sha256={proof['manifest_sha256']} reader=research_lead")
         ruling_path = "authority/examples/invented-ruling.md"
