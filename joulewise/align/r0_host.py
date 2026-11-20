@@ -151,6 +151,33 @@ def _read_finished_ns(read):
     return read.finished_ns if isinstance(read, _ArgumentsRead) else read.finished.monotonic_ns
 
 
+# Darwin prints lstart in whole seconds. Wall offsets that agree within one
+# second are treated as one clock, as in _overlap_cpu_evidence.
+_START_RESOLUTION_NS = 1_000_000_000
+
+
+def _wall_offset_ns(read):
+    return read.started.wall_ns - read.started.monotonic_ns
+
+
+def _birth_floor_ns(row, read):
+    """Monotonic time of ``row``'s printed start second, on the clock of the read that listed it."""
+    return int(row["start_epoch_s"]) * 1_000_000_000 - _wall_offset_ns(read)
+
+
+def _born_after(row, read, monotonic_ns, reference):
+    """Whether ``row``'s printed start proves a birth after ``monotonic_ns``.
+
+    ``read`` listed the row; ``reference`` is an earlier accounting read.
+    Nothing is proven without one, across a wall step, or by a start dated
+    after its own listing. The start must clear the instant by a full second.
+    """
+    if reference is None or abs(_wall_offset_ns(read) - _wall_offset_ns(reference)) > _START_RESOLUTION_NS:
+        return False
+    floor = _birth_floor_ns(row, read)
+    return monotonic_ns + _START_RESOLUTION_NS < floor <= read.finished.monotonic_ns
+
+
 def _window_reads(reads, opening, current):
     start = next(i for i, read in enumerate(reads) if read is opening)
     end = next(i for i in range(start + 1, len(reads)) if reads[i] is current)
@@ -163,13 +190,23 @@ def _overlap_cpu_evidence(opening, current, reads, *, endpoint_elapsed_ns):
     named = {pid for read in reads if isinstance(read, _ArgumentsRead) for pid in read.contenders}
     identities = {key for _, read in accounting for key, row in read.rows.items()
                   if row["contaminant"] or key[0] in named}
+    # The arguments table prints a PID and no start time. Every other join
+    # below is on (pid, start), so a PID's later holder is a distinct process.
+    watched = {pid for pid, _ in identities}
+    holders = {}
+    for index, read in accounting:
+        for key, row in read.rows.items():
+            if key[0] in watched:
+                holders.setdefault(key[0], []).append((index, read, key, row))
+    window_start = opening.started.monotonic_ns
+    opening_offset = _wall_offset_ns(opening)
     evidence = []
     contenders = []
     for identity in identities:
         pid, start = identity
         observed = [(i, read, read.rows[identity]) for i, read in accounting if identity in read.rows]
         first_index, first, first_row = observed[0]
-        last_index, _, last_row = observed[-1]
+        last_index, last, last_row = observed[-1]
         last_possible = current.finished.monotonic_ns
         # Absence bounds the lifetime only after its final positive accounting read.
         lifetime_end = len(reads)
@@ -179,23 +216,38 @@ def _overlap_cpu_evidence(opening, current, reads, *, endpoint_elapsed_ns):
                 last_possible = _read_finished_ns(read)
                 lifetime_end = index
                 break
-
-        matches = {match for _, _, row in observed for match in row["contaminant_matches"]}
-        if any(isinstance(read, _ArgumentsRead) and pid in read.contenders
-               for read in reads[first_index:lifetime_end]):
-            matches.add("args")
-        if not matches:
-            continue
+        # A reused PID keeps the arguments table's row. This identity had
+        # released it before the next holder's printed start second ended.
+        for index, read, other, row in holders[pid]:
+            if other == identity or index <= last_index:
+                continue
+            floor = _birth_floor_ns(row, read)
+            released = floor + _START_RESOLUTION_NS
+            if (abs(_wall_offset_ns(read) - opening_offset) <= _START_RESOLUTION_NS
+                    and floor <= read.finished.monotonic_ns and released >= last.started.monotonic_ns):
+                last_possible = min(last_possible, released)
 
         # Darwin prints lstart at whole-second precision. Its floor and
         # the opening read's beginning bound the largest possible overlap.
-        window_start = opening.started.monotonic_ns
-        wall_offset = first.started.wall_ns - first.started.monotonic_ns
-        opening_offset = opening.started.wall_ns - window_start
-        birth_floor = int(first_row["start_epoch_s"]) * 1_000_000_000 - wall_offset
-        reliable_start = (abs(wall_offset - opening_offset) <= 1_000_000_000
+        wall_offset = _wall_offset_ns(first)
+        birth_floor = _birth_floor_ns(first_row, first)
+        reliable_start = (abs(wall_offset - opening_offset) <= _START_RESOLUTION_NS
                           and birth_floor <= first.finished.monotonic_ns)
         start_bound = max(window_start, birth_floor) if reliable_start else window_start
+
+        # An arguments sighting of the PID counts from the first read this
+        # identity's start cannot postdate until its confirmed absence. An
+        # earlier holder of the PID cannot hide a sighting that precedes
+        # this identity's first accounting row.
+        seen_from = next(index for index, read in enumerate(reads[:first_index + 1])
+                         if not (reliable_start
+                                 and _read_finished_ns(read) + _START_RESOLUTION_NS < birth_floor))
+        matches = {match for _, _, row in observed for match in row["contaminant_matches"]}
+        if any(isinstance(read, _ArgumentsRead) and pid in read.contenders
+               for read in reads[seen_from:lifetime_end]):
+            matches.add("args")
+        if not matches:
+            continue
         resident = first is opening and identity in current.rows
         if resident:
             overlap_ns = endpoint_elapsed_ns
@@ -260,6 +312,9 @@ class QuietGuard:
     clear verdict re-reads the stored failure as its last act, so a census
     that fails while an admission's own probes run refuses that admission.
     Contention in a judged window is recorded and blocks publication.
+    A process is its (pid, start) pair. The arguments table prints no start,
+    so its rows are joined by the printed start second and the confirmed
+    lifetime; an earlier or later holder of a PID is a different process.
     finish() stops sampling and judges the final state before success can
     be published. An unfinished census at the join bound is indeterminate.
     """
@@ -291,7 +346,9 @@ class QuietGuard:
         self._admission_snapshots = []
         self._admission_previous_over = {}
         self._process_observations = []
-        self._process_history = {}  # pid -> (start identity, highest CPU, contaminant matches)
+        # (pid, start) -> (highest CPU, contaminant matches). One entry per
+        # process seen; a PID's next holder never reads or replaces it.
+        self._process_history = {}
         # Index into _snapshots of the snapshot that closed the last judged
         # window (or the first snapshot before admission).
         self._judged_end = 0
@@ -383,21 +440,28 @@ class QuietGuard:
     def _remember_cpu_snapshot(self, snapshot, *, census_summary, admission):
         rows = snapshot.rows
         previous_read = self._process_observations[-1] if self._process_observations else None
-        for (pid, start), row in rows.items():
+        sighted = previous_read.contenders if isinstance(previous_read, _ArgumentsRead) else frozenset()
+        reference = next((read for read in reversed(self._process_observations)
+                          if isinstance(read, contention.Snapshot)), None)
+        for identity, row in rows.items():
             cpu = row["cumulative_cpu_seconds"]
             matches = set(row["contaminant_matches"])
-            prior_start, prior_cpu, prior_matches = self._process_history.get(pid, (None, 0, ()))
-            if (prior_start in (None, start) and isinstance(previous_read, _ArgumentsRead)
-                    and pid in previous_read.contenders):
+            known = self._process_history.get(identity)
+            # The arguments table prints no start time. Its sighting of this
+            # PID belongs to this row unless the row's start proves a later
+            # birth. What an earlier holder of the PID was decides nothing.
+            if identity[0] in sighted and (known is not None or not _born_after(
+                    row, snapshot, previous_read.finished_ns, reference)):
                 matches.add("args")
-            if prior_start == start:
+            if known is not None:
+                prior_cpu, prior_matches = known
                 matches.update(prior_matches)
                 if prior_cpu > cpu:
                     row["peak_cpu_seconds"] = prior_cpu
                     cpu = prior_cpu
             row["contaminant_matches"] = sorted(matches)
             row["contaminant"] = bool(matches)
-            self._process_history[pid] = (start, cpu, matches)
+            self._process_history[identity] = (cpu, matches)
         if not admission:
             backwards = snapshot.finished.wall_ns < snapshot.started.wall_ns
             if self._snapshots:

@@ -2492,6 +2492,182 @@ class R0LatchedCensusAdmissionTest(unittest.TestCase):
         self.assertIn("Errno 5", guard.failure)
 
 
+class R0ProcessIdentityTest(unittest.TestCase):
+    """Audit round 2 MED: the arguments table's PID is not a process identity."""
+    trial = R0PublicationAuditTest.trial
+    assert_withheld = R0PublicationAuditTest.assert_withheld
+
+    def tables(self, rows, *, slow_reads=(45, 46)):
+        """Frozen-suite fixture with extra rows; ps reads in ``slow_reads`` take 10 ms."""
+        from tests.align import test_r0_vs_l3_differential as fixture
+
+        class Tables(fixture.Fixture):
+            def __init__(self, case, root):
+                super().__init__(case, root)
+                self.log = []
+
+            def processes(self):
+                return [*super().processes(), *rows(self.case, self.now)]
+
+            def run(self, argv, **kwargs):
+                start = self.now
+                reply = super().run(argv, **kwargs)
+                if slow_reads[0] <= start < slow_reads[1] and tuple(argv) in (contention.PS_ARGV, prewindow.PS_ARGV):
+                    self.log.append((round(start, 3), argv[-1], reply.stdout.strip().splitlines()[-1]))
+                    self.now += 0.01
+                return reply
+
+        return Tables
+
+    def run_tables(self, case, tables):
+        models = []
+
+        def factory(case, root):
+            models.append(tables(case, root))
+            return models[-1]
+
+        return self.trial(case, factory=factory), models[0]
+
+    def test_audit2_exited_worker_is_flagged_when_its_pid_had_an_earlier_holder(self):
+        # Audit round 2 exited.py. The census sees `python3 mdworker_task.py`,
+        # accounting reads 1.80 CPU-s for the PID, and the worker is gone
+        # before the paired arguments read. "reused": the PID belonged to an
+        # ordinary process until 20 s.
+        from tests.align import test_r0_vs_l3_differential as fixture
+
+        def rows(case, now):
+            if case.name == "reused" and now < 20:
+                yield (fixture.PID, -100, 0, "ordinary", "ordinary")
+            if 35 <= now < 45.015:
+                yield (fixture.PID, 35, 180, "python3", "python3 mdworker_task.py")
+
+        results = {}
+        for name in ("fresh", "reused"):
+            with self.subTest(case=name):
+                result, model = self.run_tables(fixture.Case(name, end=65), self.tables(rows))
+                self.assertEqual([(at, table.split(",")[-1], row.split()[0]) for at, table, row in model.log], [
+                    (45, "args=", str(fixture.PID)), (45.01, "ucomm", str(fixture.PID)), (45.02, "args=", "1")])
+                self.assertIn("0:01.80 python3", model.log[1][2])
+                self.assert_withheld(result)
+                windows = [(start, end) for start, end, pid, _ in result["flags"] if pid == fixture.PID]
+                self.assertEqual(windows, [(15.0, 45.015), (30.0, 60.0), (30.0, 65.0)], result)
+                self.assertEqual(len({birth for *_, birth in result["flags"]}), 1)
+                self.assertIn((15.0, 45.015), result["report_intervals"])
+                results[name] = result
+        self.assertEqual(results["reused"]["flags"], results["fresh"]["flags"])
+        self.assertEqual(results["reused"]["judged_windows"], results["fresh"]["judged_windows"])
+
+    def test_later_holder_of_a_pid_cannot_stretch_an_exited_workers_lifetime(self):
+        # The mirror image. The worker is listed once, at the 15 s baseline
+        # midpoint, with 0.60 CPU-s after a start at 5 s, and exits. A new
+        # process takes the PID before the paired arguments read, so that
+        # table still lists the PID. The worker's lifetime ends before the
+        # holder's start second (15 s) does: 0.60 / 11 s is above 0.05.
+        # Stretched to the next accounting read it would be 0.60 / 25 s.
+        from tests.align import test_r0_vs_l3_differential as fixture
+
+        def rows(case, now):
+            growth = int(case.name.rsplit("_", 1)[1])
+            if 5 <= now < 15.005:
+                yield (fixture.PID, 5, growth if now >= 10 else 0, fixture.WORKER, fixture.WORKER)
+            elif now >= 15.005 and "reused" in case.name:
+                yield (fixture.PID, 15, 0, "ordinary", "ordinary")
+
+        for name, busy in (("exited_60", True), ("reused_60", True), ("reused_55", False), ("exited_50", False)):
+            with self.subTest(case=name):
+                result, model = self.run_tables(fixture.Case(name, end=40),
+                                                self.tables(rows, slow_reads=(15, 16)))
+                listed = [row.split()[0] == str(fixture.PID) for _, _, row in model.log]
+                self.assertEqual(listed, [True, "reused" in name])
+                if busy:
+                    self.assert_withheld(result)
+                    self.assertIn((0.0, 30.02, fixture.PID), [flag[:3] for flag in result["flags"]], result)
+                    self.assertIn((0.0, 30.02), result["report_intervals"])
+                else:
+                    self.assertEqual((result["rc"], result["published"], result["flags"]), (0, True, []), result)
+
+    def test_arguments_sighting_before_the_first_accounting_row_names_the_process(self):
+        # Born between the 45 s accounting read and its arguments read, the
+        # process is named only in that arguments table. It then replaces its
+        # arguments (exec keeps PID and start). Accounting first lists it at
+        # 60 s with 1.80 CPU-s, after a census that shows the neutral name.
+        from tests.align import test_r0_vs_l3_differential as fixture
+
+        def rows(case, now):
+            if now >= 45.015:
+                named = case.name == "named_once" and now < 50
+                yield (fixture.PID, 45, 180 if now >= 55 else 0, "python3",
+                       "python3 mdworker_task.py" if named else "python3 other.py")
+
+        result, model = self.run_tables(fixture.Case("named_once", end=65), self.tables(rows))
+        self.assertEqual([row.split()[0] == str(fixture.PID) for _, _, row in model.log], [False, False, True])
+        self.assert_withheld(result)
+        self.assertIn((30.0, 60.0, fixture.PID), [flag[:3] for flag in result["flags"]], result)
+
+        result, _ = self.run_tables(fixture.Case("never_named", end=65), self.tables(rows))
+        self.assertEqual((result["rc"], result["published"], result["flags"]), (0, True, []), result)
+
+    def test_earlier_holders_name_does_not_follow_the_pid_to_a_later_process(self):
+        # The start time decides in both directions. A named worker holds the
+        # PID until 5 s without using CPU. An ordinary process started at 10 s
+        # under the same PID uses 1.80 CPU-s: it is not a contaminant.
+        from tests.align import test_r0_vs_l3_differential as fixture
+
+        def rows(case, now):
+            if now < 5:
+                yield (fixture.PID, -100, 0, "python3", "python3 mdworker_task.py")
+            elif now >= 10:
+                name = fixture.WORKER if case.name == "worker_again" else "ordinary"
+                yield (fixture.PID, 10, 180 if now >= 20 else 0, name, name)
+
+        result, _ = self.run_tables(fixture.Case("ordinary_successor", end=40), self.tables(rows))
+        self.assertEqual((result["rc"], result["published"], result["flags"]), (0, True, []), result)
+
+        result, _ = self.run_tables(fixture.Case("worker_again", end=40), self.tables(rows))
+        self.assert_withheld(result)
+        self.assertIn((0.0, 30.0, fixture.PID), [flag[:3] for flag in result["flags"]], result)
+
+    def test_printed_start_proves_a_later_birth_only_on_one_consistent_clock(self):
+        from joulewise.align.r0_host import _born_after
+
+        def read(started_s, finished_s, wall_offset_s=1_000):
+            stamp = lambda at: SimpleNamespace(monotonic_ns=int(at * 1e9), wall_ns=int((at + wall_offset_s) * 1e9))
+            return SimpleNamespace(started=stamp(started_s), finished=stamp(finished_s))
+
+        row = {"start_epoch_s": 1_010.0}  # monotonic 10 s on the default offset
+        reference, listing = read(0, 0.01), read(15, 15.01)
+        self.assertTrue(_born_after(row, listing, int(8.9e9), reference))
+        # lstart is whole seconds: a start within one second proves nothing.
+        self.assertFalse(_born_after(row, listing, int(9e9), reference))
+        self.assertFalse(_born_after(row, listing, int(12e9), reference))
+        # No earlier accounting read, a wall step, or a start dated after its
+        # own listing: the sighting stays with the row.
+        self.assertFalse(_born_after(row, listing, int(8.9e9), None))
+        self.assertFalse(_born_after(row, read(15, 15.01, 998.9), int(8.9e9), reference))
+        self.assertFalse(_born_after({"start_epoch_s": 1_016.0}, listing, int(8.9e9), reference))
+
+    def test_history_is_kept_per_identity_across_pid_reuse(self):
+        # Two holders of PID 42 alternate in the tables. Each keeps its own
+        # peak counter and classification.
+        guard = QuietGuard([], run=lambda *a, **k: None, inspect_custody=lambda **kw: Census(), host_reader=None)
+        self.addCleanup(guard.close)
+        stamp = SimpleNamespace(monotonic_ns=0, wall_ns=1_800_000_000_000_000_000)
+
+        def remember(start, cpu, matches):
+            row = {"pid": 42, "start_identity": start, "start_epoch_s": 0.0, "command": "fixture",
+                   "cumulative_cpu_seconds": cpu, "contaminant_matches": list(matches)}
+            snapshot = SimpleNamespace(rows={(42, start): row}, started=stamp, finished=stamp)
+            guard._remember_cpu_snapshot(snapshot, census_summary=None, admission=True)
+            return row
+
+        remember(OLD_START, 1.8, ["ucomm"])
+        other = remember(NEW_START, 0.2, [])
+        self.assertEqual((other["contaminant"], other.get("peak_cpu_seconds")), (False, None))
+        again = remember(OLD_START, 0.0, [])
+        self.assertEqual((again["contaminant_matches"], again["peak_cpu_seconds"]), (["ucomm"], 1.8))
+        self.assertEqual(guard._process_history[(42, NEW_START)], (0.2, set()))
+
+
 class R0QuietIntervalTest(unittest.TestCase):
     # CPU fixtures derive from the 0.05 CPU-s/s bar and 30 s interval:
     # 0.06 / 0.04 straddle the bar by 0.01; 1.80 / 1.20 are their
