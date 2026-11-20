@@ -53,21 +53,23 @@ def prepare(measurement_root, session_root, *, power_runner=None, window_id=None
     # measuring night, which holds the host night lock and restores at its own
     # close) and refuse the session if the restore fails its read-back.
     start = session_start_restore(measurement_root, runner=power_runner)
-    kit.generate(measurement_root, check=True, source_root=measurement_root)
     series_state = None
+    post_w1 = False
     if extra_sentinels not in (0, 2) or (extra_sentinels and window_id in (None, 'W1')):
         raise ValueError('escalation sentinels (R20) apply to a C/T window after a U4-inconclusive window only')
     if window_id is not None:
         from scripts import align_v4_series as series
         manifest = series.load(measurement_root)
         selected = series.selected(manifest, window_id)
-        series.require_admission(measurement_root, manifest, post_w1=selected['id'] != 'W1')
-        if selected['id'] != 'W1':
-            series.generate(measurement_root, window_id, check=True, extra_sentinels=extra_sentinels)
-            kwargs.update(kit=series.kit_path(selected['id']), pack_id=series.pack_id(selected['id']))
+        post_w1 = selected['id'] != 'W1'
+        series.require_admission(measurement_root, manifest, post_w1=post_w1)
         series_state = dict(window_id=selected['id'], role=selected['role'], extra_sentinels=extra_sentinels,
             manifest_sha256=kit.sha((Path(measurement_root) / series.MANIFEST).read_bytes()),
             admission_sha256=kit.sha((Path(measurement_root) / series.ADMISSION).read_bytes()))
+    kit.generate(measurement_root, check=True, source_root=measurement_root, series_release=post_w1)
+    if post_w1:
+        series.generate(measurement_root, selected['id'], check=True, extra_sentinels=extra_sentinels)
+        kwargs.update(kit=series.kit_path(selected['id']), pack_id=series.pack_id(selected['id']))
     # Lead ruling R5-6: the night plan declares the frozen series powermode, so
     # run_night admits a High Power host only for a W1 that adopted it.
     kwargs.setdefault('ac_powermode', series_ac_powermode(measurement_root, kwargs.get('kit', kit.KIT)))
@@ -1162,6 +1164,16 @@ def desk(session_root, **kwargs):
     return status
 
 
+def _check_prepared_series_kit(state, directory, pack):
+    view = Path(state['measurement_root'])
+    paths = (
+        (state.get('registration_dir'), view / directory / 'registration'),
+        ((state.get('inputs') or {}).get('pack_root'), view / 'configs/campaigns' / pack),
+    )
+    if any(staged is not None and Path(staged) != expected for staged, expected in paths):
+        raise ValueError('prepared series window differs from the staged kit; prepare a new session')
+
+
 def validate_series_state(state):
     """Recheck source kit and exact admission after prepare, before any arm."""
     from scripts import align_v4_series as series
@@ -1174,10 +1186,13 @@ def validate_series_state(state):
     window = series.selected(manifest, selection['window_id'])
     if window['role'] != selection['role']:
         raise ValueError('prepared series role changed')
-    series.require_admission(root, manifest, post_w1=window['id'] != 'W1')
-    if window['id'] != 'W1':
+    post_w1 = window['id'] != 'W1'
+    directory = series.kit_path(window['id']) if post_w1 else kit.KIT
+    _check_prepared_series_kit(state, directory, series.pack_id(window['id']) if post_w1 else kit.PACK_ID)
+    series.require_admission(root, manifest, post_w1=post_w1)
+    kit.generate(root, check=True, source_root=root, series_release=post_w1)
+    if post_w1:
         series.generate(root, window['id'], check=True, extra_sentinels=selection.get('extra_sentinels', 0))
-    directory = kit.KIT if window['id'] == 'W1' else series.kit_path(window['id'])
     return json.loads((root / directory / 'collection_plan.json').read_bytes())
 
 
@@ -1730,10 +1745,13 @@ def install(session_root, *, runner=None, volume_runner=None, now=None, w1_disk_
     measurement_root = state['measurement_root']
     # Council ruling 7: the frozen series powermode comes from the measurement
     # checkout's r1_slots, and arm refuses on a mismatch with the host.
-    source_root = state['source_measurement_root'] if state.get('v4_series') else measurement_root
-    kit.generate(source_root, check=True, source_root=source_root)
-    plan = (validate_series_state(state) if state.get('v4_series') else
-            json.loads((Path(measurement_root) / kit.KIT / 'collection_plan.json').read_bytes()))
+    if state.get('v4_series'):
+        plan = validate_series_state(state)
+    else:
+        _check_prepared_series_kit(state, kit.KIT, kit.PACK_ID)
+        source_root = state.get('source_measurement_root', measurement_root)
+        kit.generate(source_root, check=True, source_root=source_root)
+        plan = json.loads((Path(measurement_root) / kit.KIT / 'collection_plan.json').read_bytes())
     from joulewise.align.apple import powermode
     high = None
     # Lead ruling R6-7: the High Power marker is host-level, so every later

@@ -525,8 +525,11 @@ def verify_r1_executed_sources(root, slots):
     return commit
 
 
-def validate_receipt(receipt, root, *, series_release=False):
+def validate_receipt(receipt, root, *, series_release=False, allow_combined=False):
     """Bind reviewed bytes to one existing Git commit and current working bytes.
+
+    The ordinary W1 kit may opt into both exact inventories. Series release
+    requires the expanded inventory regardless of the receipt's contents.
 
     Gate judgments and signature are lead-owned assertions, not fabricated by
     this validator. A receipt never creates its own approval or gate reports.
@@ -542,10 +545,14 @@ def validate_receipt(receipt, root, *, series_release=False):
     if receipt.get('rulings') != {str(n): 'installed' for n in RULINGS}:
         raise ValueError('registration_receipt ruling installation incomplete')
     artifacts = receipt.get('artifacts')
+    if not isinstance(artifacts, dict):
+        raise ValueError('registration_receipt artifact set incomplete')
+    keys = set(artifacts)
     required = set(ARTIFACTS)
-    if series_release:
-        required.update(SERIES_RELEASE_ARTIFACTS)
-    if not isinstance(artifacts, dict) or set(artifacts) != required:
+    expanded = required.union(SERIES_RELEASE_ARTIFACTS)
+    if series_release or (allow_combined and keys == expanded):
+        required = expanded
+    if keys != required:
         raise ValueError('registration_receipt artifact set incomplete')
     gates = receipt.get('gates')
     if not isinstance(gates, dict) or set(gates) != {'A', 'B'}:
@@ -558,7 +565,10 @@ def validate_receipt(receipt, root, *, series_release=False):
         if not isinstance(path, str) or not path.startswith('docs/align/v4/'):
             raise ValueError('registration_receipt gate report path refused')
         _local(root, path)
-        bindings[path] = gate.get('sha256')
+        expected = gate.get('sha256')
+        if path in bindings and bindings[path] != expected:
+            raise ValueError(f'registration_receipt invalid digest: {path} (conflicting gate binding)')
+        bindings[path] = expected
     for path, expected in bindings.items():
         if not is_digest(expected):
             raise ValueError(f'registration_receipt invalid digest: {path}')
@@ -579,13 +589,13 @@ def validate_receipt(receipt, root, *, series_release=False):
     return receipt
 
 
-def require_registration(root, *, series_release=False):
+def require_registration(root, *, series_release=False, allow_combined=False):
     path = REGISTRATION+'registration_receipt.json'
     try:
         receipt = json.loads(_local(root, path).read_bytes())
     except (OSError, ValueError) as exc:
         raise ValueError('registration_receipt.json missing or unreadable; W1 is not registered') from exc
-    validate_receipt(receipt, root, series_release=series_release)
+    validate_receipt(receipt, root, series_release=series_release, allow_combined=allow_combined)
     verify_r1_executed_sources(root, json.loads(_local(root, REGISTRATION+'r1_slots.json').read_bytes()))
     bar = json.loads(_local(root, REGISTRATION+'u3_bar.json').read_bytes())
     validate_u3(bar, root=root, commit=receipt['commit'])
