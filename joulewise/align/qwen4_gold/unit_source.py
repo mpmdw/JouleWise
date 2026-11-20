@@ -218,7 +218,7 @@ class Provider:
     def source_info(self):
         return deepcopy(self._source_info)
 
-    def start(self, binding, prompts, reference_hash):
+    def start(self, binding, prompts, reference_hash, *, allow_initialize=True):
         """Open the journal under the caller's writer lock, before recovery."""
         require(hex_sha(reference_hash), "fixture provider requires bound reference source hash")
         self.binding = digest([self.identity, binding, prompts, reference_hash])
@@ -229,11 +229,22 @@ class Provider:
         exists = os.path.lexists(self.root)
         require(not exists or (self.root.is_dir() and not self.root.is_symlink()), "unsafe provider root")
         marker = self.root / ".owner"
+        initial = dict(identity=self.binding, objects={}, done=[], plan=None, traffic=dict(spent=0, reserved=0))
         if os.path.lexists(self.journal):
-            require(regular(marker) and marker.read_bytes() == self.owner, "provider invocation mismatch")
             require(regular(self.journal), "unsafe provider journal")
             self.state = decode(self.journal.read_bytes())
             require(self.state["identity"] == self.binding, "provider invocation mismatch")
+            if not regular(marker) or marker.read_bytes() != self.owner:
+                require(allow_initialize and self.state == initial and set(self.root.iterdir()) <= {self.journal, marker},
+                        "provider invocation mismatch")
+                if os.path.lexists(marker):
+                    require(regular(marker) and marker.stat().st_size <= len(self.owner)
+                            and self.owner.startswith(marker.read_bytes()), "unowned provider marker")
+                    self.budget.admit("provider bootstrap inventory")
+                    marker.unlink()
+                self.budget.admit("provider owner", [len(self.owner)])
+                synced_write(marker, self.owner)
+                sync_dir(self.root)
             traffic = self._traffic()
             for tag, checksum in self.state["objects"].items():
                 self.records[tag] = self._receipt(tag, checksum)
@@ -245,15 +256,24 @@ class Provider:
                         and all(self.state["objects"].get(tag) == checksum
                                 for tag, checksum in plan["buffers"].items()), "committed plan binding changed")
         else:
-            require(not exists or not any(self.root.iterdir()), "missing provider journal in nonempty root")
-            state = dict(identity=self.binding, objects={}, done=[], plan=None, traffic=dict(spent=0, reserved=0))
-            self.budget.admit("initial provider journal", [len(self.owner), len(encode(state))], dirs=int(not exists))
+            require(allow_initialize, "missing provider journal for started fixture invocation")
+            raw = encode(initial)
+            if exists and any(self.root.iterdir()):
+                candidate = self.journal.with_suffix(".tmp")
+                require(set(self.root.iterdir()) == {candidate} and regular(candidate)
+                        and candidate.stat().st_size <= len(raw) and raw.startswith(candidate.read_bytes()),
+                        "missing provider journal in nonempty root")
+                self.budget.admit("provider bootstrap inventory")
+                candidate.unlink()
+            self.budget.admit("initial provider journal", [len(self.owner), len(raw)], dirs=int(not exists))
             if not exists:
                 self.root.mkdir()
                 sync_dir(self.root.parent)
+            # The root owner marks completed bootstrap. Its presence with a
+            # missing journal can never be repaired as a fresh invocation.
+            self._save(initial)
             synced_write(marker, self.owner)
             sync_dir(self.root)
-            self._save(state)
         self.budget.admit("restart inventory")
 
     def _receipt(self, tag, checksum):

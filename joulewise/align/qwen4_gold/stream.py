@@ -16,7 +16,7 @@ from .core import (GATE_AMENDMENTS, SCHEMA, TOLERANCES, IndexedCheckpoint, REFER
                    file_stamp, sha256, write_json)
 from .runner import Harness, execute, failure_summary, load_prompts, runtime_identity, runtime_version
 from .stream_ple import BUFFER_SUFFIXES, copy_tensors, extract_part, header, is_table, valid_entry
-from .unit_source import BLOCK, Provider, encode, regular, replace_json, sync_dir
+from .unit_source import BLOCK, Provider, encode, regular, replace_json, sync_dir, synced_write
 
 REPO_ID = "Qwen/Qwen3.8-Flash-Next"
 REVISION = "de4b8e4d43b917e7706784d8bb445c9af86a3540"
@@ -284,7 +284,8 @@ class StreamDriver:
                           "plan": self.plan, "storage": self.storage, "shards": {}, "derived_shards": {},
                           "units": {}, "chain": {}, "ple": {"entries": {}}}
             if provider:
-                self.state.update(fixture_source=fixture_source, fixture_chain=self.fixture_chain)
+                self.state.update(fixture_source=fixture_source, fixture_chain=self.fixture_chain,
+                                  fixture_provider_started=False, fixture_provider_charge=0)
             else:
                 if rerun:
                     self.adopt_rerun(rerun)
@@ -294,6 +295,22 @@ class StreamDriver:
         self.selected = set(self.state["rerun"]["units"]) if "rerun" in self.state else None
 
     def initialize_fixture_files(self, fresh, rerun):
+        stage = self.work / ".fixture-initializing"
+        marker, candidate = stage / ".owner", stage / "pending"
+        owner = self.state["fingerprint"].encode()
+        if os.path.lexists(stage):
+            if not stage.is_dir() or stage.is_symlink():
+                raise ValueError("unsafe fixture initialization candidate")
+            children = set(stage.iterdir())
+            recorded = marker.read_bytes() if regular(marker) and marker.stat().st_size <= len(owner) else None
+            if (not children <= {marker, candidate} or (children and (
+                    recorded is None or not owner.startswith(recorded))) or (
+                    candidate in children and (recorded != owner or not regular(candidate)))):
+                raise ValueError("fixture initialization candidate ownership changed")
+            self.unit_source.budget.admit("fixture initialization recovery")
+            shutil.rmtree(stage)
+            sync_dir(self.work)
+
         provenance = self.harness.out / "provenance.json"
         if provenance.parent != self.work / "parity":
             raise ValueError("unsafe fixture provenance directory")
@@ -307,7 +324,9 @@ class StreamDriver:
             if rerun:
                 for row, target in self.rerun_targets(rerun):
                     source = Path(row["source"])
-                    copies.append((source, target, source.stat().st_size, row["sha256"]))
+                    size = source.stat().st_size
+                    if not (regular(target) and target.stat().st_size == size and sha256(target) == row["sha256"]):
+                        copies.append((source, target, size, row["sha256"]))
                 self.record_rerun(rerun)
             outputs[self.path] = encode(self.state)
         paths = [*outputs, *(target for _, target, _, _ in copies)]
@@ -317,42 +336,53 @@ class StreamDriver:
         if any(parent.is_symlink() for parent in parents):
             raise ValueError("unsafe fixture initialization directory")
         dirs = sum(not parent.exists() for parent in parents)
-        sizes = [*(len(raw) for raw in outputs.values()), *(size for _, _, size, _ in copies)]
-        self.unit_source.budget.admit("fixture initialization files", sizes, dirs=dirs)
+        sizes = [len(owner), *(len(raw) for raw in outputs.values()), *(size for _, _, size, _ in copies)]
+        self.unit_source.budget.admit("fixture initialization files", sizes, dirs=dirs+1)
+        stage.mkdir()
+        synced_write(marker, owner)
+        sync_dir(stage)
+        sync_dir(self.work)
         for source, target, size, checksum in copies:
-            target.parent.mkdir(parents=True, exist_ok=True)
-            self.copy_fixture_input(source, target, size, checksum)
-        for path, raw in outputs.items():
-            path.parent.mkdir(parents=True, exist_ok=True)
-            replace_json(path, raw)
+            self.copy_fixture_input(source, candidate, size, checksum)
+            self.publish_fixture_file(candidate, target)
+        for target, raw in outputs.items():
+            synced_write(candidate, raw)
+            self.publish_fixture_file(candidate, target)
+        shutil.rmtree(stage)
+        sync_dir(self.work)
+
+    def publish_fixture_file(self, candidate, target):
+        target.parent.mkdir(parents=True, exist_ok=True)
+        sync_dir(candidate.parent)
+        candidate.replace(target)
+        for parent in target.parents:
+            sync_dir(parent)
+            if parent == self.work:
+                break
+        sync_dir(candidate.parent)
 
     @staticmethod
     def copy_fixture_input(source, target, size, checksum):
         # Keep a changed predecessor within the size admitted for this copy.
-        candidate = target.with_suffix(".tmp")
-        with source.open("rb") as inp, candidate.open("xb") as out:
-            try:
-                remaining = size
-                while remaining:
-                    block = inp.read(min(BLOCK, remaining))
-                    if not block:
-                        raise ValueError("reference chain input shrank while copying")
-                    out.write(block)
-                    remaining -= len(block)
-                if inp.read(1):
-                    raise ValueError("reference chain input grew while copying")
-                out.flush()
-                os.fsync(out.fileno())
-                if sha256(candidate) != checksum:
-                    raise ValueError("reference chain input changed while copying")
-            except BaseException:
-                candidate.unlink()
-                raise
-        candidate.replace(target)
-        sync_dir(target.parent)
+        with source.open("rb") as inp, target.open("xb") as out:
+            remaining = size
+            while remaining:
+                block = inp.read(min(BLOCK, remaining))
+                if not block:
+                    raise ValueError("reference chain input shrank while copying")
+                out.write(block)
+                remaining -= len(block)
+            if inp.read(1):
+                raise ValueError("reference chain input grew while copying")
+            out.flush()
+            os.fsync(out.fileno())
+        if sha256(target) != checksum:
+            raise ValueError("reference chain input changed while copying")
 
     def save(self):
         if getattr(self, "unit_source", None):
+            if self.state["fixture_provider_started"]:
+                self.state["fixture_provider_charge"] = self.unit_source.bytes_charged
             self.save_fixture_json(self.path, self.state)
         else:
             write_json(self.path, self.state)
@@ -771,19 +801,33 @@ class StreamDriver:
             self.state = fresh
             self.validate_done()
             provider = self.unit_source
+            started = self.state.get("fixture_provider_started")
+            charged = self.state.get("fixture_provider_charge")
+            if (type(started) is not bool or type(charged) is not int or charged < 0 or (not started and (
+                    charged or self.state["units"] or self.state.get("current_unit") or self.state.get("fixture_plan")))):
+                raise ValueError("fixture provider start state is missing or inconsistent")
             provider.start(self.state["fingerprint"], self.prompts,
-                           self.runtimes["reference"].get("modeling_qwen4_exp.py_sha256"))
+                           self.runtimes["reference"].get("modeling_qwen4_exp.py_sha256"), allow_initialize=not started)
+            if provider.bytes_charged < charged:
+                raise ValueError("provider journal predates committed fixture spending")
             pinned = self.state.get("fixture_plan")
             if pinned is not None and pinned != provider.plan_digest:
                 raise ValueError("completed fixture plan changed")
             acknowledged = set(self.state["units"]) | ({"planner"} if provider.state["plan"] else set())
             if not set(provider.state["done"]) <= acknowledged:
                 raise ValueError("fixture consumers lack a committed result")
+            if not started and (provider.bytes_charged or provider.records):
+                raise ValueError("fixture manifest predates charged source access")
             provider.recover()
             if provider.state["plan"]:
                 provider.finish({"planner"})
             for path in (self.path, self.work / "summary.json"):
                 path.with_suffix(".tmp").unlink(missing_ok=True)
+            if not started:
+                # Publish authorization before any source attempt, including
+                # one that fails without ever producing a catalogue or unit.
+                self.state["fixture_provider_started"] = True
+                self.save()
             self.release()
             if any(unit not in self.state["units"] for unit in (self.selected or self.plan["units"])):
                 for name in sorted(self.metadata):

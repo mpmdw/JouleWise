@@ -550,6 +550,23 @@ class Acceptance(unittest.TestCase):
             self.start()
         self.assertEqual(self.feed.visits, [])
 
+    def test_provider_recovers_interrupted_genesis(self):
+        replace_file = Path.replace
+
+        def interrupt(candidate, target):
+            if target.name == "journal.json":
+                raise InterruptedError("before genesis publication")
+            return replace_file(candidate, target)
+
+        with patch.object(Path, "replace", interrupt):
+            with self.assertRaisesRegex(InterruptedError, "genesis publication"):
+                self.fresh("torn-genesis")
+        self.start()
+        self.assertEqual(self.p.impl.bytes_charged, 0)
+        self.assertEqual(self.feed.visits, [])
+        self.p.discover(A)
+        self.assertEqual(self.p.impl.bytes_charged, 589)
+
     def test_incomplete_read_exception_charges_partial_bytes(self):
         for phase, expected in (("first read", 7), ("EOF probe", 590)):
             with self.subTest(phase=phase):
@@ -670,8 +687,65 @@ class DriverTests(unittest.TestCase):
                 self.assertFalse((work / "manifest.json").exists())
         broker = Budget(work, cap=exact)
         self.make_driver(budget=broker)
-        self.assertEqual(broker.admit("initialized fixture"), exact)
+        self.assertEqual(max(need for _, _, need in broker.events), exact)
+        self.assertLess(broker.admit("initialized fixture"), exact)
         self.assertEqual(self.feed.visits, [])
+
+    def test_driver_recovers_interrupted_initialization_publications(self):
+        replace_file = Path.replace
+        for name in ("provenance.json", "manifest.json"):
+            with self.subTest(name=name):
+                work = self.base / name
+                candidates = []
+
+                def interrupt(candidate, target):
+                    if target.name == name:
+                        candidates.append(candidate)
+                        raise InterruptedError("before initialization publication")
+                    return replace_file(candidate, target)
+
+                with patch.object(Path, "replace", interrupt):
+                    with self.assertRaisesRegex(InterruptedError, "initialization publication"):
+                        self.make_driver(work=work)
+                self.assertEqual(len(candidates), 1)
+                self.assertTrue(candidates[0].is_file())
+                self.assertEqual(self.feed.visits, [])
+                driver = self.make_driver(resume=True, work=work)
+                self.assertTrue(driver.path.is_file())
+                self.assertTrue((work / "parity/provenance.json").is_file())
+                self.assertFalse(candidates[0].exists())
+        self.assertEqual(self.feed.visits, [])
+
+    def test_driver_refuses_missing_provider_after_uncommitted_source_attempt(self):
+        driver = self.make_driver()
+        self.feed.cut = 17
+        with self.assertRaisesRegex(OSError, "injected cut"):
+            driver.run()
+        self.assertEqual(driver.unit_source.bytes_charged, 17)
+        self.assertEqual(driver.state["units"], {})
+        driver.unit_source.root.rename(self.base / "full-provider")
+        driver.unit_source.root.mkdir()
+        with patch.object(self.feed, "open", side_effect=AssertionError("unexpected source retry")):
+            reopened = self.make_driver(resume=True)
+            with self.assertRaisesRegex(ValueError, "missing provider journal"):
+                reopened.run()
+        self.assertFalse(reopened.unit_source.journal.exists())
+        self.assertEqual(self.feed.visits, [[A, 17]])
+
+    def test_driver_recovers_before_first_source_authorization(self):
+        driver = self.make_driver()
+        with patch.object(driver, "save", side_effect=InterruptedError("before source authorization")):
+            with self.assertRaisesRegex(InterruptedError, "source authorization"):
+                driver.run()
+        self.assertEqual(driver.unit_source.bytes_charged, 0)
+        self.assertFalse(json.loads(driver.path.read_bytes())["fixture_provider_started"])
+        self.assertEqual(self.feed.visits, [])
+        self.feed.cut = 17
+        resumed = self.make_driver(resume=True)
+        with self.assertRaisesRegex(OSError, "injected cut"):
+            resumed.run()
+        self.assertTrue(json.loads(resumed.path.read_bytes())["fixture_provider_started"])
+        self.assertEqual(resumed.unit_source.bytes_charged, 17)
 
     def harness(self, driver, *, interrupt=False):
         import numpy as np
@@ -725,6 +799,74 @@ class DriverTests(unittest.TestCase):
 
         driver.harness.case, driver.harness.publish = case, publish
         return seen
+
+    def stop_after_embed(self, driver):
+        self.harness(driver)
+        release = driver.release
+
+        def interrupt():
+            release()
+            if "embed" in driver.state["units"]:
+                raise InterruptedError("embed committed")
+
+        with patch.object(driver, "release", interrupt):
+            with self.assertRaisesRegex(InterruptedError, "embed committed"):
+                driver.run()
+
+    @unittest.skipUnless(HAS_READERS, "requires the pinned offline array readers")
+    def test_driver_refuses_restore_missing_provider_after_unit_commit(self):
+        driver = self.make_driver()
+        provider = driver.unit_source
+        start = provider.start
+        snapshots = []
+
+        def remember_genesis(*args, **kwargs):
+            start(*args, **kwargs)
+            snapshots.append(provider.journal.read_bytes())
+
+        with patch.object(provider, "start", remember_genesis):
+            self.stop_after_embed(driver)
+        self.assertEqual(set(driver.state["units"]), {"embed"})
+        self.assertEqual(driver.unit_source.bytes_charged, 2159)
+        backup = self.base / "complete-fixture"
+        self.work.rename(backup)
+        shutil.copytree(backup, self.work, ignore=shutil.ignore_patterns("unit-source"))
+        with patch.object(self.feed, "open", side_effect=AssertionError("unexpected source retry")):
+            reopened = self.make_driver(resume=True)
+            reopened.validate_done()
+            with self.assertRaisesRegex(ValueError, "missing provider journal"):
+                reopened.run()
+        self.assertFalse(reopened.unit_source.root.exists())
+        reopened.unit_source.root.mkdir()
+        shutil.copyfile(backup / "unit-source/.owner", reopened.unit_source.root / ".owner")
+        reopened.unit_source.journal.write_bytes(snapshots[0])
+        with patch.object(self.feed, "open", side_effect=AssertionError("unexpected source retry")):
+            reopened = self.make_driver(resume=True)
+            with self.assertRaisesRegex(ValueError, "predates committed fixture spending"):
+                reopened.run()
+        self.assertEqual(self.feed.visits, [[A, 757], [B, 645], [A, 757]])
+
+    @unittest.skipUnless(HAS_READERS, "requires the pinned offline array readers")
+    def test_driver_recovers_interrupted_rerun_input_publication(self):
+        original = self.make_driver()
+        self.stop_after_embed(original)
+        work = self.base / "selected"
+        replace_file = Path.replace
+
+        def interrupt(candidate, target):
+            if target.suffix == ".npy":
+                raise InterruptedError("before copied input publication")
+            return replace_file(candidate, target)
+
+        args = dict(work=work, rerun_from=self.work, units=["0"])
+        before = len(self.feed.visits)
+        with patch.object(Path, "replace", interrupt):
+            with self.assertRaisesRegex(InterruptedError, "copied input publication"):
+                self.make_driver(**args)
+        resumed = self.make_driver(resume=True, **args)
+        for row in resumed.state["rerun"]["inputs"]["embed"].values():
+            self.assertEqual(sha256(row["path"]), row["sha256"])
+        self.assertEqual(len(self.feed.visits), before)
 
     @unittest.skipUnless(HAS_OFFICIAL, "requires the pinned offline planner runtime")
     def test_driver_uses_guarded_views_and_commits_chain_before_release(self):
