@@ -160,7 +160,6 @@ def _result_leg(pin, mock):
     return check
 
 
-_RC = {"rc": INT}
 _SUPERVISOR_STAMP = obj({"wall_s": FLOAT, "monotonic_ns": INT, "monotonic_raw_ns": INT})
 # joulewise/b5/driver.py:1034-1085, the monitor supervisor's stop summary
 _SUPERVISOR = obj(
@@ -199,12 +198,16 @@ _RESTORE = either(
 
 
 def _stopped(check, supervised=False):
-    """A feed's stop: rc 0 on proof, 2 on failed proof. A supervised meter with a started monitor also reports the
-    monitor's process-group proof (scripts/run_align_r1_smoke.py:226-276; scripts/run_night.py:536-594)."""
+    """The meter's stop: rc 0 on proof, 2 on failed proof. A supervised meter with a started monitor also reports the
+    monitor's process-group proof (scripts/run_align_r1_smoke.py:226-276; scripts/run_night.py:536-594). The record
+    starts as a proof and ``stop`` changes it only together with the group evidence (MeterFeed.stop, 251-270), so a
+    failed proof always carries its supervisor and group."""
     def stopped(value, where):
         check(value, where)
         if value["rc"] != (0 if value["proven_stopped"] else 2):
             refuse(f"{where}.rc", "not the code its proof gives")
+        if not value["proven_stopped"] and not ("group" in value and "supervisor" in value):
+            refuse(where, "a failed proof without the process-group evidence that failed it")
         if supervised and ("group" in value or "supervisor" in value):
             started = "supervisor" in value and value["supervisor"]["starts"] > 0
             if "supervisor" not in value or ("group" in value) != started:
@@ -214,19 +217,44 @@ def _stopped(check, supervised=False):
     return stopped
 
 
+# A returned host check is one the helper did not raise on (scripts/run_align_r1_smoke.py:78-95): a nonzero exit, a
+# reading without AC power, or a loaded night agent raises ValueError and leaves an error, never a result.
+_NIGHT_AGENT = re.compile(r"(?:^|\s)com\.joulewise\.night\S*")
+
+
+def _ac_power(value, where):
+    obj({"rc": const(0), "stdout": STR})(value, where)
+    if "Now drawing from 'AC Power'" not in value["stdout"].splitlines():
+        refuse(f"{where}.stdout", "not a reading that shows AC power")
+
+
+def _night_agents(value, where):
+    obj({"rc": const(0), "stdout": STR})(value, where)
+    if _NIGHT_AGENT.search(value["stdout"]):
+        refuse(f"{where}.stdout", "a loaded night agent in a list that returned")
+
+
+def _display(value, where):
+    """scripts/run_align_r1_smoke.py:288-290: the step's rc is the display command's exit status, or 2 when none was
+    observed. The record's own exit_code is copied after it."""
+    obj({"rc": INT, "argv": arr(STR), "epoch_s": FLOAT, "exit_code": nullable(INT), "stderr": STR})(value, where)
+    if value["rc"] != (value["exit_code"] if value["exit_code"] is not None else 2):
+        refuse(f"{where}.rc", "not the code its exit status gives")
+
+
 def _result_check(name, role, *, pin, mock):
     """The production a returned step attaches (GRAMMAR.md, "Span receipt and step grammar")."""
     if role == "leg":
         return _result_leg(pin, mock)
     if role in ("start", "before", "close"):
-        return obj(_RC)
+        return obj({"rc": const(0)})                                   # every feed returns {"rc": 0} (smoke 142-205)
     if role == "wait":
         return obj({"rc": const(0), "waited_s": NUM})
     if role == "soak":
         return obj({"rc": const(0), "path": STR})
     if role == "stop":
         if mock or name != "stop-meter":
-            return _stopped(obj({"rc": INT, "proven_stopped": BOOL}))
+            return obj({"rc": const(0), "proven_stopped": const(True)})      # the census feeds' constant (smoke 152)
         return _stopped(obj({"rc": INT, "proven_stopped": BOOL}, {"supervisor": _SUPERVISOR, "group": _GROUP}),
                         supervised=True)
     if mock and name in ("night_agents", "ac_power", "condition13", "display"):
@@ -235,12 +263,12 @@ def _result_check(name, role, *, pin, mock):
         "deadline": obj({"rc": const(0), "remaining_s": NUM}),
         "frozen": (obj({"rc": const(0), "skipped": STR}) if mock
                    else obj({"rc": const(0), "head": REVISION, "paths": NAT})),
-        "night_agents": obj({"rc": INT, "stdout": STR}),
-        "ac_power": obj({"rc": INT, "stdout": STR}),
-        "condition13": obj({"rc": INT, "executed_commit": REVISION}),
+        "night_agents": _night_agents,
+        "ac_power": _ac_power,
+        "condition13": obj({"rc": const(0), "executed_commit": REVISION}),
         "read_power": (obj({"rc": const(0), "ac_powermode": INT, "mock": const(True)}) if mock
                        else obj({"rc": const(0), "ac_powermode": const(0), "automatic": const(True)})),
-        "display": obj({"rc": INT, "argv": arr(STR), "epoch_s": FLOAT, "exit_code": nullable(INT), "stderr": STR}),
+        "display": _display,
         "dwell": obj({"rc": const(0), "dwell_s": NUM}),
         "plan": obj({"rc": const(0), "deadline_epoch_s": NUM, "worst_case_s": INT, "expected_s": INT,
                      "legs": arr(LEG_ID, least=1)}),

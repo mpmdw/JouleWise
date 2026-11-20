@@ -8,6 +8,7 @@ grammar shows up in the ordinary suite within seconds and without numpy.
 from __future__ import annotations
 
 import glob
+import gzip
 import hashlib
 import json
 from pathlib import Path
@@ -16,7 +17,7 @@ import tempfile
 import unittest
 import unittest.mock
 
-from joulewise.cadence_looks import admission as A, admission_kits as K, admission_shape as S
+from joulewise.cadence_looks import admission as A, admission_journals as J, admission_kits as K, admission_shape as S
 from tests.cadence import interim_admission_accounting as ACC
 
 REPO = Path(__file__).resolve().parents[2]
@@ -324,15 +325,17 @@ class Accounting(unittest.TestCase):
     @unittest.skipIf(T is None, "the frozen admission packet is absent")
     def test_a_changed_case_list_or_a_stale_correction_is_found(self):
         real = ACC.load_corrections()
+        cases = T.cases()                                    # generated once; each variant only re-hashes the list
+        admitted = next(c.name for c in cases if T.admits(c))
         for label, change, text in (
                 ("case ids", {"case_id_sha256": "0" * 64}, "ordered case IDs"),
                 ("original oracle", {"original_oracle_sha256": "0" * 64}, "original expectations"),
                 ("corrected oracle", {"corrected_oracle_sha256": "0" * 64}, "corrected expectations"),
                 ("total", {"total_cases": 101888}, "not 101888"),
                 ("unknown id", {"expect_admit": real["expect_admit"] + ["no/such/case"]}, "not in the suite"),
-                ("already admitted", {"expect_admit": real["expect_admit"] + [next(
-                    c.name for c in T.cases() if T.admits(c))]}, "already admitted")):
-            with self.subTest(label), unittest.mock.patch.object(ACC, "load_corrections", return_value={**real, **change}):
+                ("already admitted", {"expect_admit": real["expect_admit"] + [admitted]}, "already admitted")):
+            with self.subTest(label), unittest.mock.patch.object(T, "cases", return_value=cases), \
+                    unittest.mock.patch.object(ACC, "load_corrections", return_value={**real, **change}):
                 self.assertTrue(any(text in problem for problem in ACC.verify_case_list(T)[1]))
 
     def case(self, name, family="x"):
@@ -379,6 +382,181 @@ class Accounting(unittest.TestCase):
         owned = [name for index in range(8) for name in ACC.expected_ids(cases, index, 8)]
         self.assertEqual(sorted(owned), sorted(case.name for case in cases))
         self.assertEqual(len(set(owned)), len(cases))
+
+
+@unittest.skipIf(T is None, "the frozen admission packet is absent")
+class AuditOne(unittest.TestCase):
+    """Audit round 1 of PR #795: four findings reproduced on synthetic inputs, each with its class."""
+    PINS = ("b4b6aeb19", "2d347f721", "6e9d42f1d")
+
+    @classmethod
+    def setUpClass(cls):
+        cls.corpus = T.load_corpus()
+
+    def docs(self, pin, branch="normal"):
+        return json.loads(json.dumps(T.document_set(pin, branch, self.corpus)))
+
+    def verdict(self, docs):
+        return verdict({name: T.doc_bytes(name, doc) for name, doc in docs.items()})
+
+    # --- H3: display status contradicts its exit status
+    def test_the_display_step_s_rc_is_its_exit_status_or_two_when_none_was_observed(self):
+        """scripts/run_align_r1_smoke.py:288-290 at all three pins: rc is exit_code, or 2 when exit_code is null."""
+        for pin in self.PINS:
+            for exit_code, rc, admitted in ((0, 0, True), (None, 2, True), (1, 1, True), (2, 2, True),
+                                            (None, 0, False), (2, 0, False), (0, 2, False), (None, 1, False),
+                                            (1, 2, False), (0, 1, False)):
+                docs = self.docs(pin)
+                step = next(step for step in docs[T.RECEIPT]["steps"] if step["name"] == "display")
+                step["result"]["exit_code"], step["result"]["rc"], step["rc"] = exit_code, rc, rc
+                with self.subTest(pin=pin, exit_code=exit_code, rc=rc):
+                    self.assertEqual(self.verdict(docs) is None, admitted)
+
+    def test_a_returned_step_result_is_one_the_writer_s_helper_returns(self):
+        """The class of H3: a step result member the writer derives from, or fixes beside, another. Each helper that
+        returns a result at the pins (scripts/run_align_r1_smoke.py:78-152, 190-257) returns only these."""
+        changes = {
+            "a feed start with a nonzero rc": ("start-agents", lambda r: r.update(rc=2)),
+            "a volume check with a nonzero rc": ("L001-volumes", lambda r: r.update(rc=3)),
+            "a night-agents list that returned nonzero": ("night_agents", lambda r: r.update(rc=1)),
+            "a night-agents list with a loaded agent": ("night_agents", lambda r: r.update(stdout="1\t0\tcom.joulewise.night.x\n")),
+            "an AC reading without AC power": ("ac_power", lambda r: r.update(stdout="Now drawing from 'Battery Power'\n")),
+            "an AC reading that returned nonzero": ("ac_power", lambda r: r.update(rc=1)),
+            "a condition-13 commit that is not a revision": ("condition13", lambda r: r.update(executed_commit="HEAD")),
+            "a condition-13 check that returned nonzero": ("condition13", lambda r: r.update(rc=128)),
+            "a census feed's stop with no proof": ("stop-agents", lambda r: r.update(rc=2, proven_stopped=False)),
+            "a meter stop that failed its proof without the group evidence": ("stop-meter", lambda r: r.update(
+                rc=2, proven_stopped=False)),
+        }
+        for pin in self.PINS:
+            docs = self.docs(pin)
+            self.assertIsNone(self.verdict(docs))
+            for label, (name, change) in changes.items():
+                changed = json.loads(json.dumps(docs))
+                steps = [step for step in changed[T.RECEIPT]["steps"] if step["name"] == name or
+                         (name == "L001-volumes" and step["name"].startswith("before-L001"))]
+                self.assertTrue(steps, (pin, label))
+                for step in steps:
+                    change(step["result"])
+                    step["rc"] = step["result"].get("rc", 0)
+                with self.subTest(pin=pin, label=label):
+                    self.assertIsNotNone(self.verdict(changed))
+
+    # --- H2: a controller journal cut before the writer's finalization
+    def test_a_controller_journal_that_stops_after_its_failure_refuses(self):
+        """The writer flushes the failure and appends run_finalized (controller.py _finish). The eleven rows before
+        the finalization call are the same bytes as the first eleven of the twelve; no pinned counter names the
+        final row, so the cut journal has nothing to be admitted by (RL-184 F2)."""
+        for pin in self.PINS:
+            docs = self.docs(pin, "salvaged-failure")
+            rows = docs[T.EVENTS]
+            self.assertEqual((len(rows), rows[-2]["event_type"], rows[-1]["event_type"]), (12, "failure", "run_finalized"))
+            self.assertIsNone(self.verdict(docs))
+            cut = json.loads(json.dumps(docs))
+            cut[T.EVENTS] = rows[:-1]
+            with self.subTest(pin=pin):
+                message = self.verdict(cut)
+                self.assertIsNotNone(message)
+                self.assertIn("finalization", message)
+
+    def test_a_controller_journal_closes_every_stage_it_opened_unless_it_records_a_failure(self):
+        """The number of stages is the controller's (the idle sentinel is skipped on a mock backend), so a journal
+        that stops at a stage boundary is not refused here; one that stops inside a stage is."""
+        for pin in self.PINS:
+            docs = self.docs(pin, "controller")
+            rows = docs[T.EVENTS]
+            self.assertIsNone(self.verdict(docs))
+            finalized = {"timestamp_s": rows[-1]["timestamp_s"], "event_type": "run_finalized", "phase": "run",
+                         "message": "bundle finalized", "metadata": {}}
+            changed = json.loads(json.dumps(docs))
+            changed[T.EVENTS] = rows + [finalized]
+            with self.subTest(pin=pin, label="finalized after its stages"):
+                self.assertIsNone(self.verdict(changed))
+            started = [i for i, r in enumerate(rows) if r["event_type"] == "stage_started"]
+            for label, cut in (("a stage left open", rows[:started[-1] + 1]),
+                               ("a stage left open, then finalized", rows[:started[-1] + 1] + [finalized])):
+                changed[T.EVENTS] = cut
+                with self.subTest(pin=pin, label=label):
+                    self.assertIsNotNone(self.verdict(changed))
+
+    # --- H4: a genuine writer result at the registered deadline
+    def deadline_docs(self, pin):
+        fixture = json.loads(gzip.decompress((REPO / "tests/cadence/interim_admission_audit1/deadline.json.gz").read_bytes()))
+        docs = self.docs(pin, "journals")
+        for name, doc in fixture.items():
+            docs[f"{T.BUNDLE}/{name}"] = doc
+        return docs
+
+    def test_the_writer_s_own_deadline_journals_are_admitted(self):
+        """The pinned writer's episode deadman expiring in the one turn: finish_reason and stop_condition
+        ``episode.deadman`` with the flag ``episode.deadman:0``. Generated by the writers at all three pins."""
+        for pin in self.PINS:
+            docs = self.deadline_docs(pin)
+            turn = docs[f"{T.BUNDLE}/outputs/align_turns.jsonl"][0]
+            self.assertEqual((turn["generation"]["finish_reason"], turn["generation"]["stop_condition"]),
+                             ("episode.deadman", "episode.deadman"))
+            self.assertIn("episode.deadman:0", turn["flags"])
+            with self.subTest(pin=pin):
+                self.assertIsNone(self.verdict(docs))
+
+    def test_a_finish_reason_is_the_text_the_runtime_gave_or_null(self):
+        """GRAMMAR.md: finish_reason is text or null. The endpoint stores whatever string the runtime's last response
+        carried and the deadman's own stop; an empty string or a non-string becomes null before it is stored."""
+        for pin in self.PINS:
+            for value, admitted in (("stop", True), ("length", True), ("eos", True), ("max_tokens", True),
+                                    ("episode.deadman", False), (None, True), ("", False), (0, False), (True, False),
+                                    (["stop"], False)):
+                docs = self.docs(pin, "journals")
+                turn = docs[f"{T.BUNDLE}/outputs/align_turns.jsonl"][0]
+                turn["generation"]["finish_reason"] = value
+                with self.subTest(pin=pin, finish_reason=value):
+                    # the deadman's text is admitted only with its flag
+                    self.assertEqual(self.verdict(docs) is None, admitted)
+                if value == "episode.deadman":
+                    turn["flags"].append("episode.deadman:0")
+                    turn["generation"]["stop_condition"] = "episode.deadman"
+                    self.assertIsNone(self.verdict(docs))
+
+    def test_a_turn_the_deadman_cut_before_its_provenance_was_built_is_admitted(self):
+        """endpoint.py:757-759: DeadmanExpired inside the generation leaves the four-member record whose finish reason
+        and stop are the deadman's; an endpoint error leaves both null."""
+        for pin in self.PINS:
+            for finish, stop, flags, admitted in (
+                    ("episode.deadman", "episode.deadman", ["episode.deadman:0"], True),
+                    ("episode.deadman", "episode.deadman", [], False),
+                    ("episode.deadman", None, ["episode.deadman:0"], False),
+                    (None, "episode.deadman", [], False), (None, None, [], True)):
+                docs = self.docs(pin, "endpoint-error")
+                turn = docs[f"{T.BUNDLE}/outputs/align_turns.jsonl"][0]
+                turn["generation"].update(finish_reason=finish, stop_condition=stop)
+                turn["flags"] = flags + [f for f in turn["flags"] if f.startswith("endpoint_error")]
+                with self.subTest(pin=pin, finish=finish, stop=stop, flags=flags):
+                    self.assertEqual(self.verdict(docs) is None, admitted)
+
+    def test_a_failure_row_names_a_reason_the_writer_s_enum_has(self):
+        """The class of H4: an enumeration written by hand. joulewise/schemas.py FailureReason at the three pins."""
+        writer = ("did_not_fit", "runtime_unavailable", "model_identity_mismatch", "telemetry_unavailable",
+                  "format_unavailable", "permission_denied", "transport_unavailable", "unsupported_workload",
+                  "cleanup_failed", "unknown_error")
+        self.assertEqual(J._FAILURE_REASONS, writer)
+        for pin in self.PINS:
+            for reason in (*writer, "workload_error", "timeout", "interrupted", "endpoint_error", "thermal_fault"):
+                docs = self.docs(pin, "salvaged-failure")
+                failure = next(r for r in docs[T.EVENTS] if r["event_type"] == "failure")
+                failure["metadata"] = {"failure_reason": reason}
+                with self.subTest(pin=pin, reason=reason):
+                    self.assertEqual(self.verdict(docs) is None, reason in writer)
+
+    def test_the_failure_reasons_are_the_pinned_enum_when_the_pins_are_present(self):
+        import re
+        import subprocess
+        for pin in self.PINS:
+            shown = subprocess.run(["git", "-C", str(REPO), "show", f"{pin}:joulewise/schemas.py"],
+                                   capture_output=True, text=True)
+            if shown.returncode:
+                self.skipTest("the pinned writer revisions are not in this checkout's history")
+            body = re.search(r"class FailureReason.*?(?=\n\n\ndef |\nclass )", shown.stdout, re.S).group(0)
+            self.assertEqual(tuple(re.findall(r'= "(\w+)"', body)), J._FAILURE_REASONS, pin)
 
 
 class KitTable(unittest.TestCase):

@@ -128,8 +128,12 @@ _OBSERVATIONS = {                                       # workload.py:494-542, e
     "align_g0_unreleased_stop_observation": "zero-generation sampler observation",
 }
 _STAGES = ("validate", "prepare", "idle_baseline", "warmup", "measured_run", "idle_drift_sentinel", "cleanup", "reduce")
-_FAILURE_REASONS = ("runtime_unavailable", "telemetry_unavailable", "workload_error", "timeout", "interrupted",
-                    "validation_error", "endpoint_error", "thermal_fault", "unknown_error")
+# joulewise/schemas.py:267-277 FailureReason, the same ten members at all three revisions; a failure row's metadata
+# carries one member's value (controller.py:1663-1669; GRAMMAR.md, "failure fixture").
+_FAILURE_REASONS = ("did_not_fit", "runtime_unavailable", "model_identity_mismatch", "telemetry_unavailable",
+                    "format_unavailable", "permission_denied", "transport_unavailable", "unsupported_workload",
+                    "cleanup_failed", "unknown_error")
+DEADMAN = "episode.deadman"                             # endpoint.py:338,759,765: the episode deadman's stop text
 
 
 def _mlx_metadata(row, where):
@@ -205,7 +209,7 @@ def _runtime_events(rows, where, *, controller, selected=None):
     stack = _Stack(where)
     tokens, gate_kinds, mlx_seen, stage_state = [], [], [], {}
     emitted = []
-    stages_started, stages_done, failure = [], [], None
+    stages_started, stages_done, failure, finalized = [], [], None, False
     previous = None
     for index, row in enumerate(rows):
         at = f"{where}[{index}]"
@@ -299,14 +303,31 @@ def _runtime_events(rows, where, *, controller, selected=None):
         elif kind == "run_finalized":
             if index != len(rows) - 1:
                 refuse(at, "finalization is the last row")
+            finalized = True
     if stack.open:
         refuse(where, "a phase left open; a completed record closes every phase")
     if mlx_seen and len(mlx_seen) != 8:
         refuse(where, "a turn without all of its adapter phases")
+    if controller and (stages_started or failure is not None or finalized):
+        _lifecycle_ends(rows, where, stages_started, stages_done, failure)
     return {"tokens": len(tokens), "mlx": bool(mlx_seen),
             "prompt_tokens": next((r["metadata"]["prompt_tokens"] for r in rows
                                    if (r["event_type"], r["phase"]) == ("phase_end", "tokenize")), None),
             "failure": failure}
+
+
+def _lifecycle_ends(rows, where, started, done, failure):
+    """A controller journal is complete only where ``_finish`` leaves it (controller.py:3963-3971): a run that
+    recorded a failure flushes it and then appends ``run_finalized``, and a run that did not completed every stage
+    it started. No pinned counter names a journal's final row (RL-184 F2), so a journal that stops after its failure
+    row, or inside a stage, has nothing to be told apart from a cut one by. Which stages a run has is the
+    controller's (the idle sentinel is skipped on a mock telemetry backend, controller.py:2630-2637), so their
+    number is not checked here."""
+    if failure is not None:
+        if rows[-1]["event_type"] != "run_finalized":
+            refuse(f"{where}[{len(rows) - 1}]", "a failure not followed by the finalization the writer appends")
+    elif started != done:
+        refuse(where, "a stage left open by a journal that records no failure")
 
 
 def _controller_row(row, where):
@@ -353,11 +374,17 @@ _CACHE_TURN = {**{k: v for k, v in _CACHE_SETUP.items()}, "fed_delta_ids": arr(I
 def _generation(value, where):
     """endpoint.py:724-814: a generated turn's provenance, or the error path's four members."""
     if type(value) is dict and "prompt_token_ids" not in value:
-        obj({"finish_reason": const(None), "prior_hidden_prefill_method": _PREFILL_METHOD,
-             "prior_hidden_prefill_tokens": NAT, "stop_condition": const(None)})(value, where)
+        # The turn ended before the provenance dict was built: an endpoint error leaves no stop, and the episode
+        # deadman expiring inside the generation (DeadmanExpired, endpoint.py:757-759) names itself as the stop.
+        obj({"finish_reason": nullable(const(DEADMAN)), "prior_hidden_prefill_method": _PREFILL_METHOD,
+             "prior_hidden_prefill_tokens": NAT, "stop_condition": nullable(const(DEADMAN))})(value, where)
+        if value["finish_reason"] != value["stop_condition"]:
+            refuse(f"{where}.stop_condition", "not the stop the turn's finish reason gives")
         return None
     cache = _CACHE_TURN if type(value) is dict and "cache_policy" in value else {}
-    obj({"finish_reason": nullable(enum("stop", "length")), "output_token_ids": arr(INT), "prior_hidden_prefill_method": _PREFILL_METHOD,
+    # finish_reason is whatever text the runtime's last response carried (mlx_runtime.py:911-913, endpoint.py:275-302),
+    # or the episode deadman's, or null; the writer stores no other (endpoint.py:770-771)
+    obj({"finish_reason": nullable(TEXT), "output_token_ids": arr(INT), "prior_hidden_prefill_method": _PREFILL_METHOD,
          "prior_hidden_prefill_tokens": NAT, "prompt_token_ids": arr(INT), "prompt_token_ids_sha256": DIGEST,
          "reasoning_token_accounting": STR, "runtime_stop_condition": STR, "sampler": _SAMPLER,
          "stop_condition": STR, **cache}, _CHECKPOINT if cache else None)(value, where)
@@ -376,7 +403,11 @@ def _turns(rows, where):
     generated = []
     for index, row in enumerate(rows):
         turn(row, f"{where}[{index}]")
-        generated.append(_generation(row["generation"], f"{where}[{index}].generation"))
+        generation = _generation(row["generation"], f"{where}[{index}].generation")
+        generated.append(generation)
+        stop = (generation if generation is not None else row["generation"])["finish_reason"]
+        if stop == DEADMAN and f"{DEADMAN}:0" not in row["flags"]:
+            refuse(f"{where}[{index}].flags", "the episode deadman's stop without its flag (endpoint.py:766-767)")
         if row["start_stamp"]["epoch_s"] > row["end_stamp"]["epoch_s"]:
             refuse(f"{where}[{index}]", "a turn that ends before it starts")
     return generated
