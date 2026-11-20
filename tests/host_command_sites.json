@@ -2062,5 +2062,11 @@
     "locator": "main:541443a289d468bd",
     "command": "pmset",
     "seam": "parser default only (the desk launcher's own --pmset-bin default); launch() passes it to the LaunchAgent wrapper; tests patch subprocess.run and never bootstrap"
+  },
+  {
+    "file": "joulewise/cadence_looks/step3_energy_ratios.py",
+    "locator": "<module>:fc9ea9bc8b139d43",
+    "command": "python-isolated",
+    "seam": "docstring usage line only (step 3's pinned bytes, RL-166 Q6: not edited); the module starts no process"
   }
 ]

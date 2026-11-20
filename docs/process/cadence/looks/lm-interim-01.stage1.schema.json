@@ -1,0 +1,1315 @@
+{
+ "$schema": "https://json-schema.org/draft/2020-12/schema",
+ "$id": "joulewise.cadence_look_stage1.v1",
+ "title": "Interim look, stage 1 output, level D (lm-interim-01): no energy",
+ "description": "DRAFT, part of freeze 1 (RL-166 Q8; RL-166 Amends). Level D of the analyst seat's data interface (docs/process/cadence_look_fit_interface.md section 3, PR #795), transcribed field for field. Committed with its sha256 before stage 2 opens a file; stage 2 takes it by that hash. Closed at every level; it carries no energy, power or meter value. The rules-3/4 verdicts enter through inclusion_34.py's verdict file, hashed into code_sha256's inputs by the CLI.",
+ "type": "object",
+ "additionalProperties": false,
+ "required": [
+  "active_readings",
+  "calibrated_range",
+  "centring",
+  "code_sha256",
+  "counts",
+  "input_sha256",
+  "legs",
+  "look_id",
+  "meter_clock",
+  "numpy_version",
+  "onset",
+  "onsets_before_116_s",
+  "rates",
+  "roster",
+  "schema",
+  "synthetic",
+  "tripwires"
+ ],
+ "properties": {
+  "schema": {
+   "const": "joulewise.cadence_look_stage1.v1"
+  },
+  "look_id": {
+   "const": "lm-interim-01"
+  },
+  "input_sha256": {
+   "type": "string",
+   "pattern": "^[0-9a-f]{64}$"
+  },
+  "synthetic": {
+   "type": "boolean",
+   "description": "true only on the generator's data; a production look carries false"
+  },
+  "code_sha256": {
+   "type": "object",
+   "additionalProperties": {
+    "type": "string",
+    "pattern": "^[0-9a-f]{64}$"
+   }
+  },
+  "numpy_version": {
+   "type": "string"
+  },
+  "roster": {
+   "type": "object",
+   "additionalProperties": false,
+   "required": [
+    "fit_days",
+    "spans"
+   ],
+   "properties": {
+    "spans": {
+     "type": "array",
+     "items": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+       "block_id",
+       "marks",
+       "meter_offsets_ns",
+       "phase",
+       "power_mode",
+       "role",
+       "soak_reference_tv0h_c",
+       "span_id",
+       "t0_epoch_s",
+       "t0_local_date"
+      ],
+      "properties": {
+       "span_id": {
+        "type": "string"
+       },
+       "block_id": {
+        "type": "string"
+       },
+       "phase": {
+        "enum": [
+         "development",
+         "extension"
+        ]
+       },
+       "role": {
+        "enum": [
+         "fit",
+         "describe"
+        ]
+       },
+       "power_mode": {
+        "enum": [
+         "automatic",
+         "high_power"
+        ]
+       },
+       "t0_epoch_s": {
+        "type": "number"
+       },
+       "t0_local_date": {
+        "type": "string",
+        "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+       },
+       "soak_reference_tv0h_c": {
+        "type": [
+         "number",
+         "null"
+        ]
+       },
+       "marks": {
+        "type": "array",
+        "items": {
+         "enum": [
+          "reference from a redo",
+          "reference from an excluded leg"
+         ]
+        }
+       },
+       "meter_offsets_ns": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+         "end",
+         "header"
+        ],
+        "properties": {
+         "header": {
+          "type": [
+           "integer",
+           "null"
+          ]
+         },
+         "end": {
+          "type": [
+           "integer",
+           "null"
+          ]
+         }
+        }
+       }
+      }
+     }
+    },
+    "fit_days": {
+     "type": "array",
+     "items": {
+      "type": "string",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+     }
+    }
+   }
+  },
+  "rates": {
+   "type": "object",
+   "additionalProperties": false,
+   "required": [
+    "per_cell",
+    "r_d",
+    "r_p"
+   ],
+   "properties": {
+    "r_p": {
+     "type": "number"
+    },
+    "r_d": {
+     "type": "number"
+    },
+    "per_cell": {
+     "type": "object",
+     "additionalProperties": false,
+     "required": [],
+     "properties": {
+      "2000": {
+       "type": "object",
+       "additionalProperties": false,
+       "required": [
+        "n_legs",
+        "r_d",
+        "r_p"
+       ],
+       "properties": {
+        "r_p": {
+         "type": [
+          "number",
+          "null"
+         ]
+        },
+        "r_d": {
+         "type": [
+          "number",
+          "null"
+         ]
+        },
+        "n_legs": {
+         "type": "integer"
+        }
+       }
+      },
+      "10000": {
+       "type": "object",
+       "additionalProperties": false,
+       "required": [
+        "n_legs",
+        "r_d",
+        "r_p"
+       ],
+       "properties": {
+        "r_p": {
+         "type": [
+          "number",
+          "null"
+         ]
+        },
+        "r_d": {
+         "type": [
+          "number",
+          "null"
+         ]
+        },
+        "n_legs": {
+         "type": "integer"
+        }
+       }
+      },
+      "19458": {
+       "type": "object",
+       "additionalProperties": false,
+       "required": [
+        "n_legs",
+        "r_d",
+        "r_p"
+       ],
+       "properties": {
+        "r_p": {
+         "type": [
+          "number",
+          "null"
+         ]
+        },
+        "r_d": {
+         "type": [
+          "number",
+          "null"
+         ]
+        },
+        "n_legs": {
+         "type": "integer"
+        }
+       }
+      }
+     }
+    }
+   }
+  },
+  "centring": {
+   "type": "object",
+   "additionalProperties": false,
+   "required": [
+    "fan_rpm",
+    "tf08_c",
+    "tv0h_excess_c"
+   ],
+   "properties": {
+    "tf08_c": {
+     "type": "number"
+    },
+    "fan_rpm": {
+     "type": "number"
+    },
+    "tv0h_excess_c": {
+     "type": "number"
+    }
+   }
+  },
+  "calibrated_range": {
+   "type": "object",
+   "additionalProperties": false,
+   "required": [
+    "fan_rpm",
+    "tf08_c",
+    "tv0h_excess_c"
+   ],
+   "properties": {
+    "tf08_c": {
+     "type": "array",
+     "items": {
+      "type": "number"
+     },
+     "minItems": 2,
+     "maxItems": 2
+    },
+    "fan_rpm": {
+     "type": "array",
+     "items": {
+      "type": "number"
+     },
+     "minItems": 2,
+     "maxItems": 2
+    },
+    "tv0h_excess_c": {
+     "type": "array",
+     "items": {
+      "type": "number"
+     },
+     "minItems": 2,
+     "maxItems": 2
+    }
+   }
+  },
+  "onset": {
+   "type": "object",
+   "additionalProperties": false,
+   "required": [
+    "coefficients",
+    "converged",
+    "count_only_cut",
+    "left_out",
+    "lodo",
+    "n_censored",
+    "n_days_uncensored",
+    "n_uncensored",
+    "n_uncensored_by_cell",
+    "predictors",
+    "sigma_s",
+    "status"
+   ],
+   "properties": {
+    "status": {
+     "enum": [
+      "estimable",
+      "not_estimable"
+     ]
+    },
+    "n_uncensored": {
+     "type": "integer"
+    },
+    "n_censored": {
+     "type": "integer"
+    },
+    "n_days_uncensored": {
+     "type": "integer"
+    },
+    "n_uncensored_by_cell": {
+     "type": "object",
+     "additionalProperties": false,
+     "required": [
+      "10000",
+      "19458",
+      "2000"
+     ],
+     "properties": {
+      "2000": {
+       "type": "integer"
+      },
+      "10000": {
+       "type": "integer"
+      },
+      "19458": {
+       "type": "integer"
+      }
+     }
+    },
+    "left_out": {
+     "type": "object",
+     "additionalProperties": false,
+     "required": [
+      "start_out_of_state",
+      "start_reading_missing",
+      "state_unobserved"
+     ],
+     "properties": {
+      "start_out_of_state": {
+       "type": "integer"
+      },
+      "state_unobserved": {
+       "type": "integer"
+      },
+      "start_reading_missing": {
+       "type": "integer"
+      }
+     }
+    },
+    "predictors": {
+     "type": "array",
+     "items": {
+      "enum": [
+       "intercept",
+       "tf08_c",
+       "fan_rpm",
+       "tv0h_excess_c",
+       "t_p_s"
+      ]
+     },
+     "minItems": 2,
+     "uniqueItems": true
+    },
+    "coefficients": {
+     "type": [
+      "object",
+      "null"
+     ],
+     "additionalProperties": {
+      "type": "number"
+     }
+    },
+    "sigma_s": {
+     "type": [
+      "number",
+      "null"
+     ]
+    },
+    "converged": {
+     "type": [
+      "boolean",
+      "null"
+     ]
+    },
+    "lodo": {
+     "oneOf": [
+      {
+       "type": "null"
+      },
+      {
+       "type": "object",
+       "additionalProperties": false,
+       "required": [
+        "folds_not_estimable",
+        "heldout_censored",
+        "heldout_censored_below_tau",
+        "per_day_rms_s",
+        "rms_s"
+       ],
+       "properties": {
+        "per_day_rms_s": {
+         "type": "object",
+         "additionalProperties": {
+          "type": "number"
+         }
+        },
+        "rms_s": {
+         "type": [
+          "number",
+          "null"
+         ]
+        },
+        "heldout_censored_below_tau": {
+         "type": "integer"
+        },
+        "heldout_censored": {
+         "type": "integer"
+        },
+        "folds_not_estimable": {
+         "type": "array",
+         "items": {
+          "type": "string",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+         }
+        }
+       }
+      }
+     ]
+    },
+    "count_only_cut": {
+     "type": "object",
+     "additionalProperties": false,
+     "required": [
+      "fixed_s",
+      "form",
+      "offset_s"
+     ],
+     "properties": {
+      "form": {
+       "enum": [
+        "tau_hat_minus_2rms",
+        "fixed_116_s"
+       ]
+      },
+      "offset_s": {
+       "type": [
+        "number",
+        "null"
+       ]
+      },
+      "fixed_s": {
+       "enum": [
+        116.0,
+        null
+       ]
+      }
+     }
+    }
+   }
+  },
+  "tripwires": {
+   "type": "object",
+   "additionalProperties": false,
+   "required": [
+    "any",
+    "cell_below_10",
+    "days_below_4",
+    "dev_included_below_45",
+    "hp01_below_9",
+    "start_reading_invalid_over_10pct"
+   ],
+   "properties": {
+    "dev_included_below_45": {
+     "type": "object",
+     "additionalProperties": false,
+     "required": [
+      "trips",
+      "value"
+     ],
+     "properties": {
+      "value": {
+       "type": "integer"
+      },
+      "trips": {
+       "type": "boolean"
+      }
+     }
+    },
+    "days_below_4": {
+     "type": "object",
+     "additionalProperties": false,
+     "required": [
+      "trips",
+      "value"
+     ],
+     "properties": {
+      "value": {
+       "type": "integer"
+      },
+      "trips": {
+       "type": "boolean"
+      }
+     }
+    },
+    "cell_below_10": {
+     "type": "object",
+     "additionalProperties": false,
+     "required": [
+      "trips",
+      "value"
+     ],
+     "properties": {
+      "value": {
+       "type": "object",
+       "additionalProperties": false,
+       "required": [
+        "10000",
+        "19458",
+        "2000"
+       ],
+       "properties": {
+        "2000": {
+         "type": "integer"
+        },
+        "10000": {
+         "type": "integer"
+        },
+        "19458": {
+         "type": "integer"
+        }
+       }
+      },
+      "trips": {
+       "type": "boolean"
+      }
+     }
+    },
+    "start_reading_invalid_over_10pct": {
+     "type": "object",
+     "additionalProperties": false,
+     "required": [
+      "trips",
+      "value"
+     ],
+     "properties": {
+      "value": {
+       "type": "number"
+      },
+      "trips": {
+       "type": "boolean"
+      }
+     }
+    },
+    "hp01_below_9": {
+     "type": "object",
+     "additionalProperties": false,
+     "required": [
+      "trips",
+      "value"
+     ],
+     "properties": {
+      "value": {
+       "type": [
+        "integer",
+        "null"
+       ]
+      },
+      "trips": {
+       "type": "boolean"
+      }
+     }
+    },
+    "any": {
+     "type": "boolean"
+    }
+   }
+  },
+  "counts": {
+   "type": "object",
+   "additionalProperties": false,
+   "required": [
+    "legs_named",
+    "legs_included",
+    "dev_included",
+    "in_energy_fit",
+    "hp_describe",
+    "type_T",
+    "by_block",
+    "by_cell",
+    "by_g0_role",
+    "by_day",
+    "excluded_by_rule"
+   ],
+   "properties": {
+    "legs_named": {
+     "type": "integer"
+    },
+    "legs_included": {
+     "type": "integer"
+    },
+    "dev_included": {
+     "type": "integer"
+    },
+    "in_energy_fit": {
+     "type": "integer"
+    },
+    "hp_describe": {
+     "type": "integer"
+    },
+    "type_T": {
+     "type": "integer"
+    },
+    "by_block": {
+     "type": "object",
+     "additionalProperties": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+       "included",
+       "named"
+      ],
+      "properties": {
+       "named": {
+        "type": "integer"
+       },
+       "included": {
+        "type": "integer"
+       }
+      }
+     }
+    },
+    "by_cell": {
+     "type": "object",
+     "additionalProperties": {
+      "type": "integer"
+     }
+    },
+    "by_g0_role": {
+     "type": "object",
+     "additionalProperties": {
+      "type": "integer"
+     }
+    },
+    "by_day": {
+     "type": "object",
+     "additionalProperties": {
+      "type": "integer"
+     }
+    },
+    "excluded_by_rule": {
+     "type": "object",
+     "additionalProperties": {
+      "type": "integer"
+     }
+    }
+   }
+  },
+  "meter_clock": {
+   "type": "object",
+   "additionalProperties": false,
+   "required": [
+    "max_abs_s",
+    "spans",
+    "threshold_s",
+    "to_research_lead"
+   ],
+   "properties": {
+    "spans": {
+     "type": "object",
+     "additionalProperties": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+       "end_minus_header_s",
+       "form"
+      ],
+      "properties": {
+       "form": {
+        "enum": [
+         "two_pairs",
+         "single_offset"
+        ]
+       },
+       "end_minus_header_s": {
+        "type": [
+         "number",
+         "null"
+        ]
+       }
+      }
+     }
+    },
+    "max_abs_s": {
+     "type": [
+      "number",
+      "null"
+     ]
+    },
+    "threshold_s": {
+     "const": 0.1
+    },
+    "to_research_lead": {
+     "type": "boolean"
+    }
+   },
+   "description": "RL-167 R-20: the KM003C clock check; over 0.1 s on any span goes to the research lead"
+  },
+  "active_readings": {
+   "type": "object",
+   "additionalProperties": false,
+   "required": [
+    "fan_rpm",
+    "tf08_c",
+    "tv0h_excess_c"
+   ],
+   "properties": {
+    "tf08_c": {
+     "type": "object",
+     "additionalProperties": false,
+     "required": [
+      "active",
+      "min_count_off_day",
+      "threshold",
+      "tolerance"
+     ],
+     "properties": {
+      "active": {
+       "type": "boolean"
+      },
+      "tolerance": {
+       "type": "number"
+      },
+      "min_count_off_day": {
+       "type": [
+        "integer",
+        "null"
+       ]
+      },
+      "threshold": {
+       "const": 6
+      }
+     }
+    },
+    "fan_rpm": {
+     "type": "object",
+     "additionalProperties": false,
+     "required": [
+      "active",
+      "min_count_off_day",
+      "threshold",
+      "tolerance"
+     ],
+     "properties": {
+      "active": {
+       "type": "boolean"
+      },
+      "tolerance": {
+       "type": "number"
+      },
+      "min_count_off_day": {
+       "type": [
+        "integer",
+        "null"
+       ]
+      },
+      "threshold": {
+       "const": 6
+      }
+     }
+    },
+    "tv0h_excess_c": {
+     "type": "object",
+     "additionalProperties": false,
+     "required": [
+      "active",
+      "min_count_off_day",
+      "threshold",
+      "tolerance"
+     ],
+     "properties": {
+      "active": {
+       "type": "boolean"
+      },
+      "tolerance": {
+       "type": "number"
+      },
+      "min_count_off_day": {
+       "type": [
+        "integer",
+        "null"
+       ]
+      },
+      "threshold": {
+       "const": 6
+      }
+     }
+    }
+   },
+   "description": "RL-166b B-2: a start reading is active when, for every fit day D, at least 6 energy-fit legs off day D have |z| above its tolerance (0.25 degC for Tf08 and TV0h excess, 25 rpm for the fan). min_count_off_day is the smallest such count over fit days. An inactive reading's kappa column and onset predictor are dropped everywhere."
+  },
+  "onsets_before_116_s": {
+   "type": "object",
+   "additionalProperties": false,
+   "required": [
+    "by_g0_role",
+    "onset_status",
+    "to_research_lead",
+    "total"
+   ],
+   "properties": {
+    "by_g0_role": {
+     "type": "object",
+     "additionalProperties": false,
+     "required": [
+      "capture",
+      "consume",
+      "null"
+     ],
+     "properties": {
+      "null": {
+       "type": "integer"
+      },
+      "capture": {
+       "type": "integer"
+      },
+      "consume": {
+       "type": "integer"
+      }
+     }
+    },
+    "total": {
+     "type": "integer"
+    },
+    "onset_status": {
+     "enum": [
+      "estimable",
+      "not_estimable"
+     ]
+    },
+    "to_research_lead": {
+     "type": "boolean"
+    }
+   },
+   "description": "RL-166b P-4: legs that start in state with an observed onset under 116.0 s from the turn start, by G0 role. to_research_lead is true when the onset model is not_estimable and total is above zero: the 116 s cut then does not stand by default."
+  },
+  "legs": {
+   "type": "array",
+   "items": {
+    "type": "object",
+    "additionalProperties": false,
+    "required": [
+     "block_id",
+     "cell_prompt_tokens",
+     "day",
+     "decode_tokens",
+     "g0_role",
+     "hp_describe",
+     "in_energy_fit",
+     "included",
+     "inclusion",
+     "leg_key",
+     "leg_type",
+     "load_s",
+     "marks",
+     "not_in_fit_reason",
+     "prefill_tokens",
+     "prefix_tails",
+     "role",
+     "segments",
+     "span_id",
+     "start",
+     "state",
+     "t_p_s",
+     "tau_hat_s"
+    ],
+    "properties": {
+     "leg_key": {
+      "type": "string",
+      "pattern": "^[a-z0-9-]+/[LH]\\d{3}$"
+     },
+     "span_id": {
+      "type": "string"
+     },
+     "block_id": {
+      "type": "string"
+     },
+     "day": {
+      "type": "string",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+     },
+     "role": {
+      "enum": [
+       "fit",
+       "describe"
+      ]
+     },
+     "leg_type": {
+      "enum": [
+       "A",
+       "T"
+      ]
+     },
+     "cell_prompt_tokens": {
+      "type": [
+       "integer",
+       "null"
+      ]
+     },
+     "g0_role": {
+      "enum": [
+       null,
+       "capture",
+       "consume"
+      ]
+     },
+     "marks": {
+      "type": "array",
+      "items": {
+       "enum": [
+        "reference from a redo",
+        "reference from an excluded leg"
+       ]
+      }
+     },
+     "inclusion": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+       "block_power_mode",
+       "g0_released",
+       "km003c_clean",
+       "not_a_contaminated_attempt",
+       "ran_to_cap",
+       "sidecar_coverage"
+      ],
+      "properties": {
+       "ran_to_cap": {
+        "type": "boolean"
+       },
+       "g0_released": {
+        "type": "boolean"
+       },
+       "sidecar_coverage": {
+        "type": "boolean"
+       },
+       "km003c_clean": {
+        "type": "boolean"
+       },
+       "not_a_contaminated_attempt": {
+        "type": "boolean"
+       },
+       "block_power_mode": {
+        "type": "boolean"
+       }
+      }
+     },
+     "included": {
+      "type": "boolean"
+     },
+     "in_energy_fit": {
+      "type": "boolean"
+     },
+     "hp_describe": {
+      "type": "boolean"
+     },
+     "not_in_fit_reason": {
+      "enum": [
+       null,
+       "excluded",
+       "type_T",
+       "start_reading_missing",
+       "describe_only"
+      ]
+     },
+     "prefill_tokens": {
+      "type": [
+       "integer",
+       "null"
+      ]
+     },
+     "decode_tokens": {
+      "type": [
+       "integer",
+       "null"
+      ]
+     },
+     "start": {
+      "oneOf": [
+       {
+        "type": "null"
+       },
+       {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+         "extrapolated",
+         "fan_rpm",
+         "state",
+         "status",
+         "tf08_c",
+         "tv0h_excess_c",
+         "z"
+        ],
+        "properties": {
+         "status": {
+          "enum": [
+           "ok",
+           "start_reading_missing"
+          ]
+         },
+         "state": {
+          "enum": [
+           "in_state",
+           "start_out_of_state",
+           "start_state_unobserved"
+          ]
+         },
+         "tf08_c": {
+          "type": [
+           "number",
+           "null"
+          ]
+         },
+         "fan_rpm": {
+          "type": [
+           "number",
+           "null"
+          ]
+         },
+         "tv0h_excess_c": {
+          "type": [
+           "number",
+           "null"
+          ]
+         },
+         "z": {
+          "type": [
+           "array",
+           "null"
+          ],
+          "items": {
+           "type": "number"
+          },
+          "minItems": 3,
+          "maxItems": 3
+         },
+         "extrapolated": {
+          "type": "boolean"
+         }
+        }
+       }
+      ]
+     },
+     "state": {
+      "oneOf": [
+       {
+        "type": "null"
+       },
+       {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+         "censored_at_s",
+         "first_off_kind",
+         "first_off_s",
+         "onset_use",
+         "unobserved_at_s"
+        ],
+        "properties": {
+         "first_off_s": {
+          "type": [
+           "number",
+           "null"
+          ]
+         },
+         "first_off_kind": {
+          "type": [
+           "string",
+           "null"
+          ]
+         },
+         "unobserved_at_s": {
+          "type": [
+           "number",
+           "null"
+          ]
+         },
+         "censored_at_s": {
+          "type": [
+           "number",
+           "null"
+          ]
+         },
+         "onset_use": {
+          "enum": [
+           "uncensored",
+           "censored",
+           "left_out_start_out_of_state",
+           "left_out_state_unobserved",
+           "left_out_missing_start",
+           "not_in_fit"
+          ]
+         }
+        }
+       }
+      ]
+     },
+     "t_p_s": {
+      "type": [
+       "number",
+       "null"
+      ]
+     },
+     "load_s": {
+      "type": [
+       "number",
+       "null"
+      ]
+     },
+     "tau_hat_s": {
+      "type": [
+       "number",
+       "null"
+      ]
+     },
+     "segments": {
+      "type": "array",
+      "items": {
+       "type": "object",
+       "additionalProperties": false,
+       "required": [
+        "edge_hi",
+        "edge_lo",
+        "first_token_s",
+        "hot",
+        "kind",
+        "n_tokens",
+        "seg",
+        "tok_first",
+        "tok_last",
+        "u_s",
+        "v_s",
+        "wall_end_s",
+        "wall_start_s"
+       ],
+       "properties": {
+        "seg": {
+         "type": "integer"
+        },
+        "kind": {
+         "enum": [
+          "prefill",
+          "decode"
+         ]
+        },
+        "block": {
+         "type": "integer"
+        },
+        "n_tokens": {
+         "type": "integer"
+        },
+        "edge_lo": {
+         "type": [
+          "integer",
+          "null"
+         ]
+        },
+        "edge_hi": {
+         "type": [
+          "integer",
+          "null"
+         ]
+        },
+        "tok_first": {
+         "type": [
+          "integer",
+          "null"
+         ]
+        },
+        "tok_last": {
+         "type": [
+          "integer",
+          "null"
+         ]
+        },
+        "wall_start_s": {
+         "type": "number"
+        },
+        "wall_end_s": {
+         "type": "number"
+        },
+        "first_token_s": {
+         "type": [
+          "number",
+          "null"
+         ]
+        },
+        "u_s": {
+         "type": "number"
+        },
+        "v_s": {
+         "type": "number"
+        },
+        "hot": {
+         "type": "boolean"
+        }
+       }
+      }
+     },
+     "prefix_tails": {
+      "type": "array",
+      "items": {
+       "type": "object",
+       "additionalProperties": false,
+       "required": [
+        "edge_hi",
+        "edge_lo",
+        "first_token_s",
+        "kind",
+        "n_tokens",
+        "prefix_len",
+        "tok_first",
+        "tok_last",
+        "u_s",
+        "v_s",
+        "wall_end_s",
+        "wall_start_s"
+       ],
+       "properties": {
+        "prefix_len": {
+         "enum": [
+          3724,
+          3151,
+          2981
+         ]
+        },
+        "kind": {
+         "const": "prefix_tail"
+        },
+        "tok_first": {
+         "type": "integer"
+        },
+        "tok_last": {
+         "type": "integer"
+        },
+        "n_tokens": {
+         "type": "integer"
+        },
+        "edge_lo": {
+         "type": "integer"
+        },
+        "edge_hi": {
+         "type": "integer"
+        },
+        "wall_start_s": {
+         "type": "number"
+        },
+        "wall_end_s": {
+         "type": "number"
+        },
+        "first_token_s": {
+         "type": "number"
+        },
+        "u_s": {
+         "type": "number"
+        },
+        "v_s": {
+         "type": "number"
+        }
+       }
+      }
+     }
+    }
+   }
+  }
+ }
+}
