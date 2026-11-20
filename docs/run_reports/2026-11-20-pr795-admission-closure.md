@@ -29,10 +29,11 @@ pinned in the draft manifest and recorded in stage 1's code set.
 
 | Check | Result |
 | --- | --- |
-| Frozen matrix, real two-stage CLI, 8 shards plus the five audit-3 reproductions | 101,886 of 101,889 pass |
-| The three open cases | Held open by id, see NEEDS_SPEC below |
+| Frozen matrix, real two-stage CLI, 8 shards plus the five audit-3 reproductions | 101,889 of 101,889 pass: 101,886 under the suite's expectations, 3 under the corrected expectations |
+| The three corrected cases | Pass the full positive `signal-130` CLI check, see below |
 | Audit-3's five reproductions | Pass: each exits 2 before any protected open |
 | F1 to F5 | Pass (84 of 84) |
+| Accounting | A separate CI job reads the eight shard ledgers and fails unless every distinct ID is in exactly one ledger and passed |
 | In-process projection over the same corpus | `tests/cadence/test_interim_admission.py`, numpy-free |
 | CI | The matrix runs in its own eight-shard job; the module is an exclusive module in `scripts/test_timings.json` |
 
@@ -59,12 +60,32 @@ the new messages and keeps its purpose: stage 2 refuses the same shapes before t
 subprocess with a 1,800 s ceiling. On this host (load average above 200 from other lanes) it times out before and after
 this round; the changed modules pass individually on a frozen copy of the tree.
 
-## NEEDS_SPEC: three cases no grammar can satisfy
+## The three corrected cases (resolved NEEDS_SPEC)
 
-`missing-key/<pin>/interrupt-after-result/runner_receipt.json/steps/13/result/remove` (three pins). The case removes
-the soak step's `result` from the interrupted-after-result receipt, leaving `rc` 130, `error` `SystemExit: 130` and no
-result, and expects refusal. The same suite admits that exact shape as `signal-130`, and GRAMMAR.md says an interruption
-"can leave ... an error without a result". The mutated receipt and the admitted `signal-130` receipt differ only in
-step timestamps (the soak step spans 1,800 s in one and 0 s in the other), and a real signal 1,800 s into the soak
-leaves exactly the former. Refusing it would refuse a producible receipt. `tests/cadence/interim_admission_open.json`
-holds the three ids open; the CI runner fails if a held-open case starts passing, so the list cannot go stale.
+`missing-key/<pin>/interrupt-after-result/runner_receipt.json/steps/13/result/remove` for `b4b6aeb19`, `2d347f721` and
+`6e9d42f1d`. The case removes the soak step's `result` from the interrupted-after-result receipt, leaving `rc` 130,
+`error` `SystemExit: 130` and no result, and the frozen suite expects refusal. The same suite admits that exact shape as
+`signal-130`; the two receipts differ only in step timestamps (the soak step spans 1,800 s in one and 0 s in the
+other). I reported that no grammar can satisfy both.
+
+The lead ruled on 2026-11-20: under RL-184 section 3.3 each pinned writer can produce that receipt. A SIGINT before the
+writer stores `result` makes its exception handler record `rc` 130 and `error` `SystemExit: 130`, and its `finally`
+block record `ended`; that can happen 1,800 s into the soak. The three cases are re-expected as `ADMIT` and the existing
+`signal-130` grammar applies, including every other receipt check.
+
+* The frozen suite and corpus are unchanged byte for byte. `tests/cadence/interim_admission_frozen.sha256` holds the
+  suite's own 25 test-side hash lines verbatim; CI recomputes each file's hash, requires the corpus directory to hold
+  nothing else, and recomputes the suite's published case-ID and expectation hashes.
+* The correction lives outside the frozen files: `tests/cadence/interim_admission_corrections.json` (version 1) names the
+  three IDs and the hash of the corrected expectations. A correction never removes a case; it changes what the case is
+  judged against, and CI fails if a corrected case is absent, already admitted, or no longer changes its expectation.
+* A corrected case is judged ADMIT by the suite's own assertions for an admitted case on the same mutation in the
+  positive roster, plus the ruling's terms stated outright: stage 1 exits 0 and writes its output, preflight returns
+  before the first protected open, and there are zero response reads, zero reservations and zero public writes.
+* `tests/cadence/interim_admission_open.json` (the held-open list) is removed. There is no held-open case.
+* The `interim-admission-accounting` job downloads the eight shard ledgers and fails on a missing or duplicate ID, a
+  case that did not pass, a case judged on the wrong expectation, a ledger from the wrong shard count, or a shard that
+  is absent. It reports `101,886` judged under the original expectations and `3` under the corrected ones.
+* `tests/cadence/test_interim_admission.py` covers the corrected shape (it is the signal-130 receipt with other
+  timestamps; every other receipt check still refuses), the frozen-hash check, the case-list and correction checks, and
+  every accounting failure.

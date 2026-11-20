@@ -12,15 +12,24 @@ import hashlib
 import json
 from pathlib import Path
 import sys
+import tempfile
 import unittest
+import unittest.mock
 
 from joulewise.cadence_looks import admission as A, admission_kits as K, admission_shape as S
+from tests.cadence import interim_admission_accounting as ACC
 
 REPO = Path(__file__).resolve().parents[2]
 try:
     from tests.cadence import test_interim_admission_closure as T
 except ModuleNotFoundError:                           # pragma: no cover - the frozen packet is part of the checkout
     T = None
+CORRECTED = frozenset(ACC.load_corrections()["expect_admit"])
+
+
+def admitted_as_ruled(case):
+    """The suite's expectation with the committed correction applied (tests/cadence/interim_admission_corrections.json)."""
+    return T.admits(case) or case.name in CORRECTED
 
 
 class Mem:
@@ -154,15 +163,15 @@ class FrozenCorpus(unittest.TestCase):
         return files
 
     def test_every_unmodified_production_is_admitted(self):
-        admits = [case for case in self.cases if T.admits(case)]
-        self.assertEqual({case.family for case in admits}, {"admit", "F1", "F2", "F3", "F5"})
+        admits = [case for case in self.cases if admitted_as_ruled(case)]
+        self.assertEqual({case.family for case in admits}, {"admit", "F1", "F2", "F3", "F5", "missing-key"})
         for case in admits:
             with self.subTest(case.name):
                 self.assertIsNone(verdict(self.files(case)))
 
     def test_a_sample_of_every_mutation_class_is_refused(self):
         """The first case of each family, then every 37th: all families, a few percent of the cases."""
-        refusing = [case for case in self.cases if not T.admits(case)]
+        refusing = [case for case in self.cases if not admitted_as_ruled(case)]
         families = {}
         for case in refusing:
             families.setdefault(case.family, []).append(case)
@@ -176,7 +185,7 @@ class FrozenCorpus(unittest.TestCase):
         for case in self.cases:
             if case.family in ("F2", "F4", "F5"):
                 with self.subTest(case.name):
-                    self.assertEqual(verdict(self.files(case)) is None, T.admits(case))
+                    self.assertEqual(verdict(self.files(case)) is None, admitted_as_ruled(case))
 
     def test_the_five_audit_three_reproductions_refuse(self):
         docs = T.document_set("b4b6aeb19", "normal", self.corpus)
@@ -204,6 +213,172 @@ class FrozenCorpus(unittest.TestCase):
         marked["synthetic"] = True
         message = verdict({**render(docs), T.RECEIPT: T.doc_bytes(T.RECEIPT, marked)})
         self.assertIsNotNone(message)           # the generator's closed shape is not a pinned writer's
+
+
+@unittest.skipIf(T is None, "the frozen admission packet is absent")
+class SignalWithoutResult(unittest.TestCase):
+    """The three corrected cases (lead, PR #795 NEEDS_SPEC): an interrupted soak step that has an error and no result."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.corpus = T.load_corpus()
+        cls.cases = {case.name: case for case in T.cases() if case.name in CORRECTED}
+
+    def mutated(self, pin, branch="interrupt-after-result", step="soak"):
+        docs = T.document_set(pin, branch, self.corpus)
+        receipt = json.loads(json.dumps(docs[T.RECEIPT]))
+        row = next(row for row in receipt["steps"] if row["name"] == step)
+        return docs, receipt, row
+
+    @staticmethod
+    def without_stamps(receipt):
+        """The receipt with every clock stamp removed: the only thing that tells two interruptions apart."""
+        doc = json.loads(json.dumps(receipt))
+        doc.pop("ended", None)
+        for row in doc["steps"]:
+            row.pop("started", None)
+            row.pop("ended", None)
+        return doc
+
+    def test_exactly_the_three_pins_are_corrected(self):
+        self.assertEqual(len(self.cases), 3)
+        self.assertEqual({name.split("/")[1] for name in self.cases}, {"b4b6aeb19", "2d347f721", "6e9d42f1d"})
+        for name, case in self.cases.items():
+            self.assertFalse(T.admits(case))                    # the suite's own expectation is unchanged
+            self.assertEqual((case.family, case.branch, case.file, case.op),
+                             ("missing-key", "interrupt-after-result", T.RECEIPT, "remove"))
+            self.assertEqual(name.rsplit("/", 5)[-5:], ["runner_receipt.json", "steps", "13", "result", "remove"])
+
+    def test_each_is_a_receipt_the_writer_can_produce(self):
+        """Removing the result leaves rc 130, 'SystemExit: 130' and no result: the signal-130 receipt at another time."""
+        for pin in ("b4b6aeb19", "2d347f721", "6e9d42f1d"):
+            with self.subTest(pin=pin):
+                docs, receipt, row = self.mutated(pin)
+                self.assertEqual((row["rc"], row["error"], row["result"]["rc"]), (130, "SystemExit: 130", 0))
+                del row["result"]
+                self.assertIsNone(verdict({**render(docs), T.RECEIPT: T.doc_bytes(T.RECEIPT, receipt)}))
+                signal = T.document_set(pin, "signal-130", self.corpus)[T.RECEIPT]
+                self.assertEqual(self.without_stamps(receipt), self.without_stamps(signal))
+                self.assertGreater(row["ended"]["monotonic_ns"] - row["started"]["monotonic_ns"], 1_000 * 10 ** 9)
+
+    def test_every_other_receipt_check_still_applies(self):
+        for pin in ("b4b6aeb19", "2d347f721", "6e9d42f1d"):
+            docs, receipt, row = self.mutated(pin)
+            del row["result"]
+            changes = {
+                "the code no longer matches its error": lambda r, s: s.update(rc=0),
+                "the span code no longer matches": lambda r, s: r.update(rc=2),
+                "the error is gone": lambda r, s: s.pop("error"),
+                "the error is null": lambda r, s: s.update(error=None),
+                "another signal's error": lambda r, s: s.update(error="SystemExit: 143"),
+                "an unknown member": lambda r, s: s.update(unissued=True),
+                "a result of the wrong kind": lambda r, s: s.update(result=[]),
+                "a step after the stop": lambda r, s: r["steps"].insert(
+                    r["steps"].index(s) + 1, dict(name="L001.a1", rc=0, started=s["started"], ended=s["ended"],
+                                                  result={"rc": 0})),
+                "a soak reference the soak never returned": lambda r, s: r.update(soak_reference="span/soak/x.json"),
+            }
+            for label, change in changes.items():
+                doc = json.loads(json.dumps(receipt))
+                change(doc, next(item for item in doc["steps"] if item["name"] == "soak"))
+                with self.subTest(pin=pin, label=label):
+                    self.assertIsNotNone(verdict({**render(docs), T.RECEIPT: T.doc_bytes(T.RECEIPT, doc)}))
+
+
+class Accounting(unittest.TestCase):
+    """The frozen files, the case list and the ledgers that prove every case ran exactly once."""
+
+    @unittest.skipIf(T is None, "the frozen admission packet is absent")
+    def test_the_frozen_files_and_the_case_list_match_the_published_hashes(self):
+        self.assertEqual(ACC.verify_frozen(), [])
+        cases, problems = ACC.verify_case_list(T)
+        self.assertEqual((problems, len(cases)), ([], 101889))
+
+    def test_a_changed_frozen_file_or_an_extra_one_is_found(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            (root / "corpus").mkdir()
+            (root / "suite.py").write_bytes(b"suite\n")
+            (root / "corpus" / "a.json").write_bytes(b"a\n")
+            manifest = root / "frozen.sha256"
+            manifest.write_text("".join(f"{ACC.sha256_bytes(root.joinpath(name).read_bytes())}  {name}\n"
+                                        for name in ("suite.py", "corpus/a.json")))
+            with unittest.mock.patch.multiple(ACC, ROOT=root, FROZEN=manifest, CORPUS=root / "corpus"):
+                self.assertEqual(ACC.verify_frozen(), [])
+                (root / "corpus" / "extra.json").write_bytes(b"x\n")
+                self.assertEqual(ACC.verify_frozen(), ["corpus/extra.json: in the frozen corpus directory but not in the manifest"])
+                (root / "corpus" / "extra.json").unlink()
+                (root / "suite.py").write_bytes(b"edited\n")
+                self.assertEqual(ACC.verify_frozen(), ["suite.py: differs from the frozen hash"])
+                (root / "suite.py").unlink()
+                self.assertEqual(ACC.verify_frozen(), ["suite.py: absent"])
+
+    @unittest.skipIf(T is None, "the frozen admission packet is absent")
+    def test_the_committed_manifest_is_the_suites_own_test_side_lines(self):
+        lines = ACC.FROZEN.read_text().splitlines()
+        self.assertEqual(len(lines), 25)
+        self.assertTrue(all(line.partition("  ")[2].startswith("tests/cadence/") for line in lines))
+        self.assertIn(f"{hashlib.sha256((REPO / 'tests/cadence/test_interim_admission_closure.py').read_bytes()).hexdigest()}"
+                      "  tests/cadence/test_interim_admission_closure.py", lines)
+
+    @unittest.skipIf(T is None, "the frozen admission packet is absent")
+    def test_a_changed_case_list_or_a_stale_correction_is_found(self):
+        real = ACC.load_corrections()
+        for label, change, text in (
+                ("case ids", {"case_id_sha256": "0" * 64}, "ordered case IDs"),
+                ("original oracle", {"original_oracle_sha256": "0" * 64}, "original expectations"),
+                ("corrected oracle", {"corrected_oracle_sha256": "0" * 64}, "corrected expectations"),
+                ("total", {"total_cases": 101888}, "not 101888"),
+                ("unknown id", {"expect_admit": real["expect_admit"] + ["no/such/case"]}, "not in the suite"),
+                ("already admitted", {"expect_admit": real["expect_admit"] + [next(
+                    c.name for c in T.cases() if T.admits(c))]}, "already admitted")):
+            with self.subTest(label), unittest.mock.patch.object(ACC, "load_corrections", return_value={**real, **change}):
+                self.assertTrue(any(text in problem for problem in ACC.verify_case_list(T)[1]))
+
+    def case(self, name, family="x"):
+        return type("Case", (), {"name": name, "family": family})()
+
+    def ledgers(self, names, total=2, corrected=frozenset()):
+        out = [{"index": i, "total": total, "rows": []} for i in range(total)]
+        for position, name in enumerate(names):
+            basis = "corrected" if name in corrected else "original"
+            out[position % total]["rows"].append([name, basis, True])
+        return out
+
+    def test_a_complete_set_of_ledgers_is_accounted_for(self):
+        names = [f"case-{i}" for i in range(7)]
+        cases = [self.case(n) for n in names]
+        problems, counts = ACC.account(self.ledgers(names, corrected={"case-3"}), cases, 2, frozenset({"case-3"}))
+        self.assertEqual((problems, counts), ([], {"original": 6, "corrected": 1, "failed": 0}))
+
+    def test_a_missing_duplicate_failed_or_misjudged_case_is_found(self):
+        names = [f"case-{i}" for i in range(7)]
+        cases = [self.case(n) for n in names]
+        corrected = frozenset({"case-3"})
+
+        def problems_of(mutate):
+            ledgers = self.ledgers(names, corrected=corrected)
+            mutate(ledgers)
+            return ACC.account(ledgers, cases, 2, corrected)[0]
+
+        self.assertTrue(any("in no shard ledger" in p for p in problems_of(lambda l: l[0]["rows"].pop())))
+        self.assertTrue(any("in shard" in p for p in problems_of(lambda l: l[1]["rows"].append(l[0]["rows"][0]))))
+        self.assertTrue(any("failed its original" in p for p in problems_of(lambda l: l[0]["rows"][0].__setitem__(2, False))))
+        self.assertTrue(any("judged on the" in p for p in problems_of(lambda l: l[0]["rows"][0].__setitem__(1, "corrected"))))
+        self.assertTrue(any("judged on the" in p for p in problems_of(
+            lambda l: [r.__setitem__(1, "original") for led in l for r in led["rows"] if r[0] == "case-3"])))
+        self.assertTrue(any("not 0 to 1" in p for p in problems_of(lambda l: l.pop())))
+        self.assertTrue(any("not in the suite" in p for p in problems_of(lambda l: l[0]["rows"].append(["extra", "original", True]))))
+        self.assertTrue(any("not of 2" in p for p in problems_of(lambda l: l[0].update(total=3))))
+        self.assertTrue(any("failed its corrected" in p for p in problems_of(
+            lambda l: [r.__setitem__(2, False) for led in l for r in led["rows"] if r[0] == "case-3"])))
+
+    @unittest.skipIf(T is None, "the frozen admission packet is absent")
+    def test_the_shards_own_every_case_exactly_once(self):
+        cases = T.cases()
+        owned = [name for index in range(8) for name in ACC.expected_ids(cases, index, 8)]
+        self.assertEqual(sorted(owned), sorted(case.name for case in cases))
+        self.assertEqual(len(set(owned)), len(cases))
 
 
 class KitTable(unittest.TestCase):

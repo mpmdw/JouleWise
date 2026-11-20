@@ -1,8 +1,8 @@
 # JouleWise Task Queue
 
-PR #795 audit 3 (2026-11-20), [AGENT]. Rule on the three held-open admission cases
-(an interrupted-after-result soak step with its result removed is the shape `signal-130`
-admits), then Astra re-audits the grammar against the three writer pins.
+PR #795 audit 3 (2026-11-20), [AGENT]. Astra re-audits the grammar against the three
+writer pins and the accounting job's ledger (101,889 IDs once each: 101,886 original and
+three corrected expectations, `tests/cadence/interim_admission_corrections.json`).
 [Fix report](docs/run_reports/2026-11-20-pr795-admission-closure.md).
 
 PR #795 fix round 2 (2026-11-19), [AGENT]. Astra audits the stage-1 closed
