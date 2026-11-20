@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from contextlib import ExitStack
 import hashlib
+import io
 import json
 import math
 import os
@@ -22,6 +23,11 @@ SOAK_REFERENCE = "soak_reference.json"
 BATTERY_SOURCE = "battery.jsonl"
 SOAK_FILES = ("runtime_result.json", "sensors/align_thermal.jsonl", "load_journal.json", BATTERY_SOURCE)
 D = re.compile(r"[0-9a-f]{64}\Z")
+# RL-189 1.2: the member row's witness of <model.source>/config.json.
+DESCRIPTOR_FIELD = "model_descriptor_sha256"
+DESCRIPTOR_WORDS = ("absent", "unreadable")
+DESCRIPTOR_SOURCE = "model.source/config.json"
+LOCK_FD_LIMIT = 4096  # descriptor numbers a launcher may hand its child for the host lock
 KINDS = {
     "capture-predecessor-30b": "capture_predecessor_30b",
     "step-d": "step_D_prefill_10k_decode_4096",
@@ -143,6 +149,41 @@ def read_regular(root, relative, *, compressed=False):
             return stream.read()
 
 
+def observe_descriptor(source):
+    """Observe the bytes frozen ``prepare`` reads for the native limit (WL:265-268).
+
+    Returns the witness (a sha256, ``absent`` or ``unreadable``) and the bytes.
+    The read follows links exactly as the frozen ``read_text`` does. It never raises.
+    """
+    try:
+        if not isinstance(source, str) or not source:
+            return "unreadable", None
+        raw = (Path(source).expanduser() / "config.json").read_bytes()
+    except (FileNotFoundError, NotADirectoryError):
+        return "absent", None
+    except (OSError, ValueError, RuntimeError):
+        return "unreadable", None
+    return digest(raw), raw
+
+
+def native_limit(raw):
+    """WL:268-272 applied to descriptor bytes: a positive integer, or None for an unread limit."""
+    if raw is None:
+        return None
+    try:
+        # ``Path.read_text()`` decodes with the default text layer; json.loads is the frozen parser.
+        value = json.loads(io.TextIOWrapper(io.BytesIO(raw)).read()).get("max_position_embeddings")
+        if type(value) is not int or value <= 0:
+            raise ValueError("max_position_embeddings must be a positive integer")
+    except (OSError, ValueError, AttributeError):
+        return None
+    return value
+
+
+def is_descriptor_witness(value):
+    return isinstance(value, str) and (value in DESCRIPTOR_WORDS or D.fullmatch(value) is not None)
+
+
 def _hash_text(value):
     # An unavailable stream has no observation. Its digest is distinct from
     # the empty stream, whose SHA-256 is still recorded.
@@ -160,6 +201,7 @@ class EvidenceLedger:
         self._lines = []
         self._members = {}
         self._bound_members = {}
+        self._descriptors = {}
         self.mode = mode
         self._kinds = {"idle": SOAK_SEGMENT} if mode == "soak" else KINDS
         self.runtime_config = Path(runtime_config)
@@ -223,8 +265,13 @@ class EvidenceLedger:
         if self._soak is not None:
             self._soak.verify_reads()
 
-    def member_return(self, kind, output, argv, *, process=None, error=None, spawned=None):
-        """Bind a return before interpreting its streams or opening a member file."""
+    def member_return(self, kind, output, argv, *, process=None, error=None, spawned=None,
+                      model_descriptor=None):
+        """Bind a return before interpreting its streams or opening a member file.
+
+        ``model_descriptor`` is the judged invoker's RL-189 witness for a member
+        that was launched. It joins this row and no other.
+        """
         segment = self._kinds.get(kind)
         if segment is None or Path(output) != self.root / segment:
             raise EvidenceFailure("sequence", kind if kind in self._kinds else "attempt", LEDGER_NAME)
@@ -246,7 +293,8 @@ class EvidenceLedger:
             stdout, stderr = process.stdout, getattr(process, "stderr", None)
         row = self._append({"attempt": self.attempt, "kind": kind, "argv_sha256": digest(canonical(argv)),
                             **outcome, "stdout_sha256": _hash_text(stdout), "stderr_sha256": _hash_text(stderr),
-                            "segment": segment, "manifest": terminal})
+                            "segment": segment, "manifest": terminal,
+                            **({} if model_descriptor is None else {DESCRIPTOR_FIELD: model_descriptor})})
         self._members[kind] = row
         if unreadable:
             raise EvidenceFailure("source_integrity", kind, MANIFEST_NAME)
@@ -264,6 +312,33 @@ class EvidenceLedger:
             self._bound_members[kind] = BoundMember(self.root / row["segment"], kind, self.config_sha,
                                                    manifest_sha=row["manifest"]["sha256"], status="complete")
         return self._bound_members[kind]
+
+    @staticmethod
+    def descriptor_witness(source):
+        """RL-189 1.2: what the judged invoker writes in a launched member's row."""
+        return observe_descriptor(source)[0]
+
+    def model_descriptor(self, kind, source):
+        """RL-189 D1 and D2: the row's witness must exist and equal the evaluator's own read.
+
+        Returns the bytes behind the attested limit, or None for a bound
+        ``absent`` or ``unreadable`` descriptor. The source stays registered
+        for the final recheck.
+        """
+        self.verify_chain()
+        row = self._members.get(kind)
+        if row is None or not is_descriptor_witness(row.get(DESCRIPTOR_FIELD)):
+            raise EvidenceFailure("evidence_unverifiable", kind, LEDGER_NAME, field=DESCRIPTOR_FIELD)
+        witness, raw = observe_descriptor(source)
+        if witness != row[DESCRIPTOR_FIELD]:
+            raise EvidenceFailure("source_integrity", kind, DESCRIPTOR_SOURCE, peer=LEDGER_NAME)
+        self._descriptors[kind] = source
+        return raw
+
+    def verify_descriptor(self, kind):
+        row, source = self._members.get(kind), self._descriptors.get(kind)
+        if row is None or source is None or observe_descriptor(source)[0] != row.get(DESCRIPTOR_FIELD):
+            raise EvidenceFailure("source_integrity", kind, DESCRIPTOR_SOURCE, peer=LEDGER_NAME)
 
     def refusal(self, kind):
         self.verify_chain()
@@ -322,6 +397,8 @@ class EvidenceLedger:
         self.verify_inputs()
         for bound in self._bound_members.values():
             bound.verify_reads()
+        for kind in self._descriptors:
+            self.verify_descriptor(kind)
         contrast = self._members.get("x-g")
         if contrast is not None and "x-g" not in self._bound_members:
             self.refusal("x-g")
@@ -460,6 +537,7 @@ class BoundSoak:
         self.member = BoundMember(self.root / SOAK_SEGMENT, "idle", self.config_sha,
                                   manifest_sha=manifest["sha256"])
         self.sources = {name: self.member.read(name, name) for name in SOAK_FILES}
+        self.argv_sha256 = returned["argv_sha256"]
 
         # 6. The outer row, saved receipt and stdout must be the same observation.
         self.row = self._object(outer_row, SOAK_ROW)
@@ -480,6 +558,21 @@ class BoundSoak:
         if _hash_text(line) != returned["stdout_sha256"]:
             raise EvidenceFailure("receipt_pair", "idle", SOAK_FILES[0], field="disagrees", peer="stdout")
         self.verify_reads()
+
+    def verify_argv(self, runtime, duration):
+        """EVIDENCE-SPEC row 23: the idle row binds the argument list of this soak and no other.
+
+        Only a digest is bound, so every list the frozen invoker can build for the issued soak
+        is tried: the phase table's duration as the launcher or the plan spells it, with the
+        host lock not held or held on any descriptor.
+        """
+        head = [*runtime, "--r1-kind", "idle", "--output", self.row["output_dir"]]
+        spellings = {str(float(duration))} | ({str(int(duration))} if float(duration).is_integer() else set())
+        tails = [["--duration-s", spelling] for spelling in sorted(spellings)]
+        for lock in ([], *(["--host-lock-fd", str(fd)] for fd in range(LOCK_FD_LIMIT))):
+            if any(digest(canonical([*head, *lock, *tail])) == self.argv_sha256 for tail in tails):
+                return
+        raise EvidenceFailure("sequence", "idle", LEDGER_NAME, field="argv_sha256", peer="issued_inputs")
 
     def _read(self, filename, expected, *, missing="source_integrity"):
         if not _is_digest(expected):
@@ -563,16 +656,18 @@ def verify_part_c_publication(run_root, soak_ledger_sha256, soak_reference_sha25
                 LEDGER_NAME)
         require(_is_digest(row.get("argv_sha256")), LEDGER_NAME)
         code, manifest = row.get("exit_status"), row.get("manifest")
+        # RL-189: a judged member's row carries its descriptor witness.
         completed = (type(code) is int and code == 0 and row.get("spawned") is True
                      and isinstance(manifest, dict) and manifest.get("path") == f"{path}/{MANIFEST_NAME}"
                      and _is_digest(manifest.get("sha256")) and _is_digest(row.get("stdout_sha256"))
-                     and _is_digest(row.get("stderr_sha256")))
+                     and _is_digest(row.get("stderr_sha256"))
+                     and is_descriptor_witness(row.get(DESCRIPTOR_FIELD)))
         refused = (kind == "x-g" and (
             type(code) is int and code == 2 and row.get("spawned") is True
             and row.get("stdout_sha256") == _hash_text("") and _is_digest(row.get("stderr_sha256"))
             or row.get("spawned") is False and row.get("exception") == "RuntimeAdmissionRefusal"
             and manifest == "absent"
-        ))
+        ) and (DESCRIPTOR_FIELD not in row or is_descriptor_witness(row[DESCRIPTOR_FIELD])))
         require(completed or refused, LEDGER_NAME)
 
     names = ("smoke_part_c.json", "smoke.json")

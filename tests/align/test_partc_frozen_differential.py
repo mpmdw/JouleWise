@@ -12,6 +12,9 @@ perturbs entire repeated series. JW_PARTC_ALL_OCCURRENCES=1 additionally isolate
 every array index; JW_PARTC_SHARD=i/n partitions either matrix (zero-based).
 FALSE_PASS means the public native evaluator accepted a contradictory claim.
 REFUSED means it rejected one. OTHER_REFUSAL records a stricter native check.
+RL-189 adds sixteen native descriptor cases. These run serially against the
+single synthetic mirror after all concurrent readers finish. A missing clean
+binding is reported separately so the full matrix can still be evaluated.
 The evaluator comes from the working tree. The versioned fixture and the R1
 oracle are materialized separately from Git. No checkout, fetch or host runtime.
 """
@@ -49,6 +52,8 @@ P, S, D, X = "capture-predecessor-30b", "step-d", "d-bank-benign-s1", "x-g"
 SUBJECTS = ("scripts.align_r1_part_c", "scripts.align_r1_part_c_evidence")
 RECEIPT = "runtime_result.json"
 OUTER = ("soak_reference.json", "soak_row.json")
+DESCRIPTOR_FIELD = "model_descriptor_sha256"
+LIMIT_FIELD = "context_limits.max_position_embeddings"
 REG = "joulewise/align/apple/v4_registration.py"
 HERE = Path(__file__).resolve()
 
@@ -562,7 +567,7 @@ def replay_workload(bundle, ep, *, construct=False):
                   *[("decode","token")]*count, ("decode","phase_end")], "native phase and token order")
             first_ns = round(phases[1]["timestamp_s"]*N)
             need(start <= first_ns <= end and first_ns == t.first_token_ns, "first token")
-            need(start <= phases[0]["timestamp_s"]*N and
+            need(phases[0]["timestamp_s"]*N == start and
                  round(phases[-2]["timestamp_s"]*N) <= round(phases[-1]["timestamp_s"]*N) <= end,
                  "native decode-end bracket")
             need([e["metadata"]["index"] for e in phases[3:-1]] == list(range(count)), "token indices")
@@ -803,8 +808,41 @@ def new_fixture():
     return case
 
 
+def issue_model_source():
+    """Change only the model.source in private fixture copies of the issued templates."""
+    configured, _ = rt.load_config(rt.ROOT / r1.DEFAULT_RUNTIME_CONFIG)
+    for key in ("model_30b", "d_spam", "d_bank", "x_g"):
+        template = rt.resolve(configured["templates"][key])
+        assert template.is_relative_to(rt.ROOT)
+        config = read(template)
+        config["model"]["source"] = str(MODEL_DIR)
+        write(template, config)
+
+
+def clean_bindings(ledger):
+    # A verified bundle can supply the path in a supplemental chained row.
+    # Its binding belongs to the preceding member until the next return.
+    bindings = {role: [] for role in (P, S, D, X)}
+    supplemental = set()
+    member = None
+    for row in ledger:
+        # The terminal verdict closes the ledger. It cannot attest X-G's return.
+        if "verdict" in row:
+            break
+        if "manifest" in row:
+            member = row["kind"]
+        if DESCRIPTOR_FIELD in row:
+            role = row.get("kind")
+            if member not in bindings or (role in bindings and role != member):
+                raise AssertionError("descriptor binding outside its member's return")
+            bindings[member].append(row[DESCRIPTOR_FIELD])
+            if "manifest" not in row:
+                supplemental.add(member)
+    return bindings, supplemental
+
+
 def control(directory):
-    global CONFIG
+    global CONFIG, SUPPLEMENTAL_BINDINGS
     case = new_fixture()
     CONFIG = rt.load_config(case.attempt.config)[0]
     ledger_fixture = importlib.import_module("tests.test_part_c_evidence_ledger")
@@ -822,6 +860,7 @@ def control(directory):
         ref = None if kind == "idle" else read(case.attempt.reference)
         if kind != "idle":
             bundle = segment / receipt["bundle"]
+            assert read(bundle / "config.json")["model"]["source"] == str(MODEL_DIR)
             replay_workload(bundle, wl.read_episode_bundle(bundle), construct=True)
         frozen = derive(segment, kind, receipt, ref)
         receipt.update(frozen)
@@ -854,6 +893,9 @@ def control(directory):
             shutil.copytree(source, directory / kind)
         shutil.copytree(case.attempt.directory, directory / "soak")
         write(directory / "reference.json", read(case.attempt.reference))
+        bindings, SUPPLEMENTAL_BINDINGS = clean_bindings(rows(case.attempt.output / "evidence_ledger.jsonl"))
+        expected = hashlib.sha256((MODEL_DIR / "config.json").read_bytes()).hexdigest()
+        return [role for role, seen in bindings.items() if seen != [expected]]
     finally:
         case.doCleanups()
 
@@ -890,6 +932,16 @@ class Mutation:
     @property
     def name(self):
         return "/".join((self.role, self.file, ".".join(map(str, self.path)), self.op))
+
+
+@dataclass(frozen=True)
+class DescriptorCase:
+    role: str
+    op: str
+
+    @property
+    def name(self):
+        return f"{self.role}/descriptor/{self.op}"
 
 
 def load_doc(path):
@@ -1023,6 +1075,9 @@ def cases(base):
             file = file.replace("runs/member/",f"runs/{bundle.name}/",1)
         for op in ops:
             yield Mutation(role, file, (), op)
+    for role in (P, S, D, X):
+        for op in ("rewritten-after-return", "consistent-40961", "mirror-40961-claim-40960", "no-binding"):
+            yield DescriptorCase(role, op)
 
 
 def mutate(case, value):
@@ -1399,6 +1454,71 @@ def apply_case(base, segment, case):
             write(manifest, m)
 
 
+def descriptor_claim(segment, case, kind):
+    # One mirror serves the entire attempt. Keep all peers consistent with its
+    # bytes at their own return. Only the selected D4 member retains 40,960.
+    if kind == "idle":
+        return
+    limit = read(MODEL_DIR / "config.json")["max_position_embeddings"]
+    receipt = read(segment / RECEIPT)
+    bundle = segment / receipt["bundle"]
+    assert read(bundle / "config.json")["model"]["source"] == str(MODEL_DIR)
+    episode = bundle / "outputs/align_episode.json"
+    record = read(episode)
+    limits = record["hardware"]["context_limits"]
+    assert limits == {"max_context_tokens": 40960, "max_position_embeddings": 40960}
+    if limit == 40960 or (kind == case.role and case.op == "mirror-40961-claim-40960"):
+        return
+    assert limit == 40961
+    limits["max_position_embeddings"] = limit
+    unshared(episode)
+    write(episode, record)
+    manifest_path = segment / rt.CUSTODY_NAME
+    manifest = read(manifest_path)
+    manifest["files"][episode.relative_to(segment).as_posix()] = hashlib.sha256(episode.read_bytes()).hexdigest()
+    unshared(manifest_path)
+    write(manifest_path, manifest)
+
+
+@contextmanager
+def descriptor_attempt(case):
+    descriptor = MODEL_DIR / "config.json"
+    baseline = descriptor.read_bytes()
+    assert json.loads(baseline) == {"max_position_embeddings": 40960}
+    append = evidence.EvidenceLedger._append
+    member = None
+    rewritten = False
+
+    def write_row(ledger, row):
+        nonlocal member, rewritten
+        if ledger.mode == "native" and "manifest" in row:
+            member = row["kind"]
+        target = ledger.mode == "native" and member == case.role
+        # Remove before hashing, so the retained row and on-disk chain agree.
+        if target and case.op == "no-binding" and DESCRIPTOR_FIELD in row:
+            row = dict(row)
+            del row[DESCRIPTOR_FIELD]
+        stored = append(ledger, row)
+        if target and case.op == "rewritten-after-return" and not rewritten:
+            # For a pre-RL-189 writer the return is the only row. A writer
+            # using the permitted supplemental binding must finish it first.
+            if DESCRIPTOR_FIELD in row or ("manifest" in row and member not in SUPPLEMENTAL_BINDINGS):
+                assert descriptor.read_bytes() == baseline
+                write(descriptor, {"max_position_embeddings": 40961})
+                rewritten = True
+        return stored
+
+    try:
+        if case.op in ("consistent-40961", "mirror-40961-claim-40960"):
+            write(descriptor, {"max_position_embeddings": 40961})
+        with patch.object(evidence.EvidenceLedger, "_append", write_row):
+            yield
+        if case.op == "rewritten-after-return":
+            assert rewritten, "target row was never written"
+    finally:
+        descriptor.write_bytes(baseline)
+
+
 class Probe:
     def __init__(self, base):
         self.base = base
@@ -1500,7 +1620,11 @@ class Probe:
 
         def produce(kind, segment):
             copy_segment(self.base, kind, segment)
-            if m and m.role == kind and m.file not in OUTER:
+            if isinstance(m, DescriptorCase):
+                descriptor_claim(segment, m, kind)
+                if kind == m.role:
+                    touched.append(kind)
+            elif m and m.role == kind and m.file not in OUTER:
                 apply_case(self.base, segment, m)
                 touched.append(kind)
             receipt = read(segment / RECEIPT)
@@ -1551,6 +1675,10 @@ class Probe:
         if returned:
             (root / "part-c.stdout.log").write_text(log.getvalue())
             evidence.verify_part_c_publication(root, ledger_sha, hashlib.sha256(ref.read_bytes()).hexdigest())
+        if isinstance(m, DescriptorCase):
+            self.descriptor_verdict = word
+            self.descriptor_findings = [json.loads(line) for line in log.getvalue().splitlines()
+                                        if line.startswith("{") and "reason" in json.loads(line)]
         return returned
 
 
@@ -1658,8 +1786,33 @@ def worker_init():
         copy_segment(WORKER.base, k, WORKER.tree / ("idle_soak" if k=="idle" else pc.KINDS[k]))
 
 
+def descriptor_trial(m):
+    expected = {"rewritten-after-return": "source_integrity", "consistent-40961": "pass",
+                "mirror-40961-claim-40960": "admission_recompute", "no-binding": "evidence_unverifiable"}[m.op]
+    with descriptor_attempt(m):
+        accepted = WORKER.candidate(m)
+    findings = WORKER.descriptor_findings
+    actual = WORKER.descriptor_verdict
+    detail = f"expected={expected} actual={actual} findings={findings}"
+    if expected == "pass":
+        return ("AGREES_PASS" if accepted else "WRONG_VERDICT"), m.name, detail
+    if accepted:
+        return "FALSE_PASS", m.name, detail
+    # With one mirror, any member already bound at the instant of the rewrite
+    # can be the first to report the changed bytes. D1 and D4 are target-local.
+    roles = (P, S, D, X)
+    affected = roles[:roles.index(m.role)+1] if m.op == "rewritten-after-return" else (m.role,)
+    correct = actual == "other_failure" and any(
+        f.get("role") in affected and f.get("reason") == expected and
+        (m.op != "mirror-40961-claim-40960" or f.get("field") in
+         ("max_position_embeddings", LIMIT_FIELD, "hardware." + LIMIT_FIELD)) for f in findings)
+    return ("REFUSED" if correct else "WRONG_VERDICT"), m.name, detail
+
+
 def trial(m):
     try:
+        if isinstance(m, DescriptorCase):
+            return descriptor_trial(m)
         mismatch = WORKER.oracle(m)
         if not m.path and m.op in ("warmup-shift", "warmup-delete", "warmup-duplicate", "xml-malformed",
                                   "short-recovery", "swap-picks", "poll-ambiguity", "overlap-previous"):
@@ -1681,19 +1834,23 @@ def main():
         MODEL_DIR = root / "synthetic-model"
         MODEL_DIR.mkdir()
         write(MODEL_DIR / "config.json", {"max_position_embeddings":40960})
+        issue_model_source()
         endpoint_code()
         with kit_source(finder), compact_control(), patch.object(rt, "registered_s6", return_value={
                 "slots":{"S6":1.}, "s6_tuning":{}}):
             base = root / "base"
-            control(base)
+            binding_errors = control(base)
             CONFIG_SHA = hashlib.sha256((rt.ROOT / r1.DEFAULT_RUNTIME_CONFIG).read_bytes()).hexdigest()
             probe, inv = profile_graph(finder, lambda: Probe(base))
-            print("clean control passes;",len(inv),"decision sites in frozen call-graph closure", flush=True)
+            print("clean control verdict=pass; descriptor rows",
+                  ("FAIL " + ", ".join(binding_errors)) if binding_errors else "PASS (4/4)",
+                  ";", len(inv), "decision sites in frozen call-graph closure", flush=True)
             inventory_mode = os.environ.get("JW_PARTC_INVENTORY")
             if inventory_mode in ("1","only"):
                 for path, func, line, op in inv:
                     print(f"{path}:{line} {func} {op}")
                 if inventory_mode == "only":
+                    assert not binding_errors, "clean control lacks the four correct descriptor digests"
                     return
             suite = cases(base)
             if shard := os.environ.get("JW_PARTC_SHARD"):
@@ -1726,17 +1883,23 @@ def main():
                     def bounded():
                         it = iter(suite)
                         while batch := list(islice(it, max(128, workers*32))):
-                            yield from pool.map(trial,batch,chunksize=4)
+                            legacy = [case for case in batch if not isinstance(case, DescriptorCase)]
+                            yield from pool.map(trial, legacy, chunksize=4)
+                            # All readers of the shared mirror have completed this
+                            # batch before the parent starts a descriptor rewrite.
+                            yield from map(trial, (case for case in batch if isinstance(case, DescriptorCase)))
                     answers = bounded()
                 for position, (status, name, reason) in enumerate(answers, 1):
                     totals[status] += 1
-                    if status in ("FALSE_PASS", "HARNESS_ERROR"):
+                    if status in ("FALSE_PASS", "HARNESS_ERROR", "WRONG_VERDICT") or "/descriptor/" in name:
                         print(status, name, reason, flush=True)
                     if position % 100 == 0:
                         print("progress", position, "/", size, dict(totals), flush=True)
             assert sum(totals.values()), "no mutations ran"
             print("matrix", sum(totals.values()), sorted(totals.items()), flush=True)
             assert not totals["HARNESS_ERROR"], "incomplete differential comparison"
+            assert not binding_errors, "clean control lacks the four correct descriptor digests"
+            assert not totals["WRONG_VERDICT"], "descriptor decision or finding disagrees with RL-189"
             assert not totals["FALSE_PASS"], "native evaluator accepted a frozen contradiction"
 
 

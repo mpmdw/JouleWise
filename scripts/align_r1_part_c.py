@@ -56,8 +56,8 @@ from types import SimpleNamespace
 import time
 
 from scripts.align_r1_part_c_evidence import (
-    BATTERY_SOURCE, BoundMember, BoundSoak, EvidenceFailure, EvidenceLedger, KINDS, MANIFEST_NAME,
-    SOAK_DIRECTORY, SOAK_FILES, SOAK_SEGMENT, canonical, digest,
+    BATTERY_SOURCE, BoundMember, BoundSoak, DESCRIPTOR_SOURCE, EvidenceFailure, EvidenceLedger, KINDS,
+    MANIFEST_NAME, SOAK_DIRECTORY, SOAK_FILES, SOAK_SEGMENT, canonical, digest, native_limit,
     parse_json as parse_evidence_json, read_regular, stdout_payload,
 )
 
@@ -86,6 +86,24 @@ EPISODE_IDENTITIES = {
     "d-bank": ("Qwen3.8-27B-8bit", "shade/bank_transfer_2", "benign", 1),
     "x-g": ("Qwen3-30B-A3B-4bit", "shade/spam_filter_update", "sabotage", 16),
 }
+# The frozen dispatch's template for each Part C member (r1_runtime k_capture_predecessor_30b,
+# k_step_d, k_gated_d and k_x_g). RL-189 D3 holds each member's own config.json to it.
+TEMPLATE_KEYS = {"capture-predecessor-30b": "model_30b", "step-d": "d_spam",
+                 "d-bank-benign-s1": "d_bank", "x-g": "x_g"}
+UNREAD_LIMIT_FLAG = "model.position_limit_unread"
+# The events the pinned producer records for a turn between the endpoint's start stamp and
+# the prefill start, in order (mlx_runtime._generate). Only the whole sequence witnesses a
+# delayed prefill start.
+PRE_PREFILL_EVENTS = (("tokenize", "phase_start"), ("tokenize", "phase_end"),
+                      ("generation_setup", "phase_start"), ("generation_setup", "phase_end"))
+PRE_PREFILL_PHASES = frozenset(phase for phase, _ in PRE_PREFILL_EVENTS)
+# bundle.RunBundleWriter.finalize at the pin appends exactly this event.
+FINAL_EVENT = {"event_type": "run_finalized", "phase": "run", "message": "bundle finalized", "metadata": {}}
+# D-018 (bundle_read.POWER_TRACE_INTERVAL_HEADER). A trace header is this, its four-column
+# form, or the three-column form without rails that the frozen reader also accepts.
+TRACE_HEADER = ("timestamp_s", "power_w", "source", "rail", "interval_start_s", "interval_end_s")
+JOURNAL_CLOCKS = ("wall_ns", "monotonic_ns", "monotonic_raw_ns")
+ISSUED_DRIVER = "issued_driver"
 POWERMODE_SOURCE = "pmset -g custom (AC Power block, exact powermode key)"
 CUT_FLAGS = frozenset({"episode.deadman", "episode.g0_unreleased", "episode.malformed_tool_call",
                        "episode.time_guard", "episode.context_limit", "thermal.start_gate_timeout",
@@ -434,6 +452,38 @@ class RuntimeAdmissionRefusal(ValueError):
         self.kind, self.reason = kind, reason
 
 
+def issued_model_source(kind, configured):
+    """RL-189 1.2, first route: the member's ``model.source`` from the issued runtime config.
+
+    The frozen ``read_template`` is called unchanged on the template the issued
+    config names for this member. No file of the member is read.
+    """
+    from joulewise.align.apple import r1_runtime as rt
+
+    template, _spec = rt.read_template(configured["templates"][TEMPLATE_KEYS[kind]])
+    return template["model"]["source"]
+
+
+def _descriptor_witness(kind, ledger):
+    """The judged invoker's observation of ``<model.source>/config.json`` at a member's return.
+
+    The path comes from the runtime config whose digest row 0 binds. An
+    observation that cannot be made is recorded as such. It never raises.
+    """
+    if ledger is None or ledger.mode != "native" or kind not in TEMPLATE_KEYS:
+        return None
+    try:
+        from joulewise.align.apple import r1_runtime as rt
+
+        configured, config_sha = rt.load_config(ledger.runtime_config)
+        if config_sha != ledger.config_sha:
+            return "unreadable"
+        source = issued_model_source(kind, configured)
+    except Exception:  # noqa: BLE001 - the row must still be written
+        return "unreadable"
+    return ledger.descriptor_witness(source)
+
+
 def judged_invoke(runtime, kind, output, duration=None, *, soak_reference=None, quiet=False,
                   contract_key=None, watch=None, ledger=None):
     """Part C's evidence transport around the byte-frozen R1 process driver."""
@@ -464,14 +514,16 @@ def judged_invoke(runtime, kind, output, duration=None, *, soak_reference=None, 
         process = r1._run(argv)
     except BaseException as error:
         if ledger is not None:
-            ledger.member_return(kind, output, argv, error=error)
+            ledger.member_return(kind, output, argv, error=error,
+                                 model_descriptor=_descriptor_witness(kind, ledger))
         if isinstance(error, UnicodeError):
             raise RuntimeEvidenceError(kind, "stdout_receipt", "invalid", field="invalid") from None
         if not isinstance(error, (OSError, TimeoutExpired)):
             raise
         raise RuntimeEvidenceError(kind, "process_exit", type(error).__name__) from None
     if ledger is not None:
-        ledger.member_return(kind, output, argv, process=process)
+        ledger.member_return(kind, output, argv, process=process,
+                             model_descriptor=_descriptor_witness(kind, ledger))
     code, stdout = process.returncode, process.stdout
     if type(code) is not int:
         raise RuntimeEvidenceError(kind, "process_exit", "invalid exit status")
@@ -1291,6 +1343,10 @@ def _validate_sidecar(rows, sensors, kind, source, *, gated=False):
             for clock in ("wall_ns", "monotonic_ns", "monotonic_raw_ns")), "stamp", i)
         check(begin_ns <= a["monotonic_ns"] <= b["monotonic_ns"] <= end["finished"]["monotonic_ns"],
               "stamp", i)
+        # The frozen Sidecar takes every stamp under one lock (thermal.py tick, event and _write),
+        # so a row, reading or boundary, never starts before the row above it has finished.
+        check(i == 0 or all(rows[i - 1]["finished"][clock] <= a[clock] for clock in JOURNAL_CLOCKS),
+              "stamp_order", i)
         if i in (0, len(rows) - 1):
             continue
         check(row["kind"] == "reading" or row["kind"] in boundary_kinds, "kind", i)
@@ -1333,8 +1389,24 @@ def _validate_sidecar(rows, sensors, kind, source, *, gated=False):
     check(canonical(counter.report(span[1])) == canonical(coverage), "coverage")
 
 
+def _check_event_rows(kind, events):
+    """Every controller event is typed, and the stream ends with the producer's one finalization event."""
+    source = "events.jsonl"
+    for index, event in enumerate(events):
+        # EVIDENCE-SPEC row 38: event_type and phase are nonempty strings; a message may be empty.
+        _required(_finite(event.get("timestamp_s")) and isinstance(event.get("event_type"), str)
+                  and bool(event["event_type"]) and isinstance(event.get("phase"), str) and bool(event["phase"])
+                  and isinstance(event.get("message"), str) and isinstance(event.get("metadata"), dict),
+                  "bundle_binding", kind, source, index=index)
+    _required(all(key in events[-1] and canonical(events[-1][key]) == canonical(value)
+                  for key, value in FINAL_EVENT.items())
+              and sum(row["event_type"] == "run_finalized" for row in events) == 1
+              and all(row["timestamp_s"] <= events[-1]["timestamp_s"] for row in events[:-1]),
+              "bundle_binding", kind, source, field="run_finalized")
+
+
 def _check_member_records(kind, bundle, receipt, data, configured, gate_inputs, *,
-                          step_binding=None, gate_counts=None):
+                          step_binding=None, gate_counts=None, descriptor=None):
     from joulewise.align.apple import r1_runtime as rt
     from joulewise.align.apple.budget import budget_record
     from joulewise.align.apple.sampler import seconds_ns
@@ -1366,14 +1438,7 @@ def _check_member_records(kind, bundle, receipt, data, configured, gate_inputs, 
             and receipt.get("failure_reason") is None, "member_status", summary_name, peer=RECEIPT_NAME)
 
     events = rows(events_name, "bundle_binding")
-    for index, event in enumerate(events):
-        require(_finite(event.get("timestamp_s")) and isinstance(event.get("event_type"), str)
-                and isinstance(event.get("phase"), str) and isinstance(event.get("message"), str)
-                and isinstance(event.get("metadata"), dict), "bundle_binding", events_name, index=index)
-    require(events[-1]["event_type"] == "run_finalized"
-            and sum(row["event_type"] == "run_finalized" for row in events) == 1
-            and all(row["timestamp_s"] <= events[-1]["timestamp_s"] for row in events[:-1]),
-            "bundle_binding", events_name, field="run_finalized")
+    _check_event_rows(kind, events)
 
     episode = doc(episode_name, "episode_identity")
     config, meta = doc(config_name), doc(metadata_name)
@@ -1499,6 +1564,10 @@ def _check_member_records(kind, bundle, receipt, data, configured, gate_inputs, 
     intervals = () if thermal is None else thermal["intervals"]
     parsed_episode = from_json(Episode, data[episode_name])
     execution = _recompute_member_config(kind, receipt, config, spec, configured, gate_inputs)
+    if descriptor is not None:
+        # RL-189 D3. The whole-config comparisons above already imply it; this names the field.
+        require(config["model"].get("source") == descriptor.source, "execution_config", config_name,
+                field="model.source", peer="issued_inputs")
     _recompute_turn_boundaries(kind, parsed_episode, witnessed, events, intervals, execution.max_tokens)
     context_checks = _recompute_controller_phases(kind, parsed_episode, witnessed, intervals, events)
     _recompute_continuation(kind, parsed_episode, witnessed, execution, config["model"]["family"])
@@ -1512,7 +1581,7 @@ def _check_member_records(kind, bundle, receipt, data, configured, gate_inputs, 
     limits = hardware.get("context_limits")
     reason = next((flag for flag in reversed(episode["flags"]) if flag.startswith(stop + ":")), stop)
     effective_context_cap = _recompute_admissions(kind, execution, parsed_episode, witnessed, limits,
-                                                  budget, context_checks)
+                                                  budget, context_checks, episode["flags"], descriptor)
     expected_budget = budget_record(execution, parsed_episode.turns, reason,
                                     effective_context_cap=effective_context_cap).get("token_budget")
     if expected_budget is None:
@@ -1555,8 +1624,7 @@ def _recompute_member_config(kind, receipt, config, spec, configured, gate_input
     from joulewise.align.apple.workload import EpisodeSpec
     from joulewise.schemas import BenchmarkConfig
 
-    template_key = {"capture-predecessor-30b": "model_30b", "step-d": "d_spam",
-                    "d-bank-benign-s1": "d_bank", "x-g": "x_g"}[kind]
+    template_key = TEMPLATE_KEYS[kind]
     source = "config.json"
     try:
         actual = EpisodeSpec.from_text(config["workload_profile"]["prompt_text"])
@@ -1589,20 +1657,65 @@ def _recompute_member_config(kind, receipt, config, spec, configured, gate_input
     return actual
 
 
-def _recompute_admissions(kind, execution, episode, witnessed, limits, budget, context_checks):
+class _AttestedDescriptor:
+    """RL-189 1.3: the mirror the ledger binds for one member and the limit frozen code reads from it."""
+
+    def __init__(self, source, limit):
+        self.source, self.limit = source, limit
+
+
+def _attested_descriptor(ledger, kind, configured):
+    """D1 and D2. ``A`` is WL:268-272 on bytes whose digest is the member row's, before and after the parse."""
+    try:
+        source = issued_model_source(kind, configured)
+    except Exception as error:
+        raise EvidenceFailure("execution_limits_recompute", kind, "config.json", field="model.source",
+                              peer="issued_inputs") from error
+    limit = native_limit(ledger.model_descriptor(kind, source))
+    ledger.verify_descriptor(kind)
+    return _AttestedDescriptor(source, limit)
+
+
+def frozen_context_cap(limit, execution):
+    """WL:283-289 from a native limit (None when unread), the configured cap and the budget flags."""
+    configured = execution.max_context_tokens
+    cap = (min(value for value in (limit, configured) if value is not None)
+           if limit is not None or configured is not None else None)
+    if execution.max_episode_decode_tokens is not None or execution.deadman_s is not None:
+        cap = min(40960, cap or 40960)
+    return cap
+
+
+def _same_limit(claim, expected):
+    return type(claim) is type(expected) and claim == expected
+
+
+def _recompute_admissions(kind, execution, episode, witnessed, limits, budget, context_checks, flags,
+                          descriptor=None):
     source = "outputs/align_episode.json"
 
-    def check(ok, field, index=None):
-        _required(ok, "admission_recompute", kind, source, field=field, index=index, peer="config.json")
+    def check(ok, field, index=None, peer="config.json"):
+        _required(ok, "admission_recompute", kind, source, field=field, index=index, peer=peer)
 
-    position_cap = limits.get("max_position_embeddings") if isinstance(limits, dict) else None
-    # The descriptor is unbound. A positive recorded cap is a possible native
-    # descriptor, but its effective cap must still follow the issued limits.
-    check(_uint(position_cap) and position_cap > 0, "context_limits.max_position_embeddings")
-    context_cap = min(position_cap, execution.max_context_tokens or position_cap)
-    if execution.deadman_s is not None or execution.max_episode_decode_tokens is not None:
-        context_cap = min(context_cap, 40960)
-    check(type(limits.get("max_context_tokens")) is int and limits["max_context_tokens"] == context_cap,
+    claimed = isinstance(limits, dict) and "max_position_embeddings" in limits
+    claim = limits["max_position_embeddings"] if claimed else None
+    if descriptor is None:
+        # RL-189 1.4, the replay: no ledger exists, so the claim is judged by existence.
+        # It is null, or a positive integer that must reproduce the recorded cap below.
+        check(claimed and (claim is None or type(claim) is int and claim > 0),
+              "context_limits.max_position_embeddings")
+        position_cap = claim
+    else:
+        # D4: the claim equals the attested limit, by type and value.
+        position_cap = descriptor.limit
+        check(claimed and _same_limit(claim, position_cap), "context_limits.max_position_embeddings",
+              peer=DESCRIPTOR_SOURCE)
+    # D5: the limit is unread exactly when the episode says so.
+    _required((UNREAD_LIMIT_FLAG in flags) == (position_cap is None), "flag_source", kind, source,
+              field=UNREAD_LIMIT_FLAG, peer=DESCRIPTOR_SOURCE if descriptor is not None else None)
+    # D6: the recorded effective cap follows from that limit and the issued configuration.
+    context_cap = frozen_context_cap(position_cap, execution)
+    check("max_context_tokens" in limits and _same_limit(limits["max_context_tokens"], context_cap),
           "context_limits.max_context_tokens")
     check(len(episode.turns) <= execution.max_turns, "max_turns")
     deadline = budget.get("deadline_ns") if isinstance(budget, dict) else None
@@ -1617,7 +1730,8 @@ def _recompute_admissions(kind, execution, episode, witnessed, limits, budget, c
               "max_episode_decode_tokens", index)
         tokens_used += turn.decode_tokens
         rendered_tokens = len(record["generation"]["prompt_token_ids"])
-        check(rendered_tokens + execution.max_tokens <= context_cap,
+        # WL:518-526 guards an admission only when a limit exists.
+        check(context_cap is None or rendered_tokens + execution.max_tokens <= context_cap,
               "max_context_tokens", index)
         guard_start, guard_end = context_checks[index]
         if execution.deadman_s is not None:
@@ -1691,9 +1805,17 @@ def _recompute_turn_boundaries(kind, episode, witnessed, events, intervals, turn
 
     source = "events.jsonl"
     by_turn = defaultdict(list)
+    lead = defaultdict(list)
     previous_turn = 0
-    for event in events:
+    for position, event in enumerate(events):
         phase, event_type = event["phase"], event["event_type"]
+        if phase in PRE_PREFILL_PHASES:
+            # Such an event belongs to one turn and precedes that turn's prefill. Anything else is an orphan.
+            index = event["metadata"].get("align_turn_index")
+            _required(_uint(index) and index < len(episode.turns) and index not in by_turn,
+                      "turn_boundary_recompute", kind, source, field="prefill_start", index=position)
+            lead[index].append((phase, event_type, event["timestamp_s"]))
+            continue
         if phase not in ("prefill", "decode") or event_type not in ("phase_start", "phase_end", "token"):
             continue
         index = event["metadata"].get("align_turn_index")
@@ -1735,6 +1857,15 @@ def _recompute_turn_boundaries(kind, episode, witnessed, events, intervals, turn
               and final_decode.timestamp_s <= end.epoch_s
               and all(left.timestamp_s <= right.timestamp_s for left, right in zip(phase, phase[1:])),
               "phase_order")
+        # The prefill start has no stamp of its own. A start later than the endpoint's start
+        # stamp is accepted only when the turn records the producer's whole pre-prefill sequence,
+        # in order, inside that bracket. With none recorded nothing witnesses a delay and the
+        # two must coincide. A partial, repeated or reordered sequence witnesses nothing.
+        witnessed = lead.get(index, [])
+        bracket = [start.epoch_s, *(stamp for _, _, stamp in witnessed), prefill_start.timestamp_s]
+        check(all(left <= right for left, right in zip(bracket, bracket[1:]))
+              and (tuple(mark[:2] for mark in witnessed) == PRE_PREFILL_EVENTS if witnessed
+                   else bracket[0] == bracket[-1]), "prefill_start")
         check(type(final_decode.metadata.get("emitted_tokens")) is int
               and final_decode.metadata["emitted_tokens"] == turn.decode_tokens
               and type(first_decode.metadata.get("max_tokens")) is int
@@ -2616,7 +2747,146 @@ def _check_gated_energy(episode, data, receipt, kind):
                   RECEIPT_NAME, field=key, peer="power_trace.csv")
 
 
-def _native_bundle(bound, receipt, configured, gate_inputs, step_binding):
+_DRIVER_PROGRAMS = {}
+
+
+def _issued_driver_program():
+    """Compile the frozen rehearsal's phase loop and close statements from its own source.
+
+    ``align_r1_rehearsal.run`` decides admission, skips and INCONCLUSIVE segments inline, so
+    there is no frozen function to call. The statements are taken as written: the phase loop
+    under ``with guard``, then the thermometry bar and the feed checks. Nothing is restated.
+    """
+    import ast
+
+    from scripts import align_r1_rehearsal as r1
+
+    raw = Path(r1.__file__).read_bytes()
+    key = r1.__file__, digest(raw)
+    if key not in _DRIVER_PROGRAMS:
+        run = next(node for node in ast.parse(raw).body
+                   if isinstance(node, ast.FunctionDef) and node.name == "run")
+        guard = next(node for node in ast.walk(run) if isinstance(node, ast.With)
+                     and any(ast.unparse(item.context_expr) == "guard" for item in node.items))
+        loop = next(index for index, node in enumerate(guard.body) if isinstance(node, ast.For)
+                    and isinstance(node.iter, ast.Call) and ast.unparse(node.iter.func) == "phase_plan")
+        outer = next(node.body for node in ast.walk(run) if isinstance(node, ast.Try) and guard in node.body)
+        bar = next(index for index, node in enumerate(outer) if isinstance(node, ast.Assign)
+                   and ast.unparse(node.targets[0]) == "thermometry['bar']")
+        mode = next(index for index, node in enumerate(outer[bar:], bar) if isinstance(node, ast.Assign)
+                    and ast.unparse(node.targets[0]) == "ac_powermode")
+        feeds = next(node for node in outer[mode:] if isinstance(node, ast.For)
+                     and ast.unparse(node.iter) == "results.items()")
+        _DRIVER_PROGRAMS[key] = tuple(
+            compile(ast.Module(body=list(block), type_ignores=[]), r1.__file__, "exec")
+            for block in (guard.body[:loop + 1], [*outer[bar:mode], feeds]))
+    return _DRIVER_PROGRAMS[key]
+
+
+def _check_issued_driver(runtime, schedule, soak_receipt, soak_reference, receipts):
+    """Replay the frozen rehearsal's decisions over the bound receipts.
+
+    The frozen statements run in a private namespace. Only the transport is replaced: it
+    serves the receipts this attempt bound, where the driver would launch the runtime. The
+    driver must admit every judged member, skip none, call none INCONCLUSIVE and keep the
+    thermometry bar. Its own Refusal is a refusal here.
+    """
+    from copy import deepcopy
+
+    from scripts import align_r1_rehearsal as r1
+
+    def refuse(field, role="attempt", error=None):
+        raise EvidenceFailure(ISSUED_DRIVER, role, RECEIPT_NAME, field=field) from error
+
+    served = {kind: deepcopy(receipt) for kind, receipt in {"idle": soak_receipt, **receipts}.items()}
+    try:
+        loop_code, close_code = _issued_driver_program()
+        plan = [row for row in r1.phase_plan() if row[1] in served and (row[1] != "idle" or row[0] == SOAK_SEGMENT)]
+        kinds = {row[0]: row[1] for row in plan}
+        if list(kinds.values()) != list(served):
+            refuse("phase_plan")
+
+        def role(names):
+            return next((kinds[name] for name in names if name in kinds),
+                        "step-d" if any(str(name).startswith("thermometry") for name in names) else "attempt")
+
+        def unit(args, output, rows, record, *, soak_reference=None, extra=None):
+            return {name: (served[kind], {"name": name, "class": workload_class, "result": served[kind]})
+                    for name, kind, _duration, workload_class in rows if name in kinds}
+
+        state = {**vars(r1), "args": SimpleNamespace(runtime=list(runtime), include_4bit=False),
+                 "output": None, "schedule": schedule, "precool_cap": r1.runtime_precool_cap_s(runtime),
+                 "record": {"phases": []}, "results": {}, "phase_plan": lambda *args, **kwargs: plan,
+                 "_admission_unit": unit, "write_soak_reference": lambda output, row: soak_reference}
+        exec(loop_code, state)
+        results = state["results"]
+        if state["skipped"] or set(results) != set(kinds):
+            refuse("skipped", role([*state["skipped"], *(set(kinds) - set(results))]))
+        step_name = r1.STEP_D_NAME
+        state["thermometry_d"] = r1.thermometry_record(step_name, results[step_name])
+        state["thermometry"] = {"D": state["thermometry_d"]}
+        exec(close_code, state)
+        if state["inconclusive"]:
+            refuse("inconclusive", role(list(state["inconclusive"])))
+        if state["thermometry"]["bar"] != "pass":
+            refuse("thermometry_bar", "step-d")
+        for name, kind in kinds.items():
+            if kind != "idle":
+                # The Part C series mode is Automatic. The loop checks it only after an A-B-A decision.
+                r1._check_member_powermode(name, results[name], 0)
+    except EvidenceFailure:
+        raise
+    except Exception as error:  # noqa: BLE001 - an unreplayable driver decision is never a pass
+        refuse("refused" if isinstance(error, getattr(r1, "Refusal", ())) else "unavailable", error=error)
+
+
+def _check_issued_duty_bar(receipt):
+    """A passing mechanics line must also be the frozen ``deadman_summary``'s duty bar."""
+    from scripts import align_r1_rehearsal as r1
+
+    kind = "d-bank-benign-s1"
+    try:
+        verdict = r1.deadman_summary(KINDS[kind], receipt)["duty_bar"]["verdict"]
+    except Exception as error:  # noqa: BLE001
+        raise EvidenceFailure("duty_budget", kind, RECEIPT_NAME, field="duty_bar", peer=ISSUED_DRIVER) from error
+    _required(verdict == "pass", "duty_budget", kind, RECEIPT_NAME, field="duty_bar", peer=ISSUED_DRIVER)
+
+
+def _check_power_trace(kind, raw, started_epoch_s, ended_epoch_s):
+    """The bundle trace parses as the producer's CSV and lies inside this member's terminal bracket.
+
+    The bracket is what binds a trace to its member: the runtime stamps it around the whole
+    segment (r1_runtime.main), so another member's trace cannot fall inside it.
+    """
+    import csv
+
+    source = "power_trace.csv"
+
+    def check(ok, field, index=None):
+        _required(ok, "bundle_binding", kind, source, field=field, index=index, peer=MANIFEST_NAME)
+
+    try:
+        lines = list(csv.reader(StringIO(raw.decode("utf-8"), newline=""), strict=True))
+    except (UnicodeError, csv.Error) as error:
+        raise EvidenceFailure("bundle_binding", kind, source, field="invalid") from error
+    check(bool(lines), "header")
+    header = tuple(lines[0])
+    check(len(header) in (3, 4, 6) and header == TRACE_HEADER[:len(header)], "header")
+    for index, row in enumerate(row for row in lines[1:] if row):   # the frozen DictReader skips blank lines too
+        check(len(row) == len(header), "row", index)
+        fields = dict(zip(header, row))
+        try:
+            stamps = [float(fields["timestamp_s"]), *(float(fields[name]) for name in TRACE_HEADER[4:]
+                                                      if fields.get(name))]
+            power = float(fields["power_w"])
+        except ValueError as error:
+            raise EvidenceFailure("bundle_binding", kind, source, field="row", index=index) from error
+        check(all(map(math.isfinite, (power, *stamps))) and len(stamps) in (1, 3)
+              and (len(stamps) == 1 or stamps[1] <= stamps[2]), "row", index)
+        check(started_epoch_s <= min(stamps) and max(stamps) <= ended_epoch_s, "window", index)
+
+
+def _native_bundle(bound, receipt, configured, gate_inputs, step_binding, descriptor):
     from joulewise.align.apple.sampler import seconds_ns
 
     kind = bound.kind
@@ -2624,10 +2894,11 @@ def _native_bundle(bound, receipt, configured, gate_inputs, step_binding):
     try:
         _required({item.name for item in bundle.parent.iterdir()} == {bundle.name},
                   "bundle_binding", kind, "runs")
+        _check_power_trace(kind, data["power_trace.csv"], bound.started_epoch_s, bound.ended_epoch_s)
         if kind in QUIET_MEMBERS:
             _check_load(data[LOAD_SOURCE], receipt, kind, bound.ended_epoch_s - bound.started_epoch_s)
         binding = _check_member_records(kind, bundle, receipt, data, configured, gate_inputs,
-                                        step_binding=step_binding)
+                                        step_binding=step_binding, descriptor=descriptor)
         joined = _episode_from_bound_trace(data)
         first, last = joined.hardware["paired_clock_stamps_ns"]
         _required(seconds_ns(bound.started_epoch_s) <= first["epoch_ns"] <= last["epoch_ns"]
@@ -2763,9 +3034,11 @@ def _native_verdict(ledger, runtime, invoke, configured, soak):
         member = ledger.member(kind)
         prior_end = _check_terminal_order(member, prior_end)
         bundles[kind], binding = _native_bundle(member, receipt, configured,
-                                                (step_receipt, bands, s5_bands), step_binding)
+                                                (step_receipt, bands, s5_bands), step_binding,
+                                                _attested_descriptor(ledger, kind, configured))
         if kind == "step-d":
             step_binding = binding
+    _check_issued_driver(runtime, schedule, soak.row["result"], str(ledger.soak_reference), receipts)
     step = step_d_facts(bundles["step-d"], step_receipt)
     bank = {**facts_from_bundle(bundles["d-bank-benign-s1"], role="d-bank", native=True),
             "runtime": receipts["d-bank-benign-s1"]}
@@ -2774,6 +3047,8 @@ def _native_verdict(ledger, runtime, invoke, configured, soak):
     verdict = _judge_observations(predecessor=receipts["capture-predecessor-30b"], step_d=step, d_bank=bank,
                        n_chunk=step_receipt["slots"]["N_chunk"], x_g=contrast,
                        x_g_not_run_reason=refusal, ledger=ledger)
+    if verdict["verdict"] == "pass":
+        _check_issued_duty_bar(receipts["d-bank-benign-s1"])
     ledger.verify_final_sources()
     _required(canonical(schedule) == canonical(_w1_schedule(runtime)),
               "inter_member_schedule", "attempt", "W1 roster")
@@ -2793,6 +3068,8 @@ def run_bound_part_c(output, runtime, *, soak_reference, soak_ledger_sha256=None
         revision = r1.executed_commit(Path(__file__).resolve().parents[1])
         config = Path(r1.runtime_config_path(runtime))
         soak = BoundSoak(output, soak_reference, soak_ledger_sha256, revision, config)
+        soak.verify_argv(runtime, next(seconds for name, _kind, seconds, _size in r1.phase_plan()
+                                       if name == SOAK_SEGMENT))
         ledger = EvidenceLedger(output, revision, config, soak_reference, soak=soak)
         with redirect_stdout(StringIO()), redirect_stderr(StringIO()):
             configured = _check_native_soak(soak, config)
@@ -2864,8 +3141,9 @@ def replay_archived(output, runtime_config):
     from scripts import align_r1_rehearsal as r1
 
     counts = []
+    # RL-189 1.4: a replay has no ledger and so no descriptor witness. It says so for each member.
     result = {"binding": "archived_custody", "verdict": "other_failure", "failing_checks": [],
-              "gate_counts": counts}
+              "gate_counts": counts, "native_limit": dict.fromkeys(KINDS, "unattested")}
     kind = "idle"
     try:
         configured, config_sha = rt.load_config(runtime_config)
@@ -2900,6 +3178,7 @@ def replay_archived(output, runtime_config):
                 receipt[kind] = row
                 _check_member_schedule(kind, row, schedule)
                 bundle, data = _bound_member_files(member, row)
+                _check_power_trace(kind, data["power_trace.csv"], member.started_epoch_s, member.ended_epoch_s)
                 if kind in QUIET_MEMBERS:
                     _check_load(data[LOAD_SOURCE], row, kind, member.ended_epoch_s - member.started_epoch_s)
                 binding = _check_member_records(kind, bundle, row, data, configured,
@@ -2927,9 +3206,12 @@ def replay_archived(output, runtime_config):
             result["failing_checks"] = sorted(set(failures))
             return result
         step = receipt["step-d"]
+        _check_issued_driver(["--config", str(runtime_config)], schedule, soak, None, receipt)
         table = _judge_observations(step_d=_project_step(projected["step-d"], step),
                                     d_bank=projected["d-bank-benign-s1"], x_g=projected["x-g"],
                                     n_chunk=step["slots"]["N_chunk"], archived=True)
+        if table["verdict"] == "pass":
+            _check_issued_duty_bar(receipt["d-bank-benign-s1"])
         config = Path(runtime_config)
         _required(digest(read_regular(config.parent, config.name)) == config_sha,
                   "source_integrity", "attempt", "runtime_config")
