@@ -1052,6 +1052,23 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 
 <!-- RUN_STATE TYPED ITEMS: newest first. Add with scripts/run_state_add.py; never edit by hand. -->
 
+473. **RL-190 in force: kit 15/16 legs read by lm-stab-02 only; KITS.json committed; piece-1 hand-read signed (late, deviation recorded)**
+
+```item
+{"expires_epoch_s": null, "issued_epoch_s": 1795146711, "number": 473, "owner": "lead", "schema": "joulewise.run_state_item.v1", "sets": [], "status": "ISSUED", "supersedes": []}
+```
+
+- **RL-190 is in force** (audit branch `ca1d72b81`). Nothing in it stops or changes tonight's ladder.
+- **RL-190 1: kit 15 and 16 legs are read by `lm-stab-02` only.** `lm-stab-01` stays kits 01-14, and its first date is Thu 19 Nov (item 468). Item 464 is confirmed as the collection plan, unchanged. The kit index `f2-stab/KITS.json` (16 rows, digests recomputed and equal to `filler-kit-registry.json`) is committed on the audit branch at `ea2f55318`.
+- **Piece-1 hand-read, SIGNED (lead, RL-190 3.3, RL-169a §5).** Item 411's record meets RL-169a §5's three conditions:
+  - three legs complete, each with one 600 s quiet span and 512 decode tokens;
+  - meter clean (0 bad polls, 0 USB errors), feeds `proven_stopped`;
+  - restore and stop steps rc 0.
+
+  It also records every wall under 2,700 s (1,568 / 1,252 / L003 as in 411) and realised prefill 284 on the nominal-256 leg. Cells are named by nominal size. This discharges the gate, independently of row 7's bindings.
+- **Deviation (RL-190 3.3):** the piece-1 signature is late. f2-inst-01 queue b, f2-inst-02 and f2-inst-03's issue ran or were issued before it (item 465). An operational gate's order was missed; no blinding rule was touched. This line is the deviation record until the lm-inst-01 manifest's deviation section carries it.
+- **Magistrate:** the item 411 / 428 / 465 "piece-1 hand-read still open" line is closed. Nothing else changes.
+
 472. **f2-inst-03 right after f2-inst-02's last Check (no idle until 00:00); corrects 470's last sentence**
 
 ```pointer
