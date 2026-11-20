@@ -1,10 +1,10 @@
 {
   "armed": null,
-  "next_observable": "f2inst03-28881e56/run-out.txt shows LAUNCH_RC=0 with the fence (expected end ~21:50, fence ~22:57). The next activation after the fence is gone Checks cq-f2-inst-03-l001-l002-a1 under /Users/edr/campaign-out/f2-inst-03/ with the ready template f2inst03-check-template-28881e56/check.sh (kit sha 2868…cf25 and campaign_id f2-inst-03 already set; replace REPLACE_STAMP in OUT with the actual directory's stamp and NEWACT in TMPDIR with the activation id; read each leg_summary's admitted/contaminated_redos and each leg_record's os_load), and copies at once with f2inst03-check-template-28881e56/offload-run.sh (NEWACT in the brctl/poll log names; marker text names 28881e56, change it). Then rank 2: f2-inst-03 seq 3 L003-L004 (inputs f2inst03-28881e56/inputs.sh with SPAN/LEGS/SEQ/MAGISTRATE_PID changed; ARG per item 463: 02:00-02:35 until 23:03:10, else 13:14-13:15) only if its expected end falls before Fri 00:00; otherwise Fri 20 Nov rank 1 = f2-stab-01 L002 (seq 2) on pin A per item 464, templates f2stab01-ff4b6340/ with LEGS/SEQ changed, ARG 13:14-13:15 from 00:00 to 02:34:59.",
+  "next_observable": "f2inst03-4dbbfa87/run-out.txt shows LAUNCH_RC=0 with the fence (launch ~21:37, expected end ~23:17, fence ~00:24). The next activation after the fence is gone Checks cq-f2-inst-03-l003-l004-a1 under /Users/edr/campaign-out/f2-inst-03/ with the ready template f2inst03-check-template-4dbbfa87/check.sh (LEGS L003,L004, kit sha 2868…cf25, campaign_id f2-inst-03 and batch_windows == ['02:00-02:35'] already asserted; replace REPLACE_STAMP in OUT with the actual directory's stamp and NEWACT in TMPDIR with the activation id; read each leg_summary's admitted/contaminated_redos and each leg_record's os_load), and copies at once with f2inst03-check-template-4dbbfa87/offload-run.sh (replace NEWACT everywhere with the activation id). Then: if the Check is clean and it is before Fri 00:00 with f2-inst-03 seq 5 L005-L006's expected end before 00:00, issue it (inputs f2inst03-4dbbfa87/inputs.sh with SPAN/LEGS/SEQ/MAGISTRATE_PID changed; ARG per item 463); otherwise Fri 20 Nov rank 1 = f2-stab-01 L002 (seq 2) on pin A per item 464, templates f2stab01-ff4b6340/ with LEGS/SEQ changed, ARG 13:14-13:15 from 00:00 to 02:34:59.",
   "open_items": [
     {
       "expires_epoch_s": null,
-      "item": 474,
+      "item": 475,
       "owner": "magistrate",
       "status": "ISSUED"
     },
@@ -155,10 +155,10 @@
   ],
   "owner": "magistrate",
   "schema": "joulewise.current_pointer.v2",
-  "source_item": "474",
+  "source_item": "475",
   "source_item_heading_date": "2026-11-19",
   "wait": {
-    "deadline_epoch_s": 1795158000,
+    "deadline_epoch_s": 1795163400,
     "observable": "none",
     "on_early_or_refused": "a launcher refusal or non-clean close: record it, hold kit f2-inst-03 until an input changes (item 422, RL-179 F-6), mail the lead and Ed, and continue down the ladder. R1 stays unarmed."
   }
