@@ -3,7 +3,8 @@
 
     python3 -B scripts/cadence_look_input_review.py template --manifest MANIFEST.json --repo DIR
     python3 -B scripts/cadence_look_input_review.py review --manifest MANIFEST.json --repo DIR --custody ROOT
-        [--span-dir SPAN_ID=PATH ...] --seat-model NAME --seat-family NAME --out RECORD.json
+        [--span-dir SPAN_ID=PATH ...] [--run-state RUN_STATE.md] --seat-model NAME --seat-family NAME
+        --out RECORD.json
     python3 -B scripts/cadence_look_input_review.py check RECORD.json --manifest MANIFEST.json --repo DIR
 
 ``template`` prints the record with every slot the seat and the lead fill left null. ``review`` is the executing
@@ -13,7 +14,10 @@ only then decoded. A trace, telemetry or meter file is bound by its pin and neve
 records the shape found for RL-184 section 3.3's F01 to F05, the pinned writer's file and lines that produce the
 shape, and whether the shape is one the rule admits; the criteria are the rule's as written, and nothing is decided
 on seeing a file. The span's verdict is the pinned grammar validator's. The desk's verdict is the lead's to copy in
-from the row-7 desk record. ``check`` requires a filled record to carry the manifest's pins, every slot, and the same
+from the row-7 desk record. For each span the record also carries how its public Check item names the offload
+manifest (RL-194a section 2): the full digest, the text exactly as the Check prints it, the item number, and a slot
+for any second record made at the time, which is cited when one exists and is not required. ``--run-state`` reads a
+file; the default is RUN_STATE.md on origin/main. ``check`` requires a filled record to carry the manifest's pins, every slot, and the same
 verdict from the desk and the seat on every span; a disagreement or an inadmissible span goes to the research lead as
 a count and a shape before anything is changed.
 """
@@ -153,6 +157,8 @@ def template(pin_list, pin_list_sha256, manifest_sha256):
                    "criteria": CRITERIA},
         "spans": [{
             **{key: span[key] for key in custody_pins.SPAN_KEYS},
+            "check": {"item": span["check_item"], "offload_manifest_sha256": span["offload_manifest_sha256"],
+                      "as_printed": None, "form": None, "second_record": None},
             "receipt": {"path": admission.RECEIPT, "writer_pin": admission.PINS.get(span["runner_commit"]),
                         "kit_frozen_commit": None, "kit_frozen_commit_is_runner_commit": None,
                         "shapes": {rule: {"shape": None, "writer": _writer(rule, admission.PINS.get(span["runner_commit"])),
@@ -167,11 +173,14 @@ def _writer(rule, pin):
     return {"file": cite[0], "lines": cite[1]} if cite else {"file": None, "lines": None}
 
 
-def review(pin_list, pin_list_sha256, manifest_sha256, sdir_of, *, seat_model, seat_family, command):
-    """The executing seat's record: shapes and verdicts from the operational files, each read through its pin."""
+def review(pin_list, pin_list_sha256, manifest_sha256, sdir_of, *, seat_model, seat_family, command, run_state):
+    """The executing seat's record: shapes and verdicts from the operational files, each read through its pin, and
+    how each span's Check item in ``run_state`` (the public RUN_STATE's text) prints its offload manifest digest."""
     record = template(pin_list, pin_list_sha256, manifest_sha256)
     opened = []
     for span, row in zip(pin_list["spans"], record["spans"]):
+        binding = custody_pins.check_binding(span, run_state)
+        row["check"].update(as_printed=binding["as_printed"], form=binding["form"])
         files = PinnedOperational(span, sdir_of(span["span_id"]), opened)
         try:
             receipt = admission.decode(files.read(admission.RECEIPT), f"{span['span_id']}/{admission.RECEIPT}")
@@ -232,6 +241,20 @@ def record_problems(record, pin_list, pin_list_sha256, manifest_sha256):
         sid = span["span_id"]
         if any(row.get(key) != span[key] for key in custody_pins.SPAN_KEYS):
             problems.append(f"{sid}: its pins or Check items are not the manifest's")
+        check = row.get("check") or {}
+        printed = check.get("as_printed")
+        if check.get("item") != span["check_item"] or check.get("offload_manifest_sha256") != span["offload_manifest_sha256"]:
+            problems.append(f"{sid}: check does not carry the manifest's Check item and full offload manifest digest")
+        elif check.get("form") == "full" and printed == span["offload_manifest_sha256"]:
+            pass
+        elif check.get("form") == "abbreviated" and isinstance(printed, str) and custody_pins.check_binding(
+                span, f"{span['check_item']}. **as printed** {printed}\n")["as_printed"] == printed:
+            pass
+        else:
+            problems.append(f"{sid}: its Check item does not print a digest every character of which matches; the "
+                            "span is held and returns to the research lead")
+        if check.get("second_record") is not None and not (isinstance(check["second_record"], str) and check["second_record"]):
+            problems.append(f"{sid}: check.second_record is a citation or null")
         shapes = ((row.get("receipt") or {}).get("shapes") or {})
         for rule in RULES:
             slot = shapes.get(rule) or {}
@@ -278,6 +301,7 @@ def main(argv=None):
     run = sub.choices["review"]
     run.add_argument("--custody", required=True)
     run.add_argument("--span-dir", action="append", default=[])
+    run.add_argument("--run-state")
     run.add_argument("--seat-model", required=True)
     run.add_argument("--seat-family", required=True)
     run.add_argument("--out", required=True)
@@ -296,9 +320,11 @@ def main(argv=None):
                       f"executing seat agree on all; record sha256 {lm.sha256_file(Path(args.record))}")
             return 1 if problems else 0
         overrides = dict(pair.partition("=")[::2] for pair in args.span_dir)
+        run_state = (Path(args.run_state).read_text(encoding="utf-8") if args.run_state
+                     else lm.public_run_state(args.repo))
         record = review(pin_list, sha, manifest_sha,
                         lambda sid: Path(overrides.get(sid) or os.path.join(args.custody, sid)),
-                        seat_model=args.seat_model, seat_family=args.seat_family,
+                        run_state=run_state, seat_model=args.seat_model, seat_family=args.seat_family,
                         command=[Path(sys.argv[0]).name, *(argv if argv is not None else sys.argv[1:])])
         Path(args.out).write_bytes(dump(record))
         seat = [row["verdicts"]["executing_seat"] for row in record["spans"]]

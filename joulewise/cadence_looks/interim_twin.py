@@ -371,19 +371,23 @@ def _retain_stdout(data):
 
 
 def run(path, *, manifest, manifest_sha, commit, stage1_path, stage1_sha, custody, overrides,
-        restricted, coefficient_sha, deadline, stage1, coefficients, fit, step3, custody_pins=None):
-    """Launch the verified child once. Stderr inherits the reserved descriptor."""
-    argv = [sys.executable, "-I", "-B", str(path),
-            "--manifest", str(Path(manifest).resolve()), "--manifest-sha256", manifest_sha,
+        restricted, coefficient_sha, deadline, stage1, coefficients, fit, step3, wrapper, custody_pins=None):
+    """Launch the verified child once, through its pin-checking wrapper. Stderr inherits the reserved descriptor.
+
+    RL-194 condition 4: ``wrapper`` (scripts/cadence_interim_twin_pins.py) checks every roster file against the
+    look's pins with its own code and then becomes the reviewed child ``path``, byte-identical, with the arguments
+    below untouched. ``custody_pins`` is a draft look's own (pin list path, sha256)."""
+    argv = [sys.executable, "-I", "-B", str(wrapper)]
+    if custody_pins is not None:
+        argv.extend(("--custody-pins", str(Path(custody_pins[0]).resolve()), "--custody-pins-sha256", custody_pins[1]))
+    argv += ["--manifest", str(Path(manifest).resolve()), "--manifest-sha256", manifest_sha,
             "--ledger-commit", commit, "--stage1", str(Path(stage1_path).resolve()), "--stage1-sha256", stage1_sha,
             "--custody", str(Path(custody).resolve())]
+    del path                                # the wrapper finds the child by the manifest's own pin
     for span_id, location in overrides:
         argv.extend(("--span-dir", f"{span_id}={location}"))
     argv.extend(("--coefficients", str(restricted / "coefficients.json"), "--coefficients-sha256", coefficient_sha,
                  "--fit", str(restricted / "fit.json"), "--step3", str(restricted / "step3.json")))
-    if custody_pins is not None:        # a draft look's own pin list (RL-194); the child checks the pins itself
-        path_, sha256 = custody_pins
-        argv.extend(("--custody-pins", str(Path(path_).resolve()), "--custody-pins-sha256", sha256))
     fallback = {"agreement": "not_evaluable"}
     remaining = deadline - time.monotonic()
     if remaining <= 0:

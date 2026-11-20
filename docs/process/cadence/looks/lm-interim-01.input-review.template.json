@@ -4,6 +4,7 @@
   "One entry of 'spans' is shown; the filled record has one per roster span, in the pin list's order.",
   "scripts/cadence_look_input_review.py template prints this form with the manifest's pins filled in; review is the executing seat's run and fills the shapes, the writer lines, the seat's verdicts, the seat's identity, its command and the files it opened; the lead copies each span's desk verdict from the row-7 desk record; check requires every slot, the manifest's pins and the same verdict from both sources on every span.",
   "A filled record has no '_template' member. Its sha256 is named in the research lead's cold-pass ruling.",
+  "Each span's 'check' carries the full offload manifest digest, the text exactly as its public Check item prints it (in full, or an abbreviation every printed character of which matches), the item number, and 'second_record' for any second record made at the time, which is cited when one exists and is not required (RL-194a section 2). A span whose Check does not bind is held.",
   "Verdicts are 'admissible' or 'inadmissible'. A disagreement or an inadmissible span goes to the research lead as a count and a shape before anything is changed; neither the seat nor the lead edits the roster."
  ],
  "schema": "joulewise.cadence_look_input_review.v1",
@@ -34,6 +35,13 @@
      "size": null
     }
    ],
+   "check": {
+    "item": null,
+    "offload_manifest_sha256": null,
+    "as_printed": null,
+    "form": null,
+    "second_record": null
+   },
    "receipt": {
     "path": "runner_receipt.json",
     "writer_pin": null,

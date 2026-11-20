@@ -1,77 +1,87 @@
-# PR #795: stage 1 admits by content address (RL-194), and audit round 1
+# PR #795: stage 1 admits by content address (RL-194, RL-194a), and audit round 1
 
-RL-194 (research lead, 2026-11-20) rules that `lm-interim-01` may meet RL-184 §3.3 by content hash, because its
-inputs are a closed set of eleven collected spans. This round builds that, keeps the grammar validator behind it as
-defense in depth, and carries the audit-1 fixes that are still sound. Every test input is generated; no custody,
-energy, meter or restricted file was opened.
+RL-194 rules that `lm-interim-01` may meet RL-184 §3.3 by content hash, because its inputs are a closed set of
+eleven collected spans. RL-194a and the lead's decisions of the same day settle who hashes what, the twin, the
+abbreviated Check digests and the validator's controller rows. This report covers both rounds. Every test input is
+generated; no custody, energy, meter or restricted file was opened.
 
 ## What changed
 
 | Piece | Where | Role |
 | --- | --- | --- |
-| Pin list and first act | `joulewise/cadence_looks/custody_pins.py` | The pin-list format, its chain checks, `PinnedCustody.verify` and the guarded reads |
-| Manifest | `lm-interim-01.json` `inputs.pins`, `lm-interim-01.inputs.json`, `manifest.py`, `look_manifest.schema.json` | The manifest pins one inputs file; that file pins every file of every roster span. It is unfilled in this draft: the lead fills it with `pin-inputs` |
-| Pin tool | `scripts/cadence_look_manifest.py pin-inputs`, `check-inputs` | Writes the inputs file from the offload manifests without opening custody; follows the chain to each Check item |
-| Stage 1 and stage 2 | `scripts/cadence_look_run.py` `admit_custody` | The first act on custody in both stages, before any other roster read and before the reservation |
-| Twin | `scripts/cadence_interim_twin.py` `CustodyPins` | The child checks the pins itself on every custody read |
+| Pin list, chain checks, the stage's act, pinned reads | `joulewise/cadence_looks/custody_pins.py` | The pin-list format; `check_binding`; `PinnedCustody` |
+| Hash-only verifier | `scripts/cadence_look_verify_inputs.py` | A separate process each stage launches first. Standard library only |
+| Manifest | `lm-interim-01.json` `inputs.pins`, `lm-interim-01.inputs.json`, `manifest.py`, `look_manifest.schema.json` | The manifest pins one inputs file; that file pins every file of every roster span. Unfilled in this draft |
+| Pin tool | `scripts/cadence_look_manifest.py pin-inputs`, `check-inputs` | Writes the inputs file from the offload manifests without opening custody; follows the chain |
+| Stage 1 and stage 2 | `scripts/cadence_look_run.py` `admit_custody`, `run_verifier` | The first act on custody in both stages |
+| Twin | `scripts/cadence_interim_twin_pins.py` | A wrapper that checks the pins and then becomes the reviewed child, byte-identical |
 | Review record | `scripts/cadence_look_input_review.py`, `lm-interim-01.input-review.template.json` | The one-time record RL-194 §1 specifies |
-| CI | `.github/workflows/ci.yml` | The two jobs that gated on the 101,889-case matrix are removed |
+| Validator | `joulewise/cadence_looks/admission_journals.py` | Mirrors the pinned controller's real journal rows |
 
-## How the six conditions are met
+## Who hashes what
 
-| # | Condition | Here |
+| Process | Reads | Writes |
 | --- | --- | --- |
-| 1 | The pins cover every roster file either stage or the twin opens; an open outside the list refuses | The pins are each span's whole offload inventory. The first act refuses a file that is not pinned. For the rest of the stage an open of a roster path outside the list refuses, and so does a raw open that bypasses the served bytes |
-| 2 | Each pin chains to a public Check item; none is hashed fresh | A span's pins are its offload manifest's lines in order, so they rebuild that manifest's sha256. `pin-inputs` copies the digests and reads sizes from directory entries. A committed run requires the Check item on `origin/main` to name the digest |
-| 3 | Hash the bytes that are parsed; a mismatch, a missing file or a symlink refuses first | Each pinned file is read once into memory, hashed and compared. Later reads are served from those bytes |
-| 4 | The twin checks the pins itself | `CustodyPins` in the child: the pin list from the manifest, the inventory of each span directory, and a hash check on every read |
-| 5 | The once-only review opens operational files only | `cadence_look_input_review.py review` reads receipts, soak references, leg records, summaries and bundle journals, each through its pin, and refuses any other path |
-| 6 | An inadmissible real file comes to the research lead as a count and a shape | `check` fails on an inadmissible span or a disagreement and says so; nothing edits the roster |
+| Verifier (first, its own process) | Every pinned file of every roster span, as opaque bytes | One file: `pass` or `fail`, and per path the pinned and observed digests and one state word |
+| Stage 1 | Each operational file once into memory (hashed, then parsed from those bytes); a pinned stream's time fields from disk | Its stage-1 output. It never hashes a stream |
+| Stage 2 | Operational files as stage 1; a stream re-read and checked against its pin at each open, then decoded from those bytes | Under the reservation only |
+| Twin wrapper | Every pinned file, as opaque bytes, in one pass; then it becomes the reviewed child | The child's one frame |
 
-## Decisions the lead should know
+- **A fail consumes nothing.** The verifier runs before a stage parses anything and before the reservation.
+- **Stage 1 and energy (RL-179 F-12).** The stage process opens a stream only through the pins and only to read
+  what it read before (time fields). It holds and hashes no stream.
+- **Stage 2's re-check** raises inside the reservation, so the look is spent under RL-180's ordinary rule.
+- **The twin.** `scripts/cadence_interim_twin.py` is back at sha256 `91ca54ab…0aab` and `fit.twin` names it. The
+  wrapper is pinned look code. It shares no code with the primary's check.
+- **Pin scope.** Each span's pins are its whole offload inventory, so they rebuild the offload manifest digest and
+  any extra file refuses.
+- **Abbreviated Check digests (RL-194a §2).** The full digest is the offload manifest's sha256. It binds when the
+  Check prints it in full or prints an abbreviation every character of which matches, prefix and suffix as printed
+  (at least eight hex digits in all). The review record carries the full digest, the text as printed, the item
+  number and a slot for a second record. A span that does not bind is held.
 
-- **The reviewed #816 twin child changed.** Condition 4 requires it. Its sha256 was `91ca54ab…0aab` and is now the
-  value `fit.twin.sha256` carries in the manifest. Every custody read in the child goes through `pinned_bytes`.
-- **The pins are the whole offload inventory of each span,** not only the files a stage opens. That is what lets the
-  pin list rebuild the offload manifest digest with no other file, and it makes "extra file" a total check.
-- **Stage 1 holds every pinned byte in memory** from the first act to the end of the stage. The sum of the pinned sizes
-  is known from the pin list before the run.
-- **Staging.** `--stage-archives` hashes each member as it is written and never reopens it. Its per-file digests are
-  the same offload-manifest lines the pins are, and the first act then reads the staged copy back.
-- **Draft runs** name a generated custody's pin list with `--custody-pins`. A committed run cannot.
+## The validator and the real controller rows
 
-## The grammar validator on real data: a risk to settle before the run
+The leg runtime runs the whole controller (`r1_runtime.py` 1537-1546), and `controller.py`, `bundle.py` and
+`timing_receipts.py` are byte-identical at the three pinned revisions. The validator now admits what that code
+writes:
 
-The validator's controller-journal grammar was mirrored from the frozen packet's writer productions. Those drive the
-bundle serializer directly. The real leg runtime runs the whole controller (`joulewise/align/apple/r1_runtime.py`
-1537-1546 at `6e9d42f1d` calls `controller.run_benchmark`), which also writes `sampling_started`, `sampling_stopped` and
-`timing_boundary` rows and stage rows with metadata. The validator refuses those today ("not an event a pinned writer
-records"). I did not open real custody, so this is read from the pinned source, not observed. If it holds, the
-validator refuses every real span after the pins have admitted it.
+- **Stage rows with their metadata:** the adapter names on `validate`, the baseline's four members on
+  `idle_baseline`, `warmup` and `measured_run` counts, the sentinel's status forms, `cleanup_ok` and the battery
+  clock's reading where a non-mock backend adds it. A bare `{}` stays admitted: it is what the stage helpers
+  write when the frozen packet drives them directly.
+- **Sampling markers:** one `sampling_started`, then one `sampling_stopped`, with either of its two messages.
+- **Timing boundaries:** the receipt row is the event's metadata; phase, activity and time must agree; a span has
+  one start and at most one end.
+- **The failure path:** `failure`, the closing sampling marker, then `run_finalized`.
 
-RL-194 §2 says the builder's closed list shrinks to the shapes present in the eleven spans. The review record is
-where those shapes come from. Until the validator mirrors them, a real stage 1 will stop at the validator.
+The rows were generated by the pinned controller with its mock backends
+(`tests/cadence/interim_admission_controller`). I did not see a real journal. The ALIGN episode rows (gates, MLX
+phases, tokens) were already mirrored from the frozen packet.
+
+**One thing for the research lead.** `controller.py` 2045-2057 writes the idle baseline's mean power
+(`power_w_mean`) into the `idle_baseline` completion row of `events.jsonl`. That journal is an operational file
+stage 1 parses whole. The validator checks that member's JSON kind and nothing reads its value, but the number is
+in a file the stage decodes.
 
 ## Audit round 1
 
 | Finding | Disposition |
 | --- | --- |
-| H4: a genuine deadline result refused | Fixed. `finish_reason` is text or null; the deadman's stop needs its flag. A fixture generated by the pinned writers at all three revisions is committed with its generator |
-| Same class: hand-written `FailureReason` list | Fixed. It is the writers' ten members, checked against the pinned sources when they are in history |
-| H2: an unfinalized failure journal admitted | Fixed. A failure row is followed by `run_finalized`; a journal with no failure closes every stage it opened |
-| H3: a contradictory display status admitted | Fixed, with the same class across the step results (feed constants, host checks, meter-stop evidence) |
-| H1: archive staging read protected files before refusal | Superseded by RL-194: the hash of every file is now the ruled first act. Staging no longer reopens a member to hash it |
-
-Under RL-194 a shape no pinned file can hold is a low finding. H2 and H3 are kept because they are sound and cheap.
+| H4: a genuine deadline result refused | Fixed. A fixture generated by the pinned writers is committed |
+| Same class: hand-written `FailureReason` list | Fixed: the writers' ten members |
+| H2: an unfinalized failure journal admitted | Fixed |
+| H3: a contradictory display status admitted | Fixed, with the same class across the step results |
+| H1: staging read protected files before refusal | Superseded. Staging hashes each member as it is written and never reopens it |
 
 ## Verification
 
-Local runs were limited: the build host carried a load average near 140 from other lanes, so one CLI test took
-minutes. These passed locally: `test_custody_pins` (28), `test_input_review` (7), `test_look_run.Staging` (7), the
-staged stage-1 CLI test, and `test_interim_admission.AuditOne` (9). The full suite is hosted CI's.
+Hosted CI is the judge of the full suite: the build host's load made each CLI test take minutes. Fast modules run
+locally: `test_custody_pins` (30), `test_twin_wrapper` (7), `test_input_review` (9) and
+`test_interim_admission.RealControllerRows` (5).
 
-## Follow-ups
+## Not done
 
-- Mirror the real controller's journal rows in the validator, from the shapes the review record lists.
-- The frozen 101,889-case packet stays in the tree unedited. It drives the CLI without a pin list, so it cannot run as
-  it stands; its productions still feed the in-process validator tests.
+- The pin list is unfilled: the lead fills it with `pin-inputs` from the eleven offload manifests.
+- No real custody was opened, so agreement on the shapes actually present waits for the review record.
+- The frozen 101,889-case packet stays unedited and no longer gates.

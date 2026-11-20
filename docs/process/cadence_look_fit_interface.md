@@ -467,23 +467,28 @@ file of every roster span by sha256 and size
   A changed, added, dropped or reordered pin breaks the chain in the pin list
   itself. `cadence_look_manifest.py pin-inputs` writes the file from the offload
   manifests and opens no custody file; `check-inputs` follows the chain.
-- **The first act.** Before any other read of a roster file and before the
-  reservation, stage 1 and stage 2 read each pinned file once into memory, hash
-  it and compare. A changed, missing, unpinned or substituted file, a symlink
-  or a span the pins do not name refuses, and nothing is consumed. A committed
-  run also requires each span's Check item on `origin/main` to name its offload
-  manifest.
-- **The bytes hashed are the bytes parsed.** For the rest of the stage every
-  read of a roster path is served from the verified bytes. An open of a roster
-  path outside the pin list refuses, and so does any open that bypasses the
-  served bytes.
-- **The twin checks the pins itself.** The child reads the pin list the
-  manifest names and checks each custody file against its pin on every read.
+- **A separate verifier runs first (RL-194a §1).** `scripts/cadence_look_verify_inputs.py` is a hash-only
+  process each stage launches before it parses anything and before the reservation. It imports no decoder and no
+  look code, reads every pinned file as opaque bytes, and writes one file: `pass` or `fail`, and for each path
+  the pinned and observed digests. A `fail` refuses with nothing consumed. `--verification-out` keeps the file.
+- **Stage 1 never hashes an energy stream (RL-179 F-12).** After the verifier's pass the stage reads each
+  operational file it parses once into memory, hashes it and compares, and parses those bytes. It checks each
+  span directory by name: a missing or unpinned file or a symlink refuses. It reads a stream's time fields
+  from disk, and only if the stream is pinned.
+- **Stage 2 re-checks a stream's pin at each open,** immediately before decoding it, and decodes those bytes.
+  A mismatch there is inside the reservation and spends the look under RL-180's ordinary rule.
+- **An open of a roster path outside the pin list refuses,** and so does any open that bypasses the pinned
+  reads. A committed run also requires each span's Check item on `origin/main` to name its offload manifest:
+  in full, or by an abbreviation every printed character of which matches (RL-194a §2).
+- **The twin.** The reviewed child is byte-identical to its #816 review. The parent launches
+  `scripts/cadence_interim_twin_pins.py`, which checks every roster file against the pins with its own code
+  and then becomes the child with the child's arguments untouched.
 - **Draft runs.** A synthetic `--allow-draft` run names its generated
   custody's pin list with `--custody-pins`, and a RUN_STATE with `--run-state`.
 - **The review record.** `scripts/cadence_look_input_review.py` produces the
   one-time record RL-194 §1 specifies. The seat opens operational files only,
-  each through its pin. The form is
+  each through its pin. For each span it carries the full offload manifest
+  digest, the text exactly as the Check prints it and the item number. The form is
   `docs/process/cadence/looks/lm-interim-01.input-review.template.json`.
 
 The grammar validator still runs on the admitted bytes, in both stages, as
@@ -493,8 +498,10 @@ defense in depth (RL-184 §3.3):
 `admission_synthetic`). A shape is admitted only if one of the three rostered writer
 revisions (`b4b6aeb19`, `2d347f721`, `6e9d42f1d`) issues it; the grammar mirrors
 `scripts/cadence_legs_runner.py` and `joulewise/cadence/legs.py` there, with
-the source lines cited in the modules. The frozen 101,889-case matrix no longer
-gates.
+the source lines cited in the modules. The controller's rows are mirrored from
+`joulewise/controller.py` and `timing_receipts.py` (byte-identical at the three
+revisions): stage rows with their metadata, the sampling markers, the failure
+path and timing boundaries. The frozen 101,889-case matrix no longer gates.
 
 - **Strict decoding.** Every operational file is UTF-8 JSON with no duplicate
   member, no nonfinite number and no second document. A journal is one object

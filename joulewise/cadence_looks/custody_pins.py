@@ -7,11 +7,20 @@ span's Check) in their order, so the offload manifest's own sha256 is recomputed
 digest is the one the span's public RUN_STATE Check item names. A pin that was changed, added or dropped breaks the
 chain here, with no other file to consult.
 
-``PinnedCustody.verify`` is the first act of stage 1 and of stage 2 (RL-194 conditions 1 to 3): every pinned file
-is read once into memory, hashed and compared; a missing file, a file that is not pinned, a symlink, a size or a
-digest that differs refuses before any other read of a roster file and before the reservation. Every later read of
-a roster file is served from those verified bytes (``guard``): the bytes hashed are the bytes parsed, and an open of
-a roster path outside the pin list refuses. Nothing here decodes a measurement.
+Who hashes what (RL-194 conditions 1 to 3, as RL-194a amends them for the energy streams):
+
+* A separate, hash-only verifier process (``scripts/cadence_look_verify_inputs.py``) runs first, before a stage parses
+  anything and before the reservation. It reads every pinned file as opaque bytes and writes ``pass`` or ``fail`` with
+  the pinned and observed digests. A stage is never the process that hashes an energy stream (RL-179 F-12).
+* ``PinnedCustody.verify`` is then the stage's own act on the operational files it parses (the receipt, the soak
+  reference, the leg records and summaries and the bundles' journals): each is read once into memory, hashed and
+  compared, and every later read of one is served from those bytes, so the bytes hashed are the bytes parsed. It also
+  checks each span directory by name: a missing file, a file that is not pinned or a symlink refuses.
+* A stream is opened only if it is pinned. Stage 1 reads its time fields from disk after the verifier's pass. Stage 2
+  re-checks a stream's pin at each open, immediately before it is decoded, and decodes those bytes; a mismatch there
+  is inside the reservation. An open of a roster path outside the pin list refuses in both.
+
+Nothing here decodes a measurement.
 """
 from __future__ import annotations
 
@@ -27,14 +36,27 @@ import stat
 import sys
 
 SCHEMA = "joulewise.cadence_look_input_pins.v1"
+VERIFICATION_SCHEMA = "joulewise.cadence_look_input_verification.v1"
 _HEX64 = re.compile(r"[0-9a-f]{64}")
 _COMMIT = re.compile(r"[0-9a-f]{40}")
 _SPAN = re.compile(r"[a-zA-Z0-9][a-zA-Z0-9._-]*")
 _OFFLOAD_LINE = re.compile(r"([0-9a-f]{64})  \./(.+)")
 _ITEM_HEAD = re.compile(r"^([0-9]+)\. \*\*", re.M)
-_ABBREVIATED = re.compile(r"([0-9a-f]{8,63})(?:…|\.\.\.)([0-9a-f]{0,55})")
+_ABBREVIATED = re.compile(r"(?<![0-9a-f])([0-9a-f]{1,63})(?:…|\.\.\.)([0-9a-f]{0,63})(?![0-9a-f])")
 SPAN_KEYS = ("span_id", "runner_commit", "close_item", "check_item", "offload_manifest_sha256", "files")
 FILE_KEYS = ("path", "sha256", "size")
+# The span paths a stage parses whole and the look reuses: the receipt, the soak reference, each leg's record and
+# summary and a bundle's journals. Every other pinned file is a stream: bound by its hash, never hashed by stage 1.
+_OPERATIONAL = re.compile(
+    r"runner_receipt\.json|soak/soak_reference\.json"
+    r"|legs/[^/]+/leg_(?:record|summary)\.json"
+    r"|legs/[^/]+/runtime/(?:[^/]+/)*(?:events\.jsonl|config\.json|align_runtime_events\.jsonl"
+    r"|align_(?:turns|thermal|runtime_events)\.jsonl)")
+
+
+def is_operational_path(rel):
+    """Whether a span-relative POSIX path is one of the operational sources, never an energy-bearing file."""
+    return _OPERATIONAL.fullmatch(rel) is not None
 
 
 class PinRefusal(Exception):
@@ -158,34 +180,42 @@ def run_state_item(text, number):
     return text[start:end]
 
 
+def check_binding(span, run_state_text):
+    """How a span's public Check item names its offload manifest (RL-194a section 2). The full digest is the sha256
+    of the offload manifest file as custody holds it. It binds to the Check when the item prints it in full, or
+    prints an abbreviation every character of which matches: the prefix and the suffix exactly as printed (at least
+    eight hex digits in all). Returns the item number, the text as printed (None when nothing binds) and the form:
+    ``full``, ``abbreviated`` or ``absent``."""
+    digest, number = span["offload_manifest_sha256"], span["check_item"]
+    item = run_state_item(run_state_text, number)
+    out = {"check_item": number, "as_printed": None, "form": "absent"}
+    if item is None:
+        return out
+    if digest in item:
+        return dict(out, as_printed=digest, form="full")
+    for match in _ABBREVIATED.finditer(item):
+        prefix, suffix = match.group(1), match.group(2)
+        if len(prefix) + len(suffix) >= 8 and digest.startswith(prefix) and digest.endswith(suffix):
+            return dict(out, as_printed=match.group(0), form="abbreviated")
+    return out
+
+
 def check_chain_problems(doc, run_state_text):
-    """Problems chaining each span's offload manifest to its public Check item. The item names the digest in full,
-    or by a prefix of at least eight digits with its closing digits (``5d029937…00b``)."""
+    """Problems chaining each span's offload manifest to its public Check item. A span whose Check prints no
+    matching digest is held and returns to the research lead."""
     problems = []
     for span in doc["spans"]:
-        digest, number = span["offload_manifest_sha256"], span["check_item"]
-        item = run_state_item(run_state_text, number)
-        if item is None:
-            problems.append(f"{span['span_id']}: RUN_STATE has no single item {number}")
-        elif digest not in item and not any(digest.startswith(a) and digest.endswith(b)
-                                            for a, b in _ABBREVIATED.findall(item)):
-            problems.append(f"{span['span_id']}: Check item {number} does not name its offload manifest's sha256")
+        if run_state_item(run_state_text, span["check_item"]) is None:
+            problems.append(f"{span['span_id']}: RUN_STATE has no single item {span['check_item']}")
+        elif check_binding(span, run_state_text)["form"] == "absent":
+            problems.append(f"{span['span_id']}: Check item {span['check_item']} does not name its offload "
+                            "manifest's sha256; the span is held")
     return problems
 
 
 def chain_link(doc, run_state_text):
     """Per span, how its Check item names the offload manifest: ``full``, ``abbreviated`` or ``absent``."""
-    out = {}
-    for span in doc["spans"]:
-        digest, item = span["offload_manifest_sha256"], run_state_item(run_state_text, span["check_item"])
-        if item is None:
-            out[span["span_id"]] = "absent"
-        elif digest in item:
-            out[span["span_id"]] = "full"
-        else:
-            out[span["span_id"]] = ("abbreviated" if any(digest.startswith(a) and digest.endswith(b)
-                                                         for a, b in _ABBREVIATED.findall(item)) else "absent")
-    return out
+    return {span["span_id"]: check_binding(span, run_state_text)["form"] for span in doc["spans"]}
 
 
 def pin_list_sha256(raw):
@@ -212,37 +242,42 @@ def load_pin_list(raw, *, complete=True):
 
 
 class PinnedCustody:
-    """The roster's span directories, admitted by content address and then read only from memory."""
+    """The roster's span directories under their pins, for one stage.
 
-    def __init__(self, doc, roster_span_ids, sdir_of):
+    ``streams`` says what the stage does when it opens a pinned stream (any pinned file that is not operational):
+    ``"pass"`` reads it from disk (stage 1, which never hashes energy: the verifier process has checked it);
+    ``"verify"`` reads it once, checks its pin and serves those bytes (stage 2, immediately before decoding)."""
+
+    def __init__(self, doc, roster_span_ids, sdir_of, *, streams):
         ids = list(roster_span_ids)
         pinned = [span["span_id"] for span in doc["spans"]]
         if sorted(ids) != sorted(pinned) or len(set(ids)) != len(ids):
             raise PinRefusal(f"the pin list names {len(pinned)} span(s) and the roster {len(ids)}; "
                              "they are not the same spans")
+        if streams not in ("pass", "verify"):
+            raise ValueError("streams: 'pass' or 'verify'")
         self.spans = {span["span_id"]: span for span in doc["spans"]}
-        self.order = ids
+        self.order, self.streams = ids, streams
         self.roots = {sid: os.path.abspath(os.fspath(sdir_of(sid))) for sid in ids}
-        self._bytes = {}                # (span id, relative path) -> the verified bytes
+        self.pins = {(sid, entry["path"]): entry for sid in ids for entry in self.spans[sid]["files"]}
+        self._bytes = {}                # (span id, relative path) -> an operational file's verified bytes
         self._real = {}                 # realpath of a span directory -> span id
         self._own_read = False
         self._guarded = False
-        self.opened = []                # (span id, relative path) of every read served, in order
+        self.opened = []                # (span id, relative path) of every read the stage made, in order
 
-    # ------------------------------------------------------------------------------------------ the first act
+    # ------------------------------------------------------------------------------------- the stage's own act
     def verify(self):
-        """Refuse unless every span directory holds exactly its pinned files with their pinned bytes. Returns the
-        number of files and bytes verified. Reads every pinned file once; the bytes stay in memory."""
+        """Refuse unless every span directory holds exactly its pinned files (by name; nothing is opened for that)
+        and every operational file has its pinned bytes. Returns the number of operational files and bytes read.
+        No stream is opened here."""
         for sid in self.order:
             self._inventory(sid)
         count = total = 0
-        for sid in self.order:
-            for entry in self.spans[sid]["files"]:
-                data = self._read_once(sid, entry["path"])
-                if len(data) != entry["size"] or hashlib.sha256(data).hexdigest() != entry["sha256"]:
-                    raise PinRefusal(f"{sid}/{entry['path']}: its bytes are not its pin")
-                self._bytes[(sid, entry["path"])] = data
-                count, total = count + 1, total + len(data)
+        for (sid, rel), entry in self.pins.items():
+            if is_operational_path(rel):
+                self._bytes[(sid, rel)] = self._pinned_bytes(sid, rel)
+                count, total = count + 1, total + entry["size"]
         for sid in self.order:
             self._real[os.path.realpath(self.roots[sid])] = sid
         return count, total
@@ -279,7 +314,9 @@ class PinnedCustody:
         for rel in sorted(present - pinned)[:1]:
             raise PinRefusal(f"{sid}/{rel}: a file that is not pinned")
 
-    def _read_once(self, sid, rel):
+    def _pinned_bytes(self, sid, rel):
+        """One pinned file read once, hashed and compared; the bytes are returned only if they are the pin's."""
+        entry = self.pins[(sid, rel)]
         path = os.path.join(self.roots[sid], *rel.split("/"))
         self._own_read = True
         try:
@@ -288,15 +325,18 @@ class PinnedCustody:
                 if not stat.S_ISREG(os.fstat(descriptor).st_mode):
                     raise PinRefusal(f"{sid}/{rel}: not a regular file")
                 with os.fdopen(descriptor, "rb", closefd=False) as handle:
-                    return handle.read()
+                    data = handle.read()
             finally:
                 os.close(descriptor)
         except OSError:
             raise PinRefusal(f"{sid}/{rel}: a pinned file is missing, a symlink or unreadable") from None
         finally:
             self._own_read = False
+        if len(data) != entry["size"] or hashlib.sha256(data).hexdigest() != entry["sha256"]:
+            raise PinRefusal(f"{sid}/{rel}: its bytes are not its pin")
+        return data
 
-    # ------------------------------------------------------------------------------- reads after the first act
+    # ----------------------------------------------------------------------------------- reads during the stage
     def locate(self, file):
         """(span id, relative path) of a path inside a roster span directory, or None for any other path."""
         if not isinstance(file, (str, bytes, os.PathLike)):
@@ -312,10 +352,10 @@ class PinnedCustody:
         return None
 
     def read(self, sid, rel):
-        """The verified bytes of one pinned file; an unpinned path refuses."""
+        """The verified bytes of one operational file; any other path refuses."""
         data = self._bytes.get((sid, rel))
         if data is None:
-            raise PinRefusal(f"{sid}/{rel}: an open of a roster file outside the pin list")
+            raise PinRefusal(f"{sid}/{rel}: an open of a roster file outside the verified operational files")
         self.opened.append((sid, rel))
         return data
 
@@ -327,30 +367,45 @@ class PinnedCustody:
         sid, rel = hit
         if set(mode) - set("rbt"):
             raise PinRefusal(f"{sid}/{rel}: a roster file opened for writing")
-        if (sid, rel) not in self._bytes:
+        if (sid, rel) not in self.pins:
             path = os.path.abspath(os.fsdecode(file))
             if rel and os.path.isdir(path):
                 raise IsADirectoryError(21, "Is a directory", path)
             if not os.path.lexists(path):
                 raise FileNotFoundError(2, "No such file or directory", path)
-        data = self.read(sid, rel)
+            raise PinRefusal(f"{sid}/{rel}: an open of a roster file outside the pin list")
         sys.audit("joulewise.custody_pins.read", os.fsdecode(file), mode)      # an observer sees what is parsed
+        if (sid, rel) in self._bytes:
+            data = self.read(sid, rel)
+        elif self.streams == "pass":
+            # Stage 1 and a stream: the verifier process hashed it; this process reads its time fields from disk
+            # and never holds or hashes the whole file (RL-179 F-12; RL-194a section 1).
+            self.opened.append((sid, rel))
+            self._own_read = True
+            try:
+                return real_open(file, mode, buffering, encoding, errors, newline, closefd, opener)
+            finally:
+                self._own_read = False
+        else:
+            # Stage 2 and a stream: its pin is checked on this read, immediately before it is decoded
+            data = self._pinned_bytes(sid, rel)
+            self.opened.append((sid, rel))
         if "b" in mode:
             return io.BytesIO(data)
         return io.TextIOWrapper(io.BytesIO(data), encoding=encoding, errors=errors, newline=newline)
 
     def _audit(self, event, args):
-        """The backstop: a real open of a roster path that this store did not make itself refuses. Reads served
+        """The backstop: a real open of a roster path that this object did not make itself refuses. Reads served
         from memory open nothing, so they raise no event."""
         if not self._guarded or self._own_read or event != "open" or not args:
             return
         if self.locate(args[0]) is not None:
             sid, rel = self.locate(args[0])
-            raise PinRefusal(f"{sid}/{rel}: a roster file opened outside the verified bytes")
+            raise PinRefusal(f"{sid}/{rel}: a roster file opened outside the pinned reads")
 
     @contextlib.contextmanager
     def guard(self):
-        """Serve every read of a roster path from the verified bytes for the duration of the stage."""
+        """Route every read of a roster path through the pins for the duration of the stage."""
         real_open = builtins.open
 
         def guarded(file, mode="r", buffering=-1, encoding=None, errors=None, newline=None, closefd=True,
@@ -364,3 +419,26 @@ class PinnedCustody:
             yield self
         finally:
             builtins.open, io.open, self._guarded = real_open, real_open, False
+
+
+def verification_problems(doc, result):
+    """Problems of the verifier process's result file against the pin list: it must say ``pass`` and carry, for
+    exactly the pinned files, an observed digest equal to the pin. Returns the first problems, naming paths."""
+    expected = [(span["span_id"], entry["path"], entry["sha256"]) for span in doc["spans"] for entry in span["files"]]
+    if (not isinstance(result, dict) or set(result) != {"schema", "result", "files"}
+            or result.get("schema") != VERIFICATION_SCHEMA or not isinstance(result.get("files"), list)):
+        return ["the verifier's result is not a joulewise.cadence_look_input_verification.v1 file"]
+    problems, seen = [], []
+    for row in result["files"]:
+        if not isinstance(row, dict) or set(row) != {"span_id", "path", "pinned", "observed", "state"}:
+            return ["the verifier's result carries a row that is not span_id, path, pinned, observed and state"]
+        seen.append((row["span_id"], row["path"], row["pinned"]))
+        if row["state"] != "match" or row["observed"] != row["pinned"] or row["pinned"] is None:
+            words = {"mismatch": "its bytes are not its pin", "missing": "a pinned file is missing",
+                     "not_pinned": "a file that is not pinned", "symlink": "a symlink"}
+            problems.append(f"{row['span_id']}/{row['path']}: {words.get(row['state'], 'not verified')}")
+    if not problems and sorted(seen) != sorted(expected):
+        problems.append("the verifier did not check exactly the pinned files")
+    if not problems and result["result"] != "pass":
+        problems.append("the verifier did not pass")
+    return problems

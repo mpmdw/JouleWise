@@ -162,7 +162,7 @@ class CheckChain(unittest.TestCase):
             "the item twice": text + text,
             "an abbreviation of another digest": text.replace(
                 doc["spans"][0]["offload_manifest_sha256"], "00000000…000"),
-            "a prefix too short to bind": text.replace(
+            "an abbreviation too short to bind": text.replace(
                 doc["spans"][0]["offload_manifest_sha256"], doc["spans"][0]["offload_manifest_sha256"][:7] + "…"),
         }
         for label, changed in cases.items():
@@ -172,6 +172,27 @@ class CheckChain(unittest.TestCase):
         moved["spans"][0]["check_item"] = doc["spans"][1]["check_item"]        # points at the other span's Check
         self.assertTrue(P.check_chain_problems(moved, text))
 
+    def test_an_abbreviation_binds_when_every_printed_character_matches(self):
+        """RL-194a section 2: prefix and suffix exactly as the Check prints them."""
+        doc = pins()
+        span = doc["spans"][0]
+        digest, number = span["offload_manifest_sha256"], span["check_item"]
+        item = lambda printed: f"{number}. **Check.** enc sha256 `00000000…000`, manifest `{printed}` (5 files)\n"
+        other = "0" if digest[-1] != "0" else "1"
+        for printed, form in ((digest, "full"), (f"{digest[:8]}…{digest[-3:]}", "abbreviated"),
+                              (f"{digest[:8]}...{digest[-7:]}", "abbreviated"), (f"{digest[:8]}…", "abbreviated"),
+                              (f"{digest[:5]}…{digest[-3:]}", "abbreviated"),
+                              (f"{digest[:7]}{other if digest[7] != other else 'f'}…{digest[-3:]}", "absent"),
+                              (f"{digest[:8]}…{digest[-3:-1]}{other}", "absent"),
+                              (f"{digest[:4]}…{digest[-3:]}", "absent"),          # seven digits printed: too few
+                              (digest[:20], "absent")):                           # a bare prefix is not an abbreviation
+            with self.subTest(printed=printed):
+                got = P.check_binding(span, item(printed))
+                self.assertEqual(got["form"], form)
+                self.assertEqual(got["as_printed"], printed if form != "absent" else None)
+                self.assertEqual(got["check_item"], number)
+                self.assertEqual(bool(P.check_chain_problems(doc, item(printed))), form == "absent")
+
     def test_an_item_runs_from_its_head_to_the_next_item_s_head(self):
         text = "320. **Later.** x\n\n3. sub-step with 317. inside\n\n317. **Check.** digest here\n1. step\n\n316. **Earlier.** y\n"
         self.assertEqual(P.run_state_item(text, 317), "317. **Check.** digest here\n1. step\n\n")
@@ -179,7 +200,14 @@ class CheckChain(unittest.TestCase):
         self.assertIsNone(P.run_state_item(text, 999))
 
 
-class FirstAct(unittest.TestCase):
+TRACE = "legs/L001/runtime/run/power_trace.csv"
+STREAM = "hazards/meter/stream-0001.jsonl"
+RECEIPT = "runner_receipt.json"
+RECORD = "legs/L001/leg_record.json"
+VERIFIER = Path(__file__).resolve().parents[2] / "scripts/cadence_look_verify_inputs.py"
+
+
+class _Custody(unittest.TestCase):
     SPANS = ("dev-01-s01", "dev-01-s03")
 
     def setUp(self):
@@ -189,171 +217,311 @@ class FirstAct(unittest.TestCase):
         for sid in self.SPANS:
             write_span(self.root, sid)
         self.doc = pins(self.SPANS)
+        self.pin_file = Path(self.tmp.name) / "pins.json"
+        self.pin_file.write_text(json.dumps(self.doc))
 
-    def custody(self, doc=None, roster=None):
-        return P.PinnedCustody(doc or self.doc, roster or self.SPANS, lambda sid: self.root / sid)
+    def faults(self):
+        """label -> (change to the custody, the path the refusal names, the verifier's word for it)."""
+        s1, s3 = self.root / "dev-01-s01", self.root / "dev-01-s03"
 
-    def refused(self, pattern, doc=None):
-        custody = self.custody(doc)
-        with self.assertRaisesRegex(P.PinRefusal, pattern):
-            custody.verify()
-        self.assertEqual(custody.opened, [])                    # nothing was served: no other read happened
+        def flip(path):
+            data = path.read_bytes()
+            path.write_bytes(bytes([data[0] ^ 1]) + data[1:])
 
-    def test_the_pinned_copy_is_admitted_and_counted(self):
-        count, total = self.custody().verify()
-        self.assertEqual(count, sum(len(files_for(sid)) for sid in self.SPANS))
-        self.assertEqual(total, sum(len(data) for sid in self.SPANS for data in files_for(sid).values()))
+        def exchange(a, b):
+            x, y = a.read_bytes(), b.read_bytes()
+            a.write_bytes(y)
+            b.write_bytes(x)
 
-    def test_a_changed_file_refuses(self):
-        path = self.root / "dev-01-s03/legs/L001/runtime/run/power_trace.csv"
-        data = path.read_bytes()
-        path.write_bytes(bytes([data[0] ^ 1]) + data[1:])       # one flipped bit, the same length
-        self.refused(r"dev-01-s03/legs/L001/runtime/run/power_trace\.csv: its bytes are not its pin")
+        def link(path):
+            kept = Path(self.tmp.name) / "kept"
+            path.rename(kept)                       # the link resolves to the very bytes that are pinned
+            path.symlink_to(kept, target_is_directory=kept.is_dir())
+        return {
+            "a changed stream (one bit, same length)": (lambda: flip(s3 / TRACE), f"dev-01-s03/{TRACE}", "mismatch"),
+            "a changed operational file": (lambda: flip(s1 / RECEIPT), f"dev-01-s01/{RECEIPT}", "mismatch"),
+            "a stream of another length": (lambda: (s1 / STREAM).write_bytes((s1 / STREAM).read_bytes() + b" "),
+                                           f"dev-01-s01/{STREAM}", "mismatch"),
+            "a missing stream": ((s1 / STREAM).unlink, f"dev-01-s01/{STREAM}", "missing"),
+            "a missing operational file": ((s3 / RECORD).unlink, f"dev-01-s03/{RECORD}", "missing"),
+            "an extra stream": (lambda: (s1 / "hazards/meter/stream-0002.jsonl").write_bytes(b"x"),
+                                "dev-01-s01/hazards/meter/stream-0002.jsonl", "not_pinned"),
+            "two streams exchanged": (lambda: exchange(s1 / TRACE, s1 / STREAM), f"dev-01-s01/{STREAM}", "mismatch"),
+            "a symlinked stream": (lambda: link(s1 / TRACE), f"dev-01-s01/{TRACE}", "symlink"),
+            "a symlinked directory": (lambda: link(s1 / "hazards"), "dev-01-s01/hazards", "symlink"),
+            "a symlinked span": (lambda: link(s3), "dev-01-s03", "symlink"),
+        }
 
-    def test_a_file_of_another_length_refuses(self):
-        path = self.root / "dev-01-s01/runner_receipt.json"
-        path.write_bytes(path.read_bytes() + b" ")
-        self.refused(r"dev-01-s01/runner_receipt\.json: its bytes are not its pin")
+    def run_verifier(self, out=None):
+        import subprocess
+        import sys
+        out = out or Path(self.tmp.name) / "verification.json"
+        argv = [sys.executable, "-I", "-B", str(VERIFIER), "--pins", str(self.pin_file), "--pins-sha256",
+                sha(self.pin_file.read_bytes()), "--out", str(out)]
+        for sid in self.SPANS:
+            argv += ["--span", f"{sid}={self.root / sid}"]
+        done = subprocess.run(argv, capture_output=True, text=True)
+        return done, (json.loads(out.read_bytes()) if out.exists() else None)
 
-    def test_a_missing_file_refuses(self):
-        (self.root / "dev-01-s01/hazards/meter/stream-0001.jsonl").unlink()
-        self.refused(r"dev-01-s01/hazards/meter/stream-0001\.jsonl: a pinned file is missing")
 
-    def test_an_extra_file_refuses(self):
-        for rel in ("hazards/meter/stream-0002.jsonl", "notes.txt", "legs/L002/leg_record.json"):
-            path = self.root / "dev-01-s01" / rel
-            path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_bytes(b"unpinned\n")
-            with self.subTest(rel):
-                self.refused(rf"dev-01-s01/{rel}: a file that is not pinned".replace(".", r"\."))
-            path.unlink()
+class Verifier(_Custody):
+    """RL-194a section 1: the separate hash-only process that runs first."""
 
-    def test_a_substituted_file_refuses(self):
-        """Two pinned files with their contents exchanged: each name still exists and each digest is still pinned."""
-        first = self.root / "dev-01-s01/legs/L001/runtime/run/power_trace.csv"
-        second = self.root / "dev-01-s01/hazards/meter/stream-0001.jsonl"
-        a, b = first.read_bytes(), second.read_bytes()
-        first.write_bytes(b)
-        second.write_bytes(a)
-        self.refused("its bytes are not its pin")
-        first.write_bytes(a)
-        second.write_bytes(b)
-        other = self.root / "dev-01-s03/runner_receipt.json"                 # another span's file under this name
-        other.write_bytes(b'{"roster": ["L009"]}\n')
-        self.refused(r"dev-01-s03/runner_receipt\.json: its bytes are not its pin")
+    def test_it_passes_the_pinned_copy_and_writes_words_and_hashes_only(self):
+        done, result = self.run_verifier()
+        self.assertEqual((done.returncode, done.stdout, done.stderr), (0, "", ""))
+        self.assertEqual(set(result), {"schema", "result", "files"})
+        self.assertEqual((result["schema"], result["result"]), (P.VERIFICATION_SCHEMA, "pass"))
+        self.assertEqual(len(result["files"]), sum(len(files_for(sid)) for sid in self.SPANS))
+        for row in result["files"]:
+            self.assertEqual(set(row), {"span_id", "path", "pinned", "observed", "state"})
+            self.assertEqual((row["state"], row["observed"]), ("match", row["pinned"]))
+        self.assertEqual(P.verification_problems(self.doc, result), [])
 
-    def test_a_symlink_refuses_whatever_it_points_at(self):
-        target = self.root / "dev-01-s01/legs/L001/runtime/run/power_trace.csv"
-        kept = self.root.parent / "kept.csv"
-        kept.write_bytes(target.read_bytes())                   # the link resolves to the very bytes that are pinned
-        target.unlink()
-        target.symlink_to(kept)
-        self.refused(r"dev-01-s01/legs/L001/runtime/run/power_trace\.csv: a symlink")
-        target.unlink()
-        target.write_bytes(kept.read_bytes())
-        directory = self.root / "dev-01-s01/hazards"
-        moved = self.root.parent / "hazards-kept"
-        directory.rename(moved)
-        directory.symlink_to(moved, target_is_directory=True)
-        self.refused(r"dev-01-s01/hazards: a symlink")
-        directory.unlink()
-        moved.rename(directory)
-        span = self.root / "dev-01-s03"
-        elsewhere = self.root.parent / "span-kept"
-        span.rename(elsewhere)
-        span.symlink_to(elsewhere, target_is_directory=True)
-        self.refused("dev-01-s03: the span directory is a symlink")
+        def leaves(node):
+            if isinstance(node, dict):
+                for value in node.values():
+                    yield from leaves(value)
+            elif isinstance(node, list):
+                for value in node:
+                    yield from leaves(value)
+            else:
+                yield node
+        self.assertTrue(all(isinstance(leaf, str) or leaf is None for leaf in leaves(result)))   # no size, count, float
 
-    def test_a_missing_span_and_a_roster_the_pins_do_not_match_refuse(self):
-        with self.assertRaisesRegex(P.PinRefusal, "not the same spans"):
-            self.custody(roster=("dev-01-s01",))
-        with self.assertRaisesRegex(P.PinRefusal, "not the same spans"):
-            self.custody(roster=(*self.SPANS, "dev-02-s02"))
-        with self.assertRaisesRegex(P.PinRefusal, "not the same spans"):
-            self.custody(roster=("dev-01-s01", "dev-01-s01"))
-        import shutil
+    def test_it_holds_no_decoder_and_imports_no_look_code(self):
+        import ast
+        tree = ast.parse(VERIFIER.read_text(encoding="utf-8"))
+        imported = set()
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Import):
+                imported |= {alias.name.split(".")[0] for alias in node.names}
+            elif isinstance(node, ast.ImportFrom):
+                imported.add((node.module or "").split(".")[0])
+        self.assertEqual(imported, {"hashlib", "json", "os", "stat", "sys"})
+
+    def test_each_fault_fails_with_the_path_and_both_digests(self):
+        for label, (change, named, word) in self.faults().items():
+            for sid in self.SPANS:
+                shutil.rmtree(self.root / sid, ignore_errors=True)
+                (self.root / sid).unlink(missing_ok=True)
+                write_span(self.root, sid)
+            shutil.rmtree(Path(self.tmp.name) / "kept", ignore_errors=True)
+            (Path(self.tmp.name) / "kept").unlink(missing_ok=True)
+            change()
+            done, result = self.run_verifier()
+            with self.subTest(label):
+                self.assertEqual((done.returncode, result["result"]), (1, "fail"))
+                bad = [row for row in result["files"] if row["state"] != "match"]
+                self.assertTrue(any(f"{row['span_id']}/{row['path']}".startswith(named) and row["state"] == word
+                                    for row in bad), bad)
+                for row in bad:
+                    self.assertIn(row["state"], ("mismatch", "missing", "not_pinned", "symlink"))
+                    if row["state"] == "mismatch":
+                        self.assertNotEqual(row["observed"], row["pinned"])
+                        self.assertRegex(row["observed"], "^[0-9a-f]{64}$")
+                    else:
+                        self.assertIsNone(row["observed"])            # a missing, linked or unpinned file is not read
+                problems = P.verification_problems(self.doc, result)
+                self.assertTrue(problems and problems[0].startswith(named.split("/")[0]), problems)
+
+    def test_it_runs_only_as_asked(self):
+        import subprocess
+        import sys
+        base = [sys.executable, "-I", "-B", str(VERIFIER)]
+        spans = [arg for sid in self.SPANS for arg in ("--span", f"{sid}={self.root / sid}")]
+        out = Path(self.tmp.name) / "o.json"
+        good = ["--pins", str(self.pin_file), "--pins-sha256", sha(self.pin_file.read_bytes()), "--out", str(out)]
+        for label, argv in {"another pin list digest": [*good[:3], "0" * 64, *good[4:], *spans],
+                            "a span the pins do not name": [*good, *spans, "--span", f"other={self.root}"],
+                            "a pinned span not named": [*good, *spans[:2]],
+                            "an unknown option": [*good, *spans, "--decode", "x"]}.items():
+            with self.subTest(label):
+                self.assertEqual(subprocess.run(base + argv, capture_output=True).returncode, 2)
+                self.assertFalse(out.exists())
+
+    def test_a_result_that_is_not_the_whole_pin_list_passing_is_refused_by_the_stage(self):
+        _, result = self.run_verifier()
+        changes = {
+            "a row dropped": lambda r: r["files"].pop(),
+            "a row for another path": lambda r: r["files"][0].update(path="other.json"),
+            "a pass that lists a mismatch": lambda r: r["files"][0].update(observed="0" * 64, state="mismatch"),
+            "a fail with every row matching": lambda r: r.update(result="fail"),
+            "a row with a size": lambda r: r["files"][0].update(size=3),
+            "another schema": lambda r: r.update(schema="x"),
+        }
+        for label, change in changes.items():
+            changed = json.loads(json.dumps(result))
+            change(changed)
+            with self.subTest(label):
+                self.assertTrue(P.verification_problems(self.doc, changed))
+
+
+class StageAct(_Custody):
+    """The stage's own act: each span directory by name, and the operational bytes it parses. No stream is opened."""
+
+    def custody(self, doc=None, roster=None, streams="pass"):
+        return P.PinnedCustody(doc or self.doc, roster or self.SPANS, lambda sid: self.root / sid, streams=streams)
+
+    def test_it_reads_the_operational_files_once_and_opens_no_stream(self):
+        for sid in self.SPANS:                                   # a stream that cannot be opened is still admitted
+            for name in (TRACE, STREAM):
+                os.chmod(self.root / sid / name, 0)
+        try:
+            custody = self.custody()
+            count, total = custody.verify()
+        finally:
+            for sid in self.SPANS:
+                for name in (TRACE, STREAM):
+                    os.chmod(self.root / sid / name, 0o600)
+        operational = [name for name in files_for("dev-01-s01") if P.is_operational_path(name)]
+        self.assertEqual(sorted(operational), sorted([RECEIPT, RECORD, "legs/L001/runtime/run/events.jsonl",
+                                                      "soak/soak_reference.json"]))
+        self.assertEqual(count, len(operational) * len(self.SPANS))
+        self.assertEqual(total, sum(len(files_for(sid)[name]) for sid in self.SPANS for name in operational))
+        self.assertEqual(sorted(rel for _, rel in custody._bytes), sorted(operational * len(self.SPANS)))
+
+    def test_each_fault_the_stage_itself_can_see_refuses_before_anything_is_served(self):
+        seen_by_stage = {"a changed operational file": "its bytes are not its pin",
+                         "a missing stream": "a pinned file is missing",
+                         "a missing operational file": "a pinned file is missing",
+                         "an extra stream": "a file that is not pinned",
+                         "a symlinked stream": "a symlink", "a symlinked directory": "a symlink",
+                         "a symlinked span": "the span directory is a symlink"}
+        for label, (change, named, _) in self.faults().items():
+            for sid in self.SPANS:
+                shutil.rmtree(self.root / sid, ignore_errors=True)
+                (self.root / sid).unlink(missing_ok=True)
+                write_span(self.root, sid)
+            shutil.rmtree(Path(self.tmp.name) / "kept", ignore_errors=True)
+            (Path(self.tmp.name) / "kept").unlink(missing_ok=True)
+            change()
+            custody = self.custody()
+            with self.subTest(label):
+                if label in seen_by_stage:
+                    with self.assertRaisesRegex(P.PinRefusal, named.replace(".", r"\.") + ".*" + seen_by_stage[label]):
+                        custody.verify()
+                else:                       # a stream's bytes are the verifier process's to check, never the stage's
+                    custody.verify()
+                self.assertEqual(custody.opened, [])
+
+    def test_the_pins_name_exactly_the_roster_s_spans(self):
+        for roster in (("dev-01-s01",), (*self.SPANS, "dev-02-s02"), ("dev-01-s01", "dev-01-s01")):
+            with self.subTest(roster=roster), self.assertRaisesRegex(P.PinRefusal, "not the same spans"):
+                self.custody(roster=roster)
         shutil.rmtree(self.root / "dev-01-s03")
-        self.refused("dev-01-s03: no span directory")
-
-    def test_every_refusal_comes_before_any_file_is_served(self):
-        """The inventory of every span is checked before the first byte of any span is hashed."""
-        (self.root / "dev-01-s03/notes.txt").write_bytes(b"x")
-        custody = self.custody()
-        with self.assertRaises(P.PinRefusal):
-            custody.verify()
-        self.assertEqual(custody._bytes, {})
+        with self.assertRaisesRegex(P.PinRefusal, "dev-01-s03: no span directory"):
+            self.custody().verify()
 
 
-class GuardedReads(unittest.TestCase):
+class GuardedReads(_Custody):
+    SPANS = ("dev-01-s01",)
+
+    def admitted(self, streams):
+        custody = P.PinnedCustody(self.doc, self.SPANS, lambda sid: self.root / sid, streams=streams)
+        custody.verify()
+        return custody
+
     def setUp(self):
-        self.tmp = tempfile.TemporaryDirectory(prefix="pins-")
-        self.addCleanup(self.tmp.cleanup)
-        self.root = Path(self.tmp.name) / "custody"
-        write_span(self.root, "dev-01-s01")
-        self.custody = P.PinnedCustody(pins(), ("dev-01-s01",), lambda sid: self.root / sid)
-        self.custody.verify()
+        super().setUp()
         self.span = self.root / "dev-01-s01"
 
-    def test_the_bytes_parsed_are_the_bytes_hashed(self):
-        """After the first act the file on disk is not read again: what a reader gets is what was hashed."""
-        trace = self.span / "legs/L001/runtime/run/power_trace.csv"
-        pinned = trace.read_bytes()
-        trace.write_bytes(b"changed after the check\n")
-        with self.custody.guard():
-            self.assertEqual(trace.read_bytes(), pinned)
-            with open(trace, "rb") as handle:
-                self.assertEqual(handle.read(), pinned)
-            with open(str(trace)) as handle:
-                self.assertEqual(handle.read(), pinned.decode())
-            with trace.open(encoding="utf-8", newline="") as handle:
-                self.assertEqual(handle.readline(), pinned.decode())
-            self.assertEqual(json.loads((self.span / "runner_receipt.json").read_text()), {"roster": ["L001"]})
-            self.assertEqual(hashlib.file_digest(io.open(trace, "rb"), "sha256").hexdigest(), sha(pinned))
-        self.assertEqual(trace.read_bytes(), b"changed after the check\n")     # outside the stage, the disk again
-        self.assertEqual(self.custody.opened[0], ("dev-01-s01", "legs/L001/runtime/run/power_trace.csv"))
+    def test_the_operational_bytes_parsed_are_the_bytes_hashed(self):
+        """After the stage's act an operational file is never read from disk again."""
+        for streams in ("pass", "verify"):
+            write_span(self.root, "dev-01-s01")
+            custody = self.admitted(streams)
+            receipt = self.span / RECEIPT
+            pinned = receipt.read_bytes()
+            receipt.write_bytes(b"changed after the check\n")
+            with self.subTest(streams=streams), custody.guard():
+                self.assertEqual(receipt.read_bytes(), pinned)
+                with open(receipt, "rb") as handle:
+                    self.assertEqual(handle.read(), pinned)
+                with open(str(receipt)) as handle:
+                    self.assertEqual(handle.read(), pinned.decode())
+                with receipt.open(encoding="utf-8", newline="") as handle:
+                    self.assertEqual(handle.readline(), pinned.decode())
+                self.assertEqual(json.loads(receipt.read_text()), {"roster": ["L001"]})
+                self.assertEqual(hashlib.file_digest(io.open(receipt, "rb"), "sha256").hexdigest(), sha(pinned))
+            self.assertEqual(receipt.read_bytes(), b"changed after the check\n")     # outside the stage, the disk
+            self.assertEqual(custody.opened[0], ("dev-01-s01", RECEIPT))
+
+    def test_stage_1_reads_a_pinned_stream_from_disk_and_keeps_none_of_it(self):
+        custody = self.admitted("pass")
+        with custody.guard():
+            self.assertEqual((self.span / TRACE).read_bytes(), FILES[TRACE])
+            with open(self.span / STREAM, newline="") as handle:
+                self.assertEqual(handle.read(), FILES[STREAM].decode())
+        self.assertEqual(custody.opened, [("dev-01-s01", TRACE), ("dev-01-s01", STREAM)])
+        self.assertFalse([key for key in custody._bytes if not P.is_operational_path(key[1])])
+
+    def test_stage_2_checks_a_stream_s_pin_at_each_open_before_it_is_decoded(self):
+        custody = self.admitted("verify")
+        trace = self.span / TRACE
+        with custody.guard():
+            self.assertEqual(trace.read_bytes(), FILES[TRACE])
+            with open(trace) as handle:
+                self.assertEqual(handle.read(), FILES[TRACE].decode())
+            os.chmod(trace, 0o600)
+            import subprocess
+            import sys
+            flip = "import sys; p = sys.argv[1]; d = open(p, 'rb').read(); open(p, 'wb').write(bytes([d[0] ^ 1]) + d[1:])"
+            subprocess.run([sys.executable, "-c", flip, str(trace)], check=True)     # changed after the verifier's pass
+            with self.assertRaisesRegex(P.PinRefusal, r"power_trace\.csv: its bytes are not its pin"):
+                trace.read_bytes()
+            with self.assertRaisesRegex(P.PinRefusal, r"power_trace\.csv: its bytes are not its pin"):
+                open(trace, "rb")
+        self.assertEqual(custody.opened, [("dev-01-s01", TRACE)] * 2)           # the refused reads served nothing
 
     def test_an_open_of_a_roster_file_outside_the_pin_list_refuses(self):
-        added = self.span / "hazards/meter/stream-0002.jsonl"
-        added.write_bytes(b"appeared after the check\n")
-        with self.custody.guard():
-            with self.assertRaisesRegex(P.PinRefusal, "outside the pin list"):
-                added.read_bytes()
-            with self.assertRaisesRegex(P.PinRefusal, "outside the pin list"):
-                open(added)
+        for streams in ("pass", "verify"):
+            custody = self.admitted(streams)
+            added = self.span / "hazards/meter/stream-0002.jsonl"
+            added.write_bytes(b"appeared after the check\n")
+            with self.subTest(streams=streams), custody.guard():
+                with self.assertRaisesRegex(P.PinRefusal, "outside the pin list"):
+                    added.read_bytes()
+                with self.assertRaisesRegex(P.PinRefusal, "outside the pin list"):
+                    open(added)
+            added.unlink()
 
     def test_an_absent_optional_file_is_absent_and_a_directory_is_a_directory(self):
-        with self.custody.guard():
+        with self.admitted("pass").guard():
             with self.assertRaises(FileNotFoundError):
                 open(self.span / "legs/L001/runtime/run/outputs/align_runtime_events.jsonl", "rb")
             with self.assertRaises(IsADirectoryError):
                 open(self.span / "legs")
-            self.assertTrue((self.span / "runner_receipt.json").is_file())
+            self.assertTrue((self.span / RECEIPT).is_file())
 
     def test_a_roster_file_cannot_be_opened_for_writing(self):
-        with self.custody.guard():
-            for mode in ("w", "a", "r+", "wb", "x"):
-                with self.subTest(mode), self.assertRaisesRegex(P.PinRefusal, "for writing"):
-                    open(self.span / "runner_receipt.json", mode)
-        self.assertEqual((self.span / "runner_receipt.json").read_bytes(), FILES["runner_receipt.json"])
+        with self.admitted("pass").guard():
+            for name in (RECEIPT, TRACE):
+                for mode in ("w", "a", "r+", "wb", "x"):
+                    with self.subTest(name=name, mode=mode), self.assertRaisesRegex(P.PinRefusal, "for writing"):
+                        open(self.span / name, mode)
+        self.assertEqual((self.span / RECEIPT).read_bytes(), FILES[RECEIPT])
 
-    def test_a_raw_open_that_bypasses_the_served_bytes_refuses(self):
+    def test_a_raw_open_that_bypasses_the_pinned_reads_refuses(self):
         """os.open does not go through ``open``; the audit backstop refuses it for a roster path."""
-        with self.custody.guard():
-            with self.assertRaisesRegex(P.PinRefusal, "outside the verified bytes"):
-                os.open(self.span / "runner_receipt.json", os.O_RDONLY)
-        os.close(os.open(self.span / "runner_receipt.json", os.O_RDONLY))      # inert once the stage is over
+        for streams in ("pass", "verify"):
+            with self.subTest(streams=streams), self.admitted(streams).guard():
+                for name in (RECEIPT, TRACE):
+                    with self.assertRaisesRegex(P.PinRefusal, "outside the pinned reads"):
+                        os.open(self.span / name, os.O_RDONLY)
+        os.close(os.open(self.span / RECEIPT, os.O_RDONLY))                    # inert once the stage is over
 
     def test_other_paths_are_untouched_and_a_span_reached_by_another_spelling_is_still_guarded(self):
         outside = self.root.parent / "outside.txt"
-        with self.custody.guard():
+        with self.admitted("pass").guard():
             with open(outside, "w") as handle:
                 handle.write("ok")
             self.assertEqual(outside.read_text(), "ok")
-            spelled = self.root / "dev-01-s01" / "legs" / ".." / "runner_receipt.json"
-            self.assertEqual(open(spelled, "rb").read(), FILES["runner_receipt.json"])
+            spelled = self.root / "dev-01-s01" / "legs" / ".." / RECEIPT
+            self.assertEqual(open(spelled, "rb").read(), FILES[RECEIPT])
             link = self.root.parent / "alias"
             link.symlink_to(self.root, target_is_directory=True)
-            self.assertEqual((link / "dev-01-s01/runner_receipt.json").read_bytes(), FILES["runner_receipt.json"])
+            self.assertEqual((link / "dev-01-s01" / RECEIPT).read_bytes(), FILES[RECEIPT])
 
 
 class ManifestInputs(unittest.TestCase):
@@ -438,7 +606,7 @@ class ManifestInputs(unittest.TestCase):
                         runner_commit=COMMIT, close_item=318 + i, check_item=317 - i)
             for i, sid in enumerate(("dev-01-s01", "dev-01-s03"))]})
         self.assertEqual(P.pin_list_problems(written, complete=True), [])
-        P.PinnedCustody(written, ("dev-01-s01", "dev-01-s03"), lambda sid: self.custody / sid).verify()
+        P.PinnedCustody(written, ("dev-01-s01", "dev-01-s03"), lambda sid: self.custody / sid, streams="pass").verify()
 
     def test_pin_inputs_refuses_a_span_directory_that_is_not_its_offload_manifest(self):
         span = self.custody / "dev-01-s03"

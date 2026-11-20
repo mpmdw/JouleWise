@@ -163,22 +163,63 @@ def span_dirs(custody, pairs):
     return lambda sid: m.get(sid, Path(custody) / sid)
 
 
-def admit_custody(a, span_ids, sdir_of, stack):
-    """RL-194 conditions 1 to 3, the first act of stage 1 and of stage 2 on custody: every file of every roster span
-    equals its pin, or the stage refuses before any other read of a roster file and before the reservation. The
-    pins are the manifest's (``inputs.pins``); only a synthetic ``--allow-draft`` run may name its own list. A
-    committed run also requires each span's offload manifest digest in its public RUN_STATE Check item. Every later
-    read of a roster file in this process is served from the verified bytes (``stack`` holds the guard open for
-    the rest of the stage). Returns (the admitted custody, the pin list's sha256)."""
+def run_verifier(doc, pins, pins_path, pins_sha, span_ids, sdir_of, a):
+    """RL-194a section 1: the hash-only verifier, as its own process, before this stage parses anything. It reads
+    every pinned file as opaque bytes; this process reads back only its result file (``pass`` or ``fail``, and for
+    each path the pinned and observed digests) and refuses unless that covers exactly the pinned files and every
+    one matches. A stage never hashes an energy stream itself (RL-179 F-12)."""
+    import subprocess
+    verifier = ROOT / M.VERIFIER_PATH
+    pinned = {path: sha for _, path, sha in M.code_refs(doc)}
+    if verifier.resolve() != verifier or not verifier.is_file() or sha256_file(verifier) != pinned.get(M.VERIFIER_PATH):
+        raise F.LookInputError("custody pins: the verifier is not at its manifest pin")
+    result = None
+    with tempfile.TemporaryDirectory(prefix="jw-look-verify-") as tmp:
+        out = Path(getattr(a, "verification_out", None) or Path(tmp) / "verification.json")
+        argv = [sys.executable, "-I", "-B", str(verifier), "--pins", str(pins_path), "--pins-sha256", pins_sha,
+                "--out", str(out)]
+        for sid in span_ids:
+            argv += ["--span", f"{sid}={Path(sdir_of(sid)).absolute()}"]
+        try:
+            done = subprocess.run(argv, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                                  stderr=subprocess.DEVNULL, check=False)
+            if done.returncode in (0, 1):
+                result = json.loads(out.read_bytes())
+        except (OSError, ValueError):
+            result = None
+    if result is None:
+        raise F.LookInputError("custody pins: the verifier process did not produce its result")
+    problems = PINS.verification_problems(pins, result)
+    if problems or done.returncode != 0:
+        raise F.LookInputError("custody pins: " + (problems[0] if problems else "the verifier did not pass"))
+
+
+def admit_custody(a, span_ids, sdir_of, stack, *, streams):
+    """RL-194 conditions 1 to 3 as RL-194a amends them, the first act of stage 1 and of stage 2 on custody, before
+    any roster file is parsed and before the reservation:
+
+    1. the pins are the manifest's (``inputs.pins``; only a synthetic ``--allow-draft`` run may name its own list),
+       they name exactly the roster's spans, and in a committed run each span's public RUN_STATE Check item names
+       its offload manifest;
+    2. the separate hash-only verifier process checks every pinned file (``run_verifier``);
+    3. this process then reads each operational file once, checks its pin and keeps those bytes, and checks each
+       span directory by name (``PinnedCustody.verify``). It opens no stream for that.
+
+    For the rest of the stage every read of a roster path goes through the pins (``stack`` holds the guard open):
+    an operational file is served from its verified bytes, and a stream is read from disk (``streams="pass"``,
+    stage 1) or re-checked against its pin at each open, immediately before it is decoded (``"verify"``, stage 2).
+    Returns (the admitted custody, the pin list's path, the pin list's sha256)."""
     doc, _ = _VERIFIED[0]
     try:
         if getattr(a, "custody_pins", None):
             if not a.allow_draft:
                 raise F.LookInputError("--custody-pins names a pin list other than the manifest's; only with --allow-draft")
-            raw = Path(a.custody_pins).read_bytes()
+            pins_path = Path(a.custody_pins)
+            raw = pins_path.read_bytes()
             pins, pins_sha = PINS.load_pin_list(raw), hashlib.sha256(raw).hexdigest()
         else:
             pins, pins_sha = M.input_pins(ROOT, doc, complete=True)
+            pins_path = ROOT / doc["inputs"]["pins"]["path"]
         if getattr(a, "run_state", None) and not a.allow_draft:
             raise F.LookInputError("--run-state names a RUN_STATE other than the public one; only with --allow-draft")
         if not a.allow_draft or getattr(a, "run_state", None):
@@ -187,13 +228,14 @@ def admit_custody(a, span_ids, sdir_of, stack):
             unchained = PINS.check_chain_problems(pins, text)
             if unchained:
                 raise F.LookInputError("custody pins: " + "; ".join(unchained[:4]))
-        custody = PINS.PinnedCustody(pins, span_ids, sdir_of)
+        custody = PINS.PinnedCustody(pins, span_ids, sdir_of, streams=streams)
+        run_verifier(doc, pins, pins_path, pins_sha, span_ids, sdir_of, a)
         custody.verify()
     except PINS.PinRefusal as exc:
         raise F.LookInputError(f"custody pins: {exc}") from None
     stack.enter_context(custody.guard())
     ADMITTED.append(custody)
-    return custody, pins_sha
+    return custody, pins_path, pins_sha
 
 
 def stage_archive(span_id, archive, manifest, marker, staging_root):
@@ -989,10 +1031,12 @@ def _stage1(a, stack):
         if not isinstance(roster, list) or not all(isinstance(s, dict) and isinstance(s.get("span_id"), str) for s in roster):
             raise F.LookInputError("roster: not a list of spans")
         staging = stage_custody(a, roster)
-        # RL-194: before any roster file is read, every file of every roster span equals its pin. Stage 1 records
-        # nothing of the pin list: its output stays a function of time fields and operational files alone, and a
-        # committed run's manifest hash already names the list.
-        admit_custody(a, [span["span_id"] for span in roster], span_dirs(a.custody, a.span_dir), stack)
+        # RL-194 and RL-194a: before any roster file is parsed, the verifier process has checked every pinned
+        # file and this process has checked the operational ones it parses. Stage 1 hashes no energy stream
+        # (RL-179 F-12) and records nothing of the pin list: its output stays a function of time fields and
+        # operational files alone, and a committed run's manifest hash already names the list.
+        admit_custody(a, [span["span_id"] for span in roster], span_dirs(a.custody, a.span_dir), stack,
+                      streams="pass")
         rules34 = _json(a.rules_3_4)
         if ruled and not a.allow_draft:
             old_input, old_ruled = superseded_source(a, row)
@@ -1087,8 +1131,10 @@ def _stage2(a, stack, *, keep_redirected=False):
     sdir_of = span_dirs(a.custody, (f"{sid}={path}" for sid, path in overrides)) if a.custody else None
     if sdir_of is not None:
         # RL-194: stage 2's first act on custody, before any roster file is read and before the reservation
-        # (a committed stage 2 runs under the manifest stage 1 names, so under the same pin list)
-        _, a.custody_pins_sha256 = admit_custody(a, [span["span_id"] for span in s1["roster"]["spans"]], sdir_of, stack)
+        # (a committed stage 2 runs under the manifest stage 1 names, so under the same pin list). From here on a
+        # stream's pin is checked again at each open, immediately before it is decoded (RL-194a section 1 item 5).
+        _, _, a.custody_pins_sha256 = admit_custody(a, [span["span_id"] for span in s1["roster"]["spans"]], sdir_of,
+                                                    stack, streams="verify")
         synthetic_custody_only(s1, sdir_of)
         validate_runtime_bundles(s1["roster"]["spans"], sdir_of)
         ids = [leg["span_id"] for leg in s1["legs"] if leg["included"] and leg["role"] == "fit" and
@@ -1152,6 +1198,11 @@ def require_twin_runner(doc):
         raise F.LookInputError("stage 2: the pinned twin script is missing from its canonical repository path")
     if sha256_file(path) != pin["sha256"]:
         raise F.LookInputError("stage 2: the twin sha256 differs from the manifest pin")
+    # RL-194 condition 4: the wrapper that checks the pins for the twin, at its own canonical path and pin
+    wrapper = ROOT / M.TWIN_WRAPPER_PATH
+    pinned = {rel: sha for _, rel, sha in M.code_refs(doc)}
+    if wrapper.resolve() != wrapper or not wrapper.is_file() or sha256_file(wrapper) != pinned.get(M.TWIN_WRAPPER_PATH):
+        raise F.LookInputError("stage 2: the twin's pin-checking wrapper is not at its manifest pin")
     return path
 
 
@@ -1172,7 +1223,11 @@ def run_twin(twin_path, a, stage1, fit, step3, coefficients, *, doc, commit, man
     if twin_path.resolve() != twin_path or not twin_path.is_file() or sha256_file(twin_path) != doc["fit"]["twin"]["sha256"]:
         return {"agreement": "not_evaluable"}
     pins = getattr(a, "custody_pins", None)
-    return interim_twin.run(twin_path, manifest=a.manifest, manifest_sha=manifest_sha, commit=commit,
+    wrapper = ROOT / M.TWIN_WRAPPER_PATH
+    pinned = {rel: sha for _, rel, sha in M.code_refs(doc)}
+    if wrapper.resolve() != wrapper or not wrapper.is_file() or sha256_file(wrapper) != pinned.get(M.TWIN_WRAPPER_PATH):
+        return {"agreement": "not_evaluable"}
+    return interim_twin.run(twin_path, wrapper=wrapper, manifest=a.manifest, manifest_sha=manifest_sha, commit=commit,
                             stage1_path=a.stage1, stage1_sha=a.stage1_sha256, custody=a.custody, overrides=overrides,
                             restricted=restricted, coefficient_sha=coefficient_sha, deadline=deadline,
                             stage1=stage1, coefficients=coefficients, fit=fit, step3=step3,
@@ -1338,6 +1393,8 @@ def main(argv=None, *, keep_redirected=False):
                                               "the manifest's (RL-194)")
         p.add_argument("--run-state", help="with --allow-draft only: a synthetic RUN_STATE whose Check items the "
                                            "pin list chains to")
+        p.add_argument("--verification-out", help="keep the hash-only verifier's result file here (pass or fail and, "
+                                                  "for each path, the pinned and observed digests; RL-194a)")
         p.add_argument("--manifest", required=True, help="the look manifest whose pins the running code must match")
         p.add_argument("--allow-draft", action="store_true", help="synthetic runs: accept a draft manifest")
     a = ap.parse_args(argv)

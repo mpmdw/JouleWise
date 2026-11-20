@@ -514,6 +514,132 @@ class AuditOne(unittest.TestCase):
             self.assertEqual(tuple(re.findall(r'= "(\w+)"', body)), J._FAILURE_REASONS, pin)
 
 
+@unittest.skipIf(T is None, "the frozen admission packet is absent")
+class RealControllerRows(unittest.TestCase):
+    """RL-194a item 5: the validator mirrors the journal rows the pinned controller really writes. The leg runtime
+    runs the whole controller (r1_runtime.py:1537-1546), so a leg's events.jsonl carries its lifecycle rows with
+    their metadata, the sampling markers and, for an align_episode bundle, timing boundaries. The rows here were
+    written by the pinned controller with its mock backends (tests/cadence/interim_admission_controller)."""
+    CONTROLLER = ("run_started", "stage_started", "stage_completed", "sampling_started", "sampling_stopped",
+                  "failure", "run_finalized", "timing_boundary")
+
+    @classmethod
+    def setUpClass(cls):
+        raw = (REPO / "tests/cadence/interim_admission_controller/controller-rows.json.gz").read_bytes()
+        cls.rows = {name: [row for row in rows if row["event_type"] in cls.CONTROLLER]
+                    for name, rows in json.loads(gzip.decompress(raw)).items()}
+        cls.corpus = T.load_corpus()
+
+    def journal(self, rows):
+        try:
+            J._runtime_events(json.loads(json.dumps(rows)), "events.jsonl", controller=True)
+        except S.Refusal as refusal:
+            return str(refusal)
+        return None
+
+    def test_the_controller_s_own_journals_are_admitted(self):
+        self.assertEqual([row["event_type"] for row in self.rows["failed"]][-3:],
+                         ["failure", "sampling_stopped", "run_finalized"])
+        self.assertEqual({row["metadata"]["event"] for row in self.rows["timing"]}, {"start", "end"})
+        for name, rows in self.rows.items():
+            with self.subTest(name):
+                self.assertIsNone(self.journal(rows))
+
+    def leg_journal(self, pin):
+        """A leg's journal as the controller writes it: its lifecycle rows around the packet's MLX episode rows,
+        which fall inside the measured window, and the bundle's timing boundaries before finalization."""
+        docs = json.loads(json.dumps(T.document_set(pin, "journals", self.corpus)))
+        episode = docs[T.EVENTS]
+        rows = self.rows["complete"]
+        opened = next(i for i, row in enumerate(rows) if row["event_type"] == "sampling_started")
+        before, after = rows[:opened + 1], rows[opened + 1:-1]
+        low, high = episode[0]["timestamp_s"], episode[-1]["timestamp_s"]
+        before = [dict(row, timestamp_s=low - (len(before) - i) * 0.001) for i, row in enumerate(before)]
+        after = [dict(row, timestamp_s=high + (i + 1) * 0.001) for i, row in enumerate(after)]
+        end = after[-1]["timestamp_s"]
+        timing = []
+        for i, row in enumerate(self.rows["timing"]):
+            stamp = end + (i + 1) * 0.001
+            timing.append(dict(row, timestamp_s=stamp, metadata=dict(row["metadata"], timestamp_s=stamp)))
+        final = dict(rows[-1], timestamp_s=end + 1.0)
+        docs[T.EVENTS] = [*before, *episode, *after, *timing, final]
+        return docs
+
+    def test_a_leg_s_journal_with_the_controller_s_rows_around_its_episode_is_admitted(self):
+        for pin in ("b4b6aeb19", "2d347f721", "6e9d42f1d"):
+            docs = self.leg_journal(pin)
+            kinds = [row["event_type"] for row in docs[T.EVENTS]]
+            self.assertEqual((kinds[0], kinds[-1]), ("run_started", "run_finalized"))
+            self.assertIn("timing_boundary", kinds)
+            with self.subTest(pin=pin):
+                self.assertIsNone(verdict({name: T.doc_bytes(name, doc) for name, doc in docs.items()}))
+
+    def test_host_clock_timing_rows_carry_no_timestamp_of_their_own(self):
+        """On the host clock the stamp is ``paired_stamp`` (timing_receipts.py:28-32): no ``timestamp_s`` in the
+        row, and the event's time is the row's epoch_ns over 1e9."""
+        rows = []
+        for row in self.rows["timing"]:
+            metadata = {k: v for k, v in row["metadata"].items() if k != "timestamp_s"}
+            metadata["clock_domain"] = "host-monotonic"
+            rows.append(dict(row, metadata=metadata, timestamp_s=metadata["epoch_ns"] / 1e9))
+        self.assertIsNone(self.journal(rows))
+        rows[0] = dict(rows[0], timestamp_s=rows[0]["timestamp_s"] - 1.0)
+        self.assertIn("not its receipt row's time", self.journal(rows))
+
+    def test_rows_the_controller_cannot_write_still_refuse(self):
+        complete, failed, timing = self.rows["complete"], self.rows["failed"], self.rows["timing"]
+        at = lambda rows, kind, phase=None: next(i for i, row in enumerate(rows) if row["event_type"] == kind
+                                                 and phase in (None, row["phase"]))
+        started, stopped = at(complete, "sampling_started"), at(complete, "sampling_stopped")
+        baseline = at(complete, "stage_completed", "idle_baseline")
+        validate = at(complete, "stage_completed", "validate")
+
+        def changed(rows, index, **metadata):
+            out = json.loads(json.dumps(rows))
+            out[index]["metadata"].update(metadata)
+            return out
+
+        def retimed(rows, index, **fields):
+            out = json.loads(json.dumps(rows))
+            out[index].update(fields)
+            return out
+        cases = {
+            "a second sampling start": complete[:started + 1] + complete[started:],
+            "a sampling stop before its start": [row for i, row in enumerate(complete) if i != started],
+            "a second sampling stop": complete[:stopped + 1] + complete[stopped:],
+            "a sampling marker with metadata": changed(complete, started, note="x"),
+            "a sampling marker with another message": retimed(complete, started, message="sampling"),
+            "a sampling marker outside measured_run": retimed(complete, started, phase="warmup"),
+            "an unknown member on validate": changed(complete, validate, note="x"),
+            "text for the idle baseline's mean": changed(complete, baseline, power_w_mean="5.0"),
+            "a boolean sample count": changed(complete, at(complete, "stage_completed", "measured_run"), sample_count=True),
+            "a failed run cut before its finalization": failed[:-1],
+            "a failed cleanup without its message": changed(complete, at(complete, "stage_completed", "cleanup"),
+                                                            cleanup_ok=False),
+            "a timing end without its start": timing[1:],
+            "a timing span started twice": [timing[0], *timing],
+            "a timing row whose message is not its activity": retimed(timing, 0, message="other"),
+            "a timing row whose phase is not its row's": retimed(timing, 0, phase="other"),
+            "a timing row with an unknown member": changed(timing, 0, note="x"),
+            "a timing start with a status": changed(timing, 0, status="complete", rc=None),
+            "a timing end without its status": [timing[0], {**timing[1]}, dict(
+                timing[2], metadata={k: v for k, v in timing[2]["metadata"].items() if k != "status"})],
+            "a timing row of another schema": changed(timing, 0, schema="other"),
+            "an event the controller never writes": retimed(complete, started, event_type="sampling_paused"),
+        }
+        for label, rows in cases.items():
+            with self.subTest(label):
+                self.assertIsNotNone(self.journal(rows))
+
+    def test_the_idle_baseline_row_carries_a_power_mean_and_the_validator_only_checks_its_kind(self):
+        """controller.py:2045-2057 writes the idle baseline's mean power into the stage's completion row. The
+        validator admits a number or null there and reads nothing from it."""
+        row = next(row for row in self.rows["complete"] if (row["event_type"], row["phase"]) ==
+                   ("stage_completed", "idle_baseline"))
+        self.assertEqual(set(row["metadata"]), {"power_w_mean", "duration_s", "admission_attempts", "admission_decision"})
+        self.assertIs(type(row["metadata"]["power_w_mean"]), float)
+
+
 class KitTable(unittest.TestCase):
     """admission_kits is generated from the repository's kit files and the filler registry; a drift refuses here."""
 

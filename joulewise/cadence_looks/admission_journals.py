@@ -210,6 +210,7 @@ def _runtime_events(rows, where, *, controller, selected=None):
     tokens, gate_kinds, mlx_seen, stage_state = [], [], [], {}
     emitted = []
     stages_started, stages_done, failure, finalized = [], [], None, False
+    timing_spans, timing_sequences, sampling = {}, set(), []
     previous = None
     for index, row in enumerate(rows):
         at = f"{where}[{index}]"
@@ -221,6 +222,15 @@ def _runtime_events(rows, where, *, controller, selected=None):
             previous = row["timestamp_s"]
         if phase.startswith("align_tool_"):
             refuse(f"{at}.phase", "a tool phase; the registered task has no tools (F4)")
+        if controller and kind == "timing_boundary":                 # routed by kind: its phase is the span's own
+            _timing_row(row, at, timing_spans, timing_sequences)
+            continue
+        if controller and kind in ("sampling_started", "sampling_stopped"):
+            _controller_row(row, at)
+            if sampling != ([] if kind == "sampling_started" else ["sampling_started"]):
+                refuse(at, "not the measured window's one start, then its one stop")
+            sampling.append(kind)
+            continue
         if phase in ("align_thermal_gate", "align_thermal_hold"):
             if kind not in ("phase_start", "phase_end"):
                 refuse(f"{at}.event_type", "not a phase boundary")
@@ -330,6 +340,78 @@ def _lifecycle_ends(rows, where, started, done, failure):
         refuse(where, "a stage left open by a journal that records no failure")
 
 
+def _cleanup_metadata(value, where):
+    """controller.py:2685-2734. ``cleanup_ok`` and, when cleanup failed, why; a clean adapter's own cleanup
+    metadata is merged in beside it, so the other members of a successful cleanup are the adapter's."""
+    if type(value) is not dict:
+        refuse(where, "not an object")
+    if not value:
+        return
+    if type(value.get("cleanup_ok")) is not bool:
+        refuse(f"{where}.cleanup_ok", "not a boolean")
+    if not value["cleanup_ok"]:
+        obj({"cleanup_ok": const(False), "message": nullable(STR)}, {"failure_reason": nullable(STR)})(value, where)
+
+
+# What each stage's rows carry (controller.py, the same bytes at the three revisions). A bare ``{}`` is what the two
+# stage helpers write when called with no metadata (3856-3867), which is how the frozen packet's serializer
+# production drives them; the other form is the lifecycle's own call. On a telemetry backend that is not the mock,
+# idle_baseline's start and the sentinel's completion also carry the battery clock's reading, null when it failed
+# (3856-3875); the idle sentinel is skipped on the mock backend and reports "unavailable" without a provider.
+_STAGE_STARTED = {"idle_baseline": either(obj({}), obj({"monotonic_ns": nullable(INT)}))}
+_STAGE_COMPLETED = {
+    "validate": either(obj({}), obj({"transport": STR, "runtime": STR, "telemetry": STR})),                # 1772-1779
+    "idle_baseline": either(obj({}), obj({"power_w_mean": nullable(NUM), "duration_s": nullable(NUM),    # 2045-2057
+                                          "admission_attempts": nullable(NAT), "admission_decision": nullable(STR)})),
+    "warmup": either(obj({}), obj({"warmup_runs": NAT, "warmup_seconds": NUM})),                           # 2476-2479
+    "measured_run": either(obj({}), obj({"sample_count": NAT, "runtime_event_count": NAT})),               # 2609-2615
+    "idle_drift_sentinel": either(obj({}, {"monotonic_ns": nullable(INT)}),                                # 2630-2675
+                                  obj({"status": nullable(STR)}, {"duration_requested_s": nullable(NUM),
+                                                                  "monotonic_ns": nullable(INT)})),
+    "cleanup": _cleanup_metadata,
+}
+_SAMPLING_MESSAGES = {
+    "sampling_started": ("telemetry sampling confirmed active",),
+    "sampling_stopped": ("measured window stopped; telemetry tail retained outside window",
+                         "telemetry sampling stopping (failure path)"),
+}
+TIMING_SCHEMA = "joulewise.timing_boundary.v1"                          # timing_receipts.py:23
+
+
+def _timing_row(row, where, spans, sequences):
+    """One timing boundary (controller.py:3935-3942; timing_receipts.py:43-83,115-138): the receipt row is the
+    event's metadata, its phase and activity are the event's phase and message, and the event's time is the row's.
+    An ``align_episode`` bundle records them; a span has one start and at most one end, after it."""
+    metadata, at = row["metadata"], f"{where}.metadata"
+    ended = metadata.get("event") == "end"
+    required = {"schema": const(TIMING_SCHEMA), "kind": const("timing_boundary"), "producer": const("bundle"),
+                "plan_id": nullable(STR), "member": TEXT, "attempt": const(None), "boot_session_id": nullable(STR),
+                "clock_domain": enum("host-monotonic", "synthetic-controller"), "producer_id": TEXT,
+                "wall_resolution_s": NUM, "monotonic_resolution_s": NUM, "sequence": NAT,
+                "event": enum("start", "end"), "span_id": TEXT, "parent_span_id": nullable(TEXT), "phase": TEXT,
+                "activity": TEXT, "stage": nullable(TEXT), "epoch_ns": INT, "monotonic_before_ns": INT,
+                "monotonic_after_ns": INT}
+    if ended:
+        required.update(status=TEXT, rc=nullable(INT))
+    obj(required, {"timestamp_s": FLOAT, "requested_s": NUM})(metadata, at)
+    if row["phase"] != metadata["phase"] or row["message"] != metadata["activity"]:
+        refuse(where, "not the phase and activity its receipt row carries")
+    if row["timestamp_s"] != metadata.get("timestamp_s", metadata["epoch_ns"] / 1e9):
+        refuse(f"{where}.timestamp_s", "not its receipt row's time")
+    if metadata["sequence"] < 1 or metadata["sequence"] in sequences:
+        refuse(f"{at}.sequence", "not a sequence number of its own")
+    sequences.add(metadata["sequence"])
+    key, opened = metadata["span_id"], spans.get(metadata["span_id"])
+    if not ended:
+        if opened is not None:
+            refuse(f"{at}.span_id", "a span started twice")
+        spans[key] = [metadata["phase"], metadata["activity"], False]
+    elif opened is None or opened[2] or opened[:2] != [metadata["phase"], metadata["activity"]]:
+        refuse(f"{at}.span_id", "an end that closes no open span of its phase and activity")
+    else:
+        opened[2] = True
+
+
 def _controller_row(row, where):
     """The controller's lifecycle rows (controller.py:1663-1681,1742-2827,3935-3960; bundle.py:1193-1210)."""
     kind, phase, metadata, message = row["event_type"], row["phase"], row["metadata"], row["message"]
@@ -347,8 +429,11 @@ def _controller_row(row, where):
         word = "started" if kind == "stage_started" else "completed"
         if message != f"stage {phase} {word}":
             refuse(f"{where}.message", "not the constructor's message")
-        stamped = (phase, kind) in (("idle_baseline", "stage_started"), ("idle_drift_sentinel", "stage_completed"))
-        obj({"monotonic_ns": INT} if stamped else {})(metadata, at)
+        (_STAGE_STARTED if kind == "stage_started" else _STAGE_COMPLETED).get(phase, obj({}))(metadata, at)
+    elif kind in ("sampling_started", "sampling_stopped"):
+        obj({})(metadata, at)                                          # controller.py:2510-2521,2618-2627,2913-2922
+        if phase != "measured_run" or message not in _SAMPLING_MESSAGES[kind]:
+            refuse(f"{where}.message", "not the constructor's message")
     elif kind == "failure":
         enum(*_STAGES)(phase, f"{where}.phase")
         obj({"failure_reason": enum(*_FAILURE_REASONS)})(metadata, at)

@@ -503,7 +503,10 @@ if opts.get("spy") or opts.get("twin_path"):
         if opts.get("twin_path"):
             if event == "os.mkdir" and os.path.basename(os.fsdecode(args[0])) == "RESTRICTED":
                 reservation_attempts += 1
-            if event == "subprocess.Popen" and isinstance(args[1], (list, tuple)) and opts["twin_path"] in args[1]:
+            # the twin is launched through its pin-checking wrapper (RL-194 condition 4); either path counts
+            if event == "subprocess.Popen" and isinstance(args[1], (list, tuple)) and (
+                    opts["twin_path"] in args[1]
+                    or any(str(word).endswith("scripts/cadence_interim_twin_pins.py") for word in args[1])):
                 twin_launches += 1
         # RL-194: a roster file is read from disk once, by the pin check, and parsed from those bytes. What the
         # tests observe is what is parsed: a read served from the verified bytes counts as an open by its caller,

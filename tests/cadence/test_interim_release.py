@@ -544,7 +544,7 @@ class LookExecution(unittest.TestCase):
         successor = "lm-interim-02"
         pin = M.load_json(REPO / MR.MANIFEST)["fit"]["twin"]
         self.assertEqual(pin, {"path": "scripts/cadence_interim_twin.py",
-                               "sha256": "eded8c5105ff59a61b5644e44dd7998cd3c4ab6f24311a8b2fae674903fb63c6"})
+                               "sha256": "91ca54ab8747ede3d0fe8826e1b7d06ef721bce94de52969b9508a3eac890aab"})
         twin = (self.mini / pin["path"]).resolve()
         self.assertEqual(digest(twin.read_bytes()), pin["sha256"])
         MR.commit(self.mini, stage1_sha256=self.stage1_sha)
@@ -856,7 +856,8 @@ def run(argv, *args, **kwargs):
         assert argv == ["/usr/sbin/ioreg", "-rd1", "-c", "IOPlatformExpertDevice"]
         return subprocess.CompletedProcess(argv, 0,
             b'    "IOPlatformUUID" = "12345678-9abc-def0-1234-56789abcdef0"\n', b"")
-    if Path(argv[0]) != Path(sys.executable) or argv[1:4] != ["-I", "-B", str(repo / "scripts/cadence_interim_twin.py")]:
+    # RL-194 condition 4: the parent launches the pin-checking wrapper, which becomes the reviewed child
+    if Path(argv[0]) != Path(sys.executable) or argv[1:4] != ["-I", "-B", str(repo / "scripts/cadence_interim_twin_pins.py")]:
         return original_run(argv, *args, **kwargs)
     attempts.append(argv)
     assert len(attempts) == 1 and not kwargs.get("shell")
@@ -875,8 +876,8 @@ def run(argv, *args, **kwargs):
         argv[argv.index("--fit") + 1] = str(missing)
     tamper = PIN_FAULTS.get(fault)
     if tamper:
-        # RL-194 condition 4. The parent admitted custody by its pins and holds those bytes; the file is changed on
-        # disk, by another process, before the child starts. The child reads the disk and checks the pins itself.
+        # RL-194 condition 4. The parent has finished reading custody; the file is changed on disk, by another
+        # process, before the twin starts. The twin's wrapper checks every pin and the reviewed child never runs.
         spans = [Path(value.partition("=")[2]) for key, value in zip(argv, argv[1:]) if key == "--span-dir"] or sorted(
             item for item in Path(argv[argv.index("--custody") + 1]).iterdir() if (item / "runner_receipt.json").exists())
         target = str(sorted(spans[0].glob("legs/*/runtime/runs/cadence-leg/power_trace.csv"))[0])
@@ -938,7 +939,7 @@ class TwinThroughCLI(unittest.TestCase):
         pin = M.load_json(REPO / MR.MANIFEST)["fit"]["twin"]
         self.twin = self.mini / pin["path"]
         self.assertEqual(digest(self.twin.read_bytes()),
-                         "eded8c5105ff59a61b5644e44dd7998cd3c4ab6f24311a8b2fae674903fb63c6")
+                         "91ca54ab8747ede3d0fe8826e1b7d06ef721bce94de52969b9508a3eac890aab")
         draft["fit"]["twin"] = pin
         self.manifest.write_bytes(C.dump(draft))
         tokens = {}
@@ -1020,7 +1021,7 @@ class TwinThroughCLI(unittest.TestCase):
                                  ("cell_malformed", "not_evaluable"),
                                  ("omitted_fold", "not_evaluable"), ("forged_primary", "not_evaluable"),
                                  ("missing_input", "not_evaluable"),
-                                 # RL-194 condition 4: the child checks the pins itself and raises on a mismatch
+                                 # RL-194 condition 4: the twin's wrapper checks the pins and raises on a mismatch
                                  ("pin_changed", "not_evaluable"), ("pin_extra", "not_evaluable"),
                                  ("pin_symlink", "not_evaluable"),
                                  ("malformed", "not_evaluable"), ("timeout", "not_evaluable")):
@@ -1069,10 +1070,7 @@ class TwinThroughCLI(unittest.TestCase):
     def test_primary_and_twin_refuse_bad_bundle_locators_before_response_reads(self):
         from tests.cadence import test_look_run as cli_fixture
 
-        child = runpy.run_path(str(self.twin))
-        # the child's own locator checks, with its pin check stood aside (the pins are tested on their own)
-        child["_PINNED"][:] = [SimpleNamespace(read=lambda path: path.read_bytes())]
-        child_span = child["span_identities"]
+        child_span = runpy.run_path(str(self.twin))["span_identities"]
         span = self.source / self.spans[0]
         leg = next(row for row in M.load_json(self.stage1)["legs"]
                    if row["span_id"] == self.spans[0] and row["in_energy_fit"])

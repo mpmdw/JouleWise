@@ -67,6 +67,10 @@ TOP_KEYS = {"schema", "look_id", "look_kind", "status", "title", "rulings", "whe
             "open_questions", "inputs"}
 # RL-194: the one file that pins, by sha256 and size, every file of every roster span (custody_pins)
 INPUTS_PATH = "docs/process/cadence/looks/lm-interim-01.inputs.json"
+# RL-194a: the hash-only verifier process each stage runs first, and the wrapper that checks the pins for the twin
+# before the reviewed child runs byte-identical. Neither is imported by a stage; both are pinned look code.
+VERIFIER_PATH = "scripts/cadence_look_verify_inputs.py"
+TWIN_WRAPPER_PATH = "scripts/cadence_interim_twin_pins.py"
 LOOK_KINDS = {"interim", "qualification", "controls"}
 STATUSES = {"draft", "committed"}
 
@@ -95,7 +99,9 @@ REQUIRED_CODE_PATHS = {"interim": {"joulewise/cadence_looks/fit_interim.py", "jo
                                    "joulewise/cadence_looks/admission_synthetic.py",
                                    "joulewise/cadence_looks/admission_kits.py",
                                    # RL-194: stage 1's and stage 2's first act, the content pins of the roster's files
-                                   "joulewise/cadence_looks/custody_pins.py"}}   # RL-166 Q1; Sol N3; RL-173 E.1
+                                   "joulewise/cadence_looks/custody_pins.py",
+                                   "scripts/cadence_look_verify_inputs.py",
+                                   "scripts/cadence_interim_twin_pins.py"}}   # RL-166 Q1; Sol N3; RL-173 E.1; RL-194a
 
 # Which block phases each look may read, by role (RL-149 sections 2.3 and 2.6; RL-157 section 4).
 # Phases are BLOCK-QUEUE's (joulewise/cadence/blocks.py PHASES). hp-01 is phase "extension".
@@ -1833,18 +1839,9 @@ def operational_paths(sdir):
     return sorted(paths)
 
 
-# The span paths admission reads and the look reuses (``operational_paths``), as a pattern over a path with no span on
-# disk: staging expands exactly these members before admission and every other member only after it (deny by default).
-_OPERATIONAL = re.compile(
-    r"runner_receipt\.json|soak/soak_reference\.json"
-    r"|legs/[^/]+/leg_(?:record|summary)\.json"
-    r"|legs/[^/]+/runtime/(?:[^/]+/)*(?:events\.jsonl|config\.json|align_runtime_events\.jsonl"
-    r"|align_(?:turns|thermal|runtime_events)\.jsonl)")
-
-
-def is_operational_path(rel):
-    """Whether a span-relative POSIX path is one of the operational sources, never an energy-bearing file."""
-    return _OPERATIONAL.fullmatch(rel) is not None
+# The span paths admission reads and the look reuses (``operational_paths``), as a pattern over a path with no span
+# on disk. One definition: the pin module's, which the stages' pin check and the review record share.
+is_operational_path = custody_pins.is_operational_path
 
 
 def nonenergy_files(sdir):
