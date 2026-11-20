@@ -9,7 +9,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from decimal import Decimal, localcontext
 from fractions import Fraction
-from functools import cached_property
+from functools import cache, cached_property
 from hashlib import sha1, sha256
 import io
 import json
@@ -577,8 +577,22 @@ def _time_budget(op, kit):
     return {"over_time_budget": over_budget}
 
 
+@cache
+def _drop_item_parser():
+    package = "_description_drop_items"
+    for path in ("scripts/gen_current.py", "scripts/run_state_items.py"):
+        source = exact_path(CODE_ROOT / path).read_bytes()
+        require(digest(source) == EXECUTABLE_DEPENDENCIES[path], "typed item parser differs from its pin")
+        module = ModuleType(f"{package}.{Path(path).stem}")
+        module.__file__ = str(CODE_ROOT / path)
+        module.__package__ = package
+        sys.modules[module.__name__] = module
+        exec(compile(source, path, "exec"), module.__dict__)
+    return module
+
+
 def _drop_authorizations(snapshot):
-    from scripts import run_state_items
+    run_state_items = _drop_item_parser()
 
     text = snapshot.read("RUN_STATE.md").decode("utf-8")
     # A projected single item carries the same heading, typed header and
