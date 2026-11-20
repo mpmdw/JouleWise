@@ -1186,3 +1186,35 @@ files as published.
 All 53 protected paths match the prior branch. The governing-pin
 comparison remains a combined-base gate. The draft PR will carry the
 hosted check for the v3 head.
+
+## 2026-11-20 audit round 3 recovery and start sensors
+
+The worktree, upstream, and draft PR #868 agreed at
+`7d2b45d063688f090921b92b90a951f2a90d75b6` at intake. Both audit
+reproducers failed on that head and passed after `4d4017258`.
+[Audit report](/Volumes/JW-EXT/scratch/pl-d-desc-looks-executor/audit-3/FINAL-MESSAGE.md)
+
+| Finding | Commit and regression | Result |
+| --- | --- | --- |
+| HIGH. The sampling marker displaced the common recovery grid. | `4d4017258`, `test_registered_grid_is_invariant_to_sampling_marker` and the independent `registered_grid.py` | **PASS**. The common grid starts at the latest first channel observation. The regression sweeps seven marker positions and retains 19 s with one `coverage` skip for both rails. DC reports `under` with a 9 s bound. Without any observed channel the sampling marker supplies the existing unobserved-span diagnostic and there are no recovery windows. |
+| MED. An all-null start sensor disappeared. | `4d4017258`, `test_start_sensor_with_only_null_readings_is_reported` and the independent `sensor_nulls.py` | **PASS**. With full coverage the named sensor prints `{"value":null,"reason":"no_numeric_sensor_reading"}`. A mixed null and numeric sensor retains its numeric mean, including zero. |
+
+[Original grid failure](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/audit3-red-registered_grid.log) · [Grid replay](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/audit3-green-registered_grid.log) · [Sensor replay](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/audit3-green-sensor_nulls.log) · [Builder regressions](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/audit3-final-focused.log)
+
+The frozen recovery selection ran 816 cases. All 815 interval,
+staggered-start, and stream-end cases passed. The inherited
+`test_lm_inst_01_edge_hand_table_exact` refused at stage 1 on its
+legacy fixture. An authenticated v3 terminal-instrument fixture
+matched the unchanged hand table exactly for the two qualified
+legs with the same reader. All six v3 hashes and all 53 protected
+paths match on the current stack.
+[Frozen selection](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/audit3-frozen-focus.log) · [Exact hand table replay](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/audit3-exact-edges.log) · [V3 hashes](/Volumes/JW-EXT/scratch/astra-desc-suite-amend3/v3/SUITE.sha256) · [Protected paths](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/audit3-protected-blobs.tsv)
+
+The preceding hosted run on `7d2b45d06` passed the instrument
+publication and both early-lock publication cases. Its six
+`once_abandoned` and `once_other_checkout` cases failed, and
+four ordinary shards failed overall. The independent v4 freeze
+remains the fixture gate. The 17 hardware cases await the owner
+base with PR #795. The canonical local sharded run started for
+the audit fix. The draft PR will carry CI for the pushed head.
+[Preceding hosted shard](https://github.com/mpmdw/JouleWise/actions/runs/44765866585/job/136390619515) · [Extracted case results](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/audit3-prior-hosted-literal.log) · [Local shard log](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/audit3-shards.log)
