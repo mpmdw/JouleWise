@@ -6,6 +6,9 @@ producer closes. Each damaged attempt must end `other_failure` with its expected
 workload disagrees with the damage, the probe first confirms that disagreement itself, so each case is a
 contradiction of the frozen code and not only of the evaluator's own rules.
 
+Two cases are positives and must pass: the clean control, and RL-193 section 1's supplement, a predecessor
+trace that is the six-column D-018 interval header with zero rows.
+
     python3.13 -IB tests/align/partc_audit_probe.py [case ...]      (JW_PARTC_REPO selects the tree under test)
 
 It prints one `RESULT <case> <verdict> <reasons>` line per case and exits 1 on any disagreement. The pinned
@@ -22,6 +25,7 @@ from unittest.mock import patch
 SUITE = Path(__file__).resolve().parent / "test_partc_frozen_differential.py"
 EXPECTED = {
     "control": None,
+    "interval-header-zero-rows": None,
     "raw-runner-fault": "workload_replay",
     "raw-turn-budget-flag": "workload_replay",
     "last-turn-unclosed": "workload_replay",
@@ -48,7 +52,7 @@ def run(argv):
     changed_member = {"raw-runner-fault": s.D, "raw-turn-budget-flag": s.D, "last-turn-unclosed": s.D,
                       "other-run-id": s.X, "duplicate-predecessor": s.S, "predecessor-timeout": s.P,
                       "extra-stop-flag": s.P, "gate-before-entry": s.D, "finalized-after-close": s.D,
-                      "control": None}
+                      "interval-header-zero-rows": s.P, "control": None}
 
     def frozen_refuses(segment, kind):
         try:
@@ -62,7 +66,15 @@ def run(argv):
         episode_path = bundle / "outputs/align_episode.json"
         turns_path = bundle / "outputs/align_turns.jsonl"
         episode = s.read(episode_path)
-        if case in ("last-turn-unclosed", "raw-turn-budget-flag", "raw-runner-fault"):
+        if case == "interval-header-zero-rows":
+            from joulewise.bundle_read import POWER_TRACE_HEADER, POWER_TRACE_INTERVAL_HEADER, _check_power_trace
+
+            trace = bundle / "power_trace.csv"
+            assert trace.read_bytes().splitlines()[0].decode() == POWER_TRACE_HEADER
+            trace.write_bytes((POWER_TRACE_INTERVAL_HEADER + "\n").encode("ascii"))
+            assert _check_power_trace(bundle, s.read(bundle / "summary_metrics.json"),
+                                      s.read(bundle / "metadata.json")) == [], "the pinned check refused it"
+        elif case in ("last-turn-unclosed", "raw-turn-budget-flag", "raw-runner-fault"):
             turns = s.rows(turns_path)
             assert not episode["turns"][-1]["tool_calls"]
             flag = {"last-turn-unclosed": "unclosed_reasoning_span", "raw-turn-budget-flag": "turn_budget_reached",

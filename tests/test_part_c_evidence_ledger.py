@@ -1231,7 +1231,7 @@ class RawEvidenceTests(unittest.TestCase):
         # Audit round 1, `one-byte-predecessor-trace` and the file sweep's truncation.
         self.refused(lambda: self.trace(b"{"), "header")
         self.refused(lambda: self.trace(b""), "header")
-        for header in (b"timestamp_s,power_w,source\n",   # v2's header-only trace: not a D-018 header (PROVISIONAL)
+        for header in (b"timestamp_s,power_w,source\n",   # v2's header-only trace: not a D-018 header (RL-193 1)
                        b"timestamp_s,power_w\n", b"power_w,timestamp_s,source\n", b"timestamp_s,power_w,source,rail,x\n",
                        b"timestamp_s,power_w,source,rail,interval_start_s\n", b'{"attempt":"foreign"}\n'):
             with self.subTest(header=header):
@@ -1625,18 +1625,22 @@ class SoakArgvTests(unittest.TestCase):
 # ---- Audit round 2: the pinned validators, bracket and order rules, and the planned run id ---------------
 
 class PredecessorTraceD018Tests(unittest.TestCase):
-    """The lead's PROVISIONAL rule: the pinned D-018 validator judges the predecessor's trace."""
+    """RL-193 section 1: the whole pinned D-018 check judges the predecessor's bound trace bytes."""
 
     D018 = b"timestamp_s,power_w,source,rail\n"
     INTERVAL = b"timestamp_s,power_w,source,rail,interval_start_s,interval_end_s\n"
 
-    def judge(self, raw, *, summary=b'{"status":"succeeded"}', metadata=b"{}"):
+    def judge(self, raw, *, summary=b'{"status":"succeeded"}', metadata=b"{}", on_disk=None):
+        """``raw`` is the bound trace. ``on_disk`` is what the member's directory holds by then, if anything."""
         from scripts.align_r1_part_c import _check_pinned_trace
 
         with TemporaryDirectory() as tmp:
-            bundle = Path(tmp)
-            (bundle / "power_trace.csv").write_bytes(raw)
-            _check_pinned_trace(FIRST, bundle, {"summary_metrics.json": summary, "metadata.json": metadata})
+            bundle = Path(tmp) / "align-pilot-v3-episodes-a-e01"
+            bundle.mkdir()
+            if on_disk is not None:
+                (bundle / "power_trace.csv").write_bytes(on_disk)
+            _check_pinned_trace(FIRST, bundle, {"summary_metrics.json": summary, "metadata.json": metadata,
+                                                "power_trace.csv": raw})
 
     def refused(self, raw, **kwargs):
         with self.assertRaises(evidence.EvidenceFailure) as caught:
@@ -1649,8 +1653,9 @@ class PredecessorTraceD018Tests(unittest.TestCase):
 
     def test_the_issued_headers_pass_and_every_other_form_is_refused(self):
         self.judge(self.D018)
-        self.judge(self.INTERVAL)
+        self.judge(self.INTERVAL)       # RL-193 1: either header the pinned check accepts, zero rows included
         self.judge(self.D018 + b"2001.5,0.002,powermetrics,gpu_power\n")
+        self.judge(self.INTERVAL + b"2001.5,0.002,powermetrics,gpu_power,2001.0,2002.0\n")
         # Audit round 1 `audit-one-byte-predecessor-csv` and the v3 `three-column-header` case.
         for raw in (b"{", b"", b"timestamp_s,power_w,source\n", b"[]\n", b'"unclosed\xff\n',
                     b"timestamp_s,power_w,source,rail,x\n", b"power_w,timestamp_s,source,rail\n",
@@ -1666,17 +1671,46 @@ class PredecessorTraceD018Tests(unittest.TestCase):
                 with self.subTest(damage=damage), self.assertRaises(evidence.EvidenceFailure) as caught:
                     self.judge(self.D018, **damage)
                 self.assertEqual((caught.exception.reason, caught.exception.source), ("bundle_binding", source))
-            with patch.dict(sys.modules, {"joulewise.bundle_read": None}), self.assertRaises(Exception):
-                from scripts.align_r1_part_c import _check_pinned_trace
+            from scripts.align_r1_part_c import _check_pinned_trace
 
-                _check_pinned_trace(FIRST, bundle, {"summary_metrics.json": b"{}", "metadata.json": b"{}"})
+            bound = {"summary_metrics.json": b"{}", "metadata.json": b"{}", "power_trace.csv": self.D018}
+            _check_pinned_trace(FIRST, bundle, bound)
+            for broken in (None, SimpleNamespace(_check_power_trace=lambda *args: 1 / 0),
+                           SimpleNamespace(_check_power_trace=lambda *args: None),
+                           SimpleNamespace(_check_power_trace=lambda *args: ()),
+                           SimpleNamespace(_check_power_trace=lambda *args: ["a problem"])):
+                with self.subTest(validator=broken), patch.dict(sys.modules, {"joulewise.bundle_read": broken}), \
+                        self.assertRaises(evidence.EvidenceFailure) as caught:
+                    _check_pinned_trace(FIRST, bundle, bound)
+                self.assertEqual((caught.exception.reason, caught.exception.field, caught.exception.peer),
+                                 ("bundle_binding", "D-018", "bundle_read"))
 
-    def test_a_trace_file_that_is_missing_is_not_a_trace(self):
+    def test_the_bound_bytes_are_judged_whatever_the_directory_holds(self):
+        # The function reads a path. It must read the bytes the manifest binds, not the member's directory.
+        self.judge(self.D018, on_disk=b"{")
+        self.judge(self.INTERVAL, on_disk=b"timestamp_s,power_w,source\n")
+        for bound in (b"{", b"", b"timestamp_s,power_w,source\n"):
+            for on_disk in (self.D018, self.INTERVAL, None):
+                with self.subTest(bound=bound, on_disk=on_disk):
+                    self.refused(bound, on_disk=on_disk)
+
+    def test_the_rail_manifest_rule_after_the_header_is_part_of_the_check(self):
+        declared = json.dumps({"device": {"rail_manifest": ["gpu_power"]}}).encode()
+        row = b"2001.5,0.002,powermetrics,%s\n"
+        self.judge(self.D018 + row % b"gpu_power", metadata=declared)
+        self.judge(self.D018 + row % b"gpu_power" + row % b"another_rail", metadata=declared)
+        self.refused(self.D018 + row % b"gpu_power" * 2, metadata=declared)      # one rail twice at one stamp
+        self.refused(self.INTERVAL + b"2001.5,0.002,powermetrics,gpu_power,2001.0,2002.0\n", metadata=declared)
+        self.refused(self.D018, metadata=json.dumps({"device": {"rail_manifest": "gpu_power"}}).encode())
+
+    def test_a_trace_that_was_never_bound_is_not_a_trace(self):
         from scripts.align_r1_part_c import _check_pinned_trace
 
-        with TemporaryDirectory() as tmp, self.assertRaises(evidence.EvidenceFailure) as caught:
-            _check_pinned_trace(FIRST, Path(tmp), {"summary_metrics.json": b'{"status":"succeeded"}',
-                                                   "metadata.json": b"{}"})
+        with TemporaryDirectory() as tmp:
+            (Path(tmp) / "power_trace.csv").write_bytes(self.D018)       # on disk, but never bound
+            with self.assertRaises(evidence.EvidenceFailure) as caught:
+                _check_pinned_trace(FIRST, Path(tmp), {"summary_metrics.json": b'{"status":"succeeded"}',
+                                                       "metadata.json": b"{}"})
         self.assertEqual((caught.exception.reason, caught.exception.field), ("bundle_binding", "D-018"))
 
 
@@ -1853,7 +1887,8 @@ class FrozenDifferentialNamedCasesTests(unittest.TestCase):
     object database. A shallow checkout lacks them and this test skips. The full 25,082-case matrix is run by
     hand. These cases are the regressions of audits 1 and 2 that need the frozen workload, driver and D-018
     validator: the five named audit reproductions, the seven predecessor CSV wire cases, the orphan tokenize
-    event, the empty final phase, and the turn-flag classes the frozen workload decides.
+    event, the empty final phase, and the turn-flag classes the frozen workload decides. The seven CSV cases
+    keep the suffix `PROVISIONAL` in their frozen IDs. RL-193 section 1 confirmed their expectations.
     """
 
     SUITE = Path(__file__).resolve().parent / "align" / "test_partc_frozen_differential.py"
@@ -1880,7 +1915,8 @@ class FrozenDifferentialNamedCasesTests(unittest.TestCase):
         self.assertNotRegex(output, r"(?m)^(FALSE_PASS|WRONG_VERDICT|HARNESS_ERROR)")
 
     PROBE = Path(__file__).resolve().parent / "align" / "partc_audit_probe.py"
-    EXPECTED = {"control": "pass -", "raw-runner-fault": "other_failure workload_replay",
+    EXPECTED = {"control": "pass -", "interval-header-zero-rows": "pass -",
+                "raw-runner-fault": "other_failure workload_replay",
                 "raw-turn-budget-flag": "other_failure workload_replay",
                 "last-turn-unclosed": "other_failure workload_replay",
                 "other-run-id": "other_failure execution_config", "duplicate-predecessor": "other_failure sequence",
@@ -1890,7 +1926,11 @@ class FrozenDifferentialNamedCasesTests(unittest.TestCase):
                 "finalized-after-close": "other_failure member_order"}
 
     def test_audit_two_reproductions_are_each_refused_for_their_own_reason(self):
-        """Audit 2's nine damaged attempts through the synthetic launcher, and the clean control that passes."""
+        """Audit 2's nine damaged attempts through the synthetic launcher, and the two positives that pass.
+
+        The positives are the clean control and RL-193 section 1's supplement: a predecessor trace that is the
+        six-column D-018 interval header with zero rows.
+        """
         import os
         import subprocess
 

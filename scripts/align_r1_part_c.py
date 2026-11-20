@@ -3197,21 +3197,34 @@ def _check_power_trace(kind, raw, started_epoch_s, ended_epoch_s):
 
 
 def _check_pinned_trace(kind, bundle, data):
-    """The lead's provisional rule: the pinned D-018 validator judges the predecessor's trace.
+    """RL-193 section 1: the pinned D-018 check judges the predecessor's bound trace bytes.
 
-    The member's own reader examines no heading when a trace has zero rows, so a header or bytes that
-    D-018 rejects would otherwise be admitted. ``bundle`` holds the bound bytes; every source is digest
-    rechecked before a pass is published.
+    ``bundle_read._check_power_trace`` is the contract, whole and unchanged. It is called as the pinned
+    bundle validation calls it, with the bundle's own summary and metadata. An empty problem list passes
+    this check. A reported problem, a read failure or an exception refuses. Both headers the function
+    accepts pass, with or without rows; Part C's other checks still apply.
+
+    The function reads a path. The bound bytes are written to a private directory of the bundle's name and
+    judged there, so the bytes it reads are the ones the manifest binds, whatever the member's directory
+    holds by then. The member's own reader examines no heading when a trace has zero rows, which is why a
+    lone ``{`` was once admitted.
     """
-    from joulewise.bundle_read import _check_power_trace as pinned
+    import tempfile
 
     summary = _object_from_bytes(data["summary_metrics.json"], kind, "summary_metrics.json", "bundle_binding")
     meta = _object_from_bytes(data["metadata.json"], kind, "metadata.json", "bundle_binding")
     try:
-        problems = pinned(bundle, summary, meta)
+        from joulewise.bundle_read import _check_power_trace as pinned
+
+        with tempfile.TemporaryDirectory() as private:
+            judged = Path(private) / Path(bundle).name
+            judged.mkdir()
+            (judged / "power_trace.csv").write_bytes(data["power_trace.csv"])
+            problems = pinned(judged, summary, meta)
     except Exception as error:  # noqa: BLE001 - a validator that cannot run is never a pass
         raise EvidenceFailure("bundle_binding", kind, "power_trace.csv", field="D-018", peer="bundle_read") from error
-    _required(not problems, "bundle_binding", kind, "power_trace.csv", field="D-018", peer="bundle_read")
+    _required(isinstance(problems, list) and not problems, "bundle_binding", kind, "power_trace.csv",
+              field="D-018", peer="bundle_read")
 
 
 def _check_events_inside(kind, data, started_epoch_s, ended_epoch_s):
