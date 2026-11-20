@@ -10,4 +10,6 @@ Clearance requires a typed disposition that names the exact issue, hold and sour
 
 The local CI-discovered tests cover 40 phase and blocking-fact combinations, forged or mismatched and published clearances, receipt tamper and partial clearance, custody write failures, 80,442 guard offsets, 32 launcher-boundary cases and 24 read-last cases. The original R1–R3 properties, 60 contract decisions, 54 occupancy decisions, 1,764 clock cases, 43 runner traces and legacy replay also passed. All six frozen files match byte for byte. The verification uses synthetic fixtures with zero native-command attempts. No measured energy data was accessed. Hosted CI supplies the full suite per CANONICAL.
 
+The first hosted run caught direct Git initialization in the synthetic authority test. The test now uses the repository's shared fixture initializer, and the targeted fixture-maintenance check passed.
+
 Independent delta execution on the pushed repair remains the next gate.

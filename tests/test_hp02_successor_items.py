@@ -8,6 +8,8 @@ import tempfile
 import unittest
 from zipfile import ZipFile
 
+from tests.git_fixture import init_git_fixture
+
 
 DRAFTS = (Path(__file__).resolve().parents[1]
           / "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/item-drafts-f2-0203")
@@ -82,7 +84,7 @@ class HP02SuccessorItemsTests(unittest.TestCase):
             def disposition(row, commit):
                 return {**row, "authority": {**authority, "commit": commit}}
 
-            git("init", "--initial-branch=main")
+            init_git_fixture(repo, "--initial-branch=main")
             committed = record_authority(payload)
             git("update-ref", "refs/remotes/origin/main", committed)
             gate.verify_disposition(repo, disposition(payload, committed), hold, payload["issue_id"], 102)
