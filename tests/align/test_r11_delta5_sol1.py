@@ -21,7 +21,7 @@ from joulewise.align.apple import v4_cadence as cadence, v4_registration
 from scripts import align_v4_kit as kit, align_v4_next_arm_packet as builder
 from scripts import align_v4_series as series, align_v4_session as session
 from tests.align.test_v4_cadence import write_battery_log
-from tests.align.test_v4_next_arm_packet import NOW, Scenario
+from tests.align.test_v4_next_arm_packet import NOW, Scenario, write_c1_fixture_kit
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -160,8 +160,7 @@ class Delta5Witnesses(unittest.TestCase):
                 self.tmp.mkdir()
             s = self.scenario(previous, next_window=target)
             if target == 'C1':
-                for path, raw in self.c1_files.items():
-                    s.write(path, raw)
+                write_c1_fixture_kit(s, self.c1_files)
             s.finish()
             honest = s.build()
             record, error, calls = self.arm(s, honest, window=target)

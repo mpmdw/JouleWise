@@ -4,8 +4,10 @@ from __future__ import annotations
 import hashlib
 import json
 import math
+import os
 import re
 from pathlib import Path
+import stat
 import statistics
 import subprocess
 
@@ -451,6 +453,80 @@ def artifact_set_digest(root):
             return _local(root, path).read_bytes()
         except (OSError, ValueError):
             return None
+    return artifact_set_digest_from(reader)
+
+
+def confined_reader(root, *other_roots):
+    """Read repository-relative files, following links within the named roots.
+
+    Check each target before touching it. In particular, resolving an
+    escaping link must not stat the file or directory it names.
+    """
+    aliases = {Path(path).absolute(): Path(path).resolve(strict=True) for path in (root, *other_roots)}
+    aliases.update({path: path for path in tuple(aliases.values())})
+    ordered_aliases = sorted(aliases, key=lambda path: -len(path.parts))
+    roots = sorted(set(aliases.values()), key=lambda path: -len(path.parts))
+    prefixes = {parent for scope in roots for parent in scope.parents}
+    blocked = {'.git', 'restricted', 'night-custody', 'night-archive'}
+
+    def scope_for(path):
+        return next((scope for scope in roots if path.is_relative_to(scope)), None)
+
+    def read(relative):
+        relative = Path(relative)
+        if relative.is_absolute() or not relative.parts or '..' in relative.parts:
+            raise ValueError('staged input needs a repository-relative path')
+        directory = aliases[Path(root).absolute()]
+        parts = relative.parts
+        links = 0
+        while parts:
+            name, *parts = parts
+            if name == '..':
+                directory = directory.parent
+                continue
+            target = directory / name
+            scope = scope_for(target)
+            if scope is None:
+                if target in prefixes and parts:
+                    directory = target
+                    continue
+                raise ValueError(f'staged input escapes its allowed roots: {relative}')
+            if any(part in blocked or part.startswith('jw-b5-') for part in target.relative_to(scope).parts):
+                raise ValueError(f'staged input names a restricted path: {relative}')
+            status = target.lstat()
+            if stat.S_ISLNK(status.st_mode):
+                links += 1
+                if links > 40:
+                    raise ValueError(f'staged input has a symlink loop: {relative}')
+                link = Path(os.readlink(target))
+                if link.is_absolute():
+                    alias = next((scope for scope in ordered_aliases if link.is_relative_to(scope)), None)
+                    if alias is None:
+                        raise ValueError(f'staged input escapes its allowed roots: {relative}')
+                    directory = aliases[alias]
+                    link = link.relative_to(alias)
+                parts = [*link.parts, *parts]
+            elif parts:
+                if not stat.S_ISDIR(status.st_mode):
+                    raise ValueError(f'staged input parent is not a directory: {relative}')
+                directory = target
+            elif stat.S_ISREG(status.st_mode):
+                return target.read_bytes()
+        raise ValueError(f'staged input is not a regular file: {relative}')
+
+    return read
+
+
+def staged_artifact_set_digest(measurement_root, source_root):
+    """Hash the registered paths as the prepared launch view sees them."""
+    read = confined_reader(measurement_root, source_root)
+
+    def reader(path):
+        try:
+            return read(path)
+        except FileNotFoundError:
+            return None
+
     return artifact_set_digest_from(reader)
 
 

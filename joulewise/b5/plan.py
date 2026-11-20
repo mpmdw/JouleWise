@@ -167,7 +167,8 @@ class StageDispatch:
                 "run_ids": list(self.run_ids) if self.run_ids is not None else None, "error": self.error}
 
 
-def _dispatch_of(row: Any, repo_root: Path, bindings: Mapping[str, str] | None) -> StageDispatch:
+def _dispatch_of(row: Any, repo_root: Path, bindings: Mapping[str, str] | None,
+                 read_manifest: Callable[[Path], bytes] | None = None) -> StageDispatch:
     stage_id = str(row.get("stage_id")) if isinstance(row, Mapping) else "?"
     ordinal = row.get("ordinal") if isinstance(row, Mapping) and type(row.get("ordinal")) is int else None
     binding: str | None = None
@@ -200,9 +201,9 @@ def _dispatch_of(row: Any, repo_root: Path, bindings: Mapping[str, str] | None) 
         return failed("the campaign command names no --runs-dir binding")
     if bindings is not None and not isinstance(bindings.get(binding), str):
         return failed(f"--runs-dir binding {binding} is not bound")
-    path = Path(repo_root) / config / "order_manifest.json"
+    path = Path(config) / "order_manifest.json"
     try:
-        raw = path.read_bytes()
+        raw = read_manifest(path) if read_manifest is not None else (repo_root / path).read_bytes()
         manifest = json.loads(raw)
     except (OSError, ValueError) as exc:
         return failed(f"order manifest {config}/order_manifest.json is unreadable: {type(exc).__name__}")
@@ -238,11 +239,13 @@ def resolve_stage_dispatch(stage: Mapping[str, Any], *, pack_root: Path | str,
 
 
 def resolve_stage_dispatches(tree: Mapping[str, Any], repo_root: Path | str, *,
-                             bindings: Mapping[str, str] | None = None) -> list[StageDispatch]:
+                             bindings: Mapping[str, str] | None = None,
+                             read_manifest: Callable[[Path], bytes] | None = None) -> list[StageDispatch]:
     """Every ``campaign_collection`` stage of the plan tree, in ordinal order, resolved from its own argv.
 
     ``repo_root`` is the checkout the stage's config directory is relative to
-    (the measurement checkout, or the harvest's preserved copy). With
+    (the measurement checkout, or the harvest's preserved copy). A supplied
+    reader receives that same repository-relative manifest path. With
     ``bindings`` each runs root is also given as a path. Never raises on a
     malformed stage: its ``error`` says what could not be read and its
     ``run_ids`` is None (unresolved).
@@ -252,7 +255,15 @@ def resolve_stage_dispatches(tree: Mapping[str, Any], repo_root: Path | str, *,
     rows = [row for row in graph if isinstance(row, Mapping) and row.get("kind") == "campaign_collection"] \
         if isinstance(graph, list) else []
     rows.sort(key=lambda row: row.get("ordinal") if type(row.get("ordinal")) is int else 1 << 30)
-    return [_dispatch_of(row, Path(repo_root), bindings) for row in rows]
+    return [_dispatch_of(row, Path(repo_root), bindings, read_manifest) for row in rows]
+
+
+def relocate_order_entry(row: dict, config: Path, sha256: str) -> None:
+    """Pin a staged copy at its new repository-relative config path."""
+    if "config_path" in row:
+        row["config_path"] = config.as_posix()
+    row["config"] = config.name
+    row["config_sha256"] = sha256
 
 
 def duplicate_dispatches(dispatches: Sequence[StageDispatch]) -> list[dict[str, Any]]:

@@ -26,6 +26,7 @@ from unittest.mock import patch
 
 from joulewise.align.apple import v4_cadence as cad, v4_registration
 from joulewise.b5.chain import stage_plan
+from joulewise.b5.plan import resolve_stage_dispatches
 from scripts import align_pilot_session as pilot, align_v4_kit as kit, align_v4_series as s
 from scripts import align_v4_session as session, bytes_h_session as h
 from tests.align.test_v4_cadence import arm_seams, write_battery_log
@@ -60,6 +61,12 @@ def mirror(target):
             if p.name not in omitted and not p.name.startswith('align_v4_'):
                 (target / relative / p.name).symlink_to(p, target_is_directory=p.is_dir())
     shutil.copytree(ROOT / kit.KIT, target / kit.KIT)
+    # These checked-in templates provide the auxiliary stage manifests in
+    # both the rendered kit and the actual linked launch view.
+    for name in ('neg8_reference_corpus_v5', 'window_references_v5'):
+        directory = Path('configs/campaigns') / name
+        (target / directory).unlink()
+        shutil.copytree(ROOT / directory, target / directory)
 
 
 class SeriesCadenceEndToEnd(unittest.TestCase):
@@ -118,6 +125,11 @@ class SeriesCadenceEndToEnd(unittest.TestCase):
             return_value={'ok': True, 'reasons': [], 'synthetic': True}))
         stack.enter_context(patch.object(session, 'held_window_check',
             return_value={'ok': True, 'reasons': [], 'synthetic': True}))
+        # This fixture's source mirrors public repo code through additional
+        # links. Its synthetic packet builder already stands in for Git and
+        # desk evidence. C1PacketRebuildTests exercises the real artifact reader.
+        stack.enter_context(patch.object(v4_registration, 'staged_artifact_set_digest',
+            side_effect=lambda view, source: v4_registration.artifact_set_digest(source)))
         self.installed = []
         stack.enter_context(patch.object(pilot, 'install', side_effect=self.shared_install))
         self.manifest = s.load(self.measurement)
@@ -328,6 +340,28 @@ class SeriesCadenceEndToEnd(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, 'packet_kit_mismatch: staged member config'):
                 session.install(root, next_arm_triage=packet)
         host.assert_not_called()
+        self.assertEqual(self.installed, [])
+
+    def test_c1_refuses_each_order_manifest_swap_including_scaffold(self):
+        self.outcome('W1', captured=18)
+        packet = self.packet('C1')
+        root = self.tmp / 'swapped-order-session'
+        session.prepare(self.measurement, root, window_id='C1')
+        view, pack = self.views[s.pack_id('C1')]
+        dispatches = resolve_stage_dispatches(json.loads((pack / 'plan_tree.json').read_bytes()), view)
+        self.assertTrue(any('reference' in stage.stage_id for stage in dispatches))
+        for stage in dispatches:
+            with self.subTest(stage=stage.stage_id):
+                path = view / stage.config_dir / 'order_manifest.json'
+                original = path.read_bytes()
+                path.write_bytes(original + b' ')
+                try:
+                    with patch('joulewise.align.apple.powermode.host_marker_path') as host:
+                        with self.assertRaisesRegex(ValueError, 'packet_kit_mismatch: .*order manifest'):
+                            session.install(root, next_arm_triage=packet)
+                    host.assert_not_called()
+                finally:
+                    path.write_bytes(original)
         self.assertEqual(self.installed, [])
 
     def test_an_unbound_packet_cannot_arm_w1_or_a_series_window(self):

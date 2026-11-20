@@ -28,7 +28,7 @@ from scripts import align_v4_kit as w1_kit, align_v4_next_arm_packet as builder
 from scripts import align_v4_series as series
 from scripts import align_v4_session as session
 from scripts import bytes_h_session as staging
-from joulewise.b5.chain import TOOLS
+from joulewise.b5.chain import TOOLS, stage_plan
 from joulewise.b5.plan import resolve_stage_dispatches
 from joulewise.schemas import BenchmarkConfig, CONFIG_SCHEMA_VERSION
 from joulewise.align.apple import v4_cadence as cad
@@ -123,6 +123,26 @@ def seed_materializer(scenario):
     ))
     write(series.MANIFEST, series.raw_json(series.candidate()))
 
+
+def write_c1_fixture_kit(scenario, files):
+    """Carry the generated C1 science kit with invented scaffold dispatches."""
+    directory = series.kit_path('C1')
+    for path, raw in files.items():
+        scenario.write(path, raw)
+    tree = json.loads(files[directory / 'plan_tree.json'])
+    for stage in stage_plan(tree):
+        if stage.kind != 'campaign_collection':
+            continue
+        config_dir = Path(stage.commands[0].arguments[0]['value'])
+        if config_dir.is_relative_to(directory):
+            continue
+        rows = []
+        for position in range(1, stage.expected_count + 1):
+            run_id = f'fixture-{stage.stage_id}-{position}'
+            name = run_id + '.json'
+            scenario.write(config_dir / name, {'run_id': run_id})
+            rows.append({'run_id': run_id, 'config': name, 'index': position})
+        scenario.write(config_dir / 'order_manifest.json', {'executed_order': rows})
 
 
 class Scenario:

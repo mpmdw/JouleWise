@@ -155,11 +155,23 @@ state at `--series-commit`, with:
   from kit-relative file paths to their byte digests, the raw collection-plan
   SHA-256, the member count, and the ordered sentinel ordinals. The builder
   checks the materialization against the committed series and projection.
+  Commit the auxiliary campaign manifests and their configs in that same
+  tree. The packet binds the ordered science IDs and the exact staged bytes
+  of each stage's order manifest. The builder derives the latter from the
+  committed order and the same relocation used by the staging view. It also
+  binds the dispatched config digests and any declared spare order files.
   Projection-only packets are usable for off-host preflight. C1 install
   requires the kit binding and checks the selected materialization before
   host actions. The arm checks it against its own rebuild and verifies the
-  staged plan and launch-tree binding. A kit mismatch refuses install with
-  exit 2 and `packet_kit_mismatch`.
+  staged plan, launch-tree binding, and mirrored kit files. It resolves
+  the staged campaign argv with the writer's dispatch resolver and checks
+  order manifest and config digests, including scaffold stages. The C1
+  roster count and sentinel positions come from the ordered science IDs.
+  For the W1 desk check, the C1 consumer hashes the artifact bytes seen in
+  the staged view. Links resolve within that view and its prepared source
+  checkout. A matching copy has the same digest. An escaping link or a
+  staged kit or dispatch mismatch refuses install with exit 2 and
+  `packet_kit_mismatch`.
 * The window records are **hash-chained**: each record names its predecessor
   (`previous_record`: `commit`, `path`, `sha256`) and the series ledger `series/state.json`
   names the latest one (`previous_record`, `series_sha256`). The builder walks the chain back to

@@ -13,6 +13,7 @@ import math
 import json
 import os
 from pathlib import Path
+import shutil
 import tempfile
 import time
 from types import SimpleNamespace
@@ -410,7 +411,10 @@ class FakeWorld:
         for path in (ROOT / 'configs/campaigns').iterdir():
             target = m / 'configs/campaigns' / path.name
             if path.name != 'align_v4' and not target.exists():
-                target.symlink_to(path, target_is_directory=path.is_dir())
+                if name == 'C1' and path.name in ('neg8_reference_corpus_v5', 'window_references_v5'):
+                    shutil.copytree(path, target)
+                else:
+                    target.symlink_to(path, target_is_directory=path.is_dir())
         # This existing policy directory needs an additional safe repo fixture.
         target = m / 'configs/campaign_policies/quiet_mac_p2_b5.json'
         target.symlink_to(ROOT / 'configs/campaign_policies/quiet_mac_p2_b5.json')
@@ -516,6 +520,8 @@ class FakeWorld:
                 return_value={'ok': True, 'reasons': [], 'synthetic': True}))
             stack.enter_context(patch.object(session, 'held_window_check',
                 return_value={'ok': True, 'reasons': [], 'synthetic': True}))
+            stack.enter_context(patch.object(v4_registration, 'staged_artifact_set_digest',
+                side_effect=lambda view, source: v4_registration.artifact_set_digest(source)))
             stack.enter_context(patch.object(h, 'read', side_effect=physical_inventory))
             # The chain replay stages t0 in the past to avoid an eight-minute
             # wait. The pre-arm clock is earlier; the real preflight still reads

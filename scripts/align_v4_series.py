@@ -21,8 +21,9 @@ if str(ROOT) not in sys.path:
 from scripts import align_v4_kit as w1
 from scripts.align_pilot_kit import raw_json, sha
 from joulewise.align.apple import v4_cadence as cadence
+from joulewise.align.apple.v4_registration import confined_reader
 from joulewise.align.apple.sampling import episode_seed, leading_seed, turn_seed
-from joulewise.b5 import chain
+from joulewise.b5 import chain, plan as launch_plan
 
 SCHEMA = 'joulewise.align_v4.series.v1'
 ADMISSION_SCHEMA = 'joulewise.align_v4.series_admission.v1'
@@ -61,22 +62,92 @@ def c1_plan_projection(plan):
     return rows
 
 
-def c1_kit_identity(file_hashes, plan):
+def c1_kit_identity(file_hashes, plan, tree, read):
     rows = c1_plan_projection(plan)
     return {'kit_sha256': sha(raw_json(file_hashes)), 'plan_sha256': file_hashes[C1_PLAN],
             'member_count': len(rows),
-            'sentinel_ordinals': [i for i, row in enumerate(rows, 1) if row['role'] == 'sentinel']}
+            'sentinel_ordinals': [i for i, row in enumerate(rows, 1) if row['role'] == 'sentinel'],
+            'staged_kit_files': {path: digest for path, digest in file_hashes.items() if path != 'plan_tree.json'},
+            'execution': c1_execution_identity(tree, plan, read, staged=False)}
+
+
+def _campaign_file(path, read):
+    if not path.is_relative_to('configs/campaigns') or '..' in path.parts or path.suffix != '.json':
+        raise ValueError(f'C1 execution input must be a campaign JSON file: {path}')
+    return read(path)
+
+
+def _order_configs(order, directory, read):
+    """Bind the actual configs named by the runner, in manifest order."""
+    configs = {}
+    for row in order['executed_order']:
+        name = row['config']
+        if Path(name).parts != (name,) or name in configs:
+            raise ValueError('invalid or duplicate config name in C1 order manifest')
+        raw = _campaign_file(directory / name, read)
+        if json.loads(raw)['run_id'] != row['run_id']:
+            raise ValueError('C1 order manifest run ID differs from its dispatched config')
+        configs[name] = sha(raw)
+    return configs
+
+
+def c1_execution_identity(tree, plan, read, *, staged):
+    """Use the writer's argv resolver to seal each stage and the science order."""
+    order_bytes = {}
+
+    def read_order(path):
+        raw = _campaign_file(path, read)
+        order_bytes[path] = raw
+        return raw
+
+    stages = {stage.stage_id: stage for stage in chain.stage_plan(tree) if stage.kind == 'campaign_collection'}
+    dispatches = launch_plan.resolve_stage_dispatches(tree, '.', read_manifest=read_order)
+    science_stages = {member['stage_id'] for member in plan['members']}
+    launch_pack = Path('configs/campaigns') / pack_id('C1')
+    orders, science_ids = [], []
+    for dispatch in dispatches:
+        stage = stages[dispatch.stage_id]
+        if dispatch.error or len(dispatch.run_ids) != stage.expected_count:
+            raise ValueError(f'C1 dispatch {stage.stage_id}: {dispatch.error or "member count differs"}')
+        directory = Path(dispatch.config_dir)
+        staged_dir = launch_pack / 'members' / stage.stage_id
+        if staged and directory != staged_dir:
+            raise ValueError(f'C1 dispatch {stage.stage_id} does not use its staged config directory')
+        raw = order_bytes[directory / 'order_manifest.json']
+        order = json.loads(raw)
+        configs = _order_configs(order, directory, read)
+        if not staged:
+            for row in order['executed_order']:
+                launch_plan.relocate_order_entry(row, staged_dir / row['config'], configs[row['config']])
+            raw = raw_json(order)
+        spares = {}
+        for path in (stage.spare_sets or {}).values():
+            spare = Path(path)
+            spare_raw = _campaign_file(spare, read)
+            spares[path] = {'sha256': sha(spare_raw),
+                            'configs': _order_configs(json.loads(spare_raw), spare.parent, read)}
+        orders.append({'stage_id': stage.stage_id, 'ordinal': stage.ordinal,
+                       'runs_root_binding': dispatch.runs_root_binding,
+                       'sha256': sha(raw), 'run_ids': list(dispatch.run_ids), 'configs': configs, 'spares': spares})
+        if stage.stage_id in science_stages:
+            science_ids.extend(dispatch.run_ids)
+    rows = c1_plan_projection(plan)
+    if science_ids != [row['run_id'] for row in rows] or len(set(science_ids)) != len(rows):
+        raise ValueError('resolved C1 dispatch differs from the frozen ordered member roster')
+    return {'run_ids': science_ids, 'order_manifests': orders}
 
 
 def read_c1_kit(root):
     """Hash the selected materialization, including the exact collection-plan bytes."""
     relative = kit_path('C1')
-    directory = Path(root)
+    root = Path(root)
+    directory = root
     for part in relative.parts:
         directory /= part
         if not stat.S_ISDIR(directory.lstat().st_mode):
             raise ValueError('materialized C1 kit directory must be a regular directory')
-    file_hashes, plan = {}, None
+    read = confined_reader(root)
+    file_hashes, plan, tree = {}, None, None
     for path in sorted(directory.rglob('*')):
         mode = path.lstat().st_mode
         if stat.S_ISDIR(mode):
@@ -84,13 +155,15 @@ def read_c1_kit(root):
         relative = path.relative_to(directory)
         if not stat.S_ISREG(mode) or not c1_kit_file(relative):
             raise ValueError('unexpected file in materialized C1 kit: ' + relative.as_posix())
-        raw = path.read_bytes()
+        raw = read(path.relative_to(root))
         file_hashes[relative.as_posix()] = sha(raw)
         if relative.as_posix() == C1_PLAN:
             plan = json.loads(raw)
-    if not isinstance(plan, dict) or 'plan_tree.json' not in file_hashes:
+        elif relative.as_posix() == 'plan_tree.json':
+            tree = json.loads(raw)
+    if not isinstance(plan, dict) or not isinstance(tree, dict):
         raise ValueError('materialized C1 kit is incomplete')
-    return c1_kit_identity(file_hashes, plan), plan
+    return c1_kit_identity(file_hashes, plan, tree, read), plan
 
 
 RESERVED_INDICES = frozenset({1, *range(91, 100)})   # development: W1 1/93, R0 91-92, reserve 94-99

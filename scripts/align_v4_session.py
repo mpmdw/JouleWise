@@ -1210,6 +1210,7 @@ def _read_packet(pointer):
 
 def _check_c1_packet_kit(root, packet, *, plan=None, measurement_root=None, night_plan_path=None):
     from scripts import align_v4_series as series
+    from joulewise.align.apple.v4_registration import confined_reader
 
     try:
         expected = packet.get('c1_kit') if isinstance(packet, dict) else None
@@ -1221,43 +1222,31 @@ def _check_c1_packet_kit(root, packet, *, plan=None, measurement_root=None, nigh
         if plan is not None and plan != source_plan:
             raise ValueError('selected collection plan differs from the materialized plan')
         if measurement_root is not None:
-            # The staging view relocates the tree and copies stage configs. The
-            # launch plan pins that relocated tree and the original collection plan.
-            pack = Path(measurement_root) / 'configs/campaigns' / series.pack_id('C1')
-            collection = pack / series.C1_PLAN
-            if collection.is_symlink():
-                source = Path(root) / series.kit_path('C1') / series.C1_PLAN
-                if os.readlink(collection) != str(source):
-                    raise ValueError('staged collection plan link names a different kit')
-            tree_path = pack / 'plan_tree.json'
-            if tree_path.is_symlink():
-                raise ValueError('staged launch tree must be a regular file')
-            tree_raw = tree_path.read_bytes()
+            read = confined_reader(measurement_root, root)
+            pack = Path('configs/campaigns') / series.pack_id('C1')
+            for path, digest in actual['staged_kit_files'].items():
+                if _sha256(read(pack / path)) != digest:
+                    raise ValueError(f'staged kit file differs from the committed kit: {path}')
+            # The staging view relocates the tree. Its exact bytes are pinned by
+            # the prepared launch plan, and the packet binds what its argv resolves.
+            tree_raw = read(pack / 'plan_tree.json')
             tree = json.loads(tree_raw)
             hazard = pilot.h.read(night_plan_path)['hazard_window']
-            # The hazard budget counts scaffold dispatches too. The collection
-            # plan and the staged science rows carry the C1 member roster.
-            if (_sha256(collection.read_bytes()) != actual['plan_sha256']
-                    or tree['plan']['path'] != series.C1_PLAN
+            if (tree['plan']['path'] != series.C1_PLAN
                     or tree['plan']['actual_sha256'] != actual['plan_sha256']
-                    or hazard['pack']['pack_root'] != str(pack)
+                    or hazard['pack']['pack_root'] != str(Path(measurement_root) / pack)
                     or hazard['pack']['plan_tree_sha256'] != _sha256(tree_raw)
                     or [(row['run_id'], row['config_sha256']) for row in tree['science']] !=
                        [(row['run_id'], row['config_sha256']) for row in source_plan['members']]):
                 raise ValueError('staged launch plan differs from the materialized kit')
-            members = pack / 'members'
-            if members.is_symlink():
-                raise ValueError('staged configs must be copied inside the launch kit')
             for projected, member in zip(tree['science'], source_plan['members'], strict=True):
-                stage = member['stage_id']
-                if Path(stage).parts != (stage,):
-                    raise ValueError('materialized plan has an invalid stage ID')
-                directory = members / stage
-                config = directory / Path(member['config_path']).name
-                if (projected['config_path'] != config.relative_to(measurement_root).as_posix()
-                        or directory.is_symlink() or config.is_symlink()
-                        or _sha256(config.read_bytes()) != member['config_sha256']):
-                    raise ValueError('staged member config differs from the materialized kit')
+                config = pack / 'members' / member['stage_id'] / Path(member['config_path']).name
+                if projected['config_path'] != config.as_posix():
+                    raise ValueError('staged science row names a different config')
+            execution = series.c1_execution_identity(tree, source_plan, read, staged=True)
+            if execution != actual['execution']:
+                raise ValueError('staged member config or order manifest differs from the committed dispatch')
+            return {**actual, 'staged_launch_tree_sha256': _sha256(tree_raw)}
         return actual
     except (OSError, ValueError, KeyError, TypeError, AttributeError) as exc:
         raise PacketKitMismatch(str(exc)) from exc
@@ -1544,16 +1533,19 @@ def arm_checks(measurement_root, plan, *, runner=None, volume_runner=None, lock=
     # battery and the live meter are computed here from current hardware, never entered.
     from joulewise.align.apple import v4_cadence, v4_registration
     supplied, packet_file_sha256 = _read_packet(next_arm_triage)
-    current_digest = v4_registration.artifact_set_digest(measurement_root)
+    evidence_root = c1_kit_root or measurement_root
+    staged_c1 = Path(evidence_root) != Path(measurement_root)
     built, matches, rebuild_error = None, False, None
     with timing_receipts.span("arm", "v4_packet_rebuild"):
         try:
+            current_digest = (v4_registration.staged_artifact_set_digest(measurement_root, evidence_root)
+                              if staged_c1 else v4_registration.artifact_set_digest(measurement_root))
             if packet_builder is not None:
-                built, matches = packet_builder(measurement_root, supplied, now_epoch_s=now_s,
+                built, matches = packet_builder(evidence_root, supplied, now_epoch_s=now_s,
                                                 current_artifact_set_sha256=current_digest)
             else:
                 from scripts import align_v4_next_arm_packet as builder
-                built, matches = builder.rebuild_and_compare(measurement_root, supplied, now_epoch_s=now_s,
+                built, matches = builder.rebuild_and_compare(evidence_root, supplied, now_epoch_s=now_s,
                                                              current_artifact_set_sha256=current_digest)
         except (ValueError, KeyError, TypeError, AttributeError, OSError) as exc:
             rebuild_error = f'{type(exc).__name__}: {exc}'
@@ -1562,8 +1554,8 @@ def arm_checks(measurement_root, plan, *, runner=None, volume_runner=None, lock=
         if built is not None:
             commit = built.get('record_commit')
             identity = {'artifact_set_sha256': current_digest,
-                        'record_commit_exists': (commit_check or _commit_exists)(measurement_root, commit),
-                        'record_bound': bool((record_check or _record_bound)(measurement_root, built))}
+                        'record_commit_exists': (commit_check or _commit_exists)(evidence_root, commit),
+                        'record_bound': bool((record_check or _record_bound)(evidence_root, built))}
         series_binding = list(series_bind(built)) if series_bind is not None else None
         packet_kit = None
         if c1_kit_root is not None or plan.get('window_id') == 'C1':
@@ -1576,7 +1568,7 @@ def arm_checks(measurement_root, plan, *, runner=None, volume_runner=None, lock=
             except PacketKitMismatch as exc:
                 reasons.append(exc.reason)
                 packet_kit = {'ok': False, 'reason': exc.reason, 'detail': exc.detail}
-    held = held_window_check(measurement_root, built, ruling_path=held_window_ruling)
+    held = held_window_check(evidence_root, built, ruling_path=held_window_ruling)
     reasons += held['reasons']
     watchdog = (watchdog_check or watchdog_acceptance)(phase='pre_install', runner=runner,
         plist_path=watchdog_plist, plan=watchdog_plan, plan_path=watchdog_plan_path, now=now)
@@ -1817,6 +1809,11 @@ def install(session_root, *, runner=None, volume_runner=None, now=None, w1_disk_
         supplied, _ = _read_packet(kwargs.get('next_arm_triage'))
         _check_c1_packet_kit(source_root, supplied, measurement_root=measurement_root,
                              night_plan_path=state.get('plan_path'))
+        from joulewise.align.apple.v4_registration import staged_artifact_set_digest
+        try:
+            staged_artifact_set_digest(measurement_root, source_root)
+        except (OSError, ValueError) as exc:
+            raise PacketKitMismatch(str(exc)) from exc
     kit.generate(source_root, check=True, source_root=source_root)
     plan = (validate_series_state(state) if state.get('v4_series') else
             json.loads((Path(measurement_root) / kit.KIT / 'collection_plan.json').read_bytes()))

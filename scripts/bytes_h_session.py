@@ -183,10 +183,7 @@ def measurement_view(source, session, *, kit=KIT, pack_id=PACK_ID):
             digest = hashlib.sha256(raw).hexdigest()
             relative = target.relative_to(view).as_posix()
             relocated[config.relative_to(source).as_posix()] = relative
-            if 'config_path' in row:
-                row['config_path'] = relative
-            row['config'] = target.name
-            row['config_sha256'] = digest
+            plan.relocate_order_entry(row, Path(relative), digest)
             typed = BenchmarkConfig.from_mapping(json.loads(raw)).to_dict()
             model, hardware = typed['model'], typed['hardware_target']
             unit_id = model_ids.get(model['source'], 'neg8_reference')

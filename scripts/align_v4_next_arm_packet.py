@@ -655,7 +655,7 @@ def committed_c1_kit(evidence, commit, manifest_sha256, projection):
     if not entries:
         return None    # projection-only packets can still be evaluated off-host
     file_hashes = {}
-    plan = None
+    plan, tree = None, None
     for entry in entries:
         _, name = entry.split(b'\t', 1)
         path = name.decode()
@@ -665,12 +665,15 @@ def committed_c1_kit(evidence, commit, manifest_sha256, projection):
         file_hashes[relative.as_posix()] = digest(raw)
         if relative.as_posix() == frozen_series.C1_PLAN:
             plan = decode(raw)
-    require(plan is not None and 'plan_tree.json' in file_hashes, 'committed C1 kit is incomplete')
+        elif relative.as_posix() == 'plan_tree.json':
+            tree = decode(raw)
+    require(plan is not None and tree is not None, 'committed C1 kit is incomplete')
     require(plan.get('series_manifest_sha256') == manifest_sha256, 'materialized C1 kit names a different series')
     require(frozen_series.c1_plan_projection(plan) ==
             [{'run_id': row['run_id'], 'role': row['role']} for row in projection],
             'materialized C1 roster disagrees with the committed next plan')
-    return frozen_series.c1_kit_identity(file_hashes, plan)
+    return frozen_series.c1_kit_identity(file_hashes, plan, tree,
+                                         lambda path: evidence.read(commit, path.as_posix()))
 
 
 def build_packet(repo, *, record_commit, record_path, series_commit, series_path, pushed_ref,

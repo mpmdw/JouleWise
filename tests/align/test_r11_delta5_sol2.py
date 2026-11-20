@@ -43,8 +43,7 @@ class CommittedSeriesTests(unittest.TestCase):
     def scenario(self, window='W1', *, previous=None, captured=True):
         s = fixtures.Scenario(self.repo, window, previous=previous, captured=captured)
         s.write(series.MANIFEST.as_posix(), series.raw_json(series.candidate()))
-        for path, raw in self.c1_files.items():
-            s.write(path, raw)
+        fixtures.write_c1_fixture_kit(s, self.c1_files)
         if window.startswith('C'):
             s.sources['pilot']['extra_checks']['series_desk_row'] = {
                 'window_id': window.split('#')[0], 'captured_members': 2 if captured else 0,
