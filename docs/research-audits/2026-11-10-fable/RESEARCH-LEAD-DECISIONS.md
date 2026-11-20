@@ -22910,3 +22910,76 @@ Rows for the lead to commit to `RULES.json`. Owner is `research_lead` for rows 1
 **Rows closed or changed by this ruling.** `FOR-FABLE.md`'s eleven questions are answered. RL-189 register row 4 and RL-188 register row 4 are read with rows 1 and 3. SD's NEEDS_RULING on both captured arms is answered. GF rows 1 to 3 are closed. RS473's "until the manifest's deviation section carries it" reads "until the deviation file carries it".
 
 **What comes back to me.** A v2.2 case whose expectation under section 1 disagrees with a passing v2.1 case. A description print on which two rules of 1.1 give different reasons. A change to one of RL-182 1.5's eight names needed for 2.3. A member with `captured` true whose builder gives a turn neither a row nor a code on an episode that reconciles. Two admitted final records that disagree on A9. GF rows 4 to 11 when they fire. Nothing else in this ruling returns.
+
+# RL-192. The description looks compute in exact rationals of the recorded literals with no tolerance; the 0.50 s rail-sum rise and onset lag stand, and the two hand-table fixtures are corrected because their component literals carry float dust the plant never had. The present bytes are kept as a near-miss case at 0.75 s / 0.25 s
+
+Research lead (Fable 5.2), 2026-11-20 02:20 PST
+
+**Question** (executor builder, PR #868, NEEDS_SPEC E1, under RL-188 §4.1). Exact arithmetic gives a rail-sum rise of 0.75 s and onset lag of 0.25 s on `f2-inst-01/L001` and its pair. Suite v2.1 expects 0.50 s for both.
+
+**Ruling: (c).** Not (a), not (b).
+
+| # | Question | Answer |
+|---|---|---|
+| 1 | Which arithmetic? | Exact rationals, everywhere in the description looks. Section 1 |
+| 2 | Is 0.50 s a float artifact? | No. It is the plant. The fixture bytes are the artifact |
+| 3 | A tolerance or a binary64 order? | Neither. "At or above" is exact and inclusive |
+| 4 | What changes in the suite? | v2.2: both legs' component literals are rewritten to the planted decimals. Expectations stay 0.50 s / 0.50 s. Section 2 |
+| 5 | What happens to the present bytes? | Kept unchanged as two new near-miss cases expecting 0.75 s / 0.25 s. Section 2 |
+| 6 | Who edits the fixture? | The suite's owner, not the executor builder (RL-191 register row 7) |
+
+## Why
+
+- **The plant is on the threshold by design.** RL-188 §4.1's hand table puts the rails at 0.50, 0.75 and 1.00 s. The witness shows the GPU rail meeting all three thresholds with a difference of exactly 0 on both legs. The rail sum was planted the same way: hold 24, level 6, thresholds 24.6, 27 and 29.4 W.
+- **The bytes are not the plant.** The recorded component literals sum to 26.999999999999999 W, and the level comes out as 6.0000000000000009 W. Those digits were written by a float generator. No planted value has them. The witness log shows the shortfalls are 1.5e-15 and 9e-16 W, which is that dust and nothing else.
+- **Why not (a).** It would freeze the dust as the expectation and make the rail sum and the GPU rail disagree on a trace built for them to agree. The inclusive edge of "at or above" would then have no rail-sum test.
+- **Why not (b).** A tolerance is a new parameter in a rule fixed before any energy was read (RL-188 register row 4). A binary64 evaluation order is what produced the audit HIGH on the flat 2.042 W trace.
+- **On real records nothing moves.** A recorded literal is what the instrument wrote. It is compared as written.
+
+## 1. The rule the executor builder implements
+
+> 1. Every recorded number enters as the exact rational of its literal text (`Fraction(Decimal(text))`). The existing guard stays: `float(text)` must equal the pinned loader's value on every row, or the look refuses.
+> 2. Every sum, mean, hold, level, threshold, interpolation, lag and window mean is computed in rationals. Each f of RL-181 §2.4 is a rational (1/10, not 0.1). Times are rationals of their literals.
+> 3. Every comparison is exact and inclusive as RL-188 §4.1 and §4.2 word it. No tolerance, no epsilon, no rounding before a comparison.
+> 4. A comparison against an SD multiple is made on squares with the sign taken first: x ≤ k·SD is true if x ≤ 0, and otherwise is x² ≤ k²·variance. No square root is taken before a comparison.
+> 5. A value becomes a float or a rounded decimal once, at print.
+
+The builder changes no fixture and no expectation. PR #868 is judged against v2.2.
+
+## 2. The suite owner's correction (v2.2)
+
+> 1. On `f2-inst-01/L001` and its pair, each component literal is rewritten as the terminating decimal of its hand-table planted value. The generator uses `Decimal` or integers, never a float repr.
+> 2. A suite guard asserts, in rationals, that the rail sum minus the threshold is exactly 0 at the three steps (602.50, 602.75, 603.00 s) on both legs, and that the level is exactly 6 W and 12 W.
+> 3. Expectations are unchanged: rail-sum rise 0.50 s, rail-sum onset lag 0.50 s, GPU rise 0.50 s, flat trace P − H exactly 0. Every other v2.1 expectation on these legs is unchanged.
+> 4. The present v2.1 bytes of both legs are kept under new case names (`…_near_miss`) expecting rail-sum rise 0.75 s and onset lag 0.25 s, with the GPU values unchanged. This case fails any executor that carries a tolerance.
+> 5. The fixture hash pins are rebound in the same commit, citing RL-192. The change is a fix in place to a frozen component.
+
+If a planted component value has no terminating decimal, or a v2.1 expectation other than the near-miss pair changes under the corrected bytes, the suite returns to me.
+
+---
+
+## Amends
+
+- **RL-188 §4.1:** read with section 1. "At or above" and "at or under" are exact rational comparisons. The hand-table values (0.50, 0.75, 1.00 s; onset lag 0.50 s) stand.
+- **RL-188 §4.2:** the "hold mean + 2 × the hold's 10 s SD" comparison is made as section 1 item 4 gives.
+- **Suite v2.1:** superseded by v2.2 on the two hand-table legs only.
+- **Stand unchanged:** RL-181 §2.4; RL-188 register rows 4 and 5; RL-189 §4; RL-191 §1.
+
+**Blind status.** Blind. Only the synthetic hand-table fixture and the builder's witness log were read. No measured energy was opened.
+
+**For Ed, plainly.** "A test file for the instrument read had rounding dust in its numbers, about a millionth of a billionth of a watt. The careful arithmetic we now require noticed it. The expected answers were right and the test file was wrong. The file is corrected, and the old one is kept as a test that the code allows no fudge factor. No machine time is needed."
+
+---
+
+## Register
+
+Owner is `research_lead`.
+
+| # | Clause | Class | Protects | Scope | Ends | Test |
+|---|---|---|---|---|---|---|
+| 1 | The description looks compute in exact rationals of the recorded literals; comparisons are exact and inclusive with no tolerance; an SD comparison is made on squares; a float appears only at print (1) | VALIDITY | A crossing or a zero does not depend on float evaluation order | `lm-inst-01`, `lm-stab-*` | The paper's data release | Flat 2.042 W gives P − H = 0; the corrected legs give 0.50 s / 0.50 s; the near-miss legs give 0.75 s / 0.25 s |
+| 2 | A synthetic fixture's literals are the terminating decimals of its planted values, with an exact-equality guard at every planted threshold step (2) | VALIDITY | An expectation tests the plant, not the generator's rounding | Description-looks suite v2.2 onward | The paper's data release | The suite guard of section 2 item 2 |
+
+**Rows closed or changed by this ruling.** RL-188 register row 4's test is read with row 1. NEEDS_SPEC E1 on PR #868 is answered.
+
+**What comes back to me.** The two conditions at the end of section 2. A real record whose `float(text)` guard fails. Nothing else.
