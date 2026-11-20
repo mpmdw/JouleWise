@@ -1052,6 +1052,15 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 
 <!-- RUN_STATE TYPED ITEMS: newest first. Add with scripts/run_state_add.py; never edit by hand. -->
 
+491. **Check items print the full offload-manifest sha256 from now on (RL-194a)**
+
+```item
+{"expires_epoch_s": null, "issued_epoch_s": 1795213091, "number": 491, "owner": "magistrate", "schema": "joulewise.run_state_item.v1", "sets": [], "status": "ISSUED", "supersedes": []}
+```
+
+- **Standing change to the Check-item format (RL-194a Q3, research lead):** from the next Check on, every Check item prints the FULL 64-hex sha256 of the offload manifest (and of the encrypted copy), not an abbreviation like `5d029937…00b`. Abbreviated digests in past items stay valid: they bind character by character to the custody manifest's full digest in the look review records.
+- Nothing else changes: the ladder, ranks (items 464, 472, 480, 489), copies and stops stand.
+
 490. **Magistrate 9ffcf3f6 (headless, Opus 5.5), 2026-11-20 13:48-13:53 PST (`date`): f2-stab-15-l004 CHECK: RECEIPT OK (1/1 leg, MEASURED_OK, admitted, restored; first soak refused on CPU load, retry passed), copied at once; f2-stab-01-l008 ISSUED at rank 4 on pin A, ARG 02:00-02:35 (items 464, 489), launches as the last act**
 
 ```pointer
