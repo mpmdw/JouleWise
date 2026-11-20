@@ -408,3 +408,28 @@ Opus acceptance, and the final post-close packet remain with their owners.
 
 `NEEDS_SPEC: none`. Only invented fixtures were used for the audit replay
 and software checks.
+
+### Hosted integration repair
+
+The first K1 run reported 20/21 jobs passing on `df4c9b2db`.
+Shard 8 exposed two integration issues. Its dwell-order witness needed a
+committed C1 kit before the real arm could reach the dwell stamp. Its
+production-path replay also showed that the night plan's hazard budget
+counts scaffold dispatches along with C1 science rows. The check had
+compared that larger number to the collection-plan roster, which stopped
+C1 and skipped the subsequent history in the replay.
+
+Commit `2fece9927b615da715f7753f46981c78e6124b99`, tree
+`68df4829f2b24c67fd5438a9537660ac9c2c64c5`, retains the exact
+collection-plan digest, kit digest, roster and sentinel comparisons,
+as well as the staged launch-tree and copied-config checks. It compares
+the C1 roster through the staged science rows. The synthetic end-to-end
+fixture now uses the real, larger scaffold-inclusive budget. The existing
+dwell-order witness now uses a committed kit from the synthetic materializer.
+Its disk-usage call is a stand-in. Neither fixture performs host probes.
+[First hosted shard 8](https://github.com/mpmdw/JouleWise/actions/runs/44755731193/job/136355110044)
+
+```sh
+JW_B5_SYNTHETIC_ONLY=1 PYTHONPATH=tests:. python3.13 -B -m unittest -v \
+  align.test_v4_next_arm_packet.ArmOrderWitness align.test_v4_series_e2e
+```
