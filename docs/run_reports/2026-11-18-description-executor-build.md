@@ -692,3 +692,59 @@ preserves the recorded capture bounds, including the 0.75 s and 25 s
 cases.
 
 [RL-192](/Volumes/JW-EXT/scratch/fable-rl192.md) · [Direct controls](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/rl192-direct.log) · [Focused frozen run](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/rl192-gate-focus.log) · [Direct scientific comparison](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/rl192-science.log) · [Protected paths](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/rl192-protected-blobs.tsv)
+
+## 2026-11-20 RL-192a freeze and RL-190 stage-1 supplement
+
+The fetched branch, worktree and draft PR #868 agreed at
+`3428548709181f4886df8e83f0bdbd600696b674`. The worktree was clean.
+`ac3051ad7` imports both supplied modules byte for byte. The comparison
+against the previous report matches all 53 protected path entries,
+including the registration files. [Protected path comparison](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/rl190-supplement-protected-blobs.tsv)
+
+| Frozen module | Cases | SHA-256 |
+| --- | ---: | --- |
+| v2.1.2 | 3,384 | `ed3fb9837dbbaa83ace5d416351dea0d37e0a56d1c1f933c1e56dbdae065a333` |
+| v2.2.1 | 13,303 | `89e202e40281937920e39bff828378891de1629cdb4a9c435d5232521279dd03` |
+| RL-190 supplement | 187 | `fff03259cabc54cb915a273d0f8859c2ba8c155c89d842c94db72ddb213af06d` |
+
+| Finding | Commit | Regression result |
+| --- | --- | --- |
+| Concealed second bundle or a member behind a drop | `78cef0a88` | **PASS** with the supplement's original fixture. Both concealment cases refuse. The executor reconciles the issued instrument roster with operational receipts and leg-record paths in the closed source tree. |
+| Missing local span index and private own-reference attribution | `78cef0a88` | **PASS** with the supplement's original fixture. `test_layout_as_run_indices_36` verifies the receipt-local index and `test_layout_own_reference_L006` verifies the authenticated per-leg reference. |
+| Missing over-budget projection | `78cef0a88` | **PASS** with the supplement's original fixture for `test_wall_all_36` and both `test_wall_stab15_*` cases. The executor verifies the supplied wall and allowance against the authenticated kit and carries the boolean without using it to qualify a leg. Required-field enforcement remains open for older projections that omit wall evidence. |
+| RL-192a hand literals and exact comparisons | `ac3051ad7` | **PASS** for exact-zero fixture guard and both near-miss methods. Direct scoring matches the instrument hand oracle and all three looks' scientific assertions. The builder's separate 200-level property now derives its reference from the decimal text written by the fixture. |
+| Loaded exclusion, typed drops, closed amended schema and hardware host | Pending | **FAIL** against the supplement's original fixture. The legacy positive expectations and the missing owner integration block these changes. |
+
+With the two modules installed together as delivered, the supplement
+has 16 passes, 5 failures and 166 errors. All 166 errors report that
+`placeholders()` received an unexpected `hand_table` keyword. The
+5 failures are the literal shared host CLI cases. The focused seven-case
+diagnosis uses the unmodified v2.1 fixture at SHA-256 `26bcfd12…` and
+runs against the checkout's actual executor. The direct scoring check
+authenticates the invented stage-1 bytes and verifies the prints in
+memory. Those checks leave integrated release acceptance open.
+[Paired run](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/rl190-compatible-explicit.log) · [Original-fixture targeted run](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/rl190-original-targeted.log) · [RL-192a controls](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/rl192a-new-controls.log) · [Direct scientific and hand-table comparison](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/rl192a-direct-hand.log)
+
+### NEEDS_SPEC
+
+- The supplement author needs to accept the `hand_table` keyword in its
+  replacement generator and publish a successor digest. Its schema vectors
+  also import `jsonschema`, which is available in the builder's isolated
+  test environment. Ordinary hosted shards run with the standard library.
+  The successor needs an approved hosted test dependency or a standard
+  library schema check.
+- The v2.1.2 positives still accept hostname binding and undocumented drops.
+  They assert bare dispositions and count a loaded leg. RL-190 §3.1 and §3.6
+  require typed lead evidence, reason-bearing dispositions, exclusion and
+  a hardware token. The two freezes exercise the same authenticated
+  projection. The lead needs to designate the successor for integrated
+  acceptance.
+- The immutable PR #795 tree at `eb449af6` already provides
+  `scripts/cadence_look_run.py host-id` and its shared hardware probe.
+  This branch and `origin/main` lack those paths. The accepted integration
+  base is needed to exercise that CLI on the tested tree.
+
+PR #868 was read back as a draft at
+`78cef0a8883efa0a8b38cab009d67ad91ffac305`. Hosted CI was
+queued on that revision. No hosted result is available for the six
+reservation errors on this revision. [Draft PR](https://github.com/mpmdw/JouleWise/pull/868) · [Hosted CI](https://github.com/mpmdw/JouleWise/actions/runs/44725564352) · [Supplement findings](/Volumes/JW-EXT/scratch/d-inst01-stage1-rl190-supplement/FINAL-MESSAGE.md)
