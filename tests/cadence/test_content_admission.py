@@ -128,7 +128,7 @@ class Stage1(_Copy):
                 undo()
             with self.subTest(label):
                 self.assertEqual(rc, 2, err)
-                self.assertTrue(err.startswith("REFUSED custody pins: "), err)
+                self.assertIn("REFUSED custody pins: ", err)       # (a stage may print a warning line first)
                 self.assertIn(message, err)
                 self.assertFalse(out.exists())
                 self.assertEqual(TLR.LAST_RUN["served"], [])                 # no other read: nothing was parsed
@@ -223,7 +223,7 @@ class Stage2(_Copy):
                 undo()
             with self.subTest(label):
                 self.assertEqual(rc, 2, err)
-                self.assertTrue(err.startswith("REFUSED custody pins: "), err)
+                self.assertIn("REFUSED custody pins: ", err)       # (a stage may print a warning line first)
                 self.assertIn(message, err)
                 self.assertEqual((TLR.LAST_RUN["reservation_attempts"], TLR.LAST_RUN["twin_launches"]), (0, 0))
                 self.assertEqual(TLR.LAST_RUN["served"], [])
