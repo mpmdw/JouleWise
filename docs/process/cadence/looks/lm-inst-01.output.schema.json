@@ -29,6 +29,11 @@
     "n_legs": {
       "type": "integer",
       "minimum": 0
+    },
+    "n_interval_ledger_mismatch": {
+      "description": "For RL-194 instrument manifests, the count of legs with recorded intervals absent from their ledger.",
+      "type": "integer",
+      "minimum": 0
     }
   },
   "additionalProperties": false

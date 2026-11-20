@@ -507,6 +507,21 @@
         "when": {"$ref": "#/$defs/text"},
         "stage1": {"$ref": "#/$defs/text"},
         "stage2": {"$ref": "#/$defs/text"},
+        "inputs": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["pins"],
+          "properties": {
+            "pins": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["path", "sha256"],
+              "properties": {"path": {"$ref": "#/$defs/path"}, "sha256": {"$ref": "#/$defs/sha256"}}
+            },
+            "rule": {"$ref": "#/$defs/text"},
+            "cite": {"$ref": "#/$defs/textList"}
+          }
+        },
         "rail_sum_columns": {"const": ["cpu_power", "gpu_power", "ane_power"]},
         "kit_index_path": {"$ref": "#/$defs/path"},
         "prints": {

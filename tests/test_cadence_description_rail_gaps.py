@@ -52,7 +52,7 @@ def _with_rail_intervals(directory, rows):
 
 
 class RailGapPeriodTests(unittest.TestCase):
-    def test_authenticated_scorers_refuse_support_that_omits_a_recorded_interval(self):
+    def test_authenticated_scorers_preserve_recorded_interval_membership(self):
         with patch.object(reader.socket, "gethostname", return_value=fixture.FIXTURE_BOARD), \
                 patch.dict(os.environ, R190_NODENAME=fixture.FIXTURE_BOARD):
             for look in fixture.IDS[:2]:
@@ -81,8 +81,35 @@ class RailGapPeriodTests(unittest.TestCase):
                     census, qualified = reader.census(snapshot)
                     snapshot.check_stage1(census)
                     sources = reader.verify_gates(snapshot, qualified)
-                    with self.assertRaisesRegex(reader.Refusal, "recorded rail interval contradicts support"):
-                        reader.score(snapshot, sources, qualified, lambda: None)
+                    if world.inst:
+                        output = reader.score(snapshot, sources, qualified, lambda: None)
+                        for table in output.values():
+                            self.assertEqual(table[key], fixture.null("interval_ledger_mismatch"))
+                    else:
+                        with self.assertRaisesRegex(reader.Refusal, "recorded rail interval contradicts support"):
+                            reader.score(snapshot, sources, qualified, lambda: None)
+
+    def test_instrument_nulls_every_print_before_retrieving_a_value(self):
+        for delta in (None, 0.000000001):
+            with self.subTest(delta=delta), TemporaryDirectory() as temporary:
+                leg = fixture.TraceLeg(Path(temporary))
+                intervals = leg.meta["rail_intervals"]
+                index = intervals.index([50, 51])
+                intervals[index:index + 1] = [] if delta is None else [[50, 51 - delta]]
+                with patch.object(reader, "_sample", side_effect=AssertionError("value retrieved")):
+                    result = fixture.print_one(leg.signal(), fixture.IDS[0])
+                self.assertEqual(result, dict.fromkeys(("hold", "turn", "gain", "edges"),
+                                                     fixture.null("interval_ledger_mismatch")))
+
+    def test_unobserved_nominal_slots_remain_ordinary_coverage(self):
+        with TemporaryDirectory() as temporary:
+            leg = fixture.TraceLeg(Path(temporary))
+            for rail in fixture.COLS:
+                leg.omit(rail, range(50, 57))
+            result = fixture.print_one(leg.signal(), fixture.IDS[0])
+            self.assertEqual(result["hold"]["gpu_rail"]["mean_w"], fixture.null("coverage"))
+            self.assertEqual(result["hold"]["rail_sum"]["mean_w"], fixture.null("coverage"))
+            self.assertEqual(result["hold"]["dc_in"]["mean_w"], 40)
 
     def test_recorded_rail_evidence_rejects_omit_duplicate_shift_and_false_gap(self):
         with TemporaryDirectory() as temporary:

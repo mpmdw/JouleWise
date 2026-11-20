@@ -37,6 +37,12 @@ WIDTHS = (10, 40, 128)
 NS_PER_SECOND = 1_000_000_000
 MIN_SAMPLE_COVERAGE_PERCENT = 99  # RL-166 Q7, applied to each description print by RL-181.
 VALUE_FILES = ("support.json", "power_trace.csv", "dc_points.csv")
+INTERVAL_LEDGER_MISMATCH = "interval_ledger_mismatch"
+INTERVAL_LEDGER_COUNT = "n_interval_ledger_mismatch"
+# The sole authorized v2 schema change adds the optional RL-194 envelope.
+# Frozen legacy manifests retain their authenticated original schema blob.
+V2_SCHEMA_BEFORE_INPUTS = "ca2e36dff49d4c9112a9ad9b9e880b8cfe7e6cb226df1f862f2459034c4e8320"
+V2_SCHEMA_WITH_INPUTS = "671bfcb65c4fcb75008bfa1758367672026fad7befc0d1ba26dde1e208653fa9"
 LOCAL = ZoneInfo("America/Los_Angeles")
 SHA = re.compile(r"[0-9a-f]{64}")
 OID = re.compile(r"[0-9a-f]{40}")
@@ -69,6 +75,10 @@ AUTHORITY = {
 
 class Refusal(ValueError):
     """An absent, inconsistent or unauthorized description binding."""
+
+
+class IntervalLedgerMismatch(Refusal):
+    """A recorded rail interval is missing from the ledger of its leg."""
 
 
 def require(condition, message):
@@ -313,11 +323,33 @@ class Snapshot:
         self._destinations(root)
         self.step3_code = _validate_executables(integrated=self.native)
         self.validate_manifest(self.manifest_name, look)
+        self.input_spans = self.input_files = None
+        if "inputs" in self.manifest:
+            self._verify_input_pins()
         self.roster = self.doc("roster.json")
         self.receipts = self.roster["receipt_commit"]
         # The manifest and receipts independently bind to this pre-read
         # commit. The collection may have closed before final registration.
         require(self.book.ancestor(self.receipts, self.commit), "unproven receipt chronology")
+
+    def _verify_input_pins(self):
+        from .description_inputs import check_chain_problems, load_pin_list, pin_inventory, run_verifier
+
+        require(self.instrument, "input pins are authorized only for the instrument look")
+        reference = self.manifest["inputs"]["pins"]
+        raw = self.read(reference["path"])
+        require(digest(raw) == reference["sha256"], "input pin list differs from manifest")
+        document = load_pin_list(raw)
+        checks = self.book.blob(self.registration, "RUN_STATE.md").decode("utf-8")
+        require(not check_chain_problems(document, checks), "input pins do not bind their public Checks")
+        files = pin_inventory(document)
+        expected = {"status": "pass", "digests": {
+            name: dict.fromkeys(("pinned_sha256", "observed_sha256"), entry["sha256"])
+            for name, entry in files.items()
+        }}
+        require(decode(run_verifier(self.copy_root, raw)) == expected, "hash-only input verification refused")
+        self.input_spans = {span["span_id"]: span["runner_commit"] for span in document["spans"]}
+        self.input_files = files
 
     def read(self, name):
         if name not in self.cache:
@@ -343,8 +375,12 @@ class Snapshot:
         for role, path in expected_paths.items():
             pin = doc["code_pins"][role]
             require(pin["path"] == path and token(pin["sha256"], SHA), "wrong manifest pin")
-            require(digest(self.read(path)) == pin["sha256"]
-                    and exact_path(CODE_ROOT / path).read_bytes() == self.read(path),
+            registered = self.read(path)
+            executing = exact_path(CODE_ROOT / path).read_bytes()
+            legacy_schema = (role == "manifest_schema" and "inputs" not in doc
+                             and pin["sha256"] == V2_SCHEMA_BEFORE_INPUTS
+                             and digest(executing) == V2_SCHEMA_WITH_INPUTS)
+            require(digest(registered) == pin["sha256"] and (executing == registered or legacy_schema),
                     "executing code differs from its manifest pin")
         registry = f"{CONTROL}/filler-kit-registry.json"
         require(exact_path(CODE_ROOT / registry).read_bytes() == self.read(registry),
@@ -371,14 +407,20 @@ class Snapshot:
             require(doc["kit_index_path"] == expected_index, "wrong later-kit index")
         return doc
 
-    def source_bytes(self, name):
+    def source_bytes(self, name, *, member=False):
         raw = self.read(name)
         require(self.book.tree(self.receipts).get(name) == self.book.tree(self.commit).get(name),
                 "input does not belong to the closed source snapshot")
+        if member and self.input_files is not None:
+            parts = relative(name).parts
+            require(parts[0] == "ops" and len(parts) >= 3, "member input is outside its pinned span")
+            entry = self.input_files.get("/".join(parts[1:]))
+            require(entry is not None and len(raw) == entry["size"] and digest(raw) == entry["sha256"],
+                    "operational bytes differ from their Check-time pin")
         return raw
 
-    def source(self, name, **decode_options):
-        return decode(self.source_bytes(name), **decode_options)
+    def source(self, name, *, member=False, **decode_options):
+        return decode(self.source_bytes(name, member=member), **decode_options)
 
     @cached_property
     def drop_authorizations(self):
@@ -421,6 +463,9 @@ class Snapshot:
     def validate_public(self, candidate, expected):
         require(type(candidate) is dict and candidate.keys() == expected.keys(),
                 "unexpected public record fields")
+        if INTERVAL_LEDGER_COUNT in candidate:
+            count = candidate[INTERVAL_LEDGER_COUNT]
+            require(integer(count) and count <= expected["n_legs"], "invalid interval mismatch count")
         require(all(type(candidate[key]) is type(value) and candidate[key] == value
                     for key, value in expected.items()), "public record disagrees with its source")
         return canonical(candidate)
@@ -711,9 +756,9 @@ def _drop_position(snapshot, row, kit_id, kit, kit_sha):
 def _token_row(snapshot, references, kit, kit_sha, plan, closes):
     require(references.keys() == {"key", "issue", "receipt", "leg_record", *DESK_RECORDS},
             "invalid position source inventory")
-    issue = snapshot.source(references["issue"])
-    receipt = snapshot.source(references["receipt"], parse_float=Decimal)
-    op = snapshot.source(references["leg_record"], parse_float=Decimal)
+    issue = snapshot.source(references["issue"], member=True)
+    receipt = snapshot.source(references["receipt"], member=True, parse_float=Decimal)
+    op = snapshot.source(references["leg_record"], member=True, parse_float=Decimal)
     key = references["key"]
     kit_id, leg_id = key.split("/")
     span_id, attempt, roster = receipt["span_id"], receipt["attempt"], receipt["legs"]
@@ -729,12 +774,14 @@ def _token_row(snapshot, references, kit, kit_sha, plan, closes):
     require(len(receipt_path.parts) >= 3 and receipt_path.parts[0] == "ops"
             and receipt_path.name == "runner_receipt.json", "receipt is outside the operational inventory")
     prefix = str(receipt_path.parent)
+    if snapshot.input_spans is not None:
+        require(prefix == f"ops/{span_id}", "operational projection has the wrong pinned span path")
     require(references["issue"] == f"{prefix}/issue.json"
             and references["leg_record"] == f"{prefix}/legs/{leg_id}/leg_record.json"
             and op["leg_id"] == leg_id, "position is not physically bound to its issue")
     for role in DESK_RECORDS:
         require(references[role] == f"{prefix}/{role}.json", "wrong desk evidence source")
-        evidence = snapshot.source(references[role])
+        evidence = snapshot.source(references[role], member=True)
         require(evidence["span_id"] == span_id and type(evidence["attempt"]) is int
                 and evidence["attempt"] == attempt and evidence["record"] == role
                 and evidence["passed"] is True, "desk evidence does not prove this attempt")
@@ -927,6 +974,9 @@ def census(snapshot):
     if snapshot.instrument:
         require(len(positions) == 36, "instrument population is not terminal")
     _reconcile_member_bundles(snapshot, kits, issued, empty_closes)
+    if snapshot.input_spans is not None:
+        issued_pins = {detail[1]["span_id"]: detail[1]["runner_pin"] for detail in details.values()}
+        require(issued_pins == snapshot.input_spans, "Check-time pins differ from the issued span roster")
     qualified = [row for row in table if row["disposition"] == "qualified"]
     counts = {"n_legs": len(qualified)}
     result = {
@@ -975,12 +1025,20 @@ def verify_gates(snapshot, qualified):
         relative(name)
         require(token(sha, SHA), "malformed copy attestation entry")
     sources = {}
-    for key in qualified:
+    for key, detail in qualified.items():
         sources[key] = {}
         for filename in VALUE_FILES:
-            name = f"{key}/{filename}"
+            if snapshot.input_files is None:
+                name = f"{key}/{filename}"
+            else:
+                name = f"{detail[1]['span_id']}/legs/{detail[0]['leg_id']}/{filename}"
             require(name in entries, "copy verification omits a per-leg input")
-            sources[key][filename] = exact_path(snapshot.copy_root / relative(name))
+            path = exact_path(snapshot.copy_root / relative(name))
+            if snapshot.input_files is not None:
+                pin = snapshot.input_files.get(name)
+                require(pin is not None and pin["sha256"] == entries[name],
+                        "copy verification differs from the Check-time input pin")
+            sources[key][filename] = path
     return sources
 
 
@@ -1005,7 +1063,7 @@ def missing(reason, bound=None):
 def _quality_null(*operands):
     # RL-191 §1.1 ranks independently judged operands by stream, interval,
     # then value. Crossing exhaustion uses the same rank as its censor.
-    for reason in ("rail_manifest", "meter_absent", "meter_contaminated",
+    for reason in (INTERVAL_LEDGER_MISMATCH, "rail_manifest", "meter_absent", "meter_contaminated",
                    "coverage", "meter_gap", "nonpositive_level", "nonpositive_denominator",
                    "crossed_before_span", "crossing_unobserved", "over 1 s", "stream_end"):
         for operand in operands:
@@ -1476,7 +1534,8 @@ class Signals:
                 if rail not in RAILS:
                     continue
                 require(key not in stamps, "repeated rail in the same interval")
-                require(bounds in declared[rail], "recorded rail interval contradicts support")
+                if bounds not in declared[rail]:
+                    raise IntervalLedgerMismatch("recorded rail interval contradicts support")
                 stamps[key] = stamp
                 recorded[rail].append(bounds)
         individual = {
@@ -1893,6 +1952,12 @@ def print_leg(signal, detail, instrument):
 
 
 def _leg_values(signal, detail, instrument):
+    if instrument:
+        # RL-194b uses the ordinary rail index inside the scoring boundary.
+        try:
+            signal._index_rails()
+        except IntervalLedgerMismatch:
+            return {name: missing(INTERVAL_LEDGER_MISMATCH) for name in ("hold", "turn", "gain", "edges")}
     op, _, _, _, row = detail
     meta = signal.meta
     start, first, last = (signal.stamps_ns[name]
@@ -2044,8 +2109,14 @@ def score(snapshot, sources, qualified, mark_read):
     # Reuse preflight's verified code. Scoring must not resolve a different
     # dependency after the worker has spent the one-use reservation.
     pinned = _load_step3(snapshot.step3_code) if qualified else None
+    if snapshot.input_files is not None:
+        from .description_inputs import PinnedInput
+
     for key, detail in qualified.items():
         paths = sources[key]
+        if snapshot.input_files is not None:
+            paths = {name: PinnedInput(path, snapshot.input_files[path.relative_to(snapshot.copy_root).as_posix()])
+                     for name, path in paths.items()}
         with paths["support.json"].open("rb") as stream:
             support, sensor_span = _support_metadata(stream)
             sensor_source = (stream, sensor_span) if snapshot.instrument and sensor_span else None
@@ -2075,7 +2146,11 @@ EXECUTABLE_DEPENDENCIES = {
     "scripts/cadence_description_run.py":
         "6a16157e3e071518c78d71b1f1e01b3818d8008c32a76339ff764346ab9ad60c",
     "joulewise/cadence_looks/description_worker.py":
-        "d152d6841ace94104893907f7300918efe6ba505b5c1e444c5450be1b4a85c1a",
+        "637f748460aa3e670f5809ebf34022dfd2dc416222765af6ca55e82386f344df",
+    "joulewise/cadence_looks/description_inputs.py":
+        "7488652d77d9d53468b453e75e2160d02afc5886beddb5691357710199ce46ad",
+    "joulewise/cadence_looks/custody_pins.py":
+        "cb764b6112597f8b43c8b366ace7f889a4339f880e3717515d48f0ca9fb5b44f",
     "joulewise/cadence_looks/transfer_release.py":
         "9f826ee253b4f4039d5172c3e3535b6003e9499593bf3166907bb15d4776d953",
     "joulewise/__init__.py":

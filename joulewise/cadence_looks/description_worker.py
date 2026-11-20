@@ -73,6 +73,18 @@ def _failure(error, read_started, confined):
     return "REFUSE description look before read\n"
 
 
+def _public_after_scoring(snapshot, expected, prebound, prints):
+    if not snapshot.instrument:
+        return prebound
+    mismatch = reader.missing(reader.INTERVAL_LEDGER_MISMATCH)
+    mismatched = sum(hold == mismatch for hold in prints["hold"].values())
+    if snapshot.input_files is None:
+        reader.require(mismatched == 0, "interval mismatch requires the RL-194 public count")
+        return prebound
+    final = dict(expected, **{reader.INTERVAL_LEDGER_COUNT: mismatched})
+    return snapshot.validate_public(final, final)
+
+
 def main(argv=None):
     saved = None
     read_started = False
@@ -99,6 +111,7 @@ def main(argv=None):
         snapshot.check_stage1(document)
         expected = snapshot.public_record(document)
         if args.stage == "validate-public":
+            reader.require(snapshot.input_files is None, "mismatch count requires confined scoring")
             snapshot.validate_public(_candidate(snapshot, args.candidate), expected)
             os._exit(0)
         public_bytes = snapshot.validate_public(expected, expected)
@@ -108,6 +121,7 @@ def main(argv=None):
         confined = True
         _sync_directory(snapshot.restricted.parent)
         prints = reader.score(snapshot, sources, qualified, mark_read)
+        public_bytes = _public_after_scoring(snapshot, expected, public_bytes, prints)
         for name, report in prints.items():
             _write_private(snapshot.restricted / f"{name}.json", reader.canonical(report))
         reader.require({path.name for path in snapshot.restricted.iterdir()}

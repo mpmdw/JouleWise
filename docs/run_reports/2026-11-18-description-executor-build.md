@@ -1438,3 +1438,46 @@ integration. The eight v5 entries and all 53 protected paths
 match intake. The read-back PR records verification on this
 head.
 [RL-194 §3](/Volumes/JW-EXT/scratch/fable-rl194.md#3-c-where-the-principle-applies) · [Manifest shape proof](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/v5-audit2-manifest-shape.log) · [Protected paths](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/v5-audit2-protected.tsv) · [Draft PR #868](https://github.com/mpmdw/JouleWise/pull/868)
+
+## 2026-11-20 RL-194b instrument verifier and interval mismatch release
+
+Intake head `3fad749966474c3ea5213b07f3cfbbf32021d399`
+matched draft PR #868. RL-194a and RL-194b place the opaque
+pin check in a separate process and the interval decision in
+confined stage 2.
+[RL-194a](/Volumes/JW-EXT/scratch/fable-rl194a.md) · [RL-194b](/Volumes/JW-EXT/scratch/fable-rl194b.md)
+
+| Gate | Implementation and synthetic replay |
+| --- | --- |
+| Check-bound manifest inputs | The v2 description schema accepts a closed optional `inputs.pins` reference. The reader authenticates the referenced bytes, rebuilds the offload evidence with the shared pin contract, and checks the public Check record at the manifest registration commit. It uses the PR #795 pin parser byte-for-byte from `51716a8f`. |
+| First read and reservation | An isolated verifier with no decoder validates the span inventory and hashes opaque files. It writes one private temporary word-and-digest record. A missing, extra, changed, or symlinked input refuses before the census or reservation. The stage-1 reader checks the bytes of receipt-backed operational projections against their pins before parsing. Invented KM003C bytes pass through the verifier without decoding. |
+| Stage-2 recheck | Each opened scoring input is checked in confined stage 2 and parsed from those same bytes. The copy is held for one leg. The regression changes an input both before reservation and after the verifier pass. |
+| Interval membership and release | The ordinary rail index checks exact recorded endpoint pairs before retrieving any value on the instrument leg. A missing observed interval nulls that leg's rows in all four private tables with `interval_ledger_mismatch`. An unobserved nominal slot remains ordinary coverage. Regression includes an exact 1 ns mismatch. `n_legs` retains the affected member, and an RL-194 pinned manifest publishes `n_interval_ledger_mismatch`. The writer rejects a count different from the one it computed. |
+
+The normalized synthetic inventory uses each receipt's span ID
+as the offload directory and `legs/<leg-id>/<filename>` for its
+scoring inputs. The lead supplies the actual Check-bound inventory
+and native source mapping. This run leaves the native host-ID
+admission gate to PR #795 and uses its invented board token in
+the fixture. Local reservation permission still limits literal
+publication. The regression checks the real reservation boundary,
+then exercises the confined scorer and public-record builder with
+the same admitted synthetic book.
+
+All eight frozen v5 hashes match. Of the 53 protected entries,
+52 remain byte-identical. The authorized optional envelope is
+the sole protected v2 schema delta. The reader recognizes the
+exact predecessor and extended schema hashes for legacy frozen
+manifests. The dispatcher and prior registrations retain their
+existing bytes. A pinned instrument manifest uses the extended
+schema hash.
+[Protected blob comparison](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/rl194b-protected.tsv) · [Focused checks](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/rl194b-focused.log) · [Pinned synthetic acceptance](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/rl194b-integration-final.log)
+
+**NEEDS_SPEC.** The exact mismatch count exists only after the
+confined scoring pass. The standalone pre-scoring
+`validate-public` path refuses a pinned instrument candidate
+pending the lead's ruling on range validation or verification
+against authenticated completed publication. The writer already
+binds its exact count to the scored leg results. The independent
+suite owner retains the new acceptance freeze.
+[Draft PR #868](https://github.com/mpmdw/JouleWise/pull/868)

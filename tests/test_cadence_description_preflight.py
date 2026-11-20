@@ -7,11 +7,14 @@ import os
 from pathlib import Path
 import socket
 import subprocess
+import sys
 from tempfile import TemporaryDirectory
 import unittest
 from unittest.mock import patch
 
 from joulewise.cadence_looks import description as reader
+from joulewise.cadence_looks import description_worker
+from joulewise.cadence_looks.custody_pins import PinRefusal, offload_manifest_bytes_sha256
 from tests import test_desc_looks_acceptance as fixture
 from tests.fixtures.description_worlds import DescriptionWorld
 
@@ -687,6 +690,157 @@ class Stage1BindingHistoryTests(unittest.TestCase):
 
     def test_lm_stab_02_stage1_commit_before_reservation(self):
         self._check_binding_history("lm-stab-02")
+
+
+class ContentAddressedInstrumentTests(unittest.TestCase):
+    def test_verifier_hashes_native_bytes_without_decoding(self):
+        temporary = self.enterContext(TemporaryDirectory())
+        folder = Path(temporary).resolve()
+        root = folder / "copy"
+        name = "sample.km003c"
+        payload = b"\x00\xff\x80\r\n"
+        fixture.put(root / "invented-span" / name, payload)
+        entry = {"path": name, "sha256": fixture.sha(payload), "size": len(payload)}
+        span = {"span_id": "invented-span", "runner_commit": "a" * 40,
+                "close_item": 1, "check_item": 2, "files": [entry]}
+        span["offload_manifest_sha256"] = offload_manifest_bytes_sha256(span)
+        pins = {"schema": "joulewise.cadence_look_input_pins.v1", "spans": [span]}
+        verifier = reader.CODE_ROOT / "joulewise/cadence_looks/description_inputs.py"
+        report = folder / "verification.json"
+        result = subprocess.run([sys.executable, "-I", "-B", str(verifier), str(root), str(report)],
+                                input=fixture.wire(pins), capture_output=True, check=False)
+        self.assertEqual((result.returncode, result.stdout, result.stderr), (0, b"", b""))
+        self.assertEqual(fixture.read(report), {"status": "pass", "digests": {
+            f"invented-span/{name}": {"pinned_sha256": entry["sha256"], "observed_sha256": entry["sha256"]},
+        }})
+
+    def _pinned_world(self):
+        temporary = self.enterContext(TemporaryDirectory())
+        world = fixture.World(Path(temporary).resolve() / "world", fixture.IDS[0])
+        witness = sorted(world.good)[0]
+        support_path = world.copy / witness / "support.json"
+        support = fixture.read(support_path)
+        support["rail_intervals"].remove([50, 51])
+        fixture.put(support_path, support)
+
+        custody = world.base / "pinned-copy"
+        spans = []
+        witness_stream = None
+        for number, (key, (op, receipt, _, _)) in enumerate(world.records.items(), start=1000):
+            span = receipt["span_id"]
+            operational = world.repo / "ops" / span
+            leg = f"legs/{op['leg_id']}"
+            inputs = {str(path.relative_to(operational)): path.read_bytes()
+                      for path in operational.rglob("*") if path.is_file()}
+            inputs.update({f"{leg}/{name}": (world.copy / key / name).read_bytes()
+                           for name in reader.VALUE_FILES})
+            for name, data in inputs.items():
+                fixture.put(custody / span / name, data)
+            if key == witness:
+                witness_stream = custody / span / leg / "support.json"
+            row = {"span_id": span, "runner_commit": receipt["runner_pin"],
+                   "close_item": number, "check_item": number,
+                   "files": [{"path": name, "sha256": fixture.sha(data), "size": len(data)}
+                             for name, data in sorted(inputs.items())]}
+            row["offload_manifest_sha256"] = offload_manifest_bytes_sha256(row)
+            spans.append(row)
+        self.assertIsNotNone(witness_stream)
+
+        schema_path = reader._pin_paths(world.look)["manifest_schema"]
+        schema = (reader.CODE_ROOT / schema_path).read_bytes()
+        fixture.put(world.repo / schema_path, schema)
+        manifest = fixture.read(world.man)
+        manifest["code_pins"]["manifest_schema"]["sha256"] = fixture.sha(schema)
+        pin_name = "instrument.inputs.json"
+        pins = {"schema": "joulewise.cadence_look_input_pins.v1", "spans": spans}
+        fixture.put(world.repo / pin_name, pins)
+        manifest["inputs"] = {"pins": {"path": pin_name, "sha256": fixture.sha(fixture.wire(pins))}}
+        fixture.put(world.man, manifest)
+        state = world.repo / "RUN_STATE.md"
+        checks = "".join(f"\n{row['check_item']}. **Invented Check of {row['span_id']}.**\n\n"
+                         f"Offload manifest sha256 {row['offload_manifest_sha256']}.\n" for row in spans)
+        fixture.put(state, state.read_bytes() + checks.encode())
+        world.reg = world.book.seal("register the Check-bound instrument manifest")
+
+        world.copy = custody
+        copy = world.targets["copy"]
+        proof = fixture.read(copy)
+        proof.update(root=str(custody), files={f"{row['span_id']}/{entry['path']}": entry["sha256"]
+                                              for row in spans for entry in row["files"]})
+        fixture.put(copy, proof)
+        manifest_sha = fixture.sha(world.man.read_bytes())
+        cold = world.targets["cold"]
+        fixture.put(cold, dict(fixture.read(cold), manifest_sha256=manifest_sha))
+        for path in (world.man, state, world.repo / pin_name, world.repo / schema_path, cold, copy):
+            world.row["input_hashes"][str(path.relative_to(world.repo))] = fixture.sha(path.read_bytes())
+        world.row.update(sha256=manifest_sha, registration_commit=world.reg)
+        world.save_row()
+        world.book.seal("bind cold and copy authority after final registration")
+        return world, witness, witness_stream, pins
+
+    def test_hash_only_verifier_and_confined_leg_nulls(self):
+        world, witness, stream, pins = self._pinned_world()
+        verifier = reader.CODE_ROOT / "joulewise/cadence_looks/description_inputs.py"
+        command = [sys.executable, "-I", "-B", str(verifier), str(world.copy)]
+        expected = fixture.sha(stream.read_bytes())
+        path = str(stream.relative_to(world.copy))
+        source = stream.read_bytes()
+        for fault in ("clean", "missing", "extra", "changed", "symlink"):
+            with self.subTest(fault=fault):
+                extra = stream.with_name("unexpected.json")
+                if fault == "missing":
+                    stream.unlink()
+                elif fault == "extra":
+                    extra.write_bytes(b"invented")
+                elif fault == "changed":
+                    stream.write_bytes(b"x" + source[1:])
+                elif fault == "symlink":
+                    stream.unlink()
+                    stream.symlink_to(stream.with_name(fixture.RAIL_FILE))
+                receipt = world.base / f"verify-{fault}.json"
+                result = subprocess.run([*command, str(receipt)], input=fixture.wire(pins),
+                                        capture_output=True, check=False)
+                self.assertEqual((result.stdout, result.stderr), (b"", b""))
+                report = fixture.read(receipt)
+                self.assertEqual(report.keys(), {"status", "digests"})
+                self.assertEqual(report["digests"][path]["pinned_sha256"], expected)
+                passed = fault == "clean"
+                self.assertEqual((result.returncode, report["status"]), (0, "pass") if passed else (2, "fail"))
+                if not passed:
+                    rc, out, _, events = fixture.invoke(world, "stage1")
+                    self.assertEqual((rc, out), (2, b""))
+                    self.assertFalse(any(kind == "open" for kind, _ in events))
+                    self.assertFalse(world.stage.exists() or world.private.exists())
+                extra.unlink(missing_ok=True)
+                stream.unlink(missing_ok=True)
+                stream.write_bytes(source)
+
+        fixture.Checks().stage1(world)
+        stream.write_bytes(b"x" + source[1:])
+        self.assertEqual(fixture.reservation_boundary(self, world), [])
+        stream.write_bytes(source)
+        self.assertEqual(fixture.reservation_boundary(self, world), [str(world.private)])
+        snapshot = reader.Snapshot(world.repo, world.look, "stage2")
+        census, qualified = reader.census(snapshot)
+        snapshot.check_stage1(census)
+        sources = reader.verify_gates(snapshot, qualified)
+        stream.write_bytes(b"x" + source[1:])
+        with self.assertRaisesRegex(PinRefusal, "stage-2 bytes differ"):
+            reader.score(snapshot, sources, qualified, lambda: None)
+        stream.write_bytes(source)
+        tables = reader.score(snapshot, sources, qualified, lambda: None)
+        for table in tables.values():
+            self.assertEqual(table[witness], fixture.null("interval_ledger_mismatch"))
+        for key in set(qualified) - {witness}:
+            self.assertIsInstance(tables["hold"][key]["gpu_rail"]["mean_w"], (int, float))
+        expected_public = snapshot.public_record(census)
+        prebound = snapshot.validate_public(expected_public, expected_public)
+        released = json.loads(description_worker._public_after_scoring(snapshot, expected_public, prebound, tables))
+        self.assertEqual(released, dict(expected_public, n_interval_ledger_mismatch=1))
+        self.assertEqual(released["n_legs"], len(world.good))
+        for wrong in (True, 1.0, 0, len(world.good) + 1):
+            with self.subTest(public_count=wrong), self.assertRaises(reader.Refusal):
+                snapshot.validate_public(dict(released, n_interval_ledger_mismatch=wrong), released)
 
 
 class SpentDescriptionLookTests(unittest.TestCase):
