@@ -630,9 +630,10 @@ def frozen_sentinel_ids(manifest, plan, *, needs_supplemental):
     require(isinstance(members, list), refusal)
     with_extras = needs_supplemental or len(members) == len(ordinary) + len(supplemental)
     allocations = ordinary + supplemental if with_extras else ordinary
-    require(all(isinstance(m, dict) and type(m.get('ordinal')) is int
-                and isinstance(m.get('run_id'), str) and m['run_id'] for m in members)
-            and [m['ordinal'] for m in members] == [row['ordinal'] for row in allocations]
+    require(len(members) == len(allocations)
+            and all(isinstance(m, dict) and isinstance(m.get('run_id'), str) and m['run_id']
+                    and ('ordinal' not in m or (type(m['ordinal']) is int and m['ordinal'] == position))
+                    for position, m in enumerate(members, 1))
             and len({m['run_id'] for m in members}) == len(members), refusal)
 
     pack = frozen_series.pack_id(window['id'])
@@ -641,7 +642,7 @@ def frozen_sentinel_ids(manifest, plan, *, needs_supplemental):
     sentinel_names = set(expected.values())
     wanted = {row['ordinal']: expected[row['ordinal']]
               for row in allocations if row['ordinal'] in expected}
-    planned = {m['ordinal']: m['run_id'] for m in members if m.get('role') == 'sentinel'}
+    planned = {position: m['run_id'] for position, m in enumerate(members, 1) if m.get('role') == 'sentinel'}
     require(planned == wanted and all(m['run_id'] not in sentinel_names
                                       for m in members if m.get('role') != 'sentinel'), refusal)
     return list(wanted.values())
@@ -930,6 +931,10 @@ def build_packet(repo, *, record_commit, record_path, series_commit, series_path
                 'full desk passed on a different code/config state than the arm will run')
         result = {'basis': 'full desk completed and passing for the current code/config state'}
         if previous.window == 'W1':
+            # The artifact digest must come from the same committed record as the W1 desk.
+            require((last_record.commit, last_record.path, last_record.sha256)
+                    == (previous.commit, previous.path, previous.sha256),
+                    'full desk last-passed record must identify the authenticated W1 predecessor')
             result['desk_sha256'] = digest(previous.source('desk', json_value=False))
             # Carry any receipt exported with W1, or its canonical committed copy. Signing stays upstream.
             receipt = (previous.source('registration_receipt', json_value=False)
