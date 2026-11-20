@@ -36,6 +36,29 @@ pinned in the draft manifest and recorded in stage 1's code set.
 | In-process projection over the same corpus | `tests/cadence/test_interim_admission.py`, numpy-free |
 | CI | The matrix runs in its own eight-shard job; the module is an exclusive module in `scripts/test_timings.json` |
 
+## Existing tests
+
+The closed grammar refuses, earlier, custody that several older tests mutated into shapes no writer produces. Each
+still exercises its own later check, using a mutation the grammar admits:
+
+| Test | Was | Now |
+| --- | --- | --- |
+| `CustodyBinding.test_another_copy_refuses_before_energy` (receipt) | Added a member | Re-encodes the receipt with another layout: admitted (F3), but not the bytes stage 1 read |
+| `CustodyBinding.test_changed_operational_sources_refuse_before_later_readers` | Appended a space to each file | Prepends a space (a cut final record refuses; leading layout does not) |
+| `SupersededStage1.test_a_rerun_authenticates_both_kept_files_and_unchanged_source` | Changed `sensors.Tf08` only | Changes the cleaned value and its raw reading together |
+| `Admission.test_committed_verdicts_cannot_admit_changed_meter_or_journal` | Deleted journal rows | Deletes them and renumbers `seq`, as the collector would have written it |
+| `Admission.missing_start_fan` (two tests) | Nulled a fan reading | Stale `pm_observed_ns` on the start reading. A failed read sets the row's `error` and the reader drops error rows, so a null fan was never the writer-shaped way to lose the start state |
+| `Admission.test_rl174_undecodable_span...` | `leg_status` `failed` | `incomplete` (a registered value) |
+| `ColdSeatFixes.test_m13_custody_carries_the_synthetic_flag` | Stripped the generator's flag | Asserts that the unflagged receipt now refuses at admission |
+
+The previous round's `WriterShapes` class, the receipt-code tests and `inclusion_34.check_writer_receipt` are
+removed: the frozen matrix and `test_interim_admission.py` supersede them. The both-stages CLI test is rewritten around
+the new messages and keeps its purpose: stage 2 refuses the same shapes before the reservation.
+
+`test_look_manifest.FreezeCommit.test_the_look_s_tests_pass_on_the_frozen_tree` runs every look module in one
+subprocess with a 1,800 s ceiling. On this host (load average above 200 from other lanes) it times out before and after
+this round; the changed modules pass individually on a frozen copy of the tree.
+
 ## NEEDS_SPEC: three cases no grammar can satisfy
 
 `missing-key/<pin>/interrupt-after-result/runner_receipt.json/steps/13/result/remove` (three pins). The case removes

@@ -1,5 +1,10 @@
 # JouleWise Task Queue
 
+PR #795 audit 3 (2026-11-20), [AGENT]. Rule on the three held-open admission cases
+(an interrupted-after-result soak step with its result removed is the shape `signal-130`
+admits), then Astra re-audits the grammar against the three writer pins.
+[Fix report](docs/run_reports/2026-11-20-pr795-admission-closure.md).
+
 PR #795 fix round 2 (2026-11-19), [AGENT]. Astra audits the stage-1 closed
 list against the three writer pins. A real-roster receipt that stage 1
 refuses comes to Fable as a count and a shape (RL-184 §3.3).

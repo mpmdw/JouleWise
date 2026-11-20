@@ -1,5 +1,12 @@
 # JouleWise Run State
 
+PR #795 audit 3 (2026-11-20) adopts the independent seat's frozen admission-closure
+suite and replaces stage 1's pre-pass with one validator built from the pinned
+writers' full output grammar, run over every rostered span before any protected open
+in both stages. The matrix runs in its own CI job; three cases are held open by id
+pending a ruling. Campaign admission awaits the paired census and manifest cold pass.
+[Fix report](docs/run_reports/2026-11-20-pr795-admission-closure.md).
+
 PR #795 fix round 2 (2026-11-19) carries base sync B and closes stage-1
 admission at the writer's exit paths: a step's return code, a failed step's
 propagation, strict JSON in every operational file, and no text read as a

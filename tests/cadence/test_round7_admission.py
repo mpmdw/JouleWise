@@ -178,6 +178,10 @@ class Admission(unittest.TestCase):
         self.assertFalse(got["in_energy_fit"])
 
     def missing_start_fan(self, root):
+        """A leg stage 1 includes but leaves out of the energy fit: its start reading is unusable (RL-149 section 1.3:
+        the last reading at or before the turn start, at most 2 s old, on a fresh power-management stamp). A failed
+        read would not do it: the collector writes its row with an error and the reader drops such rows, so the
+        writer-shaped way is a stale ``pm_observed_ns``, as the generator's own ``missing_start`` plant does."""
         key = "dev-01-s02/L007"
         leg = next(leg for leg in self.stage1(root)["legs"] if leg["leg_key"] == key)
         bundle = bundle_of(root / leg["span_id"], key)
@@ -188,11 +192,8 @@ class Admission(unittest.TestCase):
                     and row["finished"]["wall_ns"] <= round(leg["segments"][0]["wall_start_s"] * 1e9))
         for row in rows:
             if row.get("kind") == "reading" and row["finished"]["wall_ns"] == start:
-                values = row["values"]                                   # a failed read: null with its reason
-                values["sensors"]["F0Ac"] = None
-                values["errors"]["F0Ac"] = "generated read failure"
-                values["readings"]["F0Ac"] = {"value": None, "error": "generated read failure"}
-                row["error"] = "; ".join(values["errors"].values())
+                status = row["values"]["status"]
+                status["pm_observed_ns"] = row["started"]["monotonic_ns"] - 5_000_000_000
         journal.write_text("".join(json.dumps(row) + "\n" for row in rows))
         return key, bundle
 
