@@ -57,7 +57,7 @@ import time
 
 from scripts.align_r1_part_c_evidence import (
     BATTERY_SOURCE, BoundMember, BoundSoak, DESCRIPTOR_SOURCE, EvidenceFailure, EvidenceLedger, KINDS,
-    MANIFEST_NAME, SOAK_DIRECTORY, SOAK_FILES, SOAK_SEGMENT, canonical, digest, native_limit,
+    LEDGER_NAME, MANIFEST_NAME, SOAK_DIRECTORY, SOAK_FILES, SOAK_SEGMENT, canonical, digest, native_limit,
     parse_json as parse_evidence_json, read_regular, stdout_payload,
 )
 
@@ -99,8 +99,8 @@ PRE_PREFILL_EVENTS = (("tokenize", "phase_start"), ("tokenize", "phase_end"),
 PRE_PREFILL_PHASES = frozenset(phase for phase, _ in PRE_PREFILL_EVENTS)
 # bundle.RunBundleWriter.finalize at the pin appends exactly this event.
 FINAL_EVENT = {"event_type": "run_finalized", "phase": "run", "message": "bundle finalized", "metadata": {}}
-# D-018 (bundle_read.POWER_TRACE_INTERVAL_HEADER). A trace header is this, its four-column
-# form, or the three-column form without rails that the frozen reader also accepts.
+# D-018 (bundle_read.POWER_TRACE_HEADER and POWER_TRACE_INTERVAL_HEADER): the four-column header or
+# this six-column one. Nothing else is a power trace.
 TRACE_HEADER = ("timestamp_s", "power_w", "source", "rail", "interval_start_s", "interval_end_s")
 JOURNAL_CLOCKS = ("wall_ns", "monotonic_ns", "monotonic_raw_ns")
 ISSUED_DRIVER = "issued_driver"
@@ -1555,6 +1555,14 @@ def _check_member_records(kind, bundle, receipt, data, configured, gate_inputs, 
     ):
         require(type(claim) is int and claim == expected_total, "token_accounting", source, peer=turns_name)
 
+    # The issued predecessor template carries no thermal policy (r1_runtime.k_capture_predecessor_30b refuses
+    # one), so its episode records none. Every other member records its gates.
+    require(("thermal" in hardware) == (role != "predecessor"), "gate_cardinality", episode_name,
+            field="thermal")
+    # The frozen predecessor receipt records no stop evidence (k_capture_predecessor_30b). A flags field on it
+    # would be a second account of how the member ended, so it must be the raw episode's own list.
+    require(role != "predecessor" or "episode_flags" not in receipt or receipt["episode_flags"] == episode["flags"],
+            "flag_source", RECEIPT_NAME, field="episode_flags", peer=episode_name)
     thermal = None if role == "predecessor" else hardware["thermal"]
     all_flags = [episode["flags"]]
     if thermal is not None:
@@ -1571,6 +1579,8 @@ def _check_member_records(kind, bundle, receipt, data, configured, gate_inputs, 
     _recompute_turn_boundaries(kind, parsed_episode, witnessed, events, intervals, execution.max_tokens)
     context_checks = _recompute_controller_phases(kind, parsed_episode, witnessed, intervals, events)
     _recompute_continuation(kind, parsed_episode, witnessed, execution, config["model"]["family"])
+    _replay_frozen_workload(kind, config, witnessed, events, meta, episode, parsed_episode,
+                            descriptor.raw if descriptor is not None else _claimed_descriptor(hardware))
     if role == "step-d":
         require(not rt.incomplete_member_reasons(SimpleNamespace(
                     ep=parsed_episode, status=summary["status"], failure_reason=summary["failure_reason"])),
@@ -1619,6 +1629,41 @@ def _check_member_records(kind, bundle, receipt, data, configured, gate_inputs, 
     return binding if role == "step-d" else None
 
 
+def planned_run_id(kind, configured):
+    """The run id the frozen dispatch issues for ``kind``, taken from the dispatch itself.
+
+    ``Segment.dispatch`` is called with its member runner replaced by one that stops at the first config it
+    would run. Nothing is launched and no file is read beyond the issued templates.
+    """
+    from joulewise.align.apple import r1_runtime as rt
+
+    class Planned(Exception):
+        pass
+
+    def capture(config, hook=None):
+        raise Planned(config["run_id"])
+
+    plan = object.__new__(rt.Segment)
+    plan.kind, plan.config = kind, configured
+    plan.start_inventory = lambda: None
+    plan.step_d_result = lambda: {"slots": {"T_dead": 1000., "B_D": 6144, "N_chunk": 4096, "S7": 60.}}
+    plan.reference = lambda: {}
+    plan.bands = lambda: {"delta_fast_c": 1., "delta_slow_c": 1.}
+    plan.run_member = capture
+    try:
+        plan.dispatch()
+    except Planned as seen:
+        return seen.args[0]
+    raise ValueError("the frozen dispatch issued no run id")
+
+
+def _claimed_descriptor(hardware):
+    """The archive has no ledger. Its mirror is whatever descriptor reproduces the recorded claim (RL-189 1.4)."""
+    limits = hardware.get("context_limits")
+    claim = limits.get("max_position_embeddings") if isinstance(limits, dict) else None
+    return json.dumps({"max_position_embeddings": claim}).encode() if type(claim) is int and claim > 0 else b"{"
+
+
 def _recompute_member_config(kind, receipt, config, spec, configured, gate_inputs):
     from joulewise.align.apple import r1_runtime as rt
     from joulewise.align.apple.workload import EpisodeSpec
@@ -1626,6 +1671,12 @@ def _recompute_member_config(kind, receipt, config, spec, configured, gate_input
 
     template_key = TEMPLATE_KEYS[kind]
     source = "config.json"
+    try:
+        run_id = planned_run_id(kind, configured)
+    except Exception as error:
+        raise EvidenceFailure("execution_limits_recompute", kind, source, field="run_id") from error
+    _required(config.get("run_id") == run_id, "execution_config", kind, source, field="run_id",
+              peer="issued_inputs")
     try:
         actual = EpisodeSpec.from_text(config["workload_profile"]["prompt_text"])
         if kind == "capture-predecessor-30b":
@@ -1640,7 +1691,7 @@ def _recompute_member_config(kind, receipt, config, spec, configured, gate_input
             t_dead, budget = rt.gated_budget(gate_inputs[0]["slots"])
             expected.update(deadman_s=t_dead, max_episode_decode_tokens=budget)
         generated = BenchmarkConfig.from_mapping(rt.member_config(
-            template_config, expected, run_id=config["run_id"], kind=kind)).to_dict()
+            template_config, expected, run_id=run_id, kind=kind)).to_dict()
         declared = {**config, "workload_profile": {
             **config["workload_profile"], "prompt_text": rt.canonical(spec)}}
     except Exception as error:
@@ -1660,8 +1711,8 @@ def _recompute_member_config(kind, receipt, config, spec, configured, gate_input
 class _AttestedDescriptor:
     """RL-189 1.3: the mirror the ledger binds for one member and the limit frozen code reads from it."""
 
-    def __init__(self, source, limit):
-        self.source, self.limit = source, limit
+    def __init__(self, source, limit, raw=None):
+        self.source, self.limit, self.raw = source, limit, raw
 
 
 def _attested_descriptor(ledger, kind, configured):
@@ -1671,9 +1722,10 @@ def _attested_descriptor(ledger, kind, configured):
     except Exception as error:
         raise EvidenceFailure("execution_limits_recompute", kind, "config.json", field="model.source",
                               peer="issued_inputs") from error
-    limit = native_limit(ledger.model_descriptor(kind, source))
+    raw = ledger.model_descriptor(kind, source)
+    limit = native_limit(raw)
     ledger.verify_descriptor(kind)
-    return _AttestedDescriptor(source, limit)
+    return _AttestedDescriptor(source, limit, raw)
 
 
 def frozen_context_cap(limit, execution):
@@ -1968,6 +2020,256 @@ def _recompute_controller_phases(kind, episode, witnessed, intervals, events):
     return guards
 
 
+ISSUED_WORKLOAD = "issued_workload"
+_WORKLOAD_CODE = {}
+
+
+def _frozen_workload_code(wl, tg):
+    """Two statement lists lifted from the frozen sources: the endpoint's finish classification and the
+    gate's flag classification. They are run as written, so no rule is restated here."""
+    import ast
+    import inspect
+    import textwrap
+
+    key = id(wl.MlxEndpoint), id(tg.ThermalSession._wait)
+    if key not in _WORKLOAD_CODE:
+        body = ast.parse(textwrap.dedent(inspect.getsource(wl.MlxEndpoint.chat))).body[0].body
+        begin = next(i for i, node in enumerate(body) if isinstance(node, ast.If)
+                     and ast.unparse(node.test) == "finish_reason == 'episode.deadman'")
+        end = next(i for i in range(begin + 1, len(body)) if isinstance(body[i], ast.Expr)
+                   and isinstance(body[i].value, ast.Call)
+                   and ast.unparse(body[i].value.func) == "provenance.update")
+        finish = compile(ast.Module(body=body[begin:end], type_ignores=[]), "issued-finish", "exec")
+        wait = ast.parse(textwrap.dedent(inspect.getsource(tg.ThermalSession._wait))).body[0].body
+        start = next(i for i, node in enumerate(wait) if isinstance(node, ast.If)
+                     and ast.unparse(node.test) == "unobserved and unreferenced")
+        gate = compile(ast.Module(body=wait[start:start + 2], type_ignores=[]), "issued-gate-flags", "exec")
+        _WORKLOAD_CODE[key] = finish, gate
+    return _WORKLOAD_CODE[key]
+
+
+def _replay_frozen_workload(kind, config_doc, witnessed, events, meta, raw_episode, episode, descriptor_raw):
+    """Run the frozen ``EpisodeRuntimeAdapter.run_workload`` over the recorded model returns.
+
+    The model, the tools and the host observations are replaced by what the bundle recorded. The frozen
+    admission, deadman, continuation, flag and stop logic decides everything else. Its flags, outcome, token
+    budget and context limits must equal the episode's, and an exception it raises is a disagreement.
+    ``descriptor_raw`` is the attested mirror's config.json (None when the mirror held none).
+    """
+    import tempfile
+    from dataclasses import replace
+    from unittest.mock import patch
+
+    from joulewise.align.apple import r1_runtime as rt, thermal_gates as tg, workload as wl
+    from joulewise.align.apple.endpoint import _StreamObservation, normalize_model_family
+    from joulewise.align.interfaces import ChatMessage
+    from joulewise.clock import ClockStamp
+    from joulewise.schemas import BenchmarkConfig
+
+    source = "outputs/align_episode.json"
+
+    def agree(actual, expected, field):
+        def same(a, b):
+            if isinstance(b, dict):
+                return isinstance(a, dict) and set(a) >= set(b) and all(same(a[k], v) for k, v in b.items())
+            if isinstance(b, (list, tuple)):
+                return isinstance(a, (list, tuple)) and len(a) == len(b) and all(map(same, a, b))
+            return a == b and isinstance(a, bool) == isinstance(b, bool)
+
+        _required(same(actual, expected), "workload_replay", kind, source, field=field, peer=ISSUED_WORKLOAD)
+
+    def check(ok, field):
+        _required(ok, "workload_replay", kind, source, field=field, peer=ISSUED_WORKLOAD)
+
+    def stamp(ns):
+        seconds = ns / NS
+        return ClockStamp(seconds, seconds, seconds, 1e-9, 1e-9)
+
+    finish_code, gate_code = _frozen_workload_code(wl, tg)
+    try:
+        config = BenchmarkConfig.from_mapping(config_doc)
+        spec = wl.EpisodeSpec.from_text(config.workload_profile.prompt_text)
+        hardware = episode.hardware
+        gates = hardware.get("thermal", {}).get("intervals", [])
+        budget = hardware.get("token_budget") or {}
+        meta_flags = meta["workload_provenance"]["flags"]
+        clock = SimpleNamespace(ns=gates[0]["start_ns"] if gates else episode.start_ns)
+        clock.stamp = lambda: stamp(clock.ns)
+        clock.sleep = lambda seconds: setattr(clock, "ns", clock.ns + round(seconds * NS))
+        task = SimpleNamespace(task_pair=episode.task_pair, reset=lambda seed: None,
+                               system_prompt=lambda condition: "", user_prompt=lambda: "", tool_schemas=lambda: [],
+                               call_tool=lambda *args: "{}", score_main=lambda messages: None,
+                               score_side=lambda messages: None, scratchpad_tags=None,
+                               task_description=lambda: "")
+
+        class ReplayThermal(SimpleNamespace):
+            holds_suppressed = tg.ThermalSession.holds_suppressed
+
+        thermal = ReplayThermal(policy=spec.thermal, intervals=[], flags=[], events=[], episode_reference=None,
+                                record=lambda: hardware.get("thermal", {}))
+        position = 0
+        check(all(a["timestamp_s"] <= b["timestamp_s"] for a, b in zip(events, events[1:])), "event order")
+        guards = [row for row in events if row["phase"] == "align_context_check"]
+
+        def wait(gate_kind, turn=0, deadman=None, token_count=None, defer_resume=False):
+            matches = [g for g in gates if g["kind"] == gate_kind and g["turn"] == turn
+                       and g["token_count"] == token_count]
+            check(len(matches) == 1, "gate admission")
+            gate, = matches
+            thermal.intervals.append(gate)
+            if gate["outcome"] != "released":
+                state = dict(self=thermal, kind=gate_kind, turn=turn, reason=gate["outcome"],
+                             unobserved=gate["outcome"] == "unobserved",
+                             unreferenced=gate["reference"] is None and gate_kind != "G0")
+                exec(gate_code, state)
+            clock.ns = gate["end_ns"]
+            if gate_kind == "G0":
+                thermal.episode_reference = gate["release"] if gate["outcome"] == "released" else None
+                if budget.get("deadline_origin") == "R1_after_G0_release_and_quiet":
+                    rearm = budget["deadline_ns"] - round(spec.deadman_s * NS)
+                    check(clock.ns + rt.STEP_QUIET_S * NS <= rearm <= episode.start_ns, "step-d re-arm")
+                    clock.ns = rearm
+                    rt.rearm_deadman(deadman, spec.deadman_s, "R1_after_G0_release_and_quiet")
+            return gate
+
+        thermal.wait = wait
+        thermal.resume_hold = thermal.persist_interval = lambda row: None
+        thermal.start = thermal.close = lambda: None
+        thermal.capture_reference = lambda member: None
+
+        class Endpoint:
+            def __init__(self, *args, **kwargs):
+                self.deadman = kwargs.get("deadman")
+                self.model_family = normalize_model_family(config.model.family)
+                self.flags, self.events, self.turn_provenance = [], [], []
+                self.identity, self.prompt_token_ids = episode.endpoint, []
+                self.tokenizer_provenance, self.cache_policy = {}, {}
+
+            def rendered_prompt_length(self, messages, tools):
+                nonlocal position
+                check(position < len(witnessed), "unwitnessed admission")
+                begin, end_event = guards[2 * position:2 * position + 2]
+                check(begin["event_type"] == "phase_start" and end_event["event_type"] == "phase_end",
+                      "context order")
+                start, end = (round(row["timestamp_s"] * NS) for row in (begin, end_event))
+                check(start <= end, "context bracket")
+                if spec.deadman_s is not None:
+                    check(end < budget["deadline_ns"], "admitted context bracket")
+                clock.ns = end
+                return len(witnessed[position]["generation"]["prompt_token_ids"])
+
+            def chat(self, messages, **kwargs):
+                nonlocal position
+                check(position < len(episode.turns) and position < len(witnessed), "unwitnessed model call")
+                turn, record = episode.turns[position], witnessed[position]
+                check(record["turn"] == turn.index == position, "turn order")
+                ids = record["generation"]
+
+                def mono(name):
+                    before, after = record[name]["monotonic_before_s"], record[name]["monotonic_after_s"]
+                    check(before <= after, name)
+                    return round((before + (after - before) / 2) * NS)
+
+                start, end = mono("start_stamp"), mono("end_stamp")
+                check(start <= end and start == turn.start_ns and end == turn.end_ns, "endpoint clock")
+                emitted = [row for row in events if row.get("metadata", {}).get("align_turn_index") == position]
+                phases = [row for row in emitted if row["phase"] in ("prefill", "decode")]
+                count = len(ids["output_token_ids"])
+                check([(row["phase"], row["event_type"]) for row in phases] ==
+                      [("prefill", "phase_start"), ("prefill", "phase_end"), ("decode", "phase_start"),
+                       *[("decode", "token")] * count, ("decode", "phase_end")], "native phase and token order")
+                first_ns = round(phases[1]["timestamp_s"] * NS)
+                check(start <= first_ns <= end and first_ns == turn.first_token_ns, "first token")
+                check(start <= phases[0]["timestamp_s"] * NS
+                      and round(phases[-2]["timestamp_s"] * NS) <= round(phases[-1]["timestamp_s"] * NS) <= end,
+                      "native decode-end bracket")
+                check([row["metadata"]["index"] for row in phases[3:-1]] == list(range(count)), "token indices")
+                check(phases[-1]["metadata"]["emitted_tokens"] == count
+                      and phases[-1]["metadata"]["requested_output_tokens"] == kwargs["max_tokens"], "token cap")
+                tool_events = [row for row in emitted if row["phase"].startswith("align_tool_")]
+                check(len(tool_events) == len(turn.tool_calls) * 2, "tool event count")
+                calls = []
+                for i, call in enumerate(turn.tool_calls):
+                    begin, close = tool_events[2 * i:2 * i + 2]
+                    check((begin["event_type"], close["event_type"]) == ("phase_start", "phase_end")
+                          and begin["phase"] == close["phase"] == f"align_tool_{position}_{i}"
+                          and begin["message"] == close["message"] == call.name
+                          and begin["metadata"] == close["metadata"]
+                          and round(begin["timestamp_s"] * NS) == call.start_ns
+                          and round(close["timestamp_s"] * NS) == call.end_ns, "tool order, identity or time")
+                    if spec.deadman_s is not None:
+                        check(close["timestamp_s"] * NS < budget["deadline_ns"], "tool deadman bracket")
+                    calls.append(SimpleNamespace(name=begin["message"], arguments_json="{}",
+                                                 call_id=begin["metadata"]["tool_call_id"]))
+
+                def stream():
+                    for j, event in enumerate(phases[3:-1]):
+                        clock.ns = round(event["timestamp_s"] * NS)
+                        yield SimpleNamespace(finish_reason=ids.get("finish_reason") if j + 1 == count else None)
+
+                observed = _StreamObservation(SimpleNamespace(stream_generate=stream), deadman=self.deadman,
+                                              max_tokens=kwargs["max_tokens"],
+                                              thermal=thermal if gates else None, turn_index=position)
+                with patch.object(tg, "drain_decode", lambda stream: None):
+                    check(sum(1 for _ in observed.stream_generate()) == count, "frozen stream cap/deadman")
+                state = dict(finish_reason=observed.finish_reason, completion_tokens=count,
+                             max_tokens=kwargs["max_tokens"], turn_index=position, flags=[])
+                exec(finish_code, state)
+                classified = state["flags"]
+                check(all(flag in record["flags"] for flag in classified)
+                      and (f"turn_token_budget_reached:{position}" in record["flags"]) ==
+                      (f"turn_token_budget_reached:{position}" in classified), "native finish classification")
+                self.flags.extend(record["flags"])
+                self.turn_provenance.append({"flags": list(record["flags"])})
+                clock.ns, position = end, position + 1
+                return SimpleNamespace(prompt_tokens=len(ids["prompt_token_ids"]),
+                                       cached_prompt_tokens=turn.context_tokens, completion_tokens=count,
+                                       reasoning_tokens=turn.hidden_tokens, first_token_ns=turn.first_token_ns,
+                                       start_ns=start, end_ns=end, tool_calls=calls,
+                                       raw_usage={"joulewise": {"flags": record["flags"]}})
+
+            def assistant_history_message(self, result):
+                return ChatMessage("assistant", "")
+
+        # An isolated mirror carries exactly the attested descriptor bytes. No model path is opened.
+        with tempfile.TemporaryDirectory() as mirror:
+            if descriptor_raw is not None:
+                (Path(mirror) / "config.json").write_bytes(descriptor_raw)
+            safe = replace(config, model=replace(config.model, source=mirror))
+            fake_factory = SimpleNamespace(**{spec.task_factory.split(":")[1]: lambda **kw: task})
+            runtime = SimpleNamespace(name="synthetic", prepare=lambda *args: wl.AdapterResult(ok=True),
+                                      warmup=lambda *args: wl.AdapterResult(ok=True))
+            adapter = wl.EpisodeRuntimeAdapter(runtime, clock, thermal_factory=lambda *args: thermal)
+            with patch.object(wl, "importlib", SimpleNamespace(import_module=lambda _: fake_factory)):
+                prepared = adapter.prepare(safe)
+            check(prepared.ok, "frozen preparation")
+            agree(hardware["context_limits"],
+                  {key: adapter.prepared[key] for key in ("max_context_tokens", "max_position_embeddings")},
+                  "context_limits")
+            check(adapter.warmup(safe).ok, "frozen warmup")
+            adapter.powermode_reader = lambda: hardware["ac_powermode"]["value"]
+            adapter.identity_projection_metadata = lambda cfg: dict(model={}, sampler={}, output_policy={})
+            with patch.object(wl, "MlxEndpoint", Endpoint):
+                result = adapter.run_workload(safe)
+    except EvidenceFailure:
+        raise
+    except Exception as error:  # noqa: BLE001 - an exception the frozen workload raises is a disagreement
+        raise EvidenceFailure("workload_replay", kind, source, field="raised", peer=ISSUED_WORKLOAD) from error
+    check(position == len(witnessed) == len(episode.turns), "admissions")
+    agree(gates, thermal.intervals, "gate sequence")
+    outcome = result.workload_provenance["episode_outcome"]
+    recorded = meta["workload_provenance"]["episode_outcome"]
+    agree(recorded["stop_condition"], outcome["stop_condition"], "stop_condition")
+    agree(recorded["emitted_tokens"], outcome["emitted_tokens"], "emitted_tokens")
+    if budget:
+        agree(budget, outcome["token_budget"], "token_budget")
+    flags = result.workload_provenance["flags"]
+    if gates:
+        agree(hardware["thermal"]["flags"], thermal.flags, "thermal flags")
+    agree(raw_episode["flags"], flags, "episode flags")
+    agree(meta_flags, flags, "provenance flags")
+
+
 def _recompute_continuation(kind, episode, witnessed, execution, family):
     """Check stop observations before using the frozen stop precedence."""
     from joulewise.align.apple.xml_tool_calls import XML_MODEL_FAMILIES, normalize_model_family
@@ -2065,6 +2367,13 @@ def _check_gate_boundaries(intervals, journal, events, kind):
             "entry_stamp": interval.get("entry_stamp"),
         }) and canonical(close["values"]) == canonical({"state": "end", "gate": interval}),
             "gate_journal_disagreement", kind, THERMAL_SOURCE, index=index, peer=episode)
+        # The frozen _wait takes its entry and exit stamps, then writes the row (ThermalSession._wait).
+        for row, label in ((begin, "entry"), (close, "exit")):
+            stamp = interval.get(f"{label}_stamp")
+            _required(_paired_stamp(stamp, start if label == "entry" else end)
+                      and row["started"]["monotonic_ns"] >= stamp["monotonic_before_ns"],
+                      "gate_journal_disagreement", kind, THERMAL_SOURCE, index=index, field=f"{label}_stamp",
+                      peer=episode)
         for offset, (label, direction, ns) in enumerate((("entry", "start", start), ("exit", "end", end))):
             stamp = interval.get(f"{label}_stamp")
             epoch = interval.get(f"{label}_epoch_s")
@@ -2871,7 +3180,7 @@ def _check_power_trace(kind, raw, started_epoch_s, ended_epoch_s):
         raise EvidenceFailure("bundle_binding", kind, source, field="invalid") from error
     check(bool(lines), "header")
     header = tuple(lines[0])
-    check(len(header) in (3, 4, 6) and header == TRACE_HEADER[:len(header)], "header")
+    check(len(header) in (4, 6) and header == TRACE_HEADER[:len(header)], "header")
     for index, row in enumerate(row for row in lines[1:] if row):   # the frozen DictReader skips blank lines too
         check(len(row) == len(header), "row", index)
         fields = dict(zip(header, row))
@@ -2886,6 +3195,49 @@ def _check_power_trace(kind, raw, started_epoch_s, ended_epoch_s):
         check(started_epoch_s <= min(stamps) and max(stamps) <= ended_epoch_s, "window", index)
 
 
+def _check_pinned_trace(kind, bundle, data):
+    """The lead's provisional rule: the pinned D-018 validator judges the predecessor's trace.
+
+    The member's own reader examines no heading when a trace has zero rows, so a header or bytes that
+    D-018 rejects would otherwise be admitted. ``bundle`` holds the bound bytes; every source is digest
+    rechecked before a pass is published.
+    """
+    from joulewise.bundle_read import _check_power_trace as pinned
+
+    summary = _object_from_bytes(data["summary_metrics.json"], kind, "summary_metrics.json", "bundle_binding")
+    meta = _object_from_bytes(data["metadata.json"], kind, "metadata.json", "bundle_binding")
+    try:
+        problems = pinned(bundle, summary, meta)
+    except Exception as error:  # noqa: BLE001 - a validator that cannot run is never a pass
+        raise EvidenceFailure("bundle_binding", kind, "power_trace.csv", field="D-018", peer="bundle_read") from error
+    _required(not problems, "bundle_binding", kind, "power_trace.csv", field="D-018", peer="bundle_read")
+
+
+def _check_events_inside(kind, data, started_epoch_s, ended_epoch_s):
+    """Every controller event lies inside the member's own terminal bracket, which the runtime stamps around it."""
+    events = _jsonl_objects(data["events.jsonl"], kind, "events.jsonl", "bundle_binding")
+    for index, event in enumerate(events):
+        _required(_finite(event.get("timestamp_s")) and started_epoch_s <= event["timestamp_s"] <= ended_epoch_s,
+                  "member_order", kind, "events.jsonl", index=index, field="timestamp_s", peer=MANIFEST_NAME)
+
+
+def _check_segment_inventory(root, allowed, *, source):
+    """EVIDENCE-SPEC row 23: no inserted precool, retry or substituted segment beside the issued ones."""
+    try:
+        entries = list(Path(root).iterdir())
+    except OSError as error:
+        raise EvidenceFailure("sequence", "attempt", source, field="segments") from error
+    for entry in entries:
+        if entry.name in allowed:
+            continue
+        try:
+            directory = S_ISDIR(entry.lstat().st_mode)
+        except OSError as error:
+            raise EvidenceFailure("sequence", "attempt", source, field="segments") from error
+        _required(not (directory or "rejected" in entry.name or "precool" in entry.name),
+                  "sequence", "attempt", source, field="segments")
+
+
 def _native_bundle(bound, receipt, configured, gate_inputs, step_binding, descriptor):
     from joulewise.align.apple.sampler import seconds_ns
 
@@ -2895,6 +3247,9 @@ def _native_bundle(bound, receipt, configured, gate_inputs, step_binding, descri
         _required({item.name for item in bundle.parent.iterdir()} == {bundle.name},
                   "bundle_binding", kind, "runs")
         _check_power_trace(kind, data["power_trace.csv"], bound.started_epoch_s, bound.ended_epoch_s)
+        _check_events_inside(kind, data, bound.started_epoch_s, bound.ended_epoch_s)
+        if kind == "capture-predecessor-30b":
+            _check_pinned_trace(kind, bundle, data)
         if kind in QUIET_MEMBERS:
             _check_load(data[LOAD_SOURCE], receipt, kind, bound.ended_epoch_s - bound.started_epoch_s)
         binding = _check_member_records(kind, bundle, receipt, data, configured, gate_inputs,
@@ -3023,6 +3378,7 @@ def _native_verdict(ledger, runtime, invoke, configured, soak):
             if not isinstance(slots, dict) or type(slots.get("N_chunk")) is not int or slots["N_chunk"] <= 0:
                 raise EvidenceFailure("step_configuration", kind, RECEIPT_NAME, field="slots")
         _check_member_schedule(kind, receipts[kind], schedule)
+    _check_segment_inventory(ledger.root, set(KINDS.values()), source=LEDGER_NAME)
     step_receipt = receipts["step-d"]
     sensors = sensors_policy(configured)
     bands = bands_c(soak.reference, sensors, slow_floor=configured["slow_band_floor_c"])
@@ -3049,6 +3405,7 @@ def _native_verdict(ledger, runtime, invoke, configured, soak):
                        x_g_not_run_reason=refusal, ledger=ledger)
     if verdict["verdict"] == "pass":
         _check_issued_duty_bar(receipts["d-bank-benign-s1"])
+    _check_segment_inventory(ledger.root, set(KINDS.values()), source=LEDGER_NAME)
     ledger.verify_final_sources()
     _required(canonical(schedule) == canonical(_w1_schedule(runtime)),
               "inter_member_schedule", "attempt", "W1 roster")
@@ -3179,6 +3536,9 @@ def replay_archived(output, runtime_config):
                 _check_member_schedule(kind, row, schedule)
                 bundle, data = _bound_member_files(member, row)
                 _check_power_trace(kind, data["power_trace.csv"], member.started_epoch_s, member.ended_epoch_s)
+                _check_events_inside(kind, data, member.started_epoch_s, member.ended_epoch_s)
+                if kind == "capture-predecessor-30b":
+                    _check_pinned_trace(kind, bundle, data)
                 if kind in QUIET_MEMBERS:
                     _check_load(data[LOAD_SOURCE], row, kind, member.ended_epoch_s - member.started_epoch_s)
                 binding = _check_member_records(kind, bundle, row, data, configured,

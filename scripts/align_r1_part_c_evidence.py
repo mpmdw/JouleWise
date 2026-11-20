@@ -537,6 +537,10 @@ class BoundSoak:
         self.member = BoundMember(self.root / SOAK_SEGMENT, "idle", self.config_sha,
                                   manifest_sha=manifest["sha256"])
         self.sources = {name: self.member.read(name, name) for name in SOAK_FILES}
+        # No retry or substituted segment beside the issued one (EVIDENCE-SPEC row 23).
+        for entry in self.root.iterdir():
+            if entry.name != SOAK_SEGMENT and (entry.is_dir() or "rejected" in entry.name or "precool" in entry.name):
+                raise EvidenceFailure("sequence", "idle", LEDGER_NAME, field="segments")
         self.argv_sha256 = returned["argv_sha256"]
 
         # 6. The outer row, saved receipt and stdout must be the same observation.

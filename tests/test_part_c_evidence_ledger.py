@@ -1225,14 +1225,14 @@ class RawEvidenceTests(unittest.TestCase):
     def test_the_power_trace_is_the_producers_csv(self):
         d018 = b"timestamp_s,power_w,source,rail\n"
         interval = b"timestamp_s,power_w,source,rail,interval_start_s,interval_end_s\n"
-        self.trace(b"timestamp_s,power_w,source\n")                 # the synthetic control's header-only trace
         self.trace(d018)
         self.trace(d018 + b"2001.5,0.002,powermetrics,gpu_power\n2002.5,0.002,powermetrics,cpu_power\n")
         self.trace(interval + b"2001,0.002,powermetrics,gpu_power,2000,2001\n3800,0.5,powermetrics,gpu_power,,\n")
         # Audit round 1, `one-byte-predecessor-trace` and the file sweep's truncation.
         self.refused(lambda: self.trace(b"{"), "header")
         self.refused(lambda: self.trace(b""), "header")
-        for header in (b"timestamp_s,power_w\n", b"power_w,timestamp_s,source\n", b"timestamp_s,power_w,source,rail,x\n",
+        for header in (b"timestamp_s,power_w,source\n",   # v2's header-only trace: not a D-018 header (PROVISIONAL)
+                       b"timestamp_s,power_w\n", b"power_w,timestamp_s,source\n", b"timestamp_s,power_w,source,rail,x\n",
                        b"timestamp_s,power_w,source,rail,interval_start_s\n", b'{"attempt":"foreign"}\n'):
             with self.subTest(header=header):
                 self.refused(lambda: self.trace(header), "header")
@@ -1620,3 +1620,261 @@ class SoakArgvTests(unittest.TestCase):
         with TemporaryDirectory() as tmp:
             with self.assertRaises(evidence.EvidenceFailure):
                 self.bound(tmp, self.idle("--duration-s", "1800")).verify_argv(self.RUNTIME, 1801)
+
+
+# ---- Audit round 2: the pinned validators, bracket and order rules, and the planned run id ---------------
+
+class PredecessorTraceD018Tests(unittest.TestCase):
+    """The lead's PROVISIONAL rule: the pinned D-018 validator judges the predecessor's trace."""
+
+    D018 = b"timestamp_s,power_w,source,rail\n"
+    INTERVAL = b"timestamp_s,power_w,source,rail,interval_start_s,interval_end_s\n"
+
+    def judge(self, raw, *, summary=b'{"status":"succeeded"}', metadata=b"{}"):
+        from scripts.align_r1_part_c import _check_pinned_trace
+
+        with TemporaryDirectory() as tmp:
+            bundle = Path(tmp)
+            (bundle / "power_trace.csv").write_bytes(raw)
+            _check_pinned_trace(FIRST, bundle, {"summary_metrics.json": summary, "metadata.json": metadata})
+
+    def refused(self, raw, **kwargs):
+        with self.assertRaises(evidence.EvidenceFailure) as caught:
+            self.judge(raw, **kwargs)
+        failure = caught.exception
+        self.assertEqual((failure.reason, failure.role, failure.source, failure.peer),
+                         ("bundle_binding", FIRST, "power_trace.csv", "bundle_read"))
+        self.assertIn(failure.field, ("D-018", "invalid"))
+        self.assertNotIn(str(MARKER), json.dumps(failure.finding()))
+
+    def test_the_issued_headers_pass_and_every_other_form_is_refused(self):
+        self.judge(self.D018)
+        self.judge(self.INTERVAL)
+        self.judge(self.D018 + b"2001.5,0.002,powermetrics,gpu_power\n")
+        # Audit round 1 `audit-one-byte-predecessor-csv` and the v3 `three-column-header` case.
+        for raw in (b"{", b"", b"timestamp_s,power_w,source\n", b"[]\n", b'"unclosed\xff\n',
+                    b"timestamp_s,power_w,source,rail,x\n", b"power_w,timestamp_s,source,rail\n",
+                    b"timestamp_s,power_w,source,rail,interval_start_s\n",
+                    self.D018 + b"x,0.002,powermetrics,gpu_power\n"):
+            with self.subTest(raw=raw):
+                self.refused(raw)
+
+    def test_a_validator_that_cannot_run_or_a_summary_that_cannot_be_read_is_never_a_pass(self):
+        with TemporaryDirectory() as tmp:
+            bundle = Path(tmp)
+            for damage, source in ((dict(summary=b"{"), "summary_metrics.json"), (dict(metadata=b"[]"), "metadata.json")):
+                with self.subTest(damage=damage), self.assertRaises(evidence.EvidenceFailure) as caught:
+                    self.judge(self.D018, **damage)
+                self.assertEqual((caught.exception.reason, caught.exception.source), ("bundle_binding", source))
+            with patch.dict(sys.modules, {"joulewise.bundle_read": None}), self.assertRaises(Exception):
+                from scripts.align_r1_part_c import _check_pinned_trace
+
+                _check_pinned_trace(FIRST, bundle, {"summary_metrics.json": b"{}", "metadata.json": b"{}"})
+
+    def test_a_trace_file_that_is_missing_is_not_a_trace(self):
+        from scripts.align_r1_part_c import _check_pinned_trace
+
+        with TemporaryDirectory() as tmp, self.assertRaises(evidence.EvidenceFailure) as caught:
+            _check_pinned_trace(FIRST, Path(tmp), {"summary_metrics.json": b'{"status":"succeeded"}',
+                                                   "metadata.json": b"{}"})
+        self.assertEqual((caught.exception.reason, caught.exception.field), ("bundle_binding", "D-018"))
+
+
+class MemberBracketTests(unittest.TestCase):
+    """Audit 2 `finalized-after-close`: an event stamped after the member's own terminal close is impossible."""
+
+    @staticmethod
+    def events(*stamps):
+        return {"events.jsonl": b"".join(json_bytes({
+            "timestamp_s": stamp, "event_type": "phase_start", "phase": "run", "message": "", "metadata": {}})
+            for stamp in stamps)}
+
+    def judge(self, *stamps, bracket=(2000.0, 3800.0)):
+        pc._check_events_inside(FIRST, self.events(*stamps), *bracket)
+
+    def refused(self, *stamps, index):
+        with self.assertRaises(evidence.EvidenceFailure) as caught:
+            self.judge(*stamps)
+        failure = caught.exception
+        self.assertEqual((failure.reason, failure.role, failure.source, failure.index, failure.field, failure.peer),
+                         ("member_order", FIRST, "events.jsonl", index, "timestamp_s", MANIFEST))
+
+    def test_every_event_lies_inside_the_terminal_bracket(self):
+        self.judge(2000.0, 2001.5, 3800.0)
+        self.refused(2000.0, 3801.0, index=1)        # the audit's finalization one second after the close
+        self.refused(2000.0, 3800.000001, index=1)
+        self.refused(1999.999999, 2001.0, index=0)
+        for bad in (float("nan"), float("inf"), "2001", None, True):
+            with self.subTest(stamp=bad), self.assertRaises(evidence.EvidenceFailure):
+                self.judge(2000.5, bad)
+
+
+class SegmentInventoryTests(unittest.TestCase):
+    """Audit 2 `duplicate-predecessor`: a second complete segment beside the issued ones."""
+
+    ALLOWED = set(MEMBERS.values())
+
+    def test_only_the_issued_segments_may_be_directories_of_the_part_c_root(self):
+        with TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            for name in self.ALLOWED:
+                (root / name).mkdir()
+            (root / evidence.LEDGER_NAME).write_bytes(b"")
+            pc._check_segment_inventory(root, self.ALLOWED, source=evidence.LEDGER_NAME)
+            (root / "smoke.json").write_bytes(b"{}")        # a plain file is not a segment
+            pc._check_segment_inventory(root, self.ALLOWED, source=evidence.LEDGER_NAME)
+            for extra in ("capture_predecessor_30b.rejected1", "idle_until_soak", "calibration.precool",
+                          "X_G_contrast.retry", "any_directory"):
+                with self.subTest(extra=extra):
+                    (root / extra).mkdir()
+                    with self.assertRaises(evidence.EvidenceFailure) as caught:
+                        pc._check_segment_inventory(root, self.ALLOWED, source=evidence.LEDGER_NAME)
+                    failure = caught.exception
+                    self.assertEqual((failure.reason, failure.role, failure.source, failure.field),
+                                     ("sequence", "attempt", evidence.LEDGER_NAME, "segments"))
+                    self.assertNotIn(extra, json.dumps(failure.finding()))
+                    (root / extra).rmdir()
+            (root / "capture_predecessor_30b.rejected2").write_bytes(b"")   # a retry's name, even as a file
+            with self.assertRaises(evidence.EvidenceFailure):
+                pc._check_segment_inventory(root, self.ALLOWED, source=evidence.LEDGER_NAME)
+        with self.assertRaises(evidence.EvidenceFailure):
+            pc._check_segment_inventory(Path("/nonexistent/part-c"), self.ALLOWED, source=evidence.LEDGER_NAME)
+
+    def test_the_soak_root_holds_one_segment_too(self):
+        with TemporaryDirectory() as tmp:
+            attempt = SoakAttempt(Path(tmp))
+            handoff = attempt.close()
+            attempt.binding(handoff)
+            for extra in ("idle_soak.rejected1", "idle_soak.precool", "another_directory"):
+                with self.subTest(extra=extra):
+                    (attempt.directory / extra).mkdir()
+                    with self.assertRaises(evidence.EvidenceFailure) as caught:
+                        attempt.binding(handoff)
+                    self.assertEqual((caught.exception.reason, caught.exception.role, caught.exception.field),
+                                     ("sequence", "idle", "segments"))
+                    (attempt.directory / extra).rmdir()
+            attempt.binding(handoff)
+
+
+class GateRowOrderTests(unittest.TestCase):
+    """Audit 2 `gate-before-entry`: the frozen _wait takes its stamp, then writes the row that contains it."""
+
+    START, END = 10 * 10**9, 20 * 10**9
+
+    @staticmethod
+    def paired(ns):
+        return {"epoch_ns": ns, "monotonic_before_ns": ns, "monotonic_after_ns": ns, "wall_resolution_ns": 1,
+                "monotonic_resolution_ns": 1}
+
+    def fixture(self, begin_at, end_at):
+        interval = {"kind": "G0", "turn": 0, "token_count": None, "outcome": "released", "start_ns": self.START,
+                    "end_ns": self.END, "duration_s": 10.0, "clock": "episode_monotonic_ns", "entry_sensors": {},
+                    "reference": {"fast_c": 35.0, "slow_c": 35.0}, "release": {"fast_c": 35.0, "slow_c": 35.0},
+                    "slope_c_per_min": 0.0, "entry_slope_c_per_min": 0.0, "exit_sample_ns": self.END - 1,
+                    "entry_stamp": self.paired(self.START), "exit_stamp": self.paired(self.END),
+                    "entry_epoch_s": 10.0, "exit_epoch_s": 20.0}
+        journal = [{"kind": "align_thermal_gate", "started": {"monotonic_ns": begin_at},
+                    "values": {"state": "begin", "gate_kind": "G0", "turn": 0, "token_count": None,
+                               "entry_stamp": interval["entry_stamp"]}},
+                   {"kind": "align_thermal_gate", "started": {"monotonic_ns": end_at},
+                    "values": {"state": "end", "gate": interval}}]
+        events = [{"phase": "align_thermal_gate", "event_type": kind, "message": "G0", "timestamp_s": seconds,
+                   "metadata": interval} for kind, seconds in (("phase_start", 10.0), ("phase_end", 20.0))]
+        return [interval], journal, events
+
+    def judge(self, begin_at, end_at):
+        sampler = ModuleType("joulewise.align.apple.sampler")
+        sampler.seconds_ns = lambda seconds: round(seconds * 10**9)
+        apple = ModuleType("joulewise.align.apple")
+        apple.sampler = sampler
+        align = ModuleType("joulewise.align")
+        align.apple = apple
+        with patch.dict(sys.modules, {m.__name__: m for m in (align, apple, sampler)}):
+            pc._check_gate_boundaries(*self.fixture(begin_at, end_at), "d-bank-benign-s1")
+
+    def refused(self, begin_at, end_at, field):
+        with self.assertRaises(evidence.EvidenceFailure) as caught:
+            self.judge(begin_at, end_at)
+        failure = caught.exception
+        self.assertEqual((failure.reason, failure.field, failure.source), ("gate_journal_disagreement", field,
+                                                                           pc.THERMAL_SOURCE))
+
+    def test_a_row_is_written_at_or_after_the_stamp_it_contains(self):
+        self.judge(self.START, self.END)
+        self.judge(self.START + 1, self.END + 5)
+        self.refused(self.START - 1_000_000, self.END, "entry_stamp")     # the audit's one millisecond early
+        self.refused(self.START - 1, self.END, "entry_stamp")
+        self.refused(self.START, self.END - 1, "exit_stamp")
+        self.refused(self.START, 0, "exit_stamp")
+
+
+class PlannedRunIdTests(unittest.TestCase):
+    """Audit 2 `other-run-id`: the run id is the one the frozen dispatch issues, never the bundle's own."""
+
+    @contextmanager
+    def dispatch_double(self, body):
+        runtime = ModuleType("joulewise.align.apple.r1_runtime")
+
+        class Segment:
+            def dispatch(self):
+                body(self)
+
+        runtime.Segment = Segment
+        apple = ModuleType("joulewise.align.apple")
+        apple.r1_runtime = runtime
+        align = ModuleType("joulewise.align")
+        align.apple = apple
+        with patch.dict(sys.modules, {m.__name__: m for m in (align, apple, runtime)}):
+            yield
+
+    def test_the_id_is_taken_from_the_dispatch_for_each_member(self):
+        seen = []
+
+        def body(segment):
+            seen.append((segment.kind, segment.config))
+            segment.run_member({"run_id": f"align-v4-r1-{segment.kind}"})
+
+        with self.dispatch_double(body):
+            for kind in MEMBERS:
+                self.assertEqual(pc.planned_run_id(kind, {"issued": True}), f"align-v4-r1-{kind}")
+        self.assertEqual(seen, [(kind, {"issued": True}) for kind in MEMBERS])
+
+    def test_a_dispatch_that_issues_no_id_is_an_error_never_a_default(self):
+        with self.dispatch_double(lambda segment: None), self.assertRaises(ValueError):
+            pc.planned_run_id("x-g", {})
+        with self.dispatch_double(lambda segment: 1 / 0), self.assertRaises(ZeroDivisionError):
+            pc.planned_run_id("x-g", {})
+
+
+class FrozenDifferentialNamedCasesTests(unittest.TestCase):
+    """The frozen differential suite's audit-named cases, run from this checkout against its own evaluator.
+
+    The suite materializes the issued R1 sources from Git, so it needs the two pinned commits in the local
+    object database. A shallow checkout lacks them and this test skips. The full 25,082-case matrix is run by
+    hand. These cases are the regressions of audits 1 and 2 that need the frozen workload, driver and D-018
+    validator: the five named audit reproductions, the seven predecessor CSV wire cases, the orphan tokenize
+    event, the empty final phase, and the turn-flag classes the frozen workload decides.
+    """
+
+    SUITE = Path(__file__).resolve().parent / "align" / "test_partc_frozen_differential.py"
+    SELECTOR = r"audit-|PROVISIONAL|orphan-tokenize|empty-final-phase|runner\.error|0\.flags/set-turn_budget_reached"
+    PINS = ("b2e01464d6d4fbf2901ff4d4154df9455104a12a", "2d02a6f0e42b7ac7a51ea5d5830867eea9ff2911")
+
+    def test_named_audit_cases_have_no_false_pass_and_the_clean_control_passes(self):
+        import os
+        import subprocess
+
+        root = Path(__file__).resolve().parents[1]
+        if not self.SUITE.is_file() or any(
+                subprocess.run(["git", "-C", str(root), "cat-file", "-e", pin + "^{commit}"],
+                               capture_output=True).returncode for pin in self.PINS):
+            self.skipTest("the pinned R1 commits are not in this object database")
+        env = {**os.environ, "JW_PARTC_CASE": self.SELECTOR, "JW_PARTC_WORKERS": "1", "JW_PARTC_REPO": str(root),
+               "PYTHONDONTWRITEBYTECODE": "1"}
+        with TemporaryDirectory() as tmp:
+            proc = subprocess.run([sys.executable, "-IB", str(self.SUITE)], cwd=tmp, env={**env, "TMPDIR": tmp},
+                                  capture_output=True, text=True)
+        output = proc.stdout + proc.stderr
+        self.assertEqual(proc.returncode, 0, output[-3000:])
+        self.assertIn("descriptor rows PASS (4/4)", output)
+        self.assertNotRegex(output, r"(?m)^(FALSE_PASS|WRONG_VERDICT|HARNESS_ERROR)")
