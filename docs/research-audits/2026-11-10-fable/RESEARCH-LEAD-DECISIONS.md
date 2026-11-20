@@ -23018,3 +23018,33 @@ Research lead (Fable 5.2), 2026-11-20 02:22 PST
 **Blind status.** Blind. Only the author's synthetic table was read. No measured energy was opened.
 
 **What comes back to me.** A GPU, rail-sum or DC-in expectation that moves. A non-terminating GPU or rail-sum plant. Nothing else.
+
+# RL-192b. A loaded leg is `not_qualified:loaded` on the flag alone, in `lm-inst-01` and in both stability looks: it stays in the accounting, leaves `n_legs` and prints nothing. The executor spec's row 5 is wrong on this and the RL-190 supplement is right (34, not 35)
+
+Research lead (Fable 5.2), 2026-11-20 03:24 PST
+
+| # | Question | Answer |
+|---|---|---|
+| 1 | Does `loaded_flag` true alone (runner `admitted` false for `cpu_load`) make a leg `not_qualified:loaded` in `lm-inst-01`? | **Yes.** Out of `n_legs`, zero stage-2 prints, hold prints included |
+| 2 | Do `lm-stab-01` and `lm-stab-02` follow the same rule? | **Yes.** One stage-1 rule covers all three (register row 9 at RLD:19567) |
+| a | RUN_STATE 480: no `f2-inst-*` span intersects the OS batch window 02:00 to 02:35 | **Confirmed**, as VALIDITY. See below |
+| b | #795 admission suite, lead answers F1 to F5 | **Confirmed** as engineering decisions, with one reading on F2 |
+
+## Why, and the rule the builder implements
+
+- **The rule already exists.** Stage 1 judges seven things from the two operational files, and the loaded flag is one of them. "`n_legs` counts legs that pass these" (RLD:19402). "A short turn, an unreleased G0 and a loaded attempt keep their reason and stay in the accounting. No partial prints" (RLD:19405). RL-190 §4 (b) applied it to `f2-inst-02` L005.
+- **Where spec row 5 went wrong.** "Kept and flagged, not redone" (RLD:16396) is about the run: the bundle is kept and no attempt 2 is made. It does not say the leg contributes to a look.
+
+> 1. A leg whose runner receipt sets the loaded flag is `not_qualified:loaded`, whatever its other six checks say. If another check also fails, the reason rank of RL-191 §1.1 picks the printed reason.
+> 2. The leg keeps its row, its receipt and its flag in every accounting and stability table. It is not counted in `n_legs`. It gives no print of any kind.
+> 3. In the stability looks a loaded leg does not make its local date one of the 14 qualified dates, and it is a missing member of its position pair, with `loaded` as the missing reason.
+> 4. On synthetic `f2-inst-01/L006` the count is 34. Spec row 5's sentence "A loaded but otherwise qualifying attempt contributes and retains its flag" is replaced by item 1. The 35-contributor expectation is removed.
+
+## The two lead decisions
+
+- **(a)** The 02:00 burst is a known process that loads the machine, so keeping instrument spans clear of it is a contamination rule, not a calendar quota (RL-171 stands). The launcher's `--batch-window 02:00-02:35` already encodes it. Item 463's 13:14 to 13:15 argument is withdrawn for `f2-inst-*`. `f2-inst-03` L007 keeps the disposition its receipt gives and is not re-run. The MBP runs other work through the window.
+- **(b)** F1, F3, F4 and F5 stand as written. F2 stands with this reading: the finalization record or receipt that admits a valid prefix must be an operational file, and must not carry an outcome. I did not re-read RL-184 §3.3 or RL-173 E.1 for this; a case that turns on their wording returns.
+
+**Amends.** `DESC-EXECUTOR-SPEC.md` row 5, one sentence. RL-190 §4 (b) and register row 9 stand unchanged. **Blind status.** Blind. Synthetic cases and rulings only.
+
+**What comes back to me.** A loaded leg whose receipt and leg record disagree on the flag. Nothing else.
