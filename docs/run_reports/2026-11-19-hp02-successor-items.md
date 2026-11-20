@@ -5,7 +5,7 @@ Builder desk work on `ops/2026-11-19-hp02-successor-items`, based on audit `ea2f
 - Pin `dd206025abb30fd5c07515cd4b34b3e653174810`, kit SHA-256 `7693b8293b42b8ba20cbd321e201974745b172dc53c4f1397d2c1494f38fbe66`.
 - Queue-b at `e3eaa282f9d4cea3b579eeb7bde989ff897df45e`, SHA-256 `078eb24c3149f2a7bc522a432098e51e21bd36278d288b0f41efbb5d57da528f`. It preserves queue-a's 3+4+5 rosters and the kit's seed. Its local interval is November 21 00:00 inclusive to November 30 00:00 exclusive.
 - Issue, Start and Run use one decision with fresh scoped records. It checks the finite queue, unspent roster, predecessor and host close, copy disposition, eligible ladder, counted calendar and composed occupancy through outer clearance. Run claims the roster once before the pinned launcher. The lead owns live evidence and issue.
-- The original frozen fixtures and occupancy delivery match the supplied bytes. The new unittest module is discoverable by CI.
+- The original frozen fixtures and occupancy delivery match the supplied bytes. The new unittest module has a local scheduling observation in the CI shard timing map.
 
 ## Synthetic verification
 
