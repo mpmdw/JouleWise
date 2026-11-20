@@ -6,10 +6,10 @@ triage it here instead of assuming it should happen immediately.
 ## 2026-11-19 hp-02 successor items
 
 P1 [AGENT], user-directed Tier 2 builder work under RL-190 §2 and the frozen
-item and occupancy contracts. The round-three repair adds the lead's
-expiry, publication ordering and rank-one evidence rules with executing
-regressions. Independent delta execution is next.
-[Round-three repair report](docs/run_reports/2026-11-19-hp02-successor-audit-3.md).
+item and occupancy contracts. The round-four repair adds a derived launch
+guard and a read-only final gate pass after custody writes. Independent
+delta execution is next.
+[Round-four repair report](docs/run_reports/2026-11-20-hp02-successor-audit-4.md).
 
 ## 2026-11-18 qualification drafts at the PR #812 merge pin
 

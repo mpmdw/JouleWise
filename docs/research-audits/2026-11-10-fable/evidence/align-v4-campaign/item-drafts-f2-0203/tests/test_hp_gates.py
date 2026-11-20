@@ -336,12 +336,13 @@ def transition_record(span, phase, sampled, queue, **over):
 
 
 @contextmanager
-def transition_runtime(root, span, now):
+def transition_runtime(root, span, now, *, queue=None):
     """Drive the real Start and Run entry with a mutable fake clock and no native calls."""
     from joulewise.align.apple import powermode
 
     root.mkdir()
-    queue = (HP / "queue-b.json").read_bytes()
+    if queue is None:
+        queue = (HP / "queue-b.json").read_bytes()
     _, issue, *_ = candidate({"span": span}, now, "Start", queue=queue)
     args = SimpleNamespace(
         repo=SEAT / "tmp/pin", kit=HP / "cl-hp-02.json", span=span, phase="Start",
@@ -364,6 +365,10 @@ def transition_runtime(root, span, now):
             for field in hp.RUN_OBSERVATIONS:
                 if isinstance(obs.get(field), dict):
                     obs[field]["sampled_at"] = sampled
+            first = int(hp.midnight(hp.local_date(sampled)))
+            last = int(hp.midnight(hp.local_date(sampled) + hp.timedelta(days=1))) - 1
+            for entry in obs["priority"]["entries"]:
+                entry.setdefault("start_windows", [[first, last]] if entry["status"] == "eligible" else [])
         return obs
 
     def invoke(observation, at, want):
@@ -652,7 +657,11 @@ def launch_margin_properties(output):
     """Check the real Run entry against both runway and exclusive expiry."""
     from scripts import launch_cadence_span as launcher
 
-    expiry = unix("2026-11-30T00:00:00-08:00")
+    expiry_text = "2026-11-29T16:00:00-08:00"
+    expiry = unix(expiry_text)
+    queue = json.loads((HP / "queue-b.json").read_bytes())
+    queue["expires_at"] = expiry_text
+    short_queue = json.dumps(queue).encode()
     latencies = (0, 1, 599, 600, 601)
     runway = (0, 1, 599, 600, 601, 602, 1200)
     failures = {"queue": "NEED_FRESH_QUEUE", "admission": "WAIT_EVIDENCE", "watcher": "WAIT_EVIDENCE",
@@ -663,10 +672,13 @@ def launch_margin_properties(output):
         limit = now + remaining
         case = output / f"margin-{field}-{remaining}-{latency}"
         span = BASE["span"]
-        with transition_runtime(case, span, now - 2) as (args, record, invoke, launch, clock):
+        queue_override = short_queue if field == "queue" else None
+        with transition_runtime(case, span, now - 2, queue=queue_override) as (args, record, invoke, launch, clock):
             rendered = case / "items"
             rendered.mkdir()
             items = deepcopy(ITEMS)
+            if queue_override is not None:
+                items[span]["queue"]["sha256"] = hp.sha256(queue_override)
             if field == "item":
                 items[span]["expires_epoch_s"] = limit
             (rendered / "items.json").write_text(json.dumps(list(items.values())))
@@ -695,7 +707,8 @@ def launch_margin_properties(output):
             with patch.object(hp, "HP", rendered):
                 invoke(record("Start", now - 2), now - 2, "ELIGIBLE")
                 allowed = remaining >= 600 and remaining > latency
-                invoke(run, now, "ELIGIBLE" if allowed else failures[field])
+                failure = "WAIT_EVIDENCE" if remaining == 1 else failures[field]
+                invoke(run, now, "ELIGIBLE" if allowed else failure)
             assert launch.call_count == int(allowed)
             assert launched_at == ([now + latency] if allowed else [])
             checked += 1
@@ -762,7 +775,7 @@ def publication_properties(output):
                 invoke(record("Run", sampled_run), read_run, "ELIGIBLE" if allowed else "WAIT_EVIDENCE")
                 expected = ["verified-start", "read-observation"] if sampled_start <= published <= read_run else []
                 if allowed:
-                    expected.append("read-observation")  # Post-claim byte check.
+                    expected.extend(["verified-start", "read-observation"])  # Final read-only pass.
                 assert events == expected, offsets
                 if published > read_run:
                     attempt_start()
@@ -856,6 +869,214 @@ def rank1_properties():
         assert hp.decide(*args)["decision"] == "ELIGIBLE", phase
 
 
+
+def guard_sweep():
+    from joulewise.cadence import legs
+    from scripts import align_r1_rehearsal as r1
+
+    queue_bytes = (HP / "queue-b.json").read_bytes()
+    queue = json.loads(queue_bytes)
+    now = unix("2026-11-21T13:30:00-08:00")
+    day = "2026-11-21"
+    # The instrument schedule is an input to HP. Use RS463's one-leg
+    # windows, including alternate-argument and closed-band edges.
+    def local(hms):
+        return unix(f"{day}T{hms}-08:00")
+
+    instrument_edges = (
+        ("00:00:00", "02:34:59"), ("02:35:00", "10:50:00"),
+        ("13:15:00", "23:48:10"), ("23:48:11", "23:59:59"),
+    )
+    count = 0
+    for span in ITEMS:
+        item, issue, obs, _, _, kit, _ = candidate({"span": span}, now, "Run", queue=queue_bytes)
+        item["expires_epoch_s"] = now + 12345
+        issue["expires_epoch_s"] = now + 17968
+        obs["valid_through_epoch_s"] = now + 2555
+        obs["copy"]["status"] = "pending"
+        obs["watcher"] = evidence("watcher", expires_epoch_s=now + 4142)
+        for entry in obs["priority"]["entries"]:
+            entry["start_windows"] = []
+            if entry["rung"] == "f2-inst-03":
+                entry["start_windows"] = [[local(lo), local(hi)] for lo, hi in instrument_edges]
+        obs["calendar"]["starts"] = [evidence("pending counted start", span="A", date=day,
+                                                pin="synthetic", windows=[[local("18:10:00"), local("22:00:00")]],
+                                                through_transition_s=1800)]
+        edges = hp.run_boundaries(item, issue, queue, obs, now)
+        assert hp.occupancy(item, kit, now, obs["timing"], boundaries=edges)["argument"] == hp.ARGUMENTS[0]
+        assert hp.occupancy(item, kit, local("23:40:00"), obs["timing"], boundaries=edges)["argument"] == hp.ARGUMENTS[1]
+        hp.check_dated(obs["calendar"], now, item["deadline_s"], edges)
+        required = {
+            local("00:00:00"), local("02:00:00"), local("02:35:00"), local("10:50:01"),
+            local("13:14:59"), local("13:15:00"), local("23:48:10"), local("23:48:11"),
+            hp.midnight(hp.local_date(now) + hp.timedelta(days=1)),
+            hp.queue_start(queue["spans"][0]), unix(queue["expires_at"]),
+            local("18:10:00"), local("22:00:00") - item["deadline_s"],
+            item["expires_epoch_s"], issue["expires_epoch_s"], obs["valid_through_epoch_s"],
+            obs["watcher"]["expires_epoch_s"], obs["latest_close"]["ended_epoch_s"] + hp.COPY_WAIT_S,
+        }
+        assert required <= set(edges), (span, required - set(edges))
+        assert "soak wait" in edges.values() and "leg start wait" in edges.values()
+        for edge in edges:
+            for offset in range(-121, 2):
+                point = edge + offset
+                guarded = any(point < candidate <= point + 120 for candidate in edges)
+                for table, expected in (({edge: edges[edge]}, -120 <= offset < 0), (edges, guarded)):
+                    try:
+                        hp.check_guard_band(table, point)
+                    except hp.Refusal as ex:
+                        assert expected and ex.decision == "WAIT_EVIDENCE", (span, edge, offset, ex)
+                    else:
+                        assert not expected, (span, edge, offset, table)
+                count += 1
+
+        # Independently evaluate each pinned argument at every accepted
+        # second around raw and shifted blackout boundaries and at +60.
+        for arg in hp.ARGUMENTS:
+            window = legs.parse_window(arg)
+            for first, end in legs.window_epochs(now, [window, r1.OS_BATCH_WINDOW_LOCAL]):
+                for edge in (first, end, first - item["worst_case_s"]):
+                    for offset in range(-121, 2):
+                        point = edge + offset
+                        if any(point < candidate <= point + 120 for candidate in edges):
+                            continue
+                        def blocked(epoch):
+                            return bool(legs.blackout_bound_s(epoch, item["worst_case_s"], [window]))
+                        assert blocked(point) == blocked(point + 60), (span, arg, edge, offset)
+    return count
+
+
+def last_read_properties(output):
+    from joulewise.align.apple import powermode
+    from scripts import launch_cadence_span as launcher
+
+    now = unix(BASE["clock"])
+    count = 0
+    for target, delay in product(("control", "mode", "fence", "census", "rank", "after-read"), (0, 1, 15, 60)):
+        with transition_runtime(output / f"read-last-{target}-{delay}", BASE["span"], now) as (
+                args, record, invoke, launch, clock):
+            invoke(record("Start", now), now, "ELIGIBLE")
+            run = record("Run", now + 1)
+            events = []
+            state = {"changed": False}
+            claim_write = hp.write_exclusive
+            sync = hp.sync_directory
+            verify_start = hp.read_published_start
+            read_bytes = Path.read_bytes
+            remember = hp.remember_admission
+
+            def mutate_after_claim_io(path, data):
+                events.append("write-claim")
+                claim_write(path, data)
+                clock[0] += delay
+                if target in ("mode", "fence", "census"):
+                    state["changed"] = True
+                if target == "rank":
+                    changed = deepcopy(run)
+                    changed["priority"]["entries"][1].update(status="eligible")
+                    args.observation.write_text(json.dumps(changed))
+
+            def sync_custody(path):
+                events.append("sync")
+                sync(path)
+
+            def read_start(*args):
+                events.append("start")
+                return verify_start(*args)
+
+            def read_input(path):
+                names = {hp.HP / "items.json": "item", args.queue: "queue", args.issue: "issue",
+                         args.observation: "evidence", args.kit: "kit"}
+                if path in names:
+                    events.append(names[path])
+                return read_bytes(path)
+
+            def read_admission(*args, read_only=False):
+                events.append("admission-read" if read_only else "admission-preflight")
+                return remember(*args, read_only=read_only)
+
+            def read_census(*args):
+                events.append("census")
+                if target == "census" and state["changed"]:
+                    raise hp.Refusal("HOLD_HOST", "foreign agent appeared during write")
+
+            def read_fence(*args, binding_only=False):
+                if not binding_only:
+                    events.append("fence")
+                    if target == "fence" and state["changed"]:
+                        raise hp.Refusal("WAIT_FENCE", "fence appeared during write")
+
+            def read_mode():
+                events.append("mode")
+                return 2 if state["changed"] else 0
+
+            def receive(argv, **kwargs):
+                events.append("launch")
+                if target == "after-read":
+                    state["changed"] = True
+                plan = launcher.cadence_plan(args.kit, argv[argv.index("--legs") + 1],
+                                             argv[argv.index("--batch-window") + 1])
+                assert now + 1 <= plan["t0_epoch_s"] <= now + 61
+                return 0
+
+            launch.side_effect = receive
+            with (patch.object(hp, "write_exclusive", side_effect=mutate_after_claim_io),
+                  patch.object(hp, "sync_directory", side_effect=sync_custody),
+                  patch.object(hp, "read_published_start", side_effect=read_start),
+                  patch.object(Path, "read_bytes", read_input),
+                  patch.object(hp, "remember_admission", side_effect=read_admission),
+                  patch.object(hp, "check_agent_census", side_effect=read_census),
+                  patch.object(hp, "runtime_files", side_effect=read_fence),
+                  patch.object(powermode, "observe_ac_powermode", side_effect=read_mode)):
+                want = {"mode": "HOLD_HOST", "census": "HOLD_HOST", "fence": "WAIT_FENCE",
+                        "rank": "WAIT_EVIDENCE"}.get(target, "ELIGIBLE")
+                invoke(run, now + 1, want)
+            disk = args.custody / "hp-02-arms"
+            assert bool(list(disk.glob("*-a1.json"))) == (want == "ELIGIBLE")
+            assert launch.call_count == int(want == "ELIGIBLE")
+            after_sync = events[events.index("sync") + 1:]
+            assert after_sync[:5] == ["item", "start", "issue", "evidence", "queue"], events
+            if want == "ELIGIBLE":
+                assert {"admission-read", "kit", "census", "fence", "mode"} <= set(after_sync)
+                assert after_sync.index("census") < after_sync.index("fence") < after_sync.index("mode")
+                assert after_sync[after_sync.index("mode"):][:2] == ["mode", "launch"], events
+                assert not {"write-claim", "sync", "admission-preflight"} & set(after_sync)
+            count += 1
+    return count
+
+
+def launch_edge_regressions(output):
+    # Exact audit reproductions and permitted controls around both edges.
+    cases = (
+        ("midnight", unix("2026-11-22T00:00:00-08:00")),
+        ("instrument", unix(BASE["clock"])),
+    )
+    count = 0
+    for (name, boundary), offset, delay in product(cases, (-121, -120, -119, -1), (0, 1, 59, 60)):
+        now = boundary + offset
+        with transition_runtime(output / f"{name}-{offset}-{delay}", BASE["span"], now - 1) as (
+                _, record, invoke, launch, clock):
+            invoke(record("Start", now - 1), now - 1, "ELIGIBLE")
+            run = record("Run", now)
+            if name == "instrument":
+                row = next(e for e in run["priority"]["entries"] if e["rung"] == "f2-inst-03")
+                row["start_windows"] = [[boundary, int(hp.midnight(hp.local_date(now) + hp.timedelta(days=1))) - 1]]
+
+            def receive(*args, **kwargs):
+                clock[0] += delay
+                assert clock[0] < boundary
+                return 0
+
+            launch.side_effect = receive
+            # A preceding clock boundary can overlap the sparse control;
+            # the midnight control has no adjacent pin edge in this case.
+            allowed = offset == -121 and name == "midnight"
+            invoke(run, now, "ELIGIBLE" if allowed else "WAIT_EVIDENCE")
+            assert launch.call_count == int(allowed)
+            count += 1
+    return count
+
+
 if __name__ == "__main__":
     output = Path(sys.argv[2])
     original = original_vectors()
@@ -872,7 +1093,12 @@ if __name__ == "__main__":
         margin_cases = launch_margin_properties(session)
         ordering_cases = publication_properties(session)
         receipt_integrity_regressions(session)
+        read_last_cases = last_read_properties(session)
+        launch_edge_cases = launch_edge_regressions(session)
     rank1_properties()
+    guard_cases = guard_sweep()
+    print(f"PASS handoff rules: {guard_cases} guard offsets, {launch_edge_cases} launcher races "
+          f"and {read_last_cases} read-last cases")
     print(f"PASS lead rules: {margin_cases} scope/runway/latency cases and {ordering_cases} publication interleavings")
     (output / "item-decisions.json").write_text(json.dumps(original, indent=2))
     (output / "timing-decisions.json").write_text(json.dumps(timing_decisions, indent=2))

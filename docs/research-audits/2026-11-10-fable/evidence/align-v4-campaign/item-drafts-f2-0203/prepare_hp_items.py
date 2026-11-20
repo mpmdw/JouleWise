@@ -30,6 +30,8 @@ LINE2_SENTENCE = (
 )
 ARGUMENTS = ("02:00-02:35", "13:14-13:15")
 LAUNCH_MARGIN_S = 600
+CLOCK_GUARD_S = 120
+COPY_WAIT_S = 600
 START_SCHEMA = "hp-02.start.v4"
 RUN_OBSERVATIONS = ("look", "hp01_dates", "latest_close", "history", "safety",
                     "stops", "copy", "priority", "calendar", "timing")
@@ -108,7 +110,11 @@ def read_json(data):
 
 
 def git(repo, *args):
-    return subprocess.check_output(["git", "-C", str(repo), *args], timeout=60)
+    return subprocess.check_output(["git", "--no-optional-locks", "-C", str(repo), *args], timeout=60)
+
+
+def queue_start(row):
+    return midnight(date.fromisoformat(row["not_before"]))
 
 
 def queue_entry(item, queue, now):
@@ -126,7 +132,7 @@ def queue_entry(item, queue, now):
                 and row["block_id"] == "hp-02" and row.get("rerun_of") is None,
                 "WAIT_BINDING", "queue does not preserve the ordered same-pin rosters")
         seq = row["seq"]
-        start = midnight(date.fromisoformat(row["not_before"]))
+        start = queue_start(row)
         require(expiry.tzinfo is not None and start < expiry.timestamp(),
                 "WAIT_BINDING", "invalid queue interval")
         if span == item["span"]:
@@ -314,17 +320,20 @@ def check_safety(obs, close):
         require(stop["scope"] in ("counted", "v4", "other-kit"), "WAIT_EVIDENCE", "unresolved stop scope")
 
 
-def check_copy(copy, close, now):
-    require(record(copy) and copy["predecessor"] == close["record"], "WAIT_COPY", "unbound copy evidence")
-    stopped = copy["transfer_stopped"] is True
-    verified = (
+def copy_verified(copy):
+    return (
         copy.get("status") == "verified" and is_sha(copy.get("plaintext_manifest_sha256"))
         and is_sha(copy.get("ciphertext_sha256")) and type(copy.get("ciphertext_size_bytes")) is int
         and copy["ciphertext_size_bytes"] > 0 and is_text(copy.get("provider_verification"))
     )
-    if verified and stopped:
+
+
+def check_copy(copy, close, now):
+    require(record(copy) and copy["predecessor"] == close["record"], "WAIT_COPY", "unbound copy evidence")
+    stopped = copy["transfer_stopped"] is True
+    if copy_verified(copy) and stopped:
         return False
-    require(now - close["ended_epoch_s"] >= 600, "WAIT_COPY", "waiting within the copy interval")
+    require(now - close["ended_epoch_s"] >= COPY_WAIT_S, "WAIT_COPY", "waiting within the copy interval")
     require(stopped, "HOLD_FOREIGN_LOAD", "transfer has not stopped")
     require(is_text(copy.get("debt_record")), "WAIT_COPY", "copy debt is unrecorded")
     return True
@@ -375,7 +384,7 @@ def check_rank(priority, day):
     return by_rung["further-stability"]["status"] == "eligible"
 
 
-def check_dated(calendar, now, fence_s):
+def check_dated(calendar, now, fence_s, boundaries=None):
     require(record(calendar) and calendar["complete"] is True, "WAIT_EVIDENCE", "complete dated starts required")
     transfer = calendar["post_fence_transfer_s"]
     require(number(transfer) and 0 <= transfer <= 600, "WAIT_EVIDENCE", "unbounded post-fence transition")
@@ -398,11 +407,28 @@ def check_dated(calendar, now, fence_s):
                     "WAIT_EVIDENCE", "invalid pin start window for counted date")
             if lo <= upper:
                 choices.append(min(hi, upper))
-        require(choices and max(choices) >= earliest, "CEDE_DATED", f"would block counted start {row['span']}")
+        require(choices, "CEDE_DATED", f"no legal counted start for {row['span']}")
         latest_start = max(choices)
+        if boundaries is not None:
+            boundaries[latest_start - fence_s - transfer] = f"last HP start preserving {row['span']}"
+            check_guard_band(boundaries, now)
+        require(latest_start >= earliest, "CEDE_DATED", f"would block counted start {row['span']}")
 
 
-def occupancy(item, kit_path, now, timing, arguments=ARGUMENTS, planner=None, resample=None):
+def add_window_boundaries(boundaries, epoch, windows, label, *, offset=0, duration=0):
+    from joulewise.cadence import legs
+
+    for first, end in legs.window_epochs(epoch + offset, windows):
+        edge = first - offset - duration
+        boundaries[edge] = label
+        if duration:
+            # The half-open overlap test changes just AFTER this equality.
+            boundaries[math.nextafter(edge, math.inf)] = label
+        boundaries[end - offset] = label
+
+
+def occupancy(item, kit_path, now, timing, arguments=ARGUMENTS, planner=None, resample=None,
+              boundaries=None):
     """Compose the pinned stages through outer clearance; no native actions."""
     from joulewise.cadence import legs
     from scripts import align_r1_rehearsal as r1, cadence_legs_runner as runner
@@ -429,10 +455,11 @@ def occupancy(item, kit_path, now, timing, arguments=ARGUMENTS, planner=None, re
 
     work = item["worst_case_s"]
     fence = item["deadline_s"]
+    minimum = launcher.cadence_minimum_seconds(plan)
     require(plan["worst_case_s"] == work and plan["expected_s"] == item["expected_s"]
             and plan["blackout_clear"] is True and plan["batch_windows"] == [arg]
             and [leg["leg_id"] for leg in plan["legs"]] == item["legs"]
-            and launcher.cadence_minimum_seconds(plan) <= fence,
+            and minimum <= fence,
             "WAIT_PIN", "pin plan, roster or deadline mismatch")
     require(record(timing), "WAIT_EVIDENCE", "no demonstrated timing bound")
     keys = ("runner_start_max_s", "selector_sample_max_s", "soak_dispatch_max_s", "inner_soak_gate_max_s",
@@ -460,21 +487,37 @@ def occupancy(item, kit_path, now, timing, arguments=ARGUMENTS, planner=None, re
             "WITHHOLD_REPLAN", "selected argument can refuse during runner handoff")
 
     after_setup = now + selector
-    soak_wait = legs.interval_delay(after_setup, soak_s, [arg_window, r1.OS_BATCH_WINDOW_LOCAL])
+    soak_windows = [arg_window, r1.OS_BATCH_WINDOW_LOCAL]
+    if boundaries is not None:
+        add_window_boundaries(boundaries, now, soak_windows, "soak wait",
+                              offset=selector, duration=soak_s)
+    soak_wait = legs.interval_delay(after_setup, soak_s, soak_windows)
     end = after_setup + soak_wait + dispatch + soak_s
     leg_wait = 0
     for _ in range(attempts):
         end += timing["pre_leg_max_s"]
+        # A wait pins the downstream clock to a window end until an upstream
+        # boundary changes. Otherwise every downstream selector moves with t0.
+        if boundaries is not None and not (soak_wait or leg_wait):
+            add_window_boundaries(boundaries, now, [arg_window], "leg start wait",
+                                  offset=end - now)
         wait = legs.leg_start_delay(end, [arg_window])
         end += wait + timing["leg_wait_overshoot_max_s"] + plan["leg_cap_s"]
         leg_wait += wait
     work_end = end - now + timing["post_last_cap_max_s"]
     close_end = work_end + timing["restore_and_close_max_s"]
     through_clearance = close_end + timing["outer_clear_max_s"]
+    if boundaries is not None:
+        if soak_wait or leg_wait:
+            boundaries[now + work_end - cut] = "work cutoff"
+            boundaries[now + close_end - close_cut] = "close cutoff"
+            boundaries[now + through_clearance - fence] = "outer clearance cutoff"
+        check_guard_band(boundaries, now)
     require(work_end <= cut and close_end <= close_cut and through_clearance <= fence,
             "CEDE_FENCE", f"composed clearance at +{through_clearance:g}s; fence +{fence}s")
     return {
         "argument": arg, "t0": now, "deadline": now + fence, "work_s": work_end,
+        "minimum_s": minimum,
         "soak_wait_s": soak_wait, "leg_wait_s": leg_wait, "close_s": close_end,
         "through_clearance_s": through_clearance, "fence_s": fence,
     }
@@ -490,7 +533,8 @@ def check_observation(item, issue, obs, phase, now):
             "WAIT_EVIDENCE", "fresh phase- and issue-bound operational observation required")
 
 
-def decide(item, issue, obs, phase, now, kit_path, queue_bytes, *, planner=None, resample=None):
+def decide(item, issue, obs, phase, now, kit_path, queue_bytes, *, planner=None, resample=None,
+           boundaries=None):
     """Evaluate the phase snapshot; run_gate adds custody and dispatch preconditions."""
     from joulewise.cadence import kit as kitmod, queue as queuemod
 
@@ -531,13 +575,14 @@ def decide(item, issue, obs, phase, now, kit_path, queue_bytes, *, planner=None,
         require(HP01_RECORDED_DATES <= dates, "WAIT_EVIDENCE", "hp-01 census omits a documented t0-date")
         check_history(item, obs, close)
         debt = check_copy(obs["copy"], close, now)
-        timing = occupancy(item, kit_path, now, obs.get("timing"), planner=planner, resample=resample)
+        timing = occupancy(item, kit_path, now, obs.get("timing"), planner=planner, resample=resample,
+                           boundaries=boundaries)
         t0 = timing["t0"]
         if t0 != now:
             queue_entry(item, queue, t0)
             require(t0 <= obs["valid_through_epoch_s"] and local_date(t0) == local_date(now),
                     "WAIT_EVIDENCE", "alternate plan needs a fresh dated observation")
-        check_dated(obs["calendar"], t0, timing["fence_s"])
+        check_dated(obs["calendar"], t0, timing["fence_s"], boundaries)
         return {"decision": "ELIGIBLE_WITH_COPY_DEBT" if debt else "ELIGIBLE", **timing}
     except Refusal as ex:
         return {"decision": ex.decision, "detail": str(ex)}
@@ -676,7 +721,7 @@ CUSTODY=/Users/edr/night-custody/magistrate
 hp_gate Start "$HP_START_OBSERVATION" || exit 1
 ```
 
-**Run.** Refresh the records, native census, marker, fence and clock after Start. Invoke the same gate with the Run observation immediately before launch. Run first verifies the atomically published Start receipt. It reads the operational observation afterward and requires its sample time to follow publication on the same host. The shared admission record retains observed close, restore, look-execution and spent-leg facts across issues and retries. The gate reserves the roster, then rechecks the queue opening and the 600-second margin on all applicable expiries after the claim is durable. The claim records the exact argument, t0 and deadline. On bootstrap refusal hold this attempt for the lead. Exit the session as soon as the launcher reports a claimed fence.
+**Run.** Refresh the records, native census, marker, fence and clock after Start. Invoke the same gate with the Run observation immediately before launch. Run first verifies the atomically published Start receipt. It reads the operational observation afterward and requires its sample time to follow publication on the same host. The shared admission record retains observed close, restore, look-execution and spent-leg facts across issues and retries. Run returns WAIT in the 120 seconds before a derived clock boundary, including local midnight, pin and argument edges, finite queue endpoints and a higher rung's next eligible start. The 600-second expiry margin still applies. The gate writes admission custody and the roster claim first, then re-reads the bound records, current rank, fence, census and AC mode before invoking the pinned launcher. The claim records the exact argument, decision t0 and deadline. The residual risk is a state change after the final read. The MBP is quiet under the magistrate, and host mode changes only through `measurement_mode`. On bootstrap refusal hold this attempt for the lead. Exit the session as soon as the launcher reports a claimed fence.
 
 ```sh
 hp_gate Run "$HP_RUN_OBSERVATION" || exit 1
@@ -756,11 +801,7 @@ def check_agent_census(obs, parent_pid):
 
 
 def write_exclusive(path, data):
-    with path.open("x", encoding="utf-8") as stream:
-        json.dump(data, stream)
-        stream.write("\n")
-        stream.flush()
-        os.fsync(stream.fileno())
+    publish_new_file(path, (json.dumps(data) + "\n").encode())
 
 
 def sync_directory(path):
@@ -786,7 +827,7 @@ def write_admission_state(path, data):
             temporary.unlink(missing_ok=True)
 
 
-def remember_admission(path, obs, now):
+def remember_admission(path, obs, now, *, read_only=False):
     """Record scoped positive and adverse facts before evaluating arm eligibility."""
     schema = "hp-02.admission.v1"
     if os.path.lexists(path):
@@ -794,6 +835,7 @@ def remember_admission(path, obs, now):
         require(state["schema"] == schema and state["host"] == obs["host"],
                 "WAIT_EVIDENCE", "observation conflicts with shared admission custody")
     else:
+        require(not read_only, "WAIT_EVIDENCE", "durable admission state disappeared")
         state = {"schema": schema, "host": obs["host"], "latest_close": None, "closes": {},
                  "restore_stop": None, "look_execution": None, "spent": []}
     before = json.dumps(state, sort_keys=True)
@@ -868,6 +910,7 @@ def remember_admission(path, obs, now):
     finally:
         serialized = json.dumps(state, sort_keys=True)
         if serialized != before:
+            require(not read_only, "WAIT_EVIDENCE", "final observation needs a new admission write")
             write_admission_state(path, (serialized + "\n").encode())
 
 
@@ -878,7 +921,7 @@ def receipt_bytes(record):
 def publish_new_file(path, data):
     linked = False
     try:
-        with NamedTemporaryFile(dir=path.parent, prefix=".start-", delete=False) as stream:
+        with NamedTemporaryFile(dir=path.parent, prefix=".gate-", delete=False) as stream:
             temporary = Path(stream.name)
             try:
                 stream.write(data)
@@ -954,33 +997,190 @@ def check_run_observation_times(obs, start, published_at, read_at):
                 "WAIT_EVIDENCE", f"{field} must have a sample after published Start and before being read")
 
 
-def check_run_expiries(item, issue, queue, obs, now, latest_start=None):
-    queue_entry(item, queue, now)
-    expiries = [
-        ("queue", datetime.fromisoformat(queue["expires_at"]).timestamp(), "NEED_FRESH_QUEUE"),
-        ("admission", obs["valid_through_epoch_s"], "WAIT_EVIDENCE"),
-    ]
-    expiries.extend(
-        (label, obj["expires_epoch_s"], "WAIT_BINDING")
-        for label, obj in (("item", item), ("issue", issue)) if obj["expires_epoch_s"] is not None
-    )
+def run_expiries(item, issue, queue, obs):
+    yield "queue", datetime.fromisoformat(queue["expires_at"]).timestamp(), "NEED_FRESH_QUEUE"
+    yield "admission", obs["valid_through_epoch_s"], "WAIT_EVIDENCE"
+    for label, obj in (("item", item), ("issue", issue)):
+        if obj["expires_epoch_s"] is not None:
+            yield label, obj["expires_epoch_s"], "WAIT_BINDING"
     watcher = obs.get("watcher")
     if watcher is not None:
         require(record(watcher), "WAIT_EVIDENCE", "unverified watcher admission evidence")
-        expiries.append(("watcher", watcher["expires_epoch_s"], "WAIT_EVIDENCE"))
-    for label, expiry, status in expiries:
+        yield "watcher", watcher["expires_epoch_s"], "WAIT_EVIDENCE"
+
+
+def check_run_expiries(item, issue, queue, obs, now, latest_start=None):
+    queue_entry(item, queue, now)
+    for label, expiry, status in run_expiries(item, issue, queue, obs):
         require(number(expiry) and expiry - now >= LAUNCH_MARGIN_S
                 and (latest_start is None or latest_start < expiry),
                 status, f"{label} expiry leaves insufficient launch margin")
 
 
-def check_handoff_time(item, issue, queue, obs, decision, now):
-    latest_start = decision["t0"] + obs["timing"]["runner_start_max_s"]
-    check_run_expiries(item, issue, queue, obs, now, latest_start)
-    require(decision["t0"] <= now <= latest_start,
-            "WAIT_EVIDENCE", "handoff window elapsed; make a fresh Run decision")
-    require(local_date(now) == local_date(decision["t0"]),
-            "WAIT_EVIDENCE", "launch date changed; refresh dated observations")
+def check_guard_band(boundaries, now, *, since=None, through=None):
+    first = now if since is None else since
+    last = now + CLOCK_GUARD_S if through is None else max(now + CLOCK_GUARD_S, through)
+    upcoming = min((edge for edge in boundaries if first < edge <= last), default=None)
+    if upcoming is not None:
+        boundary = datetime.fromtimestamp(upcoming, ZONE).isoformat()
+        raise Refusal("WAIT_EVIDENCE", f"launch guard at {boundary}: {boundaries[upcoming]}")
+
+
+def add_start_windows(boundaries, windows, first, last, label):
+    require(isinstance(windows, list), "WAIT_EVIDENCE", f"missing start windows for {label}")
+    for lo, hi in windows:
+        require(type(lo) is int and type(hi) is int and first <= lo <= hi <= last,
+                "WAIT_EVIDENCE", f"invalid dated start window for {label}")
+        boundaries.update({lo - 1: label, lo: label, hi: label, hi + 1: label})
+
+
+def run_boundaries(item, issue, queue, obs, now):
+    from joulewise.cadence import legs
+    from scripts import align_r1_rehearsal as r1
+
+    day = local_date(now)
+    first, end = midnight(day), midnight(day + timedelta(days=1))
+    boundaries = {first: "local midnight", end: "local midnight"}
+    for row in queue["spans"]:
+        if row["span_id"] == item["span"]:
+            boundaries[queue_start(row)] = "queue opening"
+    for label, expiry, status in run_expiries(item, issue, queue, obs):
+        require(number(expiry), status, f"invalid {label} expiry")
+        boundaries[expiry] = f"{label} expiry"
+    for label, epoch in (("issue time", issue["issued_epoch_s"]),
+                         ("observation time", obs["observed_epoch_s"])):
+        require(number(epoch), "WAIT_EVIDENCE", f"invalid {label}")
+        boundaries[epoch] = label
+    if not (copy_verified(obs["copy"]) and obs["copy"]["transfer_stopped"] is True):
+        boundaries[obs["latest_close"]["ended_epoch_s"] + COPY_WAIT_S] = "copy debt threshold"
+    arguments = [legs.parse_window(arg) for arg in ARGUMENTS]
+    add_window_boundaries(boundaries, now, [*arguments, r1.OS_BATCH_WINDOW_LOCAL], "batch window")
+    work = item["worst_case_s"]
+    lag = obs["timing"]["runner_start_max_s"]
+    require(number(lag) and lag >= 0, "WAIT_EVIDENCE", "invalid startup bound")
+    add_window_boundaries(boundaries, now, arguments, "pin plan", duration=work)
+    add_window_boundaries(boundaries, now, arguments, "runner handoff", duration=work + lag)
+
+    for entry in obs["priority"]["entries"]:
+        if entry["rung"] in HIGHER:
+            windows = entry["start_windows"]
+            add_start_windows(boundaries, windows, first, end - 1, entry["rung"])
+            require(entry.get("basis") != "spent-for-date" or windows == [],
+                    "WAIT_EVIDENCE", "spent rank 1 cannot have another eligible start")
+    for row in obs["calendar"]["starts"]:
+        start_day = date.fromisoformat(row["date"])
+        add_start_windows(boundaries, row["windows"], midnight(start_day),
+                          midnight(start_day + timedelta(days=1)) - 1, row["span"])
+    return boundaries
+
+
+def check_run_rank_clock(priority, now):
+    require(priority["date"] == local_date(now).isoformat() == local_date(priority["sampled_at"]).isoformat(),
+            "WAIT_EVIDENCE", "rank clock needs this date's census")
+    for entry in priority["entries"]:
+        if entry["rung"] in HIGHER:
+            windows = entry["start_windows"]
+            sampled = priority["sampled_at"]
+            current = any(lo <= now < hi + 1 for lo, hi in windows)
+            original = any(lo <= sampled < hi + 1 for lo, hi in windows)
+            require(current == original == (entry["status"] == "eligible"), "WAIT_EVIDENCE",
+                    f"{entry['rung']} eligibility changed; refresh the census")
+
+
+def read_gate_records(args, item, started):
+    if args.phase == "Run":
+        start, published_at = read_published_start(started, args)
+    queue = assert_source_bindings(args, item)
+    issue_bytes = args.issue.read_bytes()
+    require(sha256(issue_bytes) == args.issue_sha, "WAIT_BINDING", "issue bytes differ")
+    issue = read_json(issue_bytes)
+    observation_read_at = time.time()
+    observation_bytes = args.observation.read_bytes()
+    obs = read_json(observation_bytes)
+    if args.phase == "Run":
+        check_run_observation_times(obs, start, published_at, observation_read_at)
+    require(issue.get("synthetic_only") is not True and obs.get("synthetic_only") is not True,
+            "WAIT_EVIDENCE", "synthetic records cannot issue or arm")
+    require(args.queue.read_bytes() == queue, "WAIT_BINDING", "staged queue changed during the arm check")
+    return issue, obs, queue, observation_bytes
+
+
+def run_decision(args, item, issue, obs, queue_bytes, now):
+    queue = read_json(queue_bytes)
+    boundaries = run_boundaries(item, issue, queue, obs, now)
+    check_guard_band(boundaries, now)
+    check_run_expiries(item, issue, queue, obs, now)
+    check_run_rank_clock(obs["priority"], now)
+    result = decide(item, issue, obs, "Run", now, args.kit, queue_bytes, boundaries=boundaries)
+    require(result["decision"] in PASS, result["decision"], result.get("detail", "Run refused"))
+    return result, queue, boundaries
+
+
+def check_claims(item, claim, *, owned=False):
+    if not owned:
+        require(not os.path.lexists(claim), "SKIP_SPENT", "roster already has a launch claim")
+    require(not any(os.path.lexists(claim.with_name(f"{KIT_SHA}-{span}-a1.json"))
+                    for span in ROSTERS if span > item["span"]),
+            "WAIT_EVIDENCE", "a later HP roster has a launch claim")
+
+
+def result_record(args, decision, obs):
+    return {**decision, "span": args.span, "output": str(args.output), "issue_sha": args.issue_sha,
+            "host": obs["host"], "observed_epoch_s": obs["observed_epoch_s"], "observation": obs["record"]}
+
+
+def dispatch_run(args, item, claim, started, admission, approved_obs, decision):
+    from joulewise.align.apple.powermode import observe_ac_powermode
+
+    roster = ",".join(item["legs"])
+    argv = [
+        sys.executable, "-B", "scripts/launch_cadence_span.py", "launch",
+        "--repo", str(args.repo), "--python-bin", sys.executable, "--kit", str(args.kit),
+        "--legs", roster, "--batch-window", decision["argument"],
+        "--output", str(args.output), "--disk-path", str(args.repo), "--custody-root", str(args.custody),
+        "--magistrate-pid", str(args.magistrate_pid), "--deadline", str(decision["deadline"]),
+        "--exit-wait-seconds", "180", "--start-wait-seconds", "30",
+    ]
+    try:
+        # Everything from here to the launcher call is read-only. If a final
+        # input requires another write or a different claim, refuse and retry.
+        require(item in read_json((HP / "items.json").read_bytes()),
+                "WAIT_BINDING", "item changed during the claim write")
+        issue, obs, queue_bytes, obs_bytes = read_gate_records(args, item, started)
+        require(obs_bytes == approved_obs, "WAIT_EVIDENCE", "Run observation changed during the claim write")
+        require(read_json(claim.read_bytes()) == result_record(args, decision, obs),
+                "WAIT_EVIDENCE", "durable claim changed before dispatch")
+        read_at = time.time()
+        remember_admission(admission, obs, read_at, read_only=True)
+        fresh, queue, boundaries = run_decision(args, item, issue, obs, queue_bytes, read_at)
+        require(fresh["argument"] == decision["argument"], "WAIT_EVIDENCE", "claim argument needs a fresh decision")
+        check_claims(item, claim, owned=True)
+        check_agent_census(obs, args.magistrate_pid)
+        runtime_files(args, item)
+        mode = observe_ac_powermode()
+        dispatch = time.time()
+        latest_start = decision["t0"] + obs["timing"]["runner_start_max_s"]
+        boundaries[decision["deadline"] - fresh["minimum_s"]] = "launcher deadline fit"
+        check_guard_band(boundaries, dispatch, since=decision["t0"])
+        check_run_expiries(item, issue, queue, obs, dispatch, latest_start)
+        check_guard_band(boundaries, dispatch, since=decision["t0"], through=latest_start)
+        require(decision["t0"] <= read_at <= dispatch <= latest_start
+                and local_date(dispatch) == local_date(decision["t0"]),
+                "WAIT_EVIDENCE", "handoff window or date elapsed; make a fresh Run decision")
+        # The inclusive calendar cutoff can be legal at equality. The same
+        # composed fence must still preserve the dated starts at launcher t0.
+        check_dated(obs["calendar"], latest_start, fresh["fence_s"])
+        require(latest_start + fresh["minimum_s"] <= decision["deadline"],
+                "WAIT_PIN", "deadline no longer fits at the launcher handoff")
+        require(automatic(mode), "HOLD_HOST", "AC powermode is not Automatic")
+    except (Refusal, OSError, ValueError, TypeError, KeyError, AttributeError, OverflowError,
+            subprocess.SubprocessError):
+        claim.unlink()
+        raise
+    # Retain the claim on ambiguous or refused launcher invocations.
+    rc = subprocess.call(argv, cwd=args.repo)
+    print(json.dumps(decision), flush=True)
+    return rc
 
 
 def run_gate(args):
@@ -992,62 +1192,47 @@ def run_gate(args):
         items = read_json((HP / "items.json").read_bytes())
         item = next(row for row in items if row["span"] == args.span)
         runtime_files(args, item, binding_only=True)
-        args.custody.mkdir(parents=True, exist_ok=True)
         ledger = args.custody / "hp-02-arms"
-        ledger.mkdir(exist_ok=True)
-        # Use stable identities independent of queue renewal or output naming.
+        ledger.mkdir(parents=True, exist_ok=True)
+        # Stable identities independent of queue renewal or output naming.
         claim = ledger / f"{KIT_SHA}-{item['span']}-a1.json"
         started = ledger / f"start-{args.issue_sha}.v4.json"
+        admission = ledger / "admission-state.json"
         with (ledger / "arm.lock").open("a") as lock:
             fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-            if args.phase == "Run":
-                start, published_at = read_published_start(started, args)
-            queue = assert_source_bindings(args, item)
+            issue, obs, queue, obs_bytes = read_gate_records(args, item, started)
             sys.path.insert(0, str(args.repo))
-            issue_bytes = args.issue.read_bytes()
-            require(sha256(issue_bytes) == args.issue_sha, "WAIT_BINDING", "issue bytes differ")
-            issue = read_json(issue_bytes)
-            observation_read_at = time.time()
-            observation_bytes = args.observation.read_bytes()
-            obs = read_json(observation_bytes)
-            if args.phase == "Run":
-                check_run_observation_times(obs, start, published_at, observation_read_at)
-            require(issue.get("synthetic_only") is not True and obs.get("synthetic_only") is not True,
-                    "WAIT_EVIDENCE", "synthetic records cannot issue or arm")
-            current_queue = args.queue.read_bytes()
-            require(current_queue == queue, "WAIT_BINDING", "staged queue changed during the arm check")
             now = time.time()
             check_issue(item, issue, now, args.phase)
             check_observation(item, issue, obs, args.phase, now)
             if args.phase == "Issue":
                 require(obs["latest_close"]["record"] == issue["latest_close_at_issue"],
                         "WAIT_EVIDENCE", "issue close mismatch")
-            remember_admission(ledger / "admission-state.json", obs, now)
-            bound_queue = read_json(current_queue)
+            remember_admission(admission, obs, now)
             if args.phase == "Run":
-                check_run_expiries(item, issue, bound_queue, obs, time.time())
+                check_claims(item, claim)
+                decision, _, _ = run_decision(args, item, issue, obs, queue, time.time())
+                write_exclusive(claim, result_record(args, decision, obs))
+                return dispatch_run(args, item, claim, started, admission, obs_bytes, decision)
+
             from joulewise.align.apple.powermode import observe_ac_powermode
 
             runtime_files(args, item)
-            require(not os.path.lexists(claim), "SKIP_SPENT", "roster already has a launch claim")
-            require(not any(os.path.lexists(ledger / f"{KIT_SHA}-{span}-a1.json")
-                            for span in ROSTERS if span > item["span"]),
-                    "WAIT_EVIDENCE", "a later HP roster has a launch claim")
+            check_claims(item, claim)
             require(automatic(observe_ac_powermode()), "HOLD_HOST", "AC powermode is not Automatic")
             check_agent_census(obs, args.magistrate_pid)
-            decision = decide(item, issue, obs, args.phase, time.time(), args.kit, current_queue, resample=time.time)
+            decision = decide(item, issue, obs, args.phase, time.time(), args.kit, queue, resample=time.time)
             if decision["decision"] not in PASS:
                 print(json.dumps(decision), flush=True)
                 return 1
-            result = {**decision, "span": item["span"], "output": str(args.output), "issue_sha": args.issue_sha,
-                      "host": obs["host"], "observed_epoch_s": obs["observed_epoch_s"], "observation": obs["record"]}
             if args.phase == "Start":
                 passed = time.time()
+                bound_queue = read_json(queue)
                 require(decision["t0"] <= passed <= obs["valid_through_epoch_s"]
                         and local_date(passed) == local_date(decision["t0"]),
                         "WAIT_EVIDENCE", "Start evidence expired before the verdict")
                 queue_entry(item, bound_queue, passed)
-                publish_start(started, result)
+                publish_start(started, result_record(args, decision, obs))
                 try:
                     _, published_at = read_published_start(started, args)
                     check_observation(item, issue, obs, args.phase, published_at)
@@ -1060,48 +1245,12 @@ def run_gate(args):
                     started.unlink()
                     sync_directory(ledger)
                     raise
-            if args.phase == "Run":
-                from scripts import launch_cadence_span as launcher
-
-                launch_sample = time.time()
-                check_handoff_time(item, issue, bound_queue, obs, decision, launch_sample)
-                roster = ",".join(item["legs"])
-                plan = launcher.cadence_plan(args.kit, roster, decision["argument"], t0=launch_sample)
-                minimum = launcher.cadence_minimum_seconds(plan)
-                argv = [
-                    sys.executable, "-B", "scripts/launch_cadence_span.py", "launch",
-                    "--repo", str(args.repo), "--python-bin", sys.executable, "--kit", str(args.kit),
-                    "--legs", roster, "--batch-window", decision["argument"],
-                    "--output", str(args.output), "--disk-path", str(args.repo), "--custody-root", str(args.custody),
-                    "--magistrate-pid", str(args.magistrate_pid), "--deadline", str(decision["deadline"]),
-                    "--exit-wait-seconds", "180", "--start-wait-seconds", "30",
-                ]
-                write_exclusive(claim, result)
-                # Finish blocking custody and input checks before sampling the actual
-                # dispatch clock. A refusal here precedes any launcher invocation.
-                try:
-                    runtime_files(args, item)
-                    require(args.queue.read_bytes() == queue and sha256(args.kit.read_bytes()) == KIT_SHA
-                            and args.issue.read_bytes() == issue_bytes,
-                            "WAIT_BINDING", "staged queue, kit or issue changed after the Run decision")
-                    require(args.observation.read_bytes() == observation_bytes,
-                            "WAIT_EVIDENCE", "Run observation changed before dispatch")
-                    dispatch = time.time()
-                    check_handoff_time(item, issue, bound_queue, obs, decision, dispatch)
-                    require(dispatch + minimum <= decision["deadline"],
-                            "WAIT_PIN", "deadline no longer fits at the launcher handoff")
-                except (Refusal, OSError):
-                    claim.unlink()
-                    raise
-                # Retain the claim on ambiguous or refused launcher invocations.
-                rc = subprocess.call(argv, cwd=args.repo)
-                print(json.dumps(decision), flush=True)
-                return rc
             print(json.dumps(decision), flush=True)
         return 0
     except Refusal as ex:
         print(json.dumps({"decision": ex.decision, "detail": str(ex)}))
-    except (OSError, ValueError, TypeError, KeyError, StopIteration, subprocess.SubprocessError) as ex:
+    except (OSError, ValueError, TypeError, KeyError, StopIteration, AttributeError, OverflowError,
+            subprocess.SubprocessError) as ex:
         print(json.dumps({"decision": "WAIT_EVIDENCE", "detail": str(ex)}))
     return 1
 

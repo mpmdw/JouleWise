@@ -33,6 +33,8 @@ class HP02SuccessorItemsTests(unittest.TestCase):
             fixture = scratch / "fixtures"
             output = check(DRAFTS / "tests/test_hp_gates.py", scratch, scratch)
             self.assertIn("175 scope/runway/latency cases and 256 publication interleavings", output)
+            self.assertRegex(output, r"PASS handoff rules: [1-9][0-9]+ guard offsets, "
+                                     r"32 launcher races and 24 read-last cases")
             self.assertIn("60 original decisions, 54 timing decisions, 1764 clock cases, 11 dated pairs, "
                           "0 native command attempts", output)
             output = check(fixture / "clocked_occupancy.py")
