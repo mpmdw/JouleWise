@@ -6,10 +6,11 @@ triage it here instead of assuming it should happen immediately.
 ## 2026-11-19 hp-02 successor items
 
 P1 [AGENT], user-directed Tier 2 builder work under RL-190 §2 and the frozen
-item and occupancy contracts. Round one blocked the initial build. The repaired
-successor drafts and queue-b go to independent delta execution. The lead owns
-review disposition and live issue.
-[Round-one repair report](docs/run_reports/2026-11-19-hp02-successor-audit-1.md).
+item and occupancy contracts. Round-two repairs add durable admission
+evidence and reconcile Check identity, fixed roster order and rank-2
+adjudications. Independent delta execution is next. The lead owns review
+disposition and live issue.
+[Round-two repair report](docs/run_reports/2026-11-19-hp02-successor-audit-2.md).
 
 ## 2026-11-18 qualification drafts at the PR #812 merge pin
 

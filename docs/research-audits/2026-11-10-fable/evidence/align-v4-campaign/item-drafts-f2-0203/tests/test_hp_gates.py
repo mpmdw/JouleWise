@@ -334,7 +334,13 @@ def transition_runtime(root, span, now):
     clock = [now]
 
     def record(phase, sampled, **over):
-        return transition_record(span, phase, sampled, queue, **over)
+        obs = transition_record(span, phase, sampled, queue, **over)
+        # Each retry observes the same immutable close receipts unless the
+        # scenario explicitly supplies a different close.
+        obs["latest_close"]["ended_epoch_s"] -= sampled - now
+        if obs["history"]["prior_check"]:
+            obs["history"]["prior_check"]["ended_epoch_s"] -= sampled - now
+        return obs
 
     def invoke(observation, at, want):
         clock[0] = at
@@ -392,8 +398,8 @@ def audit_transition_regressions(output):
             invoke(run, now + 1, "WAIT_EVIDENCE")
         invoke(record("Run", now + 1, look_attestation="ran"), now + 1, "NOT_ADMITTED")
         launch.assert_not_called()
-        invoke(record("Run", now + 1), now + 1, "ELIGIBLE")
-        launch.assert_called_once()
+        invoke(record("Run", now + 2), now + 2, "NOT_ADMITTED")
+        launch.assert_not_called()
 
     with transition_runtime(output / "same-host", BASE["span"], now) as (_, record, invoke, launch, _):
         invoke(record("Start", now), now, "ELIGIBLE")
@@ -485,6 +491,139 @@ def audit_evidence_regressions(output):
         launch.assert_called_once()
 
 
+def replace_close(obs, identity, ended, digit):
+    sha = digit * 64
+    obs["latest_close"].update(record=identity, ended_epoch_s=ended, receipt_sha256=sha)
+    obs["safety"].update(close_record=identity, close_sha256=sha)
+    obs["copy"]["predecessor"] = identity
+    return obs["latest_close"]
+
+
+def republish_issue(args):
+    issue = json.loads(args.issue.read_bytes())
+    issue["check_target"] = "new synthetic issue publication"
+    args.issue.write_text(json.dumps(issue))
+    args.issue_sha = hp.sha256(args.issue.read_bytes())
+
+
+def audit_close_history_regressions(output, now):
+    span = BASE["span"]
+    with transition_runtime(output / "older-close", span, now) as (_, record, invoke, launch, _):
+        invoke(record("Start", now), now, "ELIGIBLE")
+        run = record("Run", now + 1)
+        replace_close(run, "fixture-close-16", now - 1800, "c")
+        invoke(run, now + 1, "WAIT_EVIDENCE")
+        launch.assert_not_called()
+        run = record("Run", now + 2)
+        replace_close(run, "fixture-close-18", now, "e")
+        invoke(run, now + 2, "ELIGIBLE")
+        launch.assert_called_once()
+
+    with transition_runtime(output / "after-failed-restore", span, now) as (args, record, invoke, launch, _):
+        invoke(record("Start", now), now, "ELIGIBLE")
+        run = record("Run", now + 1)
+        close = replace_close(run, "fixture-close-18", now, "e")
+        close.update(restore_status="unproven", recovery=evidence(
+            "pinned recovery on close 18", same_close=close["record"], safe_route_proven=True,
+            result="failed", residual_refusal="open",
+        ))
+        invoke(run, now + 1, "HALT_AND_PAGE")
+        invoke(record("Run", now + 2), now + 2, "HALT_AND_PAGE")
+        run = record("Run", now + 3)
+        replace_close(run, "fixture-close-19", now + 2, "f")
+        invoke(run, now + 3, "HALT_AND_PAGE")
+        republish_issue(args)
+        invoke(record("Start", now + 4), now + 4, "HALT_AND_PAGE")
+        launch.assert_not_called()
+
+    with transition_runtime(output / "restore-disposition", span, now) as (_, record, invoke, launch, _):
+        invoke(record("Start", now), now, "ELIGIBLE")
+        run = record("Run", now + 1)
+        close = replace_close(run, "fixture-close-18", now, "e")
+        close["restore_status"] = "unproven"
+        invoke(run, now + 1, "HOLD_HOST")
+        run = record("Run", now + 2)
+        replace_close(run, "fixture-close-18", now, "e")
+        invoke(run, now + 2, "HOLD_HOST")
+        launch.assert_not_called()
+        run = record("Run", now + 3)
+        close = replace_close(run, "fixture-close-18", now, "e")
+        close.update(restore_status="unproven", recovery=evidence(
+            "pinned successful recovery", same_close=close["record"], safe_route_proven=True,
+            result="proven", residual_refusal="clear",
+        ))
+        invoke(run, now + 3, "ELIGIBLE")
+        launch.assert_called_once()
+
+    with transition_runtime(output / "scoped-restore-stop", span, now) as (_, record, invoke, launch, _):
+        invoke(record("Start", now), now, "ELIGIBLE")
+        run = record("Run", now + 1)
+        run["stops"]["open"] = [{"code": "RESTORE_UNPROVEN", "scope": "host"}]
+        invoke(run, now + 1, "HOLD_HOST")
+        invoke(record("Run", now + 2), now + 2, "HOLD_HOST")
+        launch.assert_not_called()
+
+
+def audit_round_two_regressions(output):
+    now = unix("2026-11-21T13:15:00-08:00")
+    audit_close_history_regressions(output, now)
+    with transition_runtime(output / "positive-look", BASE["span"], now) as (args, record, invoke, launch, _):
+        invoke(record("Start", now), now, "ELIGIBLE")
+        invoke(record("Run", now + 1, look_attestation="ran"), now + 1, "NOT_ADMITTED")
+        invoke(record("Run", now + 2), now + 2, "NOT_ADMITTED")
+        republish_issue(args)
+        invoke(record("Start", now + 3), now + 3, "NOT_ADMITTED")
+        launch.assert_not_called()
+
+    with transition_runtime(output / "look-while-ceding", BASE["span"], now) as (_, record, invoke, launch, _):
+        invoke(record("Start", now), now, "ELIGIBLE")
+        invoke(record("Run", now + 1, look_attestation="ran", finite_ready=["inst-03"]), now + 1, "CEDE_INST_03")
+        invoke(record("Run", now + 2), now + 2, "NOT_ADMITTED")
+        launch.assert_not_called()
+
+    def same_check_two_receipts(obs):
+        obs["history"]["prior_check"]["record"] = obs["latest_close"]["record"]
+
+    def later_roster_spent(obs):
+        obs["history"]["legs"].update(dict.fromkeys(hp.ROSTERS["hp-02-s02"], "spent"))
+
+    def copied_instrument(obs):
+        rows = {entry["rung"]: entry for entry in obs["priority"]["entries"]}
+        rows["f2-inst-03"].update(entry_id=rows["f2-inst-02"]["entry_id"], record=rows["f2-inst-02"]["record"])
+
+    def copied_instrument_proof(obs):
+        rows = {entry["rung"]: entry for entry in obs["priority"]["entries"]}
+        rows["f2-inst-03"]["record"] = rows["f2-inst-02"]["record"]
+
+    cases = (
+        ("two-receipts-one-check", "hp-02-s02", same_check_two_receipts),
+        ("fixed-roster-order", BASE["span"], later_roster_spent),
+        ("unidentified-inst-03", BASE["span"], copied_instrument),
+        ("duplicate-instrument-proof", BASE["span"], copied_instrument_proof),
+    )
+    for name, span, modify in cases:
+        with transition_runtime(output / (name + "-start"), span, now) as (_, record, invoke, launch, _):
+            start = record("Start", now)
+            modify(start)
+            invoke(start, now, "WAIT_EVIDENCE")
+            launch.assert_not_called()
+        with transition_runtime(output / (name + "-run"), span, now) as (_, record, invoke, launch, _):
+            invoke(record("Start", now), now, "ELIGIBLE")
+            run = record("Run", now + 1)
+            modify(run)
+            invoke(run, now + 1, "WAIT_EVIDENCE")
+            if name == "fixed-roster-order":
+                invoke(record("Run", now + 2), now + 2, "WAIT_EVIDENCE")
+            launch.assert_not_called()
+
+    with transition_runtime(output / "later-roster-claim", BASE["span"], now) as (args, record, invoke, launch, _):
+        invoke(record("Start", now), now, "ELIGIBLE")
+        claim = args.custody / "hp-02-arms" / f"{hp.KIT_SHA}-hp-02-s02-a1.json"
+        hp.write_exclusive(claim, {"synthetic_only": True})
+        invoke(record("Run", now + 1), now + 1, "WAIT_EVIDENCE")
+        launch.assert_not_called()
+
+
 if __name__ == "__main__":
     output = Path(sys.argv[2])
     original = original_vectors()
@@ -497,6 +636,7 @@ if __name__ == "__main__":
         run_transition(session)
         audit_transition_regressions(session)
         audit_evidence_regressions(session)
+        audit_round_two_regressions(session)
     (output / "item-decisions.json").write_text(json.dumps(original, indent=2))
     (output / "timing-decisions.json").write_text(json.dumps(timing_decisions, indent=2))
     assert not freeze.NATIVE

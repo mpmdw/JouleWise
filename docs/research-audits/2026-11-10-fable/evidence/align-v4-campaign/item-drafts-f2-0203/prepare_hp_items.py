@@ -9,6 +9,7 @@ from pathlib import Path
 import re
 import subprocess
 import sys
+from tempfile import NamedTemporaryFile
 import time
 from zoneinfo import ZoneInfo
 
@@ -33,7 +34,11 @@ ROSTERS = {
     "hp-02-s02": ["L004", "L005", "L006", "L007"],
     "hp-02-s03": ["L008", "L009", "L010", "L011", "L012"],
 }
-HIGHER = ("ready-session", "counted", "first-stability", "f2-inst-01", "f2-inst-02", "f2-inst-03")
+INSTRUMENTS = ("f2-inst-01", "f2-inst-02", "f2-inst-03")
+HIGHER = ("ready-session", "counted", "first-stability", *INSTRUMENTS)
+HP_LEGS = frozenset(leg for roster in ROSTERS.values() for leg in roster)
+CLOSE_KEYS = ("record", "receipt_sha256", "ended_epoch_s")
+RESTORE_STOPS = frozenset({"RESTORE_UNPROVEN", "UNOWNED_MARKER"})
 RANK_DECISION = ("CEDE_READY", "CEDE_COUNTED", "CEDE_RANK_1", "CEDE_INST_01", "CEDE_INST_02", "CEDE_INST_03")
 FEEDS = {"agents", "meter", "volumes"}
 PREFLIGHT = {
@@ -158,7 +163,7 @@ def check_issue(item, issue, now, phase):
     )
 
 
-def check_look(look, now, sampled_at):
+def check_look_binding(look, now, sampled_at):
     require(
         record(look) and look["scope"] == "lm-hp-01" and look["kit_sha256"] == KIT_SHA
         and look["checked_through"] == sampled_at and look["checked_through"] <= now
@@ -166,18 +171,40 @@ def check_look(look, now, sampled_at):
         and look["all_execution_routes_covered"] is True,
         "WAIT_EVIDENCE", "current scoped look evidence required",
     )
+
+def check_look(look, now, sampled_at):
+    check_look_binding(look, now, sampled_at)
     require(look["status"] != "ran", "NOT_ADMITTED", "lm-hp-01 already started")
     require(look["status"] == "not_run" and look["pending_conflict"] is False, "WAIT_EVIDENCE", "look unresolved")
 
 
-def check_history(item, obs, close):
-    history = obs["history"]
+def history_states(history):
     require(record(history) and history["complete"] is True and history["kit_sha256"] == KIT_SHA,
             "WAIT_EVIDENCE", "complete per-leg execution history required")
     states = history["legs"]
-    current = [states.get(leg) for leg in item["legs"]]
-    require(not any(state == "spent" for state in current), "SKIP_SPENT", "roster already started")
+    require(isinstance(states, dict) and states.keys() == HP_LEGS
+            and all(state in ("unrun", "spent", "ambiguous") for state in states.values()),
+            "WAIT_EVIDENCE", "history must classify the entire fixed roster")
+    return states
+
+
+def check_close_identity_agreement(first, second):
+    same_record = first["record"] == second["record"]
+    same_receipt = first["receipt_sha256"] == second["receipt_sha256"]
+    same_end = first["ended_epoch_s"] == second["ended_epoch_s"]
+    if same_record or same_receipt or same_end:
+        require(same_receipt and same_end, "WAIT_EVIDENCE", "close identity, receipt or chronology conflicts")
+
+
+def check_history(item, obs, close):
+    history = obs["history"]
+    states = history_states(history)
+    current = [states[leg] for leg in item["legs"]]
+    require("spent" not in current, "SKIP_SPENT", "roster already started")
     require(all(state == "unrun" for state in current), "WAIT_EVIDENCE", "ambiguous unrun roster")
+    require(all(states[leg] == "unrun" for span, roster in ROSTERS.items()
+                if span > item["span"] for leg in roster),
+            "WAIT_EVIDENCE", "later HP roster started or unresolved before this one")
     previous = item["predecessor"]
     if previous is not None:
         prior = history["prior_check"]
@@ -192,20 +219,22 @@ def check_history(item, obs, close):
                 and all(states.get(leg) == "spent" for span, roster in ROSTERS.items()
                         if span < item["span"] for leg in roster),
                 "WAIT_EVIDENCE", "prior HP Check/roster unresolved")
-        same_receipt = prior["receipt_sha256"] == close["receipt_sha256"]
-        same_end = prior["ended_epoch_s"] == close["ended_epoch_s"]
-        require(same_receipt == same_end, "WAIT_EVIDENCE", "latest and prior close receipt chronology conflicts")
+        check_close_identity_agreement(prior, close)
 
 
 def automatic(value):
     return type(value) is int and value == 0
 
 
-def check_close(close, obs):
+def check_close_binding(close, obs):
     require(record(close) and close["identity"] == "latest-unambiguous" and close["host"] == obs["host"]
             and is_sha(close["receipt_sha256"])
             and number(close["ended_epoch_s"]) and close["ended_epoch_s"] <= obs["observed_epoch_s"],
             "WAIT_EVIDENCE", "latest identified Check at observation time required")
+
+
+def check_close(close, obs):
+    check_close_binding(close, obs)
     restore_status = close.get("restore_status")
     require(restore_status in ("proven", "unproven"), "HOLD_HOST", "unknown initial restore status")
     recovery = close.get("recovery")
@@ -238,6 +267,16 @@ def check_close(close, obs):
     )
 
 
+def open_stops(obs):
+    stops = obs["stops"]
+    require(record(stops) and stops["complete"] is True, "WAIT_EVIDENCE", "scoped stop register required")
+    names = stops["open"]
+    require(isinstance(names, list) and all(isinstance(stop, dict) and is_text(stop.get("code"))
+                                            and is_text(stop.get("scope")) for stop in names),
+            "WAIT_EVIDENCE", "invalid stop register")
+    return names
+
+
 def check_safety(obs, close):
     safety = obs["safety"]
     require(
@@ -254,13 +293,9 @@ def check_safety(obs, close):
             and (verify["rc"] == 0 and verify["exceptions"] == []
                  or verify["rc"] == 1 and verify["exceptions"] == ["own-agent-tree-or-permitted-jobs"]),
             "HOLD_HOST", "measurement mode verify failed beyond the documented exception")
-    stops = obs["stops"]
-    require(record(stops) and stops["complete"] is True, "WAIT_EVIDENCE", "scoped stop register required")
-    names = stops["open"]
-    require(isinstance(names, list), "WAIT_EVIDENCE", "invalid stop register")
-    for stop in names:
+    for stop in open_stops(obs):
         code = stop["code"]
-        require(code not in {"RESTORE_UNPROVEN", "UNOWNED_MARKER", "DISK_FLOOR", "HOST_STATE"}
+        require(code not in RESTORE_STOPS | {"DISK_FLOOR", "HOST_STATE"}
                 and stop["scope"] != "host", "HOLD_HOST", f"host-wide stop {code}")
         require(stop["scope"] not in ("measured", "hp-02", obs["binding"]["span"]),
                 "HOLD_KIT", f"applicable stop {code}")
@@ -299,6 +334,10 @@ def check_rank(priority, day):
             require(re.fullmatch(r"f2-stab-(0[1-9]|1[0-4])", entry["entry_id"]) is not None,
                     "WAIT_EVIDENCE", "invalid first-stability kit")
     require(set(by_rung) == {*HIGHER, "further-stability"}, "WAIT_EVIDENCE", "incomplete ladder")
+    instruments = [by_rung[rung] for rung in INSTRUMENTS]
+    require(all(entry["entry_id"] == entry["rung"] for entry in instruments)
+            and len({entry["record"] for entry in instruments}) == len(instruments),
+            "WAIT_EVIDENCE", "each finite instrument kit needs its own adjudication")
     for rung, decision in zip(HIGHER, RANK_DECISION):
         require(by_rung[rung]["status"] != "eligible", decision, by_rung[rung]["record"])
     return by_rung["further-stability"]["status"] == "eligible"
@@ -409,6 +448,16 @@ def occupancy(item, kit_path, now, timing, arguments=ARGUMENTS, planner=None, re
     }
 
 
+def check_observation(item, issue, obs, phase, now):
+    require(record(obs) and obs["schema"] == "hp-02.observation.v1" and obs["phase"] == phase
+            and is_text(obs["host"]) and obs["binding"] == issue_binding(item)
+            and obs["issue_record"] == issue["record"]
+            and number(obs["observed_epoch_s"]) and number(obs["valid_through_epoch_s"])
+            and obs["observed_epoch_s"] <= now <= obs["valid_through_epoch_s"]
+            and obs["observed_epoch_s"] >= issue["issued_epoch_s"],
+            "WAIT_EVIDENCE", "fresh phase- and issue-bound operational observation required")
+
+
 def decide(item, issue, obs, phase, now, kit_path, queue_bytes, *, planner=None, resample=None):
     """One fail-closed decision shared by Issue, Start and Run."""
     from joulewise.cadence import kit as kitmod, queue as queuemod
@@ -422,13 +471,7 @@ def decide(item, issue, obs, phase, now, kit_path, queue_bytes, *, planner=None,
         queue = read_json(queue_bytes)
         queuemod.validate_queue(queue, {KIT_PATH: (kit, sha)})
         queue_entry(item, queue, now)
-        require(record(obs) and obs["schema"] == "hp-02.observation.v1" and obs["phase"] == phase
-                and is_text(obs["host"]) and obs["binding"] == issue_binding(item)
-                and obs["issue_record"] == issue["record"]
-                and number(obs["observed_epoch_s"]) and number(obs["valid_through_epoch_s"])
-                and obs["observed_epoch_s"] <= now <= obs["valid_through_epoch_s"]
-                and obs["observed_epoch_s"] >= issue["issued_epoch_s"],
-                "WAIT_EVIDENCE", "fresh phase- and issue-bound operational observation required")
+        check_observation(item, issue, obs, phase, now)
         if obs.get("fence_clear") is not True:
             raise Refusal("WAIT_FENCE", "shared fence still live or status unknown")
         close = obs["latest_close"]
@@ -601,7 +644,7 @@ CUSTODY=/Users/edr/night-custody/magistrate
 hp_gate Start "$HP_START_OBSERVATION" || exit 1
 ```
 
-**Run.** Refresh the records, native census, marker, fence and clock after Start. Invoke the same gate with the Run observation immediately before launch. Run requires evidence sampled after the successful Start verdict on the same host. The gate reserves the roster, then rechecks the handoff clock after the claim is durable. The claim records the exact argument, t0 and deadline. On bootstrap refusal hold this attempt for the lead. Exit the session as soon as the launcher reports a claimed fence.
+**Run.** Refresh the records, native census, marker, fence and clock after Start. Invoke the same gate with the Run observation immediately before launch. Run requires evidence sampled after the successful Start verdict on the same host. The shared admission record retains observed close, restore, look-execution and spent-leg facts across issues and retries. The gate reserves the roster, then rechecks the handoff clock after the claim is durable. The claim records the exact argument, t0 and deadline. On bootstrap refusal hold this attempt for the lead. Exit the session as soon as the launcher reports a claimed fence.
 
 ```sh
 hp_gate Run "$HP_RUN_OBSERVATION" || exit 1
@@ -619,9 +662,11 @@ test ! -e "$CUSTODY/desk_fence.json" && test ! -L "$CUSTODY/desk_fence.json" || 
 """
 
 
-def runtime_files(args, item):
+def runtime_files(args, item, *, binding_only=False):
     require(args.custody == Path("/Users/edr/night-custody/magistrate"),
             "HOLD_HOST", "use the shared host fence and roster ledger")
+    if binding_only:
+        return
     require(not os.path.lexists(args.custody / "desk_fence.json"), "WAIT_FENCE", "shared fence exists or is a link")
     require(not os.environ.get("JOULEWISE_HOST_STATE_DIR") and not os.path.lexists(MARKER),
             "HOLD_HOST", "host-state override or High Power marker")
@@ -686,6 +731,110 @@ def write_exclusive(path, data):
         os.fsync(stream.fileno())
 
 
+def write_admission_state(path, data):
+    # The arm lock serializes readers and writers. Keep the prior version on
+    # write failure, and sync the new file and directory before returning.
+    with NamedTemporaryFile(dir=path.parent, prefix=".admission-", delete=False) as stream:
+        temporary = Path(stream.name)
+        try:
+            stream.write(data)
+            stream.flush()
+            os.fsync(stream.fileno())
+            os.replace(temporary, path)
+            directory = os.open(path.parent, os.O_RDONLY)
+            try:
+                os.fsync(directory)
+            finally:
+                os.close(directory)
+        finally:
+            temporary.unlink(missing_ok=True)
+
+
+def remember_admission(path, obs, now):
+    """Record scoped positive and adverse facts before evaluating arm eligibility."""
+    schema = "hp-02.admission.v1"
+    if os.path.lexists(path):
+        state = read_json(path.read_bytes())
+        require(state["schema"] == schema and state["host"] == obs["host"],
+                "WAIT_EVIDENCE", "observation conflicts with shared admission custody")
+    else:
+        state = {"schema": schema, "host": obs["host"], "latest_close": None, "closes": {},
+                 "restore_stop": None, "look_execution": None, "spent": []}
+    before = json.dumps(state, sort_keys=True)
+    current_look_ran = False
+    states = None
+    try:
+        try:
+            look = obs["look"]
+            check_look_binding(look, now, obs["observed_epoch_s"])
+        except (Refusal, KeyError, TypeError):
+            pass  # The normal decision still requires a valid, current look attestation.
+        else:
+            current_look_ran = look.get("status") == "ran"
+            if current_look_ran and state["look_execution"] is None:
+                state["look_execution"] = look
+
+        try:
+            states = history_states(obs["history"])
+        except (Refusal, KeyError, TypeError):
+            pass  # Malformed history cannot supply new facts or grant eligibility.
+        else:
+            state["spent"] = sorted(set(state["spent"]) | {leg for leg, status in states.items() if status == "spent"})
+
+        stop = state["restore_stop"]
+        if stop and stop["decision"] == "HALT_AND_PAGE":
+            raise Refusal("HALT_AND_PAGE", f"failed recovery on {stop['close']['record']} remains an active host halt")
+
+        close = obs["latest_close"]
+        check_close_binding(close, obs)
+        identity = {key: close[key] for key in CLOSE_KEYS}
+        seen = state["closes"]
+        for earlier in seen.values():
+            check_close_identity_agreement(identity, earlier)
+        latest = state["latest_close"]
+        require(latest is None or close["ended_epoch_s"] >= seen[latest]["ended_epoch_s"],
+                "WAIT_EVIDENCE", "latest close is older than one already observed")
+        if stop:
+            check_close_identity_agreement(identity, stop["close"])
+            require(identity == stop["close"] and isinstance(close.get("recovery"), dict),
+                    stop["decision"], f"restore disposition still owed for {stop['close']['record']}")
+
+        seen[identity["record"]] = identity
+        state["latest_close"] = identity["record"]
+        try:
+            stops = open_stops(obs)
+        except (Refusal, KeyError, TypeError):
+            stops = None
+        restore_owed = stops is not None and any(entry["code"] in RESTORE_STOPS for entry in stops)
+        try:
+            check_close(close, obs)
+            require(not restore_owed, "HOLD_HOST", "restore stop is open in the scoped register")
+        except Refusal as exc:
+            if restore_owed or close.get("restore_status") != "proven" or close.get("recovery") is not None:
+                state["restore_stop"] = {
+                    "close": identity, "decision": exc.decision,
+                    "observation": obs["record"], "recovery": close.get("recovery"),
+                }
+            raise
+        if stops is not None:
+            state["restore_stop"] = None
+
+        prior = obs["history"].get("prior_check") if states is not None else None
+        if record(prior) and is_sha(prior.get("receipt_sha256")) and number(prior.get("ended_epoch_s")):
+            for known in seen.values():
+                check_close_identity_agreement(prior, known)
+
+        if state["look_execution"] is not None and not current_look_ran:
+            raise Refusal("NOT_ADMITTED", f"lm-hp-01 execution recorded by {state['look_execution']['record']}")
+        if states is not None:
+            require(all(states[leg] == "spent" for leg in state["spent"]),
+                    "WAIT_EVIDENCE", "history reverses a previously observed spent leg")
+    finally:
+        serialized = json.dumps(state, sort_keys=True)
+        if serialized != before:
+            write_admission_state(path, (serialized + "\n").encode())
+
+
 def check_handoff_time(item, queue, obs, decision, now):
     queue_entry(item, queue, now)
     require(decision["t0"] <= now <= min(
@@ -705,7 +854,7 @@ def run_gate(args):
         item = next(row for row in items if row["span"] == args.span)
         queue = assert_source_bindings(args, item)
         sys.path.insert(0, str(args.repo))
-        runtime_files(args, item)
+        runtime_files(args, item, binding_only=True)
         issue_bytes = args.issue.read_bytes()
         require(sha256(issue_bytes) == args.issue_sha, "WAIT_BINDING", "issue bytes differ")
         issue = read_json(issue_bytes)
@@ -720,11 +869,18 @@ def run_gate(args):
         ledger.mkdir(exist_ok=True)
         # Use stable identities independent of queue renewal or output naming.
         claim = ledger / f"{KIT_SHA}-{item['span']}-a1.json"
-        started = ledger / f"start-{args.issue_sha}.v2.json"
+        started = ledger / f"start-{args.issue_sha}.v3.json"
         with (ledger / "arm.lock").open("a") as lock:
             fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-            runtime_files(args, item)
-            require(not os.path.lexists(claim), "SKIP_SPENT", "roster already has a launch claim")
+            current_queue = args.queue.read_bytes()
+            require(current_queue == queue, "WAIT_BINDING", "staged queue changed during the arm check")
+            now = time.time()
+            check_issue(item, issue, now, args.phase)
+            check_observation(item, issue, obs, args.phase, now)
+            if args.phase == "Issue":
+                require(obs["latest_close"]["record"] == issue["latest_close_at_issue"],
+                        "WAIT_EVIDENCE", "issue close mismatch")
+            remember_admission(ledger / "admission-state.json", obs, now)
             if args.phase == "Run":
                 start = read_json(started.read_bytes())
                 require(start["decision"] in PASS and start["span"] == args.span
@@ -732,8 +888,11 @@ def run_gate(args):
                         and start["host"] == obs["host"] and number(start["passed_epoch_s"])
                         and number(obs["observed_epoch_s"]) and obs["observed_epoch_s"] > start["passed_epoch_s"],
                         "WAIT_EVIDENCE", "Run evidence must follow a successful Start on the same host")
-            current_queue = args.queue.read_bytes()
-            require(current_queue == queue, "WAIT_BINDING", "staged queue changed during the arm check")
+            runtime_files(args, item)
+            require(not os.path.lexists(claim), "SKIP_SPENT", "roster already has a launch claim")
+            require(not any(os.path.lexists(ledger / f"{KIT_SHA}-{span}-a1.json")
+                            for span in ROSTERS if span > item["span"]),
+                    "WAIT_EVIDENCE", "a later HP roster has a launch claim")
             require(automatic(observe_ac_powermode()), "HOLD_HOST", "AC powermode is not Automatic")
             check_agent_census(obs, args.magistrate_pid)
             decision = decide(item, issue, obs, args.phase, time.time(), args.kit, current_queue, resample=time.time)
