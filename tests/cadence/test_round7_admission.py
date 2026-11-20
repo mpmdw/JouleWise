@@ -112,12 +112,14 @@ class Admission(unittest.TestCase):
         self.assertTrue(all(not leg["in_energy_fit"] for leg in rows))
         self.assertIsNone(next(leg for leg in rows if leg["leg_key"] == sid + "/L001")["state"])
 
-    def test_rl174_staged_span_is_recorded_by_real_stage1_cli(self):
+    def staged_plan(self, root, change=None):
+        """Archive the span ``dev-01-s01`` of a custody copy (after ``change(span_dir)``), remove it from the custody
+        and return the stage-1 arguments that read it back through ``--stage-archives``."""
         import tarfile
-        from tests.cadence.test_look_run import run_cli
-        root = self.source_copy()
         sid = "dev-01-s01"
         parent = root.parent
+        if change is not None:
+            change(root / sid)
         archive, manifest, marker = [parent / name for name in ("span.tgz", "SHA256SUMS", "marker.json")]
         files = sorted(path for path in (root / sid).rglob("*") if path.is_file())
         manifest.write_text("".join(f"{R.sha256_file(path)}  ./{path.relative_to(root / sid).as_posix()}\n"
@@ -133,9 +135,16 @@ class Admission(unittest.TestCase):
                                     "marker": str(marker)}]))
         shutil.rmtree(root / sid)  # this span can only be read from the staged archive
         out = parent / "stage1.json"
-        rc, _, err = run_cli(["stage1", "--roster", str(root / "roster.json"), "--custody", str(root),
-                              "--rules-3-4", str(root / "rules_3_4.json"), "--out", str(out),
-                              "--stage-archives", str(plan), "--staging-root", str(parent / "stage")])
+        args = ["stage1", "--roster", str(root / "roster.json"), "--custody", str(root),
+                "--rules-3-4", str(root / "rules_3_4.json"), "--out", str(out),
+                "--stage-archives", str(plan), "--staging-root", str(parent / "stage")]
+        return sid, files, (archive, manifest, marker), out, args
+
+    def test_rl174_staged_span_is_recorded_by_real_stage1_cli(self):
+        from tests.cadence.test_look_run import run_cli
+        root = self.source_copy()
+        sid, files, (archive, manifest, marker), out, args = self.staged_plan(root)
+        rc, _, err = run_cli(args)
         self.assertEqual(rc, 0, err)
         self.assertEqual(read(out)["staging"], [{"span_id": sid, "archive_sha256": R.sha256_file(archive),
                                                "manifest_sha256": R.sha256_file(manifest),

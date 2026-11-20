@@ -56,59 +56,6 @@ jobs:
           python -m pip install 'numpy==2.2.6'
           python -B -m unittest tests.cadence.test_fit_interim tests.cadence.test_look_run tests.cadence.test_time_fields tests.cadence.test_predict tests.cadence.test_round6_guards tests.cadence.test_round6_diagnostics tests.cadence.test_round7_admission tests.cadence.test_interim_release
 
-  # The frozen stage-1 admission matrix (RL-184 section 3.3): 101,889 generated cases through the real two-stage CLI,
-  # run in eight shards. It needs numpy for the fit fixture's generator and creates one test method per case, so it
-  # is an exclusive module (scripts/test_timings.json): never in an ordinary shard or the quick tier. Each shard
-  # verifies the frozen files and the case list against the suite's published hashes, judges every case it owns (three
-  # carry a corrected expectation, tests/cadence/interim_admission_corrections.json) and uploads a ledger. The
-  # accounting job then requires every case ID in exactly one ledger, each passing. There is no held-open case.
-  interim-admission-closure:
-    needs: changes
-    if: needs.changes.outputs.code == 'true'
-    runs-on: ubuntu-latest
-    timeout-minutes: 90
-    strategy:
-      fail-fast: false
-      matrix:
-        shard: [0, 1, 2, 3, 4, 5, 6, 7]
-    steps:
-      - uses: actions/checkout@v5
-        with:
-          fetch-depth: 0
-      - uses: actions/setup-python@v6
-        with:
-          python-version: "3.13"
-      - name: Install numpy
-        run: python -m pip install 'numpy==2.2.6'
-      - name: Frozen admission matrix, shard ${{ matrix.shard }} of 8
-        run: python -B tests/cadence/ci_interim_admission.py shard ${{ matrix.shard }} 8 "$RUNNER_TEMP/ledgers"
-      - name: Upload the shard ledger
-        if: ${{ !cancelled() }}
-        uses: actions/upload-artifact@v5
-        with:
-          name: admission-ledger-${{ matrix.shard }}
-          path: ${{ runner.temp }}/ledgers/ledger-${{ matrix.shard }}.json
-          if-no-files-found: error
-
-  interim-admission-accounting:
-    needs: [changes, interim-admission-closure]
-    if: ${{ !cancelled() && needs.changes.outputs.code == 'true' }}
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-python@v6
-        with:
-          python-version: "3.13"
-      - name: Download the eight shard ledgers
-        uses: actions/download-artifact@v5
-        with:
-          pattern: admission-ledger-*
-          merge-multiple: true
-          path: ${{ runner.temp }}/ledgers
-      - name: Every suite case ID in exactly one ledger, each passing
-        run: python -B tests/cadence/ci_interim_admission.py account "$RUNNER_TEMP/ledgers" 8
-
   # Select interpreters and skip expensive jobs only for proven docs-only ranges.
   changes:
     runs-on: ubuntu-latest

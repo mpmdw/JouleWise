@@ -18,7 +18,7 @@ import unittest
 from unittest import mock
 
 from joulewise.cadence_looks import interim_release as C, manifest as M
-from tests.cadence import look_minirepo as MR
+from tests.cadence import custody_pin_fixture as PF, look_minirepo as MR
 
 REPO = MR.REPO
 LOOK = "lm-interim-01"
@@ -544,7 +544,7 @@ class LookExecution(unittest.TestCase):
         successor = "lm-interim-02"
         pin = M.load_json(REPO / MR.MANIFEST)["fit"]["twin"]
         self.assertEqual(pin, {"path": "scripts/cadence_interim_twin.py",
-                               "sha256": "91ca54ab8747ede3d0fe8826e1b7d06ef721bce94de52969b9508a3eac890aab"})
+                               "sha256": "eded8c5105ff59a61b5644e44dd7998cd3c4ab6f24311a8b2fae674903fb63c6"})
         twin = (self.mini / pin["path"]).resolve()
         self.assertEqual(digest(twin.read_bytes()), pin["sha256"])
         MR.commit(self.mini, stage1_sha256=self.stage1_sha)
@@ -842,6 +842,14 @@ def destinations(repo, row):
 look.release.destinations = destinations
 
 original_run = subprocess.run
+flip = "import sys; p = sys.argv[1]; d = open(p, 'rb').read(); open(p, 'wb').write(bytes([d[0] ^ 1]) + d[1:])"
+PIN_FAULTS = {
+    "pin_changed": (flip, flip),
+    "pin_extra": ("import sys; open(sys.argv[1] + '.extra', 'wb').write(b'x')",
+                  "import os, sys; os.unlink(sys.argv[1] + '.extra')"),
+    "pin_symlink": ("import os, sys; p = sys.argv[1]; os.rename(p, p + '.kept'); os.symlink(p + '.kept', p)",
+                    "import os, sys; p = sys.argv[1]; os.unlink(p); os.rename(p + '.kept', p)"),
+}
 attempts = []
 def run(argv, *args, **kwargs):
     if argv[0] == "/usr/sbin/ioreg":
@@ -865,10 +873,20 @@ def run(argv, *args, **kwargs):
         missing = path.with_name("missing-fit.json")
         assert not missing.exists()
         argv[argv.index("--fit") + 1] = str(missing)
+    tamper = PIN_FAULTS.get(fault)
+    if tamper:
+        # RL-194 condition 4. The parent admitted custody by its pins and holds those bytes; the file is changed on
+        # disk, by another process, before the child starts. The child reads the disk and checks the pins itself.
+        spans = [Path(value.partition("=")[2]) for key, value in zip(argv, argv[1:]) if key == "--span-dir"] or sorted(
+            item for item in Path(argv[argv.index("--custody") + 1]).iterdir() if (item / "runner_receipt.json").exists())
+        target = str(sorted(spans[0].glob("legs/*/runtime/runs/cadence-leg/power_trace.csv"))[0])
+        original_run([sys.executable, "-c", tamper[0], target], check=True)
     result = original_run(argv, *args, **kwargs)
+    if tamper:
+        original_run([sys.executable, "-c", tamper[1], target], check=True)
     assert path.read_bytes() == before
-    if fault == "missing_input":
-        assert result.returncode == 1 and result.stdout == b""
+    if fault == "missing_input" or tamper:
+        assert result.returncode == 1 and result.stdout == b"", (result.returncode, result.stdout)
         return result
     assert result.returncode == 0, result.returncode
     if fault == "malformed":
@@ -920,7 +938,7 @@ class TwinThroughCLI(unittest.TestCase):
         pin = M.load_json(REPO / MR.MANIFEST)["fit"]["twin"]
         self.twin = self.mini / pin["path"]
         self.assertEqual(digest(self.twin.read_bytes()),
-                         "91ca54ab8747ede3d0fe8826e1b7d06ef721bce94de52969b9508a3eac890aab")
+                         "eded8c5105ff59a61b5644e44dd7998cd3c4ab6f24311a8b2fae674903fb63c6")
         draft["fit"]["twin"] = pin
         self.manifest.write_bytes(C.dump(draft))
         tokens = {}
@@ -945,8 +963,12 @@ class TwinThroughCLI(unittest.TestCase):
                 item.setdefault("thermal_pressure", "Unknown")
             native.write_bytes(b"".join(plistlib.dumps(item) + b"\0" for item in frames))
         self.stage1 = self.root / "stage1.json"
+        self.pins = self.root / "custody_pins.json"                  # RL-194: the generated custody, as it now is
+        self.pins.write_bytes(PF.dump(PF.synthetic_pins({row["span_id"]: source / row["span_id"]
+                                                         for row in look_input["spans"]})))
         self.stage1_args = ["stage1", "--roster", locators["roster.json"], "--rules-3-4", locators["rules_3_4.json"],
-                            "--custody", source, "--manifest", self.manifest, "--allow-draft"]
+                            "--custody", source, "--manifest", self.manifest, "--allow-draft",
+                            "--custody-pins", self.pins]
         stage1 = MR.py(self.mini, "scripts/cadence_look_run.py", *self.stage1_args, "--out", self.stage1)
         self.assertEqual(stage1.returncode, 0, stage1.stderr)
         doc = M.load_json(self.stage1)
@@ -975,7 +997,7 @@ class TwinThroughCLI(unittest.TestCase):
         ledger.write_bytes(C.dump({"schema": M.LOOK_LEDGER_SCHEMA, "looks": [row]}))
         argv = [sys.executable, "-I", "-B", self.driver, self.mini, self.basename, fault,
                 "stage2", "--manifest", self.manifest, "--stage1", self.stage1, "--stage1-sha256", self.response_sha,
-                "--looks", ledger, "--allow-draft", "--custody", private_root]
+                "--looks", ledger, "--allow-draft", "--custody", private_root, "--custody-pins", self.pins]
         if relocated is not None:
             for sid in self.spans:
                 argv.extend(("--span-dir", f"{sid}={relocated / sid}"))
@@ -998,6 +1020,9 @@ class TwinThroughCLI(unittest.TestCase):
                                  ("cell_malformed", "not_evaluable"),
                                  ("omitted_fold", "not_evaluable"), ("forged_primary", "not_evaluable"),
                                  ("missing_input", "not_evaluable"),
+                                 # RL-194 condition 4: the child checks the pins itself and raises on a mismatch
+                                 ("pin_changed", "not_evaluable"), ("pin_extra", "not_evaluable"),
+                                 ("pin_symlink", "not_evaluable"),
                                  ("malformed", "not_evaluable"), ("timeout", "not_evaluable")):
             with self.subTest(fault=fault):
                 run, private, public = self.trial(fault, relocated=relocated)
@@ -1044,7 +1069,10 @@ class TwinThroughCLI(unittest.TestCase):
     def test_primary_and_twin_refuse_bad_bundle_locators_before_response_reads(self):
         from tests.cadence import test_look_run as cli_fixture
 
-        child_span = runpy.run_path(str(self.twin))["span_identities"]
+        child = runpy.run_path(str(self.twin))
+        # the child's own locator checks, with its pin check stood aside (the pins are tested on their own)
+        child["_PINNED"][:] = [SimpleNamespace(read=lambda path: path.read_bytes())]
+        child_span = child["span_identities"]
         span = self.source / self.spans[0]
         leg = next(row for row in M.load_json(self.stage1)["legs"]
                    if row["span_id"] == self.spans[0] and row["in_energy_fit"])
@@ -1062,25 +1090,32 @@ class TwinThroughCLI(unittest.TestCase):
                   "--allow-draft", "--looks", ledger, "--custody", self.source]
         outside = self.root / "outside-runtime"
         outside.mkdir()
-        (record_path.parent / "runtime" / "runs" / "escaped").symlink_to(outside, target_is_directory=True)
         bad = ("", "/runs/cadence-leg", "runs//cadence-leg", "runs/cadence-leg/", "./runs/cadence-leg",
                "runs/../cadence-leg", "runs/escaped")
+        # each run pins the custody as it then is (the launcher writes the generated pin list), so the changed record
+        # passes the pins and reaches the locator check
+        stage1 = [arg for arg in self.stage1_args if arg not in ("--custody-pins", self.pins)]
         for locator in bad:
             with self.subTest(locator=locator):
+                if locator == "runs/escaped":
+                    (record_path.parent / "runtime" / "runs" / "escaped").symlink_to(outside, target_is_directory=True)
                 record["result"]["bundle"] = locator
                 record_path.write_bytes(C.dump(record))
                 reason = "escapes the leg runtime" if locator == "runs/escaped" else "invalid runtime bundle path"
                 with self.assertRaisesRegex(ValueError, reason):
                     child_span(span)
-                for args in ([*self.stage1_args, "--out", out], stage2):
-                    with cli_fixture.spy_opens() as opened:
-                        code, stdout, stderr = cli_fixture._cli_subprocess(args, repo=self.mini,
-                                                                          extra={"host_probe": UUID_LINE})
+                for args in ([*stage1, "--out", out], stage2):
+                    code, stdout, stderr = cli_fixture._cli_subprocess(args, repo=self.mini,
+                                                                      extra={"host_probe": UUID_LINE})
                     self.assertEqual((code, stdout), (2, ""), stderr)
-                    self.assertIn(reason, stderr)
-                    self.assertFalse([path for path in opened if "/hazards/meter/" in path or Path(path).name in
-                                      ("power_trace.csv", "rich_telemetry.jsonl", "powermetrics.plist")])
+                    # RL-194: a symlink in a span refuses at the pin check, before the locator is ever resolved
+                    self.assertRegex(stderr, "custody pins: .*runs/escaped: a symlink" if locator == "runs/escaped"
+                                     else reason)
+                    self.assertFalse([path for path in cli_fixture.LAST_RUN["served"] if "/hazards/meter/" in path
+                                      or Path(path).name in ("power_trace.csv", "rich_telemetry.jsonl",
+                                                             "powermetrics.plist")])
                 self.assertFalse(out.exists() or private.exists())
+        (record_path.parent / "runtime" / "runs" / "escaped").unlink()
         record["attempts"] = []
         record["result"].update(bundle=None, leg_status="incomplete", decode_cap_reached=False, g0_released=False)
         record_path.write_bytes(C.dump(record))
@@ -1110,7 +1145,8 @@ class TwinThroughCLI(unittest.TestCase):
         ledger_doc = {"schema": M.LOOK_LEDGER_SCHEMA, "looks": [row]}
         ledger.write_bytes(C.dump(ledger_doc))
         MR.git_commit(self.mini, "register generated stage-1 inputs")
-        stage1 = [arg for arg in self.stage1_args if arg != "--allow-draft"] + ["--ledger-ref", "origin/main"]
+        stage1 = [arg for arg in self.stage1_args if arg not in ("--allow-draft", "--custody-pins", self.pins)
+                  ] + ["--ledger-ref", "origin/main"]
         committed_stage1 = self.root / "committed-stage1.json"
         control = MR.py(self.mini, "scripts/cadence_look_run.py", *stage1, "--out", committed_stage1)
         self.assertEqual(control.returncode, 0, control.stderr)
@@ -1163,9 +1199,17 @@ class TwinThroughCLI(unittest.TestCase):
              + files[soak_reference][1:], "a duplicate member"),
             ("salvage events outside outputs/", salvage_alias, original_events, "salvage events outside outputs/"),
         ]
+        # RL-194: admission is by content address, and the grammar validator runs on the admitted bytes.
+        # Stage 1 is run with each changed file pinned as it is (the launcher stands in for the lead's pin-inputs),
+        # so the pins pass and the grammar refuses. Stage 2 is run under the pins of the unchanged custody, as a
+        # committed look is: the changed file is not its pin and stage 2 refuses on the hash, before anything else.
         for args in ([*stage1, "--out", out], stage2):
             if args[0] == "stage2":
-                row.update(status="stage1_committed", stage1_sha256=stage1_sha)
+                for name, saved in files.items():
+                    name.write_bytes(saved)
+                MR.pin_custody(self.mini, stage2)             # back to the pins the committed stage 1 ran under
+                row.update(status="stage1_committed", stage1_sha256=stage1_sha,
+                           sha256=digest(self.manifest.read_bytes()))
                 ledger.write_bytes(C.dump(ledger_doc))
                 MR.git_commit(self.mini, "register generated stage-1 output")
             for label, path, data, reason in cases:
@@ -1174,17 +1218,21 @@ class TwinThroughCLI(unittest.TestCase):
                         for name, saved in files.items():
                             name.write_bytes(saved)
                         path.write_bytes(data)
-                        with cli_fixture.spy_opens() as opened:
-                            code, stdout, stderr = cli_fixture._cli_subprocess(
-                                args, repo=self.mini, extra={"host_probe": UUID_LINE,
-                                                             "twin_path": str(self.twin.resolve())})
+                        code, stdout, stderr = cli_fixture._cli_subprocess(
+                            args, repo=self.mini, extra={"host_probe": UUID_LINE, "twin_path": str(self.twin.resolve()),
+                                                         "pin_custody": args[0] == "stage1"})
                     finally:
                         salvage_alias.unlink(missing_ok=True)
                     self.assertEqual((code, stdout), (2, ""), stderr)
                     self.assertRegex(stderr, "^REFUSED ")
-                    self.assertRegex(stderr, reason)
+                    if args[0] == "stage1":
+                        self.assertRegex(stderr, reason)
+                    else:
+                        self.assertRegex(stderr, "custody pins: .*(its bytes are not its pin|a file that is not pinned)")
                     self.assertEqual(cli_fixture.LAST_RUN["reservation_attempts"], 0)
                     self.assertEqual(cli_fixture.LAST_RUN["twin_launches"], 0)
-                    self.assertFalse([name for name in opened if "/hazards/meter/" in name or Path(name).name in
-                                      ("power_trace.csv", "rich_telemetry.jsonl", "powermetrics.plist")])
+                    # no trace, telemetry or meter file was parsed: the only reads of them were the pin check's
+                    self.assertFalse([name for name in cli_fixture.LAST_RUN["served"] if "/hazards/meter/" in name
+                                      or Path(name).name in ("power_trace.csv", "rich_telemetry.jsonl",
+                                                             "powermetrics.plist")])
                     self.assertFalse(out.exists() or private.exists() or (public / "PUBLIC.json").exists())

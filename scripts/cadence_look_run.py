@@ -34,6 +34,7 @@ closed public report or the fixed two-line failure notice leaves custody.
 from __future__ import annotations
 
 import argparse
+import contextlib
 import hashlib
 import importlib
 import importlib.util
@@ -61,6 +62,7 @@ from joulewise.cadence_looks import manifest as M  # noqa: E402
 from joulewise.cadence_looks import inclusion_34 as I34  # noqa: E402
 from joulewise.cadence_looks import time_fields as TF  # noqa: E402
 from joulewise.cadence_looks import admission as ADM  # noqa: E402
+from joulewise.cadence_looks import custody_pins as PINS  # noqa: E402
 # the reader runs the pinned decoder's unwrap and clock fit on counters (RL-173 E.1): loaded up front, so every stage-1
 # run records one code set (manifest.STAGE1_CODE) whatever its input
 from joulewise.external import km003c_parse as _kp  # noqa: E402,F401
@@ -89,6 +91,7 @@ def code_hashes():
 
 
 _VERIFIED = []
+ADMITTED = []          # RL-194: the custody each stage of this process admitted by its pins; its reads are listed there
 
 
 def _stamp(out, a):
@@ -160,13 +163,49 @@ def span_dirs(custody, pairs):
     return lambda sid: m.get(sid, Path(custody) / sid)
 
 
+def admit_custody(a, span_ids, sdir_of, stack):
+    """RL-194 conditions 1 to 3, the first act of stage 1 and of stage 2 on custody: every file of every roster span
+    equals its pin, or the stage refuses before any other read of a roster file and before the reservation. The
+    pins are the manifest's (``inputs.pins``); only a synthetic ``--allow-draft`` run may name its own list. A
+    committed run also requires each span's offload manifest digest in its public RUN_STATE Check item. Every later
+    read of a roster file in this process is served from the verified bytes (``stack`` holds the guard open for
+    the rest of the stage). Returns (the admitted custody, the pin list's sha256)."""
+    doc, _ = _VERIFIED[0]
+    try:
+        if getattr(a, "custody_pins", None):
+            if not a.allow_draft:
+                raise F.LookInputError("--custody-pins names a pin list other than the manifest's; only with --allow-draft")
+            raw = Path(a.custody_pins).read_bytes()
+            pins, pins_sha = PINS.load_pin_list(raw), hashlib.sha256(raw).hexdigest()
+        else:
+            pins, pins_sha = M.input_pins(ROOT, doc, complete=True)
+        if getattr(a, "run_state", None) and not a.allow_draft:
+            raise F.LookInputError("--run-state names a RUN_STATE other than the public one; only with --allow-draft")
+        if not a.allow_draft or getattr(a, "run_state", None):
+            text = (Path(a.run_state).read_text(encoding="utf-8") if getattr(a, "run_state", None)
+                    else M.public_run_state(ROOT))
+            unchained = PINS.check_chain_problems(pins, text)
+            if unchained:
+                raise F.LookInputError("custody pins: " + "; ".join(unchained[:4]))
+        custody = PINS.PinnedCustody(pins, span_ids, sdir_of)
+        custody.verify()
+    except PINS.PinRefusal as exc:
+        raise F.LookInputError(f"custody pins: {exc}") from None
+    stack.enter_context(custody.guard())
+    ADMITTED.append(custody)
+    return custody, pins_sha
+
+
 def stage_archive(span_id, archive, manifest, marker, staging_root):
     """RL-174 D.3: expand a pulled, decrypted #804 archive; hash bytes, decode no measurement.
 
     The existing marker binds the exact SHA256SUMS bytes (``hash  ./relative/path``) and the archive.
     Publish a new span directory only after all files match. The supplied marker is the upstream
     custody handoff; this offline step neither contacts the provider nor decrypts ciphertext.
-    """
+
+    Each member's digest is taken from the bytes as they are written, in one pass: an expanded file is never
+    opened again here. Under RL-194 the per-file hashes of this SHA256SUMS are the look's content pins, so what
+    this step writes is what stage 1's first act then reads back and compares (``custody_pins``)."""
     import tarfile
     from pathlib import PurePosixPath
 
@@ -231,16 +270,18 @@ def stage_archive(span_id, archive, manifest, marker, staging_root):
                             if name not in expected:
                                 refuse("archive file absent from the manifest")
                             path.parent.mkdir(parents=True, exist_ok=True)
+                            written = hashlib.sha256()
                             with tar.extractfile(member) as src, path.open("xb") as dst:
-                                shutil.copyfileobj(src, dst)
+                                while chunk := src.read(1 << 20):
+                                    written.update(chunk)
+                                    dst.write(chunk)
+                            if written.hexdigest() != expected[name]:
+                                refuse("staged file sha256 differs from the manifest")
                             files.add(name)
                         else:
                             refuse("archive member is not a regular file or directory")
             if files != set(expected):
                 refuse("archive file set differs from the manifest")
-            for name, digest in expected.items():
-                if sha256_file(tmp / top / name) != digest:
-                    refuse("staged file sha256 differs from the manifest")
             (tmp / top).rename(destination)
         return {"span_id": span_id, "archive_sha256": archive_sha, "manifest_sha256": msha,
                 "marker_sha256": hashlib.sha256(kraw).hexdigest(), "files_verified": len(expected)}
@@ -922,6 +963,11 @@ def superseded_source(a, row):
 
 
 def cmd_stage1(a):
+    with contextlib.ExitStack() as stack:
+        return _stage1(a, stack)
+
+
+def _stage1(a, stack):
     staging = []
     if a.input and not a.allow_draft:
         raise F.LookInputError("--input (level R) runs only with --allow-draft; a committed look reads custody")
@@ -940,7 +986,11 @@ def cmd_stage1(a):
                                        verdicts_sha256=sha256_file(a.rules_3_4), ledger_ref=a.ledger_ref,
                                        ruled_exclusions={k: list(v) for k, v in ruled.items()})
         roster = _json(a.roster)
+        if not isinstance(roster, list) or not all(isinstance(s, dict) and isinstance(s.get("span_id"), str) for s in roster):
+            raise F.LookInputError("roster: not a list of spans")
         staging = stage_custody(a, roster)
+        # RL-194: before any roster file is read, every file of every roster span equals its pin
+        _, pins_sha = admit_custody(a, [span["span_id"] for span in roster], span_dirs(a.custody, a.span_dir), stack)
         rules34 = _json(a.rules_3_4)
         if ruled and not a.allow_draft:
             old_input, old_ruled = superseded_source(a, row)
@@ -970,7 +1020,8 @@ def cmd_stage1(a):
         if a.write_input:
             with open(a.write_input, "wb") as f:
                 f.write(data)
-        extra = {"roster_sha256": sha256_file(a.roster), "rules_3_4_sha256": sha256_file(a.rules_3_4)}
+        extra = {"roster_sha256": sha256_file(a.roster), "rules_3_4_sha256": sha256_file(a.rules_3_4),
+                 "custody_pins_sha256": pins_sha}
     if a.allow_draft and look_input.get("synthetic") is not True:
         raise F.LookInputError("--allow-draft runs on synthetic input only (Mythos N2)")
     out = F.stage1(look_input, input_sha, code_hashes())    # RL-172a's soak-retry print is level R's (F.stage1)
@@ -983,6 +1034,11 @@ def cmd_stage1(a):
 
 
 def cmd_stage2(a, *, keep_redirected=False):
+    with contextlib.ExitStack() as stack:
+        return _stage2(a, stack, keep_redirected=keep_redirected)
+
+
+def _stage2(a, stack, *, keep_redirected=False):
     with open(a.stage1, "rb") as f:
         raw = f.read()
     if hashlib.sha256(raw).hexdigest() != a.stage1_sha256:
@@ -1029,6 +1085,9 @@ def cmd_stage2(a, *, keep_redirected=False):
     overrides = stage2_overrides(a.span_dir, s1)
     sdir_of = span_dirs(a.custody, (f"{sid}={path}" for sid, path in overrides)) if a.custody else None
     if sdir_of is not None:
+        # RL-194: stage 2's first act on custody, before any roster file is read and before the reservation
+        # (a committed stage 2 runs under the manifest stage 1 names, so under the same pin list)
+        _, a.custody_pins_sha256 = admit_custody(a, [span["span_id"] for span in s1["roster"]["spans"]], sdir_of, stack)
         validate_runtime_bundles(s1["roster"]["spans"], sdir_of)
         ids = [leg["span_id"] for leg in s1["legs"] if leg["included"] and leg["role"] == "fit" and
                leg["leg_type"] == "A"]
@@ -1110,10 +1169,12 @@ def run_twin(twin_path, a, stage1, fit, step3, coefficients, *, doc, commit, man
         return {"agreement": "not_evaluable"}  # the synthetic level-E fixture has no raw inputs for the twin
     if twin_path.resolve() != twin_path or not twin_path.is_file() or sha256_file(twin_path) != doc["fit"]["twin"]["sha256"]:
         return {"agreement": "not_evaluable"}
+    pins = getattr(a, "custody_pins", None)
     return interim_twin.run(twin_path, manifest=a.manifest, manifest_sha=manifest_sha, commit=commit,
                             stage1_path=a.stage1, stage1_sha=a.stage1_sha256, custody=a.custody, overrides=overrides,
                             restricted=restricted, coefficient_sha=coefficient_sha, deadline=deadline,
-                            stage1=stage1, coefficients=coefficients, fit=fit, step3=step3)
+                            stage1=stage1, coefficients=coefficients, fit=fit, step3=step3,
+                            custody_pins=(pins, a.custody_pins_sha256) if pins else None)
 
 
 def finish_stage2(a, stage1, prepared, doc, commit, manifest_sha, restricted, public, public_schema,
@@ -1266,6 +1327,10 @@ def main(argv=None, *, keep_redirected=False):
     p2.add_argument("--looks", help="with --allow-draft only: a scratch LOOKS.json in place of the repository's")
     p2.add_argument("--ledger-ref", help="the ref HEAD must be an ancestor of (default: upstream, else origin/main)")
     for p in (p1, p2):
+        p.add_argument("--custody-pins", help="with --allow-draft only: a synthetic custody's pin list in place of "
+                                              "the manifest's (RL-194)")
+        p.add_argument("--run-state", help="with --allow-draft only: a synthetic RUN_STATE whose Check items the "
+                                           "pin list chains to")
         p.add_argument("--manifest", required=True, help="the look manifest whose pins the running code must match")
         p.add_argument("--allow-draft", action="store_true", help="synthetic runs: accept a draft manifest")
     a = ap.parse_args(argv)
@@ -1309,6 +1374,9 @@ def main(argv=None, *, keep_redirected=False):
         return 2
     except M.ManifestError as exc:
         print(f"REFUSED {'; '.join(exc.problems)}", file=sys.stderr)
+        return 2
+    except PINS.PinRefusal as exc:          # a read of a roster file outside the verified bytes, after the first act
+        print(f"REFUSED custody pins: {exc}", file=sys.stderr)
         return 2
     except Exception as exc:  # noqa: BLE001 - no message: it could carry a value
         tb = exc.__traceback__

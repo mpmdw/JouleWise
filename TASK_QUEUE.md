@@ -1,5 +1,11 @@
 # JouleWise Task Queue
 
+PR #795 RL-194 (2026-11-20), [AGENT]. The lead fills `lm-interim-01.inputs.json` from the eleven offload
+manifests (`cadence_look_manifest.py pin-inputs`, then `pin --write`) and runs `check-inputs`. The
+executing seat produces the review record (`cadence_look_input_review.py review`), and the validator is
+then brought to the journal shapes that record lists.
+[Report](docs/run_reports/2026-11-20-pr795-rl194-content-address.md).
+
 PR #795 audit 3 (2026-11-20), [AGENT]. Astra re-audits the grammar against the three
 writer pins and the accounting job's ledger (101,889 IDs once each: 101,886 original and
 three corrected expectations, `tests/cadence/interim_admission_corrections.json`).

@@ -371,7 +371,7 @@ def _retain_stdout(data):
 
 
 def run(path, *, manifest, manifest_sha, commit, stage1_path, stage1_sha, custody, overrides,
-        restricted, coefficient_sha, deadline, stage1, coefficients, fit, step3):
+        restricted, coefficient_sha, deadline, stage1, coefficients, fit, step3, custody_pins=None):
     """Launch the verified child once. Stderr inherits the reserved descriptor."""
     argv = [sys.executable, "-I", "-B", str(path),
             "--manifest", str(Path(manifest).resolve()), "--manifest-sha256", manifest_sha,
@@ -381,6 +381,9 @@ def run(path, *, manifest, manifest_sha, commit, stage1_path, stage1_sha, custod
         argv.extend(("--span-dir", f"{span_id}={location}"))
     argv.extend(("--coefficients", str(restricted / "coefficients.json"), "--coefficients-sha256", coefficient_sha,
                  "--fit", str(restricted / "fit.json"), "--step3", str(restricted / "step3.json")))
+    if custody_pins is not None:        # a draft look's own pin list (RL-194); the child checks the pins itself
+        path_, sha256 = custody_pins
+        argv.extend(("--custody-pins", str(Path(path_).resolve()), "--custody-pins-sha256", sha256))
     fallback = {"agreement": "not_evaluable"}
     remaining = deadline - time.monotonic()
     if remaining <= 0:

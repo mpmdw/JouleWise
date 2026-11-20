@@ -1,16 +1,17 @@
-"""Accounting for the frozen admission matrix (RL-184 section 3.3). Not a test module: ``unittest`` does not discover it.
+"""The frozen admission packet's identity (RL-184 section 3.3). Not a test module: ``unittest`` does not discover it.
 
-The matrix is 101,889 generated cases. This module is what lets CI say it accounted for every one of them exactly once:
+Under RL-194 stage 1 admits by content address and the packet's 101,889-case matrix no longer gates: it drives the real
+CLI without a pin list, so it cannot run as it stands, and it is kept unedited. Its writer productions and its case
+generator still feed the fast in-process tests of the grammar validator (``test_interim_admission``), which runs behind
+the pins as defense in depth. This module keeps those tests honest about what they read:
 
-* ``verify_frozen`` checks the suite's module and corpus against ``interim_admission_frozen.sha256`` (the test-side lines of
-  the suite's own ``SUITE.sha256``, copied verbatim) and that the corpus directory holds nothing else;
-* ``verify_case_list`` checks the generated case list against the suite's published hashes (count, distinct IDs, the hash
-  of the ordered IDs and the hash of the original expectations) and the corrected expectations against theirs;
-* ``account`` checks that the shards' ledgers together hold every ID exactly once, each with a passing result, and counts
-  how many were judged under the original and under the corrected expectations.
+* ``verify_frozen`` checks the packet's module and corpus against ``interim_admission_frozen.sha256`` (the test-side
+  lines of the packet's own ``SUITE.sha256``, copied verbatim) and that the corpus directory holds nothing else;
+* ``verify_case_list`` checks the generated case list against the packet's published hashes (count, distinct IDs, the
+  hash of the ordered IDs and the hash of the original expectations) and the corrected expectations against theirs.
 
-The corrections are ``interim_admission_corrections.json``: a versioned list of case IDs whose expectation is corrected
-outside the frozen files. A correction never removes a case: it changes what the case is judged against.
+The corrections are ``interim_admission_corrections.json``: a versioned list of case IDs whose expectation the lead
+corrected outside the frozen files.
 """
 from __future__ import annotations
 
@@ -92,41 +93,3 @@ def verify_case_list(suite):
         elif suite.admits(by_name[name]):
             problems.append(f"{name}: already admitted by the suite; the correction is stale")
     return cases, problems
-
-
-def expected_ids(cases, index, total):
-    """The IDs shard ``index`` of ``total`` owns, as the suite's report mode partitions them: every case that is not an
-    audit-3 reproduction by its position modulo ``total``, and the audit-3 reproductions with shard 0."""
-    return [case.name for position, case in enumerate(cases)
-            if (case.family == "audit-3" and index == 0) or (case.family != "audit-3" and position % total == index)]
-
-
-def account(ledgers, cases, total, corrected):
-    """Problems with the shards' ledgers taken together. ``ledgers`` is a list of dicts
-    ``{"index", "total", "rows": [[id, basis, passed], ...]}``. The result is ``(problems, counts)``."""
-    problems, seen, counts = [], {}, {"original": 0, "corrected": 0, "failed": 0}
-    indices = sorted(ledger["index"] for ledger in ledgers)
-    if indices != list(range(total)):
-        problems.append(f"shard ledgers {indices}, not 0 to {total - 1} once each")
-    for ledger in ledgers:
-        if ledger["total"] != total:
-            problems.append(f"shard {ledger['index']} ran as 1 of {ledger['total']}, not of {total}")
-        for name, basis, passed in ledger["rows"]:
-            if name in seen:
-                problems.append(f"{name}: in shard {seen[name]} and in shard {ledger['index']}")
-            seen[name] = ledger["index"]
-            if basis not in ("original", "corrected") or (basis == "corrected") != (name in corrected):
-                problems.append(f"{name}: judged on the {basis} expectation")
-                continue
-            if passed is not True:
-                counts["failed"] += 1
-                problems.append(f"{name}: failed its {basis} expectation")
-            counts[basis] += 1
-    names = {case.name for case in cases}
-    for name in sorted(names - set(seen))[:20]:
-        problems.append(f"{name}: in no shard ledger")
-    for name in sorted(set(seen) - names)[:20]:
-        problems.append(f"{name}: in a ledger but not in the suite")
-    if not problems and counts["original"] + counts["corrected"] != len(names):
-        problems.append("the judged cases do not add up to the suite")
-    return problems, counts

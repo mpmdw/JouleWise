@@ -44,7 +44,7 @@ MUTANTS = [
      [T_FIT + ".RL166b.test_zero_design_has_no_column_rank"]),
     ("r9_excess_count_includes_1s", FIT, 'and 1.0 < excess <= 2.0)', 'and 1.0 <= excess <= 2.0)',
      [T_FIT + ".RL166b.test_rl174_excess_count_is_print_only_and_uses_energy_fit_legs"]),
-    ("r9_stage_file_hash_ignored", RUN, 'if sha256_file(tmp / top / name) != digest:', 'if False:',
+    ("r9_stage_file_hash_ignored", RUN, 'if written.hexdigest() != expected[name]:', 'if False:',
      [T_RUN + ".Staging.test_one_changed_byte_refuses_before_publishing"]),
     ("r9_stage_manifest_hash_ignored", RUN, ' or mark.get("manifest_sha256") != msha', '',
      [T_RUN + ".Staging.test_manifest_and_archive_must_match_marker"]),

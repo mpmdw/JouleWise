@@ -404,9 +404,13 @@ def child_arguments(argv):
         parser.add_argument(f"--{role}-sha256", required=True)
     parser.add_argument("--ledger-commit", required=True)
     parser.add_argument("--span-dir", action="append", default=[])
+    parser.add_argument("--custody-pins", type=Path)
+    parser.add_argument("--custody-pins-sha256")
     args = parser.parse_args(argv)
     if not re.fullmatch(r"[0-9a-f]{40}", args.ledger_commit):
         raise ValueError("invalid ledger commit identity")
+    if (args.custody_pins is None) != (args.custody_pins_sha256 is None):
+        raise ValueError("invalid child arguments")
     return args
 
 
@@ -434,16 +438,94 @@ def digest(data):
     return hashlib.sha256(data).hexdigest()
 
 
-def file_digest(path):
-    with path.open("rb") as stream:
-        return hashlib.file_digest(stream, "sha256").hexdigest()
-
-
 def read_bound(path, sha256):
     data = path.read_bytes()
     if digest(data) != sha256:
         raise ValueError("input digest mismatch")
     return data
+
+
+INPUT_PINS_SCHEMA = "joulewise.cadence_look_input_pins.v1"
+
+
+class CustodyPins:
+    """RL-194 condition 4: this child checks the look's content pins itself.
+
+    Built from the pin list the manifest names. Each span's pins must rebuild the offload manifest digest the
+    span carries, and each span directory must hold exactly its pinned files: no symlink, no other file, none
+    missing. ``read`` is the only way a custody file's bytes are obtained here: the bytes are hashed and compared
+    with the pin before they are returned, so what is parsed is what was hashed."""
+
+    def __init__(self, document, directories):
+        if (not isinstance(document, dict) or set(document) != {"schema", "spans"}
+                or document["schema"] != INPUT_PINS_SCHEMA or not isinstance(document["spans"], list)):
+            raise ValueError("invalid input pin list")
+        spans = {}
+        for span in document["spans"]:
+            if not isinstance(span, dict) or span.get("span_id") in spans:
+                raise ValueError("invalid input pin list")
+            spans[span.get("span_id")] = span
+        if set(spans) != set(directories):
+            raise ValueError("pin list and stage-1 roster name different spans")
+        self.pins = {}
+        for key, directory in directories.items():
+            lines, expected = [], set()
+            for entry in spans[key]["files"]:
+                relative, sha256, size = entry["path"], entry["sha256"], entry["size"]
+                if (not isinstance(relative, str) or not relative or Path(relative).is_absolute()
+                        or any(part in ("", ".", "..") for part in relative.split("/"))
+                        or not isinstance(sha256, str) or not re.fullmatch(r"[0-9a-f]{64}", sha256)
+                        or type(size) is not int or size < 0):
+                    raise ValueError("invalid input pin")
+                path = directory.joinpath(*relative.split("/"))
+                if path in self.pins:
+                    raise ValueError("duplicate input pin")
+                self.pins[path] = (sha256, size)
+                expected.add(path)
+                lines.append(f"{sha256}  ./{relative}\n")
+            if digest("".join(lines).encode()) != spans[key]["offload_manifest_sha256"]:
+                raise ValueError("input pins do not rebuild their offload manifest")
+            present, pending = set(), [directory]
+            while pending:
+                with os.scandir(pending.pop()) as children:
+                    for child in children:
+                        if child.is_symlink():
+                            raise ValueError("symlink in pinned custody")
+                        if child.is_dir(follow_symlinks=False):
+                            pending.append(Path(child.path))
+                        elif child.is_file(follow_symlinks=False):
+                            present.add(Path(child.path))
+                        else:
+                            raise ValueError("irregular file in pinned custody")
+            if present != expected:
+                raise ValueError("custody files differ from the pin list")
+
+    def read(self, path):
+        pin = self.pins.get(path)
+        if pin is None:
+            raise ValueError("custody input outside the pin list")
+        data = path.read_bytes()
+        if len(data) != pin[1] or digest(data) != pin[0]:
+            raise ValueError("custody input differs from its pin")
+        return data
+
+
+_PINNED = []
+
+
+def pinned_bytes(path):
+    """The bytes of one custody file, checked against its pin on this read."""
+    return _PINNED[0].read(path)
+
+
+def input_pin_list(args, manifest, stage1, repository):
+    """The look's pin list: the file the manifest pins, or a draft look's own list named by the parent."""
+    if args.custody_pins is not None:
+        if stage1.get("allow_draft") is not True:
+            raise ValueError("pin list override outside a draft look")
+        return decode_json(read_bound(args.custody_pins, args.custody_pins_sha256))
+    pin = manifest["inputs"]["pins"]
+    return decode_json(read_bound(child_path(repository, pin["path"]), pin["sha256"]))
 
 
 def child_path(directory, relative):
@@ -460,7 +542,7 @@ def verify_pins(manifest, code_path):
     fit = manifest["fit"]
     pins = [fit["twin"], *fit["code"], *fit["dependencies"], fit["step3"]["code"],
             fit["step3"]["adapter"], manifest["stages"]["stage1"]["schema"],
-            manifest["freeze2"]["schema"], manifest["outputs"]["schema"]]
+            manifest["freeze2"]["schema"], manifest["outputs"]["schema"], manifest["inputs"]["pins"]]
     if child_path(repository, fit["twin"]["path"]) != code_path:
         raise ValueError("manifest names another twin")
     if not {DECODER_PATH, DECODER_PACKAGE_PATH} <= {pin["path"] for pin in fit["dependencies"]}:
@@ -492,7 +574,10 @@ def meter_decoder(verified, streams):
             sibling = candidate.with_name(candidate.name + ".zst")
             if candidate.suffix == ".zst" or sibling.exists() or sibling.is_symlink():
                 raise ValueError("compressed meter input")
-        return read_bound(resolved, active.sha256)
+        data = pinned_bytes(resolved)
+        if digest(data) != active.sha256:
+            raise ValueError("input digest mismatch")
+        return data
 
     def reject_t_diagnostic(*args, **kwargs):
         raise RuntimeError("meter diagnostic is outside the twin decoder scope")
@@ -824,7 +909,12 @@ def span_dirs(root, overrides, spans):
         key, has_equal, value = raw.partition("=")
         if not has_equal or not value or key in requested or key not in spans:
             raise ValueError("invalid span override")
+        if Path(value).is_symlink():
+            raise ValueError("span directory is a symlink")
         requested[key] = Path(value).resolve(strict=True)
+    for span in spans:
+        if span not in requested and (root / span).is_symlink():
+            raise ValueError("span directory is a symlink")
     return {span: requested[span] if span in requested else child_path(root, span) for span in spans}
 
 
@@ -1267,7 +1357,9 @@ def child_frame(args):
     threshold, = (row["threshold"] for row in manifest["decisions"] if row["id"] == "drift_tripwire")
     if step3["tripwire"]["threshold_applied"] != threshold:
         raise ValueError("primary Step 3 threshold differs from the manifest")
-    own_fit, own_step3 = recompute_bundle(args, stage1, fit["custody"], step3["custody"], decoder_pin, threshold)
+    pin_list = input_pin_list(args, manifest, stage1, Path(__file__).resolve().parents[1])
+    own_fit, own_step3 = recompute_bundle(args, stage1, fit["custody"], step3["custody"], decoder_pin, threshold,
+                                          pin_list)
     coefficients = decode_json(coefficient_bytes)
     primary_identity(coefficients, args, stage1)
     primary_projection = projections(stage1, coefficients, fit, step3)
@@ -1556,8 +1648,8 @@ def step3_output_key_allowed(key, leg_ids):
 def step3_measurements(bundle):
     sources = ("events.jsonl", "outputs/align_turns.jsonl", "outputs/align_thermal.jsonl",
                "rich_telemetry.jsonl", "raw/powermetrics.plist")
-    start, _, tokens, journal, power = step3_records(*(child_path(bundle, name).read_bytes() for name in sources))
-    gpu = gpu_rows(child_path(bundle, "power_trace.csv").read_bytes())
+    start, _, tokens, journal, power = step3_records(*(pinned_bytes(child_path(bundle, name)) for name in sources))
+    gpu = gpu_rows(pinned_bytes(child_path(bundle, "power_trace.csv")))
     observations = step3_observations(start, tokens, journal, power, gpu)
     histogram_keys = {state if isinstance(state, str) else "None"
                       for stamp, _, state, _ in power if start < stamp <= tokens[-1]}
@@ -1610,7 +1702,7 @@ def present_file(span, name):
 
 def span_identities(span):
     receipt_path = child_path(span, "runner_receipt.json")
-    receipt = decode_json(receipt_path.read_bytes())
+    receipt = decode_json(pinned_bytes(receipt_path))
     roster = receipt["roster"]
     if not isinstance(roster, list) or len(set(roster)) != len(roster):
         raise ValueError("invalid runner receipt roster")
@@ -1625,7 +1717,7 @@ def span_identities(span):
         record_path = present_file(span, record_name)
         if record_path is None:
             continue
-        record = decode_json(record_path.read_bytes())
+        record = decode_json(pinned_bytes(record_path))
         bundle = (record.get("result") or {}).get("bundle")
         if bundle is None:
             continue
@@ -1648,13 +1740,13 @@ def span_identities(span):
     for name in sorted(names):
         path = present_file(span, name)
         if path is not None:
-            raw_files[name] = file_digest(path)
+            raw_files[name] = digest(pinned_bytes(path))
     native_time = {}
     for relative in bundles.values():
         rich = present_file(span, f"{relative}/rich_telemetry.jsonl")
         native = present_file(span, f"{relative}/raw/powermetrics.plist")
         if rich is not None and native is not None:
-            native_time[relative] = native_time_digest(rich.read_bytes(), native.read_bytes())
+            native_time[relative] = native_time_digest(pinned_bytes(rich), pinned_bytes(native))
     return receipt, bundles, raw_files, native_time
 
 
@@ -1669,7 +1761,7 @@ def verified_span_inputs(span, identity, inventory):
     def meter_preimages():
         for path in paths:
             resolved = child_path(span, path.relative_to(span))
-            data = resolved.read_bytes()
+            data = pinned_bytes(resolved)
             raw_sha256 = digest(data)
             if resolved in inventory and inventory[resolved] != raw_sha256:
                 raise ValueError("meter bytes differ from comparison inventory")
@@ -1709,7 +1801,7 @@ def check_custody_inventory(root, spans, *inventories):
             if resolved in seen and seen[resolved] != sha256:
                 raise ValueError("inconsistent comparison input identities")
             if resolved not in seen:
-                if file_digest(resolved) != sha256:
+                if digest(pinned_bytes(resolved)) != sha256:
                     raise ValueError("comparison input digest mismatch")
                 seen[resolved] = sha256
     return seen
@@ -1723,12 +1815,13 @@ def gpu_input(span, bundle):
     return path
 
 
-def recompute_bundle(args, stage1, fit_identity, step3_identity, decoder_pin, threshold):
+def recompute_bundle(args, stage1, fit_identity, step3_identity, decoder_pin, threshold, pin_list):
     roster = stage1["roster"]["spans"]
     span_records = {row["span_id"]: row for row in roster}
     if len(span_records) != len(roster):
         raise ValueError("duplicate span ID")
     directories = span_dirs(args.custody, args.span_dir, span_records)
+    _PINNED[:] = [CustodyPins(pin_list, directories)]     # before any custody file is read
     inventory = check_custody_inventory(args.custody.resolve(), directories, fit_identity, step3_identity)
     receipts, bundle_paths, streams = {}, {}, {}
     for key, row in span_records.items():
@@ -1750,7 +1843,7 @@ def recompute_bundle(args, stage1, fit_identity, step3_identity, decoder_pin, th
         known_bundles[row["leg_key"]] = relative
         gpu_identity = (row.get("trace_holes") or {}).get("gpu_rail", {}).get("rows_sha256")
         if gpu_identity is not None:
-            if relative is None or gpu_identity != gpu_time_digest(gpu_input(directories[key], relative).read_bytes()):
+            if relative is None or gpu_identity != gpu_time_digest(pinned_bytes(gpu_input(directories[key], relative))):
                 raise ValueError("stage-1 GPU time identity differs from custody")
         elif row["in_energy_fit"]:
             raise ValueError("GPU time identity required for fit")
@@ -1764,7 +1857,7 @@ def recompute_bundle(args, stage1, fit_identity, step3_identity, decoder_pin, th
         if key not in dc_readers:
             dc_readers[key] = pooled_meter((stream.path for stream in streams[key]), parse)
         bundle = known_bundles[row["leg_key"]]
-        gpu = gpu_rows(gpu_input(directories[key], bundle).read_bytes())
+        gpu = gpu_rows(pinned_bytes(gpu_input(directories[key], bundle)))
         responses.append(responses_for_leg(row, gpu, dc_readers[key]))
     marked = {key for key, row in span_records.items() if row["marks"]}
     fit = recompute_fit(stage1, fit_legs, responses, marked)

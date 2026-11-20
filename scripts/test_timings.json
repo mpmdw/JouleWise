@@ -36,7 +36,7 @@
         1800.0
       ],
       "fallback_rejection_threshold_seconds": 300,
-      "_evidence": "PR #795 (2026-11-20), local single run, not hosted: 101,889 generated cases ran as eight --report shards in about 200 s each on a 10-core Mac, so about 1,600 s of one-process CPU. It needs numpy (the fit fixture's generator), which the ordinary shards do not install, and it creates 101,889 test methods, so it runs once in its own eight-shard job through tests/cadence/ci_interim_admission.py and never in an ordinary shard or the quick tier. Replace this with the hosted per-shard median after the first CI harvest."
+      "_evidence": "PR #795 (2026-11-20), local single run, not hosted: 101,889 generated cases ran as eight --report shards in about 200 s each on a 10-core Mac, so about 1,600 s of one-process CPU. It needs numpy and creates 101,889 test methods, so it never runs in an ordinary shard or the quick tier. Under RL-194 (2026-11-20) stage 1 admits by content address and this matrix no longer gates: it drives the CLI without a pin list, so its own CI job was removed. The module stays an exclusive module so that no shard collects it."
     }
   },
   "split_modules": {

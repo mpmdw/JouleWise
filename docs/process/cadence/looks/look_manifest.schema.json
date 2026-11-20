@@ -25,7 +25,8 @@
     "freeze2",
     "custody",
     "review",
-    "open_questions"
+    "open_questions",
+    "inputs"
   ],
   "properties": {
     "schema": {
@@ -1438,6 +1439,39 @@
     "supersedes": {
       "type": "string",
       "pattern": "^lm-[a-z0-9][a-z0-9-]{2,40}$"
+    },
+    "inputs": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "pins",
+        "rule",
+        "cite"
+      ],
+      "properties": {
+        "pins": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "path",
+            "sha256"
+          ],
+          "properties": {
+            "path": {
+              "const": "docs/process/cadence/looks/lm-interim-01.inputs.json"
+            },
+            "sha256": {
+              "$ref": "#/$defs/sha_or_pending"
+            }
+          }
+        },
+        "rule": {
+          "$ref": "#/$defs/text"
+        },
+        "cite": {
+          "$ref": "#/$defs/cites"
+        }
+      }
     }
   },
   "$defs": {

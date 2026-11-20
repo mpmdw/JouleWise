@@ -39,7 +39,7 @@ import subprocess
 import sys
 from datetime import date
 
-from joulewise.cadence_looks import interim_release as release, schema_check
+from joulewise.cadence_looks import custody_pins, interim_release as release, schema_check
 
 SCHEMA = "joulewise.cadence_look_manifest.v1"
 INTERIM_LOOK_ID = "lm-interim-01"
@@ -64,7 +64,9 @@ LOOK_ROW_REQUIRES = {"stage1_committed": _STAGE1_HASHES, "failed": _STAGE1_HASHE
 
 TOP_KEYS = {"schema", "look_id", "look_kind", "status", "title", "rulings", "when", "stages", "reads", "energy",
             "fit", "inclusion", "outputs", "decisions", "later_looks", "freeze1", "freeze2", "custody", "review",
-            "open_questions"}
+            "open_questions", "inputs"}
+# RL-194: the one file that pins, by sha256 and size, every file of every roster span (custody_pins)
+INPUTS_PATH = "docs/process/cadence/looks/lm-interim-01.inputs.json"
 LOOK_KINDS = {"interim", "qualification", "controls"}
 STATUSES = {"draft", "committed"}
 
@@ -91,7 +93,9 @@ REQUIRED_CODE_PATHS = {"interim": {"joulewise/cadence_looks/fit_interim.py", "jo
                                    "joulewise/cadence_looks/admission.py", "joulewise/cadence_looks/admission_shape.py",
                                    "joulewise/cadence_looks/admission_journals.py",
                                    "joulewise/cadence_looks/admission_synthetic.py",
-                                   "joulewise/cadence_looks/admission_kits.py"}}   # RL-166 Q1; Sol N3; RL-173 E.1
+                                   "joulewise/cadence_looks/admission_kits.py",
+                                   # RL-194: stage 1's and stage 2's first act, the content pins of the roster's files
+                                   "joulewise/cadence_looks/custody_pins.py"}}   # RL-166 Q1; Sol N3; RL-173 E.1
 
 # Which block phases each look may read, by role (RL-149 sections 2.3 and 2.6; RL-157 section 4).
 # Phases are BLOCK-QUEUE's (joulewise/cadence/blocks.py PHASES). hp-01 is phase "extension".
@@ -414,7 +418,8 @@ def code_refs(doc, *, look_code_only=False):
             out.append((f"inclusion.rules[{i}].code", rule["code"].get("path"), rule["code"].get("sha256")))
     for where, node in (("outputs.schema", (doc.get("outputs") or {}).get("schema")),
                         ("stages.stage1.schema", ((doc.get("stages") or {}).get("stage1") or {}).get("schema")),
-                        ("freeze2.schema", (doc.get("freeze2") or {}).get("schema"))):
+                        ("freeze2.schema", (doc.get("freeze2") or {}).get("schema")),
+                        ("inputs.pins", (doc.get("inputs") or {}).get("pins"))):
         if isinstance(node, dict):
             out.append((where, node.get("path"), node.get("sha256")))
     return out
@@ -476,6 +481,7 @@ def validate_manifest(doc, *, final=None):
     _later_looks(doc.get("later_looks"), problems)
     _freezes(doc.get("freeze1"), doc.get("freeze2"), problems, kind, final)
     _custody(doc.get("custody"), problems)
+    _inputs(doc.get("inputs"), problems)
     _review(doc.get("review"), problems)
     _verbatim(doc, kind, problems)
     if kind == "interim":
@@ -1110,6 +1116,43 @@ def _custody(c, problems):
         if not _text(c.get(k)):
             problems.append(f"custody.{k}: text")
     _need_cite(c, "custody", problems)
+
+
+def _inputs(node, problems):
+    """RL-194: the manifest pins one inputs file; that file pins every file of every roster span (custody_pins)."""
+    if not _closed(node, {"pins", "rule", "cite"}, "inputs", problems):
+        return
+    pins = node.get("pins")
+    if not (isinstance(pins, dict) and set(pins) == {"path", "sha256"} and pins["path"] == INPUTS_PATH
+            and isinstance(pins["sha256"], str) and (SHA_RE.fullmatch(pins["sha256"]) or pins["sha256"] == PENDING_CODE)):
+        problems.append(f"inputs.pins: path {INPUTS_PATH} and its sha256")
+    if not _text(node.get("rule")):
+        problems.append("inputs.rule: text")
+    if not (_cites(node.get("cite")) and any(c.startswith("RL-194") for c in node["cite"])):
+        problems.append("inputs.cite: ruling cites, RL-194 among them")
+
+
+def input_pins(repo, doc, *, complete):
+    """(pin list, its file's sha256) for a manifest whose pins ``verify_pins`` has checked. ``complete`` refuses the
+    unfilled list a draft may carry. Raises ManifestError."""
+    raw = (Path(repo) / doc["inputs"]["pins"]["path"]).read_bytes()
+    try:
+        return custody_pins.load_pin_list(raw, complete=complete), hashlib.sha256(raw).hexdigest()
+    except custody_pins.PinRefusal as error:
+        raise ManifestError([f"inputs: {error}"]) from None
+
+
+PUBLIC_RUN_STATE_REF = "refs/remotes/origin/main"
+
+
+def public_run_state(repo):
+    """RUN_STATE.md as it stands on the public main branch: where each roster span's Check item is (RL-194
+    condition 2). Read from the remote-tracking ref, never from the working tree."""
+    rc, raw, _ = _git(Path(repo).resolve(), "show", f"{PUBLIC_RUN_STATE_REF}:RUN_STATE.md")
+    if rc != 0:
+        raise ManifestError([f"RUN_STATE.md cannot be read from {PUBLIC_RUN_STATE_REF}: the pins' Check items "
+                             "are not available to chain to"])
+    return raw.decode("utf-8", "replace")
 
 
 def _review(r, problems):
@@ -1790,6 +1833,20 @@ def operational_paths(sdir):
     return sorted(paths)
 
 
+# The span paths admission reads and the look reuses (``operational_paths``), as a pattern over a path with no span on
+# disk: staging expands exactly these members before admission and every other member only after it (deny by default).
+_OPERATIONAL = re.compile(
+    r"runner_receipt\.json|soak/soak_reference\.json"
+    r"|legs/[^/]+/leg_(?:record|summary)\.json"
+    r"|legs/[^/]+/runtime/(?:[^/]+/)*(?:events\.jsonl|config\.json|align_runtime_events\.jsonl"
+    r"|align_(?:turns|thermal|runtime_events)\.jsonl)")
+
+
+def is_operational_path(rel):
+    """Whether a span-relative POSIX path is one of the operational sources, never an energy-bearing file."""
+    return _OPERATIONAL.fullmatch(rel) is not None
+
+
 def nonenergy_files(sdir):
     """Operational sources reused by the look, with paths relative to a span and byte hashes.
     Optional files are included when present; adding or removing one changes the map. No energy-bearing
@@ -1894,6 +1951,7 @@ def loaded_repo_files(repo):
 # stage records exactly its set, at the pins (Sol round-2 N2, round-3 NEW-3). The stage-2 set also takes every
 # fit.dependencies file but the stage-1-only sensor policy.
 _SHARED_CODE = ("joulewise/__init__.py", "joulewise/cadence_looks/__init__.py", "joulewise/cadence_looks/manifest.py",
+                "joulewise/cadence_looks/custody_pins.py",
                 "joulewise/cadence_looks/schema_check.py", "joulewise/cadence_looks/interim_release.py",
                 "joulewise/axi_decode_config.py",
                 "joulewise/idle_admission.py", "joulewise/schemas.py", "joulewise/validation.py")
@@ -2043,6 +2101,11 @@ def verify_pins(manifest_path, repo, *, allow_draft=False, running=(), ledger_re
             problems.append(f"{where}: {path} is not in the repository")
         elif sha256_file(f) != sha:
             problems.append(f"{where}: {path} sha256 differs from the pin")
+    if isinstance(doc.get("inputs"), dict) and (repo / INPUTS_PATH).is_file() and not problems:
+        try:                                    # RL-194: a committed look's pin list is filled and chains internally
+            input_pins(repo, doc, complete=not allow_draft)
+        except ManifestError as error:
+            problems += error.problems
     for r in running:
         try:
             rel = Path(r).resolve().relative_to(repo).as_posix() if Path(r).is_absolute() else Path(r).as_posix()

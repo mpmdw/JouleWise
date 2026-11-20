@@ -1,5 +1,13 @@
 # JouleWise Run State
 
+PR #795 (2026-11-20, RL-194): `lm-interim-01` admits its custody by content address. The manifest pins
+one inputs file, which pins every file of every roster span from the span's offload manifest; stage 1
+and stage 2 check every pin as their first act and parse only those bytes; the twin checks the pins
+itself. The pin list is unfilled in this draft: the lead fills it with `pin-inputs`. The grammar
+validator runs behind the pins and the 101,889-case matrix no longer gates. The validator's controller
+grammar does not yet mirror the real leg runtime's journal rows.
+[Report](docs/run_reports/2026-11-20-pr795-rl194-content-address.md).
+
 PR #795 audit 3 (2026-11-20) adopts the independent seat's frozen admission-closure
 suite and replaces stage 1's pre-pass with one validator built from the pinned
 writers' full output grammar, run over every rostered span before any protected open

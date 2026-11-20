@@ -41,7 +41,8 @@
     "RL-181 §5",
     "RL-183 §2.4",
     "RL-184 §1",
-    "RL-184 §3.3"
+    "RL-184 §3.3",
+    "RL-194 §1"
   ],
   "when": {
     "after_desk_final": [
@@ -529,11 +530,11 @@
       },
       {
         "path": "scripts/cadence_look_run.py",
-        "sha256": "8d75081846294d40555af34cbecfbc8838743ada5a17057c50000ba985025ff4"
+        "sha256": "cd690086f542893ecd78076fdc4c7565f58a9334656b18dd98fea0003dfa3ec4"
       },
       {
         "path": "scripts/cadence_look_manifest.py",
-        "sha256": "e80d1b9c2b2174a8606fcd70da32d63b85366ed451430dcf6586102872048389"
+        "sha256": "fba974e9ade6a8547d557d750a873ed8de7d9d6b0856f9f9c0c15039e272f5b7"
       },
       {
         "path": "joulewise/cadence_looks/schema_check.py",
@@ -545,11 +546,11 @@
       },
       {
         "path": "joulewise/cadence_looks/interim_twin.py",
-        "sha256": "19cd748f21f8a30c4fb1aee5af78fbd485ec5e2342e46531fd349a0ef89b839e"
+        "sha256": "34cf49ba91e6c3212436c37e83cfeb69c6ba91844880561b9867a4b6313fc603"
       },
       {
         "path": "joulewise/cadence_looks/admission.py",
-        "sha256": "551a3a2a197d007050cab1d9fd6b989508cbc2f6bcef0ea688ddfcafaa83bfe7"
+        "sha256": "9816bec6ccd0576bcd18d14114a47260f4993977a0e7eeb6e716a4f4b0524212"
       },
       {
         "path": "joulewise/cadence_looks/admission_shape.py",
@@ -557,7 +558,7 @@
       },
       {
         "path": "joulewise/cadence_looks/admission_journals.py",
-        "sha256": "e15ee2c87dc78057106b63c39c1c134339fff6b2cfe5efdc8de8f4393ad157c9"
+        "sha256": "7352edea5e93a00ab650a249da5889d9884b312e0d8e666caf68d3c3d57cc8a6"
       },
       {
         "path": "joulewise/cadence_looks/admission_synthetic.py",
@@ -566,6 +567,10 @@
       {
         "path": "joulewise/cadence_looks/admission_kits.py",
         "sha256": "28d9f77526384d24830371539a008382e83acb20c496ea49fa2f9d0c50727887"
+      },
+      {
+        "path": "joulewise/cadence_looks/custody_pins.py",
+        "sha256": "cb764b6112597f8b43c8b366ace7f889a4339f880e3717515d48f0ca9fb5b44f"
       }
     ],
     "runtime": "Python standard library plus numpy, no scipy, run with -I. Stage 2 refuses, before the first energy read, unless its numpy version equals the one in the committed stage-1 output.",
@@ -864,7 +869,7 @@
       },
       {
         "path": "joulewise/cadence_looks/manifest.py",
-        "sha256": "f9b34584de955635167e6a474e1457ecd81e84fa1b4961d5528837a0b4096307"
+        "sha256": "16baf835617ce237cd7039d3cc4e42e708d63579b76ac177941de07ba7b32bb1"
       },
       {
         "path": "joulewise/desk_compress.py",
@@ -916,7 +921,7 @@
     },
     "twin": {
       "path": "scripts/cadence_interim_twin.py",
-      "sha256": "91ca54ab8747ede3d0fe8826e1b7d06ef721bce94de52969b9508a3eac890aab"
+      "sha256": "eded8c5105ff59a61b5644e44dd7998cd3c4ab6f24311a8b2fae674903fb63c6"
     }
   },
   "inclusion": {
@@ -1322,5 +1327,16 @@
       "RL-166 §2"
     ]
   },
-  "open_questions": []
+  "open_questions": [],
+  "inputs": {
+    "pins": {
+      "path": "docs/process/cadence/looks/lm-interim-01.inputs.json",
+      "sha256": "d00ace43b4c007ee2bc76606757b1386b80c3350e20c3174677bae14e1ace42d"
+    },
+    "rule": "The roster is a closed set, so stage 1 admits by content address. This file pins, by sha256 and size, every file of every roster span. A span's pins are the lines of its offload manifest in their order, so they rebuild that manifest's sha256, which the span's public RUN_STATE Check item names; no pin is hashed from today's copy. Stage 1's first act, and stage 2's, reads each pinned file once, hashes it and compares: a changed, missing, unpinned or substituted file or a symlink refuses before any other read of a roster file and before the reservation. Every later read is served from those bytes, and the twin checks the pins itself. The grammar validator still runs on the admitted bytes.",
+    "cite": [
+      "RL-194 §1",
+      "RL-184 §3.3"
+    ]
+  }
 }

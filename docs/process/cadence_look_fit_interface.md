@@ -455,15 +455,46 @@ literal nested bundle locators, including under a staged span override.
 Campaign execution awaits Astra's paired census rerun and Fable's manifest
 cold pass.
 
-Both stages run one admission validator over every rostered span before any trace,
-telemetry or meter file opens and before the reservation (RL-184 §3.3):
+**Admission is by content address (RL-194).** The roster is a closed set, so
+the manifest pins one inputs file (`inputs.pins`,
+`docs/process/cadence/looks/lm-interim-01.inputs.json`) and that file pins every
+file of every roster span by sha256 and size
+(`joulewise/cadence_looks/custody_pins.py`).
+
+- **The pins are not hashes of today's copy.** A span's pins are the lines of
+  its offload manifest (`<sha256>  ./<path>`) in their order. They rebuild that
+  manifest's sha256, and the span's public RUN_STATE Check item names it.
+  A changed, added, dropped or reordered pin breaks the chain in the pin list
+  itself. `cadence_look_manifest.py pin-inputs` writes the file from the offload
+  manifests and opens no custody file; `check-inputs` follows the chain.
+- **The first act.** Before any other read of a roster file and before the
+  reservation, stage 1 and stage 2 read each pinned file once into memory, hash
+  it and compare. A changed, missing, unpinned or substituted file, a symlink
+  or a span the pins do not name refuses, and nothing is consumed. A committed
+  run also requires each span's Check item on `origin/main` to name its offload
+  manifest.
+- **The bytes hashed are the bytes parsed.** For the rest of the stage every
+  read of a roster path is served from the verified bytes. An open of a roster
+  path outside the pin list refuses, and so does any open that bypasses the
+  served bytes.
+- **The twin checks the pins itself.** The child reads the pin list the
+  manifest names and checks each custody file against its pin on every read.
+- **Draft runs.** A synthetic `--allow-draft` run names its generated
+  custody's pin list with `--custody-pins`, and a RUN_STATE with `--run-state`.
+- **The review record.** `scripts/cadence_look_input_review.py` produces the
+  one-time record RL-194 §1 specifies. The seat opens operational files only,
+  each through its pin. The form is
+  `docs/process/cadence/looks/lm-interim-01.input-review.template.json`.
+
+The grammar validator still runs on the admitted bytes, in both stages, as
+defense in depth (RL-184 §3.3):
 `joulewise/cadence_looks/admission.py` with its grammar modules
 (`admission_shape`, `admission_journals`, `admission_kits`,
-`admission_synthetic`). Stage 1 refuses with nothing consumed. Stage 2 repeats
-the check. A shape is admitted only if one of the three rostered writer
+`admission_synthetic`). A shape is admitted only if one of the three rostered writer
 revisions (`b4b6aeb19`, `2d347f721`, `6e9d42f1d`) issues it; the grammar mirrors
 `scripts/cadence_legs_runner.py` and `joulewise/cadence/legs.py` there, with
-the source lines cited in the modules.
+the source lines cited in the modules. The frozen 101,889-case matrix no longer
+gates.
 
 - **Strict decoding.** Every operational file is UTF-8 JSON with no duplicate
   member, no nonfinite number and no second document. A journal is one object

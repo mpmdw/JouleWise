@@ -1040,7 +1040,9 @@ class SupersededStage1(unittest.TestCase):
         self.mr = mr
         self.mini = mr.mini_repo(self)
         self.d = tmpdir(self)
-        mr.commit(self.mini, roster_sha256=self.roster_sha, verdicts_sha256=self.verdicts_sha)
+        # RL-194: the committed copy pins the generated custody it will read (the lead's pin-inputs, before the freeze)
+        mr.commit(self.mini, roster_sha256=self.roster_sha, verdicts_sha256=self.verdicts_sha,
+                  span_dirs={span["span_id"]: self.c.root / span["span_id"] for span in rj(self.c.paths["roster.json"])})
         self.msha = M.sha256_file(self.mini / mr.MANIFEST)
 
     def set_row(self, publish=True, **fields):

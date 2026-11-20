@@ -297,6 +297,65 @@ class Staging(unittest.TestCase):
             self.assertFalse((root / "escape").exists())
 
 
+    PROTECTED = ("legs/L001/runtime/run/power_trace.csv", "legs/L001/runtime/run/raw/powermetrics.plist",
+                 "legs/L001/runtime/run/rich_telemetry.jsonl", "hazards/meter/stream-0001.jsonl")
+    OPERATIONAL = ("runner_receipt.json", "soak/soak_reference.json", "legs/L001/leg_record.json",
+                   "legs/L001/leg_summary.json", "legs/L001/runtime/run/config.json",
+                   "legs/L001/runtime/run/events.jsonl", "legs/L001/runtime/run/outputs/align_turns.jsonl",
+                   "legs/L001/runtime/run/outputs/align_thermal.jsonl")
+
+    def span_files(self):
+        return {**{name: b"{}\n" for name in self.OPERATIONAL},
+                **{name: b"synthetic " + name.encode() for name in self.PROTECTED}, "notes/readme.txt": b"other\n"}
+
+    def test_each_member_is_hashed_as_it_is_written_and_never_opened_again(self):
+        """Audit 1 H1: staging re-opened every expanded trace, telemetry and meter file to hash it. The digest now
+        comes from the bytes as they are written; RL-194 makes stage 1's pin check the first read of the copy."""
+        import sys
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            args = self.pack(root, self.span_files())
+            opened, recording = [], [True]
+
+            def hook(event, hook_args):
+                if recording[0] and event == "open" and hook_args and isinstance(hook_args[0], (str, bytes, os.PathLike)):
+                    opened.append((os.fsdecode(hook_args[0]), hook_args[1]))
+            sys.addaudithook(hook)
+            try:
+                record = R.stage_archive(*args, root / "stage")
+            finally:
+                recording[0] = False
+            self.assertEqual(record["files_verified"], len(self.span_files()))
+            protected = {Path(n).name for n in self.PROTECTED}
+            modes = [mode for path, mode in opened if Path(path).name in protected]
+            self.assertEqual(len(modes), len(self.PROTECTED))            # each written once...
+            self.assertTrue(all("x" in str(mode) for mode in modes), modes)   # ...and never opened to be read
+
+    def test_the_operational_classification_names_the_look_s_operational_sources_only(self):
+        """manifest.is_operational_path: the receipt, soak reference, leg records and summaries and bundle journals."""
+        for name in self.OPERATIONAL:
+            with self.subTest(name=name):
+                self.assertTrue(M.is_operational_path(name))
+        for name in (*self.PROTECTED, "notes/readme.txt", "legs/L001/runtime.rejected1/run/power_trace.csv",
+                     "legs/L001/runtime/run/raw/powermetrics.plist", "hazards/meter/stream-0001.jsonl",
+                     "legs/L001/runtime/run/outputs/power_trace.csv", "runner_receipt.json.bak"):
+            with self.subTest(name=name):
+                self.assertFalse(M.is_operational_path(name))
+
+    def test_the_operational_classification_covers_what_the_manifest_reads_from_a_span(self):
+        with tempfile.TemporaryDirectory() as td:
+            sdir = Path(td)
+            for name in self.OPERATIONAL:
+                path = sdir / name
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text("{}")
+            (sdir / "runner_receipt.json").write_text(json.dumps({"roster": ["L001"]}))
+            (sdir / "legs/L001/leg_record.json").write_text(json.dumps({"result": {"bundle": "run"}}))
+            for rel in M.operational_paths(sdir):
+                with self.subTest(rel=rel):
+                    self.assertTrue(M.is_operational_path(rel), rel)
+
+
 class _Custody:
     tmp = None
 
@@ -446,17 +505,23 @@ if opts.get("spy") or opts.get("twin_path"):
                 reservation_attempts += 1
             if event == "subprocess.Popen" and isinstance(args[1], (list, tuple)) and opts["twin_path"] in args[1]:
                 twin_launches += 1
-        if event == "open" and args and isinstance(args[0], (str, bytes, os.PathLike)):
+        # RL-194: a roster file is read from disk once, by the pin check, and parsed from those bytes. What the
+        # tests observe is what is parsed: a read served from the verified bytes counts as an open by its caller,
+        # and the pin check's own read of every file does not.
+        if event in ("open", "joulewise.custody_pins.read") and args and isinstance(args[0], (str, bytes, os.PathLike)):
             path = os.fsdecode(args[0])
-            opened.append(path)
-            f, who = sys._getframe(1), None          # the innermost repository frame that asked for the open
+            f, who, pin_check = sys._getframe(1), None, False   # the innermost repository frame that asked
             while f is not None:
                 fn = f.f_code.co_filename
                 if fn.startswith(opts["repo"] + os.sep):
                     who = os.path.relpath(fn, opts["repo"])
-                    break
+                    if who != "joulewise/cadence_looks/custody_pins.py":
+                        break
+                    pin_check, who = pin_check or event == "open", None
                 f = f.f_back
-            frames.append([path, who])
+            if not pin_check:
+                opened.append(path)
+                frames.append([path, who])
     sys.addaudithook(_hook)
 if opts.get("trap"):
     import plistlib
@@ -553,9 +618,10 @@ finally:
         shutil.rmtree(private.parent)
     if opts.get("report"):
         with open(opts["report"], "w") as f:
+            served = [f"{sid}/{rel}" for custody in R.ADMITTED for sid, rel in custody.opened]
             json.dump({"opened": opened, "frames": frames, "stage2_calls": len(calls),
                        "private_stderr": private_stderr, "reservation_attempts": reservation_attempts,
-                       "twin_launches": twin_launches}, f)
+                       "twin_launches": twin_launches, "served": served}, f)
 sys.exit(rc)
 '''
 
@@ -574,6 +640,48 @@ _SPIES = []           # active spy_opens lists: a subprocess's opens are appende
 LAST_RUN = {}
 
 
+def synthetic_custody_pins(argv):
+    """RL-194: a generated custody has no offload manifest, so its pin list is made from its bytes as they are when
+    the CLI is called (the generator's ``synthetic_pins``), unless the test names its own with ``--custody-pins``.
+    A test that changes custody after generation therefore still reaches the check it is about; the tests of the
+    pins themselves pass ``--custody-pins``. Returns the arguments to add."""
+    from scripts import cadence_look_synth as synth
+    if "--custody" not in argv or "--custody-pins" in argv or "--allow-draft" not in argv:
+        return []
+    custody = Path(argv[argv.index("--custody") + 1])
+    try:
+        if argv[0] == "stage1":
+            ids = [span["span_id"] for span in rj(argv[argv.index("--roster") + 1])]
+        else:
+            ids = [span["span_id"] for span in rj(argv[argv.index("--stage1") + 1])["roster"]["spans"]]
+        dirs = {sid: custody / sid for sid in ids}
+        for i, word in enumerate(argv):
+            if word == "--span-dir":
+                sid, _, path = argv[i + 1].partition("=")
+                if sid in dirs and path:
+                    dirs[sid] = Path(path)
+        if "--stage-archives" in argv:       # a staged span exists only after the run: its pins are its SHA256SUMS
+            import tarfile
+            from joulewise.cadence_looks import custody_pins
+            staged = {}
+            for entry in rj(argv[argv.index("--stage-archives") + 1]):
+                with tarfile.open(entry["archive"]) as tar:
+                    sizes = {m.name.split("/", 1)[1]: m.size for m in tar if m.isfile()}
+                staged[entry["span_id"]] = custody_pins.span_pins(
+                    entry["span_id"], Path(entry["manifest"]).read_bytes(), sizes, runner_commit="0" * 40,
+                    close_item=2, check_item=1)
+            doc = synth.synthetic_pins({sid: path for sid, path in dirs.items() if sid not in staged})
+            doc["spans"] += list(staged.values())
+        else:
+            doc = synth.synthetic_pins(dirs)
+    except Exception:  # noqa: BLE001 - a malformed roster, plan or custody is the CLI's to refuse, not the harness's
+        return []
+    path = os.path.join(_PIN_DIR, f"custody-pins-{len(os.listdir(_PIN_DIR))}.json")
+    with open(path, "wb") as f:
+        f.write(synth.dump(doc))
+    return ["--custody-pins", path]
+
+
 def _cli_subprocess(argv, trap=False, mock_stage2=False, repo=None, extra=None):
     import subprocess
     import sys
@@ -581,6 +689,11 @@ def _cli_subprocess(argv, trap=False, mock_stage2=False, repo=None, extra=None):
     _pin_dir()
     report = os.path.join(_PIN_DIR, f"report-{len(os.listdir(_PIN_DIR))}.json")
     argv = list(map(str, argv))
+    argv += synthetic_custody_pins(argv)
+    extra = dict(extra or {})
+    if extra.pop("pin_custody", True) and repo != REPO:      # a committed stage in a copy: its custody pinned first
+        from tests.cadence import look_minirepo
+        look_minirepo.pin_custody(repo, argv)
     exports = {}
     if argv[0] == "stage2":
         for flag, name in (("--out", "fit.json"), ("--coefficients-out", "coefficients.json")):

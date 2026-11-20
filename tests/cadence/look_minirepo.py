@@ -20,6 +20,7 @@ import sys
 import tempfile
 
 from joulewise.cadence_looks import manifest as lm
+from tests.cadence import custody_pin_fixture
 from tests.git_fixture import init_git_fixture
 
 REPO = Path(__file__).resolve().parents[2]
@@ -120,18 +121,87 @@ def run(argv, cwd, check=False, env=None):
     return r
 
 
-def py(root, rel, *args, tmpdir=None):
-    """Run a copied entry point as a file under -I, from outside the copy; ``tmpdir``: the child's private TMPDIR."""
+def stage_span_dirs(argv):
+    """{span id: directory} a stage-1 or stage-2 command line reads, from its roster or stage-1 file, ``--custody``
+    and ``--span-dir``; None when the command reads no custody or its inputs cannot be read here."""
+    argv = list(map(str, argv))
+    if not argv or argv[0] not in ("stage1", "stage2") or "--custody" not in argv:
+        return None
+    try:
+        source = json.loads(Path(argv[argv.index("--roster" if argv[0] == "stage1" else "--stage1") + 1]).read_bytes())
+        ids = [span["span_id"] for span in (source if argv[0] == "stage1" else source["roster"]["spans"])]
+    except (OSError, ValueError, KeyError, TypeError, IndexError):
+        return None
+    custody = Path(argv[argv.index("--custody") + 1])
+    dirs = {sid: custody / sid for sid in ids}
+    for index, word in enumerate(argv[:-1]):
+        if word == "--span-dir":
+            sid, _, path = argv[index + 1].partition("=")
+            if sid in dirs and path:
+                dirs[sid] = Path(path)
+    return dirs
+
+
+def pin_custody(root, argv):
+    """Stand in for the lead's ``pin-inputs`` and commit (RL-194): before a committed stage reads generated custody,
+    make the copy's inputs file pin that custody as it is now, with a RUN_STATE whose Check items the pins chain to,
+    and commit it on the shared history. Does nothing for a draft run, a manifest that is not committed, a copy with
+    uncommitted or unpublished changes (a test of those states must reach its own refusal), or a pin list that already
+    matches. A test of the pins themselves passes ``pin_custody=False`` to its launcher and edits custody afterwards."""
+    argv = list(map(str, argv))
+    dirs = stage_span_dirs(argv)
+    if dirs is None or "--allow-draft" in argv or "--custody-pins" in argv or "--stage-archives" in argv:
+        return False
+    m = root / MANIFEST
+    try:
+        doc = json.loads(m.read_text(encoding="utf-8"))
+        if doc.get("status") != "committed" or git(root, "status", "--porcelain").stdout.strip():
+            return False
+        if git(root, "rev-parse", "HEAD").stdout != git(root, "rev-parse", "refs/remotes/origin/main").stdout:
+            return False
+        pins = custody_pin_fixture.dump(custody_pin_fixture.synthetic_pins(dirs))
+    except Exception:  # noqa: BLE001 - custody the fixture cannot pin is the stage's to refuse
+        return False
+    if (root / lm.INPUTS_PATH).read_bytes() == pins:
+        return False
+    doc["inputs"]["pins"]["sha256"] = write_pins(root, dirs)
+    m.write_text(json.dumps(doc, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+    looks = json.loads((root / lm.LOOK_LEDGER_PATH).read_text(encoding="utf-8"))
+    next(r for r in looks["looks"] if r["look_id"] == doc["look_id"])["sha256"] = lm.sha256_file(m)
+    (root / lm.LOOK_LEDGER_PATH).write_text(json.dumps(looks, indent=2) + "\n", encoding="utf-8")
+    git_commit(root, "pin the generated custody")
+    return True
+
+
+def py(root, rel, *args, tmpdir=None, pin=True):
+    """Run a copied entry point as a file under -I, from outside the copy; ``tmpdir``: the child's private TMPDIR.
+    A committed stage on generated custody first has that custody pinned in the copy (``pin_custody``)."""
+    if pin and rel == "scripts/cadence_look_run.py":
+        pin_custody(root, args)
     env = None if tmpdir is None else {**os.environ, "TMPDIR": str(tmpdir)}
     return run([sys.executable, "-I", "-B", str(root / rel), *map(str, args)], tmpdir or tempfile.gettempdir(), env=env)
 
 
-def commit(root, *, stage1_sha256=None, roster_sha256=None, verdicts_sha256=None, publish=True, git_commit_it=True):
+def write_pins(root, span_dirs=None):
+    """RL-194: fill the copy's inputs file with the pins of generated custody (``{span id: directory}``; without
+    one, a placeholder list no roster names) and write a RUN_STATE whose Check items those pins chain to. Returns
+    the inputs file's sha256, for the manifest's ``inputs.pins``."""
+    pins = custody_pin_fixture.synthetic_pins(span_dirs) if span_dirs else custody_pin_fixture.placeholder_pins()
+    (root / lm.INPUTS_PATH).write_bytes(custody_pin_fixture.dump(pins))
+    (root / "RUN_STATE.md").write_text(custody_pin_fixture.run_state(pins), encoding="utf-8")
+    return lm.sha256_file(root / lm.INPUTS_PATH)
+
+
+def commit(root, *, stage1_sha256=None, roster_sha256=None, verdicts_sha256=None, publish=True, git_commit_it=True,
+           span_dirs=None):
     """Mark the copy's manifest committed (status and LOOKS.json row) and commit it with git, as the lead's commit
-    would. ``git_commit_it=False`` leaves the change in the working tree only (a loose ledger)."""
+    would. ``git_commit_it=False`` leaves the change in the working tree only (a loose ledger). A committed look
+    pins its inputs (RL-194): ``span_dirs`` names the generated custody the copy's pin list is made from."""
     m = root / MANIFEST
     doc = json.loads(m.read_text(encoding="utf-8"))
     doc["status"] = "committed"
+    if span_dirs or not json.loads((root / lm.INPUTS_PATH).read_bytes())["spans"]:     # keep a list already filled
+        doc["inputs"]["pins"]["sha256"] = write_pins(root, span_dirs)
     (root / TWIN_PATH).write_bytes(TWIN_SOURCE)
     doc["fit"]["twin"] = TWIN_PIN
     drift = next(d for d in doc["decisions"] if d["id"] == "drift_tripwire")

@@ -1,9 +1,9 @@
 """Fast guards for the stage-1 admission validator (RL-184 section 3.3). Every input is generated; nothing here
 reads custody, and no energy-bearing file exists.
 
-The full black-box matrix is ``test_interim_admission_closure`` (101,889 generated cases through the real CLI, run
-in its own CI job). These tests run the same validator in-process over the same frozen corpus, so a regression in the
-grammar shows up in the ordinary suite within seconds and without numpy.
+Under RL-194 stage 1 admits by content address (``custody_pins``) and this grammar validator runs behind the pins
+as defense in depth. The frozen packet's black-box matrix (``test_interim_admission_closure``) no longer gates; these
+tests run the validator in-process over the packet's writer productions and a sample of its cases, without numpy.
 """
 from __future__ import annotations
 
@@ -287,7 +287,7 @@ class SignalWithoutResult(unittest.TestCase):
 
 
 class Accounting(unittest.TestCase):
-    """The frozen files, the case list and the ledgers that prove every case ran exactly once."""
+    """The frozen packet's files and case list are the published ones, and the correction is the lead's three IDs."""
 
     @unittest.skipIf(T is None, "the frozen admission packet is absent")
     def test_the_frozen_files_and_the_case_list_match_the_published_hashes(self):
@@ -337,51 +337,6 @@ class Accounting(unittest.TestCase):
             with self.subTest(label), unittest.mock.patch.object(T, "cases", return_value=cases), \
                     unittest.mock.patch.object(ACC, "load_corrections", return_value={**real, **change}):
                 self.assertTrue(any(text in problem for problem in ACC.verify_case_list(T)[1]))
-
-    def case(self, name, family="x"):
-        return type("Case", (), {"name": name, "family": family})()
-
-    def ledgers(self, names, total=2, corrected=frozenset()):
-        out = [{"index": i, "total": total, "rows": []} for i in range(total)]
-        for position, name in enumerate(names):
-            basis = "corrected" if name in corrected else "original"
-            out[position % total]["rows"].append([name, basis, True])
-        return out
-
-    def test_a_complete_set_of_ledgers_is_accounted_for(self):
-        names = [f"case-{i}" for i in range(7)]
-        cases = [self.case(n) for n in names]
-        problems, counts = ACC.account(self.ledgers(names, corrected={"case-3"}), cases, 2, frozenset({"case-3"}))
-        self.assertEqual((problems, counts), ([], {"original": 6, "corrected": 1, "failed": 0}))
-
-    def test_a_missing_duplicate_failed_or_misjudged_case_is_found(self):
-        names = [f"case-{i}" for i in range(7)]
-        cases = [self.case(n) for n in names]
-        corrected = frozenset({"case-3"})
-
-        def problems_of(mutate):
-            ledgers = self.ledgers(names, corrected=corrected)
-            mutate(ledgers)
-            return ACC.account(ledgers, cases, 2, corrected)[0]
-
-        self.assertTrue(any("in no shard ledger" in p for p in problems_of(lambda l: l[0]["rows"].pop())))
-        self.assertTrue(any("in shard" in p for p in problems_of(lambda l: l[1]["rows"].append(l[0]["rows"][0]))))
-        self.assertTrue(any("failed its original" in p for p in problems_of(lambda l: l[0]["rows"][0].__setitem__(2, False))))
-        self.assertTrue(any("judged on the" in p for p in problems_of(lambda l: l[0]["rows"][0].__setitem__(1, "corrected"))))
-        self.assertTrue(any("judged on the" in p for p in problems_of(
-            lambda l: [r.__setitem__(1, "original") for led in l for r in led["rows"] if r[0] == "case-3"])))
-        self.assertTrue(any("not 0 to 1" in p for p in problems_of(lambda l: l.pop())))
-        self.assertTrue(any("not in the suite" in p for p in problems_of(lambda l: l[0]["rows"].append(["extra", "original", True]))))
-        self.assertTrue(any("not of 2" in p for p in problems_of(lambda l: l[0].update(total=3))))
-        self.assertTrue(any("failed its corrected" in p for p in problems_of(
-            lambda l: [r.__setitem__(2, False) for led in l for r in led["rows"] if r[0] == "case-3"])))
-
-    @unittest.skipIf(T is None, "the frozen admission packet is absent")
-    def test_the_shards_own_every_case_exactly_once(self):
-        cases = T.cases()
-        owned = [name for index in range(8) for name in ACC.expected_ids(cases, index, 8)]
-        self.assertEqual(sorted(owned), sorted(case.name for case in cases))
-        self.assertEqual(len(set(owned)), len(cases))
 
 
 @unittest.skipIf(T is None, "the frozen admission packet is absent")
