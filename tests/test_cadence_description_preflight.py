@@ -377,6 +377,41 @@ class Stage1OperationalEvidenceTests(unittest.TestCase):
                 self.assertFalse(world.stage.exists())
 
 
+class EarlyDataLockTests(unittest.TestCase):
+    def test_early_lock_refuses_the_narrower_look(self):
+        with TemporaryDirectory() as directory:
+            world = DescriptionWorld(Path(directory).resolve() / "world", fixture.IDS[1], "lock_first")
+            self.assertEqual(len(world.qualified_dates()), 1)
+            fixture.Checks().refused(world, "stage1")
+            self.assertFalse(world.stage.exists())
+
+    def test_early_lock_admits_the_full_later_look_even_below_the_date_gate(self):
+        class EarlyLock(DescriptionWorld):
+            def named(self, name, rel, doc):
+                if name == "event":
+                    doc.update(previous_read=None, previous_status=None, coalesced=[fixture.IDS[1]])
+                super().named(name, rel, doc)
+
+            def save_row(self):
+                for row in self.events_ledger:
+                    if row.get("look_id") == fixture.IDS[1]:
+                        row["status"] = "coalesced"
+                super().save_row()
+
+        for change, dates in (("thirteen", 13), ("all_terminal", 0)):
+            with self.subTest(dates=dates), TemporaryDirectory() as directory:
+                world = EarlyLock(Path(directory).resolve() / "world", fixture.IDS[2], change)
+                world.commit_stage1(self)
+                snapshot = reader.Snapshot(world.repo, world.look, "stage2")
+                census, qualified = reader.census(snapshot)
+                snapshot.check_stage1(census)
+                self.assertEqual(census["counts"]["n_local_dates"], dates)
+                self.assertEqual(set(qualified), set(world.good))
+                self.assertEqual(set(reader.verify_gates(snapshot, qualified)), set(world.good))
+                if dates:
+                    self.assertIn("f2-stab-15/L001", qualified)
+
+
 class SpentDescriptionLookTests(unittest.TestCase):
     def test_spent_look_refuses_before_launching_final_validator(self):
         # Simulate the existing reservation for the worker and its observer.

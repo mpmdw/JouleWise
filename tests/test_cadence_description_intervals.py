@@ -197,6 +197,50 @@ class DescriptionIntervalTests(unittest.TestCase):
             self.assertEqual(summary["dates"][day], dict.fromkeys(("n", "mean", "sd"), refused))
             self.assertEqual(summary["missing"], {"coverage": 1})
 
+    def test_stability_computes_zero_for_equal_irrational_date_means(self):
+        class EqualDateMeans(DescriptionWorld):
+            def leg(self, kit, pos, v, day, ordinal, status):
+                refs = super().leg(kit, pos, v, day, ordinal, status)
+                if pos == 1 and status == "qualified":
+                    amplitude = {3: 1, 4: 3}.get(ordinal, 2)
+                    path = self.copy / refs["key"] / fixture.RAIL_FILE
+                    with path.open(newline="") as stream:
+                        reader_rows = csv.DictReader(stream)
+                        headers = reader_rows.fieldnames
+                        rows = list(reader_rows)
+                    for row in rows:
+                        t = Fraction(row["interval_start_s"])
+                        if 0 <= t < 600 and row["source"] == "powermetrics" and row["rail"] == "gpu_power":
+                            row["power_w"] = str(1 + (amplitude if t >= 300 else 0))
+                    fixture.put(path, fixture.csvbytes([headers, *(row.values() for row in rows)]))
+                return refs
+
+        for look in fixture.IDS[1:]:
+            with self.subTest(look=look), TemporaryDirectory() as directory:
+                world = EqualDateMeans(Path(directory).resolve() / "world", look)
+                result = _score_world(self, world)["date_spreads"]["19458/gpu_rail/sd10_w"]
+                self.assertEqual(len(result["dates"]), 3)
+                self.assertEqual(len({row["mean"] for row in result["dates"].values()}), 1)
+                self.assertEqual(result["sd_date_means"], 0)
+                self.assertGreater(result["pooled_within_sd"], 0)
+
+    def test_mixed_radical_date_means_distinguish_exact_equality_from_a_near_miss(self):
+        for delta in (Fraction(), Fraction(1, 10**30)):
+            with self.subTest(delta=delta):
+                first = (Fraction(2), Fraction(3))
+                second = (8 * (1 + delta) ** 2, Fraction(12), Fraction(), Fraction())
+                observations = {
+                    f"{day}/{index}": {"date": day, "value": reader.StandardDeviation(squared)}
+                    for day, measurements in (("first", first), ("second", second))
+                    for index, squared in enumerate(measurements)
+                }
+                result = reader._printed(reader._date_summaries({"cell": observations}))
+                spread = result["cell"]["sd_date_means"]
+                if delta:
+                    self.assertEqual(spread, float(delta / 2))
+                else:
+                    self.assertEqual(spread, 0)
+
     def test_prefill_level_preserves_a_half_nanosecond_midpoint(self):
         for offset, omit, expected in ((0, True, None), (1, False, None),
                                        (1, True, "coverage"), (2, True, "coverage")):

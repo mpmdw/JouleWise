@@ -768,15 +768,13 @@ def _check_schedule(snapshot, dates):
             "data lock is not committed for this cut")
     peer = [row.get("status") for row in snapshot.ledger["looks"] if row.get("look_id") == other]
     if snapshot.look == IDS[1]:
-        if lock:
-            require(peer == ["coalesced"] and event["coalesced"] == [IDS[2]],
-                    "early lock requires a committed coalescence")
-        else:
-            require(dates >= 14 and not event["coalesced"], "first stability read is not due")
+        require(not lock and dates >= 14 and event["coalesced"] == [], "first stability read is not due")
     else:
-        require(lock and not event["coalesced"] and event["previous_read"] == IDS[1]
-                and event["previous_status"] == "completed" and peer == ["completed"],
-                "second stability read is not due")
+        completed_first = (peer == ["completed"] and event["coalesced"] == []
+                           and event["previous_read"] == IDS[1] and event["previous_status"] == "completed")
+        coalesced_first = (peer == ["coalesced"] and event["coalesced"] == [IDS[1]]
+                           and event["previous_read"] is None and event["previous_status"] is None)
+        require(lock and (completed_first or coalesced_first), "second stability read is not due")
 
 
 def _reconcile_member_bundles(snapshot, kits, issued, empty_closes):
@@ -952,20 +950,54 @@ def difference(left, right):
     return _quality_null(left, right) or missing("missing_operand")
 
 
+def _exact_root(value):
+    numerator, denominator = value.as_integer_ratio()
+    n, d = math.isqrt(numerator), math.isqrt(denominator)
+    return Fraction(n, d) if n * n == numerator and d * d == denominator else None
+
+
 @dataclass(frozen=True, slots=True)
 class StandardDeviation:
     squared: Fraction
 
     def rational(self):
+        exact = _exact_root(self.squared)
+        if exact is not None:
+            return exact
         numerator, denominator = self.squared.as_integer_ratio()
-        n, d = math.isqrt(numerator), math.isqrt(denominator)
-        if n * n == numerator and d * d == denominator:
-            return Fraction(n, d)
-        # The square root itself may be irrational. Keep its approximation
-        # out of threshold comparisons and use it for date aggregates and output.
         with localcontext() as context:
             context.prec = 60
             return Fraction((Decimal(numerator) / Decimal(denominator)).sqrt())
+
+
+@dataclass(frozen=True, slots=True)
+class RadicalSum:
+    terms: dict[Fraction, Fraction]
+
+    def __sub__(self, other):
+        terms = {}
+        for root in self.terms.keys() | other.terms.keys():
+            coefficient = self.terms.get(root, 0) - other.terms.get(root, 0)
+            if coefficient:
+                terms[root] = coefficient
+        return RadicalSum(terms)
+
+    def decimal(self):
+        # One representative per rational square class. Equal radicals
+        # cancel exactly before the remaining terms need numerical roots.
+        return sum((Decimal(c.numerator) / Decimal(c.denominator)
+                    * (Decimal(r.numerator) / Decimal(r.denominator)).sqrt()
+                    for r, c in self.terms.items()), Decimal())
+
+
+@dataclass(frozen=True, slots=True)
+class ResidualDeviation:
+    residuals: list[RadicalSum]
+    df: int
+
+    def decimal(self):
+        squared = sum((residual.decimal() ** 2 for residual in self.residuals), Decimal())
+        return (squared / self.df).sqrt()
 
 
 def deviation(samples):
@@ -977,6 +1009,10 @@ def _printed(value):
         return float(value.rational())
     if isinstance(value, Fraction):
         return float(value)
+    if isinstance(value, (RadicalSum, ResidualDeviation)):
+        with localcontext() as context:
+            context.prec = 60
+            return float(value.decimal())
     if isinstance(value, dict):
         return {key: _printed(item) for key, item in value.items()}
     if isinstance(value, list):
@@ -1759,40 +1795,68 @@ def _leg_values(signal, detail, instrument):
     return result
 
 
+def _date_value(value, basis):
+    if not isinstance(value, StandardDeviation):
+        return RadicalSum({Fraction(1): Fraction(value)}) if value else RadicalSum({})
+    squared = Fraction(value.squared)
+    if not squared:
+        return RadicalSum({})
+    for root in basis:
+        coefficient = _exact_root(squared / root)
+        if coefficient is not None:
+            return RadicalSum({root: coefficient})
+    basis.append(squared)
+    return RadicalSum({squared: Fraction(1)})
+
+
+def _date_mean(values):
+    terms = defaultdict(Fraction)
+    for value in values:
+        for root, coefficient in value.terms.items():
+            terms[root] += coefficient
+    return RadicalSum({root: coefficient / len(values) for root, coefficient in terms.items() if coefficient})
+
+
 def _date_summaries(context):
     spreads = {}
     for cell, items in context.items():
         grouped = defaultdict(list)
         refused_by_date = defaultdict(list)
         failures = Counter()
+        basis = [Fraction(1)]
         for detail in items.values():
             value, day = detail["value"], detail["date"]
             values = grouped[day]
-            if isinstance(value, StandardDeviation):
-                value = value.rational()
-            if number(value):
-                values.append(value)
+            if isinstance(value, StandardDeviation) or number(value):
+                values.append(_date_value(value, basis))
             else:
                 failures[value["reason"]] += 1
                 refused_by_date[day].append(value)
         dates = {}
         means = []
-        df, squared_residuals = 0, Fraction()
+        df, pooled_residuals = 0, []
         for day, values in grouped.items():
             if not values:
                 refusals = refused_by_date[day]
                 refused = _quality_null(*refusals) or refusals[0]
                 dates[day] = dict.fromkeys(("n", "mean", "sd"), refused)
                 continue
-            center = mean(values)
-            dates[day] = {"n": len(values), "mean": center, "sd": deviation(values)}
+            center = _date_mean(values)
+            residuals = [value - center for value in values]
+            day_df = len(values) - 1
+            spread = ResidualDeviation(residuals, day_df) if day_df else missing("fewer_than_two")
+            dates[day] = {"n": len(values), "mean": center, "sd": spread}
             means.append(center)
-            df += len(values) - 1
-            squared_residuals += sum((value - center) ** 2 for value in values)
+            df += day_df
+            pooled_residuals.extend(residuals)
+        between = missing("fewer_than_two")
+        if len(means) >= 2:
+            center = _date_mean(means)
+            between = ResidualDeviation([value - center for value in means], len(means) - 1)
         spread = {
             "dates": dates, "singleton_dates": sum(row["n"] == 1 for row in dates.values()),
-            "sd_date_means": deviation(means),
-            "pooled_within_sd": StandardDeviation(squared_residuals / df) if df else missing("no_within_date_df"),
+            "sd_date_means": between,
+            "pooled_within_sd": ResidualDeviation(pooled_residuals, df) if df else missing("no_within_date_df"),
         }
         if failures:
             spread["missing"] = dict(failures)
