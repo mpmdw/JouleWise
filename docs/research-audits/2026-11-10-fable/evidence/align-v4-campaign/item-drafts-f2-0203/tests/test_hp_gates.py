@@ -4,6 +4,7 @@ from copy import deepcopy
 import csv
 import io
 from datetime import datetime
+from itertools import product
 import json
 from pathlib import Path
 import sys
@@ -54,6 +55,26 @@ def fixture_queue():
     for row in queue["spans"]:
         row["not_before"] = fixture["not_before"]
     return json.dumps(queue).encode()
+
+
+def first_stability_entry(over, day):
+    stability = over.get("stability", BASE["stability"])
+    if stability == "first-eligible":
+        return evidence("rank-one eligible kit", rung="first-stability", status="eligible",
+                        entry_id=over.get("stability_kit"), pool=over.get("first_eligible_stability_pool"))
+    # The fixture's default states the first leg is done. When it names a
+    # separate 15/16 filler, its explicit rank-one pool and completion facts
+    # are the evidence for that day; rank four cannot supply those facts.
+    separate_pool = over.get("stability_kit") in ("f2-stab-15", "f2-stab-16")
+    pool = over.get("rank1_pool") if separate_pool else over.get("rank1_pool", hp.RANK1_POOL)
+    done = over.get("rank1_already_done") if separate_pool else over.get("rank1_already_done", True)
+    kit_id = "f2-stab-01"
+    entry = evidence("rank-one daily disposition", rung="first-stability", status="unavailable",
+                     entry_id=kit_id, basis="spent-for-date", pool=pool)
+    if done is True:
+        entry["completion"] = evidence("synthetic first leg completion", kit_id=kit_id,
+                                       leg_id="L001", pin=hp.RANK1_PIN, t0_date=day.isoformat(), status="completed")
+    return entry
 
 
 def candidate(over, now, phase, queue=None):
@@ -127,16 +148,15 @@ def candidate(over, now, phase, queue=None):
     ranks = {
         "ready-session": over.get("eligible_session", BASE["eligible_session"]),
         "counted": over.get("eligible_counted", BASE["eligible_counted"]),
-        "first-stability": over.get("stability") == "first-eligible",
         **{f"f2-inst-0{n}": f"inst-0{n}" in over.get("finite_ready", BASE["finite_ready"]) for n in (1, 2, 3)},
         "further-stability": over.get("stability") == "further-eligible",
     }
     day = hp.local_date(now)
     priority = evidence("synthetic complete ladder", date=day.isoformat(), complete=True, r1_post_close=True, entries=[
         evidence(f"entry {rung}", rung=rung, status="eligible" if eligible else "unavailable",
-                 entry_id=over.get("stability_kit", rung) if rung == "first-stability" else rung)
+                 entry_id=over.get("stability_kit", rung) if rung == "further-stability" else rung)
         for rung, eligible in ranks.items()
-    ])
+    ] + [first_stability_entry(over, day)])
     spent = {}
     for row in over.get("hp_run_history", BASE["hp_run_history"]):
         span, status = row.split(":")
@@ -332,7 +352,6 @@ def transition_runtime(root, span, now):
     args.issue_sha = hp.sha256(args.issue.read_bytes())
     args.queue.write_bytes(queue)
     clock = [now]
-
     def record(phase, sampled, **over):
         obs = transition_record(span, phase, sampled, queue, **over)
         # Each retry observes the same immutable close receipts unless the
@@ -340,6 +359,11 @@ def transition_runtime(root, span, now):
         obs["latest_close"]["ended_epoch_s"] -= sampled - now
         if obs["history"]["prior_check"]:
             obs["history"]["prior_check"]["ended_epoch_s"] -= sampled - now
+        if phase == "Run":
+            obs["valid_through_epoch_s"] = sampled + 1200
+            for field in hp.RUN_OBSERVATIONS:
+                if isinstance(obs.get(field), dict):
+                    obs[field]["sampled_at"] = sampled
         return obs
 
     def invoke(observation, at, want):
@@ -411,8 +435,8 @@ def audit_transition_regressions(output):
 
     expiry = unix("2026-11-30T00:00:00-08:00")
     handoff_cases = (
-        ("expires-in-claim", expiry - 2, expiry + 5, "NEED_FRESH_QUEUE"),
-        ("handoff-validity", now, now + 1, "WAIT_EVIDENCE"),
+        ("expires-in-claim", expiry - 601, expiry + 5, "NEED_FRESH_QUEUE"),
+        ("handoff-validity", now, now + 601, "WAIT_EVIDENCE"),
     )
     for name, started, valid_through, want in handoff_cases:
         with transition_runtime(output / name, BASE["span"], started) as (args, record, invoke, launch, clock):
@@ -624,6 +648,214 @@ def audit_round_two_regressions(output):
         launch.assert_not_called()
 
 
+def launch_margin_properties(output):
+    """Check the real Run entry against both runway and exclusive expiry."""
+    from scripts import launch_cadence_span as launcher
+
+    expiry = unix("2026-11-30T00:00:00-08:00")
+    latencies = (0, 1, 599, 600, 601)
+    runway = (0, 1, 599, 600, 601, 602, 1200)
+    failures = {"queue": "NEED_FRESH_QUEUE", "admission": "WAIT_EVIDENCE", "watcher": "WAIT_EVIDENCE",
+                "item": "WAIT_BINDING", "issue": "WAIT_BINDING"}
+    checked = 0
+    for field, remaining, latency in product(failures, runway, latencies):
+        now = expiry - remaining if field == "queue" else unix(BASE["clock"])
+        limit = now + remaining
+        case = output / f"margin-{field}-{remaining}-{latency}"
+        span = BASE["span"]
+        with transition_runtime(case, span, now - 2) as (args, record, invoke, launch, clock):
+            rendered = case / "items"
+            rendered.mkdir()
+            items = deepcopy(ITEMS)
+            if field == "item":
+                items[span]["expires_epoch_s"] = limit
+            (rendered / "items.json").write_text(json.dumps(list(items.values())))
+            if field == "issue":
+                issue = json.loads(args.issue.read_bytes())
+                issue["expires_epoch_s"] = limit
+                args.issue.write_text(json.dumps(issue))
+                args.issue_sha = hp.sha256(args.issue.read_bytes())
+            run = record("Run", now)
+            if field == "admission":
+                run["valid_through_epoch_s"] = limit
+            if field == "watcher":
+                run["watcher"] = evidence("synthetic watcher relied on at Run", sampled_at=now, expires_epoch_s=limit)
+            run["timing"]["runner_start_max_s"] = latency
+            launched_at = []
+
+            def launch_after_delay(argv, **kwargs):
+                clock[0] += latency
+                plan = launcher.cadence_plan(args.kit, argv[argv.index("--legs") + 1],
+                                             argv[argv.index("--batch-window") + 1])
+                launched_at.append(plan["t0_epoch_s"])
+                assert launched_at[-1] < limit
+                return 0
+
+            launch.side_effect = launch_after_delay
+            with patch.object(hp, "HP", rendered):
+                invoke(record("Start", now - 2), now - 2, "ELIGIBLE")
+                allowed = remaining >= 600 and remaining > latency
+                invoke(run, now, "ELIGIBLE" if allowed else failures[field])
+            assert launch.call_count == int(allowed)
+            assert launched_at == ([now + latency] if allowed else [])
+            checked += 1
+
+    queue_bytes = (HP / "queue-b.json").read_bytes()
+    opens = unix("2026-11-21T00:00:00-08:00")
+    item, issue, obs, *_ = candidate({}, opens, "Run", queue=queue_bytes)
+    obs["valid_through_epoch_s"] = opens + 1200
+    for offset in (-1, 0, 1):
+        try:
+            hp.check_run_expiries(item, issue, json.loads(queue_bytes), obs, opens + offset)
+        except hp.Refusal as exc:
+            assert offset == -1 and exc.decision == "NEED_FRESH_QUEUE"
+        else:
+            assert offset >= 0
+    return checked
+
+
+def publication_properties(output):
+    """Sweep every ordering and tie of the four events on a one-second grid."""
+    epoch = unix(BASE["clock"])
+    for offsets in product(range(4), repeat=4):
+        sampled_start, published, sampled_run, read_run = (epoch + offset for offset in offsets)
+        root = output / ("publication-" + "-".join(map(str, offsets)))
+        with transition_runtime(root, BASE["span"], epoch) as (args, record, invoke, launch, clock):
+            events = []
+            original_read = Path.read_bytes
+            verify = hp.read_published_start
+            link = hp.os.link
+
+            def observed_verify(path, current_args):
+                read = verify(path, current_args)
+                if current_args.phase == "Run":
+                    events.append("verified-start")
+                return read
+
+            def observed_read(path):
+                if args.phase == "Run" and path == args.observation:
+                    events.append("read-observation")
+                return original_read(path)
+
+            def link_at_publication(source, destination, *args, **kwargs):
+                if Path(destination).name.endswith(".v4.json"):
+                    # The sample at the Start gate cannot stand in for a
+                    # receipt that is still absent during staged write I/O.
+                    assert not Path(destination).exists()
+                    clock[0] = published
+                return link(source, destination, *args, **kwargs)
+
+            def attempt_start():
+                start = record("Start", sampled_start)
+                start["valid_through_epoch_s"] = epoch + 1200
+                if sampled_start > published:
+                    invoke(start, published, "WAIT_EVIDENCE")
+                else:
+                    with patch.object(hp.os, "link", side_effect=link_at_publication):
+                        invoke(start, sampled_start, "ELIGIBLE")
+
+            allowed = sampled_start <= published < sampled_run <= read_run
+            with patch.object(hp, "read_published_start", side_effect=observed_verify), \
+                 patch.object(Path, "read_bytes", observed_read):
+                if published <= read_run:
+                    attempt_start()
+                invoke(record("Run", sampled_run), read_run, "ELIGIBLE" if allowed else "WAIT_EVIDENCE")
+                expected = ["verified-start", "read-observation"] if sampled_start <= published <= read_run else []
+                if allowed:
+                    expected.append("read-observation")  # Post-claim byte check.
+                assert events == expected, offsets
+                if published > read_run:
+                    attempt_start()
+            assert launch.call_count == int(allowed), offsets
+    return 4 ** 4
+
+
+def receipt_integrity_regressions(output):
+    now = unix(BASE["clock"])
+    with transition_runtime(output / "receipt-integrity", BASE["span"], now) as (args, record, invoke, launch, _):
+        invoke(record("Start", now), now, "ELIGIBLE")
+        receipt, = (args.custody / "hp-02-arms").glob("start-*.v4.json")
+        original = receipt.read_bytes()
+        seal = hp.start_seal_path(receipt)
+        original_seal = seal.read_bytes()
+        read_bytes = Path.read_bytes
+
+        def require_no_observation(path):
+            assert path != args.observation, "Run read observations before verifying Start"
+            return read_bytes(path)
+
+        for corruption in ("digest", "unpublished"):
+            envelope = json.loads(original)
+            if corruption == "digest":
+                envelope["receipt"]["observation"] = "modified receipt"
+            else:
+                envelope["receipt"]["state"] = "PREPARED"
+                envelope["sha256"] = hp.sha256(hp.receipt_bytes(envelope["receipt"]))
+            receipt.write_text(json.dumps(envelope))
+            with patch.object(Path, "read_bytes", require_no_observation):
+                invoke(record("Run", now + 1), now + 1, "WAIT_EVIDENCE")
+        receipt.write_bytes(original)
+        seal.unlink()
+        with patch.object(Path, "read_bytes", require_no_observation):
+            invoke(record("Run", now + 1), now + 1, "WAIT_EVIDENCE")
+        old_seal = json.loads(original_seal)
+        old_seal["publication"]["published_at"] -= 1
+        seal.write_text(json.dumps(old_seal))
+        with patch.object(Path, "read_bytes", require_no_observation):
+            invoke(record("Run", now + 1), now + 1, "WAIT_EVIDENCE")
+        seal.write_bytes(original_seal)
+        for field in hp.RUN_OBSERVATIONS + ("watcher",):
+            run = record("Run", now + 1)
+            if field == "watcher":
+                run["watcher"] = evidence("synthetic watcher", expires_epoch_s=now + 1200)
+            else:
+                run[field].pop("sampled_at")
+            invoke(run, now + 1, "WAIT_EVIDENCE")
+            run[field]["sampled_at"] = now  # No stale section can hide inside a fresh envelope.
+            invoke(run, now + 1, "WAIT_EVIDENCE")
+        launch.assert_not_called()
+        invoke(record("Run", now + 2), now + 2, "ELIGIBLE")
+        launch.assert_called_once()
+
+
+def rank1_properties():
+    observations = next(row["observations"] for row in DOC["cases"] if row["id"] == "rank1-spent-for-date")
+    now = unix(BASE["clock"])
+    for phase in ("Issue", "Start", "Run"):
+        def fixture(over=observations):
+            return candidate(over, now, phase, queue=(HP / "queue-b.json").read_bytes())
+
+        def rank_one(args):
+            return next(entry for entry in args[2]["priority"]["entries"] if entry["rung"] == "first-stability")
+
+        assert hp.decide(*fixture())["decision"] == "ELIGIBLE"
+        for fact in ("rank1_pool", "rank1_already_done"):
+            without_fact = {key: value for key, value in observations.items() if key != fact}
+            assert hp.decide(*fixture(without_fact))["decision"] == "WAIT_EVIDENCE", (phase, fact)
+        for fact in rank_one(fixture())["completion"]:
+            args = fixture()
+            del rank_one(args)["completion"][fact]
+            assert hp.decide(*args)["decision"] == "WAIT_EVIDENCE", (phase, fact)
+        for kit in range(1, 17):
+            args = fixture()
+            row = rank_one(args)
+            row["completion"]["kit_id"] = row["entry_id"] = f"f2-stab-{kit:02d}"
+            assert hp.decide(*args)["decision"] == ("ELIGIBLE" if kit <= 14 else "WAIT_EVIDENCE"), (phase, kit)
+        for field, incorrect in (("t0_date", hp.local_date(now - 86400).isoformat()),
+                                 ("leg_id", "L013"), ("pin", hp.PIN), ("status", "running")):
+            args = fixture()
+            rank_one(args)["completion"][field] = incorrect
+            assert hp.decide(*args)["decision"] == "WAIT_EVIDENCE", (phase, field)
+        args = fixture()
+        row = rank_one(args)
+        row.pop("completion")
+        row.update(entry_id=hp.RANK1_POOL, basis="no-eligible-kit", eligibility_census=evidence(
+            "complete synthetic eligibility census", date=hp.local_date(now).isoformat(), pool=hp.RANK1_POOL,
+            complete=True, eligible_kits=[],
+        ))
+        assert hp.decide(*args)["decision"] == "ELIGIBLE", phase
+
+
 if __name__ == "__main__":
     output = Path(sys.argv[2])
     original = original_vectors()
@@ -637,6 +869,11 @@ if __name__ == "__main__":
         audit_transition_regressions(session)
         audit_evidence_regressions(session)
         audit_round_two_regressions(session)
+        margin_cases = launch_margin_properties(session)
+        ordering_cases = publication_properties(session)
+        receipt_integrity_regressions(session)
+    rank1_properties()
+    print(f"PASS lead rules: {margin_cases} scope/runway/latency cases and {ordering_cases} publication interleavings")
     (output / "item-decisions.json").write_text(json.dumps(original, indent=2))
     (output / "timing-decisions.json").write_text(json.dumps(timing_decisions, indent=2))
     assert not freeze.NATIVE

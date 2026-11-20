@@ -7,6 +7,7 @@ import math
 import os
 from pathlib import Path
 import re
+import stat
 import subprocess
 import sys
 from tempfile import NamedTemporaryFile
@@ -28,6 +29,14 @@ LINE2_SENTENCE = (
     "no frozen byte differs (RL-190 2)."
 )
 ARGUMENTS = ("02:00-02:35", "13:14-13:15")
+LAUNCH_MARGIN_S = 600
+START_SCHEMA = "hp-02.start.v4"
+RUN_OBSERVATIONS = ("look", "hp01_dates", "latest_close", "history", "safety",
+                    "stops", "copy", "priority", "calendar", "timing")
+RANK1_POOL = "f2-stab-01..14"
+RANK1_KITS = frozenset(f"f2-stab-{n:02d}" for n in range(1, 15))
+RANK1_LEGS = frozenset(f"L{n:03d}" for n in range(1, 13))
+RANK1_PIN = "2d347f721552fe03bdd19f113e7bad7a7c24908e"
 PASS = frozenset({"ELIGIBLE", "ELIGIBLE_WITH_COPY_DEBT"})
 ROSTERS = {
     "hp-02-s01": ["L001", "L002", "L003"],
@@ -151,7 +160,7 @@ def check_issue(item, issue, now, phase):
     require(
         record(issue) and issue["schema"] == "hp-02.issue.v1"
         and issue["status"] == ("PROPOSED" if phase == "Issue" else "ISSUED")
-        and issue["binding"] == issue_binding(item) and issue["expires_epoch_s"] is None
+        and issue["binding"] == issue_binding(item)
         and number(issue["issued_epoch_s"]) and issue["issued_epoch_s"] <= now
         and number(issue["check_deadline_epoch_s"])
         and is_text(issue["check_target"]) and is_text(issue["latest_close_at_issue"])
@@ -161,6 +170,9 @@ def check_issue(item, issue, now, phase):
         and line2_ok == "yes",
         "WAIT_BINDING", "issue identity, accepted spec, inherited smoke or LINE2_OK missing",
     )
+    for expiry in (item["expires_epoch_s"], issue["expires_epoch_s"]):
+        require(expiry is None or number(expiry) and expiry > now,
+                "WAIT_BINDING", "item or issue expiry is invalid or reached")
 
 
 def check_look_binding(look, now, sampled_at):
@@ -318,6 +330,28 @@ def check_copy(copy, close, now):
     return True
 
 
+def check_rank1(entry, day):
+    require(entry.get("pool") == RANK1_POOL, "WAIT_EVIDENCE", "rank 1 must adjudicate the 01–14 pool")
+    if entry["status"] == "eligible":
+        require(entry["entry_id"] in RANK1_KITS, "WAIT_EVIDENCE", "invalid first-stability kit")
+        return
+    if entry.get("basis") == "spent-for-date":
+        complete = entry.get("completion")
+        require(record(complete) and complete.get("status") == "completed"
+                and complete.get("kit_id") in RANK1_KITS
+                and complete["kit_id"] == entry["entry_id"]
+                and complete.get("pin") == RANK1_PIN and complete.get("t0_date") == day.isoformat()
+                and complete.get("leg_id") in RANK1_LEGS,
+                "WAIT_EVIDENCE", "rank 1 spent requires a completed 01–14 leg and this date's completion record")
+        return
+    census = entry.get("eligibility_census")
+    require(entry.get("basis") == "no-eligible-kit" and entry["entry_id"] == RANK1_POOL
+            and record(census) and census.get("date") == day.isoformat()
+            and census.get("pool") == RANK1_POOL
+            and census.get("complete") is True and census.get("eligible_kits") == [],
+            "WAIT_EVIDENCE", "rank 1 unavailability requires a complete pool adjudication")
+
+
 def check_rank(priority, day):
     require(record(priority) and priority["complete"] is True and priority["date"] == day.isoformat()
             and priority["r1_post_close"] is True, "WAIT_EVIDENCE", "current complete ladder required")
@@ -330,10 +364,8 @@ def check_rank(priority, day):
         rung = entry["rung"]
         require(rung not in by_rung, "WAIT_EVIDENCE", "ambiguous ladder rung")
         by_rung[rung] = entry
-        if rung == "first-stability" and entry["status"] == "eligible":
-            require(re.fullmatch(r"f2-stab-(0[1-9]|1[0-4])", entry["entry_id"]) is not None,
-                    "WAIT_EVIDENCE", "invalid first-stability kit")
     require(set(by_rung) == {*HIGHER, "further-stability"}, "WAIT_EVIDENCE", "incomplete ladder")
+    check_rank1(by_rung["first-stability"], day)
     instruments = [by_rung[rung] for rung in INSTRUMENTS]
     require(all(entry["entry_id"] == entry["rung"] for entry in instruments)
             and len({entry["record"] for entry in instruments}) == len(instruments),
@@ -459,7 +491,7 @@ def check_observation(item, issue, obs, phase, now):
 
 
 def decide(item, issue, obs, phase, now, kit_path, queue_bytes, *, planner=None, resample=None):
-    """One fail-closed decision shared by Issue, Start and Run."""
+    """Evaluate the phase snapshot; run_gate adds custody and dispatch preconditions."""
     from joulewise.cadence import kit as kitmod, queue as queuemod
 
     try:
@@ -644,7 +676,7 @@ CUSTODY=/Users/edr/night-custody/magistrate
 hp_gate Start "$HP_START_OBSERVATION" || exit 1
 ```
 
-**Run.** Refresh the records, native census, marker, fence and clock after Start. Invoke the same gate with the Run observation immediately before launch. Run requires evidence sampled after the successful Start verdict on the same host. The shared admission record retains observed close, restore, look-execution and spent-leg facts across issues and retries. The gate reserves the roster, then rechecks the handoff clock after the claim is durable. The claim records the exact argument, t0 and deadline. On bootstrap refusal hold this attempt for the lead. Exit the session as soon as the launcher reports a claimed fence.
+**Run.** Refresh the records, native census, marker, fence and clock after Start. Invoke the same gate with the Run observation immediately before launch. Run first verifies the atomically published Start receipt. It reads the operational observation afterward and requires its sample time to follow publication on the same host. The shared admission record retains observed close, restore, look-execution and spent-leg facts across issues and retries. The gate reserves the roster, then rechecks the queue opening and the 600-second margin on all applicable expiries after the claim is durable. The claim records the exact argument, t0 and deadline. On bootstrap refusal hold this attempt for the lead. Exit the session as soon as the launcher reports a claimed fence.
 
 ```sh
 hp_gate Run "$HP_RUN_OBSERVATION" || exit 1
@@ -731,6 +763,14 @@ def write_exclusive(path, data):
         os.fsync(stream.fileno())
 
 
+def sync_directory(path):
+    directory = os.open(path, os.O_RDONLY)
+    try:
+        os.fsync(directory)
+    finally:
+        os.close(directory)
+
+
 def write_admission_state(path, data):
     # The arm lock serializes readers and writers. Keep the prior version on
     # write failure, and sync the new file and directory before returning.
@@ -741,11 +781,7 @@ def write_admission_state(path, data):
             stream.flush()
             os.fsync(stream.fileno())
             os.replace(temporary, path)
-            directory = os.open(path.parent, os.O_RDONLY)
-            try:
-                os.fsync(directory)
-            finally:
-                os.close(directory)
+            sync_directory(path.parent)
         finally:
             temporary.unlink(missing_ok=True)
 
@@ -835,10 +871,113 @@ def remember_admission(path, obs, now):
             write_admission_state(path, (serialized + "\n").encode())
 
 
-def check_handoff_time(item, queue, obs, decision, now):
+def receipt_bytes(record):
+    return json.dumps(record, sort_keys=True, separators=(",", ":")).encode()
+
+
+def publish_new_file(path, data):
+    linked = False
+    try:
+        with NamedTemporaryFile(dir=path.parent, prefix=".start-", delete=False) as stream:
+            temporary = Path(stream.name)
+            try:
+                stream.write(data)
+                stream.flush()
+                os.fsync(stream.fileno())
+                os.link(temporary, path)
+                linked = True
+            finally:
+                temporary.unlink()
+        sync_directory(path.parent)
+    except OSError:
+        if linked:
+            path.unlink()
+        raise
+
+
+def start_seal_path(path):
+    return path.with_suffix(".published.json")
+
+
+def publish_start(path, result):
+    receipt = {**result, "schema": START_SCHEMA, "state": "PUBLISHED"}
+    envelope = {"receipt": receipt, "sha256": sha256(receipt_bytes(receipt))}
+    data = receipt_bytes(envelope) + b"\n"
+    publish_new_file(path, data)
+    # The complete, digest-verifiable receipt is visible and durable now.
+    # Timestamp after that event, and bind the timestamp to those exact bytes.
+    published = {"published_at": time.time(), "receipt_sha256": sha256(data)}
+    try:
+        seal = {"publication": published, "sha256": sha256(receipt_bytes(published))}
+        publish_new_file(start_seal_path(path), receipt_bytes(seal) + b"\n")
+    except OSError:
+        path.unlink()
+        sync_directory(path.parent)
+        raise
+
+
+def read_receipt_file(path):
+    fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+    with os.fdopen(fd, "rb") as stream:
+        require(stat.S_ISREG(os.fstat(stream.fileno()).st_mode),
+                "WAIT_EVIDENCE", "Start receipt and publication seal must be regular files")
+        return stream.read()
+
+
+def read_published_start(path, args):
+    data = read_receipt_file(path)
+    envelope = read_json(data)
+    seal = read_json(read_receipt_file(start_seal_path(path)))
+    publication = seal["publication"]
+    published_at = publication["published_at"]
+    start = envelope["receipt"]
+    require(seal["sha256"] == sha256(receipt_bytes(publication))
+            and publication["receipt_sha256"] == sha256(data)
+            and envelope["sha256"] == sha256(receipt_bytes(start))
+            and start["schema"] == START_SCHEMA and start["state"] == "PUBLISHED"
+            and start["decision"] in PASS and start["span"] == args.span
+            and start["output"] == str(args.output) and start["issue_sha"] == args.issue_sha
+            and number(published_at) and number(start["t0"]) and published_at >= start["t0"],
+            "WAIT_EVIDENCE", "missing or unverifiable published Start receipt")
+    return start, published_at
+
+
+def check_run_observation_times(obs, start, published_at, read_at):
+    sampled = obs["observed_epoch_s"]
+    require(start["host"] == obs["host"] and number(sampled) and published_at < sampled <= read_at,
+            "WAIT_EVIDENCE", "Run evidence must be sampled after published Start and before being read")
+    fields = RUN_OBSERVATIONS + (("watcher",) if obs.get("watcher") is not None else ())
+    for field in fields:
+        observation = obs.get(field)
+        require(isinstance(observation, dict) and number(observation.get("sampled_at"))
+                and sampled <= observation["sampled_at"] <= read_at,
+                "WAIT_EVIDENCE", f"{field} must have a sample after published Start and before being read")
+
+
+def check_run_expiries(item, issue, queue, obs, now, latest_start=None):
     queue_entry(item, queue, now)
-    require(decision["t0"] <= now <= min(
-                obs["valid_through_epoch_s"], decision["t0"] + obs["timing"]["runner_start_max_s"]),
+    expiries = [
+        ("queue", datetime.fromisoformat(queue["expires_at"]).timestamp(), "NEED_FRESH_QUEUE"),
+        ("admission", obs["valid_through_epoch_s"], "WAIT_EVIDENCE"),
+    ]
+    expiries.extend(
+        (label, obj["expires_epoch_s"], "WAIT_BINDING")
+        for label, obj in (("item", item), ("issue", issue)) if obj["expires_epoch_s"] is not None
+    )
+    watcher = obs.get("watcher")
+    if watcher is not None:
+        require(record(watcher), "WAIT_EVIDENCE", "unverified watcher admission evidence")
+        expiries.append(("watcher", watcher["expires_epoch_s"], "WAIT_EVIDENCE"))
+    for label, expiry, status in expiries:
+        require(number(expiry) and expiry - now >= LAUNCH_MARGIN_S
+                and (latest_start is None or latest_start < expiry),
+                status, f"{label} expiry leaves insufficient launch margin")
+
+
+def check_handoff_time(item, issue, queue, obs, decision, now):
+    latest_start = decision["t0"] + obs["timing"]["runner_start_max_s"]
+    check_run_expiries(item, issue, queue, obs, now, latest_start)
+    require(decision["t0"] <= now <= latest_start,
             "WAIT_EVIDENCE", "handoff window elapsed; make a fresh Run decision")
     require(local_date(now) == local_date(decision["t0"]),
             "WAIT_EVIDENCE", "launch date changed; refresh dated observations")
@@ -852,26 +991,29 @@ def run_gate(args):
     try:
         items = read_json((HP / "items.json").read_bytes())
         item = next(row for row in items if row["span"] == args.span)
-        queue = assert_source_bindings(args, item)
-        sys.path.insert(0, str(args.repo))
         runtime_files(args, item, binding_only=True)
-        issue_bytes = args.issue.read_bytes()
-        require(sha256(issue_bytes) == args.issue_sha, "WAIT_BINDING", "issue bytes differ")
-        issue = read_json(issue_bytes)
-        observation_bytes = args.observation.read_bytes()
-        obs = read_json(observation_bytes)
-        require(issue.get("synthetic_only") is not True and obs.get("synthetic_only") is not True,
-                "WAIT_EVIDENCE", "synthetic records cannot issue or arm")
-        from joulewise.align.apple.powermode import observe_ac_powermode
-
         args.custody.mkdir(parents=True, exist_ok=True)
         ledger = args.custody / "hp-02-arms"
         ledger.mkdir(exist_ok=True)
         # Use stable identities independent of queue renewal or output naming.
         claim = ledger / f"{KIT_SHA}-{item['span']}-a1.json"
-        started = ledger / f"start-{args.issue_sha}.v3.json"
+        started = ledger / f"start-{args.issue_sha}.v4.json"
         with (ledger / "arm.lock").open("a") as lock:
             fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            if args.phase == "Run":
+                start, published_at = read_published_start(started, args)
+            queue = assert_source_bindings(args, item)
+            sys.path.insert(0, str(args.repo))
+            issue_bytes = args.issue.read_bytes()
+            require(sha256(issue_bytes) == args.issue_sha, "WAIT_BINDING", "issue bytes differ")
+            issue = read_json(issue_bytes)
+            observation_read_at = time.time()
+            observation_bytes = args.observation.read_bytes()
+            obs = read_json(observation_bytes)
+            if args.phase == "Run":
+                check_run_observation_times(obs, start, published_at, observation_read_at)
+            require(issue.get("synthetic_only") is not True and obs.get("synthetic_only") is not True,
+                    "WAIT_EVIDENCE", "synthetic records cannot issue or arm")
             current_queue = args.queue.read_bytes()
             require(current_queue == queue, "WAIT_BINDING", "staged queue changed during the arm check")
             now = time.time()
@@ -881,13 +1023,11 @@ def run_gate(args):
                 require(obs["latest_close"]["record"] == issue["latest_close_at_issue"],
                         "WAIT_EVIDENCE", "issue close mismatch")
             remember_admission(ledger / "admission-state.json", obs, now)
+            bound_queue = read_json(current_queue)
             if args.phase == "Run":
-                start = read_json(started.read_bytes())
-                require(start["decision"] in PASS and start["span"] == args.span
-                        and start["output"] == str(args.output) and start["issue_sha"] == args.issue_sha
-                        and start["host"] == obs["host"] and number(start["passed_epoch_s"])
-                        and number(obs["observed_epoch_s"]) and obs["observed_epoch_s"] > start["passed_epoch_s"],
-                        "WAIT_EVIDENCE", "Run evidence must follow a successful Start on the same host")
+                check_run_expiries(item, issue, bound_queue, obs, time.time())
+            from joulewise.align.apple.powermode import observe_ac_powermode
+
             runtime_files(args, item)
             require(not os.path.lexists(claim), "SKIP_SPENT", "roster already has a launch claim")
             require(not any(os.path.lexists(ledger / f"{KIT_SHA}-{span}-a1.json")
@@ -906,14 +1046,25 @@ def run_gate(args):
                 require(decision["t0"] <= passed <= obs["valid_through_epoch_s"]
                         and local_date(passed) == local_date(decision["t0"]),
                         "WAIT_EVIDENCE", "Start evidence expired before the verdict")
-                queue_entry(item, read_json(queue), passed)
-                write_exclusive(started, {**result, "passed_epoch_s": passed})
+                queue_entry(item, bound_queue, passed)
+                publish_start(started, result)
+                try:
+                    _, published_at = read_published_start(started, args)
+                    check_observation(item, issue, obs, args.phase, published_at)
+                    check_issue(item, issue, published_at, args.phase)
+                    queue_entry(item, bound_queue, published_at)
+                    require(local_date(published_at) == local_date(decision["t0"]),
+                            "WAIT_EVIDENCE", "Start date changed before publication")
+                except (Refusal, OSError, ValueError, TypeError, KeyError):
+                    start_seal_path(started).unlink()
+                    started.unlink()
+                    sync_directory(ledger)
+                    raise
             if args.phase == "Run":
                 from scripts import launch_cadence_span as launcher
 
-                bound_queue = read_json(queue)
                 launch_sample = time.time()
-                check_handoff_time(item, bound_queue, obs, decision, launch_sample)
+                check_handoff_time(item, issue, bound_queue, obs, decision, launch_sample)
                 roster = ",".join(item["legs"])
                 plan = launcher.cadence_plan(args.kit, roster, decision["argument"], t0=launch_sample)
                 minimum = launcher.cadence_minimum_seconds(plan)
@@ -936,7 +1087,7 @@ def run_gate(args):
                     require(args.observation.read_bytes() == observation_bytes,
                             "WAIT_EVIDENCE", "Run observation changed before dispatch")
                     dispatch = time.time()
-                    check_handoff_time(item, bound_queue, obs, decision, dispatch)
+                    check_handoff_time(item, issue, bound_queue, obs, decision, dispatch)
                     require(dispatch + minimum <= decision["deadline"],
                             "WAIT_PIN", "deadline no longer fits at the launcher handoff")
                 except (Refusal, OSError):
