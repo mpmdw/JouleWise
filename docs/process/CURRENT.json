@@ -1,10 +1,10 @@
 {
   "armed": null,
-  "next_observable": "f2inst02-414b6f3a/run-out.txt shows LAUNCH_RC=0 with the fence (expected end ~19:07, fence ~20:15). The next activation after the fence is gone Checks cq-f2-inst-02-l009-l010-a1 under /Users/edr/campaign-out/f2-inst-02/ (template f2inst02-check-414b6f3a/check.sh with OUT, LEGS=L009,L010 and TMPDIR changed; read each leg_summary's admitted/contaminated_redos and each leg_record's os_load: the redo rule is >0.5 busy cores sustained 60 s, so a high max_busy_cores alone is not a rejection), copies at once (offload-f2inst02-414b6f3a.sh / -run- with plan id changed). Then rank 2: f2-inst-02 seq 11 L011-L012 (inputs f2inst02-414b6f3a/inputs.sh with SPAN/LEGS/SEQ/MAGISTRATE_PID changed; ARG per item 463: 02:00-02:35 until 23:03:10, else 13:14-13:15) only if it closes before Fri 00:00; otherwise Fri 20 Nov rank 1 = f2-stab-01 L002 (seq 2) on pin A per item 464, templates f2stab01-ff4b6340/ with LEGS/SEQ changed, ARG 13:14-13:15 from 00:00 to 02:34:59.",
+  "next_observable": "f2inst02-1dcf674c/run-out.txt shows LAUNCH_RC=0 with the fence (expected end ~20:30, fence ~21:40). The next activation after the fence is gone Checks cq-f2-inst-02-l011-l012-a1 under /Users/edr/campaign-out/f2-inst-02/ (template f2inst02-check-1dcf674c/check.sh with OUT, LEGS=L011,L012 and TMPDIR changed; read each leg_summary's admitted/contaminated_redos and each leg_record's os_load: the redo rule is >0.5 busy cores sustained 60 s, so a high max_busy_cores alone is not a rejection), copies at once (offload-f2inst02-1dcf674c.sh / -run- with plan id changed). This is the last f2-inst-02 queue span (seq 11 of 6 spans); after it the kit's queue is exhausted (L005 not admitted, item 467; redo_quota 0, so any L005 redo is the lead's call, not a magistrate launch). Then Fri 20 Nov rank 1 = f2-stab-01 L002 (seq 2) on pin A per item 464, templates f2stab01-ff4b6340/ with LEGS/SEQ changed, ARG 13:14-13:15 from 00:00 to 02:34:59; nothing launches between the Check and 00:00 unless a higher-ranked item is issued.",
   "open_items": [
     {
       "expires_epoch_s": null,
-      "item": 469,
+      "item": 470,
       "owner": "magistrate",
       "status": "ISSUED"
     },
@@ -149,10 +149,10 @@
   ],
   "owner": "magistrate",
   "schema": "joulewise.current_pointer.v2",
-  "source_item": "469",
+  "source_item": "470",
   "source_item_heading_date": "2026-11-19",
   "wait": {
-    "deadline_epoch_s": 1795148400,
+    "deadline_epoch_s": 1795153800,
     "observable": "none",
     "on_early_or_refused": "a launcher refusal or non-clean close: record it, hold kit f2-inst-02 until an input changes (item 422, RL-179 F-6), mail the lead, and continue down the ladder. R1 stays unarmed."
   }
