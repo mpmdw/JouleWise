@@ -38,9 +38,11 @@ eligible captured member contributes no S score.
 | Astra v2 private test head and tree | `7c0f18ce9f915435d1883d6cea79ab651d03e38c`, `54aee772122934db71f0a8f54dcb6a97e5701603` |
 | Round-ten regression freeze | `578a67778a74802827c4c8b02e6e115a9d549700` (draft replay `4cb201e15`) |
 | Round-ten private test head and tree | `716d74a7176e8db339397257cfaef2577e90a1c0`, `7a38f48a10fbc41d787b0f626093361d09f55362` |
-| Caller SHA-256 for signatory | `69ff6c01a8f20caaba46227bec6f0426c92e13621c797a0c7a6b2a2570055655` |
-| Shared validator SHA-256 for signatory | `27b1aef5862b5865c2a5ee20c935270ae3943bdbf8d7b2957c2c188e9444513c` |
-| Draft code head and tree before report | `1824b484bea34f215fdec89018e0abe669ad3668`, `fb02be0e2de6592b683ac0e28bf33ea31a6b583f` |
+| Round-eleven regression freeze | `055cb09341d22a2abb5388daf8c4d0b2fb694a27` (draft replay `a4071c9fd58a6d37d633bfb58e3d584c9acb291a`) |
+| Round-eleven private test head and tree | `c9bb941395c1debb6ce8959c60a61ef7fd596430`, `b6b1ca9cb77ef5153610fb675790b1e77eb6dc1d` |
+| Caller SHA-256 for signatory | `898d1107a0c724e0b262da314401c5b44c111d47c95d9cdebeb077798002cd6a` |
+| Shared validator SHA-256 for signatory | `a56c033469dbb0e3cf51be18b232fcfdb52aae85e949ca2029346f4e553cc3cb` |
+| Draft code head and tree before report | `fbfc102080bc5b3a575722698184f1e0407488ad`, `1cf93d310b9972fec699e012b734051ffe6d1118` |
 
 At the initial freeze the CLI tests failed with no script. At the RL-185
 freeze both stored worlds reached the provisional provider and refused.
@@ -70,9 +72,9 @@ the dependency landings. [Draft PR #836](https://github.com/mpmdw/JouleWise/pull
 | CLI and guard | Caller `build_report`, `main`, PR #813 `v4_desk_seal.py:351,418` and `rl176.py:611,622,633` | Snapshot the guard's named metadata, call the real guard and use the literal freeze flag in the scorer. |
 | Registration and history | Caller `require_executing_bindings`, `bound_history`, `final_roster`, `ReleasedInputs`, `v4_registration.py` `validate_receipt` and `require_registration`, and `scripts/align_v4_series.py:220,231,239,510` | Verify the C1 predecessor's receipt digest, verify the executing source inventory, and join the authorized history to the frozen manifest. |
 | Final records and A9 | PR #826 `scripts/align_v4_next_arm_packet.py:237,306,395` and `light_triage.py:79,163` | Use the shared RL-183b finality, including successor `previous_final`, and independently preserve final per-member reasons. |
-| Finalized closure precondition | Caller :628,650,762, `harvest_offload.py:50,515` | Run the shared validator on the record-bound closure and collect the live identity of every declared mirror, including mirrors with no linked targets. A refusal stops the release before ledger verification and scoring. |
-| Stored rows and complete manifest | Caller `manifest_inputs`, :343,417,434,474,669,736, `read_member`, PR #787 `s_rows.py:193,751,774`, PR #813 `workload.py:893` | Classify protected sources and aliases from the manifest. Verify directory membership, unprotected byte bindings, internal links, and Git-mirror targets. Pass #787's row tuple directly. |
-| Roster, DC and coverage | Caller :762,932,990,1099, `verify_score_inputs`, `verify_s_coverage`, PR #813 `rl176.py:200,291,352,379,527,550,628` | The eligible benign provider verifies its own DC bytes. Require the complete ledger and check registered S decode and fit contributor identities before any comparison. Check ledger completeness and the report's counts before publishing. |
+| Finalized closure precondition | Caller :645,836, `harvest_offload.py:50,345,519` | Run the shared validator on the record-bound closure and collect the live identity of every declared mirror, including mirrors with no linked targets. A refusal stops the release before ledger verification and scoring. |
+| Stored rows and complete manifest | Caller :123,305,540,730,753,931, PR #787 `s_rows.py:193,751,774`, PR #813 `workload.py:729,893` | Classify protected sources and aliases before generic opens. Verify path-keyed and explicit input bindings, directory membership, internal links, and Git-mirror files and trees. Validate the stored seed against its final assignment. Pass #787's row tuple directly. |
+| Roster, DC and coverage | Caller :836,1011,1069,1178, `verify_score_inputs`, `verify_s_coverage`, PR #813 `rl176.py:200,291,352,379,527,550,628` | The eligible benign provider verifies its own DC bytes. Require the complete ledger and check registered S decode and fit contributor identities before any comparison. Check ledger completeness and the report's counts before publishing. |
 
 ## Resolved interfaces under RL-185 §3
 
@@ -534,6 +536,33 @@ staged next-arm code lacks the legacy fixture constant
 `FINALIZED_MANIFEST_SCHEMA`.
 All ten issued R1 source blobs still match W1. The dependency landings and
 exact-head integrated CI remain gates. [Draft CI](https://github.com/mpmdw/JouleWise/pull/836/checks)
+
+## Round-eleven release audit
+
+The supplied synthetic reproducer and regression freeze exercised all four
+findings at the prior head. `c9bb94139` (draft `fbfc10208`) carries the fixes.
+
+| Verified finding | Root repair and regression |
+|---|---|
+| Nested path-keyed calibration inputs bypassed digest checks. The transfer-encoded ledger also published. | Traverse explicit and keyed file descriptors throughout the manifest. Reject encoded and compressed suffixes at the shared bound reader, including compound suffixes. `test_nested_path_keyed_calibration_is_verified` and `test_declared_transfer_encoded_archive_refuses` cover the intact control and the five refusal cases. |
+| The release rejected the seed index written by the production episode serializer. | Bind the plan's seed index and derived seed to the same manifest assignment. Accept the serializer's index and the derived representation used by earlier projections. `test_stored_episode_with_registered_seed_index_releases` gets the on-disk seed from the production writer on a fake clock and mock runtime. |
+| A Git directory link could pass the finalized validator and fail release. | The ledger verifies the named Git tree's recursive directory membership and the tracked members' blob identities. The shared validator checks the finalized ignored scope. `test_mirror_directory_verifies_the_bound_recursive_git_tree` passes the intact directory and refuses a changed tracked file even when Git status reports clean. |
+| Closure and ancillary reads opened native general traces or transcripts. | Use the common protected-path classification before closure or ledger reads. `test_native_trace_and_transcript_are_never_opened` observes each actual path in released and withheld worlds. |
+
+All five new regression tests failed on the prior caller, with nine failing
+cases across their subtests. All eleven focused release tests passed on the
+recorded candidate, including both stored S boundaries and validator refusal.
+The pinned and selected harvest suites passed 99 tests with four opt-in
+skips. All 254 frozen v2 cases passed across ten shards with zero skips, and
+the supplied module remains byte-identical at SHA-256
+`1bbd2846bf5ccb47d87f0e85e10e6fd4b067816b7352c7204c15f3b7aa17a8e7`.
+Both the private and public release trees match all ten issued R1 source blobs.
+
+The medium findings remain with their owners. Standalone W1 discovery
+requires the scorer dependency. The signing-kit owner must accept the
+release-profile artifact set. The draft remains subject to the dependency
+landings, integration-owner contract suite, and green exact-head CI.
+[Draft checks](https://github.com/mpmdw/JouleWise/pull/836/checks)
 
 ## Executed checks and Tier 2 dispositions
 
