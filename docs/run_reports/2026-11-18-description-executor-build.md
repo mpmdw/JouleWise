@@ -1027,3 +1027,42 @@ entries match after the repair.
 
 Hosted checks for the code head `899ce422c` started after push.
 [Hosted CI](https://github.com/mpmdw/JouleWise/actions/runs/44749693951) · [Workflow self-test](https://github.com/mpmdw/JouleWise/actions/runs/44749693842)
+
+## 2026-11-20 RL-190 committed index and stability views
+
+The clean worktree, upstream and draft PR #868 agreed at
+`2c3ede628`. Commit `30bd013b0` implements the resolved
+index and population contracts. All six suite-manifest hashes
+and all 53 protected path entries match on this stack.
+[Protected paths](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/rl190-index-view-protected-blobs.tsv) · [Current frozen manifest](/Volumes/JW-EXT/scratch/astra-desc-suite-rl192b/SUITE.sha256)
+
+| Finding | Commit | Regression and result |
+| --- | --- | --- |
+| The old index expected only later kits and required a pre-receipt index entry. | `30bd013b0` | **PASS**. `test_committed_index_can_follow_the_later_receipt_and_binds_pin_counts` admits an index with all fourteen base kits and kit 15, committed after the kit-15 receipt. `test_later_index_refuses_missing_rows_and_mismatched_receipts` refuses a missing base row, an absent late row, a concealed unindexed receipt, and independently changed receipt digests and pins. |
+| The early lock had no test of the committed-before-reservation boundary. | `899ce422c`, `30bd013b0` | **PASS**. The narrower look refuses. The wider look's 13-date and zero-date cases observe zero reservation attempts with unstaged census bytes and one attempt after authenticated stage-1 binding. The ordinary completed-first route passes the later-reader controls. |
+| Each private table needs full and base-only populations. | `30bd013b0` | **PASS**. The four files expose exactly `all` and `base14` for `02`. The base view equals `01` on the same invented base closes. A kit-15 perturbation changes only the applicable full-view leg rows and cells. The observer counts one scoring call per qualified leg. Receipt-authenticated `runner_pin` appears on both stability looks' member accounting, token and private leg rows. |
+| Per-population and per-runner counts must bind to census. | `30bd013b0` | **PASS**. The two-group fixture covers two separate authenticated pins and distinct dates. Each group includes zero counts for its indexed pins when none qualify. The public record uses only the full-roster integer counts and retains exactly six fields. |
+| Empty populations need an explicit print. | `30bd013b0` | **PASS**. A later-only cut emits the exact null for `base14` and preserves the one-date later observations with `fewer_than_two`. An empty full cut emits `no_qualified_leg` in all eight table views, records integer zeros and opens no scoring inputs. |
+| Shared stability schemas need to admit the resolved shapes. | `30bd013b0` | **PASS** locally with `jsonschema==4.25.1`. Validated ordinary `01`, populated `02`, later-only `02` and empty `02`. Extra or missing view keys and missing required `by_kit_set` fail validation. |
+
+The normalized index rows contain `kit_id`, `sha256`,
+`runner_pin` and `path`. Every base row matches the committed
+base population. The reader binds each kit file and its pin to the
+index at the authenticating cut and independently checks each
+operational receipt. The private schemas use a single-view shape for
+`01` and a closed dual-view shape for `02`.
+[Resolved builder controls](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/rl190-index-view-final-required.log) · [Focused preflight, DC and rails](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/rl190-index-view-focused.log) · [Date spread and calendar controls](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/rl190-index-view-spreads.log) · [Schema cases](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/rl190-index-view-schema.log)
+
+The authorized freeze pointer still names the four unchanged
+modules with 16,899 IDs. The builder fixtures supply the successor
+operational requirements and index rows without changing those
+modules. The independent successor remains due for the inherited
+wall, typed drop, reason, lock-direction, index-timing and table
+oracles. The combined integration base and final comparison remain
+owner gates. The reservation observer uses invented paths and
+stops at the literal mkdir. The six hosted literal reservation
+cases remain open.
+[Current authorization](/Volumes/JW-EXT/scratch/desc-suites-current.md) · [Owner PR #795](https://github.com/mpmdw/JouleWise/pull/795)
+
+Hosted CI and workflow self-test started on the code head.
+[CI](https://github.com/mpmdw/JouleWise/actions/runs/44751935898) · [Self-test](https://github.com/mpmdw/JouleWise/actions/runs/44751935953)
