@@ -746,14 +746,19 @@ def missing(reason, bound=None):
     return null
 
 
+def _quality_null(*operands):
+    for reason in ("rail_manifest", "coverage", "meter_gap", "crossed_before_span",
+                   "meter_absent", "meter_contaminated"):
+        for operand in operands:
+            if isinstance(operand, dict) and operand["reason"] == reason:
+                return operand
+    return None
+
+
 def difference(left, right):
     if number(left) and number(right):
         return left - right
-    for reason in ("rail_manifest", "coverage", "meter_gap", "crossed_before_span"):
-        for operand in (left, right):
-            if isinstance(operand, dict) and operand["reason"] == reason:
-                return operand
-    return missing("missing_operand")
+    return _quality_null(left, right) or missing("missing_operand")
 
 
 def deviation(samples):
@@ -768,6 +773,8 @@ def _ratios(levels):
         ratio = {"numerator": numerator, "denominator": denominator}
         if number(numerator) and number(denominator) and denominator > 0:
             ratio["value"] = numerator / denominator
+        elif refused := _quality_null(numerator, denominator):
+            ratio.update(missing(refused["reason"]))
         else:
             reason = ("nonpositive_denominator" if number(denominator) and denominator <= 0
                       else "missing_operand")
@@ -1167,27 +1174,20 @@ def _dc_crossing(rows, a, b, threshold, falls):
     def crossed(value):
         return value <= threshold if falls else value >= threshold
 
-    if rows:
-        left, right, low, high = rows[0]
-        initial = low if left >= a else high
-        at_start = low + (high - low) * (a - left) / (right - left)
-        if crossed(initial) or crossed(at_start):
-            return missing("crossed_before_span")
+    # RL-188 §4.1 uses observations in the search span. The integration
+    # brackets carried by these rows can extend outside that span.
     for left, right, low, high in rows:
-        lo, hi = max(a, left), min(b, right)
-        first = low + (high - low) * (lo - left) / (right - left)
-        last = low + (high - low) * (hi - left) / (right - left)
-        if DC_CROSSING_STAMP == "first_sample":
-            if left >= a and crossed(low):
-                return left
-            if right <= b and crossed(high):
-                return right
+        if a <= left <= b and crossed(low):
+            return missing("crossed_before_span")
+        if right > b:
+            break
+        if right < a or not crossed(high):
             continue
-        if crossed(first):
-            return lo
-        if crossed(last):
-            # When the threshold lies in the segment its slope is nonzero.
-            return left + (threshold - low) * (right - left) / (high - low)
+        if left < a:
+            return missing("crossed_before_span")
+        if DC_CROSSING_STAMP == "first_sample":
+            return right
+        return left + (threshold - low) * (right - left) / (high - low)
     return missing("crossing_unobserved")
 
 
@@ -1362,8 +1362,8 @@ def print_leg(signal, detail, instrument):
     start, first, last = (meta[name] for name in ("turn_start_s", "first_token_s", "last_token_s"))
     require(all(number(t) for t in (start, first, last)) and start < first < last,
             "invalid projected turn stamps")
-    quiet = next(lo for lo, hi in op["quiet_spans_ns"] if hi - lo >= 600_000_000_000)
-    quiet = meta.get("quiet_start_s", quiet / 1e9)
+    # The operational record supplies the hold interval for every print.
+    quiet = next(lo for lo, hi in op["quiet_spans_ns"] if hi - lo >= 600_000_000_000) / 1e9
     hold = _hold(signal, quiet, instrument)
     baseline = {channel: hold[channel]["mean_w"] for channel in CHANNELS}
     energy = {channel: _above_hold(signal, channel, baseline[channel], start, last + 1, average=False)
@@ -1387,7 +1387,7 @@ def print_leg(signal, detail, instrument):
         floors[channel] = []
         for width in WIDTHS:
             sd = hold[channel][f"sd{width}_w"]
-            value = missing("decode_or_sd_undefined")
+            value = _quality_null(watts, sd) or missing("decode_or_sd_undefined")
             if number(sd) and number(watts) and watts > 0:
                 value = sd * width * row["realised_decode_tokens"] / (watts * (last - first))
             floors[channel].append(value)

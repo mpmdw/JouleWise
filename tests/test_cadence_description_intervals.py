@@ -97,6 +97,89 @@ def _score_world(world):
 
 
 class DescriptionIntervalTests(unittest.TestCase):
+    def test_hold_admission_uses_the_recorded_span_even_with_a_support_offset(self):
+        for look in fixture.IDS[:2]:
+            with self.subTest(look=look), TemporaryDirectory() as temporary:
+                world = fixture.World(Path(temporary).resolve() / "world", look)
+                keys = list(world.good)[:2]
+                missing_stamps = {581, 583, 585, 587, 589, 591, 593}
+                for key, projected_start in zip(keys, (None, -20)):
+                    references = next(row for row in world.rows if row["key"] == key)
+                    op = fixture.read(world.repo / references["leg_record"])
+                    self.assertEqual(op["quiet_spans_ns"], [[0, 600_000_000_000]])
+                    path = world.copy / key / "support.json"
+                    support = fixture.read(path)
+                    support["sidecar_times"] = [t for t in support["sidecar_times"]
+                                                if t not in missing_stamps]
+                    recorded = [t for t in support["sidecar_times"] if 0 <= t < 600]
+                    self.assertEqual(len(recorded), 593)
+                    self.assertEqual(max(b - a for a, b in zip(recorded, recorded[1:])), 2)
+                    if projected_start is not None:
+                        support["quiet_start_s"] = projected_start
+                    fixture.put(path, support)
+                report = _score_world(world)
+                for key in keys:
+                    for channel in fixture.CHANNEL:
+                        self.assertEqual(report["hold"][key][channel]["mean_w"],
+                                         {"value": None, "reason": "coverage"})
+                    if world.inst:
+                        self.assertEqual(report["gain"][key]["mean_fan_rpm"],
+                                         {"value": None, "reason": "coverage"})
+
+    def test_decode_end_lag_requires_a_qualifying_in_span_dc_sample(self):
+        with TemporaryDirectory() as temporary:
+            world = fixture.World(Path(temporary).resolve() / "world", fixture.IDS[0])
+            key = next(iter(world.good))
+            path = world.copy / key / "dc_points.csv"
+            with path.open(encoding="utf-8", newline="") as stream:
+                header, *rows = csv.reader(stream)
+            in_span = [row for row in rows if 610 <= float(row[0]) <= 611]
+            after_span = [row for row in rows if float(row[0]) > 611]
+            self.assertEqual(len(in_span), 20)
+            self.assertEqual(float(after_span[0][0]), 611.025)
+            for row in in_span:
+                row[1] = "60"
+            for row in after_span:
+                row[1] = "40"
+            fixture.put(path, fixture.csvbytes([header, *rows]))
+            report = _score_world(world)
+            baseline = report["hold"][key]["dc_in"]["mean_w"]
+            plateau = report["gain"][key]["decode_w"]["dc_in"]
+            self.assertEqual(baseline + plateau / 2, 49.6875)
+            for channel in fixture.CHANNEL[:2]:
+                self.assertEqual(report["edges"][key]["decode_end_lag_s"][channel],
+                                 {"value": None, "reason": "over 1 s", "bound_s": 1.0})
+
+    def test_dc_crossing_uses_in_span_sample_pairs_at_both_boundaries(self):
+        rows = [(-0.1, 0.4, 20.0, 0.0), (0.4, 0.8, 0.0, 20.0)]
+        self.assertAlmostEqual(reader._dc_crossing(rows, 0, 1, 10, False), 0.6)
+        rows = [(0.0, 0.5, 20.0, 18.0), (0.5, 1.0, 18.0, 2.0)]
+        self.assertAlmostEqual(reader._dc_crossing(rows, 0, 1, 10, True), 0.75)
+        rows = [(-0.1, 0.1, 20.0, 2.0), (0.1, 1.1, 2.0, 20.0)]
+        self.assertEqual(reader._dc_crossing(rows, 0, 1, 10, True),
+                         {"value": None, "reason": "crossed_before_span"})
+
+    def test_dependent_turn_decode_and_floor_keep_the_interval_refusal(self):
+        with TemporaryDirectory() as temporary:
+            world = fixture.World(Path(temporary).resolve() / "world", fixture.IDS[0])
+            key = next(iter(world.good))
+            _filter_csv(world.copy / key / "power_trace.csv", lambda row: not (
+                row["source"] == "powermetrics" and row["rail"] == "gpu_power"
+                and float(row["interval_start_s"]) == 607
+            ))
+            report = _score_world(world)
+            refused = {"value": None, "reason": "coverage"}
+            turn, gain = report["turn"][key], report["gain"][key]
+            for channel in fixture.CHANNEL[:2]:
+                self.assertEqual(turn["energy_j"][channel], refused)
+                self.assertEqual(gain["decode_w"][channel], refused)
+                for ratio in (turn["ratios"][channel], gain["decode_gain"][channel]):
+                    self.assertEqual(ratio["reason"], "coverage")
+                    self.assertEqual(ratio["denominator"], refused)
+                    self.assertIsInstance(ratio["numerator"], float)
+                self.assertEqual(gain["floor_tokens"][channel], [refused] * 3)
+            self.assertTrue(all(isinstance(value, float) for value in gain["floor_tokens"]["dc_in"]))
+
     def test_support_projection_handles_escaped_keys_and_nested_delimiters(self):
         readings = br'[{"label":"a\"b,[}]","temperature":37.8125}]'
         beginning = br'{"clock":{"note":"sensors: [,}]"},"sens\u006frs":'
