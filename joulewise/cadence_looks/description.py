@@ -1630,12 +1630,13 @@ def _context(hold, turn, qualified):
     context = {f"{prompt}/{channel}/{measure}": {} for prompt in (256, 2000, 19458)
                for channel in CHANNELS for measure in MEASURES}
     for key, (_, receipt, instant, predecessor, row) in qualified.items():
-        gap = receipt["t0_epoch_s"] - predecessor["close_epoch_s"] if predecessor else None
+        gap = (Fraction(receipt["t0_epoch_s"]) - Fraction(predecessor["close_epoch_s"])
+               if predecessor else None)
         location = {
             "date": instant.date().isoformat(), "hour": instant.hour,
             "utc_offset_s": int(instant.utcoffset().total_seconds()),
             "predecessor_kind": predecessor["kind"] if predecessor else None,
-            "gap_s": Fraction(gap) if gap is not None else None,
+            "gap_s": gap,
             "status": "unknown" if gap is None else "negative_gap" if gap < 0 else "known",
         }
         for channel in CHANNELS:

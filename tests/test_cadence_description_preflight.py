@@ -122,7 +122,7 @@ class NativeStep3PreflightTests(unittest.TestCase):
         def describe(signal, _detail, _instrument):
             return {"hold": signal.pinned.reader_identity}
 
-        with patch.object(reader, "print_leg", side_effect=describe):
+        with patch.object(reader, "_leg_values", side_effect=describe):
             result = reader.score(stage2, paths, qualified, lambda: self.fail("scoring input opened"))
         self.assertEqual(len(qualified), 3)
         self.assertEqual(result["hold"], dict.fromkeys(qualified, "invented pin"))
