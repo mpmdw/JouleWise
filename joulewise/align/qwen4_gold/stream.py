@@ -9,12 +9,14 @@ import os
 import re
 import shutil
 import sys
+from contextlib import contextmanager
 from pathlib import Path
 
 from .core import (IndexedCheckpoint, REFERENCE_VERSION, TraceFile, digest,
                    file_stamp, sha256, write_json)
 from .runner import Harness, execute, failure_summary, load_prompts, runtime_identity, runtime_version
 from .stream_ple import BUFFER_SUFFIXES, copy_tensors, extract_part, header, is_table, valid_entry
+from .unit_source import Provider, encode, regular, replace_json, sync_dir
 
 REPO_ID = "Qwen/Qwen3.8-Flash-Next"
 REVISION = "de4b8e4d43b917e7706784d8bb445c9af86a3540"
@@ -168,20 +170,56 @@ def storage_plan(plan, metadata, weight_map):
 
 
 class StreamDriver:
-    def __init__(self, args, source=None, runtimes=None):
+    def __init__(self, args, source=None, runtimes=None, *, unit_source=None):
         self.args = args
         self.work = Path(args.work).resolve()
+        self.path = self.work / "manifest.json"
+        self.unit_source = unit_source
+        if unit_source is not None:
+            if args.convert_out:
+                raise ValueError("fixture unit source does not support convert_out")
+            if not isinstance(unit_source, Provider) or source is not None:
+                raise ValueError("select one bound offline fixture provider")
+            if unit_source.root != self.work / "unit-source":
+                raise ValueError("fixture provider must live under work/unit-source")
         self.work.mkdir(parents=True, exist_ok=True)
+        if unit_source is not None:
+            with self.driver_lock():
+                self.initialize(source, runtimes)
+        else:
+            self.initialize(source, runtimes)
+
+    @contextmanager
+    def driver_lock(self):
+        with (self.work / "driver.lock").open("a") as lock:
+            try:
+                fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            except BlockingIOError as error:
+                raise RuntimeError("another streaming driver owns this work directory") from error
+            yield
+
+    def initialize(self, source, runtimes):
+        args = self.args
+        provider = self.unit_source
+        previous = json.loads(self.path.read_bytes()) if self.path.exists() else None
+        if previous is not None and (("fixture_source" in previous) != (provider is not None)):
+            raise ValueError("stream invocation changed source mode; use a fresh work directory")
         self.staging = self.work / "staging"
         self.root = self.staging / "checkpoint"
-        self.root.mkdir(parents=True, exist_ok=True)
-        self.source = source or HubSource(self.work)
-        self.source.min_free_gb, self.source.max_staging_gb = args.min_free_gb, args.max_staging_gb
-        self.source_info = self.source.prepare()
+        if provider is not None:
+            self.source_info, self.checkpoint = provider.source_info, provider.metadata
+        else:
+            self.root.mkdir(parents=True, exist_ok=True)
+            self.source = source or HubSource(self.work)
+            self.source.min_free_gb, self.source.max_staging_gb = args.min_free_gb, args.max_staging_gb
+            self.source_info = self.source.prepare()
+            self.checkpoint = IndexedCheckpoint(self.root)
         self.metadata = self.source_info["shards"]
-        self.checkpoint = IndexedCheckpoint(self.root)
         self.plan = unit_plan(self.checkpoint)
-        self.storage = storage_plan(self.plan, self.metadata, self.checkpoint.weight_map)
+        ple_ids = self.checkpoint.text.get("ple_layer_ids") or []
+        self.first_ple = str(min(ple_ids) - 1) if ple_ids else None
+        self.storage = ({"mode": "fixture-unit-source", "source_quota_bytes": provider.limits.quota}
+                        if provider else storage_plan(self.plan, self.metadata, self.checkpoint.weight_map))
         self.prompts = load_prompts(args.prompts_json, self.checkpoint.text)
         self.runtimes = runtimes if runtimes is not None else {
             "reference": runtime_identity(args.ref_python), "mlx": runtime_identity(args.mlx_python)}
@@ -192,16 +230,27 @@ class StreamDriver:
         args.output = str(self.work / "parity")
         args.dtypes, args.input_modes = "fp32,bf16", "random,real"
         args.worker_extra = {"hf_home": str(self.staging / "hf")}
+        fixture_source = None
+        if provider:
+            self.fixture_chain = digest([self.source_info, self.prompts, self.runtimes["reference"]])
+            fixture_source = digest([provider.identity, self.fixture_chain, self.plan, self.runtimes,
+                                     args.seed, args.random_scale, args.max_gb, args.timeout,
+                                     args.ref_python, args.mlx_python, args.shared_shards,
+                                     getattr(args, "keep_going", False),
+                                     sha256(args.mlx_module), {p: sha256(p) for p in args.adapter_dependency}])
+            if previous is not None and previous["fixture_source"] != fixture_source:
+                raise ValueError("stream invocation changed; use a fresh work directory")
+            provider.budget.admit("fixture provenance", provider.limits.planner_sizes, provider.limits.planner_dirs)
         self.harness = Harness(args, self.checkpoint, identity, self.prompts, self.runtimes)
-        self.path = self.work / "manifest.json"
         self._verified = {}
         rerun = self.rerun_identity() if getattr(args, "rerun_from", None) else None
         fp = digest([STREAM_SCHEMA, self.harness.fingerprint, args.min_free_gb, args.max_staging_gb,
                      str(Path(args.convert_out).resolve()) if args.convert_out else None,
                      {p: sha256(p) for p in (args.canonical_converter, args.canonical_module) if p},
-                     args.shared_shards] + ([rerun["identity"]] if rerun else []))
-        if self.path.exists():
-            self.state = json.loads(self.path.read_text())
+                     args.shared_shards] + ([rerun["identity"]] if rerun else [])
+                    + ([fixture_source] if provider else []))
+        if previous is not None:
+            self.state = previous
             if not args.resume:
                 raise ValueError("work already exists; repeat the same command with --resume")
             if self.state["fingerprint"] != fp:
@@ -210,13 +259,23 @@ class StreamDriver:
             self.state = {"schema": STREAM_SCHEMA, "fingerprint": fp, "source": self.source_info,
                           "plan": self.plan, "storage": self.storage, "shards": {}, "derived_shards": {},
                           "units": {}, "chain": {}, "ple": {"entries": {}}}
+            if provider:
+                self.state.update(fixture_source=fixture_source, fixture_chain=self.fixture_chain)
             if rerun:
                 self.adopt_rerun(rerun)
             self.save()
         self.selected = set(self.state["rerun"]["units"]) if "rerun" in self.state else None
 
     def save(self):
-        write_json(self.path, self.state)
+        if getattr(self, "unit_source", None):
+            self.save_fixture_json(self.path, self.state)
+        else:
+            write_json(self.path, self.state)
+
+    def save_fixture_json(self, path, value):
+        raw = encode(value)
+        self.unit_source.budget.admit("stream journal replacement", [len(raw)])
+        replace_json(path, raw)
 
     def stage(self, filename):
         filename = safe_name(filename)
@@ -269,6 +328,9 @@ class StreamDriver:
         self.save()
 
     def release(self):
+        if self.unit_source:
+            self.unit_source.finish(set(self.state["units"]))
+            return
         done = set(self.state["units"])
         if self.selected is not None:
             done |= set(self.plan["units"]) - self.selected  # never run here
@@ -331,6 +393,8 @@ class StreamDriver:
         return IndexedCheckpoint(root)
 
     def prepare_ple(self):
+        if self.unit_source:
+            return self.prepare_fixture_ple()
         if not self.plan["tables"]:
             return
         ple = self.state["ple"]
@@ -377,6 +441,68 @@ class StreamDriver:
         write_json(store / "store.json", ple)
         self.args.worker_extra.update(sparse_store=str(store), sparse_digest=sha256(store / "store.json"))
 
+    def fixture_projections(self, names, consumer, role):
+        provider = self.unit_source
+        weights = self.checkpoint.weight_map
+        grouped = {}
+        for name in names:
+            grouped.setdefault(weights[name], []).append(name)
+        return [provider.project(f"{role}-{consumer}-{obj}", obj, selected, consumer, role=role)
+                for obj, selected in sorted(grouped.items())]
+
+    def prepare_fixture_ple(self):
+        provider = self.unit_source
+        if provider.state["plan"] is None:
+            max_ids = provider.planner_bound(int(self.args.max_gb*GIB))
+            buffers = self.fixture_projections(provider.planner_buffers(), "planner", "planner")
+            with provider.checkpoint(buffers) as (checkpoint, guards, _, _):
+                limits = provider.limits
+                provider.budget.admit("planner worker evidence", limits.planner_sizes, limits.planner_dirs)
+                request = {"backend": "ple_plan", "checkpoint": str(checkpoint.root), "prompts": self.prompts,
+                           "hf_home": str(self.staging / "hf"), "shard_guards": guards,
+                           "config_digest": digest(checkpoint.config), "weight_map_digest": digest(checkpoint.weight_map)}
+                result = execute(self.args.ref_python, request, self.work / "ple-plan",
+                                 self.args.max_gb, self.args.timeout)
+                provider.budget.admit("completed planner evidence")
+                if "error" in result:
+                    raise RuntimeError(f"official PLE plan failed: {result}")
+            provider.install_plan(result, buffers, max_ids)
+        if self.state.get("fixture_plan") is None:
+            self.state["fixture_plan"] = provider.plan_digest
+            self.save()
+        weights = self.checkpoint.weight_map
+        active = [unit for unit in self.plan["units"] if self.selected is None or unit in self.selected]
+        fold_into = self.first_ple if self.first_ple in active else None
+        last = active[-1]
+        folded, sparse = {}, []
+        for obj in sorted({weights[name] for name in self.plan["tables"]}):
+            dense = [name for name in self.plan["keys"].get(fold_into, []) if weights[name] == obj]
+            tag = provider.project(f"table-{obj}", obj, dense, fold_into, last, role="table")
+            sparse.append(tag)
+            if dense:
+                folded[obj] = tag
+        return folded, sparse
+
+    @contextmanager
+    def fixture_checkpoint(self, unit, first):
+        folded, sparse = {}, []
+        if first is not None and self.plan["units"].index(unit) >= self.plan["units"].index(first):
+            folded, sparse = self.prepare_ple()
+        names = self.plan["keys"][unit]
+        if unit == first:
+            names = [name for name in names if self.checkpoint.weight_map[name] not in folded]
+        tags = self.fixture_projections(names, unit, "regular")
+        if unit == first:
+            tags.extend(folded.values())
+        provider = self.unit_source
+        with provider.checkpoint(tags, sparse) as (checkpoint, guards, store, checksum):
+            self.harness.checkpoint, self.harness.identity["stamps"] = checkpoint, guards
+            self.args.worker_extra["fixture_projection"] = digest(
+                [provider.plan_digest, [provider.state["objects"][tag] for tag in tags + sparse]])
+            if store is not None:
+                self.args.worker_extra.update(sparse_store=str(store), sparse_digest=checksum)
+            yield checkpoint
+
     def rerun_identity(self):
         """Selected units of a finished/in-progress run, re-run on its reference chain.
 
@@ -394,6 +520,8 @@ class StreamDriver:
         if (old["source"]["repo"], old["source"]["revision"], old["source"]["shards"]) != (
                 self.source_info["repo"], self.source_info["revision"], self.metadata):
             raise ValueError("--rerun-from used a different pinned checkpoint")
+        if self.unit_source and old.get("fixture_chain") != self.fixture_chain:
+            raise ValueError("--rerun-from used different fixture inputs or reference runtime")
         units = list(getattr(self.args, "units", None) or [])
         if getattr(self.args, "rerun_failed", False):
             units += [u for u, row in old["units"].items() if row.get("status") != "PASS"]
@@ -403,7 +531,7 @@ class StreamDriver:
         units = [u for u in self.plan["units"] if u in set(units)]
         if not units:
             raise ValueError("no units selected to re-run (--units and/or --rerun-failed)")
-        keys = [dtype + ":" + prompt["name"] for dtype in ("fp32", "bf16") for prompt in self.prompts]
+        keys = self.chain_keys()
         inputs = {}
         for unit in units:
             index = self.plan["units"].index(unit)
@@ -413,10 +541,14 @@ class StreamDriver:
             row, chain = old["units"].get(previous), old.get("chain", {}).get(previous)
             if row is None or chain is None:
                 raise ValueError(f"--rerun-from has no completed reference chain at {previous}")
+            if self.unit_source and sha256(row["result"]) != row["result_sha256"]:
+                raise ValueError(f"--rerun-from completed predecessor result changed: {previous}")
             for key in keys:
                 source = Path(chain[key]) if key in chain else None
                 relative = str(source.relative_to(old_work)) if source else None
-                if source is None or row["artifacts"].get(relative) != sha256(source):
+                if source is None or (self.unit_source and (
+                        not regular(source) or source != self.fixture_reference_path(old_work, previous, key)
+                )) or row["artifacts"].get(relative) != sha256(source):
                     raise ValueError(f"reference chain input missing or changed: {previous}/{key}")
                 inputs.setdefault(previous, {})[key] = {"source": str(source), "sha256": row["artifacts"][relative]}
         return {"old_work": old_work, "old": old, "units": units, "inputs": inputs,
@@ -424,6 +556,10 @@ class StreamDriver:
 
     def adopt_rerun(self, rerun):
         directory = self.work / "rerun-inputs"
+        if self.unit_source:
+            sizes = [Path(row["source"]).stat().st_size for keys in rerun["inputs"].values() for row in keys.values()]
+            if sizes:
+                self.unit_source.budget.admit("fixture rerun chain", sizes, 1 + len(rerun["inputs"]))
         for previous, keys in rerun["inputs"].items():
             for key, row in keys.items():
                 target = directory / previous / (key.replace(":", "-") + ".npy")
@@ -433,7 +569,7 @@ class StreamDriver:
                     raise ValueError("reference chain input changed while copying")
                 row["path"] = str(target)
         old_ple = rerun["old"].get("ple", {})
-        if "plans" in old_ple:
+        if "plans" in old_ple and not self.unit_source:
             # The official sparse PLE rows already extracted for these prompts:
             # copied byte-checked; prepare_ple re-binds them to the pinned shards.
             store = self.work / "sparse-ple"
@@ -445,6 +581,15 @@ class StreamDriver:
             self.state["ple"] = {k: v for k, v in old_ple.items() if k != "source_shards"}
         self.state["rerun"] = {"source_work": str(rerun["old_work"]), "source_fingerprint": rerun["old"]["fingerprint"],
                                "units": rerun["units"], "inputs": rerun["inputs"]}
+
+    def chain_keys(self):
+        return [dtype + ":" + prompt["name"] for dtype in ("fp32", "bf16") for prompt in self.prompts]
+
+    @staticmethod
+    def fixture_reference_path(work, unit, key):
+        dtype, prompt = key.split(":", 1)
+        directory = f"layer-{int(unit):03d}" if unit.isdigit() else unit
+        return work / "parity" / directory / f"{prompt}-{dtype}-real" / "reference/output.npy"
 
     def chain_input(self, previous, key):
         if previous in self.state["chain"]:
@@ -504,13 +649,20 @@ class StreamDriver:
             # FAIL rows exist only from --keep-going: recorded, never retried.
             if row["status"] not in ("PASS", "FAIL") or sha256(row["result"]) != row["result_sha256"]:
                 raise ValueError(f"completed unit result changed: {unit}")
-            if row.get("sparse_digest") and sha256(self.work / "sparse-ple/store.json") != row["sparse_digest"]:
+            store = self.unit_source.store if self.unit_source else self.work / "sparse-ple/store.json"
+            if row.get("sparse_digest") and sha256(store) != row["sparse_digest"]:
                 raise ValueError(f"completed unit sparse PLE contract changed: {unit}")
             for name, checksum in row["artifacts"].items():
                 if sha256(self.work / name) != checksum:
                     raise ValueError(f"completed unit activation/trace changed: {unit}/{name}")
-            for key, path in self.state["chain"][unit].items():
-                relative = str(Path(path).relative_to(self.work))
+            chain = self.state["chain"][unit]
+            if self.unit_source and chain.keys() != set(self.chain_keys()):
+                raise ValueError(f"completed fixture chain has missing cases: {unit}")
+            for key, path in chain.items():
+                path = Path(path)
+                if self.unit_source and (not regular(path) or path != self.fixture_reference_path(self.work, unit, key)):
+                    raise ValueError(f"fixture chain is not the official output: {unit}/{key}")
+                relative = str(path.relative_to(self.work))
                 if relative not in row["artifacts"]:
                     raise ValueError(f"chain points outside completed unit artifacts: {unit}/{key}")
             if "conversion" in row:
@@ -522,42 +674,100 @@ class StreamDriver:
                         raise ValueError("converted unit payload changed")
 
     def run(self):
+        if not self.unit_source:
+            return self.run_stream()
+        with self.driver_lock():
+            fresh = json.loads(self.path.read_bytes())
+            if fresh["fingerprint"] != self.state["fingerprint"]:
+                raise ValueError("stream invocation changed; use a fresh work directory")
+            self.state = fresh
+            self.validate_done()
+            provider = self.unit_source
+            provider.start(self.state["fingerprint"], self.prompts,
+                           self.runtimes["reference"].get("modeling_qwen4_exp.py_sha256"))
+            pinned = self.state.get("fixture_plan")
+            if pinned is not None and pinned != provider.plan_digest:
+                raise ValueError("completed fixture plan changed")
+            acknowledged = set(self.state["units"]) | ({"planner"} if provider.state["plan"] else set())
+            if not set(provider.state["done"]) <= acknowledged:
+                raise ValueError("fixture consumers lack a committed result")
+            provider.recover()
+            if provider.state["plan"]:
+                provider.finish({"planner"})
+            for path in (self.path, self.work / "summary.json"):
+                path.with_suffix(".tmp").unlink(missing_ok=True)
+            self.release()
+            if any(unit not in self.state["units"] for unit in (self.selected or self.plan["units"])):
+                for name in sorted(self.metadata):
+                    provider.discover(name)
+            return self.run_stream()
+
+    @contextmanager
+    def active_checkpoint(self, unit, first_ple):
+        if self.unit_source:
+            self.args.worker_extra = {"hf_home": str(self.staging / "hf")}
+            with self.fixture_checkpoint(unit, first_ple) as active:
+                yield active
+            return
+        if unit == first_ple:
+            self.prepare_ple()
+        elif (self.selected is not None and first_ple is not None and "source_shards" not in self.state["ple"]
+              and self.plan["units"].index(unit) > self.plan["units"].index(first_ple)):
+            self.prepare_ple()  # Re-run: rows adopted from --rerun-from, or extracted now.
+        elif "plans" in self.state["ple"]:
+            store = self.work / "sparse-ple"
+            self.args.worker_extra.update(sparse_store=str(store), sparse_digest=sha256(store / "store.json"))
+        if self.args.shared_shards == "restage":
+            active = self.subset_checkpoint(unit, self.plan["keys"][unit])
+        else:
+            active = self.checkpoint
+            for filename in self.plan["shards"][unit]:
+                self.stage(filename)
+        self.harness.checkpoint = active
+        self.harness.identity["stamps"] = {p.name: file_stamp(p) for p in active.root.glob("*.safetensors")}
+        yield active
+
+    def commit_fixture_evidence(self, row):
+        paths = {Path(row["result"]), *(self.work / name for name in row["artifacts"])}
+        parents = set()
+        for path in paths:
+            if not regular(path):
+                raise ValueError("fixture unit evidence is missing")
+            with path.open("rb") as stream:
+                os.fsync(stream.fileno())
+            parents.update(p for p in path.parents if p == self.work or self.work in p.parents)
+        for directory in sorted(parents, key=lambda p: -len(p.parts)):
+            sync_dir(directory)
+        self.state["fixture_plan"] = self.unit_source.plan_digest
+
+    def run_stream(self):
         print(json.dumps(self.storage, indent=2), flush=True)
-        if self.args.shared_shards == "retain" and self.storage["peak_shard_bytes"] > self.args.max_staging_gb * GIB:
+        if (not self.unit_source and self.args.shared_shards == "retain"
+                and self.storage["peak_shard_bytes"] > self.args.max_staging_gb * GIB):
             raise RuntimeError(f"retaining shared shards requires at least {self.storage['peak_shard_bytes']/GIB:.3f} GiB "
                                f"at unit {self.storage['peak_unit']}; staging cap is {self.args.max_staging_gb:g} GiB")
-        self.validate_done()
-        self.release()  # Recovers a kill between committing a unit and unlinking its last shard.
-        if self.args.shared_shards == "restage":
-            for unit in self.state["units"]:
-                path = self.staging / "views" / unit
-                if path.exists():
-                    shutil.rmtree(path)
+        if not self.unit_source:
+            self.validate_done()
+            self.release()  # Recovers a kill between committing a unit and unlinking its last shard.
+            if self.args.shared_shards == "restage":
+                for unit in self.state["units"]:
+                    path = self.staging / "views" / unit
+                    if path.exists():
+                        shutil.rmtree(path)
         for unit in self.plan["units"]:
             if unit in self.state["units"] or (self.selected is not None and unit not in self.selected):
                 continue
             print(f"Unit {unit}", flush=True)
-            ple_ids = self.checkpoint.text.get("ple_layer_ids") or []
-            first_ple = str(min(ple_ids) - 1) if ple_ids else None
-            if ple_ids and unit == first_ple:
-                self.prepare_ple()
-            elif (self.selected is not None and first_ple is not None and "source_shards" not in self.state["ple"]
-                  and self.plan["units"].index(unit) > self.plan["units"].index(first_ple)):
-                self.prepare_ple()  # Re-run: rows adopted from --rerun-from, or extracted now.
-            elif "plans" in self.state["ple"]:
-                store = self.work / "sparse-ple"
-                self.args.worker_extra.update(sparse_store=str(store), sparse_digest=sha256(store / "store.json"))
-            if self.args.shared_shards == "restage":
-                active = self.subset_checkpoint(unit, self.plan["keys"][unit])
-            else:
-                active = self.checkpoint
-                for filename in self.plan["shards"][unit]:
-                    self.stage(filename)
-            self.harness.checkpoint = active
-            self.harness.identity["stamps"] = {p.name: file_stamp(p) for p in active.root.glob("*.safetensors")}
-            self.state["current_unit"] = {"unit": unit, "state": "running"}
-            self.save()
-            row = self.run_unit(unit)
+            with self.active_checkpoint(unit, self.first_ple) as active:
+                self.state["current_unit"] = {"unit": unit, "state": "running"}
+                self.save()
+                if self.unit_source:
+                    limits = self.unit_source.limits
+                    self.unit_source.budget.admit("unit worker evidence", limits.unit_sizes, limits.unit_dirs)
+                    self.harness.rows.pop(unit, None)
+                row = self.run_unit(unit)
+                if self.unit_source:
+                    self.unit_source.budget.admit("completed unit evidence")
             if row["status"] != "PASS":
                 if not getattr(self.args, "keep_going", False):
                     raise RuntimeError(f"parity did not pass at {unit}; see {self.harness.out}")
@@ -565,14 +775,17 @@ class StreamDriver:
                       + json.dumps(row["failures"]), flush=True)
             elif self.args.convert_out:
                 row["conversion"] = self.convert_unit(unit)  # Only parity-passing units are exported.
+            if self.unit_source:
+                self.commit_fixture_evidence(row)
             self.state["chain"][unit] = row.pop("chain")
             self.state["units"][unit] = row
             self.state.pop("current_unit", None)
             self.save()
-            for filename in self.plan["shards"][unit]:
-                self.consume(filename, unit)
+            if not self.unit_source:
+                for filename in self.plan["shards"][unit]:
+                    self.consume(filename, unit)
             self.release()
-            if self.args.shared_shards == "restage":
+            if not self.unit_source and self.args.shared_shards == "restage":
                 shutil.rmtree(active.root)
         failures = [{"unit": unit, "result": row["result"], "cases": row["failures"]}
                     for unit, row in self.state["units"].items() if row["status"] != "PASS"]
@@ -580,11 +793,16 @@ class StreamDriver:
                    "fingerprint": self.state["fingerprint"],
                    "coverage": {"layers": list(range(self.checkpoint.text["num_hidden_layers"])),
                                 "dtypes": ["fp32", "bf16"], "input_modes": ["random", "real"], "endpoints": True,
-                                "full_48_layer_gold": (not failures and self.selected is None
+                                "full_48_layer_gold": (not self.unit_source and not failures and self.selected is None
                                                        and self.checkpoint.text["num_hidden_layers"] == 48),
                                 "rerun": self.state.get("rerun")},
                    "failures": failures, "units": self.state["units"], "skipped_keys": self.plan["skipped_keys"]}
-        write_json(self.work / "summary.json", summary)
+        if self.unit_source:
+            summary["fixture_source"] = {"plan": self.unit_source.plan_digest,
+                                         "source_bytes": self.unit_source.bytes_charged}
+            self.save_fixture_json(self.work / "summary.json", summary)
+        else:
+            write_json(self.work / "summary.json", summary)
         if failures:
             print(f"Stream FAIL: {len(failures)} unit(s) failed", flush=True)
             for failure in failures:

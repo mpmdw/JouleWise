@@ -1,0 +1,62 @@
+{
+  "config": {
+    "eos_token_id": 0,
+    "heads_per_ngram": 1,
+    "make_ngram_vocab_size_divisible_by": 1,
+    "ngram_size": 2,
+    "ngram_vocab_size_base": 7,
+    "num_hidden_layers": 3,
+    "ple_embed_dim": 2,
+    "ple_layer_ids": [
+      2
+    ],
+    "split_ngram_parts": 2,
+    "vocab_size": 8
+  },
+  "objects": {
+    "A.safetensors": "wAEAAAAAAAB7Im1vZGVsLmxheWVycy4xLnBsZS5wbGVfZW1iZWRkaW5nLm5ncmFtX2VtYmVkZGluZy5zaGFyZF8wLndlaWdodCI6eyJkdHlwZSI6IkJGMTYiLCJzaGFwZSI6WzQsMl0sImRhdGFfb2Zmc2V0cyI6WzAsMTZdfSwibW9kZWwuZW1iZWRfdG9rZW5zLndlaWdodCI6eyJkdHlwZSI6IkYzMiIsInNoYXBlIjpbOCwyXSwiZGF0YV9vZmZzZXRzIjpbMTYsODBdfSwibW9kZWwubGF5ZXJzLjEucGxlLnBsZV9lbWJlZGRpbmcubGF5ZXJfbXVsdGlwbGllcnMiOnsiZHR5cGUiOiJJNjQiLCJzaGFwZSI6WzJdLCJkYXRhX29mZnNldHMiOls4MCw5Nl19LCJtb2RlbC5sYXllcnMuMC5zY2FsZSI6eyJkdHlwZSI6IkYzMiIsInNoYXBlIjpbMl0sImRhdGFfb2Zmc2V0cyI6Wzk2LDEwNF19LCJ1bnVzZWQucGFkQSI6eyJkdHlwZSI6IlU4Iiwic2hhcGUiOlsyOV0sImRhdGFfb2Zmc2V0cyI6WzEwNCwxMzNdfX0gAIABQIA/gL9BQAE/QUERwQAAAAAAAIA/AAAAQAAAQEAAAIBAAACgQAAAwEAAAOBAAAAAQQAAEEEAACBBAAAwQQAAQEEAAFBBAABgQQAAcEEDAAAAAAAAAAUAAAAAAAAAAABAQAAAAMAAAQIDBAUGBwgJCgsMDQ4PEBESExQVFhcYGRobHA==",
+    "B.safetensors": "KAIAAAAAAAB7Im1vZGVsLmxheWVycy4xLnBsZS5wbGVfZW1iZWRkaW5nLm5ncmFtX2hlYWRzX3ZvY2FiX3NpemVzIjp7ImR0eXBlIjoiSTY0Iiwic2hhcGUiOlsxXSwiZGF0YV9vZmZzZXRzIjpbMCw4XX0sIm1vZGVsLmxheWVycy4xLnBsZS5wbGVfZW1iZWRkaW5nLm5ncmFtX2hlYWRzX29mZnNldHMiOnsiZHR5cGUiOiJJNjQiLCJzaGFwZSI6WzFdLCJkYXRhX29mZnNldHMiOls4LDE2XX0sIm1vZGVsLmxheWVycy4xLnBsZS5wbGVfZW1iZWRkaW5nLm5ncmFtX2VtYmVkZGluZy5zaGFyZF8xLndlaWdodCI6eyJkdHlwZSI6IkJGMTYiLCJzaGFwZSI6WzMsMl0sImRhdGFfb2Zmc2V0cyI6WzE2LDI4XX0sIm1vZGVsLmxheWVycy4xLnNjYWxlIjp7ImR0eXBlIjoiRjMyIiwic2hhcGUiOlsyXSwiZGF0YV9vZmZzZXRzIjpbMjgsMzZdfSwibW9kZWwubGF5ZXJzLjIuc2NhbGUiOnsiZHR5cGUiOiJGMzIiLCJzaGFwZSI6WzJdLCJkYXRhX29mZnNldHMiOlszNiw0NF19LCJ1bnVzZWQucGFkQiI6eyJkdHlwZSI6IlU4Iiwic2hhcGUiOls0MV0sImRhdGFfb2Zmc2V0cyI6WzQ0LDg1XX19ICAgICAHAAAAAAAAAAAAAAAAAAAAAcCBP39/gADzQeW/AACAQAAAoEAAAABAAADAQAABAgMEBQYHCAkKCwwNDg8QERITFBUWFxgZGhscHR4fICEiIyQlJico"
+  },
+  "pins": {
+    "A.safetensors": [
+      589,
+      "3a82d3895fdadd1991bb9714cdf887520c864ac980f71e251c85fe96bfcc45e5"
+    ],
+    "B.safetensors": [
+      645,
+      "b6daac6fab4ed75ddc77f114d7ca13e2461c9209504b3788341ef7bf4bf95588"
+    ]
+  },
+  "prompts": [
+    {
+      "input_ids": [
+        1,
+        2,
+        0,
+        3
+      ],
+      "name": "toy-x"
+    },
+    {
+      "input_ids": [
+        4,
+        4
+      ],
+      "name": "toy-y"
+    }
+  ],
+  "revision": "invented/unit-local/1",
+  "weight_map": {
+    "model.embed_tokens.weight": "A.safetensors",
+    "model.layers.0.scale": "A.safetensors",
+    "model.layers.1.ple.ple_embedding.layer_multipliers": "A.safetensors",
+    "model.layers.1.ple.ple_embedding.ngram_embedding.shard_0.weight": "A.safetensors",
+    "model.layers.1.ple.ple_embedding.ngram_embedding.shard_1.weight": "B.safetensors",
+    "model.layers.1.ple.ple_embedding.ngram_heads_offsets": "B.safetensors",
+    "model.layers.1.ple.ple_embedding.ngram_heads_vocab_sizes": "B.safetensors",
+    "model.layers.1.scale": "B.safetensors",
+    "model.layers.2.scale": "B.safetensors",
+    "unused.padA": "A.safetensors",
+    "unused.padB": "B.safetensors"
+  }
+}
