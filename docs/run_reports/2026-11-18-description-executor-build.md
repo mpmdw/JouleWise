@@ -292,3 +292,127 @@ successor freeze and lead-supplied native bindings are also pending.
 [Final focused regressions](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/audit4-regressions-final.log)
 [Complete-stream controls](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/audit4-complete-controls.log)
 [Frozen boundary rerun](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/audit4-frozen-boundary.log)
+
+## 2026-11-19 audit 5 and frozen acceptance v2
+
+The fetched builder branch, clean checkout and draft PR #868 agreed at
+`6fe70b30b81c5be08827193757daaf7f00907c73`. The independent freeze
+reported 1,857 failures and six host errors on that head. The source and
+tracked copies of the successor suite compare byte for byte. The suite
+contains 1,046 inherited and 2,288 new cases under SHA-256
+`7b3ef5b502d8cae6ece820078898a74baef6920c479a99e537b39367aa74f7c0`.
+
+| Audit 5 finding | Repair commit | Regression evidence |
+| --- | --- | --- |
+| HIGH. GPU raw field projection preceded observed rail coverage. | `eb13a0549` | The structural pass indexes row identities and stamps. The gateway decodes admitted fields in a second pass and caches only numbers from that interval. **PASS.** The decisive last-row, warm-cache and field-order cases exercise the two stages independently. |
+| HIGH. A sidecar gap overrode a rail sample-count deficit. | `eb13a0549` | The gateway checks the ordered manifest for rail sum, then the observed component and complete-triple counts and the sidecar count before any gap. **PASS.** The count boundary, join, channel isolation and named 593/594/595 witnesses exercise the precedence. |
+| HIGH. Recovery printed through an indeterminate window. | `eb13a0549` | The common latest-start grid evaluates complete 10 s windows through the hold's end. Each failed window contributes one skip and one reason. **PASS.** The audit's 9-of-10 witness, the staggered and terminal cases and the skipped-window sequences check resulting returns and censors. Hold SD reports its dropped window reasons. |
+
+The worker preflight invokes the pinned final-validator CLI and matches
+its exact success tuple. With the successor observer, the instrument
+foreign-roster test passed with exit 2, empty stdout, no scoring opens,
+no output writes and no reservation. The frozen GPU row comparator
+passed, and the direct science checks matched the complete synthetic
+outputs on all three IDs and all nine RL-188 oracle maps. Both negative
+controls failed at their intended checks. The public stub added
+`sample_sum`, and the foreign-roster stub admitted the foreign roster.
+The focused dispatcher, transfer release and description runs had
+60 passes and the existing dispatcher skip. The 44 command-census and
+gate-ledger checks passed.
+
+The blob comparison found 53 protected paths with matching IDs between
+the pre-repair and repair heads, including the qualification and
+interim pin closures and registrations. The design archive still hashes
+to `09e8cacb56706ebb7f18a83281e6590b76741f29c127b4defea853add881aa8d`.
+The independent oracle still hashes to
+`334f028d934e4618ced41362eb6c8ae934c6388ab8963b7273b0bacb217da92c`.
+Final registration will use the dispatcher merged in PR #854. The
+combined native base and native source equivalence remain lead gates.
+
+In the synthetic reservation repro, the worker returned exit 2 before
+any scoring open. The same direct directory creation returned
+`EPERM`. The six direct fixture errors are `once_abandoned` and
+`once_other_checkout` on each of the three look IDs. All 3,334 local cases have a result. There were 3,212 passes,
+116 failed reservation-dependent assertions and six direct directory
+errors. The two v2 publication probes account for two of the assertions.
+The other 2,286 v2 cases passed. The local case index lists each blocked
+case and the trace logs distinguish the pre-read refusal, absent directory
+and race outcomes from the direct `EPERM` errors.
+
+[Independent successor freeze and red run](/Volumes/JW-EXT/scratch/astra-desc-suite-v2/FINAL-MESSAGE.md) · [Contract delta](/Volumes/JW-EXT/scratch/astra-desc-suite-v2/SPEC-DELTA.md) · [Protected blob comparison](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/acceptance-v2-protected-blobs.tsv) · [Targeted frozen regressions](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/acceptance-v2-fast.log) · [Focused tests](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/acceptance-v2-focused.log) · [Reservation repro](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/acceptance-v2-host-cases.log) · [CI on the repair head](https://github.com/mpmdw/JouleWise/actions/runs/44670634993)
+
+[Local case index](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/acceptance-v2-local-matrix.txt) · [All 2,288 new cases](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/acceptance-v2-new.log) · [Direct scientific outputs and oracle](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/acceptance-v2-science.log) · [Raw read and recovery cases](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/acceptance-v2-read-recovery.log)
+
+## 2026-11-19 RL-190 and frozen acceptance v2.1
+
+After the lead paused the run, fetch and readback showed that the
+worktree, upstream branch and draft PR #868 agreed at
+`eb13a05498e75165b951c159a0e7d88e7d9994af`. The audit 5 report above
+was the only local edit. The independent v2.1 baseline on that head
+reported 3,185 passes, 190 failed assertions and six reservation errors.
+
+The successor suite was copied byte for byte and SHA-256
+`26bcfd126736d2ae490d82e221a5d53232fa0888301972e464b57641c0377426`
+matches. The suite discovers 3,381 cases. Of the v2 cases, 3,273 have
+the same expectations and 61 have amended expectations. There are 47
+new cases. The blob comparison matched all 53 protected paths, and the
+design archive and independent edge oracle match their pins above.
+
+| RL-190 finding | Repair commit | Regression |
+| --- | --- | --- |
+| §3.4. The manifest was required to precede the receipt snapshot. | `7a442bec8` | **PASS.** The final manifest and receipt snapshot each authenticate against the pre-read commit. Each receipt already had to bind the admitted kit digest. Nine valid same-commit, later and parallel histories reach reservation. The sibling-commit, bad-receipt and staged-only cases exercise refusal. |
+| §3.8 B. A valid count with an excessive gap recorded the general interval token. | `7a442bec8` | **PASS.** Recovery records `gap_over_u1` when a gap wins after coverage. The general interval and hold SD gap token stays `meter_gap`. Vector B and the amended recovery cases check the exact reason. |
+| §3.8 H. Recovery searched a tile intersecting the end of the rail capture. | `7a442bec8` | **PASS.** The shared 10 s grid only searches complete tiles within each stream and the hold. Both H cases check that the truncated tile is neither queried nor skipped and that the bound remains 612 s. |
+| §3.8 tail. A failed rail-return admission omitted the stream-end bound. | `7a442bec8` | **PASS.** The rail tail records the winning reason with the observed endpoint. The shortened tail checks 0.75 s, and the amended tail cases distinguish coverage from gaps and true stream-end censoring. |
+
+The ancestry change concerns final manifest registration. The frozen
+kit-index chronology cases cover a separate rule and retain their
+expectations in v2.1. Final native equivalence and registration remain
+lead gates.
+
+[RL-190](/Volumes/JW-EXT/scratch/fable-rl190.md) · [Independent freeze delta and red results](/Volumes/JW-EXT/scratch/astra-desc-suite-v2-1/DELTA.md) · [Protected blob comparison](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/acceptance-v21-protected-blobs.tsv) · [Hosted CI for the RL-190 code head](https://github.com/mpmdw/JouleWise/actions/runs/44673815663)
+
+All 196 selected RL-190 regression cases passed locally. The selection
+includes all 61 revised expectations, all 47 new cases and 88 additional
+recovery and tail cases. The 61 focused tests had 60 passes and the
+existing dispatcher skip. All 44 command-census and gate-ledger checks
+passed. Both negative controls failed for their intended reasons. The
+draft PR body and repair head matched the GitHub
+readback.
+
+[RL-190 regression run](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/acceptance-v21-rl190.log) · [Focused tests](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/acceptance-v21-focused.log) · [Public-field negative control](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/acceptance-v21-negative-public.log) · [Foreign-roster negative control](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/acceptance-v21-negative-foreign.log)
+
+The eight local partitions recorded results for all 3,381 frozen IDs.
+There were 3,259 passes, 116 reservation-dependent assertion failures
+and six direct `EPERM` errors. These are the same 122 affected IDs as
+v2. On each look, `once_abandoned` and `once_other_checkout` fail while
+creating the synthetic reservation. The other reservation-dependent
+cases include both publication probes. A separate diagnostic observed
+the real reservation mkdir fail with errno 1 in each of the 116
+worker cases. The direct synthetic scientific
+print checks passed on all three looks, including the independent
+RL-188 edge oracle on instrument. No tested case requires a spec referral.
+
+[Complete local case index](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/acceptance-v21-local-matrix.txt) · [Reservation-dependent cases and symptoms](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/acceptance-v21-local-reservation-results.tsv) · [Direct scientific comparisons](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/acceptance-v21-science.log)
+
+[Per-case mkdir errno diagnostic](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/acceptance-v21-reservation-errno.txt)
+
+### Hosted release retry regression
+
+The superseded v2 hosted shard reported 21 failures in the fault and
+once-only cases, seven per look. Its successful first-release cases
+show that the hosted runner can make the synthetic reservation. On an
+already spent look the executor launched the sanctioned validator
+before checking the registered destinations. The observer then recorded
+the validator's `/dev/null` open after reservation.
+
+Commit `68775f47ef01178f036b97a47919d1e1e1af0154` checks the authenticated
+destinations before starting the validator and rechecks immediately
+before each validation child, including the peer check. The reservation
+mkdir remains the final one-use arbitration. The new regression records
+the unexpected device open on all three synthetic looks before the
+repair. After the repair the regression passes on all three, and the
+focused native-preflight and foreign-roster controls also pass. The
+frozen v2.1 bytes and both companion fixtures match the same digests.
+
+[Superseded hosted shard](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/acceptance-v2-hosted-shard2.log) · [Regression before repair](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/acceptance-v21-spent-red.log) · [Regression and focused controls after repair](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/acceptance-v21-spent-green.log) · [Current hosted checks](https://github.com/mpmdw/JouleWise/pull/868/checks)
