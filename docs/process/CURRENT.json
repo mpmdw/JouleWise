@@ -1,10 +1,10 @@
 {
   "armed": null,
-  "next_observable": "f2stab01-aeecce64/run-out.txt shows LAUNCH_RC=0 with the fence (launch ~09:07, expected end ~10:25, fence ~11:08; read the true fence deadline from run-out.txt). The next activation after the fence pid is gone and runner_receipt.json exists Checks cq-f2-stab-01-l006-a1 under /Users/edr/campaign-out/f2-stab-01/ with f2stab01-check-template-aeecce64/check.sh (LEGS L006, kit sha dbad…70fe, campaign_id f2-stab-01 and batch_windows == ['02:00-02:35'] asserted; replace REPLACE_STAMP in OUT with the actual directory's stamp and NEWACT in TMPDIR with the activation id; grep the leg_record for max_busy_cores/max_gap_s), and copies at once with f2stab01-check-template-aeecce64/offload-run.sh (replace NEWACT everywhere with the activation id). Then continue down the ladder (items 422, 447, 463, 464, 480): rank 2 only for an f2-inst kit whose executing delta PASS is recorded on main; otherwise rank 3 hp-02 if issued; otherwise rank 4. A pin-A one-leg t0 in 10:50:01-13:14:59 refuses on both ARGs, so if the Check lands in that gap the rung is f2-stab-15/16 on pin 6e9d42f1d with no window (item 463); from 13:15:00 rank 4 resumes f2-stab-01 L007 (seq 7) on pin 2d347f721 with ARG 02:00-02:35 (inputs f2stab01-aeecce64/inputs.sh with SPAN/LEGS/SEQ/MAGISTRATE_PID changed). Saturday's rank-1 stability leg is due at the first dispatch after 00:00.",
+  "next_observable": "f2stab01-182576df/run-out.txt shows LAUNCH_RC=0 with the fence (launch ~10:12, expected end ~11:27, fence ~12:12; read the true fence deadline from run-out.txt). The next activation after the fence pid is gone and runner_receipt.json exists Checks cq-f2-stab-01-l007-a1 under /Users/edr/campaign-out/f2-stab-01/ with f2stab01-check-template-182576df/check.sh (LEGS L007, kit sha dbad…70fe, campaign_id f2-stab-01 and batch_windows == ['02:00-02:35'] asserted; replace REPLACE_STAMP in OUT with the actual directory's stamp and NEWACT in TMPDIR with the activation id; grep the leg_record for max_busy_cores/max_gap_s), and copies at once with f2stab01-check-template-182576df/offload-run.sh (replace NEWACT everywhere with the activation id). Then continue down the ladder (items 422, 447, 463, 464, 480): rank 2 only for an f2-inst kit whose executing delta PASS is recorded on main; otherwise rank 3 hp-02 if issued; otherwise rank 4. The Check is expected ~11:27, inside the 10:50:01-13:14:59 gap where a pin-A one-leg t0 refuses on both ARGs, so the rung then is f2-stab-15/16 on pin 6e9d42f1d with no window (item 463); from 13:15:00 rank 4 resumes f2-stab-01 L008 (seq 8) on pin 2d347f721 with ARG 02:00-02:35 (inputs f2stab01-182576df/inputs.sh with SPAN/LEGS/SEQ/MAGISTRATE_PID changed). Saturday's rank-1 stability leg is due at the first dispatch after 00:00.",
   "open_items": [
     {
       "expires_epoch_s": null,
-      "item": 485,
+      "item": 486,
       "owner": "magistrate",
       "status": "ISSUED"
     },
@@ -161,10 +161,10 @@
   ],
   "owner": "magistrate",
   "schema": "joulewise.current_pointer.v2",
-  "source_item": "485",
+  "source_item": "486",
   "source_item_heading_date": "2026-11-20",
   "wait": {
-    "deadline_epoch_s": 1795206600,
+    "deadline_epoch_s": 1795210200,
     "observable": "none",
     "on_early_or_refused": "a launcher refusal or non-clean close: record it, hold kit f2-stab-01 until an input changes (item 422, RL-179 F-6), mail the lead and Ed, and continue down the ladder. R1 stays unarmed."
   }
