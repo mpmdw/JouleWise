@@ -569,7 +569,8 @@ def runtime_double():
     """Stand-ins for the pinned producer calls the RL-189 checks make. No R1 runtime is on main.
 
     ``load_config`` and ``read_template`` keep the frozen contracts (a parsed
-    config with its sha256; a template with its parsed prompt).
+    config with its sha256; a template with its parsed prompt). The sampler and
+    gate helpers accept only this module's clean synthetic turn.
     """
     runtime = ModuleType("joulewise.align.apple.r1_runtime")
 
@@ -582,11 +583,19 @@ def runtime_double():
         return config, json.loads(config["workload_profile"]["prompt_text"])
 
     runtime.load_config, runtime.read_template = load_config, read_template
+    sampler = ModuleType("joulewise.align.apple.sampler")
+    sampler.seconds_ns = lambda seconds: round(seconds * 10**9)
+    sampler.monotonic_ns = lambda stamp: round(
+        (stamp.monotonic_before_s + (stamp.monotonic_after_s - stamp.monotonic_before_s) / 2) * 10**9)
+    sampler.stamp_mapping = lambda stamps, *, episode_domain, evidence=None: (
+        SimpleNamespace(offset_ns=0, episode_domain=episode_domain), [])
+    gates = ModuleType("joulewise.align.apple.thermal_gates")
+    gates.split_decode_events = lambda events, holds: list(events)
     apple = ModuleType("joulewise.align.apple")
-    apple.r1_runtime = runtime
+    apple.r1_runtime, apple.sampler, apple.thermal_gates = runtime, sampler, gates
     align = ModuleType("joulewise.align")
     align.apple = apple
-    with patch.dict(sys.modules, {module.__name__: module for module in (align, apple, runtime)}):
+    with patch.dict(sys.modules, {module.__name__: module for module in (align, apple, runtime, sampler, gates)}):
         yield runtime
 
 
@@ -1045,6 +1054,81 @@ class NativeLimitDecisionTests(unittest.TestCase):
         self.assertNotIn(str(MARKER), json.dumps(record))
 
 
+class PrefillStartWitnessTests(unittest.TestCase):
+    """The prefill start is delayed past the endpoint's start stamp only by recorded producer phases."""
+
+    @staticmethod
+    def event(kind, phase, at, **metadata):
+        return {"event_type": kind, "phase": phase, "timestamp_s": at, "message": "synthetic",
+                "metadata": {"align_turn_index": 0, **metadata}}
+
+    def judge(self, prefill_start, lead=()):
+        stamp = lambda at: {"epoch_s": at, "monotonic_before_s": at, "monotonic_after_s": at,
+                            "wall_resolution_s": 1e-9, "monotonic_resolution_s": 1e-9}
+        turn = SimpleNamespace(index=0, start_ns=10 * 10**9, first_token_ns=12 * 10**9, end_ns=13 * 10**9,
+                               decode_tokens=1)
+        episode = SimpleNamespace(turns=[turn], clock_domain="synthetic")
+        record = {"start_stamp": stamp(10.0), "end_stamp": stamp(13.0),
+                  "clock_mapping": {"offset_ns": 0, "episode_domain": "synthetic"}}
+        events = [*lead, self.event("phase_start", "prefill", prefill_start),
+                  self.event("phase_end", "prefill", 12.0),
+                  self.event("phase_start", "decode", 12.0, max_tokens=4096),
+                  self.event("token", "decode", 12.5, index=0),
+                  self.event("phase_end", "decode", 13.0, emitted_tokens=1, requested_output_tokens=4096)]
+        with runtime_double():
+            pc._recompute_turn_boundaries("step-d", episode, [record], events, (), 4096)
+
+    def refused(self, field, *args, **kwargs):
+        with self.assertRaises(evidence.EvidenceFailure) as caught:
+            self.judge(*args, **kwargs)
+        failure = caught.exception
+        self.assertEqual((failure.reason, failure.source, failure.field, failure.index),
+                         ("turn_boundary_recompute", "events.jsonl", field, 0))
+
+    def phases(self, *times, phases=("tokenize", "tokenize", "generation_setup", "generation_setup"), **metadata):
+        kinds = ("phase_start", "phase_end") * 2
+        return [self.event(kind, phase, at, **metadata) for kind, phase, at in zip(kinds, phases, times)]
+
+    def test_with_no_recorded_phase_the_prefill_start_is_the_start_stamp(self):
+        self.judge(10.0)
+        # Frozen suite v2: <member>/.../events.jsonl/<prefill start>.timestamp_s/shift in four members.
+        for at in (11.0, 12.0, 10.000001):
+            with self.subTest(at=at):
+                self.refused("prefill_start", at)
+        self.refused("phase_order", 9.0)
+
+    def test_recorded_tokenize_and_setup_phases_witness_a_delay_in_order(self):
+        self.judge(11.0, self.phases(10.2, 10.6, 10.6, 10.9))
+        self.judge(11.0, self.phases(10.0, 10.0, 11.0, 11.0))
+        self.judge(10.0, self.phases(10.0, 10.0, 10.0, 10.0))
+        self.judge(11.0, self.phases(10.2, 10.6)[:1])
+        for name, lead in (("after the prefill start", self.phases(10.2, 10.6, 10.6, 11.5)),
+                           ("before the start stamp", self.phases(9.9, 10.6, 10.6, 10.9)),
+                           ("out of order", self.phases(10.6, 10.2, 10.7, 10.9)),
+                           ("another turn", self.phases(10.2, 10.6, 10.6, 10.9, align_turn_index=1)),
+                           ("an unrelated phase", self.phases(10.2, 10.6, 10.6, 10.9, phases=("align_note",) * 4))):
+            with self.subTest(lead=name):
+                self.refused("prefill_start", 11.0, lead)
+
+    def test_a_phase_recorded_after_the_prefill_start_is_no_witness(self):
+        late = self.phases(10.2, 10.6, 10.6, 10.9)
+        stamp = lambda at: {"epoch_s": at, "monotonic_before_s": at, "monotonic_after_s": at,
+                            "wall_resolution_s": 1e-9, "monotonic_resolution_s": 1e-9}
+        turn = SimpleNamespace(index=0, start_ns=10 * 10**9, first_token_ns=12 * 10**9, end_ns=13 * 10**9,
+                               decode_tokens=1)
+        episode = SimpleNamespace(turns=[turn], clock_domain="synthetic")
+        record = {"start_stamp": stamp(10.0), "end_stamp": stamp(13.0),
+                  "clock_mapping": {"offset_ns": 0, "episode_domain": "synthetic"}}
+        events = [self.event("phase_start", "prefill", 11.0), *late, self.event("phase_end", "prefill", 12.0),
+                  self.event("phase_start", "decode", 12.0, max_tokens=4096),
+                  self.event("token", "decode", 12.5, index=0),
+                  self.event("phase_end", "decode", 13.0, emitted_tokens=1, requested_output_tokens=4096)]
+        with runtime_double(), self.assertRaises(evidence.EvidenceFailure) as caught:
+            pc._recompute_turn_boundaries("step-d", episode, [record], events, (), 4096)
+        self.assertEqual((caught.exception.reason, caught.exception.field),
+                         ("turn_boundary_recompute", "prefill_start"))
+
+
 class DescriptorMarkerTests(unittest.TestCase):
     """RL-183c test 3 over the RL-189 checks: names leave the process, no planted value or path does."""
 
@@ -1068,6 +1152,7 @@ class DescriptorMarkerTests(unittest.TestCase):
                                         attested=MARKER, flags=[pc.UNREAD_LIMIT_FLAG]))               # D5
             collect(lambda: judge.judge({"max_context_tokens": MARKER, "max_position_embeddings": MARKER},
                                         attested=MARKER))                                             # D6
+            collect(lambda: PrefillStartWitnessTests().judge(10.0 + MARKER))
             attempt.descriptor.write_bytes(json_bytes({"max_position_embeddings": MARKER + 1}))
             collect(lambda: pc._attested_descriptor(attempt.ledger, FIRST, attempt.configured))       # D2
             append = evidence.EvidenceLedger._append
@@ -1077,7 +1162,7 @@ class DescriptorMarkerTests(unittest.TestCase):
             collect(lambda: pc._attested_descriptor(attempt.ledger, "d-bank-benign-s1", attempt.configured))  # D1
             self.assertEqual([failure.reason for failure in failures],
                              ["admission_recompute", "flag_source", "admission_recompute",
-                              "source_integrity", "evidence_unverifiable"])
+                              "turn_boundary_recompute", "source_integrity", "evidence_unverifiable"])
 
             stdout, stderr = StringIO(), StringIO()
             with redirect_stdout(stdout), redirect_stderr(stderr), self.assertRaises(ValueError) as raised:

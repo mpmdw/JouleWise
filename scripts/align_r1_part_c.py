@@ -91,6 +91,9 @@ EPISODE_IDENTITIES = {
 TEMPLATE_KEYS = {"capture-predecessor-30b": "model_30b", "step-d": "d_spam",
                  "d-bank-benign-s1": "d_bank", "x-g": "x_g"}
 UNREAD_LIMIT_FLAG = "model.position_limit_unread"
+# The phases the pinned producer records for a turn between the endpoint's start stamp and
+# the prefill start (mlx_runtime.generate_turn). They witness a delayed prefill start.
+PRE_PREFILL_PHASES = ("tokenize", "generation_setup")
 POWERMODE_SOURCE = "pmset -g custom (AC Power block, exact powermode key)"
 CUT_FLAGS = frozenset({"episode.deadman", "episode.g0_unreleased", "episode.malformed_tool_call",
                        "episode.time_guard", "episode.context_limit", "thermal.start_gate_timeout",
@@ -1779,10 +1782,14 @@ def _recompute_turn_boundaries(kind, episode, witnessed, events, intervals, turn
 
     source = "events.jsonl"
     by_turn = defaultdict(list)
+    lead = defaultdict(list)
     previous_turn = 0
     for event in events:
         phase, event_type = event["phase"], event["event_type"]
         if phase not in ("prefill", "decode") or event_type not in ("phase_start", "phase_end", "token"):
+            index = event["metadata"].get("align_turn_index")
+            if phase in PRE_PREFILL_PHASES and _uint(index) and index not in by_turn:
+                lead[index].append(event["timestamp_s"])
             continue
         index = event["metadata"].get("align_turn_index")
         _required(_uint(index) and previous_turn <= index < len(episode.turns), "turn_boundary_recompute",
@@ -1823,6 +1830,12 @@ def _recompute_turn_boundaries(kind, episode, witnessed, events, intervals, turn
               and final_decode.timestamp_s <= end.epoch_s
               and all(left.timestamp_s <= right.timestamp_s for left, right in zip(phase, phase[1:])),
               "phase_order")
+        # The prefill start has no stamp of its own. A start later than the endpoint's start
+        # stamp is accepted only when the turn's recorded pre-prefill phases fill that bracket
+        # in order. With none recorded nothing witnesses a delay, and the two must coincide.
+        bracket = [start.epoch_s, *lead.get(index, ()), prefill_start.timestamp_s]
+        check(all(left <= right for left, right in zip(bracket, bracket[1:]))
+              and (len(bracket) > 2 or bracket[0] == bracket[-1]), "prefill_start")
         check(type(final_decode.metadata.get("emitted_tokens")) is int
               and final_decode.metadata["emitted_tokens"] == turn.decode_tokens
               and type(first_decode.metadata.get("max_tokens")) is int
