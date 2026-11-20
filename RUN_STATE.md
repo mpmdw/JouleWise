@@ -1,5 +1,11 @@
 # JouleWise Run State
 
+PR #795 audit round 2 repairs writer exit and phase admission, compares
+complete Step 3 cell maps, and closes the interim v1 validator and filler
+check. The branch carries the reviewed base CI repairs. Campaign admission
+awaits the paired census and manifest cold pass.
+[Audit repair report](docs/run_reports/2026-11-19-pr795-audit-2.md).
+
 PR #795 applies RL-187 §1.5 at the interim runner's entry point. The
 stage-2 regression checks the draft and committed-ledger routes with the
 reviewed #816 pin. Campaign admission awaits the paired census and manifest

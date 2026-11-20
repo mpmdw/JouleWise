@@ -1,5 +1,10 @@
 # JouleWise Task Queue
 
+PR #795 audit round 2 repairs (2026-11-19), [AGENT]. Review the corrected
+writer and twin comparison paths and the checked port inventory. The
+main-side RL-188 registration test needs to compare the qualification row
+when the ledger grows. [Audit repair report](docs/run_reports/2026-11-19-pr795-audit-2.md).
+
 PR #795 RL-187 follow-up (2026-11-18), [AGENT]. Review the
 `lm-interim-01` execution boundary with the paired census. Fable's manifest
 cold pass gates campaign admission. The successor manifest PR owns its

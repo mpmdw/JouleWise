@@ -5,6 +5,7 @@ import json
 import math
 import os
 from pathlib import Path
+import re
 import subprocess
 import sys
 import time
@@ -239,9 +240,10 @@ def _validate_twin(twin, stage1, primary):
     _require(words["D#/tripwire/decision"] in ("within", "to the research lead", "not_evaluable")
              and (words["D#/tripwire/trips"] is None or type(words["D#/tripwire/trips"]) is bool))
     cells = words["D#/cells"]
-    allowed_cells = {str(leg["cell_prompt_tokens"]) for leg in stage1["legs"] if leg["cell_prompt_tokens"] is not None}
-    _require(type(cells) is dict and cells.keys() <= allowed_cells)
-    for cell in cells.values():
+    # Membership belongs to the exact comparison. A well-formed extra cell is a disagreement.
+    _require(type(cells) is dict)
+    for key, cell in cells.items():
+        _require(re.fullmatch(r"[1-9][0-9]*", key) is not None)
         _keys(cell, ("status", "gamma_estimable"))
         _require(cell["status"] in ("ok", "not_run")
                  and (cell["gamma_estimable"] is None or type(cell["gamma_estimable"]) is bool))

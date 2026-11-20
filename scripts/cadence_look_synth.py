@@ -662,7 +662,7 @@ def write_custody(root, look_input, energy, tokens):
         legs = legs_by_span[sid]
         with open(os.path.join(sdir, "runner_receipt.json"), "w") as f:
             json.dump({"schema": "joulewise.cadence_span_receipt.v1", "started": {"epoch_s": span["t0_epoch_s"]},
-                       "roster": [leg["leg_id"] for leg in legs], "synthetic": True,
+                       "roster": [leg["leg_id"] for leg in legs], "synthetic": True, "rc": 0,
                        "steps": [{"name": "soak", "rc": 0}]}, f)
         with open(os.path.join(sdir, "soak/soak_reference.json"), "w") as f:
             json.dump({"schema": "joulewise.align.r1_soak_reference.v1",

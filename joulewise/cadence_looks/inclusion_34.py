@@ -512,7 +512,10 @@ def check_writer_receipt(receipt):
     """Check the historical runner envelope and the current one-retry writer's history."""
     if "soak_refusals" in receipt:
         raise ValueError("runner receipt: soak_refusals is absent from the pinned writers")
-    _writer_rc(receipt)
+    rc = _writer_rc(receipt)
+    # The span starts at zero. Outside its exception handler only cleanup can change it to two.
+    if rc is None or (receipt.get("error") is None and rc not in (0, 2)):
+        raise ValueError("runner receipt: invalid span return code for its exit path")
     steps = receipt.get("steps")
     if not isinstance(steps, list):
         raise ValueError("runner receipt: invalid step list")

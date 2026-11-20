@@ -513,7 +513,7 @@
       },
       {
         "path": "joulewise/cadence_looks/inclusion_34.py",
-        "sha256": "bc1670020c794f14f3d4e68867cf8e4e40fce477da7213579f4792b3c740e9c5"
+        "sha256": "d67f3363d1ad7d61db7eb00f2beab222cd2e66d8818a3144ee8c3f9784116231"
       },
       {
         "path": "joulewise/cadence_looks/time_fields.py",
@@ -529,7 +529,7 @@
       },
       {
         "path": "scripts/cadence_look_run.py",
-        "sha256": "268bf87e258f6029426c318280586e57dd68ce53d0b0cb3af6eeba44755460e2"
+        "sha256": "ebf26f953f1ade490c15923df092fdd4c2f723d06f7d6c2d91490eb134be3a04"
       },
       {
         "path": "scripts/cadence_look_manifest.py",
@@ -545,7 +545,7 @@
       },
       {
         "path": "joulewise/cadence_looks/interim_twin.py",
-        "sha256": "2f3725969af20670b1199f71105a48bac036506d7478e924cc96152a2a7c6645"
+        "sha256": "19cd748f21f8a30c4fb1aee5af78fbd485ec5e2342e46531fd349a0ef89b839e"
       }
     ],
     "runtime": "Python standard library plus numpy, no scipy, run with -I. Stage 2 refuses, before the first energy read, unless its numpy version equals the one in the committed stage-1 output.",
@@ -844,7 +844,7 @@
       },
       {
         "path": "joulewise/cadence_looks/manifest.py",
-        "sha256": "1b5de65b8c7bf66fac452ece13c0c36a98459251cd8834e9e03c05bf4299141f"
+        "sha256": "9a7aa7cc89a89215b712d5bbb5c1e445e5a1b918fa7e96a8ea32c92bcf92e533"
       },
       {
         "path": "joulewise/desk_compress.py",
@@ -881,6 +881,10 @@
       {
         "path": "joulewise/validation.py",
         "sha256": "82bb03f3aed626446298d186e845b7fe75b3371ca6cbabd7160946bd8e7bfcfd"
+      },
+      {
+        "path": "docs/process/cadence/looks/filler-kit-registry.json",
+        "sha256": "021bacab8a229198d86e4a9af8235560607b470bfde4c3b9e27ceffdc0389814"
       }
     ],
     "gpu_trace_hole_refusal": {
@@ -926,7 +930,7 @@
         "reads_energy": false,
         "code": {
           "path": "joulewise/cadence_looks/inclusion_34.py",
-          "sha256": "bc1670020c794f14f3d4e68867cf8e4e40fce477da7213579f4792b3c740e9c5"
+          "sha256": "d67f3363d1ad7d61db7eb00f2beab222cd2e66d8818a3144ee8c3f9784116231"
         },
         "cite": [
           "RL-149 §2.4",
@@ -942,7 +946,7 @@
         "reads_energy": false,
         "code": {
           "path": "joulewise/cadence_looks/inclusion_34.py",
-          "sha256": "bc1670020c794f14f3d4e68867cf8e4e40fce477da7213579f4792b3c740e9c5"
+          "sha256": "d67f3363d1ad7d61db7eb00f2beab222cd2e66d8818a3144ee8c3f9784116231"
         },
         "cite": [
           "RL-149 §2.4",

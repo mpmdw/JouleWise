@@ -95,6 +95,56 @@ class Base(unittest.TestCase):
 
 
 class CommittedDraft(Base):
+    def test_final_v1_refuses_unregistered_id_and_qualification_route(self):
+        from tests.cadence import look_minirepo as mr
+
+        mini = mr.mini_repo(self)
+        mr.commit(mini)
+        control = lm.load_json(mini / mr.MANIFEST)
+        candidate = mini / "generated-manifest.json"
+        args = ("validate", candidate, "--final")
+        candidate.write_text(json.dumps(control))
+        valid = mr.py(mini, "scripts/cadence_look_manifest.py", *args)
+        self.assertEqual(valid.returncode, 0, valid.stdout + valid.stderr)
+        qualified = copy.deepcopy(control)
+        qualified["look_kind"] = "qualification"
+        qualified["reads"]["blocks"] = [{"block_id": "qual-01", "phase": "qualification", "role": "fit",
+                                        "kit_sha256": None, "spans": "all_desk_final", "cite": ["RL-165 §8.1"]}]
+        qualified["when"]["after_desk_final"] = ["qual-01"]
+        for doc, field in ((dict(control, look_id="lm-other-01"), "look_id"),
+                           (dict(control, look_id="lm-interim-02", supersedes=control["look_id"]), "look_id"),
+                           (qualified, "look_kind"), (dict(control, look_kind="controls"), "look_kind")):
+            with self.subTest(field=field, look_id=doc["look_id"], kind=doc["look_kind"]):
+                candidate.write_text(json.dumps(doc))
+                result = mr.py(mini, "scripts/cadence_look_manifest.py", *args)
+                self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+                self.assertIn(f"REFUSE {field}: the v1 validator admits only", result.stdout)
+
+    def test_final_refuses_filler_ids_and_digest_aliases(self):
+        from tests.cadence import look_minirepo as mr
+
+        mini = mr.mini_repo(self)
+        mr.commit(mini)
+        control = lm.load_json(mini / mr.MANIFEST)
+        registry = lm.load_json(REPO / lm.FILLER_KIT_REGISTRY)
+        digest = registry["kit_sha256_by_id"]["f2-inst-01"]
+        candidate = mini / "generated-manifest.json"
+        args = ("validate", candidate, "--final")
+        for block_id, changes in (("reserve-01", {"block_id": "f2-inst-01"}),
+                                  ("reserve-01", {"kit_sha256": digest}),
+                                  ("reserve-01", {"block_id": "f2-inst-01", "kit_sha256": digest}),
+                                  ("dev-01", {"kit_sha256": digest}),
+                                  ("reserve-01", {"block_id": "cl-hp-02"}),
+                                  ("reserve-01", {"block_id": "f2-stab-99"})):
+            doc = copy.deepcopy(control)
+            next(block for block in doc["reads"]["blocks"] if block["block_id"] == block_id).update(changes)
+            candidate.write_text(json.dumps(doc))
+            for repo in ([], ["--repo", mini]):
+                with self.subTest(block=block_id, changes=changes, repo=bool(repo)):
+                    result = mr.py(mini, "scripts/cadence_look_manifest.py", *args, *repo)
+                    self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
+                    self.assertIn("cannot reference a filler kit", result.stdout)
+
     def test_the_committed_draft_validates_with_only_code_hashes_open(self):
         pending = lm.validate_manifest(draft())
         self.assertLessEqual({q for _, q in pending}, {"CODE"})        # RL-166 §2 item 3

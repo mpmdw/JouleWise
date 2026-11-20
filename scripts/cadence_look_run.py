@@ -607,7 +607,8 @@ def validate_runtime_bundles(roster, sdir_of):
                     continue
                 phase, metadata = event.get("phase"), event.get("metadata")
                 if (kind not in ("phase_start", "phase_end") or not isinstance(phase, str)
-                        or (phase not in _WRITER_PHASES and not re.fullmatch(r"align_tool_(0|[1-9]\d*)_(0|[1-9]\d*)", phase))
+                        or (phase not in _WRITER_PHASES
+                            and not re.fullmatch(r"align_tool_(0|[1-9][0-9]*)_(0|[1-9][0-9]*)", phase))
                         or (metadata is not None and not isinstance(metadata, dict))):
                     raise F.LookInputError("events: invalid writer phase")
 

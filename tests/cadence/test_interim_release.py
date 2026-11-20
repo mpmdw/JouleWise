@@ -129,7 +129,6 @@ class FreezeNaming(unittest.TestCase):
         doc = M.load_json(REPO / MR.MANIFEST)
         successor = "lm-interim-02"
         manifest = dict(doc, look_id=successor, supersedes=LOOK, status="committed")
-        M.validate_manifest(manifest, final=True)
         M.require_successor_ruling(manifest, {"looks": [{"look_id": LOOK, "status": "interrupted", "ruling": "RL-999"}]})
         published = dict(report(), look_id=successor)
         self.assertEqual(C.read_public(C.dump(published), SCHEMA, look_id=manifest["look_id"]), published)
@@ -523,7 +522,8 @@ class LookExecution(unittest.TestCase):
                                     sha256=stage1["manifest_sha256"], stage1_sha256=successor_sha))
         ledger_path.write_bytes(C.dump(ledger))
         MR.git_commit(self.mini, "register synthetic successor")
-        self.assertEqual(M.verify_pins(path, self.mini), manifest)
+        self.assertEqual(M.committed_ledger(self.mini)[2], ledger)
+        M.require_successor_ruling(manifest, ledger)
 
         # A draft caller can name the predecessor's stage-1 row and rebind its manifest hash.
         # That route must still refuse on the successor manifest before reading generated inputs.
@@ -549,7 +549,7 @@ class LookExecution(unittest.TestCase):
                 self.assertEqual(reads, [])
                 self.assertEqual(cli_fixture.LAST_RUN["twin_launches"], 0)
                 self.assertEqual((rc, stdout), (2, ""))
-                self.assertIn("this look runner executes only lm-interim-01", stderr)
+                self.assertIn("look_id: the v1 validator admits only lm-interim-01", stderr)
         self.assertFalse(any(root.glob("*/RESTRICTED")))
         self.assertFalse(any(self.public.parent.parent.glob("*/PUBLIC.json")))
 
@@ -833,9 +833,15 @@ def run(argv, *args, **kwargs):
         result.stdout = b"not a frame\n"
     elif fault == "coefficient_change":
         path.write_bytes(before[:-1] + b" ")
-    elif fault == "missing_cell":
+    elif fault in ("missing_cell", "extra_cell", "malformed_cell"):
         frame = json.loads(result.stdout)
-        frame["verdicts"]["twin"]["D#/cells"].pop("10000")
+        cells = frame["verdicts"]["twin"]["D#/cells"]
+        if fault == "missing_cell":
+            cells.pop("10000")
+        else:
+            key = "32" if fault == "extra_cell" else "032"
+            assert key not in cells
+            cells[key] = {"status": "not_run", "gamma_estimable": None}
         result.stdout = json.dumps(frame, sort_keys=True, separators=(",", ":")).encode() + b"\n"
     elif fault in ("numeric", "omitted_fold", "forged_primary"):
         frame = json.loads(result.stdout)
@@ -945,7 +951,8 @@ class TwinThroughCLI(unittest.TestCase):
         for sid in self.spans:
             shutil.move(self.source / sid, relocated / sid)
             self.assertFalse((self.source / sid).exists())
-        for fault, agreement in (("relocated", "yes"), ("numeric", "no"), ("missing_cell", "no"),
+        for fault, agreement in (("relocated", "yes"), ("numeric", "no"), ("missing_cell", "no"), ("extra_cell", "no"),
+                                 ("malformed_cell", "not_evaluable"),
                                  ("omitted_fold", "not_evaluable"), ("forged_primary", "not_evaluable"),
                                  ("missing_input", "not_evaluable"),
                                  ("malformed", "not_evaluable"), ("timeout", "not_evaluable")):
@@ -1051,11 +1058,27 @@ class TwinThroughCLI(unittest.TestCase):
         public = self.mini / "public" / LOOK
         private.parent.mkdir()
         public.mkdir(parents=True)
-        ledger = self.root / "refusal-ledger.json"
-        row = dict(self.row, custody_root=str(self.source), public_root="public")
-        ledger.write_bytes(C.dump({"schema": M.LOOK_LEDGER_SCHEMA, "looks": [row]}))
-        stage2 = ["stage2", "--stage1", self.stage1, "--stage1-sha256", self.response_sha, "--manifest", self.manifest,
-                  "--allow-draft", "--looks", ledger, "--custody", self.source]
+        manifest = dict(M.load_json(self.manifest), status="committed")
+        self.manifest.write_bytes(C.dump(manifest))
+        ledger = self.mini / M.LOOK_LEDGER_PATH
+        row = dict(self.row, sha256=digest(self.manifest.read_bytes()), status="committed",
+                   custody_root=str(self.source), public_root="public")
+        row.pop("stage1_sha256")
+        ledger_doc = {"schema": M.LOOK_LEDGER_SCHEMA, "looks": [row]}
+        ledger.write_bytes(C.dump(ledger_doc))
+        MR.git_commit(self.mini, "register generated stage-1 inputs")
+        inputs_commit = MR.git(self.mini, "rev-parse", "HEAD").stdout.strip()
+        stage1 = [arg for arg in self.stage1_args if arg != "--allow-draft"] + ["--ledger-ref", "origin/main"]
+        committed_stage1 = self.root / "committed-stage1.json"
+        control = MR.py(self.mini, "scripts/cadence_look_run.py", *stage1, "--out", committed_stage1)
+        self.assertEqual(control.returncode, 0, control.stderr)
+        stage1_sha = digest(committed_stage1.read_bytes())
+        row.update(status="stage1_committed", stage1_sha256=stage1_sha)
+        ledger.write_bytes(C.dump(ledger_doc))
+        MR.git_commit(self.mini, "register generated stage-1 output")
+        execution_commit = MR.git(self.mini, "rev-parse", "HEAD").stdout.strip()
+        stage2 = ["stage2", "--stage1", committed_stage1, "--stage1-sha256", stage1_sha, "--manifest", self.manifest,
+                  "--ledger-ref", "origin/main", "--custody", self.source]
 
         first = {"attempt": 1, "started_epoch_s": 1, "refused": "generated refusal", "output_dir": "soak.rejected1"}
         second = {"attempt": 2, "started_epoch_s": 2, "refused": None, "output_dir": "soak"}
@@ -1066,6 +1089,7 @@ class TwinThroughCLI(unittest.TestCase):
             ("nan", b'"rc":NaN', "nonfinite"), ("infinity", b'"rc":Infinity', "nonfinite"),
             ("overflow", b'"rc":1e999', "nonfinite"),
             ("contradictory exit", {"rc": 0, "error": "ValueError: generated fixture", "result": {"rc": 0}}, "contradicts its error"),
+            ("unexplained exit", {"rc": 73}, "invalid span return code"),
             ("contradictory result", {"rc": 0, "result": {"rc": 3}}, "contradicts its result"),
             ("failed wait", {"steps": [{"name": "soak-blackout-wait", "rc": 130}, {"name": "soak", "rc": 0}]}, "failed soak wait"),
             ("null refusals", {"soak_refusals": None}, "soak_refusals"),
@@ -1074,6 +1098,8 @@ class TwinThroughCLI(unittest.TestCase):
             ("forged provenance", {"soak_attempts": [dict(first, soak_refusals_kind="slope"), second], "steps": [failed, success]}, "soak attempt fields"),
             ("unknown kind", {"soak_attempts": [dict(first, refusal_kind="other"), second], "steps": [failed, success]}, "soak attempt fields"),
             ("unknown phase", {}, "invalid writer phase"),
+            ("align_tool_1\u0662_0", {}, "invalid writer phase"),
+            ("align_tool_0_1\u0662", {}, "invalid writer phase"),
         ]
         for label, mutation, reason in cases:
             with self.subTest(label=label):
@@ -1083,15 +1109,20 @@ class TwinThroughCLI(unittest.TestCase):
                     receipt.write_bytes(b"{" + mutation + b"," + C.dump(row)[1:])
                 else:
                     receipt.write_bytes(C.dump(dict(json.loads(original), **mutation)))
-                events.write_bytes(original_events + (C.dump({"event_type": "phase_start", "phase": "not_a_writer_phase",
-                                                                "timestamp_s": 1, "metadata": {}})
-                                                      if label == "unknown phase" else b""))
-                for args in ([*self.stage1_args, "--out", out], stage2):
+                phase = "not_a_writer_phase" if label == "unknown phase" else label
+                events.write_bytes(original_events + (C.dump({"event_type": "phase_start", "phase": phase,
+                                                              "timestamp_s": 1, "metadata": {}})
+                                                      if reason == "invalid writer phase" else b""))
+                for commit, args in ((inputs_commit, [*stage1, "--out", out]), (execution_commit, stage2)):
+                    MR.git(self.mini, "checkout", "-q", "--detach", commit)
                     with cli_fixture.spy_opens() as opened:
                         code, stdout, stderr = cli_fixture._cli_subprocess(args, repo=self.mini,
-                                                                          extra={"host_probe": UUID_LINE})
+                                                                          extra={"host_probe": UUID_LINE,
+                                                                                 "twin_path": str(self.twin.resolve())})
                     self.assertEqual((code, stdout), (2, ""), stderr)
                     self.assertIn(reason, stderr)
+                    self.assertEqual(cli_fixture.LAST_RUN["reservation_attempts"], 0)
+                    self.assertEqual(cli_fixture.LAST_RUN["twin_launches"], 0)
                     self.assertFalse([name for name in opened if "/hazards/meter/" in name or Path(name).name in
                                       ("power_trace.csv", "rich_telemetry.jsonl", "powermetrics.plist")])
                 self.assertFalse(out.exists() or private.exists() or (public / "PUBLIC.json").exists())

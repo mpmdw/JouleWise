@@ -68,7 +68,7 @@ class ReceiptKinds(unittest.TestCase):
                 ({"steps": [], "soak_attempts": []}, True, 0, False),
                 ({"steps": [], "soak_attempts": [first]}, True, 1, False)):
             with self.subTest(raw=raw):
-                I34.check_writer_receipt(raw)
+                I34.check_writer_receipt(dict(raw, rc=0))
                 result = I34.soak_retries_from({"s": I34.soak_fields(raw)})["spans"]["s"]
                 self.assertEqual(result, {"field_present": field_present, "attempts": attempts,
                                           "accepted": accepted, "retried": []})
@@ -76,6 +76,14 @@ class ReceiptKinds(unittest.TestCase):
         raw["soak_attempts"][0]["soak_refusals_kind"] = "slope"
         result = I34.soak_retries_from({"s": I34.soak_fields(raw)})["spans"]["s"]
         self.assertEqual(result["retried"], [{"attempt": 1, "kind": "kind not recorded", "read_from": None}])
+
+    def test_receipt_return_code_requires_a_writer_exit_path(self):
+        for fields in ({"rc": 0}, {"rc": 2}, {"rc": 130, "error": "SystemExit: 130"}):
+            with self.subTest(fields=fields):
+                I34.check_writer_receipt(dict(fields, steps=[]))
+        for fields in ({}, {"rc": None}, {"rc": -9}, {"rc": 73}, {"rc": 130}):
+            with self.subTest(fields=fields), self.assertRaisesRegex(ValueError, "span return code"):
+                I34.check_writer_receipt(dict(fields, steps=[]))
 
 
 class TraceTimes(unittest.TestCase):

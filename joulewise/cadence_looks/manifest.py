@@ -42,9 +42,11 @@ from datetime import date
 from joulewise.cadence_looks import interim_release as release, schema_check
 
 SCHEMA = "joulewise.cadence_look_manifest.v1"
+INTERIM_LOOK_ID = "lm-interim-01"
 LEDGER_SCHEMA = "joulewise.cadence_span_ledger.v1"
 LOOK_LEDGER_SCHEMA = "joulewise.cadence_look_ledger.v1"
 LOOK_LEDGER_PATH = "docs/process/cadence/looks/LOOKS.json"
+FILLER_KIT_REGISTRY = "docs/process/cadence/looks/filler-kit-registry.json"
 LOOK_LEDGER_STATUSES = ("draft", "committed", "stage1_committed", "run", "frozen", "superseded", "failed", "interrupted")
 _REGISTERED_QUAL_ID = re.compile(r"lm-qual-[0-9]{2}")
 # What each status needs recorded, so that "committed" is checkable (Mythos cold seat 8).
@@ -146,7 +148,7 @@ REQUIRED_NEVER_READ_IDS = {"interim": {"qualification", "ctl01", "fillers", "v4"
 # (Mythos cold seat 3; Sol 9): the DC-in decoder and the meter-parser's own imports, and rule 3's sensor policy.
 REQUIRED_DEPENDENCIES = {"interim": {"joulewise/external/km003c_parse.py", "joulewise/aggregate.py",
                                      "joulewise/desk_compress.py", "configs/align/v4/r1_runtime.json",
-                                     "joulewise/cadence_looks/manifest.py"}}
+                                     "joulewise/cadence_looks/manifest.py", FILLER_KIT_REGISTRY}}
 # Dictated and ruled texts, pinned verbatim (Sol cold seat 7; Mythos cold seat 11): RL-166b section 2.1, 2.2, 3 and
 # 4 (with RL-166c section 5 for the partial correction), RL-166 Q3 and Q4 as amended, RL-166c section 2 row 7. A
 # change to any of them is a change of the ruled text and needs a ruling, then a new hash here.
@@ -421,19 +423,18 @@ def validate_manifest(doc, *, final=None):
     if not isinstance(doc, dict):
         raise ManifestError(["manifest: object"])
     _closed(doc, TOP_KEYS, "manifest", problems, optional={"supersedes"})
+    route = (("schema", SCHEMA), ("look_kind", "interim"), ("look_id", INTERIM_LOOK_ID))
+    if any(doc.get(key) != expected for key, expected in route):
+        problems.extend(f"{key}: the v1 validator admits only {expected}" for key, expected in route
+                        if doc.get(key) != expected)
+        raise ManifestError(problems)
     if "supersedes" in doc and (not isinstance(doc["supersedes"], str)
                                or not LOOK_ID_RE.fullmatch(doc["supersedes"])
                                or doc["supersedes"] == doc.get("look_id")):
         problems.append("supersedes: a different look id")
     if final is None:
         final = doc.get("status") == "committed"
-    if doc.get("schema") != SCHEMA:
-        problems.append(f"schema: {SCHEMA}")
-    if not (isinstance(doc.get("look_id"), str) and LOOK_ID_RE.fullmatch(doc["look_id"])):
-        problems.append("look_id: lm-<lowercase id>")
     kind = doc.get("look_kind")
-    if kind not in LOOK_KINDS:
-        problems.append(f"look_kind: one of {sorted(LOOK_KINDS)}")
     if doc.get("status") not in STATUSES:
         problems.append(f"status: one of {sorted(STATUSES)}")
     if final and doc.get("status") != "committed":
@@ -607,6 +608,15 @@ def _reads(r, kind, when, problems):
     if not (isinstance(blocks, list) and blocks):
         problems.append("reads.blocks: non-empty list")
         blocks = []
+    registry_path = Path(__file__).resolve().parents[2] / FILLER_KIT_REGISTRY
+    try:
+        registry = strict_json(registry_path.read_bytes())
+        registered = registry["kit_sha256_by_id"]
+        filler_ids = {item.casefold() for item in (*registered, *registry["other_ids"])}
+        filler_digests = set(registered.values())
+    except (AttributeError, KeyError, OSError, TypeError, ValueError):
+        raise ManifestError(["reads.blocks: the filler-kit registry is unavailable or invalid"]) from None
+    filler_prefixes = ("f2-inst-", "f2-stab-", "r1-partc-f0-")
     seen, fit_blocks = set(), set()
     for i, b in enumerate(blocks):
         where = f"reads.blocks[{i}]"
@@ -625,6 +635,9 @@ def _reads(r, kind, when, problems):
         for reason in block_phase_problems(kind, bid, phase, role, b.get("serves_phase")):
             problems.append(f"{where}: {reason}")
         sha = b.get("kit_sha256")
+        if ((isinstance(bid, str) and (bid.casefold() in filler_ids or bid.casefold().startswith(filler_prefixes)))
+                or (isinstance(sha, str) and sha.lower() in filler_digests)):
+            problems.append(f"{where}: a counted block cannot reference a filler kit (RL-181 §2.1)")
         if not (sha is None or (isinstance(sha, str) and SHA_RE.fullmatch(sha))):
             problems.append(f"{where}.kit_sha256: 64 hex or null")
         spans = b.get("spans")
