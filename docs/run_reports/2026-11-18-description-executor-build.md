@@ -918,3 +918,69 @@ The successor code-and-fixture head `f0176d8b1` started hosted CI.
 The base and class-sweep reruns were still in progress locally when
 this report was written. Integrated acceptance is blocked by the
 demonstrated frozen contract conflict. [Hosted CI](https://github.com/mpmdw/JouleWise/actions/runs/44742513284)
+
+## 2026-11-20 typed drops and mandatory wall evidence
+
+The worktree, remote branch and draft PR agreed at `61ee17e1f` at
+intake. All four frozen files keep the hashes in the preceding
+successor table. The design and hand-table hashes also match.
+The post-change comparison preserves all 53 protected path entries
+on this stack. Hardware and final pin verification still await the
+accepted combined base.
+[Frozen manifest](/Volumes/JW-EXT/scratch/astra-desc-suite-rl192b/SUITE.sha256) · [Protected path comparison](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/strict-drops-protected-blobs.tsv)
+
+| Finding | Commit | Regression and result |
+| --- | --- | --- |
+| Drops could pass with a bare authority string | `805becf17` | **PASS**. The queue, ended-span and later committed declaration controls emit their exact reason-bearing labels. The typed item names the exact key, disposition and hash of the independent witness in the operational projection. The existing typed-item parser and its dependency are pinned through the reader. |
+| An empty close could conceal a member or cite the wrong proof | `805becf17` | **PASS**. The frozen hidden-member and alternate-bundle cases refuse. Builder cases admit a canonical empty runner receipt with no bundle and refuse it with a concealed member. Witness drift, a non-lead owner, an unissued item and fenced example text all refuse. |
+| Drop proof parser must execute its pinned bytes | `5a6f77350` | **PASS**. The reader verifies and compiles both typed-item helpers from source. The final queue, span and schema controls and the four builder evidence regressions pass against this loader. |
+| Committed member schemas accepted absent wall evidence | `805becf17` | **PASS**. Every member requires a finite nonnegative wall time, the same allowance as the authenticated kit, and a literal matching boolean. The builder passes both sides of the exact equality boundary and rejects missing evidence through stage 1 on all three looks. The frozen missing-flag and drop schema cases pass with `jsonschema==4.25.1`. |
+| Hosted RL-190 schema tests lacked the validator | `7dbee5cbb`, `cd51f54c3` | **PASS** in both workflow selection controls. Each workflow installs `jsonschema==4.25.1` only for the shard assigned the supplement, a split method, or its remainder. The runtime dependency list is empty. |
+
+The ordered member reasons, receipt retention, missing-pair label,
+and exclusion from counts and scoring remain covered by the builder
+regressions with authenticated synthetic wall and drop inputs.
+The stage-1 schema requires the boolean for each receipt-backed row
+and accepts only the two terminal drop labels for a no-member row.
+[Frozen targeted controls](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/strict-drops-witnesses.log) · [Builder evidence cases](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/strict-drops-final-evidence.log) · [Eligibility controls](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/strict-drops-evidence.log) · [Workflow dependency controls](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/strict-drops-ci-dependency.log)
+
+The current freeze remains intact pending the independent successor.
+The sampled inherited base, v2.2.1 authenticated and RL-192b
+provisional cases now refuse before scoring because their positive
+fixtures omit wall evidence. The base also needs typed drop inputs
+and the agreed prefixed dispositions in the inherited oracles.
+The isolated builder fixtures are synthetic and carry the new
+proofs. They provide no hardware or release evidence.
+[Sampled current-freeze failures](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/strict-drops-frozen-preflight.log)
+
+The positive projection uses `wall_s`, `leg_budget_s`, and
+`over_time_budget` in every operational member record. Each drop
+declaration binds its reason, its lead item reference, and the
+receipt or queue path. The committed lead item explicitly names the
+key, disposition, path, and witness SHA-256. The separate witness
+comes from the closed operational snapshot. The builder's fixture
+shows the positive shapes for the independent suite owner.
+[Builder projection](/Volumes/JW-EXT/jw-wt/d-desc-looks-executor/tests/fixtures/description_worlds.py) · [Pinned parser controls](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/strict-drops-pinned-parser.log)
+
+The full RL-190 rerun against reader commit `5a6f77350` used
+`jsonschema==4.25.1`. It passed 168 of 187 methods with 19 failures,
+zero errors, and zero skips. The failures are the 17 hardware methods
+and `test_wall_stab15_true` and `test_wall_stab15_false`, where
+the frozen fixture equips only kit 15's witness while the remaining
+members lack mandatory wall inputs. Both wall-time/eligibility
+variants in the as-run instrument fixture pass.
+
+The current RL-192b file fails all 25 method IDs in its positive
+stage-1 assertions under the new evidence requirement. Its generated
+subtests report 28 failed assertions. The focused dispatcher,
+transfer, preflight and rail tests recorded 66 passes and the
+existing absent-interim-schema skip. The final pinned-loader
+regressions also pass.
+[Full RL-190 results](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/strict-drops-final-rl190.jsonl) · [Current RL-192b failures](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/strict-drops-current-rl192b.log) · [Focused suite](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/strict-drops-focused.log)
+
+### NEEDS_SPEC
+
+The independent successor freeze and the accepted combined
+dispatcher and hardware base have yet to arrive. Report the final
+hashes and 53-path comparison on that base. The 16,899-case
+hosted result and all six literal reservation methods remain open.
