@@ -233,9 +233,9 @@ def _walk_tree(target: Path, collected: _ClosureFiles | None = None, *, why: str
 
 
 def _directory_listing(target: Path, collected: _ClosureFiles | None = None, *, why: str = '',
-                       into: str = 'files') -> list[str]:
+                       into: str = 'files', inspect_path: Callable[[Path], None] | None = None) -> list[str]:
     """Regular files below an external directory (see :func:`_walk_tree`)."""
-    return _walk_tree(target, collected, why=why, into=into)[0]
+    return _walk_tree(target, collected, why=why, into=into, inspect_path=inspect_path)[0]
 
 
 def _rebase(path: str, rebase) -> str:
@@ -327,7 +327,8 @@ def _git_ignored(mirror_real: Path, relative: str) -> list[str]:
     return sorted(p for p in result.stdout.decode().split('\0') if p)
 
 
-def _membership(directory: Path, skip: set[str], collected: _ClosureFiles | None = None) -> list[list[Any]]:
+def _membership(directory: Path, skip: set[str], collected: _ClosureFiles | None = None, *,
+                inspect_path: Callable[[Path], None] | None = None) -> list[list[Any]]:
     """Sorted relative names and sizes below a byte-bound directory (delta2, lead ruling 3).
 
     Declared inputs (``skip``) carry no size: their bytes are bound separately and a transported
@@ -335,14 +336,15 @@ def _membership(directory: Path, skip: set[str], collected: _ClosureFiles | None
     """
     rows = []
     for name in (collected.listings[str(directory)] if collected is not None and str(directory) in collected.listings
-                 else _directory_listing(directory)):
+                 else _directory_listing(directory, inspect_path=inspect_path)):
         path = directory / name
         rows.append([name, None if os.path.realpath(path) in skip else os.lstat(path).st_size])
     return rows
 
 
 def _mirror_ignored(target: Path, mirror_real: Path, policy: dict[str, Any], declared_real: set[str],
-                    collected: _ClosureFiles | None, link: str) -> list[dict[str, Any]]:
+                    collected: _ClosureFiles | None, link: str, *,
+                    inspect_path: Callable[[Path], None] | None = None) -> list[dict[str, Any]]:
     """Classify every ignored path a mirror link reaches (D3); bind or refuse the undeclared ones."""
     relative = target.relative_to(mirror_real).as_posix() if target != mirror_real else ''
 
@@ -350,9 +352,9 @@ def _mirror_ignored(target: Path, mirror_real: Path, policy: dict[str, Any], dec
         if path.is_dir() and not path.is_symlink():
             if collected is not None:
                 _directory_listing(path, collected, why=link, into='ignored')
-            row['members'] = _membership(path, declared_real, collected)
+            row['members'] = _membership(path, declared_real, collected, inspect_path=inspect_path)
             row['directories'] = (collected.trees[str(path)] if collected is not None
-                                  else _walk_tree(path)[1])
+                                  else _walk_tree(path, inspect_path=inspect_path)[1])
         elif collected is not None and str(path) not in declared_real:
             collected.add(path, link, into='ignored')
         return row
@@ -363,6 +365,8 @@ def _mirror_ignored(target: Path, mirror_real: Path, policy: dict[str, Any], dec
         if target.is_file():
             entry = relative
         path = mirror_real / entry
+        if inspect_path is not None:
+            inspect_path(path)
         if any(entry.startswith(prefix) for prefix in policy['identity_bound']):
             rows.append({'path': entry, 'class': 'identity_bound'})
         elif _policy_match(entry, policy['regenerated']):
@@ -528,10 +532,7 @@ def _verify_closure(closure: dict[str, Any], root: Path, *,
     if inspect_path is not None:
         for relative, row in closure['links'].items():
             inspect_path(root / relative)
-            target = Path(row['target'])
-            inspect_path(target)
-            if row['class'] == 'mirror' and not target.is_file():
-                raise OffloadRefused('guarded mirror link does not name a regular input')
+            inspect_path(Path(row['target']))
     if callable(mirror_identity):
         mirror_identity = mirror_identity()
     if mirror is not None and mirror_identity != mirror['identity']:
@@ -564,7 +565,8 @@ def _verify_closure(closure: dict[str, Any], root: Path, *,
             mirror_path = target.relative_to(mirror_real).as_posix() if target != mirror_real else '.'
             if mirror_path != row['mirror_path']:
                 raise OffloadRefused(f'{where}: mirror link {relative} selects {mirror_path}, not {row["mirror_path"]}')
-            here = _mirror_ignored(target, mirror_real, policy, declared_real, None, relative)
+            here = _mirror_ignored(target, mirror_real, policy, declared_real, None, relative,
+                                   inspect_path=inspect_path)
             if here != row['ignored']:
                 raise OffloadRefused(f'{where}: ignored mirror content under {relative} differs from the finalized '
                                      'record manifest')

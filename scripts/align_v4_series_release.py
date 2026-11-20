@@ -109,13 +109,21 @@ SOC_RAILS = frozenset(("powermetrics", name) for name in ("cpu_power", "gpu_powe
 RAIL_COLUMNS = {"timestamp_s", "power_w", "source", "rail"}
 RAIL_INTERVAL_COLUMNS = {"interval_start_s", "interval_end_s"}
 METER_DIRECTORY = tuple(Path(km003c.REQUIREMENT["custody_directory"]).parts)
-PROTECTED_ENERGY_NAMES = {"align_dc_in", "dc_in", "benign_dc", "wall_meter", "km003c", "system_total"}
+PROTECTED_INPUT_NAMES = {
+    "align_dc_in", "dc_in", "benign_dc", "wall_meter", "km003c", "system_total",
+    "power_trace", "align_power_trace", "transcript", "transcripts", "align_transcript", "align_transcripts",
+    "restricted", "custody", "night_custody", "night_archive", "sealed",
+}
+ENCODED_SUFFIXES = {
+    ".gz", ".gzip", ".zst", ".zstd", ".bz2", ".xz", ".lz", ".lz4", ".zip", ".7z", ".tar", ".tgz",
+    ".b64", ".base64", ".uu", ".uue",
+}
 
 
 def protected_path(path):
     parts = Path(path.casefold()).parts
     native_meter = any(parts[i:i + len(METER_DIRECTORY)] == METER_DIRECTORY for i in range(len(parts)))
-    return native_meter or any(part.partition(".")[0].replace("-", "_") in PROTECTED_ENERGY_NAMES
+    return native_meter or any(part.partition(".")[0].replace("-", "_") in PROTECTED_INPUT_NAMES
                                for part in parts)
 
 
@@ -263,7 +271,8 @@ class Assignment:
     pair: str
     ordinal: int
     run_id: str
-    seed: int
+    seed_index: int
+    episode_seed: int
     reason: str | None
     files: RestoredFiles | None
 
@@ -310,20 +319,20 @@ def manifest_inputs(manifest, root, prefix):
             size = previous.size if size is None else size
         bindings[relative] = BoundInput(relative, size, sha256)
 
-    closure = manifest["closure"]
-    for table in (manifest["entries"], closure["files"], closure["ignored"]):
-        for name, row in table.items():
-            if "sha256" in row or "digest" in row:
-                add(name, row)
     pending = [manifest]
     while pending:
         node = pending.pop()
         if isinstance(node, dict):
             if "path" in node and ("sha256" in node or "digest" in node):
                 add(node["path"], node)
+            for name, child in node.items():
+                if (isinstance(child, dict) and "path" not in child
+                        and ("sha256" in child or "digest" in child)):
+                    add(name, child)
             pending.extend(node.values())
         elif isinstance(node, list):
             pending.extend(node)
+    closure = manifest["closure"]
     for name, declared in closure["inputs"].items():
         packet.require(Path(name).is_absolute() and declared["real"] == name
                        and manifest_path(root, prefix, name) in bindings,
@@ -338,6 +347,7 @@ class ClosureLink:
     mirror_path: str | None = None
     directories: tuple[str, ...] = ()
     directory_target: bool = False
+    ignored: tuple[str, ...] = ()
 
 
 def internal_link(entries, root, prefix, name):
@@ -395,14 +405,19 @@ def manifest_links(manifest, root, prefix):
             planned.append((path, hop))
             path = manifest_path(root, prefix, (root / path).parent.joinpath(hop).as_posix())
         packet.require(str(root / path) == row["target"], "closure link target disagrees with its hops")
-        mirror_path = None
+        mirror_path, ignored = None, ()
         if row["class"] == "mirror":
             mirror_path = row["mirror_path"]
-            input_parts(mirror_path)
+            if mirror_path != ".":
+                input_parts(mirror_path)
             mirror_root = Path(closure["mirror"]["root"])
             packet.require(mirror_root.is_absolute() and str(mirror_root / mirror_path) == row["target"],
                            "closure target differs from its mirror path")
-        yield ClosureLink(tuple(planned), path, mirror_path, directory_target=row.get("kind") == "directory")
+            ignored = tuple(entry["path"].removesuffix("/") for entry in row["ignored"])
+            for name in ignored:
+                input_parts(name)
+        yield ClosureLink(tuple(planned), path, mirror_path, directory_target=row.get("kind") == "directory",
+                          ignored=ignored)
     for name, row in entries.items():
         if "link" in row and name not in external:
             yield internal_link(entries, root, prefix, name)
@@ -492,8 +507,10 @@ class InputLedger:
             if link.mirror_path is not None:
                 self.entries.setdefault(link.target, None)
         for directory in directories:
-            packet.require(self.entries.setdefault(directory.path, directory) == directory,
+            previous = self.entries.get(directory.path)
+            packet.require(previous in (None, directory),
                            "conflicting finalized directory bindings")
+            self.entries[directory.path] = directory
 
     def classify(self):
         chains = [({entry.target, *(path for path, _ in entry.hops)}, entry.directories)
@@ -521,7 +538,13 @@ class InputLedger:
 
 
 def bound_bytes(root, bound):
+    require_plain_path(bound.path)
     return require_bound_bytes(named_bytes(root, bound.path), bound)
+
+
+def require_plain_path(path):
+    suffixes = set(Path(path.casefold()).suffixes)
+    packet.require(not suffixes & ENCODED_SUFFIXES, "manifest lists an encoded or compressed input")
 
 
 def require_bound_bytes(raw, bound):
@@ -532,12 +555,6 @@ def require_bound_bytes(raw, bound):
 
 def verify_ancillary_input(root, bound):
     """Verify a listed ancillary input in an admitted plain representation."""
-    path = bound.path
-    stems = {part.partition(".")[0].replace("-", "_") for part in path.casefold().split("/")}
-    packet.require(not stems.intersection({"power_trace", "transcript", "transcripts", "restricted", "custody", "night_custody",
-                                          "night_archive", "sealed"}), "manifest input has no authorized release reader")
-    packet.require(Path(path).suffix.casefold() not in {".zst", ".gz", ".bz2", ".xz", ".zip", ".lz4", ".7z"},
-                   "manifest lists a compressed file")
     text = bound_bytes(root, bound).decode("utf-8")
     packet.require(all(not (ord(char) < 32 or ord(char) == 127) or char in "\t\n\r" for char in text),
                    "manifest file has no admitted plain representation")
@@ -654,8 +671,13 @@ class RestoredFiles:
             prefix = evidence.repo.relative_to(self.root)
             protected = {Path(path).relative_to(prefix): binding for path, binding in self.ledger.entries.items()
                          if self.is_protected(path) and Path(path).is_relative_to(prefix)}
-            if protected:
+            scopes = tuple(Path(link.mirror_path) for link in self.links if link.mirror_path is not None)
+            if protected or scopes:
                 tracked = {Path(os.fsdecode(name)) for name in evidence.git("ls-files", "-z").split(b"\0") if name}
+                for path in tracked:
+                    if any(path.is_relative_to(scope) for scope in scopes):
+                        packet.require(not self.is_protected((prefix / path).as_posix()),
+                                       "mirror identity would inspect a protected input")
                 for path, binding in protected.items():
                     packet.require(path not in tracked, "mirror identity would inspect a protected input")
                     if isinstance(binding, BoundDirectory):
@@ -672,10 +694,14 @@ class RestoredFiles:
         for binding in self.directories:
             if self.is_protected(binding.path):
                 continue
-            with named_directory(self.root, input_parts(binding.path)) as directory:
-                packet.require(set(os.listdir(directory)) == binding.children,
-                               "restored names differ from finalized inventory")
+            self.verify_directory(binding)
             self.ledger.verified.add(binding.path)
+
+    def verify_directory(self, binding):
+        self.inspect_closure_path(self.root / binding.path)
+        with named_directory(self.root, input_parts(binding.path)) as directory:
+            packet.require(set(os.listdir(directory)) == binding.children,
+                           "restored names differ from finalized inventory")
 
     def bind(self, name, *, optional=False):
         # Only the canonical representation belongs to this input. Compare
@@ -704,7 +730,17 @@ class RestoredFiles:
     def verify_mirror_target(self, link):
         packet.require(not self.is_protected(link.target), "protected mirror target cannot be opened")
         with self.mirror_checkout() as evidence:
-            committed = evidence.read(evidence.commit(self.mirror["identity"]["head"]), link.mirror_path)
+            commit = evidence.commit(self.mirror["identity"]["head"])
+            scoped = () if link.mirror_path == "." else ("--", link.mirror_path)
+            tree = {}
+            for entry in evidence.git("ls-tree", "-rtz", "--full-tree", commit, *scoped).split(b"\0"):
+                if entry:
+                    header, name = entry.split(b"\t", 1)
+                    tree[os.fsdecode(name)] = header.decode("ascii").split()
+            if link.mirror_path == "." or tree[link.mirror_path][:2] == ["040000", "tree"]:
+                self.verify_mirror_directory(link, tree, "sha1" if len(commit) == 40 else "sha256")
+                return
+            committed = evidence.read(commit, link.mirror_path)
         reference = BoundInput(link.target, len(committed), packet.digest(committed))
         existing = self.ledger.entries[link.target]
         packet.require(existing is None or (isinstance(existing, BoundInput) and existing.sha256 == reference.sha256
@@ -712,6 +748,44 @@ class RestoredFiles:
                        "closure mirror target conflicts with its listed digest")
         verify_ancillary_input(self.root, reference)
         self.ledger.entries[link.target] = reference
+        self.ledger.verified.add(link.target)
+
+    def verify_mirror_directory(self, link, tree, algorithm):
+        scope = Path(link.mirror_path)
+        directories, leaves = ["."], {}
+        for name, (mode, kind, oid) in tree.items():
+            input_parts(name)
+            if name == link.mirror_path:
+                continue
+            relative = Path(name).relative_to(scope).as_posix()
+            if mode == "040000" and kind == "tree":
+                directories.append(relative)
+            else:
+                packet.require(kind == "blob" and mode in ("100644", "100755", "120000"),
+                               "unsupported committed mirror entry")
+                leaves[relative] = (mode, oid)
+        ignored = [Path(name).relative_to(scope).as_posix() for name in link.ignored]
+        if scope == Path("."):
+            ignored.append(".git")  # The validated checkout owns its Git administrative entry.
+        inventory = directory_inventory(link.target, [*leaves, *ignored], directories)
+        root = next(binding for binding in inventory if binding.path == link.target)
+        existing = self.ledger.entries[link.target]
+        packet.require(existing in (None, root), "closure mirror target conflicts with its listed inventory")
+        for binding in inventory:
+            self.verify_directory(binding)
+        for relative, (mode, oid) in leaves.items():
+            path = self.inspect_closure_path(self.root / link.target / relative)
+            if mode == "120000":
+                *parents, name = input_parts(path)
+                with named_directory(self.root, parents) as directory:
+                    raw = os.fsencode(os.readlink(name, dir_fd=directory))
+            else:
+                require_plain_path(path)
+                raw = named_bytes(self.root, path)
+            digest = hashlib.new(algorithm, f"blob {len(raw)}\0".encode("ascii"))
+            digest.update(raw)
+            packet.require(digest.hexdigest() == oid, "restored mirror file differs from its committed blob")
+        self.ledger.entries[link.target] = root
         self.ledger.verified.add(link.target)
 
     def verify_link(self, link):
@@ -829,6 +903,8 @@ def final_roster(root, manifest, completion, ledger, chain, input_ledger):
                            and planned["condition"] == frozen["condition"]
                            and planned["pool_role"] == frozen["pool"]
                            and planned["model_id"] == frozen["model_id"]
+                           and type(planned.get("seed_index")) is int
+                           and planned["seed_index"] == frozen["seed_index"]
                            and planned["expected_episode_seed"] == frozen["episode_seed"],
                            "plan fresh assignment disagrees with frozen manifest")
             run_id = planned["run_id"]
@@ -838,8 +914,8 @@ def final_roster(root, manifest, completion, ledger, chain, input_ledger):
                 codes, _ = v4_contention.split_codes(harvest_codes.get(run_id, ()))
                 code = (codes or decision["reasons"])[0].split(":", 1)[0]
                 packet.require(bool(code), "excluded assignment lacks a reason word")
-            assignment = Assignment(window, frozen["pair"], ordinal, run_id, frozen["episode_seed"],
-                                    code, files if decision["captured"] else None)
+            assignment = Assignment(window, frozen["pair"], ordinal, run_id, frozen["seed_index"],
+                                    frozen["episode_seed"], code, files if decision["captured"] else None)
             identity = window, ordinal
             packet.require(identity not in assignments and run_id not in run_ids, "ambiguous final assignment")
             assignments[identity] = assignment
@@ -870,7 +946,10 @@ def read_member(assignment, condition, bindings):
         episode = read_episode_bundle(project)
         rows, _ = s_rows.read_member_rows(project, s_rows.REGISTERED, hazard_journal=files.hazard(),
                                           pm_rows=pm_rows)
-    packet.require(episode.episode_id == run_id and episode.seed == assignment.seed
+    # The episode writer stores the seed index. Earlier sealed projections
+    # can carry the derived seed for the same registered assignment.
+    packet.require(episode.episode_id == run_id and type(episode.seed) is int
+                   and episode.seed in (assignment.seed_index, assignment.episode_seed)
                    and episode.task_pair.removeprefix("shade/") == assignment.pair
                    and rows.episode_id == episode.episode_id, "episode does not bind the final assignment")
     packet.require(all((trace.source, trace.channel) in SOC_RAILS

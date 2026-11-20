@@ -1318,8 +1318,9 @@ class SeriesReleaseTests(unittest.TestCase):
             record = SimpleNamespace(window="C8", finalized_manifest_sha256=manifest["sha256"])
             files = caller.RestoredFiles(root, record, {"trace_layout": caller.LAYOUT, "hazard_journal": None})
             with patch.object(caller, "open_named_bytes", side_effect=AssertionError("opened an unadmitted trace")), \
-                    self.assertRaisesRegex(ValueError, "no authorized release reader"):
+                    self.assertRaisesRegex(ValueError, "remain unverified"):
                 files.verify_listed_inputs()
+                files.ledger.require_complete()
 
     def test_receipt_from_after_t3_cannot_replace_the_c1_predecessors_receipt(self):
         with tempfile.TemporaryDirectory() as tmp:
