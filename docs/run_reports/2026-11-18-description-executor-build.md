@@ -1297,3 +1297,11 @@ reported separately at the observed mkdir or occupied-reservation
 fixture. A local reservation attempt alone establishes no publication.
 The read-back PR records the hosted result for the pushed head.
 [Independent nonpass ledger](/Volumes/JW-EXT/scratch/astra-desc-suite-amend5/v5/replay/nonpass.tsv) · [Focused replay results](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/v5-focused-replay.jsonl) · [Draft PR #868](https://github.com/mpmdw/JouleWise/pull/868) · [PR #795](https://github.com/mpmdw/JouleWise/pull/795)
+
+The first hosted quick run identified a host setup issue in the
+builder-owned preflight module. Its test worlds now inherit v5's
+invented board token. The module supplies that same token to the
+legacy host lookup for its in-process and subprocess checks, so
+they can exercise their intended refusal gates. The frozen cases
+keep their own device observation and expected results.
+[Initial hosted quick result](https://github.com/mpmdw/JouleWise/actions/runs/44807078917/job/136534035008)

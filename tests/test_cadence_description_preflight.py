@@ -3,7 +3,9 @@
 from decimal import Decimal
 from itertools import product
 import json
+import os
 from pathlib import Path
+import socket
 import subprocess
 from tempfile import TemporaryDirectory
 import unittest
@@ -12,6 +14,13 @@ from unittest.mock import patch
 from joulewise.cadence_looks import description as reader
 from tests import test_desc_looks_acceptance as fixture
 from tests.fixtures.description_worlds import DescriptionWorld
+
+
+def setUpModule():
+    # These tests exercise admission gates beyond the pre-integration host check.
+    # Keep the frozen suite's independent hardware observations in its own tests.
+    unittest.enterModuleContext(patch.object(socket, "gethostname", return_value=fixture.FIXTURE_BOARD))
+    unittest.enterModuleContext(patch.dict(os.environ, R190_NODENAME=fixture.FIXTURE_BOARD))
 
 
 def _native_path(name):
