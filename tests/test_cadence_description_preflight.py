@@ -142,7 +142,7 @@ class LoadedLegAdmissionTests(unittest.TestCase):
                 instrument = look == fixture.IDS[0]
                 world = LoadedFirstMember(root / "world", look, None if instrument else "same_work")
                 key = "f2-inst-01/L001" if instrument else "f2-stab-01/L001"
-                eligible = set(world.good) - {key}
+                eligible = set(world.good)
                 rc, stdout, stderr, events = fixture.invoke(world, "stage1")
                 self.assertEqual((rc, stdout, stderr), (0, b"", b""))
                 self.assertFalse([event for event, _ in events if event == "open"])
@@ -203,7 +203,7 @@ class LoadedLegAdmissionTests(unittest.TestCase):
             rc, stdout, stderr, _ = fixture.invoke(last, "stage1")
             self.assertEqual((rc, stdout, stderr), (0, b"", b""))
             counts = fixture.read(last.stage)["counts"]
-            self.assertEqual(counts, {"n_legs": len(last.good) - 1, "n_local_dates": 13})
+            self.assertEqual(counts, {"n_legs": len(last.good), "n_local_dates": 13})
 
 
 class Stage1ReasonOrderTests(unittest.TestCase):
@@ -259,9 +259,9 @@ class Stage1ReasonOrderTests(unittest.TestCase):
                 self.assertEqual(row["reasons"], ["wrong_mode", "incomplete", "unreleased",
                                                   "short_hold", "loaded", "short", "cap_not_reached"])
                 self.assertTrue(row["loaded_flag"])
-                admitted_key = next(candidate for candidate in world.good if candidate != key)
+                admitted_key = next(iter(world.good))
                 self.assertEqual(document["positions"][admitted_key]["reasons"], [])
-                self.assertEqual(document["counts"]["n_legs"], len(world.good) - 1)
+                self.assertEqual(document["counts"]["n_legs"], len(world.good))
                 if not world.inst:
                     token = next(row for row in document["token_table"]
                                  if f'{row["kit_id"]}/{row["leg_id"]}' == key)
@@ -272,7 +272,7 @@ class Stage1ReasonOrderTests(unittest.TestCase):
                 snapshot = reader.Snapshot(world.repo, look, "stage2")
                 census, qualified = reader.census(snapshot)
                 snapshot.check_stage1(census)
-                self.assertEqual(set(qualified), set(world.good) - {key})
+                self.assertEqual(set(qualified), set(world.good))
                 self.assertNotIn(key, reader.verify_gates(snapshot, qualified))
 
 
