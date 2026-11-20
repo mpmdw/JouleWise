@@ -23327,3 +23327,36 @@ Research lead (Fable 5.2), Fri Nov 20 09:26 PST 2026 (from `date`). Answers the 
 
 **Amends.** RL-184 §3.3's enforcement clause, as section 2 has it. **Blind status.** Blind.
 **What comes back to me.** An inadmissible or disputed span; a file either stage opens that has no Check-time hash; a conflict with RL-180's text.
+
+# RL-194a. Addendum to RL-194: the energy streams are verified before the reservation by a separate hash-only process, and stage 1 still never opens energy; an abbreviated Check digest binds a pin when every printed character matches the custody manifest's full digest
+
+Research lead (Fable 5.2), Fri Nov 20 14:17 PST 2026 (from `date`). Answers Q2 and Q3 of `/Volumes/JW-EXT/scratch/pl-795/resolve-5/FINAL-MESSAGE.md`.
+
+**Read.** That report; RL-179's F-12 summary row and register row 26 (RLD:18638, 18933); RL-194. **Not checked.** #795's code, the twin child, any Check item's digest. **Not done.** No commit, run or SSH. No custody, energy or restricted file was opened. **Blind status.** Blind.
+
+## 1. Q2: option (c)
+
+**A separate verifier process checks the stream pins before the reservation.** F-12 stands as written: stage 1 never opens energy.
+
+- **Why not (a).** Row 26 limits what "a process that has opened energy" may write. Stage 1 writes the public census. It must not become such a process, even for a hash.
+- **Why not (b).** A copy fault found after the reservation would spend a single-use look on a custody accident that says nothing about the data.
+
+> 1. The verifier imports no decoder and no look code. It reads each pinned stream as opaque bytes, computes sha256, and retains nothing.
+> 2. It writes one file: the word `pass` or `fail`, and for each path the pinned and observed digests. No size beyond the pinned one, no count, no float. That is within row 26's "words and hashes".
+> 3. It runs first. A `fail` stops the run before stage 1 parses anything and before the reservation, and consumes nothing.
+> 4. Stage 1 still hashes the operational bytes it parses (RL-194 condition 3).
+> 5. Stage 2 and the twin each check a stream's pin before decoding it. They may hash in one pass and decode in a second, because the custody root is on every seat's deny list for the run. A mismatch there refuses before any value is read; the look is then spent under RL-180's ordinary rule.
+
+**Amends.** RL-194 condition 3 for streams (item 5's two passes), and its "first act" (item 3).
+
+**On the resolver's question 1,** which is the lead's: RL-194 condition 4 wants the twin's inputs checked by code that is not the primary's. A wrapper that verifies the pins and then invokes the reviewed child byte-identical meets it. So does the changed child, with its own review.
+
+## 2. Q3: the lead's reading is confirmed, with three terms
+
+1. **The full digest is the sha256 of the offload manifest file as custody holds it,** written at the span's close. It binds to the Check when every hex character the Check prints, prefix and suffix, matches. One mismatched character holds the span and returns to me.
+2. **The review record carries** the full 64 hex, the abbreviation exactly as printed, the Check item number, and any second record made at the time (the MBP-side sums file, the close marker), when one exists. A second record is cited, not required.
+3. **This is a reading of RL-194 condition 2, not an exception.** It guards against accident, which is the honest-writer model RL-194 rests on. Eleven printed characters leave no realistic chance of an accidental match.
+
+Check items print the full digest from now on. That is the lead's process change.
+
+**What comes back to me.** A span whose abbreviation does not match; a stream with no pin.
