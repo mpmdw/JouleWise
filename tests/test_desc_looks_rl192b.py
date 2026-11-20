@@ -1,4 +1,4 @@
-"""Independent, synthetic stage-1 boundary cases for RL-192b and the provisional lead order."""
+"""Independent, synthetic stage-1 boundary cases for RL-192b and RL-193 §4."""
 from pathlib import Path
 import tempfile
 import unittest
@@ -13,11 +13,13 @@ import test_desc_looks_acceptance as frozen
 # Each expected list is literal and independent of the order of fixture assignments below.
 VECTORS = (
     ("receipt_g0_load", ("wrong_mode", "unreleased", "loaded")),
-    ("completion_through_stop", ("incomplete", "unreleased", "short_hold", "loaded", "short", "cap_not_reached")),
+    ("completion_through_stop", ("incomplete", "wrong_mode", "unreleased", "short_hold", "loaded", "short", "cap_not_reached")),
     ("g0_quiet_load", ("unreleased", "short_hold", "loaded")),
     ("quiet_load_stop", ("short_hold", "loaded", "cap_not_reached")),
     ("load_count_stop", ("loaded", "short", "cap_not_reached")),
     ("count_stop_without_load", ("short", "cap_not_reached")),
+    ("status_before_power", ("incomplete", "wrong_mode")),
+    ("loaded_and_short_turn", ("loaded", "short")),
 )
 
 
@@ -116,7 +118,14 @@ def loaded_alone(test, look):
     test.assertIs(row["loaded_flag"], True)
     test.assertEqual(row["receipt"], world.rows[0]["receipt"])
     test.assertEqual(doc["counts"]["n_legs"], dict(zip(frozen.IDS, (2, 16, 17)))[look])
-    test.assertEqual(doc["by_kit"][key.split("/")[0]]["not_qualified:loaded"], 1)
+    rollup = {}
+    for item in world.rows:
+        name = item["key"]
+        disposition = (world.records[name][-1] if name in world.records
+                       else "dropped:" + world.dropped[name])
+        counts = rollup.setdefault(name.split("/")[0], {})
+        counts[disposition] = counts.get(disposition, 0) + 1
+    frozen.check_category_counts(test, doc, rollup)
     test.no_prints(world, key)
 
 
@@ -160,8 +169,16 @@ def position_pair(test, look):
 def multi_failure(test, look, reasons):
     world = world_with_failures(test.base / "multi", look, set(reasons))
     key = first_key(look)
-    doc = test.stage(world)
+    # As in the RL190 preflight fixtures, isolate the reason assertions from
+    # the outstanding host integration. Host acceptance has distinct-name controls.
+    from test_desc_looks_rl190 import device, HOST
+    with device():
+        doc = test.stage(world)
     row = doc["positions"][key]
+    if look != frozen.IDS[0] and reasons == ("loaded", "short"):
+        with test.subTest(check="stability_missing_member_turn_reason"):
+            token = next(r for r in doc["token_table"] if r["kit_id"] + "/" + r["leg_id"] == key)
+            test.assertEqual(token["missing_count_reason"], "short")
     # Separate subtests keep an absent reasons array visible even when the label is wrong.
     with test.subTest(check="first_in_lifecycle"):
         test.assertEqual(row["disposition"], "not_qualified:" + reasons[0])
@@ -171,7 +188,7 @@ def multi_failure(test, look, reasons):
         test.assertEqual(row["receipt"], world.rows[0]["receipt"])
     with test.subTest(check="excluded_once"):
         test.assertEqual(doc["counts"]["n_legs"], dict(zip(frozen.IDS, (2, 16, 17)))[look])
-    with test.subTest(check="zero_prints"):
+    with test.subTest(check="zero_prints"), device(), patch.object(frozen.socket, "gethostname", return_value=HOST):
         test.no_prints(world, key)
 
 
@@ -190,7 +207,7 @@ for look in frozen.IDS:
         register(prefix + "_RL192b_loaded_singleton_date", singleton_date, look)
         register(prefix + "_RL192b_loaded_position_pair", position_pair, look)
     for label, reasons in VECTORS:
-        register(prefix + "_PROVISIONAL_" + label, multi_failure, look, reasons)
+        register(prefix + "_RL193_" + label, multi_failure, look, reasons)
 
 
 if __name__ == "__main__":

@@ -219,7 +219,7 @@ class AsRun(frozen.World):
             "row7": {"spans": sorted({r["receipt"] for r in self.rows if "receipt" in r}),
                      "hand_comparison": "agrees", "q1": True, "desk_final": True},
             "host_rehearsal": {"literal_directory": "RESTRICTED", "host": HOST,
-                               "revision": proof["executor_revision"], "passed": True},
+                               "revision": rehearsal_revision(pins), "passed": True},
             "once_only": {"reservation_attempts_allowed": 1, "second_invocation_refused": True},
         }.items():
             location = f"authority/examples/{role}.json"
@@ -227,7 +227,8 @@ class AsRun(frozen.World):
             proof[role] = {"path": location, "sha256": sha(wire(entry))}
         dropped = {}
         if self.inst and self.scenario in ("drop", "hide_member"):
-            dropped[self.target] = read(self.repo / ("drops/" + self.target + ".json"))["reason"]
+            dropped[self.target] = ("ended_without_member" if self.defect in ("span", "no_item_span", "wrong_span")
+                                    else "queue_retired")
         exclusions = {LOADED: "loaded"} if self.inst and LOADED in self.records else {}
         if self.inst and self.scenario == "wall" and self.defect != "none":
             exclusions[self.target] = {"quiet":"short_hold", "g0":"unreleased", "status":"incomplete",
@@ -338,7 +339,7 @@ class AsRun(frozen.World):
         if self.scenario in ("pending", "drop", "hide_member"):
             self.drop(self.target, by_key[self.target])
             if self.scenario == "pending":
-                # World generated a legacy empty-authority drop for the absent member.
+                # Remove the uncommitted placeholder for this still-open key.
                 (self.repo / ("drops/" + self.target + ".json")).unlink()
         if self.scenario in ("second_bundle", "concealed_second_bundle"):
             refs = by_key[self.target]
@@ -361,6 +362,7 @@ def stage(test, world, *, allowed=True, nodename=HOST, values=(UUID,)):
     test.assertEqual((code, stdout), (0 if allowed else 2, b""), error)
     test.assertFalse([e for e in events if e[0] in ("open", "reservation_attempt")], events)
     test.assertEqual(world.stage.is_file(), allowed)
+    test.assertFalse(world.private.exists() or world.public.exists())
     return read(world.stage) if allowed else None
 
 
@@ -414,8 +416,19 @@ def member(test, kind):
     elif kind == "count":
         test.assertEqual(doc["counts"], {"n_legs": 35})
     else:
-        test.assertEqual({key: row["span_id"] for key, row in doc["positions"].items()},
-                         {key: LOCATION[key][0] for key in KEYS})
+        check_span_ids(test, doc)
+
+
+def pending_refuses(test, world):
+    # SQ2 specifies effects only. The diagnostic may identify an operational key.
+    before = subprocess.check_output(["git", "-C", world.repo, "rev-parse", "HEAD"])
+    with device(boundary=True):
+        rc, _, _, events = frozen.invoke(world, "stage1")
+    test.assertEqual(rc, 2)
+    test.assertFalse([event for event in events if event[0] in ("open", "reservation_attempt")])
+    test.assertFalse(world.stage.exists() or world.private.exists() or world.public.exists())
+    test.assertEqual(subprocess.check_output(["git", "-C", world.repo, "rev-parse", "HEAD"]), before)
+    test.assertFalse(frozen.git_ok(world.repo, "cat-file", "-e", "HEAD:" + str(world.stage.relative_to(world.repo))))
 
 
 def roster_case(test, scenario, target, defect=None):
@@ -424,6 +437,9 @@ def roster_case(test, scenario, target, defect=None):
         test.assertFalse(frozen.git_ok(w.repo, "cat-file", "-e", w.receipts+":RUN_STATE.md"))
         test.assertTrue(frozen.git_ok(w.repo, "cat-file", "-e", "HEAD:RUN_STATE.md"))
     allowed = scenario == "drop" and defect in ("queue", "span", "late_queue")
+    if scenario == "pending":
+        pending_refuses(test, w)
+        return
     if not allowed:
         stage(test, w, allowed=False)
         return
@@ -432,6 +448,18 @@ def roster_case(test, scenario, target, defect=None):
     literal_status(test, doc["positions"][target],
                    "dropped:" + ("queue_retired" if defect != "span" else "ended_without_member"))
     test.assertEqual(doc["counts"]["n_legs"], 34)
+
+
+def check_span_ids(test, doc):
+    def strings(obj, path=()):
+        if isinstance(obj, dict):
+            for name, value in obj.items():
+                yield from strings(value, path + (name,))
+        elif isinstance(obj, str):
+            yield path, obj
+    rows = {key:dict(strings(row)) for key,row in doc["positions"].items()}
+    test.assertTrue(any(all(rows[key].get(path) == span for key,(span, _) in LOCATION.items())
+                        for path in rows[KEYS[0]]), "no common field identifies each authenticated span")
 
 
 def numeric_paths(obj, path=()):
@@ -622,7 +650,7 @@ def stable_wall(test, over):
     test.assertIs(row.get("over_time_budget"), over)
 
 
-def own_reference(test):
+def own_reference(test, key=SOLO):
     # Use the candidate's own census detail and score path. Only one invented
     # member needs a numeric trace. Inspect the return in memory, before any writer.
     w = test.world()
@@ -645,7 +673,7 @@ def references(obj):
     return obj if isinstance(obj, (str, bool, int)) else None
 f.put(Path(out), references({name: rows[key] for name, rows in result.items() if key in rows}))
 '''
-    key = SOLO  # Third in the planned piece, first and only member as run.
+    source = GROUPS[LOCATION[key][0]][0]  # Actual first member of this receipt.
     folder = test.base / "invented-trace"
     frozen.traces(folder, 1, 0)
     probe = test.base / "device"
@@ -657,22 +685,28 @@ f.put(Path(out), references({name: rows[key] for name, rows in result.items() if
         r = subprocess.run([sys.executable, "-B", "-c", program, str(w.repo), w.look, key,
                             str(folder), str(output)], env=env, cwd=test.base, capture_output=True)
     test.assertEqual(r.returncode, 0, r.stderr)
-    def carries(obj):
+    def reference_facts(obj):
         if isinstance(obj, list):
-            return any(carries(item) for item in obj)
-        if not isinstance(obj, dict):
-            return False
-        for name, value in obj.items():
-            descriptor = name.lower()
-            if isinstance(value, str) and ("ref" in descriptor or "g0" in descriptor):
-                if value in ("own", "self", "L006", SOLO) or value.endswith("/L006"):
-                    return True
-            if ("own" in descriptor or "captur" in descriptor) and "ref" in descriptor and value is True:
-                return True
-            if carries(value):
-                return True
-        return False
-    test.assertTrue(carries(read(output)), "per-leg prints omit the identity or fact of the leg's own reference")
+            for item in obj:
+                yield from reference_facts(item)
+        if isinstance(obj, dict):
+            for name, value in obj.items():
+                word = name.lower()
+                if "ref" in word or "g0" in word:
+                    if type(value) is bool and ("own" in word or "captur" in word):
+                        yield value == (source == key)
+                    if isinstance(value, str):
+                        if value in ("own", "self"):
+                            yield source == key
+                        elif value in ("shared", "inherited", "borrowed"):
+                            yield source != key
+                        elif value.startswith("L") or "/L" in value:
+                            yield value in (source, source.split("/")[1])
+                yield from reference_facts(value)
+    facts = list(reference_facts(read(output)))
+    test.assertTrue(facts, "per-leg prints omit the reference attribution")
+    test.assertTrue(all(facts), f"{key} must carry the reference captured by {source}")
+
 
 
 def schema_case(test, variation):
@@ -876,6 +910,14 @@ def stanza_vector(test, mode):
     test.assertEqual(result, mode == "effective")
 
 
+def rehearsal_revision(pins):
+    # A comparison of path-to-content identities. The digest is a fixture representation.
+    paths = {pin["path"]: pin["sha256"] for pin in pins.values() if pin["path"].endswith(".py")}
+    if not paths:
+        raise ValueError("no pinned executor code")
+    return sha(wire(paths))
+
+
 def rehearsal_covers(evidence, host, revision):
     return (evidence.get("host") == host and evidence.get("revision") == revision and
             evidence.get("passed") is True and evidence.get("literal_directory") == "RESTRICTED")
@@ -889,7 +931,10 @@ def rehearsal_vector(test, mode):
     witness = packet["bindings"]["host_rehearsal"]
     actual = (w.repo / witness["path"]).read_bytes()
     test.assertEqual(sha(actual), witness["sha256"])
-    revision = packet["bindings"]["executor_revision"]
+    manifest = read(w.man)
+    paths = {p["path"] for p in manifest["code_pins"].values() if p["path"].endswith(".py")}
+    revision = sha(wire({path:sha(subprocess.check_output(["git", "-C", w.repo, "show", w.reg+":"+path]))
+                         for path in paths}))
     evidence = dict(json.loads(actual), originating_look=INST)
     requested = dict(host=HOST, revision=revision, look=STAB1)
     if mode == "other_host":

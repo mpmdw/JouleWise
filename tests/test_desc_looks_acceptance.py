@@ -34,6 +34,8 @@ WIDTH = (10, 40, 128)
 MEASURES = ("mean_w", "sd10_w", "sd40_w", "sd128_w", "turn_j")
 LA = ZoneInfo("America/Los_Angeles")
 TOL = 1e-8
+# Independent RL-184 §1.2 fixed vector for the invented IOPlatformUUID in RL190.
+FIXTURE_BOARD = "hw1:d1c881567ddb895a14f81ab71e8b84f3b75ae773b949d215b63f29a8685a5e60"
 
 
 def sha(data):
@@ -72,10 +74,10 @@ def committed_index():
 
 
 def operational_reasons(op, receipt, plan):
-    # Independent oracle in the lead's provisional lifecycle order, including secondary reasons.
+    # Independent oracle in RL-193 §4 lifecycle order, including secondary reasons.
     failed = (
-        ("wrong_mode", receipt["power_mode"] != "Automatic"),
         ("incomplete", op["leg_status"] != "complete"),
+        ("wrong_mode", receipt["power_mode"] != "Automatic"),
         ("unreleased", op["g0_outcome"] != "released"),
         ("short_hold", not any(b - a >= 600_000_000_000 for a, b in op["quiet_spans_ns"])),
         ("loaded", op["loaded_flag"]),
@@ -369,7 +371,7 @@ class World:
                     if key not in present:
                         path = "drops/"+key+".json"
                         self.named("drop" if "drop" not in self.targets else None, path,
-                                   {"key":key,"status":"dropped","authority":"fixture desk decision"})
+                                   {"key":key,"status":"pending"})
                         self.rows.append({"key":key,"drop":path})
         if change == "incomplete":
             self.rows.pop()
@@ -437,7 +439,7 @@ class World:
         self.named("cold","authority/cold.json",
                    {"look_id":look,"manifest_sha256":sha(self.man.read_bytes()),"passed":True,
                     "dropped":self.dropped, "not_qualified":self.excluded})
-        self.named("copy","authority/copy.json",{"root":str(self.copy),"execution_host":socket.gethostname(),
+        self.named("copy","authority/copy.json",{"root":str(self.copy),"execution_host":FIXTURE_BOARD,
                   "receipt_commit":self.receipts,"verified":True,
                   "files":{str(p.relative_to(self.copy)):sha(p.read_bytes()) for p in self.copy.rglob("*") if p.is_file()}})
         event = {"first_proven_close":self.receipts,"previous_read":IDS[1] if look==IDS[2] else None,
@@ -467,7 +469,7 @@ class World:
         if change=="lock_first":
             self.events_ledger.append({"look_id":IDS[2],"status":"coalesced"})
         self.row = dict(look_id=look, status="committed", manifest_path=str(self.man.relative_to(self.repo)),
-            sha256=sha(self.man.read_bytes()), execution_host=socket.gethostname(),
+            sha256=sha(self.man.read_bytes()), execution_host=FIXTURE_BOARD,
             public_root="public", custody_root=str(base/"private"), registration_commit=self.reg,
             input_hashes={str(p.relative_to(self.repo)):sha(p.read_bytes()) for p in self.repo.rglob("*")
                           if p.is_file() and ".git" not in p.parts})
@@ -529,7 +531,7 @@ class World:
                     "close_epoch_s":epoch-(-4 if ordinal==3 else 23+ordinal)}
         if prior:
             prior["entry_id"]="previous-to-"+span
-            self.predecessors[prior["entry_id"]]=dict(prior,host=socket.gethostname(),proven=True)
+            self.predecessors[prior["entry_id"]]=dict(prior,host=FIXTURE_BOARD,proven=True)
         ident=dict(kit_id=kid, kit_sha256=sha(kitpath.read_bytes()),span_id=span,attempt=1,
                    runner_pin=k["frozen"]["commit"],legs=[lid])
         allowance = k["span_template"]["leg_budget_s"]
@@ -568,7 +570,9 @@ class World:
         return refs
 
     def bind(self):
-        self.row.update(status="stage1_committed",stage1_path=str(self.stage.relative_to(self.repo)),
+        self.artifact_commit = self.book.seal("commit stage one artifact before its ledger row")
+        self.row.update(status="stage1_committed",stage1_commit=self.artifact_commit,
+                        stage1_path=str(self.stage.relative_to(self.repo)),
                         stage1_sha256=sha(self.stage.read_bytes()))
         self.save_row()
         self.targets["stage1"]=self.stage
@@ -667,12 +671,18 @@ io.open=decorate(io.open)
 
 def invoke(w, stage, *extra, fault="", wait=True):
     probe=w.base/"observer"
-    put(probe/"sitecustomize.py",PROBE.encode())
+    from test_desc_looks_rl190 import HARDWARE, HOSTNAME, BOOT_UUID, UUID, device_output
+    observer = PROBE if HARDWARE in PROBE else PROBE + HARDWARE
+    put(probe/"sitecustomize.py",observer.encode())
     log=tempfile.NamedTemporaryFile(dir=w.base)
     env=dict(os.environ,PYTHONDONTWRITEBYTECODE="1",DESC_AUDIT_LOG=log.name,
              DESC_VALUE_ROOT=str(w.copy),DESC_INJECT=fault,DESC_RESERVATION=str(w.private),
              DESC_VALIDATOR_SOURCE=str(ROOT/"joulewise/cadence_looks/manifest_dispatch.py"),
              PYTHONPATH=os.pathsep.join([str(probe),str(ROOT),os.environ.get("PYTHONPATH","")]))
+    # Never derive a binding or a device observation from the replay machine.
+    env.setdefault("R190_NODENAME", HOSTNAME)
+    env.setdefault("R190_BOOT", BOOT_UUID)
+    env.setdefault("R190_IOREG", device_output(UUID))
     proc=subprocess.Popen([*command(),stage,"--repo",str(w.repo),"--look-id",w.look,*extra],
         cwd=w.base,env=env,stdin=subprocess.DEVNULL,stdout=subprocess.PIPE,stderr=subprocess.PIPE,
         close_fds=True)
@@ -727,6 +737,45 @@ def sd1(xs):
     return statistics.stdev(xs) if len(xs)>=2 else null("fewer_than_two")
 
 
+def check_category_counts(test, doc, dispositions_by_kit):
+    # SQ8 groups terminal dispositions. Secondary failures remain in the position array.
+    from collections import Counter
+    categories = ("qualified", "not_qualified", "dropped")
+    test.assertEqual(set(doc["by_kit"]), set(dispositions_by_kit))
+    total_qualified = 0
+    for kit, dispositions in dispositions_by_kit.items():
+        expected = {category: Counter() for category in categories}
+        totals = dict.fromkeys(categories, 0)
+        for disposition, count in dispositions.items():
+            category, _, reason = disposition.partition(":")
+            totals[category] += count
+            if reason:
+                expected[category][reason] += count
+        total_qualified += totals["qualified"]
+        summary = doc["by_kit"][kit]
+        with test.subTest(kit=kit):
+            # Accept named category totals alongside a category-keyed reasons table,
+            # or count and subcounts in each category. Flat disposition keys fail.
+            test.assertFalse(any(":" in key for key in summary), summary)
+            counts = summary.get("counts", summary)
+            for category in categories:
+                test.assertIn(category, counts, summary)
+                bucket = counts[category]
+                if isinstance(bucket, dict):
+                    total = bucket.get("count", bucket.get("total"))
+                    reasons = bucket.get("reasons", {k:v for k,v in bucket.items()
+                                                     if k not in ("count", "total")})
+                else:
+                    total = bucket
+                    reasons = summary.get("reasons", {}).get(category, {})
+                test.assertIs(type(total), int)
+                test.assertEqual(total, totals[category])
+                test.assertIsInstance(reasons, dict)
+                test.assertTrue(all(type(n) is int and n >= 0 for n in reasons.values()))
+                test.assertEqual({k:n for k,n in reasons.items() if n}, dict(expected[category]))
+    test.assertEqual(doc["counts"]["n_legs"], total_qualified)
+
+
 class Checks(unittest.TestCase):
     def setUp(self):
         temp=tempfile.TemporaryDirectory()
@@ -748,7 +797,7 @@ class Checks(unittest.TestCase):
             counts=rollup.setdefault(key.split("/")[0],{})
             reason=w.records[key][-1] if key in w.records else "dropped:" + w.dropped[key]
             counts[reason]=counts.get(reason,0)+1
-        self.assertEqual(doc["by_kit"],rollup)
+        check_category_counts(self, doc, rollup)
         self.assertEqual(set(doc["positions"]),{r["key"] for r in w.rows})
         for key,(op,receipt,plan,status) in w.records.items():
             self.assertEqual(doc["positions"][key]["reasons"], operational_reasons(op, receipt, plan))
@@ -1005,7 +1054,7 @@ TerminalInstrumentWorld = World
 
 def instrument_happy(self, look):
     # RL-190 §§3.1–3.2. The 36 terminal rows include five receipts with wall evidence.
-    # The provisional reason order puts incomplete before unreleased on the last receipt.
+    # RL-193 §4 puts incomplete before unreleased on the last receipt.
     w = World(self.base, look)
     rc, out, err, events = invoke(w, "stage1")
     self.assertEqual((rc, out, err), (0, b"", b""))
@@ -1018,7 +1067,7 @@ def instrument_happy(self, look):
     self.assertEqual(len(w.dropped), 31)
     self.assertEqual(doc["counts"], {"n_legs": 2})
     self.assertEqual({key: row["disposition"] for key, row in doc["positions"].items()}, expected)
-    self.assertEqual(doc["by_kit"], {
+    check_category_counts(self, doc, {
         "f2-inst-01": {dropped: 9, "not_qualified:loaded": 1, "not_qualified:short": 1,
                       "not_qualified:incomplete": 1},
         "f2-inst-02": {dropped: 11, "qualified": 1},
@@ -2524,7 +2573,9 @@ def native_preflight(test, look, mutation, stage):
         if stage == "stage2":
             stage_name=f"{CONTROL}/stage1/{look}.json"
             put(root/stage_name,wire(census))
-            row.update(status="stage1_committed",stage1_path=stage_name,stage1_sha256=sha(wire(census)))
+            artifact_commit = native.seal("commit native stage one artifact before its ledger row")
+            row.update(status="stage1_committed",stage1_commit=artifact_commit,
+                       stage1_path=stage_name,stage1_sha256=sha(wire(census)))
             put(ledger,{"schema":reader.LEDGER_SCHEMA,"looks":[row]})
             native.seal("invented bound native stage one")
             reader.Snapshot(root,look,stage).check_stage1(census)
