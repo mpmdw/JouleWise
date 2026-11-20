@@ -153,3 +153,26 @@ python3.13 -B scripts/compare_c1_protected_sources.py --repo "$AUDIT_FIXTURES/re
   --c1-commit 63bfaf4ceb611720ae95cae4f6feeb16a2c3d6e8 \
   --w1-prompts "$AUDIT_FIXTURES/map.json" --c1-prompts "$AUDIT_FIXTURES/map.json"
 ```
+
+## Astra round 2 correction
+
+Astra assessed `3f781222f3cd4ae1bc6cea3dd738abe9cbd9748b`, tree `a2d5ec016702eb9a54a7a1f49a6e3f3402420fca`, and blocked on one VERIFIED HIGH. The exact invented pair adds `_holm.__code__ = revised.__code__`. Both the initial helper at `edbc41023` and the audited round 1 repair returned 0 with an empty protected change map in both directions. The correction and regression were assessed at `2ab96a5123d8c0a88e51eac49833aece1b5ade7d`, tree `014a6d13a7cd4d828ae44c73c7ebfdb6633c62a3`.
+
+| Round | VERIFIED HIGH | VERIFIED MED | VERIFIED LOW | Root cause |
+| --- | ---: | ---: | ---: | --- |
+| 2 | 1 | 0 | 0 | `impl-bug`, same indirect-mutation guard gap as round 1 |
+
+The guard refuses a protected callable reference used as a value, including exposure through an alias, container, argument, import, attribute read or pattern capture. Direct calls remain supported. The guard uses syntactic names and can decline a benign use of the same spelling as a value. Such source goes to the lead for manual review. This closes the first-class callable mutation paths in the regression across code, defaults and keyword defaults. The scorer source at `82542232d` still yields all eight protected bindings without executing it.
+
+`test_mutating_or_exporting_protected_callable_objects_fails_closed` produced eight failing subtests on the old helper. The correction rejects all eight variants on either side and when the invalid input is identical, and retains exit 0 with a scorer review entry for a residual edit that uses direct calls. All nine frozen cases and both round 1 regressions were preserved. The exact round 2 pair returns 2 naming `_holm` in both directions. The exact round 1 decorator and module-object pairs still return 1 with the expected hashes and 2 naming the level, respectively.
+
+```sh
+PYTHONPATH=tests:. python3.13 -B -m unittest align.test_rl182_registration.ProtectedSourceComparisonTests
+PYTHONPATH=tests:. python3.13 -B -m unittest align.test_rl182_registration align.test_rl176
+python3.13 -B scripts/compare_c1_protected_sources.py --repo "$AUDIT_FIXTURES/repo" \
+  --w1-commit 406c3abeb29412197d1de6d53dba09dab6a07d73 \
+  --c1-commit 3e17c928df2df49e4412dc1b1a70e6500b672ec0 \
+  --w1-prompts "$AUDIT_FIXTURES/map.json" --c1-prompts "$AUDIT_FIXTURES/map.json"
+```
+
+The focused class passed 12 tests and 102 synthetic CLI invocations. The combined suite passed 44 tests. The audited aggregate is 3 VERIFIED HIGH, 0 MED and 0 LOW across two independent rounds. Round 2 decays under §3 with `H₂ = 1 ≤ floor(2 / 2)` and the existing `impl-bug` root cause. A VERIFIED HIGH in round 3 returns to spec. Integration-owner and Opus acceptance and the signatory's actual receipt comparison, attestation and review remain open.
