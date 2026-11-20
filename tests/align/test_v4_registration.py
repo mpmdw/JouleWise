@@ -574,6 +574,7 @@ class C1ArmReceiptTests(unittest.TestCase):
             stack.enter_context(patch.object(kit, check))
         self.stager = stack.enter_context(patch.object(session.pilot, 'prepare', side_effect=self.stage))
         self.installer = stack.enter_context(patch.object(session.pilot, 'install', return_value={'exit_code': 0}))
+        self.real_arm_and_install = session._arm_and_install
         stack.enter_context(patch.object(session, '_arm_and_install',
                                          side_effect=lambda path, *_args, **_kw: self.installer(path)))
         stack.enter_context(patch.object(session, 'session_start_restore', return_value={'action': 'none'}))
@@ -777,6 +778,58 @@ class C1ArmReceiptTests(unittest.TestCase):
             'combined_signed_commit': expanded_receipt['commit'],
         }
         self.assertNotEqual(self.git_witness['legacy_receipt_blob'], self.git_witness['combined_receipt_blob'])
+
+    def test_c1_arm_record_binds_receipt_at_selected_commit(self):
+        from scripts import align_v4_next_arm_packet as packet
+
+        for resign in (False, True):
+            with self.subTest(resign=resign):
+                self.installer.reset_mock()
+                self.write_json(self.RECEIPT_PATH, self.legacy if resign else self.combined)
+                record_path = 'records/W1/synthetic-record.json'
+                finalized = 'records/W1/synthetic-finalized.json'
+                (self.repo / record_path).parent.mkdir(parents=True, exist_ok=True)
+                (self.repo / finalized).write_bytes(b'{"closure":{},"entries":{},"schema":'
+                    b'"joulewise.align_v4.finalized_manifest.v2","source_root":"synthetic"}')
+                self.write_json(record_path, {'schema': packet.RECORD_SCHEMA, 'role': 'development',
+                    'window': 'W1', 'previous_record': None, 'synthetic_resign': resign,
+                    'finalized_manifest': {'path': finalized, 'sha256': self.sha(finalized)}})
+                prior = self.commit('Synthetic W1 predecessor')
+                receipt_path, request = self.RECEIPT_PATH, {}
+                pin = prior
+                if resign:
+                    receipt_path = reg.REGISTRATION + 'series_registration_receipt.json'
+                    self.write_json(receipt_path, {**self.combined, 'commit': prior})
+                    pin = self.commit('Synthetic re-signed receipt before C1')
+                    request['series_receipt_commit'] = pin
+                work = Path(tempfile.mkdtemp(dir=self.root))
+                self.session.prepare(self.repo, work, window_id='C1', power_runner=self.no_host, **request)
+                plan = work / 'synthetic-night.json'
+                plan.write_text('{}')
+                state = self.session.pilot.h.read(work / 'session.json')
+                state['plan_path'] = str(plan)
+                self.session.pilot.h.write(work / 'session.json', state)
+                built = {'record_commit': prior, 'record_path': record_path, 'record_sha256': self.sha(record_path),
+                         'previous_window': 'W1', 'pushed_tip': pin}
+                def fake_arm(*_args, series_bind, pre_dwell, **_kwargs):
+                    reasons = series_bind(built)
+                    record = {'schema': self.session.ARM_RECORD_SCHEMA, 'admitted': not reasons, 'reasons': [],
+                              'next_arm_triage': {'rebuilt_packet': built}, 'ac_powermode': {'observed': 0},
+                              'series_binding': reasons}
+                    pre_dwell(record)
+                    return record
+                with patch.object(self.session, '_arm_and_install', self.real_arm_and_install), \
+                        patch.object(self.session, 'arm_checks', side_effect=fake_arm), \
+                        patch.object(self.series, 'bind_packet'), \
+                        patch.object(self.session, 'w1_disk_check', return_value={}), \
+                        patch.object(self.session, 'frequency_word_pre_t0', return_value={'ok': True}), \
+                        patch.object(self.session, '_watchdog_post_install'):
+                    self.assertEqual(self.session.install(work, runner=self.no_host), {'exit_code': 0})
+                self.installer.assert_called_once()
+                arm = json.loads((work / 'staging/v4-arm-001.json').read_bytes())
+                self.assertEqual(arm['series_registration'], {'commit': pin, 'sha256': self.sha(receipt_path)})
+                self.assertEqual(arm['arm_source_commit'], pin)
+                self.assertEqual(arm['series_packet']['record_commit'], prior)
 
 
 if __name__ == '__main__':
