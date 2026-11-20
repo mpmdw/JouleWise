@@ -22586,3 +22586,327 @@ Rows for the lead to commit to `RULES.json`. Owner is `research_lead` for rows 1
 **Rows closed or changed by this ruling.** RL-181 register row 11 is read with row 2. RS464's open question on kit 15 is answered. HS's first two NEEDS_SPEC bullets are answered; its third is unchanged and stays mine. FF:1 to FF:12 are answered.
 
 **What comes back to me.** A stability receipt naming a kit that is not in the index. A third runner pin in the stability series. A positive `lm-hp-01` execution or reservation found by the desk. A dropped instrument position whose span left a partial bundle. A `ctl01_withheld` row. A rail-manifest mismatch at the read. The final manifests, once each, as before. Nothing else in this ruling returns.
+
+# RL-191. The description looks get one reason rank: a stream-level veto before an interval refusal, a refusal before anything computed from values; all eleven suite questions are answered and all 152 skipped cases get an expectation. An admitted capture with no S score is ranked, not refused: it enters Q and leaves S with `s_score_undefined`, and the release's "every eligible member scores" check is wrong against the registration. The C1 gate sheet: one row answered, two closed from source, eight are untriggered returns. The lead's four decisions are confirmed
+
+Research lead (Fable 5.2), Thu Nov 19 23:07 PST 2026 (from `date`). Answers the implementation lead's four items. RL-176, RL-177, RL-182, RL-185 and RL-187 to RL-190 stand except where "Amends" says otherwise.
+
+**Cites.**
+- `RLD:n` is `RESEARCH-LEAD-DECISIONS.md` on the audit branch at `00a28dcf2` (22,588 lines).
+- `RS<item>` is a RUN_STATE item on `origin/main` at `c8d7d9cbd`.
+- `Q:<name>` is a question of `/Volumes/JW-EXT/scratch/astra-desc-suite-v2-2/FOR-FABLE.md`. `DL` is `DELTA.md` beside it, `SU` is `test_desc_looks_v22.py` (sha256 `b2af51fb…6029`), `CR` is `CASE-RESULTS.tsv`.
+- `EX` is the executor `joulewise/cadence_looks/description.py` at PR #868's head `e38428b3f`. `ES` is `/Volumes/JW-EXT/scratch/d-desc-looks-suite/DESC-EXECUTOR-SPEC.md`.
+- `SD` is `/Volumes/JW-EXT/scratch/d-c1-final-input-suite-v3/SPEC-DELTA.md`. `GF` is `/Volumes/JW-EXT/scratch/d-c1-gate-refresh-and-briefs/FOR-FABLE.md`, rows numbered 1 to 11 in its NEEDS_SPEC table.
+- `RK` is `scripts/align_v4_series_release.py` at PR #836's head `46f4295de`.
+
+**Read.**
+- `FOR-FABLE.md`, DL, `CASE-COUNT.md`, `BRIEF.md` and ES in full. SU lines 555 to 1330. The v2 suite's admission, read-order and recovery sections.
+- RL-185 §3 and §4, RL-187 3.5 to 3.8, RL-188 §4, RL-189 §4, RL-190 in full; RL-177 C and RL-182's E2 and 1.5 (RLD:18232-18240, 19676-19685, 19776-19796).
+- SD from line 32, its `FINAL-MESSAGE.md`, GF in full, the lead's `lead-answer-1.md` on the arm receipt, RS473, and the first 30 lines and the headings of the hp-02 `FREEZE-ADDENDUM.md`.
+- EX lines 735 to 800 and 1025 to 1400. RK lines 852 to 1200. `light_triage.member_eligibility`.
+
+**Checked myself.**
+- **The 152 skips** in CR split 23, 29, 12, 12, 16, 12, 13, 23, 6, 1, 5 over the eleven questions, in `FOR-FABLE.md`'s order.
+- **EX's present tokens and order.** It prints `meter_absent` and `meter_contaminated` after the count and gap checks (EX:1119-1121). `_quality_null` ranks `rail_manifest`, `coverage`, `meter_gap`, `crossed_before_span`, `meter_absent`, `meter_contaminated` across operands (EX:749-755). A level at or under zero prints `prefill_level_undefined` or `decode_plateau_undefined`. `_dc_crossing` already accepts a sample at the span's right end (EX:1176-1191). No frozen v2.1 case asserts the two `_undefined` level tokens.
+- **The endpoint fixture** (`endpoint_case`, SU:776-785). I ran that one invented leg on the suite's throwaway checkout at `e38428b3f`. Hold 40 W, decode plateau 19.375 W, so the threshold is 49.6875 W. The samples are 60 W at 610.95 s and 40 W at 611.000 s. By hand the crossing is 610.97578125 s, and the lags are 0.72578125 s (GPU rail) and 0.47578125 s (rail sum). The run printed the same two numbers.
+- **`even(a, b, 24)`** (SU:62-63) puts the last in-span DC stamp at a + 979,166,666 ns.
+- **A9's words.** `member_eligibility` gives every plan member a `captured` boolean, and an uncaptured member with a record and no other reason gets `member.not_captured`; one with no record gets `member.no_record` (`light_triage.py:83-94`). The file's blob is `824c150f8` at the W1 pin `b2e01464d` and at #836's head: the same bytes.
+- **RK refuses a scoreless eligible member twice:** `verify_score_inputs` requires the members with decode rows to equal the eligible members and every fold to be defined (RK:1056-1075), and `verify_s_coverage` requires `with_score` to equal the eligible count (RK:1112-1127).
+
+**Not checked.**
+- I ran neither suite. The expectations in section 1 follow from the rules and from reading the fixtures; only the endpoint case was executed.
+- SD's three rational p values. They are the suite author's.
+- #787's row builder. Its per-turn codes are taken from RLD:14051-14061 and 15055 and from SD's report of what it returned.
+- PR #889's code and #836's two mirror failures. Neither is a research question.
+- The component probe GF row 1 cites.
+- No custody, energy, power, meter, transcript, sealed or restricted file was opened. The one run above used an invented trace.
+
+**Not done.** No commit, push, comment or SSH. The only file written is this one.
+
+---
+
+## 0. The answers
+
+| # | Answer | In one line |
+|---|---|---|
+| 1 | **All eleven answered; no case stays skipped** | One rule (1.1) settles `health`, `operands`, `nonpositive`, `cross_pair`, `threshold_lag` and `onset_operand`. The tail questions get one bound rule (1.5). Two answers match what EX already does |
+| 1, tokens | **`meter_absent` and `meter_contaminated` move above the counts; a level at or under zero prints `nonpositive_level`; no tail prints `no_tail`** | `missing_operand` is no longer an expected reason for any lag or ratio |
+| 2 | **Rank it. The release does not refuse** | The registration already says so (RLD:19681) and RL-185 3.1 built the case on it. RK's two checks are replaced by 2.3 |
+| 2, record | **Three states, told apart by A9's `captured` and `eligible` and by one builder disposition for every turn** | Absent: `captured` false. Eligible with no S score: a `no_s_score` entry. Incomplete: a structural refusal, as now |
+| 3 | **Row 1 answered by section 2. Rows 2 and 3 closed from source. Rows 4 to 11 deferred** | Each deferred row is a return that fires on a fact nobody has supplied; its trigger and its hold are confirmed |
+| 4 (a) (b) (c) | **Confirmed** | (b): my cold pass names the deviation file's sha256 beside the manifest's |
+| 4 (d) | **Confirmed, with two consequences** | A Mythos builder never touches the twin of what it fixes, and on RL-176 row 4's code the Claude-family gate seat is then Opus |
+
+---
+
+## 1. The description looks' numerics
+
+### 1.1 One reason rank
+
+**Every null reason belongs to one of three classes, and a higher class always prints over a lower one.**
+
+| Rank | Reason | Class | What it says |
+|---|---|---|---|
+| 1 | `rail_manifest` | Stream | The rail sum's column list is not the registered one (RL-185 §4) |
+| 2 | `meter_absent` | Stream | The leg has no DC-in stream |
+| 3 | `meter_contaminated` | Stream | The DC-in stream is present and not clean |
+| 4 | `coverage` | Interval | A count under 99 %, the channel's own or the sidecar's |
+| 5 | `meter_gap` | Interval | Counts pass; a gap over its limit or a missing DC-in bracket |
+| 6 | `nonpositive_level`, `nonpositive_denominator` | Value | Everything was read; the level or the denominator is at or under zero |
+| 7 | `crossed_before_span` | Value | RL-188 4.1 |
+| 8 | "over 1 s", `stream_end` | Value | The search ran out |
+
+**Two rules use it.**
+
+> **Within one channel's print.** The reason is the first refusal met in this order: the print's own interval, by rank; then the hold it takes its threshold or baseline from, by rank; then the value-class reasons.
+>
+> **Across the two operands of a ratio or a lag.** Each operand gets its reason by the rule above. The print carries the higher-ranked of the two. The rank is the same list; it is not a second table.
+
+- **Why stream before interval.** A stream-level fact is metadata, true of every interval of the leg, and known before a count is taken. RL-189 §4 already put `rail_manifest` first for that reason (RLD:22225). A count or a gap on a contaminated stream is a count of samples that are themselves in doubt.
+- **Why a refusal before a value reason.** `nonpositive_denominator` and `crossed_before_span` say "both sides were read and this is what they showed". When one side was not read, that statement is false.
+- **Why one rank and not "numerator first".** The answer then does not depend on which operand a builder evaluates first. A ratio keeps its `numerator` and `denominator` fields, each with its own reason, so nothing is hidden.
+- **What does not change.** A refused turn still prints its own reason when its hold also failed, and an admitted turn with a refused hold carries the hold's (DL, "Hold versus turn or tail"). Floors keep `decode_or_sd_undefined`. The 256-token onset keeps "prefill shorter than the level window".
+
+### 1.2 `health` (23 cases)
+
+**Absence and contamination are tested before any count.** EX tests them last; that order changes.
+
+| Cases | Expected |
+|---|---|
+| `C_interval_dc_in_absent`, and `…_{left_bracket, right_bracket, own_count, side_count, side_gap}_absent` | null, `meter_absent`, no bound |
+| `C_interval_dc_in_{left_bracket, right_bracket, own_count, own_gap, side_count, side_gap}_dirty` | null, `meter_contaminated`, no bound |
+| `C_lag_pair_{gpu_rail, rail_sum}_absent_{ok, coverage, crossed_before_span, no_threshold, unobserved}` | null, `meter_absent`, no bound |
+| `C_lag_pair_rail_sum_absent_rail_manifest` | null, `rail_manifest`, no bound |
+
+- `C_interval_dc_in_dirty` alone stays `meter_contaminated`, as the suite already asserts.
+- An absent stream's file is not opened, as v2.1 already requires.
+
+### 1.3 `operands` (29) and `nonpositive` (12)
+
+**The higher rank wins, whichever operand holds it.**
+
+| DC-in operand | Rail operand | Ratio or lag prints |
+|---|---|---|
+| `coverage` | `meter_gap` | `coverage` |
+| `meter_gap` | `coverage` | `coverage` |
+| `meter_contaminated` | `coverage` or `meter_gap` | `meter_contaminated` |
+| any of the three | `rail_manifest` | `rail_manifest` |
+| `coverage`, `meter_gap` or `meter_contaminated` | measured, at or under zero | the DC-in reason |
+
+- These rows cover every `operands` case: the 22 `C_ratio_{turn, decode}_…` cases and the 7 `C_lag_pair_…` cases. None carries a bound.
+- The 12 `nonpositive` cases print the DC-in operand's reason. `numerator` is null with that reason. `denominator` stays the measured number at or under zero.
+- `nonpositive_denominator` prints only when the numerator was admitted.
+
+### 1.4 `cross_pair` (12), `threshold_lag` (23) and `onset_operand` (5)
+
+**A channel whose level is at or under zero gives no threshold, and its crossing is null with `nonpositive_level`.** This replaces EX's `prefill_level_undefined` and `decode_plateau_undefined` on the rise, the onset and the decode-end crossing. A level that could not be read keeps the reason of the interval or hold that refused it.
+
+**The lag's reason, by rank 6 to 8 after any refusal:**
+
+| The two crossings | Lag prints |
+|---|---|
+| Either operand refused (ranks 1 to 5) | That reason; the higher rank if both. No bound |
+| Neither refused; either has `nonpositive_level` | `nonpositive_level`. No bound |
+| Neither of the above; either is `crossed_before_span` | `crossed_before_span`. No bound |
+| Neither of the above; either is unobserved | "over 1 s", bound 1 |
+| Both numeric | DC-in time less rail time |
+
+**"over 1 s" never appears with an unavailable threshold.** It says a threshold existed on both channels and a crossing was not seen inside the tail.
+
+| Cases | Expected |
+|---|---|
+| `C_lag_dc_already_across_other_coverage`, `C_lag_rail_already_across_other_coverage`, `C_lag_pair_*_coverage_crossed_before_span`, `C_lag_pair_*_crossed_before_span_coverage` | `coverage` |
+| `C_lag_rail_already_across_other_meter_gap`, `C_lag_pair_*_meter_gap_crossed_before_span` | `meter_gap` |
+| `C_lag_pair_*_meter_contaminated_crossed_before_span` | `meter_contaminated` |
+| `C_lag_pair_rail_sum_crossed_before_span_rail_manifest`, `C_lag_pair_rail_sum_no_threshold_rail_manifest` | `rail_manifest` |
+| `C_lag_pair_*_coverage_no_threshold`, `C_lag_pair_*_no_threshold_coverage` | `coverage` |
+| `C_lag_pair_*_meter_gap_no_threshold` | `meter_gap` |
+| `C_lag_pair_*_meter_contaminated_no_threshold` | `meter_contaminated` |
+| `C_lag_pair_*_{crossed_before_span, ok, unobserved, no_threshold}_no_threshold` and `C_lag_pair_*_no_threshold_{crossed_before_span, ok, unobserved}` | `nonpositive_level` |
+| The five `C_named_*missing_operand*` cases, on `onset_lag_s.gpu_rail` | `nonpositive_level` |
+
+- `*` is `gpu_rail` and `rail_sum`. Every row is null with no bound.
+- **`missing_operand` is not an expected reason on any lag or ratio.** Every null operand now has a named reason. The fallback stays in the code as a last resort, because an exception after the first read spends the look's id; a suite case that prints it fails.
+- **Into RL-187 3.7.** A lag that is null for any reason but "over 1 s" is listed with its reason and left out of the maximum, as RL-190 3.8 does for a return with no threshold. If no leg gives a numeric lag, RL-190 3.9's "over 1 s" branch applies.
+
+### 1.5 `clean_tail` (12), `manifest_tail` (16) and `no_support` (6)
+
+**One bound rule for `rail_return_censor_s`.**
+
+> B is the recorded end of the powermetrics capture less the last token, from stamps alone. When B is above zero, every null of this print carries `bound_s` = B, whatever its reason. When B is zero or negative, the print is null with `no_tail` and no `bound_s`, whatever the hold's state; a `rail_manifest` mismatch still prints `rail_manifest` on the rail sum, without a bound.
+
+- **Why the bound always prints.** B is how long the rail was watched after the last token. It is a fact about stamps and does not depend on any value or on why the return could not be judged. RL-190 3.8 already printed it beside a coverage reason.
+- **Why this does not breach RL-185 §4.** That section forbids reading a value on an interval before the manifest check. B is the capture's end stamp, the same number the GPU-rail print carries on that leg. Stage 2 may read stamps first (RLD:19402).
+- **Why no zero bound.** A bound of zero reads as a censored return time of zero. There was no tail to censor.
+
+| Cases | Expected on `rail_return_censor_s` |
+|---|---|
+| `C_tail_{ane, cpu, gpu}_power_{coverage, meter_gap}_ok_{750, 1000}` | null, the hold's reason, `bound_s` 0.75 or 1.0 |
+| `C_tail_{ane, cpu}_power_rail_manifest_{ok, count, gap, count_gap}_{750, 1000}`, on the rail sum | null, `rail_manifest`, `bound_s` 0.75 or 1.0 |
+| `C_tail_no_support_{ok, meter_gap, coverage}_{0, 250}`, both rails | null, `no_tail`, no `bound_s` key |
+
+- The first row is rule 1.1's chain: the tail's own interval passes, so the hold's reason prints. The hold's own print says which interval failed.
+- EX's `rail_return_undefined` is retired in favour of `no_tail`.
+
+### 1.6 `tail_endpoint` (13)
+
+**Yes. A DC-in sample at exactly last token + 1.000 s may establish the crossing.**
+
+> For DC-in the search span is closed: a ≤ t ≤ b. RL-188 4.1's rule is unchanged: sample k is the first in the span that qualifies, sample k − 1 is also in the span, and the crossing is the interpolated time, which then lies at or before b. A first qualifying sample after b gives no crossing. For a rail the span stays [a, b): an interval that starts at b belongs to what follows.
+
+- **Why.** The channel is read as the function its energy is integrated from (RLD:21973), and the turn's DC-in integral already uses the point at b as its bracket. The half-open rule is for counting eligible starts and is unchanged.
+- EX already does this. No code change is owed.
+
+| Cases | Expected |
+|---|---|
+| `A_cross_dc_in_{rise, fall}_{right_exact, left_p1s}_{local, epoch}` | The crossing at a + 989,583,333 ns: the midpoint of a + 979,166,666 ns and b, the same branch the suite uses for a probe inside the span |
+| `A_printed_lag_dc_in_{right_exact, left_p1s}_{local, epoch}` | Lag 489,583,333 ns, which is 989,583,333 less the rail's 500,000,000 |
+| `C_lag_dc_exact_right_endpoint` | 0.72578125 s on the GPU rail and 0.47578125 s on the rail sum |
+
+### 1.7 `mixed_gap` (1)
+
+**Each part against its own limit.**
+
+> An uncovered rail run is cut at every cadence transition inside the print's interval. Each part is compared with max(1 s, five periods) of the segment it lies in. The interval fails with `meter_gap` if any part exceeds its limit.
+
+- **Why.** The count rule already sums expected samples piecewise across the transition (DL, A). A print that ends at the transition sees only its side of the hole, so judging the parts separately gives the same verdict whether an interval is judged whole or as two. The rule needs integer nanoseconds only.
+- **What it permits.** A hole of up to 5 s before the transition joined to 1.25 s after it. Each side loses no more than a print wholly on that side may already lose.
+- **`A_mixed_u1_straddles`:** [601, 603) is 1 s against 5 s and 1 s against 1.25 s. Admitted; the value prints.
+
+### 1.8 What the builder changes, in one list
+
+1. The DC-in health test moves ahead of the count and gap checks (1.2).
+2. `_quality_null`'s order becomes rank 1 to 5 of 1.1, with the value reasons after it (1.3, 1.4).
+3. `nonpositive_level` replaces the two `_undefined` level tokens; the lag's value-class order is as 1.4 has it.
+4. `rail_return_censor_s` follows 1.5: the bound on every null when B is above zero, `no_tail` otherwise.
+5. U1 on a mixed-cadence interval follows 1.7.
+6. Nothing for 1.6.
+
+---
+
+## 2. C1: an admitted capture with no S score
+
+### 2.1 Ruling
+
+**The release ranks the member. It does not refuse.**
+
+- **The registration decides it.** "A member with no decode-only row, with fewer than 6 training rows in its fit, or whose fit has zero residual variance (A26) has no S score and leaves its stratum with code `s_score_undefined`" (RLD:19681). That is a registered outcome for an eligible member. A release that refuses on it adds a rule nobody registered.
+- **RL-185 3.1 already used it** as world 2 of its distinguishing case: the member "enters Q with its outcome and is counted 'eligible, no S score'" (RLD:20859).
+- **RK's two checks are the fault.** `verify_score_inputs` and `verify_s_coverage` take "every eligible member has a score" as the integrity test. That was a stand-in for the real test, which is 2.2's third row.
+
+**What the member does.**
+
+| | Benign member | Instructed member |
+|---|---|---|
+| Q | Enters, with its outcome | Enters; the stratum enters Q |
+| S | Leaves its stratum; the stratum's benign count falls by one | The stratum does not enter S, and is counted among the strata that did not enter, reason `s_score_undefined` |
+| Attrition table, at release | "eligible, no S score", by condition and pair | The same |
+
+### 2.2 The three states and the record of each
+
+| State | Final A9 row | Episode | Row builder | Result |
+|---|---|---|---|---|
+| **Absent capture** | `captured` false, `eligible` false, a reason word | None. No member file is opened | Not called | RL-185 3.1's excluded roster entry. In no stratum of S or Q |
+| **Eligible, no S score** | `captured` true, `eligible` true | Every file of its finalized inventory present and hash-equal; every returned generation's token events equal its logged decode count | Returns one disposition for every turn of the episode: a row, or a code from its closed list. Zero rows, or rows that leave the fold undefined | A `FreshMember` with `eligible` true. A `no_s_score` entry. In Q; out of S |
+| **Incomplete capture** | `captured` true, `eligible` true | A listed file missing or changed, or a generation whose token events do not reconcile with its logged count | Not reached, or a turn with neither a row nor a code | Structural refusal before any score or rank. No report |
+
+- **What marks an absent capture is `captured` false, not the reason word.** A9 gives an uncaptured member `member.not_captured`, `member.no_record` or an earlier exclusion code, depending on its thermal record. The roster entry carries whichever word the final record holds.
+- **The `no_s_score` entry** is built by the release script beside the members: window, pair, manifest ordinal, A9 decision `eligible`, S status `s_score_undefined`, the cause (which of the registration's three: no decode-only row, under six training rows, zero residual variance), and for the first cause the ordered per-turn codes as the builder returned them. Condition is not a field; it is looked up from the manifest by ordinal at release, as in RL-185 3.1.
+- **The two entries cannot be confused:** one says `excluded` and has no episode; the other says `eligible`, has an episode, and carries codes.
+- **The same inputs cannot give both of the last two states.** SD's legitimate member keeps every token event (6, 10 and 14, reconciling) and has three first-token stamps; the builder answers `start_out_of_state`, `after_hot_turn`, `after_hot_turn`. The v2 negative strips decode events from an episode that logged tokens, and fails reconciliation. No fixture obligation is amended.
+
+### 2.3 What replaces RK's checks
+
+1. The members contributing an S score equal the eligible members less those with a `no_s_score` entry.
+2. Every eligible member without a score has such an entry, and every turn of its episode has exactly one disposition. A turn with neither is a refusal.
+3. The ranked S strata equal the expected strata less those 2.1's table removes.
+4. An undefined fold gives the entry with its cause. "S contributor fit is undefined" is no longer a refusal.
+
+- **These are release-script checks.** If meeting them needs a change to any of the eight names of RL-182 1.5 (RLD:19796), that change comes to me first. RL-182 says the scorer already returns `s_score_undefined` (RLD:19686), so I expect none.
+- **They land before the re-signed receipt of 4 (a),** which binds the script.
+
+### 2.4 The suite's two conditional cases
+
+**Both captured arms publish.** The fixture SD describes is a legitimate world-2 member and I admit it as the scientific case.
+
+| Arm | Expected |
+|---|---|
+| Benign ordinal 7 captured | Exit 0 and a report. Eight Q entrants in the stratum. S's strata as in the excluded arm. One `no_s_score` entry with the three codes above |
+| Instructed ordinal 19 captured | Exit 0 and a report. The stratum enters Q with eight members and does not enter S. One `no_s_score` entry |
+
+- Q's exact p in each arm is the suite's "all eligible captures" rational, rounded once under RL-187 N1. I did not recompute it.
+- **Still the owners':** binding the A9 join in the four stored records and supplying both serialized producer outputs for each arm (RLD:21678-21680). The v2 negative and #836's test of the stripped episode stand as refusals.
+- #836's two mirror failures are the release pipeline lead's.
+
+---
+
+## 3. The C1 gate sheet (GF)
+
+| GF row | Disposition | Answer |
+|---|---|---|
+| 1. Captured with no S rows against an incomplete capture | **Answered** | Section 2. The distinction is representable, so nothing further returns |
+| 2. Does A9's union lack a word for an absent capture; do two admitted records disagree | **First half closed from source. Second half deferred** | The word exists: `member.not_captured`, in bytes that are the same at the W1 pin and at #836's head. The mark of absence is `captured` false (2.2). Two admitted final records that disagree still come to me; none has been shown |
+| 3. Two meanings of the stored episode seed | **Answered** | Identity is (window id, manifest ordinal) (RLD:20880). The seed is a consistency check. A stored value equal to that manifest row's seed index or to its derived episode seed is the same assignment, and RK's test of exactly those two is sound. A conflict between two admitted writers or a signed registration still returns |
+| 4. A layout where rails and DC-in cannot be opened apart | **Deferred: not triggered** | RL-185 3.2 stands. It returns with the layout and no content |
+| 5. No committed representation of a held window | **Deferred: not triggered** | Held and barred windows contribute no assignment. It returns only with the missing field named |
+| 6. A numeric leaf outside every RL-187 class | **Deferred: not triggered** | `unbound_numeric` is the right refusal meanwhile |
+| 7. An unclean A/B row | **Deferred: fires on the row** | RL-183 2.1 stands. Affected rows are withheld from every use until disposed |
+| 8. W1 shows a missing first-token stamp, a paired gap over 10 ms, or no pairs | **Deferred: fires on W1's Check** | I need the counts to answer. C1 does not arm on a fired row until I have. 10 ms exactly does not fire |
+| 9. A third Pydantic version with other deltas | **Deferred: fires on the recount** | Equal deltas clear without me |
+| 10. A finding that changes S's or Q's arithmetic, level, population or words | **Deferred: fires on the diff** | Section 2 is not such a change: it restores the registered population |
+| 11. A held reason, over 10 % D G1 timeouts, or a Part C carry across changed paths | **Deferred: fires on W1's close** | The named returns of RL-185 3.4 row 15 stand |
+
+**Why eight are deferred.** Each asks what I would do with evidence that does not exist yet, and the disposition depends on that evidence. The trigger, the evidence to send and the hold in GF are right as written. GF's second table (OP 1 to 10) needs nothing from me.
+
+---
+
+## 4. The lead's decisions
+
+| # | Decision | Ruling |
+|---|---|---|
+| (a) | C1's arm record binds the re-signed receipt by its commit on the W1 line and the receipt file's sha256; the release refuses any other receipt, a substitution after C1's arm, and a changed W1 record; `scripts/align_v4_kit.py` stays byte for byte | **Confirmed.** RL-182 1.5 admits both histories (RLD:19782-19787). The commit descends from W1's signed commit and W1's receipt bytes are unchanged there. The receipt binds the four things of RL-182 row 2, and section 2.3's checks are in the script it binds |
+| (b) | The piece-1 deviation line goes in `docs/process/cadence/looks/lm-inst-01-DEVIATIONS.md`, committed with the final manifest | **Confirmed.** The v2 schema is closed and one line does not justify reopening it. The file holds dated lines and ruling cites and no value. My cold-pass ruling names its sha256 beside the manifest's (RL-190 3.5). A stability look that needs one uses the same pattern |
+| (c) | hp-02's items use the composed occupancy-through-clearance check; no plan-only acceptance | **Confirmed.** No research question, as RL-190 2.3 said. The addendum shows a plan that passes at noon and cannot finish; the check belongs in the items |
+| (d) | Mythos 5.2 builders take over three stopped Sol fix rounds (#795, #809, #824); Astra audits | **Confirmed.** RL-190 4 (d)'s rule is met: the Astra seat is neither builder's model, and it is of another family than the Mythos builder |
+
+**(d), two consequences.**
+- **The twin.** Where a look has a twin (#795), a Mythos builder that fixes one side does not touch the other. If the twin was written by a Claude-family seat, the two sides now share a family, and RL-190 4 (d) then asks for a gate seat of another family. Astra is one.
+- **RL-176 row 4.** That gate keeps one executing Claude-family seat that did not write the code. If a Mythos builder ever fixes Q's code or `S_dec`, that seat is Opus, not a second Mythos seat.
+
+---
+
+## Amends
+
+- **RL-189 §4's precedence table** (RLD:22225): `meter_absent` and `meter_contaminated` are rows 2 and 3, above every count; the same list ranks reasons across the two operands of a ratio or a lag (1.1).
+- **RL-185 §4** (RLD:20918): unchanged for values. A `rail_manifest` null of `rail_return_censor_s` carries the stamp-only bound B (1.5).
+- **RL-188 §4.1** (RLD:21971-21985): the DC-in search span is closed at its right end; a level at or under zero gives `nonpositive_level`; a lag takes its reason by 1.4's table.
+- **RL-190 3.8** (RLD:22509): "a tail keeps its coverage reason when the end-of-stream bound also applies" is general: every null of the rail-return print carries B when B is above zero, and prints `no_tail` otherwise (1.5).
+- **RL-187 3.7** (RLD:21801): a lag null for a reason other than "over 1 s" is listed and left out of the maximum (1.4).
+- **ES, "Interval arithmetic":** the rail gap limit is applied to each cadence part of an uncovered run (1.7).
+- **RL-185 3.1** (RLD:20858-20859): world 2's member carries the `no_s_score` entry of 2.2. **RL-182 1.5** (RLD:19790): the release script's coverage checks are 2.3's.
+- **RL-190 3.5:** the cold-pass ruling for `lm-inst-01` also binds the deviation file's sha256 (4 b).
+- **Stand unchanged:** every statistic, level, population and outcome word of S and Q; the eight names of RL-182 1.5; RL-188 4.2 and RL-189 4.1 on the recovery search; the count rule and the 2 s sidecar and DC-in limits; the floors' `decode_or_sd_undefined`; RL-190 4 (d)'s rule.
+
+**Blind status.** Blind. No F2, stability, High Power, ctl or series energy has been read by me, and I did not check whether anyone else has. No series member exists. Section 1 fixes spellings, an order of reasons and two edge conventions on invented traces before the read they govern; it changes no estimator and no threshold. Section 2 moves no population: it makes the release follow the registered one.
+
+**For Ed, plainly.** "Four things, and none needs the MacBook Pro. First, the test author had 152 test cases waiting on eleven small questions about how the instrument read labels a missing number. I answered all of them with one ordering rule, so the tests can be finished and the code fixed against them. Second, the program that will release the sabotage result was refusing to run if any admitted episode had no usable score. The registered plan says such an episode is still counted in the whole-episode test and simply drops out of the main one, so the program must do that, and I said exactly how it tells that case from a broken recording. Third, of eleven questions parked for the first test window, I closed three; the other eight only matter if something specific goes wrong, and none has. Fourth, the lead's four decisions stand, including moving three stalled repair jobs from GPT to Claude Mythos builders with GPT Astra still checking them."
+
+---
+
+## Register
+
+Rows for the lead to commit to `RULES.json`. Owner is `research_lead` for rows 1 to 5; the lead owns rows 6 and 7.
+
+| # | Clause | Class | Protects | Scope | Ends | Test |
+|---|---|---|---|---|---|---|
+| 1 | A description print's null reason follows 1.1's rank: stream, then interval, then value; within a channel the own interval precedes the hold; across two operands the higher rank prints | VALIDITY | One reason for one fault, whatever order the code evaluates in | `lm-inst-01`, `lm-stab-*` | The paper's data release | Suite v2.2's `health`, `operands`, `nonpositive`, `cross_pair`, `threshold_lag` and `onset_operand` cases at 1.2 to 1.4's values |
+| 2 | Every null of `rail_return_censor_s` carries the stamp-only bound B when B is above zero and prints `no_tail` without a bound otherwise (1.5) | VALIDITY | How long the rail was watched is never lost with the reason | `lm-inst-01` | The paper's data release | The `clean_tail`, `manifest_tail` and `no_support` cases |
+| 3 | A DC-in sample at the right end of its search span may establish a crossing; a rail interval starting there may not (1.6) | VALIDITY | Lags are defined before their energy is read | `lm-inst-01`, `lm-stab-*` | The paper's data release | The `tail_endpoint` cases; 0.72578125 s and 0.47578125 s on the endpoint leg |
+| 4 | A rail gap is judged in its cadence parts, each against max(1 s, five periods) of its segment (1.7) | VALIDITY | U1 gives one verdict whether an interval is judged whole or in two | `lm-inst-01`, `lm-stab-*` | The paper's data release | `A_mixed_u1_{slow, fast, straddles}`: value, `meter_gap`, value |
+| 5 | An eligible captured member with no S score is ranked: it enters Q, leaves S with `s_score_undefined`, and has a `no_s_score` entry; a turn with neither a row nor a builder code, or an episode that does not reconcile, refuses the release (2.1 to 2.3). Read with RL-185 row 6 | VALIDITY (prereg) | The release follows the registered population, and a broken capture cannot pass as attrition | The release script | The v4 release | Suite v3's two captured arms publish at 2.4's counts; the stripped-episode negative refuses |
+| 6 | C1's arm record binds the re-signed receipt by commit and sha256; the release refuses any other, a later substitution, or a changed W1 record (4 a) | VALIDITY (prereg) | The code between a series record and S's word is fixed before a series member exists | C1's arm and the release | The v4 release | #889's synthetic tests for both histories, the substitution, the W1 change and a wrong sha |
+| 7 | A builder of one side of a twinned look does not touch the other side; on RL-176 row 4's code the Claude-family gate seat is not the builder's model (4 d). Read with RL-190 row 7 | VALIDITY | The twin and the gate stay independent when builders change | Every twinned look; Q's code and `S_dec` | Standing; reviewed when the seat roster changes | The PR's review record names each builder's and the seat's model |
+
+**Rows closed or changed by this ruling.** `FOR-FABLE.md`'s eleven questions are answered. RL-189 register row 4 and RL-188 register row 4 are read with rows 1 and 3. SD's NEEDS_RULING on both captured arms is answered. GF rows 1 to 3 are closed. RS473's "until the manifest's deviation section carries it" reads "until the deviation file carries it".
+
+**What comes back to me.** A v2.2 case whose expectation under section 1 disagrees with a passing v2.1 case. A description print on which two rules of 1.1 give different reasons. A change to one of RL-182 1.5's eight names needed for 2.3. A member with `captured` true whose builder gives a turn neither a row nor a code on an episode that reconciles. Two admitted final records that disagree on A9. GF rows 4 to 11 when they fire. Nothing else in this ruling returns.
