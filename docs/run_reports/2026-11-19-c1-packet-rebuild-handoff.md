@@ -254,3 +254,16 @@ finalization and preserves caller-supplied series bytes. A disposable R1 fixture
 verified the same copy sequence, retained a caller-supplied companion blob, and built
 a ready W1 packet. The production sentinel gate and both executable freezes remain
 the same. [First hosted shard 11](https://github.com/mpmdw/JouleWise/actions/runs/44702660992/job/136175741092)
+
+### Hosted mutation-inventory compatibility
+
+The second hosted run at `459497d6c` passed the repaired prequalification module 42/42
+and the packet module 64/64. Its packet-tamper probe refused all 490 mutations, with zero
+admitted. The shard failed because the previous test expected 488. The frozen manifest is
+now a source in the sentinel check, yielding one changed-source and one removed-source
+probe. The independent mutation assertions now require both new probes and the count of
+490. A local synthetic packet also reproduced that count and independently rebuilt both
+edited packets with canonical comparison false. The R20 gate code is byte-identical
+through this test correction.
+[Hosted prequalification](https://github.com/mpmdw/JouleWise/actions/runs/44712187100/job/136208242934) ·
+[Hosted packet and mutation probe](https://github.com/mpmdw/JouleWise/actions/runs/44712187100/job/136208242907)
