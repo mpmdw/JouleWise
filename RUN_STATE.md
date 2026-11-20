@@ -1052,6 +1052,34 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 
 <!-- RUN_STATE TYPED ITEMS: newest first. Add with scripts/run_state_add.py; never edit by hand. -->
 
+491. **Check items print the full offload-manifest sha256 from now on (RL-194a)**
+
+```item
+{"expires_epoch_s": null, "issued_epoch_s": 1795213091, "number": 491, "owner": "magistrate", "schema": "joulewise.run_state_item.v1", "sets": [], "status": "ISSUED", "supersedes": []}
+```
+
+- **Standing change to the Check-item format (RL-194a Q3, research lead):** from the next Check on, every Check item prints the FULL 64-hex sha256 of the offload manifest (and of the encrypted copy), not an abbreviation like `5d029937…00b`. Abbreviated digests in past items stay valid: they bind character by character to the custody manifest's full digest in the look review records.
+- Nothing else changes: the ladder, ranks (items 464, 472, 480, 489), copies and stops stand.
+
+490. **Magistrate 9ffcf3f6 (headless, Opus 5.5), 2026-11-20 13:48-13:53 PST (`date`): f2-stab-15-l004 CHECK: RECEIPT OK (1/1 leg, MEASURED_OK, admitted, restored; first soak refused on CPU load, retry passed), copied at once; f2-stab-01-l008 ISSUED at rank 4 on pin A, ARG 02:00-02:35 (items 464, 489), launches as the last act**
+
+```pointer
+owner: magistrate
+wait: none
+deadline: 2026-11-20T17:00:00-08:00
+on_early_or_refused: a launcher refusal or non-clean close: record it, hold kit f2-stab-01 until an input changes (item 422, RL-179 F-6), mail the lead and Ed, and continue down the ladder. R1 stays unarmed.
+next_observable: f2stab01-9ffcf3f6/run-out.txt shows LAUNCH_RC=0 with the fence (launch ~13:53, expected end ~15:08, fence ~15:53; read the true fence deadline and pid from run-out.txt). The next activation after the fence pid is gone and runner_receipt.json exists Checks cq-f2-stab-01-l008-a1 under /Users/edr/campaign-out/f2-stab-01/ with f2stab01-check-template-9ffcf3f6/check.sh (LEGS L008, kit sha dbad…70fe, campaign_id f2-stab-01 and batch_windows == ['02:00-02:35'] asserted; replace REPLACE_STAMP in OUT with the actual directory's stamp and NEWACT in TMPDIR with the activation id; grep the leg_record for max_busy_cores/max_gap_s), and copies at once with f2stab01-check-template-9ffcf3f6/offload-run.sh (replace NEWACT everywhere with the activation id). Then continue down the ladder (items 422, 447, 463, 464, 480, 489): rank 2 only for an f2-inst kit whose executing delta PASS is recorded on main; rank 3 hp-02 only from Sat 21 Nov 00:00 (item 489); otherwise rank 4 f2-stab-01 L009 (seq 9) on pin 2d347f721 with ARG 02:00-02:35 (inputs f2stab01-9ffcf3f6/inputs.sh with SPAN/LEGS/SEQ/MAGISTRATE_PID changed; check template L008 -> L009) while its blackout_clear holds; a t0 whose plan reports blackout_clear false (fence reaching the 02:00-02:35 window) takes the next eligible rung instead. Saturday's rank-1 stability leg is due at the first dispatch after 00:00.
+```
+
+```item
+{"expires_epoch_s": null, "issued_epoch_s": 1795211520, "number": 490, "owner": "magistrate", "schema": "joulewise.run_state_item.v1", "sets": [{"at_epoch_s": 1795211520, "item": 488, "status": "CLOSED"}], "status": "ISSUED", "supersedes": []}
+```
+
+- **Spawn.** Activation 9ffcf3f6 spawned 13:48:47 PST, after f2-stab-15 L004's span had closed (receipt 13:43:56; fence pid 5800 gone; no align-r0 or night label loaded). No notices pending, no unread mail from Ed, directive list unchanged (standing 587/422/421/417/416/408/405), no standdown request. Canonical fast-forwarded `2db09e54b` -> `c2b9aca26` (item 489, lead) with no night label loaded or on disk.
+- **f2-stab-15 L004 Check** (custody `f2stab15-check-9ffcf3f6/check-out.txt`, from `f2stab15-check-template-e1134a0f`): RECEIPT OK. rc 0, 1/1 leg, MEASURED_OK, chain COMPLETE, no fault; batch_windows `[]`; kit sha `8dce…36a1`, frozen `6e9d42f1d`, campaign f2-stab-15; every step rc 0 except the first idle soak (rc 2: "idle soak: sustained CPU load", max_busy_cores 2.283 over 1,800 s, kept as `soak.rejected1/`); soak.a2 passed within the 1,950 s soak retry budget; restore and all stop/close steps rc 0; feeds proven stopped; meter 26,055 polls, 0 bad, 0 USB errors, 0 restarts. L004: complete, g0 released after 135.5 s, decode 512 (cap reached), prefill 2,024 tokens (4,111 chars), wall 1,306.0 s against a 1,378 s budget, contaminated_redos 0, admitted; max_busy_cores 2.431, max_gap_s 1.25. Maintenance log 12:16:49-13:43:56: 25,067 lines (dasd dominant, cloudd, backupd, mobileassetd, bird, fileproviderd, softwareupdated 8, mds 3). measurement_mode verify: the one FAIL is this magistrate's own MCP children (codex-mcp-server, server-pdf), as in earlier items; network time Off, frequency word 0, powermode 0, AC, not charging (InstantAmperage 0), no High Power marker, no desk fence, no runner/monitor group, no root powermetrics, free disk 224 GiB.
+- **Copied at once** (item 409): `cq-f2-stab-15-l004-a1.ok` written 13:50:16; manifest 64 files, enc sha256 `8dcbc27f…1468`; iCloud caught up and idle after the 13:49:37 copy (`f2stab15-check-9ffcf3f6/offload-out.txt`).
+- **Ladder.** Rank 1 already served today. Rank 2: no f2-inst executing delta PASS on main (item 489: f2-inst kits complete). Rank 3: hp-02 is admitted (item 489) but not before Sat 21 Nov 00:00. So rank 4: **f2-stab-01 L008 (seq 8)** on pin `2d347f721`, ARG `02:00-02:35` (t0 ~13:52 is after 13:15:00). Start and check at 13:50:08 OK: kit/queue shas, validate_kit, validate-queue, queue entry seq 8, blackout_clear true, L008 prefill 4,111 chars, decode 512, budget 1,378 s; expected 4,528 s, worst case 5,850 s, fence end ~15:52 (planned at that t0; the Run block replans at actual t0). Custody `f2stab01-9ffcf3f6/` (inputs.sh = 182576df's with SPAN/LEGS/SEQ and MAGISTRATE_PID 11653 changed, start-check.out, run-block.sh); launches as this activation's last act, output in `run-out.txt`. Check template for L008: `f2stab01-check-template-9ffcf3f6/` (L007 -> L008).
+
 489. **hp-02: queue-b ADMITTED; issue via the standard filler ladder from Sat 21 Nov 00:00 (gate automaton retired)**
 
 ```pointer
