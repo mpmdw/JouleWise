@@ -7,6 +7,7 @@ import json
 import os
 from pathlib import Path
 import re
+import runpy
 import shlex
 import subprocess
 import sys
@@ -245,7 +246,7 @@ def unrelated():
             (unrelated, b"TOY_PHASE = 2\n", [self.SCORER, self.PHASES]),
         ):
             with self.subTest(files=expected):
-                output = self.compare(self.commit(source, phases), 0)
+                output = self.compare(self.commit(source, phases), 2)
                 self.assertEqual(output["protected_changes"], {})
                 self.assertEqual(output["files_for_review"], expected)
                 modules = output["revisions"]
@@ -261,7 +262,7 @@ def unrelated():
             with self.subTest(binding=name):
                 self.assertEqual(self.SOURCE.count(before), 1)
                 c1 = self.commit(self.SOURCE.replace(before, before[:-1] + b"b"))
-                changes = self.compare(c1, 1)["protected_changes"]
+                changes = self.compare(c1, 2)["protected_changes"]
                 self.assertEqual(list(changes), [name])
                 self.assertRegex(changes[name]["w1"], r"^[0-9a-f]{64}$")
                 self.assertRegex(changes[name]["c1"], r"^[0-9a-f]{64}$")
@@ -269,7 +270,7 @@ def unrelated():
 
     def test_line_endings_are_source_bytes(self):
         c1 = self.commit(self.SOURCE.replace(b"return item  # holm-a\n", b"return item  # holm-a\r\n"))
-        self.assertEqual(list(self.compare(c1, 1)["protected_changes"]), ["_holm"])
+        self.assertEqual(list(self.compare(c1, 2)["protected_changes"]), ["_holm"])
 
     def test_first_decorator_is_hashed_after_form_feed_indentation_reset(self):
         body = b"def _holm(item):\n    return item  # holm-a\n"
@@ -284,7 +285,7 @@ def unrelated():
                 w1 = self.commit(helpers + self.SOURCE.replace(body, old))
                 c1 = self.commit(helpers + self.SOURCE.replace(body, new))
                 for left, right, before, after in ((w1, c1, old, new), (c1, w1, new, old)):
-                    self.assertEqual(self.compare(right, 1, w1=left)["protected_changes"], {
+                    self.assertEqual(self.compare(right, 2, w1=left)["protected_changes"], {
                         "_holm": {"w1": hashlib.sha256(before).hexdigest(),
                                   "c1": hashlib.sha256(after).hexdigest()},
                     })
@@ -316,7 +317,7 @@ def unrelated():
         ) + b"\ndef revised(): return 2\n"
         w1 = self.commit(base)
         residual = self.commit(base + b"\ndef ordinary(): return _holm() + revised()\n")
-        output = self.compare(residual, 0, w1=w1)
+        output = self.compare(residual, 2, w1=w1)
         self.assertEqual(output["protected_changes"], {})
         self.assertEqual(output["files_for_review"], [self.SCORER])
 
@@ -446,6 +447,7 @@ index = args.index('sha256:' + 'a' * 64)
 assert args[index + 1:index + 4] == ['--kill-after=2s', '30s', '/usr/local/bin/python3']
 python_args = [mounts.get(arg, arg) for arg in args[index + 4:]]
 assert '-I' in python_args and '-B' in python_args and '-S' in python_args
+os.chdir(mounts['/source'])
 os.execve(sys.executable, [sys.executable, *python_args], {'PATH': os.defpath})
 """
 
@@ -558,9 +560,11 @@ rl176._holm = decorate(CAPTURED)
     def test_outside_wiring_review_is_independent_of_equal_runtime_identity(self):
         w1 = self.commit()
         c1 = self.commit({self.SCORER: self.SOURCE + b"\n# invented unapproved byte change\n"})
-        result = self.compare(w1, c1, 1)
+        result = self.compare(w1, c1, 2)
         self.assertEqual(result["runtime_changes"], {})
+        self.assertEqual(result["oracle_changes"], {})
         self.assertEqual(result["protected_changes"], {})
+        self.assertEqual(list(result["closure_changes"]), [self.SCORER])
         self.assertEqual(result["research_lead_review"], [self.SCORER])
 
     def test_runtime_identity_distinguishes_shared_mutable_defaults(self):
@@ -585,32 +589,115 @@ rl176._holm = replacement
         for old, new in ((with_release, missing), (missing, with_release)):
             self.assertIn("entry point", self.compare(old, new, 2)["error"])
 
-    def test_approved_exact_wiring_spans_do_not_exempt_other_bytes(self):
+    def test_wiring_bytes_are_flagged_without_exceptions(self):
         phase = b"from . import rl176\n# invented wiring note A\n"
         c1_phase = phase.replace(b"note A", b"note B")
-        span = [[phase.index(b"note A"), phase.index(b"note A") + len(b"note A")]]
-        permit = self.scratch / "wiring.json"
-
-        def allow(path, before, after, spans):
-            permit.write_text(json.dumps([{
-                "path": path,
-                "before": {"sha256": hashlib.sha256(before).hexdigest(), "spans": spans},
-                "after": {"sha256": hashlib.sha256(after).hexdigest(), "spans": spans},
-            }]), encoding="ascii")
-
-        allow(self.PHASES, phase, c1_phase, span)
         w1, c1 = self.commit({self.PHASES: phase}), self.commit({self.PHASES: c1_phase})
         for old, new in ((w1, c1), (c1, w1)):
-            result = self.compare(old, new, 0, "--wiring-allowlist", permit)
-            self.assertEqual(result["research_lead_review"], [])
+            result = self.compare(old, new, 2)
+            self.assertEqual(list(result["closure_changes"]), [self.PHASES])
             self.assertEqual(result["files_for_review"], [self.PHASES])
+            self.assertEqual(result["oracle_changes"], {})
         other = self.commit({self.PHASES: c1_phase + b"# invented extra byte change\n"})
-        result = self.compare(w1, other, 1, "--wiring-allowlist", permit)
-        self.assertEqual(result["research_lead_review"], [self.PHASES])
-
+        self.assertEqual(self.compare(w1, other, 2)["files_for_review"], [self.PHASES])
         altered = self.SOURCE.replace(b"0.25", b"0.75")
-        level_at = self.SOURCE.index(b"0.25")
-        allow(self.SCORER, self.SOURCE, altered, [[level_at, level_at + 4]])
-        result = self.compare(self.commit(), self.commit({self.SCORER: altered}), 2,
-                              "--wiring-allowlist", permit)
-        self.assertEqual(result["research_lead_review"], [self.SCORER])
+        self.assertEqual(self.compare(self.commit(), self.commit({self.SCORER: altered}), 2)
+                         ["files_for_review"], [self.SCORER])
+
+    def test_audit_four_nan_alias_changes_default_oracle(self):
+        path = self.PACKAGE + "/wire.py"
+        source = b"""from joulewise.align.apple import rl176
+missing = float('nan')
+another = float('nan')
+markers = (missing,)
+def classify(value=missing, excluded=markers): return value in excluded
+rl176._holm = classify
+"""
+        w1 = self.commit({path: source})
+        c1 = self.commit({path: source.replace(b"markers = (missing,)", b"markers = (another,)")})
+        for old, new in ((w1, c1), (c1, w1)):
+            result = self.compare(old, new, 2)
+            self.assertEqual(list(result["closure_changes"]), [path])
+            self.assertEqual(list(result["oracle_changes"]["_holm"]), ["defaults"])
+
+    def test_audit_four_root_module_is_projected_and_in_the_closure(self):
+        path = self.PACKAGE + "/wire.py"
+        source = b"""from joulewise.align.apple import rl176
+try:
+    from toy_release_options import ALPHA
+except ModuleNotFoundError:
+    ALPHA = 0.25
+rl176.S_SUPERIORITY_ALPHA = ALPHA
+"""
+        root = "toy_release_options.py"
+        w1 = self.commit({path: source, root: b"ALPHA = 0.25\n"})
+        c1 = self.commit({path: source, root: b"ALPHA = 0.75\n"})
+        for old, new in ((w1, c1), (c1, w1)):
+            result = self.compare(old, new, 2)
+            self.assertEqual(list(result["closure_changes"]), [root])
+            self.assertEqual(list(result["runtime_changes"]), [self.LEVEL])
+            self.assertEqual(list(result["oracle_changes"][self.LEVEL]), ["value"])
+
+    def test_audit_four_deleted_phase_preserves_every_flagged_path(self):
+        w1 = self.commit()
+        c1 = self.commit({self.SCORER: self.SOURCE + b"# toy scorer note\n", self.PHASES: None})
+        for old, new in ((w1, c1), (c1, w1)):
+            result = self.compare(old, new, 2)
+            self.assertEqual(result["files_for_review"], [self.SCORER, self.PHASES])
+            self.assertEqual(list(result["closure_changes"]), [self.SCORER, self.PHASES])
+            missing_side = "c1" if old == w1 else "w1"
+            self.assertIsNone(result["closure_changes"][self.PHASES][missing_side])
+
+    def test_transitive_package_addition_and_import_time_file_are_flagged(self):
+        wire = self.PACKAGE + "/wire.py"
+        dep = self.PACKAGE + "/nested/helper.py"
+        resource = "invented-import-note.txt"
+        helper = b"""try:
+    with open('invented-import-note.txt', encoding='ascii') as note:
+        note.read()
+except FileNotFoundError:
+    pass
+try:
+    from .fresh import WIRE
+except ModuleNotFoundError:
+    pass
+"""
+        fresh = self.PACKAGE + "/nested/fresh.py"
+        w1 = self.commit({wire: b"from .nested import helper\n", dep: helper, resource: b"old\n"})
+        c1 = self.commit({wire: b"from .nested import helper\n", dep: helper,
+                          resource: b"new\n", fresh: b"WIRE = 2\n"})
+        for old, new in ((w1, c1), (c1, w1)):
+            result = self.compare(old, new, 2)
+            self.assertEqual(list(result["closure_changes"]), [resource, fresh])
+            self.assertIn(resource, result["error"])
+            self.assertEqual(result["oracle_changes"], {})
+
+    def test_frozen_public_scorer_outputs(self):
+        from fractions import Fraction
+        from joulewise.align.apple import rl176
+
+        worker = runpy.run_path(str(ROOT / "scripts/compare_c1_protected_sources.py"))
+        table = worker["oracle_outputs"](vars(rl176))
+        self.assertEqual(table["_decode_design"]["zero"], (1.0, 0, 0.0))
+        self.assertEqual(table["_decode_design"]["one"], (1.0, 1, 5.5))
+        self.assertTrue(all(value != value for value in table["_decode_design"]["nan"][1:]))
+        self.assertEqual(table["_decode_design"]["infinity"][1:], (float("inf"), float("inf")))
+        self.assertEqual(table["_decode_rows"]["no-trace"], ())
+        self.assertEqual(table["_decode_rows"]["stamp-at-end"], (((1.0, 1, 5.5), 0.0, 0.0),))
+        self.assertEqual(table["_residual_scores"]["empty"], {})
+        self.assertEqual(table["_residual_scores"]["five-training"], {})
+        self.assertEqual(table["_tail_test"]["empty"],
+                         ({"strata": 0, "theta": None, "p_sup": None, "p_inf": None}, None))
+        self.assertEqual(table["_tail_test"]["tie"], ({"strata": 1, "theta": 0.5, "p_sup": 1.0, "p_inf": 1.0}, 1))
+        self.assertEqual(table["_tail_test"]["infinity"][0]["theta"], 1.0)
+        self.assertEqual(table["_s_rank"]["empty"]["words"], ["S NOT EVALUABLE"])
+        self.assertEqual(table["_s_rank"]["above-level"]["words"], ["S INCONCLUSIVE"])
+        self.assertEqual(table["_s_rank"]["below-level"]["words"], ["S SIGNATURE"])
+        self.assertEqual(table["_holm"]["boundary"], (None, {
+            "a": ({"strata": 8, "word": "Q SHIFT"}, Fraction(1, 40)),
+            "b": ({"strata": 8, "word": "Q SHIFT"}, Fraction(1, 20)),
+        }))
+        self.assertEqual(table["_q_energies"]["empty"], (0.0, None, None))
+        self.assertEqual(table["_q_energies"]["no-trace-with-stamp"], (None, None, None))
+        self.assertEqual(table["_q_energies"]["stamp-at-segment-start"], (2.0, 2.0, 0.0))
+        self.assertEqual(table[self.LEVEL]["value"], Fraction(1, 80))
