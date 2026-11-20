@@ -172,9 +172,11 @@ class AsRun(frozen.World):
                 return
         return super().leg(kit, pos, v, day, ordinal, status)
 
+    def declare_unrun_positions(self):
+        # This family owns its grouped receipts and every deliberately missing or malformed drop.
+        self.group_members()
+
     def named(self, name, path, doc):
-        if name == "host_chain" and self.inst:
-            self.group_members()
         if name == "roster" and self.inst:
             if self.scenario == "missing":
                 self.rows[:] = [r for r in self.rows if r["key"] != self.target]

@@ -89,12 +89,22 @@ class RL192b(unittest.TestCase):
         self.assertEqual(set(sources), expected)
         self.assertEqual(seen, expected)
         per_leg = ("hold", "turn", "gain", "edges") if world.inst else ("hold", "turn")
-        for name in per_leg:
-            with self.subTest(output=name):
-                self.assertEqual(set(prints[name]), expected)
-        if not world.inst:
-            contexts = set().union(*(rows.keys() for rows in prints["context"].values()))
-            self.assertEqual(contexts, expected)
+        # RL-190 §1.3 preserves the original zero-print assertion in each population.
+        populations = {"all": expected}
+        if world.look == frozen.IDS[2]:
+            base = {row["kit_id"] for row in frozen.template(frozen.IDS[1])["kits"]}
+            populations["base14"] = {k for k in expected if k.split("/")[0] in base}
+            for name in (*per_leg, "context"):
+                self.assertEqual(set(prints[name]), set(populations))
+        for view, keys in populations.items():
+            with self.subTest(population=view):
+                reports = {n: table[view] for n, table in prints.items()} if world.look == frozen.IDS[2] else prints
+                for name in per_leg:
+                    with self.subTest(output=name):
+                        self.assertEqual(set(reports[name]), keys)
+                if not world.inst:
+                    contexts = set().union(*(rows.keys() for rows in reports["context"].values()))
+                    self.assertEqual(contexts, keys)
 
 
 def loaded_alone(test, look):

@@ -62,6 +62,29 @@ def design():
         return {k: z.read(k) for k in z.namelist()}
 
 
+@lru_cache
+def committed_index():
+    # Exact public design blob from the audit branch. Keep its envelope, paths and pin spellings.
+    data = (HERE / "description-stability-KITS.json").read_bytes()
+    if sha(data) != "9fd3d49c0a51ab75a1c4e20fb784f9f656fb70e9cfca8e2b9ff304c0eba70dae":
+        raise ValueError("committed stability index digest changed")
+    return data
+
+
+def operational_reasons(op, receipt, plan):
+    # Independent oracle in the lead's provisional lifecycle order, including secondary reasons.
+    failed = (
+        ("wrong_mode", receipt["power_mode"] != "Automatic"),
+        ("incomplete", op["leg_status"] != "complete"),
+        ("unreleased", op["g0_outcome"] != "released"),
+        ("short_hold", not any(b - a >= 600_000_000_000 for a, b in op["quiet_spans_ns"])),
+        ("loaded", op["loaded_flag"]),
+        ("short", op["decode_tokens"] != plan["decode_tokens"]),
+        ("cap_not_reached", not op["decode_cap_reached"]),
+    )
+    return [name for name, present in failed if present]
+
+
 def command():
     return shlex.split(os.environ["DESC_CLI"]) if "DESC_CLI" in os.environ else [
         sys.executable, "-B", str(ROOT / "scripts/cadence_description_run.py")]
@@ -277,9 +300,21 @@ class World:
             a,b=k["legs"][:2]
             a["prefill_tokens"],b["prefill_tokens"]=b["prefill_tokens"],a["prefill_tokens"]
             put(self.repo/kit15,k)
-        self.index = [{"kit_id":"f2-stab-15","sha256":sha((self.repo/kit15).read_bytes())}]
-        if change=="bad_index_digest": self.index[0]["sha256"]="7"*64
-        if look == IDS[2] and change not in ("late_index","same_index","absent_index"):
+        self.index = committed_index()
+        index_doc = json.loads(self.index)
+        for row in index_doc["rows"]:
+            kid = row["kit_id"]
+            kit = (self.repo / "kits" / (kid + ".json")).read_bytes()
+            if kid == "f2-stab-15" and change == "position_swap":
+                row["sha256"] = sha(kit)  # Bind the planted swap, so the changed cells are the defect.
+            if sha(kit) != row["sha256"] or not json.loads(kit)["frozen"]["commit"].startswith(row["runner_pin"]):
+                raise ValueError(f"public design archive disagrees with index for {kid}")
+            put(self.repo / row["path"], kit)
+            if kid == "f2-stab-15" and change == "bad_index_digest":
+                row["sha256"] = "7" * 64
+        if change in ("position_swap", "bad_index_digest"):
+            self.index = wire(index_doc)
+        if change not in ("late_index", "same_index", "absent_index"):
             self.named("kit_index", "f2-stab/KITS.json", self.index)
         if change=="missing_peer":
             self.targets["peer_manifest"].unlink()
@@ -363,8 +398,7 @@ class World:
             if field=="short_count": doc["decode_tokens"]-=1
             put(self.repo/refs["receipt"],rc)
             put(self.repo/refs["leg_record"],doc)
-            self.records[key]=(doc,rc,plan,{"quiet_short":"short_hold","g0":"unreleased","cap_flag":"cap_not_reached",
-                                            "mode":"wrong_mode","short_count":"short"}[field])
+            self.records[key]=(doc,rc,plan,"not_qualified:" + operational_reasons(doc, rc, plan)[0])
             self.good.pop(key)
             self.specimens.pop(1)
         if change=="split":
@@ -386,14 +420,23 @@ class World:
                 shutil.rmtree(old.parents[2])
         if change=="same_index":
             self.named("kit_index","f2-stab/KITS.json",self.index)
+        self.dropped = {}
+        if self.inst:
+            self.declare_unrun_positions()
         self.named("host_chain","ops/host-closes.json",self.predecessors)
         self.receipts = self.book.seal("close snapshot")
         if look == IDS[2] and change == "late_index":
             self.named("kit_index", "f2-stab/KITS.json", self.index)
         self.roster = {"rows":self.rows,"receipt_commit":self.receipts}
         self.named("roster","roster.json",self.roster)
+        self.excluded = {}
+        for key, (op, receipt, plan, _) in self.records.items():
+            reasons = operational_reasons(op, receipt, plan)
+            if reasons:
+                self.excluded[key] = reasons[0]
         self.named("cold","authority/cold.json",
-                   {"look_id":look,"manifest_sha256":sha(self.man.read_bytes()),"passed":True})
+                   {"look_id":look,"manifest_sha256":sha(self.man.read_bytes()),"passed":True,
+                    "dropped":self.dropped, "not_qualified":self.excluded})
         self.named("copy","authority/copy.json",{"root":str(self.copy),"execution_host":socket.gethostname(),
                   "receipt_commit":self.receipts,"verified":True,
                   "files":{str(p.relative_to(self.copy)):sha(p.read_bytes()) for p in self.copy.rglob("*") if p.is_file()}})
@@ -431,6 +474,30 @@ class World:
         self.save_row()
         self.book.seal("blind prerequisites")
 
+    def declare_unrun_positions(self):
+        # RL-190 §3.1. Each typed lead item binds one absent position and the final queue
+        # record that corroborates it. Both are committed before the close snapshot.
+        keys = sorted(row["key"] for row in self.rows if "drop" in row)
+        self.dropped = dict.fromkeys(keys, "queue_retired")
+        queue_path = "ops/drop-evidence/final-queue.json"
+        queue = wire(dict(queue_id="invented-instrument-queue", final=True, unrun=keys))
+        put(self.repo / queue_path, queue)
+        items = []
+        for number, key in enumerate(keys, start=900002):
+            header = dict(schema="joulewise.run_state_item.v1", owner="lead", number=number,
+                          issued_epoch_s=1800000000, expires_epoch_s=None,
+                          status="ISSUED", sets=[], supersedes=[])
+            items.append(f"{number}. **Invented terminal declaration for {key}.**\n\n"
+                         f"```item\n{json.dumps(header, sort_keys=True)}\n```\n\n"
+                         f"The lead declares {key} dropped:queue_retired. No member exists or will exist. "
+                         f"Evidence {queue_path} sha256={sha(queue)}.\n")
+            put(self.repo / "drops" / (key + ".json"),
+                dict(key=key, status="dropped", reason="queue_retired", authority="lead",
+                     typed_item_ref={"path": "RUN_STATE.md", "number": number}, queue=queue_path))
+        state = ["<!-- RUN_STATE TYPED ITEMS: synthetic lead decisions -->", *reversed(items),
+                 "<!-- RUN_STATE LEGACY ITEMS below: prose, not typed; cutover 900002 -->"]
+        put(self.repo / "RUN_STATE.md", ("\n".join(state) + "\n").encode())
+
     def named(self, name, rel, doc):
         p = self.repo/rel
         put(p,doc)
@@ -465,7 +532,9 @@ class World:
             self.predecessors[prior["entry_id"]]=dict(prior,host=socket.gethostname(),proven=True)
         ident=dict(kit_id=kid, kit_sha256=sha(kitpath.read_bytes()),span_id=span,attempt=1,
                    runner_pin=k["frozen"]["commit"],legs=[lid])
-        doc=dict(leg_id=lid,leg_status="g0_unreleased" if status=="unreleased" else "complete",
+        allowance = k["span_template"]["leg_budget_s"]
+        doc=dict(wall_s=allowance, leg_budget_s=allowance, over_time_budget=False,
+                 leg_id=lid,leg_status="g0_unreleased" if status=="unreleased" else "complete",
                  g0_outcome="timeout" if status=="unreleased" else "released",
                  quiet_spans_ns=[] if status=="unreleased" else [[0,600_000_000_000]],
                  prefill_tokens=None if status=="unreleased" else leg["prefill_tokens"]+ordinal%3,
@@ -486,7 +555,8 @@ class World:
         if ordinal==0:
             self.targets["kit"]=kitpath
         # RL-192b: keep the authenticated row and all its tempting synthetic traces.
-        disposition = "not_qualified:loaded" if doc["loaded_flag"] else status
+        reasons = operational_reasons(doc, receipt, leg)
+        disposition = "not_qualified:" + reasons[0] if reasons else "qualified"
         self.records[key]=(doc,receipt,leg,disposition)
         self.rows.append(refs)
         if status=="qualified":
@@ -637,7 +707,20 @@ def private_names(look):
 
 
 def by_key(w, file):
-    return read(w.private/(file+".json"))
+    data = read(w.private / (file + ".json"))
+    if w.inst:
+        return data
+    if w.look == IDS[2]:
+        if set(data) != {"all", "base14"}:
+            raise AssertionError("wide stability file must carry both ruled views")
+        data = data["all"]
+    if file != "date_spreads":
+        groups = data.values() if file == "context" else (data,)
+        for group in groups:
+            for key, row in group.items():
+                if row.pop("runner_pin") != w.records[key][1]["runner_pin"]:
+                    raise AssertionError(f"custody runner pin differs from receipt for {key}")
+    return data
 
 
 def sd1(xs):
@@ -663,18 +746,22 @@ class Checks(unittest.TestCase):
         for rr in w.rows:
             key=rr["key"]
             counts=rollup.setdefault(key.split("/")[0],{})
-            reason=w.records[key][-1] if key in w.records else "dropped"
+            reason=w.records[key][-1] if key in w.records else "dropped:" + w.dropped[key]
             counts[reason]=counts.get(reason,0)+1
         self.assertEqual(doc["by_kit"],rollup)
         self.assertEqual(set(doc["positions"]),{r["key"] for r in w.rows})
-        for key,(_,__,___,status) in w.records.items():
+        for key,(op,receipt,plan,status) in w.records.items():
+            self.assertEqual(doc["positions"][key]["reasons"], operational_reasons(op, receipt, plan))
+            self.assertIs(doc["positions"][key]["over_time_budget"], op["over_time_budget"])
             self.assertEqual(doc["positions"][key]["disposition"],status)
             self.assertEqual(doc["positions"][key]["loaded_flag"],w.records[key][0]["loaded_flag"])
         for row in w.rows:
             if "drop" in row:
-                self.assertEqual(doc["positions"][row["key"]]["disposition"],"dropped")
+                self.assertEqual(doc["positions"][row["key"]]["disposition"],"dropped:" + w.dropped[row["key"]])
         if not w.inst:
             self.assertEqual(doc["counts"]["n_local_dates"],len(w.qualified_dates()))
+            if w.look == IDS[2]:
+                self.assertEqual(doc["source_snapshot"]["kit_index_sha256"], sha(w.index))
             table=doc["token_table"]
             self.assertEqual(len(table),len(w.records))
             self.assertEqual([r["kit_id"]+"/"+r["leg_id"] for r in table],sorted(w.records))
@@ -683,7 +770,7 @@ class Checks(unittest.TestCase):
             for r in table:
                 k=r["kit_id"]+"/"+r["leg_id"]
                 op,rc,plan,disp=w.records[k]
-                self.assertEqual(r,dict(kit_id=rc["kit_id"],kit_sha256=rc["kit_sha256"],
+                self.assertEqual(r,dict(kit_id=rc["kit_id"],kit_sha256=rc["kit_sha256"],runner_pin=rc["runner_pin"],
                      span_id=rc["span_id"],leg_id=op["leg_id"],position=int(op["leg_id"][1:]),
                      attempt=1,nominal_prefill_tokens=plan["prefill_tokens"],decode_cap=plan["decode_tokens"],
                      realised_prefill_tokens=op["prefill_tokens"],realised_decode_tokens=op["decode_tokens"],
@@ -719,6 +806,12 @@ class Checks(unittest.TestCase):
                 p=Path(path)
                 self.assertTrue(p==w.public or p==w.private or w.private in p.parents,
                                 f"unexpected write attempt {p}")
+
+    def admissible_control(self, look):
+        with self.subTest(control="unmutated", look=look), tempfile.TemporaryDirectory() as base:
+            w = World(Path(base).resolve() / "control", look)
+            self.stage1(w)
+            self.assertEqual(reservation_boundary(self, w), [str(w.private)])
 
     def refused(self,w,stage="stage2",reserved=False,extra=()):
         before=w.public.read_bytes() if w.public.is_file() else None
@@ -905,58 +998,15 @@ def matrix(self,look,cls,issue):
     self.refused(w)
 
 
-class WallEvidenceWorld(World):
-    def leg(self, kit, pos, v, day, ordinal, status):
-        # RL-190 §3.2, resolver §1. Every receipted leg carries the kit's wall allowance.
-        refs = super().leg(kit, pos, v, day, ordinal, status)
-        op = self.records[refs["key"]][0]
-        allowance = read(self.repo / "kits" / f"f2-{self.family}-{kit:02}.json")["span_template"]["leg_budget_s"]
-        op.update(wall_s=allowance, leg_budget_s=allowance, over_time_budget=False)
-        put(self.repo / refs["leg_record"], op)
-        return refs
-
-
-class TerminalInstrumentWorld(WallEvidenceWorld):
-    # RL-190 §3.1. The cold pass lists every drop separately from receipt-backed exclusions.
-    excluded = {"f2-inst-01/L001": "loaded", "f2-inst-01/L011": "short",
-                "f2-inst-01/L012": "incomplete"}
-
-    def named(self, name, path, doc):
-        if name == "host_chain":
-            self.declare_unrun_positions()
-        if name == "cold":
-            doc = dict(doc, dropped=self.dropped, not_qualified=self.excluded)
-        super().named(name, path, doc)
-
-    def declare_unrun_positions(self):
-        # RL-190 §3.1. Each typed lead item binds one absent position and the final queue
-        # record that corroborates it. Both are committed before the close snapshot.
-        keys = sorted(row["key"] for row in self.rows if "drop" in row)
-        self.dropped = dict.fromkeys(keys, "queue_retired")
-        queue_path = "ops/drop-evidence/final-queue.json"
-        queue = wire(dict(queue_id="invented-instrument-queue", final=True, unrun=keys))
-        put(self.repo / queue_path, queue)
-        items = []
-        for number, key in enumerate(keys, start=900002):
-            header = dict(schema="joulewise.run_state_item.v1", owner="lead", number=number,
-                          issued_epoch_s=1800000000, expires_epoch_s=None,
-                          status="ISSUED", sets=[], supersedes=[])
-            items.append(f"{number}. **Invented terminal declaration for {key}.**\n\n"
-                         f"```item\n{json.dumps(header, sort_keys=True)}\n```\n\n"
-                         f"The lead declares {key} dropped:queue_retired. No member exists or will exist. "
-                         f"Evidence {queue_path} sha256={sha(queue)}.\n")
-            put(self.repo / "drops" / (key + ".json"),
-                dict(key=key, status="dropped", reason="queue_retired", authority="lead",
-                     typed_item_ref={"path": "RUN_STATE.md", "number": number}, queue=queue_path))
-        state = ["<!-- RUN_STATE TYPED ITEMS: synthetic lead decisions -->", *reversed(items),
-                 "<!-- RUN_STATE LEGACY ITEMS below: prose, not typed; cutover 900002 -->"]
-        put(self.repo / "RUN_STATE.md", ("\n".join(state) + "\n").encode())
+# Existing replay scripts import these two named fixtures. Their baseline evidence now lives in World.
+WallEvidenceWorld = World
+TerminalInstrumentWorld = World
 
 
 def instrument_happy(self, look):
     # RL-190 §§3.1–3.2. The 36 terminal rows include five receipts with wall evidence.
     # The provisional reason order puts incomplete before unreleased on the last receipt.
-    w = TerminalInstrumentWorld(self.base, look)
+    w = World(self.base, look)
     rc, out, err, events = invoke(w, "stage1")
     self.assertEqual((rc, out, err), (0, b"", b""))
     self.assertFalse(any(kind == "open" for kind, _ in events))
@@ -1040,6 +1090,7 @@ def public_test(self,look):
 
 
 def foreign(self,look):
+    self.admissible_control(look)
     w=self.world(look,"foreign")
     self.refused(w,"stage1")
 
@@ -1148,6 +1199,7 @@ BLIND_ALL=("duplicate","bad_receipt","wrong_attempt","runner","hand_disagrees","
 FINAL_GATES=("missing_columns","gpu_only","bad_names","bad_counts","unknown_id","missing_reader")
 GATES=("freeze_no","freeze_unevaluable","cold_denied","cold_wrong_hash","copy_failed")
 def refused_gate(self,look,reason):
+    self.admissible_control(look)
     w=self.world(look,reason)
     if reason in BLIND or reason in FINAL_GATES:
         self.refused(w,"stage1")
@@ -1333,21 +1385,17 @@ def missing_wall_evidence(self):
 
 
 def coalescence(self):
+    self.admissible_control(IDS[1])
     # RL-190 §1.5 reverses the old one-date lock. Even a ledger offering 01 and retiring 02 must refuse.
-    w = WallEvidenceWorld(self.base, IDS[1], "lock_first")
+    w = World(self.base, IDS[1], "lock_first")
     self.assertEqual(len(w.qualified_dates()), 1)
     self.refused(w, "stage1")
     self.assertFalse(w.stage.exists())
 
 
-class EarlyLockWorld(WallEvidenceWorld):
+class EarlyLockWorld(World):
     def named(self, name, rel, doc):
         # RL-190 §1.5 uses the full §1.3 roster at the lock, including the extension kit.
-        if name == "kit_index":
-            doc = []
-            for path in sorted((self.repo / "kits").glob("f2-stab-*.json")):
-                doc.append(dict(kit_id=path.stem, path=str(path.relative_to(self.repo)),
-                                sha256=sha(path.read_bytes()), runner_pin=read(path)["frozen"]["commit"]))
         if name == "event":
             doc.update(previous_read=None, previous_status=None, coalesced=[IDS[1]])
         super().named(name, rel, doc)
@@ -2417,6 +2465,11 @@ def native_preflight(test, look, mutation, stage):
     def path(name):
         if name.startswith("manifests/"):
             return reader.CAMPAIGN+"/looks/"+Path(name).stem+".manifest.json"
+        if name == "f2-stab/KITS.json":
+            return reader.CAMPAIGN + "/" + name
+        if name.startswith("kits/f2-stab-"):
+            rows = json.loads(committed_index())["rows"]
+            return next(row["path"] for row in rows if row["kit_id"] == Path(name).stem)
         if name.startswith("kits/"):
             return reader.CAMPAIGN+"/"+name
         return name
@@ -3153,6 +3206,7 @@ def unbound_stage(test, look):
 
 
 def receipt_digest(test, look, mutation, member):
+    test.admissible_control(look)
     # Rebuild the receipt snapshot and every ledger hash around the mutation.
     # Another kit's genuine digest is a valid SHA; the issue agrees with it.
     seal = Book.seal
