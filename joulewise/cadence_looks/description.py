@@ -40,8 +40,10 @@ VALUE_FILES = ("support.json", "power_trace.csv", "dc_points.csv")
 LOCAL = ZoneInfo("America/Los_Angeles")
 SHA = re.compile(r"[0-9a-f]{64}")
 OID = re.compile(r"[0-9a-f]{40}")
+INDEX_PIN = re.compile(r"(?:[0-9a-f]{9}|[0-9a-f]{40})")
 LEG = re.compile(r"L00[1-9]|L01[0-2]")
 STABILITY_KIT = re.compile(r"f2-stab-[0-9]{2}")
+STABILITY_INDEX_SCHEMA = "joulewise.f2_stab_kit_index.v1"
 BASE_STABILITY_KITS = frozenset(f"f2-stab-{number:02}" for number in range(1, 15))
 POSITION_KEY = re.compile(r"f2-(?:inst|stab)-[0-9]{2}/(?:L00[1-9]|L01[0-2])")
 DROP_WITNESSES = {"ended_without_member": "receipt", "queue_retired": "queue"}
@@ -464,16 +466,21 @@ def _mode_rule(kit):
 
 
 def _kit(snapshot, kit_id, expected, parallel=None, *, index_row=None):
-    path = _kit_path(snapshot, kit_id)
-    require(snapshot.hashes[path] == expected, "wrong kit bytes")
-    if index_row is None:
-        kit = snapshot.source(path)
-    else:
-        require(index_row["path"] == path, "wrong kit index path binding")
-        kit = snapshot.doc(path)
-        require(kit["frozen"]["commit"] == index_row["runner_pin"], "wrong kit index runner pin")
-    require(kit["campaign_id"] == kit_id and token(kit["frozen"]["commit"], OID),
-            "wrong kit identity")
+    path = index_row["path"] if index_row is not None else _kit_path(snapshot, kit_id)
+    require(snapshot.hashes.get(path) == expected, "wrong kit bytes")
+    load = snapshot.doc if index_row is not None else snapshot.source
+    kit = load(path)
+    pin = kit["frozen"]["commit"]
+    require(kit["campaign_id"] == kit_id and token(pin, OID), "wrong kit identity")
+    if index_row is not None:
+        # Resolve the recorded abbreviation against the authenticated kit.
+        # Operational receipts still have to assert that same full pin.
+        require(pin.startswith(index_row["runner_pin"]), "wrong kit index runner pin")
+        if not snapshot.native:
+            projection = _kit_path(snapshot, kit_id)
+            if projection in snapshot.hashes:
+                require(snapshot.hashes[projection] == expected, "projected kit disagrees with the index")
+                snapshot.read(projection)
     positions = _positions(kit)
     require([row[0] for row in positions] == [f"L{i:03}" for i in range(1, 13)]
             and all(row[1] in (256, 2000, 19458) and row[3:] == ("q600", "own")
@@ -488,17 +495,28 @@ def _kit(snapshot, kit_id, expected, parallel=None, *, index_row=None):
     return kit
 
 
-def _stability_index(rows):
-    require(type(rows) is list, "invalid stability kit index")
+def _stability_index(document):
+    require(type(document) is dict and document.keys() == {"schema", "ruling", "base_kits", "rows"}
+            and document["schema"] == STABILITY_INDEX_SCHEMA
+            and type(document["ruling"]) is str and bool(document["ruling"])
+            and type(document["rows"]) is list, "invalid stability kit index")
+    base = document["base_kits"]
+    require(type(base) is list and len(base) == len(BASE_STABILITY_KITS)
+            and all(token(kit_id, STABILITY_KIT) for kit_id in base)
+            and set(base) == BASE_STABILITY_KITS, "wrong base stability population")
     index = {}
-    for row in rows:
+    paths = set()
+    for row in document["rows"]:
         require(type(row) is dict and row.keys() == {"kit_id", "sha256", "runner_pin", "path"},
                 "invalid stability kit index row")
         kit_id = row["kit_id"]
         require(token(kit_id, STABILITY_KIT) and int(kit_id[-2:]) > 0 and kit_id not in index
-                and token(row["sha256"], SHA) and token(row["runner_pin"], OID),
+                and token(row["sha256"], SHA) and token(row["runner_pin"], INDEX_PIN),
                 "invalid or repeated stability kit index row")
-        relative(row["path"])
+        path = public_path(relative(row["path"]))
+        require(path.is_relative_to(f"{CAMPAIGN}/f2-stab") and path not in paths,
+                "invalid or repeated stability kit index path")
+        paths.add(path)
         index[kit_id] = row
     return index
 
@@ -515,7 +533,8 @@ def _admitted_kits(snapshot):
     base = None if snapshot.instrument else _kit(
         snapshot, "f2-inst-01", commitments[IDS[0]]["kit_sha256_by_id"]["f2-inst-01"])
     if snapshot.look != IDS[2]:
-        return {kit_id: _kit(snapshot, kit_id, bound, base) for kit_id, bound in required.items()}
+        kits = {kit_id: _kit(snapshot, kit_id, bound, base) for kit_id, bound in required.items()}
+        return kits, required
 
     index = _stability_index(snapshot.doc(snapshot.manifest["kit_index_path"]))
     require(BASE_STABILITY_KITS <= index.keys() and
@@ -523,8 +542,9 @@ def _admitted_kits(snapshot):
             "stability index omits or changes a base kit")
     # A closed receipt independently binds the kit and runner that actually
     # ran. The authoritative index may have been committed after collection.
-    return {kit_id: _kit(snapshot, kit_id, row["sha256"], base, index_row=row)
+    kits = {kit_id: _kit(snapshot, kit_id, row["sha256"], base, index_row=row)
             for kit_id, row in index.items()}
+    return kits, {kit_id: row["sha256"] for kit_id, row in index.items()}
 
 
 def _eligibility_reasons(op, receipt, cap):
@@ -620,7 +640,7 @@ def _drop_authorizations(snapshot):
     return statements
 
 
-def _drop_position(snapshot, row, kit_id, kit):
+def _drop_position(snapshot, row, kit_id, kit, kit_sha):
     require(row.keys() == {"key", "drop"}, "invalid terminal drop roster row")
     # The decision may follow collection. Its independent witness must
     # already belong to the closed operational projection.
@@ -643,7 +663,7 @@ def _drop_position(snapshot, row, kit_id, kit):
     if role == "receipt":
         members = witness.get("member_legs")
         require(witness["closed"] is True and witness["kit_id"] == kit_id
-                and witness["kit_sha256"] == snapshot.hashes[_kit_path(snapshot, kit_id)]
+                and witness["kit_sha256"] == kit_sha
                 and type(witness["span_id"]) is str and bool(witness["span_id"])
                 and type(members) is list and all(token(member, LEG) for member in members)
                 and len(set(members)) == len(members)
@@ -669,7 +689,7 @@ def _drop_position(snapshot, row, kit_id, kit):
     return {"disposition": disposition, "loaded_flag": None, "drop": row["drop"]}, empty_close
 
 
-def _token_row(snapshot, references, kit, plan, closes):
+def _token_row(snapshot, references, kit, kit_sha, plan, closes):
     require(references.keys() == {"key", "issue", "receipt", "leg_record", *DESK_RECORDS},
             "invalid position source inventory")
     issue = snapshot.source(references["issue"])
@@ -677,7 +697,6 @@ def _token_row(snapshot, references, kit, plan, closes):
     op = snapshot.source(references["leg_record"], parse_float=Decimal)
     key = references["key"]
     kit_id, leg_id = key.split("/")
-    kit_sha = snapshot.hashes[_kit_path(snapshot, kit_id)]
     span_id, attempt, roster = receipt["span_id"], receipt["attempt"], receipt["legs"]
     require(receipt["closed"] is True and receipt["kit_id"] == kit_id
             and receipt["kit_sha256"] == kit_sha and type(span_id) is str and bool(span_id)
@@ -846,7 +865,7 @@ def census(snapshot):
     rows = snapshot.roster["rows"]
     require(type(rows) is list and all(type(row["key"]) is str for row in rows),
             "malformed commitment roster")
-    kits = _admitted_kits(snapshot)
+    kits, kit_hashes = _admitted_kits(snapshot)
     closes = {} if snapshot.instrument else snapshot.source(AUTHORITY["host_closes"], parse_float=Decimal)
     positions, details, table = {}, {}, []
     counts_by_kit = defaultdict(Counter)
@@ -859,14 +878,15 @@ def census(snapshot):
         kit_id, leg_id = key.split("/")
         require(kit_id in kits and token(leg_id, LEG), "unregistered position")
         kit = kits[kit_id]
+        kit_sha = kit_hashes[kit_id]
         plan = kit["legs"][int(leg_id[1:]) - 1]
         if "drop" in row:
-            position, empty_close = _drop_position(snapshot, row, kit_id, kit)
+            position, empty_close = _drop_position(snapshot, row, kit_id, kit, kit_sha)
             if empty_close is not None:
                 path, close = empty_close
                 empty_closes[path] = close
         else:
-            position, token_row, detail = _token_row(snapshot, row, kit, plan, closes)
+            position, token_row, detail = _token_row(snapshot, row, kit, kit_sha, plan, closes)
             table.append(token_row)
             details[key] = detail
             identity = (kit_id, position["span_id"])

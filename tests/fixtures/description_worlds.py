@@ -10,21 +10,7 @@ class DescriptionWorld(frozen.World):
     def named(self, name, rel, doc):
         if name == "host_chain":
             self.project_drops()
-        elif name == "kit_index" and self.look == frozen.IDS[2]:
-            doc = self.project_index(doc)
         super().named(name, rel, doc)
-
-    def project_index(self, rows):
-        digests = {row["kit_id"]: row["sha256"] for row in rows}
-        for number in range(1, 15):
-            key = f"f2-stab-{number:02}"
-            digests[key] = frozen.sha((self.repo / "kits" / f"{key}.json").read_bytes())
-        index = []
-        for kit_id, digest in sorted(digests.items()):
-            path = f"kits/{kit_id}.json"
-            pin = frozen.read(self.repo / path)["frozen"]["commit"]
-            index.append({"kit_id": kit_id, "sha256": digest, "runner_pin": pin, "path": path})
-        return index
 
     def full_roster_prints(self, prints):
         if self.look == frozen.IDS[2]:

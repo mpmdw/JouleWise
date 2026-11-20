@@ -2,6 +2,7 @@
 
 from decimal import Decimal
 from itertools import product
+import json
 from pathlib import Path
 import subprocess
 from tempfile import TemporaryDirectory
@@ -492,10 +493,12 @@ class LaterStabilityPopulationTests(unittest.TestCase):
             index = fixture.read(world.repo / index_path)
             self.assertEqual(census["source_snapshot"]["kit_index_sha256"],
                              fixture.sha((world.repo / index_path).read_bytes()))
-            self.assertEqual({row["kit_id"] for row in index}, {f"f2-stab-{i:02}" for i in range(1, 16)})
+            self.assertEqual((world.repo / index_path).read_bytes(), fixture.committed_index())
+            self.assertEqual({row["kit_id"] for row in index["rows"]}, {f"f2-stab-{i:02}" for i in range(1, 17)})
+            base_rows = [row for row in index["rows"] if row["kit_id"] in index["base_kits"]]
             expected = {}
-            for name, included in (("all", index), ("base14", index[:-1])):
-                by_pin = {row["runner_pin"]: [] for row in included}
+            for name, included in (("all", index["rows"]), ("base14", base_rows)):
+                by_pin = {fixture.read(world.repo / row["path"])["frozen"]["commit"]: [] for row in included}
                 kit_ids = {row["kit_id"] for row in included}
                 dates = set()
                 for key in world.good:
@@ -515,13 +518,23 @@ class LaterStabilityPopulationTests(unittest.TestCase):
 
     def test_later_index_refuses_missing_rows_and_mismatched_receipts(self):
         class BadIndex(DescriptionWorld):
-            def project_index(self, rows):
-                result = super().project_index(rows)
-                missing = {"base": "f2-stab-14", "unindexed": "f2-stab-15",
-                           "hidden": "f2-stab-15"}.get(self.defect)
-                return [row for row in result if row["kit_id"] != missing]
-
             def named(self, name, rel, doc):
+                if name == "kit_index":
+                    index = json.loads(doc)
+                    missing = {"base": "f2-stab-14", "unindexed": "f2-stab-15",
+                               "hidden": "f2-stab-15"}.get(self.defect)
+                    index["rows"] = [row for row in index["rows"] if row["kit_id"] != missing]
+                    if self.defect == "duplicate":
+                        index["rows"].append(index["rows"][0].copy())
+                    if self.defect == "schema":
+                        index["schema"] += ".unknown"
+                    if self.defect == "base_kits":
+                        index["base_kits"][-1] = "f2-stab-15"
+                    if self.defect == "index_pin":
+                        index["rows"][0]["runner_pin"] = "6e9d42f1d"
+                    if self.defect == "path":
+                        index["rows"][0]["path"] = "kits/f2-stab-01.json"
+                    doc = fixture.wire(index)
                 if name == "roster" and self.defect == "hidden":
                     doc = dict(doc, rows=[row for row in doc["rows"] if not row["key"].startswith("f2-stab-15/")])
                 super().named(name, rel, doc)
@@ -538,7 +551,8 @@ class LaterStabilityPopulationTests(unittest.TestCase):
                     fixture.put(self.repo / refs["issue"], dict(issue, **{field: changed}))
                 return refs
 
-        for defect in ("base", "unindexed", "hidden", "digest", "pin"):
+        for defect in ("base", "unindexed", "hidden", "digest", "pin",
+                       "duplicate", "schema", "base_kits", "index_pin", "path"):
             with self.subTest(defect=defect), TemporaryDirectory() as directory:
                 BadIndex.defect = defect
                 world = BadIndex(Path(directory).resolve() / "world", fixture.IDS[2], "late_index")

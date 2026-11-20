@@ -13,7 +13,7 @@ from tests import test_desc_looks_acceptance as fixture
 class RegisteredRecoveryGridTests(unittest.TestCase):
     def _replay(self, marker):
         with TemporaryDirectory() as directory:
-            world = fixture.TerminalInstrumentWorld(Path(directory).resolve() / "world", fixture.IDS[0])
+            world = fixture.World(Path(directory).resolve() / "world", fixture.IDS[0])
             key = "f2-inst-03/L002"
             folder = world.copy / key
             support = fixture.read(folder / "support.json")

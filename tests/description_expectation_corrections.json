@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "suite_manifest_sha256": "f00fce6b83052fb34f039d4288b21550bcf53d73a9babdbef8e48b0d254346d8",
+  "authority": "RL-190 §1.3",
+  "source": "https://github.com/mpmdw/JouleWise/blob/d6016f406496ac4d0c82f70811da2a5bab82ea35/docs/research-audits/2026-11-10-fable/RESEARCH-LEAD-DECISIONS.md#L22340-L22356",
+  "expect_admit": {
+    "test_desc_looks_acceptance.Checks.test_lm_stab_02_refuse_same_index": "same_index",
+    "test_desc_looks_acceptance.Checks.test_lm_stab_02_refuse_late_index": "late_index"
+  }
+}
