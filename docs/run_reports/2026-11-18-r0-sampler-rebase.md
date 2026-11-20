@@ -252,4 +252,13 @@ The background guard uses the accounting-read midpoints for window selection, en
 
 Frozen v3 remains byte-identical and passed 7,683 cases. The separately executed v2 archive matched SHA-256 `0752ccc152ec4c93b710337be6d9ff6e5de7f50c6997ff6db3d046391d91fcca` and passed 3,094 cases. All 116 focused tests, 13 publication audit tests, and the foreground midpoint check passed. Exact-candidate CI is tracked on draft PR #824.
 
-**NEEDS_SPEC** — The audit checklist expects the v2 hash at the repository path. The lead explicitly installed v3 at that path with hash `afd360c29d390f7d39400e1363a25add5c13ace71bca55c80d11ec0ceb4e5009`. Confirm the expected repository hash for the next audit and use the archived v2 run as separate evidence.
+## Resolved audit checklist for PR #824
+
+The lead superseded the v2 checksum requirement at `tests/align/test_r0_vs_l3_differential.py`. The next audit uses frozen v3 at that path and runs the archived v2 suite separately against the same candidate commit.
+
+| Audit input | Byte source | Required SHA-256 | Required passes |
+| --- | --- | --- | ---: |
+| Frozen v3 | `tests/align/test_r0_vs_l3_differential.py` at the candidate | `afd360c29d390f7d39400e1363a25add5c13ace71bca55c80d11ec0ceb4e5009` | 7,683 |
+| Archived v2 | `tests/align/test_r0_vs_l3_differential.py` at `5b038d8e7401c1f4eddb8bb2c3147fc8bddafd0d` | `0752ccc152ec4c93b710337be6d9ff6e5de7f50c6997ff6db3d046391d91fcca` | 3,094 |
+
+Record both digests and completed case counts against the exact PR head in the draft evidence. A digest mismatch, incomplete run, or failed case blocks the audit. The v2-at-that-path finding in the previous audit is superseded. NEEDS_SPEC has no entries.
