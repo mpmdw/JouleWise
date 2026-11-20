@@ -221,3 +221,21 @@ The November 19 resume found a clean worktree and draft PR #824 at `53aba150b8dd
 The CPU census retains the normalized match and the admitted case-insensitive substring search on the original command or arguments. The original arguments preserve path components that basename normalization removes. The regression covers every admitted contaminant pattern in both fields, the exact `corespotlightd` report, and the threshold and neutral-process controls. All 19 above-threshold cases failed before the repair and passed afterward. Both controls published. The auditor replay recorded the 0–30 s flag on admitted R0-L3 and on the repaired R0, which exited 2 without publishing.
 
 Frozen v2 remains byte-identical and passed all 3,094 scenarios with zero failures. The 115 focused tests, 12 publication audit tests, and 46 synthetic contention tests passed. Three live contention cases were skipped. The current report has no additional MED or LOW findings. Exact-candidate CI and the two-family delta review are tracked on draft PR #824. NEEDS_SPEC has no entries.
+
+## Frozen differential v3
+
+The freeze commit `4a0dabe4d` copied the supplied suite byte for byte. Its SHA-256 is `afd360c29d390f7d39400e1363a25add5c13ace71bca55c80d11ec0ceb4e5009`. The supplied baseline at `08a2a1d991ce327fe2060ab0d61fdbcc62b91373` lost admitted R0-L3 flags in 3,816 cases. The November 19 resume retained the freeze commit and the partial timestamp changes.
+
+Repair `411e60e1c489bee3d7d46bc5da745979f3785321` gives the admitted endpoint comparison the same paired-read timestamps and midpoint spacing as R0-L3. Foreground admissions choose the newest eligible opening on that time base and use the shared contention calculation with its prior-interval evidence for exits and regressed counters. R0 retains the accounting brackets and intermediate readings for v2's additional lifetime evidence. Check and inventory modes drain the sampler and evaluate the terminal admission even when an earlier flag already bars publication. Commit `c9cecb3f1` places the optional host tick read before the process sample clock starts.
+
+The fixed resident replay saw 1.52 CPU-seconds over the admitted 30.2-second interval. R0 recorded that flag, exited 2 and withheld publication. The earlier `corespotlightd` replay also retained its admitted flag and withheld publication.
+
+| Frozen regression family | Cases | Baseline failures | Candidate failures |
+| --- | ---: | ---: | ---: |
+| Preserved v2 cases | 3,094 | 0 | 0 |
+| Rate denominator and time base | 4,219 | 3,605 | 0 |
+| Endpoint and worker histories | 368 | 210 | 0 |
+| Fixed audit replays | 2 | 1 | 0 |
+| Total | 7,683 | 3,816 | 0 |
+
+All 116 focused tests and 12 publication audit tests passed. They include `test_args_ps_time_is_included_in_the_admitted_midpoint`, `test_host_probe_time_precedes_the_admitted_cpu_sample`, the guard's exit and regression cases, and both terminal-admission checks with an earlier flag. The previous candidate's shard 5 repeated `test_every_refusal_site_is_listed_with_its_exact_count`. Exact-candidate CI and the two-family delta review are tracked on draft PR #824. NEEDS_SPEC has no entries.

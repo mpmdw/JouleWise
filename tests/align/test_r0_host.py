@@ -2930,7 +2930,8 @@ class R0QuietIntervalTest(unittest.TestCase):
             clock.now += 2
             return [[0, 0, 100, 0]]
 
-        guard = QuietGuard([], run=self.runner, clock=clock, host_reader=read_host)
+        guard = QuietGuard([], run=self.runner, clock=clock, host_reader=read_host,
+                           wall_clock_ns=lambda: round(clock() * 1e9))
         snapshot = guard._cpu_snapshot()
         self.assertEqual(snapshot.host, [[0, 0, 100, 0]])
         self.assertEqual(snapshot.admitted_midpoint_ns, 2_000_000_000)
