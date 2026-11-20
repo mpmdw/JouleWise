@@ -316,7 +316,8 @@ def soak_child(output, inputs, parts="AB"):
     gated members follow the soak with no blackout check of their own (PR #777 row-2
     finding 1). Parts A and B keep the soak-only check.
     """
-    reg.verify_r1_executed_sources(ROOT, {"executed_commit": r1.executed_commit(ROOT)})
+    revision = r1.executed_commit(ROOT)
+    reg.verify_r1_executed_sources(ROOT, {"executed_commit": revision})
     output = Path(output)
     output.mkdir(parents=True, exist_ok=False)
     span_s = soak_seconds() + (launcher.r1_part_c_cap_s() if parts == "C" else 0.0)
@@ -324,29 +325,60 @@ def soak_child(output, inputs, parts="AB"):
     def overlaps_batch(_delay):
         raise ValueError(f"{what} ({span_s:.0f} s) would overlap the {r1.os_batch_window_text()} local OS batch "
                          "window (ruling 8; RL-149 section 2.9 item 4)")
-    r1.wait_outside_os_batch(span_s, sleep=overlaps_batch)
-    started = time.time_ns()
-    result = r1._invoke(r1.runtime_argv_from_inputs(inputs), "idle", output / "idle_soak", soak_seconds(),
-                        quiet=True, contract_key="idle_soak")
-    row = {"name": "idle_soak", "class": "light", "started_ns": started, "ended_ns": time.time_ns(),
-           "attempt": 0, "output_dir": str(output / "idle_soak"), "result": result}
-    row["os_load"] = r1.os_load_verdict("idle_soak", result, wall_s=(row["ended_ns"] - started) / 1e9)
-    row["soak_detrended"] = r1.soak_detrended(result.get("sensor_series_c"), result.get("sensor_series_t_s"),
-                                              result.get("sensor_series_end_t_s"))
-    (output / "soak_row.json").write_text(json.dumps(row, indent=2, sort_keys=True) + "\n")
-    if not all(v["settled"] for v in row["soak_detrended"].values()):
-        raise ValueError("idle soak has unresolved slope")
-    if row["os_load"]["redo"]:
-        raise ValueError("idle soak: sustained CPU load (the night would redo it; the smoke does not)")
-    return r1.write_soak_reference(output, row)
+    started = None
+
+    def check_start(_label=None):
+        nonlocal started
+        r1.wait_outside_os_batch(span_s, sleep=overlaps_batch)
+        started = time.time_ns()
+
+    ledger = None
+    invoke, extra = r1._invoke, {}
+    if parts == "C":
+        from scripts import align_r1_part_c as part_c
+
+        runtime = r1.runtime_argv_from_inputs(inputs)
+        ledger = part_c.EvidenceLedger(output, revision, r1.runtime_config_path(runtime), mode="soak")
+        invoke, extra = part_c.judged_invoke, {"ledger": ledger, "watch": SimpleNamespace(check=check_start)}
+    else:
+        check_start()
+        runtime = r1.runtime_argv_from_inputs(inputs)
+    try:
+        result = invoke(runtime, "idle", output / "idle_soak", soak_seconds(),
+                        quiet=True, contract_key="idle_soak", **extra)
+        row = {"name": "idle_soak", "class": "light", "started_ns": started, "ended_ns": time.time_ns(),
+               "attempt": 0, "output_dir": str(output / "idle_soak"), "result": result}
+        row["os_load"] = r1.os_load_verdict("idle_soak", result, wall_s=(row["ended_ns"] - started) / 1e9)
+        row["soak_detrended"] = r1.soak_detrended(result.get("sensor_series_c"), result.get("sensor_series_t_s"),
+                                                  result.get("sensor_series_end_t_s"))
+        (output / "soak_row.json").write_text(json.dumps(row, indent=2, sort_keys=True) + "\n")
+        if not all(v["settled"] for v in row["soak_detrended"].values()):
+            raise ValueError("idle soak has unresolved slope")
+        if row["os_load"]["redo"]:
+            raise ValueError("idle soak: sustained CPU load (the night would redo it; the smoke does not)")
+        reference = r1.write_soak_reference(output, row)
+    except BaseException:
+        if ledger is not None:
+            ledger.finish_soak("refused")
+        raise
+    if ledger is not None:
+        ledger.finish_soak("accepted")
+    return reference
 
 
 def part_argv(args, which):
     if which == "soak":
-        return [sys.executable, "-B", str(ROOT / "scripts/run_align_r1_smoke.py"), "--soak-child",
+        argv = [sys.executable, "-B", str(ROOT / "scripts/run_align_r1_smoke.py"), "--soak-child",
                 "--output", str(args.output / "soak"), "--parts", getattr(args, "parts", "AB")]
-    return [sys.executable, "-B", str(ROOT / "scripts/align_r1_followup_kit.py"), "smoke", "--part", which,
-            "--output", str(args.output / ("part-" + which.lower())), "--soak-reference", str(args.soak_reference)]
+    else:
+        argv = [sys.executable, "-B", str(ROOT / "scripts/align_r1_followup_kit.py"), "smoke", "--part", which,
+                "--output", str(args.output / ("part-" + which.lower())), "--soak-reference", str(args.soak_reference)]
+    if which == "C" or (which == "soak" and getattr(args, "parts", None) == "C"):
+        if getattr(args, "inputs", None) is not None:
+            argv += ["--inputs", str(args.inputs)]
+        if which == "C" and getattr(args, "soak_ledger_sha256", None) is not None:
+            argv += ["--soak-ledger-sha256", args.soak_ledger_sha256]
+    return argv
 
 
 class PartDeadline(night._WindowDeadline):
@@ -458,6 +490,7 @@ def run(args, *, feeds=None):
         raise SystemExit(128 + signum)
 
     handlers = {s: signal.signal(s, interrupted) for s in SIGNALS}
+    soak_result = None
     try:
         step("deadline", lambda: {"remaining_s": work_remaining(args)})
         step("night_agents", night_agents)
@@ -497,14 +530,38 @@ def run(args, *, feeds=None):
                 args.soak_reference = path
                 record["soak_reference"] = str(path)
                 with path.open("rb") as handle:
-                    return {**result, "soak_reference_sha256": hashlib.file_digest(handle, "sha256").hexdigest()}
-            step("soak", run_soak)
+                    result = {**result, "soak_reference_sha256": hashlib.file_digest(handle, "sha256").hexdigest()}
+                if parts == "C":
+                    from scripts.align_r1_part_c_evidence import EvidenceFailure, LEDGER_NAME, digest, read_regular
+
+                    try:
+                        args.soak_ledger_sha256 = digest(read_regular(path.parent, LEDGER_NAME))
+                    except FileNotFoundError:
+                        raise EvidenceFailure("evidence_unverifiable", "idle", LEDGER_NAME) from None
+                    except (OSError, ValueError):
+                        raise EvidenceFailure("source_integrity", "idle", LEDGER_NAME) from None
+                    result["soak_ledger_sha256"] = args.soak_ledger_sha256
+                return result
+            soak_result = step("soak", run_soak)
         for which in parts:
             for feed in feeds:
                 if hasattr(feed, "before_part"):
                     step("before-part-" + which + "-" + feed.name, feed.before_part)
             def run_part():
-                result = part(args, which, feeds, on_start=lambda: record["parts"].__setitem__(which, True))
+                if which == "C":
+                    from scripts.align_r1_part_c_evidence import EvidenceFailure, verify_part_c_publication
+
+                    if soak_result is None:
+                        raise EvidenceFailure("verdict_binding", "attempt", "soak")
+                    result = part(args, which, feeds)
+                    if not isinstance(result, dict) or type(result.get("rc")) is not int:
+                        raise EvidenceFailure("verdict_binding", "attempt", "process_exit")
+                    if result["rc"]:
+                        return result
+                    verify_part_c_publication(args.output, soak_result.get("soak_ledger_sha256"),
+                                              soak_result.get("soak_reference_sha256"))
+                else:
+                    result = part(args, which, feeds, on_start=lambda: record["parts"].__setitem__(which, True))
                 record["parts"][which] = True
                 return result
             step("part-" + which, run_part)
@@ -569,7 +626,23 @@ def main(argv=None):
     parser.add_argument("--pmset-bin", default="/usr/bin/pmset")
     args = parser.parse_args(argv)
     if args.soak_child:
-        soak_child(args.output, args.inputs, args.parts)
+        if args.parts != "C":
+            soak_child(args.output, args.inputs, args.parts)
+            return 0
+        from scripts import align_r1_part_c as part_c
+
+        try:
+            soak_child(args.output, args.inputs, args.parts)
+        except part_c.EvidenceFailure as error:
+            print(json.dumps(error.finding(), sort_keys=True))
+            return 2
+        except part_c.RuntimeEvidenceError as error:
+            print(json.dumps(part_c.EvidenceFailure(error.reason, "idle", "stdout", field=error.field).finding(),
+                             sort_keys=True))
+            return 2
+        except Exception:
+            print(json.dumps(part_c.EvidenceFailure("fresh_soak", "idle", "soak_row.json").finding(), sort_keys=True))
+            return 2
         return 0
     if args.deadline is None or not math.isfinite(args.deadline):
         parser.error("deadline must be finite")
