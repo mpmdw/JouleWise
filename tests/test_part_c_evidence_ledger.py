@@ -1878,3 +1878,33 @@ class FrozenDifferentialNamedCasesTests(unittest.TestCase):
         self.assertEqual(proc.returncode, 0, output[-3000:])
         self.assertIn("descriptor rows PASS (4/4)", output)
         self.assertNotRegex(output, r"(?m)^(FALSE_PASS|WRONG_VERDICT|HARNESS_ERROR)")
+
+    PROBE = Path(__file__).resolve().parent / "align" / "partc_audit_probe.py"
+    EXPECTED = {"control": "pass -", "raw-runner-fault": "other_failure workload_replay",
+                "raw-turn-budget-flag": "other_failure workload_replay",
+                "last-turn-unclosed": "other_failure workload_replay",
+                "other-run-id": "other_failure execution_config", "duplicate-predecessor": "other_failure sequence",
+                "predecessor-timeout": "other_failure gate_cardinality",
+                "extra-stop-flag": "other_failure flag_source",
+                "gate-before-entry": "other_failure gate_journal_disagreement",
+                "finalized-after-close": "other_failure member_order"}
+
+    def test_audit_two_reproductions_are_each_refused_for_their_own_reason(self):
+        """Audit 2's nine damaged attempts through the synthetic launcher, and the clean control that passes."""
+        import os
+        import subprocess
+
+        root = Path(__file__).resolve().parents[1]
+        if not self.PROBE.is_file() or any(
+                subprocess.run(["git", "-C", str(root), "cat-file", "-e", pin + "^{commit}"],
+                               capture_output=True).returncode for pin in self.PINS):
+            self.skipTest("the pinned R1 commits are not in this object database")
+        with TemporaryDirectory() as tmp:
+            proc = subprocess.run([sys.executable, "-IB", str(self.PROBE)], cwd=tmp, capture_output=True, text=True,
+                                  env={**os.environ, "JW_PARTC_REPO": str(root), "TMPDIR": tmp,
+                                       "PYTHONDONTWRITEBYTECODE": "1"})
+        output = proc.stdout + proc.stderr
+        seen = {line.split()[1]: " ".join(line.split()[2:]) for line in proc.stdout.splitlines()
+                if line.startswith("RESULT ")}
+        self.assertEqual(seen, self.EXPECTED, output[-3000:])
+        self.assertEqual(proc.returncode, 0, output[-3000:])
