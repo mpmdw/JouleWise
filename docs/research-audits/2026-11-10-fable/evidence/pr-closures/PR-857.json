@@ -1,0 +1,448 @@
+{
+  "additional_checks": [
+    {
+      "check_run_id": 135237377310,
+      "completed_at": "2026-11-19T00:32:54Z",
+      "conclusion": "success",
+      "job_url": "https://github.com/mpmdw/JouleWise/actions/runs/44426641017/job/135237377310",
+      "name": "align-templates",
+      "required_by_main_protection": false,
+      "required_on_pr_base": false,
+      "run_attempt": 1,
+      "run_id": 44426641017,
+      "run_url": "https://github.com/mpmdw/JouleWise/actions/runs/44426641017",
+      "started_at": "2026-11-19T00:32:29Z"
+    },
+    {
+      "check_run_id": 135233086405,
+      "completed_at": "2026-11-19T00:16:50Z",
+      "conclusion": "success",
+      "job_url": "https://github.com/mpmdw/JouleWise/actions/runs/44426641017/job/135233086405",
+      "name": "build",
+      "required_by_main_protection": false,
+      "required_on_pr_base": false,
+      "run_attempt": 1,
+      "run_id": 44426641017,
+      "run_url": "https://github.com/mpmdw/JouleWise/actions/runs/44426641017",
+      "started_at": "2026-11-19T00:16:28Z"
+    },
+    {
+      "check_run_id": 135233086185,
+      "completed_at": "2026-11-19T00:18:07Z",
+      "conclusion": "success",
+      "job_url": "https://github.com/mpmdw/JouleWise/actions/runs/44426641017/job/135233086185",
+      "name": "changes",
+      "required_by_main_protection": false,
+      "required_on_pr_base": false,
+      "run_attempt": 1,
+      "run_id": 44426641017,
+      "run_url": "https://github.com/mpmdw/JouleWise/actions/runs/44426641017",
+      "started_at": "2026-11-19T00:17:41Z"
+    },
+    {
+      "check_run_id": 135236786479,
+      "completed_at": "2026-11-19T00:21:32Z",
+      "conclusion": "success",
+      "job_url": "https://github.com/mpmdw/JouleWise/actions/runs/44426641017/job/135236786479",
+      "name": "installed-wheel",
+      "required_by_main_protection": false,
+      "required_on_pr_base": false,
+      "run_attempt": 1,
+      "run_id": 44426641017,
+      "run_url": "https://github.com/mpmdw/JouleWise/actions/runs/44426641017",
+      "started_at": "2026-11-19T00:21:19Z"
+    }
+  ],
+  "base_ref": "refs/heads/ops/2026-11-11-w1-presign",
+  "base_sha": "b2e01464d6d4fbf2901ff4d4154df9455104a12a",
+  "checks_scope": "GitHub required-on-PR-base status and the repository's main protection contexts are recorded separately. Every observed check run at the exact PR head is included.",
+  "disposition": "The provisional B + Part C comparison is complete. PR #902 is the newer provisional comparison and uses a distinct tree.",
+  "draft_at_capture": true,
+  "head_ref": "refs/heads/integ/2026-11-18-w1-candidate-rehearsal-b-partc",
+  "head_sha": "9eda15deeeb70e6f2ee740a4646c07e8e54f00a7",
+  "line_2": null,
+  "open_prs_using_retained_commit_via_separate_ref": [],
+  "pr_number": 857,
+  "pr_url": "https://github.com/mpmdw/JouleWise/pull/857",
+  "recorded_at": "2026-11-20T11:47:21+00:00",
+  "related_evidence_urls": [],
+  "repository": "mpmdw/JouleWise",
+  "required_checks": [
+    {
+      "check_run_id": 135237377226,
+      "completed_at": "2026-11-19T00:39:00Z",
+      "conclusion": "success",
+      "job_url": "https://github.com/mpmdw/JouleWise/actions/runs/44426641017/job/135237377226",
+      "name": "calibration-exits-exclusive (3.13)",
+      "required_by_main_protection": true,
+      "required_on_pr_base": false,
+      "run_attempt": 1,
+      "run_id": 44426641017,
+      "run_url": "https://github.com/mpmdw/JouleWise/actions/runs/44426641017",
+      "started_at": "2026-11-19T00:24:12Z"
+    },
+    {
+      "check_run_id": 135237377219,
+      "completed_at": "2026-11-19T00:38:45Z",
+      "conclusion": "success",
+      "job_url": "https://github.com/mpmdw/JouleWise/actions/runs/44426641017/job/135237377219",
+      "name": "calibration-writer-crash-matrix-exclusive (3.13, 1)",
+      "required_by_main_protection": true,
+      "required_on_pr_base": false,
+      "run_attempt": 1,
+      "run_id": 44426641017,
+      "run_url": "https://github.com/mpmdw/JouleWise/actions/runs/44426641017",
+      "started_at": "2026-11-19T00:32:27Z"
+    },
+    {
+      "check_run_id": 135237377236,
+      "completed_at": "2026-11-19T00:28:23Z",
+      "conclusion": "success",
+      "job_url": "https://github.com/mpmdw/JouleWise/actions/runs/44426641017/job/135237377236",
+      "name": "calibration-writer-crash-matrix-exclusive (3.13, 2)",
+      "required_by_main_protection": true,
+      "required_on_pr_base": false,
+      "run_attempt": 1,
+      "run_id": 44426641017,
+      "run_url": "https://github.com/mpmdw/JouleWise/actions/runs/44426641017",
+      "started_at": "2026-11-19T00:24:49Z"
+    },
+    {
+      "check_run_id": 135233086361,
+      "completed_at": "2026-11-19T00:18:34Z",
+      "conclusion": "success",
+      "job_url": "https://github.com/mpmdw/JouleWise/actions/runs/44426641017/job/135233086361",
+      "name": "fences",
+      "required_by_main_protection": true,
+      "required_on_pr_base": false,
+      "run_attempt": 1,
+      "run_id": 44426641017,
+      "run_url": "https://github.com/mpmdw/JouleWise/actions/runs/44426641017",
+      "started_at": "2026-11-19T00:17:27Z"
+    },
+    {
+      "check_run_id": 135233094429,
+      "completed_at": "2026-11-19T00:09:02Z",
+      "conclusion": "skipped",
+      "job_url": "https://github.com/mpmdw/JouleWise/actions/runs/44426641114/job/135233094429",
+      "name": "gate-ledger",
+      "required_by_main_protection": true,
+      "required_on_pr_base": false,
+      "run_attempt": 1,
+      "run_id": 44426641114,
+      "run_url": "https://github.com/mpmdw/JouleWise/actions/runs/44426641114",
+      "started_at": "2026-11-19T00:09:02Z"
+    },
+    {
+      "check_run_id": 135233693986,
+      "completed_at": "2026-11-19T00:10:17Z",
+      "conclusion": "skipped",
+      "job_url": "https://github.com/mpmdw/JouleWise/actions/runs/44426819734/job/135233693986",
+      "name": "gate-ledger",
+      "required_by_main_protection": true,
+      "required_on_pr_base": false,
+      "run_attempt": 1,
+      "run_id": 44426819734,
+      "run_url": "https://github.com/mpmdw/JouleWise/actions/runs/44426819734",
+      "started_at": "2026-11-19T00:10:18Z"
+    },
+    {
+      "check_run_id": 135237377216,
+      "completed_at": "2026-11-19T00:37:16Z",
+      "conclusion": "success",
+      "job_url": "https://github.com/mpmdw/JouleWise/actions/runs/44426641017/job/135237377216",
+      "name": "quick",
+      "required_by_main_protection": true,
+      "required_on_pr_base": false,
+      "run_attempt": 1,
+      "run_id": 44426641017,
+      "run_url": "https://github.com/mpmdw/JouleWise/actions/runs/44426641017",
+      "started_at": "2026-11-19T00:31:44Z"
+    },
+    {
+      "check_run_id": 135237377458,
+      "completed_at": "2026-11-19T01:12:15Z",
+      "conclusion": "success",
+      "job_url": "https://github.com/mpmdw/JouleWise/actions/runs/44426641017/job/135237377458",
+      "name": "test (3.13, 1)",
+      "required_by_main_protection": true,
+      "required_on_pr_base": false,
+      "run_attempt": 1,
+      "run_id": 44426641017,
+      "run_url": "https://github.com/mpmdw/JouleWise/actions/runs/44426641017",
+      "started_at": "2026-11-19T00:38:47Z"
+    },
+    {
+      "check_run_id": 135237377527,
+      "completed_at": "2026-11-19T04:28:53Z",
+      "conclusion": "failure",
+      "failed_tests": [
+        {
+          "outcome": "fail",
+          "test": "align.test_partc_frozen_differential.FrozenPartCDifferential.test_frozen_differential"
+        }
+      ],
+      "job_url": "https://github.com/mpmdw/JouleWise/actions/runs/44426641017/job/135237377527",
+      "name": "test (3.13, 10)",
+      "required_by_main_protection": true,
+      "required_on_pr_base": false,
+      "run_attempt": 1,
+      "run_id": 44426641017,
+      "run_url": "https://github.com/mpmdw/JouleWise/actions/runs/44426641017",
+      "started_at": "2026-11-19T00:39:02Z"
+    },
+    {
+      "check_run_id": 135237377515,
+      "completed_at": "2026-11-19T01:28:49Z",
+      "conclusion": "success",
+      "job_url": "https://github.com/mpmdw/JouleWise/actions/runs/44426641017/job/135237377515",
+      "name": "test (3.13, 11)",
+      "required_by_main_protection": true,
+      "required_on_pr_base": false,
+      "run_attempt": 1,
+      "run_id": 44426641017,
+      "run_url": "https://github.com/mpmdw/JouleWise/actions/runs/44426641017",
+      "started_at": "2026-11-19T00:40:52Z"
+    },
+    {
+      "check_run_id": 135237377620,
+      "completed_at": "2026-11-19T01:17:09Z",
+      "conclusion": "failure",
+      "failed_tests": [
+        {
+          "outcome": "fail",
+          "test": "hazards.test_refusal_allowlist.RefusalAllowlistTests.test_every_refusal_site_is_listed_with_its_exact_count"
+        },
+        {
+          "outcome": "fail",
+          "test": "hazards.test_refusal_allowlist.RefusalAllowlistTests.test_the_scan_covers_every_module_the_hazard_path_imports"
+        }
+      ],
+      "job_url": "https://github.com/mpmdw/JouleWise/actions/runs/44426641017/job/135237377620",
+      "name": "test (3.13, 12)",
+      "required_by_main_protection": true,
+      "required_on_pr_base": false,
+      "run_attempt": 1,
+      "run_id": 44426641017,
+      "run_url": "https://github.com/mpmdw/JouleWise/actions/runs/44426641017",
+      "started_at": "2026-11-19T00:40:08Z"
+    },
+    {
+      "check_run_id": 135237377540,
+      "completed_at": "2026-11-19T01:12:27Z",
+      "conclusion": "failure",
+      "failed_tests": [
+        {
+          "outcome": "fail",
+          "test": "align.test_v4_executed_closure.ExecutedClosureBindingTests.test_every_executed_module_and_script_is_in_the_receipt_artifact_set"
+        }
+      ],
+      "job_url": "https://github.com/mpmdw/JouleWise/actions/runs/44426641017/job/135237377540",
+      "name": "test (3.13, 2)",
+      "required_by_main_protection": true,
+      "required_on_pr_base": false,
+      "run_attempt": 1,
+      "run_id": 44426641017,
+      "run_url": "https://github.com/mpmdw/JouleWise/actions/runs/44426641017",
+      "started_at": "2026-11-19T00:44:00Z"
+    },
+    {
+      "check_run_id": 135237377609,
+      "completed_at": "2026-11-19T01:42:16Z",
+      "conclusion": "success",
+      "job_url": "https://github.com/mpmdw/JouleWise/actions/runs/44426641017/job/135237377609",
+      "name": "test (3.13, 3)",
+      "required_by_main_protection": true,
+      "required_on_pr_base": false,
+      "run_attempt": 1,
+      "run_id": 44426641017,
+      "run_url": "https://github.com/mpmdw/JouleWise/actions/runs/44426641017",
+      "started_at": "2026-11-19T00:46:39Z"
+    },
+    {
+      "check_run_id": 135237377480,
+      "completed_at": "2026-11-19T01:13:00Z",
+      "conclusion": "success",
+      "job_url": "https://github.com/mpmdw/JouleWise/actions/runs/44426641017/job/135237377480",
+      "name": "test (3.13, 4)",
+      "required_by_main_protection": true,
+      "required_on_pr_base": false,
+      "run_attempt": 1,
+      "run_id": 44426641017,
+      "run_url": "https://github.com/mpmdw/JouleWise/actions/runs/44426641017",
+      "started_at": "2026-11-19T00:37:43Z"
+    },
+    {
+      "check_run_id": 135237377492,
+      "completed_at": "2026-11-19T01:07:19Z",
+      "conclusion": "success",
+      "job_url": "https://github.com/mpmdw/JouleWise/actions/runs/44426641017/job/135237377492",
+      "name": "test (3.13, 5)",
+      "required_by_main_protection": true,
+      "required_on_pr_base": false,
+      "run_attempt": 1,
+      "run_id": 44426641017,
+      "run_url": "https://github.com/mpmdw/JouleWise/actions/runs/44426641017",
+      "started_at": "2026-11-19T00:35:46Z"
+    },
+    {
+      "check_run_id": 135237377499,
+      "completed_at": "2026-11-19T01:29:53Z",
+      "conclusion": "success",
+      "job_url": "https://github.com/mpmdw/JouleWise/actions/runs/44426641017/job/135237377499",
+      "name": "test (3.13, 6)",
+      "required_by_main_protection": true,
+      "required_on_pr_base": false,
+      "run_attempt": 1,
+      "run_id": 44426641017,
+      "run_url": "https://github.com/mpmdw/JouleWise/actions/runs/44426641017",
+      "started_at": "2026-11-19T00:32:56Z"
+    },
+    {
+      "check_run_id": 135237377636,
+      "completed_at": "2026-11-19T01:49:30Z",
+      "conclusion": "success",
+      "job_url": "https://github.com/mpmdw/JouleWise/actions/runs/44426641017/job/135237377636",
+      "name": "test (3.13, 7)",
+      "required_by_main_protection": true,
+      "required_on_pr_base": false,
+      "run_attempt": 1,
+      "run_id": 44426641017,
+      "run_url": "https://github.com/mpmdw/JouleWise/actions/runs/44426641017",
+      "started_at": "2026-11-19T00:45:29Z"
+    },
+    {
+      "check_run_id": 135237377789,
+      "completed_at": "2026-11-19T01:23:50Z",
+      "conclusion": "success",
+      "job_url": "https://github.com/mpmdw/JouleWise/actions/runs/44426641017/job/135237377789",
+      "name": "test (3.13, 8)",
+      "required_by_main_protection": true,
+      "required_on_pr_base": false,
+      "run_attempt": 1,
+      "run_id": 44426641017,
+      "run_url": "https://github.com/mpmdw/JouleWise/actions/runs/44426641017",
+      "started_at": "2026-11-19T00:49:42Z"
+    },
+    {
+      "check_run_id": 135237377567,
+      "completed_at": "2026-11-19T01:24:39Z",
+      "conclusion": "success",
+      "job_url": "https://github.com/mpmdw/JouleWise/actions/runs/44426641017/job/135237377567",
+      "name": "test (3.13, 9)",
+      "required_by_main_protection": true,
+      "required_on_pr_base": false,
+      "run_attempt": 1,
+      "run_id": 44426641017,
+      "run_url": "https://github.com/mpmdw/JouleWise/actions/runs/44426641017",
+      "started_at": "2026-11-19T00:44:16Z"
+    }
+  ],
+  "retained_refs": [
+    {
+      "observed_tip_sha": "9eda15deeeb70e6f2ee740a4646c07e8e54f00a7",
+      "reachable_commit_shas": [
+        "9eda15deeeb70e6f2ee740a4646c07e8e54f00a7"
+      ],
+      "ref": "refs/heads/integ/2026-11-18-w1-candidate-rehearsal-b-partc"
+    },
+    {
+      "observed_tip_sha": "3615c68cfb6cc84c9f63266bfa30898ca0ba298d",
+      "reachable_commit_shas": [
+        "3615c68cfb6cc84c9f63266bfa30898ca0ba298d"
+      ],
+      "ref": "refs/heads/integ/2026-11-20-w1-candidate-rehearsal-c-partc"
+    },
+    {
+      "observed_tip_sha": "b2e01464d6d4fbf2901ff4d4154df9455104a12a",
+      "reachable_commit_shas": [
+        "b2e01464d6d4fbf2901ff4d4154df9455104a12a"
+      ],
+      "ref": "refs/heads/ops/2026-11-11-w1-presign"
+    }
+  ],
+  "review_thread_comment_urls": [],
+  "review_urls": [],
+  "run_ids": [
+    44426641017,
+    44426641114,
+    44426819734
+  ],
+  "runs": [
+    {
+      "artifacts": [
+        {
+          "digest": "sha256:7a0bafa601dd565155dafc833bd183cf7df2242cb5f23eb3b8be5ac8157f253f",
+          "expired": false,
+          "expires_at": "2027-02-17T00:09:01Z",
+          "id": 14484453847,
+          "name": "python-distributions",
+          "size_in_bytes": 8476220
+        }
+      ],
+      "check_suite_id": 120263091141,
+      "conclusion": "failure",
+      "created_at": "2026-11-19T00:09:01Z",
+      "event": "pull_request",
+      "head_branch": "integ/2026-11-18-w1-candidate-rehearsal-b-partc",
+      "head_sha": "9eda15deeeb70e6f2ee740a4646c07e8e54f00a7",
+      "html_url": "https://github.com/mpmdw/JouleWise/actions/runs/44426641017",
+      "id": 44426641017,
+      "name": "ci",
+      "path": ".github/workflows/ci.yml",
+      "run_attempt": 1,
+      "run_number": 5325,
+      "run_started_at": "2026-11-19T00:09:01Z",
+      "status": "completed",
+      "updated_at": "2026-11-19T04:28:54Z",
+      "workflow_id": 292525771
+    },
+    {
+      "artifacts": [],
+      "check_suite_id": 120263091374,
+      "conclusion": "skipped",
+      "created_at": "2026-11-19T00:09:01Z",
+      "event": "pull_request",
+      "head_branch": "integ/2026-11-18-w1-candidate-rehearsal-b-partc",
+      "head_sha": "9eda15deeeb70e6f2ee740a4646c07e8e54f00a7",
+      "html_url": "https://github.com/mpmdw/JouleWise/actions/runs/44426641114",
+      "id": 44426641114,
+      "name": "gate-ledger",
+      "path": ".github/workflows/gate-ledger.yml",
+      "run_attempt": 1,
+      "run_number": 3131,
+      "run_started_at": "2026-11-19T00:09:01Z",
+      "status": "completed",
+      "updated_at": "2026-11-19T00:09:02Z",
+      "workflow_id": 348524224
+    },
+    {
+      "artifacts": [],
+      "check_suite_id": 120263553894,
+      "conclusion": "skipped",
+      "created_at": "2026-11-19T00:10:17Z",
+      "event": "pull_request",
+      "head_branch": "integ/2026-11-18-w1-candidate-rehearsal-b-partc",
+      "head_sha": "9eda15deeeb70e6f2ee740a4646c07e8e54f00a7",
+      "html_url": "https://github.com/mpmdw/JouleWise/actions/runs/44426819734",
+      "id": 44426819734,
+      "name": "gate-ledger",
+      "path": ".github/workflows/gate-ledger.yml",
+      "run_attempt": 1,
+      "run_number": 3133,
+      "run_started_at": "2026-11-19T00:10:17Z",
+      "status": "completed",
+      "updated_at": "2026-11-19T00:10:18Z",
+      "workflow_id": 348524224
+    }
+  ],
+  "schema": "joulewise.pr_closure_evidence.v1",
+  "state_at_capture": "open",
+  "successor": {
+    "head_sha": "3615c68cfb6cc84c9f63266bfa30898ca0ba298d",
+    "pr_number": 902,
+    "pr_url": "https://github.com/mpmdw/JouleWise/pull/902",
+    "provisional": true
+  },
+  "tree_sha": "bf12326aa8d91211b87dca001c49a0d4b29f3fc0"
+}
