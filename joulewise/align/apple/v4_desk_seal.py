@@ -47,6 +47,7 @@ from pathlib import Path
 import re
 
 WITHHELD = 'withheld_until_series_complete'
+RL176 = 'rl176'
 WITHHELD_PILOT = 'archive/withheld/PILOT.full.json'
 WITHHELD_THERMAL_MD = 'archive/withheld/THERMAL.full.md'   # standalone thermal desk (Sol F1)
 SERIES_MANIFEST = 'configs/campaigns/align_v4/series/series_manifest.json'
@@ -750,6 +751,8 @@ def _seal_extra_w1(extra, plan_members, withhold):
     nonbenign = _nonbenign(plan_members)
     benign_ordinals = {m.get('ordinal') for m in plan_members or () if m.get('run_id') not in nonbenign}
     out = dict(extra)
+    if RL176 in extra:
+        out[RL176] = withheld(extra[RL176])
     if withhold:
         if isinstance(extra.get('balance_check'), dict) and extra['balance_check'].get('status') != WITHHELD:
             out['balance_check'] = seal_balance(extra['balance_check'])
@@ -843,6 +846,8 @@ def _seal_pilot_w1(pilot, plan_members, withhold):
     rows = {m.get('run_id'): m for m in plan_members or ()}
     cells = _cells_of(members, nonbenign)
     out = dict(pilot)
+    if RL176 in pilot:
+        out[RL176] = withheld(pilot[RL176])
 
     def minimum(member):
         member = dict(member)
@@ -1278,7 +1283,7 @@ def tool_path_fires(record):
     return ruled or ends_early
 
 
-def tripwires(records, scope, nonbenign, roles=None, sources=None):
+def tripwires(records, scope, nonbenign, roles=None, sources=None, *, window_harvest_flags=()):
     """RL-152 section 3.4: the two instrument-health lines, computed in memory; each prints one fact, no count
     of a withheld member. Returns (report, printed lines). ``roles`` maps id -> plan role (else the record's).
 
@@ -1286,6 +1291,7 @@ def tripwires(records, scope, nonbenign, roles=None, sources=None):
     every non-benign D member with at least one admitted turn carries a tool-path flag, and there is at least
     one such member (a D member that ended at G0 has no turn and no flag, so it is not counted)."""
     report, lines = {}, []
+    window_codes = unlisted_codes(window_harvest_flags)
 
     def counted(record):
         return member_counted_codes(record, (sources or {}).get(record.get('id')))
@@ -1314,6 +1320,10 @@ def tripwires(records, scope, nonbenign, roles=None, sources=None):
                                          'rule': 'RL-152 section 3.4, RL-162 section 2'}
         lines.append(f'unlisted flag codes (RL-152 section 3.4): all members {total}; codes: '
                      + (', '.join(names) or 'none'))
+    # RL-163 §2: window-scoped harvest faults name no member and never augment a member tally.
+    report['unlisted_flag_codes']['window_harvest_codes'] = window_codes
+    if window_codes:
+        lines[-1] += '; window harvest codes: ' + ', '.join(window_codes)
     return report, lines
 
 
@@ -1370,15 +1380,23 @@ class SessionLock:
     nothing is written for the lock). It is released when the desk returns or its process dies."""
 
     def __init__(self, session):
+        import errno
         import fcntl
-        self._fd = os.open(str(session), os.O_RDONLY)
+        self._fd = None
+        try:
+            self._fd = os.open(str(session), os.O_RDONLY)
+        except OSError as exc:
+            raise ValueError('ALIGN v4 desk refused: could not open the session directory for locking '
+                             f'(errno {exc.errno}: {exc.strerror}). Nothing was written.') from None
         try:
             fcntl.flock(self._fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        except OSError:
-            os.close(self._fd)
-            self._fd = None
-            raise ValueError('ALIGN v4 desk refused: another desk holds this session. Nothing was written. Wait for '
-                             'it; a session gets one guarded harvest desk.') from None
+        except OSError as exc:
+            self.release()
+            if exc.errno in (errno.EWOULDBLOCK, errno.EAGAIN):
+                raise ValueError('ALIGN v4 desk refused: another desk holds this session. Nothing was written. Wait '
+                                 'for it; a session gets one guarded harvest desk.') from None
+            raise ValueError('ALIGN v4 desk refused: could not lock the session directory '
+                             f'(errno {exc.errno}: {exc.strerror}). Nothing was written.') from None
 
     def release(self):
         if self._fd is not None:
