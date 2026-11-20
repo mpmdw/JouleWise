@@ -1,6 +1,7 @@
 """Synthetic tests for the C1 caller and its stored-bundle inputs."""
 
 import ast
+import base64
 import builtins
 import bz2
 from contextlib import redirect_stderr
@@ -467,6 +468,192 @@ def authored_receipt(root, window="C1"):
 
 
 class SeriesReleaseTests(unittest.TestCase):
+    def test_nested_path_keyed_calibration_is_verified(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp).resolve()
+            target = root / "calibration.json"
+            raw = b'{"synthetic":1}\n'
+            target.write_bytes(raw)
+            finalize = harvest_offload.finalized_manifest
+
+            def with_binding(window):
+                manifest = finalize(window)
+                if window.name == "C8":
+                    policy = manifest["closure"]["ignored_policy"]
+                    policy["synthetic_bindings"] = [{"nested": {str(target): {
+                        "sha256": packet.digest(raw), "size": len(raw),
+                    }}}]
+                return manifest
+
+            with patch.object(harvest_offload, "finalized_manifest", with_binding):
+                stored_series(root)
+            control = root / "control.json"
+            result = invoke(root, control)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(json.loads(control.read_bytes())[seal.RL176]["S"]["words"], ["S SIGNATURE"])
+
+            archive = target.with_suffix(".json.gz")
+            for defect in ("missing", "compressed-only", "unreadable", "digest-changed"):
+                with self.subTest(defect=defect):
+                    try:
+                        if defect in ("missing", "compressed-only"):
+                            target.unlink()
+                            if defect == "compressed-only":
+                                archive.write_bytes(gzip.compress(raw))
+                        elif defect == "unreadable":
+                            target.chmod(0)
+                        else:
+                            target.write_bytes(raw.replace(b"1", b"2"))
+                        output = root / f"{defect}.json"
+                        result = invoke(root, output)
+                        self.assertEqual(result.returncode, 1, result.stderr)
+                        self.assertFalse(output.exists())
+                    finally:
+                        if archive.exists():
+                            archive.unlink()
+                        if target.exists():
+                            target.chmod(0o600)
+                        target.write_bytes(raw)
+
+    def test_declared_transfer_encoded_archive_refuses(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp).resolve()
+            archive = root / "calibration-ledger.jsonl.gz.b64"
+            archive.write_bytes(base64.encodebytes(gzip.compress(b'{"synthetic":1}\n')))
+            finalize = harvest_offload.finalized_manifest
+
+            def with_binding(window):
+                return finalize(window, inputs=(archive,) if window.name == "C8" else ())
+
+            with patch.object(harvest_offload, "finalized_manifest", with_binding):
+                stored_series(root, wins=101)
+            output = root / "report.json"
+            result = invoke(root, output)
+            self.assertEqual(result.returncode, 1, result.stderr)
+            self.assertFalse(output.exists())
+
+    def test_stored_episode_with_registered_seed_index_releases(self):
+        from joulewise.adapters.mock_runtime import MockRuntimeAdapter
+        from joulewise.align.apple.workload import EpisodeRuntimeAdapter
+        from joulewise.clock import FakeClock
+        from tests.align import test_apple_campaign as fixture
+
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp).resolve()
+            native = series.selected(series.candidate(), "C1")["members"][5]
+            spec = replace(fixture.episode_spec(hidden=False), seed=native["seed_index"],
+                           condition=native["condition"], enable_thinking=True)
+            clock = FakeClock()
+            runtime = EpisodeRuntimeAdapter(MockRuntimeAdapter(clock), clock)
+            with patch.object(fixture.SyntheticTask, "task_pair", "shade/" + native["pair"]):
+                config = fixture.as_config(spec, "synthetic-seed-writer")
+                self.assertTrue(runtime.prepare(config).ok)
+                data = json.loads(runtime.run_workload(config).output_artifacts["align_episode.json"])
+            self.assertEqual(data["seed"], native["seed_index"])
+            self.assertNotEqual(data["seed"], native["episode_seed"])
+            produce = write_bundle
+
+            def with_native_seed(bundle, window, assignment, *args, **kwargs):
+                run_id = produce(bundle, window, assignment, *args, **kwargs)
+                if window == "C1" and assignment["ordinal"] == native["ordinal"]:
+                    path = bundle / "outputs/align_episode.json"
+                    record = json.loads(path.read_bytes())
+                    record["seed"] = data["seed"]
+                    write_json(path, record)
+                return run_id
+
+            with patch(f"{__name__}.write_bundle", with_native_seed):
+                stored_series(root)
+            output = root / "report.json"
+            result = invoke(root, output)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            score = json.loads(output.read_bytes())[seal.RL176]["S"]
+            self.assertEqual((score["strata"], score["words"]), (22, ["S SIGNATURE"]))
+
+    def test_mirror_directory_verifies_the_bound_recursive_git_tree(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp).resolve()
+            mirror = root / "checkout"
+            reference = mirror / "scripts/nested/reference.py"
+            reference.parent.mkdir(parents=True)
+            reference.write_text("VERSION = 1\n")
+            init_git_fixture(mirror, "-q")
+            relative = reference.relative_to(mirror).as_posix()
+            descriptor = mirror_fixture(mirror, [relative])
+            finalize = harvest_offload.finalized_manifest
+
+            def with_mirror(window):
+                if window.name != "C8":
+                    return finalize(window)
+                view = window / "measurement"
+                view.mkdir()
+                (view / "scripts").symlink_to(mirror / "scripts", target_is_directory=True)
+                return finalize(window, mirror=descriptor)
+
+            with patch.object(harvest_offload, "finalized_manifest", with_mirror):
+                stored_series(root)
+            output = root / "control.json"
+            result = invoke(root, output)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertEqual(json.loads(output.read_bytes())[seal.RL176]["S"]["words"], ["S SIGNATURE"])
+
+            fixture_git(mirror, "update-index", "--assume-unchanged", relative)
+            reference.write_text("VERSION = 2\n")
+            self.assertEqual(fixture_git(mirror, "status", "--porcelain"), "")
+            output = root / "changed.json"
+            result = invoke(root, output)
+            self.assertEqual(result.returncode, 1, result.stderr)
+            self.assertFalse(output.exists())
+
+    def test_native_trace_and_transcript_are_never_opened(self):
+        from tests.align import test_c1_release_input_completeness as frozen
+
+        for artifact in ("power_trace.csv", "align_transcript.jsonl"):
+            with self.subTest(artifact=artifact), tempfile.TemporaryDirectory() as tmp:
+                scratch = Path(tmp).resolve()
+                root = scratch / "synthetic"
+                root.mkdir()
+                finalize = harvest_offload.finalized_manifest
+                marker = []
+
+                def with_marker(window):
+                    if window.name != "C8":
+                        return finalize(window)
+                    if artifact == "power_trace.csv":
+                        path = root / "acquisition" / artifact
+                        path.parent.mkdir()
+                        inputs = (path,)
+                    else:
+                        outputs = sorted((window / "runs").glob("*/outputs"))[0]
+                        path = outputs / artifact
+                        inputs = ()
+                    path.write_bytes(b'{"synthetic_marker":true}\n')
+                    marker.append(path)
+                    return finalize(window, inputs=inputs)
+
+                with patch.object(harvest_offload, "finalized_manifest", with_marker):
+                    stored_series(root)
+                (path,) = marker
+                for released in (True, False):
+                    if not released:
+                        (root / seal.RELEASE_RECEIPT).unlink()
+                    output = scratch / ("released.json" if released else "withheld.json")
+                    witness = scratch / "opens.json"
+                    result = subprocess.run(
+                        [sys.executable, "-B", frozen.__file__, "--observe-cli", str(SCRIPT),
+                         str(root), str(output), str(witness), str(path)],
+                        cwd=ROOT, capture_output=True, text=True, check=False,
+                    )
+                    observed = json.loads(witness.read_bytes())
+                    self.assertEqual(observed, {"ranked": [], "entering": [], "errors": [], "denied": False})
+                    self.assertEqual(result.returncode, int(released), result.stderr)
+                    if released:
+                        self.assertFalse(output.exists())
+                    else:
+                        self.assertEqual(json.loads(output.read_bytes()), {
+                            seal.RL176: dict.fromkeys(rl176.RELEASE_LEAVES, seal.WITHHELD),
+                        })
+
     def test_declared_mirror_missing_without_links_refuses_release(self):
         from scripts.align_v4_harvest_off import checkout_identity
 
