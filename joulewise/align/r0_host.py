@@ -157,7 +157,7 @@ def _window_reads(reads, opening, current):
     return reads[start:end + 1]
 
 
-def _overlap_cpu_evidence(opening, current, reads):
+def _overlap_cpu_evidence(opening, current, reads, *, endpoint_elapsed_ns):
     """Compare observed TIME growth against the largest supported overlap."""
     accounting = [(i, read) for i, read in enumerate(reads) if isinstance(read, contention.Snapshot)]
     named = {pid for read in reads if isinstance(read, _ArgumentsRead) for pid in read.contenders}
@@ -198,7 +198,7 @@ def _overlap_cpu_evidence(opening, current, reads):
         start_bound = max(window_start, birth_floor) if reliable_start else window_start
         resident = first is opening and identity in current.rows
         if resident:
-            overlap_ns = current.admitted_midpoint_ns - opening.admitted_midpoint_ns
+            overlap_ns = endpoint_elapsed_ns
         else:
             overlap_ns = min(last_possible, current.finished.monotonic_ns) - start_bound
         if overlap_ns <= 0:
@@ -241,10 +241,11 @@ class QuietGuard:
     include shared defaults and configured extras; missing roots fail closed.
     A refusal is latched even if an endpoint catches the raised exception.
     CPU windows span at least prewindow.INTERVAL_S. The admitted endpoint
-    comparison uses paired-read midpoints. Interior readings also bound CPU
-    across a transient worker's observed lifetime. The first admission waits
-    for the baseline, with a mid-baseline
-    snapshot so the daemon can close its first window after one more cadence.
+    comparison uses paired-read midpoints. Background windows use the
+    accounting-read midpoints. Interior readings also bound CPU across a
+    transient worker's observed lifetime. The first admission waits for the
+    baseline. Its midpoint sample lets the daemon close its first window
+    after one more cadence.
 
     After that admission a daemon thread repeats the census and takes a CPU
     snapshot every SNAPSHOT_CADENCE_S; it only stores what it saw (or the
@@ -721,7 +722,14 @@ class QuietGuard:
             return contention.interval(before, after, tree_roots=(), include_kernel_task=True,
                                        limit=limit, previous_over=prior)
 
-        before, after = opening.admitted_endpoint(), current.admitted_endpoint()
+        # Only the caller's admitted sequence uses the paired args read as
+        # part of its timestamp. Daemon selection and rates both use the
+        # accounting clock, even when the subsequent args query runs long.
+        admitted = previous_over is not None
+        before, after = opening, current
+        if admitted:
+            before, after = opening.admitted_endpoint(), current.admitted_endpoint()
+        endpoint_elapsed_ns = after.midpoint_ns - before.midpoint_ns
         raw = measure(before, after, previous_over)
         # Endpoint counters provide the existing regression and host aggregate
         # diagnostics. The admitted verdict uses the raw endpoint counters.
@@ -761,12 +769,13 @@ class QuietGuard:
         endpoint = {"start_monotonic_s": before.midpoint_ns / 1e9, "end_monotonic_s": after.midpoint_ns / 1e9,
                     "elapsed_s": raw["elapsed_s"]}
         details["endpoint_interval"] = endpoint
-        endpoint_evidence = raw if previous_over is not None else measured
+        endpoint_evidence = raw if admitted else measured
         endpoint_busy = {(row["pid"], row["start"]): row for row in endpoint_evidence["outside_over_limit"] if contaminant(row)}
         if previous_over is not None:
             previous_over.clear()
             previous_over.update((key, rate) for key, rate in contention.over_limit(raw).items() if key in matches)
-        evidence, details["contaminants"] = _overlap_cpu_evidence(opening, current, reads)
+        evidence, details["contaminants"] = _overlap_cpu_evidence(
+            opening, current, reads, endpoint_elapsed_ns=endpoint_elapsed_ns)
         same_window = before.midpoint_ns == opening.midpoint_ns and after.midpoint_ns == current.midpoint_ns
         lifetime_busy = []
         for row in evidence:

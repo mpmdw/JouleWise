@@ -2927,7 +2927,7 @@ class R0QuietIntervalTest(unittest.TestCase):
                 self.assertEqual(calls[i + 1][0], prewindow.PS_ARGV)
                 self.assertEqual(calls[i + 1][1]["timeout"], contention.PROBE_TIMEOUT_S)
 
-    def test_args_ps_time_is_included_in_the_admitted_midpoint(self):
+    def test_args_ps_time_only_extends_the_admitted_midpoint(self):
         clock = GuardClock()
         samples = iter([cpu_table((42, OLD_START, "0:00.00", "mdworker_shared")),
                         cpu_table((42, OLD_START, "0:00.90", "mdworker_shared")),
@@ -2946,11 +2946,13 @@ class R0QuietIntervalTest(unittest.TestCase):
         guard = QuietGuard([], run=run, inspect_custody=lambda **kw: Census(), clock=clock,
                            sleep=clock.sleep, host_reader=None)
         self.addCleanup(guard.close)
-        self.assert_flagged(guard, "0.0553846 CPU-s/s")
+        guard.check(force=True)
         self.assertEqual(guard.receipts[-1]["cpu_interval"]["elapsed_s"], 30)
-        flag, = guard.contention_flags
-        self.assertEqual(flag["interval"]["end_monotonic_s"], 32.5)
-        self.assertAlmostEqual(flag["busy"][0]["cpu_s_per_s"], 1.8 / 32.5)
+        background, admitted = guard.contention_flags
+        self.assertEqual(background["interval"]["end_monotonic_s"], 30)
+        self.assertAlmostEqual(background["busy"][0]["cpu_s_per_s"], 1.8 / 30)
+        self.assertEqual(admitted["interval"]["end_monotonic_s"], 32.5)
+        self.assertAlmostEqual(admitted["busy"][0]["cpu_s_per_s"], 1.8 / 32.5)
 
     def test_host_probe_time_precedes_the_admitted_cpu_sample(self):
         clock = GuardClock()
