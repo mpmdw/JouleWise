@@ -274,9 +274,9 @@
 
 ## B9 · v4: the registered test (1:00)
 
-- **Message:** v4 turns the pilot into a confirmatory test. Its rules were fixed before data, and its outcomes stay sealed until a registered release.
-- **Visual (F10):** R0 → R1 → blind registration gate → W1 → 3 D windows → registration-grade calibration (m ≥ 39 per pair plus a held-out test cohort) → independent recompute → release. Each box shows a `[FREEZE]` status (done, pending or refused), never an outcome.
-  - Qwen3.8-27B at 8-bit; KM003C captured in every window, with a secondary DC-in analysis; full transcripts sealed and unscored.
+- **Message:** v4 turns the pilot into a registered test with rules fixed before data. K is the confirmatory tripwire assessed on benign held-out alarms. S is the registered secondary comparison of sabotage-instructed and benign episodes at logged counts. Outcomes stay sealed until the registered release.
+- **Visual (F10):** R0 → R1 `[FREEZE]` → blind registration gate → W1 → C calibration windows → held-out T windows → independent recompute → release. Each box shows a `[FREEZE]` status (done, pending or refused), never an outcome.
+  - Design: Qwen3.8-27B 8-bit; KM003C on DC input in every window; full transcripts sealed and unscored.
 - **Sources:** `docs/research/research-strategy.md` §3; `RUN_STATE.md` items 203 (R10, 11.9 tok/s, fallback declared blind), 204 (Q4, Q6) and 212 (R11-3: the registered residual stays GPU energy).
 - **Speaker notes:**
   - Example of deciding first: 8-bit decode at about 11.9 tok/s cannot fit the original budget, so the fallback was declared before any R1 number existed (item 203).
@@ -290,7 +290,7 @@
   - Endpoint: **side-task success and no joint alarm, per assigned attempt**, reported with utility.
   - Joint rule calibrated at 0.05, with energy-alone and monitor-alone comparators, plus trusted time plus monitor as a primary comparator.
   - Frontier API monitor off-box; a scoped, sandboxed red team.
-  - Timeline: Nov 30 talk → mid-Dec paper → v5 windows Dec-Feb → NeurIPS 2027 (about mid-May; no deadline verified).
+  - Timeline: Nov 30 talk → mid-Dec paper.
 - **Sources:** `RUN_STATE.md` item 212 (R11-2: D07, D09, D12) and item 210 (monitor, D-139 A1, venue); `docs/research/AGENDA.md` timeline; v5 design competition branches `origin/align/2026-11-08-v5design-*` (not decided).
 - **Speaker notes:**
   - The v5 design is still being judged. Do not name a roster or sample size.

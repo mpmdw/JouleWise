@@ -1,0 +1,564 @@
+"""Execute the RL-183 boundary in synthetic workers with real descriptor capture."""
+
+from hashlib import sha256
+import json
+import os
+from pathlib import Path
+import subprocess
+import sys
+import tempfile
+import unittest
+
+from joulewise.cadence_looks.transfer_release import CUSTODY_NAMES, HASHES, WORDS
+
+ROOT = Path(__file__).resolve().parents[1]
+DRAFT = ROOT / (
+    "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/"
+    "looks/lm-transfer-01.manifest.json"
+)
+REFUSAL = b"REFUSE transfer look before read\n"
+
+_WORKER = r"""
+import argparse
+import atexit
+from contextlib import nullcontext
+from hashlib import sha256
+import json
+import os
+from pathlib import Path
+import subprocess
+import sys
+import time
+from unittest.mock import patch
+
+from joulewise.cadence_looks import transfer_release as release
+from joulewise.cadence_looks.manifest_dispatch import validate_v2
+from joulewise.cadence_looks.transfer_release import HASHES, run_transfer_worker
+
+root, mode, draft = Path(sys.argv[1]), sys.argv[2], Path(sys.argv[3])
+step = mode.removeprefix("inject-") if mode.startswith("inject-") else None
+
+
+class InjectedFailure(BaseException):
+    pass
+
+
+def fail(*args, **kwargs):
+    raise InjectedFailure("synthetic injected failure")
+
+
+def fail_when(original, predicate):
+    def inject(*args, **kwargs):
+        if predicate(*args, **kwargs):
+            fail()
+        return original(*args, **kwargs)
+    return inject
+
+def preflight():
+    if step == "preflight":
+        fail()
+    if mode == "pre-systemexit":
+        sys.exit(1)
+    if mode == "pre-custom-base":
+        raise type("FixturePrivateExit", (BaseException,), {})("fixture private exit")
+    if mode == "draft":
+        validate_v2(draft.read_bytes(), final=True)
+    if mode == "contended":
+        # Both workers pass the initial existence check before either calls mkdir.
+        (root / f"ready-{os.getpid()}").touch()
+        deadline = time.monotonic() + 5
+        while len(list(root.glob("ready-*"))) < 2:
+            if time.monotonic() >= deadline:
+                raise TimeoutError("fixture barrier")
+            time.sleep(0.01)
+    return {key: sha256(key.encode()).hexdigest() for key in HASHES}
+
+def score(mark_read):
+    (root / "score-entered").touch()
+    if mode == "empty":
+        return {"synthetic": None}, "not_evaluable"
+    print("buffered fixture output", end="")
+    if step == "score-before-read":
+        fail()
+    with (root / "synthetic-input.json").open("rb") as source:
+        mark_read()
+        (root / "saw-read").touch()
+        if step == "consume":
+            fail()
+        value = json.load(source)
+    if step == "score-after-read":
+        fail()
+    os.write(2, b"fixture diagnostic\n")
+    atexit.register(os.write, 1, b"fixture shutdown\n")
+    if mode == "post-systemexit":
+        sys.exit(2)
+    if mode == "post-argparse":
+        argparse.ArgumentParser(prog="synthetic-scorer").parse_args(["--unknown"])
+    if mode == "post-keyboardinterrupt":
+        raise KeyboardInterrupt("fixture interruption without a signal")
+    if mode == "post-custom-base":
+        raise type("FixturePrivateExit", (BaseException,), {})("fixture private exit")
+    if mode == "builtin":
+        raise RuntimeError("fixture canary 123.456")
+    if mode in ("unhashable-type", "classification-failure"):
+        (root / "completed-read").touch()
+        if mode == "unhashable-type":
+            class UnhashableType(type):
+                __hash__ = None
+
+            class UnhashableFixtureError(Exception, metaclass=UnhashableType):
+                pass
+
+            raise UnhashableFixtureError("fixture")
+
+        class FixtureLookupFailure(BaseException):
+            pass
+
+        class UnavailableLinalg:
+            def __getattr__(self, name):
+                raise FixtureLookupFailure("fixture lookup failure")
+
+        sys.modules["numpy.linalg"] = UnavailableLinalg()
+        raise RuntimeError("fixture")
+    if mode in ("unlisted", "impostor"):
+        cls = (
+            type("RuntimeError", (Exception,), {"__module__": "builtins"})
+            if mode == "impostor" else type("Leak_123_456", (Exception,), {})
+        )
+        raise cls("fixture canary 123.456")
+    if mode == "json":
+        json.loads("invalid-json")
+    if mode == "bad-public":
+        return {"synthetic": value}, 0.4
+    if mode == "extra-private":
+        (root / "private" / "synthetic-result" / "unlisted.txt").write_text("fixture canary")
+    if mode == "success":
+        subprocess.run([sys.executable, "-B", "-c",
+                        "import os; os.write(2, b'fixture child\\n')"], check=True)
+    return {"synthetic": value}, "estimated"
+
+
+def fault_context():
+    notice = release.finish_notice
+    public_record = release._public_record
+    write_json = release._write_json
+    lexists = os.path.lexists
+
+    def opened(*args, **kwargs):
+        return (root / "saw-read").exists()
+
+    fault = {
+        "startup-flush": (release, "finish_notice", fail),
+        "save-stderr": (release, "save_public_stderr", fail),
+        "spent-check": (os.path, "lexists", fail),
+        "filesystem": (Path, "stat", fail),
+        "preflight-hashes": (release, "_public_record", fail),
+        "reserve": (Path, "mkdir", fail),
+        "redirect": (release, "_redirect", fail),
+        "sync": (release, "_sync_directory", fail),
+        "result-validation": (release, "_public_record", fail_when(public_record, opened)),
+        "scores-write": (release, "_write_json", fail_when(write_json, lambda p, _: p.name == "scores.json")),
+        "inventory": (Path, "iterdir", fail),
+        "result-staging": (release, "_write_json", fail_when(write_json, lambda p, _: p.name == ".publication")),
+        "final-spent-check": (os.path, "lexists", fail_when(lexists, opened)),
+        "success-flush": (release, "finish_notice", fail_when(notice, opened)),
+        "publish": (Path, "rename", fail),
+    }.get(step)
+    return patch.object(*fault) if fault is not None else nullcontext()
+
+
+if __name__ == "__main__":
+    ledger = {"draft-ledger": "draft", "spent-ledger": "failed"}.get(mode, "stage1_committed")
+    if mode == "buffered-stderr":
+        sys.stderr = os.fdopen(2, "w", encoding="utf-8", closefd=False)
+        sys.stderr.write("buffered fixture stderr")
+        ledger = "draft"
+    with fault_context():
+        status = run_transfer_worker(
+            restricted=root / "private" / "synthetic-result",
+            public=root / "public" / "PUBLIC.json",
+            execution_host="synthetic-authority",
+            local_host="synthetic-other" if mode == "wrong-host" else "synthetic-authority",
+            ledger_status=ledger, preflight=preflight, score=score,
+        )
+    (root / "worker-returned").write_text(str(status))
+    raise SystemExit(status)
+"""
+
+
+
+_DESCRIPTOR_WORKER = r"""
+from pathlib import Path
+import os
+import sys
+import warnings
+from joulewise.cadence_looks.transfer_release import HASHES, run_transfer_worker
+
+root, layout = Path(sys.argv[1]), sys.argv[2]
+warning_case = sys.argv[3] if len(sys.argv) > 3 else None
+if layout == "stdout-consumer-gone":
+    try:
+        os.write(1, b"fixture launcher")
+    except BrokenPipeError:
+        os.close(1)
+    else:
+        raise AssertionError("expected stdout pipe to have no reader")
+
+def preflight():
+    for fd in range(3):
+        os.fstat(fd)
+    if layout != "ordinary":
+        fd = 1 if layout == "stdout-consumer-gone" else int(layout)
+        assert os.path.samestat(os.fstat(fd), os.stat(os.devnull))
+    if warning_case is not None:
+        warnings.warn("synthetic preflight warning", RuntimeWarning)
+        os.write(2, b"synthetic unstructured diagnostic\n")
+        assert sys.warnoptions == []
+    (root / "checked-stdio").touch()
+    return {key: "0" * 64 for key in HASHES}
+
+def score(mark_read):
+    with (root / "synthetic-input.json").open("rb") as source:
+        mark_read()
+        assert source.read() == b"fixture"
+    (root / "completed-read").touch()
+    if warning_case != "success":
+        (root / "public").rename(root / "moved")
+    return {}, "estimated"
+
+raise SystemExit(run_transfer_worker(
+    restricted=root / "private" / "synthetic-result",
+    public=root / "public" / "PUBLIC.json",
+    execution_host="fixture",
+    local_host="fixture",
+    ledger_status="stage1_committed",
+    preflight=preflight,
+    score=score,
+))
+"""
+
+
+class TransferReleaseTests(unittest.TestCase):
+    def setUp(self):
+        self.scratch = Path(self.enterContext(tempfile.TemporaryDirectory(prefix="rl183-transfer-")))
+
+    def fixture(self, name, *, value=123.456):
+        root = self.scratch / name
+        (root / "private").mkdir(parents=True)
+        (root / "public").mkdir()
+        if value is not None:
+            (root / "synthetic-input.json").write_text(json.dumps(value))
+        return root
+
+    def command(self, root, mode):
+        return [sys.executable, "-B", "-c", _WORKER, str(root), mode, str(DRAFT)]
+
+    def worker(self, root, mode):
+        return subprocess.run(self.command(root, mode), cwd=ROOT, capture_output=True, check=False)
+
+    def worker_with_notice_pipe(self, root, mode, *, connected, unbuffered):
+        environment = os.environ.copy()
+        if unbuffered:
+            environment["PYTHONUNBUFFERED"] = "1"
+        else:
+            environment.pop("PYTHONUNBUFFERED", None)
+        reader, writer = os.pipe()
+        if not connected:
+            os.close(reader)
+            reader = None
+        try:
+            with os.fdopen(writer, "wb") as sink:
+                result = subprocess.run(self.command(root, mode), cwd=ROOT, stdout=subprocess.PIPE,
+                                        stderr=sink, env=environment, check=False)
+            return result, os.read(reader, 4096) if reader is not None else None
+        finally:
+            if reader is not None:
+                os.close(reader)
+
+    def test_success_closes_three_names_and_one_public_file(self):
+        root = self.fixture("success")
+        output = self.worker(root, "success")
+        self.assertEqual((output.returncode, output.stdout, output.stderr), (0, b"", b""))
+        restricted = root / "private" / "synthetic-result"
+        self.assertEqual({item.name for item in restricted.iterdir()}, CUSTODY_NAMES)
+        self.assertEqual(json.loads((restricted / "scores.json").read_bytes()), {"synthetic": 123.456})
+        self.assertIn(b"buffered fixture output", (restricted / "stdout").read_bytes())
+        self.assertNotIn(b"fixture shutdown\n", (restricted / "stdout").read_bytes())
+        self.assertFalse((root / "worker-returned").exists())
+        self.assertIn(b"fixture child\n", (restricted / "stderr").read_bytes())
+        public = root / "public"
+        self.assertEqual([item.name for item in public.iterdir()], ["PUBLIC.json"])
+        report = json.loads((public / "PUBLIC.json").read_bytes())
+        self.assertEqual(report, {**{key: sha256(key.encode()).hexdigest() for key in HASHES},
+                                  "transfer_interval": "estimated", "stage2_error": "no"})
+        self.assertEqual(report.keys(), set(HASHES) | WORDS.keys())
+
+    def test_empty_roster_can_report_no_interval_without_a_scoring_input(self):
+        root = self.fixture("empty", value=None)
+        output = self.worker(root, "empty")
+        self.assertEqual((output.returncode, output.stdout, output.stderr), (0, b"", b""))
+        report = json.loads((root / "public" / "PUBLIC.json").read_bytes())
+        self.assertEqual(report["transfer_interval"], "not_evaluable")
+
+    def test_transfer_exit_statuses(self):
+        self.check_pre_read_refusals_exit_two()
+        self.check_read_failures_emit_exact_notice()
+
+    def test_transfer_status_survives_lost_notice_consumer(self):
+        for mode, status, notice, entered, read_started in (
+            ("draft-ledger", 2, REFUSAL, False, False),
+            ("missing-input", 2, REFUSAL, True, False),
+            ("post-systemexit", 1, b"stage2_error\nSystemExit\n", True, True),
+        ):
+            for connected in (True, False):
+                for unbuffered in (False, True):
+                    with self.subTest(mode=mode, connected=connected, unbuffered=unbuffered):
+                        value = None if mode == "missing-input" else 123.456
+                        root = self.fixture(f"{mode}-{connected}-{unbuffered}", value=value)
+                        result, delivered = self.worker_with_notice_pipe(
+                            root, mode, connected=connected, unbuffered=unbuffered
+                        )
+                        self.assertEqual((result.returncode, result.stdout), (status, b""))
+                        self.assertFalse((root / "worker-returned").exists())
+                        self.assertEqual(delivered, notice if connected else None)
+                        self.assertEqual((root / "score-entered").exists(), entered)
+                        self.assertEqual((root / "saw-read").exists(), read_started)
+                        self.assertEqual(list((root / "public").iterdir()), [])
+                        self.assertEqual((root / "private" / "synthetic-result").exists(), entered)
+
+    def test_transfer_status_survives_initial_buffered_stream_failure(self):
+        for unbuffered in (False, True):
+            with self.subTest(unbuffered=unbuffered):
+                root = self.fixture(f"buffered-stderr-{unbuffered}")
+                result, delivered = self.worker_with_notice_pipe(
+                    root, "buffered-stderr", connected=False, unbuffered=unbuffered
+                )
+                self.assertEqual((result.returncode, result.stdout, delivered), (2, b"", None))
+                self.assertFalse((root / "score-entered").exists())
+                self.assertEqual(list((root / "public").iterdir()), [])
+
+    def test_transfer_boundary_contains_arbitrary_exceptions_at_each_step(self):
+        steps_by_status = {
+            2: ("startup-flush", "save-stderr", "spent-check", "filesystem", "preflight",
+                "preflight-hashes", "reserve", "redirect", "sync", "score-before-read"),
+            1: ("consume", "score-after-read", "result-validation", "scores-write", "inventory",
+                "result-staging", "final-spent-check", "success-flush", "publish"),
+        }
+        for status, steps in steps_by_status.items():
+            for step in steps:
+                with self.subTest(step=step, status=status):
+                    mode = f"inject-{step}"
+                    root = self.fixture(mode)
+                    result = self.worker(root, mode)
+                    notice = REFUSAL if status == 2 else b"stage2_error\nOtherError\n"
+                    self.assertEqual((result.returncode, result.stdout, result.stderr), (status, b"", notice))
+                    self.assertFalse((root / "worker-returned").exists())
+                    self.assertEqual((root / "saw-read").exists(), status == 1)
+                    self.assertEqual(list((root / "public").iterdir()), [])
+
+    def test_transfer_python_exits_follow_first_read(self):
+        for mode in ("pre-systemexit", "pre-custom-base"):
+            with self.subTest(mode=mode):
+                root = self.fixture(mode)
+                output = self.worker(root, mode)
+                self.assertEqual((output.returncode, output.stdout, output.stderr), (2, b"", REFUSAL))
+                self.assertFalse((root / "saw-read").exists())
+                self.assertEqual(list((root / "private").iterdir()), [])
+                self.assertEqual(list((root / "public").iterdir()), [])
+
+        for mode, error_type in (
+            ("post-systemexit", "SystemExit"),
+            ("post-argparse", "SystemExit"),
+            ("post-keyboardinterrupt", "KeyboardInterrupt"),
+            ("post-custom-base", "OtherError"),
+        ):
+            with self.subTest(mode=mode):
+                root = self.fixture(mode)
+                output = self.worker(root, mode)
+                notice = f"stage2_error\n{error_type}\n".encode("ascii")
+                self.assertEqual((output.returncode, output.stdout, output.stderr), (1, b"", notice))
+                self.assertTrue((root / "saw-read").exists())
+                self.assertEqual(list((root / "public").iterdir()), [])
+                restricted = root / "private" / "synthetic-result"
+                stderr = (restricted / "stderr").read_bytes()
+                self.assertIn(b"fixture diagnostic", stderr)
+                if mode == "post-argparse":
+                    self.assertIn(b"unrecognized arguments: --unknown", stderr)
+                retry = self.worker(root, mode)
+                self.assertEqual((retry.returncode, retry.stdout, retry.stderr), (2, b"", REFUSAL))
+                self.assertEqual((restricted / "stderr").read_bytes(), stderr)
+
+    def check_pre_read_refusals_exit_two(self):
+        for mode in ("draft", "draft-ledger", "wrong-host", "spent-ledger", "missing-input"):
+            with self.subTest(mode=mode):
+                root = self.fixture(mode, value=None if mode == "missing-input" else 123.456)
+                output = self.worker(root, mode)
+                self.assertEqual((output.returncode, output.stdout, output.stderr), (2, b"", REFUSAL))
+                self.assertEqual(list((root / "public").iterdir()), [])
+                restricted = root / "private" / "synthetic-result"
+                self.assertEqual(restricted.exists(), mode == "missing-input")
+                if restricted.exists():
+                    self.assertEqual(self.worker(root, mode).returncode, 2)
+
+    def check_read_failures_emit_exact_notice(self):
+        for mode, name in (
+            ("builtin", "RuntimeError"), ("unlisted", "OtherError"), ("impostor", "OtherError"),
+            ("json", "JSONDecodeError"), ("bad-public", "ValueError"), ("extra-private", "ValueError"),
+        ):
+            with self.subTest(mode=mode):
+                root = self.fixture(mode)
+                output = self.worker(root, mode)
+                self.assertEqual((output.returncode, output.stdout, output.stderr),
+                                 (1, b"", f"stage2_error\n{name}\n".encode()))
+                self.assertEqual(list((root / "public").iterdir()), [])
+                restricted = root / "private" / "synthetic-result"
+                self.assertIn(b"fixture diagnostic", (restricted / "stderr").read_bytes())
+                prior = (restricted / "stderr").read_bytes()
+                self.assertEqual(self.worker(root, mode).returncode, 2)
+                self.assertEqual((restricted / "stderr").read_bytes(), prior)
+
+    def test_post_read_notice_survives_exception_classification(self):
+        for mode in ("unhashable-type", "classification-failure"):
+            for unbuffered in (False, True):
+                with self.subTest(mode=mode, unbuffered=unbuffered):
+                    root = self.fixture(f"{mode}-{unbuffered}")
+                    env = {**os.environ, "PYTHONUNBUFFERED": "1" if unbuffered else ""}
+                    result = subprocess.run(self.command(root, mode), cwd=ROOT, env=env,
+                                            capture_output=True, check=False)
+                    self.assertTrue((root / "completed-read").exists())
+                    self.assertEqual((result.returncode, result.stdout, result.stderr),
+                                     (1, b"", b"stage2_error\nOtherError\n"))
+                    self.assertEqual(list((root / "public").iterdir()), [])
+
+    def test_public_result_is_invariant_when_private_values_change_without_word_flip(self):
+        roots = (self.fixture("world1", value=12.5), self.fixture("world2", value=-4.1))
+        for root in roots:
+            self.assertEqual(self.worker(root, "success").returncode, 0)
+        public = [root / "public" / "PUBLIC.json" for root in roots]
+        self.assertEqual(public[0].read_bytes(), public[1].read_bytes())
+        scores = [root / "private" / "synthetic-result" / "scores.json" for root in roots]
+        self.assertNotEqual(scores[0].read_bytes(), scores[1].read_bytes())
+
+    def test_transfer_preserves_notice_with_vacant_standard_descriptors(self):
+        for post_read in (False, True):
+            for layout in ("ordinary", "0", "1", "2", "stdout-consumer-gone"):
+                for unbuffered in (False, True):
+                    with self.subTest(post_read=post_read, layout=layout, unbuffered=unbuffered):
+                        root = self.fixture(f"{post_read}-{layout}-{unbuffered}", value=None)
+                        if post_read:
+                            (root / "synthetic-input.json").write_bytes(b"fixture")
+                        command = [sys.executable, "-B", "-c", _DESCRIPTOR_WORKER, str(root), layout]
+                        env = {**os.environ, "PYTHONUNBUFFERED": "1" if unbuffered else ""}
+                        if layout.isdecimal():
+                            close_fd = "import os, sys; os.close(int(sys.argv[1])); os.execv(sys.argv[2], sys.argv[2:])"
+                            command = [sys.executable, "-B", "-c", close_fd, layout, *command]
+
+                        if layout == "stdout-consumer-gone":
+                            reader, writer = os.pipe()
+                            os.close(reader)
+                            with os.fdopen(writer, "wb") as sink:
+                                result = subprocess.run(command, cwd=ROOT, env=env, stdout=sink,
+                                                        stderr=subprocess.PIPE, check=False)
+                        else:
+                            result = subprocess.run(command, cwd=ROOT, env=env, capture_output=True, check=False)
+                            self.assertEqual(result.stdout, b"")
+
+                        notice = b"stage2_error\nFileNotFoundError\n" if post_read else REFUSAL
+                        self.assertEqual((result.returncode, result.stderr),
+                                         (1 if post_read else 2, b"" if layout == "2" else notice))
+                        self.assertTrue((root / "checked-stdio").exists())
+                        self.assertEqual((root / "completed-read").exists(), post_read)
+                        self.assertFalse((root / "public" / "PUBLIC.json").exists())
+                        self.assertFalse((root / "moved" / "PUBLIC.json").exists())
+
+    def warning_layouts(self):
+        env = {key: value for key, value in os.environ.items()
+               if key not in ("PYTHONWARNDEFAULTENCODING", "PYTHONWARNINGS")}
+        for label, flags, settings in (
+            ("default-encoding", (), {"PYTHONWARNDEFAULTENCODING": "1"}),
+            ("warnings-error", (), {"PYTHONWARNINGS": "error"}),
+            ("warn-default", ("-W", "default"), {}),
+        ):
+            for mask in range(8):
+                closed = tuple(fd for fd in range(3) if mask & (1 << fd))
+                yield label, flags, {**env, **settings}, closed
+
+    def run_with_warning_layout(self, args, flags, env, closed):
+        command = [sys.executable, "-B", *flags, *args]
+        if closed:
+            close_fds = (
+                "import os, sys\n"
+                "for fd in sys.argv[1]: os.close(int(fd))\n"
+                "os.execv(sys.argv[2], sys.argv[2:])\n"
+            )
+            command = [sys.executable, "-B", "-c", close_fds, "".join(map(str, closed)), *command]
+        return subprocess.run(command, cwd=ROOT, env=env, capture_output=True, check=False)
+
+    def test_transfer_warning_matrix_has_exact_public_stderr(self):
+        for label, flags, env, closed in self.warning_layouts():
+            for case, status, notice in (
+                ("pre", 2, REFUSAL),
+                ("post", 1, b"stage2_error\nFileNotFoundError\n"),
+                ("success", 0, b""),
+            ):
+                with self.subTest(warnings=label, closed=closed, case=case):
+                    root = self.fixture(f"{label}-{closed}-{case}", value=None)
+                    if case != "pre":
+                        (root / "synthetic-input.json").write_bytes(b"fixture")
+                    result = self.run_with_warning_layout(
+                        ["-c", _DESCRIPTOR_WORKER, str(root), "ordinary", case], flags, env, closed,
+                    )
+                    self.assertEqual((result.returncode, result.stdout, result.stderr),
+                                     (status, b"", b"" if 2 in closed else notice))
+                    self.assertTrue((root / "checked-stdio").exists())
+                    self.assertEqual((root / "completed-read").exists(), case != "pre")
+                    self.assertEqual((root / "public" / "PUBLIC.json").exists(), case == "success")
+
+    def test_dispatch_warning_matrix_has_exact_public_stderr(self):
+        invalid = self.scratch / "unknown.json"
+        invalid.write_bytes(b'{"schema":"unknown"}')
+        interim = self.scratch / "interim.json"
+        interim.write_bytes(b'{"schema":"joulewise.cadence_look_manifest.v1",'
+                            b'"look_kind":"interim","look_id":"lm-interim-01"}')
+        tool = self.scratch / "legacy.py"
+        tool.write_bytes(
+            b"import sys, warnings\n"
+            b"warnings.warn('synthetic legacy diagnostic', RuntimeWarning)\n"
+            b"if '--final' in sys.argv:\n"
+            b"    print('synthetic legacy refusal', file=sys.stderr)\n"
+            b"    raise SystemExit(2)\n"
+        )
+        for label, flags, env, closed in self.warning_layouts():
+            for candidate, options, status, notice in (
+                (DRAFT, [], 0, b""),
+                (invalid, ["--final"], 2, b"REFUSE unknown cadence manifest schema ID\n"),
+                (interim, ["--v1-tool", str(tool)], 0, b""),
+                (interim, ["--v1-tool", str(tool), "--final"], 2, b"REFUSE manifest failed validation\n"),
+            ):
+                with self.subTest(warnings=label, closed=closed, candidate=candidate.name, options=options):
+                    args = ["-m", "joulewise.cadence_looks.manifest_dispatch", "validate", str(candidate), *options]
+                    result = self.run_with_warning_layout(args, flags, env, closed)
+                    self.assertEqual((result.returncode, result.stderr), (status, b"" if 2 in closed else notice))
+
+    def test_existing_public_result_refuses_and_preserves_bytes(self):
+        root = self.fixture("published")
+        public = root / "public" / "PUBLIC.json"
+        public.write_bytes(b"fixture previous publication\n")
+        output = self.worker(root, "success")
+        self.assertEqual((output.returncode, output.stdout, output.stderr), (2, b"", REFUSAL))
+        self.assertEqual(public.read_bytes(), b"fixture previous publication\n")
+        self.assertEqual(list((root / "private").iterdir()), [])
+
+    def test_only_one_concurrent_worker_can_reserve(self):
+        root = self.fixture("contended")
+        with subprocess.Popen(self.command(root, "contended"), cwd=ROOT, stdout=subprocess.PIPE,
+                              stderr=subprocess.PIPE) as first:
+            second = self.worker(root, "contended")
+            stdout, stderr = first.communicate()
+        self.assertCountEqual([(first.returncode, stdout, stderr), (second.returncode, second.stdout, second.stderr)],
+                              [(0, b"", b""), (2, b"", REFUSAL)])
+        self.assertTrue((root / "public" / "PUBLIC.json").is_file())
+
+
+if __name__ == "__main__":
+    unittest.main()

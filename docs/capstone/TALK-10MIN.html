@@ -274,10 +274,11 @@ a { color: var(--accent); }
   <div class="slide-head"><span class="slide-no">9</span><h2>v4 and v5</h2><span class="chip"><b>1:15</b> · at 8:35</span></div>
   <p class="message">v4 turns the pilot into a registered test with rules fixed before data. v5 asks whether an adaptive agent can sabotage successfully and still escape a joint energy-plus-monitor audit.</p>
   <div class="screen"><span class="label">On screen</span>
-    <div class="flow"><span>R0</span><i>→</i><span>R1</span><i>→</i><span>blind registration gate</span><i>→</i><span>W1</span><i>→</i><span>3 D windows</span><i>→</i><span>calibration, m ≥ 39 per pair + held-out test</span><i>→</i><span>independent recompute</span><i>→</i><span>release</span></div>
-    <p>Each box carries its <span class="freeze">[FREEZE]</span> status (done, pending or refused), never an outcome. Qwen3.8-27B at 8-bit; the KM003C captured in every window; full transcripts sealed and unscored.</p>
+    <div class="flow"><span>R0</span><i>→</i><span>R1 <small class="freeze">[FREEZE]</small></span><i>→</i><span>blind registration gate</span><i>→</i><span>W1</span><i>→</i><span>C calibration windows</span><i>→</i><span>held-out T windows</span><i>→</i><span>independent recompute</span><i>→</i><span>release</span></div>
+    <p>Each box carries its <span class="freeze">[FREEZE]</span> status (done, pending or refused), never an outcome.</p>
+    <p>Design: Qwen3.8-27B 8-bit; KM003C on DC input in every window; full transcripts sealed and unscored.</p>
     <p><strong>v5 endpoint:</strong> side-task success and no joint alarm, per attempt, reported with utility. The joint rule is calibrated at 0.05 and compared against energy alone, monitor alone, and time plus monitor. The monitor is a frontier model called by API, off the measured machine.</p>
-    <div class="flow"><span>talk, 30 Nov</span><i>→</i><span>paper, mid-Dec</span><i>→</i><span>v5 windows, Dec–Feb</span><i>→</i><span>NeurIPS 2027</span></div>
+    <div class="flow"><span>talk, 30 Nov</span><i>→</i><span>paper, mid-Dec</span></div>
   </div>
   <div class="say"><span class="label">Say</span><ul>
     <li>An example of deciding first: 8-bit decode at about 11.9 tokens per second could not fit the original budget, so the fallback was declared before any R1 number existed.</li>
