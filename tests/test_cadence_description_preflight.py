@@ -1,5 +1,6 @@
 """Exercise native-look dependency admission with invented ledger and source bytes."""
 
+from itertools import product
 from pathlib import Path
 import subprocess
 from tempfile import TemporaryDirectory
@@ -149,6 +150,7 @@ class LoadedLegAdmissionTests(unittest.TestCase):
                 position = document["positions"][key]
                 self.assertIs(position["loaded_flag"], True)
                 self.assertEqual(position["disposition"], "not_qualified:loaded")
+                self.assertEqual(position["reasons"], ["loaded"])
                 refs = next(row for row in world.rows if row["key"] == key)
                 self.assertEqual(position["receipt"], refs["receipt"])
                 self.assertEqual(document["counts"]["n_legs"], len(eligible))
@@ -204,6 +206,76 @@ class LoadedLegAdmissionTests(unittest.TestCase):
             self.assertEqual(counts, {"n_legs": len(last.good) - 1, "n_local_dates": 13})
 
 
+class Stage1ReasonOrderTests(unittest.TestCase):
+    def test_every_subset_of_operational_failures_keeps_the_lifecycle_order(self):
+        qualified = {
+            "leg_status": "complete", "g0_outcome": "released", "loaded_flag": False,
+            "quiet_spans_ns": [[0, 600_000_000_000]], "decode_tokens": 512, "decode_cap_reached": True,
+        }
+        failures = (
+            ("wrong_mode", "power_mode", "High Power"),
+            ("incomplete", "leg_status", "incomplete"),
+            ("unreleased", "g0_outcome", "timeout"),
+            ("short_hold", "quiet_spans_ns", [[0, 599_999_999_999]]),
+            ("loaded", "loaded_flag", True),
+            ("short", "decode_tokens", 511),
+            ("cap_not_reached", "decode_cap_reached", False),
+        )
+        for selected in product((False, True), repeat=len(failures)):
+            failed = [(reason, field, value) for (reason, field, value), enabled in zip(failures, selected)
+                      if enabled]
+            expected = [reason for reason, _, _ in failed]
+            with self.subTest(reasons=expected):
+                op = qualified.copy()
+                op.update((field, value) for _, field, value in failed)
+                receipt = {"power_mode": op.pop("power_mode", "Automatic")}
+                self.assertEqual(reader._eligibility_reasons(op, receipt, 512), expected)
+
+    def test_census_binds_first_reason_and_all_failures_before_scoring(self):
+        class FailedMember(DescriptionWorld):
+            loaded_keys = {"f2-inst-01/L001", "f2-stab-01/L001"}
+
+            def leg(self, kit, pos, v, day, ordinal, status):
+                refs = super().leg(kit, pos, v, day, ordinal, status)
+                if refs["key"] in self.loaded_keys:
+                    op, receipt, _, _ = self.records[refs["key"]]
+                    op.update(leg_status="incomplete", g0_outcome="timeout",
+                              quiet_spans_ns=[], decode_tokens=0, decode_cap_reached=False)
+                    receipt["power_mode"] = "High Power"
+                    fixture.put(self.repo / refs["leg_record"], op)
+                    fixture.put(self.repo / refs["receipt"], receipt)
+                return refs
+
+        for look in fixture.IDS:
+            with self.subTest(look=look), TemporaryDirectory() as directory:
+                world = FailedMember(Path(directory).resolve() / "world", look)
+                key = f"f2-{world.family}-01/L001"
+                rc, stdout, stderr, events = fixture.invoke(world, "stage1")
+                self.assertEqual((rc, stdout, stderr), (0, b"", b""))
+                self.assertFalse([path for event, path in events if event == "open"])
+                document = fixture.read(world.stage)
+                row = document["positions"][key]
+                self.assertEqual(row["disposition"], "not_qualified:wrong_mode")
+                self.assertEqual(row["reasons"], ["wrong_mode", "incomplete", "unreleased",
+                                                  "short_hold", "loaded", "short", "cap_not_reached"])
+                self.assertTrue(row["loaded_flag"])
+                admitted_key = next(candidate for candidate in world.good if candidate != key)
+                self.assertEqual(document["positions"][admitted_key]["reasons"], [])
+                self.assertEqual(document["counts"]["n_legs"], len(world.good) - 1)
+                if not world.inst:
+                    token = next(row for row in document["token_table"]
+                                 if f'{row["kit_id"]}/{row["leg_id"]}' == key)
+                    self.assertEqual(token["disposition"], "not_qualified:wrong_mode")
+                    self.assertEqual(token["missing_count_reason"], "loaded")
+                world.bind()
+
+                snapshot = reader.Snapshot(world.repo, look, "stage2")
+                census, qualified = reader.census(snapshot)
+                snapshot.check_stage1(census)
+                self.assertEqual(set(qualified), set(world.good) - {key})
+                self.assertNotIn(key, reader.verify_gates(snapshot, qualified))
+
+
 class SpentDescriptionLookTests(unittest.TestCase):
     def test_spent_look_refuses_before_launching_final_validator(self):
         # Simulate the existing reservation for the worker and its observer.
@@ -217,8 +289,7 @@ os.path.lexists = _with_reservation
         for look in fixture.IDS:
             with self.subTest(look=look), TemporaryDirectory() as temporary:
                 world = DescriptionWorld(Path(temporary).resolve() / "world", look)
-                checks = fixture.Checks()
-                checks.stage1(world)
+                world.commit_stage1(self)
                 with patch.object(fixture, "PROBE", fixture.PROBE + spent):
                     rc, out, _, events = fixture.invoke(world, "stage2")
                 self.assertEqual((rc, out), (2, b""))

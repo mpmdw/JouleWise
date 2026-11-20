@@ -90,9 +90,9 @@ def _filter_csv(path, keep):
     return output[1:]
 
 
-def _score_world(world):
+def _score_world(test, world):
     fixture.copy_attestation(world)
-    fixture.Checks().stage1(world)
+    world.commit_stage1(test)
     snapshot = reader.Snapshot(world.repo, world.look, "stage2")
     census, qualified = reader.census(snapshot)
     snapshot.check_stage1(census)
@@ -186,7 +186,7 @@ class DescriptionIntervalTests(unittest.TestCase):
             support = fixture.read(path)
             support["sidecar_times"] = [stamp for stamp in support["sidecar_times"] if stamp not in range(10, 80, 10)]
             fixture.put(path, support)
-            output = _score_world(world)
+            output = _score_world(self, world)
             cell, day = "19458/gpu_rail/mean_w", "2026-11-03"
             refused = fixture.null("coverage")
             context = output["context"][cell]
@@ -235,7 +235,7 @@ class DescriptionIntervalTests(unittest.TestCase):
                     self.assertFalse(world.stage.exists())
                     continue
 
-                check.stage1(world)
+                world.commit_stage1(self)
                 record = world.public_truth()
                 self.assertEqual(record["n_local_dates"], 14)
                 candidate = root / "candidate.json"
@@ -280,7 +280,7 @@ class DescriptionIntervalTests(unittest.TestCase):
                     if projected_start is not None:
                         support["quiet_start_s"] = projected_start
                     fixture.put(path, support)
-                report = _score_world(world)
+                report = _score_world(self, world)
                 for key in keys:
                     for channel in fixture.CHANNEL:
                         self.assertEqual(report["hold"][key][channel]["mean_w"],
@@ -305,7 +305,7 @@ class DescriptionIntervalTests(unittest.TestCase):
             for row in after_span:
                 row[1] = "40"
             fixture.put(path, fixture.csvbytes([header, *rows]))
-            report = _score_world(world)
+            report = _score_world(self, world)
             baseline = report["hold"][key]["dc_in"]["mean_w"]
             plateau = report["gain"][key]["decode_w"]["dc_in"]
             self.assertEqual(baseline + plateau / 2, 49.6875)
@@ -330,7 +330,7 @@ class DescriptionIntervalTests(unittest.TestCase):
                 row["source"] == "powermetrics" and row["rail"] == "gpu_power"
                 and float(row["interval_start_s"]) == 607
             ))
-            report = _score_world(world)
+            report = _score_world(self, world)
             refused = {"value": None, "reason": "coverage"}
             turn, gain = report["turn"][key], report["gain"][key]
             for channel in fixture.CHANNEL[:2]:
@@ -398,7 +398,7 @@ class DescriptionIntervalTests(unittest.TestCase):
 
                 with (patch.object(reader.json, "loads", observe_loads),
                       patch.object(reader.Signals, "_interval_refusal", observe_gate)):
-                    report = _score_world(world)
+                    report = _score_world(self, world)
                 if world.inst:
                     self.assertEqual(observed[:3], [
                         ("sidecar", 0, 600, "coverage"), ("sidecar", 0, 600, "meter_gap"),
@@ -426,7 +426,7 @@ class DescriptionIntervalTests(unittest.TestCase):
                     row["source"] == "powermetrics" and row["rail"] == "gpu_power"
                     and float(row["interval_start_s"]) == 607
                 ))
-                report = _score_world(world)
+                report = _score_world(self, world)
                 self.assertEqual(report["hold"][key]["gpu_rail"]["mean_w"],
                                  {"value": None, "reason": "meter_gap"})
                 turn = report["turn"][key]["energy_j"]
@@ -502,7 +502,7 @@ class DescriptionIntervalTests(unittest.TestCase):
                 self.assertEqual(sum(602 <= stamp < 611 for stamp in support["meter_times"]), 120)
                 fixture.put(sparse / "support.json", support)
                 fixture.copy_attestation(world)
-                fixture.Checks().stage1(world)
+                world.commit_stage1(self)
 
                 snapshot = reader.Snapshot(world.repo, look, "stage2")
                 census, qualified = reader.census(snapshot)

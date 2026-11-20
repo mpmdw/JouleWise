@@ -50,7 +50,7 @@ class DCCoverageTests(unittest.TestCase):
                     fixture.put(path, support)
                     expected[key] = 40 * world.good[key][0]
                 fixture.copy_attestation(world)
-                fixture.Checks().stage1(world)
+                world.commit_stage1(self)
                 snapshot = reader.Snapshot(world.repo, look, "stage2")
                 census, qualified = reader.census(snapshot)
                 snapshot.check_stage1(census)
@@ -81,7 +81,7 @@ class DCCoverageTests(unittest.TestCase):
                 self.assertEqual(sum(turn_start <= t < last + 1 for t in stamps), 108)
                 self.assertEqual(max(b - a for a, b in zip(decode, decode[1:])), 0.5)
                 fixture.copy_attestation(world)
-                fixture.Checks().stage1(world)
+                world.commit_stage1(self)
 
                 snapshot = reader.Snapshot(world.repo, look, "stage2")
                 census, qualified = reader.census(snapshot)

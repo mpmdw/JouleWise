@@ -65,31 +65,31 @@
               "type": "integer",
               "minimum": 1
             },
+            "not_qualified:wrong_mode": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "not_qualified:incomplete": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "not_qualified:unreleased": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "not_qualified:short_hold": {
+              "type": "integer",
+              "minimum": 1
+            },
             "not_qualified:loaded": {
               "type": "integer",
               "minimum": 1
             },
-            "short": {
+            "not_qualified:short": {
               "type": "integer",
               "minimum": 1
             },
-            "unreleased": {
-              "type": "integer",
-              "minimum": 1
-            },
-            "short_hold": {
-              "type": "integer",
-              "minimum": 1
-            },
-            "cap_not_reached": {
-              "type": "integer",
-              "minimum": 1
-            },
-            "wrong_mode": {
-              "type": "integer",
-              "minimum": 1
-            },
-            "incomplete": {
+            "not_qualified:cap_not_reached": {
               "type": "integer",
               "minimum": 1
             },
@@ -112,6 +112,7 @@
           "type": "object",
           "required": [
             "disposition",
+            "reasons",
             "loaded_flag",
             "receipt",
             "span_id",
@@ -120,16 +121,23 @@
           ],
           "properties": {
             "disposition": {
-              "enum": [
-                "qualified",
-                "not_qualified:loaded",
-                "short",
-                "unreleased",
-                "short_hold",
-                "cap_not_reached",
-                "wrong_mode",
-                "incomplete"
-              ]
+              "$ref": "#/$defs/member_disposition"
+            },
+            "reasons": {
+              "description": "Stage-1 eligibility failures in provisional lifecycle order.",
+              "type": "array",
+              "items": {
+                "enum": [
+                  "wrong_mode",
+                  "incomplete",
+                  "unreleased",
+                  "short_hold",
+                  "loaded",
+                  "short",
+                  "cap_not_reached"
+                ]
+              },
+              "uniqueItems": true
             },
             "loaded_flag": {
               "type": "boolean"
@@ -156,7 +164,28 @@
               "type": "boolean"
             }
           },
-          "additionalProperties": false
+          "additionalProperties": false,
+          "if": {
+            "properties": {
+              "disposition": {
+                "const": "qualified"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "reasons": {
+                "maxItems": 0
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "reasons": {
+                "minItems": 1
+              }
+            }
+          }
         },
         {
           "type": "object",
@@ -179,6 +208,18 @@
           },
           "additionalProperties": false
         }
+      ]
+    },
+    "member_disposition": {
+      "enum": [
+        "qualified",
+        "not_qualified:wrong_mode",
+        "not_qualified:incomplete",
+        "not_qualified:unreleased",
+        "not_qualified:short_hold",
+        "not_qualified:loaded",
+        "not_qualified:short",
+        "not_qualified:cap_not_reached"
       ]
     }
   }

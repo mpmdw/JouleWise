@@ -45,7 +45,6 @@ LEDGER_SCHEMA = "joulewise.cadence_look_ledger.v1"
 POSITION_FIELDS = ("leg_id", "prefill_tokens", "decode_tokens", "start_band", "g0_shape")
 SPAN_FIELDS = ("kit_id", "kit_sha256", "span_id", "attempt", "runner_pin", "legs")
 DESK_RECORDS = ("hand_table", "q1", "desk_final")
-LOADED_DISPOSITION = "not_qualified:loaded"
 FINISHED = {"completed", "coalesced", "failed", "interrupted"}
 AUTHORITY = {
     "first_native": "authority/native.json",
@@ -516,22 +515,19 @@ def _admitted_kits(snapshot, rows):
     return kits
 
 
-def _disposition(op, receipt, cap):
-    if op["loaded_flag"]:
-        return LOADED_DISPOSITION
-    if op["g0_outcome"] != "released":
-        return "unreleased"
-    if op["leg_status"] != "complete":
-        return "incomplete"
-    if not any(end - start >= 600_000_000_000 for start, end in op["quiet_spans_ns"]):
-        return "short_hold"
-    if receipt["power_mode"] != "Automatic":
-        return "wrong_mode"
-    if op["decode_tokens"] != cap:
-        return "short"
-    if not op["decode_cap_reached"]:
-        return "cap_not_reached"
-    return "qualified"
+def _eligibility_reasons(op, receipt, cap):
+    # Provisional lead order (2026-11-20). Receipt authentication happens
+    # before these checks, and planner overtime is recorded independently.
+    checks = (
+        ("wrong_mode", receipt["power_mode"] == "Automatic"),
+        ("incomplete", op["leg_status"] == "complete"),
+        ("unreleased", op["g0_outcome"] == "released"),
+        ("short_hold", any(end - start >= 600_000_000_000 for start, end in op["quiet_spans_ns"])),
+        ("loaded", not op["loaded_flag"]),
+        ("short", op["decode_tokens"] == cap),
+        ("cap_not_reached", op["decode_cap_reached"]),
+    )
+    return [reason for reason, passed in checks if not passed]
 
 
 def _epoch_seconds(value):
@@ -606,9 +602,10 @@ def _token_row(snapshot, references, kit, plan, closes):
             "malformed operational count or stamp")
     require(type(op["leg_status"]) is str and type(op["g0_outcome"]) is str
             and type(receipt["power_mode"]) is str, "invalid operational disposition input")
-    disposition = _disposition(op, receipt, plan["decode_tokens"])
+    reasons = _eligibility_reasons(op, receipt, plan["decode_tokens"])
+    disposition = f"not_qualified:{reasons[0]}" if reasons else "qualified"
     missing_count_reason = None
-    if disposition == LOADED_DISPOSITION:
+    if op["loaded_flag"]:
         missing_count_reason = "loaded"
     elif op["prefill_tokens"] is None:
         missing_count_reason = op["leg_status"]
@@ -627,6 +624,7 @@ def _token_row(snapshot, references, kit, plan, closes):
     }
     position = {
         "disposition": disposition, "loaded_flag": op["loaded_flag"],
+        "reasons": reasons,
         "receipt": references["receipt"], "span_id": span_id, "attempt": attempt,
         "span_leg_index": roster.index(leg_id),
         **_time_budget(op, kit),
