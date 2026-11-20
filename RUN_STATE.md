@@ -1052,6 +1052,25 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 
 <!-- RUN_STATE TYPED ITEMS: newest first. Add with scripts/run_state_add.py; never edit by hand. -->
 
+472. **f2-inst-03 right after f2-inst-02's last Check (no idle until 00:00); corrects 470's last sentence**
+
+```pointer
+owner: magistrate
+wait: none
+deadline: 2026-11-19T21:50:00-08:00
+on_early_or_refused: follow item 470 and RL-179 F-6 on a refused launch, missing proof or non-clean close: record the reason, apply the scoped hold, mail the lead and Ed, and take the next eligible rung only when safe. Report a missing observable at the deadline.
+next_observable: item 470 owns the f2-inst-02 L011-L012 launch, fence, Check and immediate copy. After that clean Check, issue f2-inst-03 at once (items 465, 471): seq 1 L001-L002 on its pair queue if the span fits before 23:48:10 under item 463's pin-A rule (ARG 02:00-02:35), otherwise its single-leg queue L001 if that fits. Check the kit sha256 286842217313e13ac5f8f25917b3325e3e512cd621b90b78b6201d331e9dcf25 and the queue hashes against fillers-w2/README.md at issue. At the first eligible Friday dispatch take f2-stab-01 L002 at rank 1 (item 464). Keep 470 open until its Check.
+```
+
+```item
+{"expires_epoch_s": null, "issued_epoch_s": 1795146067, "number": 472, "owner": "magistrate", "schema": "joulewise.run_state_item.v1", "sets": [], "status": "ISSUED", "supersedes": []}
+```
+
+- **Correction to item 470's last sentence (lead).** 470 says nothing launches between the f2-inst-02 Check and 00:00. Item 465 makes f2-inst-03 eligible at rank 2 as soon as f2-inst-02's last leg closes, with no further delta check, and item 471 repeats this. So the MBP does not sit idle until midnight: issue f2-inst-03 right after 470's Check, under items 463 and 464.
+- If a pair does not fit before the pin-A start limit, use the single-leg queue. If neither fits, wait for 00:00 and take Friday's rank-1 leg (f2-stab-01 L002) as 470 says.
+- Item 411's f2-inst-01 piece-1 hand-read stays open. It does not block f2-inst-03 (item 465).
+- Everything else in 470 and 471 stands: L005 is recorded with no redo, R1 is complete, no qualification items, and no W1-line merges.
+
 471. **LEAD BACK (Air): 466 hold ends; ladder unchanged; no L005 redo; no qual, no W1 merges yet**
 
 ```item
