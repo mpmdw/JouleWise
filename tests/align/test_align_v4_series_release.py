@@ -321,10 +321,12 @@ def registration_fixture(root, amount_field=None, artifact_overrides=None, *, le
 
 def stored_series(root, *, wins=102, different=None, no_rows=False, spoof=False, history=False,
                   amount_fields=None, amount_field=None, artifact_overrides=None, defective_layout=False,
-                  omit_first_pm=False, legacy_receipt=False):
+                  omit_first_pm=False, legacy_receipt=False, resign_after_w1=False,
+                  c1_arm_defect=None):
     """Synthetic committed arm history with a separate, untracked restored tree."""
     init_git_fixture(root, "-q")
-    registration_fixture(root, amount_field, artifact_overrides, legacy_receipt=legacy_receipt)
+    registration_fixture(root, amount_field, artifact_overrides,
+                         legacy_receipt=legacy_receipt or resign_after_w1)
     manifest = series.candidate()
     manifest_sha = hashlib.sha256(series.raw_json(manifest)).hexdigest()
     prior = None
@@ -335,6 +337,36 @@ def stored_series(root, *, wins=102, different=None, no_rows=False, spoof=False,
         windows[windows.index("C2"):windows.index("C3")] = ["C2", "C2#2"]
         windows.insert(windows.index("T1"), "C9")
     for window in windows:
+        if window == "C1":
+            original_path = registration.REGISTRATION + "registration_receipt.json"
+            receipt_path = original_path
+            receipt_commit = prior["commit"]
+            if resign_after_w1:
+                receipt_path = registration.REGISTRATION + "series_registration_receipt.json"
+                receipt = json.loads((root / original_path).read_bytes())
+                new_paths = sorted(set(registration.SERIES_RELEASE_ARTIFACTS) - receipt["artifacts"].keys())
+                for path in new_paths:
+                    target = root / path
+                    target.parent.mkdir(parents=True, exist_ok=True)
+                    target.write_bytes((ROOT / path).read_bytes())
+                    receipt["artifacts"][path] = registration.digest(target.read_bytes())
+                receipt["commit"] = commit_fixture(root, new_paths)
+                write_json(root / receipt_path, receipt)
+                receipt_commit = commit_fixture(root, [receipt_path])
+            if c1_arm_defect == "changed W1":
+                target = root / prior["path"]
+                target.write_bytes(target.read_bytes() + b"\n")
+                commit_fixture(root, [prior["path"]])
+            arm_source_commit = fixture_git(root, "rev-parse", "HEAD")
+            receipt_sha256 = registration.digest((root / receipt_path).read_bytes())
+            if c1_arm_defect == "wrong sha":
+                receipt_sha256 = "0" * 64
+            arm = {
+                "schema": "joulewise.align_v4_arm.v1", "admitted": True, "series_window": "C1",
+                "arm_source_commit": arm_source_commit,
+                "series_registration": {"commit": receipt_commit, "sha256": receipt_sha256},
+                "series_packet": {f"record_{key}": prior[key] for key in ("commit", "path", "sha256")},
+            }
         slot = window.split("#")[0]
         selected = series.selected(manifest, slot)
         benign_ordinals = [a["ordinal"] for a in selected["members"] if a["ordinal"] in series.FRESH_ORDINALS
@@ -410,6 +442,8 @@ def stored_series(root, *, wins=102, different=None, no_rows=False, spoof=False,
             }),
             "result": describe(root, f"{base}/result.json", {"verdict": "GO", "chain_exit_code": 0}),
         }
+        if window == "C1":
+            sources["arm"] = describe(root, f"{base}/arm.json", arm)
         if empty:
             sources["light_triage"] = describe(root, f"{base}/light.json", {
                 "schema": packet.LIGHT_TRIAGE_SCHEMA, "window": window,
@@ -467,6 +501,58 @@ def authored_receipt(root, window="C1"):
 
 
 class SeriesReleaseTests(unittest.TestCase):
+    def test_c1_arm_bound_receipt_after_w1_releases(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            stored_series(root, resign_after_w1=True)
+            w1_path = registration.REGISTRATION + "registration_receipt.json"
+            c1_path = registration.REGISTRATION + "series_registration_receipt.json"
+            c1 = json.loads((root / "records/C1/record.json").read_bytes())
+            arm = json.loads((root / c1["sources"]["arm"]["path"]).read_bytes())
+            pin = arm["series_registration"]
+            w1 = c1["previous_record"]["commit"]
+            self.assertNotEqual(w1, pin["commit"])
+            fixture_git(root, "merge-base", "--is-ancestor", w1, pin["commit"])
+            self.assertEqual(fixture_git(root, "rev-parse", f"{w1}:{w1_path}"),
+                             fixture_git(root, "rev-parse", f"{pin['commit']}:{w1_path}"))
+            self.assertEqual(pin["sha256"], registration.digest((root / c1_path).read_bytes()))
+            output = root / "report.json"
+            result = invoke(root, output)
+            self.assertEqual(result.returncode, 0, result.stderr)
+            self.assertIn("S SIGNATURE", json.loads(output.read_bytes())[seal.RL176]["S"]["words"])
+
+    def test_c1_arm_bound_receipt_rejects_w1_record_change_and_wrong_sha(self):
+        for defect in ("changed W1", "wrong sha"):
+            with self.subTest(defect=defect), tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp)
+                stored_series(root, resign_after_w1=True, c1_arm_defect=defect)
+                expected = "records/W1/record.json" if defect == "changed W1" else "series_registration_receipt.json"
+                self.assert_c1_receipt_refusal(root, expected)
+
+    def test_c1_arm_bound_resigned_receipt_rejects_later_replacement(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            stored_series(root, resign_after_w1=True)
+            path = registration.REGISTRATION + "series_registration_receipt.json"
+            late = json.loads((root / path).read_bytes())
+            late["side_transfer_field"] = "late_synthetic_field"
+            write_json(root / path, late)
+            tip = commit_fixture(root, [path])
+            fixture_git(root, "update-ref", "refs/remotes/origin/align-v4-series-release", tip)
+            self.assert_c1_receipt_refusal(root, path)
+
+    def assert_c1_receipt_refusal(self, root, path):
+        from scripts import align_v4_series_release as caller
+
+        metadata = {name: (root / name).read_bytes() for name in caller.RELEASE_METADATA}
+        with self.assertRaisesRegex(ValueError, "source SHA-256 mismatch") as refusal:
+            caller.bound_history(root.resolve(), metadata)
+        self.assertIn(path, str(refusal.exception))
+        output = root / "report.json"
+        result = invoke(root, output)
+        self.assertEqual(result.returncode, 1, result.stderr)
+        self.assertFalse(output.exists())
+
     def test_declared_mirror_missing_without_links_refuses_release(self):
         from scripts.align_v4_harvest_off import checkout_identity
 

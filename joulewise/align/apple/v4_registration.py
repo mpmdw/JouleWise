@@ -1,6 +1,9 @@
 """V4 registration evidence. Pure stdlib; no probes, data discovery or weights."""
 from __future__ import annotations
 
+from contextlib import contextmanager
+from contextvars import ContextVar
+from dataclasses import dataclass
 import hashlib
 import json
 import math
@@ -10,6 +13,8 @@ import statistics
 import subprocess
 
 REGISTRATION = 'configs/campaigns/align_v4/registration/'
+W1_RECEIPT = REGISTRATION + 'registration_receipt.json'
+C1_RECEIPT = REGISTRATION + 'series_registration_receipt.json'
 RECEIPT_SCHEMA = 'joulewise.align_v4.registration_receipt.v1'
 U3_SCHEMA = 'joulewise.align_v4.u3_bar.v1'
 WP19_SCHEMA = 'joulewise.align_v4.wp19_identity.v1'
@@ -481,7 +486,7 @@ def _committed_bytes(root, commit, paths):
     """
     request = ''.join(f'{commit}:{path}\n' for path in paths).encode()
     try:
-        out = subprocess.run(['git', 'cat-file', '--batch'], cwd=root, input=request,
+        out = subprocess.run(['git', '--no-replace-objects', 'cat-file', '--batch'], cwd=root, input=request,
                              capture_output=True, check=True).stdout
     except (OSError, subprocess.CalledProcessError) as exc:
         raise ValueError('registration_receipt commit unreadable') from exc
@@ -525,8 +530,11 @@ def verify_r1_executed_sources(root, slots):
     return commit
 
 
-def validate_receipt(receipt, root, *, series_release=False):
+def validate_receipt(receipt, root, *, series_release=False, allow_combined=False):
     """Bind reviewed bytes to one existing Git commit and current working bytes.
+
+    The ordinary W1 kit may opt into both exact inventories. Series release
+    requires the expanded inventory regardless of the receipt's contents.
 
     Gate judgments and signature are lead-owned assertions, not fabricated by
     this validator. A receipt never creates its own approval or gate reports.
@@ -542,10 +550,14 @@ def validate_receipt(receipt, root, *, series_release=False):
     if receipt.get('rulings') != {str(n): 'installed' for n in RULINGS}:
         raise ValueError('registration_receipt ruling installation incomplete')
     artifacts = receipt.get('artifacts')
+    if not isinstance(artifacts, dict):
+        raise ValueError('registration_receipt artifact set incomplete')
+    keys = set(artifacts)
     required = set(ARTIFACTS)
-    if series_release:
-        required.update(SERIES_RELEASE_ARTIFACTS)
-    if not isinstance(artifacts, dict) or set(artifacts) != required:
+    expanded = required.union(SERIES_RELEASE_ARTIFACTS)
+    if series_release or (allow_combined and keys == expanded):
+        required = expanded
+    if keys != required:
         raise ValueError('registration_receipt artifact set incomplete')
     gates = receipt.get('gates')
     if not isinstance(gates, dict) or set(gates) != {'A', 'B'}:
@@ -558,7 +570,10 @@ def validate_receipt(receipt, root, *, series_release=False):
         if not isinstance(path, str) or not path.startswith('docs/align/v4/'):
             raise ValueError('registration_receipt gate report path refused')
         _local(root, path)
-        bindings[path] = gate.get('sha256')
+        expected = gate.get('sha256')
+        if path in bindings and bindings[path] != expected:
+            raise ValueError(f'registration_receipt invalid digest: {path} (conflicting gate binding)')
+        bindings[path] = expected
     for path, expected in bindings.items():
         if not is_digest(expected):
             raise ValueError(f'registration_receipt invalid digest: {path}')
@@ -579,13 +594,82 @@ def validate_receipt(receipt, root, *, series_release=False):
     return receipt
 
 
-def require_registration(root, *, series_release=False):
-    path = REGISTRATION+'registration_receipt.json'
+@dataclass
+class _SeriesRegistrationCheck:
+    root: Path
+    receipt_commit: str | None
+    sha256: str | None = None
+
+
+_series_registration = ContextVar('series_registration', default=None)
+
+
+@contextmanager
+def series_registration_check(root, *, receipt_commit=None):
+    """Carry the authenticated selection into the frozen kit's verifier call."""
+    if receipt_commit is not None and (
+            not isinstance(receipt_commit, str) or not re.fullmatch('[0-9a-f]{40}', receipt_commit)):
+        raise ValueError('series registration requires a full receipt commit')
+    check = _SeriesRegistrationCheck(Path(root).resolve(), receipt_commit)
+    token = _series_registration.set(check)
     try:
-        receipt = json.loads(_local(root, path).read_bytes())
+        yield check
+    finally:
+        _series_registration.reset(token)
+
+
+def verify_c1_receipt_binding(evidence, predecessor, arm_source_commit, binding):
+    """Verify the prospective pair against the exact W1 record on the arm line."""
+    from scripts.align_v4_kit import valid_lead_signature
+    from scripts.align_v4_next_arm_packet import decode
+
+    if (not isinstance(binding, dict) or set(binding) != {'commit', 'sha256'}
+            or not is_digest(binding['sha256'])):
+        raise ValueError('C1 arm requires a committed registration receipt and SHA-256')
+    arm_commit = evidence.commit(arm_source_commit)
+    w1_record_commit = evidence.commit(predecessor['commit'])
+    receipt_commit = evidence.commit(binding['commit'])
+    evidence.git('merge-base', '--is-ancestor', w1_record_commit, arm_commit)
+    evidence.git('merge-base', '--is-ancestor', receipt_commit, arm_commit)
+    evidence.read(w1_record_commit, predecessor['path'], predecessor['sha256'])
+    evidence.read(arm_commit, predecessor['path'], predecessor['sha256'])
+    w1_raw = evidence.read(w1_record_commit, W1_RECEIPT)
+    w1_receipt = decode(w1_raw)
+    if (not isinstance(w1_receipt, dict) or w1_receipt.get('schema') != RECEIPT_SCHEMA
+            or w1_receipt.get('status') != 'registered' or not valid_lead_signature(w1_receipt.get('lead_signature'))):
+        raise ValueError('C1 predecessor requires a signed W1 receipt')
+    w1_signed = evidence.commit(w1_receipt.get('commit'))
+    evidence.git('merge-base', '--is-ancestor', w1_signed, w1_record_commit)
+    evidence.git('merge-base', '--is-ancestor', w1_signed, receipt_commit)
+    evidence.read(receipt_commit, W1_RECEIPT, digest(w1_raw))
+    evidence.read(arm_commit, W1_RECEIPT, digest(w1_raw))
+    shared = evidence.git('merge-base', w1_record_commit, receipt_commit).decode().strip()
+    if shared == w1_record_commit and receipt_commit != w1_record_commit:
+        evidence.read(receipt_commit, predecessor['path'], predecessor['sha256'])
+    path = W1_RECEIPT if receipt_commit == w1_record_commit else C1_RECEIPT
+    raw = evidence.read(receipt_commit, path, binding['sha256'])
+    evidence.read(arm_commit, path, binding['sha256'])
+    reviewed = evidence.commit(decode(raw)['commit'])
+    evidence.git('merge-base', '--is-ancestor', reviewed, receipt_commit)
+    return path, raw
+
+
+def require_registration(root, *, series_release=None, receipt_bytes=None):
+    check = _series_registration.get() if series_release is None and receipt_bytes is None else None
+    if check is not None and check.root != Path(root).resolve():
+        raise ValueError('series registration root differs from the selected kit')
+    path = C1_RECEIPT if check is not None and check.receipt_commit is not None else W1_RECEIPT
+    try:
+        from scripts.align_v4_next_arm_packet import decode
+        raw = _local(root, path).read_bytes() if receipt_bytes is None else receipt_bytes
+        receipt = decode(raw)
     except (OSError, ValueError) as exc:
-        raise ValueError('registration_receipt.json missing or unreadable; W1 is not registered') from exc
-    validate_receipt(receipt, root, series_release=series_release)
+        raise ValueError(f'{Path(path).name} missing or unreadable') from exc
+    if check is not None and check.receipt_commit is not None:
+        if _committed_bytes(root, check.receipt_commit, [path])[path] != raw:
+            raise ValueError('series registration receipt differs from the selected commit')
+    validate_receipt(receipt, root, series_release=series_release is True or check is not None,
+                     allow_combined=series_release is None and check is None)
     verify_r1_executed_sources(root, json.loads(_local(root, REGISTRATION+'r1_slots.json').read_bytes()))
     bar = json.loads(_local(root, REGISTRATION+'u3_bar.json').read_bytes())
     validate_u3(bar, root=root, commit=receipt['commit'])
@@ -593,6 +677,8 @@ def require_registration(root, *, series_release=False):
     validate_policy(json.loads(_local(root, REGISTRATION+'battery_window_policy.json').read_bytes()))
     wp19 = json.loads(_local(root, REGISTRATION+'wp19_receipt.json').read_bytes())
     validate_wp19(wp19)
+    if check is not None:
+        check.sha256 = digest(raw)
     return receipt
 
 
