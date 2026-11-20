@@ -494,3 +494,56 @@ the complete synthetic outputs on all three looks and the independent
 RL-188 edge oracle.
 
 [Full local result summary](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/audit-v21-round2-full-summary.txt) · [Current PR checks](https://github.com/mpmdw/JouleWise/pull/868/checks)
+
+## 2026-11-19 class sweep on frozen v2.2
+
+The fetched remote branch, draft PR #868 and clean worktree agreed at
+`e38428b3fae17bfc732749554ea7ebe5211354ec`. The independent baseline at
+that head reported 1,949 v2.2 failures. Commit `4a93b0340f7c49bfe2860f82dda403e994093a9b`
+repairs the shared scorer and adds the frozen supplement.
+
+| Finding | Repair and regression | Local result |
+| --- | --- | --- |
+| A. Fractional boundaries changed membership and coverage under clock translation. A mixed window used the fast gap cap in its slow segment. | Convert timestamps at ingestion to integer nanoseconds. Count half-open windows at the exact 99% threshold and use the appropriate period for gaps within each cadence segment. The authenticated 50 ns quiet-start, translated 99/100 turn and 2 s slow-gap cases cover the class. | **PASS.** 11,482 passed, 13 ruled skips. |
+| B. Turn energy charged the hold baseline during uncovered rail time. | Integrate `P − H` over each covered rail overlap and the clipped DC trapezoids. The exact energy tables cover leading, internal and trailing gaps on both looks, including `P == H`. | **PASS.** 1,378 passed. |
+| C. An unavailable hold masked the requested interval's refusal and censored rail-tail bound. | Reuse the ordered interval gate for ordinary, dependent and tail prints. The 3/4 tail coverage case and the shortened 0.75 s capture retain their own reasons and observed bounds. | **PASS.** 291 passed, 139 ruled skips. |
+
+The complete local implementation sweep ran all 13,303 v2.2 cases.
+All 13,151 executable cases passed with zero failures and errors. The
+152 skip IDs match the independent case table exactly. The final
+structural timestamp-indexing change passed the 230-case follow-up
+(195 passes and 35 existing skips), including the raw-read, warm-cache,
+step-3 GPU, authenticated clock, energy and tail controls. The focused
+checks ran 70 cases with 69 passes and the existing dispatcher skip.
+All 44 command-census and gate-ledger checks passed. The sharder uses
+2,529.529 seconds as the v2.2 scheduling weight, the sum of measured
+case durations in the local sweep.
+
+The local v2.1 matrix matched the established 122 reservation-dependent
+outcomes by case ID and result. The other 3,259 cases passed. The
+predecessor's hosted run passed all 3,381 v2.1 cases, including the
+synthetic reservation, with zero failures, errors or skips. The draft
+PR checks cover the pushed revision.
+
+| Frozen artifact | SHA-256 |
+| --- | --- |
+| v2.1 | `26bcfd126736d2ae490d82e221a5d53232fa0888301972e464b57641c0377426` |
+| v2.2 | `b2af51fb0231eb571fb839193839f0b56d04a0282eb7c9310db8f6309c4c6029` |
+| Design archive | `09e8cacb56706ebb7f18a83281e6590b76741f29c127b4defea853add881aa8d` |
+| RL-188 edge oracle | `334f028d934e4618ced41362eb6c8ae934c6388ab8963b7273b0bacb217da92c` |
+
+Both Python modules match their independent sources byte for byte.
+The v1, interim and qualification pin audit matched all 53 protected
+path entries, including unchanged absences. Final registration and
+independent review remain lead gates.
+
+**NEEDS_SPEC.** The 152 referred cases keep their frozen skips. They
+cover health, operands, nonpositive values, clean and manifest tails,
+crossing pairs, tail endpoints, threshold lags, absent support, mixed
+gaps and onset operands. The executable cases surfaced no new referral.
+
+[Independent contract](/Volumes/JW-EXT/scratch/astra-desc-suite-v2-2/DELTA.md) · [Independent case table](/Volumes/JW-EXT/scratch/astra-desc-suite-v2-2/CASE-RESULTS.tsv) · [Questions for Fable](/Volumes/JW-EXT/scratch/astra-desc-suite-v2-2/FOR-FABLE.md)
+
+[Local case matrix](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/class-sweep-local) · [Final targeted controls](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/class-sweep-final-targeted.log) · [Focused checks](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/class-sweep-focused.log) · [Gate checks](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/class-sweep-guard.log) · [Protected blobs](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/class-sweep-protected-blobs.tsv)
+
+[Predecessor hosted v2.1 result](https://github.com/mpmdw/JouleWise/actions/runs/44685496628/job/136118994012) · [Current PR checks](https://github.com/mpmdw/JouleWise/pull/868/checks)
