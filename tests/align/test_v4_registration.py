@@ -1,6 +1,7 @@
 """Registration blockers: synthetic records only; no native probes or weights."""
 from tests.git_fixture import init_git_fixture
 from tests.align.test_v4_arm_watchdog_check import acceptance as _watchdog_acceptance
+from contextlib import ExitStack
 from copy import deepcopy
 import hashlib
 import json
@@ -479,6 +480,303 @@ class R1ExecutedSourceTests(unittest.TestCase):
             (root / "joulewise/align/apple/r1_phase_table.py").unlink()
             with self.assertRaisesRegex(ValueError, "missing"):
                 reg.verify_r1_executed_sources(root, {"executed_commit": commit})
+
+
+class C1ArmReceiptTests(unittest.TestCase):
+    EXECUTABLES = (
+        'scripts/align_v4_series_release.py',
+        'joulewise/align/apple/s_rows.py',
+        'joulewise/align/apple/rl176.py',
+        'joulewise/align/apple/rl176_phases.py',
+    )
+    SHARED_DEPENDENCY = 'joulewise/align/apple/harvest_offload.py'
+    RECEIPT_PATH = reg.REGISTRATION + 'registration_receipt.json'
+
+    def setUp(self):
+        from joulewise.align.apple import powermode
+        from scripts import align_v4_series as series, align_v4_session as session
+        from tests.align import v4_registration_fixtures as fixtures
+
+        self.series, self.session = series, session
+        self.root = Path(self.enterContext(tempfile.TemporaryDirectory()))
+        self.repo = self.root / 'source'
+        self.repo.mkdir()
+        init_git_fixture(self.repo, '-q')
+        self.git('config', 'user.name', 'Synthetic')
+        self.git('config', 'user.email', 'synthetic@example.invalid')
+        self.git('config', 'commit.gpgsign', 'false')
+
+        self.expanded = set(reg.ARTIFACTS) | set(self.EXECUTABLES) | {self.SHARED_DEPENDENCY}
+        for path in self.expanded:
+            target = self.repo / path
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text(f'# Inert fixture for {path}\n')
+        self.plan_paths = {window: directory / 'collection_plan.json'
+                           for window, directory in [('W1', kit.KIT), ('C1', series.kit_path('C1'))]}
+        for window, path in self.plan_paths.items():
+            self.write_json(path, {'synthetic_window': window, 'runtime_requirements': {
+                'ac_powermode': 0, 'km003c': kit.km003c.REQUIREMENT,
+            }})
+        manifest = series.candidate()
+        (self.repo / series.MANIFEST).write_bytes(series.raw_json(manifest))
+        evidence_raw = b'{"synthetic":"pass"}'
+        self.write_json(series.ADMISSION, {
+            'schema': series.ADMISSION_SCHEMA, 'lead_signature': 'lead: synthetic 2026-11-19',
+            'manifest_sha256': self.sha(series.MANIFEST),
+            'w1_collection_sha256': self.sha(self.plan_paths['W1']),
+            'choices': {k: manifest[k] for k in ('d_mapping', 'test_windows', 'test_shape', 'sentinel')},
+            'evidence': {k: {'content_utf8': evidence_raw.decode(), 'sha256': reg.digest(evidence_raw),
+                             'pointer': '/synthetic'} for k in ('scorer_fit_contract', 'seed_allocation',
+                                'r13_r14_gate', 'paired_build_agreement', 'w1_clearance')},
+        })
+        gates = {}
+        for stage in ('A', 'B'):
+            path = f'docs/align/v4/synthetic-{stage}.json'
+            self.write_json(path, {'synthetic_stage': stage, 'verdict': 'ADMIT'})
+            gates[stage] = {'verdict': 'ADMIT', 'path': path, 'sha256': self.sha(path)}
+        r1_commit = self.commit('Synthetic executed sources')
+        self.write_json(reg.REGISTRATION + 'r1_slots.json', {'executed_commit': r1_commit})
+        export = fixtures.export()
+        transfer = 'synthetic-transfer.json'
+        source = 'synthetic-u3.json'
+        self.write_json(transfer, {'transfer': 'synthetic'})
+        export['policy']['transfer_justification_sha256'] = self.sha(transfer)
+        self.write_json(source, export)
+        bar = reg.derive_u3(export['pairs'], {p: self.sha(p) for p in (transfer, source)}, policy=export['policy'])
+        u3_gate = 'docs/align/v4/synthetic-u3-gate.json'
+        gate = {'verdict': 'ADMIT', 'derivation_sha256': bar['derivation_sha256']}
+        self.write_json(u3_gate, gate)
+        bar.update(status='registered', lead_signature='lead: synthetic 2026-11-19',
+                   independent_gate={**gate, 'path': u3_gate, 'sha256': self.sha(u3_gate)})
+        self.write_json(reg.REGISTRATION + 'u3_bar.json', bar)
+        self.write_json(reg.REGISTRATION + 'battery_window_policy.json', fixtures.battery_policy())
+        self.write_json(reg.REGISTRATION + 'wp19_receipt.json',
+                        reg.wp19_identity({arm: {'turns': [{'turn': 0, 'prompt_token_ids': [1],
+                                                          'output_token_ids': [2]}]} for arm in ('X', 'Y')},
+                                          {}, [], live_source_sha256='a' * 64))
+        self.signed_commit = self.commit('Synthetic reviewed bytes and reports')
+        self.combined = dict(schema=reg.RECEIPT_SCHEMA, status='registered', commit=self.signed_commit,
+                             artifacts={p: self.sha(p) for p in sorted(self.expanded)}, gates=gates,
+                             rulings={str(n): 'installed' for n in reg.RULINGS},
+                             lead_signature='lead: synthetic 2026-11-19')
+        self.legacy = {**self.combined, 'artifacts': {p: self.combined['artifacts'][p] for p in reg.ARTIFACTS}}
+
+        stack = self.enterContext(ExitStack())
+        # Leave the generated-byte comparisons, registration and series admission real.
+        # The stand-in materializers never run an inventoried source file.
+        plans = {window: {path: (self.repo / path).read_bytes()} for window, path in self.plan_paths.items()}
+        stack.enter_context(patch.object(kit, 'build_files', return_value=plans['W1']))
+        stack.enter_context(patch.object(series, 'build_files', side_effect=lambda root, manifest, name, **_: plans[name]))
+        stack.enter_context(patch.object(kit, 'read_inputs', return_value={}))
+        stack.enter_context(patch.object(kit, 'pending_inputs', return_value=['WP11.identity_unit']))
+        stack.enter_context(patch.object(kit, 'read_r1_slots', return_value={}))
+        for check in ('check_w1_record_keys', 'require_ready', 'require_sizing', 'validate_wp18_fixtures'):
+            stack.enter_context(patch.object(kit, check))
+        self.stager = stack.enter_context(patch.object(session.pilot, 'prepare', side_effect=self.stage))
+        self.installer = stack.enter_context(patch.object(session.pilot, 'install', return_value={'exit_code': 0}))
+        stack.enter_context(patch.object(session, '_arm_and_install',
+                                         side_effect=lambda path, *_args, **_kw: self.installer(path)))
+        stack.enter_context(patch.object(session, 'session_start_restore', return_value={'action': 'none'}))
+        stack.enter_context(patch.object(session, '_prepare_weight_digests', return_value={'ok': True, 'reasons': []}))
+        stack.enter_context(patch.object(session, 'runtime_stack_preflight', return_value={'ok': True, 'reasons': []}))
+        stack.enter_context(patch.object(session, 'frequency_word_preflight', return_value={'ok': True}))
+        stack.enter_context(patch.object(session, '_termination_handlers', return_value=(lambda: None, lambda: None)))
+        stack.enter_context(patch.object(powermode, 'host_lock_preflight', return_value={'synthetic': True}))
+        stack.enter_context(patch.object(powermode, 'host_state_override', return_value=self.root))
+        self.host_marker = stack.enter_context(patch.object(powermode, 'host_marker_path',
+                                                            return_value=self.root / 'synthetic-host-marker'))
+        host_lock = stack.enter_context(patch.object(powermode, 'HostLock'))
+        host_lock.return_value.acquire.return_value = True
+        stack.enter_context(patch.object(powermode, 'enter_high_power', side_effect=self.no_host))
+        stack.enter_context(patch.object(session, '_require_night_job_absent', side_effect=self.no_host))
+
+    @staticmethod
+    def no_host(*_args, **_kwargs):
+        raise AssertionError('external host command called')
+
+    @staticmethod
+    def stage(root, session_root, *, kit, pack_id, **_):
+        view = session_root / 'measurement'
+        return dict(measurement_root=str(view), source_measurement_root=str(root),
+                    registration_dir=str(view / kit / 'registration'), preparation_status='STAGED',
+                    inputs={'pack_root': str(view / 'configs/campaigns' / pack_id)})
+
+    def git(self, *args):
+        return subprocess.check_output(['git', *args], cwd=self.repo, text=True).strip()
+
+    def commit(self, message):
+        self.git('add', '.')
+        self.git('commit', '-qm', message)
+        return self.git('rev-parse', 'HEAD')
+
+    def write_json(self, path, value):
+        path = self.repo / path
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(value, sort_keys=True) + '\n')
+
+    def sha(self, path):
+        return reg.digest((self.repo / path).read_bytes())
+
+    def prepare(self, window):
+        work = Path(tempfile.mkdtemp(dir=self.root))
+        state = self.session.prepare(self.repo, work, window_id=window, power_runner=self.no_host)
+        self.assertEqual(state['v4_series']['window_id'], window)
+        return work, state
+
+    def install(self, work):
+        with patch.object(self.session, 'validate_series_state',
+                          wraps=self.session.validate_series_state) as recheck:
+            self.assertEqual(self.session.install(work, runner=self.no_host), {'exit_code': 0})
+        recheck.assert_called_once()
+        self.installer.assert_called_once_with(work)
+
+    def assert_prepare_refuses(self, receipt, reason, *, window='C1'):
+        self.write_json(self.RECEIPT_PATH, receipt)
+        with self.assertRaisesRegex(ValueError, reason):
+            self.prepare(window)
+        self.stager.assert_not_called()
+        self.installer.assert_not_called()
+
+    def assert_recheck_refuses(self, work, state, reason):
+        with self.assertRaisesRegex(ValueError, reason):
+            self.session.validate_series_state(state)
+        self.session.pilot.h.write(work / 'session.json', state)
+        with self.assertRaisesRegex(ValueError, reason):
+            self.session.install(work, runner=self.no_host)
+        self.host_marker.assert_not_called()
+        self.installer.assert_not_called()
+
+    def test_legacy_w1_receipt_only_admits_w1(self):
+        self.write_json(self.RECEIPT_PATH, self.legacy)
+        work, state = self.prepare('W1')
+        self.assertEqual(self.session.validate_series_state(state)['synthetic_window'], 'W1')
+        self.install(work)
+        self.stager.reset_mock()
+        self.installer.reset_mock()
+        self.assert_prepare_refuses({**self.legacy, 'series_release': False}, 'artifact set incomplete')
+
+    def test_combined_receipt_admits_w1_and_c1(self):
+        self.write_json(self.RECEIPT_PATH, self.combined)
+        kit.generate(self.repo, check=True, source_root=self.repo)
+        for window in ('W1', 'C1'):
+            with self.subTest(window=window):
+                work, state = self.prepare(window)
+                self.assertEqual(self.session.validate_series_state(state)['synthetic_window'], window)
+                self.install(work)
+                self.installer.reset_mock()
+
+    def test_every_c1_executable_binding_is_checked_at_prepare(self):
+        for path in self.EXECUTABLES:
+            for defect, reason in [('missing', 'artifact set incomplete'), ('null', 'invalid digest'),
+                                   ('wrong sha256', 'digest drift')]:
+                with self.subTest(path=path, defect=defect):
+                    receipt = deepcopy(self.combined)
+                    if defect == 'missing':
+                        del receipt['artifacts'][path]
+                    else:
+                        receipt['artifacts'][path] = None if defect == 'null' else reg.digest(b'wrong bytes')
+                    self.assert_prepare_refuses(receipt, reason)
+
+    def test_every_c1_executable_is_rechecked_for_working_byte_drift(self):
+        self.write_json(self.RECEIPT_PATH, self.combined)
+        work, state = self.prepare('C1')
+        for path in self.EXECUTABLES:
+            with self.subTest(path=path):
+                target = self.repo / path
+                original = target.read_bytes()
+                target.write_bytes(original + b'# working copy drift\n')
+                try:
+                    self.assert_recheck_refuses(work, state, 'digest drift: ' + path)
+                finally:
+                    target.write_bytes(original)
+
+    def test_current_bytes_cannot_replace_the_signed_commit_binding(self):
+        path = self.EXECUTABLES[0]
+        (self.repo / path).write_bytes(b'# Different working source, never committed\n')
+        receipt = deepcopy(self.combined)
+        receipt['artifacts'][path] = self.sha(path)
+        self.assert_prepare_refuses(receipt, 'digest drift: ' + path)
+
+    def test_invalid_commit_gate_dependency_and_extra_key_refuse(self):
+        for defect in ('missing commit', 'unknown commit', 'gate report', 'shared dependency', 'extra key'):
+            with self.subTest(defect=defect):
+                receipt = deepcopy(self.combined)
+                if defect == 'missing commit':
+                    del receipt['commit']
+                    reason = 'requires a full commit'
+                elif defect == 'unknown commit':
+                    receipt['commit'] = '0' * 40
+                    reason = 'missing committed artifact'
+                elif defect == 'gate report':
+                    receipt['gates']['B']['sha256'] = receipt['gates']['A']['sha256']
+                    reason = 'digest drift: docs/align/v4/synthetic-B.json'
+                else:
+                    reason = 'artifact set incomplete'
+                    if defect == 'shared dependency':
+                        del receipt['artifacts'][self.SHARED_DEPENDENCY]
+                    else:
+                        receipt['artifacts']['synthetic-extra.py'] = reg.digest(b'extra')
+                self.assert_prepare_refuses(receipt, reason)
+
+    def test_gate_report_cannot_override_an_inventoried_digest(self):
+        path = 'docs/align/v4/DEVIATIONS.md'
+        for window, form in [('W1', self.legacy), ('C1', self.combined)]:
+            with self.subTest(window=window):
+                receipt = deepcopy(form)
+                receipt['artifacts'][path] = None
+                receipt['gates']['B'].update(path=path, sha256=self.sha(path))
+                self.assert_prepare_refuses(receipt, 'invalid digest: ' + path, window=window)
+
+    def test_recheck_refuses_legacy_substitution_and_selected_window_downgrade(self):
+        self.write_json(self.RECEIPT_PATH, self.combined)
+        work, state = self.prepare('C1')
+        self.write_json(self.RECEIPT_PATH, self.legacy)
+        self.assert_recheck_refuses(work, state, 'artifact set incomplete')
+        altered = deepcopy(state)
+        altered['v4_series'].update(window_id='W1', role='selection')
+        self.assert_recheck_refuses(work, altered, 'prepared series.*(window|kit)')
+        del altered['v4_series']
+        self.session.pilot.h.write(work / 'session.json', altered)
+        with self.assertRaisesRegex(ValueError, 'prepared series.*(window|kit)'):
+            self.session.install(work, runner=self.no_host)
+        self.host_marker.assert_not_called()
+        self.installer.assert_not_called()
+
+    def test_w1_does_not_retry_an_invalid_combined_receipt_as_legacy(self):
+        for path in self.EXECUTABLES:
+            with self.subTest(path=path):
+                receipt = deepcopy(self.combined)
+                receipt['artifacts'][path] = None
+                self.assert_prepare_refuses(receipt, 'invalid digest: ' + path, window='W1')
+
+    def test_two_receipts_bind_distinct_git_identities_before_c1(self):
+        self.write_json(self.RECEIPT_PATH, self.legacy)
+        legacy_pin = self.commit('Synthetic W1 receipt issued')
+        with patch.object(reg, 'validate_receipt', wraps=reg.validate_receipt) as checked:
+            self.prepare('W1')
+        checked.assert_called_once()
+        self.assertEqual(checked.call_args.args[0], self.legacy)
+        # The earlier receipt remains in history. The second signature selects
+        # a different Git commit, before the first series member is prepared.
+        expanded_receipt = {**self.combined, 'commit': legacy_pin}
+        self.write_json(self.RECEIPT_PATH, expanded_receipt)
+        expanded_pin = self.commit('Synthetic combined receipt issued before C1')
+        self.git('merge-base', '--is-ancestor', legacy_pin, expanded_pin)
+        with patch.object(reg, 'validate_receipt', wraps=reg.validate_receipt) as checked:
+            work, state = self.prepare('C1')
+        checked.assert_called_once()
+        self.assertEqual(checked.call_args.args[0], expanded_receipt)
+        self.assertEqual(self.session.validate_series_state(state)['synthetic_window'], 'C1')
+        self.install(work)
+        self.git_witness = {
+            'legacy_receipt_commit': legacy_pin,
+            'legacy_receipt_blob': self.git('rev-parse', f'{legacy_pin}:{self.RECEIPT_PATH}'),
+            'combined_receipt_commit': expanded_pin,
+            'combined_receipt_blob': self.git('rev-parse', f'{expanded_pin}:{self.RECEIPT_PATH}'),
+            'legacy_signed_commit': self.signed_commit,
+            'combined_signed_commit': expanded_receipt['commit'],
+        }
+        self.assertNotEqual(self.git_witness['legacy_receipt_blob'], self.git_witness['combined_receipt_blob'])
 
 
 if __name__ == '__main__':
