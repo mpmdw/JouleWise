@@ -72,10 +72,24 @@ def main(argv=None, *, runner=subprocess.run, root=ROOT):
             print(result.stdout)
             if args.write_contrast:
                 inputs = Path(root) / REGISTRATION / 'inputs.json'
-                data = json.loads(inputs.read_bytes())
-                data['R1']['thermal_policy'].update(json.loads(result.stdout))
-                inputs.write_text(json.dumps(data, indent=2, sort_keys=True) + '\n')
-                print(f'wrote contrast fields to {inputs}')
+                raw = inputs.read_bytes()
+                # Compare numbers by their JSON spelling, separately from strings, arrays and booleans.
+                number_tokens = dict(parse_int=tuple, parse_float=tuple)
+                policy = json.loads(raw, **number_tokens)['R1']['thermal_policy']
+                if not isinstance(policy, dict):
+                    print('step derive-contrast refused: R1.thermal_policy must be an object', file=sys.stderr)
+                    return 1
+                derived = json.loads(result.stdout, **number_tokens)
+                for field, value in derived.items():
+                    if field in policy and policy[field] != value:
+                        print(f'step derive-contrast refused: R1.thermal_policy.{field} differs from derivation',
+                              file=sys.stderr)
+                        return 1
+                if derived.keys() - policy.keys():
+                    data = json.loads(raw)
+                    data['R1']['thermal_policy'].update(json.loads(result.stdout))
+                    inputs.write_text(json.dumps(data, indent=2, sort_keys=True) + '\n')
+                    print(f'wrote contrast fields to {inputs}')
         if code != 0:
             if step == 'kit-check':
                 print('kit --check refused (expected until every pending input, signature and gate is supplied)')
