@@ -984,3 +984,46 @@ The independent successor freeze and the accepted combined
 dispatcher and hardware base have yet to arrive. Report the final
 hashes and 53-path comparison on that base. The 16,899-case
 hosted result and all six literal reservation methods remain open.
+
+## 2026-11-20 audit after strict operational evidence
+
+At intake the clean branch and draft PR agreed at `85e7655f3`.
+The current audit and all five earlier reports were reviewed.
+The current audit's 16,899-method run reported 15,966 passes,
+921 failures and 12 errors. The audit used the current frozen
+bytes. All six suite-manifest hashes and all 53 protected path
+entries match after the repair.
+[Current audit](/Volumes/JW-EXT/scratch/pl-d-desc-looks-executor/audit-1/FINAL-MESSAGE.md) · [Protected paths](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/post-evidence-audit-protected-blobs.tsv)
+
+| Finding | Commit | Regression and result |
+| --- | --- | --- |
+| HIGH. Early data lock routed to the narrow look | `899ce422c` | **PASS**. The audit's exact replay now refuses `lm-stab-01` and admits `lm-stab-02` with the first look coalesced. The later census reports 13 qualifying dates and includes kit 15. The builder also verifies an early lock at zero dates and authenticates the stage-2 cut before reservation. |
+| MED. Stability rounded per-leg standard deviations before aggregation | `899ce422c` | **PASS**. The audit's three equal date means now print a between-date SD of exactly zero. The builder repeats it for both stability looks and checks positive pooled within-date SD. Fraction coefficients retain equivalent radicals through means and residuals. The mixed-radical near miss stays positive. |
+| HIGH. Frozen positive lacks mandatory wall evidence | `805becf17` held under the lead's resolution | **FAIL** in the old positive. The direct census reproduction returns `missing operational wall evidence` before reservation. The fully evidenced builder fixture and the signed missing-wall refusal both pass. The independently authorized successor must supply the mandatory evidence. |
+| HIGH. Hardware identity and canonical host CLI | Owner integration pending | **FAIL** on this stack. The canonical `host-id` runner is absent and PR #795 remains open. The lead requires the accepted combined base with the merged PR #854 dispatcher and shared hardware command before closing this gate. |
+
+| Earlier audit | Repair | Current regression |
+| --- | --- | --- |
+| Void 1, native pinned reader absent after reservation | `cb042106c` | **PASS**. Native preflight refuses the absent, changed and symlinked reader. Admitted scoring uses the bytes compiled at preflight. |
+| Void 2, rail gap judged at the hold cadence | `d4622c221` | **PASS**. The four-second ANE case and the two interval gap-boundary regressions pass. |
+| Void 3, sparse DC passed because its gaps were short | `ddbce2c4d` | **PASS**. Both the 108/180 turn and 8/80 decode cases refuse for coverage. |
+| Void 4, rail/sidecar coverage and precedence | `78776829b` | **PASS**. The GPU 35/36, sidecar 300/600 and DC 120/180 reproductions and the channel/interval matrix pass. |
+| Void 5, raw access, reason and recovery precedence | `eb13a0549`, `7a442bec8` and subsequent ruled refinements | **PASS**. All 140 selected current raw-read and tail cases and all 111 selected recovery/precedence cases pass. |
+
+[Early-lock replay](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/post-evidence-audit-lock-replay.log) · [Exact date-spread replay](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/post-evidence-audit-date-replay.log) · [New regressions](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/post-evidence-audit-final-reproductions.log) · [Earlier focused regressions](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/post-evidence-audit-focused.log) · [Raw-read cases](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/post-evidence-audit-raw-read-regressions.log) · [Recovery and precedence cases](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/post-evidence-audit-recovery-coverage.log)
+
+### NEEDS_SPEC
+
+- The successor must supply wall evidence and typed drops and update the
+  inherited disposition and early-lock oracles. The current frozen
+  `test_lm_stab_lock_coalesces` still expects the superseded direction.
+- The builder fixed route selection for RL-190 §1.5. The §1.3
+  base-only second form of the tables and the empty-population
+  `no_qualified_leg` print need the admitted stability wire shapes.
+- The owner must supply the combined base for hardware and the final
+  protected-path comparison. Hosted publication and the six literal
+  reservation checks remain open. The earlier `/dev/null` probe used
+  the old observer. The current descriptor/refusal controls pass.
+
+Hosted checks for the code head `899ce422c` started after push.
+[Hosted CI](https://github.com/mpmdw/JouleWise/actions/runs/44749693951) · [Workflow self-test](https://github.com/mpmdw/JouleWise/actions/runs/44749693842)
