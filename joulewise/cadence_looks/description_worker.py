@@ -14,7 +14,7 @@ import warnings
 
 from . import description as reader
 from .manifest_dispatch import (
-    PRE_READ_REFUSAL, exit_with_failure, finish_notice, redirect_to_devnull, save_public_stderr,
+    PRE_READ_REFUSAL, exit_with_failure, finish_notice, save_public_stderr,
 )
 from .transfer_release import _failure_type, _redirect, _sync_directory
 
@@ -87,7 +87,6 @@ def main(argv=None):
         warnings.simplefilter("ignore")
         sys.warnoptions = []
         saved = save_public_stderr()
-        redirect_to_devnull(2)
         if finish_notice(0, flush_streams=True):
             raise OSError("worker streams could not be flushed")
         snapshot = reader.Snapshot(args.repo.absolute(), args.look_id, args.stage)

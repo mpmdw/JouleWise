@@ -166,7 +166,7 @@ class Book:
     def git(self, *args):
         return subprocess.check_output(
             ["git", "--no-replace-objects", "-C", str(self.root), *args],
-            env=_git_environment(), stdin=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+            env=_git_environment(), stderr=subprocess.PIPE,
         )
 
     def tree(self, commit):
@@ -338,7 +338,7 @@ class Snapshot:
         result = subprocess.run(
             [sys.executable, "-B", "-m", "joulewise.cadence_looks.manifest_dispatch",
              "validate", str(self.book.root / name), "--final"],
-            cwd=CODE_ROOT, stdin=subprocess.DEVNULL, capture_output=True, check=False,
+            cwd=CODE_ROOT, capture_output=True, check=False,
         )
         expected_notice = f"ok {look} (committed)\n".encode()
         require((result.returncode, result.stdout, result.stderr) == (0, expected_notice, b""),
@@ -722,10 +722,11 @@ def verify_gates(snapshot, qualified):
 
 
 MEASURES = ("mean_w", "sd10_w", "sd40_w", "sd128_w", "turn_j")
-# These choices remain provisional until the research lead rules on FOR-FABLE.
+# Crossing timestamps and the shared recovery grid follow RL-188 §4.
 RAIL_CROSSING_STAMP = "interval_start"
 DC_CROSSING_STAMP = "interpolated"
 RECOVERY_WINDOW_STRIDE_S = 10
+RECOVERY_WINDOW_S = 10
 STEP3_COMMIT = "eb449af6404ad302fd8e659fa733f97665044c5f"
 STEP3_PATH = "joulewise/cadence_looks/step3_energy_ratios.py"
 STEP3_SHA256 = "84a1a5530ab06e688b000c84f248b2c4e561e8330f37d3132ec47aa2572eb173"
@@ -741,6 +742,10 @@ def missing(reason, bound=None):
 def difference(left, right):
     if number(left) and number(right):
         return left - right
+    for reason in ("rail_manifest", "coverage", "meter_gap", "crossed_before_span"):
+        for operand in (left, right):
+            if isinstance(operand, dict) and operand["reason"] == reason:
+                return operand
     return missing("missing_operand")
 
 
@@ -774,7 +779,7 @@ def _step3_code(*, integrated):
         source = subprocess.check_output(
             ["git", "--no-replace-objects", "-C", str(CODE_ROOT),
              "show", f"{STEP3_COMMIT}:{STEP3_PATH}"],
-            env=_git_environment(), stdin=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+            env=_git_environment(), stderr=subprocess.PIPE,
         )
     require(digest(source) == STEP3_SHA256, "pinned step-3 reader has different bytes")
     return compile(source, STEP3_PATH, "exec")
@@ -831,20 +836,16 @@ def _float(text):
 
 
 def _rail_rows(stream):
-    """Parse row identity and interval stamps before projecting any rail values."""
+    """Yield a row with its structural identity and stamp."""
     reader = csv.DictReader(stream)
     fields = ("interval_start_s", "interval_end_s", "timestamp_s", "source", "rail", "power_w")
     require(reader.fieldnames == list(fields), "wrong rail file columns")
-    rows = {}
     for row in reader:
         if row["source"] != "powermetrics" or row["rail"] not in RAILS:
             continue
         left, right, stamp = (_float(row[key]) for key in fields[:3])
         require(left < right and left <= stamp <= right, "invalid rail interval")
-        rails = rows.setdefault((left, right), {})
-        require(row["rail"] not in rails, "repeated rail in the same interval")
-        rails[row["rail"]] = (stamp, row["power_w"])
-    return rows
+        yield ((left, right), row["rail"]), stamp, row
 
 
 class Signals:
@@ -855,8 +856,13 @@ class Signals:
         self.paths = paths
         self.mark_read = mark_read
         self.pinned = pinned
-        self._rail_tokens = None
-        self._meter_tokens = None
+        self.sum_admitted = support["rail_manifest"] == list(RAILS)
+        self._read_started = False
+        self._rail_stamps = None
+        self._observed_rails = None
+        self._meter_verified = False
+        self._rail_values = {}
+        self._meter_values = {}
         self.periods = support["sample_period_s"]
         for name in ("hold", "rail_edge", "dc_edge"):
             _period(self.periods[name])
@@ -874,7 +880,6 @@ class Signals:
                     for row in self.bounds)
                 and all(first[1] <= second[0] for first, second in zip(self.bounds, self.bounds[1:])),
                 "invalid support interval ledger")
-        self.sum_admitted = support["rail_manifest"] == list(RAILS)
         missing_rails = support.get("rail_missing", {})
         for rail, gaps in missing_rails.items():
             require(rail in RAILS and all(len(row) == 2 and all(number(x) for x in row)
@@ -888,7 +893,7 @@ class Signals:
 
     @staticmethod
     def _rail_support(individual):
-        # A rail-sum sample exists only at an interval shared by every rail.
+        # Every component must supply the same start and end for a sum sample.
         common = sorted(set.intersection(*(set(intervals) for intervals in individual.values())))
         return {channel: ([a for a, _ in bounds], bounds)
                 for channel, bounds in {**individual, "rail_sum": common}.items()}
@@ -897,20 +902,21 @@ class Signals:
         split = min(b, max(a, self.meta["turn_start_s"]))
         return (split - a) / self.periods["hold"] + (b - split) / self.periods[edge_period]
 
-    def _interval_refusal(self, channel, a, b, rail_support):
-        # The normalized sidecar uses the hold cadence throughout. Count
-        # half-open sample starts for every required stream before any gap.
-        minimum = MIN_SAMPLE_COVERAGE * ((b - a) / self.periods["hold"])
-        if _sample_count(self.sidecar, a, b) < minimum:
-            return "coverage"
+    def _coverage_passes(self, channel, a, b, rail_support):
         if channel == "dc_in":
             minimum = MIN_SAMPLE_COVERAGE * self._expected_samples(a, b, "dc_edge")
             if _sample_count(self.meter, a, b) < minimum:
-                return "coverage"
+                return False
         elif rail_support:
             minimum = MIN_SAMPLE_COVERAGE * self._expected_samples(a, b, "rail_edge")
             if any(_sample_count(starts, a, b) < minimum for starts, _ in rail_support):
-                return "coverage"
+                return False
+        minimum = MIN_SAMPLE_COVERAGE * ((b - a) / self.periods["hold"])
+        return _sample_count(self.sidecar, a, b) >= minimum
+
+    def _interval_refusal(self, channel, a, b, rail_support):
+        if not self._coverage_passes(channel, a, b, rail_support):
+            return "coverage"
 
         lo = max(0, bisect_right(self.sidecar, a) - 1)
         hi = bisect_left(self.sidecar, b)
@@ -925,14 +931,102 @@ class Signals:
             lo, hi = limits
             if any(self.meter[i + 1] - self.meter[i] > 2 for i in range(lo, hi)):
                 return "meter_gap"
-            if not self.meter_clean:
-                return "meter_absent" if self.meta["meter_present"] is False else "meter_contaminated"
         elif rail_support:
             period = "rail_edge" if b > self.meta["turn_start_s"] else "hold"
             if any(_max_gap(bounds, a, b) > max(1.0, 5 * self.periods[period])
                    for _, bounds in rail_support):
                 return "meter_gap"
         return None
+
+    def _open_signal(self, name):
+        if not self._read_started:
+            self.mark_read()
+            self._read_started = True
+        return self.paths[name].open(encoding="utf-8", newline="")
+
+    def _index_rails(self):
+        if self._rail_stamps is not None:
+            return
+        stamps = {}
+        with self._open_signal("power_trace.csv") as stream:
+            for key, stamp, _ in _rail_rows(stream):
+                require(key not in stamps, "repeated rail in the same interval")
+                stamps[key] = stamp
+        self._observed_rails = self._rail_support({
+            name: [bounds for bounds in self._declared_rails[name][1] if (bounds, rail) in stamps]
+            for name, rail in RAIL_CHANNELS.items()
+        })
+        self._rail_stamps = stamps
+
+    def recovery_start(self, sampling):
+        self._index_rails()
+        observed = [self._observed_rails[channel][0][0] for channel in CHANNELS[:2]
+                    if (channel != "rail_sum" or self.sum_admitted)
+                    and self._observed_rails[channel][0]]
+        if self.meter_clean:
+            observed.append(self.meter[0])
+        return max([sampling, *observed])
+
+    def _admitted_rails(self, channel, a, b):
+        selected = [bounds for bounds in self._observed_rails[channel][1]
+                    if bounds[1] > a and bounds[0] < b]
+        names = RAILS if channel == "rail_sum" else (RAIL_CHANNELS[channel],)
+        pending = {(bounds, rail) for bounds in selected for rail in names
+                   if (bounds, rail) not in self._rail_values}
+        if pending:
+            with self._open_signal("power_trace.csv") as stream:
+                for key, stamp, row in _rail_rows(stream):
+                    if key in pending:
+                        require(self._rail_stamps[key] == stamp, "rail stamp changed after admission")
+                        self._rail_values[key] = _float(row["power_w"])
+                        pending.remove(key)
+                        if not pending:
+                            break
+            require(not pending, "rail row disappeared after admission")
+
+        stamp_rail = "gpu_power" if channel == "rail_sum" else names[0]
+        rows = [(left, right, sum(self._rail_values[((left, right), rail)] for rail in names),
+                 self._rail_stamps[((left, right), stamp_rail)]) for left, right in selected]
+        if channel != "gpu_rail":
+            return rows
+
+        # The immutable loader sees only rows admitted for this print.
+        buffer = io.StringIO()
+        writer = csv.writer(buffer)
+        writer.writerow(("interval_start_s", "interval_end_s", "timestamp_s", "source",
+                         "rail", "power_w"))
+        for left, right, value, stamp in rows:
+            writer.writerow((left, right, stamp, "powermetrics", "gpu_power", value))
+        buffer.seek(0)
+        self.pinned.open = lambda *_args, **_kwargs: buffer
+        try:
+            return self.pinned.load_gpu_trace(".")
+        finally:
+            del self.pinned.open
+
+    def _admitted_meter(self, a, b):
+        if not self._meter_verified:
+            with self._open_signal("dc_points.csv") as stream:
+                rows = csv.DictReader(stream)
+                require(rows.fieldnames == ["epoch_s", "watts"], "wrong decoded point columns")
+                stamps = [_float(row["epoch_s"]) for row in rows]
+            require(stamps == self.meter, "decoder stamps disagree with the copy's support")
+            self._meter_verified = True
+        lo, hi = _meter_slice(self.meter, a, b)
+        pending = {i for i in range(lo, hi + 1) if i not in self._meter_values}
+        if pending:
+            with self._open_signal("dc_points.csv") as stream:
+                for i, row in enumerate(csv.DictReader(stream)):
+                    if i in pending:
+                        require(self.meter[i] == _float(row["epoch_s"]),
+                                "decoder stamp changed after admission")
+                        self._meter_values[i] = _float(row["watts"])
+                        pending.remove(i)
+                        if not pending:
+                            break
+            require(not pending, "decoder point disappeared after admission")
+        return [(self.meter[i], self.meter[i + 1], self._meter_values[i],
+                 self._meter_values[i + 1]) for i in range(lo, hi)]
 
     def interval_values(self, channel, interval):
         """Admit sample counts and gaps before interpreting the interval's values."""
@@ -946,66 +1040,26 @@ class Signals:
             rail_channels = (*RAIL_CHANNELS, "rail_sum")
         else:
             rail_channels = (channel,) if channel in RAIL_CHANNELS else ()
+        if rail_channels:
+            # The declared support can prove a deficit. Only the observed
+            # identities can establish that coverage passed before the gap checks.
+            if not self._coverage_passes(channel, a, b,
+                                        [self._declared_rails[name] for name in rail_channels]):
+                return missing("coverage")
+            self._index_rails()
         reason = self._interval_refusal(
-            channel, a, b, [self._declared_rails[rail] for rail in rail_channels],
+            channel, a, b, [self._observed_rails[name] for name in rail_channels],
         )
         if reason:
             return missing(reason)
         if channel == "sidecar":
             return self.meta["sensors"]
         if channel == "dc_in":
-            if self._meter_tokens is None:
-                self.mark_read()
-                with self.paths["dc_points.csv"].open(encoding="utf-8", newline="") as stream:
-                    rows = csv.DictReader(stream)
-                    require(rows.fieldnames == ["epoch_s", "watts"], "wrong decoded point columns")
-                    points = list(rows)
-                require([_float(point["epoch_s"]) for point in points] == self.meter,
-                        "decoder stamps disagree with the copy's support")
-                self._meter_tokens = [point["watts"] for point in points]
-            lo, hi = _meter_slice(self.meter, a, b)
-            return [(self.meter[i], self.meter[i + 1], _float(self._meter_tokens[i]),
-                     _float(self._meter_tokens[i + 1])) for i in range(lo, hi)]
-
-        if self._rail_tokens is None:
-            # The CSV carries stamps and raw tokens together. Confirm actual
-            # row coverage and gaps with timestamps before converting power.
-            self.mark_read()
-            with self.paths["power_trace.csv"].open(encoding="utf-8", newline="") as stream:
-                self._rail_tokens = _rail_rows(stream)
-            self._observed_rails = self._rail_support({
-                name: [bounds for bounds in self._declared_rails[name][1]
-                       if rail in self._rail_tokens.get(bounds, {})]
-                for name, rail in RAIL_CHANNELS.items()
-            })
-        reason = self._interval_refusal(
-            channel, a, b, [self._observed_rails[rail] for rail in rail_channels],
-        )
-        if reason:
-            return missing(reason)
-        selected = [(left, right, self._rail_tokens[(left, right)])
-                    for left, right in self._observed_rails[channel][1] if right > a and left < b]
-        if channel == "gpu_rail":
-            # The immutable loader sees only rows admitted for this print.
-            buffer = io.StringIO()
-            writer = csv.writer(buffer)
-            writer.writerow(("interval_start_s", "interval_end_s", "timestamp_s", "source",
-                             "rail", "power_w"))
-            for left, right, rails in selected:
-                stamp, value = rails["gpu_power"]
-                writer.writerow((left, right, stamp, "powermetrics", "gpu_power", value))
-            buffer.seek(0)
-            self.pinned.open = lambda *_args, **_kwargs: buffer
-            try:
-                rows = self.pinned.load_gpu_trace(".")
-            finally:
-                del self.pinned.open
-            require(all(number(row[2]) for row in rows), "invalid GPU value")
-            return rows
-        names = RAILS if channel == "rail_sum" else (RAIL_CHANNELS[channel],)
-        stamp_rail = "gpu_power" if channel == "rail_sum" else names[0]
-        return [(left, right, sum(_float(rails[rail][1]) for rail in names), rails[stamp_rail][0])
-                for left, right, rails in selected]
+            if not self.meter_clean:
+                return missing("meter_absent" if self.meta["meter_present"] is False
+                               else "meter_contaminated")
+            return self._admitted_meter(a, b)
+        return self._admitted_rails(channel, a, b)
 
     def energy(self, channel, a, b):
         rows = self.interval_values(channel, (a, b))
@@ -1031,26 +1085,37 @@ class Signals:
             return rows
         if channel == "dc_in":
             return _dc_crossing(rows, a, b, threshold, falls)
-        for left, right, watts, stamp in rows:
+        for index, (left, _, watts, stamp) in enumerate(rows):
             if (watts <= threshold if falls else watts >= threshold):
-                return max(a, left) if RAIL_CROSSING_STAMP == "interval_start" else stamp
+                if index == 0:
+                    return missing("crossed_before_span")
+                return left if RAIL_CROSSING_STAMP == "interval_start" else stamp
         return missing("crossing_unobserved")
 
 
 def _dc_crossing(rows, a, b, threshold, falls):
+    def crossed(value):
+        return value <= threshold if falls else value >= threshold
+
+    if rows:
+        left, right, low, high = rows[0]
+        initial = low if left >= a else high
+        at_start = low + (high - low) * (a - left) / (right - left)
+        if crossed(initial) or crossed(at_start):
+            return missing("crossed_before_span")
     for left, right, low, high in rows:
         lo, hi = max(a, left), min(b, right)
         first = low + (high - low) * (lo - left) / (right - left)
         last = low + (high - low) * (hi - left) / (right - left)
         if DC_CROSSING_STAMP == "first_sample":
-            if left >= a and (low <= threshold if falls else low >= threshold):
+            if left >= a and crossed(low):
                 return left
-            if right <= b and (high <= threshold if falls else high >= threshold):
+            if right <= b and crossed(high):
                 return right
             continue
-        if (first <= threshold if falls else first >= threshold):
+        if crossed(first):
             return lo
-        if (last <= threshold if falls else last >= threshold):
+        if crossed(last):
             # When the threshold lies in the segment its slope is nonzero.
             return left + (threshold - low) * (right - left) / (high - low)
     return missing("crossing_unobserved")
@@ -1062,11 +1127,16 @@ def _hold(signal, start, instrument):
         printed = {"mean_w": signal.average(channel, start, start + 600), "kept": [], "dropped": []}
         for width in WIDTHS:
             windows = []
+            reasons = []
             for index in range(600 // width):
                 a = start + index * width
                 value = signal.average(channel, a, a + width)
                 if number(value):
                     windows.append((a + width / 2, value))
+                else:
+                    reasons.append(value["reason"])
+            if reasons:
+                printed.setdefault("drop_reasons", {})[str(width)] = reasons
             printed[f"sd{width}_w"] = deviation([value for _, value in windows])
             printed["kept"].append(len(windows))
             printed["dropped"].append(600 // width - len(windows))
@@ -1113,18 +1183,24 @@ def _sensors(keys, readings):
     return fan, {name: mean(values) for name, values in sensors.items()}
 
 
-def _recovery(signal, channel, start, origin, hold, spread, quiet_start):
+def _recovery(signal, channel, start, origin, hold, spread, stop):
+    reasons = []
     if not number(hold) or not number(spread):
-        return missing("hold_or_sd_undefined")
+        return missing("hold_or_sd_undefined"), reasons
     threshold = hold + 2 * spread
-    index = 0
-    while start + index * RECOVERY_WINDOW_STRIDE_S + 10 <= quiet_start:
+    complete = max(0, 1 + math.floor((stop - start - RECOVERY_WINDOW_S)
+                                    / RECOVERY_WINDOW_STRIDE_S))
+    last_end = start
+    for index in range(complete):
         a = start + index * RECOVERY_WINDOW_STRIDE_S
-        value = signal.average(channel, a, a + 10)
-        if number(value) and value <= threshold:
-            return missing("under", a - origin) if index == 0 else a - origin
-        index += 1
-    return missing("no_observed_return", max(0, quiet_start - origin))
+        last_end = a + RECOVERY_WINDOW_S
+        value = signal.average(channel, a, last_end)
+        if not number(value):
+            reasons.append(value["reason"])
+        elif value <= threshold:
+            elapsed = a - origin
+            return (missing("under", elapsed) if index == 0 else elapsed), reasons
+    return missing("not returned", last_end - origin), reasons
 
 
 def _edge_prints(signal, hold, decode, turn, first, last, quiet_start, prompt):
@@ -1136,12 +1212,18 @@ def _edge_prints(signal, hold, decode, turn, first, last, quiet_start, prompt):
     origin = stage - 5 if fallback else meta["completion_log_raw_s"] + real_shift
     sampling = meta["sampling_started_raw_s"] + real_shift
     gap = missing("no_completion_log") if fallback else stage - origin
+    anchor = signal.recovery_start(sampling)
     return_times, rise, onsets, offsets, censored = {}, {}, {}, {}, {}
+    skip_counts, skip_reasons = {}, {}
     end = last + 1
     for channel in CHANNELS:
         baseline = hold[channel]["mean_w"]
-        return_times[channel] = _recovery(signal, channel, sampling, origin, baseline,
-                                           hold[channel]["sd10_w"], quiet_start)
+        return_times[channel], reasons = _recovery(
+            signal, channel, anchor, origin, baseline, hold[channel]["sd10_w"], quiet_start + 600,
+        )
+        skip_counts[channel] = len(reasons)
+        if reasons:
+            skip_reasons[channel] = reasons
         if prompt == 256:
             rise[channel] = onsets[channel] = missing("prefill shorter than the level window")
         else:
@@ -1152,19 +1234,26 @@ def _edge_prints(signal, hold, decode, turn, first, last, quiet_start, prompt):
                 rise[channel] = difference(crosses[2], crosses[0])
                 onsets[channel] = crosses[1]
             else:
-                rise[channel] = onsets[channel] = missing("prefill_level_undefined")
+                rise[channel] = onsets[channel] = (
+                    level if isinstance(level, dict) else missing("prefill_level_undefined")
+                )
         plateau = decode[channel]
-        offsets[channel] = (signal.cross(channel, last, end, baseline + plateau / 2, falls=True)
-                            if number(baseline) and number(plateau) and plateau > 0
-                            else missing("decode_plateau_undefined"))
+        if number(baseline) and number(plateau) and plateau > 0:
+            offsets[channel] = signal.cross(channel, last, end, baseline + plateau / 2, falls=True)
+        else:
+            offsets[channel] = plateau if isinstance(plateau, dict) else missing("decode_plateau_undefined")
         if channel != "dc_in":
             stream_end = signal.bounds[-1][1] if signal.bounds else last
             if number(baseline) and stream_end > last:
                 rail_return = signal.cross(channel, last, stream_end, baseline, falls=True)
-                censored[channel] = (rail_return - last if number(rail_return)
-                                     else missing("stream_end", stream_end - last))
+                if number(rail_return):
+                    censored[channel] = rail_return - last
+                elif rail_return["reason"] == "crossing_unobserved":
+                    censored[channel] = missing("stream_end", stream_end - last)
+                else:
+                    censored[channel] = rail_return
             else:
-                censored[channel] = missing("rail_return_undefined")
+                censored[channel] = baseline if isinstance(baseline, dict) else missing("rail_return_undefined")
     decode_lags = {}
     for channel in CHANNELS[:2]:
         lag = difference(offsets["dc_in"], offsets[channel])
@@ -1177,14 +1266,19 @@ def _edge_prints(signal, hold, decode, turn, first, last, quiet_start, prompt):
     onset_lags = {channel: difference(onsets["dc_in"], onsets[channel]) for channel in CHANNELS[:2]}
     if prompt == 256:
         onset_lags = {channel: onsets[channel] for channel in CHANNELS[:2]}
-    return {
+    result = {
         "fallback": fallback, "gap_outside": not fallback and not 4.5 <= gap <= 5.5,
-        "completion_to_stage_s": gap, "unobserved_s": sampling - origin,
+        "completion_to_stage_s": gap, "unobserved_s": anchor - origin,
         "recovery_s": return_times, "rail_return_censor_s": censored,
+        "recovery_resolution_s": dict.fromkeys(CHANNELS, RECOVERY_WINDOW_S),
+        "recovery_skipped_windows": skip_counts,
         "resolution_s": dict(zip(CHANNELS, (signal.periods["rail_edge"], signal.periods["rail_edge"],
                                            signal.periods["dc_edge"]))),
         "rise_s": rise, "onset_lag_s": onset_lags, "decode_end_lag_s": decode_lags,
     }
+    if skip_reasons:
+        result["recovery_skip_reasons"] = skip_reasons
+    return result
 
 
 def print_leg(signal, detail, instrument):
@@ -1304,7 +1398,7 @@ EXECUTABLE_DEPENDENCIES = {
     "scripts/cadence_description_run.py":
         "6a16157e3e071518c78d71b1f1e01b3818d8008c32a76339ff764346ab9ad60c",
     "joulewise/cadence_looks/description_worker.py":
-        "43df640d5169fbe8b99e0a7bbc21881552fd7cae55e33e0775d7ae184a34a280",
+        "d152d6841ace94104893907f7300918efe6ba505b5c1e444c5450be1b4a85c1a",
     "joulewise/cadence_looks/transfer_release.py":
         "9f826ee253b4f4039d5172c3e3535b6003e9499593bf3166907bb15d4776d953",
     "joulewise/__init__.py":

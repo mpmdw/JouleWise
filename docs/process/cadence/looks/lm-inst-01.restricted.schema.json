@@ -140,6 +140,21 @@
                       "$ref": "#/$defs/undefined"
                     }
                   ]
+                },
+                "drop_reasons": {
+                  "type": "object",
+                  "properties": {
+                    "10": {
+                      "$ref": "#/$defs/admissionRejectionList"
+                    },
+                    "40": {
+                      "$ref": "#/$defs/admissionRejectionList"
+                    },
+                    "128": {
+                      "$ref": "#/$defs/admissionRejectionList"
+                    }
+                  },
+                  "additionalProperties": false
                 }
               },
               "additionalProperties": false
@@ -228,6 +243,21 @@
                       "$ref": "#/$defs/undefined"
                     }
                   ]
+                },
+                "drop_reasons": {
+                  "type": "object",
+                  "properties": {
+                    "10": {
+                      "$ref": "#/$defs/admissionRejectionList"
+                    },
+                    "40": {
+                      "$ref": "#/$defs/admissionRejectionList"
+                    },
+                    "128": {
+                      "$ref": "#/$defs/admissionRejectionList"
+                    }
+                  },
+                  "additionalProperties": false
                 }
               },
               "additionalProperties": false
@@ -316,6 +346,21 @@
                       "$ref": "#/$defs/undefined"
                     }
                   ]
+                },
+                "drop_reasons": {
+                  "type": "object",
+                  "properties": {
+                    "10": {
+                      "$ref": "#/$defs/admissionRejectionList"
+                    },
+                    "40": {
+                      "$ref": "#/$defs/admissionRejectionList"
+                    },
+                    "128": {
+                      "$ref": "#/$defs/admissionRejectionList"
+                    }
+                  },
+                  "additionalProperties": false
                 }
               },
               "additionalProperties": false
@@ -1143,7 +1188,9 @@
             "resolution_s",
             "rise_s",
             "onset_lag_s",
-            "decode_end_lag_s"
+            "decode_end_lag_s",
+            "recovery_resolution_s",
+            "recovery_skipped_windows"
           ],
           "properties": {
             "fallback": {
@@ -1372,12 +1419,87 @@
                 }
               },
               "additionalProperties": false
+            },
+            "recovery_resolution_s": {
+              "type": "object",
+              "required": [
+                "gpu_rail",
+                "rail_sum",
+                "dc_in"
+              ],
+              "properties": {
+                "gpu_rail": {
+                  "const": 10,
+                  "description": "Window duration in s."
+                },
+                "rail_sum": {
+                  "const": 10,
+                  "description": "Window duration in s."
+                },
+                "dc_in": {
+                  "const": 10,
+                  "description": "Window duration in s."
+                }
+              },
+              "additionalProperties": false
+            },
+            "recovery_skipped_windows": {
+              "type": "object",
+              "required": [
+                "gpu_rail",
+                "rail_sum",
+                "dc_in"
+              ],
+              "properties": {
+                "gpu_rail": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "rail_sum": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "dc_in": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              },
+              "additionalProperties": false
+            },
+            "recovery_skip_reasons": {
+              "type": "object",
+              "properties": {
+                "gpu_rail": {
+                  "$ref": "#/$defs/admissionRejectionList"
+                },
+                "rail_sum": {
+                  "$ref": "#/$defs/admissionRejectionList"
+                },
+                "dc_in": {
+                  "$ref": "#/$defs/admissionRejectionList"
+                }
+              },
+              "additionalProperties": false
             }
           },
           "additionalProperties": false
         }
       },
       "additionalProperties": false
+    },
+    "admissionRejectionList": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "enum": [
+          "rail_manifest",
+          "coverage",
+          "meter_gap",
+          "meter_absent",
+          "meter_contaminated"
+        ]
+      },
+      "description": "Reasons for refused complete windows, in search order."
     }
   }
 }

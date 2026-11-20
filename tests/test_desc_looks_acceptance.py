@@ -483,13 +483,31 @@ injection=os.environ.get("DESC_INJECT","")
 class Leak_123_456(Exception): pass
 def log(*args):
     os.write(fd,(json.dumps(args)+"\n").encode())
+# The one sanctioned descriptor setup in the pinned final-validator child.
+import stat
+def validator_stderr(path, flags, frame):
+    module = os.environ["DESC_VALIDATOR_SOURCE"]
+    reserve = os.environ["DESC_RESERVATION"]
+    caller = frame.f_back
+    return (path=="/dev/null" and flags & os.O_ACCMODE==os.O_RDWR
+            and not flags & ~(os.O_RDWR | getattr(os,"O_CLOEXEC",0))
+            and stat.S_ISCHR(os.stat(path, follow_symlinks=False).st_mode)
+            and not os.path.lexists(reserve)
+            and frame.f_code.co_filename==module and frame.f_code.co_name=="redirect_to_devnull"
+            and frame.f_locals.get("fd")==2 and caller is not None
+            and caller.f_code.co_filename==module and caller.f_code.co_name=="main"
+            and sys.argv[0]==module and sys.argv[1:2]==["validate"] and sys.argv[-1:]==["--final"]
+            and ["-m","joulewise.cadence_looks.manifest_dispatch"] in
+                [sys.orig_argv[i:i+2] for i in range(len(sys.orig_argv)-1)])
 def audit(event,args):
     if event=="open" and isinstance(args[0],(str,bytes)):
         path=os.path.abspath(os.fsdecode(args[0]))
         flags=args[2] or 0
         if path.startswith(copy):
             log("open",path)
-        if flags & (os.O_WRONLY|os.O_RDWR|os.O_CREAT|os.O_TRUNC): log("write",path)
+        if flags & (os.O_WRONLY|os.O_RDWR|os.O_CREAT|os.O_TRUNC):
+            if validator_stderr(path,flags,sys._getframe(1)): log("descriptor",path)
+            else: log("write",path)
     if event in ("os.rename","os.link","os.symlink","os.mkdir","os.remove","os.rmdir"):
         for arg in args[:2 if event in ("os.rename","os.link","os.symlink") else 1]:
             if isinstance(arg,(str,bytes)): log("write",os.path.abspath(os.fsdecode(arg)))
@@ -539,7 +557,8 @@ def invoke(w, stage, *extra, fault="", wait=True):
     put(probe/"sitecustomize.py",PROBE.encode())
     log=tempfile.NamedTemporaryFile(dir=w.base)
     env=dict(os.environ,PYTHONDONTWRITEBYTECODE="1",DESC_AUDIT_LOG=log.name,
-             DESC_VALUE_ROOT=str(w.copy),DESC_INJECT=fault,
+             DESC_VALUE_ROOT=str(w.copy),DESC_INJECT=fault,DESC_RESERVATION=str(w.private),
+             DESC_VALIDATOR_SOURCE=str(ROOT/"joulewise/cadence_looks/manifest_dispatch.py"),
              PYTHONPATH=os.pathsep.join([str(probe),str(ROOT),os.environ.get("PYTHONPATH","")]))
     proc=subprocess.Popen([*command(),stage,"--repo",str(w.repo),"--look-id",w.look,*extra],
         cwd=w.base,env=env,stdin=subprocess.DEVNULL,stdout=subprocess.PIPE,stderr=subprocess.PIPE,
@@ -723,7 +742,10 @@ class Checks(unittest.TestCase):
                                    zip(m[c][0][1:4],WIDTH)] for c,ch in enumerate(CHANNEL)}))
                 e=edges[key]
                 self.assertEqual(set(e),set(("fallback","gap_outside","completion_to_stage_s","unobserved_s",
-                    "recovery_s","rail_return_censor_s","resolution_s","rise_s","onset_lag_s","decode_end_lag_s")))
+                    "recovery_s","rail_return_censor_s","resolution_s","rise_s","onset_lag_s","decode_end_lag_s",
+                    "recovery_resolution_s","recovery_skipped_windows")))
+                self.match(e["recovery_resolution_s"],dict.fromkeys(CHANNEL,10.0))
+                self.match(e["recovery_skipped_windows"],dict.fromkeys(CHANNEL,0))
                 self.match(e["fallback"],i==2)
                 self.match(e["gap_outside"],i==1)
                 self.match(e["completion_to_stage_s"],null("no_completion_log") if i==2 else (5.,6.)[i])
@@ -1354,6 +1376,1181 @@ for kind in ("qualification","transfer"):
         for f in fields:
             add("registry_"+kind+"_"+kid.replace("-","_")+"_"+f,registry_gate,kind,kid,f)
 
+
+
+# ---------------- Frozen v2 additions (inherited scenarios above) ----------------
+from bisect import bisect_left, bisect_right
+from collections.abc import Mapping
+from contextlib import contextmanager
+from itertools import combinations, permutations, product
+
+
+RAW_CHANNEL = dict(zip(COLS, ("cpu_rail", "gpu_rail", "ane_rail")))
+PRINT_INPUTS = {"gpu_rail": ("gpu_power",), "rail_sum": tuple(COLS), "dc_in": ("dc_in",)}
+RAW_INPUTS = (*COLS, "dc_in", "sidecar")
+STRIDE_S = 10  # RL-188 §4.2. Keep the fixture's clock independent of the executor.
+
+
+def depends(channel, raw):
+    return raw == "sidecar" or raw in PRINT_INPUTS[channel]
+RAIL_HEADER = ("interval_start_s", "interval_end_s", "timestamp_s", "source", "rail", "power_w")
+# [start, end), split in cadence at the turn. The origin is arbitrary.
+INTERVAL = {
+    "hold": (0, 600), "sd10": (0, 10), "sd40": (0, 40), "sd128": (0, 128),
+    "recovery": (-20, -10), "turn": (602, 611), "prefill": (602, 606),
+    "level": (604, 606), "decode": (606, 610), "tail": (610, 611),
+    "mixed": (600, 606),
+}
+RAIL_FILE = "power_trace.csv"
+DC_FILE = "dc_points.csv"
+POSITION = ("first", "middle", "last")
+
+
+def executor():
+    from joulewise.cadence_looks import description
+    return description
+
+
+@lru_cache
+def fixture_step3():
+    return executor().step3_reader()
+
+
+def nominal(raw, a, b):
+    # Independent integer oracle. Every endpoint used here is on its nominal grid.
+    fast_hz = 1 if raw == "sidecar" else 20 if raw == "dc_in" else 4
+    split = max(a, min(602, b))
+    return (split - a) + (b - split) * fast_hz
+
+
+def grid(raw, a, b):
+    split = max(a, min(602, b))
+    n = nominal(raw, split, b)
+    return [float(i) for i in range(a, split)] + [split + (b - split) * i / n for i in range(n)]
+
+
+def count_floor(raw, a, b):
+    return nominal(raw, a, b) * 99 // 100
+
+
+def establish_count(stamps, count, a, b):
+    # Spread omissions so that count loss alone does not synthesize a >2 s gap.
+    # Preserve the first point, including the left DC bracket when possible.
+    if count > len(stamps):
+        return sorted([*stamps, (stamps[-1] + b) / 2])
+    if count == 0:
+        return []
+    return [stamps[i * len(stamps) // count] for i in range(count)]
+
+
+def gap_grid(stamps, a, b, gap):
+    # Preserve the requested count, both end brackets, and the nominal header.
+    # Pack each half on its side of an internal hole of exactly 'gap' seconds.
+    mid = len(stamps) // 2
+    left, right = (a+b-gap)/2, (a+b+gap)/2
+    return ([a + (left-a)*i/max(1, mid-1) for i in range(mid)]
+            + [right + (b-right)*i/(len(stamps)-mid) for i in range(len(stamps)-mid)])
+
+
+def raw_fixture(folder, rails, dc, sidecar, **metadata):
+    pairs = sorted({(a, b) for rows in rails.values() for a, b, _ in rows})
+    meta = dict(turn_start_s=602, sample_period_s={"hold": 1, "rail_edge": .25, "dc_edge": .05},
+                rail_manifest=list(COLS), rail_intervals=pairs, meter_times=[t for t, _ in dc],
+                sidecar_times=sidecar, meter_present=True, meter_clean=True,
+                meter_counts={"decoded": len(dc), "bad": 0, "usb_errors": 0},
+                sensors=[{"fan_keys": {"left": 700}, "TV0h": 42}])
+    meta.update(metadata)
+    paths = {name:folder/name for name in (RAIL_FILE, DC_FILE)}
+    rows = sorted((a, b, b, "powermetrics", rail, watts)
+                  for rail, series in rails.items() for a, b, watts in series)
+    put(paths[RAIL_FILE], csvbytes([RAIL_HEADER, *rows]))
+    put(paths[DC_FILE], csvbytes([("epoch_s","watts"), *dc]))
+    return executor().Signals(meta, paths, lambda: None, fixture_step3()), meta
+
+
+def assert_scalar(test, value, reason):
+    if reason:
+        test.assertEqual(value, null(reason))
+    else:
+        test.assertIn(type(value), (int, float))
+        test.assertTrue(math.isfinite(value))
+
+
+def boundary(test, phase, channel, raw, offset, gap):
+    a, b = INTERVAL[phase]
+    base = {key: grid(key, a, b) for key in RAW_INPUTS}
+    n = count_floor(raw, a, b) + offset
+    chosen = establish_count(base[raw], n, a, b)
+    bad = n * 100 < 99 * nominal(raw, a, b)
+    rail_grid = sorted(set(base[COLS[0]]) | (set(chosen) if raw in COLS else set()))
+    ends = dict(zip(rail_grid, rail_grid[1:] + [b]))
+    rails = {key: [(s, ends[s], i+1) for s in (chosen if key == raw else base[key])]
+             for i, key in enumerate(COLS)}
+    points = {}
+    for key in ("dc_in", "sidecar"):
+        stamps = chosen if raw == key else base[key]
+        points[key] = [a-1, *stamps, b]
+        if gap in (key, "both"):
+            if b-a >= 4 and len(stamps) >= 3:
+                points[key] = [a-1, *gap_grid(stamps, a, b, 3), b]
+            else:
+                # A short span can have a gap in its enclosing observations.
+                # Move the boundary bracket and preserve the number *inside*.
+                inner = [a + (i + 1) * (b-a) / (len(stamps)+1) for i in range(len(stamps))]
+                points[key] = [a-3, *inner, b]
+            test.assertGreater(max(y-x for x,y in zip(points[key], points[key][1:])), 2)
+    signal, _ = raw_fixture(test.base, rails, [(t, 7) for t in points["dc_in"]], points["sidecar"])
+    starts = [r[0] for r in rails[raw]] if raw in COLS else points[raw]
+    test.assertEqual(sum(a <= stamp < b for stamp in starts), n)
+    if bad:
+        reason = "coverage"
+    elif gap in ("sidecar", "both") or (channel == "dc_in" and gap == "dc_in"):
+        reason = "meter_gap"
+    else:
+        reason = None
+    assert_scalar(test, signal.average(channel, a, b), reason)
+
+
+class TraceLeg:
+    """One ordinary invented leg, editable before the production print entry point."""
+    def __init__(self, folder):
+        self.folder = folder
+        traces(folder, 1, 0)
+        self.meta = read(folder/"support.json")
+        self.rows = {}
+        for name in (RAIL_FILE, DC_FILE):
+            with (folder/name).open(newline="") as stream:
+                self.rows[name] = list(csv.DictReader(stream))
+
+    def omit(self, raw, stamps):
+        stamps = set(stamps)
+        if raw == "sidecar":
+            self.meta["sidecar_times"] = [s for s in self.meta["sidecar_times"] if s not in stamps]
+        elif raw == "dc_in":
+            self.rows[DC_FILE] = [row for row in self.rows[DC_FILE] if float(row["epoch_s"]) not in stamps]
+            self.meta["meter_times"] = [float(row["epoch_s"]) for row in self.rows[DC_FILE]]
+            self.meta["meter_counts"]["decoded"] = len(self.rows[DC_FILE])
+        else:
+            self.rows[RAIL_FILE] = [row for row in self.rows[RAIL_FILE]
+                                    if row["source"] != "powermetrics" or row["rail"] != raw
+                                    or float(row["interval_start_s"]) not in stamps]
+
+    def signal(self):
+        for name, rows in self.rows.items():
+            put(self.folder/name, csvbytes([list(rows[0]), *(row.values() for row in rows)]))
+        return executor().Signals(self.meta, {n:self.folder/n for n in self.rows},
+                                  lambda: None, fixture_step3())
+
+
+def print_one(signal, look):
+    detail = ({"quiet_spans_ns":[(0, 600_000_000_000)]}, None, None, None,
+              {"nominal_prefill_tokens":19458, "realised_decode_tokens":512})
+    return executor().print_leg(signal, detail, look == IDS[0])
+
+
+def omit_at(leg, raw, a, b, position, n):
+    starts = grid(raw, a, b)
+    # The left endpoint is eligible; the right endpoint belongs to the next interval.
+    begin = {"first":0, "middle":(len(starts)-n)//2, "last":len(starts)-n}[position]
+    stamps = starts[begin:begin+n]
+    leg.omit(raw, stamps)
+    return stamps
+
+
+def look_counts(test, look, raw, position, gap, offset):
+    leg = TraceLeg(test.base)
+    n = 594 + offset
+    # Keep holes isolated so channel coverage and the auxiliary gap are independent.
+    first = {"first":1, "middle":294, "last":585}[position]
+    leg.omit(raw, (first+2*i for i in range(600-n)))
+    if gap in ("sidecar","both"):
+        leg.omit("sidecar", [100,101])
+    if gap in ("dc_in","both"):
+        # Relocate two points to create a 3 s hole without changing the tested count.
+        for row in leg.rows[DC_FILE]:
+            stamp = float(row["epoch_s"])
+            if stamp in (200,201):
+                row["epoch_s"] = stamp - 1.75 if stamp==200 else stamp+1.25
+        leg.rows[DC_FILE].sort(key=lambda row:float(row["epoch_s"]))
+        leg.meta["meter_times"] = [float(row["epoch_s"]) for row in leg.rows[DC_FILE]]
+    report = print_one(leg.signal(), look)
+    for name in CHANNEL:
+        affected = depends(name, raw)
+        reason = ("coverage" if n<594 and affected else
+                  "meter_gap" if gap in ("sidecar","both") or (name=="dc_in" and gap=="dc_in")
+                  else None)
+        with test.subTest(print=name):
+            assert_scalar(test, report["hold"][name]["mean_w"], reason)
+
+
+def turn_projection(test, look, raw, position):
+    leg = TraceLeg(test.base)
+    # Defeat both count gates with loss inside decode, on its own faster cadence.
+    n = 2 if raw == "dc_in" else 1
+    omit_at(leg, raw, 606, 610, position, n)
+    report = print_one(leg.signal(), look)
+    for name in CHANNEL:
+        affected = depends(name, raw)
+        reason = "coverage" if affected else None
+        assert_scalar(test, report["hold"][name]["mean_w"], None)
+        assert_scalar(test, report["turn"]["energy_j"][name], reason)
+        if look == IDS[0]:
+            assert_scalar(test, report["gain"]["decode_w"][name], reason)
+
+
+class WatchedToken(str):
+    # Also detect interpretation of a previously cached raw field under a later request.
+    def __new__(cls, value, row, spy):
+        token = super().__new__(cls, value)
+        token.row, token.spy = row, spy
+        return token
+
+    def __float__(self):
+        self.spy(self.row)
+        return float(str.__str__(self))
+
+    def __str__(self):
+        self.spy(self.row)
+        return str.__str__(self)
+
+
+class WatchedRow(Mapping):
+    """Tag field *retrieval*, including get/items/values/dict copies, before float conversion."""
+    def __init__(self, row, spy):
+        self._row = row
+        self.spy = spy
+
+    def __len__(self):
+        return len(self._row)
+
+    def __iter__(self):
+        return iter(self._row)
+
+    def __getitem__(self, key):
+        if key in ("watts","power_w"):
+            self.spy(self._row)
+            return WatchedToken(self._row[key], self._row, self.spy)
+        return self._row[key]
+
+
+@contextmanager
+def observe_fields(folder, spy):
+    real = csv.DictReader
+    watched = {str(folder/n) for n in (RAIL_FILE,DC_FILE)}
+    class FieldReader(real):
+        def __init__(self, stream, *args, **kwargs):
+            self.watched = getattr(stream, "name", None) in watched
+            super().__init__(stream, *args, **kwargs)
+
+        def __next__(self):
+            row = super().__next__()
+            return WatchedRow(row, spy) if self.watched else row
+
+    with patch.object(csv, "DictReader", FieldReader):
+        yield
+
+
+def rail_selections(leg):
+    rows = {rail: set() for rail in COLS}
+    for row in leg.rows[RAIL_FILE]:
+        if row["source"] == "powermetrics":
+            rows[row["rail"]].add((float(row["interval_start_s"]), float(row["interval_end_s"])))
+    return {**{RAW_CHANNEL[k]: sorted(v) for k,v in rows.items()},
+            "rail_sum": sorted(set.intersection(*rows.values()))}
+
+
+def read_order(test, look, target, raw, phase, position):
+    # The oracle sees only fixture identities/stamps. No scorer state or refusal helper is used.
+    leg = TraceLeg(test.base)
+    if phase == "tiles":
+        lo = {"first":0, "middle":300, "last":590}[position]
+        hi = lo + 10
+    else:
+        lo, hi = INTERVAL[phase]
+    if phase == "recovery":
+        # Keep window zero and every channel's first stamp intact even for
+        # a leading omission. A conforming common anchor will visit this tile.
+        leg, start, _ = recovery_fixture(test.base, 4, STRIDE_S)
+        lo, hi = start+STRIDE_S, start+2*STRIDE_S
+    n = nominal(raw, lo, hi)
+    omit_at(leg, raw, lo, hi, position, n - ((99*n-1)//100))
+    rails = rail_selections(leg)
+    joint_pairs = set(rails["rail_sum"])
+    dc = leg.meta["meter_times"]
+    active = None
+    seen_good = set()
+    violations = {}
+    checked = []
+    # A first- or last-row omission may also make a DC gap. Counts always win.
+    @lru_cache(None)
+    def allowed(channel, a, b):
+        if channel == "sidecar":
+            return False, 0, -1
+        if channel == "dc_in":
+            left, right = bisect_right(dc,a)-1, bisect_left(dc,b)
+            count = bisect_left(dc,b) - bisect_left(dc,a)
+            ok = (100*count >= 99*nominal("dc_in",a,b) and left >= 0 and right < len(dc)
+                  and all(dc[i+1]-dc[i] <= 2 for i in range(left,right)))
+            return ok, dc[max(0,left)], dc[min(right,len(dc)-1)]
+        bounds = rails[channel]
+        count = sum(a <= start < b for start,_ in bounds)
+        edge, longest = a, 0
+        for start, stop in bounds:
+            if start < b and stop > a:
+                longest = max(longest, start-edge)
+                edge = max(edge, stop)
+        period = .25 if a >= 602 else 1
+        return (100*count >= 99*nominal("gpu_power",a,b)
+                and max(longest,b-edge) <= max(1,5*period)), a, b
+
+    def spy(row):
+        if "epoch_s" in row:
+            channel, stamp = "dc_in", float(row["epoch_s"])
+        elif row["source"] == "powermetrics":
+            channel, stamp = row["rail"], float(row["interval_start_s"])
+        else:
+            return
+        if channel != raw:
+            return
+        if active is None:
+            violations.setdefault("outside any interval", stamp)
+            return
+        name, a, b = active
+        admitted, left, right = allowed(name, a, b)
+        dependent = depends(name, raw)
+        inside = left <= stamp <= right if raw=="dc_in" else stamp < right and float(row["interval_end_s"]) > left
+        if name == "rail_sum" and raw in COLS:
+            inside = inside and (stamp, float(row["interval_end_s"])) in joint_pairs
+        if dependent and admitted and inside:
+            seen_good.add(stamp)
+        else:
+            label = "failed fixture interval" if lo <= stamp < hi else "other unadmitted field"
+            violations.setdefault(label, (raw,stamp,active))
+
+    def access(channel, span):
+        nonlocal active
+        previous = active
+        active = (channel, *span)
+        try:
+            result = original(channel, span)
+            if channel == target and span == (lo,hi):
+                checked.append(result)
+            return result
+        finally:
+            active = previous
+
+    with observe_fields(leg.folder, spy):
+        signal = leg.signal()
+        original = signal.interval_values
+        with patch.object(signal, "interval_values", access):
+            print_one(signal, look)
+            # Re-query after cache warmup. A broad print cannot admit this subwindow.
+            value = signal.interval_values(target, (lo,hi))
+    test.assertEqual(value, null("coverage"))
+    test.assertGreaterEqual(len(checked), 2, "normal print did not exercise the failed interval")
+    test.assertFalse(violations, violations)
+    test.assertTrue(seen_good, "reader spy did not intercept any admitted raw field")
+
+
+def recovery_fixture(folder, winner, stride_s):
+    # The fixture supplies its grid. The implementation supplies its own search.
+    # All starts coincide here, so staggered-start or crossing choices cannot mask coverage.
+    leg = TraceLeg(folder)
+    origin, start = -69, -60
+    turn_low = start + winner*stride_s
+    leg.meta.update(sampling_started_raw_s=1000+start, completion_log_raw_s=1000+origin,
+                    warmup_stage_raw_s=1005+origin)
+    negative = range(start, 0)
+    rail_rows = []
+    for a in negative:
+        for key, base in zip(COLS, (8,12,4)):
+            rail_rows.append(dict(zip(RAIL_HEADER, (a,a+1,a+1,"powermetrics",key,
+                                                     base + (40 if a < turn_low else 0)))))
+    leg.rows[RAIL_FILE] = rail_rows + [r for r in leg.rows[RAIL_FILE] if float(r["interval_start_s"])>=0]
+    leg.rows[DC_FILE] = [dict(epoch_s=a,watts=40 + (100 if a < turn_low else 0)) for a in negative] + [
+        r for r in leg.rows[DC_FILE] if float(r["epoch_s"])>=0]
+    leg.meta["rail_intervals"] = [[a,a+1] for a in negative] + [r for r in leg.meta["rail_intervals"] if r[0]>=0]
+    leg.meta["meter_times"] = [float(r["epoch_s"]) for r in leg.rows[DC_FILE]]
+    leg.meta["meter_counts"]["decoded"] = len(leg.rows[DC_FILE])
+    leg.meta["sidecar_times"] = list(negative) + [t for t in leg.meta["sidecar_times"] if t>=0]
+    return leg, start, origin
+
+
+def shift_points(leg, raw, a):
+    # Relocate (never delete) two samples. The common clock and nominal rate stay fixed.
+    moved = {a+2: a+1.25, a+3: a+4.25}
+    if raw == "sidecar":
+        leg.meta["sidecar_times"] = sorted(moved.get(t, t) for t in leg.meta["sidecar_times"])
+    else:
+        for row in leg.rows[DC_FILE]:
+            stamp = float(row["epoch_s"])
+            row["epoch_s"] = moved.get(stamp, stamp)
+        leg.rows[DC_FILE].sort(key=lambda row: float(row["epoch_s"]))
+        leg.meta["meter_times"] = [float(row["epoch_s"]) for row in leg.rows[DC_FILE]]
+
+
+def plant_rail_gap(leg, raw, a):
+    # Add six complete triples on equal endpoints, then omit six consecutive
+    # 1 s intervals of just one component. Count still passes; its 6 s gap fails.
+    rows = []
+    bounds = set()
+    for row in leg.rows[RAIL_FILE]:
+        lo, hi = float(row["interval_start_s"]), float(row["interval_end_s"])
+        if a+2 <= lo < a+8 and row["source"] == "powermetrics" and row["rail"] == raw:
+            continue
+        steps = 4 if a <= lo < a+2 else 1
+        for i in range(steps):
+            x, y = lo+(hi-lo)*i/steps, lo+(hi-lo)*(i+1)/steps
+            bounds.add((x, y))
+            rows.append(dict(row, interval_start_s=x, interval_end_s=y, timestamp_s=y))
+    leg.rows[RAIL_FILE] = rows
+    leg.meta["rail_intervals"] = sorted(bounds)
+
+
+def window_fault(leg, raw, a, width, fault):
+    if fault == "gap":
+        if raw in COLS:
+            plant_rail_gap(leg, raw, a)
+        else:
+            shift_points(leg, raw, a)
+    else:
+        if fault == "mixed":
+            shift_points(leg, "sidecar", a)
+        # Keeping ceil(.99 W)-1 eligible starts fails the count, without
+        # creating an independent time gap in the single-cause case.
+        missing = width - ((99*width-1)//100)
+        leg.omit(raw, [a+5+2*i for i in range(missing)])
+
+
+def window_reason(channel, raw, fault):
+    if depends(channel, raw):
+        return "meter_gap" if fault == "gap" else "coverage"
+    if fault == "mixed":
+        return "meter_gap"  # The common sidecar gap still vetoes the sibling.
+    return None
+
+
+def assert_recovery(test, edges, values, reasons):
+    # Independent assertions keep a correct late value visible when bookkeeping is absent.
+    for channel in CHANNEL:
+        with test.subTest(channel=channel, field="recovery_s"):
+            test.match(edges["recovery_s"][channel], values[channel])
+        with test.subTest(channel=channel, field="recovery_skipped_windows"):
+            counts = edges.get("recovery_skipped_windows", {})
+            test.assertEqual(set(counts), set(CHANNEL))
+            test.match(counts[channel], len(reasons[channel]))
+        with test.subTest(channel=channel, field="skip reasons"):
+            # A clean legacy row has no reason document. On a drop we need
+            # an observation in the print itself, independent of fixture metadata.
+            test.match(edges.get("recovery_skip_reasons", {}).get(channel, []), reasons[channel])
+        with test.subTest(channel=channel, field="recovery_resolution_s"):
+            resolution = edges.get("recovery_resolution_s", {})
+            test.assertEqual(set(resolution), set(CHANNEL))
+            test.assertIn(type(resolution[channel]), (int, float))
+            test.assertEqual(resolution[channel], 10)
+
+
+def recovery_prefix(test, raw, faults, winner, stride_s):
+    leg, start, origin = recovery_fixture(test.base, winner, stride_s)
+    for index, fault in faults:
+        window_fault(leg, raw, start+stride_s*index, 10, fault)
+    values, reasons = {}, {}
+    for ch in CHANNEL:
+        reasons[ch] = []
+        for index in range(6):
+            reason = next((window_reason(ch, raw, fault) for i, fault in faults if i == index), None)
+            if reason:
+                reasons[ch].append(reason)
+            elif index >= winner:
+                values[ch] = float(start+index*stride_s-origin) if index else null("under", bound_s=float(start-origin))
+                break
+        test.assertIn(ch, values, "fixture must contain a complete qualifying successor")
+    assert_recovery(test, print_one(leg.signal(), IDS[0])["edges"], values, reasons)
+
+
+def audit5_window_zero(test):
+    leg = TraceLeg(test.base)
+    leg.omit("sidecar", [-18])
+    leg.omit("gpu_power", [610.25])
+    leg.meta["rail_missing"] = {"gpu_power": [[610.25, 610.5]]}
+    test.assertEqual(sum(-20 <= t < -10 for t in leg.meta["sidecar_times"]), 9)
+    test.assertEqual(sum(-10 <= t < 0 for t in leg.meta["sidecar_times"]), 10)
+    edges = print_one(leg.signal(), IDS[0])["edges"]
+    assert_recovery(test, edges, dict.fromkeys(CHANNEL, 19.0),
+                    {ch: ["coverage"] for ch in CHANNEL})
+
+
+def window_sd(test, look, channel, raw, width, position, fault):
+    leg = TraceLeg(test.base)
+    total = 600 // width
+    index = {"first": 0, "middle": total//2, "last": total-1}[position]
+    window_fault(leg, raw, index*width, width, fault)
+    report = print_one(leg.signal(), look)["hold"]
+    tested = CHANNEL if raw == "sidecar" else (channel, *(ch for ch in CHANNEL if not depends(ch, raw)))
+    for ch in tested:
+        reason = window_reason(ch, raw, fault)
+        kept = [i for i in range(total) if not reason or i != index]
+        c = CHANNEL.index(ch)
+        means = [(12,24,40)[c] + (c+1)/64 * ((i+.5)*width-300) for i in kept]
+        with test.subTest(channel=ch, field="SD and counts"):
+            test.match(report[ch]["kept"][WIDTH.index(width)], len(kept))
+            test.match(report[ch]["dropped"][WIDTH.index(width)], total-len(kept))
+            test.match(report[ch][f"sd{width}_w"], statistics.stdev(means))
+        with test.subTest(channel=ch, field="drop reasons"):
+            test.match(report[ch].get("drop_reasons", {}).get(str(width), []), [reason] if reason else [])
+
+
+def staggered_grid(test, late, mode, stride_s, raw=None, placement=None):
+    leg = TraceLeg(test.base)
+    # Earliest stamp -20, latest channel start -15, origin -29.
+    # Remove leading intervals from ONE component, or leading points only from DC.
+    leg.omit(late, range(-20, -15))
+    if mode == "nonreturn":
+        # Tile k has equal positive and negative impulses, so every hold mean
+        # is 300 W (900 W for the sum), SD=0. Moving the grid by 5 s pairs the
+        # old negative impulse with the next, strictly larger positive one.
+        def level(t):
+            if t < 0:
+                return 400
+            k, offset = divmod(t, 10)
+            return 300 + (k+1) * ((offset == 2) - (offset == 7))
+        for row in leg.rows[RAIL_FILE]:
+            t = float(row["interval_start_s"])
+            if t < 600 and row["source"] == "powermetrics":
+                row["power_w"] = level(t)
+        for row in leg.rows[DC_FILE]:
+            t = float(row["epoch_s"])
+            if t <= 600:
+                row["watts"] = level(t)
+    # From -15 the final complete tile is [585,595); [595,600) has no vote.
+    # Keep omissions away from the hand fixture's impulses and interpolation knots.
+    if placement in ("complete", "both"):
+        leg.omit(raw, [589])
+    if placement in ("incomplete", "both"):
+        leg.omit(raw, [599])
+    reasons = {ch: ["coverage"] if placement in ("complete","both") and depends(ch,raw) else []
+               for ch in CHANNEL}
+    expected = null("under", bound_s=14.) if mode == "under" else null("not returned", bound_s=624.)
+    signal = leg.signal()
+    calls = []
+    original = signal.interval_values
+    def observe(ch, span):
+        calls.append((ch, span))
+        return original(ch, span)
+    with patch.object(signal, "interval_values", observe):
+        e = print_one(signal, IDS[0])["edges"]
+    for ch in CHANNEL:
+        with test.subTest(channel=ch):
+            test.assertIn((ch, (-15, -15+stride_s)), calls)
+            if mode == "nonreturn":
+                test.assertIn((ch, (585,595)), calls)
+                test.assertFalse(any(name == ch and lo == 595 and hi > lo for name,(lo,hi) in calls))
+    assert_recovery(test, e, dict.fromkeys(CHANNEL, expected), reasons)
+
+
+def tail_reason(test, raw, position):
+    leg = TraceLeg(test.base)
+    if raw=="sidecar":
+        # The ordinary sidecar is oversampled after the turn. Remove the whole
+        # half-open tail, retaining its two brackets and a sub-2 s gap.
+        leg.omit(raw, [s for s in leg.meta["sidecar_times"] if 610 <= s < 611])
+    else:
+        omit_at(leg, raw, 610, 611, position, 1)
+    edges = print_one(leg.signal(), IDS[0])["edges"]
+    for channel in ("gpu_rail","rail_sum"):
+        affected = (channel=="rail_sum" and raw in COLS) or raw in ("sidecar","gpu_power")
+        with test.subTest(channel=channel, print="rail return"):
+            test.assertEqual(edges["rail_return_censor_s"][channel],
+                             null("coverage") if affected else null("stream_end",bound_s=1))
+        with test.subTest(channel=channel, print="decode end"):
+            assert_scalar(test, edges["decode_end_lag_s"][channel],
+                          "coverage" if affected or raw=="dc_in" else None)
+
+
+def gap_limit_v2(test, channel, raw, period, delta, phase):
+    # Decouple counts from gaps by dividing the covered duration into N rows.
+    a = 602 if phase == "turn" else 0
+    duration = 32
+    b = a+duration
+    n = int(duration/period)
+    rail = raw in COLS
+    limit = max(1,5*period) if rail else 2
+    width = limit + delta
+    span = (duration-width)/2
+    bounds = [(start+i*span/(n//2), start+(i+1)*span/(n//2))
+              for start in (a,a+span+width) for i in range(n//2)]
+    regular = [(a+i*period, a+(i+1)*period) for i in range(n)]
+    rows = {r:[(lo,hi,1) for lo,hi in (bounds if rail else regular)] for r in COLS}
+    common = [s for s,_ in regular]
+    stamps = gap_grid(common,a,b,width)
+    meter = stamps if raw=="dc_in" else common
+    sidecar = stamps if raw=="sidecar" else common
+    hold = period if phase=="hold" or not rail else 1
+    signal,_ = raw_fixture(test.base, rows, [(t,7) for t in [*meter,b]], [*sidecar,b],
+                            sample_period_s={"hold":hold,"rail_edge":period,"dc_edge":period})
+    result = signal.interval_values(channel,(a,b))
+    if delta>0:
+        test.assertEqual(result,null("meter_gap"))
+    else:
+        test.assertIsInstance(result,list)
+        test.assertTrue(result)
+
+
+def sum_intersection(test, raw_pair, offset):
+    # Every component passes 594 individually; staggered absences decide the join.
+    missing = 600-(594+offset)
+    rails = {r:[(i,i+1,1) for i in range(600)
+                if not (r==raw_pair[0] and i in {10,20,30})
+                and not (r==raw_pair[1] and i in set(range(100,100+10*(missing-3),10)))]
+             for r in COLS}
+    signal,_ = raw_fixture(test.base,rails,[(i,7) for i in range(601)],list(range(601)))
+    test.assertTrue(all(len(rail) >= 594 for rail in rails.values()))
+    assert_scalar(test,signal.average("gpu_rail",0,600),None)
+    assert_scalar(test,signal.average("rail_sum",0,600),"coverage" if offset<0 else None)
+
+
+def manifest_order(test, look, order):
+    leg = TraceLeg(test.base)
+    leg.meta["rail_manifest"] = list(order)
+    report = print_one(leg.signal(), look)
+    good = list(order)==COLS
+    for name in CHANNEL:
+        reason = "rail_manifest" if name=="rail_sum" and not good else None
+        assert_scalar(test, report["hold"][name]["mean_w"], reason)
+        assert_scalar(test, report["turn"]["energy_j"][name], reason)
+
+
+def public_order(test, look):
+    world = test.world(look)
+    test.stage1(world)
+    truth = world.public_truth()
+    # A profile hook records the actual validated byte return. The I/O hook uses
+    # the child process's real file descriptors and writes at its first scoring open.
+    extra = r"""
+def profile(frame, event, result):
+    if event=="return" and frame.f_code.co_name=="validate_public" and isinstance(result,bytes):
+        log("public_bytes",result.hex())
+sys.setprofile(profile)
+sent=False
+def echo_at_stream(event,args):
+    global sent
+    if event=="open" and not sent and isinstance(args[0],str) and args[0].startswith(copy) and args[0].endswith(("power_trace.csv","dc_points.csv")):
+        sent=True
+        os.write(1,b"fixture-v2 parent stdout\n")
+        os.write(2,b"fixture-v2 parent stderr\n")
+        pid=os.fork()
+        if pid==0:
+            os.write(1,b"fixture-v2 child stdout\n")
+            os.write(2,b"fixture-v2 child stderr\n")
+            os._exit(0)
+        os.waitpid(pid,0)
+sys.addaudithook(echo_at_stream)
+"""
+    with patch.dict(invoke.__globals__,PROBE=PROBE+extra):
+        rc,out,err,events=invoke(world,"stage2")
+    test.assertEqual((rc,out,err),(0,b"",b""))
+    first_open=next(i for i,(kind,_) in enumerate(events) if kind=="open")
+    test.assertIn(["public_bytes",wire(truth).hex()],events[:first_open])
+    test.assertEqual(world.public.read_bytes(),wire(truth))
+    for pipe in ("stdout","stderr"):
+        payload=(world.private/pipe).read_bytes()
+        for sender in ("parent","child"):
+            test.assertIn(f"fixture-v2 {sender} {pipe}\n".encode(),payload)
+
+
+def native_preflight(test, look, mutation, stage):
+    # Native ledger placement is essential. A normalized Book intentionally
+    # permits a pinned Git fallback and cannot serve as this refusal oracle.
+    reader = executor()
+    w = test.world(look)
+    root = test.base/"native"
+    native = Book(root)
+    def path(name):
+        if name.startswith("manifests/"):
+            return reader.CAMPAIGN+"/looks/"+Path(name).stem+".manifest.json"
+        if name.startswith("kits/"):
+            return reader.CAMPAIGN+"/"+name
+        return name
+
+    def project(commit):
+        names = subprocess.check_output(["git","-C",str(w.repo),"ls-tree","-rz","--name-only",commit])
+        for entry in names.split(b"\0"):
+            if not entry or entry==b"LOOKS.json":
+                continue
+            name = entry.decode()
+            data = (w.repo/name).read_bytes()
+            if name=="manifests/lm-stab-02.json":
+                data = wire(dict(json.loads(data),kit_index_path=reader.CAMPAIGN+"/f2-stab/KITS.json"))
+            put(root/path(name),data)
+
+    project(w.reg)
+    reg = native.seal("invented native registration")
+    project(w.receipts)
+    rec = native.seal("invented native receipts")
+    project(w.book.head)
+    bindings = [("authority/copy.json","receipt_commit"),("roster.json","receipt_commit")]
+    if not w.inst:
+        bindings.append(("authority/events.json","first_proven_close"))
+    for name, field in bindings:
+        item = read(root/name)
+        item[field] = rec
+        put(root/name,item)
+    hashes = {path(k):sha((root/path(k)).read_bytes()) for k in w.row["input_hashes"]}
+    pub = test.base/"native-public"
+    (pub/look).mkdir(parents=True)
+    row = dict(w.row,manifest_path=path(w.row["manifest_path"]),registration_commit=reg,
+               public_root=str(pub),input_hashes=hashes)
+    ledger = root/CONTROL/"LOOKS.json"
+    put(ledger,{"schema":reader.LEDGER_SCHEMA,"looks":[row]})
+    native.seal("invented admission")
+    loader = test.base/"fixture-loader.py"
+    source = b"fixture_reader = True\n"
+    put(loader,source)
+    original_git = subprocess.check_output
+    fallback = []
+    def object_read(cmd,*args,**kwargs):
+        if cmd[-2:] == ["show",f"{reader.STEP3_COMMIT}:{loader}"]:
+            fallback.append(True)
+            return source
+        return original_git(cmd,*args,**kwargs)
+    with patch.multiple(reader,STEP3_PATH=str(loader),STEP3_SHA256=sha(source)), \
+         patch.object(subprocess,"check_output",side_effect=object_read):
+        snap = reader.Snapshot(root,look,"stage1")
+        test.assertTrue(snap.native)
+        census,qualified = reader.census(snap)
+        test.assertGreater(len(qualified),0)
+        if stage == "stage2":
+            stage_name=f"{CONTROL}/stage1/{look}.json"
+            put(root/stage_name,wire(census))
+            row.update(status="stage1_committed",stage1_path=stage_name,stage1_sha256=sha(wire(census)))
+            put(ledger,{"schema":reader.LEDGER_SCHEMA,"looks":[row]})
+            native.seal("invented bound native stage one")
+            reader.Snapshot(root,look,stage).check_stage1(census)
+        loader.unlink()
+        if mutation=="symlink":
+            backing = test.base/"invented-source"
+            put(backing,source)
+            loader.symlink_to(backing)
+        elif mutation=="drift":
+            put(loader,source+b"# different\n")
+        with test.assertRaises((FileNotFoundError,reader.Refusal)):
+            reader.Snapshot(root,look,stage)
+        test.assertEqual(fallback,[])
+        test.assertFalse(w.private.exists())
+        test.assertFalse((pub/look/"PUBLIC.json").exists())
+
+
+def sidecar_read(test, look, position, sparse):
+    # Sibling energy rows are complete. Only the common interval dependency changes.
+    leg = TraceLeg(test.base)
+    a = {"first":0,"middle":300,"last":590}[position]
+    if sparse:
+        leg.omit("sidecar", [a+4])
+    signal = leg.signal()
+    seen, denied = set(), set()
+    active = None
+    original = signal.interval_values
+    def access(name, pair):
+        nonlocal active
+        old = active
+        active = (name, *pair)
+        try:
+            return original(name,pair)
+        finally:
+            active = old
+    def record(row):
+        if active is None:
+            denied.add("outside request")
+        elif active[1:]==(a,a+10):
+            seen.add(active[0])
+            if sparse:
+                denied.add(active)
+    with patch.object(signal,"interval_values",access),observe_fields(leg.folder,record):
+        # Exercise this interval before the full per-leg path can populate any cache.
+        for name in CHANNEL:
+            assert_scalar(test, signal.average(name,a,a+10), "coverage" if sparse else None)
+        report=print_one(signal,look)
+    test.assertFalse(denied,denied)
+    if not sparse:
+        test.assertTrue(seen, "synthetic value reader spy was silent")
+    for name in CHANNEL:
+        test.assertEqual(report["hold"][name]["kept"][0],59 if sparse else 60)
+
+
+def public_inventory(test,look):
+    world=test.world(look)
+    test.stage1(world)
+    truth=world.public_truth()
+    fields={"look_id","commit","manifest_sha256","stage1_sha256","n_legs"}
+    if look==IDS[1]:
+        fields.add("n_local_dates")
+    test.assertEqual(set(truth),fields)
+    candidate=world.base/"v2-candidate.json"
+    for doc,code in [(truth,0),(dict(truth,extra="fixture-marker"),2),
+                     *( (dict(truth,**{k:True}),2) for k in fields if k.startswith("n_") )]:
+        put(candidate,doc)
+        rc,out,err,events=invoke(world,"validate-public","--candidate",str(candidate))
+        test.assertEqual((rc,out),(code,b""),err)
+        test.assertFalse(any(kind=="open" for kind,_ in events))
+        test.assertFalse(world.private.exists())
+        test.assertFalse(world.public.exists())
+
+
+def check_before_value(test, name, raw, phase, loss):
+    # This is the white-box seam for temporal order on *passing* as well as
+    # failing gates. An all-valid fixture alone cannot expose parse-then-check by output.
+    leg = TraceLeg(test.base)
+    a,b = INTERVAL[phase]
+    if loss:
+        n = nominal(raw,a,b)
+        omit_at(leg,raw,a,b,"last", n-((99*n-1)//100))
+    adjudicated = []
+    reads = []
+    actual = rail_selections(leg).get(name, [])
+    def adjudicate(channel,lo,hi,rail_support):
+        result = original(channel,lo,hi,rail_support)
+        if channel==name and (lo,hi)==(a,b) and result is None:
+            # The optimistic interval ledger is not proof of missing raw identities.
+            if raw=="dc_in" or any([p for p in bounds if p[0]<b and p[1]>a]
+                                   == [p for p in actual if p[0]<b and p[1]>a]
+                                   for _,bounds in rail_support):
+                adjudicated.append((lo,hi))
+        return result
+    def spy(row):
+        if raw=="dc_in":
+            if "epoch_s" not in row or not a<=float(row["epoch_s"])<b:
+                return
+        elif row.get("source")!="powermetrics" or row.get("rail")!=raw or not a<=float(row["interval_start_s"])<b:
+            return
+        test.assertTrue(adjudicated,"raw field retrieved before a passing interval check")
+        test.assertFalse(loss,"a failed interval exposed a raw field")
+        reads.append(1)
+    with observe_fields(leg.folder,spy):
+        signal = leg.signal()
+        original = signal._interval_refusal
+        with patch.object(signal,"_interval_refusal",adjudicate):
+            value=signal.average(name,a,b)
+    assert_scalar(test,value,"coverage" if loss else None)
+    test.assertEqual(bool(reads),not loss,"spy missed the admitted value path")
+
+
+def binding_before_reservation(test,look):
+    world=test.world(look)
+    test.stage1(world)
+    # The synthetic refusal makes this order test independent of filesystem
+    # permission to create the one-use directory. The real-pipe case uses the worker unchanged.
+    extra = r"""
+def record_binding(frame,event,result):
+    if event=="return" and frame.f_code.co_name=="validate_public" and isinstance(result,bytes):
+        log("public_bytes",result.hex())
+sys.setprofile(record_binding)
+def refuse_reservation(event,args):
+    if event=="os.mkdir" and args[0]==os.environ["DESC_RESERVATION"]:
+        log("reservation_attempt",args[0])
+        raise PermissionError("invented refusal")
+sys.addaudithook(refuse_reservation)
+"""
+    with patch.dict(invoke.__globals__,PROBE=PROBE+extra):
+        rc,out,err,events=invoke(world,"stage2")
+    test.assertEqual((rc,out),(2,b""),err)
+    before=events.index(["reservation_attempt",str(world.private)])
+    test.assertIn(["public_bytes",wire(world.public_truth()).hex()],events[:before])
+    test.assertFalse(any(kind=="open" for kind,_ in events))
+    test.assertFalse(world.public.exists())
+    test.assertFalse(world.private.exists())
+
+
+def gap_per_look(test, look, raw, ticks):
+    leg = TraceLeg(test.base)
+    # Subdivide six clean rows, so losing five or six consecutive 250 ms
+    # intervals cannot trip the 99% count first. Keep the header cadence fixed.
+    bounds = []
+    rows = []
+    for lo,hi in leg.meta["rail_intervals"]:
+        if not 606 <= lo < 610:
+            bounds.append((lo,hi))
+            continue
+        mids = [lo,(lo+hi)/2,hi] if lo<607.5 else [lo,hi]
+        for x,y in zip(mids,mids[1:]):
+            bounds.append((x,y))
+            for key,val in zip(COLS,(12,20,4)):
+                if key!=raw or not 608 <= x < 608+.25*ticks:
+                    rows.append(dict(zip(RAIL_HEADER,(x,y,y,"powermetrics",key,val))))
+    leg.meta["rail_intervals"]=bounds
+    leg.rows[RAIL_FILE]=[r for r in leg.rows[RAIL_FILE] if not 606<=float(r["interval_start_s"])<610]+rows
+    leg.rows[RAIL_FILE].sort(key=lambda r:float(r["interval_start_s"]))
+    test.assertGreaterEqual(sum(r["rail"]==raw for r in rows),16)
+    report=print_one(leg.signal(),look)
+    for name in CHANNEL:
+        affected = depends(name, raw)
+        reason = "meter_gap" if affected and ticks>5 else None
+        assert_scalar(test,report["turn"]["energy_j"][name],reason)
+        if look==IDS[0]:
+            assert_scalar(test,report["gain"]["decode_w"][name],reason)
+
+
+def dc_bracket(test, edge):
+    # Preserve all nominal starts even when the first/last interpolation bracket is absent.
+    a,b=602,606
+    legs={r:[(s,s+.25,1) for s in grid(r,a,b)] for r in COLS}
+    times=grid("dc_in",a,b)
+    if edge=="left":
+        times[0] += .005
+    if edge!="right":
+        times.append(b)
+    signal,_=raw_fixture(test.base,legs,[(s,7) for s in times],list(range(a,b+1)))
+    test.assertEqual(sum(a<=s<b for s in times),80)
+    assert_scalar(test,signal.average("dc_in",a,b),None if edge=="both_present" else "meter_gap")
+    assert_scalar(test,signal.average("gpu_rail",a,b),None)
+
+
+def manifest_first(test, variant, fault):
+    leg = TraceLeg(test.base)
+    manifests = {"order": list(reversed(COLS)), "short": COLS[:-1],
+                 "extra": [*COLS, "unknown"], "duplicate": [COLS[0], COLS[1], COLS[1]]}
+    leg.meta["rail_manifest"] = manifests[variant]
+    if fault in ("count", "mixed"):
+        leg.omit("ane_power", range(40, 47))
+    if fault in ("gap", "mixed"):
+        shift_points(leg, "sidecar", 100)
+    events = []
+    class OrderedManifest(list):
+        def __eq__(self, other):
+            events.append("manifest")
+            return super().__eq__(other)
+        def __ne__(self, other):
+            return not self == other
+        def __iter__(self):
+            events.append("manifest")
+            return super().__iter__()
+        def __len__(self):
+            events.append("manifest")
+            return super().__len__()
+
+    class ObservedSupport(dict):
+        def __getitem__(self, key):
+            if key in ("rail_intervals", "rail_missing", "meter_times", "meter_counts", "sidecar_times"):
+                events.append("coverage")
+            return super().__getitem__(key)
+        def get(self, key, default=None):
+            return self[key] if key in self else default
+
+    leg.meta["rail_manifest"] = OrderedManifest(leg.meta["rail_manifest"])
+    leg.meta = ObservedSupport(leg.meta)
+    def raw(row):
+        events.append("raw")
+    with observe_fields(leg.folder, raw):
+        signal = leg.signal()
+        with patch.object(signal, "_interval_refusal", wraps=signal._interval_refusal) as gate:
+            assert_scalar(test, signal.average("rail_sum", 0, 600), "rail_manifest")
+            gate.assert_not_called()
+    test.assertIn("manifest", events)
+    test.assertEqual(events[0], "manifest", events)
+    test.assertNotIn("raw", events)
+
+
+def bad_tail_gap(test, raw):
+    leg = TraceLeg(test.base)
+    # The right bracket is available, but too far from the last in-span stamp.
+    if raw == "sidecar":
+        leg.meta["sidecar_times"] = [t for t in leg.meta["sidecar_times"] if t < 611] + [614.]
+    else:
+        rows = [r for r in leg.rows[DC_FILE] if float(r["epoch_s"]) < 611]
+        leg.rows[DC_FILE] = rows + [dict(epoch_s=614., watts=40.)]
+        leg.meta["meter_times"] = [float(r["epoch_s"]) for r in leg.rows[DC_FILE]]
+        leg.meta["meter_counts"]["decoded"] = len(leg.rows[DC_FILE])
+    edges = print_one(leg.signal(), IDS[0])["edges"]
+    for rail in CHANNEL[:2]:
+        with test.subTest(print="lag", rail=rail):
+            assert_scalar(test, edges["decode_end_lag_s"][rail], "meter_gap")
+        with test.subTest(print="return", rail=rail):
+            test.assertEqual(edges["rail_return_censor_s"][rail], null("meter_gap")
+                             if raw == "sidecar" else null("stream_end", bound_s=1.))
+
+
+def already_crossed(test, channel, direction):
+    leg = TraceLeg(test.base)
+    a, b = INTERVAL["prefill" if direction == "rise" else "tail"]
+    value = 120 if direction == "rise" else 0
+    if channel == "dc_in":
+        for row in leg.rows[DC_FILE]:
+            if a <= float(row["epoch_s"]) < b:
+                row["watts"] = value
+    else:
+        for row in leg.rows[RAIL_FILE]:
+            if (row["source"] == "powermetrics" and row["rail"] in PRINT_INPUTS[channel]
+                    and a <= float(row["interval_start_s"]) < b):
+                row["power_w"] = value
+    e = print_one(leg.signal(), IDS[0])["edges"]
+    if direction == "rise":
+        test.assertEqual(e["rise_s"][channel], null("crossed_before_span"))
+    lags = e["onset_lag_s" if direction == "rise" else "decode_end_lag_s"]
+    for rail in CHANNEL[:2] if channel == "dc_in" else (channel,):
+        test.assertEqual(lags[rail], null("crossed_before_span"))
+
+
+def decisive_rail_row(test, channel, last_rail, present):
+    # Both tapes have the same nominal ledger, file length in rows, stamps and
+    # sidecar. Only the final row's source decides whether 98 or 99 qualify.
+    # Even a correct final scalar cannot excuse an earlier field projection.
+    leg = TraceLeg(test.base)
+    final = []
+    rows = []
+    for row in leg.rows[RAIL_FILE]:
+        stamp = float(row["interval_start_s"])
+        if not 0 <= stamp < 100 or row["source"] != "powermetrics":
+            continue
+        if row["rail"] == last_rail:
+            if stamp == 19:
+                row = dict(row, source="unrelated")
+            if stamp == 99:
+                final.append(dict(row, source="powermetrics" if present else "unrelated"))
+                continue
+        rows.append(row)
+    test.assertEqual(len(final), 1)
+    leg.rows[RAIL_FILE] = rows + final
+    leg.meta["rail_intervals"] = [(i, i+1) for i in range(100)]
+    leg.meta["sidecar_times"] = list(range(101))
+    decisive_seen = False
+    projected = []
+
+    def project(row):
+        if "power_w" in row:
+            test.assertTrue(decisive_seen, "raw field projected before the decisive row arrived")
+            test.assertTrue(present, "failed interval exposed a raw field")
+            projected.append(row["rail"])
+
+    original = WatchedRow.__init__
+    def observe_arrival(mapping, row, spy):
+        nonlocal decisive_seen
+        original(mapping, row, spy)
+        if row.get("rail") == last_rail and float(row["interval_start_s"]) == 99:
+            decisive_seen = True
+
+    with observe_fields(leg.folder, project), patch.object(WatchedRow, "__init__", observe_arrival):
+        signal = leg.signal()
+        value = signal.average(channel, 0, 100)
+    assert_scalar(test, value, None if present else "coverage")
+    test.assertEqual(bool(projected), present, "spy did not see the admitted rail path")
+
+
+def retained_rows(test, channel, raw, direction):
+    # Catch a cache of whole raw row mappings even if it never calls row["power_w"]
+    # until a later request. Weak references keep the observer from retaining a row.
+    import weakref
+    leg = TraceLeg(test.base)
+    permitted, refused = (INTERVAL["hold"], INTERVAL["tail"]) if direction == "forward" else (
+        INTERVAL["tail"], INTERVAL["hold"])
+    a, b = refused
+    count = nominal(raw, a, b)
+    omit_at(leg, raw, a, b, "middle", count-((99*count-1)//100))
+    candidates, touched, positive = [], [], []
+    def watch(row):
+        if raw == "dc_in":
+            return float(row["epoch_s"]) if "epoch_s" in row else None
+        if row.get("source") == "powermetrics" and row.get("rail") == raw:
+            return float(row["interval_start_s"])
+        return None
+    def project(row):
+        stamp = watch(row)
+        if stamp is not None:
+            if a <= stamp < b:
+                touched.append(stamp)
+            elif permitted[0] <= stamp < permitted[1]:
+                positive.append(stamp)
+    original = WatchedRow.__init__
+    def register(self, row, spy):
+        original(self, row, spy)
+        stamp = watch(row)
+        if stamp is not None and a <= stamp < b:
+            candidates.append(weakref.ref(self))
+    with observe_fields(leg.folder, project), patch.object(WatchedRow, "__init__", register):
+        signal = leg.signal()
+        assert_scalar(test, signal.average(channel, *permitted), None)
+        test.assertTrue(positive, "no admitted raw field reached the observation seam")
+        test.assertFalse(touched, f"outside field read before failed interval check: {touched[:2]}")
+        test.assertFalse(any(ref() is not None for ref in candidates), "whole raw row cached across requests")
+        assert_scalar(test, signal.average(channel, *refused), "coverage")
+        test.assertFalse(touched, f"raw value retrieved on the failed request: {touched[:2]}")
+        test.assertFalse(any(ref() is not None for ref in candidates), "failed request retained a raw row")
+
+
+# Separately discoverable cases; no expected failures, skips or baseline edits.
+def register_v2():
+    def case(family, fn, *args):
+        def identifier(x):
+            return str(x).replace("lm-inst-01","inst").replace("lm-stab-01","stab").replace("-", "m").replace("+","p").replace(".","_")
+        add("v2_"+family+"_"+"_".join(identifier(x) for x in args),fn,*args)
+
+    for channel, inputs in PRINT_INPUTS.items():
+        for phase, (a, b) in INTERVAL.items():
+            for raw, offset, gap in product((*inputs, "sidecar"), (-1,0,1), ("none","sidecar","dc_in","both")):
+                if count_floor(raw, a, b)+offset >= 0:
+                    case("boundary", boundary, phase, channel, raw, offset, gap)
+        for look, position in product(IDS[:2], POSITION):
+            phases = ("hold","tiles","turn","prefill","level","decode","recovery","tail") if look==IDS[0] else ("hold","tiles","turn")
+            for raw, phase in product(inputs, phases):
+                case("read", read_order, look, channel, raw, phase, position)
+            for raw, width, fault in product(inputs, WIDTH, ("count","gap","mixed")):
+                case("sd", window_sd, look, channel, raw, width, position, fault)
+            # A common sidecar fault affects every print. One case checks all siblings.
+            if channel == CHANNEL[0]:
+                for width, fault in product(WIDTH, ("count","gap","mixed")):
+                    case("sd", window_sd, look, channel, "sidecar", width, position, fault)
+        for raw, phase, loss in product(inputs, INTERVAL, (False,True)):
+            case("order", check_before_value, channel, raw, phase, loss)
+        for raw, delta in product((*inputs,"sidecar"), (-.03125,0,.03125)):
+            for period, phase in ((1,"hold"),(.25,"turn"),(.125,"turn")):
+                case("gap", gap_limit_v2, channel, raw, period, delta, phase)
+        for raw, direction in product(inputs, ("forward","backward")):
+            case("cache", retained_rows, channel, raw, direction)
+        for direction in ("rise","fall"):
+            case("crossing", already_crossed, channel, direction)
+    for channel in ("gpu_rail", "rail_sum"):
+        for raw, present in product(PRINT_INPUTS[channel], (False, True)):
+            case("decisive", decisive_rail_row, channel, raw, present)
+    for edge in ("left","right","both_present"):
+        case("bracket",dc_bracket,edge)
+    for look,raw,ticks in product(IDS[:2],COLS,(4,5,6)):
+        case("period",gap_per_look,look,raw,ticks)
+    for look,raw,pos in product(IDS[:2],(*COLS,"dc_in"),POSITION):
+        case("turn",turn_projection,look,raw,pos)
+        for gap,offset in product(("none","sidecar","dc_in","both"),(-1,0,1)):
+            case("hold",look_counts,look,raw,pos,gap,offset)
+    for raw in RAW_INPUTS:
+        # Before, at, and after the first otherwise-qualifying candidate. Mixed and
+        # multiple failures distinguish a per-channel skip list from a leg-wide flag.
+        for fault in ("count", "gap", "mixed"):
+            for bad,winner in ((0,0),(0,5),(2,5),(4,5),(3,3),(4,1),(4,0)):
+                add(f"v2_recovery_{raw}_{fault}_bad{bad}_winner{winner}",
+                    recovery_prefix,raw,((bad,fault),),winner,STRIDE_S)
+        add(f"v2_recovery_{raw}_multiple",recovery_prefix,raw,((0,"count"),(2,"gap"),(4,"mixed")),4,STRIDE_S)
+        for pos in POSITION if raw!="sidecar" else ("first",):
+            case("tail",tail_reason,raw,pos)
+    add("v2_recovery_audit5_9_of_10",audit5_window_zero)
+    for raw in ("sidecar","dc_in"):
+        case("tailgap",bad_tail_gap,raw)
+    for late, mode in product((*COLS,"dc_in"),("under","nonreturn")):
+        case("anchor",staggered_grid,late,mode,STRIDE_S)
+    for raw, placement in product(RAW_INPUTS, ("complete","incomplete","both")):
+        case("terminal", staggered_grid, "dc_in", "nonreturn", STRIDE_S, raw, placement)
+    for pair,offset in product(combinations(COLS,2),(-1,0,1)):
+        add("v2_join_"+"_".join(pair)+"_"+str(offset).replace("-","m"),sum_intersection,pair,offset)
+    for variant, fault in product(("order","short","extra","duplicate"),("none","count","gap","mixed")):
+        case("manifestfirst",manifest_first,variant,fault)
+    for look in IDS[:2]:
+        for pos,sparse in product(POSITION,(False,True)):
+            case("sidecar_read",sidecar_read,look,pos,sparse)
+        case("inventory",public_inventory,look)
+        case("binding",binding_before_reservation,look)
+        for order in permutations(COLS):
+            add("v2_manifest_"+look.replace("-","_")+"_"+"_".join(order),manifest_order,look,order)
+        for mutation,stage in product(("missing","drift","symlink"),("stage1","stage2")):
+            case("native",native_preflight,look,mutation,stage)
+        case("publication",public_order,look)
+
+
+register_v2()
 
 
 if __name__=="__main__":

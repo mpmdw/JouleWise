@@ -102,7 +102,10 @@ class DescriptionIntervalTests(unittest.TestCase):
                     if present < 990 or gap:
                         reason = "coverage" if present < 990 else "meter_gap"
                         self.assertEqual(value, {"value": None, "reason": reason})
-                        self.assertEqual(opens, [])
+                        # At passing declared coverage, inspect rail identities
+                        # even when the interval ultimately fails its gap check.
+                        self.assertEqual(opens, [True] if channel in RAIL_FOR_CHANNEL
+                                         and present >= 990 else [])
                     else:
                         self.assertIsInstance(value, (int, float))
                         self.assertEqual(opens, [] if channel == "sidecar" else [True])
@@ -174,32 +177,41 @@ class DescriptionIntervalTests(unittest.TestCase):
         module = root / "joulewise/cadence_looks"
         sources = (module / "description.py", module / "description_worker.py",
                    root / "scripts/cadence_description_run.py")
-        raw = re.compile(r'\b(?:_rail_tokens|_meter_tokens|_rail_rows|load_gpu_trace)\b'
+        raw = re.compile(r'\b(?:_rail_values|_meter_values|load_gpu_trace)\b'
                          r'|\[["\'](?:power_w|watts|sensors)["\']\]')
         stamps = re.compile(r'\.(?:sidecar|meter)\b|\[["\'](?:sidecar_times|meter_times)["\']\]')
         io = re.compile(r'\b(?:open|read_bytes|read_text)\(')
         structural_io = {
             "description.py": {"working", "validate_manifest", "_step3_code",
-                               "_validate_executables"},
+                               "_validate_executables", "_open_signal"},
             "description_worker.py": {"_candidate", "_write_private"},
         }
         for source in sources:
             body = source.read_text()
             functions = [node for node in ast.walk(ast.parse(body))
                          if isinstance(node, ast.FunctionDef)]
-            for line_no, line in enumerate(body.splitlines(), 1):
-                scope = min((node for node in functions if node.lineno <= line_no <= node.end_lineno),
+            def enclosing_function(line_number):
+                scope = min((node for node in functions
+                             if node.lineno <= line_number <= node.end_lineno),
                             key=lambda node: node.end_lineno - node.lineno, default=None)
-                owner = scope.name if scope else ""
+                return scope.name if scope else ""
+
+            for node in ast.walk(ast.parse(body)):
+                if not isinstance(node, ast.Call) or not isinstance(node.func, ast.Attribute):
+                    continue
+                if node.func.attr in {"_admitted_rails", "_admitted_meter"}:
+                    self.assertEqual(enclosing_function(node.lineno), "interval_values")
+
+            for line_no, line in enumerate(body.splitlines(), 1):
+                owner = enclosing_function(line_no)
                 with self.subTest(file=source.name, line=line_no):
                     if raw.search(line):
-                        permitted = (owner == "interval_values"
-                                     or owner == "_rail_rows"  # Tokenizer called only by the gateway.
-                                     or owner == "__init__" and line.strip().endswith(" = None"))
+                        permitted = (owner in {"interval_values", "_admitted_rails", "_admitted_meter"}
+                                     or owner == "__init__" and line.strip().endswith(" = {}"))
                         self.assertTrue(permitted, line)
                     if stamps.search(line):
-                        self.assertIn(owner, {"__init__", "_interval_refusal", "interval_values"},
-                                      line)
+                        self.assertIn(owner, {"__init__", "_coverage_passes", "_interval_refusal",
+                                              "_admitted_meter", "recovery_start"}, line)
                     if io.search(line):
                         support_only = owner == "score" and line.strip() == (
                             'support = decode(paths["support.json"].read_bytes())'
