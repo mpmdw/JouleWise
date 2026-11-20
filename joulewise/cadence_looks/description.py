@@ -9,6 +9,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from decimal import Decimal, localcontext
 from fractions import Fraction
+from functools import cached_property
 from hashlib import sha1, sha256
 import io
 import json
@@ -41,6 +42,12 @@ SHA = re.compile(r"[0-9a-f]{64}")
 OID = re.compile(r"[0-9a-f]{40}")
 LEG = re.compile(r"L00[1-9]|L01[0-2]")
 STABILITY_KIT = re.compile(r"f2-stab-[0-9]{2}")
+POSITION_KEY = re.compile(r"f2-(?:inst|stab)-[0-9]{2}/(?:L00[1-9]|L01[0-2])")
+DROP_WITNESSES = {"ended_without_member": "receipt", "queue_retired": "queue"}
+SINGLE_TYPED_ITEM = re.compile(
+    r"(?P<heading>[1-9][0-9]*\. \*\*[^\n]+\*\*)\n\n"
+    r"```item\n(?P<header>[^\n]+)\n```\n\n(?P<body>[^\n]+)\n?"
+)
 LEDGER_SCHEMA = "joulewise.cadence_look_ledger.v1"
 POSITION_FIELDS = ("leg_id", "prefill_tokens", "decode_tokens", "start_band", "g0_shape")
 SPAN_FIELDS = ("kit_id", "kit_sha256", "span_id", "attempt", "runner_pin", "legs")
@@ -361,11 +368,18 @@ class Snapshot:
             require(doc["kit_index_path"] == expected_index, "wrong later-kit index")
         return doc
 
-    def source(self, name, **decode_options):
+    def source_bytes(self, name):
         raw = self.read(name)
         require(self.book.tree(self.receipts).get(name) == self.book.tree(self.commit).get(name),
                 "input does not belong to the closed source snapshot")
-        return decode(raw, **decode_options)
+        return raw
+
+    def source(self, name, **decode_options):
+        return decode(self.source_bytes(name), **decode_options)
+
+    @cached_property
+    def drop_authorizations(self):
+        return _drop_authorizations(self)
 
     def _destinations(self, root):
         public_root = _absolute(root, self.row["public_root"])
@@ -549,9 +563,8 @@ def _predecessor(snapshot, receipt, closes):
 
 
 def _time_budget(op, kit):
-    fields = {"wall_s", "leg_budget_s", "over_time_budget"}
-    if fields.isdisjoint(op):
-        return {}
+    require({"wall_s", "leg_budget_s", "over_time_budget"} <= op.keys(),
+            "missing operational wall evidence")
     budget = kit["span_template"]["leg_budget_s"]
     wall = op["wall_s"]
     require(type(wall) is int or (type(wall) is Decimal and wall.is_finite()),
@@ -562,6 +575,83 @@ def _time_budget(op, kit):
     over_budget = wall > budget
     require(op["over_time_budget"] is over_budget, "incorrect operational over-time flag")
     return {"over_time_budget": over_budget}
+
+
+def _drop_authorizations(snapshot):
+    from scripts import run_state_items
+
+    text = snapshot.read("RUN_STATE.md").decode("utf-8")
+    # A projected single item carries the same heading, typed header and
+    # declaration as the full canonical document.
+    if item := SINGLE_TYPED_ITEM.fullmatch(text):
+        number = int(item["heading"].split(".", 1)[0])
+        header = run_state_items.canonical(decode(item["header"].encode("utf-8")))
+        text = (f"{run_state_items.TOP_MARKER_PREFIX} projected item -->\n"
+                f"{item['heading']}\n\n```item\n{header}\n```\n\n{item['body']}\n"
+                f"<!-- RUN_STATE LEGACY ITEMS below: prose, not typed; cutover {number} -->\n")
+    parsed = run_state_items.parse(text)
+    require(not run_state_items.validate(parsed), "invalid typed drop item document")
+    as_of = int(snapshot.book.git("show", "-s", "--format=%ct", snapshot.commit))
+    statuses = run_state_items.derive(parsed, as_of)
+    active = {item.line: item.number for item in parsed.items
+              if item.header["owner"] == "lead" and item.header["issued_epoch_s"] <= as_of
+              and statuses[item.number] in ("ISSUED", "CLOSED")}
+    statements = defaultdict(set)
+    current = None
+    for line in run_state_items._scan(text):
+        if line.kind == "legacy":
+            break
+        if line.kind == "heading":
+            current = active.get(line.number)
+        elif current is not None and line.kind == "prose":
+            statements[current].add(line.text)
+    return statements
+
+
+def _drop_position(snapshot, row, kit_id):
+    require(row.keys() == {"key", "drop"}, "invalid terminal drop roster row")
+    # The decision may follow collection. Its independent witness must
+    # already belong to the closed operational projection.
+    declaration = snapshot.doc(row["drop"])
+    require(type(declaration) is dict, "invalid terminal drop declaration")
+    reason = declaration.get("reason")
+    role = DROP_WITNESSES.get(reason) if type(reason) is str else None
+    require(role is not None and declaration.keys() ==
+            {"key", "status", "reason", "authority", "typed_item_ref", role}
+            and declaration["key"] == row["key"] and declaration["status"] == "dropped"
+            and declaration["authority"] == "lead", "unproven terminal drop")
+    witness_path = declaration[role]
+    payload = snapshot.source_bytes(witness_path)
+    witness = decode(payload)
+    require(type(witness) is dict, "invalid terminal drop witness")
+    unrun = witness.get("unrun")
+    require(type(unrun) is list and all(token(key, POSITION_KEY) for key in unrun)
+            and len(set(unrun)) == len(unrun) and row["key"] in unrun,
+            "drop witness does not establish this position as unrun")
+    if role == "receipt":
+        members = witness.get("member_legs")
+        require(witness["closed"] is True and witness["kit_id"] == kit_id
+                and witness["kit_sha256"] == snapshot.hashes[_kit_path(snapshot, kit_id)]
+                and type(witness["span_id"]) is str and bool(witness["span_id"])
+                and type(members) is list and all(token(member, LEG) for member in members)
+                and len(set(members)) == len(members)
+                and all(key.startswith(kit_id + "/") and key.rsplit("/", 1)[1] not in members
+                        for key in unrun),
+                "drop witness is not a closed span for the committed kit")
+    else:
+        require(witness["final"] is True and type(witness["queue_id"]) is str
+                and bool(witness["queue_id"]), "drop witness is not a final queue record")
+    disposition = f"dropped:{reason}"
+    statement = (f"The lead declares {row['key']} {disposition}. No member exists or will exist. "
+                 f"Evidence {witness_path} sha256={digest(payload)}.")
+    ref = declaration["typed_item_ref"]
+    require(type(ref) is dict and ref.keys() == {"path", "number"}
+            and ref["path"] == "RUN_STATE.md" and integer(ref["number"], 1),
+            "invalid terminal drop item reference")
+    require(statement in snapshot.drop_authorizations.get(ref["number"], ()),
+            "typed lead item does not authorize this exact drop and witness")
+    empty_close = (witness_path, witness) if role == "receipt" and not members else None
+    return {"disposition": disposition, "loaded_flag": None, "drop": row["drop"]}, empty_close
 
 
 def _token_row(snapshot, references, kit, plan, closes):
@@ -582,7 +672,10 @@ def _token_row(snapshot, references, kit, plan, closes):
             and leg_id in roster and issue == {field: receipt[field] for field in SPAN_FIELDS},
             "receipt does not close its issued roster")
     require(receipt["fresh_soak"] is True, "no fresh soak for the issued span")
-    prefix = str(relative(references["receipt"]).parent)
+    receipt_path = relative(references["receipt"])
+    require(len(receipt_path.parts) >= 3 and receipt_path.parts[0] == "ops"
+            and receipt_path.name == "runner_receipt.json", "receipt is outside the operational inventory")
+    prefix = str(receipt_path.parent)
     require(references["issue"] == f"{prefix}/issue.json"
             and references["leg_record"] == f"{prefix}/legs/{leg_id}/leg_record.json"
             and op["leg_id"] == leg_id, "position is not physically bound to its issue")
@@ -672,7 +765,7 @@ def _check_schedule(snapshot, dates):
                 "second stability read is not due")
 
 
-def _reconcile_member_bundles(snapshot, kits, issued):
+def _reconcile_member_bundles(snapshot, kits, issued, empty_closes):
     """Check the closed operational tree as well as the selected roster."""
     receipts = {path: members for _, path, members in issued.values()}
     bundles = defaultdict(set)
@@ -687,9 +780,19 @@ def _reconcile_member_bundles(snapshot, kits, issued):
     for prefix, entries in bundles.items():
         receipt_path = f"{prefix}/runner_receipt.json"
         if receipt_path in receipts:
+            require(receipt_path not in empty_closes, "member receipt also claims an empty span")
             expected = {"issue.json", "runner_receipt.json"}
             expected.update(f"legs/{leg}/leg_record.json" for leg in receipts[receipt_path])
             require(entries == expected, "operational bundle differs from its issued roster")
+            continue
+        if receipt_path in empty_closes:
+            close = empty_closes[receipt_path]
+            require(entries <= {"issue.json", "runner_receipt.json"},
+                    "closed empty span has a concealed member")
+            if "issue.json" in entries:
+                issue = snapshot.source(f"{prefix}/issue.json")
+                require(all(issue[field] == close[field] for field in ("kit_id", "kit_sha256", "span_id")),
+                        "empty span close differs from its issue")
             continue
         # An unlisted receipt or issue for an admitted kit is itself an
         # inconsistency, including a partially materialized second bundle.
@@ -714,6 +817,7 @@ def census(snapshot):
     counts_by_kit = defaultdict(Counter)
     spans = defaultdict(set)
     issued = {}
+    empty_closes = {}
     for row in sorted(rows, key=lambda entry: entry["key"]):
         key = row["key"]
         require(key not in positions and key.count("/") == 1, "duplicate or malformed position")
@@ -722,11 +826,10 @@ def census(snapshot):
         kit = kits[kit_id]
         plan = kit["legs"][int(leg_id[1:]) - 1]
         if "drop" in row:
-            drop = snapshot.source(row["drop"])
-            require(row.keys() == {"key", "drop"} and drop["key"] == key
-                    and drop["status"] == "dropped" and type(drop["authority"]) is str
-                    and bool(drop["authority"]), "unproven terminal drop")
-            position = {"disposition": "dropped", "loaded_flag": None, "drop": row["drop"]}
+            position, empty_close = _drop_position(snapshot, row, kit_id)
+            if empty_close is not None:
+                path, close = empty_close
+                empty_closes[path] = close
         else:
             position, token_row, detail = _token_row(snapshot, row, kit, plan, closes)
             table.append(token_row)
@@ -741,7 +844,7 @@ def census(snapshot):
             "receipt names positions absent from the snapshot")
     if snapshot.instrument:
         require(len(positions) == 36, "instrument population is not terminal")
-        _reconcile_member_bundles(snapshot, kits, issued)
+    _reconcile_member_bundles(snapshot, kits, issued, empty_closes)
     qualified = [row for row in table if row["disposition"] == "qualified"]
     counts = {"n_legs": len(qualified)}
     result = {
@@ -1727,6 +1830,10 @@ def score(snapshot, sources, qualified, mark_read):
 
 # The final manifest pins this inventory through the reader SHA-256.
 EXECUTABLE_DEPENDENCIES = {
+    "scripts/run_state_items.py":
+        "5f5b21cd0993bb1c6f5917384db56122c79a12cc935c040f2a696ab7cdccd125",
+    "scripts/gen_current.py":
+        "8bc54f9d34ec7ee36139ddf5552478610aee1d05f4a04b3ab6477f0bf38216b4",
     "scripts/cadence_description_run.py":
         "6a16157e3e071518c78d71b1f1e01b3818d8008c32a76339ff764346ab9ad60c",
     "joulewise/cadence_looks/description_worker.py":

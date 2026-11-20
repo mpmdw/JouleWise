@@ -130,7 +130,11 @@
               "type": "integer",
               "minimum": 1
             },
-            "dropped": {
+            "dropped:ended_without_member": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "dropped:queue_retired": {
               "type": "integer",
               "minimum": 1
             }
@@ -166,7 +170,8 @@
             "receipt",
             "span_id",
             "attempt",
-            "span_leg_index"
+            "span_leg_index",
+            "over_time_budget"
           ],
           "properties": {
             "disposition": {
@@ -243,7 +248,10 @@
           ],
           "properties": {
             "disposition": {
-              "const": "dropped"
+              "enum": [
+                "dropped:ended_without_member",
+                "dropped:queue_retired"
+              ]
             },
             "loaded_flag": {
               "type": "null"

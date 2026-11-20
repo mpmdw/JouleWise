@@ -1,5 +1,6 @@
 """Exercise native-look dependency admission with invented ledger and source bytes."""
 
+from decimal import Decimal
 from itertools import product
 from pathlib import Path
 import subprocess
@@ -274,6 +275,106 @@ class Stage1ReasonOrderTests(unittest.TestCase):
                 snapshot.check_stage1(census)
                 self.assertEqual(set(qualified), set(world.good))
                 self.assertNotIn(key, reader.verify_gates(snapshot, qualified))
+
+
+class Stage1OperationalEvidenceTests(unittest.TestCase):
+    def test_canonical_empty_span_close_admits_drop_and_rejects_concealed_member(self):
+        class ClosedSpan(DescriptionWorld):
+            def project_drops(self):
+                super().project_drops()
+                row = next(row for row in self.rows if "drop" in row)
+                key = row["key"]
+                kit, leg_id = key.split("/")
+                self.dropped_key = key
+                path = "ops/invented-empty-span/runner_receipt.json"
+                witness = {
+                    "span_id": "invented-empty-span", "kit_id": kit, "closed": True, "member_legs": [],
+                    "kit_sha256": fixture.sha((self.repo / "kits" / f"{kit}.json").read_bytes()),
+                    "unrun": [key],
+                }
+                fixture.put(self.repo / path, witness)
+                declaration = fixture.read(self.repo / row["drop"])
+                queue = declaration.pop("queue")
+                declaration.update(reason="ended_without_member", receipt=path)
+                fixture.put(self.repo / row["drop"], declaration)
+                run_state = self.repo / "RUN_STATE.md"
+                before = f"The lead declares {key} dropped:queue_retired. No member exists or will exist. "
+                before += f"Evidence {queue} sha256={fixture.sha((self.repo / queue).read_bytes())}."
+                after = f"The lead declares {key} dropped:ended_without_member. No member exists or will exist. "
+                after += f"Evidence {path} sha256={fixture.sha(fixture.wire(witness))}."
+                fixture.put(run_state, run_state.read_bytes().replace(before.encode(), after.encode(), 1))
+                if self.concealed:
+                    fixture.put(self.repo / "ops/invented-empty-span/legs" / leg_id / "leg_record.json",
+                                {"leg_id": leg_id})
+
+        for concealed in (False, True):
+            with self.subTest(concealed=concealed), TemporaryDirectory() as directory:
+                ClosedSpan.concealed = concealed
+                world = ClosedSpan(Path(directory).resolve() / "world", fixture.IDS[0])
+                if concealed:
+                    fixture.Checks().refused(world, "stage1")
+                else:
+                    world.commit_stage1(self)
+                    row = fixture.read(world.stage)["positions"][world.dropped_key]
+                    self.assertEqual(row["disposition"], "dropped:ended_without_member")
+
+    def test_wall_budget_uses_exact_equality_and_requires_all_evidence(self):
+        kit = {"span_template": {"leg_budget_s": 600}}
+        for wall, over in ((Decimal("599.999999999"), False), (600, False),
+                           (Decimal("600.000000001"), True)):
+            with self.subTest(wall=wall):
+                record = {"wall_s": wall, "leg_budget_s": 600, "over_time_budget": over}
+                self.assertEqual(reader._time_budget(record, kit), {"over_time_budget": over})
+        record = {"wall_s": 600, "leg_budget_s": 600, "over_time_budget": False}
+        for field in record:
+            with self.subTest(missing=field), self.assertRaises(reader.Refusal):
+                reader._time_budget({key: value for key, value in record.items() if key != field}, kit)
+        for fields in ({"wall_s": True}, {"wall_s": Decimal("NaN")}, {"wall_s": -1},
+                       {"leg_budget_s": 601}, {"leg_budget_s": Decimal(600)},
+                       {"over_time_budget": 0}, {"over_time_budget": True}):
+            with self.subTest(invalid=fields), self.assertRaises(reader.Refusal):
+                reader._time_budget(dict(record, **fields), kit)
+
+    def test_signed_member_without_wall_evidence_refuses_stage1(self):
+        class MissingEvidence(DescriptionWorld):
+            def leg(self, kit, pos, v, day, ordinal, status):
+                refs = super().leg(kit, pos, v, day, ordinal, status)
+                if ordinal == 0:
+                    op = self.records[refs["key"]][0]
+                    op.pop("over_time_budget")
+                    fixture.put(self.repo / refs["leg_record"], op)
+                return refs
+
+        for look in fixture.IDS:
+            with self.subTest(look=look), TemporaryDirectory() as directory:
+                world = MissingEvidence(Path(directory).resolve() / "world", look)
+                fixture.Checks().refused(world, "stage1")
+                self.assertFalse(world.stage.exists())
+
+    def test_typed_drop_requires_an_active_visible_lead_claim_of_exact_witness(self):
+        class ChangedProof(DescriptionWorld):
+            def project_drops(self):
+                super().project_drops()
+                path = self.repo / "RUN_STATE.md"
+                text = path.read_text()
+                if self.defect == "witness":
+                    queue = self.repo / "ops/drop-evidence/retired-queue.json"
+                    fixture.put(queue, dict(fixture.read(queue), queue_id="different-invented-queue"))
+                elif self.defect == "owner":
+                    fixture.put(path, text.replace('"owner": "lead"', '"owner": "ed"').encode())
+                elif self.defect == "unissued":
+                    fixture.put(path, text.replace('"status": "ISSUED"', '"status": "DRAFT"').encode())
+                elif self.defect == "fenced":
+                    text = text.replace("The lead declares", "~~~\nThe lead declares", 1)
+                    text = text.replace("\n\n<!-- RUN_STATE LEGACY", "\n~~~\n\n<!-- RUN_STATE LEGACY")
+                    fixture.put(path, text.encode())
+
+        for defect in ("witness", "owner", "unissued", "fenced"):
+            with self.subTest(defect=defect), TemporaryDirectory() as directory:
+                ChangedProof.defect = defect
+                world = ChangedProof(Path(directory).resolve() / "world", fixture.IDS[0])
+                fixture.Checks().refused(world, "stage1")
+                self.assertFalse(world.stage.exists())
 
 
 class SpentDescriptionLookTests(unittest.TestCase):
