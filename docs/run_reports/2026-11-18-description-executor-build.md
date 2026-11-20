@@ -774,7 +774,7 @@ select explicit keys and leave their invented value files present.
 The three frozen modules match their unchanged SHA-256 digests. All
 53 protected paths match. [Loaded regressions](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/rl192b-loaded-regressions.log) · [Original-fixture supplement controls](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/rl192b-original-supplement-loaded.log) · [Schema validation](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/rl192b-stage1-schemas.log) · [Protected blob comparison](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/rl192b-protected-blobs.tsv)
 
-### NEEDS_SPEC under RL-192b
+### Expected-to-change frozen cases under RL-192b
 
 The frozen `World` marks ordinal zero loaded and includes it in its
 expected eligible roster. The inherited `Checks.stage1` oracle therefore
@@ -813,3 +813,45 @@ no step-3 reader on its admitted path. The fixture now uses the pinned
 reader. The isolated rerun passes both gap boundaries. The focused
 RL-192a hand and near-miss cases and the GPU row comparator also pass.
 [Focused run](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/rl192b-focused.log) · [Gap boundary rerun](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/rl192b-gap-fixture.log) · [Hand and row controls](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/rl192b-focused-no-interval-matrix.log)
+
+## 2026-11-20 provisional stage-1 reason order
+
+The worktree was clean at `124bde284` and matched the remote branch
+and draft PR #868. Commit `8b86c4395` applies the provisional lead
+rule to the seven authenticated eligibility checks on all three
+looks. The closed accounting position records the ordered
+`reasons` array. It is empty for a qualified member. A failed member
+has `not_qualified:<first reason>` in its position and, for stability,
+in the existing token row. The per-kit count uses the same label.
+
+The order is `wrong_mode` from the receipt, `incomplete`,
+`unreleased` for G0, `short_hold` for the quiet span,
+`loaded`, `short` for the decode count and `cap_not_reached`.
+Receipt authentication remains a refusal boundary. The quiet-span
+check uses the authenticated operational stamps. The budget and stop
+checks use the existing count and cap predicates. Planner overtime
+remains an accounting flag. A loaded stability row still marks its
+missing pair `loaded` when another reason precedes it. Any failed
+check excludes the leg from counts, dates and scoring.
+[Provisional rule](/Volumes/JW-EXT/scratch/lead-provisional-stage1-reason-order.md)
+
+| Finding | Commit | Regression and result |
+| --- | --- | --- |
+| Multiple failures lost all but one reason and the load flag took precedence | `8b86c4395` | **PASS**. `test_every_subset_of_operational_failures_keeps_the_lifecycle_order` covers all 128 subsets. `test_census_binds_first_reason_and_all_failures_before_scoring` exercises authenticated stage 1 and stage 2 for every look. |
+| Accounting schema and loaded eligibility | `8b86c4395` | **PASS**. All three synthetic censuses validate. The schema refuses missing, unknown, duplicate, and incorrectly empty or nonempty reasons. Both builder loaded regressions and twelve original-fixture RL-190 controls pass, including the 34-leg case and the paired wall-time controls. |
+| RL-190 supplement lacked a shard scheduling entry | `5a7923267` | **PASS** in the isolated timing inventory over 531 discovered files. The weight uses the observed hosted duration of the incomplete supplement run. Full local shard discovery reached permission-denied metadata checks on unrelated host archives. |
+
+All three frozen files match their previous hashes and all 53 protected
+paths match. The twelve IDs in the [RL-192b expected-to-change table](#expected-to-change-frozen-cases-under-rl-192b)
+remain with the suite owner. The shared v2.1.2 census helper also
+asserts the old bare dispositions in accounting, by-kit counts and
+stability token rows.
+[Reason and loaded regressions](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/provisional-stage1-reasons.log) · [RL-190 controls](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/provisional-stage1-original-supplement.log) · [Schema validation](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/provisional-stage1-schema.log) · [Timing inventory](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/provisional-stage1-timing-inventory.log) · [Protected paths](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/provisional-stage1-protected-blobs.tsv)
+
+Hosted CI on `124bde284` recorded 866 failures in v2.1.2 and
+four failures in v2.2.1. The RL-190 supplement still had 166 generator
+errors and five missing host CLI failures. The shard timing failure
+was separate. Integrated acceptance awaits the authorized successor
+freeze and hardware integration. The operational reason order
+remains **PROVISIONAL** pending research-lead confirmation.
+[Predecessor hosted CI](https://github.com/mpmdw/JouleWise/actions/runs/44728051179) · [Hosted frozen failure IDs](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/provisional-predecessor-frozen-failures.tsv)
