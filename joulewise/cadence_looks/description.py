@@ -361,11 +361,11 @@ class Snapshot:
             require(doc["kit_index_path"] == expected_index, "wrong later-kit index")
         return doc
 
-    def source(self, name):
+    def source(self, name, **decode_options):
         raw = self.read(name)
         require(self.book.tree(self.receipts).get(name) == self.book.tree(self.commit).get(name),
                 "input does not belong to the closed source snapshot")
-        return decode(raw)
+        return decode(raw, **decode_options)
 
     def _destinations(self, root):
         public_root = _absolute(root, self.row["public_root"])
@@ -531,15 +531,21 @@ def _disposition(op, receipt, cap):
     return "qualified"
 
 
+def _epoch_seconds(value):
+    require(type(value) in (int, Decimal) and math.isfinite(value), "invalid epoch timestamp")
+    return value
+
+
 def _predecessor(snapshot, receipt, closes):
     pointer = receipt.get("predecessor")
     if pointer is None:
         return None
     previous = closes[pointer["entry_id"]]
     require(previous == dict(pointer, host=snapshot.row["execution_host"], proven=True)
-            and previous["proven"] is True and number(previous["close_epoch_s"])
+            and previous["proven"] is True
             and type(previous["kind"]) is str and bool(previous["kind"]),
             "unproven host predecessor")
+    _epoch_seconds(previous["close_epoch_s"])
     return previous
 
 
@@ -547,7 +553,7 @@ def _token_row(snapshot, references, kit, plan, closes):
     require(references.keys() == {"key", "issue", "receipt", "leg_record", *DESK_RECORDS},
             "invalid position source inventory")
     issue = snapshot.source(references["issue"])
-    receipt = snapshot.source(references["receipt"])
+    receipt = snapshot.source(references["receipt"], parse_float=Decimal)
     op = snapshot.source(references["leg_record"])
     key = references["key"]
     kit_id, leg_id = key.split("/")
@@ -577,12 +583,14 @@ def _token_row(snapshot, references, kit, plan, closes):
             and (op["prefill_tokens"] is None or integer(op["prefill_tokens"]))
             and type(op["quiet_spans_ns"]) is list
             and all(type(span) is list and len(span) == 2 and all(integer(t) for t in span)
-                    and span[0] <= span[1] for span in op["quiet_spans_ns"])
-            and number(receipt["t0_epoch_s"]), "malformed operational count or stamp")
+                    and span[0] <= span[1] for span in op["quiet_spans_ns"]),
+            "malformed operational count or stamp")
     require(type(op["leg_status"]) is str and type(op["g0_outcome"]) is str
             and type(receipt["power_mode"]) is str, "invalid operational disposition input")
     disposition = _disposition(op, receipt, plan["decode_tokens"])
-    instant = datetime.fromtimestamp(receipt["t0_epoch_s"], LOCAL)
+    # Date, hour and UTC offset apply to the containing whole second. A
+    # sub-microsecond stamp before a boundary belongs to the earlier second.
+    instant = datetime.fromtimestamp(math.floor(_epoch_seconds(receipt["t0_epoch_s"])), LOCAL)
     token_row = {
         "kit_id": kit_id, "kit_sha256": kit_sha, "span_id": span_id, "attempt": attempt,
         "position": int(leg_id[1:]), "leg_id": leg_id,
@@ -643,7 +651,7 @@ def census(snapshot):
     require(type(rows) is list and all(type(row["key"]) is str for row in rows),
             "malformed commitment roster")
     kits = _admitted_kits(snapshot, rows)
-    closes = {} if snapshot.instrument else snapshot.source(AUTHORITY["host_closes"])
+    closes = {} if snapshot.instrument else snapshot.source(AUTHORITY["host_closes"], parse_float=Decimal)
     positions, details, table = {}, {}, []
     counts_by_kit = defaultdict(Counter)
     spans = defaultdict(set)
@@ -829,7 +837,15 @@ def _csv_time_ns(text):
     return _time_ns(Decimal(text))
 
 
+def _window_ns(seconds):
+    # Recorded timestamps have integer nanoseconds. A derived endpoint,
+    # such as the midpoint between two stamps, can lie between ticks.
+    return seconds * NS_PER_SECOND if isinstance(seconds, Fraction) else _time_ns(seconds)
+
+
 def _seconds(ns):
+    if isinstance(ns, Fraction):
+        return ns / NS_PER_SECOND
     whole, remainder = divmod(ns, NS_PER_SECOND)
     return Decimal(ns).scaleb(-9) if remainder else whole
 
@@ -1020,7 +1036,7 @@ class Signals:
         split = min(b, max(a, self.turn_ns))
         numerator = MIN_SAMPLE_COVERAGE_PERCENT * ((split - a) * fast + (b - split) * slow)
         denominator = 100 * slow * fast
-        return (numerator + denominator - 1) // denominator
+        return -(-numerator // denominator)
 
     def _coverage_passes(self, channel, a, b, rail_support):
         if channel == "dc_in":
@@ -1036,7 +1052,7 @@ class Signals:
 
     def _interval_refusal(self, channel, a, b, rail_support):
         """Judge interval admission in priority order before retrieving values."""
-        a, b = _time_ns(a), _time_ns(b)
+        a, b = _window_ns(a), _window_ns(b)
         if not self._coverage_passes(channel, a, b, rail_support):
             return "coverage"
 
@@ -1186,7 +1202,7 @@ class Signals:
         return None
 
     def _interval_quality(self, channel, a, b):
-        start, stop = _time_ns(a), _time_ns(b)
+        start, stop = _window_ns(a), _window_ns(b)
         require(start < stop, "invalid print interval")
         require(channel in (*RAIL_CHANNELS, "rail_sum", "dc_in", "sidecar"), "unknown channel")
         if reason := self._stream_refusal(channel):
@@ -1225,7 +1241,7 @@ class Signals:
             self._start_read()
             stream.seek(start)
             return decode(stream.read(end - start))
-        start, stop = _time_ns(a), _time_ns(b)
+        start, stop = _window_ns(a), _window_ns(b)
         if channel == "dc_in":
             return self._admitted_meter(start, stop)
         return self._admitted_rails(channel, start, stop)
@@ -1234,7 +1250,7 @@ class Signals:
         rows = self.interval_values(channel, (a, b))
         if isinstance(rows, dict):
             return rows
-        start, stop = _time_ns(a), _time_ns(b)
+        start, stop = _window_ns(a), _window_ns(b)
         if channel != "dc_in":
             return math.fsum((watts - baseline) * (min(right, stop) - max(left, start))
                              for left, right, watts, _ in rows) / NS_PER_SECOND
@@ -1249,10 +1265,10 @@ class Signals:
 
     def average(self, channel, a, b):
         energy = self.energy(channel, a, b)
-        return energy * NS_PER_SECOND / (_time_ns(b) - _time_ns(a)) if number(energy) else energy
+        return energy * NS_PER_SECOND / (_window_ns(b) - _window_ns(a)) if number(energy) else energy
 
     def cross(self, channel, a, b, threshold, *, falls=False):
-        crossing = self._cross_ns(channel, _time_ns(a), _time_ns(b), threshold, falls=falls)
+        crossing = self._cross_ns(channel, _window_ns(a), _window_ns(b), threshold, falls=falls)
         return crossing if isinstance(crossing, dict) else float(crossing / NS_PER_SECOND)
 
     def _cross_ns(self, channel, a, b, threshold, *, falls=False):
@@ -1386,6 +1402,11 @@ def _crossing_lag(left, right, *, decode_end=False):
     return refused
 
 
+def _crossing_refusal(signal, channel, start, stop, level):
+    return (signal._interval_null(channel, _seconds(start), _seconds(stop))
+            or (level if isinstance(level, dict) else missing("nonpositive_level")))
+
+
 def _rail_return(signal, channel, last, end, baseline):
     if end is None or end <= last:
         return missing(signal._stream_refusal(channel) or "no_tail")
@@ -1414,6 +1435,7 @@ def _edge_prints(signal, hold, decode, turn, first, last, quiet_start, prompt):
     return_times, rise, onsets, offsets, censored = {}, {}, {}, {}, {}
     skip_counts, skip_reasons = {}, {}
     end = last + NS_PER_SECOND
+    midpoint = Fraction(turn + first, 2)
     for channel in CHANNELS:
         baseline = hold[channel]["mean_w"]
         stream_end = signal.stream_end(channel)
@@ -1428,21 +1450,19 @@ def _edge_prints(signal, hold, decode, turn, first, last, quiet_start, prompt):
         if prompt == 256:
             rise[channel] = onsets[channel] = missing("prefill shorter than the level window")
         else:
-            level = _above_hold(signal, channel, baseline, (turn + first) // 2, first, average=True)
+            level = _above_hold(signal, channel, baseline, midpoint, first, average=True)
             if number(level) and level > 0:
                 crosses = [signal._cross_ns(channel, turn, first, baseline + fraction * level)
                            for fraction in (0.1, 0.5, 0.9)]
                 rise[channel] = _crossing_lag(crosses[2], crosses[0])
                 onsets[channel] = crosses[1]
             else:
-                rise[channel] = onsets[channel] = (
-                    level if isinstance(level, dict) else missing("nonpositive_level")
-                )
+                rise[channel] = onsets[channel] = _crossing_refusal(signal, channel, turn, first, level)
         plateau = decode[channel]
         if number(baseline) and number(plateau) and plateau > 0:
             offsets[channel] = signal._cross_ns(channel, last, end, baseline + plateau / 2, falls=True)
         else:
-            offsets[channel] = plateau if isinstance(plateau, dict) else missing("nonpositive_level")
+            offsets[channel] = _crossing_refusal(signal, channel, last, end, plateau)
         if channel != "dc_in":
             censored[channel] = _rail_return(signal, channel, last, stream_end, baseline)
     decode_lags = {channel: _crossing_lag(offsets["dc_in"], offsets[channel], decode_end=True)
@@ -1549,7 +1569,8 @@ def _context(hold, turn, qualified):
         location = {
             "date": instant.date().isoformat(), "hour": instant.hour,
             "utc_offset_s": int(instant.utcoffset().total_seconds()),
-            "predecessor_kind": predecessor["kind"] if predecessor else None, "gap_s": gap,
+            "predecessor_kind": predecessor["kind"] if predecessor else None,
+            "gap_s": float(gap) if isinstance(gap, Decimal) else gap,
             "status": "unknown" if gap is None else "negative_gap" if gap < 0 else "known",
         }
         for channel in CHANNELS:

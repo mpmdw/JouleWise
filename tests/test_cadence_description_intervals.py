@@ -2,6 +2,7 @@
 
 import ast
 import csv
+from decimal import Decimal
 import io
 from itertools import product
 import json
@@ -97,6 +98,69 @@ def _score_world(world):
 
 
 class DescriptionIntervalTests(unittest.TestCase):
+    def test_prefill_level_preserves_a_half_nanosecond_midpoint(self):
+        for offset, omit, expected in ((0, True, None), (1, False, None),
+                                       (1, True, "coverage"), (2, True, "coverage")):
+            with self.subTest(offset=offset, omit=omit), TemporaryDirectory() as temporary:
+                leg = fixture.TraceLeg(Path(temporary))
+                leg.meta["first_token_s"] = Decimal(606) + Decimal(offset).scaleb(-9)
+                if omit:
+                    leg.omit("gpu_power", [606])
+                edges = fixture.print_one(leg.signal(), fixture.IDS[0])["edges"]
+                for channel in fixture.CHANNEL[:2]:
+                    fixture.assert_scalar(self, edges["rise_s"][channel], expected)
+                    fixture.assert_scalar(self, edges["onset_lag_s"][channel], expected)
+
+    def test_stability_calendar_gate_respects_the_exact_receipt_epoch(self):
+        class LastDateReceipt(fixture.World):
+            def leg(self, kit, pos, v, day, ordinal, status):
+                refs = super().leg(kit, pos, v, day, ordinal, status)
+                if day == 13 and status == "qualified":
+                    path = self.repo / refs["receipt"]
+                    receipt = fixture.read(path)
+                    receipt["t0_epoch_s"] = "EXACT_EPOCH"
+                    fixture.put(path, fixture.wire(receipt).replace(b'"EXACT_EPOCH"', self.epoch))
+                    self.witness = refs["key"]
+                return refs
+
+        check = fixture.Checks()
+        for stamp, due in ((b"1794643199.9999998", False), (b"1794643199.999999999", False),
+                           (b"1794643200", True), (b"1794643200.000000001", True)):
+            with self.subTest(stamp=stamp), TemporaryDirectory() as temporary:
+                root = Path(temporary).resolve()
+                LastDateReceipt.epoch = stamp
+                world = LastDateReceipt(root / "world", fixture.IDS[1])
+                self.assertEqual(world.witness, "f2-stab-13/L002")
+                if not due:
+                    check.refused(world, "stage1")
+                    self.assertFalse(world.stage.exists())
+                    continue
+
+                check.stage1(world)
+                record = world.public_truth()
+                self.assertEqual(record["n_local_dates"], 14)
+                candidate = root / "candidate.json"
+                fixture.put(candidate, record)
+                rc, stdout, stderr, events = fixture.invoke(world, "validate-public", "--candidate", str(candidate))
+                self.assertEqual((rc, stdout, stderr), (0, b"", b""))
+                self.assertFalse(any(event in {"open", "write"} for event, _ in events))
+                fixture.put(candidate, dict(record, n_local_dates=13))
+                check.refused(world, "validate-public", extra=("--candidate", str(candidate)))
+
+    def test_crossing_span_coverage_precedes_a_nonpositive_level(self):
+        for missing_search, expected in ((False, "nonpositive_level"), (True, "coverage")):
+            with self.subTest(missing_search=missing_search), TemporaryDirectory() as temporary:
+                leg = fixture.TraceLeg(Path(temporary))
+                if missing_search:
+                    leg.omit("gpu_power", [602.25, 610.25])
+                for row in leg.rows[fixture.RAIL_FILE]:
+                    if (row["source"] == "powermetrics" and row["rail"] == "gpu_power"
+                            and 604 <= float(row["interval_start_s"]) < 610):
+                        row["power_w"] = "0"
+                edges = fixture.print_one(leg.signal(), fixture.IDS[0])["edges"]
+                for field in ("rise_s", "onset_lag_s", "decode_end_lag_s"):
+                    self.assertEqual(edges[field]["gpu_rail"], fixture.null(expected))
+
     def test_hold_admission_uses_the_recorded_span_even_with_a_support_offset(self):
         for look in fixture.IDS[:2]:
             with self.subTest(look=look), TemporaryDirectory() as temporary:
