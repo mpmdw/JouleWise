@@ -1473,11 +1473,53 @@ existing bytes. A pinned instrument manifest uses the extended
 schema hash.
 [Protected blob comparison](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/rl194b-protected.tsv) · [Focused checks](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/rl194b-focused.log) · [Pinned synthetic acceptance](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/rl194b-integration-final.log)
 
-**NEEDS_SPEC.** The exact mismatch count exists only after the
-confined scoring pass. The standalone pre-scoring
-`validate-public` path refuses a pinned instrument candidate
-pending the lead's ruling on range validation or verification
-against authenticated completed publication. The writer already
-binds its exact count to the scored leg results. The independent
-suite owner retains the new acceptance freeze.
+**Resolved.** The lead confirmed that standalone `validate-public`
+refuses the pinned instrument form. The next section records the
+regressions for the refusal and the confined writer's exact count.
 [Draft PR #868](https://github.com/mpmdw/JouleWise/pull/868)
+
+## 2026-11-20 RL-194b standalone public validation
+
+Intake `0cf24fc0eaf9faf07b5c27b6bdb62748f734d00d` matched
+the remote branch and draft PR #868. The ruling confirms the
+existing production behavior. This change extends the synthetic
+regression and retains all eight frozen v5 bytes and all 53
+protected-path entries at intake.
+
+- A Check-bound fixture has two qualifying instrument legs.
+  One leg's recording contains an interval omitted from the
+  ledger. All four private tables give that leg
+  `interval_ledger_mismatch`. The other leg has nominal slots
+  without samples. Its rail hold reports `coverage` and its
+  DC hold is defined. Both legs remain in the authenticated census.
+- The subprocess observer sees the five provenance fields bound
+  before the writer attempts the registered reservation. The
+  scorer and final writer validator produce `n_legs = 2` and the
+  strict integer `n_interval_ledger_mismatch = 1`. The same
+  validator refuses `0`, `true`, `1.0` and an out-of-range integer.
+- Standalone validation reaches the provenance record, then
+  refuses candidates containing either `0` or `1` with exit 2
+  and empty stdout. The observer sees zero scoring opens and
+  reservation attempts. The synthetic spent reservation and
+  existing `PUBLIC.json` both refuse before the provenance record,
+  final-validator descriptor or any write. The existing public
+  bytes are preserved.
+
+The synthetic reservation probe intercepts `mkdir`. The local
+test exercises the scorer and the writer's final bytes separately
+from filesystem publication. The hash-only preflight remains a
+separate process. The lead routes any positive count from a real
+release to the research lead before using the look's numbers.
+
+Both instrument preflight methods passed locally. The three
+frozen writer controls also passed. They admit the exact
+legacy standalone record and reject a different count of the
+correct JSON type for the instrument and both stability IDs.
+Hosted CI at intake ran all 16,955 frozen cases with 15,915 passes,
+zero skips, and 1,040 nonpassing IDs in the recorded v5 baseline.
+[Pinned checks](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/rl194b-standalone-pinned.log) · [Legacy checks](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/rl194b-standalone-legacy.log) · [Intake CI](https://github.com/mpmdw/JouleWise/actions/runs/44835962077) · [Current PR checks](https://github.com/mpmdw/JouleWise/pull/868/checks)
+
+**NEEDS_SPEC: none for standalone validation.** The independent
+suite owner retains the next freeze. The integration owner retains
+the PR #795 host-ID and native inventory gates.
+[Resolved public contract](https://github.com/mpmdw/JouleWise/blob/d89b95c9f22a382b756108361c556d34fc6b385b/docs/research-audits/2026-11-10-fable/RESEARCH-LEAD-DECISIONS.md#L23368-L23386) · [Regressions](../../tests/test_cadence_description_preflight.py) · [Protected blob comparison](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/rl194b-standalone-protected.tsv)

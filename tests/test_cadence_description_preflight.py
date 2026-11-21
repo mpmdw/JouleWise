@@ -1,5 +1,6 @@
 """Exercise native-look dependency admission with invented ledger and source bytes."""
 
+import csv
 from decimal import Decimal
 from itertools import product
 import json
@@ -722,6 +723,15 @@ class ContentAddressedInstrumentTests(unittest.TestCase):
         support = fixture.read(support_path)
         support["rail_intervals"].remove([50, 51])
         fixture.put(support_path, support)
+        # The other qualified leg has the inverse case: nominal intervals with
+        # no recording. Its rail hold fails coverage without a ledger mismatch.
+        other, = set(world.good) - {witness}
+        trace = world.copy / other / fixture.RAIL_FILE
+        with trace.open(newline="") as stream:
+            rows = csv.reader(stream)
+            header = next(rows)
+            retained = [row for row in rows if not 50 <= Decimal(row[0]) < 57]
+        fixture.put(trace, fixture.csvbytes([header, *retained]))
 
         custody = world.base / "pinned-copy"
         spans = []
@@ -778,6 +788,66 @@ class ContentAddressedInstrumentTests(unittest.TestCase):
         world.book.seal("bind cold and copy authority after final registration")
         return world, witness, witness_stream, pins
 
+    def _check_pinned_public_gate(self, world):
+        trace = """
+def record_public_gate(frame, event, result):
+    if event == "return" and frame.f_code.co_name == "public_record" and isinstance(result, dict):
+        log("public_record", result)
+    if event == "return" and frame.f_code.co_name == "validate_public" and isinstance(result, bytes):
+        log("public_bytes", result.hex())
+sys.setprofile(record_public_gate)
+"""
+        reserve = """
+def observe_reservation(event, args):
+    if event == "os.mkdir" and args[0] == os.environ["DESC_RESERVATION"]:
+        log("reservation_attempt", args[0])
+        raise PermissionError("synthetic boundary")
+sys.addaudithook(observe_reservation)
+"""
+        truth = world.public_truth()
+        self.assertEqual(truth["n_legs"], 2)
+        self.assertEqual(set(truth), {"look_id", "commit", "manifest_sha256", "stage1_sha256", "n_legs"})
+        probe = fixture.PROBE + trace + reserve
+        with patch.object(fixture, "PROBE", probe):
+            rc, out, _, events = fixture.invoke(world, "stage2")
+        self.assertEqual((rc, out), (2, b""))
+        boundary = events.index(["reservation_attempt", str(world.private)])
+        self.assertIn(["public_bytes", fixture.wire(truth).hex()], events[:boundary])
+        self.assertFalse(any(kind == "open" for kind, _ in events))
+
+        candidate = world.base / "pinned-candidate.json"
+        for count in (0, 1):
+            with self.subTest(standalone_count=count):
+                fixture.put(candidate, dict(truth, n_interval_ledger_mismatch=count))
+                with patch.object(fixture, "PROBE", probe):
+                    rc, out, _, events = fixture.invoke(world, "validate-public", "--candidate", str(candidate))
+                self.assertEqual((rc, out), (2, b""))
+                self.assertIn(["public_record", truth], events)
+                forbidden = {"open", "reservation_attempt", "public_bytes"}
+                self.assertFalse(any(kind in forbidden for kind, _ in events), events)
+                self.assertFalse(world.private.exists() or world.public.exists())
+
+        spent_reservation = """
+_real_lexists = os.path.lexists
+def _with_reservation(path):
+    return os.fsdecode(path) == os.environ["DESC_RESERVATION"] or _real_lexists(path)
+os.path.lexists = _with_reservation
+"""
+        prior_public = fixture.wire(dict(truth, n_interval_ledger_mismatch=1))
+        for marker in ("reservation", "publication"):
+            with self.subTest(spent=marker):
+                if marker == "publication":
+                    fixture.put(world.public, prior_public)
+                with patch.object(fixture, "PROBE", probe + (spent_reservation if marker == "reservation" else "")):
+                    rc, out, _, events = fixture.invoke(world, "validate-public", "--candidate", str(candidate))
+                self.assertEqual((rc, out), (2, b""))
+                forbidden = {"open", "descriptor", "write", "reservation_attempt", "public_record", "public_bytes"}
+                self.assertFalse(any(kind in forbidden for kind, _ in events), events)
+                self.assertFalse(world.private.exists())
+                if marker == "publication":
+                    self.assertEqual(world.public.read_bytes(), prior_public)
+                    world.public.unlink()
+
     def test_hash_only_verifier_and_confined_leg_nulls(self):
         world, witness, stream, pins = self._pinned_world()
         verifier = reader.CODE_ROOT / "joulewise/cadence_looks/description_inputs.py"
@@ -819,7 +889,7 @@ class ContentAddressedInstrumentTests(unittest.TestCase):
         stream.write_bytes(b"x" + source[1:])
         self.assertEqual(fixture.reservation_boundary(self, world), [])
         stream.write_bytes(source)
-        self.assertEqual(fixture.reservation_boundary(self, world), [str(world.private)])
+        self._check_pinned_public_gate(world)
         snapshot = reader.Snapshot(world.repo, world.look, "stage2")
         census, qualified = reader.census(snapshot)
         snapshot.check_stage1(census)
@@ -831,13 +901,15 @@ class ContentAddressedInstrumentTests(unittest.TestCase):
         tables = reader.score(snapshot, sources, qualified, lambda: None)
         for table in tables.values():
             self.assertEqual(table[witness], fixture.null("interval_ledger_mismatch"))
-        for key in set(qualified) - {witness}:
-            self.assertIsInstance(tables["hold"][key]["gpu_rail"]["mean_w"], (int, float))
+        other, = set(qualified) - {witness}
+        self.assertEqual(tables["hold"][other]["gpu_rail"]["mean_w"], fixture.null("coverage"))
+        self.assertIsInstance(tables["hold"][other]["dc_in"]["mean_w"], (int, float))
         expected_public = snapshot.public_record(census)
         prebound = snapshot.validate_public(expected_public, expected_public)
         released = json.loads(description_worker._public_after_scoring(snapshot, expected_public, prebound, tables))
         self.assertEqual(released, dict(expected_public, n_interval_ledger_mismatch=1))
-        self.assertEqual(released["n_legs"], len(world.good))
+        self.assertEqual(released["n_legs"], 2)
+        self.assertIs(type(released["n_interval_ledger_mismatch"]), int)
         for wrong in (True, 1.0, 0, len(world.good) + 1):
             with self.subTest(public_count=wrong), self.assertRaises(reader.Refusal):
                 snapshot.validate_public(dict(released, n_interval_ledger_mismatch=wrong), released)
