@@ -954,6 +954,12 @@ class C1PacketRebuildTests(Base):
             observed = self.k1_arm(w1, broken, plan, view=view, night=night)
             self.assertFalse(observed['admitted'])
             self.assertIn('packet_kit_mismatch', observed['reasons'])
+        with self.subTest(layer='install with a null digest'):
+            inventory[DERIVATION_INPUT.as_posix()] = None
+            self.commit_staged_packet(w1, broken)
+            code, calls, error = self.k4_checkpoint(w1, plan, view, night)
+            self.assertEqual((code, calls), (2, 0), error)
+            self.assertIn(DERIVATION_INPUT.as_posix(), error)
 
     def test_k5_materialized_selection_missing_its_head_pin_refuses(self):
         w1 = self.c1_scenario(materialized=True)
@@ -992,6 +998,18 @@ class C1PacketRebuildTests(Base):
                 finally:
                     w1.write(C1_PACKET_PATH, series.raw_json(packet))
                     w1.commit()
+
+    def test_k5_a_registered_input_cannot_be_reclassified_as_absent(self):
+        w1, packet, plan, view, night = self.k4_fixture()
+        self.copy_linked_k4_file(view, CODE_PATH)
+        (view / CODE_PATH).unlink()
+        binding = packet['c1_kit']
+        del binding['staged_inventory'][CODE_PATH]
+        binding['staged_absent_artifacts'].append(CODE_PATH)
+        self.commit_staged_packet(w1, packet)
+        code, calls, error = self.k4_checkpoint(w1, plan, view, night)
+        self.assertEqual((code, calls), (2, 0), error)
+        self.assertIn(CODE_PATH, error)
 
     def test_k5_matching_bytes_for_an_unreferenced_inventory_entry_refuse(self):
         w1, packet, plan, view, night = self.k4_fixture()
