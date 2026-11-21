@@ -946,8 +946,11 @@ def _reconcile_member_bundles(snapshot, kits, issued, empty_closes):
         for entry in identity_members:
             if entry in entries:
                 name = f"{prefix}/{entry}"
-                public_path(relative(name))
-                identity = decode(snapshot.book.blob(snapshot.receipts, name))
+                if snapshot.input_files is not None:
+                    identity = snapshot.source(name, span_input=True)
+                else:
+                    public_path(relative(name))
+                    identity = decode(snapshot.book.blob(snapshot.receipts, name))
                 if snapshot.look == IDS[2] and entry == "runner_receipt.json":
                     require(identity["kit_id"] in kits,
                             "stability receipt is absent from the committed index")
@@ -1479,14 +1482,7 @@ class Signals:
                                if "clock" in support else None)
         self.sidecar_ns = _series(support["sidecar_times"])
         self.meter_ns = _series(support["meter_times"])
-        counts = support["meter_counts"]
-        # RL-166 Q7. The clean flag describes the stream's lifecycle. Its
-        # trailer counters describe the span. Each print judges its own stamps.
-        self.meter_clean = (
-            support["meter_present"] is True and support["meter_clean"] is True
-            and integer(counts["decoded"]) and counts["decoded"] == len(self.meter_ns)
-            and integer(counts["bad"]) and integer(counts["usb_errors"])
-        )
+        self.meter_clean = self._meter_is_clean(len(self.meter_ns))
         # The support ledger is the ordered union of component intervals. It
         # can contain overlapping bounds from different rails.
         bounds = [tuple(map(_time_ns, row)) for row in support["rail_intervals"]]
@@ -1510,6 +1506,17 @@ class Signals:
         common = sorted(set.intersection(*(set(intervals) for intervals in individual.values())))
         return {channel: RailSupport(bounds)
                 for channel, bounds in {**individual, "rail_sum": common}.items()}
+
+    def _meter_marked_clean(self):
+        return self.meta["meter_present"] is True and self.meta["meter_clean"] is True
+
+    def _meter_is_clean(self, *stamp_counts):
+        counts = self.meta["meter_counts"]
+        # RL-166 Q7. Lifecycle and trailer evidence apply at stream scope.
+        # The print's own coverage and gaps use only recorded timestamps.
+        return (self._meter_marked_clean()
+                and integer(counts["decoded"]) and counts["decoded"] in stamp_counts
+                and integer(counts["bad"]) and integer(counts["usb_errors"]))
 
     def _minimum_samples(self, a, b, fast):
         slow = self.periods_ns["hold"]
@@ -1603,7 +1610,7 @@ class Signals:
         # Stamps define the common grid even when a channel's values refuse.
         observed = [self._observed_rails[channel].starts[0] for channel in CHANNELS[:2]
                     if self._observed_rails[channel].starts]
-        if self.meta["meter_present"] is True and self.meter_ns:
+        if self.meter_ns and (self._meter_stamp_tokens is not None or self.meta["meter_present"] is True):
             observed.append(self.meter_ns[0])
         return max(observed, default=None)
 
@@ -1673,14 +1680,18 @@ class Signals:
             require(rows.fieldnames == ["epoch_s", "watts"], "wrong decoded point columns")
             stamp_tokens = [row["epoch_s"] for row in rows]
         stamps = list(map(_csv_time_ns, stamp_tokens))
-        if stamps != self.meter_ns:
-            if set(stamps).difference(self.meter_ns):
-                raise IntervalLedgerMismatch("recorded DC stamp contradicts support")
-            raise Refusal("decoder stamps disagree with the copy's support")
+        if not set(stamps).issubset(self.meter_ns):
+            raise IntervalLedgerMismatch("recorded DC stamp contradicts support")
+        require(all(left < right for left, right in zip(stamps, stamps[1:])),
+                "invalid recorded DC stamp order")
+        # A nominal slot with no recording is an interval coverage deficit.
+        # Accept either the nominal or observed total in that case. Neither
+        # total contributes timestamps to coverage or to the recovery grid.
+        self.meter_clean = self._meter_is_clean(len(self.meter_ns), len(stamps))
+        self.meter_ns = stamps
         self._meter_stamp_tokens = stamp_tokens
 
     def _admitted_meter(self, a, b):
-        self._index_meter()
         lo, hi = _meter_slice(self.meter_ns, a, b)
         pending = {i for i in range(lo, hi + 1) if i not in self._meter_values}
         if pending:
@@ -1708,6 +1719,12 @@ class Signals:
         start, stop = _time_ns(a), _time_ns(b)
         require(start < stop, "invalid print interval")
         require(channel in (*RAIL_CHANNELS, "rail_sum", "dc_in", "sidecar"), "unknown channel")
+        if channel == "dc_in" and self._meter_stamp_tokens is None and self._meter_marked_clean():
+            # The ledger is an upper bound on coverage. Verify the recording
+            # before admitting values or classifying a count disagreement.
+            if self.meter_clean and not self._coverage_passes(channel, start, stop, ()):
+                return "coverage"
+            self._index_meter()
         if reason := self._stream_refusal(channel):
             return reason
 
@@ -2001,11 +2018,11 @@ def print_leg(signal, detail, instrument):
     return _printed(_leg_values(signal, detail, instrument))
 
 
-def _leg_values(signal, detail, instrument):
+def _leg_values(signal, detail, instrument, *, has_input_pins=False):
     # Check recorded identities in confinement before any value on this leg.
     try:
         signal._index_rails()
-        if signal.meta["meter_present"] is True and signal.meta["meter_clean"] is True:
+        if has_input_pins or signal._meter_marked_clean():
             signal._index_meter()
     except IntervalLedgerMismatch:
         if not instrument:
@@ -2162,19 +2179,20 @@ def score(snapshot, sources, qualified, mark_read):
     # Reuse preflight's verified code. Scoring must not resolve a different
     # dependency after the worker has spent the one-use reservation.
     pinned = _load_step3(snapshot.step3_code) if qualified else None
-    if snapshot.input_files is not None:
+    has_input_pins = snapshot.input_files is not None
+    if has_input_pins:
         from .description_inputs import PinnedInput
 
     for key, detail in qualified.items():
         paths = sources[key]
-        if snapshot.input_files is not None:
+        if has_input_pins:
             paths = {name: PinnedInput(path, snapshot.input_files[path.relative_to(snapshot.copy_root).as_posix()])
                      for name, path in paths.items()}
         with paths["support.json"].open("rb") as stream:
             support, sensor_span = _support_metadata(stream)
             sensor_source = (stream, sensor_span) if snapshot.instrument and sensor_span else None
             signal = Signals(support, paths, mark_read, pinned, sensor_source=sensor_source)
-            for name, value in _leg_values(signal, detail, snapshot.instrument).items():
+            for name, value in _leg_values(signal, detail, snapshot.instrument, has_input_pins=has_input_pins).items():
                 if not snapshot.instrument:
                     value["runner_pin"] = detail[1]["runner_pin"]
                 files[name][key] = value

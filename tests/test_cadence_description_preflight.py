@@ -744,7 +744,7 @@ class ContentAddressedInstrumentTests(unittest.TestCase):
         }})
 
     def _pinned_world(self, *, world_type=fixture.World, empty_span_files=(), dc_omission=False,
-                      first_check=None):
+                      first_check=None, edit_signals=None):
         temporary = self.enterContext(TemporaryDirectory())
         world = world_type(Path(temporary).resolve() / "world", fixture.IDS[0])
         witness = sorted(world.good)[0]
@@ -752,15 +752,17 @@ class ContentAddressedInstrumentTests(unittest.TestCase):
         support = fixture.read(support_path)
         support["rail_intervals"].remove([50, 51])
         fixture.put(support_path, support)
-        # The other qualified leg has the inverse case: nominal intervals with
-        # no recording. Its rail hold fails coverage without a ledger mismatch.
         other, = set(world.good) - {witness}
-        trace = world.copy / other / fixture.RAIL_FILE
-        with trace.open(newline="") as stream:
-            rows = csv.reader(stream)
-            header = next(rows)
-            retained = [row for row in rows if not 50 <= Decimal(row[0]) < 57]
-        fixture.put(trace, fixture.csvbytes([header, *retained]))
+        if edit_signals is None:
+            # The other leg has nominal rail intervals without recordings.
+            trace = world.copy / other / fixture.RAIL_FILE
+            with trace.open(newline="") as stream:
+                rows = csv.reader(stream)
+                header = next(rows)
+                retained = [row for row in rows if not 50 <= Decimal(row[0]) < 57]
+            fixture.put(trace, fixture.csvbytes([header, *retained]))
+        else:
+            edit_signals(world, witness, other)
         if dc_omission:
             point_support = world.copy / other / "support.json"
             meta = fixture.read(point_support)
@@ -900,6 +902,155 @@ class ContentAddressedInstrumentTests(unittest.TestCase):
         prebound = snapshot.validate_public(expected, expected)
         public = json.loads(description_worker._public_after_scoring(snapshot, expected, prebound, tables))
         self.assertEqual((public["n_legs"], public["n_interval_ledger_mismatch"]), (2, 2))
+
+    def _pinned_reports(self, world):
+        fixture.Checks().stage1(world)
+        snapshot = reader.Snapshot(world.repo, world.look, "stage2")
+        census, qualified = reader.census(snapshot)
+        snapshot.check_stage1(census)
+        sources = reader.verify_gates(snapshot, qualified)
+        expected = snapshot.public_record(census)
+        prebound = snapshot.validate_public(expected, expected)
+        tables = reader.score(snapshot, sources, qualified, lambda: None)
+        public = description_worker._public_after_scoring(snapshot, expected, prebound, tables)
+        return tables, json.loads(public)
+
+    def test_pinned_nominal_dc_slots_are_coverage_with_593_of_600_samples(self):
+        missing = {50, 100, 150, 200, 250, 300, 350}
+
+        def sparse(world, _, other):
+            folder = world.copy / other
+            trace = folder / fixture.DC_FILE
+            with trace.open(newline="") as stream:
+                header, *samples = csv.reader(stream)
+            retained = [sample for sample in samples if Decimal(sample[0]) not in missing]
+            self.assertEqual(sum(0 <= Decimal(sample[0]) < 600 for sample in retained), 593)
+            fixture.put(trace, fixture.csvbytes([header, *retained]))
+            meta_path = folder / "support.json"
+            meta = fixture.read(meta_path)
+            if not nominal:
+                meta["meter_times"] = [stamp for stamp in meta["meter_times"] if stamp not in missing]
+            self.assertEqual(sum(0 <= stamp < 600 for stamp in meta["meter_times"]), 600 if nominal else 593)
+            meta["meter_counts"]["decoded"] = len(retained)
+            fixture.put(meta_path, meta)
+
+        outcomes = []
+        for nominal in (True, False):
+            with self.subTest(nominal_ledger=nominal):
+                world, witness, _, _ = self._pinned_world(edit_signals=sparse)
+                other, = set(world.good) - {witness}
+                tables, public = self._pinned_reports(world)
+                hold = tables["hold"][other]
+                self.assertEqual(hold["dc_in"]["mean_w"], fixture.null("coverage"))
+                self.assertIsInstance(hold["gpu_rail"]["mean_w"], float)
+                self.assertIsInstance(hold["rail_sum"]["mean_w"], float)
+                self.assertEqual((public["n_legs"], public["n_interval_ledger_mismatch"]), (2, 1))
+                outcomes.append(tables)
+        self.assertEqual(len(outcomes), 2)
+        self.assertEqual(*outcomes)
+
+    def test_pinned_dc_omission_outranks_contamination_and_absence(self):
+        def edit(world, _, other):
+            folder = world.copy / other
+            meta_path = folder / "support.json"
+            meta = fixture.read(meta_path)
+            meta[flag] = False
+            if omitted:
+                meta["meter_times"].remove(50)
+                meta["meter_counts"]["decoded"] = len(meta["meter_times"])
+            fixture.put(meta_path, meta)
+            trace = folder / fixture.DC_FILE
+            with trace.open(newline="") as stream:
+                header, *samples = csv.reader(stream)
+            self.assertEqual(sum(0 <= Decimal(sample[0]) < 600 for sample in samples), 600)
+            fixture.put(trace, fixture.csvbytes([header, *((stamp, "DO_NOT_PARSE") for stamp, _ in samples)]))
+
+        for flag, omitted in (("meter_clean", True), ("meter_clean", False), ("meter_present", True)):
+            with self.subTest(flag=flag, omitted=omitted):
+                world, witness, _, _ = self._pinned_world(edit_signals=edit)
+                other, = set(world.good) - {witness}
+                tables, public = self._pinned_reports(world)
+                for table in tables.values():
+                    self.assertEqual(table[witness], fixture.null("interval_ledger_mismatch"))
+                if omitted:
+                    self.assertTrue(all(table[other] == fixture.null("interval_ledger_mismatch")
+                                        for table in tables.values()))
+                else:
+                    hold = tables["hold"][other]
+                    self.assertEqual(hold["dc_in"]["mean_w"], fixture.null("meter_contaminated"))
+                    self.assertIsInstance(hold["gpu_rail"]["mean_w"], float)
+                self.assertEqual((public["n_legs"], public["n_interval_ledger_mismatch"]), (2, 1 + omitted))
+
+    def test_pinned_recovery_anchor_uses_recorded_dc_start_with_contamination(self):
+        recordings = []
+        outcomes = []
+
+        def edit(world, witness, _):
+            folder = world.copy / witness
+            rail = folder / fixture.RAIL_FILE
+            with rail.open(newline="") as stream:
+                header, *rows = csv.reader(stream)
+            fixture.put(rail, fixture.csvbytes([header, *(row for row in rows if Decimal(row[0]) != 50)]))
+            dc = folder / fixture.DC_FILE
+            with dc.open(newline="") as stream:
+                header, *rows = csv.reader(stream)
+            retained = [row for row in rows if Decimal(row[0]) >= -10]
+            self.assertEqual(Decimal(retained[0][0]), -10)
+            fixture.put(dc, fixture.csvbytes([header, *retained]))
+            recordings.append((rail.read_bytes(), dc.read_bytes()))
+            path = folder / "support.json"
+            meta = fixture.read(path)
+            meta["meter_clean"] = False
+            meta["meter_counts"]["decoded"] = len(retained)
+            if not nominal:
+                meta["meter_times"] = [stamp for stamp in meta["meter_times"] if stamp >= -10]
+            self.assertEqual(meta["meter_times"][0], -20 if nominal else -10)
+            fixture.put(path, meta)
+
+        for nominal in (True, False):
+            with self.subTest(nominal_ledger=nominal):
+                world, witness, _, _ = self._pinned_world(edit_signals=edit)
+                tables, public = self._pinned_reports(world)
+                edges = tables["edges"][witness]
+                self.assertEqual(edges["unobserved_s"], 19.0)
+                for rail in ("gpu_rail", "rail_sum"):
+                    self.assertEqual(edges["recovery_s"][rail], fixture.null("under", bound_s=19.0))
+                self.assertEqual((public["n_legs"], public["n_interval_ledger_mismatch"]), (2, 0))
+                outcomes.append(tables)
+        self.assertEqual(len(outcomes), 2)
+        self.assertEqual(*recordings)
+        self.assertEqual(*outcomes)
+
+    def test_unlisted_identity_requires_check_pin_comparison_before_decode(self):
+        for role in ("issue.json", "runner_receipt.json"):
+            with self.subTest(role=role), TemporaryDirectory() as temporary:
+                root = Path(temporary).resolve() / "book"
+                book = fixture.Book(root)
+                name = f"ops/invented-unlisted-span/{role}"
+                blob = fixture.wire({"kit_id": "f2-inst-99", "invented": role})
+                fixture.put(root / name, blob)
+                commit = book.seal("invented closed unrelated span")
+                snapshot = reader.Snapshot.__new__(reader.Snapshot)
+                snapshot.book = reader.Book(root)
+                snapshot.commit = snapshot.receipts = commit
+                snapshot.look = fixture.IDS[0]
+                snapshot.hashes = {name: fixture.sha(blob)}
+                snapshot.cache = {}
+                pin_name = name.removeprefix("ops/")
+                for pins, refusal in (
+                    ({}, "absent from its Check-time pins"),
+                    ({pin_name: {"size": len(blob), "sha256": "0" * 64}}, "differ from their Check-time pin"),
+                    ({pin_name: {"size": len(blob), "sha256": fixture.sha(blob)}}, None),
+                ):
+                    with self.subTest(pin=refusal), patch.object(reader, "decode", wraps=reader.decode) as decoded:
+                        snapshot.input_files = pins
+                        if refusal:
+                            with self.assertRaisesRegex(reader.Refusal, refusal):
+                                reader._reconcile_member_bundles(snapshot, {}, {}, {})
+                            decoded.assert_not_called()
+                        else:
+                            reader._reconcile_member_bundles(snapshot, {}, {}, {})
+                            decoded.assert_called_once_with(blob)
 
     def _check_pinned_public_gate(self, world):
         trace = """

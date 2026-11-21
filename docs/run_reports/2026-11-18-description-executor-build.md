@@ -1559,3 +1559,37 @@ run finished with the same 1,040 recorded nonpassing frozen IDs.
 The independent successor freeze and PR #795 hardware gate remain
 lead dependencies.
 [Local gate and interval replay](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/rl194b-audit1-final-focus.log) · [Protected blob comparison](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/rl194b-audit1-protected.tsv) · [Intake hosted CI](https://github.com/mpmdw/JouleWise/actions/runs/44841747980) · [Current PR checks](https://github.com/mpmdw/JouleWise/pull/868/checks)
+
+## 2026-11-20 RL-194b audit round 2
+
+Intake matched draft PR #868 at `4b3a4f580e71e9e4347e6067d73eebb4a10e7bec`.
+The unchanged synthetic probes reproduced the abort at 593 recorded DC samples,
+the mismatch count of one with contamination and two with a clean flag, and the
+rail recovery change from `under` with a 19 s bound to a scalar 19 s. The paired
+recovery arms used byte-identical recordings.
+[Audit report](/Volumes/JW-EXT/scratch/pl-d-desc-looks-executor/audit-2/FINAL-MESSAGE.md) · [Intake DC replay](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/rl194b-audit2-before-dc.log) · [Intake recovery replay](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/rl194b-audit2-before-anchor.log)
+
+| Finding | Repair and regression |
+| --- | --- |
+| HIGH, nominal slots with no recording | Use the recorded DC timestamps after exact reconciliation. The 593-of-600 hold prints `coverage` and the look continues. The matched sparse ledger and nominal ledger give identical private tables and the same public counts. A nominal endpoint cannot substitute for a recorded right bracket and yields `meter_gap` when coverage passes. |
+| HIGH, a recorded timestamp omitted from the ledger | Reconcile the Check-pinned DC stamps at confined leg intake before applying cleanliness or presence flags. A recorded stamp omitted from the ledger nulls all four private tables for that leg, retains its qualification, and increments the public count once. The clean, contaminated, and absent-flag controls exercise the same omission. The matching contaminated control keeps its stream refusal. |
+| HIGH, recovery drift | The shared grid uses the actual first DC timestamp after reconciliation, including when the DC values are contaminated. With a recorded start of −10 s, both rail channels return `under` with bound 19 s for ledgers starting at −20 s and −10 s. Both legs' private tables match across the pair. |
+| MED, unlisted operational identity decoded early | Route pinned issue and receipt identities through the same Check-pin gate as roster files. A missing or different pin refuses before decoding. The matching-pin control decodes the exact checked bytes. |
+
+Coverage and gaps use the ordered recorded timestamps. The authenticated
+decoder count may agree with the observed or nominal tally without supplying
+an observation. A legacy manifest keeps its absent or contaminated DC
+stream closed. A pinned manifest reads that stream's stamp metadata inside
+stage 2 and defers every value lookup to interval admission.
+
+**FOR-FABLE.** Timestamp membership uses exact decimal values expressed on the
+nanosecond clock. Rail intervals use exact endpoint pairs. No tolerance was
+needed. **NEEDS_SPEC: none for these findings.** The hardware host-ID gate and
+physical publication rehearsal remain with the integration owner. Synthetic
+records exercise writer validation and intercept the reservation boundary.
+
+All eight frozen v5 hashes and 53 protected-path entries match intake. The
+completed intake CI run recorded 15,915 passes and 1,040 known nonpassing IDs
+across 16,955 frozen methods. Verify the successor against that independent
+baseline on the read-back head.
+[Corrected DC replay](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/rl194b-audit2-after-dc.log) · [Corrected recovery replay](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/rl194b-audit2-after-anchor.log) · [Pinned fixture regression log](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/rl194b-audit2-preflight-final.log) · [Interval and value-access log](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/rl194b-audit2-interval.log) · [Protected blob comparison](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/rl194b-audit2-protected.tsv) · [Current PR checks](https://github.com/mpmdw/JouleWise/pull/868/checks)

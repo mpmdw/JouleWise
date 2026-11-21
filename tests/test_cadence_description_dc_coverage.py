@@ -35,6 +35,22 @@ def _select_meter_points(directory, keep, *, poison=None):
 
 
 class DCCoverageTests(unittest.TestCase):
+    def test_nominal_dc_endpoint_cannot_supply_a_missing_recorded_bracket(self):
+        with TemporaryDirectory() as temporary:
+            folder = Path(temporary)
+            fixture.traces(folder, 1, 0)
+            trace = folder / fixture.DC_FILE
+            with trace.open(newline="") as stream:
+                header, *samples = csv.reader(stream)
+            retained = [row for row in samples if float(row[0]) < 600]
+            fixture.put(trace, fixture.csvbytes([header, *retained]))
+            support = fixture.read(folder / "support.json")
+            self.assertIn(600, support["meter_times"])
+            support["meter_counts"]["decoded"] = len(retained)
+            signal = reader.Signals(support, {fixture.DC_FILE: trace}, lambda: None, None)
+            with patch.object(reader, "_sample", side_effect=AssertionError("value parsed without a bracket")):
+                self.assertEqual(signal.average("dc_in", 0, 600), fixture.null("meter_gap"))
+
     def test_dc_recording_detects_omitted_stamp_even_when_decoder_count_disagrees(self):
         with TemporaryDirectory() as temporary:
             leg = fixture.TraceLeg(Path(temporary))
