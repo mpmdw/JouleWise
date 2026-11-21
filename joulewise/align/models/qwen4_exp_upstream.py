@@ -383,6 +383,9 @@ class GatedDeltaNet(nn.Module):
         q, k = normalize_qk(q, k, inv_scale=self.dk**-0.5, eps=1e-6)
 
         state = cache[1] if cache is not None else None
+        # The pinned helper lacks upstream's guard for the Metal kernel,
+        # which processes complete 32-coordinate groups along the key axis.
+        use_kernel = not self.training and self.dk >= 32 and self.dk % 32 == 0
         out, state = gated_delta_update(
             q,
             k,
@@ -393,7 +396,7 @@ class GatedDeltaNet(nn.Module):
             dt_bias=self.dt_bias,
             state=state,
             mask=mask,
-            use_kernel=not self.training,
+            use_kernel=use_kernel,
         )
         if cache is not None:
             cache[1] = state

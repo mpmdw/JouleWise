@@ -12,7 +12,8 @@
 The upstream parity runs use the installed mlx-lm source, unmodified. The
 vendored runtime test uses the JouleWise copy on its separate runtime pins.
 The vendor changes are absolute imports, eager annotations for the anonymous
-0.31.3 loader, and the upstream `normalize_qk` helper absent in 0.31.3.
+0.31.3 loader, the upstream `normalize_qk` helper and the DeltaNet kernel
+key-width guard absent in 0.31.3.
 
 ## Tiny matrix design
 
@@ -45,7 +46,9 @@ tolerance. FP32 uses `1e-4`, the existing gold threshold. BF16 uses
 applied to each corresponding fixture and tensor, including the MLX pair.
 This uses the reference's observed same-shape dtype change as the scale.
 Indexer masks, sorted selected expert sets, and greedy tokens require exact
-agreement. These gates apply to the tested tensors and prompts.
+agreement. The BF16 scale includes error propagated from earlier layers.
+In the audit, halving upstream's `B-bf16/L0.moe` output still passed the
+chained comparison at 0.22461 maximum error against a 0.28572 bound.
 
 ## Tiny results
 
@@ -170,8 +173,29 @@ alongside its `config.json` and set `"model_file": "qwen4_exp_upstream.py"`.
 The source in the existing ALIGN model config remains the checkpoint directory.
 The runtime test builds a tiny local checkpoint and tokenizer, opens it via
 `MlxRuntimeAdapter.prepare`, and compares sparse cached decode against a fresh
-prefill. The 210 GB JouleWise artifact uses its bundled historical model file
-and its own packed experts and paged n-gram layout.
+prefill through the portable DeltaNet recurrence. It covers key-head widths
+16, 32, 48, 64, 80 and 128, including both dispatch paths. The 210 GB JouleWise
+artifact uses its bundled historical model file and its own packed experts and
+paged n-gram layout.
+
+### Pinned DeltaNet width regression
+
+The Metal helper in mlx-lm 0.31.3 processes `floor(Dk / 32) × 32` key
+coordinates. The vendor now uses the portable recurrence for key widths
+below 32 or with a remainder modulo 32, matching upstream's dispatch guard.
+With only fixture A's DeltaNet key-head width changed to 48, the pre-fix
+vendor's FP32 prefill error against Transformers was 0.8405828. With the
+guard it was `1.3113e-6` against a `1e-4` bound. Prefill logits agreed
+exactly with upstream. The fixed run also passed cached replay and eight
+greedy tokens. [Regression results](evidence/vendor-width48-after.json)
+
+```sh
+WIDTH48=$(mktemp -d "$WORK/vendor-width48.XXXXXXXX")
+nice -n 10 "$WORK/venvs/reference/bin/python" scripts/qwen4_upstream_parity.py reference "$WIDTH48" --port "$PORT" --case A --dtype fp32 --linear-key-head-dim 48
+nice -n 10 "$WORK/venvs/mlx/bin/python" scripts/qwen4_upstream_parity.py upstream "$WIDTH48" --case A --dtype fp32
+nice -n 10 "$WORK/venvs/runtime/bin/python" scripts/qwen4_upstream_parity.py vendor "$WIDTH48" --case A
+nice -n 10 "$WORK/venvs/runtime/bin/python" -B -m unittest tests.test_qwen4_upstream_model_file
+```
 
 ## Converted SSD artifact
 
