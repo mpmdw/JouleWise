@@ -6,8 +6,12 @@ The [pinned runtime setup](PINNED-RUNTIME.md) uses the upstream-derived
 `model_file` on MLX 0.31.2 and mlx-lm 0.31.3. Its allowlist covers
 unquantized FP32/BF16 text weights and native MLX affine quantization,
 including per-module overrides, with a single-request token-ID stream
-and unquantized in-memory prompt caches. It uses default text RoPE,
-normalized top-k, and `linear_attention` and `full_attention` layers.
+and unquantized in-memory prompt caches. It requires the released
+`linear_attention`/`full_attention` schedule (three to one, in order),
+PLE on layer 2, width-four convolutions, normalized top-k, enabled QSA,
+four hyper-connection streams, and the released MTP declaration. Layer
+count and model dimensions may scale within that structure. The checkpoint
+config explicitly selects `zero_centered` or `folded` norm weights.
 Unsupported checkpoint formats and declared paths raise
 `UnsupportedByPinnedRuntime`. `BatchGenerator` is refused at cache setup.
 

@@ -70,3 +70,42 @@ records the reproduction and the one-line upstream diff. Audit 4
 changes are confined to PR #930. Verification used local venvs and
 locally generated tiny weights. The released artifact was read only
 for its configuration.
+
+## Audit 5
+
+The pinned loader validates the released text architecture before model
+construction. It checks the three-DeltaNet/one-full-attention pattern,
+one-indexed PLE layer 2, both convolution widths of 4, normalized top-k,
+enabled QSA with one KV head and compression ratio 4, four hyper-connection
+streams, and the released MTP declaration. The 48-layer artifact config
+passed structure validation with the explicit norm label supplied in
+memory. Only `config.json` was read from the artifact.
+
+The loader applies the `1 + w` fold from the checkpoint's top-level
+`qwen4_norm_layout`. Identical tensor names with each explicit layout
+produce the same logits. The exact audit mlx-vlm export reproduced its
+original digest and now raises `UnsupportedByPinnedRuntime` naming
+`text_config.ple_layer_ids`. On upstream `c4c9c76`, the proposed diff and
+explicit `zero_centered` label restored token 22 from token 27 and reduced
+cached final-position max error from `2.26621` to `5.96046e-7`. The replay
+used the existing mlx-vlm 0.7.12 code wheel and generated the weights locally.
+[Defect 4 reproduction and patch](../align/qwen4_exp_port/UPSTREAM-PARITY-ADDENDUM-1.md#defect-4--zero-centered-norms-without-ple)
+
+B and C were regenerated in FP32 and BF16 using the merged parity harness.
+The pinned replay used the same weights with the released MTP declaration
+and explicit norm label. Each fixture and dtype has 43 rows. The table
+counts rows outside the original tolerances (`1e-4` FP32, reference dtype
+drift bound for BF16, exact for routing, indexer masks and greedy tokens).
+
+| Fixture | HF vs upstream | HF vs canonical | Upstream vs canonical | HF vs pinned | Upstream vs pinned | Canonical vs pinned |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| B FP32 | 0 | 0 | 0 | 0 | 0 | 0 |
+| C FP32 | 0 | 0 | 0 | 0 | 0 | 0 |
+| B BF16 | 10 | 0 | 10 | 10 | 0 | 10 |
+| C BF16 | 18 | 1 | 17 | 18 | 0 | 17 |
+
+All greedy tokens matched. The 86 upstream-vs-pinned BF16 rows matched
+exactly, with the same BF16 discrepancies against the other runtimes as
+the merged evidence. The native and adapter suites passed 65 tests.
+The regenerated 6-bit affine control stayed within `1.02e-6` of
+upstream, and both NVFP4 variants raised `UnsupportedByPinnedRuntime`.

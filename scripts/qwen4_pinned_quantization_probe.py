@@ -21,6 +21,16 @@ def write_json(path, data):
     path.write_text(json.dumps(data, indent=2, sort_keys=True, allow_nan=False) + "\n")
 
 
+def released_fixture_config(config, norm_layout):
+    # The B/C parity fixtures omit the unused MTP declaration. Their text
+    # graph already uses the released layer schedule, PLE and indexer.
+    text = dict(config["text_config"], mtp_num_hidden_layers=1, mtp_use_dedicated_embeddings=False,
+                mtp={"hybrid": True, "layer_types": ["full_attention"],
+                     "mtp_use_hidden_state_from_layer": None, "num_hidden_layers": 1,
+                     "rope_theta": 10_000_000})
+    return dict(config, text_config=text, qwen4_norm_layout=norm_layout)
+
+
 @contextmanager
 def vendored_checkpoint(path, config, weights):
     with TemporaryDirectory(dir=path) as tmp:
@@ -64,6 +74,7 @@ def prepare(root, fixtures):
                                        global_scale=global_scale)
         path = root / name
         path.mkdir(parents=True)
+        config = released_fixture_config(config, "folded")
         write_json(path / "config.json", config)
         weights = dict(tree_flatten(model.parameters()))
         scales = sum(key.endswith(".global_scale") for key in weights)

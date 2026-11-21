@@ -59,10 +59,99 @@ _QUANTIZATION_SUPPORT = (
 )
 _AFFINE_FIELDS = {"mode", "bits", "group_size"}
 _FLOAT_DTYPES = (mx.float32, mx.bfloat16)
+_REQUIRED = object()
+_RELEASED_MTP = {
+    "hybrid": True,
+    "layer_types": ["full_attention"],
+    "mtp_use_hidden_state_from_layer": None,
+    "num_hidden_layers": 1,
+    "rope_theta": 10_000_000,
+}
 
 
 class UnsupportedByPinnedRuntime(ValueError):
     """The checkpoint or requested path is outside the pinned ALIGN runtime."""
+
+
+def _require_released_field(config, field, expected, *, prefix="text_config.", default=_REQUIRED):
+    value = config.get(field, default)
+    if value is _REQUIRED:
+        raise UnsupportedByPinnedRuntime(f"{prefix}{field} must be declared as {expected!r}.")
+    if type(value) is not type(expected) or value != expected:
+        raise UnsupportedByPinnedRuntime(f"{prefix}{field} must be {expected!r}; got {value!r}.")
+
+
+def _check_released_structure(text):
+    _require_released_field(text, "ple_layer_ids", [2])
+    for field, expected in {
+        "full_attention_interval": 4,
+        "ple_conv_kernel_size": 4,
+        "norm_topk_prob": True,
+        "model_type": "qwen4_exp_text",
+        "attention_bias": False,
+        "hidden_act": "silu",
+        "tie_word_embeddings": False,
+        "use_cache": True,
+        "output_router_logits": False,
+        "mamba_ssm_dtype": "float32",
+        "partial_rotary_factor": 0.25,
+    }.items():
+        _require_released_field(text, field, expected, default=expected)
+    dropout = text.get("attention_dropout", 0.0)
+    if type(dropout) not in (int, float) or dropout != 0:
+        raise UnsupportedByPinnedRuntime("text_config.attention_dropout must be 0.")
+    for field, expected in {
+        "linear_conv_kernel_dim": 4,
+        "hc_count": 4,
+        "ngram_size": 3,
+        "indexer_kv_heads": 1,
+        "indexer_compress_ratio": 4,
+        "output_gate_type": "sigmoid",
+        "mtp_num_hidden_layers": 1,
+        "mtp_use_dedicated_embeddings": False,
+    }.items():
+        _require_released_field(text, field, expected)
+
+    count = text.get("num_hidden_layers")
+    if type(count) is not int or count < 4:
+        raise UnsupportedByPinnedRuntime("text_config.num_hidden_layers must be at least 4.")
+    pattern = ["full_attention" if (i + 1) % 4 == 0 else "linear_attention" for i in range(count)]
+    if text.get("layer_types", pattern) != pattern:
+        raise UnsupportedByPinnedRuntime(
+            "text_config.layer_types must repeat three linear_attention layers then one full_attention layer."
+        )
+
+    mtp = text.get("mtp")
+    if not isinstance(mtp, dict):
+        raise UnsupportedByPinnedRuntime(f"text_config.mtp must declare the released layout {_RELEASED_MTP!r}.")
+    for field, expected in _RELEASED_MTP.items():
+        _require_released_field(mtp, field, expected, prefix="text_config.mtp.")
+    extra = mtp.keys() - _RELEASED_MTP.keys()
+    if extra:
+        raise UnsupportedByPinnedRuntime(f"text_config.mtp has unsupported fields {sorted(extra)!r}.")
+
+    for field in ("indexer_n_heads", "indexer_head_dim", "indexer_budget", "num_experts",
+                  "num_experts_per_tok", "shared_expert_intermediate_size", "heads_per_ngram", "ple_embed_dim"):
+        value = text.get(field)
+        if type(value) is not int or value <= 0:
+            raise UnsupportedByPinnedRuntime(f"text_config.{field} must be a positive integer.")
+    if text["indexer_budget"] % 4:
+        raise UnsupportedByPinnedRuntime("text_config.indexer_budget must be a positive multiple of 4.")
+    if text["num_experts_per_tok"] > text["num_experts"]:
+        raise UnsupportedByPinnedRuntime("text_config.num_experts_per_tok cannot exceed num_experts.")
+    if text["ple_embed_dim"] % (2 * text["heads_per_ngram"]):
+        raise UnsupportedByPinnedRuntime("text_config.ple_embed_dim must divide evenly across n-gram heads.")
+
+    rope = text.get("rope_parameters")
+    if not isinstance(rope, dict):
+        raise UnsupportedByPinnedRuntime("text_config.rope_parameters must be a mapping.")
+    for field, expected in {"mrope_interleaved": True, "mrope_section": [11, 11, 10],
+                            "partial_rotary_factor": 0.25}.items():
+        _require_released_field(rope, field, expected, prefix="text_config.rope_parameters.")
+    for field in ("type", "rope_type"):
+        _require_released_field(rope, field, "default", prefix="text_config.rope_parameters.", default="default")
+    if text.get("rope_scaling") is not None:
+        raise UnsupportedByPinnedRuntime("text_config.rope_scaling must be null.")
 
 
 def _check_affine_quantization(settings: Any, path: str) -> None:
@@ -178,6 +267,7 @@ class ModelArgs(BaseModelArgs):
     model_type: str
     text_config: dict[str, Any]
     quantization: dict[str, Any] | None = None
+    qwen4_norm_layout: str | None = None
     text: TextArgs = field(init=False)
 
     @classmethod
@@ -191,14 +281,6 @@ class ModelArgs(BaseModelArgs):
             raise UnsupportedByPinnedRuntime("The pinned model_file requires model_type='qwen4_exp'.")
         if not isinstance(text_config, dict):
             raise UnsupportedByPinnedRuntime("The pinned model_file requires a text_config mapping.")
-        if text_config.get("norm_topk_prob", True) is not True:
-            raise UnsupportedByPinnedRuntime("The pinned MoE requires renormalized top-k.")
-        if text_config.get("attention_bias", False):
-            raise UnsupportedByPinnedRuntime("The pinned attention requires bias-free projections.")
-        rope = text_config.get("rope_parameters", {})
-        if (not isinstance(rope, dict) or rope.get("rope_type", rope.get("type", "default")) != "default"
-            or text_config.get("rope_scaling")):
-            raise UnsupportedByPinnedRuntime("The pinned model_file requires default text RoPE.")
         for prefix, config in (("", params), ("text_config.", text_config)):
             for key in ("attn_implementation", "_attn_implementation"):
                 if config.get(key) not in (None, "sdpa"):
@@ -217,6 +299,7 @@ class ModelArgs(BaseModelArgs):
                 if settings is None or (key == "quantization_config" and settings is False):
                     continue
                 _check_affine_quantization(settings, prefix + key)
+        _require_released_field(params, "tie_word_embeddings", False, prefix="", default=False)
         native = params.get("quantization")
         if native is not None and not {"bits", "group_size"} <= native.keys():
             raise UnsupportedByPinnedRuntime("Native affine quantization requires bits and group_size.")
@@ -229,24 +312,16 @@ class ModelArgs(BaseModelArgs):
         return super().from_dict(params)
 
     def __post_init__(self) -> None:
+        _check_released_structure(self.text_config)
+        if self.qwen4_norm_layout not in ("zero_centered", "folded"):
+            raise UnsupportedByPinnedRuntime("qwen4_norm_layout must explicitly be 'zero_centered' or 'folded'.")
         self.text = TextArgs.from_dict(self.text_config)
         text = self.text
-        allowed_layers = {"linear_attention", "full_attention"}
-        if set(text.layer_types) != allowed_layers or len(text.layer_types) != text.num_hidden_layers:
-            raise UnsupportedByPinnedRuntime("Expected a hybrid linear_attention/full_attention text model.")
-        if text.hidden_act != "silu" or text.output_gate_type not in ("silu", "sigmoid"):
-            raise UnsupportedByPinnedRuntime("Unsupported activation for the pinned text model.")
-        if text.indexer_kv_heads != 1:
-            raise UnsupportedByPinnedRuntime("The pinned indexer requires one KV head.")
-        if (text.indexer_compress_ratio <= 0 or text.indexer_budget < text.indexer_compress_ratio
-            or text.indexer_budget % text.indexer_compress_ratio):
-            raise UnsupportedByPinnedRuntime("The sparse budget must be a positive multiple of the compression ratio.")
-        if (text.num_key_value_heads <= 0 or text.num_attention_heads % text.num_key_value_heads
-            or text.linear_num_key_heads <= 0 or text.linear_num_value_heads % text.linear_num_key_heads):
-            raise UnsupportedByPinnedRuntime("Attention and DeltaNet head groups must divide evenly.")
-        if any(not 1 <= layer <= text.num_hidden_layers or text.layer_types[layer - 1] != "linear_attention"
-               for layer in text.ple_layer_ids):
-            raise UnsupportedByPinnedRuntime("PLE requires a linear_attention layer.")
+        for query, kv in (("num_attention_heads", "num_key_value_heads"),
+                          ("linear_num_value_heads", "linear_num_key_heads")):
+            n, group = getattr(text, query), getattr(text, kv)
+            if n <= 0 or group <= 0 or n % group:
+                raise UnsupportedByPinnedRuntime(f"text_config.{query} must be divisible by positive {kv}.")
 
 
 class RMSNorm(nn.Module):
@@ -879,13 +954,7 @@ class Model(nn.Module):
         return caches
 
     def sanitize(self, weights: dict[str, mx.array]) -> dict[str, mx.array]:
-        # HF and mlx-vlm (flat layout, `shards.{i}` n-gram names) store these norms
-        # as `w` for a `1 + w` scale; other checkpoints already hold `1 + w`.
-        fold = any(
-            k.startswith("model.language_model.")
-            or (k.startswith("language_model.") and ".ngram_embedding.shards." in k)
-            for k in weights
-        )
+        fold = self.args.qwen4_norm_layout == "zero_centered"
 
         quantization = self.args.quantization
         default = _affine_recipe(quantization, "quantization") if quantization is not None else None

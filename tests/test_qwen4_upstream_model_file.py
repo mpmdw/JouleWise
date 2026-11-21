@@ -1,7 +1,9 @@
 """Exercise mlx-lm's pinned local model_file path with the vendored model."""
+from dataclasses import replace
 import importlib.metadata
 import json
 from pathlib import Path
+import re
 import runpy
 import tempfile
 import unittest
@@ -24,21 +26,28 @@ def tiny_config(key_width=32):
     return {
         "model_type": "qwen4_exp",
         "model_file": MODEL_FILE.name,
+        "qwen4_norm_layout": "folded",
         "eos_token_id": 2,
         "text_config": {
-            "hidden_size": 64, "num_hidden_layers": 2, "num_attention_heads": 2,
+            "hidden_size": 64, "num_hidden_layers": 4, "num_attention_heads": 2,
             "num_key_value_heads": 1, "head_dim": 32, "vocab_size": 32,
             "rms_norm_eps": 1e-6, "eos_token_id": 2,
-            "rope_parameters": {"rope_theta": 10000, "partial_rotary_factor": 0.25},
+            "rope_parameters": {"rope_theta": 10000, "partial_rotary_factor": 0.25,
+                                "mrope_interleaved": True, "mrope_section": [11, 11, 10]},
             "num_experts": 4, "num_experts_per_tok": 2, "moe_intermediate_size": 32,
             "shared_expert_intermediate_size": 32, "linear_num_key_heads": 1,
             "linear_num_value_heads": 2, "linear_key_head_dim": key_width,
-            "linear_value_head_dim": 32, "linear_conv_kernel_dim": 3,
-            "hc_count": 2, "hc_lowrank": 8, "indexer_n_heads": 4,
-            "indexer_kv_heads": 1, "indexer_head_dim": 16, "indexer_budget": 4,
-            "indexer_compress_ratio": 2, "ngram_size": 3, "heads_per_ngram": 2,
-            "ngram_vocab_size_base": 17, "ple_embed_dim": 32, "ple_layer_ids": [1],
-            "layer_types": ["linear_attention", "full_attention"],
+            "linear_value_head_dim": 32, "linear_conv_kernel_dim": 4,
+            "hc_count": 4, "hc_lowrank": 8, "indexer_n_heads": 4,
+            "indexer_kv_heads": 1, "indexer_head_dim": 16, "indexer_budget": 8,
+            "indexer_compress_ratio": 4, "ngram_size": 3, "heads_per_ngram": 2,
+            "ngram_vocab_size_base": 17, "ple_embed_dim": 32, "ple_layer_ids": [2],
+            "ple_conv_kernel_size": 4, "output_gate_type": "sigmoid",
+            "layer_types": ["linear_attention"] * 3 + ["full_attention"],
+            "mtp_num_hidden_layers": 1, "mtp_use_dedicated_embeddings": False,
+            "mtp": {"hybrid": True, "layer_types": ["full_attention"],
+                    "mtp_use_hidden_state_from_layer": None, "num_hidden_layers": 1,
+                    "rope_theta": 10_000_000},
         },
     }
 
@@ -68,7 +77,7 @@ class Qwen4UpstreamModelFileTest(unittest.TestCase):
     def test_local_artifact_load_and_cached_decode(self):
         import mlx.core as mx
 
-        self.check_local_artifact(32, metal_calls=2 if mx.metal.is_available() else None)
+        self.check_local_artifact(32, metal_calls=6 if mx.metal.is_available() else None)
 
     def test_delta_net_widths_match_portable_recurrence(self):
         import mlx.core as mx
@@ -78,50 +87,45 @@ class Qwen4UpstreamModelFileTest(unittest.TestCase):
         for width, use_metal in ((16, False), (48, False), (80, False),
                                  (64, True), (128, True)):
             with self.subTest(linear_key_head_dim=width):
-                self.check_local_artifact(width, metal_calls=2 if use_metal else 0)
+                self.check_local_artifact(width, metal_calls=6 if use_metal else 0)
 
     def test_ple_conv_widths_in_prefill_and_stream_generate(self):
         for width in (1, 2, 4):
             with self.subTest(ple_conv_kernel_size=width):
-                config = tiny_config()
-                text = config["text_config"]
-                text["ple_conv_kernel_size"] = width
-                self.check_conv_cache(config, slot=2, history=(width - 1) * text["ngram_size"])
+                self.check_conv_cache({"ple_conv_kernel_size": width}, layer=1, slot=2,
+                                      history=(width - 1) * 3)
 
     def test_delta_net_conv_width_one_in_prefill_and_stream_generate(self):
-        config = tiny_config()
-        config["text_config"]["linear_conv_kernel_dim"] = 1
-        self.check_conv_cache(config, slot=0, history=0)
+        self.check_conv_cache({"linear_conv_kernel_dim": 1}, layer=0, slot=0, history=0)
 
-    def check_conv_cache(self, config, *, slot, history):
+    def check_conv_cache(self, overrides, *, layer, slot, history):
         import mlx.core as mx
-        from mlx.utils import tree_flatten
         from mlx_lm import stream_generate
-        from mlx_lm.utils import load_model
 
         arch = runpy.run_path(str(MODEL_FILE))
         mx.random.seed(1105)
-        model = arch["Model"](arch["ModelArgs"].from_dict(config))
-        with tempfile.TemporaryDirectory() as tmp:
-            write_checkpoint(Path(tmp), config, dict(tree_flatten(model.parameters())))
-            loaded, _ = load_model(Path(tmp))
+        args = arch["ModelArgs"].from_dict(tiny_config())
+        # The generic cache helper keeps its variant coverage in-memory.
+        # The checkpoint loader admits only the released convolution widths.
+        args.text = replace(args.text, **overrides)
+        model = arch["Model"](args).eval()
 
-        vocab_size = config["text_config"]["vocab_size"]
+        vocab_size = args.text.vocab_size
         tokens = [7, 8, 9, 10, 2, 12, 13, 14, 15, 16, 17]
         ids = mx.array([tokens])
-        expected = loaded(ids)
+        expected = model(ids)
         self.assertEqual(expected.shape, (1, len(tokens), vocab_size))
         self.assertTrue(mx.isfinite(expected).all().item())
-        cache = loaded.make_cache()
+        cache = model.make_cache()
         for start, stop in ((0, 4), (4, 10), (10, 11)):
-            logits = loaded(ids[:, start:stop], cache=cache)
+            logits = model(ids[:, start:stop], cache=cache)
             self.assertEqual(logits.shape, (1, stop - start, vocab_size))
-            self.assertEqual(cache[0][slot].shape[1], history)
+            self.assertEqual(cache[layer][slot].shape[1], history)
             self.assertTrue(mx.allclose(logits, expected[:, start:stop], atol=1e-4, rtol=0).item())
 
         for step_size in (3, 2048):
             with self.subTest(prefill_step_size=step_size):
-                responses = list(stream_generate(loaded, make_tokenizer(vocab_size), tokens,
+                responses = list(stream_generate(model, make_tokenizer(vocab_size), tokens,
                                                  max_tokens=1, prefill_step_size=step_size))
                 self.assertEqual([r.token for r in responses], [expected[0, -1].argmax().item()])
 
@@ -185,14 +189,105 @@ class Qwen4UpstreamModelFileTest(unittest.TestCase):
         for key, value in cases.items():
             with self.subTest(option=key), self.assertRaises(unsupported):
                 args_class.from_dict(dict(tiny_config(), **{key: value}))
-        for changes in ({"norm_topk_prob": False}, {"attention_bias": True}, {"indexer_kv_heads": 2},
-                        {"indexer_budget": 3}, {"linear_num_value_heads": 3, "linear_num_key_heads": 2},
-                        {"layer_types": ["linear_attention", "indexed_attention"]},
-                        {"rope_parameters": {"rope_type": "yarn", "rope_theta": 10000}}):
+        with self.assertRaisesRegex(unsupported, "linear_num_value_heads"):
             config = tiny_config()
-            config["text_config"].update(changes)
-            with self.subTest(config=changes), self.assertRaises(unsupported):
+            config["text_config"].update(linear_num_value_heads=3, linear_num_key_heads=2)
+            args_class.from_dict(config)
+
+    def test_rejects_structural_variants_by_field(self):
+        arch = runpy.run_path(str(MODEL_FILE))
+        args_class, unsupported = arch["ModelArgs"], arch["UnsupportedByPinnedRuntime"]
+        cases = (
+            ("num_hidden_layers", 3), ("full_attention_interval", 2),
+            ("layer_types", ["linear_attention", "full_attention"] * 2),
+            ("layer_types", ["linear_attention"] * 3 + ["indexed_attention"]),
+            ("layer_types", []), ("ple_layer_ids", []), ("ple_layer_ids", [1]),
+            ("ple_conv_kernel_size", 1), ("ple_conv_kernel_size", 2),
+            ("linear_conv_kernel_dim", 1), ("norm_topk_prob", False),
+            ("indexer_n_heads", None), ("indexer_n_heads", 0), ("indexer_head_dim", 0),
+            ("indexer_kv_heads", 2), ("indexer_compress_ratio", 2), ("indexer_budget", 3),
+            ("hc_count", 2), ("ngram_size", 2), ("model_type", "qwen3_next"),
+            ("mtp", None), ("mtp.hybrid", False), ("mtp.layer_types", ["linear_attention"]),
+            ("mtp.mtp_use_hidden_state_from_layer", 1), ("mtp.num_hidden_layers", 2),
+            ("mtp.rope_theta", 10_000), ("mtp_num_hidden_layers", 0),
+            ("mtp_use_dedicated_embeddings", True), ("shared_expert_intermediate_size", 0),
+            ("num_experts", 0), ("num_experts_per_tok", 5),
+            ("heads_per_ngram", 0), ("ple_embed_dim", 33),
+            ("attention_bias", True), ("hidden_act", "gelu"), ("output_gate_type", "silu"),
+            ("tie_word_embeddings", True), ("use_cache", False),
+            ("attention_dropout", 0.1), ("output_router_logits", True),
+            ("mamba_ssm_dtype", "bfloat16"), ("partial_rotary_factor", 0.5),
+            ("rope_parameters.rope_type", "yarn"), ("rope_parameters.mrope_interleaved", False),
+            ("rope_parameters.mrope_section", [8, 8, 8]),
+            ("rope_parameters.partial_rotary_factor", 0.5), ("rope_scaling", {"factor": 2}),
+        )
+        for field, value in cases:
+            config = tiny_config()
+            target = config["text_config"]
+            parent, _, child = field.rpartition(".")
+            if parent:
+                target = target[parent]
+            target[child] = value
+            with self.subTest(field=field, value=value), self.assertRaisesRegex(
+                unsupported, re.escape(f"text_config.{field}") + r"\b",
+            ):
                 args_class.from_dict(config)
+        config = tiny_config()
+        del config["text_config"]["mtp"]["mtp_use_hidden_state_from_layer"]
+        with self.assertRaisesRegex(unsupported, r"text_config\.mtp\.mtp_use_hidden_state_from_layer"):
+            args_class.from_dict(config)
+        with self.assertRaisesRegex(unsupported, r"^tie_word_embeddings\b"):
+            args_class.from_dict(dict(tiny_config(), tie_word_embeddings=True))
+
+    def test_released_defaults_and_variable_layer_count(self):
+        args_class = runpy.run_path(str(MODEL_FILE))["ModelArgs"]
+        config = tiny_config()
+        config["text_config"]["num_hidden_layers"] = 8
+        pattern = config["text_config"].pop("layer_types")
+        config["text_config"].pop("ple_conv_kernel_size")
+        args = args_class.from_dict(config)
+        self.assertEqual(args.text.layer_types, pattern * 2)
+        self.assertEqual(args.text.ple_conv_kernel_size, 4)
+
+    def test_norm_layout_is_required(self):
+        arch = runpy.run_path(str(MODEL_FILE))
+        for config in ({}, {"qwen4_norm_layout": "auto"}, {"qwen4_norm_layout": None}):
+            tiny = tiny_config()
+            del tiny["qwen4_norm_layout"]
+            with self.subTest(config=config), self.assertRaisesRegex(
+                arch["UnsupportedByPinnedRuntime"], "qwen4_norm_layout",
+            ):
+                arch["ModelArgs"].from_dict(tiny | config)
+
+    def test_same_tensor_names_load_both_explicit_norm_layouts(self):
+        import mlx.core as mx
+        from mlx.utils import tree_flatten
+        from mlx_lm.utils import load_model
+
+        arch = runpy.run_path(str(MODEL_FILE))
+        config = tiny_config()
+        mx.random.seed(1105)
+        model = arch["Model"](arch["ModelArgs"].from_dict(config)).eval()
+        weights = dict(tree_flatten(model.parameters()))
+        norm_keys = [k for k in weights if k.endswith(arch["_FOLD_ONE"])]
+        for key in norm_keys:
+            weights[key] = 1 + mx.random.normal(weights[key].shape) * 0.03
+        model.load_weights(list(weights.items()))
+        ids = mx.array([[7, 8, 9, 10, 2, 12, 13, 14, 15, 16, 17]])
+        expected = model(ids)
+        for layout in ("zero_centered", "folded"):
+            with self.subTest(layout=layout), tempfile.TemporaryDirectory() as tmp:
+                checkpoint = {
+                    f"language_model.{key}": value - 1 if layout == "zero_centered" and key in norm_keys else value
+                    for key, value in weights.items()
+                }
+                write_checkpoint(Path(tmp), config | {"qwen4_norm_layout": layout}, checkpoint)
+                loaded, _ = load_model(Path(tmp))
+                cache = loaded.make_cache()
+                prefill = loaded(ids[:, :-1], cache=cache)
+                last = loaded(ids[:, -1:], cache=cache)
+                self.assertTrue(mx.allclose(mx.concatenate([prefill, last], axis=1), expected,
+                                           atol=1e-4, rtol=0).item())
 
     def test_batch_generator_rejects_audit_prompts_at_cache_setup(self):
         import mlx.core as mx
@@ -221,7 +316,7 @@ class Qwen4UpstreamModelFileTest(unittest.TestCase):
         with self.assertRaisesRegex(arch["UnsupportedByPinnedRuntime"], "token IDs only"):
             model(mx.zeros((1, 1), dtype=mx.int32), input_embeddings=mx.zeros((1, 1, 64)))
         with self.assertRaisesRegex(arch["UnsupportedByPinnedRuntime"], "Quantized KV"):
-            model.make_cache()[1].to_quantized(group_size=64, bits=4)
+            model.make_cache()[3].to_quantized(group_size=64, bits=4)
 
     def test_affine_overrides_follow_shards_and_direct_projection(self):
         import mlx.core as mx
@@ -235,7 +330,7 @@ class Qwen4UpstreamModelFileTest(unittest.TestCase):
         ref = arch["Model"](arch["ModelArgs"].from_dict(config))
         ref.eval()
         weights = dict(tree_flatten(ref.parameters()))
-        prefix = "model.layers.0.ple.ple_embedding.ngram_embedding."
+        prefix = "model.layers.1.ple.ple_embedding.ngram_embedding."
         heads = [weights.pop(f"{prefix}{i}.weight") for i in range(4)]
         joined = mx.concatenate(heads)
         joined = mx.pad(joined, [(0, -joined.shape[0] % 4), (0, 0)])
@@ -248,7 +343,7 @@ class Qwen4UpstreamModelFileTest(unittest.TestCase):
             dequantized.append(mx.dequantize(*packed, bits=4, group_size=64))
         control = mx.concatenate(dequantized)
         offset = 0
-        for head, initial in zip(ref.layers[0].ple.ple_embedding.ngram_embedding, heads):
+        for head, initial in zip(ref.layers[1].ple.ple_embedding.ngram_embedding, heads):
             head.weight = control[offset : offset + initial.shape[0]]
             offset += initial.shape[0]
 
@@ -265,7 +360,7 @@ class Qwen4UpstreamModelFileTest(unittest.TestCase):
             write_checkpoint(Path(tmp), config, weights)
             loaded, final_config = load_model(Path(tmp))
             self.assertEqual(final_config["quantization"][path]["bits"], 8)
-            self.assertEqual([h.bits for h in loaded.layers[0].ple.ple_embedding.ngram_embedding],
+            self.assertEqual([h.bits for h in loaded.layers[1].ple.ple_embedding.ngram_embedding],
                              [4, 4, 4, 4])
             cache = loaded.make_cache()
             prefill = loaded(ids[:, :-1], cache=cache)

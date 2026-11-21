@@ -16,7 +16,7 @@ def load_python(path, name):
     return module
 
 
-def prepare(root, checkout):
+def prepare(root, checkout, **text_overrides):
     import numpy as np
     from safetensors.torch import save_file
     import torch
@@ -30,6 +30,7 @@ def prepare(root, checkout):
     config = prior.config_a()
     config.update(ple_conv_kernel_size=1, rms_norm_eps=1e-6, tie_word_embeddings=False,
                   norm_topk_prob=True, layer_types=["linear_attention", "full_attention"])
+    config.update(text_overrides)
     ids = prior.ids_for("A")
     model = prior.build_model(config, 1105)
     gold.randomize(model, torch, 1105)
@@ -54,26 +55,15 @@ def prepare(root, checkout):
                       "weights_sha256": sha256(payload.read_bytes()).hexdigest()}))
 
 
-def replay(root, pinned):
+def measure(model, tokens, gold):
     import mlx.core as mx
     from mlx_lm import stream_generate
-    from mlx_lm.utils import load_model
     import numpy as np
     from tokenizers import Tokenizer
     from tokenizers.models import WordLevel
     from transformers import PreTrainedTokenizerFast
 
-    config = json.loads((root / "config.json").read_text())
-    if pinned:
-        from qwen4_pinned_quantization_probe import vendored_checkpoint
-
-        with vendored_checkpoint(root, config, root / "model.safetensors") as checkpoint:
-            model, _ = load_model(checkpoint)
-    else:
-        model, _ = load_model(root)
-
-    gold = np.load(root / "hf.npy")
-    ids = mx.array([config["ids"]])
+    ids = mx.array([tokens])
     cache = model.make_cache()
     mx.eval(model(ids[:, :-1], cache=cache))
     cached = np.asarray(model(ids[:, -1:], cache=cache))
@@ -81,19 +71,42 @@ def replay(root, pinned):
     vocab.update({str(i): i for i in range(3, gold.shape[-1])})
     tokenizer = PreTrainedTokenizerFast(tokenizer_object=Tokenizer(WordLevel(vocab, unk_token="<unk>")),
                                         bos_token="<bos>", eos_token="<eos>", unk_token="<unk>")
-    [response] = list(stream_generate(model, tokenizer, config["ids"], max_tokens=1))
+    [response] = list(stream_generate(model, tokenizer, tokens, max_tokens=1))
     full_error = float(np.abs(np.asarray(model(ids)) - gold).max())
     cached_error = float(np.abs(cached[0, -1] - gold[0, -1]).max())
     gold_token = int(gold[0, -1].argmax())
-    print(json.dumps({"implementation": "pinned" if pinned else "upstream",
-                      "full_max_abs": full_error, "cached_shape": cached.shape,
-                      "cached_last_max_abs": cached_error, "stream_token": response.token,
-                      "hf_token": gold_token}))
-    if not full_error < 1e-4:
+    return {"full_max_abs": full_error, "cached_shape": cached.shape,
+            "cached_last_max_abs": cached_error, "stream_token": response.token, "hf_token": gold_token}
+
+
+def expect_pinned_refusal(root, config, weights, field):
+    from mlx_lm.utils import load_model
+    from qwen4_pinned_quantization_probe import vendored_checkpoint
+
+    with vendored_checkpoint(root, config, weights) as checkpoint:
+        try:
+            load_model(checkpoint)
+        except ValueError as error:
+            if type(error).__name__ != "UnsupportedByPinnedRuntime" or field not in str(error):
+                raise
+            print(json.dumps({"implementation": "pinned", "refusal": str(error)}))
+            return
+    raise AssertionError(f"pinned loader accepted unsupported {field}")
+
+
+def replay(root, pinned):
+    from mlx_lm.utils import load_model
+    import numpy as np
+
+    config = json.loads((root / "config.json").read_text())
+    if pinned:
+        expect_pinned_refusal(root, config, root / "model.safetensors", "ple_layer_ids")
+        return
+    model, _ = load_model(root)
+    result = measure(model, config["ids"], np.load(root / "hf.npy"))
+    print(json.dumps({"implementation": "upstream", **result}))
+    if not result["full_max_abs"] < 1e-4:
         raise AssertionError("FP32 full prefill exceeds tolerance")
-    if pinned and (cached.shape != (1, 1, gold.shape[-1]) or not cached_error < 1e-4
-                   or response.token != gold_token):
-        raise AssertionError("cached continuation differs from Transformers")
 
 
 def main():
