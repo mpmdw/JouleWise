@@ -89,10 +89,8 @@ close_gate() {
   test "${LAST_CLOSE_KIND:-}" = "$actual" || { echo 'STOP: contradictory LAST_CLOSE_KIND'; return 1; }
   echo "CLOSE PROVEN $EFF_SPAN at $EFF_CLOSE_NS ns kind $actual"
 }
-# RL-165 §8.1; RL-172 (i) row 9; RL-173 E: freeze 2 is the committed coefficient hash.
-FREEZE2_COMMIT="<LEAD FILLS: FREEZE2_COMMIT>"
+# RL-165 §8.1; RL-180 amendment 3; RL-183 §2.3; RL-184 §2: public authorization for lm-interim-01.
 FREEZE2_COEF_SHA256="<LEAD FILLS: FREEZE2_COEF_SHA256>"
-FREEZE2_COEF_PATH="<LEAD FILLS: FREEZE2_COEF_PATH>"
 COLD_SEAT_RECORD="<LEAD FILLS: per-kit cold seat ADMIT and RL-167 Part B Q2 confirmation>"
 LINE2_RECORD="<LEAD FILLS: qual-pin suite red set equals c3f4bacd8 test for test>"
 HOST_EVENT_RECORD="<LEAD FILLS: four host-state lines under RL-174 C, with readback>"
@@ -103,22 +101,54 @@ filled() {
   case "${1:-}" in ''|*'<LEAD '*) return 1;; *) return 0;; esac
 }
 freeze2_gate() {
-  filled "$FREEZE2_COMMIT" && filled "$FREEZE2_COEF_SHA256" && filled "$FREEZE2_COEF_PATH" \
-    || { echo 'WAIT: HOLD_FOR_FIT_FREEZE (RL-165 §8.1; RL-172 (i)9; RL-173 E)'; return 1; }
-  "$PY" -I -B - "$AUTH_REPO" "$FREEZE2_COMMIT" "$FREEZE2_COEF_PATH" "$FREEZE2_COEF_SHA256" <<'PY'
-import hashlib, re, subprocess, sys
-repo, commit, path, sha = sys.argv[1:]
-def git(*args): return subprocess.check_output(['git','-C',repo,*args],stderr=subprocess.DEVNULL)
-def stop(s): sys.exit('STOP: freeze 2 ' + s)
-if not re.fullmatch('[0-9a-f]{40}',commit) or not re.fullmatch('[0-9a-f]{64}',sha): stop('full commit/hash required')
-if path.startswith('/') or any(p in ('..','restricted','campaign-out') or p.startswith('night-') for p in path.split('/')): stop('coefficient path not permitted')
+  filled "${FREEZE2_COEF_SHA256:-}" || { echo 'WAIT: HOLD_FOR_FIT_FREEZE'; return 1; }
+  "$PY" -I -B -S - "$AUTH_REPO" "$FREEZE2_COEF_SHA256" <<'PY'
+import os
+from pathlib import Path
+import re
+import subprocess
+import sys
+import tempfile
+
+repo, expected = sys.argv[1:]
+if not re.fullmatch(r"[0-9a-f]{64}", expected):
+    sys.exit("STOP: malformed issued freeze-2 public hash")
+
+# Bind the PR #795 public verifier for ordinary yes and RL-184 naming after owner delivery.
+# build_items.py renders these literals as part of the common gate in all six items.
+provider_commit = None
+provider_paths = ()
+cli = "scripts/cadence_look_manifest.py"
+if (not provider_commit or not re.fullmatch(r"[0-9a-f]{40}", provider_commit)
+        or cli not in provider_paths):
+    sys.exit("WAIT: HOLD_FOR_FIT_FREEZE (reviewed public verifier pin pending)")
+
+os.environ["GIT_NO_REPLACE_OBJECTS"] = "1"
+
+def git(*args):
+    return subprocess.check_output(["git", "-C", repo, *args], stderr=subprocess.DEVNULL)
+
 try:
-    refs = [git('rev-parse','--verify',r+'^{commit}').decode().strip() for r in ('origin/audit/2026-11-10-fable','origin/main')]
-    if not any(subprocess.run(['git','-C',repo,'merge-base','--is-ancestor',commit,r],capture_output=True).returncode==0 for r in refs): stop('commit is not ancestor of fetched audit or main')
-    blob = git('cat-file','blob',commit+':'+path)
-    if hashlib.sha256(blob).hexdigest() != sha: stop('coefficient sha256 mismatch')
-except (OSError,subprocess.CalledProcessError): stop('commit/ref/coefficient unreadable')
-print('FREEZE2 COMMITTED',commit,path,'sha256',sha)
+    if git("rev-parse", "--verify", provider_commit + "^{commit}").decode().strip() != provider_commit:
+        sys.exit("STOP: freeze-2 provider pin must identify a commit")
+    with tempfile.TemporaryDirectory(prefix="freeze2-code-") as stage:
+        for path in provider_paths:
+            entry = git("ls-tree", "-z", "--full-tree", provider_commit, "--", path)
+            if not re.fullmatch(rb"100(?:644|755) blob [0-9a-f]{40}\t" + re.escape(os.fsencode(path)) + b"\x00", entry):
+                sys.exit(f"STOP: freeze-2 provider requires a regular code blob at {path}")
+            dest = Path(stage, path)
+            dest.parent.mkdir(exist_ok=True, parents=True)
+            dest.write_bytes(git("cat-file", "blob", provider_commit + ":" + path))
+
+        script = Path(stage, cli)
+        print("FREEZE2_CODE", provider_commit, file=sys.stderr, flush=True)
+        sys.path.insert(0, stage)
+        sys.argv = [str(script), "authorize-freeze2", "--repo", repo, "--look-id", "lm-interim-01",
+                    "--expected-coefficients-sha256", expected]
+        exec(compile(script.read_bytes(), str(script), "exec"),
+             {"__name__": "__main__", "__file__": str(script)})
+except (ImportError, OSError, subprocess.CalledProcessError):
+    sys.exit("STOP: freeze-2 public verifier or its pinned dependencies unavailable")
 PY
 }
 qual_pin_gate() {

@@ -1,10 +1,12 @@
 """Render six unissued qualification items and the same-pin standing-F0 renewal.
 
 python3 -B build_items.py [--dates qual-01=YYYY-MM-DD,qual-02-s02=YYYY-MM-DD]
-                        [--queue-expiry ISO-8601-with-offset]
+                        [--queue-expiry ISO-8601-with-offset] [--output-dir NEW-SCRATCH-DIR]
+--output-dir writes qualification outputs only.
 Only read-only pinned planners/validators run; no hardware/measurement command.
 """
 import argparse
+from contextlib import contextmanager
 import datetime as dt
 import difflib
 import hashlib
@@ -16,7 +18,8 @@ import sys
 from zoneinfo import ZoneInfo
 
 sys.path.insert(0,str(Path(__file__).resolve().parent/'tools'))
-from pinned import HERE, ROOT, PIN, SOURCE, W1, git, pinned, call
+import pinned as pinned_tools
+from pinned import HERE, ROOT, PIN, SOURCE, W1, git, call
 from standing_round10 import repair_standing
 sys.path.insert(0,str(HERE.parent/'item-drafts-1115/tools'))
 from close_census import repair_census
@@ -118,8 +121,23 @@ renewal_gate() {{
     (evidence/'standing-f0-r2.diff').write_text(diff)
     return {'source_main':main,'original_issue':issued+' PST','renewal_start':start.isoformat(),'renewal_expiry':end.isoformat(),'w1_head':head,'pin_unchanged':head==old}
 
-def render(dates, queue_expiry):
-    for sub in ('kits','queues','evidence'): (HERE/sub).mkdir(exist_ok=True)
+@contextmanager
+def pinned_in(output):
+    # The shared helper stages a disposable code tree under its HERE.
+    original = pinned_tools.HERE
+    pinned_tools.HERE = output
+    try:
+        with pinned_tools.pinned() as repo:
+            yield repo
+    finally:
+        pinned_tools.HERE = original
+
+
+def render(dates, queue_expiry, output_dir=None):
+    output = HERE if output_dir is None else output_dir
+    if output_dir is not None:
+        output.mkdir(parents=True)
+    for sub in ('kits','queues','evidence'): (output/sub).mkdir(exist_ok=True)
     base=HERE.parent/'item-drafts-1115/ITEM-dev05-s01.md'
     old=base.read_text()
     q1=re.search(r'"\$PY" -I -B - "\$OUT" "\$LEGS" <<\'PY\'\nimport json, statistics.*?\nPY',old,re.S).group()
@@ -128,10 +146,12 @@ def render(dates, queue_expiry):
     template=(HERE/'tools/item-template.md').read_text(); gates=(HERE/'gates.sh').read_text()
     meta={'source':SOURCE,'pin':PIN,'merged_w1':W1,'source_audit':git('rev-parse','HEAD').decode().strip(),
           'queue_scan':git('ls-tree','-r','--name-only',SOURCE,'docs/process/cadence').decode().splitlines(),
-          'dates':dates,'queue_expiry':queue_expiry,'items':[],'standing':standing()}
+          'dates':dates,'queue_expiry':queue_expiry,'items':[]}
+    if output_dir is None:
+        meta['standing'] = standing()
     assert not any('qual' in p.lower() and 'queue' in Path(p).name.lower() for p in meta['queue_scan']),meta['queue_scan']
     git_dir=git('rev-parse','--absolute-git-dir').decode().strip()
-    with pinned() as repo:
+    with pinned_in(output) as repo:
         previous=('dev-05-s02','cl-dev-05',[f'L{i:03d}' for i in range(7,13)],'2747381bf1169471d929d1e91510f7d272ff9cbc973da2c99f11673bea53ca1a','2d347f721552fe03bdd19f113e7bad7a7c24908e')
         for n in range(1,4):
             block=f'qual-{n:02d}'; camp='cl-'+block; kp=f'docs/process/cadence/kits/{camp}.v1.1.json'
@@ -140,20 +160,20 @@ def render(dates, queue_expiry):
             call(repo,'scripts/cadence_legs_runner.py','pin-kit',staged,'--commit',PIN,'--write',GIT_DIR=git_dir)
             raw=staged.read_bytes(); sha=hashlib.sha256(raw).hexdigest(); kit=json.loads(raw)
             assert kit['frozen']['commit']==PIN and kit['runner']['kind']=='cadence-legs-v1.1'
-            local=HERE/'kits'/Path(kp).name; local.write_bytes(raw)
+            local=output/'kits'/Path(kp).name; local.write_bytes(raw)
             queue={'schema':'joulewise.cadence_queue.v1','queue_id':'cq-'+camp,'expires_at':queue_expiry,'halt':None,'standing_notice':None,'spans':[]}
             for s in range(1,3):
                 ids=[x['leg_id'] for x in kit['legs'][(s-1)*6:s*6]]
                 span=f'{block}-s{s:02d}'
                 queue['spans'].append({'seq':s,'span_id':span,'block_id':block,
                     'kit':{'path':kp,'sha256':sha},'legs':ids,'attempt':1,'not_before':dates[span]})
-            qp=HERE/'queues'/f'{camp}.queue.json'; write_json(qp,queue)
+            qp=output/'queues'/f'{camp}.queue.json'; write_json(qp,queue)
             qsha=hashlib.sha256(qp.read_bytes()).hexdigest()
             for s, entry in enumerate(queue['spans'],1):
                 name=f'qual{n:02d}-s{s:02d}'; span=entry['span_id']; day=dates[span]
                 ids=entry['legs']; legs=','.join(ids); t0=epoch(day,'12:00:00' if n==1 else '00:00:00')
                 result=call(repo,'scripts/cadence_legs_runner.py','plan','--kit',local,'--legs',legs,'--t0',t0)
-                (HERE/'evidence'/f'plan-{name}.json').write_text(result.stdout)
+                (output/'evidence'/f'plan-{name}.json').write_text(result.stdout)
                 plan=json.loads(result.stdout); assert plan['batch_windows']==[] and plan['blackout_clear'] and plan['runner_kind']=='cadence-legs-v1.1'
                 assert plan['soak_s']==1950 and [leg['leg_id'] for leg in plan['legs']]==ids
                 short=[x for x in kit['legs'] if x['leg_id'] in ids and x['decode_tokens']<4096]
@@ -177,17 +197,21 @@ QUAL_DATES={','.join(k+'='+v for k,v in dates.items())}'''
                 text=template
                 for key,value in values.items(): text=text.replace('@@'+key+'@@',str(value))
                 assert not re.search(r'@@[A-Z_]+@@',text)
-                (HERE/f'ITEM-{name}.md').write_text(text)
-                meta['items'].append(dict(item=name,span=span,block=block,camp=camp,date=day,legs=ids,kit_path=kp,kit_file=str(local.relative_to(HERE)),kit_sha=sha,seed=kit['seed_law']['master_seed'],queue_file=str(qp.relative_to(HERE)),queue_path=values['QUEUE_PATH'],queue_sha=qsha,predecessor=previous[0],predecessor_camp=previous[1],predecessor_legs=previous[2],predecessor_kit_sha=previous[3],predecessor_pin=previous[4],short_leg=short[0],expected_s=plan['expected_s'],worst_case_s=plan['worst_case_s'],launch_minimum_s=extra))
+                (output/f'ITEM-{name}.md').write_text(text)
+                meta['items'].append(dict(item=name,span=span,block=block,camp=camp,date=day,legs=ids,kit_path=kp,kit_file=str(local.relative_to(output)),kit_sha=sha,seed=kit['seed_law']['master_seed'],queue_file=str(qp.relative_to(output)),queue_path=values['QUEUE_PATH'],queue_sha=qsha,predecessor=previous[0],predecessor_camp=previous[1],predecessor_legs=previous[2],predecessor_kit_sha=previous[3],predecessor_pin=previous[4],short_leg=short[0],expected_s=plan['expected_s'],worst_case_s=plan['worst_case_s'],launch_minimum_s=extra))
                 previous=(span,camp,ids,sha,PIN)
-    write_json(HERE/'items.json',meta)
-    print('Rendered six items and STANDING-F0 r2; six pinned plan outputs; queues local to draft folder')
+    write_json(output/'items.json',meta)
+    if output_dir is None:
+        print('Rendered six items and STANDING-F0 r2; six pinned plan outputs; queues local to draft folder')
+    else:
+        print(f'Rendered six items and qualification build artifacts in {output}')
     for i in meta['items']: print(i['span'],i['kit_sha'],','.join(i['legs']),i['expected_s'],i['worst_case_s'],i['short_leg']['leg_id'],i['short_leg']['decode_tokens'])
 
 if __name__=='__main__':
     parser=argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--dates')
     parser.add_argument('--queue-expiry',default=QUEUE_EXPIRY)
+    parser.add_argument('--output-dir', type=Path, help='new scratch directory for qualification artifacts')
     args=parser.parse_args()
     try:
         dates=span_dates(args.dates)
@@ -198,4 +222,4 @@ if __name__=='__main__':
             raise ValueError('re-dating exceeds finite queue expiry; lead needs a new queue commit/window')
     except ValueError as error:
         parser.error(str(error))
-    render(dates,expiry.astimezone(TZ).isoformat())
+    render(dates,expiry.astimezone(TZ).isoformat(),args.output_dir)
