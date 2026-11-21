@@ -5,6 +5,8 @@ Part C is a gated smoke on the final bytes (fresh soak, step-D, then the gated D
 member seed 1 on W1's inter-member schedule, then X_G). It is not an arm, produces no
 slots and enters nothing. This module reconciles the receipts, episode facts and
 thermal journal before applying the fixed test. It starts nothing and writes nothing.
+The pinned D-018 check is the exception: it runs ``git cat-file`` and one child interpreter
+over a private temporary directory (``_pinned_trace_problems``).
 
 The test, as ruled (RL-145 step 3 and the addendum's section 6, which replaces the
 D_bank line):
@@ -3196,31 +3198,189 @@ def _check_power_trace(kind, raw, started_epoch_s, ended_epoch_s):
         check(started_epoch_s <= min(stamps) and max(stamps) <= ended_epoch_s, "window", index)
 
 
+# RL-193 section 1 names ``bundle_read._check_power_trace`` at the R1 pin b2e01464d6d4fbf2901ff4d4154df9455104a12a.
+# By the lead's decision of 2026-11-20 (content addressing, RL-194) Part C does not take that function from its
+# checkout. It takes these git blobs: the module and every joulewise module it imports at the pin. The eleven are
+# the whole import closure. No file of them imports another joulewise module, lazily or dynamically, and none
+# imports a third-party package. A change to a checkout copy of any of them cannot reach Part C.
+PINNED_D018_CLOSURE = {
+    "joulewise/__init__.py": "c9e02c3f0c86f48bfb1e8b6165f264773243143c",
+    "joulewise/authentication_io.py": "c872fd7a7f666a4ab959119dd745c1a4d3fb392b",
+    "joulewise/axi_decode_config.py": "287a358c4a67a2f39b6e36e866c6460377c75afa",
+    "joulewise/bundle_read.py": "37bf8286bf9a998e382a3b5b29edb9aac39a2abc",
+    "joulewise/desk_compress.py": "f7673cd8d45d342269c0ff0610e948059b820c6a",
+    "joulewise/desk_restore.py": "39f0375ce75b3354bcfa73a49d62e3e3dd687353",
+    "joulewise/idle_admission.py": "879ce820e579fe4a08a6c1e2af64f580d58ba2e0",
+    "joulewise/provenance.py": "e4a9c4f0b81e0fba042ed4f12acdc6dea099e2a4",
+    "joulewise/schemas.py": "d832777af088da5b60a261fdb21e7b5ae48f13f0",
+    "joulewise/suite.py": "0f7f1ac6dfa819c2ac88a79e15461904a3b927db",
+    "joulewise/validation.py": "32856ca439e08f1cfd9a028e04b79756635d417e",
+}
+PINNED_D018_OBJECTS = Path(__file__).resolve().parents[1]    # the checkout whose git object database is read
+PINNED_D018_TIMEOUT_S = 600.0                                # bounds a hang; a timeout refuses
+
+# The child interpreter runs with -I -S, so its path is the standard library alone until it adds the private
+# directory. It answers with one JSON object. It checks, before and after the call, that every module it has
+# loaded is a pinned file in the private directory whose bytes still carry the pinned blob id, or part of the
+# interpreter's own library.
+_PINNED_D018_CHILD = r"""
+import hashlib, json, os, pathlib, sys
+
+request = json.loads(sys.stdin.buffer.read())
+reply, sys.stdout = sys.stdout.buffer, sys.stderr       # nothing the pinned code prints can pose as the answer
+source = os.path.realpath(request["source"])
+library = [os.path.realpath(entry) for entry in sys.path if entry]
+sys.path.insert(0, source)
+
+
+def answer(**fields):
+    reply.write(json.dumps(fields).encode("ascii"))
+    reply.flush()
+    raise SystemExit(0)
+
+
+def under(path, root):
+    return os.path.realpath(path).startswith(root + os.sep)
+
+
+def audit():
+    loaded = {}
+    for name, module in sorted(sys.modules.items(), key=lambda item: item[0]):
+        origin = getattr(module, "__file__", None)
+        if origin is not None and under(origin, source):
+            relative = os.path.relpath(os.path.realpath(origin), source).replace(os.sep, "/")
+            with open(origin, "rb") as handle:
+                raw = handle.read()
+            blob = hashlib.sha1(b"blob %d\0" % len(raw) + raw, usedforsecurity=False).hexdigest()
+            if request["pins"].get(relative) != blob:
+                answer(outcome="mismatch", path=relative)
+            loaded[name] = relative
+        elif name.partition(".")[0] == "joulewise" or (
+                origin is not None and not any(under(origin, root) for root in library)):
+            answer(outcome="import_escape", module=name)
+    return loaded
+
+
+try:
+    from joulewise.bundle_read import _check_power_trace
+except ModuleNotFoundError as error:                    # a pinned module asked for one that is not pinned
+    answer(outcome="import_escape", module=str(error.name))
+audit()
+problems = _check_power_trace(pathlib.Path(request["bundle"]), request["summary"], request["metadata"])
+answer(outcome="judged", modules=audit(), problems=problems if type(problems) is list else None)
+"""
+
+
+def _git_blob_id(raw):
+    return hashlib.sha1(b"blob %d\0" % len(raw) + raw, usedforsecurity=False).hexdigest()
+
+
+def _git_cat_file(ids):
+    """``git cat-file --batch`` for these ids over the checkout's object database, or None when git gives no answer.
+
+    Nothing is fetched and no replacement object is honoured. The object database is trusted for nothing: the
+    caller verifies every object it uses against its id.
+    """
+    from subprocess import SubprocessError, run
+
+    env = {**os.environ, "GIT_NO_LAZY_FETCH": "1", "GIT_NO_REPLACE_OBJECTS": "1", "GIT_OPTIONAL_LOCKS": "0"}
+    try:
+        proc = run(["git", "-C", str(PINNED_D018_OBJECTS), "cat-file", "--batch"], capture_output=True, env=env,
+                   input="".join(f"{oid}\n" for oid in ids).encode("ascii"), timeout=PINNED_D018_TIMEOUT_S)
+    except (OSError, SubprocessError):
+        return None
+    return proc.stdout if proc.returncode == 0 else None
+
+
+def _pinned_closure(kind):
+    """Every pinned file's bytes, read from git by blob id and verified against that id before use."""
+    ids = sorted(set(PINNED_D018_CLOSURE.values()))
+    answer, position, objects = _git_cat_file(ids) or b"", 0, {}
+    for oid in ids:                 # one record per id, in order: "<id> <type> <size>\n<bytes>\n" or "<id> missing\n"
+        end = answer.find(b"\n", position)
+        header = answer[position:end].split() if end >= 0 else []
+        if len(header) == 3 and header[0] == oid.encode("ascii") and header[2].isdigit():
+            size = int(header[2])
+            objects[oid] = header[1], answer[end + 1:end + 1 + size]
+            position = end + size + 2
+        else:
+            position = end + 1 if end >= 0 else len(answer)
+    closure = {}
+    for path, oid in sorted(PINNED_D018_CLOSURE.items()):
+        if oid not in objects:
+            raise EvidenceFailure("pinned_closure_missing_object", kind, path, field="D-018", peer=oid)
+        object_type, raw = objects[oid]
+        if object_type != b"blob" or _git_blob_id(raw) != oid:
+            raise EvidenceFailure("pinned_closure_mismatch", kind, path, field="D-018", peer=oid)
+        closure[path] = raw
+    return closure
+
+
+def _pinned_trace_problems(kind, name, trace, summary, meta):
+    """The pinned check's problem list for ``trace``, from an interpreter that can load only the pinned closure.
+
+    The verified blobs and the bound trace are written to a private directory. A child interpreter imports the
+    closure from there in isolated mode, without site packages, and calls the function as the pinned bundle
+    validation calls it. A module that resolves, or tries to resolve, outside the private directory refuses.
+    """
+    from subprocess import run
+    import sys
+    import tempfile
+
+    closure = _pinned_closure(kind)
+    with tempfile.TemporaryDirectory() as private:
+        source, judged = Path(private, "pin"), Path(private, "bundle", name)
+        for path, raw in closure.items():
+            target = source / path
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes(raw)
+        judged.mkdir(parents=True)
+        (judged / "power_trace.csv").write_bytes(trace)
+        request = {"source": str(source), "bundle": str(judged), "summary": summary, "metadata": meta,
+                   "pins": PINNED_D018_CLOSURE}
+        proc = run([sys.executable, "-I", "-S", "-B", "-X", "utf8", "-c", _PINNED_D018_CHILD], cwd=private,
+                   input=json.dumps(request).encode("ascii"), capture_output=True, timeout=PINNED_D018_TIMEOUT_S)
+    if proc.returncode != 0:
+        raise RuntimeError("the pinned D-018 check did not finish: " + proc.stderr[-2000:].decode("utf-8", "replace"))
+    reply = json.loads(proc.stdout)
+    outcome = reply.get("outcome")
+    if outcome == "import_escape":
+        raise EvidenceFailure("pinned_closure_import_escape", kind, "joulewise/bundle_read.py", field="D-018",
+                              peer=str(reply.get("module")))
+    if outcome == "mismatch":
+        path = str(reply.get("path"))
+        raise EvidenceFailure("pinned_closure_mismatch", kind, path, field="D-018",
+                              peer=PINNED_D018_CLOSURE.get(path))
+    modules = reply["modules"]
+    if (outcome != "judged" or modules.get("joulewise.bundle_read") != "joulewise/bundle_read.py"
+            or not set(modules.values()) <= set(PINNED_D018_CLOSURE)):
+        raise RuntimeError("the pinned D-018 check gave no judgment")
+    return reply["problems"]
+
+
 def _check_pinned_trace(kind, bundle, data):
     """RL-193 section 1: the pinned D-018 check judges the predecessor's bound trace bytes.
 
-    ``bundle_read._check_power_trace`` is the contract, whole and unchanged. It is called as the pinned
-    bundle validation calls it, with the bundle's own summary and metadata. An empty problem list passes
-    this check. A reported problem, a read failure or an exception refuses. Both headers the function
-    accepts pass, with or without rows; Part C's other checks still apply.
+    ``bundle_read._check_power_trace`` at the R1 pin is the contract, whole and unchanged. It is called as the
+    pinned bundle validation calls it, with the bundle's own summary and metadata. An empty problem list passes
+    this check. A reported problem, a read failure or an exception refuses. Both headers the function accepts
+    pass, with or without rows; Part C's other checks still apply.
+
+    The function is content-addressed (``PINNED_D018_CLOSURE``). It never comes from the checkout. Three
+    failures to obtain it refuse under their own reasons: ``pinned_closure_missing_object``,
+    ``pinned_closure_mismatch`` and ``pinned_closure_import_escape``.
 
     The function reads a path. The bound bytes are written to a private directory of the bundle's name and
     judged there, so the bytes it reads are the ones the manifest binds, whatever the member's directory
     holds by then. The member's own reader examines no heading when a trace has zero rows, which is why a
     lone ``{`` was once admitted.
     """
-    import tempfile
-
     summary = _object_from_bytes(data["summary_metrics.json"], kind, "summary_metrics.json", "bundle_binding")
     meta = _object_from_bytes(data["metadata.json"], kind, "metadata.json", "bundle_binding")
     try:
-        from joulewise.bundle_read import _check_power_trace as pinned
-
-        with tempfile.TemporaryDirectory() as private:
-            judged = Path(private) / Path(bundle).name
-            judged.mkdir()
-            (judged / "power_trace.csv").write_bytes(data["power_trace.csv"])
-            problems = pinned(judged, summary, meta)
+        problems = _pinned_trace_problems(kind, Path(bundle).name, data["power_trace.csv"], summary, meta)
+    except EvidenceFailure:
+        raise
     except Exception as error:  # noqa: BLE001 - a validator that cannot run is never a pass
         raise EvidenceFailure("bundle_binding", kind, "power_trace.csv", field="D-018", peer="bundle_read") from error
     _required(isinstance(problems, list) and not problems, "bundle_binding", kind, "power_trace.csv",

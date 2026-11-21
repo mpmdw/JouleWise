@@ -1624,23 +1624,41 @@ class SoakArgvTests(unittest.TestCase):
 
 # ---- Audit round 2: the pinned validators, bracket and order rules, and the planned run id ---------------
 
+D018 = b"timestamp_s,power_w,source,rail\n"
+D018_INTERVAL = b"timestamp_s,power_w,source,rail,interval_start_s,interval_end_s\n"
+
+
+def judge_pinned_trace(raw, *, summary=b'{"status":"succeeded"}', metadata=b"{}", on_disk=None):
+    """``raw`` is the bound trace. ``on_disk`` is what the member's directory holds by then, if anything."""
+    with TemporaryDirectory() as tmp:
+        bundle = Path(tmp) / "align-pilot-v3-episodes-a-e01"
+        bundle.mkdir()
+        if on_disk is not None:
+            (bundle / "power_trace.csv").write_bytes(on_disk)
+        pc._check_pinned_trace(FIRST, bundle, {"summary_metrics.json": summary, "metadata.json": metadata,
+                                               "power_trace.csv": raw})
+
+
+def require_pinned_closure(case):
+    """Skip unless this object database holds every blob of the pinned D-018 closure."""
+    import subprocess
+
+    ids = "".join(f"{oid}\n" for oid in pc.PINNED_D018_CLOSURE.values())
+    proc = subprocess.run(["git", "-C", str(pc.PINNED_D018_OBJECTS), "cat-file", "--batch-check"],
+                          input=ids, capture_output=True, text=True)
+    if proc.returncode or len(proc.stdout.splitlines()) != len(pc.PINNED_D018_CLOSURE) or any(
+            line.split()[1:2] != ["blob"] for line in proc.stdout.splitlines()):
+        case.skipTest("the pinned D-018 closure is not in this object database")
+
+
 class PredecessorTraceD018Tests(unittest.TestCase):
     """RL-193 section 1: the whole pinned D-018 check judges the predecessor's bound trace bytes."""
 
-    D018 = b"timestamp_s,power_w,source,rail\n"
-    INTERVAL = b"timestamp_s,power_w,source,rail,interval_start_s,interval_end_s\n"
+    D018, INTERVAL = D018, D018_INTERVAL
+    judge = staticmethod(judge_pinned_trace)
 
-    def judge(self, raw, *, summary=b'{"status":"succeeded"}', metadata=b"{}", on_disk=None):
-        """``raw`` is the bound trace. ``on_disk`` is what the member's directory holds by then, if anything."""
-        from scripts.align_r1_part_c import _check_pinned_trace
-
-        with TemporaryDirectory() as tmp:
-            bundle = Path(tmp) / "align-pilot-v3-episodes-a-e01"
-            bundle.mkdir()
-            if on_disk is not None:
-                (bundle / "power_trace.csv").write_bytes(on_disk)
-            _check_pinned_trace(FIRST, bundle, {"summary_metrics.json": summary, "metadata.json": metadata,
-                                                "power_trace.csv": raw})
+    def setUp(self):
+        require_pinned_closure(self)
 
     def refused(self, raw, **kwargs):
         with self.assertRaises(evidence.EvidenceFailure) as caught:
@@ -1664,26 +1682,11 @@ class PredecessorTraceD018Tests(unittest.TestCase):
             with self.subTest(raw=raw):
                 self.refused(raw)
 
-    def test_a_validator_that_cannot_run_or_a_summary_that_cannot_be_read_is_never_a_pass(self):
-        with TemporaryDirectory() as tmp:
-            bundle = Path(tmp)
-            for damage, source in ((dict(summary=b"{"), "summary_metrics.json"), (dict(metadata=b"[]"), "metadata.json")):
-                with self.subTest(damage=damage), self.assertRaises(evidence.EvidenceFailure) as caught:
-                    self.judge(self.D018, **damage)
-                self.assertEqual((caught.exception.reason, caught.exception.source), ("bundle_binding", source))
-            from scripts.align_r1_part_c import _check_pinned_trace
-
-            bound = {"summary_metrics.json": b"{}", "metadata.json": b"{}", "power_trace.csv": self.D018}
-            _check_pinned_trace(FIRST, bundle, bound)
-            for broken in (None, SimpleNamespace(_check_power_trace=lambda *args: 1 / 0),
-                           SimpleNamespace(_check_power_trace=lambda *args: None),
-                           SimpleNamespace(_check_power_trace=lambda *args: ()),
-                           SimpleNamespace(_check_power_trace=lambda *args: ["a problem"])):
-                with self.subTest(validator=broken), patch.dict(sys.modules, {"joulewise.bundle_read": broken}), \
-                        self.assertRaises(evidence.EvidenceFailure) as caught:
-                    _check_pinned_trace(FIRST, bundle, bound)
-                self.assertEqual((caught.exception.reason, caught.exception.field, caught.exception.peer),
-                                 ("bundle_binding", "D-018", "bundle_read"))
+    def test_a_summary_or_metadata_that_cannot_be_read_is_never_a_pass(self):
+        for damage, source in ((dict(summary=b"{"), "summary_metrics.json"), (dict(metadata=b"[]"), "metadata.json")):
+            with self.subTest(damage=damage), self.assertRaises(evidence.EvidenceFailure) as caught:
+                self.judge(self.D018, **damage)
+            self.assertEqual((caught.exception.reason, caught.exception.source), ("bundle_binding", source))
 
     def test_the_bound_bytes_are_judged_whatever_the_directory_holds(self):
         # The function reads a path. It must read the bytes the manifest binds, not the member's directory.
@@ -1704,14 +1707,258 @@ class PredecessorTraceD018Tests(unittest.TestCase):
         self.refused(self.D018, metadata=json.dumps({"device": {"rail_manifest": "gpu_power"}}).encode())
 
     def test_a_trace_that_was_never_bound_is_not_a_trace(self):
-        from scripts.align_r1_part_c import _check_pinned_trace
-
         with TemporaryDirectory() as tmp:
             (Path(tmp) / "power_trace.csv").write_bytes(self.D018)       # on disk, but never bound
             with self.assertRaises(evidence.EvidenceFailure) as caught:
-                _check_pinned_trace(FIRST, Path(tmp), {"summary_metrics.json": b'{"status":"succeeded"}',
-                                                       "metadata.json": b"{}"})
+                pc._check_pinned_trace(FIRST, Path(tmp), {"summary_metrics.json": b'{"status":"succeeded"}',
+                                                          "metadata.json": b"{}"})
         self.assertEqual((caught.exception.reason, caught.exception.field), ("bundle_binding", "D-018"))
+
+
+class PinnedD018ClosureTests(unittest.TestCase):
+    """The lead's decision of 2026-11-20: the D-018 check is content-addressed and never comes from the checkout.
+
+    Part C reads ``bundle_read`` and every joulewise module it imports at the R1 pin from git, by blob id, into a
+    private directory. A child interpreter that can load only those files and the standard library runs the
+    check. A missing object, bytes that are not the pinned bytes and an import that leaves the private directory
+    each refuse under their own reason.
+
+    Tests that need the real pinned blobs skip where the object database lacks them. The others build a small
+    closure in a temporary repository, so they run anywhere git does.
+    """
+
+    ACCEPTS = b"def _check_power_trace(path, summary, metadata):\n    return []\n"
+
+    def refusal(self, raw=D018, **kwargs):
+        with self.assertRaises(evidence.EvidenceFailure) as caught:
+            judge_pinned_trace(raw, **kwargs)
+        failure = caught.exception
+        self.assertEqual((failure.role, failure.field), (FIRST, "D-018"))
+        self.assertNotIn(str(MARKER), json.dumps(failure.finding()))
+        return failure.reason, failure.source, failure.peer
+
+    @contextmanager
+    def closure(self, files, *, pins=None):
+        """A temporary repository that holds ``files`` as blobs, installed as the pinned closure."""
+        import subprocess
+
+        with TemporaryDirectory() as tmp:
+            repo = Path(tmp) / "objects"
+            subprocess.run(["git", "init", "-q", str(repo)], check=True, capture_output=True)
+            table = {}
+            for path, raw in files.items():
+                table[path] = subprocess.run(["git", "-C", str(repo), "hash-object", "-w", "--stdin"], input=raw,
+                                             check=True, capture_output=True).stdout.decode().strip()
+                self.assertEqual(table[path], pc._git_blob_id(raw))
+            with patch.object(pc, "PINNED_D018_OBJECTS", repo), \
+                    patch.object(pc, "PINNED_D018_CLOSURE", {**table, **(pins or {})}):
+                yield repo, table
+
+    def synthetic(self, check=ACCEPTS, **more):
+        return self.closure({"joulewise/__init__.py": b"", "joulewise/bundle_read.py": check, **more})
+
+    # (a) The checkout copy differs from the pin and the result is unchanged.
+
+    def test_a_checkout_copy_that_differs_from_the_pin_changes_nothing(self):
+        import os
+
+        require_pinned_closure(self)
+        verdicts = {"accepts everything": "return []", "refuses everything": "return ['refused by the checkout']",
+                    "cannot run": "raise RuntimeError('the checkout copy ran')"}
+        for label, body in verdicts.items():
+            with self.subTest(checkout_copy=label), TemporaryDirectory() as tmp:
+                package = Path(tmp) / "joulewise"
+                package.mkdir()
+                (package / "__init__.py").write_bytes(b"")
+                (package / "bundle_read.py").write_text(f"def _check_power_trace(*args, **kwargs):\n    {body}\n")
+                loaded = ModuleType("joulewise.bundle_read")
+                exec((package / "bundle_read.py").read_text(), loaded.__dict__)
+                here = os.getcwd()
+                try:
+                    os.chdir(tmp)
+                    # Every way a checkout copy could be picked up: the loaded module the evaluator once took,
+                    # the import path, the environment and the working directory.
+                    with patch.dict(sys.modules, {"joulewise.bundle_read": loaded}), \
+                            patch.object(sys, "path", [tmp, *sys.path]), \
+                            patch.dict(os.environ, {"PYTHONPATH": tmp, "PYTHONSAFEPATH": "", "PYTHONHOME": tmp}):
+                        judge_pinned_trace(D018)
+                        judge_pinned_trace(D018_INTERVAL)
+                        for raw in (b"{", b"timestamp_s,power_w,source\n"):
+                            self.assertEqual(self.refusal(raw), ("bundle_binding", "power_trace.csv", "bundle_read"))
+                finally:
+                    os.chdir(here)
+
+    # (b) A missing blob refuses.
+
+    def test_a_missing_blob_refuses(self):
+        require_pinned_closure(self)
+        judge_pinned_trace(D018)
+        for path in ("joulewise/bundle_read.py", "joulewise/validation.py", "joulewise/__init__.py"):
+            absent = pc._git_blob_id(b"no object has these bytes: " + path.encode())
+            with self.subTest(path=path), patch.dict(pc.PINNED_D018_CLOSURE, {path: absent}):
+                self.assertEqual(self.refusal(), ("pinned_closure_missing_object", path, absent))
+
+    def test_an_object_database_that_cannot_answer_refuses_as_a_missing_object(self):
+        import os
+
+        first = min(pc.PINNED_D018_CLOSURE)
+        expected = ("pinned_closure_missing_object", first, pc.PINNED_D018_CLOSURE[first])
+        with TemporaryDirectory() as tmp:
+            empty = Path(tmp) / "empty"
+            __import__("subprocess").run(["git", "init", "-q", str(empty)], check=True, capture_output=True)
+            for label, root in (("an empty repository", empty), ("no directory", Path(tmp) / "absent")):
+                with self.subTest(objects=label), patch.object(pc, "PINNED_D018_OBJECTS", root):
+                    self.assertEqual(self.refusal(), expected)
+            with self.subTest(objects="no git executable"), patch.dict(os.environ, {"PATH": tmp}):
+                self.assertEqual(self.refusal(), expected)
+
+        def no_answer(*args, **kwargs):
+            raise __import__("subprocess").TimeoutExpired(args[0], kwargs.get("timeout"))
+
+        with self.subTest(objects="git does not finish"), patch("subprocess.run", no_answer):
+            self.assertEqual(self.refusal(), expected)
+
+    # Bytes that are not the pinned bytes refuse.
+
+    def test_an_object_that_is_not_the_pinned_bytes_refuses(self):
+        import subprocess
+
+        path = "joulewise/bundle_read.py"
+        with self.synthetic() as (repo, table):
+            judge_pinned_trace(D018)                                    # the synthetic closure itself passes
+            answer = pc._git_cat_file(sorted(table.values()))
+            self.assertIn(self.ACCEPTS, answer)
+            with self.subTest(damage="git answers with other bytes of the same length"), patch.object(
+                    pc, "_git_cat_file", lambda ids: answer.replace(self.ACCEPTS, self.ACCEPTS.replace(b"[]", b"()"))):
+                self.assertEqual(self.refusal(), ("pinned_closure_mismatch", path, table[path]))
+            empty = "joulewise/__init__.py"                             # the last record of the answer
+            self.assertTrue(answer.endswith(b"%s blob 0\n\n" % table[empty].encode()))
+            with self.subTest(damage="git answers with a wrong size"), patch.object(
+                    pc, "_git_cat_file", lambda ids: answer.replace(b"blob 0\n", b"blob 1\n")):
+                self.assertEqual(self.refusal(), ("pinned_closure_mismatch", empty, table[empty]))
+            with self.subTest(damage="git answers with nothing"), patch.object(pc, "_git_cat_file", lambda ids: b""):
+                self.assertEqual(self.refusal(), ("pinned_closure_missing_object", empty, table[empty]))
+            tree = subprocess.run(["git", "-C", str(repo), "mktree"], input=b"", check=True,
+                                  capture_output=True).stdout.decode().strip()
+            with self.subTest(damage="the id names a tree"), patch.dict(pc.PINNED_D018_CLOSURE, {path: tree}):
+                self.assertEqual(self.refusal(), ("pinned_closure_mismatch", path, tree))
+            verified = pc._pinned_closure(FIRST)
+            with self.subTest(damage="the file changes after it was verified"), patch.object(
+                    pc, "_pinned_closure", lambda kind: {**verified, path: verified[path] + b"# changed\n"}):
+                self.assertEqual(self.refusal(), ("pinned_closure_mismatch", path, table[path]))
+
+    def test_a_replacement_object_is_not_honoured(self):
+        import subprocess
+
+        refuses = b"def _check_power_trace(path, summary, metadata):\n    return ['the replacement ran']\n"
+        with self.synthetic() as (repo, table):
+            other = subprocess.run(["git", "-C", str(repo), "hash-object", "-w", "--stdin"], input=refuses,
+                                   check=True, capture_output=True).stdout.decode().strip()
+            subprocess.run(["git", "-C", str(repo), "replace", table["joulewise/bundle_read.py"], other],
+                           check=True, capture_output=True)
+            shown = subprocess.run(["git", "-C", str(repo), "cat-file", "blob", table["joulewise/bundle_read.py"]],
+                                   check=True, capture_output=True).stdout
+            self.assertEqual(shown, refuses)                            # git alone would now serve the other bytes
+            judge_pinned_trace(D018)
+
+    # (c) An import escape refuses.
+
+    def test_an_import_that_leaves_the_private_directory_refuses(self):
+        helper = b"VALUE = []\n"
+        check = (b"from joulewise.helper import VALUE\n\n\n"
+                 b"def _check_power_trace(path, summary, metadata):\n    return VALUE\n")
+        with TemporaryDirectory() as outside:
+            (Path(outside) / "helper.py").write_bytes(helper)
+            (Path(outside) / "stray.py").write_bytes(helper)
+            reaches_out = f"__path__.append({outside!r})\n".encode()
+            with self.subTest(closure="every module is pinned"), self.synthetic(
+                    check, **{"joulewise/helper.py": helper}):
+                judge_pinned_trace(D018)
+            with self.subTest(closure="a joulewise module resolves outside"), self.closure(
+                    {"joulewise/__init__.py": reaches_out, "joulewise/bundle_read.py": check}):
+                self.assertEqual(self.refusal(), ("pinned_closure_import_escape", "joulewise/bundle_read.py",
+                                                  "joulewise.helper"))
+            lazy = (f"def _check_power_trace(path, summary, metadata):\n    import sys\n"
+                    f"    sys.path.insert(0, {outside!r})\n    import stray\n    return stray.VALUE\n").encode()
+            with self.subTest(closure="a module is loaded from outside during the call"), self.synthetic(lazy):
+                self.assertEqual(self.refusal(), ("pinned_closure_import_escape", "joulewise/bundle_read.py", "stray"))
+        with self.subTest(closure="a module is asked for that is not pinned"), self.synthetic(check):
+            self.assertEqual(self.refusal(), ("pinned_closure_import_escape", "joulewise/bundle_read.py",
+                                              "joulewise.helper"))
+        ghost = (b"import sys, types\nsys.modules['joulewise.ghost'] = types.ModuleType('joulewise.ghost')\n"
+                 + self.ACCEPTS)
+        with self.subTest(closure="a joulewise module that is no file"), self.synthetic(ghost):
+            self.assertEqual(self.refusal(), ("pinned_closure_import_escape", "joulewise/bundle_read.py",
+                                              "joulewise.ghost"))
+
+    def test_the_closure_never_falls_back_to_the_checkout_copy(self):
+        import os
+
+        require_pinned_closure(self)
+        root = str(Path(pc.__file__).resolve().parents[1])
+        self.assertTrue((Path(root) / "joulewise" / "validation.py").is_file())    # the checkout could supply it
+        pins = {path: oid for path, oid in pc.PINNED_D018_CLOSURE.items() if path != "joulewise/validation.py"}
+        here = os.getcwd()
+        try:
+            os.chdir(root)
+            with patch.object(pc, "PINNED_D018_CLOSURE", pins), patch.dict(os.environ, {"PYTHONPATH": root}):
+                self.assertEqual(self.refusal(), ("pinned_closure_import_escape", "joulewise/bundle_read.py",
+                                                  "joulewise.validation"))
+        finally:
+            os.chdir(here)
+
+    def test_the_whole_pinned_closure_is_what_the_child_loads(self):
+        import subprocess
+
+        require_pinned_closure(self)
+        with TemporaryDirectory() as private:
+            source, bundle = Path(private, "pin"), Path(private, "bundle", "run")
+            for path, raw in pc._pinned_closure(FIRST).items():
+                (source / path).parent.mkdir(parents=True, exist_ok=True)
+                (source / path).write_bytes(raw)
+            bundle.mkdir(parents=True)
+            (bundle / "power_trace.csv").write_bytes(D018)
+            request = {"source": str(source), "bundle": str(bundle), "summary": {"status": "succeeded"},
+                       "metadata": {}, "pins": pc.PINNED_D018_CLOSURE}
+            proc = subprocess.run([sys.executable, "-I", "-S", "-B", "-X", "utf8", "-c", pc._PINNED_D018_CHILD],
+                                  input=json.dumps(request).encode(), capture_output=True, cwd=private)
+        reply = json.loads(proc.stdout)
+        self.assertEqual((proc.returncode, reply["outcome"], reply["problems"]), (0, "judged", []))
+        # Every pinned file is loaded and nothing else of joulewise is: the table is the closure, no more, no less.
+        self.assertEqual(sorted(reply["modules"].values()), sorted(pc.PINNED_D018_CLOSURE))
+
+    # A pinned check that cannot decide is never a pass.
+
+    def test_a_check_that_cannot_decide_is_never_a_pass(self):
+        template = "def _check_power_trace(path, summary, metadata):\n    {}\n"
+        forged = 'print(\'{"outcome": "judged", "modules": {}, "problems": []}\')'
+        for label, body, passes in (
+                ("reports a problem", "return ['a problem']", False),
+                ("raises", "return 1 / 0", False),
+                ("returns nothing", "return None", False),
+                ("returns a tuple", "return ()", False),
+                ("returns a string", "return ''", False),
+                ("leaves without an answer", "raise SystemExit(0)", False),
+                ("prints an answer of its own and reports a problem", forged + "\n    return ['a problem']", False),
+                ("prints and passes", "print('noise')\n    return []", True)):
+            with self.subTest(check=label), self.synthetic(template.format(body).encode()):
+                if passes:
+                    judge_pinned_trace(D018)
+                else:
+                    self.assertEqual(self.refusal(), ("bundle_binding", "power_trace.csv", "bundle_read"))
+
+    def test_a_check_that_does_not_finish_refuses(self):
+        import subprocess
+
+        real = subprocess.run
+
+        def child_hangs(command, **kwargs):
+            if command[0] == sys.executable:
+                raise subprocess.TimeoutExpired(command, kwargs.get("timeout"))
+            return real(command, **kwargs)
+
+        with self.synthetic(), patch("subprocess.run", child_hangs):
+            self.assertEqual(self.refusal(), ("bundle_binding", "power_trace.csv", "bundle_read"))
 
 
 class MemberBracketTests(unittest.TestCase):
