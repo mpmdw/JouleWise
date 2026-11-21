@@ -517,3 +517,66 @@ trapped prepare and install. The focused W1 U4-inconclusive replay continues
 to cover the 24-member roster and the supplemental-sentinel refusal.
 
 [First hosted shard](https://github.com/mpmdw/JouleWise/actions/runs/44783036619/job/136450919559)
+
+## K4 · whole staged input inventory
+
+The supplied audit at `7cae941b39c5fe2fadf8e3d87e5ce8012ab207ce`, tree
+`0424e86b266093e0ec685e9754ff4fce3e0f2d65`, verified one HIGH with root
+cause `integration-seam` and zero MED or LOW findings. All six earlier findings
+were refuted. The staged derivation argv read a manifest that had a different
+reference member while the packet and staged campaign orders stayed unchanged.
+
+Freeze `7f6bdbbefc1c2cea375f219eeb8b487aea1fc635`, tree
+`2578b092c9b715a3c30710b0fa72ef0ffdd7b7b1`, preceded validator edits.
+Against `7cae941b`, the three frozen methods exited 1. The derivation
+mutation passed the arm, and both the read-set and byte-sweep methods found
+no staged inventory. Prior freezes remain in the branch.
+
+Fix `ba5982b1b4d56527b8490ca18435829563bef3d2`, tree
+`4cb20394183fe2bc56b583a0dd8edda4c33323f6`, derives the inventory from the
+committed selection and the same renderer that creates the relocated files.
+It includes the original and relocated kit, launch tree and digest, stage
+orders and configs, stage file dependencies, and registered artifacts. The
+consumer checks all listed bytes before decoding staged inputs. It reuses
+those checked bytes and refuses unlisted reads before opening them. The
+instrumented test observes the actual CLI and arm reads. The additional
+unlisted-read test injects an input request and traps any attempt to open it.
+
+The transport pin comes from the exact packet blob committed at
+`series/c1-next-arm.json` in source HEAD. This detached pin authenticates the
+packet's raw bytes before parsing. The independent rebuild still uses its
+explicit record and series commits. Normal staging links remain confined to
+the view and source roots. The prepared plan and live control files enter
+from outside the immutable view.
+
+| Fixture evidence at clock 111 | Identity or result |
+| --- | --- |
+| W1 predecessor | `f8d6eae8949682d79781ff5e3c7c5db1c295a64f:w-W1/record.json` |
+| Series selection | `dd1e03fd1d174deada996d2c0598691780d72881:series/state.json` |
+| Pushed proof | `refs/remotes/synthetic/records` |
+| Packet transport | `3ebd16ec2b7d2926f16681e6e5d6902ab33f2f46:series/c1-next-arm.json`, SHA-256 `a9422117718f6d09104a11d82f60afa368204d16526ed24d1eaad32f5a394692` |
+| Staged launch tree | SHA-256 `3918db0b17201335f0e37a5e5af28937f972fc3f9830bedc998f581b2cdc0c56` |
+| Genuine derivation | SHA-256 `ad319d72e1b24345b8f6fa95f9adc75c59a301a86e9c3e863a9ddb64fcddf9e2`. One call to the mocked host checkpoint, which deliberately returns CLI exit 1. |
+| Changed derivation member | SHA-256 `d2c7c1501bbc87c729a5ba6c4dbe531774ce5dff504b743c2fa32d592ee05bad`. CLI exit 2, zero checkpoint calls. |
+
+The fixture contains 69 pinned files including the packet, plus 329 explicit
+artifact absences. The byte sweep flips the first byte in each pinned file
+on a disposable staging view and restores it after each check. The bounded
+production fixture also verified its linked staged kit, auxiliary inputs, and
+all six relocated order manifests with prepare and install trapped.
+
+```sh
+PYTHONPATH=tests:. python3.13 -B -m unittest -v align.test_v4_next_arm_packet.C1PacketRebuildTests -k test_k4
+PYTHONPATH=tests:. python3.13 -B -m unittest -v align.test_v4_next_arm_packet.C1PacketRebuildTests
+JW_B5_SYNTHETIC_ONLY=1 PYTHONPATH=tests:. python3.13 -B -m unittest \
+  align.test_v4_series_e2e align.test_v4_next_arm_packet.ArmOrderWitness
+git diff --check b2e01464d HEAD
+```
+
+The authorized lead supplies the committed materialized kit and its launch
+dependencies at the series commit and builds the post-close packet as above.
+The lead commits the exact output locally in the prepared source checkout as
+`series/c1-next-arm.json` and uses the corresponding
+`measurement/series/c1-next-arm.json` as the arm pointer. The W1 desk and
+receipt digests carry forward. No integration-owner, Opus or signer hold was
+satisfied by the synthetic checks. `NEEDS_SPEC: none`.
