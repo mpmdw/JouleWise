@@ -10,7 +10,6 @@ from types import SimpleNamespace
 from pathlib import Path
 import tempfile
 import threading
-import time
 import unittest
 from unittest import mock
 
@@ -981,7 +980,7 @@ class StrictReservationReadinessTests(unittest.TestCase):
     def test_interrupted_claim_strict_refuses_but_legacy_retry_recovers(self):
         import json
         from tests.calibration_exits_fixtures.custody_hang import CustodyFixture
-        with CustodyFixture() as f:
+        with CustodyFixture(control_clock=True) as f:
             self._open(f)
             self._interrupt_claim(f)
             before = f.bytes()
@@ -998,7 +997,7 @@ class StrictReservationReadinessTests(unittest.TestCase):
 
     def test_open_session_strict_refuses_without_append(self):
         from tests.calibration_exits_fixtures.custody_hang import CustodyFixture
-        with CustodyFixture() as f:
+        with CustodyFixture(control_clock=True) as f:
             self._open(f)
             before = f.bytes()
             completed, _ = self._strict_execute(f)
@@ -1007,7 +1006,7 @@ class StrictReservationReadinessTests(unittest.TestCase):
     def test_healthy_strict_reservation_emits_frozen_plan_and_reserves(self):
         import json
         from tests.calibration_exits_fixtures.custody_hang import CustodyFixture
-        with CustodyFixture() as f:
+        with CustodyFixture(control_clock=True) as f:
             before = f.bytes()
             completed, _ = self._strict_execute(f)
             receipt = self._read_success(f, completed)
@@ -1020,7 +1019,7 @@ class StrictReservationReadinessTests(unittest.TestCase):
 
     def test_verify_only_implies_strict_gate_for_healthy_open_and_interrupted(self):
         from tests.calibration_exits_fixtures.custody_hang import CustodyFixture
-        with CustodyFixture() as f:
+        with CustodyFixture(control_clock=True) as f:
             before = f.bytes()
             completed, _ = f.reservation(mode="--verify-only")
             receipt = self._read_success(f, completed)
@@ -1196,7 +1195,7 @@ class UnderLeaseCustodyMemoTests(unittest.TestCase):
 
         from tests.calibration_exits_fixtures.custody_hang import CustodyFixture
 
-        with CustodyFixture() as fixture:
+        with CustodyFixture(control_clock=True) as fixture:
             deadline = self._deadline()
             deadline.arm_custody_memo()
             first = self._pass(fixture, deadline)
@@ -1546,8 +1545,8 @@ class NightBudgetAbortPathTests(unittest.TestCase):
         the delay and the number of custody workers that were started.
         """
         marker = fixture.repo / "custody-metadata-delay.jsonl"
-        (fixture.repo / "sitecustomize.py").write_text(
-            '''import json, os, time
+        with (fixture.repo / "sitecustomize.py").open("a") as hook:
+            hook.write('''import json, os
 from pathlib import Path
 _prefix = os.environ.get("JW_CUSTODY_SLOW_PREFIX")
 if _prefix:
@@ -1560,7 +1559,7 @@ if _prefix:
                 with open(_marker, "a") as handle:
                     handle.write(json.dumps(
                         {"pid": os.getpid(), "call": name, "path": str(self)}) + "\\n")
-                time.sleep(_delay)
+                _advance(_delay)
             return original(self, *args, **kwargs)
         setattr(Path, name, probe)
     for _name in ("exists", "is_dir", "is_file"):
@@ -1583,8 +1582,8 @@ if _prefix:
         files, so a FIFO answers "partial" without reading anything.
         """
         marker = fixture.repo / "governed-read-barrier.jsonl"
-        (fixture.repo / "sitecustomize.py").write_text(
-            '''import json, os, time
+        with (fixture.repo / "sitecustomize.py").open("a") as hook:
+            hook.write('''import json, os, time
 from pathlib import Path
 _target = os.environ.get("JW_GOVERNED_BARRIER_TARGET")
 if _target:
@@ -1594,6 +1593,7 @@ if _target:
         if str(Path(directory) / relative) == _target:
             with open(os.environ["JW_GOVERNED_BARRIER_MARKER"], "a") as handle:
                 handle.write(json.dumps({"pid": os.getpid(), "path": _target}) + "\\n")
+            _advance(float(os.environ["JW_CUSTODY_TEST_BUDGET"]))
             time.sleep(float(os.environ["JW_GOVERNED_BARRIER_DELAY"]))
         return _original(directory, relative)
     _io._read_nofollow_bytes = _barrier
@@ -1630,7 +1630,7 @@ if _target:
         import json
         from tests.calibration_exits_fixtures.custody_hang import CustodyFixture
 
-        with CustodyFixture() as f:
+        with CustodyFixture(control_clock=True) as f:
             env = dict(f.env)
             env["JOULEWISE_NIGHT_CUSTODY_BUDGET_S"] = "30"
             before = f.bytes()
@@ -1651,7 +1651,7 @@ if _target:
         import json
         from tests.calibration_exits_fixtures.custody_hang import CustodyFixture
 
-        with CustodyFixture() as f:
+        with CustodyFixture(control_clock=True) as f:
             plan, _root, next_root = self._finalized_slot(f, next_custody=True)
             # The stall sits in the read of the NEXT slot's manifest.json --
             # the one custody value the abort consumes.
@@ -1697,7 +1697,7 @@ if _target:
         import json
         from tests.calibration_exits_fixtures.custody_hang import CustodyFixture
 
-        with CustodyFixture() as f:
+        with CustodyFixture(control_clock=True) as f:
             # "pre" is finalized with complete custody on disk; the next slot
             # is "post". Block "pre" for 60 s: at the base head the abort
             # reads it and hangs until its allowance expires.
@@ -1730,7 +1730,7 @@ if _target:
         from tests.calibration_exits_fixtures.custody_hang import CustodyFixture
 
         slots = tuple(f"d{index:02d}" for index in range(1, 13))
-        with CustodyFixture() as f:
+        with CustodyFixture(control_clock=True) as f:
             plan, _finalized, next_root = self._finalized_slot(f, slots=slots)
             # The next slot is present but incomplete -- a night aborted
             # between two captures -- so the abort closes the session instead
@@ -1771,7 +1771,7 @@ if _target:
         import json
         from tests.calibration_exits_fixtures.custody_hang import CustodyFixture
 
-        with CustodyFixture() as f:
+        with CustodyFixture(control_clock=True) as f:
             plan, _root, next_root = self._finalized_slot(f, next_custody=True)
             marker = self._install_governed_read_barrier(f, next_root / "manifest.json")
             self.assertFalse(f.refusal.exists())

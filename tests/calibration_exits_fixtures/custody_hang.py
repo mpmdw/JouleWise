@@ -17,7 +17,7 @@ from tests import test_calibration_ledger as ledger_tests
 
 TEST_WATCHDOG_S = 30.0
 
-# Only the disposable reservation and its worker use this clock. The test
+# Only the disposable CLI and its worker use this clock. The test
 # runner's subprocess watchdog and the worker cleanup waits still use real time.
 _CLOCK_HOOK = '''import os, selectors, sys, time
 from pathlib import Path
@@ -34,7 +34,9 @@ def _advance(seconds):
 
 if sys.argv[0] == "-m":
     time.monotonic = _now
-elif sys.argv[0].endswith("reserve_calibration_window_bracket.py"):
+elif Path(sys.argv[0]).name in (
+    "reserve_calibration_window_bracket.py", "recover_calibration_ledger.py",
+):
     from joulewise import calibration_ledger as ledger
     ledger.time = SimpleNamespace(monotonic=_now, time=time.time)
 

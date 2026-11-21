@@ -16,5 +16,8 @@ The load replay uses the CI timing map to allocate shard 4 of 6 to four
 workers. The custody worker replays its regular predecessors and runs
 the complete 62-test module 20 times. The other three workers run their
 normal assignments and repeat them as needed to sustain the load. The
-first loaded repetition passed all 62 tests in a stdlib-only Python
-3.13.18 environment.
+replay uses stdlib-only Python 3.13.18. Six full repetitions passed
+before the same watchdog race surfaced in a strict-reservation
+recovery test. The custody pass had already completed. The strict-readiness,
+subprocess memo-invalidation, and night-abort cases now use the controlled
+fixture. The 20-run count restarts for that diff.
