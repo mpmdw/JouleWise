@@ -1,9 +1,33 @@
 [
   {
     "file": "joulewise/cadence_looks/interim_twin.py",
-    "locator": "run:35d6d8c5fa38fb6b",
+    "locator": "run:b7caa1f02e90b3d4",
     "command": "python-isolated",
-    "seam": "The stage-2 preflight verifies the twin path and hash. Synthetic release tests run the pinned reader on generated inputs and inject child failures through subprocess.run."
+    "seam": "The stage-2 preflight verifies the twin and its pin-checking wrapper by path and hash. The parent launches the wrapper, which checks the look's content pins and becomes the reviewed child (RL-194 condition 4). Synthetic release tests run it on generated inputs and inject child failures through subprocess.run."
+  },
+  {
+    "file": "scripts/cadence_interim_twin_pins.py",
+    "locator": "<module>:78267d3cb7422d05",
+    "command": "python-isolated",
+    "seam": "Usage line in the wrapper's docstring; no command runs at import."
+  },
+  {
+    "file": "scripts/cadence_interim_twin_pins.py",
+    "locator": "main:e9c4a5b16240436b",
+    "command": "python-isolated",
+    "seam": "After every content pin is checked, the wrapper becomes the reviewed twin child by os.execv with the same isolated interpreter and the child's arguments untouched. tests/cadence/test_twin_wrapper.py runs it on generated custody with a stand-in child."
+  },
+  {
+    "file": "scripts/cadence_look_run.py",
+    "locator": "run_verifier:4c6bb39a61da7461",
+    "command": "python-isolated",
+    "seam": "Each stage launches the pinned hash-only verifier as its own process before it parses a roster file (RL-194a). It reads generated custody in tests/cadence/test_content_admission.py and writes one result file of words and hashes."
+  },
+  {
+    "file": "scripts/cadence_look_verify_inputs.py",
+    "locator": "<module>:96c726817ffffb80",
+    "command": "python-isolated",
+    "seam": "Usage line in the verifier's docstring; no command runs at import."
   },
   {
     "file": "scripts/run_align_r1_smoke.py",
