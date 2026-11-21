@@ -561,23 +561,28 @@ class PowermetricsFixtureTimingTests(unittest.TestCase):
         )
         config = make_config(sampling={"power_hz": 20.0})
         baseline = IdleBaseline(1.0, 0.0, 5.0, 100, TelemetryBackend.POWERMETRICS)
-        real_run = subprocess.run
+        real_capture = adapter._run_bounded_capture
+        real_timeout = adapter._capture_timeout_s
         timeouts = []
 
-        def short_deadline(command, **kwargs):
-            self.assertEqual(kwargs["timeout"], 17.5)
+        def short_timeout(config, count):
+            self.assertEqual(real_timeout(config, count), 17.5)
             # Exercise a real child-process TimeoutExpired, not a fabricated
-            # exception or a relaxed strict-validation comparison.
-            kwargs["timeout"] = 0.75
+            # exception. The existing 0.75 s test deadline leaves interpreter
+            # startup time but expires before the requested 5 s idle capture.
+            return 0.75
+
+        def capture_with_receipt(*args, **kwargs):
             try:
-                return real_run(command, **kwargs)
+                return real_capture(*args, **kwargs)
             except subprocess.TimeoutExpired as exc:
                 timeouts.append(exc)
                 raise
 
         with (
             patch.dict(os.environ, {"FAKE_POWERMETRICS_SLEEP_SCALE": "1"}),
-            patch("joulewise.adapters.powermetrics.subprocess.run", short_deadline),
+            patch.object(adapter, "_capture_timeout_s", short_timeout),
+            patch.object(adapter, "_run_bounded_capture", capture_with_receipt),
         ):
             result = adapter.measure_post_run_idle(config, baseline, None)
         self.assertEqual(len(timeouts), 1)
