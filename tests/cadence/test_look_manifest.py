@@ -790,8 +790,10 @@ class FreezeCommit(Base):
         man = json.loads((root / mr.MANIFEST).read_text(encoding="utf-8"))
         self.assertEqual(man["status"], "committed")
         lm.validate_manifest(man, final=True)
+        # the copy has no git: its RUN_STATE (written with its pins, RL-194) stands in for origin/main's
         r = subprocess.run([sys.executable, "-B", str(root / "scripts/cadence_look_manifest.py"), "validate",
-                            str(root / mr.MANIFEST), "--final", "--repo", str(root)],
+                            str(root / mr.MANIFEST), "--final", "--repo", str(root),
+                            "--run-state", str(root / "RUN_STATE.md")],
                            capture_output=True, text=True, timeout=300)
         self.assertEqual(r.returncode, 0, r.stdout + r.stderr)
         # the host-command guard's sitecustomize (tests/_host_guard_site) imports the tests package from its own

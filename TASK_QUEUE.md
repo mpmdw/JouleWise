@@ -2,10 +2,10 @@
 
 PR #795 RL-194 and RL-194a (2026-11-20), [AGENT]. The lead fills `lm-interim-01.inputs.json` from the
 eleven offload manifests (`cadence_look_manifest.py pin-inputs`, then `pin --write`) and runs
-`check-inputs`, with each span's `check_item` the item that prints its manifest as the span's. The
-executing seat produces the review record (`cadence_look_input_review.py review`). The research lead
-rules whether stage 1's digest of `events.jsonl`, a journal that holds the idle baseline's mean power,
-may stand in the public stage-1 file.
+`check-inputs`, which names each HELD span. Where an item prints a span's manifest with every
+character matching, the lead runs `correct-check` (RL-195 §2.1); every other span stays HELD and goes
+to the research lead as item numbers and labels (§2.4). The executing seat produces the review record
+(`cadence_look_input_review.py review`).
 [Report](docs/run_reports/2026-11-20-pr795-rl194-content-address.md);
 [audit round 1](docs/run_reports/2026-11-20-pr795-rl194-audit-1.md).
 

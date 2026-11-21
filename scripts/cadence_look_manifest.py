@@ -7,6 +7,8 @@
     python3 -B scripts/cadence_look_manifest.py pin-inputs MANIFEST.json --repo DIR --plan PLAN.json [--write]
     python3 -B scripts/cadence_look_manifest.py check-inputs MANIFEST.json --repo DIR
         [--run-state RUN_STATE.md] [--roster ROSTER.json]
+    python3 -B scripts/cadence_look_manifest.py correct-check MANIFEST.json --repo DIR --span SPAN_ID --item N
+        [--run-state RUN_STATE.md] [--write]
     python3 -B scripts/cadence_look_manifest.py row --manifest MANIFEST.json --repo DIR
         (--roster ROSTER.json --verdicts VERDICTS.json | --stage1 STAGE1.json
          | --output | --error-type TYPE | --interrupted) [--write]
@@ -19,6 +21,9 @@ validate:
 * ``--span-ledger``: resolve the spans the look reads and refuse unsealed, out-of-phase or
   not-desk-final spans, or a ledger that carries another manifest hash. The analyst seat runs this at
   the look before opening anything.
+* ``--final --repo``: the inputs are final too: the pin list is filled, no span is HELD against the public
+  RUN_STATE (``--run-state`` reads a file instead of origin/main) and, with ``--span-ledger``, the pinned spans
+  are exactly the roster's.
 
 pin (draft manifests only): set the sha256 of every pinned file that exists in the repository, then
 the manifest's row in LOOKS.json. Prints the changes; writes only with ``--write``. A committed manifest
@@ -34,7 +39,14 @@ entry. A span directory whose files are not exactly the offload manifest's, or t
 check-inputs (RL-194 condition 2) checks the pin list a manifest names: its shape, that each span's pins rebuild the
 offload manifest digest the span carries, and that each span's public RUN_STATE Check item names that digest
 (``--run-state`` reads a file; the default is RUN_STATE.md on origin/main). ``--roster`` also requires the pinned
-spans to be exactly the roster's. Prints how each Check item names its digest (in full or abbreviated).
+spans to be exactly the roster's. Prints each span's state: ``bound`` (in full or abbreviated) or ``HELD``. A HELD
+span keeps the manifest from being final and stays on the roster (RL-195 section 2); for each one the command prints
+the item numbers and labels under which any digest is printed after the span is named, never a digest.
+
+correct-check (RL-195 section 2.1; draft manifests only) moves one span's ``check_item`` to another RUN_STATE item,
+only if that item names the span's offload manifest under a manifest label and every printed hex character matches
+the pinned digest. The item the pin table cited is kept in ``check_corrected_from``. A close-time ``outer.sha256``
+never binds; it is cited as a second record only. Run ``pin --write`` afterwards.
 
 row records an execution from its public report or the delivered RL-180 failure type.
 Use --interrupted after confirming a reservation ended without a notice or completed report (RL-183).
@@ -91,6 +103,14 @@ def validate(args):
             roster = lm.resolve_roster(doc, lm.load_json(args.span_ledger), lm.sha256_file(args.manifest))
         elif args.roster_out:
             raise lm.ManifestError(["--roster-out needs --span-ledger"])
+        if args.final and args.repo and isinstance(doc.get("inputs"), dict):
+            # RL-195 section 2.3: a HELD span keeps the manifest from being final; no span is dropped to finish it
+            text = (Path(args.run_state).read_text(encoding="utf-8") if args.run_state
+                    else lm.public_run_state(args.repo))
+            problems = lm.inputs_final_problems(args.repo, doc, text,
+                                                [r["span_id"] for r in roster] if roster is not None else None)
+            if problems:
+                raise lm.ManifestError(problems)
     except lm.ManifestError as error:
         for p in error.problems:
             print(f"REFUSE {p}")
@@ -209,6 +229,14 @@ def row(args):
     elif not problems:
         if r.get("status") != "committed" or r.get("stage1_sha256") is not None:
             problems.append("the inputs are written on a committed row with no stage-1 hash")
+        if isinstance(doc.get("inputs"), dict):
+            # RL-195 section 2.3: stage 1's inputs are committed only with no span HELD and every roster span pinned
+            roster = lm.load_json(Path(args.roster))
+            ids = [entry.get("span_id") for entry in roster] if isinstance(roster, list) else []
+            try:
+                problems += lm.inputs_final_problems(repo, doc, lm.public_run_state(repo), ids)
+            except lm.ManifestError as error:
+                problems += error.problems
         changes = {"roster_sha256": lm.sha256_file(args.roster), "verdicts_sha256": lm.sha256_file(args.verdicts)}
     if problems:
         for p_ in problems:
@@ -332,17 +360,62 @@ def check_inputs(args):
         roster = sorted(span["span_id"] for span in lm.load_json(Path(args.roster)))
         if roster != sorted(span["span_id"] for span in pin_list["spans"]):
             problems.append("the pinned spans are not exactly the roster's spans")
-    links = pins.chain_link(pin_list, text)
+    states = pins.check_states(pin_list, text)
+    ids = [span["span_id"] for span in pin_list["spans"]]
     for span in pin_list["spans"]:
+        state = states[span["span_id"]]
+        corrected = (f" (corrected from item {state['corrected_from']}, RL-195 section 2.1)"
+                     if state["corrected_from"] is not None else "")
         print(f"{span['span_id']}: {len(span['files'])} files, {sum(f['size'] for f in span['files'])} bytes; "
               f"pins rebuild offload manifest {span['offload_manifest_sha256']}; "
-              f"Check {span['check_item']} names it: {links[span['span_id']]}")
+              f"Check {span['check_item']}{corrected} names it: {state['form']}; "
+              f"{'HELD' if state['state'] == pins.HELD else 'bound'}")
+        if state["state"] == pins.HELD:
+            # RL-195 section 2.4: item numbers and labels only, never a digest
+            found = pins.digest_labels(span["span_id"], text, ids)
+            print(f"  HELD {span['span_id']}: digests printed after the span is named: "
+                  + ("; ".join(f"item {number} under {label or 'no label'}" for number, label in found) or "none"))
+    held = [sid for sid, state in states.items() if state["state"] == pins.HELD]
+    if held:
+        problems.append(f"{len(held)} span(s) HELD: the manifest cannot be final while a span is held; a held span "
+                        "stays on the roster (RL-195 section 2.3)")
     for problem in problems:
         print(f"REFUSE {problem}")
     if not problems:
         print(f"ok inputs file sha256 {sha}: {len(pin_list['spans'])} spans, "
               f"{sum(len(s['files']) for s in pin_list['spans'])} files, each chained to its Check item")
     return 1 if problems else 0
+
+
+def correct_check(args):
+    """RL-195 section 2.1: move one span's check_item to an item that names its offload manifest. Draft only."""
+    pins = lm.custody_pins
+    try:
+        doc = lm.load_json(Path(args.manifest))
+        if doc.get("status") != "draft":
+            raise lm.ManifestError(["a committed manifest's inputs are never re-pinned (RL-194 section 2)"])
+        pin_list, _ = lm.input_pins(args.repo, doc, complete=True)
+        text = (Path(args.run_state).read_text(encoding="utf-8") if args.run_state else lm.public_run_state(args.repo))
+        before = pins.check_states(pin_list, text).get(args.span)
+        corrected = pins.correct_check(pin_list, args.span, args.item, text)
+    except lm.ManifestError as error:
+        for problem in error.problems:
+            print(f"REFUSE {problem}")
+        return 1
+    except pins.PinRefusal as refusal:
+        print(f"REFUSE {refusal}")
+        return 1
+    after = pins.check_states(corrected, text)[args.span]
+    print(f"{args.span}: Check item {before['check_item']} ({before['state']}) -> {args.item} ({after['form']}; "
+          f"{after['state']}); cited first: item {after['corrected_from'] or args.item}")
+    text_out = json.dumps(corrected, indent=1) + "\n"
+    print(f"inputs file sha256 {hashlib.sha256(text_out.encode('utf-8')).hexdigest()}")
+    if args.write:
+        (Path(args.repo) / doc["inputs"]["pins"]["path"]).write_text(text_out, encoding="utf-8")
+        print(f"wrote {doc['inputs']['pins']['path']}; now run: pin {args.manifest} --repo {args.repo} --write")
+    else:
+        print("(dry run; --write to apply)")
+    return 0
 
 
 def main(argv=None):
@@ -363,6 +436,7 @@ def main(argv=None):
     v.add_argument("--span-ledger")
     v.add_argument("--looks")
     v.add_argument("--roster-out", help="write the resolved roster (needs --span-ledger)")
+    v.add_argument("--run-state", help="with --final --repo: a RUN_STATE file in place of origin/main's")
     w = sub.add_parser("pin")
     w.add_argument("manifest")
     w.add_argument("--repo", required=True)
@@ -377,6 +451,13 @@ def main(argv=None):
     ci.add_argument("--repo", required=True)
     ci.add_argument("--run-state")
     ci.add_argument("--roster")
+    cc = sub.add_parser("correct-check", help="RL-195: move a span's check_item to the item that names its manifest")
+    cc.add_argument("manifest")
+    cc.add_argument("--repo", required=True)
+    cc.add_argument("--span", required=True)
+    cc.add_argument("--item", required=True, type=int)
+    cc.add_argument("--run-state")
+    cc.add_argument("--write", action="store_true")
     rw = sub.add_parser("row", help="write the LOOKS.json row's hashes from the files (Mythos r5 N3)")
     rw.add_argument("--manifest", required=True)
     rw.add_argument("--repo", required=True)
@@ -420,6 +501,8 @@ def main(argv=None):
         return pin_inputs(args)
     if args.cmd == "check-inputs":
         return check_inputs(args)
+    if args.cmd == "correct-check":
+        return correct_check(args)
     if args.cmd == "row":
         if bool(args.roster) != bool(args.verdicts):
             p.error("--roster needs --verdicts")

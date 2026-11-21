@@ -8,6 +8,7 @@ import io
 import json
 import os
 from pathlib import Path
+import re
 import shutil
 import tempfile
 import unittest
@@ -303,6 +304,24 @@ class CheckChain(unittest.TestCase):
         self.assertNotEqual(got["as_printed"], digest)
         self.assertTrue(P.check_chain_problems(doc, wrong))
 
+    def test_an_outer_sha256_never_binds(self):
+        """RL-195 section 2.2: the close-time outer.sha256 is a custody-side file with no public, dated witness. It
+        may be cited as a second record and never binds a span, however a Check item prints it."""
+        doc = pins()
+        span = doc["spans"][0]
+        digest, number, sid = span["offload_manifest_sha256"], span["check_item"], span["span_id"]
+        for printed in (digest, f"{digest[:8]}…{digest[-4:]}"):
+            for phrase in (f"outer.sha256 `{printed}`", f"`outer.sha256` {printed}", f"outer sha256 `{printed}`",
+                           f"outer manifest `{printed}`", f"outer.sha256 (manifest) `{printed}`",
+                           f"the outer.sha256 file, manifest: {printed}", f"Outer manifest sha256 `{printed}`"):
+                text = f"{number}. **Check of {sid}.** {phrase}.\n"
+                with self.subTest(phrase):
+                    self.assertEqual(P.check_binding(span, text)["form"], "absent")
+                    self.assertEqual(P.held_spans(doc, text), [sid])
+        # beside it, the manifest's own digest still binds
+        text = f"{number}. **Check of {sid}.** Offload manifest `{digest}`; outer.sha256 `{'0' * 64}`.\n"
+        self.assertEqual(P.check_binding(span, text)["form"], "full")
+
     def test_reading_a_long_item_is_one_pass(self):
         import time
         doc = pins()
@@ -319,6 +338,99 @@ class CheckChain(unittest.TestCase):
         self.assertEqual(P.run_state_item(text, 317), "317. **Check.** digest here\n1. step\n\n")
         self.assertIsNone(P.run_state_item(text, 3))
         self.assertIsNone(P.run_state_item(text, 999))
+
+
+class HeldAndCorrected(unittest.TestCase):
+    """RL-195 section 2: a span whose Check does not bind is HELD; its check_item is corrected only to an item that
+    names its offload manifest with every printed character matching."""
+    SPANS = ("dev-01-s01", "dev-01-s03")
+
+    def setUp(self):
+        self.doc = pins(self.SPANS)
+        self.first, self.second = self.doc["spans"]
+        self.digest = self.first["offload_manifest_sha256"]
+
+    def state(self, *items):
+        """A RUN_STATE of the given items, newest first: (number, body) pairs."""
+        return "# State\n\n" + "\n".join(f"{n}. **Lead.** {body}\n" for n, body in sorted(items, reverse=True))
+
+    def test_a_span_whose_check_does_not_bind_is_held_and_stays_in_the_pins(self):
+        text = self.state((self.first["check_item"], f"Check of dev-01-s01: offload manifest `{self.digest}`."),
+                          (self.second["check_item"], "Check of dev-01-s03: archive copied, no digest printed."))
+        states = P.check_states(self.doc, text)
+        self.assertEqual({sid: state["state"] for sid, state in states.items()},
+                         {"dev-01-s01": P.BOUND, "dev-01-s03": P.HELD})
+        self.assertEqual(states["dev-01-s03"]["form"], "absent")
+        self.assertEqual(P.held_spans(self.doc, text), ["dev-01-s03"])
+        self.assertEqual(P.pin_list_problems(self.doc, complete=True), [])       # held, and still pinned
+        problems = P.check_chain_problems(self.doc, text)
+        self.assertEqual(len(problems), 1)
+        self.assertTrue(problems[0].startswith("dev-01-s03") and "held" in problems[0])
+
+    def test_check_item_is_corrected_only_to_an_item_that_names_the_span_s_manifest(self):
+        cited = self.first["check_item"]
+        good, later = cited + 2, cited + 5
+        short = f"{self.digest[:8]}…{self.digest[-4:]}"
+        wrong = ("0" if self.digest[9] != "0" else "1").join((self.digest[:9], self.digest[10:]))
+        text = self.state(
+            (cited, "Check of dev-01-s01: copied."),
+            (good, f"Copied at once: `cq-dev-01-s01-a1`, enc sha256 `00000000…0000`, manifest `{short}` (6 files)."),
+            (later, f"dev-01-s01 read back: manifest sha256 `{self.digest}`."),
+            (cited + 1, f"dev-01-s01: Encrypted archive 1,024 bytes, sha256 `{self.digest}`."),
+            (cited + 3, f"dev-01-s01 offload manifest `{wrong}`."),
+            (cited + 4, f"dev-01-s03 offload manifest `{self.digest}`."),
+            (cited + 6, f"dev-01-s01 outer.sha256 `{self.digest}`."),
+            (cited + 7, f"dev-01-s01 manifest `{self.digest[:7]}{'f' if self.digest[7] != 'f' else 'e'}…`."))
+        self.assertEqual(P.held_spans(self.doc, text), ["dev-01-s01", "dev-01-s03"])
+        before = json.dumps(self.doc)
+        corrected = P.correct_check(self.doc, "dev-01-s01", good, text)
+        self.assertEqual(json.dumps(self.doc), before)                       # the input is not changed
+        span = corrected["spans"][0]
+        self.assertEqual((span["check_item"], span["check_corrected_from"]), (good, cited))
+        self.assertEqual(P.pin_list_problems(corrected, complete=True), [])
+        self.assertEqual(P.check_states(corrected, text)["dev-01-s01"],
+                         {"state": P.BOUND, "form": "abbreviated", "check_item": good, "as_printed": short,
+                          "corrected_from": cited})
+        again = P.correct_check(corrected, "dev-01-s01", later, text)          # the item the table cited is kept
+        self.assertEqual((again["spans"][0]["check_item"], again["spans"][0]["check_corrected_from"]), (later, cited))
+        refusals = {"the archive's digest": cited + 1, "one character wrong": cited + 3,
+                    "another span's item": cited + 4, "an outer.sha256": cited + 6,
+                    "an abbreviation with a wrong character": cited + 7, "no such item": cited + 50,
+                    "the item it already has": good}
+        for label, item in refusals.items():
+            with self.subTest(label), self.assertRaisesRegex(P.PinRefusal, "dev-01-s01"):
+                P.correct_check(corrected, "dev-01-s01", item, text)
+        with self.assertRaisesRegex(P.PinRefusal, "not a span of this pin list"):
+            P.correct_check(self.doc, "dev-09-s09", good, text)
+        for bad in (0, "319", True):
+            with self.subTest(item=bad), self.assertRaises(P.PinRefusal):
+                P.correct_check(self.doc, "dev-01-s01", bad, text)
+        # correcting back to the cited item, once it binds there, clears the record of a correction
+        fixed = text.replace("Check of dev-01-s01: copied.", f"Check of dev-01-s01: offload manifest `{self.digest}`.")
+        back = P.correct_check(corrected, "dev-01-s01", cited, fixed)
+        self.assertEqual((back["spans"][0]["check_item"], back["spans"][0]["check_corrected_from"]), (cited, None))
+
+    def test_the_pin_list_records_a_correction_as_the_cited_item_number(self):
+        for value, ok in ((None, True), (self.first["check_item"] + 1, True), (self.first["check_item"], False),
+                          (0, False), (True, False), ("317", False), (1.0, False)):
+            doc = copy.deepcopy(self.doc)
+            doc["spans"][0]["check_corrected_from"] = value
+            with self.subTest(value=value):
+                self.assertEqual(P.pin_list_problems(doc, complete=True) == [], ok)
+        doc = copy.deepcopy(self.doc)
+        del doc["spans"][0]["check_corrected_from"]
+        self.assertTrue(P.pin_list_problems(doc, complete=True))
+
+    def test_the_list_for_the_research_lead_carries_item_numbers_and_labels_only(self):
+        """RL-195 section 2.4: for a HELD span, each record's item number and the label under which a digest is
+        printed. No digest."""
+        text = self.state(
+            (330, f"dev-01-s01 copied: enc sha256 `{self.digest[:8]}…{self.digest[-4:]}`, manifest `{self.digest}`."),
+            (331, f"dev-01-s03 offload manifest `{self.digest}`; then dev-01-s01 marker `{'1' * 64}`."),
+            (332, "dev-01-s01 closed; nothing printed."))
+        found = P.digest_labels("dev-01-s01", text, self.SPANS)
+        self.assertEqual(found, [(331, "marker"), (330, "enc"), (330, "manifest")])
+        self.assertFalse(any(re.search("[0-9a-f]{8}", str(label or "")) for _, label in found))
 
 
 TRACE = "legs/L001/runtime/run/power_trace.csv"
@@ -789,6 +901,66 @@ class ManifestInputs(unittest.TestCase):
             change(doc)
             with self.subTest(label), self.assertRaises(self.M.ManifestError):
                 self.M.validate_manifest(doc)
+
+    def test_a_held_span_is_reported_corrected_only_by_the_rule_and_keeps_the_inputs_from_being_final(self):
+        """RL-195 section 2 at the tool: check-inputs names each HELD span with the items and labels under which a
+        digest is printed (never a digest), correct-check moves a check_item only where the new item binds, and the
+        inputs are final only with no span HELD and every roster span pinned."""
+        self.assertEqual(self.pin_inputs("--write")[0], 0)
+        self.assertEqual(self.run_cli("pin", self.manifest, "--repo", self.repo, "--write")[0], 0)
+        pins = json.loads((self.repo / self.M.INPUTS_PATH).read_text())
+        first, second = pins["spans"]
+        state = Path(self.tmp.name) / "RUN_STATE.md"
+        later = first["check_item"] + 20
+        state.write_text(
+            f"{later}. **Copied at once.** `cq-{first['span_id']}-a1`, enc sha256 `00000000…0000`, manifest "
+            f"`{first['offload_manifest_sha256'][:8]}…{first['offload_manifest_sha256'][-4:]}`.\n\n"
+            f"{first['check_item']}. **Check of {first['span_id']}.** Copied; outer.sha256 "
+            f"`{first['offload_manifest_sha256']}`.\n\n"
+            f"{second['check_item']}. **Check of {second['span_id']}.** Offload manifest "
+            f"`{second['offload_manifest_sha256']}`.\n")
+        code, out = self.run_cli("check-inputs", self.manifest, "--repo", self.repo, "--run-state", state)
+        self.assertEqual(code, 1, out)
+        self.assertIn(f"{first['span_id']}: ", out)
+        self.assertIn("names it: absent; HELD", out)
+        self.assertIn("names it: full; bound", out)
+        self.assertIn(f"HELD {first['span_id']}: digests printed after the span is named: item {later} under enc; "
+                      f"item {later} under manifest; item {first['check_item']} under no label", out)
+        self.assertIn("1 span(s) HELD: the manifest cannot be final", out)
+        self.assertNotIn(first["offload_manifest_sha256"][:8] + "…", out)        # labels and items, no digest printed
+        self.assertEqual(self.M.inputs_final_problems(self.repo, self.doc, state.read_text())[-1:],
+                         [f"inputs: 1 span(s) HELD ({first['span_id']}): the manifest cannot be final while a span is "
+                          "held, and a held span stays on the roster (RL-195 section 2.3)"])
+        correct = lambda *extra: self.run_cli("correct-check", self.manifest, "--repo", self.repo, "--run-state", state,
+                                              "--span", first["span_id"], *extra)
+        code, out = correct("--item", second["check_item"])            # another span's Check: refused, still HELD
+        self.assertEqual(code, 1, out)
+        self.assertIn("the span stays HELD", out)
+        before = (self.repo / self.M.INPUTS_PATH).read_bytes()
+        code, out = correct("--item", later)                             # dry run
+        self.assertEqual(code, 0, out)
+        self.assertEqual((self.repo / self.M.INPUTS_PATH).read_bytes(), before)
+        code, out = correct("--item", later, "--write")
+        self.assertEqual(code, 0, out)
+        self.assertIn(f"Check item {first['check_item']} (held) -> {later} (abbreviated; bound)", out)
+        fixed = json.loads((self.repo / self.M.INPUTS_PATH).read_text())
+        self.assertEqual((fixed["spans"][0]["check_item"], fixed["spans"][0]["check_corrected_from"]),
+                         (later, first["check_item"]))
+        self.assertEqual([s["span_id"] for s in fixed["spans"]], [first["span_id"], second["span_id"]])
+        self.assertEqual(self.run_cli("pin", self.manifest, "--repo", self.repo, "--write")[0], 0)
+        doc = json.loads(self.manifest.read_text())
+        code, out = self.run_cli("check-inputs", self.manifest, "--repo", self.repo, "--run-state", state)
+        self.assertEqual(code, 0, out)
+        self.assertIn(f"(corrected from item {first['check_item']}, RL-195 section 2.1) names it: abbreviated; bound", out)
+        self.assertEqual(self.M.inputs_final_problems(self.repo, doc, state.read_text(),
+                                                      [first["span_id"], second["span_id"]]), [])
+        self.assertTrue(any("not exactly the roster's" in problem for problem in self.M.inputs_final_problems(
+            self.repo, doc, state.read_text(), [second["span_id"]])))          # no span is dropped to finish
+        committed = dict(doc, status="committed")
+        self.manifest.write_text(json.dumps(committed, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+        code, out = correct("--item", first["check_item"] + 30)
+        self.assertEqual(code, 1, out)
+        self.assertIn("never re-pinned", out)
 
     def test_a_committed_look_s_pin_list_is_filled(self):
         with self.assertRaisesRegex(self.M.ManifestError, "empty"):

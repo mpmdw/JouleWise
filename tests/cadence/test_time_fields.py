@@ -1261,6 +1261,32 @@ class SupersededStage1(unittest.TestCase):
         self.mr.git(self.mini, "branch", "-q", "-D", "side")
         M.require_stage1_committed(self.mini, "lm-interim-01", "8" * 64, stage1_doc=doc)
 
+    def test_stage_1_s_inputs_are_committed_with_no_span_held_and_none_dropped(self):
+        """RL-195 section 2.3: a HELD span keeps the look's inputs from being committed, and the roster is never
+        edited to drop it: the row refuses a roster that is not exactly the pinned spans."""
+        mr = self.mr
+        looks = self.mini / M.LOOK_LEDGER_PATH
+        before = looks.read_bytes()
+        row = lambda roster: mr.py(self.mini, "scripts/cadence_look_manifest.py", "row", "--manifest",
+                                   self.mini / mr.MANIFEST, "--repo", self.mini, "--roster", roster,
+                                   "--verdicts", self.c.paths["rules_3_4.json"], "--write")
+        roster = rj(self.c.paths["roster.json"])
+        fewer = self.d / "fewer-roster.json"
+        fewer.write_text(json.dumps(roster[1:]))
+        r = row(fewer)
+        self.assertEqual(r.returncode, 1, r.stdout)
+        self.assertIn("the pinned spans are not exactly the roster's; no span is dropped", r.stdout)
+        self.assertEqual(looks.read_bytes(), before)
+        pins = json.loads((self.mini / M.INPUTS_PATH).read_text())
+        held = pins["spans"][0]
+        state = self.mini / "RUN_STATE.md"
+        state.write_text(state.read_text().replace(held["offload_manifest_sha256"], "0" * 64))
+        mr.git_commit(self.mini, "a Check that no longer binds", publish=True)
+        r = row(self.c.paths["roster.json"])
+        self.assertEqual(r.returncode, 1, r.stdout)
+        self.assertIn(f"span(s) HELD ({held['span_id']}): the manifest cannot be final", r.stdout)
+        self.assertEqual(looks.read_bytes(), before)
+
     def test_the_row_subcommand_writes_hashes_only_after_its_checks(self):
         mr = self.mr
         looks = self.mini / M.LOOK_LEDGER_PATH

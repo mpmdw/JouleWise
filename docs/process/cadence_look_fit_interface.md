@@ -498,7 +498,19 @@ file of every roster span by sha256 and size
   names the span, the first digest labelled `manifest` (or `manifest_sha256`, or the `SHA256SUMS` file's name)
   before it names another pinned span. A digest under another label (an archive's, a marker's) binds nothing.
   The span binds when it has at least one and every printed character of each matches, in full or as an
-  abbreviation of any length; otherwise it is held.
+  abbreviation of any length; otherwise it is HELD. A digest with `outer` just before it (the close-time
+  `outer.sha256`) never binds; it is cited as a second record only (RL-195 §2.2).
+- **A HELD span (RL-195 §2).** It keeps the manifest from being final and stays on the roster and in the pins:
+  every stage refuses while it is held, `check-inputs` exits 1 and lists, for each held span, the item numbers and
+  labels under which a digest is printed after the span is named (never a digest), and `validate --final --repo`
+  and `row --roster` refuse. `correct-check` moves a span's `check_item` only to an item that names its offload
+  manifest under a manifest label with every printed character matching; `check_corrected_from` keeps the item
+  the pin table cited.
+- **The journal's digest is public (RL-195 §1).** Stage 1's file carries the plain sha256 of each span's
+  `events.jsonl`, which holds the idle baseline's mean. Three conditions bind it: no process converts, prints or
+  copies the mean before the reservation (the `sys.setprofile` probes gate it); each journal holds unpublished
+  sub-second stamps of its own (the run's first and last rows and its stage rows, written by the controller's
+  `SystemClock`); and changing only the mean moves only that journal's sha256 in stage 1's output.
 - **The twin.** The reviewed child is byte-identical to its #816 review. The parent launches
   `scripts/cadence_interim_twin_pins.py`, which checks every roster file against the pins with its own code
   and then becomes the child with the child's arguments untouched.

@@ -1143,6 +1143,25 @@ def input_pins(repo, doc, *, complete):
         raise ManifestError([f"inputs: {error}"]) from None
 
 
+def inputs_final_problems(repo, doc, run_state_text, roster_ids=None):
+    """What keeps a look's inputs from being final (RL-194 conditions 2 and 6; RL-195 section 2): a pin list that is
+    not filled or not chained internally, a span that is HELD (its Check item does not print its offload manifest's
+    digest as the span's with every character matching), and, given the roster, pinned spans that are not exactly
+    the roster's. A HELD span is never dropped to make the inputs final: it stays on the roster and in the pins."""
+    try:
+        pins, _ = input_pins(repo, doc, complete=True)
+    except ManifestError as error:
+        return list(error.problems)
+    problems = [f"inputs: {problem}" for problem in custody_pins.check_chain_problems(pins, run_state_text)]
+    held = custody_pins.held_spans(pins, run_state_text)
+    if held:
+        problems.append(f"inputs: {len(held)} span(s) HELD ({', '.join(held)}): the manifest cannot be final while a "
+                        "span is held, and a held span stays on the roster (RL-195 section 2.3)")
+    if roster_ids is not None and sorted(roster_ids) != sorted(span["span_id"] for span in pins["spans"]):
+        problems.append("inputs: the pinned spans are not exactly the roster's; no span is dropped from either")
+    return problems
+
+
 PUBLIC_RUN_STATE_REF = "refs/remotes/origin/main"
 
 

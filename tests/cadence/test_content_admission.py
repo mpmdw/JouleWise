@@ -328,6 +328,81 @@ class Stage1(_Copy):
         self.assertIs(idle([R.I34._loads(line) for line in events.read_bytes().splitlines()])["metadata"]["power_w_mean"],
                       R.PINS.SHIELDED)
 
+    # ------------------------------------------------------------------------- RL-195 section 1 at the command line
+    CONTROLLER = ("run_started", "stage_started", "stage_completed", "sampling_started", "sampling_stopped",
+                  "failure", "run_finalized")
+
+    def controller_journal(self, journal, mean):
+        """The leg's journal as the pinned controller writes it: its lifecycle rows (written by the pinned controller
+        with its mock backends, tests/cadence/interim_admission_controller) around the generated episode, on a
+        sub-second wall clock as SystemClock.now() gives one, with the idle baseline's mean set to ``mean``.
+        Returns the bytes and the lifecycle rows' stamps."""
+        import gzip
+        raw = (TLR.REPO / "tests/cadence/interim_admission_controller/controller-rows.json.gz").read_bytes()
+        lifecycle = [row for row in json.loads(gzip.decompress(raw))["complete"] if row["event_type"] in self.CONTROLLER]
+        episode = [json.loads(line) for line in journal.read_bytes().splitlines() if line.strip()]
+        opened = next(i for i, row in enumerate(lifecycle) if row["event_type"] == "sampling_started")
+        before, after = lifecycle[:opened + 1], lifecycle[opened + 1:-1]
+        low, high = episode[0]["timestamp_s"], episode[-1]["timestamp_s"]
+        before = [dict(row, timestamp_s=round(low - (len(before) - i) * 0.4137 - 0.000213, 6))
+                  for i, row in enumerate(before)]
+        after = [dict(row, timestamp_s=round(high + (i + 1) * 0.3791 + 0.000419, 6)) for i, row in enumerate(after)]
+        final = dict(lifecycle[-1], timestamp_s=round(after[-1]["timestamp_s"] + 0.5317, 6))
+        rows = [*before, *episode, *after, final]
+        idle = next(row for row in rows if (row["event_type"], row["phase"]) == ("stage_completed", "idle_baseline"))
+        idle["metadata"] = dict(idle["metadata"], power_w_mean=mean, duration_s=31.004871)
+        stamps = [row["timestamp_s"] for row in (*before, *after, final)] + [idle["metadata"]["duration_s"]]
+        return "".join(json.dumps(row) + "\n" for row in rows).encode(), stamps
+
+    def test_only_the_journal_s_digest_moves_with_the_idle_mean(self):
+        """RL-195 condition 1.3: on generated custody whose journal carries the pinned controller's rows, changing
+        only the idle baseline's mean changes stage 1's output in that journal's sha256 and nothing else: byte-equal
+        once the sha256 fields are masked. Conditions 1.1 and 1.2: no value of the mean, and none of the journal's
+        own clock stamps (run_started, the stage rows, run_finalized, the baseline's duration), is in the output."""
+        journal = sorted(self.span.glob("legs/*/runtime/runs/cadence-leg/events.jsonl"))[0]
+        rel = journal.relative_to(self.span).as_posix()
+        outputs, means = [], (4.871236, 9.513377)
+        data, stamps = self.controller_journal(journal, means[0])
+        for mean in means:
+            journal.write_bytes(data.replace(b'"power_w_mean": 4.871236', b'"power_w_mean": ' + repr(mean).encode()))
+            self.assertIn(b'"power_w_mean": ' + repr(mean).encode(), journal.read_bytes())
+            pins = self.tmp / f"pins-{mean}.json"
+            pins.write_bytes(PF.dump(PF.synthetic_pins({sid: self.root / sid for sid in self.ids})))
+            rc, err, out = self.stage1(pins=pins)
+            self.assertEqual(rc, 0, err)
+            outputs.append(json.loads(out.read_bytes()))
+        first, second = outputs
+
+        def leaves(node, path=()):
+            if isinstance(node, dict):
+                for key, value in node.items():
+                    yield from leaves(value, (*path, key))
+            elif isinstance(node, list):
+                for index, value in enumerate(node):
+                    yield from leaves(value, (*path, index))
+            else:
+                yield path, node
+        a, b = dict(leaves(first)), dict(leaves(second))
+        self.assertEqual(set(a), set(b))
+        moved = {path for path in a if a[path] != b[path]}
+        index = [span["span_id"] for span in first["roster"]["spans"]].index(self.ids[0])
+        self.assertEqual(moved, {("roster", "spans", index, "custody", "files_sha256", rel), ("input_sha256",)})
+
+        def masked(node, under=False):
+            if isinstance(node, dict):
+                return {key: masked(value, under or key == "files_sha256" or key.endswith("sha256"))
+                        for key, value in node.items()}
+            if isinstance(node, list):
+                return [masked(value, under) for value in node]
+            return "masked" if under and isinstance(node, str) else node
+        self.assertEqual(F.dump(masked(first)), F.dump(masked(second)))
+        for output in outputs:
+            numbers = {value for _, value in leaves(output) if type(value) in (int, float)}
+            self.assertFalse(numbers & set(means), "a value of the idle mean is in stage 1's output")
+            self.assertFalse(numbers & set(stamps), "a stamp of the journal's own rows is in stage 1's output")
+            text = F.dump(output).decode()
+            self.assertFalse([token for token in map(repr, (*means, *stamps)) if token in text])
+
     def test_the_pins_name_exactly_the_roster_s_spans(self):
         fewer = self.tmp / "fewer-pins.json"
         fewer.write_bytes(PF.dump(dict(self.doc, spans=self.doc["spans"][1:])))

@@ -311,6 +311,18 @@ class ReviewRecord(unittest.TestCase):
         self.assertTrue(seen)
         self.assertEqual(set(seen), {"_Shielded"})
 
+        def leaves(node):                       # RL-195 condition 1.1: the review record holds no float
+            if isinstance(node, dict):
+                for value in node.values():
+                    yield from leaves(value)
+            elif isinstance(node, list):
+                for value in node:
+                    yield from leaves(value)
+            else:
+                yield node
+        self.assertEqual([value for value in leaves(record) if type(value) is float], [])
+        self.assertNotIn("9" * 50, json.dumps(record))
+
     def test_a_span_the_validator_refuses_is_the_seat_s_inadmissible_with_the_member_named(self):
         path = self.root / "dev-01-s01/runner_receipt.json"
         receipt = json.loads(path.read_bytes())

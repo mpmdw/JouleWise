@@ -13,7 +13,10 @@ grammar validator runs behind the pins and now mirrors the pinned controller's j
 staged by its own process; the verifier checks byte counts and writes only where the stage says; a
 Check binds only a digest labelled as the span's manifest; no pre-reservation reader makes a number
 of an energy-named member; a linked span directory refuses as supplied.
-[Audit report](docs/run_reports/2026-11-20-pr795-rl194-audit-1.md).
+[Audit report](docs/run_reports/2026-11-20-pr795-rl194-audit-1.md). RL-195 is applied: stage 1
+publishes each journal's plain sha256 under its three conditions, the blind statement says so, and
+a span whose Check does not bind is HELD (it keeps the manifest from being final and stays on the
+roster); `correct-check` moves a `check_item` only to an item that binds.
 
 PR #795 audit 3 (2026-11-20) adopts the independent seat's frozen admission-closure
 suite and replaces stage 1's pre-pass with one validator built from the pinned

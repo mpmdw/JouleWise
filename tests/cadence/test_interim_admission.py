@@ -652,6 +652,20 @@ class RealControllerRows(unittest.TestCase):
             with self.subTest(label):
                 self.assertIsNotNone(self.journal(rows))
 
+    def test_every_controller_journal_opens_and_closes_with_its_own_clock_rows(self):
+        """RL-195 condition 1.2, the rows behind the citation: whatever the run's outcome, the pinned controller's
+        journal starts with run_started and its first stage row and ends with run_finalized, each stamped by the
+        controller's clock (controller.py:1662-1667, 1742-1751 and 3839-3854; bundle.py:1193-1205). In a leg that
+        clock is SystemClock (r1_runtime.py:1458-1464 and 1537-1546), whose now() is time.time() (clock.py:55-56).
+        Stage 1 reads only token and gate rows from the journal, so these stamps are in no public file."""
+        for name in ("complete", "failed"):
+            rows = self.rows[name]
+            with self.subTest(name):
+                self.assertEqual([(rows[0]["event_type"], rows[0]["phase"]), (rows[1]["event_type"], rows[1]["phase"])],
+                                 [("run_started", "run"), ("stage_started", "validate")])
+                self.assertEqual((rows[-1]["event_type"], rows[-1]["phase"]), ("run_finalized", "run"))
+                self.assertTrue(all(type(row["timestamp_s"]) is float for row in (rows[0], rows[1], rows[-1])))
+
     def idle_row(self, rows):
         return next(row for row in rows if (row["event_type"], row["phase"]) == ("stage_completed", "idle_baseline"))
 

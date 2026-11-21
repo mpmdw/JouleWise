@@ -49,7 +49,9 @@ _BETWEEN = frozenset(" \t\r\n`'\"()[]*,;:=")
 _FILLER = re.compile(r"sha-?256|files?|[0-9][0-9.,]*", re.I)
 _MANIFEST_LABEL = re.compile(r"manifest(?:[_-]sha-?256)?|sha256sums", re.I)      # the sums file by its own name
 _LABEL_REACH = 200          # characters before a digest in which its label is looked for
-SPAN_KEYS = ("span_id", "runner_commit", "close_item", "check_item", "offload_manifest_sha256", "files")
+_OUTER_REACH = 40           # a digest with "outer" this close before it is never the binding manifest digest
+SPAN_KEYS = ("span_id", "runner_commit", "close_item", "check_item", "check_corrected_from",
+             "offload_manifest_sha256", "files")
 FILE_KEYS = ("path", "sha256", "size")
 # The span paths a stage parses whole and the look reuses: the receipt, the soak reference, each leg's record and
 # summary and a bundle's journals. Every other pinned file is a stream: bound by its hash, never hashed by stage 1.
@@ -105,6 +107,10 @@ def pin_list_problems(doc, *, complete):
         for key in ("close_item", "check_item"):
             if type(span[key]) is not int or span[key] < 1:
                 problems.append(f"{at}.{key}: a RUN_STATE item number")
+        corrected = span["check_corrected_from"]
+        if corrected is not None and (type(corrected) is not int or corrected < 1 or corrected == span["check_item"]):
+            problems.append(f"{at}.check_corrected_from: null, or the item number the pin table cited before the "
+                            "correction (RL-195 section 2.1)")
         if not isinstance(span["offload_manifest_sha256"], str) or not _HEX64.fullmatch(span["offload_manifest_sha256"]):
             problems.append(f"{at}.offload_manifest_sha256: a sha256")
         files = span["files"]
@@ -159,7 +165,7 @@ def parse_offload_manifest(raw):
     return rows
 
 
-def span_pins(span_id, offload_manifest_raw, sizes, *, runner_commit, close_item, check_item):
+def span_pins(span_id, offload_manifest_raw, sizes, *, runner_commit, close_item, check_item, check_corrected_from=None):
     """One span's pin entry from its offload manifest bytes. ``sizes`` maps each path to its byte count (read from
     the custody copy's directory entries, never by hashing it). No digest is computed from a custody file."""
     rows = parse_offload_manifest(offload_manifest_raw)
@@ -168,6 +174,7 @@ def span_pins(span_id, offload_manifest_raw, sizes, *, runner_commit, close_item
         raise PinRefusal(f"{span_id}: the custody copy's files are not the offload manifest's "
                          f"({len(missing)} listed but absent, {len(set(sizes) - {p for p, _ in rows})} present but unlisted)")
     span = {"span_id": span_id, "runner_commit": runner_commit, "close_item": close_item, "check_item": check_item,
+            "check_corrected_from": check_corrected_from,
             "offload_manifest_sha256": hashlib.sha256(offload_manifest_raw).hexdigest(),
             "files": [{"path": path, "sha256": digest, "size": sizes[path]} for path, digest in rows]}
     if offload_manifest_bytes(span) != offload_manifest_raw:
@@ -186,14 +193,12 @@ def run_state_item(text, number):
     return text[start:end]
 
 
-def _manifest_labelled(item, at):
-    """Whether the digest printed at ``at`` is labelled as a manifest's: the nearest word before it, past
-    punctuation, ``sha256`` and a file count, is ``manifest`` (or ``manifest_sha256``, or the sums file's own name,
-    ``SHA256SUMS``). A digest under any other label (an archive's, a marker's, a commit's) is not the offload
-    manifest's, whatever its characters. One pass
-    backwards over at most ``_LABEL_REACH`` characters."""
-    low, end = max(0, at - _LABEL_REACH), at
-    while True:
+def _label_words(item, at, count=2):
+    """The words before the digest printed at ``at`` that label it, nearest first, skipping punctuation, ``sha256``
+    and a file count; at most ``count`` of them. The scan stops at any other character (so ``outer.sha256`` gives no
+    word) and within ``_LABEL_REACH`` characters. One pass backwards."""
+    low, end, words = max(0, at - _LABEL_REACH), at, []
+    while len(words) < count:
         while end > low and item[end - 1] in _BETWEEN:
             end -= 1
         start = end
@@ -205,12 +210,25 @@ def _manifest_labelled(item, at):
                 break
             start -= 1
         if start == end or (start == low and low > 0):
-            return False                 # another character, or the label lies beyond the reach
+            break                       # another character, or the label lies beyond the reach
         word = item[start:end]
-        if _FILLER.fullmatch(word):
-            end = start
-            continue
-        return _MANIFEST_LABEL.fullmatch(word) is not None
+        end = start
+        if not _FILLER.fullmatch(word):
+            words.append(word)
+    return words
+
+
+def _manifest_labelled(item, at):
+    """Whether the digest printed at ``at`` is labelled as a manifest's: the nearest word before it, past
+    punctuation, ``sha256`` and a file count, is ``manifest`` (or ``manifest_sha256``, or the sums file's own name,
+    ``SHA256SUMS``). A digest under any other label (an archive's, a marker's, a commit's) is not the offload
+    manifest's, whatever its characters. Nor is an ``outer`` one: the close-time ``outer.sha256`` file is a
+    custody-side record with no public, dated witness, so it is cited as a second record and never binds (RL-195
+    section 2.2)."""
+    words = _label_words(item, at)
+    if not words or _MANIFEST_LABEL.fullmatch(words[0]) is None:
+        return False
+    return "outer" not in item[max(0, at - _OUTER_REACH):at].lower()     # "outer manifest", "outer.sha256 (manifest)"
 
 
 def _mentions(item, span_ids):
@@ -289,6 +307,86 @@ def chain_link(doc, run_state_text):
     ``absent``."""
     ids = [span["span_id"] for span in doc["spans"]]
     return {span["span_id"]: check_binding(span, run_state_text, ids)["form"] for span in doc["spans"]}
+
+
+BOUND, HELD = "bound", "held"
+
+
+def check_states(doc, run_state_text):
+    """Per span, its state against the public RUN_STATE (RL-194 condition 2; RL-194a section 2; RL-195 section 2):
+    ``bound`` when its Check item prints its offload manifest's digest as the span's and every printed character
+    matches, else ``held``. A HELD span keeps the look's manifest from being final and is never dropped from the
+    roster: it stays in the pin list, and every stage refuses to run while it is held. Each value carries the state,
+    the binding's form, the item number, the text as printed and the item the pin table cited before a correction."""
+    ids = [span["span_id"] for span in doc["spans"]]
+    out = {}
+    for span in doc["spans"]:
+        binding = check_binding(span, run_state_text, ids)
+        out[span["span_id"]] = {"state": BOUND if binding["form"] in ("full", "abbreviated") else HELD,
+                                "form": binding["form"], "check_item": span["check_item"],
+                                "as_printed": binding["as_printed"],
+                                "corrected_from": span["check_corrected_from"]}
+    return out
+
+
+def held_spans(doc, run_state_text):
+    """The span ids that are HELD, in pin-list order."""
+    return [sid for sid, state in check_states(doc, run_state_text).items() if state["state"] == HELD]
+
+
+def correct_check(doc, span_id, item, run_state_text):
+    """The pin list with one span's ``check_item`` corrected to ``item`` (RL-195 section 2.1, the lead's rule). Only
+    where item ``item`` itself names that span's offload manifest under a manifest label and every printed hex
+    character matches: anything else raises PinRefusal and the span stays HELD. ``check_corrected_from`` keeps the
+    item the pin table cited first, through any later correction; correcting back to it clears it. A close-time
+    ``outer.sha256`` file cannot be the route: it is cited only as a second record (section 2.2)."""
+    out = json.loads(json.dumps(doc))
+    spans = [span for span in out["spans"] if span["span_id"] == span_id]
+    if len(spans) != 1:
+        raise PinRefusal(f"{span_id}: not a span of this pin list")
+    span = spans[0]
+    if type(item) is not int or item < 1:
+        raise PinRefusal(f"{span_id}: a RUN_STATE item number")
+    if item == span["check_item"]:
+        raise PinRefusal(f"{span_id}: Check item {item} is already the span's check_item")
+    ids = [entry["span_id"] for entry in out["spans"]]
+    trial = dict(span, check_item=item)
+    if run_state_item(run_state_text, item) is None:
+        raise PinRefusal(f"{span_id}: RUN_STATE has no single item {item}; the span stays HELD")
+    binding = check_binding(trial, run_state_text, ids)
+    if binding["form"] not in ("full", "abbreviated"):
+        raise PinRefusal(f"{span_id}: item {item} does not name the span's offload manifest with every printed "
+                         f"character matching ({binding['form']}); the span stays HELD")
+    first = span["check_corrected_from"] if span["check_corrected_from"] is not None else span["check_item"]
+    span["check_item"], span["check_corrected_from"] = item, (None if first == item else first)
+    return out
+
+
+_ANY_DIGEST = re.compile(r"(?<![0-9a-f])(?:[0-9a-f]{64}|[0-9a-f]{1,63}(?:…|\.\.\.)[0-9a-f]{0,63})(?![0-9a-f])")
+
+
+def digest_labels(span_id, run_state_text, span_ids=()):
+    """[(item number, label)] for every digest printed after an item names the span and before it names another
+    pinned span, in RUN_STATE order: the labels and item numbers RL-195 section 2.4 asks for, so that a HELD span can
+    go to the research lead without a digest. ``label`` is the nearest labelling word, or None."""
+    heads = [(int(match.group(1)), match.start()) for match in _ITEM_HEAD.finditer(run_state_text)]
+    ids = set(span_ids) | {span_id}
+    out = []
+    for index, (number, start) in enumerate(heads):
+        item = run_state_text[start:heads[index + 1][1] if index + 1 < len(heads) else len(run_state_text)]
+        mentions = _mentions(item, ids)
+        if not any(name == span_id for _, name in mentions):
+            continue
+        for position, (at, name) in enumerate(mentions):
+            if name != span_id:
+                continue
+            end = mentions[position + 1][0] if position + 1 < len(mentions) else len(item)
+            for match in _ANY_DIGEST.finditer(item, at, end):
+                words = _label_words(item, match.start(), count=1)
+                entry = (number, words[0] if words else None)
+                if entry not in out:
+                    out.append(entry)
+    return out
 
 
 def pin_list_sha256(raw):

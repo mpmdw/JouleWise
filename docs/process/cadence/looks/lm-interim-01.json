@@ -43,7 +43,8 @@
     "RL-184 §1",
     "RL-184 §3.3",
     "RL-194 §1",
-    "RL-194a §1"
+    "RL-194a §1",
+    "RL-195"
   ],
   "when": {
     "after_desk_final": [
@@ -535,7 +536,7 @@
       },
       {
         "path": "scripts/cadence_look_manifest.py",
-        "sha256": "cf7a8cf7d811155fdaaf8ebcaf340f4a50c47df42f8a1c9c9223e7c2375c9216"
+        "sha256": "e9dd6c8d9a63ac553676e865da14d1f79bbd63423c9154f1c6c0f8e6501abed3"
       },
       {
         "path": "joulewise/cadence_looks/schema_check.py",
@@ -571,7 +572,7 @@
       },
       {
         "path": "joulewise/cadence_looks/custody_pins.py",
-        "sha256": "ac947bbe4db77adc697226217a72cd0a3b7ed2e6c79bbbccef3bc3a5aea7e934"
+        "sha256": "5929b391216259f5e6598728b7cfc7c6123ca9fa638bbc654f69e51d5bd8c4df"
       },
       {
         "path": "scripts/cadence_look_verify_inputs.py",
@@ -882,7 +883,7 @@
       },
       {
         "path": "joulewise/cadence_looks/manifest.py",
-        "sha256": "226c9f9be627574e4ffa5fe9ea9e09b7033a0add70ba439c56405f7499ea7c69"
+        "sha256": "5dcfa85bdb0c713b70d43857ab623887880434338732cedb569c4e836a835387"
       },
       {
         "path": "joulewise/desk_compress.py",
@@ -1312,7 +1313,7 @@
       "every frozen path of every leg kit"
     ],
     "fit_paths_outside_kit_frozen_paths": true,
-    "disclosure": "No number computed from energy is public before the data release. The public outputs are at most sixteen words, counts that hold no energy, and hashes.",
+    "disclosure": "No number computed from energy is public before the data release. The public outputs are at most sixteen words, counts that hold no energy, and hashes. The public file carries the sha256 of each span's operational journal, which contains one measured idle-power mean; no value from it was read before the reservation.",
     "pre_run_check": "Review planted-truth synthetic bundles and run the energy-blind stage 1. The separately pinned twin runs inside the look after coefficients are final. It compares both channels' coefficients to 1e-8 relative, the censored fit to 1e-6, and verdict words, trace_coverage and soak_retries for equality. The ledger_gate is excluded.",
     "cite": [
       "RL-149 §2.6",
@@ -1324,6 +1325,7 @@
       "RL-166 Q8",
       "RL-166 §2",
       "RL-179 F12",
+      "RL-195 §1",
       "RL-180 §1"
     ],
     "pin_check": "Stage 1 and stage 2 verify the repository pins, stage-1 roster and verdict commitments, and the committed LOOKS.json row. Stage 2 checks its host, both registered roots, the hold rulings, prior execution history and the twin pins before reserving RESTRICTED/ by exclusive mkdir. Stage 2 redirects stdout and stderr into RESTRICTED/ before opening a response file. An interrupted reservation spends the id and is recorded as interrupted with error_type none_recorded (RL-183). The parent captures both streams from the pinned isolated twin and adjudicates the stdout frame after writing the coefficient file (RL-181). A delivered RL-180 failure notice is recorded as failed with its closed type."
@@ -1346,13 +1348,14 @@
       "path": "docs/process/cadence/looks/lm-interim-01.inputs.json",
       "sha256": "d00ace43b4c007ee2bc76606757b1386b80c3350e20c3174677bae14e1ace42d"
     },
-    "rule": "The roster is a closed set, so stage 1 admits by content address. This file pins, by sha256 and size, every file of every roster span. A span's pins are the lines of its offload manifest in their order, so they rebuild that manifest's sha256, which the span's public RUN_STATE Check item names (in full, or by an abbreviation every printed character of which matches); no pin is hashed from today's copy. A separate hash-only verifier process runs first, before a stage parses anything and before the reservation: it reads every pinned file as opaque bytes and writes pass or fail with the pinned and observed digests. Each stage then reads the operational files it parses once, hashes them and parses those bytes, and refuses a missing, unpinned or symlinked file by name. Stage 1 never hashes an energy stream. Stage 2 re-checks a stream's pin immediately before decoding it, and the twin's wrapper checks every pin before the reviewed child runs byte-identical. The grammar validator still runs on the admitted bytes.",
+    "rule": "The roster is a closed set, so stage 1 admits by content address. This file pins, by sha256 and size, every file of every roster span. A span's pins are the lines of its offload manifest in their order, so they rebuild that manifest's sha256, which the span's public RUN_STATE Check item names (in full, or by an abbreviation every printed character of which matches); no pin is hashed from today's copy. A separate hash-only verifier process runs first, before a stage parses anything and before the reservation: it reads every pinned file as opaque bytes and writes pass or fail with the pinned and observed digests. Each stage then reads the operational files it parses once, hashes them and parses those bytes, and refuses a missing, unpinned or symlinked file by name. Stage 1 never hashes an energy stream. Stage 2 re-checks a stream's pin immediately before decoding it, and the twin's wrapper checks every pin before the reviewed child runs byte-identical. The grammar validator still runs on the admitted bytes. A span whose Check item does not print its offload manifest's digest as the span's, with every printed character matching, is HELD: it keeps the manifest from being final and stays on the roster. Its check_item may be corrected only to an item that does (check_corrected_from keeps the item the pin table cited); a close-time outer.sha256 is cited as a second record only.",
     "cite": [
       "RL-194 §1",
       "RL-194a §1",
       "RL-194a §2",
       "RL-184 §3.3",
-      "RL-179 F12"
+      "RL-179 F12",
+      "RL-195 §2"
     ]
   }
 }

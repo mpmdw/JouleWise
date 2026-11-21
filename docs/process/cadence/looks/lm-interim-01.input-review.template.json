@@ -27,6 +27,7 @@
    "runner_commit": null,
    "close_item": null,
    "check_item": null,
+   "check_corrected_from": null,
    "offload_manifest_sha256": null,
    "files": [
     {
