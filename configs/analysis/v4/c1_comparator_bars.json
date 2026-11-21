@@ -1,0 +1,20 @@
+{
+  "source": "9fffb60141b3dbf6cbff8504dd415e4a806689df RL-187 section 2",
+  "numeric_families": {
+    "N1":  {"operator": "rounded_rational", "tolerance": 0, "source": "R2 section 8"},
+    "N2":  {"operator": "relative", "tolerance": 1e-9, "source": "turn_owned_energy_j, gross_episode_energy_j, predictions_j"},
+    "N2d": {"operator": "relative", "tolerance": 1e-3, "source": "dc_benign"},
+    "N3":  {"operator": "absolute", "tolerance": 1e-6, "source": "residuals_j, turn_residuals_j"},
+    "N4":  {"operator": "relative", "tolerance": 1e-6, "source": "fit_coefficients, fit_rss, u5_values"},
+    "N5":  {"operator": "absolute", "tolerance": 1e-6, "source": "scores"},
+    "N5p": {"operator": "absolute", "tolerance": 1e-4, "source": "N5 expressed in percentage points"},
+    "N6":  {"operator": "rounded_nanoseconds", "tolerance": 0, "source": "RL-187 section 2.1 N6"},
+    "N7":  {"operator": "absolute", "tolerance": 1e-9, "source": "u2_values, u3_values, u4_values"}
+  },
+  "closure": {"absolute_error_j": 1e-9, "relative_error": 1e-12},
+  "metadata_auc": {
+    "classification": "exempt",
+    "selector": "metadata_auc/value",
+    "recompute_marker": {"status": "exempt", "reason": "shared_library_print"}
+  }
+}
