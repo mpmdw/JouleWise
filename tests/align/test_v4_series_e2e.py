@@ -30,7 +30,7 @@ from joulewise.b5.plan import resolve_stage_dispatches
 from scripts import align_pilot_session as pilot, align_v4_kit as kit, align_v4_series as s
 from scripts import align_v4_session as session, bytes_h_session as h
 from tests.align.test_v4_cadence import arm_seams, write_battery_log
-from tests.align.v4_registration_fixtures import session_plan
+from tests.align.v4_registration_fixtures import fixture_c1_binding, localize_c1_artifacts, session_plan
 from tests.align.test_v4_kit import FakeArmHost, ready_inputs
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -67,6 +67,7 @@ def mirror(target):
         directory = Path('configs/campaigns') / name
         (target / directory).unlink()
         shutil.copytree(ROOT / directory, target / directory)
+    localize_c1_artifacts(target)
 
 
 class SeriesCadenceEndToEnd(unittest.TestCase):
@@ -125,11 +126,6 @@ class SeriesCadenceEndToEnd(unittest.TestCase):
             return_value={'ok': True, 'reasons': [], 'synthetic': True}))
         stack.enter_context(patch.object(session, 'held_window_check',
             return_value={'ok': True, 'reasons': [], 'synthetic': True}))
-        # This fixture's source mirrors public repo code through additional
-        # links. Its synthetic packet builder already stands in for Git and
-        # desk evidence. C1PacketRebuildTests exercises the real artifact reader.
-        stack.enter_context(patch.object(v4_registration, 'staged_artifact_set_digest',
-            side_effect=lambda view, source: v4_registration.artifact_set_digest(source)))
         self.installed = []
         stack.enter_context(patch.object(pilot, 'install', side_effect=self.shared_install))
         self.manifest = s.load(self.measurement)
@@ -217,7 +213,7 @@ class SeriesCadenceEndToEnd(unittest.TestCase):
                                last_desk_passed_artifact_set_sha256=v4_registration.artifact_set_digest(self.measurement),
                                valid_until_epoch_s=1000.0, now_epoch_s=500.0, commit_check=lambda root, commit: True)
         if window == 'C1':
-            packet['c1_kit'], _ = s.read_c1_kit(self.measurement)
+            packet['c1_kit'] = fixture_c1_binding(self.measurement)
         return packet
 
     def next_window(self):
@@ -244,7 +240,8 @@ class SeriesCadenceEndToEnd(unittest.TestCase):
         before = len(self.installed)
         try:
             session.install(root, runner=host, volume_runner=host, obc_off_attested_by='synthetic',
-                            battery_log=log, next_arm_triage=path, w1_disk_config=self.disk_config,
+                            battery_log=log, next_arm_triage=packet if window == 'C1' else path,
+                            w1_disk_config=self.disk_config,
                             **arm_seams(),
                             disk_gate=lambda config: {'status': 'pass', 'offloads': []})
             error = None
@@ -337,8 +334,8 @@ class SeriesCadenceEndToEnd(unittest.TestCase):
         config = view / tree['science'][0]['config_path']
         config.write_bytes(config.read_bytes() + b' ')
         with patch('joulewise.align.apple.powermode.host_marker_path') as host:
-            with self.assertRaisesRegex(ValueError, 'packet_kit_mismatch: staged member config'):
-                session.install(root, next_arm_triage=packet)
+            with self.assertRaisesRegex(ValueError, 'packet_kit_mismatch: staged input SHA-256 mismatch'):
+                session.install(root, next_arm_triage=packet, **arm_seams())
         host.assert_not_called()
         self.assertEqual(self.installed, [])
 
@@ -361,7 +358,7 @@ class SeriesCadenceEndToEnd(unittest.TestCase):
                     try:
                         with patch('joulewise.align.apple.powermode.host_marker_path') as host:
                             with self.assertRaisesRegex(ValueError, 'packet_kit_mismatch'):
-                                session.install(root, next_arm_triage=packet)
+                                session.install(root, next_arm_triage=packet, **arm_seams())
                         host.assert_not_called()
                     finally:
                         path.write_bytes(original)

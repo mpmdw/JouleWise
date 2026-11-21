@@ -535,11 +535,23 @@ class C1PacketRebuildTests(Base):
         return json.loads((directory / 'collection_plan.json').read_bytes())
 
     def k1_arm(self, scenario, packet, plan, *, view=None, night=None):
+        pointer = None
+        if view is not None:
+            self.commit_staged_packet(scenario, packet)
+            pointer = view / C1_PACKET_PATH
         # Restore the real guard with only invented host inputs from the arm-rebuild suite.
         with patch.object(session, 'arm_checks', side_effect=lambda root, _, **kw: self.real_arm(root, plan, **kw)):
             return ArmRebuildTests().arm(SimpleNamespace(root=view or scenario.root), packet,
-                c1_kit_root=scenario.root, watchdog_plan_path=night, series_bind=lambda rebuilt: (
+                pointer=pointer, c1_kit_root=scenario.root, watchdog_plan_path=night, series_bind=lambda rebuilt: (
                 series.bind_packet(scenario.root, 'C1', rebuilt, authenticated_by_rebuild=True) and []))
+
+    def commit_staged_packet(self, w1, packet):
+        raw = series.raw_json(packet)
+        path = w1.root / C1_PACKET_PATH
+        if not path.exists() or path.read_bytes() != raw:
+            w1.write(C1_PACKET_PATH, raw)
+            w1.git('add', '--', str(C1_PACKET_PATH))
+            w1.git('commit', '-qm', 'synthetic C1 packet', '--', str(C1_PACKET_PATH))
 
     def assert_k1_refusal(self, scenario, packet, plan):
         record = self.k1_arm(scenario, packet, plan)
@@ -571,12 +583,12 @@ class C1PacketRebuildTests(Base):
         self.assert_k1_refusal(w1, packet, ordinary)
 
     def assert_k1_cli_refusal(self, w1, packet, selected, state):
+        self.commit_staged_packet(w1, packet)
         target = self.output_dir / 'cli-session'
         session.pilot.h.write(target / 'session.json', state)
-        packet_ref = w1.write('cli-packet.json', packet)
         args = ['install', '--session-root', str(target), '--w1-disk-config', 'unused',
                 '--battery-log', 'unused', '--obc-off-attested-by', 'synthetic',
-                '--next-arm-triage', str(w1.root / packet_ref['path'])]
+                '--next-arm-triage', str(w1.root / C1_PACKET_PATH)]
         stderr = io.StringIO()
         with patch.object(w1_kit, 'generate'), patch.object(session, 'validate_series_state', return_value=selected), \
              patch('joulewise.align.apple.powermode.host_marker_path', side_effect=ValueError('host access')) as host, \
@@ -813,13 +825,16 @@ class C1PacketRebuildTests(Base):
         for relative in sorted(pins):
             self.copy_linked_k4_file(view, relative)
         reads = set()
+        roots = (view, view.resolve())
 
         def instrument(original):
             def observe(path, *args, **kwargs):
                 if not isinstance(path, int):
                     candidate = Path(os.fsdecode(path))
-                    if candidate.is_relative_to(view):
-                        reads.add(candidate.relative_to(view).as_posix())
+                    for root in roots:
+                        if candidate.is_relative_to(root):
+                            reads.add(candidate.relative_to(root).as_posix())
+                            break
                 return original(path, *args, **kwargs)
             return observe
 
@@ -827,9 +842,34 @@ class C1PacketRebuildTests(Base):
              patch.object(builtins, 'open', instrument(builtins.open)), \
              patch.object(os, 'open', instrument(os.open)):
             code, calls, error = self.k4_checkpoint(w1, plan, view, night)
+            record = self.k1_arm(w1, packet, plan, view=view, night=night)
         self.assertEqual((code, calls), (1, 1), error)
+        self.assertTrue(record['admitted'], record['reasons'])
         self.assertTrue({str(C1_PACKET_PATH), str(DERIVATION_INPUT), CODE_PATH} <= reads, reads)
         self.assertLessEqual(reads, pins)
+
+    def test_k4_unlisted_read_refuses_before_opening_the_file(self):
+        w1, _, plan, view, night = self.k4_fixture()
+        path = 'unlisted-fixture.json'
+        w1.write(path, {'synthetic': True})
+        (view / path).write_text('{"synthetic":true}')
+        resolve = series.c1_execution_identity
+        open_file = io.open
+
+        def inject(tree, plan, read, *, staged):
+            if staged:
+                read(Path(path))
+            return resolve(tree, plan, read, staged=staged)
+
+        def trap(target, *args, **kwargs):
+            if not isinstance(target, int):
+                self.assertNotEqual(Path(os.fsdecode(target)).name, path)
+            return open_file(target, *args, **kwargs)
+
+        with patch.object(series, 'c1_execution_identity', side_effect=inject), patch.object(io, 'open', trap):
+            code, calls, error = self.k4_checkpoint(w1, plan, view, night)
+        self.assertEqual((code, calls), (2, 0), error)
+        self.assertIn('not in the committed inventory: ' + path, error)
 
     def test_k4_one_changed_byte_in_every_inventory_file_refuses(self):
         w1, packet, plan, view, night = self.k4_fixture()
@@ -1633,13 +1673,15 @@ def first_commit(scenario):
 class ArmRebuildTests(Base):
     """The arm calls the builder itself; a supplied packet is a pointer, never trusted data."""
 
-    def arm(self, s, packet, *, now=NOW, **kwargs):
+    def arm(self, s, packet, *, now=NOW, pointer=None, **kwargs):
         from scripts import align_v4_session as session
         from tests.align.test_v4_cadence import write_battery_log
-        path = s.root / 'supplied-packet.json'
-        if path.exists():
-            path.unlink()
-        path.write_text(json.dumps(packet, indent=2))
+        path = pointer
+        if path is None:
+            path = s.root / 'supplied-packet.json'
+            if path.exists():
+                path.unlink()
+            path.write_text(json.dumps(packet, indent=2))
         good = dict(passed=True, probe_error=False, external_connected=True, is_charging=False,
                     current_capacity_pct=100, instant_amperage_ma=0, update_age_s=1)
         with patch('joulewise.align.apple.powermode.admit_ac_powermode', return_value={'admitted': True}), \

@@ -672,8 +672,22 @@ def committed_c1_kit(evidence, commit, manifest_sha256, projection):
     require(frozen_series.c1_plan_projection(plan) ==
             [{'run_id': row['run_id'], 'role': row['role']} for row in projection],
             'materialized C1 roster disagrees with the committed next plan')
-    return frozen_series.c1_kit_identity(file_hashes, plan, tree,
-                                         lambda path: evidence.read(commit, path.as_posix()))
+    def read(path):
+        return evidence.read(commit, path.as_posix())
+
+    def optional(path):
+        entry = evidence.git('ls-tree', '-z', commit, '--', path.as_posix())
+        if not entry or entry.startswith(b'040000 '):
+            return None
+        return read(path)
+
+    binding = frozen_series.c1_kit_identity(file_hashes, plan, tree, read)
+    # Legacy, un-staged projection witnesses can still rebuild. A staged arm
+    # requires the launch inputs and their complete committed inventory.
+    if optional(Path(frozen_series.launch_plan.HEAD_PIN_RELATIVE)) is not None:
+        binding = frozen_series.c1_staged_inventory(
+            binding, read, optional, registration.artifact_hashes_at(evidence.repo, commit))
+    return binding
 
 
 def build_packet(repo, *, record_commit, record_path, series_commit, series_path, pushed_ref,

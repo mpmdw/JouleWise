@@ -42,6 +42,7 @@ def pack_id(window_id):
 
 
 C1_PLAN = 'collection_plan.json'
+C1_PACKET_PATH = 'series/c1-next-arm.json'
 
 
 def c1_kit_file(path):
@@ -69,6 +70,45 @@ def c1_kit_identity(file_hashes, plan, tree, read):
             'sentinel_ordinals': [i for i, row in enumerate(rows, 1) if row['role'] == 'sentinel'],
             'staged_kit_files': {path: digest for path, digest in file_hashes.items() if path != 'plan_tree.json'},
             'execution': c1_execution_identity(tree, plan, read, staged=False)}
+
+
+def c1_staged_inventory(kit, read, optional, artifacts):
+    """Derive the staged pin set from the selected source bytes."""
+    from scripts.bytes_h_session import render_measurement_files
+
+    source_kit = kit_path('C1')
+    pack = Path('configs/campaigns') / pack_id('C1')
+    files, tree = render_measurement_files(source_kit, pack_id('C1'), read, optional)
+    pinned = dict(artifacts)
+
+    def add(path, digest):
+        name = Path(path).as_posix()
+        if name in pinned and pinned[name] != digest:
+            raise ValueError(f'incorrect staged input digest: {name}')
+        pinned[name] = digest
+
+    for path, digest in kit['staged_kit_files'].items():
+        add(pack / path, digest)
+    for path, raw in files.items():
+        add(path, sha(raw))
+    add(launch_plan.HEAD_PIN_RELATIVE, sha(read(Path(launch_plan.HEAD_PIN_RELATIVE))))
+    for row in tree['external_inputs']['artifacts']:
+        add(row['path'], row['sha256'])
+    for stage in tree['stage_graph']:
+        input_ref = stage.get('input') or {}
+        if 'path' in input_ref and 'sha256' in input_ref:
+            path = input_ref['path']
+            raw = files[Path(path)] if Path(path) in files else read(Path(path))
+            add(path, sha(raw))
+            if sha(raw) != input_ref['sha256']:
+                raise ValueError(f'committed stage input digest mismatch: {path}')
+    for stage in kit['execution']['order_manifests']:
+        for path, spare in stage['spares'].items():
+            add(path, spare['sha256'])
+            for name, digest in spare['configs'].items():
+                add(Path(path).parent / name, digest)
+    return {**kit, 'staged_inventory': {path: digest for path, digest in pinned.items() if digest is not None},
+            'staged_absent_artifacts': sorted(path for path, digest in pinned.items() if digest is None)}
 
 
 def _campaign_file(path, read):

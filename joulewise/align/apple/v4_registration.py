@@ -472,7 +472,7 @@ def confined_reader(root, *other_roots):
     def scope_for(path):
         return next((scope for scope in roots if path.is_relative_to(scope)), None)
 
-    def read(relative):
+    def read(relative, *, metadata_only=False):
         relative = Path(relative)
         if relative.is_absolute() or not relative.parts or '..' in relative.parts:
             raise ValueError('staged input needs a repository-relative path')
@@ -511,29 +511,57 @@ def confined_reader(root, *other_roots):
                     raise ValueError(f'staged input parent is not a directory: {relative}')
                 directory = target
             elif stat.S_ISREG(status.st_mode):
-                return target.read_bytes()
+                return None if metadata_only else target.read_bytes()
         raise ValueError(f'staged input is not a regular file: {relative}')
 
     return read
 
 
-def staged_artifact_set_digest(measurement_root, source_root):
-    """Hash the registered paths as the prepared launch view sees them."""
-    read = confined_reader(measurement_root, source_root)
+class StagedInventory:
+    """Hand decoders only the exact bytes verified against a committed pin."""
 
-    def reader(path):
-        try:
-            return read(path)
-        except FileNotFoundError:
-            return None
+    def __init__(self, root, source, pins):
+        if not isinstance(pins, dict) or not pins:
+            raise ValueError('committed staged input inventory missing')
+        self.pins = pins
+        self.read = confined_reader(root, source)
+        self.verified = {}
 
-    return artifact_set_digest_from(reader)
+    def __call__(self, path):
+        key = Path(path).as_posix()
+        if key not in self.pins:
+            raise ValueError(f'staged input is not in the committed inventory: {key}')
+        if key not in self.verified:
+            expected = self.pins[key]
+            if expected is None:
+                try:
+                    self.read(key, metadata_only=True)
+                except FileNotFoundError:
+                    raw = None
+                else:
+                    raise ValueError(f'unlisted staged artifact is present: {key}')
+            else:
+                raw = self.read(key)
+                if digest(raw) != expected:
+                    raise ValueError(f'staged input SHA-256 mismatch: {key}')
+            self.verified[key] = raw
+        return self.verified[key]
+
+    def verify_all(self):
+        for path in self.pins:
+            self(path)
 
 
 def artifact_set_digest_at(root, commit):
     """The same digest computed from the committed bytes of ``commit`` (the last desk-passed code state)."""
     blobs = _committed_bytes(root, commit, list(ARTIFACTS))
     return artifact_set_digest_from(lambda path: blobs.get(path))
+
+
+def artifact_hashes_at(root, commit):
+    """Expected staged artifact bytes, including required absences."""
+    return {path: digest(raw) if raw is not None else None
+            for path, raw in _committed_bytes(root, commit, list(ARTIFACTS)).items()}
 
 
 def _committed_bytes(root, commit, paths):

@@ -39,6 +39,49 @@ def held_window_acceptance(measurement_root, packet, *, ruling_path=None):
     return {'ok': True, 'reasons': [], 'synthetic': True}
 
 
+def localize_c1_artifacts(root, paths=None):
+    """Keep the legacy mirror's selected templates inside its fixture root."""
+    for relative in sorted(reg.ARTIFACTS if paths is None else paths):
+        path = Path(root)
+        for part in Path(relative).parts[:-1]:
+            path /= part
+            if path.is_symlink() and path.is_dir():
+                source = path.resolve()
+                path.unlink()
+                path.mkdir()
+                for child in source.iterdir():
+                    (path / child.name).symlink_to(child)
+            if not path.is_dir():
+                break
+        else:
+            path /= Path(relative).name
+            if path.is_symlink():
+                raw = path.read_bytes() if path.is_file() else None
+                path.unlink()
+                if raw is not None:
+                    path.write_bytes(raw)
+
+
+def fixture_c1_binding(root):
+    """Synthetic packet producer for witnesses that substitute Git and desk evidence."""
+    from scripts import align_v4_series as series
+
+    root = Path(root)
+    kit, _ = series.read_c1_kit(root)
+
+    def read(path):
+        return (root / path).read_bytes()
+
+    def optional(path):
+        return read(path) if (root / path).is_file() else None
+
+    artifacts = {path: reg.digest(read(path)) if (root / path).is_file() else None
+                 for path in reg.ARTIFACTS}
+    binding = series.c1_staged_inventory(kit, read, optional, artifacts)
+    localize_c1_artifacts(root, binding['staged_inventory'])
+    return binding
+
+
 def export():
     pairs = [dict(session=f'pilot-{i}', population='30B', phase='pilot',
                   ordinals=[5, 17], token_identical=True, clock_difference_fraction=0.,

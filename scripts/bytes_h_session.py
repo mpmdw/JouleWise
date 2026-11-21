@@ -61,12 +61,15 @@ class PhysicalHazard(ValueError):
     """Missing model payload or insufficient physical storage for this window."""
 
 
+def encoded_json(value):
+    return (json.dumps(value, indent=2, sort_keys=True, allow_nan=False) + '\n').encode()
+
+
 def write(path, value):
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
-    raw = json.dumps(value, indent=2, sort_keys=True, allow_nan=False) + '\n'
     temporary = path.with_name('.' + path.name + '.tmp')
-    temporary.write_text(raw)
+    temporary.write_bytes(encoded_json(value))
     temporary.replace(path)
 
 
@@ -144,8 +147,42 @@ def measurement_view(source, session, *, kit=KIT, pack_id=PACK_ID):
     for p in (source / kit).iterdir():
         if p.name != 'plan_tree.json':
             (pack / p.name).symlink_to(p, target_is_directory=p.is_dir())
-    tree = read(source / kit / 'plan_tree.json')
-    template = read(source / 'configs/campaigns/d117_floor_qwen3-1p7b_v5/plan_tree.json')
+
+    def source_file(relative):
+        return (source / relative).read_bytes()
+
+    def optional_file(relative):
+        path = source / relative
+        return path.read_bytes() if path.is_file() else None
+
+    files, _ = render_measurement_files(kit, pack_id, source_file, optional_file)
+    for relative, raw in files.items():
+        target = view / relative
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(raw)
+    write(session / 'staging/measurement-view.json', {
+        'source_measurement_root': str(source), 'measurement_root': str(view),
+        'source_tree': locator(source / kit / 'plan_tree.json'), 'launch_template':
+            locator(source / 'configs/campaigns/d117_floor_qwen3-1p7b_v5/plan_tree.json'),
+        'staged_tree': locator(pack / 'plan_tree.json'),
+        'changes': ['arm_attachments.launch: existing fourteen-binding interface; kit root leaves',
+                    'pack directory spelling: governed b6_layout.packs[0]',
+                    'dispatched configs: byte-identical pack-local copies; argv/manifests/science relocated together',
+                    'arm_attachments.identity_pin_projection: derived inventory; unprojected runtime pins',
+                    'external_inputs: canonical reference IDs/descriptors and dispatched file pins',
+                    'bracket reservation --plan: this pack collection_plan.json',
+                    'plan_tree.sha256: exact staged tree bytes'],
+        'ledger': "the checkout's own runs/ ledger, linked; head pin an identical copy; never fabricate a missing ledger",
+        'read_only_source': False})
+    return view, pack
+
+
+def render_measurement_files(kit, pack_id, read_file, optional_file):
+    """Render the exact relocated bytes from source readers, with no writes."""
+    pack = Path('configs/campaigns') / pack_id
+    files = {}
+    tree = json.loads(read_file(kit / 'plan_tree.json'))
+    template = json.loads(read_file(Path('configs/campaigns/d117_floor_qwen3-1p7b_v5/plan_tree.json')))
     launch = template['arm_attachments']['launch']
     for row in launch.get('bindings', []):
         if row['name'] == 'claim_runs_root': row['leaf'] = tree['roots']['claim_root_leaf']
@@ -154,35 +191,34 @@ def measurement_view(source, session, *, kit=KIT, pack_id=PACK_ID):
     # Resolve the actual campaign argv, not an inferred roster. In particular,
     # the NEG-8 scaffold and test-7 references need inventory rows too.
     science = {r['run_id'] for r in tree['science']}
-    roster = read(source / 'configs/campaigns/bytes_v1/roster.json')['models']
+    roster = json.loads(read_file(Path('configs/campaigns/bytes_v1/roster.json')))['models']
     model_ids = {m['model']['source']: m['model_id'] for m in roster}
     # Acceptance assigns corpus/start/midpoint/end roles by these existing
     # input IDs. Stage IDs are not interchangeable with that interface.
     external_ids = {m['manifest']['path']: m['external_input_id']
                     for m in template['external_inputs']['manifests']}
     units, manifests, relocated = {}, [], {}
-    dispatches = {d.stage_id: d for d in plan.resolve_stage_dispatches(tree, source)}
+    dispatches = {d.stage_id: d for d in plan.resolve_stage_dispatches(tree, '.', read_manifest=read_file)}
     for stage in tree['stage_graph']:
         if stage['kind'] != 'campaign_collection':
             continue
         dispatch = dispatches[stage['stage_id']]
         if dispatch.error:
             raise ValueError(dispatch.error)
-        manifest_path = source / dispatch.config_dir / 'order_manifest.json'
-        manifest = read(manifest_path)
+        manifest_path = Path(dispatch.config_dir) / 'order_manifest.json'
+        manifest = json.loads(read_file(manifest_path))
         if len(manifest['executed_order']) != stage['expected_count']:
             raise ValueError('collection count differs from dispatched manifest: ' + stage['stage_id'])
         directory = pack / 'members' / stage['stage_id']
-        directory.mkdir(parents=True)
         members = []
         for row in manifest['executed_order']:
             config = manifest_path.parent / row['config']
-            raw = config.read_bytes()
+            raw = read_file(config)
             target = directory / config.name
-            target.write_bytes(raw)
+            files[target] = raw
             digest = hashlib.sha256(raw).hexdigest()
-            relative = target.relative_to(view).as_posix()
-            relocated[config.relative_to(source).as_posix()] = relative
+            relative = target.as_posix()
+            relocated[config.as_posix()] = relative
             plan.relocate_order_entry(row, Path(relative), digest)
             typed = BenchmarkConfig.from_mapping(json.loads(raw)).to_dict()
             model, hardware = typed['model'], typed['hardware_target']
@@ -216,14 +252,16 @@ def measurement_view(source, session, *, kit=KIT, pack_id=PACK_ID):
             if row['run_id'] not in science:
                 members.append({'run_id': row['run_id'], 'ordinal': row.get('index'),
                                 'path': relative, 'sha256': digest})
-        write(directory / 'order_manifest.json', manifest)
-        ref = {'kind': 'manifest', 'path': (directory / 'order_manifest.json').relative_to(view).as_posix(),
-               'manifest_id': manifest['manifest_id'], 'sha256': locator(directory / 'order_manifest.json')['sha256']}
+        order_path = directory / 'order_manifest.json'
+        files[order_path] = encoded_json(manifest)
+        ref = {'kind': 'manifest', 'path': order_path.as_posix(),
+               'manifest_id': manifest['manifest_id'],
+               'sha256': hashlib.sha256(files[order_path]).hexdigest()}
         stage['input'] = ref
         stage['launch']['commands'][0]['argv_template']['arguments'][0] = {
-            'kind': 'repo_path', 'value': directory.relative_to(view).as_posix()}
+            'kind': 'repo_path', 'value': directory.as_posix()}
         if members:
-            manifests.append({'external_input_id': external_ids[manifest_path.relative_to(source).as_posix()],
+            manifests.append({'external_input_id': external_ids[manifest_path.as_posix()],
                 # The controller compares this descriptor with stage.input
                 # exactly when recognizing auxiliary pre-slot members.
                 'manifest': dict(ref),
@@ -244,7 +282,7 @@ def measurement_view(source, session, *, kit=KIT, pack_id=PACK_ID):
     reservation = next(s for s in tree['stage_graph'] if s['kind'] == 'bracket_reservation')
     arguments = reservation['launch']['commands'][0]['argv_template']['arguments']
     plan_index = next(i for i, arg in enumerate(arguments) if arg['value'] == '--plan') + 1
-    arguments[plan_index] = {'kind': 'repo_path', 'value': (pack / tree['plan']['path']).relative_to(view).as_posix()}
+    arguments[plan_index] = {'kind': 'repo_path', 'value': (pack / tree['plan']['path']).as_posix()}
     # Harvest re-derives NEG-8 only from the pinned settled-corpus bytes named
     # by the real derivation argv. Include other dispatched file inputs too.
     artifacts = {}
@@ -252,27 +290,17 @@ def measurement_view(source, session, *, kit=KIT, pack_id=PACK_ID):
         for command in stage['launch']['commands']:
             for argument in command['argv_template']['arguments']:
                 if argument['kind'] == 'repo_path':
-                    path = view / argument['value']
-                    if path.is_file():
-                        artifacts[argument['value']] = {'path': argument['value'], 'sha256': locator(path)['sha256']}
+                    path = Path(argument['value'])
+                    raw = files.get(path)
+                    if raw is None:
+                        raw = optional_file(kit / path.relative_to(pack) if path.is_relative_to(pack) else path)
+                    if raw is not None:
+                        artifacts[path.as_posix()] = {'path': path.as_posix(), 'sha256': hashlib.sha256(raw).hexdigest()}
     tree['external_inputs'] = {'manifests': manifests, 'artifacts': [artifacts[k] for k in sorted(artifacts)]}
-    write(pack / 'plan_tree.json', tree)
-    (pack / 'plan_tree.sha256').write_text(locator(pack / 'plan_tree.json')['sha256'] + '  plan_tree.json\n')
-    write(session / 'staging/measurement-view.json', {
-        'source_measurement_root': str(source), 'measurement_root': str(view),
-        'source_tree': locator(source / kit / 'plan_tree.json'), 'launch_template':
-            locator(source / 'configs/campaigns/d117_floor_qwen3-1p7b_v5/plan_tree.json'),
-        'staged_tree': locator(pack / 'plan_tree.json'),
-        'changes': ['arm_attachments.launch: existing fourteen-binding interface; kit root leaves',
-                    'pack directory spelling: governed b6_layout.packs[0]',
-                    'dispatched configs: byte-identical pack-local copies; argv/manifests/science relocated together',
-                    'arm_attachments.identity_pin_projection: derived inventory; unprojected runtime pins',
-                    'external_inputs: canonical reference IDs/descriptors and dispatched file pins',
-                    'bracket reservation --plan: this pack collection_plan.json',
-                    'plan_tree.sha256: exact staged tree bytes'],
-        'ledger': "the checkout's own runs/ ledger, linked; head pin an identical copy; never fabricate a missing ledger",
-        'read_only_source': False})
-    return view, pack
+    tree_path = pack / 'plan_tree.json'
+    files[tree_path] = encoded_json(tree)
+    files[pack / 'plan_tree.sha256'] = (hashlib.sha256(files[tree_path]).hexdigest() + '  plan_tree.json\n').encode()
+    return files, tree
 
 
 def important_capacity(root, *, run=subprocess.run):

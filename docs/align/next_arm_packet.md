@@ -24,6 +24,13 @@ check and its diagnostic basis. Invalid root schemas, missing commits or mismatc
 record/series identity refuse before a packet can be built.
 
 Pass the resulting JSON to `align_v4_session.py install --next-arm-triage`.
+For a staged C1 arm, the lead commits the exact resulting JSON as
+`series/c1-next-arm.json` in the prepared source checkout. The consumer
+derives the packet's transport pin from that Git blob at source HEAD. It
+compares the supplied bytes with the pin before decoding. Use the staged
+path `measurement/series/c1-next-arm.json` or a byte-identical file inside
+the source checkout. The packet still identifies its earlier series and
+predecessor commits for independent rebuild.
 
 **A packet is a pointer, never trusted data.** At the arm, `arm_checks` rebuilds the packet with
 `build_packet` from the identities the supplied packet names (`record_commit`, `record_path`,
@@ -167,6 +174,14 @@ state at `--series-commit`, with:
   the staged campaign argv with the writer's dispatch resolver and checks
   order manifest and config digests, including scaffold stages. The C1
   roster count and sentinel positions come from the ordered science IDs.
+  The packet's `staged_inventory` binds every staged input the consumer opens,
+  including the exact regenerated launch tree, original and relocated kit
+  files, derivation and other file inputs declared by the stage graph, and
+  the registered code and configuration artifacts. It records missing
+  registered artifacts separately. The consumer checks each digest before
+  decoding and hands parsers the same verified bytes. A request for an
+  unlisted input refuses before opening it. Prepare's session plan and live
+  control inputs belong outside the immutable measurement view.
   For the W1 desk check, the C1 consumer hashes the artifact bytes seen in
   the staged view. Links resolve within that view and its prepared source
   checkout. A matching copy has the same digest. An escaping link or a

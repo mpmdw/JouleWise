@@ -29,7 +29,7 @@ from joulewise.b5 import plan
 from joulewise.b6 import registration
 from tests.test_b5_driver import Harness, fake_monitor_argv
 from tests.align.test_v4_cadence import arm_seams
-from tests.align.v4_registration_fixtures import span_aware_watchdog
+from tests.align.v4_registration_fixtures import fixture_c1_binding, localize_c1_artifacts, span_aware_watchdog
 from tests.align.test_v4_kit import ROOT, FakeArmHost
 
 
@@ -493,7 +493,8 @@ class FakeWorld:
                                last_desk_passed_artifact_set_sha256=v4_registration.artifact_set_digest(m),
                                valid_until_epoch_s=1000.0, now_epoch_s=500.0, commit_check=lambda root, commit: True)
         if self.name == 'C1':
-            packet['c1_kit'], _ = s.read_c1_kit(m)
+            localize_c1_artifacts(m)
+            packet['c1_kit'] = fixture_c1_binding(m)
         # The source builder is separately checked against its exact output;
         # synthetic model/power readiness intentionally differs from a native kit.
         with ExitStack() as stack, redirect_stdout(io.StringIO()):
@@ -524,8 +525,6 @@ class FakeWorld:
                 return_value={'ok': True, 'reasons': [], 'synthetic': True}))
             stack.enter_context(patch.object(session, 'held_window_check',
                 return_value={'ok': True, 'reasons': [], 'synthetic': True}))
-            stack.enter_context(patch.object(v4_registration, 'staged_artifact_set_digest',
-                side_effect=lambda view, source: v4_registration.artifact_set_digest(source)))
             stack.enter_context(patch.object(h, 'read', side_effect=physical_inventory))
             # The chain replay stages t0 in the past to avoid an eight-minute
             # wait. The pre-arm clock is earlier; the real preflight still reads
