@@ -1,4 +1,27 @@
-"""Read-only R0 host probes. No model imports or downloads."""
+"""Read-only R0 host probes. No model imports or downloads.
+
+R0's only authority is its final verdict over the complete sample series.
+A sampler stall, a judged window longer than the limit, a census fault or a
+contention flag, latched at any time from the first admission to the end of
+the run, gives exit 2 and withheld publication (QuietGuard.finish, then
+QuietGuard.verify_publication).
+
+Foreground admission is advisory. It saves work that the final verdict
+would discard; it cannot make a run pass. Its last act before it returns
+clear re-reads the sampler's latch, the age of the newest sample (at most
+QuietGuard.MAX_WINDOW_S) and any windows completed while its own probes ran.
+The sampler runs concurrently, so a fault can still latch after that read
+and before or during the work it admits. That race is accepted: the work
+runs, and the final verdict withholds the run.
+
+Window and interval arithmetic uses the monotonic clock. Wall time labels
+samples. Darwin's printed process start (lstart) is a wall-clock label and
+the only evidence of a birth time; it is converted with the wall offset
+measured by the read that listed it. A window in which the wall and
+monotonic clocks move apart by more than WALL_DIVERGENCE_LIMIT_NS is
+flagged, which withholds publication, so no unflagged window relies on a
+conversion across a wall step.
+"""
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass, replace
@@ -178,6 +201,17 @@ def _born_after(row, read, monotonic_ns, reference):
         return False
     shift = abs(_wall_offset_ns(read) - _wall_offset_ns(reference))
     return monotonic_ns + shift < _birth_floor_ns(row, read) <= read.finished.monotonic_ns
+
+
+# Wall and monotonic time may drift apart by slew within a window, not more.
+WALL_DIVERGENCE_LIMIT_NS = 500_000_000
+
+
+def _wall_divergence_ns(reads):
+    """How far the wall clock moved against the monotonic clock across a window's accounting reads."""
+    offsets = [stamp.wall_ns - stamp.monotonic_ns for read in reads if isinstance(read, contention.Snapshot)
+               for stamp in (read.started, read.finished, getattr(read, "admitted_finish", read.finished))]
+    return max(offsets) - min(offsets) if offsets else 0
 
 
 def _window_reads(reads, opening, current):
@@ -621,6 +655,23 @@ class QuietGuard:
         with self._snapshot_lock:
             return self._background_failure
 
+    def _sampler_state(self):
+        """The newest sample, whether completed windows await judgment, and the latch."""
+        with self._snapshot_lock:
+            latest = self._snapshots[-1] if self._snapshots else None
+            queued = len(self._snapshots) - 1 > self._judged_end
+            return latest, queued, self._background_failure
+
+    def _close_admission(self, receipt):
+        """Admission's last act before it returns clear. Advisory (module docstring)."""
+        _, queued, _ = self._sampler_state()
+        if queued:
+            # Windows completed while this admission's own probes ran.
+            self._cpu_interval(receipt)
+        latest, _, _ = self._sampler_state()
+        self._require_fresh_background(self._now(), latest)
+        self._require_background_clear()
+
     def _require_background_clear(self):
         """The last act of every clear verdict.
 
@@ -725,7 +776,23 @@ class QuietGuard:
             self.contention_flags.append({"monotonic_s": receipt.get("monotonic_s", interval["end_monotonic_s"]),
                                           "flag": flag, "interval": interval, "busy": fresh})
 
+    def _record_clock_flag(self, receipt, details):
+        if not details.get("wall_clock_diverged"):
+            return
+        interval = {key: details[key] for key in ("start_monotonic_s", "end_monotonic_s", "elapsed_s")}
+        key = (interval["start_monotonic_s"], interval["end_monotonic_s"], "wall_clock")
+        if key in self._flagged_windows:
+            return
+        self._flagged_windows.add(key)
+        flag = (f"wall clock moved {details['wall_clock_divergence_s']:.6g} s against the monotonic clock "
+                f"within this window (limit {WALL_DIVERGENCE_LIMIT_NS / 1e9:g} s)")
+        details["clock_flag"] = flag
+        receipt.setdefault("clock_flag", flag)
+        self.contention_flags.append({"monotonic_s": receipt.get("monotonic_s", interval["end_monotonic_s"]),
+                                      "flag": flag, "interval": interval, "busy": [], "kind": "wall_clock"})
+
     def _record_interval_flags(self, receipt, details, endpoint, endpoint_busy, lifetime_busy):
+        self._record_clock_flag(receipt, details)
         if (endpoint["start_monotonic_s"], endpoint["end_monotonic_s"]) == (
                 details["start_monotonic_s"], details["end_monotonic_s"]):
             self._record_cpu_flags(receipt, details, endpoint_busy + lifetime_busy)
@@ -763,8 +830,9 @@ class QuietGuard:
             self._process_observations = [read for read in self._process_observations if _read_finished_ns(read) >= cutoff]
 
     def _cpu_interval(self, receipt):
-        details = {"regressed_counters": [], "regressed_noncontaminant": []}
-        receipt["cpu_intervals"] = []
+        # Admission's closing read can judge a second batch into its receipt.
+        details = receipt.get("cpu_interval") or {"regressed_counters": [], "regressed_noncontaminant": []}
+        judged = receipt.setdefault("cpu_intervals", [])
         dwell_ns = prewindow.INTERVAL_S * 1_000_000_000
         busy = []
         with self._snapshot_lock:
@@ -773,8 +841,9 @@ class QuietGuard:
             pending, self._pending = self._pending, self._empty_pending()
             background_failure = self._background_failure
         if pending["census"]:
-            receipt["background_snapshots_monotonic_s"] = [row["monotonic_s"] for row in pending["census"]]
-            receipt["background_census"] = pending["census"]
+            receipt.setdefault("background_snapshots_monotonic_s", []).extend(
+                row["monotonic_s"] for row in pending["census"])
+            receipt.setdefault("background_census", []).extend(pending["census"])
         if pending["wall_clock_backwards"]:
             receipt["wall_clock_backwards"] = True
         opening = None
@@ -791,7 +860,7 @@ class QuietGuard:
                 reads = _window_reads(observations, snapshots[start], snapshots[end])
                 endpoint, endpoint_busy, lifetime_busy = self._judge_cpu_interval(
                     snapshots[start], snapshots[end], interval_details, reads=reads)
-                receipt["cpu_intervals"].append(interval_details)
+                judged.append(interval_details)
                 details = interval_details
                 self._judged_end, opening = end, start
                 busy.extend(endpoint_busy + lifetime_busy)
@@ -813,8 +882,8 @@ class QuietGuard:
             receipt["host_aggregate_cpu"] = [
                 {key: interval[key] for key in
                  ("outside_aggregate_cpu_s_per_s", "aggregate_above_0_05")}
-                for interval in receipt["cpu_intervals"]]
-            receipt["busy"] = busy
+                for interval in judged]
+            receipt["busy"] = receipt.get("busy", []) + busy
         if opening:
             # Keep the newest opening and everything after it; the next
             # window's opening can only be later.
@@ -857,6 +926,9 @@ class QuietGuard:
             "elapsed_s": sampled_elapsed, "contaminants": [],
             "unaccounted": raw["unaccounted"],
             "long_interval": sampled_elapsed > self.MAX_WINDOW_S})
+        divergence_ns = _wall_divergence_ns(reads)
+        details["wall_clock_divergence_s"] = divergence_ns / 1e9
+        details["wall_clock_diverged"] = divergence_ns > WALL_DIVERGENCE_LIMIT_NS
         # Journaled like CpuQuietProbe's aggregate: flagged, never judged.
         aggregate = measured["outside_aggregate_cpu_s_per_s"]
         details["outside_aggregate_cpu_s_per_s"] = aggregate
@@ -916,10 +988,13 @@ class QuietGuard:
         receipt = {"resolved_custody_parents": []}
         try:
             now = self._now()
-            # The throttle skips repeated probes, never a latched failure.
-            if (not force and now - self.last < 15 and not self._stop_sampler.is_set()
-                    and not self._latched_background_failure()):
-                return
+            # The throttle skips repeated probes. It never skips a latched
+            # failure, a completed window awaiting judgment or a stale sample.
+            if not force and now - self.last < 15 and not self._stop_sampler.is_set():
+                latest, queued, failure = self._sampler_state()
+                if (not failure and not queued and latest is not None
+                        and now - latest.finished.monotonic_ns / 1e9 <= self.MAX_WINDOW_S):
+                    return
             receipt["monotonic_s"] = now
             self.receipts.append(receipt)
             current = None
@@ -943,7 +1018,7 @@ class QuietGuard:
             self._admission_interval(receipt, current)
             self.last = self._now()
             self._start_sampler()
-            self._require_background_clear()
+            self._close_admission(receipt)
         except Exception as exc:
             refusal = self._record_refusal(receipt, exc)
             self.close()

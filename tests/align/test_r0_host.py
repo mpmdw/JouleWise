@@ -2511,6 +2511,157 @@ class R0LatchedCensusAdmissionTest(unittest.TestCase):
         self.assertIn("Errno 5", guard.failure)
 
 
+class R0AdvisoryAdmissionTest(unittest.TestCase):
+    """Lead ruling after audit 3: the final verdict is R0's only authority.
+
+    Admission is advisory. Its last act re-reads the latch, the age of the
+    newest sample and the windows completed during its own probes. Window
+    arithmetic is monotonic; a window whose wall clock moves more than
+    0.5 s against the monotonic clock is flagged.
+    """
+    setUp = R0HostTest.setUp
+    runner = R0HostTest.runner
+    trial = R0PublicationAuditTest.trial
+    admitted_guard = R0LatchedCensusAdmissionTest.admitted_guard
+
+    def run_model(self, case, model_type):
+        models = []
+
+        def factory(case, root):
+            models.append(model_type(case, root))
+            return models[-1]
+
+        return self.trial(case, factory=factory), models[0]
+
+    def test_audit3_admission_refuses_a_stale_sample_or_long_window_reached_during_its_probes(self):
+        # Audit round 3 stall_admission.py. Only the 45 s tick fires (and
+        # 105 s in the long cases), so the newest sample stays at 45 s. The
+        # disk unit's admission starts at 94.9 s; "during" cases cross the
+        # limit inside its launchctl probe. "boundary" ends at exactly 50.0 s.
+        from tests.align import test_r0_vs_l3_differential as fixture
+
+        class Stall(fixture.Fixture):
+            def move(self, end):
+                if self.phase == "disk_unit" and end == 44:
+                    end = {"stale_before": 95.1, "long_before": 105}.get(self.case.name, 94.9)
+                elif end in (56, 58):
+                    end += 52
+                super().move(end)
+
+            def run(self, argv, **kwargs):
+                if self.phase == "disk_unit" and self.now == 94.9 and argv[0] == "/bin/launchctl":
+                    super().move({"boundary": 95, "stale_during": 95.1, "long_during": 105}[self.case.name])
+                return super().run(argv, **kwargs)
+
+        refused_at_disk = ["baseline", "host_admit", "host_unit", "host_return", "disk_admit"]
+        for name, reason in (("stale_before", "stalled (50.1 s since the last)"),
+                             ("stale_during", "stalled (50.1 s since the last)"),
+                             ("long_before", "judged CPU window of 60.0 s exceeds 50 s"),
+                             ("long_during", "judged CPU window of 60.0 s exceeds 50 s"),
+                             ("boundary", "stalled (63.0 s since the last)")):
+            with self.subTest(case=name):
+                case = fixture.Case(name, schedule="multi", ticks=(45, 105) if name.startswith("long") else (45,))
+                result, _ = self.run_model(case, Stall)
+                # The final verdict withholds every case.
+                self.assertEqual((result["rc"], result["status"], result["published"]), (2, "refused", False), result)
+                self.assertIn(reason, result["reason"])
+                if name == "boundary":
+                    # A sample exactly 50.0 s old is within the limit: the advisory
+                    # admission lets disk work start, and the final verdict refuses.
+                    self.assertEqual(result["work_started"], ["host", "disk"])
+                else:
+                    self.assertEqual(result["work_started"], ["host"], result)
+                    self.assertEqual(result["accepted"], refused_at_disk)
+
+    def stepped(self, step_at, step_s, rows=None):
+        from tests.align import test_r0_vs_l3_differential as fixture
+
+        class Stepped(fixture.Fixture):
+            def wall_ns(self):
+                return super().wall_ns() + (int(step_s * 1e9) if self.now >= step_at else 0)
+
+            def processes(self):
+                return [*super().processes(), *(rows(self.case, self.now) if rows else ())]
+
+        return Stepped
+
+    def test_audit3_forward_wall_step_flags_the_window_and_withholds(self):
+        # Audit round 3 wall_step.py. A worker born at 11 s is listed once, by
+        # the 15 s accounting read, with 1.80 CPU-s, and has gone by 30 s.
+        # "step": the wall clock jumps 2 s forward at 10 s, so ps prints the
+        # start as 13 s. 9c01174a6 published that run with no flag.
+        from tests.align import test_r0_vs_l3_differential as fixture
+
+        def rows(case, now):
+            if 11 <= now < 20:
+                yield (fixture.PID, 13 if case.name == "step" else 11, 180, fixture.WORKER, "/fixture/mdworker_shared")
+
+        for name in ("stable", "step"):
+            with self.subTest(case=name):
+                result, model = self.run_model(fixture.Case(name, end=40),
+                                               self.stepped(10, 2 if name == "step" else 0, rows))
+                self.assertEqual((result["rc"], result["status"], result["published"]), (2, "refused", False), result)
+                clock = [(f["interval"]["start_monotonic_s"], f["interval"]["end_monotonic_s"])
+                         for f in model.guard.contention_flags if f.get("kind") == "wall_clock"]
+                if name == "step":
+                    # The 0-30 s sampler window and the 0-40 s admission window
+                    # both contain the step; each is flagged.
+                    self.assertEqual(clock, [(0.0, 30.0), (0.0, 40.0)])
+                    self.assertIn("wall clock moved 2 s", result["reason"])
+                else:
+                    self.assertEqual(clock, [])
+                    self.assertIn((0.0, 30.0, fixture.PID), [flag[:3] for flag in result["flags"]], result)
+                self.assertEqual(result["recorded"], result["guard_count"])
+
+    def test_wall_clock_divergence_flags_a_window_only_above_half_a_second(self):
+        # A quiet host. The wall clock steps at 10 s, inside the 0-30 s window.
+        from tests.align import test_r0_vs_l3_differential as fixture
+
+        for step_s, flagged in ((0.49, False), (-0.49, False), (0.51, True), (-0.51, True)):
+            with self.subTest(step_s=step_s):
+                result, model = self.run_model(fixture.Case(f"step_{step_s}", end=40), self.stepped(10, step_s))
+                clock = [f for f in model.guard.contention_flags if f.get("kind") == "wall_clock"]
+                if flagged:
+                    self.assertEqual((result["rc"], result["status"], result["published"]), (2, "refused", False))
+                    self.assertEqual([(f["interval"]["start_monotonic_s"], f["interval"]["end_monotonic_s"])
+                                      for f in clock], [(0.0, 30.0), (0.0, 40.0)])
+                    self.assertIn(f"wall clock moved {abs(step_s):g} s", result["reason"])
+                else:
+                    self.assertEqual((result["rc"], result["status"], result["published"], result["flags"]),
+                                     (0, "pass", True, []), result)
+                    self.assertEqual(clock, [])
+                self.assertEqual(result["recorded"], result["guard_count"])
+
+    def test_throttled_tick_does_not_skip_a_stale_sample_or_a_completed_window(self):
+        # The newest sample is from 30 s. An admission at 70 s finds it 40 s
+        # old and returns clear. A tick within 15 s of it used to skip.
+        for case, reason in (("stale", r"background snapshots stalled \(54.0 s"),
+                             ("long_window", r"judged CPU window of 51.0 s exceeds")):
+            with self.subTest(case=case):
+                guard, clock, _ = self.admitted_guard()
+                clock.now = 70
+                guard.check(force=True)
+                if case == "long_window":
+                    clock.now = 81
+                    guard._background_snapshot()  # one sampler cycle, 51 s after the last
+                    clock.now = 82
+                else:
+                    clock.now = 84
+                self.assertLess(clock.now - guard.last, 15)
+                with self.assertRaisesRegex(Refused, reason):
+                    guard.check()
+                self.assertRegex(guard.failure, reason)
+
+        # A fresh sample and nothing awaiting judgment: the tick still skips.
+        guard, clock, _ = self.admitted_guard()
+        clock.now = 40
+        guard.check(force=True)
+        receipts = len(guard.receipts)
+        clock.now = 50
+        self.assertIsNone(guard.check())
+        self.assertEqual(len(guard.receipts), receipts)
+
+
 class R0ProcessIdentityTest(unittest.TestCase):
     """Audit round 2 MED: the arguments table's PID is not a process identity."""
     trial = R0PublicationAuditTest.trial
@@ -2631,15 +2782,19 @@ class R0ProcessIdentityTest(unittest.TestCase):
             elif now >= 15.005 and "reused" in case.name:
                 yield (fixture.PID, 15.005 - 5, 0, "ordinary", "ordinary")
 
+        # The step itself flags the 0-30 s window and withholds every run
+        # (lead ruling after audit 3). What differs is the worker's flag.
         for name, busy in (("exited_90", True), ("reused_90", True), ("reused_80", False)):
             with self.subTest(case=name):
-                result, _ = self.run_tables(fixture.Case(name, end=40), self.tables(
+                result, model = self.run_tables(fixture.Case(name, end=40), self.tables(
                     rows, slow_reads=(15, 16), wall_step=(10, -5)))
+                self.assert_withheld(result)
+                self.assertIn((0.0, 30.02), [(f["interval"]["start_monotonic_s"], f["interval"]["end_monotonic_s"])
+                                             for f in model.guard.contention_flags if f.get("kind") == "wall_clock"])
                 if busy:
-                    self.assert_withheld(result)
                     self.assertIn((0.0, 30.02, fixture.PID), [flag[:3] for flag in result["flags"]], result)
                 else:
-                    self.assertEqual((result["rc"], result["published"], result["flags"]), (0, True, []), result)
+                    self.assertEqual(result["flags"], [], result)
 
     def test_arguments_only_pid_sighting_reads_the_same_as_an_argument_change(self):
         # Resolved for PR #824: a PID listed by the arguments table alone does
@@ -2788,10 +2943,15 @@ class R0ProcessIdentityTest(unittest.TestCase):
                     self.assertEqual((result["rc"], result["published"], result["flags"]), (0, True, []), result)
 
         # A 5 s backward wall step at 35 s, after the sighting. The process
-        # born at 40 s clears the sighting by more than the step.
-        result, _ = self.run_tables(fixture.Case("stepped_40", end=65), self.tables(
+        # born at 40 s clears the sighting by more than the step, so no
+        # process is flagged. The step flags its windows and withholds the run.
+        result, model = self.run_tables(fixture.Case("stepped_40", end=65), self.tables(
             rows, slow_reads=(0, 0), wall_step=(35, -5)))
-        self.assertEqual((result["rc"], result["published"], result["flags"]), (0, True, []), result)
+        self.assert_withheld(result)
+        self.assertEqual(result["flags"], [], result)
+        self.assertNotIn("ordinary", result["reason"])
+        self.assertTrue(all(f.get("kind") == "wall_clock" for f in model.guard.contention_flags))
+        self.assertTrue(model.guard.contention_flags)
 
     def test_later_workers_name_does_not_reach_back_to_an_earlier_process(self):
         # An ordinary process uses 0.60 CPU-s and exits at 32.599 s. A named
@@ -2962,8 +3122,14 @@ class R0QuietIntervalTest(unittest.TestCase):
                     self._background_snapshot()
                 return super()._cpu_interval(receipt)
         guard_type = DrivenGuard if driven else FixtureGuard
+        # A wall clock that moves with the fake monotonic clock. Its origin
+        # is hours after OLD_START and NEW_START. Tests that need another
+        # wall clock replace guard.wall_clock_ns.
+        from datetime import datetime
+        wall0 = datetime(2026, 11, 7, 0, 0, 0).timestamp()
         guard = guard_type([], run=run, inspect_custody=lambda **kw: Census(),
-                           clock=clock, sleep=clock.sleep, host_reader=None)
+                           clock=clock, sleep=clock.sleep, host_reader=None,
+                           wall_clock_ns=lambda: int((wall0 + clock()) * 1e9))
         # The real daemon thread never fires during a test; ticks are driven.
         guard.SNAPSHOT_CADENCE_S = 3600
         self.addCleanup(guard.close)
@@ -3033,7 +3199,7 @@ class R0QuietIntervalTest(unittest.TestCase):
                 guard, _, calls = self.guard(
                     [cpu_table(), cpu_table(), cpu_table((pid, NEW_START, "0:00.60", name))],
                     diagnostic=f"{pid} {pcpu} /usr/libexec/{name}\n", clock=clock)
-                with patch("joulewise.align.r0_host.time.time_ns",
+                with patch.object(guard, "wall_clock_ns",
                            side_effect=lambda: int((wall_end - 60 + clock()) * 1e9)):
                     guard.check(force=True)
                     clock.now = 60
@@ -3055,7 +3221,7 @@ class R0QuietIntervalTest(unittest.TestCase):
                 snapshot = cpu_table((pid, NEW_START, "0:00.60", name))
                 guard, clock, _ = self.guard([snapshot, snapshot],
                                              diagnostic=f"{pid} {pcpu} {name}\n")
-                with patch("joulewise.align.r0_host.time.time_ns",
+                with patch.object(guard, "wall_clock_ns",
                            side_effect=lambda: int((wall_start + clock()) * 1e9)):
                     guard.check(force=True)
                 self.assertFalse(guard.receipts[-1]["busy"])
@@ -3102,7 +3268,7 @@ class R0QuietIntervalTest(unittest.TestCase):
         guard, clock, _ = self.guard([cpu_table(), cpu_table((42, NEW_START, "0:01.60", "photoanalysisd"))])
         from datetime import datetime
         wall = datetime(2026, 11, 6, 18, 5, 15).timestamp()
-        with patch("joulewise.align.r0_host.time.time_ns",
+        with patch.object(guard, "wall_clock_ns",
                    side_effect=lambda: int((wall + clock()) * 1e9)):
             self.assert_flagged(guard, "photoanalysisd.*CPU-s/s")
 
@@ -3139,7 +3305,7 @@ class R0QuietIntervalTest(unittest.TestCase):
                 guard, clock, _ = self.guard([
                     cpu_table((42, OLD_START, "1:00.00", "mdworker_shared")),
                     cpu_table((42, NEW_START, cpu, "mdworker_shared"))])
-                with patch("joulewise.align.r0_host.time.time_ns", side_effect=lambda: int(
+                with patch.object(guard, "wall_clock_ns", side_effect=lambda: int(
                         (datetime(2026, 11, 6, 18, 5, 0).timestamp() + clock()) * 1e9)):
                     if refuses:  # R0-L3: flagged, not refused
                         self.assert_flagged(guard, "mdworker_shared.*CPU-s/s")
@@ -3478,7 +3644,10 @@ class R0QuietIntervalTest(unittest.TestCase):
         clock.now = 30 + 50
         guard.check(force=True)  # the stall bound is inclusive
         clock.now = 30 + 51
-        guard.check()  # per-token calls stay throttled to one judgement per 15 s
+        # A throttled tick skips repeated probes, never a stale sample (lead
+        # ruling after audit 3). The refusal then latches for every caller.
+        with self.assertRaisesRegex(Refused, "background snapshots stalled \\(51.0 s since the last\\)"):
+            guard.check()
         with self.assertRaisesRegex(Refused, "background snapshots stalled \\(51.0 s since the last\\)"):
             guard.check(force=True)
 
@@ -3590,7 +3759,8 @@ class R0QuietIntervalTest(unittest.TestCase):
                 return subprocess.CompletedProcess(argv, 0, "1 0.0 /sbin/launchd\n", "")
             return self.runner(argv, **kwargs)
         guard = QuietGuard([], run=run, inspect_custody=lambda **kw: Census(), clock=clock,
-                           sleep=clock.sleep, host_reader=None)
+                           sleep=clock.sleep, host_reader=None,
+                           wall_clock_ns=lambda: 1_800_000_000_000_000_000 + round(clock() * 1e9))
         self.addCleanup(guard.close)
         guard.check(force=True)
         self.assertEqual(guard.receipts[-1]["cpu_interval"]["elapsed_s"], 30)
@@ -3632,7 +3802,7 @@ class R0QuietIntervalTest(unittest.TestCase):
         guard, clock, _ = self.guard([
             cpu_table(), cpu_table((42, birth, "0:02.00", "python"))],
             diagnostic=lambda now: "42 0.0 python mdworker_task.py\n" if now else "")
-        with patch("joulewise.align.r0_host.time.time_ns",
+        with patch.object(guard, "wall_clock_ns",
                    side_effect=lambda: int((wall + clock()) * 1e9)):
             self.assert_flagged(guard, "python.*CPU-s/s")
         self.assertEqual(guard.receipts[-1]["cpu_interval"]["contaminants"][0]["matched_on"], ["args"])
@@ -3647,7 +3817,7 @@ class R0QuietIntervalTest(unittest.TestCase):
         # one-quantum backwards step positive; it is not a judgment threshold.
         wall = 4 * prewindow.INTERVAL_S * 1_000_000_000
         backwards = wall - int(contention.PS_TIME_QUANTUM_S * 1e9)
-        with patch("joulewise.align.r0_host.time.time_ns", side_effect=[wall] * 4 + [backwards] * 2):
+        with patch.object(guard, "wall_clock_ns", side_effect=[wall] * 4 + [backwards] * 2):
             guard.check(force=True)
         self.assertTrue(guard.receipts[-1]["wall_clock_backwards"])
         entry = guard.receipts[-1]["cpu_interval"]["contaminants"][0]
@@ -3658,7 +3828,7 @@ class R0QuietIntervalTest(unittest.TestCase):
         guard, _, _ = self.guard([
             cpu_table(), cpu_table((42, OLD_START, "0:01.80", "mdworker_shared"))])
         wall = 2_000_000_000_000_000_000
-        with patch("joulewise.align.r0_host.time.time_ns",
+        with patch.object(guard, "wall_clock_ns",
                    side_effect=[wall] * 4 + [wall - 2_000_000_000] * 2):
             self.assert_flagged(guard, "mdworker_shared 0.06 CPU-s/s")
         self.assertNotIn("missed by the first snapshot",
