@@ -5,7 +5,7 @@ and **5 kits on pin B** (`f2-stab-49..53`, 60 positions). Each kit follows
 the last admitted kit on its pin, including all twelve ordered cells and
 the frozen paths. The existing generator selects the first layout match
 whose master seed and derived leg seeds are distinct from one another and
-available in the pre-mint public campaign kit inventory. Earlier successor
+unused in the pre-mint public campaign kit inventory. Earlier successor
 seeds enter that inventory before the next draw. Every mint row enters the
 wider roster under RL-190 §1.3. The base population remains kits 01–14.
 [Kit index](../research-audits/2026-11-10-fable/evidence/align-v4-campaign/f2-stab/KITS.json)
@@ -44,25 +44,32 @@ scenarios. The ledger marks each projected start for which the queue is
 still valid. Its post-expiry rows show the inventory-only forecast.
 [Capacity ledger](../research-audits/2026-11-10-fable/evidence/align-v4-campaign/filler-capacity-20261121.tsv)
 
-## NEEDS_SPEC
+## Successor queues
 
-Both admitted pins rejected the requested literal
-`not_before: 2026-11-26T00:00:00-08:00`. Their queue schema accepts an
-earliest local t0 date in `YYYY-MM-DD` form. The proposed encoding is
-`2026-11-26`, with the midnight PST bound in the README and admission item.
-Pinned validators accepted all 444 scratch candidates using that encoding.
-Release of `fillers-w3` and use of the draft item below await the lead's
-encoding ruling.
+The lead confirmed `spans[0].not_before` is `"2026-11-26"` on both pins.
+The earliest t0 is `2026-11-26T00:00:00-08:00`. At
+`2026-11-25T23:59:59-08:00` the date gate fails. At midnight PST it
+passes. Dispatch still requires predecessor exhaustion and the existing
+rank and time-band checks. Each of the 444 files contains one position
+and expires at `2026-12-15T12:35:29-08:00`.
+[Queue digests and regeneration](../research-audits/2026-11-10-fable/evidence/align-v4-campaign/fillers-w3/README.md)
 
 ## Verification
 
-The eight audit tooling tests passed. The audit `validate_kit.py` passed
+The nine audit tooling tests passed. The audit `validate_kit.py` passed
 69 invocations across 37 kits, with both item 463 windows on all 32 A
 kits and no window on all 5 B kits. Each invocation verified the kit
 bytes, the frozen paths and the ordered cells against its pinned runner.
 The ledger recount passed for all 636 rows, per-pin order, clock bands,
-ranks, expiry and nonoverlapping dispatches. Local checks use synthetic
-planning and the audit tooling. The draft PR carries hosted repository CI.
+ranks, expiry and nonoverlapping dispatches.
+
+The frozen `validate-queue` entry points accepted 384 A queues and 60 B
+queues. A full timestamp substituted into `not_before` was refused by
+each pin. The local-date comparison failed at 23:59:59 and passed at
+midnight. The README command reproduced every queue byte for byte, and
+the published-queue regression checked all 444 listed SHA-256 values.
+Local checks use synthetic planning and the audit tooling. The draft PR
+carries hosted repository CI.
 
 ## DRAFT RUN_STATE item
 
@@ -72,9 +79,12 @@ planning and the audit tooling. The draft PR carries hosted repository CI.
   unspent successor position in kit and leg order on the eligible pin.
   Verify the selected `fillers-w3/README.md` queue digest and the
   `f2-stab/KITS.json` kit digest and pin before issuing. Each file names
-  one leg. Earliest start is 2026-11-26 00:00:00 PST. Queue expiry is
-  2026-12-15 12:35:29 PST. Obtain a lead renewal before starting on an
-  expired queue.
+  one leg. The earliest t0 is `2026-11-26T00:00:00-08:00`.
+  A t0 of `2026-11-25T23:59:59-08:00` fails the date gate. At midnight
+  PST the date gate passes, and predecessor exhaustion, rank and time
+  band still govern dispatch. Queue expiry is
+  `2026-12-15T12:35:29-08:00`. Obtain a lead renewal before starting on
+  an expired queue.
 - On pin A `2d347f721`, use kits 17–48 once kit 14's last position is
   spent. The first eligible A start of the local date is rank 1 and
   further A starts are rank 4. Select the actual-t0 window under item 463.

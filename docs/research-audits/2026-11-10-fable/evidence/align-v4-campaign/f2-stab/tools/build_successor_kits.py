@@ -1,7 +1,6 @@
 """Regenerate the RL-190 §1.3 stability mint and its single-position queues."""
 
 import argparse
-from datetime import date
 import json
 from pathlib import Path, PurePosixPath
 import tempfile
@@ -12,6 +11,7 @@ from build_qual_pin_kits import (
 )
 INTAKE = "a2abdebdf6074dd9dd2c4ed79e332427eaecbfd0"
 ROSTERS = (("f2-stab-14", range(17, 49)), ("f2-stab-16", range(49, 54)))
+NOT_BEFORE = "2026-11-26"
 EXPIRES = "2026-12-15T12:35:29-08:00"
 INDEX = (STABILITY / "KITS.json").relative_to(AUDIT)
 W2 = (CAMPAIGN / "fillers-w2").relative_to(AUDIT)
@@ -63,6 +63,9 @@ def readme(queues, not_before):
         "",
         f"The local start boundary is `{not_before}T00:00:00-08:00`. The pinned queue schema",
         f"stores it as the local date `{not_before}`. Queues expire at `{EXPIRES}`.",
+        "A t0 of `2026-11-25T23:59:59-08:00` fails the date gate. At midnight",
+        "PST the date gate passes. Dispatch still requires predecessor exhaustion",
+        "and the existing rank and time-band checks.",
         "",
         "Pin A `2d347f721` uses kits 17–48 after kit 14. Pin B `6e9d42f1d` uses",
         "kits 49–53 after kit 16. Select the next unspent leg in kit and leg order",
@@ -125,12 +128,12 @@ def generate(not_before=None):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     mode = parser.add_mutually_exclusive_group(required=True)
-    mode.add_argument("--not-before", type=date.fromisoformat, help="earliest local start date")
+    mode.add_argument("--not-before", choices=(NOT_BEFORE,), help="earliest local start date")
     mode.add_argument("--kits-only", action="store_true")
     parser.add_argument("--output-root", type=Path, default=AUDIT)
     parser.add_argument("--check", action="store_true")
     args = parser.parse_args()
-    artifacts = generate(args.not_before.isoformat() if args.not_before else None)
+    artifacts = generate(args.not_before)
     target_index = args.output_root / INDEX
     if not args.check and target_index.is_file():
         if target_index.read_bytes() not in (intake_blob(INDEX), artifacts[INDEX]):

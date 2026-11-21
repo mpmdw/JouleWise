@@ -1,0 +1,23 @@
+{
+ "schema": "joulewise.cadence_queue.v1",
+ "queue_id": "cq-f2-stab-28-l002",
+ "expires_at": "2026-12-15T12:35:29-08:00",
+ "halt": null,
+ "standing_notice": null,
+ "spans": [
+  {
+   "seq": 2,
+   "span_id": "f2-stab-28-l002",
+   "block_id": "f2-stab-28",
+   "kit": {
+    "path": "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/f2-stab/successors/f2-stab-28.v1.1.json",
+    "sha256": "205e7f2e51378cb15c362392f3c1d5a958e376d5be7fde274f02dc437a5222ff"
+   },
+   "legs": [
+    "L002"
+   ],
+   "attempt": 1,
+   "not_before": "2026-11-26"
+  }
+ ]
+}
