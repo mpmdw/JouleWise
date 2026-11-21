@@ -693,6 +693,34 @@ class Stage1BindingHistoryTests(unittest.TestCase):
         self._check_binding_history("lm-stab-02")
 
 
+class InstrumentWithEmptySpan(fixture.World):
+    span_id = "invented-closed-empty"
+
+    def declare_unrun_positions(self):
+        super().declare_unrun_positions()
+        key = self.closed_position = min(self.dropped)
+        kit_id = key.split("/")[0]
+        kit = self.repo / "kits" / f"{kit_id}.json"
+        prefix = f"ops/{self.span_id}"
+        receipt = f"{prefix}/runner_receipt.json"
+        issue = {"kit_id": kit_id, "kit_sha256": fixture.sha(kit.read_bytes()), "span_id": self.span_id}
+        close = dict(issue, runner_pin=fixture.read(kit)["frozen"]["commit"], closed=True,
+                     member_legs=[], unrun=[key])
+        fixture.put(self.repo / f"{prefix}/issue.json", issue)
+        fixture.put(self.repo / receipt, close)
+        drop = self.repo / "drops" / f"{key}.json"
+        declaration = fixture.read(drop)
+        queue = declaration.pop("queue")
+        self.dropped[key] = "ended_without_member"
+        fixture.put(drop, dict(declaration, reason=self.dropped[key], receipt=receipt))
+        old = (f"The lead declares {key} dropped:queue_retired. No member exists or will exist. "
+               f"Evidence {queue} sha256={fixture.sha((self.repo / queue).read_bytes())}.")
+        new = (f"The lead declares {key} dropped:ended_without_member. No member exists or will exist. "
+               f"Evidence {receipt} sha256={fixture.sha(fixture.wire(close))}.")
+        state = self.repo / "RUN_STATE.md"
+        fixture.put(state, state.read_bytes().replace(old.encode(), new.encode(), 1))
+
+
 class ContentAddressedInstrumentTests(unittest.TestCase):
     def test_verifier_hashes_native_bytes_without_decoding(self):
         temporary = self.enterContext(TemporaryDirectory())
@@ -715,9 +743,10 @@ class ContentAddressedInstrumentTests(unittest.TestCase):
             f"invented-span/{name}": {"pinned_sha256": entry["sha256"], "observed_sha256": entry["sha256"]},
         }})
 
-    def _pinned_world(self):
+    def _pinned_world(self, *, world_type=fixture.World, empty_span_files=(), dc_omission=False,
+                      first_check=None):
         temporary = self.enterContext(TemporaryDirectory())
-        world = fixture.World(Path(temporary).resolve() / "world", fixture.IDS[0])
+        world = world_type(Path(temporary).resolve() / "world", fixture.IDS[0])
         witness = sorted(world.good)[0]
         support_path = world.copy / witness / "support.json"
         support = fixture.read(support_path)
@@ -732,18 +761,31 @@ class ContentAddressedInstrumentTests(unittest.TestCase):
             header = next(rows)
             retained = [row for row in rows if not 50 <= Decimal(row[0]) < 57]
         fixture.put(trace, fixture.csvbytes([header, *retained]))
+        if dc_omission:
+            point_support = world.copy / other / "support.json"
+            meta = fixture.read(point_support)
+            meta["meter_times"].remove(50)
+            meta["meter_counts"]["decoded"] = len(meta["meter_times"])
+            fixture.put(point_support, meta)
 
         custody = world.base / "pinned-copy"
         spans = []
         witness_stream = None
-        for number, (key, (op, receipt, _, _)) in enumerate(world.records.items(), start=1000):
+        records = [(key, op, receipt) for key, (op, receipt, _, _) in world.records.items()]
+        if empty_span_files:
+            receipt = fixture.read(world.repo / "ops" / world.span_id / "runner_receipt.json")
+            records.append((None, None, receipt))
+        for number, (key, op, receipt) in enumerate(records, start=1000):
             span = receipt["span_id"]
             operational = world.repo / "ops" / span
-            leg = f"legs/{op['leg_id']}"
-            inputs = {str(path.relative_to(operational)): path.read_bytes()
-                      for path in operational.rglob("*") if path.is_file()}
-            inputs.update({f"{leg}/{name}": (world.copy / key / name).read_bytes()
-                           for name in reader.VALUE_FILES})
+            if key is None:
+                inputs = {name: (operational / name).read_bytes() for name in empty_span_files}
+            else:
+                leg = f"legs/{op['leg_id']}"
+                inputs = {str(path.relative_to(operational)): path.read_bytes()
+                          for path in operational.rglob("*") if path.is_file()}
+                inputs.update({f"{leg}/{name}": (world.copy / key / name).read_bytes()
+                               for name in reader.VALUE_FILES})
             for name, data in inputs.items():
                 fixture.put(custody / span / name, data)
             if key == witness:
@@ -767,9 +809,12 @@ class ContentAddressedInstrumentTests(unittest.TestCase):
         manifest["inputs"] = {"pins": {"path": pin_name, "sha256": fixture.sha(fixture.wire(pins))}}
         fixture.put(world.man, manifest)
         state = world.repo / "RUN_STATE.md"
-        checks = "".join(f"\n{row['check_item']}. **Invented Check of {row['span_id']}.**\n\n"
-                         f"Offload manifest sha256 {row['offload_manifest_sha256']}.\n" for row in spans)
-        fixture.put(state, state.read_bytes() + checks.encode())
+        checks = []
+        for index, row in enumerate(spans):
+            sha = row["offload_manifest_sha256"]
+            claim = first_check(sha) if index == 0 and first_check else f"Offload manifest sha256 {sha}."
+            checks.append(f"\n{row['check_item']}. **Invented Check of {row['span_id']}.**\n\n{claim}\n")
+        fixture.put(state, state.read_bytes() + "".join(checks).encode())
         world.reg = world.book.seal("register the Check-bound instrument manifest")
 
         world.copy = custody
@@ -787,6 +832,74 @@ class ContentAddressedInstrumentTests(unittest.TestCase):
         world.save_row()
         world.book.seal("bind cold and copy authority after final registration")
         return world, witness, witness_stream, pins
+
+    def test_closed_empty_span_requires_check_pins_for_every_witness_file(self):
+        for names in ((), ("runner_receipt.json",), ("issue.json", "runner_receipt.json")):
+            with self.subTest(pinned_files=names):
+                world, _, _, _ = self._pinned_world(world_type=InstrumentWithEmptySpan, empty_span_files=names)
+                if len(names) == 2:
+                    fixture.Checks().stage1(world)
+                    self.assertEqual(fixture.read(world.stage)["positions"][world.closed_position]["disposition"],
+                                     "dropped:ended_without_member")
+                    self.assertEqual(fixture.reservation_boundary(self, world), [str(world.private)])
+                else:
+                    rc, out, _, events = fixture.invoke(world, "stage1")
+                    self.assertEqual((rc, out), (2, b""))
+                    self.assertFalse(any(kind == "open" for kind, _ in events))
+                    # The isolated hash verifier may create its scratch report.
+                    destinations = (world.stage.parent, world.private.parent, world.public.parent)
+                    self.assertFalse(any(kind == "write" and any(Path(path).is_relative_to(root)
+                                                               for root in destinations)
+                                         for kind, path in events), events)
+                    self.assertFalse(world.stage.exists() or world.public.exists() or world.private.exists())
+
+    def test_check_offload_digest_cannot_be_replaced_by_a_planning_digest(self):
+        wrong_digest = fixture.sha(b"an earlier invented offload plan")
+
+        def forged_check(expected):
+            return f"Offload manifest sha256 {wrong_digest}.\nSuperseded planning digest {expected}."
+
+        world, _, _, _ = self._pinned_world(first_check=forged_check)
+        fixture.Checks().refused(world, "stage1")
+        self.assertFalse(world.stage.exists() or world.public.exists() or world.private.exists())
+
+    def test_check_offload_digest_matches_all_printed_characters_and_is_unambiguous(self):
+        sha = "a" * 8 + "b" * 53 + "c" * 3
+        correct = f"Offload manifest sha256 {sha}."
+        doc = {"spans": [{"check_item": 12, "offload_manifest_sha256": sha}]}
+        cases = {
+            "full": (correct, True),
+            "abbreviated": ("- **Offload manifest SHA-256:** `aaaaaaaa…ccc`.", True),
+            "wrong_prefix": ("Offload manifest sha256 aaaaaaab...ccc.", False),
+            "wrong_suffix": ("Offload manifest sha256 aaaaaaaa...ccd.", False),
+            "duplicate": (f"{correct}\n{correct}", False),
+            "fenced": (f"~~~\n{correct}\n~~~", False),
+            "quoted": (f"> {correct}", False),
+        }
+        for case, (claim, admits) in cases.items():
+            with self.subTest(case=case):
+                text = f"12. **Invented span Check.**\n\n{claim}\n"
+                if admits:
+                    reader._require_input_checks(doc, text)
+                else:
+                    with self.assertRaises(reader.Refusal):
+                        reader._require_input_checks(doc, text)
+
+    def test_dc_ledger_omission_is_counted_before_any_value_parse(self):
+        world, _, _, _ = self._pinned_world(dc_omission=True)
+        fixture.Checks().stage1(world)
+        snapshot = reader.Snapshot(world.repo, world.look, "stage2")
+        census, qualified = reader.census(snapshot)
+        snapshot.check_stage1(census)
+        sources = reader.verify_gates(snapshot, qualified)
+        with patch.object(reader, "_sample", side_effect=AssertionError("value parsed before reconciliation")):
+            tables = reader.score(snapshot, sources, qualified, lambda: None)
+        mismatch_rows = dict.fromkeys(qualified, fixture.null("interval_ledger_mismatch"))
+        self.assertEqual(tables, dict.fromkeys(("hold", "turn", "gain", "edges"), mismatch_rows))
+        expected = snapshot.public_record(census)
+        prebound = snapshot.validate_public(expected, expected)
+        public = json.loads(description_worker._public_after_scoring(snapshot, expected, prebound, tables))
+        self.assertEqual((public["n_legs"], public["n_interval_ledger_mismatch"]), (2, 2))
 
     def _check_pinned_public_gate(self, world):
         trace = """

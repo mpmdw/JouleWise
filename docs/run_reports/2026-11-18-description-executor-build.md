@@ -1523,3 +1523,39 @@ zero skips, and 1,040 nonpassing IDs in the recorded v5 baseline.
 suite owner retains the next freeze. The integration owner retains
 the PR #795 host-ID and native inventory gates.
 [Resolved public contract](https://github.com/mpmdw/JouleWise/blob/d89b95c9f22a382b756108361c556d34fc6b385b/docs/research-audits/2026-11-10-fable/RESEARCH-LEAD-DECISIONS.md#L23368-L23386) · [Regressions](../../tests/test_cadence_description_preflight.py) · [Protected blob comparison](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/rl194b-standalone-protected.tsv)
+
+## 2026-11-20 RL-194b audit round 1
+
+The branch and draft PR #868 both started at
+`c255d7849f5205c458e7bae2b2e848b375807c68`. The audit supplied
+three HIGH findings and one MED finding on that head. The five
+older reports document the earlier native loader, interval gap,
+coverage ordering, and recovery regressions.
+[Round 1 audit](/Volumes/JW-EXT/scratch/pl-d-desc-looks-executor/audit-1/FINAL-MESSAGE.md)
+
+| Finding | Repair and synthetic regression |
+| --- | --- |
+| HIGH. Unpinned closed drop span | Check for a pin before opening any receipt-backed source file, including a drop receipt and its issue. Include closed empty spans in the exact runner-bound span inventory. The reproduction refuses with neither witness pinned and with only the receipt pinned. With both pinned, the drop stays `ended_without_member` and stage 2 reaches the registered reservation. |
+| HIGH. A superseded planning digest could authenticate a Check | Require one visible field explicitly labelled as the offload manifest SHA-256 in the numbered Check item. Bind a full digest or every printed prefix and suffix character of the historical abbreviation. The reproduction supplies the pinned digest as a superseded plan and a different offload digest. Field controls cover ambiguity, fenced prose, and wrong prefix and suffix. |
+| HIGH. A sparse stability projection could conceal recorded samples | Reconcile exact recorded rail identities before applying coverage in all looks. The authenticated 16-leg `lm-stab-01` case has 600 recorded GPU samples and a 540-interval projection. It takes the existing stability disagreement refusal before the first numeric parse. A nominal slot with no recording still contributes to a coverage deficit. |
+| MED. A recorded DC point omitted from the instrument support was found after rail values were parsed | Check ordered DC stamp metadata at confined leg intake when the support marks the stream present and clean. Keep the value parser behind `interval_values`. The independent rail and DC omission witnesses each yield four private `interval_ledger_mismatch` rows, retain both members, and contribute exactly two mismatches to the writer's count. The counter-disagreement control confirms that a conflicting decoded count cannot mask an observed omission. |
+
+The labelled Check field is the synthetic input contract for this
+replay. The integration owner still supplies the real Check-bound
+inventory and host-ID gate. Local reservation testing intercepts
+`mkdir`, so the local replay verifies the gate and the writer's
+bytes independently. The eight frozen v5 entries and 53 protected
+paths match the intake head. The shared #795 pin reader and the
+v2 manifest schema retain the same blobs.
+
+The final observer checks writes to the stage-1 and publication
+destinations. The hash-only verifier's scratch report belongs to
+the preflight process and is outside those destinations. The
+value-access tests check that metadata indexing cannot retrieve
+numeric fields from a refused interval.
+
+**NEEDS_SPEC: none for the reported findings.** The intake hosted
+run finished with the same 1,040 recorded nonpassing frozen IDs.
+The independent successor freeze and PR #795 hardware gate remain
+lead dependencies.
+[Local gate and interval replay](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/rl194b-audit1-final-focus.log) · [Protected blob comparison](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/rl194b-audit1-protected.tsv) · [Intake hosted CI](https://github.com/mpmdw/JouleWise/actions/runs/44841747980) · [Current PR checks](https://github.com/mpmdw/JouleWise/pull/868/checks)

@@ -12,11 +12,11 @@ import sys
 import tempfile
 
 if __package__:
-    from .custody_pins import PinRefusal, PinnedCustody, check_chain_problems, load_pin_list
+    from .custody_pins import PinRefusal, PinnedCustody, load_pin_list
 else:
     # The verifier runs with -I and imports neither the package nor a decoder.
     sys.path.insert(0, str(Path(__file__).resolve().parent))
-    from custody_pins import PinRefusal, PinnedCustody, check_chain_problems, load_pin_list
+    from custody_pins import PinRefusal, PinnedCustody, load_pin_list
 
 
 @contextmanager

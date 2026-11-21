@@ -4,6 +4,7 @@ import csv
 from pathlib import Path
 from tempfile import TemporaryDirectory
 import unittest
+from unittest.mock import patch
 
 from joulewise.cadence_looks import description as reader
 from tests import test_desc_looks_acceptance as fixture
@@ -34,6 +35,16 @@ def _select_meter_points(directory, keep, *, poison=None):
 
 
 class DCCoverageTests(unittest.TestCase):
+    def test_dc_recording_detects_omitted_stamp_even_when_decoder_count_disagrees(self):
+        with TemporaryDirectory() as temporary:
+            leg = fixture.TraceLeg(Path(temporary))
+            leg.meta["meter_times"].remove(50)
+            self.assertNotEqual(leg.meta["meter_counts"]["decoded"], len(leg.meta["meter_times"]))
+            with patch.object(reader, "_sample", side_effect=AssertionError("value parsed before reconciliation")):
+                reports = fixture.print_one(leg.signal(), fixture.IDS[0])
+            self.assertEqual(reports, dict.fromkeys(("hold", "turn", "gain", "edges"),
+                                                    fixture.null("interval_ledger_mismatch")))
+
     def test_sparse_clean_stream_reports_interval_coverage_before_value_access(self):
         with TemporaryDirectory() as temporary:
             directory = Path(temporary)

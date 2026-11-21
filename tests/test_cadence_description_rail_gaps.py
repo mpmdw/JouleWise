@@ -52,6 +52,37 @@ def _with_rail_intervals(directory, rows):
 
 
 class RailGapPeriodTests(unittest.TestCase):
+    def test_stability_reconciles_recording_before_testing_sparse_support(self):
+        with TemporaryDirectory() as temporary, \
+                patch.object(reader.socket, "gethostname", return_value=fixture.FIXTURE_BOARD), \
+                patch.dict(os.environ, R190_NODENAME=fixture.FIXTURE_BOARD):
+            world = fixture.World(Path(temporary).resolve() / "world", fixture.IDS[1])
+            key = min(world.good)
+            folder = world.copy / key
+            trace = folder / fixture.RAIL_FILE
+            original = trace.read_bytes()
+            with trace.open(newline="") as stream:
+                rows = csv.DictReader(stream)
+                count = sum(row["source"] == "powermetrics" and row["rail"] == "gpu_power"
+                            and 0 <= Decimal(row["interval_start_s"]) < 600 for row in rows)
+            self.assertEqual(count, 600)
+            ledger = folder / "support.json"
+            support = fixture.read(ledger)
+            support["rail_intervals"] = [interval for i, interval in enumerate(support["rail_intervals"]) if i % 10]
+            self.assertEqual(sum(0 <= start < 600 for start, _ in support["rail_intervals"]), 540)
+            fixture.put(ledger, support)
+            fixture.copy_attestation(world)
+            fixture.Checks().stage1(world)
+            snapshot = reader.Snapshot(world.repo, world.look, "stage2")
+            census, qualified = reader.census(snapshot)
+            snapshot.check_stage1(census)
+            self.assertEqual((len(qualified), min(qualified)), (16, key))
+            sources = reader.verify_gates(snapshot, qualified)
+            with patch.object(reader, "_sample", side_effect=AssertionError("value parsed before reconciliation")):
+                with self.assertRaisesRegex(reader.IntervalLedgerMismatch, "recorded rail interval contradicts support"):
+                    reader.score(snapshot, sources, qualified, lambda: None)
+            self.assertEqual(trace.read_bytes(), original)
+
     def test_authenticated_scorers_preserve_recorded_interval_membership(self):
         with patch.object(reader.socket, "gethostname", return_value=fixture.FIXTURE_BOARD), \
                 patch.dict(os.environ, R190_NODENAME=fixture.FIXTURE_BOARD):
@@ -260,9 +291,10 @@ class RailGapPeriodTests(unittest.TestCase):
                     opens = []
                     signal = reader.Signals(support, {"power_trace.csv": directory / "power_trace.csv"},
                                             lambda: opens.append("rail"), None)
-                    result = signal.interval_values("rail_sum", (start, stop))
+                    with patch.object(reader, "_sample", side_effect=AssertionError("value parsed before admission")):
+                        result = signal.interval_values("rail_sum", (start, stop))
                     self.assertEqual(result, {"value": None, "reason": "coverage"})
-                    self.assertEqual(opens, [] if announced else ["rail"])
+                    self.assertEqual(opens, ["rail"])
 
     def test_full_sample_count_still_requires_the_turn_gap_limit(self):
         for gap, accepted in ((1.25, True), (1.50, False)):

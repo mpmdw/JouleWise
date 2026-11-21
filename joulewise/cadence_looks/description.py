@@ -45,6 +45,14 @@ V2_SCHEMA_BEFORE_INPUTS = "ca2e36dff49d4c9112a9ad9b9e880b8cfe7e6cb226df1f862f245
 V2_SCHEMA_WITH_INPUTS = "671bfcb65c4fcb75008bfa1758367672026fad7befc0d1ba26dde1e208653fa9"
 LOCAL = ZoneInfo("America/Los_Angeles")
 SHA = re.compile(r"[0-9a-f]{64}")
+CHECK_OFFLOAD_LABEL = re.compile(
+    r"^[ \t]*(?:[-*][ \t]+)?(?:\*\*)?offload manifest(?:'s)? sha-?256"
+    r"(?:[ \t]*[:=])?(?:\*\*)?[ \t]+", re.IGNORECASE,
+)
+CHECK_OFFLOAD_DIGEST = re.compile(
+    r"(?P<quote>`?)(?P<prefix>[0-9a-f]{64}|[0-9a-f]{8,62}(?=…|\.\.\.))"
+    r"(?:(?:…|\.\.\.)(?P<suffix>[0-9a-f]{1,55}))?(?P=quote)\.?"
+)
 OID = re.compile(r"[0-9a-f]{40}")
 INDEX_PIN = re.compile(r"(?:[0-9a-f]{9}|[0-9a-f]{40})")
 LEG = re.compile(r"L00[1-9]|L01[0-2]")
@@ -333,7 +341,7 @@ class Snapshot:
         require(self.book.ancestor(self.receipts, self.commit), "unproven receipt chronology")
 
     def _verify_input_pins(self):
-        from .description_inputs import check_chain_problems, load_pin_list, pin_inventory, run_verifier
+        from .description_inputs import load_pin_list, pin_inventory, run_verifier
 
         require(self.instrument, "input pins are authorized only for the instrument look")
         reference = self.manifest["inputs"]["pins"]
@@ -341,7 +349,7 @@ class Snapshot:
         require(digest(raw) == reference["sha256"], "input pin list differs from manifest")
         document = load_pin_list(raw)
         checks = self.book.blob(self.registration, "RUN_STATE.md").decode("utf-8")
-        require(not check_chain_problems(document, checks), "input pins do not bind their public Checks")
+        _require_input_checks(document, checks)
         files = pin_inventory(document)
         expected = {"status": "pass", "digests": {
             name: dict.fromkeys(("pinned_sha256", "observed_sha256"), entry["sha256"])
@@ -407,20 +415,23 @@ class Snapshot:
             require(doc["kit_index_path"] == expected_index, "wrong later-kit index")
         return doc
 
-    def source_bytes(self, name, *, member=False):
+    def source_bytes(self, name, *, span_input=False):
+        entry = None
+        if span_input and self.input_files is not None:
+            parts = relative(name).parts
+            require(len(parts) >= 3 and parts[0] == "ops", "operational input is outside its pinned span")
+            entry = self.input_files.get("/".join(parts[1:]))
+            require(entry is not None, "operational input is absent from its Check-time pins")
         raw = self.read(name)
         require(self.book.tree(self.receipts).get(name) == self.book.tree(self.commit).get(name),
                 "input does not belong to the closed source snapshot")
-        if member and self.input_files is not None:
-            parts = relative(name).parts
-            require(parts[0] == "ops" and len(parts) >= 3, "member input is outside its pinned span")
-            entry = self.input_files.get("/".join(parts[1:]))
-            require(entry is not None and len(raw) == entry["size"] and digest(raw) == entry["sha256"],
+        if entry is not None:
+            require(len(raw) == entry["size"] and digest(raw) == entry["sha256"],
                     "operational bytes differ from their Check-time pin")
         return raw
 
-    def source(self, name, *, member=False, **decode_options):
-        return decode(self.source_bytes(name, member=member), **decode_options)
+    def source(self, name, *, span_input=False, **decode_options):
+        return decode(self.source_bytes(name, span_input=span_input), **decode_options)
 
     @cached_property
     def drop_authorizations(self):
@@ -662,6 +673,36 @@ def _drop_item_parser():
     return module
 
 
+def _require_input_checks(document, text):
+    """Bind the Check's labelled offload digest, excluding examples and other digests."""
+    items = _drop_item_parser()
+    claims = {span["check_item"]: [] for span in document["spans"]}
+    seen = set()
+    current = None
+    for line in items._scan(text):
+        if line.kind == "heading":
+            heading = items.HEADING.match(line.text)
+            current = int(heading[1]) if not heading[2] else None
+            if current in claims:
+                require(current not in seen, "duplicate public Check item")
+                seen.add(current)
+        elif current in claims and line.kind == "prose":
+            if label := CHECK_OFFLOAD_LABEL.match(line.text):
+                claims[current].append(line.text[label.end():].strip())
+
+    for span in document["spans"]:
+        values = claims[span["check_item"]]
+        require(len(values) == 1, "public Check must state one offload manifest digest")
+        match = CHECK_OFFLOAD_DIGEST.fullmatch(values[0])
+        expected = span["offload_manifest_sha256"]
+        require(match is not None, "invalid public Check offload manifest digest")
+        prefix, suffix = match["prefix"], match["suffix"]
+        agrees = (expected == prefix if suffix is None else
+                  len(prefix) + len(suffix) < len(expected)
+                  and expected.startswith(prefix) and expected.endswith(suffix))
+        require(agrees, "input pins do not bind their public Check offload manifest digest")
+
+
 def _drop_authorizations(snapshot):
     run_state_items = _drop_item_parser()
 
@@ -694,7 +735,7 @@ def _drop_authorizations(snapshot):
 
 
 def _drop_witness(snapshot, key, role, witness_path, kit_id, kit, kit_sha):
-    payload = snapshot.source_bytes(witness_path)
+    payload = snapshot.source_bytes(witness_path, span_input=role == "receipt")
     witness = decode(payload)
     require(type(witness) is dict, "invalid terminal drop witness")
     unrun = witness.get("unrun")
@@ -711,9 +752,12 @@ def _drop_witness(snapshot, key, role, witness_path, kit_id, kit, kit_sha):
                 and all(key.startswith(kit_id + "/") and key.rsplit("/", 1)[1] not in members
                         for key in unrun),
                 "drop witness is not a closed span for the committed kit")
-        if snapshot.look == IDS[2]:
+        if snapshot.look == IDS[2] or snapshot.input_spans is not None:
             require(witness.get("runner_pin") == kit["frozen"]["commit"],
                     "closed span drop witness has the wrong indexed runner")
+        if snapshot.input_spans is not None:
+            require(witness_path == f"ops/{witness['span_id']}/runner_receipt.json",
+                    "closed span drop witness has the wrong pinned span path")
     else:
         require(witness["final"] is True and type(witness["queue_id"]) is str
                 and bool(witness["queue_id"]), "drop witness is not a final queue record")
@@ -756,9 +800,9 @@ def _drop_position(snapshot, row, kit_id, kit, kit_sha):
 def _token_row(snapshot, references, kit, kit_sha, plan, closes):
     require(references.keys() == {"key", "issue", "receipt", "leg_record", *DESK_RECORDS},
             "invalid position source inventory")
-    issue = snapshot.source(references["issue"], member=True)
-    receipt = snapshot.source(references["receipt"], member=True, parse_float=Decimal)
-    op = snapshot.source(references["leg_record"], member=True, parse_float=Decimal)
+    issue = snapshot.source(references["issue"], span_input=True)
+    receipt = snapshot.source(references["receipt"], span_input=True, parse_float=Decimal)
+    op = snapshot.source(references["leg_record"], span_input=True, parse_float=Decimal)
     key = references["key"]
     kit_id, leg_id = key.split("/")
     span_id, attempt, roster = receipt["span_id"], receipt["attempt"], receipt["legs"]
@@ -781,7 +825,7 @@ def _token_row(snapshot, references, kit, kit_sha, plan, closes):
             and op["leg_id"] == leg_id, "position is not physically bound to its issue")
     for role in DESK_RECORDS:
         require(references[role] == f"{prefix}/{role}.json", "wrong desk evidence source")
-        evidence = snapshot.source(references[role], member=True)
+        evidence = snapshot.source(references[role], span_input=True)
         require(evidence["span_id"] == span_id and type(evidence["attempt"]) is int
                 and evidence["attempt"] == attempt and evidence["record"] == role
                 and evidence["passed"] is True, "desk evidence does not prove this attempt")
@@ -890,7 +934,7 @@ def _reconcile_member_bundles(snapshot, kits, issued, empty_closes):
             require(entries <= {"issue.json", "runner_receipt.json"},
                     "closed empty span has a concealed member")
             if "issue.json" in entries:
-                issue = snapshot.source(f"{prefix}/issue.json")
+                issue = snapshot.source(f"{prefix}/issue.json", span_input=True)
                 require(all(issue[field] == close[field] for field in ("kit_id", "kit_sha256", "span_id")),
                         "empty span close differs from its issue")
             continue
@@ -975,7 +1019,13 @@ def census(snapshot):
         require(len(positions) == 36, "instrument population is not terminal")
     _reconcile_member_bundles(snapshot, kits, issued, empty_closes)
     if snapshot.input_spans is not None:
-        issued_pins = {detail[1]["span_id"]: detail[1]["runner_pin"] for detail in details.values()}
+        receipts = [detail[1] for detail in details.values()]
+        receipts.extend(empty_closes.values())
+        issued_pins = {}
+        for receipt in receipts:
+            runner = receipt["runner_pin"]
+            require(issued_pins.setdefault(receipt["span_id"], runner) == runner,
+                    "conflicting Check-time runner for one span")
         require(issued_pins == snapshot.input_spans, "Check-time pins differ from the issued span roster")
     qualified = [row for row in table if row["disposition"] == "qualified"]
     counts = {"n_legs": len(qualified)}
@@ -1448,11 +1498,11 @@ class Signals:
         for rail, gaps in missing_rails.items():
             require(rail in RAILS and all(len(row) == 2 and row[0] < row[1] for row in gaps),
                     "invalid missing-rail support")
-        self._declared_rails = self._rail_support({
-            channel: [(a, b) for a, b in bounds
-                      if not any(a < end and b > start for start, end in missing_rails.get(rail, ()))]
-            for channel, rail in RAIL_CHANNELS.items()
-        })
+        self._declared_rails = {
+            rail: {(a, b) for a, b in bounds
+                   if not any(a < end and b > start for start, end in missing_rails.get(rail, ()))}
+            for rail in RAILS
+        }
 
     @staticmethod
     def _rail_support(individual):
@@ -1523,8 +1573,6 @@ class Signals:
             return
         stamps = {}
         capture_end = None
-        declared = {rail: set(self._declared_rails[channel].bounds)
-                    for channel, rail in RAIL_CHANNELS.items()}
         recorded = {rail: [] for rail in RAILS}
         with self._open_signal("power_trace.csv") as stream:
             for key, stamp in _rail_rows(stream):
@@ -1534,7 +1582,7 @@ class Signals:
                 if rail not in RAILS:
                     continue
                 require(key not in stamps, "repeated rail in the same interval")
-                if bounds not in declared[rail]:
+                if bounds not in self._declared_rails[rail]:
                     raise IntervalLedgerMismatch("recorded rail interval contradicts support")
                 stamps[key] = stamp
                 recorded[rail].append(bounds)
@@ -1617,15 +1665,22 @@ class Signals:
         return [(left, right, sum(self._rail_values[((left, right), rail)] for rail in names),
                  self._rail_stamps[((left, right), stamp_rail)].stamp_ns) for left, right in selected]
 
+    def _index_meter(self):
+        if self._meter_stamp_tokens is not None:
+            return
+        with self._open_signal("dc_points.csv") as stream:
+            rows = csv.DictReader(stream)
+            require(rows.fieldnames == ["epoch_s", "watts"], "wrong decoded point columns")
+            stamp_tokens = [row["epoch_s"] for row in rows]
+        stamps = list(map(_csv_time_ns, stamp_tokens))
+        if stamps != self.meter_ns:
+            if set(stamps).difference(self.meter_ns):
+                raise IntervalLedgerMismatch("recorded DC stamp contradicts support")
+            raise Refusal("decoder stamps disagree with the copy's support")
+        self._meter_stamp_tokens = stamp_tokens
+
     def _admitted_meter(self, a, b):
-        if self._meter_stamp_tokens is None:
-            with self._open_signal("dc_points.csv") as stream:
-                rows = csv.DictReader(stream)
-                require(rows.fieldnames == ["epoch_s", "watts"], "wrong decoded point columns")
-                stamp_tokens = [row["epoch_s"] for row in rows]
-            require(list(map(_csv_time_ns, stamp_tokens)) == self.meter_ns,
-                    "decoder stamps disagree with the copy's support")
-            self._meter_stamp_tokens = stamp_tokens
+        self._index_meter()
         lo, hi = _meter_slice(self.meter_ns, a, b)
         pending = {i for i in range(lo, hi + 1) if i not in self._meter_values}
         if pending:
@@ -1661,11 +1716,6 @@ class Signals:
         else:
             rail_channels = (channel,) if channel in RAIL_CHANNELS else ()
         if rail_channels:
-            # The declared support can prove a deficit. Only the observed
-            # identities can establish that coverage passed before the gap checks.
-            if not self._coverage_passes(channel, start, stop,
-                                        [self._declared_rails[name] for name in rail_channels]):
-                return "coverage"
             self._index_rails()
         return self._interval_refusal(
             channel, a, b, [self._observed_rails[name] for name in rail_channels],
@@ -1952,12 +2002,15 @@ def print_leg(signal, detail, instrument):
 
 
 def _leg_values(signal, detail, instrument):
-    if instrument:
-        # RL-194b uses the ordinary rail index inside the scoring boundary.
-        try:
-            signal._index_rails()
-        except IntervalLedgerMismatch:
-            return {name: missing(INTERVAL_LEDGER_MISMATCH) for name in ("hold", "turn", "gain", "edges")}
+    # Check recorded identities in confinement before any value on this leg.
+    try:
+        signal._index_rails()
+        if signal.meta["meter_present"] is True and signal.meta["meter_clean"] is True:
+            signal._index_meter()
+    except IntervalLedgerMismatch:
+        if not instrument:
+            raise
+        return {name: missing(INTERVAL_LEDGER_MISMATCH) for name in ("hold", "turn", "gain", "edges")}
     op, _, _, _, row = detail
     meta = signal.meta
     start, first, last = (signal.stamps_ns[name]
@@ -2148,7 +2201,7 @@ EXECUTABLE_DEPENDENCIES = {
     "joulewise/cadence_looks/description_worker.py":
         "637f748460aa3e670f5809ebf34022dfd2dc416222765af6ca55e82386f344df",
     "joulewise/cadence_looks/description_inputs.py":
-        "7488652d77d9d53468b453e75e2160d02afc5886beddb5691357710199ce46ad",
+        "4243d4b9a4335de0735e6738b812e30113129fcd798cd6278f9ef451799294de",
     "joulewise/cadence_looks/custody_pins.py":
         "cb764b6112597f8b43c8b366ace7f889a4339f880e3717515d48f0ca9fb5b44f",
     "joulewise/cadence_looks/transfer_release.py":

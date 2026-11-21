@@ -571,18 +571,19 @@ class DescriptionIntervalTests(unittest.TestCase):
                     bounds = INTERVALS[label]
                     signals, opens = _matrix_signal(Path(temporary), bounds, channel, present, gap,
                                                     pinned)
-                    if channel == "sidecar":
-                        readings = signals.interval_values(channel, bounds)
-                        value, _ = reader._sensors(["left"], readings)
-                    else:
-                        value = signals.average(channel, *bounds)
+                    with patch.object(reader, "_sample", wraps=reader._sample) as parsed:
+                        if channel == "sidecar":
+                            readings = signals.interval_values(channel, bounds)
+                            value, _ = reader._sensors(["left"], readings)
+                        else:
+                            value = signals.average(channel, *bounds)
                     if present < 990 or gap:
                         reason = "coverage" if present < 990 else "meter_gap"
                         self.assertEqual(value, {"value": None, "reason": reason})
-                        # At passing declared coverage, inspect rail identities
-                        # even when the interval ultimately fails its gap check.
-                        self.assertEqual(opens, [True] if channel in RAIL_FOR_CHANNEL
-                                         and present >= 990 else [])
+                        parsed.assert_not_called()
+                        # Rail coverage starts with recorded identities even
+                        # when the projection alone claims a deficit.
+                        self.assertEqual(opens, [True] if channel in RAIL_FOR_CHANNEL else [])
                     else:
                         self.assertIsInstance(value, Fraction if channel == "sidecar" else (int, float))
                         self.assertEqual(opens, [] if channel == "sidecar" else [True])
@@ -689,7 +690,7 @@ class DescriptionIntervalTests(unittest.TestCase):
                         self.assertTrue(permitted, line)
                     if stamps.search(line):
                         self.assertIn(owner, {"__init__", "_coverage_passes", "_interval_refusal",
-                                              "_admitted_meter", "recovery_start", "stream_end"}, line)
+                                              "_index_meter", "_admitted_meter", "recovery_start", "stream_end"}, line)
                     if io.search(line):
                         support_only = owner == "score" and line.strip() == (
                             'with paths["support.json"].open("rb") as stream:'
