@@ -1,0 +1,25 @@
+--- a/mlx_lm/models/qwen4_exp.py
++++ b/mlx_lm/models/qwen4_exp.py
+@@ -112,9 +112,12 @@
+ class ModelArgs(BaseModelArgs):
+     model_type: str
+     text_config: dict[str, Any]
++    qwen4_norm_layout: str | None = None
+     text: TextArgs = field(init=False)
+
+     def __post_init__(self) -> None:
++        if self.qwen4_norm_layout not in (None, "zero_centered", "folded"):
++            raise ValueError("qwen4_norm_layout must be 'zero_centered' or 'folded'.")
+         self.text = TextArgs.from_dict(self.text_config)
+
+
+@@ -706,7 +709,8 @@
+     def sanitize(self, weights: dict[str, mx.array]) -> dict[str, mx.array]:
+         # HF and mlx-vlm (flat layout, `shards.{i}` n-gram names) store these norms
+         # as `w` for a `1 + w` scale; other checkpoints already hold `1 + w`.
+-        fold = any(
++        layout = self.args.qwen4_norm_layout
++        fold = layout == "zero_centered" if layout is not None else any(
+             k.startswith("model.language_model.")
+             or (k.startswith("language_model.") and ".ngram_embedding.shards." in k)
+             for k in weights
