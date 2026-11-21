@@ -1741,10 +1741,12 @@ class PinnedD018ClosureTests(unittest.TestCase):
     def closure(self, files, *, pins=None):
         """A temporary repository that holds ``files`` as blobs, installed as the pinned closure."""
         import subprocess
+        from tests.git_fixture import init_git_fixture
 
         with TemporaryDirectory() as tmp:
             repo = Path(tmp) / "objects"
-            subprocess.run(["git", "init", "-q", str(repo)], check=True, capture_output=True)
+            repo.mkdir()
+            init_git_fixture(repo, "-q")
             table = {}
             for path, raw in files.items():
                 table[path] = subprocess.run(["git", "-C", str(repo), "hash-object", "-w", "--stdin"], input=raw,
@@ -1800,12 +1802,15 @@ class PinnedD018ClosureTests(unittest.TestCase):
 
     def test_an_object_database_that_cannot_answer_refuses_as_a_missing_object(self):
         import os
+        import subprocess
+        from tests.git_fixture import init_git_fixture
 
         first = min(pc.PINNED_D018_CLOSURE)
         expected = ("pinned_closure_missing_object", first, pc.PINNED_D018_CLOSURE[first])
         with TemporaryDirectory() as tmp:
             empty = Path(tmp) / "empty"
-            __import__("subprocess").run(["git", "init", "-q", str(empty)], check=True, capture_output=True)
+            empty.mkdir()
+            init_git_fixture(empty, "-q")
             for label, root in (("an empty repository", empty), ("no directory", Path(tmp) / "absent")):
                 with self.subTest(objects=label), patch.object(pc, "PINNED_D018_OBJECTS", root):
                     self.assertEqual(self.refusal(), expected)
@@ -1813,7 +1818,7 @@ class PinnedD018ClosureTests(unittest.TestCase):
                 self.assertEqual(self.refusal(), expected)
 
         def no_answer(*args, **kwargs):
-            raise __import__("subprocess").TimeoutExpired(args[0], kwargs.get("timeout"))
+            raise subprocess.TimeoutExpired(args[0], kwargs.get("timeout"))
 
         with self.subTest(objects="git does not finish"), patch("subprocess.run", no_answer):
             self.assertEqual(self.refusal(), expected)

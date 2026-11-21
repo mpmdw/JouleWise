@@ -636,6 +636,12 @@
     "seam": "documentation only: README prose quoting the installer's launchctl bootstrap/bootout; not executed (install_air_watch.sh runs it, and only when Ed runs the installer)"
   },
   {
+    "file": "scripts/align_r1_part_c.py",
+    "locator": "_pinned_trace_problems:2bd56ab03eeb3e96",
+    "command": "python-isolated",
+    "seam": "subprocess.run, imported at call time (PinnedD018ClosureTests patches it); the child loads only the pinned D-018 closure from a private directory"
+  },
+  {
     "file": "scripts/b5_e2e_synthetic.py",
     "locator": "_production_interrupt.killing_run:d9f606b4af0199bb",
     "command": "kill",
