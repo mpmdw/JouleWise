@@ -12,10 +12,13 @@ fi
 mkdir -p "$(dirname "$LOG")" "$(dirname "$STAMP")"
 now=$(date -u '+%Y-%m-%d %H:%M:%S')
 if [ -z "$(find "$STAMP" -mmin -60 2>/dev/null)" ]; then
-  "$OSA" -e 'display notification "ALARM WATCHER_EXIT agent repo_missing" with title "JouleWise Air watch"' >/dev/null 2>&1 \
-    && status=ok || status=failed
+  if "$OSA" -e 'display notification "ALARM WATCHER_EXIT agent repo_missing" with title "JouleWise Air watch"' >/dev/null 2>&1; then
+    status=ok
+    touch "$STAMP"
+  else
+    status=failed
+  fi
   echo "$now NOTIFY $status ALARM WATCHER_EXIT agent repo_missing" >> "$LOG"
-  touch "$STAMP"
 else
   echo "$now INFO WATCHER_EXIT_SUPPRESSED agent repo_missing" >> "$LOG"
 fi

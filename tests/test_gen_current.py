@@ -59,6 +59,28 @@ class RenderTests(unittest.TestCase):
         self.assertEqual(gc.MAX_EPOCH, 1893456000)
         gc.validate(expected())
 
+    def test_duplicate_pointer_item_refused_in_either_order(self):
+        a = block({**unarmed(), "owner": "A"}, item="387")
+        b = block({**unarmed(), "owner": "B"}, item="387")
+        for first, second in ((a, b), (b, a)):
+            with self.subTest(first=first):
+                self.refused(block(item="400") + first + second, "DUPLICATE_ITEM",
+                             len((block(item="400") + first).splitlines()) + 1)
+
+    def test_plain_heading_cannot_shadow_a_pointer_item(self):
+        pointer = block(item="399b")
+        plain = "399b. **Later prose**\n"
+        self.refused(pointer + plain, "DUPLICATE_ITEM", len(pointer.splitlines()) + 1)
+        self.refused(plain + pointer, "DUPLICATE_ITEM", 2)
+
+    def test_historical_387_pair_only(self):
+        source = (gc.ROOT / "RUN_STATE.md").read_text(encoding="utf-8")
+        history = "\n".join(line for line in source.splitlines() if line.startswith("387. **")) + "\n"
+        self.assertEqual(len(history.splitlines()), 2)
+        self.assertIsNone(json.loads(gc.render(history))["source_item"])
+        self.refused(history + "387. **New entry**\n", "DUPLICATE_ITEM", 3)
+        self.refused(history.replace("Magistrate cb24533b", "Magistrate substitute"), "DUPLICATE_ITEM", 2)
+
     def test_no_pointer_document_without_any_headings(self):
         document = {"schema": "joulewise.current_pointer.v2", "source_item": None,
                     "source_item_heading_date": None, "owner": None, "armed": None,

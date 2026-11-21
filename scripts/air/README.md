@@ -131,7 +131,9 @@ If the checkout (on JW-EXT) is missing, the wrapper posts
   If `gh` is missing or unauthenticated, one `INFO GH_UNAVAILABLE` and no alarm;
 - delivers each NOTICE/ALARM as a macOS notification (`/usr/bin/osascript
   display notification`) carrying only level, code and subject, and appends
-  `NOTIFY ok|failed ...` to the log. Notification failure is logged, not fatal.
+  `NOTIFY ok|failed ...` to the log. Failed deliveries stay pending across
+  polls and restarts, with backoff from one minute to one hour. Each source
+  checks for due retries on its regular poll.
   `NOTIFY ok` does not prove a banner was shown; after installing, run
   `python3.13 scripts/air/air_watch_agent.py notify "2026-01-01 00:00:00 ALARM INSTALL_TEST air"`
   once and confirm the banner appears.

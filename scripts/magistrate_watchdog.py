@@ -454,7 +454,7 @@ def production_driver_probe() -> CensusObservation:
 
 
 def remote_stop_probe(*, probe_allowed: Callable[[], bool] | None = None) -> StopObservation:
-    base = (
+    argv = (
         "/usr/bin/git",
         "-c",
         "credential.helper=",
@@ -463,50 +463,43 @@ def remote_stop_probe(*, probe_allowed: Callable[[], bool] | None = None) -> Sto
         "ls-remote",
         "--exit-code",
         STOP_REPOSITORY,
+        POSITIVE_CONTROL_REF,
+        STOP_REF_GLOB,
     )
-
-    def run(ref: str) -> subprocess.CompletedProcess[str] | None:
-        environment = dict(os.environ)
-        environment["GIT_TERMINAL_PROMPT"] = "0"
-        environment["GIT_CONFIG_NOSYSTEM"] = "1"
-        # Each transport has its own admission check: the positive control
-        # may still be in flight when a night span begins.
+    environment = dict(os.environ, GIT_TERMINAL_PROMPT="0", GIT_CONFIG_NOSYSTEM="1")
+    skipped = StopObservation("NOT_PROBED", "remote stop probe skipped during plan span")
+    try:
         if probe_allowed is not None and not probe_allowed():
-            return None
-        return subprocess.run(
-            (*base, ref),
-            check=False,
-            capture_output=True,
-            text=True,
-            timeout=10,  # magistrate bench 2026-09-03: 2 s produced spurious NETWORK_UNCERTAIN holds on slow links
-            env=environment,
+            return skipped
+        result = subprocess.run(
+            argv, check=False, capture_output=True, text=True, timeout=10, env=environment,
         )
+        # A completed transport may have straddled the fence. Keep the prior
+        # observation in that case, as for any other suppressed refresh.
+        if probe_allowed is not None and not probe_allowed():
+            return skipped
+    except Exception as exc:
+        return StopObservation("NETWORK_UNCERTAIN", f"stop probe exception: {exc}")
+    if result.returncode != 0:
+        return StopObservation("NETWORK_UNCERTAIN", f"stop probe rc={result.returncode}: {result.stderr.strip()}")
 
-    try:
-        control = run(POSITIVE_CONTROL_REF)
-    except Exception as exc:
-        return StopObservation("NETWORK_UNCERTAIN", f"positive control exception: {exc}")
-    if control is None:
-        return StopObservation("NOT_PROBED", "remote stop probe skipped during plan span")
-    if control.returncode != 0:
-        return StopObservation(
-            "NETWORK_UNCERTAIN",
-            f"positive control rc={control.returncode}: {control.stderr.strip()}",
-        )
-    try:
-        stop = run(STOP_REF_GLOB)
-    except Exception as exc:
-        return StopObservation("NETWORK_UNCERTAIN", f"stop-ref exception: {exc}")
-    if stop is None:
-        return StopObservation("NOT_PROBED", "remote stop probe skipped during plan span")
-    if stop.returncode == 0:
-        return StopObservation("STOPPED", stop.stdout.strip() or STOP_REF_GLOB)
-    if stop.returncode == 2:
-        return StopObservation("CLEAR", "stop branch absent; positive control present")
-    return StopObservation(
-        "NETWORK_UNCERTAIN",
-        f"stop-ref rc={stop.returncode}: {stop.stderr.strip()}",
-    )
+    main = False
+    stops = []
+    for line in result.stdout.splitlines():
+        oid, _, ref = line.partition("\t")
+        if not re.fullmatch(r"[0-9a-f]{40}|[0-9a-f]{64}", oid):
+            return StopObservation("NETWORK_UNCERTAIN", "malformed stop probe row")
+        if ref == POSITIVE_CONTROL_REF:
+            main = True
+        elif fnmatch.fnmatchcase(ref, STOP_REF_GLOB):
+            stops.append(line)
+        else:
+            return StopObservation("NETWORK_UNCERTAIN", "unexpected ref in stop probe")
+    if not main:
+        return StopObservation("NETWORK_UNCERTAIN", "positive control missing from stop probe")
+    if stops:
+        return StopObservation("STOPPED", "\n".join(stops))
+    return StopObservation("CLEAR", "stop branch absent; positive control present")
 
 
 def real_spawn(argv: Sequence[str], cwd: Path, stdout_path: Path, stderr_path: Path) -> Child:

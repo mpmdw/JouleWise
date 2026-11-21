@@ -5,7 +5,7 @@
 child exits, `run` exits with its status and launchd (KeepAlive) restarts it.
 `notify <event line>` is the watcher's --notify-cmd: NOTICE and ALARM lines
 become a macOS notification with structural fields only (level, code, subject)
-and are appended to the log. Notification failure is logged, never fatal.
+and are appended to the log. The watcher retries failed deliveries with backoff.
 """
 from __future__ import annotations
 
@@ -21,6 +21,9 @@ import time
 if __package__ in (None, ""):
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from scripts.air import main_ci_watch  # noqa: E402
+from scripts.air.night_results_watch import (  # noqa: E402
+    NOTIFY_BACKOFF_S, WatchError, queue_notification, retry_notifications, save_state,
+)
 
 HERE = Path(__file__).resolve().parent
 DEFAULT_LOG = Path.home() / "Library/Logs/JouleWise/air-watch.log"
@@ -31,7 +34,7 @@ OK_STATUSES = {0, 10, 20}
 
 
 def watcher_exit(status, state_path, log, now=None, notifier=None):
-    """Post one ALARM WATCHER_EXIT per status per hour, from this process (no repo file needed)."""
+    """Retry pending exits and rate-limit each status from its last delivery."""
     now = time.time() if now is None else now
     try:
         seen = json.loads(state_path.read_text())
@@ -40,19 +43,26 @@ def watcher_exit(status, state_path, log, now=None, notifier=None):
     except (OSError, ValueError):
         seen = {}
     key = str(status)
-    last = seen.get(key)
-    if isinstance(last, (int, float)) and now - last < EXIT_NOTIFY_S:
-        append_log(log, f"INFO WATCHER_EXIT_SUPPRESSED agent status={status}")
-        return False
-    stamp = dt.datetime.fromtimestamp(now, dt.timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
-    (notifier or notify)(f"{stamp} ALARM WATCHER_EXIT agent status={status}", log)
-    seen[key] = now
+    delivered = False
+
+    def acknowledge(pending_key):
+        nonlocal delivered
+        seen[pending_key] = now
+        delivered |= pending_key == key
+
     try:
-        state_path.parent.mkdir(parents=True, exist_ok=True)
-        state_path.write_text(json.dumps(seen, sort_keys=True))
-    except OSError:
-        pass
-    return True
+        if status is not None:
+            last = seen.get(key)
+            if isinstance(last, (int, float)) and now - last < EXIT_NOTIFY_S:
+                append_log(log, f"INFO WATCHER_EXIT_SUPPRESSED agent status={status}")
+            else:
+                stamp = dt.datetime.fromtimestamp(now, dt.timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+                queue_notification(seen, key, f"{stamp} ALARM WATCHER_EXIT agent status={status}", now)
+                save_state(state_path, seen)
+        retry_notifications(state_path, seen, now, lambda line: (notifier or notify)(line, log), acknowledge)
+    except (OSError, WatchError):
+        append_log(log, "INFO WATCHER_EXIT_STATE_ERROR agent")
+    return delivered
 
 
 def structural_text(line):
@@ -91,6 +101,7 @@ def notify(line, log, osascript="/usr/bin/osascript"):
 def watcher_argv(python, log, interval, hours, extra=()):
     return [python, str(HERE / "night_results_watch.py"), "--loop", "--keep-going",
             "--interval", str(interval), "--hours", str(hours), "--current-from-origin", *extra,
+            "--retry-notifications",
             "--notify-cmd", python, str(Path(__file__).resolve()), "notify", "--log", str(log)]
 
 
@@ -102,13 +113,18 @@ def run(args, popen=subprocess.Popen, sleep=time.sleep, clock=time.monotonic):
         watcher_exit("spawn", args.exit_state, args.log)
         return 2
     next_ci = clock()
+    next_exit_retry = next_ci
     while True:
         status = child.poll()
         if status is not None:
             if status not in OK_STATUSES:
                 watcher_exit(status, args.exit_state, args.log)
             return status
-        if args.ci_interval > 0 and clock() >= next_ci:
+        now = clock()
+        if now >= next_exit_retry:
+            watcher_exit(None, args.exit_state, args.log)
+            next_exit_retry = now + NOTIFY_BACKOFF_S
+        if args.ci_interval > 0 and now >= next_ci:
             try:
                 main_ci_watch.run_once(args.ci_state, notify=lambda l: notify(l, args.log),
                                        gh=args.gh, repo=args.repo, cwd=str(REPO))
@@ -139,11 +155,12 @@ def main(argv=None):
     n.add_argument("line")
     args = parser.parse_args(argv)
     if args.cmd == "notify":
+        if structural_text(args.line)[0] not in {"NOTICE", "ALARM"}:
+            return 0
         try:
-            notify(args.line, args.log, args.osascript)
+            return 0 if notify(args.line, args.log, args.osascript) else 1
         except OSError:
-            pass
-        return 0
+            return 1
     return run(args)
 
 
