@@ -497,3 +497,23 @@ git diff --check b2e01464d HEAD
 `NEEDS_SPEC: none`. The ten condition-13 identities remain identical to W1,
 with zero inherited absences. Exact-head hosted results and final-tree holds are
 in the draft PR ledger and seat handoff.
+
+### Hosted fixture repair after the pause
+
+On `8a57514c`, the saved focused class passed 35/35, the adjacent contracts
+passed 33/33, and the six-stage substitution and byte-edit sweep passed.
+Hosted CI passed 20/21 jobs. Its failing shard passed the packet module
+81/81 and the 490-case mutation probe. The C1 production-path fixture failed
+when the new reader correctly refused the scaffold directory links inherited
+from the generic synthetic harness. The subsequent series subtests lacked the
+C1 predecessor because that fixture stopped before C1.
+
+The fixture repair copies the two scaffold input directories into its own
+checkout, replacing inherited links in that disposable checkout. It keeps the
+production confinement and dispatch checks. A bounded replay of the repaired
+fixture constructed the real measurement view and verified the staged kit,
+all six stage manifests, and the 22 ordinary science members. The replay
+trapped prepare and install. The focused W1 U4-inconclusive replay continues
+to cover the 24-member roster and the supplemental-sentinel refusal.
+
+[First hosted shard](https://github.com/mpmdw/JouleWise/actions/runs/44783036619/job/136450919559)

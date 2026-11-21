@@ -410,11 +410,15 @@ class FakeWorld:
                 target.symlink_to(path, target_is_directory=path.is_dir())
         for path in (ROOT / 'configs/campaigns').iterdir():
             target = m / 'configs/campaigns' / path.name
-            if path.name != 'align_v4' and not target.exists():
-                if name == 'C1' and path.name in ('neg8_reference_corpus_v5', 'window_references_v5'):
+            if name == 'C1' and path.name in ('neg8_reference_corpus_v5', 'window_references_v5'):
+                # Harness already links auxiliary packs out of the fixture.
+                # K2/K3 read their contents inside the fixture's own root.
+                if target.is_symlink():
+                    target.unlink()
+                if not target.exists():
                     shutil.copytree(path, target)
-                else:
-                    target.symlink_to(path, target_is_directory=path.is_dir())
+            elif path.name != 'align_v4' and not target.exists():
+                target.symlink_to(path, target_is_directory=path.is_dir())
         # This existing policy directory needs an additional safe repo fixture.
         target = m / 'configs/campaign_policies/quiet_mac_p2_b5.json'
         target.symlink_to(ROOT / 'configs/campaign_policies/quiet_mac_p2_b5.json')
