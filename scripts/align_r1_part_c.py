@@ -3321,10 +3321,11 @@ def _check_member_window(bound, receipt, data):
     episode_name, turns_name = "outputs/align_episode.json", "outputs/align_turns.jsonl"
     episode = _strict_object(data[episode_name], kind, episode_name, "episode_identity")
     stamps = (episode.get("hardware") or {}).get("paired_clock_stamps_ns") if isinstance(episode, dict) else None
-    for index, stamp in enumerate(stamps if isinstance(stamps, list) else ()):
-        epoch = stamp.get("epoch_ns") if isinstance(stamp, dict) else None
-        if _uint(epoch):
-            inside(low <= epoch <= high, episode_name, "episode_bracket", index)
+    epochs = [stamp.get("epoch_ns") if isinstance(stamp, dict) else None
+              for stamp in (stamps if isinstance(stamps, list) else ())]
+    if len(epochs) == 2 and all(map(_uint, epochs)):
+        # The episode opens and closes in that order, inside the segment.
+        inside(low <= epochs[0] <= epochs[1] <= high, episode_name, "episode_bracket")
     for index, line in enumerate(data[turns_name].splitlines()):
         record = _strict_object(line, kind, turns_name, "turn_record")
         for key in ("start_stamp", "end_stamp"):

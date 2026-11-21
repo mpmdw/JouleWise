@@ -2356,7 +2356,8 @@ class FrozenDifferentialNamedCasesTests(unittest.TestCase):
                     "clock-offset-coherent-predecessor": "pass -", "clock-offset-coherent-d-bank": "pass -",
                     "clock-offset-coherent-x-g": "pass -",
                     "clock-offset-incoherent-predecessor": "other_failure turn_boundary_recompute",
-                    "step-d-member-wall-over-bracket": "other_failure member_order"}
+                    "step-d-member-wall-over-bracket": "other_failure member_order",
+                    "episode-stamps-reversed": "other_failure member_order"}
         proc, output, seen = self.run_probe(list(expected))
         self.assertEqual(seen, expected, output[-3000:])
         self.assertEqual(proc.returncode, 0, output[-3000:])

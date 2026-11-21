@@ -60,23 +60,26 @@ EXPECTED = {
     "clock-offset-incoherent-predecessor": ("turn_boundary_recompute", "paired_clock"),
     # RL-186's member wall bound alone, judged directly: no synthetic journal can isolate it.
     "step-d-member-wall-over-bracket": ("member_order", "member_wall_s"),
+    # The episode's two paired stamps in reverse order, both inside the bracket (v3.1's predecessor
+    # `paired_clock_stamps_ns.0.epoch_ns/shift`, which a first draft of the window check let through).
+    "episode-stamps-reversed": ("member_order", "episode_bracket"),
 }
-DIRECT = ("step-d-member-wall-over-bracket",)
+DIRECT = ("step-d-member-wall-over-bracket", "episode-stamps-reversed")
 AUDIT_2 = ("control", "interval-header-zero-rows", "raw-runner-fault", "raw-turn-budget-flag", "last-turn-unclosed",
            "other-run-id", "duplicate-predecessor", "predecessor-timeout", "extra-stop-flag", "gate-before-entry",
            "finalized-after-close")
 AUDIT_2026_11_21 = tuple(name for name in EXPECTED if name not in AUDIT_2)
 
 
-def member_wall(s, wall):
+def member_wall(s, wall, opened=4_001_000_000_000, closed=4_002_000_000_000):
     """Step D's window with every recorded instant inside it, and the receipt's member wall ``wall``."""
     import json
     from types import SimpleNamespace
 
     bound = SimpleNamespace(kind=s.S, started_epoch_s=4000.0, ended_epoch_s=5180.0)
-    stamp = {"epoch_ns": 4_001_000_000_000}
+    stamps = [{"epoch_ns": opened}, {"epoch_ns": closed}]
     data = {"events.jsonl": json.dumps({"timestamp_s": 4001.0}).encode() + b"\n",
-            "outputs/align_episode.json": json.dumps({"hardware": {"paired_clock_stamps_ns": [stamp, stamp]}}).encode(),
+            "outputs/align_episode.json": json.dumps({"hardware": {"paired_clock_stamps_ns": stamps}}).encode(),
             "outputs/align_turns.jsonl": b""}
     s.pc._check_member_window(bound, {"slot_detail": {"member_wall_s": wall}}, data)
 
@@ -361,9 +364,12 @@ def run(argv):
         work = Path(temporary)
         finder = s.import_world(work / "src")
         for name in [name for name in wanted if name in DIRECT]:
-            member_wall(s, 1180.0)                          # exactly the bracket passes
+            member_wall(s, 1180.0)                          # exactly the bracket, stamps in order: passes
             try:
-                member_wall(s, 1180.5)
+                if name == "episode-stamps-reversed":
+                    member_wall(s, 1000.0, opened=4_002_000_000_000, closed=4_001_000_000_000)
+                else:
+                    member_wall(s, 1180.5)
                 found = set()
             except s.evidence.EvidenceFailure as error:
                 found = {(error.reason, error.field)}
