@@ -1,0 +1,775 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:joulewise:cadence-description:lm-stab-01.restricted",
+  "description": "Restricted stability file set. The later look contains all and base14 views in every table.",
+  "type": "object",
+  "$defs": {
+    "undefined": {
+      "type": "object",
+      "required": [
+        "value",
+        "reason"
+      ],
+      "properties": {
+        "value": {
+          "type": "null"
+        },
+        "reason": {
+          "type": "string",
+          "minLength": 1
+        },
+        "bound_s": {
+          "type": "number"
+        }
+      },
+      "additionalProperties": false
+    },
+    "hold": {
+      "type": "object",
+      "patternProperties": {
+        "^f2-(inst|stab)-[0-9]{2}/L(00[1-9]|01[0-2])$": {
+          "type": "object",
+          "required": [
+            "gpu_rail",
+            "rail_sum",
+            "dc_in",
+            "runner_pin"
+          ],
+          "properties": {
+            "gpu_rail": {
+              "type": "object",
+              "required": [
+                "mean_w",
+                "sd10_w",
+                "sd40_w",
+                "sd128_w",
+                "kept",
+                "dropped"
+              ],
+              "properties": {
+                "mean_w": {
+                  "description": "Defined value in W, or a reason and an elapsed-seconds censor bound.",
+                  "oneOf": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "$ref": "#/$defs/undefined"
+                    }
+                  ]
+                },
+                "sd10_w": {
+                  "description": "Defined value in W, or a reason and an elapsed-seconds censor bound.",
+                  "oneOf": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "$ref": "#/$defs/undefined"
+                    }
+                  ]
+                },
+                "sd40_w": {
+                  "description": "Defined value in W, or a reason and an elapsed-seconds censor bound.",
+                  "oneOf": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "$ref": "#/$defs/undefined"
+                    }
+                  ]
+                },
+                "sd128_w": {
+                  "description": "Defined value in W, or a reason and an elapsed-seconds censor bound.",
+                  "oneOf": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "$ref": "#/$defs/undefined"
+                    }
+                  ]
+                },
+                "kept": {
+                  "type": "array",
+                  "items": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "minItems": 3,
+                  "maxItems": 3
+                },
+                "dropped": {
+                  "type": "array",
+                  "items": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "minItems": 3,
+                  "maxItems": 3
+                },
+                "drop_reasons": {
+                  "type": "object",
+                  "properties": {
+                    "10": {
+                      "$ref": "#/$defs/admissionRejectionList"
+                    },
+                    "40": {
+                      "$ref": "#/$defs/admissionRejectionList"
+                    },
+                    "128": {
+                      "$ref": "#/$defs/admissionRejectionList"
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              },
+              "additionalProperties": false
+            },
+            "rail_sum": {
+              "type": "object",
+              "required": [
+                "mean_w",
+                "sd10_w",
+                "sd40_w",
+                "sd128_w",
+                "kept",
+                "dropped"
+              ],
+              "properties": {
+                "mean_w": {
+                  "description": "Defined value in W, or a reason and an elapsed-seconds censor bound.",
+                  "oneOf": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "$ref": "#/$defs/undefined"
+                    }
+                  ]
+                },
+                "sd10_w": {
+                  "description": "Defined value in W, or a reason and an elapsed-seconds censor bound.",
+                  "oneOf": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "$ref": "#/$defs/undefined"
+                    }
+                  ]
+                },
+                "sd40_w": {
+                  "description": "Defined value in W, or a reason and an elapsed-seconds censor bound.",
+                  "oneOf": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "$ref": "#/$defs/undefined"
+                    }
+                  ]
+                },
+                "sd128_w": {
+                  "description": "Defined value in W, or a reason and an elapsed-seconds censor bound.",
+                  "oneOf": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "$ref": "#/$defs/undefined"
+                    }
+                  ]
+                },
+                "kept": {
+                  "type": "array",
+                  "items": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "minItems": 3,
+                  "maxItems": 3
+                },
+                "dropped": {
+                  "type": "array",
+                  "items": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "minItems": 3,
+                  "maxItems": 3
+                },
+                "drop_reasons": {
+                  "type": "object",
+                  "properties": {
+                    "10": {
+                      "$ref": "#/$defs/admissionRejectionList"
+                    },
+                    "40": {
+                      "$ref": "#/$defs/admissionRejectionList"
+                    },
+                    "128": {
+                      "$ref": "#/$defs/admissionRejectionList"
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              },
+              "additionalProperties": false
+            },
+            "dc_in": {
+              "type": "object",
+              "required": [
+                "mean_w",
+                "sd10_w",
+                "sd40_w",
+                "sd128_w",
+                "kept",
+                "dropped"
+              ],
+              "properties": {
+                "mean_w": {
+                  "description": "Defined value in W, or a reason and an elapsed-seconds censor bound.",
+                  "oneOf": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "$ref": "#/$defs/undefined"
+                    }
+                  ]
+                },
+                "sd10_w": {
+                  "description": "Defined value in W, or a reason and an elapsed-seconds censor bound.",
+                  "oneOf": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "$ref": "#/$defs/undefined"
+                    }
+                  ]
+                },
+                "sd40_w": {
+                  "description": "Defined value in W, or a reason and an elapsed-seconds censor bound.",
+                  "oneOf": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "$ref": "#/$defs/undefined"
+                    }
+                  ]
+                },
+                "sd128_w": {
+                  "description": "Defined value in W, or a reason and an elapsed-seconds censor bound.",
+                  "oneOf": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "$ref": "#/$defs/undefined"
+                    }
+                  ]
+                },
+                "kept": {
+                  "type": "array",
+                  "items": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "minItems": 3,
+                  "maxItems": 3
+                },
+                "dropped": {
+                  "type": "array",
+                  "items": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "minItems": 3,
+                  "maxItems": 3
+                },
+                "drop_reasons": {
+                  "type": "object",
+                  "properties": {
+                    "10": {
+                      "$ref": "#/$defs/admissionRejectionList"
+                    },
+                    "40": {
+                      "$ref": "#/$defs/admissionRejectionList"
+                    },
+                    "128": {
+                      "$ref": "#/$defs/admissionRejectionList"
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              },
+              "additionalProperties": false
+            },
+            "runner_pin": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{40}$"
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false,
+      "minProperties": 1
+    },
+    "turn": {
+      "type": "object",
+      "patternProperties": {
+        "^f2-(inst|stab)-[0-9]{2}/L(00[1-9]|01[0-2])$": {
+          "type": "object",
+          "required": [
+            "energy_j",
+            "dc_tail_cut",
+            "runner_pin"
+          ],
+          "properties": {
+            "energy_j": {
+              "type": "object",
+              "required": [
+                "gpu_rail",
+                "rail_sum",
+                "dc_in"
+              ],
+              "properties": {
+                "gpu_rail": {
+                  "description": "Defined value in J, or a reason and an elapsed-seconds censor bound.",
+                  "oneOf": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "$ref": "#/$defs/undefined"
+                    }
+                  ]
+                },
+                "rail_sum": {
+                  "description": "Defined value in J, or a reason and an elapsed-seconds censor bound.",
+                  "oneOf": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "$ref": "#/$defs/undefined"
+                    }
+                  ]
+                },
+                "dc_in": {
+                  "description": "Defined value in J, or a reason and an elapsed-seconds censor bound.",
+                  "oneOf": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "$ref": "#/$defs/undefined"
+                    }
+                  ]
+                }
+              },
+              "additionalProperties": false
+            },
+            "dc_tail_cut": {
+              "const": true
+            },
+            "runner_pin": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{40}$"
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false,
+      "minProperties": 1
+    },
+    "date_spreads": {
+      "type": "object",
+      "patternProperties": {
+        "^(256|2000|19458)/(gpu_rail|rail_sum|dc_in)/(mean_w|sd10_w|sd40_w|sd128_w|turn_j)$": {
+          "type": "object",
+          "required": [
+            "dates",
+            "singleton_dates",
+            "sd_date_means",
+            "pooled_within_sd"
+          ],
+          "properties": {
+            "dates": {
+              "type": "object",
+              "patternProperties": {
+                "^[0-9]{4}-[0-9]{2}-[0-9]{2}$": {
+                  "type": "object",
+                  "required": [
+                    "n",
+                    "mean",
+                    "sd"
+                  ],
+                  "properties": {
+                    "n": {
+                      "description": "Number of admitted observations, or the refusal when the date has none.",
+                      "oneOf": [
+                        {
+                          "type": "integer",
+                          "minimum": 1
+                        },
+                        {
+                          "$ref": "#/$defs/undefined"
+                        }
+                      ]
+                    },
+                    "mean": {
+                      "oneOf": [
+                        {
+                          "type": "number"
+                        },
+                        {
+                          "$ref": "#/$defs/undefined"
+                        }
+                      ]
+                    },
+                    "sd": {
+                      "description": "Defined value in the cell's measure, or a reason and an elapsed-seconds censor bound.",
+                      "oneOf": [
+                        {
+                          "type": "number"
+                        },
+                        {
+                          "$ref": "#/$defs/undefined"
+                        }
+                      ]
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              },
+              "additionalProperties": false
+            },
+            "singleton_dates": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "sd_date_means": {
+              "description": "Defined value in the cell's measure, or a reason and an elapsed-seconds censor bound.",
+              "oneOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "$ref": "#/$defs/undefined"
+                }
+              ]
+            },
+            "pooled_within_sd": {
+              "description": "Defined value in the cell's measure, or a reason and an elapsed-seconds censor bound.",
+              "oneOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "$ref": "#/$defs/undefined"
+                }
+              ]
+            },
+            "missing": {
+              "type": "object",
+              "patternProperties": {
+                "^\\S+$": {
+                  "type": "integer",
+                  "minimum": 1
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false,
+      "minProperties": 1
+    },
+    "context": {
+      "type": "object",
+      "patternProperties": {
+        "^(256|2000|19458)/(gpu_rail|rail_sum|dc_in)/(mean_w|sd10_w|sd40_w|sd128_w|turn_j)$": {
+          "type": "object",
+          "patternProperties": {
+            "^f2-(inst|stab)-[0-9]{2}/L(00[1-9]|01[0-2])$": {
+              "type": "object",
+              "required": [
+                "value",
+                "date",
+                "hour",
+                "utc_offset_s",
+                "predecessor_kind",
+                "gap_s",
+                "status",
+                "runner_pin"
+              ],
+              "properties": {
+                "value": {
+                  "description": "Defined value in the cell's measure, or a reason and an elapsed-seconds censor bound.",
+                  "oneOf": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "$ref": "#/$defs/undefined"
+                    }
+                  ]
+                },
+                "date": {
+                  "type": "string",
+                  "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"
+                },
+                "hour": {
+                  "type": "integer",
+                  "minimum": 0,
+                  "maximum": 23
+                },
+                "utc_offset_s": {
+                  "enum": [
+                    -28800,
+                    -25200
+                  ]
+                },
+                "predecessor_kind": {
+                  "oneOf": [
+                    {
+                      "type": "string",
+                      "minLength": 1
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "gap_s": {
+                  "oneOf": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ]
+                },
+                "status": {
+                  "enum": [
+                    "known",
+                    "unknown",
+                    "negative_gap"
+                  ]
+                },
+                "runner_pin": {
+                  "type": "string",
+                  "pattern": "^[0-9a-f]{40}$"
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false,
+      "minProperties": 1
+    },
+    "admissionRejectionList": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "enum": [
+          "rail_manifest",
+          "coverage",
+          "meter_gap",
+          "meter_absent",
+          "meter_contaminated"
+        ]
+      },
+      "description": "Reasons for refused complete windows, in search order."
+    },
+    "empty_population": {
+      "const": {
+        "value": null,
+        "reason": "no_qualified_leg"
+      }
+    },
+    "hold_views": {
+      "type": "object",
+      "required": [
+        "all",
+        "base14"
+      ],
+      "properties": {
+        "all": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/hold"
+            },
+            {
+              "$ref": "#/$defs/empty_population"
+            }
+          ]
+        },
+        "base14": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/hold"
+            },
+            {
+              "$ref": "#/$defs/empty_population"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "turn_views": {
+      "type": "object",
+      "required": [
+        "all",
+        "base14"
+      ],
+      "properties": {
+        "all": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/turn"
+            },
+            {
+              "$ref": "#/$defs/empty_population"
+            }
+          ]
+        },
+        "base14": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/turn"
+            },
+            {
+              "$ref": "#/$defs/empty_population"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "date_spreads_views": {
+      "type": "object",
+      "required": [
+        "all",
+        "base14"
+      ],
+      "properties": {
+        "all": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/date_spreads"
+            },
+            {
+              "$ref": "#/$defs/empty_population"
+            }
+          ]
+        },
+        "base14": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/date_spreads"
+            },
+            {
+              "$ref": "#/$defs/empty_population"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "context_views": {
+      "type": "object",
+      "required": [
+        "all",
+        "base14"
+      ],
+      "properties": {
+        "all": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/context"
+            },
+            {
+              "$ref": "#/$defs/empty_population"
+            }
+          ]
+        },
+        "base14": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/context"
+            },
+            {
+              "$ref": "#/$defs/empty_population"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "oneOf": [
+    {
+      "type": "object",
+      "required": [
+        "hold.json",
+        "turn.json",
+        "date_spreads.json",
+        "context.json"
+      ],
+      "properties": {
+        "hold.json": {
+          "$ref": "#/$defs/hold"
+        },
+        "turn.json": {
+          "$ref": "#/$defs/turn"
+        },
+        "date_spreads.json": {
+          "$ref": "#/$defs/date_spreads"
+        },
+        "context.json": {
+          "$ref": "#/$defs/context"
+        }
+      },
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "required": [
+        "hold.json",
+        "turn.json",
+        "date_spreads.json",
+        "context.json"
+      ],
+      "properties": {
+        "hold.json": {
+          "$ref": "#/$defs/hold_views"
+        },
+        "turn.json": {
+          "$ref": "#/$defs/turn_views"
+        },
+        "date_spreads.json": {
+          "$ref": "#/$defs/date_spreads_views"
+        },
+        "context.json": {
+          "$ref": "#/$defs/context_views"
+        }
+      },
+      "additionalProperties": false
+    }
+  ]
+}

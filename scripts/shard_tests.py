@@ -806,6 +806,15 @@ def _unittest_import_name(module: str) -> str:
     return module[len(prefix) :] if module.startswith(prefix) else module
 
 
+def _import_test_module(module: str):
+    imported = importlib.import_module(_unittest_import_name(module))
+    if module == "tests.test_desc_looks_acceptance":
+        from tests.description_expectations import apply
+
+        apply(imported)
+    return imported
+
+
 def _validate_shard_capacity(module_count: int, shard_count: int) -> None:
     """Reject a shard layout that would necessarily assign zero modules."""
 
@@ -850,7 +859,7 @@ def _run_shard_modules(modules, shard_count: int, shard_index: int, watchdog) ->
         if watchdog is not None:
             watchdog.arm(f"module {module} (import and load)")
         try:
-            imported_module = importlib.import_module(_unittest_import_name(module))
+            imported_module = _import_test_module(module)
             suite = loader.loadTestsFromModule(
                 imported_module, pattern=DISCOVERY_PATTERN
             )
@@ -1006,7 +1015,7 @@ def _run_unit_groups(units, shard_count: int, shard_index: int, watchdog) -> int
         if watchdog is not None:
             watchdog.arm(f"module {module} (import and load)")
         try:
-            imported_module = importlib.import_module(_unittest_import_name(module))
+            imported_module = _import_test_module(module)
             if whole_module:
                 module_total = ran_total = None
                 suite = loader.loadTestsFromModule(

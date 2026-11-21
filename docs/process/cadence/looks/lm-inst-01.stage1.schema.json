@@ -1,0 +1,252 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:joulewise:cadence-description:lm-inst-01.stage1",
+  "description": "Energy-blind census keyed by exact kit ID and planned leg.",
+  "type": "object",
+  "required": [
+    "look_id",
+    "source_snapshot",
+    "counts",
+    "positions",
+    "by_kit"
+  ],
+  "properties": {
+    "look_id": {
+      "const": "lm-inst-01"
+    },
+    "source_snapshot": {
+      "type": "object",
+      "required": [
+        "receipt_commit",
+        "input_hashes_sha256"
+      ],
+      "properties": {
+        "receipt_commit": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{40}$"
+        },
+        "input_hashes_sha256": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        }
+      },
+      "additionalProperties": false
+    },
+    "counts": {
+      "type": "object",
+      "required": [
+        "n_legs"
+      ],
+      "properties": {
+        "n_legs": {
+          "type": "integer",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false
+    },
+    "positions": {
+      "type": "object",
+      "patternProperties": {
+        "^f2-(inst|stab)-[0-9]{2}/L(00[1-9]|01[0-2])$": {
+          "$ref": "#/$defs/position"
+        }
+      },
+      "additionalProperties": false
+    },
+    "by_kit": {
+      "type": "object",
+      "patternProperties": {
+        "^f2-(inst|stab)-[0-9]{2}$": {
+          "type": "object",
+          "required": [
+            "qualified",
+            "not_qualified",
+            "dropped",
+            "reasons"
+          ],
+          "properties": {
+            "qualified": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "not_qualified": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "dropped": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "reasons": {
+              "type": "object",
+              "required": [
+                "not_qualified",
+                "dropped"
+              ],
+              "properties": {
+                "not_qualified": {
+                  "type": "object",
+                  "propertyNames": {
+                    "enum": [
+                      "incomplete",
+                      "wrong_mode",
+                      "unreleased",
+                      "short_hold",
+                      "loaded",
+                      "short",
+                      "cap_not_reached"
+                    ]
+                  },
+                  "additionalProperties": {
+                    "type": "integer",
+                    "minimum": 1
+                  }
+                },
+                "dropped": {
+                  "type": "object",
+                  "propertyNames": {
+                    "enum": [
+                      "queue_retired",
+                      "ended_without_member"
+                    ]
+                  },
+                  "additionalProperties": {
+                    "type": "integer",
+                    "minimum": 1
+                  }
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "position": {
+      "oneOf": [
+        {
+          "type": "object",
+          "required": [
+            "disposition",
+            "reasons",
+            "loaded_flag",
+            "receipt",
+            "span_id",
+            "attempt",
+            "span_leg_index",
+            "over_time_budget"
+          ],
+          "properties": {
+            "disposition": {
+              "$ref": "#/$defs/member_disposition"
+            },
+            "reasons": {
+              "description": "Stage-1 eligibility failures in provisional lifecycle order.",
+              "type": "array",
+              "items": {
+                "enum": [
+                  "wrong_mode",
+                  "incomplete",
+                  "unreleased",
+                  "short_hold",
+                  "loaded",
+                  "short",
+                  "cap_not_reached"
+                ]
+              },
+              "uniqueItems": true
+            },
+            "loaded_flag": {
+              "type": "boolean"
+            },
+            "receipt": {
+              "type": "string",
+              "minLength": 1
+            },
+            "span_id": {
+              "type": "string",
+              "minLength": 1
+            },
+            "attempt": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "span_leg_index": {
+              "description": "Zero-based index in the authenticated span receipt.",
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 2
+            },
+            "over_time_budget": {
+              "type": "boolean"
+            }
+          },
+          "additionalProperties": false,
+          "if": {
+            "properties": {
+              "disposition": {
+                "const": "qualified"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "reasons": {
+                "maxItems": 0
+              }
+            }
+          },
+          "else": {
+            "properties": {
+              "reasons": {
+                "minItems": 1
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "required": [
+            "disposition",
+            "loaded_flag",
+            "drop"
+          ],
+          "properties": {
+            "disposition": {
+              "enum": [
+                "dropped:ended_without_member",
+                "dropped:queue_retired"
+              ]
+            },
+            "loaded_flag": {
+              "type": "null"
+            },
+            "drop": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "additionalProperties": false
+        }
+      ]
+    },
+    "member_disposition": {
+      "enum": [
+        "qualified",
+        "not_qualified:wrong_mode",
+        "not_qualified:incomplete",
+        "not_qualified:unreleased",
+        "not_qualified:short_hold",
+        "not_qualified:loaded",
+        "not_qualified:short",
+        "not_qualified:cap_not_reached"
+      ]
+    }
+  }
+}
