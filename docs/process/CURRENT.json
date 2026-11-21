@@ -1,10 +1,10 @@
 {
   "armed": null,
-  "next_observable": "f2stab15-2fd119df/run-out.txt shows LAUNCH_RC=0 with the fence (launch ~12:13, expected end ~13:32, worst case ~13:51; read the true fence deadline and pid from run-out.txt; check the pid, not the deadline). The next activation after the fence pid is gone and runner_receipt.json exists Checks cq-f2-stab-15-l006-a1 under /Users/edr/campaign-out/f2-stab-15/ with f2stab15-check-template-2fd119df/check.sh (LEGS L006, kit sha 8dce…36a1, frozen 6e9d42f1d, campaign_id f2-stab-15, batch_windows == [] asserted; replace REPLACE_STAMP with the actual stamp and NEWACT with the activation id; grep the leg_record for max_busy_cores/max_gap_s/os_level_max; map the quiet span to wall time and count maintenance lines inside it), copies at once with f2stab15-check-template-2fd119df/offload-run.sh (NEWACT replaced; already points at its own offload.sh), prints full 64-hex digests (item 491), then takes the ladder (items 422, 447, 463, 464, 480, 507). Rank 1 for Saturday is served (item 502); rank 2 needs an f2-inst executing delta PASS on main (none at this item); rank 3 hp-02 is complete (item 512); rank 4 from 13:15:00 is f2-stab-02 L010 (seq 10) on pin A with ARG 02:00-02:35 until 23:48:10 (inputs f2stab02-72eb3034/inputs.sh with SPAN/LEGS/SEQ/MAGISTRATE_PID and the custody dir changed; check template f2stab02-check-template-72eb3034/ with l009 -> l010 AND its offload-run.sh repointed to the new template's offload.sh). Rank 1 for Sunday 22 Nov from 00:00 (item 464); item 507: no soak may touch 02:00-02:35. Item 516: stability-queue runway email to Ed if no successor queue is admitted on main by Wed 25 Nov 18:00.",
+  "next_observable": "f2stab02-737f638c/run-out.txt shows LAUNCH_RC=0 with the fence (launch ~13:2x, expected end ~14:40, worst case ~15:05; read the true fence deadline and pid from run-out.txt; check the pid, not the deadline). The next activation after the fence pid is gone and runner_receipt.json exists Checks cq-f2-stab-02-l010-a1 under /Users/edr/campaign-out/f2-stab-02/ with f2stab02-check-template-737f638c/check.sh (LEGS L010, kit sha 1fe8…d505, frozen 2d347f721, campaign_id f2-stab-02, batch_windows == ['02:00-02:35'] asserted; replace REPLACE_STAMP with the actual stamp and NEWACT with the activation id; grep the leg_record for max_busy_cores/max_gap_s/os_level_max; map the quiet span to wall time and count maintenance lines inside it), copies at once with f2stab02-check-template-737f638c/offload-run.sh (NEWACT replaced; already points at its own offload.sh), prints full 64-hex digests (item 491), then takes the ladder (items 422, 447, 463, 464, 480, 507). Rank 1 for Saturday is served (item 502); rank 2 needs an f2-inst executing delta PASS on main (none at this item); rank 3 hp-02 is complete (item 512); rank 4 is f2-stab-02 L011 (seq 11) on pin A with ARG 02:00-02:35 until 23:48:10 (inputs f2stab02-737f638c/inputs.sh with SPAN/LEGS/SEQ/MAGISTRATE_PID and the custody dir changed; check template f2stab02-check-template-737f638c/ with l010 -> l011 AND its offload-run.sh repointed to the new template's offload.sh). Rank 1 for Sunday 22 Nov from 00:00 (item 464); item 507: no soak may touch 02:00-02:35. Item 516: stability-queue runway email to Ed if no successor queue is admitted on main by Wed 25 Nov 18:00.",
   "open_items": [
     {
       "expires_epoch_s": null,
-      "item": 518,
+      "item": 519,
       "owner": "magistrate",
       "status": "ISSUED"
     },
@@ -197,11 +197,11 @@
   ],
   "owner": "magistrate",
   "schema": "joulewise.current_pointer.v2",
-  "source_item": "518",
+  "source_item": "519",
   "source_item_heading_date": "2026-11-21",
   "wait": {
-    "deadline_epoch_s": 1795302000,
+    "deadline_epoch_s": 1795309200,
     "observable": "none",
-    "on_early_or_refused": "a launcher refusal or non-clean close: record it, hold kit f2-stab-15 until an input changes (item 422, RL-179 F-6), mail the lead and Ed, and continue down the ladder. A soak refusal on a measured contending process with a proven clean close is physics, not a kit hold (item 505). If run-out.txt has no LAUNCH_RC line, nothing launched: the attempt is unspent; the next activation re-runs the start-check and re-issues inside 10:50:01-13:14:59, or from 13:15:00 takes f2-stab-02 L010 on pin A."
+    "on_early_or_refused": "a launcher refusal or non-clean close: record it, hold kit f2-stab-02 until an input changes (item 422, RL-179 F-6), mail the lead and Ed, and continue down the ladder. A soak refusal on a measured contending process with a proven clean close is physics, not a kit hold (item 505). If run-out.txt has no LAUNCH_RC line, nothing launched: the attempt is unspent; the next activation re-runs the start-check and re-issues L010 on pin A (launch must clear the 02:00-02:35 band; item 507)."
   }
 }
