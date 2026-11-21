@@ -1,5 +1,87 @@
 # JouleWise Task Queue
 
+PR #795 RL-194 and RL-194a (2026-11-20), [AGENT]. The lead fills `lm-interim-01.inputs.json` from the
+eleven offload manifests (`cadence_look_manifest.py pin-inputs`, then `pin --write`) and runs
+`check-inputs`, which names each HELD span. Where an item prints a span's manifest with every
+character matching, the lead runs `correct-check` (RL-195 §2.1); every other span stays HELD and goes
+to the research lead as item numbers and labels (§2.4). The executing seat produces the review record
+(`cadence_look_input_review.py review`).
+[Report](docs/run_reports/2026-11-20-pr795-rl194-content-address.md);
+[audit round 1](docs/run_reports/2026-11-20-pr795-rl194-audit-1.md).
+
+PR #795 audit 3 (2026-11-20), [AGENT]. Astra re-audits the grammar against the three
+writer pins and the accounting job's ledger (101,889 IDs once each: 101,886 original and
+three corrected expectations, `tests/cadence/interim_admission_corrections.json`).
+[Fix report](docs/run_reports/2026-11-20-pr795-admission-closure.md).
+
+PR #795 fix round 2 (2026-11-19), [AGENT]. Astra audits the stage-1 closed
+list against the three writer pins. A real-roster receipt that stage 1
+refuses comes to Fable as a count and a shape (RL-184 §3.3).
+[Fix report](docs/run_reports/2026-11-19-pr795-fix-2.md).
+
+PR #795 audit round 2 repairs (2026-11-19), [AGENT]. Review the corrected
+writer and twin comparison paths and the checked port inventory. The
+main-side RL-188 registration test needs to compare the qualification row
+when the ledger grows. [Audit repair report](docs/run_reports/2026-11-19-pr795-audit-2.md).
+
+PR #795 RL-187 follow-up (2026-11-18), [AGENT]. Review the
+`lm-interim-01` execution boundary with the paired census. Fable's manifest
+cold pass gates campaign admission. The successor manifest PR owns its
+execution route. [Execution boundary report](docs/run_reports/2026-11-18-pr795-rl187.md).
+
+PR #795 audit round 1 repairs (2026-11-18), [AGENT]. Review the repaired
+pair and reproduce the checked main-targeted port before the manifest cold
+pass. [Audit repair report](docs/run_reports/2026-11-18-pr795-audit-1.md).
+
+PR #795 RL-184 follow-up (2026-11-18), [AGENT]. Astra reruns the census on
+the paired primary and corrected #816 reader. Fable cold-passes the
+manifest before the lead registers a campaign look on main.
+[Builder report](docs/run_reports/2026-11-18-pr795-rl184.md).
+
+PR #795 follow-up (2026-11-18), [AGENT]. Audit the pinned parent-child
+handshake and the interruption ledger. The manifest cold pass owns
+confirmation of the campaign host identifier and the nested-locator reader
+compatibility work. [Adoption report](docs/run_reports/2026-11-18-pr795-twin-adoption.md).
+
+PR #795 frozen-spec disposition (2026-11-18), [AGENT]. Review the
+draft head with Astra. The independent cadence twin and its pinned interface
+remain with the research lead before final manifest validation or execution.
+[Builder report](docs/run_reports/2026-11-18-pr795-frozen-spec.md).
+
+PR #795 round-10 disposition (2026-11-17) takes direct user priority in the
+interim-look worktree. WS 1 and design 4, 7 and throughput 1–2 have synthetic
+regressions. RL-175 B.3 and B.4 resolve design 1 and 8 and have synthetic
+regressions. Design 5 needs a scoped cadence runner and desk patch. Keep the PR
+open for review. See the
+[round-10 report](docs/run_reports/2026-11-17-pr795-round10-builder.md).
+
+PR #795 round-9 intake (2026-11-16): direct user priority on this clean worktree at
+`41afd6eea`; [AGENT], synthetic only. Cold Sol's one LOW (underdetermined design)
+and RL-174 A.2/A.4/A.7/D.3 are implemented and gated: 407 focused tests (2 skips),
+144/144 mutants killed (0 survivors/invalid), 11/11 twin sets agree on stable source.
+Push, hosted quick and exact PR-body readback receipts are recorded in PR #795. No quiet work, real custody, MBP contact or merge. This lane supersedes the
+round-8 pointer; generated rankings and advisor state are unchanged. Evidence and
+remaining lead gates: [round-9 report](docs/run_reports/2026-11-16-pr795-round9-builder.md).
+
+PR #795 round-8 intake/disposition (2026-11-16): direct user priority on this worktree
+from `ac2e1ce33`; supersedes the round-7 lane pointer below without changing generated
+rankings. All three cold HIGH findings repaired; 397 focused tests (2 skips), 137/137
+mutants killed (0 survivors/invalid), and 10/10 twin sets pass on stable source. Root
+review complete. Push after pull --rebase, hosted quick and exact PR-body readback are
+the builder's final actions; receipts live in PR #795. Retain the listed research
+questions and draft status for the lead. No merge, real custody, recordings or MBP
+contact. Evidence/next lead step: [round-8 report](docs/run_reports/2026-11-16-pr795-round8-builder.md).
+
+PR #795 round-7 intake (2026-11-15): direct research-lead-requested code repair on the
+existing interim-look lane takes priority within this worktree; it does not select any
+quiet-machine task or alter generated project queue rankings. Complete the two round-6
+findings tables, synthetic focused suite, twin agreement and mutant harness; push and
+verify required quick, update the PR body, and hand research rulings back without merging.
+Local verification: 389 focused tests and 10 twin sets pass; 133/133 mutants killed
+(0 survivors, 0 invalid). Commit/push, hosted quick and PR readback remain pending at this record; their
+final receipts will be recorded in PR #795. Status/evidence: [builder run report](docs/run_reports/2026-11-15-pr795-round7-builder.md).
+
+
 This is the live queue for JouleWise work. When the user gives a new task, first
 triage it here instead of assuming it should happen immediately.
 

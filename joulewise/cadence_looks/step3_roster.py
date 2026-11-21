@@ -36,7 +36,6 @@ from __future__ import annotations
 import hashlib
 import importlib.util
 from pathlib import Path
-import sys
 import uuid
 
 STEP3_PATH = Path(__file__).resolve().with_name("step3_energy_ratios.py")
@@ -56,9 +55,11 @@ def load_step3(path=STEP3_PATH, sha256=STEP3_SHA256):
     raw = Path(path).read_bytes()
     if hashlib.sha256(raw).hexdigest() != sha256:
         raise Step3Refused(f"{path}: sha256 is not the pinned step 3 code (RL-166 Q6: any edit needs a ruling)")
-    spec = importlib.util.spec_from_file_location(f"_step3_{uuid.uuid4().hex}", path)
+    # Sol round-4 NEW-2: run the bytes just hashed, never a cached compilation of the file
+    spec = importlib.util.spec_from_loader(f"_step3_{uuid.uuid4().hex}", loader=None, origin=str(path))
     module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
+    module.__file__ = str(path)
+    exec(compile(raw, str(path), "exec"), module.__dict__)
     return module
 
 
@@ -124,7 +125,7 @@ def run_cell(prompt_tokens, legs, loader=load_step3):
                 return cell
             tuples = [t for t in tuples if t[0] != key]
             continue
-        cell.update(status="ok", n_legs=len(tuples), **_project(out, {t[0] for t in tuples}))
+        cell.update(status="ok", n_legs=len(tuples), details=out, **_project(out, {t[0] for t in tuples}))
         return cell
     return cell
 
@@ -160,91 +161,82 @@ def run_roster(entries, *, threshold=DRIFT_THRESHOLD, loader=load_step3):
     return {"cells": results, "tripwire": tripwire}
 
 
-# ------------------------------------------------------------------------------------------------------------
-# Custody mode, stage 2 (the stage-2 CLI does not compute statistic (iii); this file supplies it):
-#
-#     python3 -I -B joulewise/cadence_looks/step3_roster.py --manifest MANIFEST.json --stage1 STAGE1.json
-#         --stage1-sha256 HEX --custody ROOT [--span-dir SPAN_ID=PATH ...] [--allow-draft] --out STEP3.json
-#
-# Before anything is opened: the manifest's pins verify (manifest.verify_pins) and LOOKS.json names this stage-1
-# hash (manifest.require_stage1_committed; --allow-draft skips both for synthetic runs). The drift threshold is
-# the committed manifest's decision drift_tripwire (RL-166 Q11), never a command-line value.
-#
-# The roster is stage 1's committed output (level D, docs/process/cadence_look_fit_interface.md section 3),
-# taken by its sha256: its included type-A legs of role fit. A leg's bundle is
-# <span dir>/legs/<leg_id>/runtime/<leg_record.json result.bundle>, as the stage-1 CLI reads it.
-
-SCHEMA = "joulewise.cadence_look_step3.v1"
-
-
 def entries_from_stage1(stage1, sdir_of):
     import json
+    from joulewise.cadence_looks import manifest as lm
+
     out = []
     for leg in stage1["legs"]:
         if not (leg.get("included") is True and leg.get("role") == "fit" and leg.get("leg_type") == "A"):
             continue
         span_id, leg_id = leg["leg_key"].split("/", 1)
-        ldir = Path(sdir_of(span_id)) / "legs" / leg_id
-        result = json.loads((ldir / "leg_record.json").read_text(encoding="utf-8")).get("result") or {}
-        out.append({"key": leg["leg_key"], "day": leg["day"], "bundle": str(ldir / "runtime" / result["bundle"]),
+        sdir = Path(sdir_of(span_id))
+        record = json.loads((sdir / "legs" / leg_id / "leg_record.json").read_text(encoding="utf-8"))
+        bundle = lm.runtime_bundle(sdir, leg_id, record)
+        if bundle is None:
+            raise ValueError("an included Step 3 leg has no bundle")
+        out.append({"key": leg["leg_key"], "day": leg["day"], "bundle": str(bundle),
                     "role": "fit", "leg_type": "A", "included": True, "prompt_tokens_nominal": leg["cell_prompt_tokens"]})
     return out
 
 
-def span_dirs(custody, overrides=()):
-    """span_id -> directory: <custody>/<span_id> unless SPAN_ID=PATH overrides it (as the stage-1 CLI). The same
-    rule as inclusion_34.span_dirs; repeated so that this file runs on the standard library alone under -I."""
-    extra = dict(o.split("=", 1) for o in overrides)
-    return lambda span_id: Path(extra[span_id]) if span_id in extra else Path(custody) / span_id
+def custody_problems(stage1, sdir_of):
+    """Bind operational sources and every selected trace's time projection before any value reader runs.
 
-
-def main(argv=None):
-    import argparse
-    import json
-    p = argparse.ArgumentParser(description="Step 3's statistic (iii) per prompt-size cell (RL-166 Q6).")
-    p.add_argument("--stage1", required=True)
-    p.add_argument("--stage1-sha256", required=True)
-    p.add_argument("--custody", required=True)
-    p.add_argument("--span-dir", action="append", default=[])
-    p.add_argument("--manifest", required=True)
-    p.add_argument("--allow-draft", action="store_true", help="synthetic runs only: a draft manifest, no LOOKS.json stage-1 row")
-    p.add_argument("--out", required=True)
-    a = p.parse_args(argv)
-    repo = Path(__file__).resolve().parents[2]
-    if str(repo) not in sys.path:                 # -I drops the repository from sys.path
-        sys.path.insert(0, str(repo))
+    Step 3 includes legs with missing start readings, which are outside the energy fit. Their trace timing
+    still must be the timing stage 1 judged. Synthetic level-R fixtures without custody retain their test path.
+    """
     from joulewise.cadence_looks import manifest as lm
-    try:
-        doc = lm.verify_pins(a.manifest, repo, allow_draft=a.allow_draft, running=[Path(__file__).resolve(), STEP3_PATH])
-        if not a.allow_draft:
-            lm.require_stage1_committed(lm.load_json(repo / lm.LOOK_LEDGER_PATH), doc["look_id"], a.stage1_sha256)
-    except lm.ManifestError as error:
-        for problem in error.problems:
-            print(f"REFUSE {problem}")
-        return 1
-    threshold = next(d for d in doc["decisions"] if d["id"] == "drift_tripwire")["threshold"]
-    raw = Path(a.stage1).read_bytes()
-    if hashlib.sha256(raw).hexdigest() != a.stage1_sha256:
-        print("REFUSE the stage-1 file is not the committed bytes")
-        return 1
-    try:
-        entries = entries_from_stage1(json.loads(raw), span_dirs(a.custody, a.span_dir))
-        doc = {"schema": SCHEMA, "stage1_sha256": a.stage1_sha256, "step3_sha256": STEP3_SHA256,
-               **run_roster(entries, threshold=threshold)}
-    except Step3Refused as error:
-        print(f"REFUSE {error}")
-        return 1
-    except Exception as exc:                      # type and line only: a message could carry a value
-        tb = exc.__traceback__
-        while tb.tb_next:
-            tb = tb.tb_next
-        print(f"FAILED {type(exc).__name__} at line {tb.tb_lineno}")
-        return 2
-    text = json.dumps(doc, indent=1, allow_nan=False) + "\n"
-    Path(a.out).write_text(text, encoding="utf-8")
-    print(f"wrote {a.out} sha256={hashlib.sha256(text.encode('utf-8')).hexdigest()}")
-    return 0
+    from joulewise.cadence_looks import time_fields as tf
+    ids = [leg["span_id"] for leg in stage1["legs"]
+           if leg.get("included") is True and leg.get("role") == "fit" and leg.get("leg_type") == "A"]
+    problems = lm.nonenergy_problems(stage1, sdir_of, ids)
+    if problems:
+        return problems
+    spans = {sp["span_id"]: sp for sp in stage1["roster"]["spans"]}
+    for leg in stage1["legs"]:
+        if not (leg.get("included") is True and leg.get("role") == "fit" and leg.get("leg_type") == "A"):
+            continue
+        if stage1.get("synthetic") is True and (spans.get(leg["span_id"]) or {}).get("custody") is None:
+            continue
+        expected = ((leg.get("trace_holes") or {}).get("gpu_rail") or {}).get("rows_sha256")
+        try:
+            # Operational hashes above authenticate this bundle locator before it is used.
+            import json
+            sdir = Path(sdir_of(leg["span_id"]))
+            leg_id = leg["leg_key"].split("/", 1)[1]
+            record = json.loads((sdir / "legs" / leg_id / "leg_record.json").read_text(encoding="utf-8"))
+            bundle = lm.runtime_bundle(sdir, leg_id, record)
+            if bundle is None:
+                raise ValueError("an included Step 3 leg has no bundle")
+            rows = tf.gpu_rows(bundle)
+            if expected is None or tf.rows_digest(rows) != expected:
+                problems.append(f"custody: {leg['leg_key']}'s power_trace.csv is not the one stage 1 read (row stamps)")
+        except (OSError, ValueError, TypeError, KeyError, tf.TimeFieldError):
+            problems.append(f"custody: {leg['leg_key']}'s power_trace.csv: time projection unreadable")
+    return problems
 
 
-if __name__ == "__main__":
-    raise SystemExit(main())
+def custody_record(custody, overrides, entries, sdir_of, stage1=None):
+    """What step 3 read, by path and sha256 (a hash of bytes, not a value): assemble requires the fit's GPU traces to
+    be these (Mythos round-5 N6)."""
+    from joulewise.cadence_looks import manifest as lm
+    # A synthetic level-R fixture may carry no custody map or runner roster. Record operational
+    # sources only where D bound them; real stage-1 files are required to carry that map.
+    bound = {sp["span_id"] for sp in ((stage1 or {}).get("roster") or {}).get("spans") or []
+             if sp.get("custody") is not None}
+    files = [{"path": f"{sid}/{rel}", "sha256": sha}
+             for sid in sorted({e["key"].split("/", 1)[0] for e in entries} & bound)
+             for rel, sha in lm.nonenergy_files(sdir_of(sid)).items()]
+    for e in entries:
+        span_id = e["key"].split("/", 1)[0]
+        b = Path(e["bundle"])
+        rel = b.relative_to(Path(sdir_of(span_id))).as_posix()
+        for name in ("power_trace.csv", "rich_telemetry.jsonl", "raw/powermetrics.plist"):
+            if (b / name).is_file():
+                files.append({"path": f"{span_id}/{rel}/{name}",
+                              "sha256": hashlib.sha256((b / name).read_bytes()).hexdigest()})
+    return {"root": str(Path(custody).resolve()),
+            "span_dirs": [{"span_id": k, "path": str(Path(v).resolve())}
+                          for k, v in sorted(dict(o.split("=", 1) for o in overrides).items())],
+            "files": sorted(files, key=lambda f: f["path"])}

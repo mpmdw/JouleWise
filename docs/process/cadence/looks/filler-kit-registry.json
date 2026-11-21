@@ -1,0 +1,42 @@
+{
+  "source_commit": "188014f9589ca1e7fca779ff85ac1e6595e9f456",
+  "source_directory": "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign",
+  "sources": [
+    "fillers-ready/queues",
+    "item-drafts-f2-rl179/queues",
+    "f2-stab/queues",
+    "f2-stab/qual-pin/queues",
+    "f2-stab/VERIFICATION.json",
+    "f2-stab/qual-pin/VERIFICATION.json",
+    "item-drafts-f2-0203/hp-02/queue-a.json",
+    "item-drafts-1118/STANDING-F0-r2.md"
+  ],
+  "kit_sha256_by_id": {
+    "f2-inst-01": "651d1815ca87ee23640a8db1483d4ecaf42d70d029855ad03c14bfa076116f2b",
+    "f2-inst-02": "cfd03677e3629b34a8bcd794a623ee3eaae1033408492eb1d1ddb3229273ed65",
+    "f2-inst-03": "286842217313e13ac5f8f25917b3325e3e512cd621b90b78b6201d331e9dcf25",
+    "f2-stab-01": "dbad9c7b79088bb6f06aac1c1148c3631a0c616fd2ece596bab0f56657ce70fe",
+    "f2-stab-02": "1fe8dd1d0fb60fe1d481ecb0d4358fda595668c1e889a35a75695e290fcad505",
+    "f2-stab-03": "ac4b303e228233765efda120b2d63f2f6e59d7f8565c4b913880c4a1aa1dc404",
+    "f2-stab-04": "494739dedbc07f2ee3a02b1e5f9561bb4812d765c7630e6931c24ea138525bff",
+    "f2-stab-05": "023febe9afc8532b8f06bb40dfe32dd64a933c99e8e080a51e2686e888246b11",
+    "f2-stab-06": "a02d18bafca780c580ae7dfe970e3a81e3e12b4051b269699db329f02c33172c",
+    "f2-stab-07": "fb22cadce8be3c7d7642c9b55802aa0bd4ea90e41c7c0e9a5038e7a8dc88746d",
+    "f2-stab-08": "aaba2ad04cbc88e9872c292699dfa9f98dfb15ad9f7e0af23a1faf0091bebf00",
+    "f2-stab-09": "9a2b863f7abbffdc2d33a3af6bee7d8381d0c54883dbb4a7cac41378572c5ce8",
+    "f2-stab-10": "bb54fdaff1292ab24f53204698649d0925fa00beedca70604f760a340c9ee926",
+    "f2-stab-11": "e8cb23471f556d21514fb5ba37ffa409b9b697cfbd2519d3c2ab0c6922ed36fe",
+    "f2-stab-12": "7a0440d3f15823760179782f85cad560e8ca917bf66201c02b1b911d79af35f9",
+    "f2-stab-13": "47c3d2f5f6133112e7a209c9522e48bb3388c7fa27f56e5ffdf86962d95f7de3",
+    "f2-stab-14": "73fe743e013cddd6d5294e95e076c64933a81eb95933fb4aa5dfb85471b9402d",
+    "f2-stab-15": "8dceffc2e1a10a03d25c6c06487756fe37f8f5a1c57d52e242a64faabcbc36a1",
+    "f2-stab-16": "0fc1139dfb4b92ab18e5fb4c0b66e0d211a02e218e841a4cf94fde1fb19f2b96",
+    "hp-02": "7693b8293b42b8ba20cbd321e201974745b172dc53c4f1397d2c1494f38fbe66"
+  },
+  "other_ids": [
+    "cl-hp-02",
+    "F0",
+    "r1-partc-f0",
+    "STANDING-F0"
+  ]
+}

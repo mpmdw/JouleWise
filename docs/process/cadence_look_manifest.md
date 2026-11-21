@@ -4,10 +4,9 @@ Opus builder (Opus 5.5). First draft Sat 14 Nov 2026 20:28 PST; brought to RL-16
 Branch `align/2026-11-14-look-manifest`, off `align/2026-11-14-kit-v1-1` at `9cbb365a6`. Rulings read on
 `origin/audit/2026-11-10-fable`: RL-149 to RL-165 at `ce12b6924`, RL-166 at `bd090fee1`.
 
-This document is a draft. It authorizes nothing. RL-166 ruled the first draft's twenty open questions in one
-batch; RL-166a to RL-166c and RL-167 followed; the two cold seats on the combined head `5ea1bdee9` (Mythos:
-ADMIT WITH FIXES; Sol: REFUSE) are answered in section 7. The manifest `lm-interim-01` carries every value those
-rulings fixed. Every file it pins is pinned, the analyst seat's two on a draft basis until the cold reviews close.
+The look manifest is a draft. RL-166 ruled the first draft's twenty open questions in one
+batch; RL-166a to RL-166c and RL-167 followed; RL-179 F-12 and RL-180 define the release contract. The manifest `lm-interim-01` carries every value those
+rulings fixed. The checked-in code and schemas are pinned, including the independently authored reader from PR #816.
 The validator refuses a committed manifest (`status: committed`) that still carries a placeholder. The form may change
 until the manifest is committed (RL-166 §2 item 11, Tue 06:00). After that, any change needs a ruling and a
 new manifest id.
@@ -27,16 +26,18 @@ The tests build synthetic inputs only.
 | `docs/process/cadence/looks/lm-interim-01.json` | The draft manifest (`status: draft`) |
 | `docs/process/cadence/looks/LOOKS.json` | The look ledger (RL-166 Q18): look id, manifest path, sha256, status. The block ledger is not changed |
 | `docs/process/cadence/looks/lm-interim-01.stage1.schema.json` | Stage 1's output schema (no energy): level D of the analyst seat's interface (`docs/process/cadence_look_fit_interface.md` §3, PR #795), field for field. Pinned in the manifest; RL-166 adds it to freeze 1 |
-| `docs/process/cadence/looks/lm-interim-01.output.schema.json` | The look's output: level O (interface §4) embedded exactly as `fit`, step 3's file as `step3`, `realized_prompt_tokens`, the decisions and the disclosure (with `holds_cleared`). No High Power table: RL-167 §3 moved it to look `lm-hp-01`. Pinned in the manifest |
+| `docs/process/cadence/looks/lm-interim-01.output.schema.json` | The pinned closed schema for the 15 fields of stage 2’s public report |
 | `docs/process/cadence/looks/evidence/` | Synthetic evidence the manifest's dictated sentences cite, byte-identical, hashed by the validator |
-| `tests/cadence/look_minirepo.py` | Test helper: a pinned copy of every file the look runs, so the entry points' pin checks run on real bytes |
+| `tests/cadence/look_minirepo.py` | Test helper: a pinned copy of every file the look runs, as a git repository whose HEAD is `origin/main`, so the entry points' pin checks and the committed-ledger gate run on real bytes and real git state |
+| `joulewise/cadence_looks/schema_check.py` | A standard-library checker for the subset of JSON Schema the look's schemas use (CI has no `jsonschema`). The manifest validator and stage 2 use it. It refuses a schema keyword outside the subset rather than ignore it |
+| `tests/cadence/look_fixtures.py`, `tests/cadence/test_schema_check.py` | Synthetic schema-checker fixtures and keyword tests |
 | `docs/process/cadence/looks/look_manifest.schema.json` | JSON Schema copy of the manifest format. The Python validator is authoritative |
 | `joulewise/cadence_looks/manifest.py` | Validator: `validate_manifest`, `check_repo`, `validate_look_ledger`, `resolve_roster` |
 | `joulewise/cadence_looks/step3_energy_ratios.py` | Step 3's script, byte-identical (RL-166 Q6). Any edit needs a ruling |
 | `joulewise/cadence_looks/inclusion_34.py` | Rules 3 and 4, stage 1. The U1 evaluator's definitions are copied verbatim, with cites: `thermal.Coverage`, `valid_value` and `keys`, and `thermal_desk.member_record`'s pm_gap loop. Both source files are v4 strict paths, so they are copied rather than imported. Rule 4 reads only each KM003C sample line's `rt` stamp |
 | `joulewise/cadence_looks/step3_roster.py` | The step 3 adapter. It loads the pinned bytes (and refuses others), rebinds `LEGS` and `ORIGINAL_EIGHT`, and calls `analyse` and `custody_check` once per prompt-size cell, 10k first. It finds a failed leg by its traceback frame. It reads the tripwire. It contains no arithmetic on energy |
 | `tests/cadence/test_inclusion_34.py`, `tests/cadence/test_step3_roster.py` | Equality with the registered U1 source and results; boundary tests at every threshold; spy tests (no sample line decoded, no value key kept, no energy file opened); a stubbed step 3 module for the adapter's behaviour; the real module for the sha gate and failure attribution |
-| `scripts/cadence_look_manifest.py` | CLI: `validate MANIFEST [--final] [--repo R [--kit K]...] [--span-ledger L] [--looks L]`; `pin MANIFEST --repo R [--write]` (drafts only: fills the sha256 of every pinned file that exists, then the manifest's LOOKS.json row); `assemble` (one output file from the fit and step 3 files, refused unless both name the stage-1 hash) |
+| `scripts/cadence_look_manifest.py` | Validates and pins the draft and records commitments and execution outcomes in the look ledger |
 | `tests/cadence/test_look_manifest.py` | Synthetic tests, including a spy test showing that no custody file is opened |
 
 **Where the look code lives.** It is in `joulewise/cadence_looks/`. RL-150 R4 requires two things: adding the
@@ -91,7 +92,7 @@ The rows are the first draft's, corrected by RL-166 where it amends them.
 |---|---|---|
 | E1 | **GPU rail and DC-in only** | RL-166 Q17 |
 | E2 | GPU rail: through the committed step 3 module's loaders and `Trace`. DC-in: the trapezoid between consecutive KM003C samples, cut at the segment's ends | RL-166 Q2 |
-| E3 | No joule or watt per leg, turn or block in the output. Per-leg signed relative residuals keyed by leg id are allowed | RL-166 Q16 |
+| E3 | The public report carries only listed words, a stage-1 count and artifact hashes. All fit diagnostics stay in custody | RL-179 F-12; RL-180 |
 
 ### 1.5 The fit (RL-166 Q1, Q2, Q4, Q5)
 
@@ -106,7 +107,7 @@ The rows are the first draft's, corrected by RL-166 where it amends them.
 | F7 | Missing or stale start reading: the leg is out of the fit and counted. Out-of-state start: τ̂ = 0. Onset `not_estimable`: δ is dropped | RL-166 Q1 |
 | F8 | Rates r_p and r_d come from token stamps in stage 1 and are frozen in freeze 2. Per-cell rates are printed and used nowhere | RL-166 Q5 |
 | F9 | **Onset: seconds from the turn's start stamp** (not the first token) to the first off-state reading. Predictors: the three centred start readings and T_p. Censored-normal ML, right-censored at the last token; τ̂ = max(0, linear predictor). Estimable with at least 12 uncensored on at least 3 days; otherwise the count-only cut stays at 116 s. Error: the LODO RMS over held-out uncensored legs. Cut: τ̂ − 2·error. Fitted in stage 1 | RL-166 Q4 |
-| F10 | Python standard library plus numpy, no scipy, run with `-I`; the numpy version is printed | RL-166 Q1 |
+| F10 | Python standard library plus numpy, no scipy, run with `-I`; stage 2 matches the numpy version recorded in committed stage 1 | RL-166 Q1; RL-180 |
 
 ### 1.6 Inclusion
 
@@ -123,11 +124,11 @@ The rows are the first draft's, corrected by RL-166 where it amends them.
 | # | Requirement | Cite |
 |---|---|---|
 | P1 | Hot stretch: the full decode blocks from the first off-state reading onward. Relative error for day D: \|Σpred − Σmeas\|/Σmeas over D's hot blocks, with the base, heat term and onset model fitted without D. Rates and medians are not refitted | RL-166 Q3 |
-| P2 | Also printed: the per-day signed error, the pooled error, the holdout RMS (SD_j), and all of these without the heat columns | RL-166 Q3 |
+| P2 | Private fit diagnostics include the per-day signed error, pooled error, holdout RMS (SD_j), and the corresponding results without heat columns | RL-166 Q3 |
 | P3 | `qualified`, interim half: the maximum over counted days (each with at least 3 included legs that have a hot stretch), GPU rail, ≤ 0.02. Fewer than 3 counted days gives `not_evaluable`, which counts as no | RL-151 §2.1; RL-166 Q3 |
-| P4 | Prefix bias: the long leg is the whole leg; the short is its prefix of 3,724, 3,151 or 2,981 tokens. Residuals are LODO, each divided by its own length's SD. The statistic is the mean paired difference, with a 90 % t interval on day means | RL-166 Q2 |
+| P4 | Prefix bias uses the whole leg and its 3,724-, 3,151- or 2,981-token prefix. Each LODO residual is divided by its length's SD. The mean of day means and its 90% t interval use equal-day weights | RL-166 Q2, RL-175 B.4 |
 | P5 | Step 3 (iii), one call per prompt-size cell, 10k first. The tripwire reads the largest `drift_fraction_linear` over cells where γ is estimable. **Threshold 0.08**, or 0.04 if the cold seat's Q11 check fails | RL-151 §1.3; RL-166 Q6, Q11 |
-| P6 | With/without marked spans, both marks in one print | RL-161 §4; RL-166 Q20 |
+| P6 | With/without marked spans, both marks in one private sensitivity fit | RL-161 §4; RL-166 Q20 |
 | P7 | No extension rule | RL-166 Q12 |
 | P8 | The qualification prints are declared here (`later_looks`). `lm-qual-01` is committed before any qualification energy is opened. Its scorer is `fit_interim.py`'s predict path at this hash | RL-166 Q10 |
 
@@ -136,7 +137,7 @@ The rows are the first draft's, corrected by RL-166 where it amends them.
 | # | Requirement | Cite |
 |---|---|---|
 | Z1 | Freeze 1: this manifest, its code hashes, the stage-1 schema and the output schema, entered in LOOKS.json, before any development energy is read | RL-149 §2.6; RL-150 R4; RL-166 Amends |
-| Z2 | Freeze 2: the base and heat parameters with covariance, the holdout RMS, the rates, the medians and ranges, the onset model and cut, the interim half of `qualified`, and the hashes and numpy version. Never refitted on qualification legs | RL-149 §2.6; RL-166 Q2 to Q5 |
+| Z2 | Freeze 2 takes effect when the mainline report records `twin_agrees = yes` and commits the exact coefficient file by SHA-256 | RL-179 F-12; RL-180 |
 | Z3 | Freeze 2 comes before any qualification energy, any qualification leg, the phase boundary, and the release run's inputs | RL-149 §2.6, §2.8; RL-165 §8.1 |
 
 ## 2. RL-166's rulings, and where each sits
@@ -158,7 +159,7 @@ The rows are the first draft's, corrected by RL-166 where it amends them.
 | Q13 | Reserve legs if desk-final | reserve-01 block, `desk_final_if_any` |
 | Q14 | Type T not read | `reads.leg_types_never`, `never_read` |
 | Q15 | Synthetic review, then stage-1 dry run | `custody.pre_run_check`, `stages.stage1.dry_run` |
-| Q16 | No joules; relative residuals allowed | `energy`, print `per_leg_relative_residuals` |
+| Q16 | Public words, a stage-1 count and hashes | `outputs`, RL-179 F-12 and RL-180 |
 | Q17 | GPU rail and DC-in only | `energy.channels`, `energy.not_read` |
 | Q18 | LOOKS.json; no BLOCK-QUEUE change | `freeze1.ledger_pointer`, LOOKS.json |
 | Q19 | Step 3's legs stay out | `never_read` |
@@ -171,13 +172,13 @@ The rows are the first draft's, corrected by RL-166 where it amends them.
 | Structure | A missing or unknown key at any level; a missing cite. `PENDING:CODE` anywhere but a pinned sha256; `PENDING:Qn` without that open question. In a committed manifest: any placeholder or open question; two different hashes for one path |
 | Stages | Stage 1 opening energy, or any inclusion- or journal-stage file that carries energy; stage 1 not committed first; stage 2 over 1,200 s; a tripwire threshold other than RL-166's |
 | Reads | A forbidden block or phase; hp-01 in the fit; a waited-for development block not read; the look waiting for hp-01 or reserve-01; leg type T not in `leg_types_never`; a `never_read` list missing any of its nine ids (qualification, ctl01, fillers, v4, type_T, rejected_attempts, step3_legs, reserve_qualification, hp01_energy); any attempt other than the accepted one |
-| Verbatim | Any of 22 dictated or ruled texts changed by one character (`VERBATIM_SHA256`: the stated limits, the deferred freeze-2 rules, the heat-term form, the onset's response and estimability, the hot stretch, the relative error, the qualified rule, the stage-2 holds); a dictated sentence's note that does not cite the evidence file at its sha256; with `--repo`, an evidence file that differs |
+| Verbatim | Any of 31 dictated or ruled texts changed by one character (`VERBATIM_SHA256`: the stated limits, the deferred freeze-2 rules, the heat-term form, the onset's response and estimability, the hot stretch, the relative error, the qualified rule, the stage-2 holds, the nine `never_read` sentences); a dictated sentence's note that does not cite the evidence file at its sha256; with `--repo`, an evidence file that differs |
 | Pins | A missing dependency pin (the DC-in decoder `km003c_parse.py` and its imports, the rest of the measured import closure, rule 3's sensor policy `r1_runtime.json`, the validator itself) |
-| Removed | A `high_power_table` print (RL-167 §3) |
+| Public report | Any field, type or word outside the closed interim schema |
 | Energy | Channels other than exactly GPU rail and DC-in; per-leg energy in the output |
 | Fit | A missing pinned code path; a runtime other than "numpy, no scipy, `-I`"; unit not `segment`; a predictor outside the whitelist (no cell effect, nothing read inside the turn, no raw TV0h); an assumed sign; onset not measured from the start stamp, not in stage 1, or with predictors other than RL-166's four; rates outside stage 1; any fold refit other than base, heat term and onset; the step 3 file not at its path and hash; the adapter at another path |
 | Inclusion | Rules not exactly 1 to 6; rules 3 and 4 not at the look or without pinned code; rule 3 without U1's number; rule 4 with the refused clause; verdicts not hashed before energy |
-| Decisions | A missing decision; a threshold other than RL-166's (0.08 with fallback 0.04; 0.02; 9; 2); anything resembling Rule P |
+| Decisions | A missing decision; a threshold other than RL-166's (0.08 with fallback 0.04; 0.02; 9; 2); anything resembling Rule P. The fallback 0.04 carries `ruled_threshold` 0.08 and either the `pending` note (a draft) or `disposed_by` (the disposing ruling, RL-n); a committed manifest never carries `pending` (Mythos N10) |
 | `--repo` | A hash mismatch; look code that is a frozen kit path; a kit whose `looks` is not empty; a frozen `.py` importing look code; look code reading `condition`; a bad LOOKS.json (hash, look id, or a status that disagrees with the manifest) |
 | `--span-ledger` | A ledger whose manifest id or hash differs; spans that are unsealed, out of phase, not desk-final (for waited-for blocks), unknown or filed under another block; a fit roster on fewer than 3 days |
 
@@ -188,6 +189,19 @@ The rows are the first draft's, corrected by RL-166 where it amends them.
 
 **What the validator opens:** the manifest, the ledgers, kit JSON and repository source. Never a custody file.
 
+**The committed ledger** (`manifest.committed_ledger`, Sol N1). Every gate that asks "is this committed?" reads
+LOOKS.json from git, never from a path the caller names: the bytes at `HEAD` (`git show HEAD:...`), which must
+equal the working file with no uncommitted change, at a `HEAD` that is an ancestor of the shared ref (the
+branch's upstream, else `origin/main`; `--ledger-ref` names another). The ledger must validate. `verify_pins`
+then requires the row for this look to name the manifest's sha256 at status `committed`, `stage1_committed`,
+`run` or `frozen` (Mythos N5). `require_stage1_committed(repo, look_id, stage1_sha256, stage1_doc=...)` requires
+`stage1_committed`, `run` or `frozen`, the row's `stage1_sha256` equal to the file's, the manifest at `HEAD` equal
+to the working one, and the row's `roster_sha256` equal to the stage-1 file's `input:roster_sha256` (Mythos N7).
+
+**Provenance.** Stage 1 records its manifest and code hashes, run mode and
+ledger gate. Stage 2 binds the exact stage-1 bytes and the commit that
+authenticates the execution row. Full fit and Step 3 records stay in custody.
+
 ## 4. Notes on rules 3 and 4, and on the adapter
 
 - **Rule 3's clock.** The leg's interval runs from the G0 `phase_start` to the last token event, read from
@@ -195,10 +209,11 @@ The rows are the first draft's, corrected by RL-166 where it amends them.
   as step 3 has them. Sidecar rows are judged on their `wall_ns` stamps. The registered `thermal.coverage`
   uses `monotonic_ns`, but `Coverage` counts cells on a grid anchored at the first sample, so a constant
   offset does not change the result. Network time is off for the campaign.
-- **Rule 4's nominal rate** is the header's `poll_s`: one sample line per poll, empty polls included. The
-  check is "sample lines ≥ 99 % of interval / poll_s". The header's `sps` (samples per second inside a poll)
-  would need each line's `n`, which is not a stamp. This is a reading of "the header's nominal rate", for
-  the cold seat.
+- **Rule 4's nominal rate** is the header's `sps`. Each sample line's `rt` stamp and sample count `n` are taken
+  by pattern; no payload is decoded. The check is "Σ n ≥ 99 % of interval × sps", and the gap is measured
+  between polls that carried samples, so a run of empty polls (`n` 0) covers nothing (Sol N5; the earlier
+  reading, one line per `poll_s`, counted empty polls as coverage). Streams that disagree on `sps`, or lack it,
+  refuse.
 - **Rule 4's normal stop:** a signal (the runner stops the monitor's process group), `duration` or
   `stop file`. Not normal: `absent`, `exception`, `consecutive USB errors`. Only streams that overlap the
   leg's interval are judged.
@@ -208,26 +223,45 @@ The rows are the first draft's, corrected by RL-166 where it amends them.
 - **Not yet shown:** that `analyse_leg` runs on a campaign leg's real bundle layout. RL-166 left this to
   the stage-1 dry run, and the planted-truth run waits for the analyst seat's generator.
 
-## 5. The interface with the fit (PR #795)
+## 5. Execution and publication
 
-| Piece | Who writes it | Command |
-|---|---|---|
-| The roster (one JSON list) | `cadence_look_manifest.py validate` | `--span-ledger L --roster-out R.json`; its sha256 goes into LOOKS.json's `roster_sha256` |
-| Rules 3 and 4 verdict file `{"<span_id>/<leg_id>": {"sidecar_coverage", "km003c_clean"}}` | `inclusion_34.py` | `python3 -I -B joulewise/cadence_looks/inclusion_34.py --manifest M --roster R --custody C --out V.json [--detail-out D.json]` |
-| Level D (stage 1) | `scripts/cadence_look_run.py stage1 ... --rules-3-4 V.json` | #795 |
-| Level O (stage 2) | `scripts/cadence_look_run.py stage2 --stage1 S1 --stage1-sha256 H ...` | #795 |
-| Step 3's statistic (iii) and the drift tripwire (the stage-2 CLI does not compute it) | `step3_roster.py` | `python3 -I -B joulewise/cadence_looks/step3_roster.py --manifest M --stage1 S1 --stage1-sha256 H --custody C --out STEP3.json` |
-| The output file the lead checks | `cadence_look_manifest.py assemble` | `--manifest M --stage1 S1 --fit FIT --step3 STEP3 --analyst-seat NAME [--hold-cleared FLAG=RL-n ...] --out OUT` |
+The committed `LOOKS.json` row supplies `execution_host`, `public_root`
+(repository-relative), `custody_root` (absolute), and any `holds_cleared` ruling
+ids. Establish the two look directories before running. They must be on the
+same filesystem so stage 2 can publish the complete report by atomic rename
+without creating a public temporary file. Under RL-184 the lead runs
+`cadence_look_run.py host-id` at the admitted commit on the execution machine
+and records its `hw1:` token in the `stage1_committed` row on main. The token
+is derived from the machine's hardware UUID. Stage 2 derives it again before
+reservation. The campaign row awaits Astra's paired census rerun and Fable's
+manifest cold pass.
 
-Every entry point verifies the manifest's pins before it opens a custody file (`manifest.verify_pins`), and every
-stage-2 entry point refuses unless LOOKS.json names the stage-1 file's sha256 (`require_stage1_committed`).
-`--allow-draft` waives both for synthetic runs only.
+Use `cadence_look_manifest.py port-files M --repo .` to enumerate the verified
+files for the main-targeted integration. The list includes the two historical
+kit blobs and the decoder closure, including files outside the topic delta.
+Validate the complete port before registration. Preserve the separate v2
+qualification row and its registered bytes when adding the interim row.
 
-**Run end to end on #795's synthetic custody** (an integration of this branch with #795, off any PR): all seven
-generator scenarios run stage 1, stage 2, step 3 and `assemble`, and every stage-1 file and assembled output
-validates against both schemas under `jsonschema` (not installed in CI). The generator now plants rules 3 and 4
-(bc03018d2 on #795); the Mythos cold seat found `inclusion_34.py` agreeing with the planted verdicts on 71 of 72
-legs. The stage-1 dry run on real custody remains the check of the real layout.
+Stage 1 checks every rostered bundle locator before reading trace data.
+`runs/cadence-leg` is a valid literal relative POSIX path beneath a leg's
+`runtime/` directory. Staged span overrides preserve the locator. A null
+locator for an unrun leg remains absent. Stage 1 and stage 2 preflight reject
+empty, absolute or noncanonical paths and locators that resolve outside the
+leg's runtime directory. The pinned twin checks them independently.
+
+Stage 2 checks pins, host, stage-1 commitments, hold clearances, rank, and prior
+execution history. Its exclusive creation of `RESTRICTED/` consumes the id.
+The primary fit, Step 3 and the pinned isolated twin share this reservation. The parent derives the comparison word from the child frame and the stored primary artifacts. An existing
+reservation or report prevents another execution. After an interruption, a
+successor manifest needs a named research-lead ruling.
+
+`cadence_look_manifest.py row --output` reads the registered `PUBLIC.json` and
+records its digest and the coefficient commitment. `row --error-type` records
+the closed error word from the fixed failure notice. After confirming a
+reservation ended without a notice or completed report, the lead uses
+`row --interrupted` to record `interrupted` and `none_recorded`. These
+operations use public records only. See the six private names in the
+[fit interface](cadence_look_fit_interface.md#4-stage-2-fit-and-public-report).
 
 ## 6. RL-166b (the Mythos attack on the fit form), as the manifest carries it
 
@@ -237,7 +271,7 @@ legs. The stage-1 dry run on real custody remains the check of the real layout.
   - `onset.estimable_when` takes B-3, B-4 and B-5, plus the 0.30 censored-share report.
   - The days tripwire is `days_below_4`.
 - **Sentences RL-166b dictates.** They sit in `fit.stated_limits`, and the validator requires each id:
-  - what `yes` means, and its pass rate (0.421 for a correct model, about 4 in 10, 0.04 to 0.69 over five worlds; 0.095 with no heat term, about 1 in 10.5), and that `no` is not evidence against the term;
+  - what `yes` means, and its pass rate (0.421 for a correct model, about 4 in 10, 0.001 to 0.693 over all twelve committed worlds, 0.421 in the default; 0.095 with no heat term, about 1 in 10.5), and that `no` is not evidence against the term;
   - the pooled error;
   - the limit of ½T² (3 % of its 439 s value at 75 s; under about 150 s, Ĥ is the onset step alone);
   - the partial-correction share;
@@ -251,39 +285,17 @@ legs. The stage-1 dry run on real custody remains the check of the real layout.
   - the SD_j covariance term, which is the larger of the leg-clustered SE and the day-jackknife over P-1;
   - the leverage flag;
   - the hot-prefill flag.
-- **RL-166c.** The partial-correction sentence is RL-166c §5's, verbatim: 0.84 to 0.96 over twelve worlds, 0.88 in the default world. Its `note` cites the re-run's evidence file. `stages.stage2.holds` names the two flags the lead holds stage 2 on, `onsets_before_116_s.to_research_lead` and `meter_clock.to_research_lead` (RL-166c §2 row 7). The fit itself does not refuse on them. `assemble` refuses while either flag is true in stage 1's file, unless `--hold-cleared FLAG=RL-n` names the clearing ruling. The output's `disclosure.holds_cleared` records those rulings.
+- **RL-166c.** The partial-correction sentence is RL-166c §5's, verbatim: 0.84 to 0.96 over twelve worlds, 0.88 in the default world. Its `note` cites the re-run's evidence file. `stages.stage2.holds` names the two flags the lead holds stage 2 on, `onsets_before_116_s.to_research_lead` and `meter_clock.to_research_lead` (RL-166c §2 row 7). Stage 2 requires a clearing ruling in the committed ledger for each raised flag before reservation.
 - **The 116 s print rule.** It is decision `onsets_before_116_s`, with threshold 0. When the onset model is `not_estimable` and the count is above zero, the decision sends stage 1 to the research lead.
 - **Schema fields, named here because the interface page does not name them yet.**
   - Level D: `active_readings.{tf08_c,fan_rpm,tv0h_excess_c}.{active, tolerance, min_count_off_day, threshold}`; `onset.n_uncensored_by_cell`; `onsets_before_116_s.{by_g0_role, total, onset_status, to_research_lead}`; `tripwires.days_below_4`; RL-167's `meter_clock` and `roster.spans[].meter_offsets_ns`; `onset.predictors` as a list (B-2 may drop entries); `rates.per_cell` values nullable (RL-167 row 18).
   - Level O, per channel: `fold_coefficients` (P-1); `day_detail.{days.{legs_with_hot_block, hot_blocks, se_with_heat, se_no_heat}, s_with_heat, s_no_heat}` (P-2); `onset_offset_residuals.{offsets."-2".."5".{n, mean_with_heat, rms_with_heat, mean_no_heat, rms_no_heat}, rms_offsets_m2_to_p3.{with_heat, no_heat}}` (P-3). `columns` may hold as few as 5 entries.
   - The analyst seat emits these names, or the interface page renames them and the schemas follow.
 
-## 7. The cold seats on `5ea1bdee9`, answered on this branch
+## 7. Remaining authorization
 
-| Finding | Fix here | Test |
-|---|---|---|
-| Sol 1 (blinding): inclusion decodes energy values before discarding them | `read_pm_supports` takes `timestamp_s` and `elapsed_ns` by pattern; no rich-telemetry line is JSON-decoded. Meter sample and error lines were already pattern-only | energy fields written as bytes no JSON parser accepts; `json.loads` spied, never called |
-| Sol 2, Mythos 12: type-T bundles opened; a legacy field overrides the selector; unpinned sensor policy | A leg with `spec.leg_type == "T"` is never opened (both verdicts false, reason printed); no other field selects; `r1_runtime.json` resolves from the module's path and is pinned and its hash recorded | open-spy on a type-T leg; a legacy `spec.type` selects nothing; a changed policy refuses the run |
-| Sol 5, Mythos 5: the hp-01 table | Out of the manifest (title, describe rule, print), the output schema and `assemble` (`--hp-table` removed); `never_read` names hp-01 energy; RL-166a and RL-167 §3 cited | validator refuses the print; schema carries neither field; the option is gone |
-| Sol 6: Q11 | `drift_tripwire.threshold` 0.04, `ruled_threshold` 0.08, `pending` names the research lead's disposition; `step3_roster.py` reads the threshold from the manifest (its `--threshold` flag is gone) | 0.04 and 0.08 accepted, 0.05 refused, 0.04 without the pending note refused; the applied threshold equals the manifest's |
-| Sol 7, Mythos 11: verbatim texts, complete never_read, the fallback | `VERBATIM_SHA256` (22 texts); `never_read` ids, all nine required; evidence note and file hash checked | every pinned text, one character changed, refused; each id removed refused |
-| Mythos 3, Sol 9: pins not enforced; DC-in decoder unpinned | `fit.dependencies` pins the measured import closure (17 files, with `km003c_parse.py`, `aggregate.py`, `desk_compress.py`, `r1_runtime.json`, the validator); `scripts/cadence_look_manifest.py` joins `fit.code`; `verify_pins` runs in `inclusion_34.py`, `step3_roster.py` and `assemble` before anything is opened; `assemble` compares every hash the fit recorded with its pin | a changed dependency, a changed adapter, a fit hash not the pin, an unpinned running file: each refused |
-| Mythos 8: "committed" not checkable; no roster writer | LOOKS.json rows carry `roster_sha256`, `stage1_sha256`, `output_sha256`, `coefficients_sha256`, required by status; `require_stage1_committed`; `validate --roster-out` writes the one roster shape (a list), which `inclusion_34.py` alone accepts; `assemble` also holds on Q8's tripwires | status without its hashes refused; stage-1 hash mismatch refused in step 3 and assemble; a `{"roster": ...}` file refused; tripwire hold needs a ruling |
-| Mythos 10: text | Off-state reading per R-4 (any stamp age; Unknown never cuts); r_p, r_d per R-1; n and c per R-2, R-3; `passes`/`fails`/`not_evaluable`; custody_files gains the stage-1 meter read for R-20; `realized_prompt_tokens` computed by `assemble`; span trailer counts from the detail file; this spec | verbatim pins cover the ruled texts |
-| Mythos 2 (part): host-command census | The step 3 file's usage line is listed in `tests/host_command_sites.json` with its seam; the file itself is unchanged (RL-166 Q6) | `tests.test_host_command_sites` |
-
-**For the research lead (not changed here):** Mythos 10 notes the pass-rate sentence says "0.04 to 0.69 over the
-five worlds" while its evidence file has twelve worlds (down to 0.001); RL-166c §5 moved the other sentence to
-twelve worlds. Mythos's Q11 reading (the 8 % cell exists and is the same quantity) differs from Sol's (not
-verified); the manifest takes the ruled fallback 0.04 until the research lead disposes.
-
-**On the fit side (#795):** Mythos 1, 4, 6, 7, 9, 13, 14, Sol 3, Sol 4 / Mythos 2 (numpy in CI, the synth census
-entry), and wiring `verify_pins` and `require_stage1_committed` into `cadence_look_run.py` stage 1 and stage 2.
-
-## 8. Still owed
-
-| Item | Who | Due |
-|---|---|---|
-| Final pins. `fit_interim.py` and `scripts/cadence_look_run.py` are pinned **on a draft basis** at #795's latest head; on this branch `validate --repo` warns that they are absent, and with #795 merged every check passes. `pin --write` re-pins after the fit-side fixes and again after the cold reviews; a change on main to any pinned dependency needs a re-pin too | Lead, after the cold reviews | Mon 18:00 |
-| The research lead's disposition of Q11 (0.04 stands until then) | Research lead | Before item 11 |
-| A planted-truth run of `step3_roster.py` on the generator's bundles | Analyst seat / lead | With item 7 |
+The manifest remains draft. The research lead confirms the host binding at
+the cold pass. The pinned reader accepts a one-component bundle locator and
+refuses a nested locator under `runs/`. The custody-layout check needs a
+reviewed reader and corresponding pin that support the producer's layout.
+The prior round reports preserve the development history.
