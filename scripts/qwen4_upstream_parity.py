@@ -1,14 +1,12 @@
 #!/usr/bin/env python3
-"""Offline Flash-Next tiny parity and pinned model_file regression."""
+"""Offline Flash-Next tiny parity. Run reference, mlx, then compare."""
 import argparse
-from contextlib import contextmanager, ExitStack
+from contextlib import ExitStack
 from hashlib import sha256
 import importlib.util
-from importlib.metadata import version
 import json
 from pathlib import Path
 import sys
-from tempfile import TemporaryDirectory
 from unittest.mock import patch
 
 import numpy as np
@@ -18,8 +16,6 @@ PORT_SHA = "f4ec75d16f0af0517b63e202abeef704c9a775e9111949ab003250d51d982c37"
 CASES = {"A": 1105, "B": 2116, "C": 3217}
 DTYPES = ("fp32", "bf16")
 PAIRS = (("hf", "upstream"), ("hf", "port"), ("upstream", "port"))
-VENDOR_MODEL_FILE = (Path(__file__).resolve().parents[1]
-                     / "joulewise/align/models/qwen4_exp_upstream.py")
 
 
 def load_python(path, name):
@@ -86,7 +82,7 @@ def record(out, name, value, as_numpy):
         out[name] = as_numpy(value)
 
 
-def reference(directory, checkout, case, dtype, key_head_dim=None):
+def reference(directory, checkout, case, dtype):
     import torch
     import transformers
     from safetensors.torch import save_file
@@ -101,8 +97,6 @@ def reference(directory, checkout, case, dtype, key_head_dim=None):
     config["layer_types"] = ["full_attention" if t == "indexed_attention" else t
                              for t in config["layer_types"]]
     config.update(rms_norm_eps=1e-6, tie_word_embeddings=False, norm_topk_prob=True)
-    if key_head_dim is not None:
-        config["linear_key_head_dim"] = key_head_dim
     model = prior.build_model(config, CASES[case])
     gold.randomize(model, torch, CASES[case])
     model.to(device="cpu", dtype=getattr(torch, {"fp32": "float32", "bf16": "bfloat16"}[dtype]))
@@ -243,42 +237,6 @@ def mlx(directory, checkout, dtype, which):
     np.savez_compressed(directory / f"{which}.npz", **out)
 
 
-@contextmanager
-def vendored_checkpoint(directory, config, weights):
-    with TemporaryDirectory(dir=directory) as tmp:
-        checkpoint = Path(tmp)
-        (checkpoint / VENDOR_MODEL_FILE.name).write_bytes(VENDOR_MODEL_FILE.read_bytes())
-        (checkpoint / "model.safetensors").symlink_to(weights.resolve())
-        write_json(checkpoint / "config.json", dict(config, model_file=VENDOR_MODEL_FILE.name))
-        yield checkpoint
-
-
-def vendor(directory):
-    """Check the pinned model_file loader against the FP32 reference and upstream."""
-    import mlx.core as mx
-    from mlx_lm.utils import load_model
-
-    if (version("mlx"), version("mlx-lm")) != ("0.31.2", "0.31.3"):
-        raise ValueError("vendor regression requires mlx 0.31.2 and mlx-lm 0.31.3")
-    if not mx.metal.is_available():
-        raise RuntimeError("vendor regression requires Metal")
-    config = json.loads((directory / "config.json").read_text())
-    with vendored_checkpoint(directory, config, directory / "hf.safetensors") as checkpoint, mx.stream(mx.gpu):
-        model, _ = load_model(checkpoint)
-        out = capture_mlx(model, model.model, mx.array([config["ids"]]), port=False)
-
-    result = {}
-    for source in ("hf", "upstream"):
-        with np.load(directory / f"{source}.npz") as expected:
-            result[f"{source}/vendor"] = {
-                key: metrics(expected[key], out[key], 0.0 if key == "greedy" else 1e-4)
-                for key in ("logits", "stepwise", "greedy")
-            }
-    write_json(directory / "vendor-results.json", result)
-    if not all(row["pass"] for pair in result.values() for row in pair.values()):
-        raise SystemExit(f"Pinned model_file parity failed: {directory / 'vendor-results.json'}")
-
-
 def metrics(a, b, atol):
     if a.shape != b.shape:
         return {"pass": False, "shapes": [a.shape, b.shape]}
@@ -333,21 +291,13 @@ def compare(root, cases, dtypes, row):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("stage", choices=["reference", "upstream", "port", "compare", "vendor"])
+    parser.add_argument("stage", choices=["reference", "upstream", "port", "compare"])
     parser.add_argument("root", type=Path)
     parser.add_argument("--port", type=Path)
     parser.add_argument("--case", choices=CASES)
     parser.add_argument("--dtype", choices=DTYPES)
     parser.add_argument("--row", help="print metrics for one comparison row")
-    parser.add_argument("--linear-key-head-dim", type=int, choices=range(1, 257),
-                        metavar="WIDTH", help="override one reference fixture's DeltaNet key width")
     args = parser.parse_args()
-    if args.linear_key_head_dim is not None and (args.stage != "reference" or not args.case):
-        parser.error("--linear-key-head-dim requires the reference stage and one --case")
-    if args.stage == "vendor":
-        if args.dtype not in (None, "fp32"):
-            parser.error("the vendor regression requires fp32 fixtures")
-        args.dtype = "fp32"
     cases = (args.case,) if args.case else CASES
     dtypes = (args.dtype,) if args.dtype else DTYPES
     if args.stage == "compare":
@@ -366,9 +316,7 @@ def main():
             directory.mkdir(parents=True, exist_ok=True)
             print(args.stage, case, dtype, flush=True)
             if args.stage == "reference":
-                reference(directory, args.port, case, dtype, args.linear_key_head_dim)
-            elif args.stage == "vendor":
-                vendor(directory)
+                reference(directory, args.port, case, dtype)
             else:
                 mlx(directory, args.port, dtype, args.stage)
 

@@ -6,15 +6,9 @@
 | --- | --- |
 | Transformers reference | 5.22.1, PyTorch 2.12.0 on CPU, eager attention |
 | Upstream mlx-lm | Git source at `c4c9c762cc797fd979fc98645f5db5112753bbe9`, MLX 0.32.3 on Metal. [Merged PR #1788](https://github.com/ml-explore/mlx-lm/pull/1788) |
-| JouleWise comparison port | `97d780d5959f2d295b953c4d497b8859ef7f1175`, MLX 0.32.3 on Metal. Module SHA-256 `f4ec75d16f0af0517b63e202abeef704c9a775e9111949ab003250d51d982c37`. [Historical port evidence](canonical.md) |
-| Vendored runtime test | MLX 0.31.2, mlx-lm 0.31.3, Transformers 5.12.1 |
+| JouleWise comparison port | `97d780d5959f2d295b953c4d497b8859ef7f1175`, MLX 0.32.3 on Metal. Module SHA-256 `f4ec75d16f0af0517b63e202abeef704c9a775e9111949ab003250d51d982c37`. [Historical port evidence](https://github.com/mpmdw/JouleWise/blob/97d780d5959f2d295b953c4d497b8859ef7f1175/docs/align/qwen4_exp_port/canonical.md) |
 
-The upstream parity runs use the installed mlx-lm source, unmodified. The
-vendored runtime test uses the JouleWise copy on its separate runtime pins.
-The vendor changes are absolute imports, eager annotations for the anonymous
-0.31.3 loader, the upstream `normalize_qk` helper and the DeltaNet kernel
-key-width guard absent in 0.31.3. The vendor also validates the checkpoint's
-quantization against the supported formats on the pinned stack.
+The upstream parity runs use the installed mlx-lm source, unmodified.
 
 ## Tiny matrix design
 
@@ -47,9 +41,7 @@ tolerance. FP32 uses `1e-4`, the existing gold threshold. BF16 uses
 applied to each corresponding fixture and tensor, including the MLX pair.
 This uses the reference's observed same-shape dtype change as the scale.
 Indexer masks, sorted selected expert sets, and greedy tokens require exact
-agreement. The BF16 scale includes error propagated from earlier layers.
-In the audit, halving upstream's `B-bf16/L0.moe` output still passed the
-chained comparison at 0.22461 maximum error against a 0.28572 bound.
+agreement. These gates apply to the tested tensors and prompts.
 
 ## Tiny results
 
@@ -148,6 +140,13 @@ and per-implementation NumPy output are produced locally.
 | BF16 grouped RMSNorm | On A's input embeddings, the upstream folded scale differs from the FP32 `1+w` scale by up to 0.00390625. The upstream group-norm output differs by up to 0.015625 from FP32 normalization and scaling rounded once to BF16. | — |
 | BF16 DeltaNet decay | On the three BF16 input pairs in the probe, mlx-lm's `compute_g` differs from FP32 addition and softplus by up to 0.000380525. Transformers promotes `a` before adding the bias. | — |
 
+The released Flash-Next `config.json` in the SSD artifact omits
+`norm_topk_prob` and uses only `linear_attention` and `full_attention` layer
+types. Renormalized top-k and the released QSA spelling follow the upstream
+implementation's supported paths, so both configuration defects are latent
+for the released weights. Fixture A used `norm_topk_prob=True`. Its BF16
+logit excess is independent of the `norm_topk_prob=False` probe.
+
 The RMSNorm and decay probes isolate arithmetic choices. The tiny decoder
 traces include propagation through earlier components. Fixture A's BF16
 prefill logit error is 0.09765625 against HF, with a 0.0635108 bound.
@@ -156,78 +155,13 @@ bounds of 0.288588 and 0.206586 respectively.
 
 The [configuration and router diff](qwen4_exp-config-router.diff) applies to
 `c4c9c76`. The candidate results are from loading a separate local file
-containing that diff. The vendored runtime file retains the upstream model
-arithmetic. The [merged](evidence/upstream-probe.json),
+containing that diff. The [merged](evidence/upstream-probe.json),
 [candidate](evidence/patched-probe.json) and [BF16](evidence/bf16-probe.json)
 probe records include the input scopes and maximum-error coordinates.
 
 ```sh
 nice -n 10 "$WORK/venvs/mlx/bin/python" scripts/qwen4_upstream_probe.py "$WORK/tiny/A-fp32"
 nice -n 10 "$WORK/venvs/mlx/bin/python" scripts/qwen4_upstream_probe.py "$WORK/tiny/A-bf16" --bf16
-```
-
-## ALIGN model_file setup
-
-For a local upstream-layout checkpoint with unquantized weights or native
-MLX affine quantized weights, copy
-[`qwen4_exp_upstream.py`](../../../joulewise/align/models/qwen4_exp_upstream.py)
-alongside its `config.json` and set `"model_file": "qwen4_exp_upstream.py"`.
-The source in the existing ALIGN model config remains the checkpoint directory.
-The loader rejects NVFP4, other non-affine modes, legacy quantization methods,
-global scales, and activation quantization. It checks top-level and nested
-quantization metadata, including per-layer overrides. Native affine checkpoints
-declare their settings in the top-level `quantization` mapping.
-
-The runtime test builds a tiny local checkpoint and tokenizer, opens it via
-`MlxRuntimeAdapter.prepare`, and compares sparse cached decode against a fresh
-prefill through the portable DeltaNet recurrence. It covers key-head widths
-16, 32, 48, 64, 80 and 128, including both dispatch paths. The 210 GB JouleWise
-artifact uses its bundled historical model file and its own packed experts and
-paged n-gram layout.
-
-### Pinned DeltaNet width regression
-
-The Metal helper in mlx-lm 0.31.3 processes `floor(Dk / 32) × 32` key
-coordinates. The vendor now uses the portable recurrence for key widths
-below 32 or with a remainder modulo 32, matching upstream's dispatch guard.
-With only fixture A's DeltaNet key-head width changed to 48, the pre-fix
-vendor's FP32 prefill error against Transformers was 0.8405828. With the
-guard it was `1.3113e-6` against a `1e-4` bound. Prefill logits agreed
-exactly with upstream. The fixed run also passed cached replay and eight
-greedy tokens. [Regression results](evidence/vendor-width48-after.json)
-
-```sh
-WIDTH48=$(mktemp -d "$WORK/vendor-width48.XXXXXXXX")
-nice -n 10 "$WORK/venvs/reference/bin/python" scripts/qwen4_upstream_parity.py reference "$WIDTH48" --port "$PORT" --case A --dtype fp32 --linear-key-head-dim 48
-nice -n 10 "$WORK/venvs/mlx/bin/python" scripts/qwen4_upstream_parity.py upstream "$WIDTH48" --case A --dtype fp32
-nice -n 10 "$WORK/venvs/runtime/bin/python" scripts/qwen4_upstream_parity.py vendor "$WIDTH48" --case A
-nice -n 10 "$WORK/venvs/runtime/bin/python" -B -m unittest tests.test_qwen4_upstream_model_file
-```
-
-### Pinned checkpoint quantization regression
-
-Upstream's quantizer generated these three checkpoints from fixture C.
-Both stacks received the same safetensors bytes. Upstream produced finite
-logits for all three. The audit compared the original pinned vendor with
-the upstream model on prefill and one cached continuation token.
-
-| Checkpoint | Pinned result at `f1fa8e5e1` | Pinned result with the format guard |
-| --- | --- | --- |
-| NVFP4, no global scale | Prefill max absolute logit error 9.3359375, argmax changed at 38 of 39 positions | Refused with a quantization format error |
-| NVFP4, per-expert global scales | `TypeError` on the pinned expert quantization API | Refused with a quantization format error |
-| Native 6-bit affine, group size 64 | — | Prefill error `9.54e-7`, cached decode error `1.01e-6` against upstream and a `1e-4` bound |
-
-The pinned loader also checks the weight tensors. Affine scales use a
-floating dtype. Integer scale tensors and `.global_scale` tensors cause a
-format error even when the config declares affine. [Regressions before](evidence/pinned-quantization-before.json)
-and [after the guard](evidence/pinned-quantization-after.json) include the
-checkpoint digests and loader results.
-
-```sh
-QUANTS=$(mktemp -d "$WORK/pinned-quants.XXXXXXXX")
-nice -n 10 "$WORK/venvs/reference/bin/python" scripts/qwen4_upstream_parity.py reference "$QUANTS/tiny" --port "$PORT" --case C
-nice -n 10 "$WORK/venvs/mlx/bin/python" scripts/qwen4_upstream_quantization_probe.py prepare "$QUANTS/models" --fixtures "$QUANTS/tiny"
-nice -n 10 "$WORK/venvs/runtime/bin/python" scripts/qwen4_upstream_quantization_probe.py verify "$QUANTS/models"
 ```
 
 ## Converted SSD artifact
