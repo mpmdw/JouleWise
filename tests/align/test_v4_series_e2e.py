@@ -232,7 +232,8 @@ class SeriesCadenceEndToEnd(unittest.TestCase):
     # -- one arm ---------------------------------------------------------------
     def arm(self, window, packet, *, n):
         root = self.tmp / f'session-{window}-{n}'
-        session.prepare(self.measurement, root, window_id=window)
+        state = session.prepare(self.measurement, root, window_id=window)
+        is_c1 = state['v4_series']['window_id'] == 'C1'
         path = self.tmp / f'packet-{window}-{n}.json'
         path.write_text(json.dumps(packet))
         host = FakeArmHost(mode=0)
@@ -240,7 +241,7 @@ class SeriesCadenceEndToEnd(unittest.TestCase):
         before = len(self.installed)
         try:
             session.install(root, runner=host, volume_runner=host, obc_off_attested_by='synthetic',
-                            battery_log=log, next_arm_triage=packet if window == 'C1' else path,
+                            battery_log=log, next_arm_triage=packet if is_c1 else path,
                             w1_disk_config=self.disk_config,
                             **arm_seams(),
                             disk_gate=lambda config: {'status': 'pass', 'offloads': []})
