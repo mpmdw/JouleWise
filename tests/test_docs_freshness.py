@@ -298,6 +298,10 @@ def _decision_reference_documents(root: Path) -> dict[str, str]:
         and not path.relative_to(root).as_posix().startswith("docs/process_traces/")
         # DOCS-THIN-01: archived history stays outside the live reference scan.
         and not path.relative_to(root).as_posix().startswith("docs/legacy/")
+        # Audit evidence directories hold frozen, often hash-pinned records
+        # (formulas such as "D-370" in a retired spec); like docs/legacy/ they
+        # stay outside the live reference scan.
+        and "/evidence/" not in path.relative_to(root).as_posix()
     )
     paths.update(path for path in (root / ".github").rglob("*") if path.is_file())
     paths.update(
@@ -1077,6 +1081,22 @@ class DocsFreshnessTests(unittest.TestCase):
             documents = {".github/x.md": path.read_text(encoding="utf-8")}
             dangling = _dangling_decision_references(documents, {"D-170"})
             self.assertEqual([(".github/x.md", 1, "D-999")], dangling)
+
+    def test_audit_evidence_is_outside_the_reference_scan(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="docs_freshness_evidence.") as root_name:
+            root = Path(root_name)
+            frozen = root / "docs/research-audits/a/evidence/c/SPEC.md"
+            live = root / "docs/research-audits/a/NOTES.md"
+            for path in (frozen, live):
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text("need(work<=D-370)\n", encoding="utf-8")
+            documents = _decision_reference_documents(root)
+            self.assertNotIn("docs/research-audits/a/evidence/c/SPEC.md", documents)
+            self.assertIn("docs/research-audits/a/NOTES.md", documents)
+            self.assertEqual(
+                [("docs/research-audits/a/NOTES.md", 1, "D-370")],
+                _dangling_decision_references(documents, {"D-170"}),
+            )
 
     def test_current_sections_do_not_copy_volatile_literals(self) -> None:
         self.assertEqual([], _volatile_violations(_current_sections()))

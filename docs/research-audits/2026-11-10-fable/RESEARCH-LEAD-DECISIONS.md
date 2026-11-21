@@ -23423,3 +23423,392 @@ Research lead (Fable 5.2), Fri Nov 20 23:24:58 PST 2026 (from `date`). Answers q
 **Amends.** Nothing. RL-179 row 26, RL-194 and RL-194a stand as written.
 
 **What comes back to me.** A failure of condition 1.2; the list in 2.4; a mismatched character in any of the seven.
+
+# RL-196. `lm-hp-01` gets its contract before its route is built: the 24 legs of six spans are the fixed population, cold and warm by as-run position; the Automatic side is read by the HP look itself from the dev-01 and dev-02 files the interim look pinned, not from a freeze-2 artifact; the three hp-01 spans are authenticated by a named witness of 15 November, not held; RL-191's reason rank is inherited and RL-188 §4 is not, because the HP table has no crossing; the print list is closed here and carries no word. #868's executor with a closed HP variant is accepted. The MBP's update checks are not turned off: the flag follows the cold leg, not the checks, and no leg was lost. The 8-hex floor is acknowledged
+
+Research lead (Fable 5.2), Sat Nov 21 14:42:58 PST 2026 (from `date`). Answers the lead's items A, B and C. This is not the final-manifest admission: section 1.7 says what that packet holds.
+
+**Cites.**
+- `RLD:n` is `RESEARCH-LEAD-DECISIONS.md` on the audit branch at `a2abdebdf`.
+- `RS<item>` is a RUN_STATE item on `origin/main` at `46c1b7ada`; `RS:n` is a line of that file.
+- `FF:n` is question n of `/Volumes/JW-EXT/scratch/d-lm-hp01-manifest/FOR-FABLE.md`. `MD` is `MANIFEST-DRAFT.md` and `EG` is `EXECUTOR-GAPS.md` beside it.
+
+**Read.**
+- FF, EG, MD and the seat's brief and final message in full; the key list of `manifest.json` (sha256 `20914b8d…0114`).
+- RS508, RS510 and RS512 in full; RS503 and RS504; the heading paragraphs of RS337, RS340 and RS343 and RS337's receipt, leg and maintenance lines; RS:11114 and RS:11905; RS:3003; RS:2227.
+- The head and the leg lines of the committed hp-01-s02 Check trace on main (`16c8245ec`).
+- RL-149 §2.5 (RLD:12533); RL-157 §1, §3, §4 and §5 (RLD:14671-14709); RL-166 Q3, Q4, Q7 to Q9, Q16 and Q17 (RLD:15860-15916); RL-167 §3 (RLD:16104-16110); RL-171 §5 (RLD:17135-17148); RL-172 (h); RL-174 C (RLD:17604-17614); RL-179 F-12 and rows 25, 26 and 28; RL-181 §2.3 (RLD:19402); RL-184 §1.1; RL-188 §4; RL-190 §2.4, §3.4 and its register; RL-191 §1.1; RL-194, RL-194a, RL-194b; RL-195.
+
+**Checked myself.**
+- **Five digests in MD reproduce** from the cited commits: `cl-hp-01` `7eaf2660…2965`, `cl-hp-02` `7693b829…be66`, and the three queue files `90e042ed…39ed`, `01687bb7…00a5`, `078eb24c…528f`.
+- **hp-02's three Checks** each print RECEIPT OK, the kit digest, the pin `dd206025a`, the roster (3, 4, 5 legs), `restore_proven` true, 0 load redos, and a full 64-hex offload-manifest sha256 under a manifest label (`52e6b031…b68b`, `8e95acf2…7af1`, `b3b86cf7…0b3e`).
+- **hp-01's three Check items and their three committed traces print no 64-hex string and no manifest label.** The seat is right. The traces are on main in commits dated 15 Nov 04:50, 07:15 and 09:50 (`fcb9f4b23`, `16c8245ec`, `8f6ca2dd4`). The s02 trace prints each leg's `leg_summary.json` as one JSON line; RS337 prints its receipt line whole.
+- **No `lm-interim-01` row is in `LOOKS.json` at `46c1b7ada`.** Its one row is `lm-qual-01`. Freeze 2 is not in effect (RS:2227).
+- **The cold-leg flag, from the six Checks** (section 2.1).
+
+**Not checked.**
+- #868's and #795's code. Sections 1.4 and 1.6 state what the route must do, not what either executor does.
+- The s01 and s03 traces line by line; I counted their hash strings and read no leg line in them.
+- What the runner at `dd206025a` hashes at a close. Witness class (b) in 1.3 is a builder check, not something I verified. A quick search of the pin's source did not find it.
+- The committed desk records of 15 Nov on the audit branch (`e78597784`, `37afda2a4`, `05c681ac4`). I tried to list the hash labels in one; the harness refused the read and I did not pursue it. I know them from commit titles and file lists only.
+- Which dev-01 and dev-02 legs are in the HP cell, and their as-run positions. The lead enumerates them (1.2).
+- The MBP's present software-update settings.
+- No custody, energy, power, meter, transcript, slot, sealed or restricted file was opened. The thermal and timing prints inside RS337 to RS512 and in the s02 trace are on public main; I used the OS level, `pm_nominal`, log-line counts and clock times, and no temperature.
+
+**Not done.** No commit, push, comment, run, SSH or signal. The only file written is this one.
+
+---
+
+## 0. The answers
+
+| # | Answer | In one line |
+|---|---|---|
+| A, FF:1 | **Yes** | Six spans, 24 positions, fixed. First leg after each span's soak is cold, the rest warm. The measured start reading prints beside the label |
+| A, FF:2 | **Neither option as posed** | The HP look reads the Automatic legs itself, in its own confined run, from files whose pins equal the interim look's. It binds two freeze-2 hashes and opens neither energy fit |
+| A, FF:3 | **A named witness, no hold** | `hp01-witness-1115`: three classes of evidence dated at the close. A file with none of them holds its span and comes to me |
+| A, FF:4 | **RL-191 §1.1 yes; RL-188 §4 no** | The HP "onset" is the OS-state onset of RL-166 Q4, not a power crossing. No recovery search exists in this table |
+| A, FF:5 | **Approved, and closed here** | Per-leg rows and a block by position table, both arms, in custody. Public: hashes, ids and stage-1 integers. No word, no float |
+| A, route | **#868 with a closed HP variant** | No new executor, no twin |
+| B | **No change** | Update checks stay on. A dated host-events file is written, and the HP table prints it per leg |
+| C | **Acknowledged, no objection** | |
+
+---
+
+## 1. `lm-hp-01`
+
+### 1.1 FF:1, the population and the labels
+
+**Admitted as the fixed population of one read:** `hp-01-s01` to `-s03` and `hp-02-s01` to `-s03`, 24 positions, as MD lists them.
+
+- **A position's identity is (block, span, attempt, leg).** L001 to L012 occur in both kits and are never merged or matched by leg id alone.
+- **Cold is the first leg after the span's soak. Every other leg is warm** (RLD:14693). That gives 3 cold and 9 warm in each block.
+- **The label is by history, and the reading prints beside it.** Each row carries the measured start reading (RLD:13016, 14805). No leg is moved between classes on its reading.
+- **None of the six spans used a load redo** (RS337, RS340, RS343, RS508, RS510, RS512), so RL-157's "reference from a redo" case (RLD:14805) does not arise on the HP side. On the Automatic side the lead marks any such span in the reference roster.
+- **Nothing is added, dropped or replaced** (RLD:14698). A position is `qualified` or `not_qualified:<reason>` in stage 1. With 24 receipt-backed bundles there is no `dropped` and no `pending`.
+- **Fewer than 9 qualified legs in either block comes to me** before the reservation. RL-157 §4 said this for hp-01 (RLD:14701); it now covers hp-02. The count is stage 1's and reads no energy.
+- **One caption line is fixed now:** "Each High Power block ran on one date (15 and 21 November 2026). Block and date cannot be separated; n is two blocks."
+
+### 1.2 FF:2, the Automatic reference
+
+**The HP look computes the Automatic side itself: same run, same function, same revision as the High Power side.**
+
+| Option | Ruling | Why |
+|---|---|---|
+| An existing freeze-2 artifact | **No** | The coefficient file holds a fit, and a prediction is not a measurement. RL-149 §2.5 asks for ratios "against Automatic at matched blocks" (RLD:12533), and RL-157 §3 asks for the Automatic leg-to-leg and block-to-block spread beside them (RLD:14692). Both need per-leg Automatic energy on the HP print's own extents |
+| A separately authorised projection pinned beside freeze 2 | **No** | It is a second file of per-leg development energy, made by different code, with its own review. A ratio whose operands came from two programs is the thing to avoid |
+| **The HP look reads the raw Automatic files** | **Yes** | One energy function for both operands. The files are already pinned |
+
+**The rules.**
+
+1. **Reference roster.** Every leg of dev-01 and dev-02 that is in the HP cell (type A, the 19,458-token step prompt, decode cap 4,096) and has a member bundle. The lead lists them in the final manifest in MD's row format: Check item, span and leg, receipt verdict, t0-date, as-run position, class.
+2. **Pins.** Each reference file's path and sha256 are copied from `lm-interim-01`'s final manifest pin list. The cold seat checks equality row by row. The HP look therefore reads the bytes freeze 2 was fitted on. A dev span that is unproven under RL-195 §2.4 takes the route I give it for the interim look; HP adds none.
+3. **Freeze-2 files bound by hash, both in the final manifest:** the coefficient file's sha256, which is freeze 2 itself (RLD:18934, row 27), and the sha256 of `lm-interim-01`'s committed stage-1 output (RLD:15901). The HP look reads the second for the onset fit, its error and each reference leg's interim verdict. **It does not open the coefficient file,** and it writes neither. That is the whole of RL-167's "takes freeze 2's files by hash and can change none of them" (RLD:16110).
+4. **Matching** is by class within the cell: cold against cold, warm against warm. The soak is matched by design (RLD:14671). Seeds are not matched (RLD:14690).
+5. **The reference legs pass the HP look's own stage-1 predicates** (1.4), with power mode 0. Their interim verdict prints beside and decides nothing here.
+6. **No observed-over-predicted print.** The frozen energy predictor is not run on HP legs in this look. If that is wanted later, it is a new look by my line.
+
+**Order.** `lm-hp-01` reserves only when freeze 2 is in effect. Stage 1 and the reservation each check it, as RL-190 §3.5 has it for the other description looks.
+
+### 1.3 FF:3, the hp-01 spans' authentication
+
+**A named witness is admitted for `hp-01-s01`, `-s02` and `-s03` only. No hold.** A Check-time manifest digest was never printed for these spans, so there is nothing to recover, and a hold would leave half the population unread for a record that cannot be made.
+
+**Why it is sound.** RL-194 condition 2 exists so that no pin is "computed fresh from today's copy" (RLD:23298), under an honest-writer model that guards against accident (RLD:23358). What that needs is a value fixed at the close that today's bytes must equal. hp-01 has three kinds.
+
+**`hp01-witness-1115`. Each file the look opens in an hp-01 span is pinned under the first class that applies:**
+
+| Class | The witness | Covers |
+|---|---|---|
+| (a) | **Content equality with a commit of 15 Nov on main.** The file's parsed content equals what the span's committed Check trace prints (`fcb9f4b23`, `16c8245ec`, `8f6ca2dd4`) or what RS337, RS340 or RS343 prints | Leg summaries and the receipt fields those records print |
+| (b) | **A hash the pinned runner wrote at the close** into that span's own records, which the 15 Nov Check asserted equal ("feed hashes", RS337). The verifier recomputes it today | The streams and any file the close hashed |
+| (c) | **Equality of sha256 across two copies on different volumes,** where a public record of 15 Nov shows the second copy existed then (the copy markers of RS339 and RS342; the lead cites s03's) | Anything left |
+
+**Conditions.**
+
+1. **(b) is a builder check, as RL-195 1.2 was.** The run report cites, from the runner's source at `dd206025a` and not from a real span, the file and line that writes each close-time hash, and lists which files it covers.
+2. **Comparison is by the hash-only verifier of RL-194a §1** for (b) and (c): no decoder, opaque bytes, `pass` or `fail` and digests. For (a) the comparison is on operational files only and prints no value.
+3. **The review record names, for every hp-01 file,** its sha256, its class, and where the witnessing value lives: commit, path and line for (a); record path and key for (b); the two volumes and the public item for (c).
+4. **A file with no class holds its span,** and the manifest is not final (RL-195 §2.3). It comes to me as a count and the file's kind.
+5. **The first offload manifest later made for each span** is recorded with its sha256 and its date as a second record. It is cited, never binding (RL-194a §2 item 2). `outer.sha256` stays what RL-195 §2.2 says it is.
+6. **The pins are committed before any HP energy is opened by anyone.** RS503 check 1 attests none has been. That is what makes a pin fixed today as good as one fixed on 15 Nov against everything but accident, and classes (a) to (c) cover accident.
+
+**hp-02's spans take the ordinary RL-194 chain** from RS508, RS510 and RS512, full digests.
+
+**Disclosure.** The look's blind statement gains: "The three spans of 15 November closed before offload-manifest digests were printed in public records. Their files are bound by records made at those closes, as RL-196 1.3 lists."
+
+### 1.4 FF:4, timing and quality
+
+| Rule | Inherited? | Why |
+|---|---|---|
+| RL-188 §4.1, the time of a power crossing | **No. Nothing to inherit** | The HP table has no rail-rise or decode-end lag. Its "onset" is RL-166 Q4's: seconds from the turn's start stamp to the first off-state reading, right-censored at the last token (RLD:15870) |
+| RL-188 §4.2, the recovery search | **No** | The table has no return-to-baseline print |
+| RL-191 §1.1, the reason rank | **Yes, whole** | Every null in an energy print takes its reason by that rank. A ratio takes the higher-ranked reason of its two operands (RLD:22663) |
+| RL-194b, `interval_ledger_mismatch` | **Yes** | Where the route uses #868's interval ledger. Same effect: that leg's prints are null, the leg stays in the accounting |
+| RL-192, exact rationals | **Yes** | It is #868's loader. Both operands pass through it |
+| RL-181 §2.3, stage-2 coverage and gap checks | **Yes** | On each print's own interval, before a value on it is read |
+| RL-190 §3.2, `over_time_budget` | **Yes** | A boolean. Wall time is not a predicate. Six HP legs ran 1 to 5 s over budget and none is affected |
+
+**If the builder finds it needs a crossing or a recovery window to make an HP print, that print is not built** and the question returns.
+
+**Stage-1 predicates for this look,** from `leg_record.json` and `runner_receipt.json` only, in RL-193 §4's order where they coincide:
+
+> `leg_status`; `g0_outcome` released; `decode_tokens` equal to the kit's cap with `decode_cap_reached`; the power mode at episode start (2 with no revocation for a High Power leg, 0 for a reference leg); the loaded flag (RL-192b). The quiet-span predicate of RLD:19402 is not applied: these legs have no quiet span.
+
+**The in-turn prints are the ones RL-145 fixed** (RLD:11464): the first reading off (0, Nominal); the share of decode readings at each level; the GPU clock ratio by 256-token block and over the last 512 tokens against the first-10-s median; the token-rate ratio. No new definition is written.
+
+### 1.5 FF:5, the output
+
+**Approved as the seat proposes, and the print list is closed here. A print not listed is not built.**
+
+**Custody (`RESTRICTED/`):** `legs.json`, `table.json`, `stdout`, `stderr`.
+
+| File | Rows | Columns |
+|---|---|---|
+| `legs.json` | One per leg, both arms | Identity, arm, block, span, as-run position, class, t0-date, host-event id (2.3); start reading; `os_level_max`, `pm_nominal`; mode set to G0 in seconds (High Power); onset or its censoring time; share of decode tokens stamped before the first off-state reading; the same share before the frozen cut (τ̂ less twice its error, from the bound stage-1 output, RLD:15874); the in-turn prints of 1.4; energy on the GPU rail and on DC-in over prefill, decode and the leg; each null's reason |
+| `table.json` | Channel by extent by class | The ratio of the High Power class median to the Automatic class median, for hp-01, for hp-02 and for the 24 together; the smallest and largest single High Power leg over the Automatic median; **the Automatic yardstick:** the smallest and largest single reference leg over its class median, and dev-01's class median over dev-02's; hp-02's class median over hp-01's; medians of onset, clock ratio and both shares by arm, block and class; n in every cell |
+
+- **Channels are the GPU rail and DC-in** (RLD:15916). Every analysis reads DC-in.
+- **Extents use the executor's existing segments.** No new segmenting is written for this look.
+- **No interval, no test, no threshold, no word.** It is description (RLD:12534). A cell prints its n and no minimum applies; a cell with no numeric leg prints null with `no_qualified_leg`.
+- **`PUBLIC.json`:** the look id, manifest hash, commit, the stage-1 hash, both freeze-2 hashes, the two restricted files' hashes, and integers copied from stage 1. RL-179 row 26 applies as written.
+- **Stage 1's committed output is public:** the roster, dispositions, positions, classes, dates, host-event ids, `os_level_max` and `pm_nominal`. All of it is already in RUN_STATE or follows from it.
+- **Onset, clock and the shares hold no energy, and they are restricted all the same,** because the one confined process computes them (RLD:18873, classification by process). I release them by a ruling that names them.
+- **No paper sentence that pools or compares High Power and Automatic numbers is licensed by this ruling.** Row 26 ends for a number only by my ruling naming it and its contributors.
+- **Captions fixed now:** the line in 1.1, and RL-157 §1's "soak in Automatic; mode set N s before the first leg's G0" (RLD:14675).
+
+### 1.6 The route the integration owner may freeze
+
+**The lead's preference is accepted: #868's description executor, with one closed HP variant in the v2 manifest schema and an explicit dispatch entry.** A new executor would duplicate the pins, the confinement, the verifier, the host literal and the once-only rule for no gain.
+
+| Part | Contract |
+|---|---|
+| Schema | Kind `description`, variant `hp`. Look id exactly `lm-hp-01`. Kit ids exactly `cl-hp-01` and `cl-hp-02` on `dd206025a`, plus the reference kits by id and digest. Receipt cap 5 legs a span |
+| Roster binding | The six queue files' bytes, kit digests, pin, issue and attempt, the ordered receipt roster, Check verdict, restore, t0-date and position, as EG item 2 lists. An OPEN leg, a wrong digest or pin, a changed member or order, an unproven restore, a missing or unlisted span each refuse before the reservation |
+| Order test | RL-190 §3.4's three tests (RLD:22453), extended to this look, plus: the reference pins equal the interim manifest's |
+| One function | The energy function is called for both arms in one process at one revision. A reference value from any other source refuses |
+| Host, once, verifier | RL-184's `hw1:` literal; one execution for the manifest id; RL-194a §1's verifier first |
+| Twin | None. No word depends on this look |
+| Review | One executing cold seat under RL-190 4 (d), in place of RL-167's "Mythos seat" (RLD:16110) |
+| Synthetic tests | The six-span fixture; a missing and an extra block; a duplicate receipt; a swapped position; a reference pin that differs; F-12's type, invariance, failure and once tests (RLD:18865-18868); one planted hand table of a few legs with known ratios, not a cohort (RLD:15914) |
+
+**Negative test at the public CLI:** an HP manifest cannot reach the instrument or stability path, and neither of those can reach the HP path.
+
+### 1.7 What the final packet holds
+
+It comes to me once. I answer with one ruling that carries the `RESTRICTED-READ` stanza of RL-190 §3.5.
+
+1. The final manifest, committed, with its sha256 and its `LOOKS.json` row.
+2. The executor commit and the schema revisions.
+3. MD's 24 rows unchanged, and the reference roster of 1.2.
+4. The pin list for every file either stage opens, with its chain: hp-02 from RS508, RS510 and RS512; hp-01 by class under 1.3; the reference by equality with the interim manifest.
+5. The review record in RL-194's shape and the verifier's result.
+6. The freeze-2 record on main (RL-184), the coefficient file's sha256 and the interim stage-1 output's sha256.
+7. The hand table reproduced, the four F-12 tests, and the host rehearsal if this executor revision and host have none (RL-190 §3.6).
+8. The cold seat's report, with its model and the builder's.
+9. Stage 1 run as a dry run on the real roster, which opens no energy: the 24 dispositions and the reference dispositions.
+10. The desk's refreshed attestation of zero `lm-hp-*` executions and reservations (RS503 check 1), and the host-events file's hash (2.3).
+
+---
+
+## 2. The MBP's host regime
+
+### 2.1 What the six Checks show
+
+| Span | Cold leg | Its flag | Update-daemon lines the Check names |
+|---|---|---|---|
+| hp-01-s01 | L001 | **0, Nominal** | `mobileassetd` inside L001; more at the L002/L003 boundary. All three legs 0 |
+| hp-01-s02 | L004 | 2, not Nominal | Only in the 06:40 bucket, at L006's end. L006 and L007 are 0 |
+| hp-01-s03 | L008 | 2, not Nominal | Only in the 09:20 bucket, at L011's end. L011 and L012 are 0 |
+| hp-02-s01 | L001 | 2, not Nominal | The 03:10 bucket, at the soak's end and L001's start |
+| hp-02-s02 | L004 | 2, not Nominal | 05:09 and 05:22, inside L004. The 05:09 burst includes XProtect |
+| hp-02-s03 | L008 | 2, not Nominal | 07:11, in the soak, **before** L008. The same pair at 08:10 inside L010, which is 0 |
+
+- **The flag follows the cold leg, not the daemons.** Five of six cold legs carry it and none of eighteen warm legs does. Warm legs that overlapped the same daemons read 0, and hp-01-s02's flagged leg has no named burst in its interval.
+- **The flag is thermal status.** `os_level_max` and `pm_nominal` are the OS thermal-pressure level (RS:11905). In Automatic, every leg of dev-01 printed level 2 (RS:11114). No leg is dropped for it (RL-149 §2.4, as RS:11905 reads it; I did not re-read that section).
+- **No leg was lost.** All 24 were admitted with no load redo. Bursts of over 2,000 log lines a minute did not trip rule 5.
+- **The largest burst is not the hourly check.** hp-02-s02's 05:09 counts match the 05:00 batch seen on another day almost line for line (RS:3003), with XProtect in it. XProtect cannot be switched off by a supported setting (RLD:17146).
+
+### 2.2 The ruling: no change
+
+**Automatic update checks stay as they are. RL-171 §5's allowance for them is not taken up.**
+
+- **The benefit is not shown.** The option was raised to explain a flag that the checks do not explain, and to prevent a loss that did not occur.
+- **The cost is real, if small.** A host change in the middle of the stability series, between the development legs and the qualification that tests their fit, and one more setting for every arm record to prove.
+- **Timing.** A hygiene change is allowed once, before freeze 2's commit (RLD:17147). From that commit to qual-03's close nobody changes one (RLD:17612, row 25). A change after qual-03 would put W1 on a state that qualification did not run on, and needs my ruling. So the allowance lapses unused at freeze 2's commit.
+- **What would reopen it, before that commit:** a table from public Check items only, over every close since 15 Nov: legs with a load redo or a `cpu_load` non-admission, split by whether a `softwareupdated` burst lay in the attempt's interval, beside the same split for clean legs. I rule on that table. Nobody need build it; this is the route, not a request.
+
+### 2.3 What is recorded
+
+**One committed file, `HOST-EVENTS.json`, at a path the lead picks.** One row for each dated change of host state: id, epoch, what changed, the RUN_STATE item that records it, and the restore line.
+
+- **Seeded with what the record already holds:** the `spotlightknowledged` stop of Sun 15 Nov 15:32 (RLD:17606), every restart since dev-01, and any other event RUN_STATE names.
+- **A baseline row, read only:** at the next close interval the magistrate reads the software-update schedule, the automatic check, download and install keys, and the OS build, and the row records them. No armed span is touched and nothing is set.
+- **If that readback shows automatic installation of macOS updates enabled,** the lead turns that one key off at a span boundary, with a readback, a restore line and a row. It preserves the host state that row 25 protects, so it is allowed on either side of freeze 2. Checks and downloads are not touched.
+- **An OS build change is a host event** and comes to me if it falls between freeze 2's commit and W1's last close.
+
+### 2.4 What the reads do
+
+| Read | Effect |
+|---|---|
+| `lm-hp-01` | Each leg row prints the id of the latest host event before its t0 (1.5). **It needs this already:** hp-01, dev-01 and dev-02's Sunday half ran before the 15 Nov event; dev-02's Monday half and hp-02 ran after it. A caption line says so. Nothing is stratified; n is too small |
+| `lm-interim-01` | Unchanged. Its maintenance print already carries the 15 Nov date (RLD:17614) |
+| `lm-qual-01`, W1, the transfer block | **Not told and not changed.** No host change is made, so there is nothing to stratify |
+| `lm-inst-01`, `lm-stab-*` | Unchanged |
+
+---
+
+## 3. C: the 8-hex floor
+
+**Acknowledged. No objection.** Human-facing text may abbreviate a digest to eight or more hex characters. Wherever a binding is checked the full 64 hex is compared, and an abbreviation is never a binding input. RL-194a §2 stands for the legacy Check items that printed abbreviations: every printed character must match.
+
+---
+
+## Amends
+
+- **RL-167 §3** (RLD:16110): "a Mythos seat reviews it cold" is read under RL-190 4 (d); "takes freeze 2's files by hash" is 1.2 rule 3.
+- **RL-157 §4** (RLD:14701): the fewer-than-nine return covers hp-02 as well as hp-01.
+- **RL-190 register row 4** (RLD:22581): its scope gains `lm-hp-01`.
+- **RL-194 condition 2** (RLD:23298): for the three hp-01 spans only, the chain is 1.3's witness.
+- **RL-171 §5** (RLD:17144-17148): the update-check candidate is declined. The paragraph otherwise stands.
+- **Stand unchanged:** RL-149 §2.5; RL-157 §1, §3 and §5; RL-166 Q4, Q9 and Q17; RL-174 C; RL-179 rows 25 to 28; RL-188 §4 for the looks it names; RL-191 §1.1; RL-194a; RL-194b; RL-195.
+
+**Blind status.** Blind. No High Power, development, F2 or stability energy has been read by me, and RS503 check 1 is the record that nobody has run an `lm-hp-*` look. Section 1 fixes a population, a reference source, an authentication route and a print list before the look's manifest is committed and before its executor has a route; it rests on kit and queue bytes, Check items, commit dates and rulings. Section 2 rests on the OS level, the Nominal flag, log-line counts and clock times printed in six public Check items. No estimator, threshold, level or word of any registered read changes.
+
+**For Ed, plainly.** "Three things, and none needs machine time. First, the High Power comparison now has its rules written before anyone builds or runs it. It will compare the 24 High Power runs with the ordinary runs we already have, using one piece of code for both sides, and it gives a description with no pass or fail. The first block's files were saved before we started publishing checksums, so I named the records from that day that vouch for them instead of holding half the data. Second, the idea of turning off the Mac's update checks: no. The warning it was meant to fix shows up on the first run after every warm-up whether or not an update check is running, and no run was lost. Changing the machine now would cost more than it buys. We will keep a short dated list of anything that does change on the machine. Third, the lead's shorthand for checksums in notes is fine."
+
+---
+
+## Register
+
+Rows for the lead to commit to `RULES.json`. Owner is `research_lead` for rows 1 to 5; the lead owns row 6.
+
+| # | Clause | Class | Protects | Scope | Ends | Test |
+|---|---|---|---|---|---|---|
+| 1 | `lm-hp-01` reads 24 positions keyed (block, span, attempt, leg) over six named spans; cold is the first leg after a span's soak; nothing is added, dropped or replaced; fewer than 9 qualified in a block returns (1.1) | VALIDITY | The roster and the labels are fixed by records before the read | `lm-hp-01` | When the look has run | Stage 1 on synthetic roots: a missing block, an extra block, a duplicate receipt and a swapped position each refuse |
+| 2 | Both operands of every ratio come from one energy function in one run; the reference pins equal `lm-interim-01`'s; the look binds the coefficient hash and the interim stage-1 hash, opens only the second, and writes neither (1.2) | VALIDITY (prereg and blinding) | A ratio is not an artefact of two programs, and freeze 2 is not touched | `lm-hp-01` | When the look has run | A differing reference pin refuses; a reference value from another source refuses; both freeze-2 hashes are equal before and after the run |
+| 3 | A file of `hp-01-s01` to `-s03` is pinned by content equal to a 15 Nov commit on main, by a hash the runner wrote at the close, or by equal sha256 on two copies with the second witnessed on 15 Nov; a file with none holds its span (1.3) | VALIDITY | The bytes read are the bytes written at the close, where no Check-time manifest digest exists | The three hp-01 spans | When the look has run | The review record names each file's class and the witness's place; the hash-only verifier passes; the builder cites the runner line for class (b) |
+| 4 | `lm-hp-01` inherits RL-190 §3.4's order test, RL-191 §1.1's rank, RL-192, RL-194a §1 and RL-194b; it has no crossing and no recovery print, and RL-188 §4 does not apply (1.4, 1.6) | VALIDITY | Nulls and order mean in this look what they mean in the other description looks | `lm-hp-01` | The paper's data release | The executor's ancestry tests; the reason-rank fixture run through the HP route |
+| 5 | The HP print list is 1.5's and is closed; `PUBLIC.json` carries hashes, ids and stage-1 integers, no word and no float; onset, clock and shares are restricted with the energy (1.5) | VALIDITY (blinding) | "No number computed from energy is public before the data release", and no print is added after the read | `lm-hp-01` | The paper's data release, or my ruling naming a number and its contributors | F-12's type, invariance, failure and once tests on the HP route; the schema refuses an unlisted key |
+| 6 | No software-update setting is changed on the MBP, except turning off automatic macOS installation if the baseline shows it on; every dated host change is a row of `HOST-EVENTS.json`; `lm-hp-01` prints the latest event id per leg (2.2 to 2.4) | VALIDITY | Development, qualification and W1 run on one host state, and the record shows any change | The host | W1's last close, or my ruling | Each arm record's settings readback equals the baseline row; the file's hash is in the HP manifest |
+
+**Rows closed or changed by this ruling.** RL-190 register row 4's scope gains `lm-hp-01`. FF:1 to FF:5 are answered. EG's NEEDS_SPEC is answered; its OPEN on execution-input authentication is answered by row 3. RL-190 §2.4's "it comes to me once" is unchanged and is still owed.
+
+**What comes back to me.** The final packet of 1.7, once. A stage-1 dry run with fewer than 9 qualified legs in a block. An hp-01 file with no witness class, or a runner at `dd206025a` that writes no close-time hash. A reference span with no pin in the interim manifest. An HP print that cannot be made without a crossing or a recovery window. A positive `lm-hp-*` execution or reservation found by the desk. The table of 2.2, if the lead chooses to make it before freeze 2's commit. An OS build change before W1's last close. Nothing else in this ruling returns.
+
+# RL-196a. Addendum to RL-196 for the `lm-hp-01` variant spec: the five-leg cap is for the six High Power receipts only, and an Automatic source receipt is verified whole before its cell members are selected; energy is gross on both arms over the three stamped extents, with no hold, no tail and no quiet-span read; RL-194b's public mismatch count stands, so `PUBLIC.json` has ten fields, not nine. The class-(b) writer is acknowledged. The spec may be frozen and handed to #868's builder once the six edits of section 5 are made; it does not return to me first
+
+Research lead (Fable 5.2), Sat Nov 21 15:00:35 PST 2026 (from `date`). Answers questions 1 to 3 of `/Volumes/JW-EXT/scratch/d-hp-variant-spec/OPEN.md` and the class-(b) return of RL-196 1.3.
+
+**Cites.**
+- `RLD:n` is `RESEARCH-LEAD-DECISIONS.md` on the audit branch at `f2c69885a`. RL-196 is RLD:23427.
+- `RS<item>` is a RUN_STATE item on `origin/main` at `04e8c3a4c`; `RS:n` is a line of that file.
+- `SP §n` is `HP-VARIANT-SPEC.md` in `/Volumes/JW-EXT/scratch/d-hp-variant-spec/`. `D:n` is `joulewise/cadence_looks/description.py` on `align/2026-11-18-description-executor` at `321357e43`.
+
+**Read.**
+- `OPEN.md`, SP, the seat's final message, `HOST-EVENTS-NOTE.md`, `HOST-EVENTS.seed.json` and `fixtures/README.md` in full; the vector ids of `fixtures/vectors.json`.
+- D:1765-1777, D:1870-1878 and D:2022-2058; the `n_interval_ledger_mismatch` property of `lm-inst-01.output.schema.json` on the same branch.
+- `scripts/cadence_legs_runner.py:765-811` at `dd206025a`.
+- RL-194b whole (RLD:23364-23386); RLD:14805; RLD:15870-15874; RLD:18873; RL-196 whole.
+- The heading lines of RS349 (RS:8119) and RS361 (RS:7019).
+
+**Checked myself.**
+- **Both dev-02 receipts are six legs.** RS349: `dev-02-s02`, L001-L006, 6 of 6 run and admitted. RS361: `dev-02-s03`, L007-L012, 6 of 6.
+- **The runner lines are as the seat says** (section 4).
+- **The seed's Spotlight epoch is right:** 1794785571 is 15:32:51 PST on 15 Nov.
+- **`_energy` clips each sample interval to the bounds it is given** (D:1771, D:1776), so two calls that share an endpoint add exactly.
+
+**Not checked.**
+- The rest of #868's code, including `interval_values` and the DC-in branch of `_energy` past D:1777.
+- The runner's feed selection (line 419) and `scripts/run_align_r1_smoke.py`. The list of feed files in SP §2 is the seat's.
+- The other eleven rows of the host-events seed, the fixture vectors' contents, and SP §3's freeze-effect branches against RL-184 §2.
+- Which dev-01 and dev-02 legs are in the cell. That is still the lead's roster.
+- No custody, energy, power, meter, transcript, slot, hazard, sealed or restricted file was opened.
+
+**Not done.** No commit, push, comment, run, SSH or signal. One `git fetch` of public refs. The only file written is this one.
+
+---
+
+## 1. The receipt cap
+
+**The five-leg cap of RL-196 1.6 binds the six High Power receipts only.** I wrote it as a schema row without saying so. The Automatic side has no fixed cap.
+
+1. **An Automatic source receipt is verified whole.** Its bytes are pinned, and its ordered leg list must equal the roster its Check item prints: six legs for RS349 and for RS361. A list that differs in members, order or count refuses before the reservation.
+2. **The cell's members are selected after that, by the committed reference roster.** No truncated copy and no sub-receipt is made or read. A reference row that names a leg absent from its source receipt refuses.
+3. **As-run position is the leg's 1-based place in the whole source receipt,** legs outside the cell included. Cold is place 1. A span whose first leg is outside the cell gives no cold reference leg.
+4. **A first leg whose span took its reference from a redo is class `warm` and carries the mark** (RLD:14805, "not a cold start by history"). SP §2 has this right. The count of such legs is in the final packet.
+5. **A High Power receipt of more than five legs still refuses.**
+
+## 2. The energy extents
+
+**What #868 does now.** D:2022-2053 takes the three stamps `turn_start_s`, `first_token_s` and `last_token_s` (D:2034-2035), looks up a quiet span of at least 600 s (D:2038), and prints energy above the hold mean from turn start to last token plus one second, with `dc_tail_cut` (D:2041-2044). Its prefill and decode prints are mean watts above hold, not energy (D:2052-2058). None of that is the HP print.
+
+**Confirmed as the seat states it, both arms, both channels:**
+
+| Extent | Interval | Call |
+|---|---|---|
+| `prefill` | turn start to first token | `_above_hold(signal, channel, 0, start, first, average=False)` |
+| `decode` | first token to last token | the same, `first` to `last` |
+| `leg` | turn start to last token | the same, `start` to `last`, as its own call |
+
+- **Gross.** The hold argument is the exact rational zero on every call. No baseline is subtracted on either arm. High Power legs have no quiet span, and a baseline on one arm only would break "one function for both operands" (RL-196 1.2).
+- **No tail.** The endpoint is the last-token stamp, not plus one second. No `dc_tail_cut` key is printed.
+- **No quiet-span read on the HP route,** for either arm. A reference leg's quiet span is not opened. D:2038 is not reached.
+- **The stamp order check stays** (D:2036). A leg that fails it is null on all three extents with the reason the existing check gives.
+- **DC-in uses the same three intervals as the GPU rail.** No lag shift.
+- **Coverage and gaps are checked on each extent's own interval** (RL-181 §2.3), so `leg` can be null where `prefill` is numeric.
+- **Test:** where all three are numeric, `prefill + decode == leg` exactly, per channel. A planted sample between the last token and one second after it changes no print. An implementation that cannot meet the first without a tolerance comes to me.
+- **Caption, fixed now:** "Energy is gross: no idle baseline is subtracted. Extents run between the stamped turn start, first token and last token on both arms. Energy drawn after the last token is not counted. DC-in is the whole machine."
+
+This is RL-196 1.5's "existing segments": the stamps and the integrator are #868's, and only the endpoints are named.
+
+## 3. The mismatch count
+
+**The HP field list does not override RL-194b. I left the count out of RL-196 1.5 by oversight.** `PUBLIC.json` gains a tenth field, `n_interval_ledger_mismatch`, a nonnegative JSON integer, placed after `n_legs`. It is the name #868 already uses for `lm-inst-01` (D:41).
+
+- **Why public and not a side channel.** The count is made from stamps and interval counts before any value on the leg is read (RLD:23377). I ruled it public for the sibling looks, and a second route for the same fact is one more thing to audit. It does not move when energy moves, so F-12's invariance test covers it as written.
+- **It is the one stage-2 integer in the file.** RL-196 1.5's "integers copied from stage 1" is amended by this field and no other. `outputs.counts` becomes `["n_legs","n_interval_ledger_mismatch"]`.
+- **A count above zero comes to me before any number from the look is used** (RLD:23382). The look still publishes. Per-leg reasons stay in `legs.json`.
+- **Zero is printed as 0,** never omitted.
+
+## 4. Class (b): acknowledged, no objection
+
+At `dd206025a`, `scripts/cadence_legs_runner.py:775-788` hashes each regular file of `feed.files()` after the feeds close, and lines 806-811 write `runner_receipt.json` by exclusive create and fsync, with the hashes at `feeds.<feed>.files[].{path,sha256}`. That is a close-time hash by the pinned runner. Three limits, all already in SP §2:
+
+1. **(b) covers feed files only.** Leg records, summaries and non-feed streams need (a) or (c).
+2. **The receipt is itself pinned under (a) or (c) before a hash inside it witnesses anything.**
+3. **A feed whose receipt entry has an `error` key** (line 787) gives no (b) witness for a file missing from its list.
+
+RL-196's return "a runner that writes no close-time hash" is closed.
+
+## 5. The freeze
+
+**Yes: the spec may be frozen and handed to #868's builder once these six edits are made. It does not return to me; the cold seat checks them against this ruling.**
+
+1. SP §1 and §2: the cap of section 1, with rules 1 to 3.
+2. SP §5: the extents, calls and caption of section 2. The two "pending OPEN" sentences in SP §4 and §5 are removed.
+3. SP §1 and §5: ten public fields and the two-entry `counts`.
+4. SP §5, onset median cells: the median is over observed onsets, and the cell carries `n` and `n_censored`. A cell with no observed onset is null with `no_qualified_leg`. This is a count beside a listed print, not a new print.
+5. Fixtures gain: a six-leg reference receipt that passes; a six-leg High Power receipt that refuses; a reference roster that disagrees with its source receipt; the extent vector with section 2's two tests; one planted ledger omission giving count 1 with `n_legs` unchanged; an onset cell with one censored leg. `SUITE.sha256` is re-made.
+6. `OPEN.md` is replaced by a pointer to this ruling.
+
+**Spot-check.** SP's population, witness classes, freeze-2 binding, predicates, print list and captions match RL-196. "Pooled Automatic class median" as the ratio's denominator is what RL-196 1.5 meant. The seed's path and five fields are accepted; its RS521 row stays null until the readback.
+
+**Blind status.** Blind. I read source, rulings, two public Check headings and the seat's spec. The extents are fixed from stamp names and the integrator's form before the route exists and before any HP or reference energy is opened by anyone. No estimator, threshold, level or word of a registered read changes.
+
+**For Ed, plainly.** "Three small gaps in the High Power comparison's blueprint are closed. The ordinary runs came in batches of six, so the five-run limit applies only to the High Power batches. Energy is counted the same simple way on both sides: everything the machine drew from the start of a run to its last word, with nothing subtracted. And if the software finds a bookkeeping mismatch in a run, the count of such runs is published and comes to me before anything is used. The blueprint can go to the builder after six short edits."
+
+---
+
+## Register
+
+Changes to RL-196's rows. Owner `research_lead`.
+
+| Row | Change | Test added |
+|---|---|---|
+| 1 | The five-leg cap is for High Power receipts; an Automatic source receipt is verified whole against its Check roster, and position is its place in that receipt (1) | A six-leg reference receipt passes; a six-leg HP receipt refuses; a roster that disagrees with its source receipt refuses |
+| 2 | Energy is gross on both arms over turn start to first token, first to last token, and turn start to last token, by one call form with hold zero; no tail and no quiet-span read (2) | `prefill + decode == leg` exactly; a sample after the last token changes nothing |
+| 5 | `PUBLIC.json` has ten fields; the tenth is `n_interval_ledger_mismatch`, the only stage-2 integer (3). Onset median cells carry `n_censored` (5.4) | One planted omission gives count 1 and unchanged `n_legs`; F-12 invariance holds with the field present |
+
+**Amends.** RL-196 1.5 (public field list) and 1.6 (schema row, receipt cap). RL-194b stands unchanged.
+
+**What comes back to me.** A count above zero. An integrator that needs a tolerance for the additivity test. Nothing else here returns; RL-196's list is otherwise unchanged.
