@@ -297,6 +297,68 @@ class Qwen4UpstreamModelFileTest(unittest.TestCase):
                     load_model(Path(tmp))
                 self.assertEqual(type(error.exception).__name__, "UnsupportedByPinnedRuntime")
 
+    def test_raw_eos_refuses_even_when_an_override_restores_the_released_value(self):
+        from mlx.utils import tree_flatten
+        import mlx_lm
+        from mlx_lm.utils import load_model
+
+        from joulewise.adapters.mlx_runtime import MlxRuntimeAdapter
+        from joulewise.clock import FakeClock
+        from tests.test_mlx_runtime import make_config
+
+        config = tiny_config()
+        arch = runpy.run_path(str(MODEL_FILE))
+        model = arch["Model"](arch["ModelArgs"].from_dict(config))
+        override = {"eos_token_id": config["eos_token_id"]}
+        with tempfile.TemporaryDirectory() as tmp:
+            checkpoint = Path(tmp)
+            write_checkpoint(checkpoint, config, dict(tree_flatten(model.parameters())))
+            raw = checkpoint / "config.json"
+            sidecar = checkpoint / "generation_config.json"
+            sidecar.write_text(json.dumps(override))
+            load_model(checkpoint)
+            workload = make_config(model={"source": tmp, "family": "qwen4_exp"})
+            for eos in (17, None):
+                mutated = dict(config, eos_token_id=eos)
+                if eos is None:
+                    del mutated["eos_token_id"]
+                raw.write_text(json.dumps(mutated))
+                for source in ("generation_config", "model_config"):
+                    with self.subTest(eos=eos, override=source):
+                        if source == "generation_config":
+                            sidecar.write_text(json.dumps(override))
+                            kwargs = {}
+                        else:
+                            sidecar.unlink()
+                            kwargs = {"model_config": override}
+                        with self.assertRaisesRegex(ValueError, "eos_token_id") as error:
+                            load_model(checkpoint, **kwargs)
+                        self.assertEqual(type(error.exception).__name__, "UnsupportedByPinnedRuntime")
+                        if source == "generation_config":
+                            with patch.object(mlx_lm, "load") as load:
+                                result = MlxRuntimeAdapter(FakeClock()).prepare(workload)
+                            load.assert_not_called()
+                            self.assertFalse(result.ok)
+                            self.assertIn("UnsupportedByPinnedRuntime: eos_token_id", result.message)
+
+    def test_stream_generate_normalizes_unsigned_tokens_before_ple(self):
+        import mlx.core as mx
+        from mlx_lm import stream_generate
+
+        arch = runpy.run_path(str(MODEL_FILE))
+        mx.random.seed(1788)
+        model = arch["Model"](arch["ModelArgs"].from_dict(tiny_config())).eval()
+        tokenizer = make_tokenizer(32)
+        prompt = [7, 8, 9]
+        expected = model(mx.array([prompt], dtype=mx.int32))[0, -1].argmax().item()
+        for dtype in (mx.uint16, mx.uint32):
+            with self.subTest(dtype=dtype):
+                cache = model.make_cache()
+                [response] = list(stream_generate(model, tokenizer, mx.array(prompt, dtype=dtype),
+                                                  max_tokens=1, prompt_cache=cache))
+                self.assertEqual(response.token, expected)
+                self.assertEqual(cache[1][3].dtype, mx.int32)
+
     def test_indexer_prunes_at_the_released_budget_with_cached_keys(self):
         import mlx.core as mx
         from mlx_lm.models.cache import KVCache

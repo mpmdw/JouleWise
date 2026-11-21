@@ -155,3 +155,17 @@ regenerate the traces and report the discrepancy under `stepwise`.
 The focused pinned and adapter suites passed 68 tests. The affine
 control stayed within `4.18e-7`, and both NVFP4 controls were refused.
 Verification used the existing offline venvs and generated weights.
+
+## Audit 7
+
+ALIGN checks the raw `config.json` before calling mlx-lm. The direct
+`model_file` hook also validates the on-disk config before accepting the
+effective config. Both audit EOS mutations, changed to 17 and deleted,
+now raise `UnsupportedByPinnedRuntime` naming `eos_token_id`, even with
+the generation sidecar or an explicit mlx-lm override restoring 248044.
+
+The model boundary casts integer prompt IDs to `int32` before PLE.
+On the exact audit weights, `int32`, `uint16`, and `uint32` prompts
+`[7, 8, 9]` all emitted `53355` and stored `int32` PLE history.
+All 70 focused tests passed on the runtime pins. The released B/C parity
+matrix matched the audit byte for byte.

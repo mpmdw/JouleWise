@@ -7,11 +7,13 @@
 # The 0.31.3 model_file loader uses an anonymous module outside mlx_lm.models.
 # Keep imports absolute and annotations eager for its dataclass loader.
 
+import json
 import math
 import re
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from importlib.metadata import version
+from pathlib import Path
 from typing import Any
 
 import mlx.core as mx
@@ -336,10 +338,10 @@ class ModelArgs(BaseModelArgs):
     qwen4_norm_layout: str | None = None
     text: TextArgs = field(init=False)
 
-    @classmethod
-    def from_dict(cls, params):
-        # Check before BaseModelArgs drops loader metadata and mlx-lm
-        # dispatches to the pinned quantized modules.
+    @staticmethod
+    def validate_config(params):
+        if not isinstance(params, dict):
+            raise UnsupportedByPinnedRuntime("config.json must contain an object.")
         if (version("mlx"), version("mlx-lm")) != ("0.31.2", "0.31.3"):
             raise UnsupportedByPinnedRuntime("qwen4_exp model_file requires MLX 0.31.2 and mlx-lm 0.31.3.")
         if params.get("model_file", "qwen4_exp_upstream.py") != "qwen4_exp_upstream.py":
@@ -358,11 +360,19 @@ class ModelArgs(BaseModelArgs):
             if native is None or any(key not in native or alias[key] != native[key] for key in alias):
                 raise UnsupportedByPinnedRuntime("quantization_config must agree with top-level quantization.")
         _check_released_config(params)
+        if params.get("qwen4_norm_layout") not in ("zero_centered", "folded"):
+            raise UnsupportedByPinnedRuntime("qwen4_norm_layout must explicitly be 'zero_centered' or 'folded'.")
+
+    @classmethod
+    def from_dict(cls, params):
+        # The pinned model_file hook receives a config with overrides already applied.
+        if __name__ == "custom_model":
+            with Path(__file__).with_name("config.json").open(encoding="utf-8") as raw:
+                cls.validate_config(json.load(raw))
+        cls.validate_config(params)
         return super().from_dict(params)
 
     def __post_init__(self) -> None:
-        if self.qwen4_norm_layout not in ("zero_centered", "folded"):
-            raise UnsupportedByPinnedRuntime("qwen4_norm_layout must explicitly be 'zero_centered' or 'folded'.")
         self.text = TextArgs.from_dict(self.text_config)
 
 
@@ -975,7 +985,7 @@ class Model(nn.Module):
                         raise UnsupportedByPinnedRuntime("Expected an unquantized single-request KV cache pair.")
                 elif type(current) is not ArraysCache or current.left_padding is not None or current.lengths is not None:
                     raise UnsupportedByPinnedRuntime("Expected an unpadded single-request DeltaNet cache.")
-        out = self.model(inputs, cache)
+        out = self.model(inputs.astype(mx.int32), cache)
         if self.args.text.tie_word_embeddings:
             return self.model.embed_tokens.as_linear(out)
         return self.lm_head(out)
