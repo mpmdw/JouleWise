@@ -1,11 +1,19 @@
 # qwen4_exp canonical MLX module (P3)
 
 **Superseded as the Flash-Next runtime direction on 2026-11-21.**
-JouleWise vendors the merged mlx-lm implementation for upstream-layout
-checkpoints through the existing `model_file` hook. The source below remains
-pinned at `97d780d5959f2d295b953c4d497b8859ef7f1175` for historical comparison
-and existing JouleWise-layout artifacts. See [UPSTREAM-PARITY.md](UPSTREAM-PARITY.md)
-for the scope of the comparison and the runtime setup.
+
+The [pinned runtime setup](PINNED-RUNTIME.md) uses the upstream-derived
+`model_file` on MLX 0.31.2 and mlx-lm 0.31.3. Its allowlist covers
+unquantized FP32/BF16 text weights and native MLX affine quantization,
+including per-module overrides, with a single-request token-ID stream
+and unquantized in-memory prompt caches. It uses default text RoPE,
+normalized top-k, and `linear_attention` and `full_attention` layers.
+Unsupported checkpoint formats and declared paths raise
+`UnsupportedByPinnedRuntime`. `BatchGenerator` is refused at cache setup.
+
+The historical JouleWise port below remains pinned at
+`97d780d5959f2d295b953c4d497b8859ef7f1175` for comparison and existing
+JouleWise-layout artifacts. [Numerical evidence](https://github.com/mpmdw/JouleWise/pull/927)
 
 GOAL items 2-4 (`docs/align/qwen4_exp_port/GOAL.md`), phase P3: converge the Sol port and the Opus twin into ONE module, in mlx-lm house style, loaded through mlx-lm 0.31.3's `model_file` hook on the pinned stack (mlx 0.31.2, mlx-lm 0.31.3; no pin bump).
 

@@ -1,16 +1,34 @@
 #!/usr/bin/env python3
 """Build tiny upstream quants and check the pinned Flash-Next model_file loader."""
 import argparse
+from contextlib import contextmanager
 from hashlib import sha256
 from importlib.metadata import version
 import json
 from pathlib import Path
+from tempfile import TemporaryDirectory
 
 import mlx.core as mx
 from mlx.utils import tree_flatten
 import numpy as np
 
-from qwen4_upstream_parity import metrics, upstream_module, vendored_checkpoint, write_json
+MODEL_FILE = (Path(__file__).resolve().parents[1]
+              / "joulewise/align/models/qwen4_exp_upstream.py")
+UPSTREAM_SHA = "78273eb38ba4d1be065086b555417222ec2a5aafef48436134b31401a94cb669"
+
+
+def write_json(path, data):
+    path.write_text(json.dumps(data, indent=2, sort_keys=True, allow_nan=False) + "\n")
+
+
+@contextmanager
+def vendored_checkpoint(path, config, weights):
+    with TemporaryDirectory(dir=path) as tmp:
+        checkpoint = Path(tmp)
+        (checkpoint / MODEL_FILE.name).write_bytes(MODEL_FILE.read_bytes())
+        (checkpoint / "model.safetensors").symlink_to(weights.resolve())
+        write_json(checkpoint / "config.json", dict(config, model_file=MODEL_FILE.name))
+        yield checkpoint
 
 
 CASES = {
@@ -32,7 +50,10 @@ def decode(model, config):
 def prepare(root, fixtures):
     from mlx_lm.utils import load_model, quantize_model
 
-    arch = upstream_module()
+    from mlx_lm.models import qwen4_exp as arch
+
+    if sha256(Path(arch.__file__).read_bytes()).hexdigest() != UPSTREAM_SHA:
+        raise ValueError("upstream module differs from c4c9c76")
     for name, (dtype, group, bits, mode, global_scale) in CASES.items():
         fixture = fixtures / f"C-{dtype}"
         config = json.loads((fixture / "config.json").read_text())
@@ -81,7 +102,8 @@ def verify(root):
             try:
                 model, _ = load_model(checkpoint)
             except ValueError as exc:
-                if name == "affine" or "quantization.mode='nvfp4' is unsupported" not in str(exc):
+                if (name == "affine" or type(exc).__name__ != "UnsupportedByPinnedRuntime"
+                    or "quantization.mode='nvfp4' is unsupported" not in str(exc)):
                     raise
                 result[name] = dict(upstream, refusal=str(exc))
                 continue
@@ -89,10 +111,14 @@ def verify(root):
                 raise AssertionError(f"pinned model_file accepted {name}")
             outputs = decode(model, config)
         with np.load(path / "upstream.npz") as expected:
-            rows = {key: metrics(expected[key], value, 1e-4) for key, value in outputs.items()}
-        if not all(row["pass"] for row in rows.values()):
-            raise AssertionError(f"pinned affine checkpoint disagrees with upstream: {rows}")
-        result[name] = dict(upstream, comparisons=rows)
+            errors = {}
+            for key, value in outputs.items():
+                if value.shape != expected[key].shape or not np.isfinite(value).all():
+                    raise AssertionError(f"invalid {key} logits from the pinned checkpoint")
+                errors[key] = float(np.max(np.abs(expected[key] - value)))
+        if max(errors.values()) > 1e-4:
+            raise AssertionError(f"pinned affine checkpoint disagrees with upstream: {errors}")
+        result[name] = dict(upstream, max_abs=errors, atol=1e-4)
     write_json(root / "pinned-quantization-results.json", result)
 
 

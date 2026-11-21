@@ -11,10 +11,12 @@ import math
 import re
 from collections.abc import Callable
 from dataclasses import dataclass, field
+from importlib.metadata import version
 from typing import Any
 
 import mlx.core as mx
 import mlx.nn as nn
+from mlx.utils import tree_flatten
 
 from mlx_lm.models.base import (
     BaseModelArgs,
@@ -55,20 +57,63 @@ _NGRAM_SHARD_RE = re.compile(r"\.ngram_embedding\.shard_(\d+)\.")
 _QUANTIZATION_SUPPORT = (
     "qwen4_exp model_file supports unquantized or native MLX affine weight checkpoints"
 )
+_AFFINE_FIELDS = {"mode", "bits", "group_size"}
+_FLOAT_DTYPES = (mx.float32, mx.bfloat16)
+
+
+class UnsupportedByPinnedRuntime(ValueError):
+    """The checkpoint or requested path is outside the pinned ALIGN runtime."""
 
 
 def _check_affine_quantization(settings: Any, path: str) -> None:
     if not isinstance(settings, dict):
-        raise ValueError(f"{_QUANTIZATION_SUPPORT}. Expected a mapping at {path}.")
+        raise UnsupportedByPinnedRuntime(f"{_QUANTIZATION_SUPPORT}. Expected a mapping at {path}.")
     mode = settings.get("mode", "affine")
     if mode != "affine":
-        raise ValueError(f"{_QUANTIZATION_SUPPORT}. {path}.mode={mode!r} is unsupported.")
+        raise UnsupportedByPinnedRuntime(f"{_QUANTIZATION_SUPPORT}. {path}.mode={mode!r} is unsupported.")
     for key in ("quant_method", "format", "global_scale"):
         if key in settings:
-            raise ValueError(f"{_QUANTIZATION_SUPPORT}. {path}.{key} is unsupported.")
+            raise UnsupportedByPinnedRuntime(f"{_QUANTIZATION_SUPPORT}. {path}.{key} is unsupported.")
     for key, entry in settings.items():
         if isinstance(entry, dict):
             _check_affine_quantization(entry, f"{path}.{key}")
+            if entry.keys() - _AFFINE_FIELDS:
+                raise UnsupportedByPinnedRuntime(f"Unsupported affine override at {path}.{key}.")
+
+
+def _checkpoint_key(key: str) -> str:
+    if key.startswith("model.language_model."):
+        key = "model." + key[len("model.language_model.") :]
+    elif key.startswith("language_model."):
+        key = key[len("language_model.") :]
+    return _NGRAM_SHARD_RE.sub(r".ngram_embedding.shards.\1.", key)
+
+
+def _affine_recipe(settings: dict, path: str) -> tuple[int, int]:
+    bits, group = settings.get("bits", 4), settings.get("group_size", 64)
+    if type(bits) is not int or bits not in (2, 3, 4, 5, 6, 8):
+        raise UnsupportedByPinnedRuntime(f"Unsupported affine bit width at {path}: {bits!r}.")
+    if type(group) is not int or group not in (32, 64, 128):
+        raise UnsupportedByPinnedRuntime(f"Unsupported affine group size at {path}: {group!r}.")
+    return bits, group
+
+
+def _affine_overrides(quantization: dict) -> dict:
+    overrides = {}
+    for path, settings in quantization.items():
+        if path in _AFFINE_FIELDS:
+            continue
+        normalized = _checkpoint_key(path + ".scales").removesuffix(".scales")
+        if type(settings) is bool:
+            settings = _affine_recipe(quantization, "quantization") if settings else None
+        elif isinstance(settings, dict):
+            settings = _affine_recipe(settings, path)
+        else:
+            raise UnsupportedByPinnedRuntime(f"Unsupported affine override at {path}.")
+        if normalized in overrides and overrides[normalized] != settings:
+            raise UnsupportedByPinnedRuntime(f"Conflicting affine overrides for {normalized}.")
+        overrides[normalized] = settings
+    return overrides
 
 
 @dataclass
@@ -132,6 +177,7 @@ class TextArgs(BaseModelArgs):
 class ModelArgs(BaseModelArgs):
     model_type: str
     text_config: dict[str, Any]
+    quantization: dict[str, Any] | None = None
     text: TextArgs = field(init=False)
 
     @classmethod
@@ -139,24 +185,68 @@ class ModelArgs(BaseModelArgs):
         # Check before BaseModelArgs drops loader metadata and mlx-lm
         # dispatches to the pinned quantized modules.
         text_config = params.get("text_config", {})
+        if (version("mlx"), version("mlx-lm")) != ("0.31.2", "0.31.3"):
+            raise UnsupportedByPinnedRuntime("qwen4_exp model_file requires MLX 0.31.2 and mlx-lm 0.31.3.")
+        if params.get("model_type") != "qwen4_exp":
+            raise UnsupportedByPinnedRuntime("The pinned model_file requires model_type='qwen4_exp'.")
+        if not isinstance(text_config, dict):
+            raise UnsupportedByPinnedRuntime("The pinned model_file requires a text_config mapping.")
+        if text_config.get("norm_topk_prob", True) is not True:
+            raise UnsupportedByPinnedRuntime("The pinned MoE requires renormalized top-k.")
+        if text_config.get("attention_bias", False):
+            raise UnsupportedByPinnedRuntime("The pinned attention requires bias-free projections.")
+        rope = text_config.get("rope_parameters", {})
+        if (not isinstance(rope, dict) or rope.get("rope_type", rope.get("type", "default")) != "default"
+            or text_config.get("rope_scaling")):
+            raise UnsupportedByPinnedRuntime("The pinned model_file requires default text RoPE.")
         for prefix, config in (("", params), ("text_config.", text_config)):
+            for key in ("attn_implementation", "_attn_implementation"):
+                if config.get(key) not in (None, "sdpa"):
+                    raise UnsupportedByPinnedRuntime(f"{prefix}{key} must select pinned SDPA.")
             if config.get("quantize_activations"):
-                raise ValueError(f"{_QUANTIZATION_SUPPORT}. {prefix}quantize_activations is unsupported.")
+                raise UnsupportedByPinnedRuntime(
+                    f"{_QUANTIZATION_SUPPORT}. {prefix}quantize_activations is unsupported."
+                )
+            for key in ("draft_model", "kv_bits", "max_kv_size", "input_embeddings", "prompt_cache_file"):
+                if config.get(key) is not None:
+                    raise UnsupportedByPinnedRuntime(f"{prefix}{key} is outside single-request token generation.")
+            if config.get("batch_size", 1) != 1:
+                raise UnsupportedByPinnedRuntime("BatchGenerator and batched inputs are unsupported.")
             for key in ("quantization", "quantization_config"):
                 settings = config.get(key)
                 if settings is None or (key == "quantization_config" and settings is False):
                     continue
                 _check_affine_quantization(settings, prefix + key)
+        native = params.get("quantization")
+        if native is not None and not {"bits", "group_size"} <= native.keys():
+            raise UnsupportedByPinnedRuntime("Native affine quantization requires bits and group_size.")
         if params.get("quantization") is None and (
             params.get("quantization_config")
             or text_config.get("quantization_config")
             or text_config.get("quantization")
         ):
-            raise ValueError(f"{_QUANTIZATION_SUPPORT}. Affine weights require top-level quantization.")
+            raise UnsupportedByPinnedRuntime(f"{_QUANTIZATION_SUPPORT}. Affine weights require top-level quantization.")
         return super().from_dict(params)
 
     def __post_init__(self) -> None:
         self.text = TextArgs.from_dict(self.text_config)
+        text = self.text
+        allowed_layers = {"linear_attention", "full_attention"}
+        if set(text.layer_types) != allowed_layers or len(text.layer_types) != text.num_hidden_layers:
+            raise UnsupportedByPinnedRuntime("Expected a hybrid linear_attention/full_attention text model.")
+        if text.hidden_act != "silu" or text.output_gate_type not in ("silu", "sigmoid"):
+            raise UnsupportedByPinnedRuntime("Unsupported activation for the pinned text model.")
+        if text.indexer_kv_heads != 1:
+            raise UnsupportedByPinnedRuntime("The pinned indexer requires one KV head.")
+        if (text.indexer_compress_ratio <= 0 or text.indexer_budget < text.indexer_compress_ratio
+            or text.indexer_budget % text.indexer_compress_ratio):
+            raise UnsupportedByPinnedRuntime("The sparse budget must be a positive multiple of the compression ratio.")
+        if (text.num_key_value_heads <= 0 or text.num_attention_heads % text.num_key_value_heads
+            or text.linear_num_key_heads <= 0 or text.linear_num_value_heads % text.linear_num_key_heads):
+            raise UnsupportedByPinnedRuntime("Attention and DeltaNet head groups must divide evenly.")
+        if any(not 1 <= layer <= text.num_hidden_layers or text.layer_types[layer - 1] != "linear_attention"
+               for layer in text.ple_layer_ids):
+            raise UnsupportedByPinnedRuntime("PLE requires a linear_attention layer.")
 
 
 class RMSNorm(nn.Module):
@@ -725,6 +815,19 @@ class Qwen4ExpModel(nn.Module):
         return self.hyper_connection_mixer(h)
 
 
+class _SingleRequestKVPair(CacheList):
+    @property
+    def offset(self):
+        return self[0].offset
+
+    @classmethod
+    def merge(cls, caches):
+        raise UnsupportedByPinnedRuntime("BatchGenerator caches are outside single-request generation.")
+
+    def to_quantized(self, *args, **kwargs):
+        raise UnsupportedByPinnedRuntime("Quantized KV caches are outside the pinned runtime.")
+
+
 class Model(nn.Module):
     def __init__(self, args: ModelArgs):
         super().__init__()
@@ -742,7 +845,20 @@ class Model(nn.Module):
         cache: list[Any] | None = None,
         input_embeddings: mx.array | None = None,
     ) -> mx.array:
-        out = self.model(inputs, cache, input_embeddings)
+        if inputs.ndim != 2 or inputs.shape[0] != 1 or not mx.issubdtype(inputs.dtype, mx.integer):
+            raise UnsupportedByPinnedRuntime("Single-request generation requires integer token IDs shaped [1, tokens].")
+        if input_embeddings is not None:
+            raise UnsupportedByPinnedRuntime("The pinned runtime accepts token IDs only.")
+        if cache is not None:
+            if len(cache) != len(self.layers):
+                raise UnsupportedByPinnedRuntime("Expected one native cache per text layer.")
+            for layer, current in zip(self.layers, cache, strict=True):
+                if layer.layer_type == "full_attention":
+                    if type(current) is not _SingleRequestKVPair or any(type(c) is not KVCache for c in current.caches):
+                        raise UnsupportedByPinnedRuntime("Expected an unquantized single-request KV cache pair.")
+                elif type(current) is not ArraysCache or current.left_padding is not None or current.lengths is not None:
+                    raise UnsupportedByPinnedRuntime("Expected an unpadded single-request DeltaNet cache.")
+        out = self.model(inputs, cache)
         if self.args.text.tie_word_embeddings:
             return self.model.embed_tokens.as_linear(out)
         return self.lm_head(out)
@@ -755,7 +871,7 @@ class Model(nn.Module):
         caches = []
         for layer in self.layers:
             if layer.layer_type == "full_attention":
-                caches.append(CacheList(KVCache(), KVCache()))
+                caches.append(_SingleRequestKVPair(KVCache(), KVCache()))
             else:
                 # The deltanet conv and recurrent state; a PLE layer adds its
                 # conv state and n-gram context.
@@ -771,7 +887,10 @@ class Model(nn.Module):
             for k in weights
         )
 
-        out = {}
+        quantization = self.args.quantization
+        default = _affine_recipe(quantization, "quantization") if quantization is not None else None
+        overrides = _affine_overrides(quantization) if quantization is not None else {}
+        recipes, out = {}, {}
         for k, v in weights.items():
             # Not in this text-only port: the MTP head and the vision tower.
             if k.startswith(("mtp.", "model.mtp.")):
@@ -779,26 +898,23 @@ class Model(nn.Module):
             if k.startswith(("model.visual.", "visual.", "vision_tower.")):
                 continue
 
-            # Affine checkpoints store floating scales. Reject floating-point
-            # quantization payloads even if their config omits the mode.
-            if k.endswith(".global_scale") or (
-                k.endswith(".scales") and not mx.issubdtype(v.dtype, mx.floating)
-            ):
-                raise ValueError(f"{_QUANTIZATION_SUPPORT}. Unsupported scale tensor {k!r}.")
-
-            # Prefixes: HF `model.language_model.`, mlx-vlm `language_model.`.
-            if k.startswith("model.language_model."):
-                k = "model." + k[len("model.language_model.") :]
-            elif k.startswith("language_model."):
-                k = k[len("language_model.") :]
+            k = _checkpoint_key(k)
 
             # The n-gram hash constants: check them against the config, then drop.
             if k.endswith(_NGRAM_CONSTANTS):
                 self._check_ngram_constant(k, v)
                 continue
 
-            # Rename the n-gram shards to `shards.{i}`, as mlx-vlm saves them.
-            k = _NGRAM_SHARD_RE.sub(r".ngram_embedding.shards.\1.", k)
+            if k.endswith(".global_scale") or (k.endswith(".scales") and v.dtype not in _FLOAT_DTYPES):
+                raise UnsupportedByPinnedRuntime(f"{_QUANTIZATION_SUPPORT}. Unsupported scale tensor {k!r}.")
+            if v.dtype not in _FLOAT_DTYPES and not (k.endswith(".weight") and v.dtype == mx.uint32):
+                raise UnsupportedByPinnedRuntime(f"Unsupported weight dtype {v.dtype} for {k}.")
+            if k.endswith(".scales"):
+                path = k.removesuffix(".scales")
+                recipe = overrides.get(path, default)
+                if recipe is None:
+                    raise UnsupportedByPinnedRuntime(f"No affine quantization declared for {path}.")
+                recipes[path] = recipe
 
             # The experts stack as (E, out, in); gate_up_proj holds gate, then up.
             if k.endswith("mlp.experts.gate_up_proj"):
@@ -819,11 +935,16 @@ class Model(nn.Module):
                 v = 1.0 + v
             out[k] = v
 
+        source_paths = set(recipes)
+
         # Merge the checkpoint's block inject into the mix down.
         for k in [k for k in out if k.endswith("block_inject_weight.weight")]:
             p = k[: -len("block_inject_weight.weight")]
             down = p + "input_mix_weight_down"
-            _merge_linears(out, [down, p + "block_inject_weight"], target=down)
+            inject = p + "block_inject_weight"
+            if recipes.get(down) != recipes.pop(inject, None):
+                raise UnsupportedByPinnedRuntime(f"Mix-down and inject packing differ for {p}.")
+            _merge_linears(out, [down, inject], target=down)
 
         # The checkpoint has equal row shards; the model keeps one table per head.
         for k in [k for k in out if k.endswith("ngram_embedding.shards.0.weight")]:
@@ -831,14 +952,43 @@ class Model(nn.Module):
             n = sum(q.startswith(p + "shards.") and q.endswith(".weight") for q in out)
             layer = int(k.split(".layers.")[1].split(".")[0])
             sizes = self.model.layers[layer].ple.ple_embedding.head_vocab_sizes
-            # A quantized table splits its scales and biases by the same rows.
-            for name in ("weight", "scales", "biases"):
-                if f"{p}shards.0.{name}" in out:
-                    shards = [out.pop(f"{p}shards.{i}.{name}") for i in range(n)]
-                    for h, table in enumerate(_split_rows(shards, sizes)):
-                        out[f"{p}{h}.{name}"] = table
+            _split_ngram_shards(out, recipes, p, n, sizes)
 
+        self._apply_affine_recipes(out, recipes, overrides, source_paths)
         return out
+
+    def _apply_affine_recipes(self, weights, recipes, overrides, source_paths):
+        for key, value in weights.items():
+            if key.endswith(".weight") and value.dtype == mx.uint32 and key.removesuffix(".weight") not in recipes:
+                raise UnsupportedByPinnedRuntime(f"Packed weight {key} lacks affine scales.")
+        if self.args.quantization is None:
+            return
+        leaves = dict(tree_flatten(self.leaf_modules(), is_leaf=nn.Module.is_module))
+        for path, (bits, group) in recipes.items():
+            if path in overrides and overrides[path] != (bits, group):
+                raise UnsupportedByPinnedRuntime(f"Affine override disagrees with remapped weights for {path}.")
+            module = leaves.get(path)
+            if not hasattr(module, "to_quantized"):
+                raise UnsupportedByPinnedRuntime(f"Unsupported affine module {path}.")
+            shape = module.weight.shape
+            packed = weights.get(f"{path}.weight")
+            scales = weights[f"{path}.scales"]
+            biases = weights.get(f"{path}.biases")
+            if (shape[-1] % group or packed is None or packed.dtype != mx.uint32
+                or packed.shape != (*shape[:-1], shape[-1] * bits // 32)
+                or scales.shape != (*shape[:-1], shape[-1] // group)
+                or biases is None or biases.shape != scales.shape):
+                raise UnsupportedByPinnedRuntime(f"Affine packing at {path} disagrees with its declared settings.")
+        for path, settings in overrides.items():
+            if settings is not None and path not in source_paths and path not in recipes:
+                raise UnsupportedByPinnedRuntime(f"Affine override names no packed module: {path}.")
+        # The pinned loader reads this same mapping after sanitize returns.
+        # Give it explicit recipes for the final packed paths only.
+        config = self.args.quantization
+        for path in list(config.keys() - _AFFINE_FIELDS):
+            del config[path]
+        config.update({path: {"bits": bits, "group_size": group, "mode": "affine"}
+                       for path, (bits, group) in recipes.items()})
 
     def _check_ngram_constant(self, key: str, value: mx.array) -> None:
         layer = int(key.split(".layers.")[1].split(".")[0])
@@ -893,20 +1043,40 @@ def _merge_linears(
             )
 
 
-def _split_rows(shards: list[mx.array], sizes: list[int]) -> list[mx.array]:
-    """Split a table stored as equal row shards into tables of `sizes` rows."""
+def _split_ngram_shards(weights, recipes, prefix, count, sizes):
+    """Carry each source shard's affine recipe through the row partition."""
+    paths = [f"{prefix}shards.{i}" for i in range(count)]
+    shards = [weights.get(f"{path}.weight") for path in paths]
+    if any(shard is None for shard in shards):
+        raise UnsupportedByPinnedRuntime(f"Missing n-gram row shard at {prefix}.")
     rows = shards[0].shape[0]
-    tables, start = [], 0
-    for size in sizes:
+    if not rows or any(shard.shape[0] != rows for shard in shards) or sum(sizes) > rows * count:
+        raise UnsupportedByPinnedRuntime(f"Invalid n-gram row shard sizes at {prefix}.")
+
+    start = 0
+    for head, size in enumerate(sizes):
         end = start + size
         first, last = start // rows, (end - 1) // rows
-        pieces = [
-            s[max(start - i * rows, 0) : min(end - i * rows, rows)]
-            for i, s in enumerate(shards[first : last + 1], first)
-        ]
-        tables.append(mx.concatenate(pieces))
+        group = paths[first : last + 1]
+        recipe = recipes.get(group[0])
+        if any(recipes.get(path) != recipe for path in group):
+            raise UnsupportedByPinnedRuntime(f"Affine packing changes within n-gram head {prefix}{head}.")
+        destination = f"{prefix}{head}"
+        if recipe is not None:
+            recipes[destination] = recipe
+        for name in (("weight", "scales", "biases") if recipe is not None else ("weight",)):
+            pieces = []
+            for shard, path in enumerate(group, first):
+                tensor = weights.get(f"{path}.{name}")
+                if tensor is None:
+                    raise UnsupportedByPinnedRuntime(f"Missing {name} for affine shard {path}.")
+                pieces.append(tensor[max(start - shard * rows, 0) : min(end - shard * rows, rows)])
+            weights[f"{destination}.{name}"] = mx.concatenate(pieces)
         start = end
-    return tables
+    for path in paths:
+        for name in ("weight", "scales", "biases"):
+            weights.pop(f"{path}.{name}", None)
+        recipes.pop(path, None)
 
 
 def _splitmix64(v: int) -> int:
