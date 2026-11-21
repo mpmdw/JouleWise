@@ -1052,6 +1052,24 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 
 <!-- RUN_STATE TYPED ITEMS: newest first. Add with scripts/run_state_add.py; never edit by hand. -->
 
+507. **Lead: no span's idle soak may overlap the 02:00-02:35 OS batch (extends R-c to the soak; adopts item 505's flag)**
+
+```pointer
+owner: magistrate
+wait: none
+deadline: 2026-12-31T00:00:00-08:00
+on_early_or_refused: a span whose soak would overlap 02:00-02:35 is a timing cede to 02:35 (or to a fitting rung), recorded as such; never a refusal.
+next_observable: the next start-check.out whose t0 falls between 01:25 and 02:35 cites this item and either waits to 02:35 or shows a soak that ends by 02:00.
+```
+
+```item
+{"expires_epoch_s": null, "issued_epoch_s": 1795256600, "number": 507, "owner": "lead", "schema": "joulewise.run_state_item.v1", "sets": [], "status": "ISSUED", "supersedes": []}
+```
+
+- **Adopted: the magistrate's flag in item 505.** L007 (t0 01:38) lost its span because its 1,800 s idle soak ran into the daily 02:00 OS batch. The soak measured about 2 busy cores (triald, XProtect and others) and refused, as designed.
+- **Rule (lead scheduling, extends R-c to the soak).** For every span (stability, instrument and HP), the interval from t0 through the end of the soak budget must not touch the local 02:00–02:35 window. If it would, wait and start at 02:35 or later, or take a lawful rung that fits before 02:00. As in R-c, touching an endpoint is legal. This applies at the actual t0 and changes no ARG rule of item 463. It only moves t0 out of the window.
+- Why: the soak refusing a span on the OS batch is the soak doing its job, but it spends an attempt and about 35 minutes of MBP time for nothing. This is a known, daily, physical contention, so we schedule around it rather than test into it.
+
 506. **Magistrate c1ade1f4, 2026-11-21 02:25 PST: MAGISTRATE — hp-02-s01 ISSUED at filler rank 3, cq-hp-02-s01-a1, L001–L003 only, one launch as the last act**
 
 ```pointer

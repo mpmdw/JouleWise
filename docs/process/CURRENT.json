@@ -1,7 +1,13 @@
 {
   "armed": null,
-  "next_observable": "hp02s01-c1ade1f4/run-out.txt reports the launcher result and fence for cq-hp-02-s01-a1 (the block waits to 02:35 and for three quiet minutes, launching by 04:30 or not at all). At first fence clearance the magistrate checks the actual stamped output with hp02s01-check-template-c1ade1f4/check.sh (replace REPLACE_STAMP with the actual stamp and NEWACT with the activation id), copies at once with hp02s01-check-template-c1ade1f4/offload-run.sh (NEWACT replaced), and records the operational Check and restore in RUN_STATE.",
+  "next_observable": "the next start-check.out whose t0 falls between 01:25 and 02:35 cites this item and either waits to 02:35 or shows a soak that ends by 02:00.",
   "open_items": [
+    {
+      "expires_epoch_s": null,
+      "item": 507,
+      "owner": "lead",
+      "status": "ISSUED"
+    },
     {
       "expires_epoch_s": 1796025600,
       "item": 506,
@@ -185,11 +191,11 @@
   ],
   "owner": "magistrate",
   "schema": "joulewise.current_pointer.v2",
-  "source_item": "506",
-  "source_item_heading_date": "2026-11-21",
+  "source_item": "507",
+  "source_item_heading_date": null,
   "wait": {
-    "deadline_epoch_s": 1795284000,
+    "deadline_epoch_s": 1798704000,
     "observable": "none",
-    "on_early_or_refused": "Check at early fence clearance. On ordinary launcher refusal, missing required proof or non-clean HP Check, record the reason, hold cl-hp-02 until an input changes, notify Ed and the lead, reconcile the attempt and take the next safe eligible rung. A timing cede returns to the ladder. An unresolved host restore stops host dispatch. Halt and page Ed and the lead on failed pinned restore. If the Check is missing by the deadline, report it. At a clean close resume the eligible ladder. If run-out.txt ends in WAIT or STOP without a LAUNCH_RC line, nothing launched: the attempt is unspent, and the next activation runs a fresh start-check and re-issues s01 (or takes the next rung)."
+    "on_early_or_refused": "a span whose soak would overlap 02:00-02:35 is a timing cede to 02:35 (or to a fitting rung), recorded as such; never a refusal."
   }
 }
