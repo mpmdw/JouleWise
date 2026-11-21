@@ -15,7 +15,50 @@ from tests import test_calibration_exits as exits
 from tests import test_calibration_ledger as ledger_tests
 
 
+TEST_WATCHDOG_S = 30.0
+
+# Only the disposable reservation and its worker use this clock. The test
+# runner's subprocess watchdog and the worker cleanup waits still use real time.
+_CLOCK_HOOK = '''import os, selectors, sys, time
+from pathlib import Path
+from types import SimpleNamespace
+
+_clock = Path(os.environ["JW_CUSTODY_TEST_CLOCK"])
+
+def _now():
+    return sum(map(float, _clock.read_text().splitlines()))
+
+def _advance(seconds):
+    with _clock.open("a") as stream:
+        stream.write(f"{seconds}\\n")
+
+if sys.argv[0] == "-m":
+    time.monotonic = _now
+elif sys.argv[0].endswith("reserve_calibration_window_bracket.py"):
+    from joulewise import calibration_ledger as ledger
+    ledger.time = SimpleNamespace(monotonic=_now, time=time.time)
+
+    class PollingSelector(selectors.DefaultSelector):
+        def select(self, timeout=None):
+            # A FIFO event can advance the clock without waking the selector.
+            return super().select(min(timeout, 0.02) if timeout is not None else 0.02)
+
+    ledger.selectors = SimpleNamespace(DefaultSelector=PollingSelector,
+                                       EVENT_READ=selectors.EVENT_READ,
+                                       EVENT_WRITE=selectors.EVENT_WRITE)
+    if "JW_CUSTODY_EXPIRE_ON_CHECK" in os.environ:
+        _check = ledger.CustodyDeadline.check
+        def _expire_on_check(deadline):
+            _advance(deadline.budget_s + 0.03)
+            _check(deadline)
+        ledger.CustodyDeadline.check = _expire_on_check
+'''
+
+
 class CustodyFixture:
+    def __init__(self, *, control_clock=False):
+        self.control_clock = control_clock
+
     def __enter__(self):
         self.witness = exits.PublicGovernedExitWitnessTests(methodName="runTest")
         self.witness.setUp()
@@ -43,6 +86,10 @@ class CustodyFixture:
             "JOULEWISE_CALIBRATION_REFUSAL_PATH": str(self.refusal),
             "JOULEWISE_NIGHT_PLAN_ID": "custody-hang-plan",
         }
+        self.clock = self.repo / "custody-clock" if self.control_clock else None
+        if self.clock is not None:
+            (self.repo / "sitecustomize.py").write_text(_CLOCK_HOOK)
+            self.env.update(PYTHONPATH=str(self.repo), JW_CUSTODY_TEST_CLOCK=str(self.clock))
         return self
 
     def __exit__(self, *_args):
@@ -62,9 +109,20 @@ class CustodyFixture:
         return self.run([sys.executable, str(self.witness.reserve_script), *args],
                         budget=budget, env=env)
 
+    def advance_on_read(self, seconds):
+        with self.clock.open("a") as stream:
+            stream.write(f"{self.budget if seconds is None else seconds}\n")
+
     def run(self, command, *, budget=3.0, env=None):
+        env = env or self.env
+        watchdog = budget + 2.0
+        if self.clock is not None:
+            self.budget = budget
+            self.clock.write_text("")
+            env = dict(env, JW_CUSTODY_TEST_BUDGET=str(budget))
+            watchdog = TEST_WATCHDOG_S
         started = time.monotonic()
-        process = subprocess.Popen(command, cwd=self.repo, env=env or self.env,
+        process = subprocess.Popen(command, cwd=self.repo, env=env,
                                    stdout=subprocess.PIPE, stderr=subprocess.PIPE,
                                    text=True, start_new_session=True)
         # start_new_session makes this process the leader of a brand-new
@@ -73,19 +131,21 @@ class CustodyFixture:
         # the exact set of processes this run is responsible for reaping.
         self.process_group = process.pid
         try:
-            stdout, stderr = process.communicate(timeout=budget + 2.0)
+            stdout, stderr = process.communicate(timeout=watchdog)
         except subprocess.TimeoutExpired:
             os.killpg(process.pid, signal.SIGKILL)
             stdout, stderr = process.communicate(timeout=2)
             raise AssertionError(
-                f"custody refusal exceeded {budget:.1f}s budget + 2.0s cleanup tolerance; "
+                f"custody CLI exceeded the {watchdog:.1f}s watchdog (budget {budget:g}s); "
                 f"CLI remained blocked in the governed artifact read; stderr={stderr[-500:]}"
             )
         finally:
             if process.poll() is None:
                 os.killpg(process.pid, signal.SIGKILL)
                 process.wait(timeout=2)
-        return subprocess.CompletedProcess(command, process.returncode, stdout, stderr), time.monotonic() - started
+        elapsed = (time.monotonic() - started if self.clock is None
+                   else sum(map(float, self.clock.read_text().splitlines())))
+        return subprocess.CompletedProcess(command, process.returncode, stdout, stderr), elapsed
 
     def assert_lease_reacquirable(self):
         completed = subprocess.run([
@@ -93,7 +153,8 @@ class CustodyFixture:
             "from pathlib import Path; from joulewise.calibration_ledger import CalibrationWriterLease; "
             f"lease=CalibrationWriterLease(Path({str(self.ledger)!r})); "
             "lease.acquire(); lease.release(); print('reacquired')",
-        ], cwd=self.repo, env=self.env, text=True, capture_output=True, timeout=2)
+        ], cwd=self.repo, env=self.env, text=True, capture_output=True,
+            timeout=TEST_WATCHDOG_S if self.control_clock else 2)
         assert completed.returncode == 0, completed.stderr
         assert completed.stdout.strip() == "reacquired"
 
@@ -123,8 +184,9 @@ class CustodyFixture:
 
 class BlockedArtifact:
     """Send the exact original bytes through a FIFO, then withhold EOF."""
-    def __init__(self, path, delay=None):
+    def __init__(self, path, delay=None, advance=None):
         self.path, self.delay = path, delay
+        self.advance = advance
         self.entered = threading.Event()
         self.release = threading.Event()
         self.finished = threading.Event()
@@ -149,7 +211,10 @@ class BlockedArtifact:
                     return
                 os.write(fd, self.original)
                 self.entered.set()
-                self.release.wait(self.delay)
+                if self.advance is not None:
+                    self.advance(self.delay)
+                if self.advance is None or self.delay is None:
+                    self.release.wait(self.delay)
             finally:
                 if fd is not None:
                     os.close(fd)
@@ -171,7 +236,8 @@ def install_reservation_append_expiry(fixture):
     """Expire only after the CLI checks readiness, inside receipt preparation."""
     marker = fixture.repo / "reservation-append-expiry.json"
     custom = fixture.repo / "sitecustomize.py"
-    custom.write_text('''import json, os, sys, time
+    with custom.open("a") as hook:
+        hook.write('''import json, os, sys
 from pathlib import Path
 # Worker subprocesses retain their normal read-only import surface.
 if sys.argv[0].endswith("reserve_calibration_window_bracket.py"):
@@ -193,7 +259,7 @@ if sys.argv[0].endswith("reserve_calibration_window_bracket.py"):
             record = {"elapsed_before_pause": _deadline.elapsed_s,
                       "budget_s": _deadline.budget_s,
                       "observations": _deadline.observations}
-            time.sleep(_deadline.remaining() + 0.03)
+            _advance(_deadline.remaining() + 0.03)
             record["elapsed_after_pause"] = _deadline.elapsed_s
             Path(os.environ["JW_APPEND_EXPIRY_MARKER"]).write_text(json.dumps(record))
         return result
@@ -210,11 +276,16 @@ def install_read_barrier(fixture, *, after_reads=0, delay=60.0, metadata=False):
     target = fixture.custodies[0] / "events.jsonl"
     marker = fixture.repo / "custody-read-barrier.jsonl"
     custom = fixture.repo / "sitecustomize.py"
-    custom.write_text('''import json, os, time
+    with custom.open("a" if fixture.control_clock else "w") as hook:
+        hook.write('''import json, os, time
 from pathlib import Path
 _original = Path.read_bytes
 _target = os.environ.get("JW_CUSTODY_BARRIER_TARGET")
 _marker = os.environ.get("JW_CUSTODY_BARRIER_MARKER")
+def _stall():
+    if "JW_CUSTODY_TEST_CLOCK" in os.environ:
+        _advance(float(os.environ["JW_CUSTODY_TEST_BUDGET"]))
+    time.sleep(float(os.environ["JW_CUSTODY_BARRIER_DELAY"]))
 def read_bytes(self):
     if _target and str(self) == _target:
         with open(_marker, "a+") as handle:
@@ -223,7 +294,7 @@ def read_bytes(self):
             handle.write(json.dumps({"pid": os.getpid(), "read": count + 1}) + "\\n")
             handle.flush()
         if count >= int(os.environ["JW_CUSTODY_BARRIER_AFTER"]):
-            time.sleep(float(os.environ["JW_CUSTODY_BARRIER_DELAY"]))
+            _stall()
     return _original(self)
 Path.read_bytes = read_bytes
 ''')
@@ -234,7 +305,7 @@ def exists(self, *args, **kwargs):
     if _target and str(self) == str(Path(_target).parent):
         with open(_marker, "a") as handle:
             handle.write(json.dumps({"pid": os.getpid(), "metadata": True}) + "\\n")
-        time.sleep(float(os.environ["JW_CUSTODY_BARRIER_DELAY"]))
+        _stall()
     return _original_exists(self, *args, **kwargs)
 Path.exists = exists
 ''')
