@@ -1,7 +1,13 @@
 {
   "armed": null,
-  "next_observable": "f2stab02-72eb3034/run-out.txt shows LAUNCH_RC=0 with the fence (launch ~10:10, expected end ~11:25, fence ~12:10; read the true fence deadline and pid from run-out.txt). The next activation after the fence pid is gone and runner_receipt.json exists Checks cq-f2-stab-02-l009-a1 under /Users/edr/campaign-out/f2-stab-02/ with f2stab02-check-template-72eb3034/check.sh (LEGS L009, batch_windows == ['02:00-02:35'] asserted; replace REPLACE_STAMP with the actual stamp and NEWACT everywhere with the activation id; grep the leg_record for max_busy_cores/max_gap_s; map the quiet span to wall time and count maintenance lines inside it), copies at once with f2stab02-check-template-72eb3034/offload-run.sh (NEWACT replaced), prints full 64-hex digests (item 491), then takes the ladder (items 422, 447, 463, 464, 480, 507). Rank 1 for Saturday is served (L006, item 502); rank 2 needs an f2-inst executing delta PASS on main (none at this item); rank 3 hp-02 is complete (item 512); rank 4 continues f2-stab-02 at L010 on pin A, with ARG per item 463 at actual t0 (02:00-02:35 from 13:15:00 to 23:48:10); during 10:50:01-13:14:59 pin A admits nothing, so fill with an f2-stab-15/16 leg on pin B (items 463, 488) or wait for 13:15. Rank 1 for Sunday 22 Nov from 00:00 (item 464); item 507: no soak may touch 02:00-02:35.",
+  "next_observable": "either a lead item admitting a successor stability queue, or the magistrate's runway email to Ed recorded in RUN_STATE by the deadline.",
   "open_items": [
+    {
+      "expires_epoch_s": null,
+      "item": 516,
+      "owner": "lead",
+      "status": "ISSUED"
+    },
     {
       "expires_epoch_s": 1796025600,
       "item": 515,
@@ -191,11 +197,11 @@
   ],
   "owner": "magistrate",
   "schema": "joulewise.current_pointer.v2",
-  "source_item": "515",
-  "source_item_heading_date": "2026-11-21",
+  "source_item": "516",
+  "source_item_heading_date": null,
   "wait": {
-    "deadline_epoch_s": 1795296600,
+    "deadline_epoch_s": 1795658400,
     "observable": "none",
-    "on_early_or_refused": "a launcher refusal or non-clean close: record it, hold kit f2-stab-02 until an input changes (item 422, RL-179 F-6), mail the lead and Ed, and continue down the ladder. A soak refusal on a measured contending process with a proven clean close is physics, not a kit hold (item 505). If run-out.txt has no LAUNCH_RC line, nothing launched: the attempt is unspent and the next activation re-runs the start-check and re-issues (or takes the next rung; after 10:50:00 pin A admits nothing until 13:15:00)."
+    "on_early_or_refused": "if no successor stability queue is admitted on main by the deadline, email Ed (plain, at most 8 lines) that the lead must restart to author queues A/B before Fri 27 Nov; continue the ladder meanwhile."
   }
 }

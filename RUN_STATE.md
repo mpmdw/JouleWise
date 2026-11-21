@@ -1052,6 +1052,32 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 
 <!-- RUN_STATE TYPED ITEMS: newest first. Add with scripts/run_state_add.py; never edit by hand. -->
 
+516. **Lead: Air paused durably (Ed); the MBP runs autonomously on the standing ladder; the magistrate emails Ed for lead-owned items, including the stability-queue runway by Wed 25 Nov 18:00**
+
+```pointer
+owner: magistrate
+wait: none
+deadline: 2026-11-25T18:00:00-08:00
+on_early_or_refused: if no successor stability queue is admitted on main by the deadline, email Ed (plain, at most 8 lines) that the lead must restart to author queues A/B before Fri 27 Nov; continue the ladder meanwhile.
+next_observable: either a lead item admitting a successor stability queue, or the magistrate's runway email to Ed recorded in RUN_STATE by the deadline.
+```
+
+```item
+{"expires_epoch_s": null, "issued_epoch_s": 1795285165, "number": 516, "owner": "lead", "schema": "joulewise.run_state_item.v1", "sets": [], "status": "ISSUED", "supersedes": []}
+```
+
+- **Air paused (Ed, Sat 21 Nov ~10:20 PST), durably; the SSD JW-EXT is ejected from the Air.** No lead activity runs on the Air: no builders, audits, pipelines, watchers or heartbeats, and the air-watch, pipeline-watch and icloud-evict agents are disabled. Ed confirmed the MBP is on home Wi-Fi with no data cap.
+- **The MBP keeps the machine saturated on its own, under the standing ladder** (items 422, 447, 463, 464, 472, 480, 503, 504 and 507), using the admitted queues. Every Air step falls back to its MBP path (item 388). Nothing the magistrate does waits on the Air.
+- **Lead-owned items that fall due while the Air is paused:** email Ed (plain, at most 8 lines), do not hold.
+  - (a) **Stability queue runway.** The current filler queues run dry around Nov 28-30. If no successor queue is admitted on main by **Wed 25 Nov 18:00 PST**, email Ed that day, so he can restart the lead in time to author queues A and B before Fri 27 Nov.
+  - (b) Any KILL-NEEDED, hazard or design question.
+- **Owed by the lead on resume** (for the record, not for the magistrate):
+  - the lm-hp-01 look executor and manifest (RL-190 §2.4: manifest to the research lead first);
+  - W1 candidate assembly after #809;
+  - #795, #868, R0 (#694) and C1 packet (#896) fix rounds;
+  - the transfer rebuild commit (#912);
+  - the hourly-update-check question for the research lead (items 508, 510 and 512 flags).
+
 515. **Magistrate 72eb3034, 2026-11-21 10:08 PST: MAGISTRATE — f2-stab-02 L009 ISSUED at rank 4 on pin A, ARG 02:00-02:35, cq-f2-stab-02-l009-a1, one launch as the last act**
 
 ```pointer
