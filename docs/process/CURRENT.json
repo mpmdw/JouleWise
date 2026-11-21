@@ -1,16 +1,10 @@
 {
   "armed": null,
-  "next_observable": "f2stab02-4a375ecb/run-out.txt shows LAUNCH_RC=0 with the fence (launch ~14:2x, expected end ~15:35, worst case ~16:00; read the true fence deadline and pid from run-out.txt; check the pid, not the deadline). The next activation after the fence pid is gone and runner_receipt.json exists Checks cq-f2-stab-02-l011-a1 under /Users/edr/campaign-out/f2-stab-02/ with f2stab02-check-template-4a375ecb/check.sh (LEGS L011, kit sha 1fe8…d505, frozen 2d347f721, campaign_id f2-stab-02, batch_windows == ['02:00-02:35'] asserted; replace REPLACE_STAMP with the actual stamp and NEWACT with the activation id; grep the leg_record for max_busy_cores/max_gap_s/os_level_max and read leg_summary admitted/redo_reasons; on a cpu_load redo place the >0.5-core run in wall time from runtime/load_journal.json and name the top census process; map the quiet span to wall time and count maintenance lines inside it), copies at once with f2stab02-check-template-4a375ecb/offload-run.sh (NEWACT replaced; already points at its own offload.sh), prints full 64-hex digests (item 491), then takes the ladder (items 422, 447, 463, 464, 480, 507). Rank 1 for Saturday is served (item 502); rank 2 needs an f2-inst executing delta PASS on main (none at this item); rank 3 hp-02 is complete (item 512); rank 4 is f2-stab-02 L012 (seq 12, the queue's last span) on pin A with ARG 02:00-02:35 until 23:48:10 (inputs f2stab02-4a375ecb/inputs.sh with SPAN/LEGS/SEQ/MAGISTRATE_PID and the custody dir changed; check template f2stab02-check-template-4a375ecb/ with l011 -> l012 AND its offload-run.sh repointed to the new template's offload.sh). After L012, f2-stab-02's queue is exhausted (L010 not admitted, no redo; any redo is the lead's call). Rank 1 for Sunday 22 Nov from 00:00 (item 464); item 507: no soak may touch 02:00-02:35. Item 516: stability-queue runway email to Ed if no successor queue is admitted on main by Wed 25 Nov 18:00.",
+  "next_observable": "f2stab02-44d898af/run-out.txt shows LAUNCH_RC=0 with the fence (launch ~15:3x, expected end ~16:45, worst case ~17:10; read the true fence deadline and pid from run-out.txt; check the pid, not the deadline). The next activation after the fence pid is gone and runner_receipt.json exists Checks cq-f2-stab-02-l012-a1 under /Users/edr/campaign-out/f2-stab-02/ with f2stab02-check-template-44d898af/check.sh (LEGS L012, kit sha 1fe8…d505, frozen 2d347f721, campaign_id f2-stab-02, batch_windows == ['02:00-02:35'] asserted; replace REPLACE_STAMP with the actual stamp and NEWACT with the activation id; grep the leg_record for max_busy_cores/max_gap_s/os_level_max and read leg_summary admitted/redo_reasons; on a cpu_load redo place the >0.5-core run in wall time from runtime/load_journal.json and name the top census process; map the quiet span to wall time and count maintenance lines inside it), copies at once with f2stab02-check-template-44d898af/offload-run.sh (NEWACT replaced; already points at its own offload.sh), prints full 64-hex digests (item 491), then takes the ladder (items 422, 447, 463, 464, 480, 507). After L012, kit f2-stab-02's queue (fillers-w2) is exhausted: L010 not admitted, no redo (redo_quota 0; any redo is the lead's call). Rank 1 for Saturday is served (item 502); rank 2 needs an f2-inst executing delta PASS on main (none at this item); rank 3 hp-02 is complete (item 512); rank 4 has no span left unless the lead has admitted a successor queue on main (item 521: f2-stab-17 onward, fillers-w3) by then. With nothing issuable, the activation records nothing and exits quiet. Rank 1 for Sunday 22 Nov from 00:00 (item 464); item 507: no soak may touch 02:00-02:35. Item 516: stability-queue runway email to Ed if no successor queue is admitted on main by Wed 25 Nov 18:00.",
   "open_items": [
     {
       "expires_epoch_s": null,
-      "item": 521,
-      "owner": "magistrate",
-      "status": "ISSUED"
-    },
-    {
-      "expires_epoch_s": null,
-      "item": 520,
+      "item": 522,
       "owner": "magistrate",
       "status": "ISSUED"
     },
@@ -203,11 +197,11 @@
   ],
   "owner": "magistrate",
   "schema": "joulewise.current_pointer.v2",
-  "source_item": "520",
+  "source_item": "522",
   "source_item_heading_date": "2026-11-21",
   "wait": {
-    "deadline_epoch_s": 1795314600,
+    "deadline_epoch_s": 1795318200,
     "observable": "none",
-    "on_early_or_refused": "a launcher refusal or non-clean close: record it, hold kit f2-stab-02 until an input changes (item 422, RL-179 F-6), mail the lead and Ed, and continue down the ladder. A soak refusal on a measured contending process with a proven clean close is physics, not a kit hold (item 505). A clean close with the leg not admitted (cpu_load, redo_quota 0) is recorded, not a stop and not a kit hold (items 467, 479, 520). If run-out.txt has no LAUNCH_RC line, nothing launched: the attempt is unspent; the next activation re-runs the start-check and re-issues L011 on pin A (launch must clear the 02:00-02:35 band; item 507)."
+    "on_early_or_refused": "a launcher refusal or non-clean close: record it, hold kit f2-stab-02 until an input changes (item 422, RL-179 F-6), mail the lead and Ed, and continue down the ladder. A soak refusal on a measured contending process with a proven clean close is physics, not a kit hold (item 505). A clean close with the leg not admitted (cpu_load, redo_quota 0) is recorded, not a stop and not a kit hold (items 467, 479, 520). If run-out.txt has no LAUNCH_RC line, nothing launched: the attempt is unspent; the next activation re-runs the start-check and re-issues L012 on pin A (launch must clear the 02:00-02:35 band; item 507)."
   }
 }
