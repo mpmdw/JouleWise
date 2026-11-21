@@ -61,3 +61,41 @@ at `64e29575d83f7e0ebde359653703c39c4a9b7ce6`.
   draft PRs.
 
 **NEEDS_SPEC** — None.
+
+## Audit round 1 remediation
+
+The round 1 audit blocked `588196e19` on one verified HIGH. The pinned
+mlx-lm Metal kernel silently omitted the last 16 key coordinates in
+fixture A with a 48-wide DeltaNet head. The vendor restores the dispatch
+guard from `c4c9c76`. Every key width below 32 or indivisible by 32
+now takes the portable recurrence. Supported widths still take the Metal
+kernel during GPU inference.
+
+The permanent adapter regression checks widths 16, 32, 48, 64, 80 and
+128 through `model_file`. It compares prefill and cached decode with
+the portable recurrence and verifies the selected kernel path. The
+`vendor` stage in `scripts/qwen4_upstream_parity.py` also reproduces the
+audit with Transformers 5.22.1 fixture A, seed 1105 and width 48. Its
+FP32 prefill bound is `1e-4`.
+
+| Width 48 prefill comparison | Before guard | After guard |
+| --- | ---: | ---: |
+| Transformers–vendor max absolute error | 0.8405828 | 1.3113e-6 |
+| Upstream–vendor max absolute error | 0.8405834 | 0 |
+
+The pre-fix replay exited with a parity failure. The fixed replay passed
+the prefill, cached replay and eight greedy tokens against both reference
+implementations. [Before](../align/qwen4_exp_port/evidence/vendor-width48-before.json) ·
+[After](../align/qwen4_exp_port/evidence/vendor-width48-after.json)
+
+The MED finding is a follow-up. The chained BF16 bound passed a halved
+`B-bf16/L0.moe` output in the audit. An independent fixed-input,
+fixed-route BF16 component gate requires a separate oracle and tolerance.
+The fact sheet records the observed sensitivity limit. The three LOW
+findings confirmed the published fixture replay, real-weight labeling
+and download record.
+
+The pinned adapter regressions, 50 stdlib adapter checks and generated
+state check passed locally. This round reused the three SSD venvs and
+generated the width-48 fixture locally. The full suite runs on the updated
+draft in hosted CI.
