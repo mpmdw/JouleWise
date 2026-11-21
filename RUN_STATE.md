@@ -1052,6 +1052,31 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 
 <!-- RUN_STATE TYPED ITEMS: newest first. Add with scripts/run_state_add.py; never edit by hand. -->
 
+512. **Magistrate HP CHECK #511 for cq-hp-02-s03-a1.**
+
+```pointer
+owner: magistrate
+wait: none
+deadline: 2026-11-21T17:00:00-08:00
+on_early_or_refused: none; this item records the s03 HP Check, which closes block hp-02 (item 504). The next action is the ladder's next eligible rung, recorded by this activation or the next.
+next_observable: the next magistrate item on main (the next rung's ISSUED item or a hold note).
+```
+
+```item
+{"expires_epoch_s": null, "issued_epoch_s": 1795280569, "number": 512, "owner": "magistrate", "schema": "joulewise.run_state_item.v1", "sets": [{"at_epoch_s": 1795280550, "item": 511, "status": "CLOSED"}], "status": "CLOSED", "supersedes": []}
+```
+
+HP-RECEIPT 56f271987fea3999d18be4193e306afc54fd19e2a42d73090c5721c436db305f
+
+- **Spawn.** Activation 18e179b1 spawned 09:00:05 PST (watchdog attempt 2012), 199 s after cq-hp-02-s03-a1's receipt (08:56:46); watchdog went FENCED -> LAUNCHING when the align-r0 fence cleared; no night or align-r0 label loaded, no desk fence. No notices pending, no unread mail from Ed, directive list unchanged (standing 587/422/421/417/416/408/405), no standdown request. Canonical at `3090c99d3`; origin/main `71f2df040` (the lead's Flash-Next vendor merge, PR #930; adds `joulewise/align/models/qwen4_exp_upstream.py`, tests and probes, 7 lines in `joulewise/adapters/mlx_runtime.py`; no RUN_STATE change, nothing naming hp-02).
+- **Check** (custody `hp02s03-check-18e179b1/check.out`, from `hp02s03-check-template-6077188c/check.sh` with the stamp `20261121T143727Z` and the `#!/bin/zsh` + TMPDIR lines): **RECEIPT OK.** Output `/Users/edr/campaign-out/cl-hp-02/cq-hp-02-s03-a1-20261121T143727Z`. Non-mock, runner_kind cadence-legs-v1, kit sha256 `7693b8293b42b8ba20cbd321e201974745b172dc53c4f1397d2c1494f38fbe66`, campaign cl-hp-02, frozen `dd206025abb30fd5c07515cd4b34b3e653174810`, ARG `02:00-02:35` as recorded at the arm, roster L008,L009,L010,L011,L012, rc 0, error null, 5/5 legs planned and finished, 0 load redos. Span result: chain COMPLETE, outcome MEASURED_OK, verdict "5/5 legs run", fault false, restore_proven true. Every step rc 0 (deadline, frozen, night_agents, ac_power, condition13, host_lock, marker-absent, start feeds, powermode_guard, display, dwell, plan, soak, high_power, five per-leg powermode checks and legs, power_last_look, restore, power_proof, host_lock_release, stop-volumes, stop-meter, stop-agents, close-volumes). Desk bundle has exactly the five leg summaries plus span meter/result, hashes match.
+- **Actual t0 and close.** Launch 06:37:27 PST (Run block quiet at 06:37:24; ChatGPTHelper killed per item 443). Soak and the mode set both ended 07:12:46.2; L008 attempt start 0.7 s later; L008 G0 start 516.8 s after the mode set. Legs: L008 07:12:46-07:33:26, L009 -07:54:16, L010 -08:15:04, L011 -08:35:53, L012 -08:56:45. Receipt written 08:56:46 PST; fence cleared before 09:00:05.
+- **High Power.** block_power_mode 2; every included leg's record shows ac_powermode 2 at episode start; no revocation. Before restore: mode 2, this span's marker present. Restore `restore_automatic`, 1 attempt, ok. Close proof: proven, ac_powermode 0, marker absent, no pmset error. Independent readback at 09:00:52: `pmset -g custom` AC powermode 0, `pmset -g` powermode 0, no marker or link, night.lock has no holder, no stray monitor, no root powermetrics, network time Off, kernel frequency word 0, AC and not charging, 211 GiB free. measurement_mode verify's one FAIL is this magistrate's own MCP children (post-run; NOTE 1).
+- **Legs (automatic desk, from the leg summaries; all admitted, G0 released, band reached, start band q0, 1 attempt each):** L008 g0 201.0 s, wall 1,239.7 s of budget 1,251 s, os_level_max 2, pm_nominal false; L009 g0 204.0 s, wall 1,248.8 s, os_level_max 0; L010 g0 205.9 s, wall 1,248.1 s, os_level_max 0; L011 g0 205.1 s, wall 1,247.8 s, os_level_max 0; L012 g0 207.1 s, wall 1,251.9 s (0.9 s over, not over 1.5x), os_level_max 0. Feeds proven stopped and file hashes match; meter 41,714 polls, 0 bad, 0 USB errors, proven stopped. Thermal print: soak reference TV0h 34.24 C, soak tail Tf08 mean 27.69 C; own references L008-L012 TV0h 34.24/34.76/34.66/34.71/34.77 C; G0 release TV0h 34.90/35.05/35.08/35.06/35.06 C. HP stays sealed: no energy value was read.
+- **Flags for the desk (not refusals):** (1) L012 ran 0.9 s over the 1,251 s budget, below the 1.5x overtime line; no LEG_OVERTIME. (2) L008 reports os_level_max 2 and pm_nominal false. A mobileassetd burst (157 lines at 07:11) and softwareupdated (8 lines in the 07:10 bucket) fell in the last two minutes of the soak, just before L008 began at 07:12:46; inside L008 the log has only 4 mobileassetd and 30 backupd lines besides dasd. The same mobileassetd + softwareupdated pair recurs at 08:10 inside L010, which reports os_level_max 0. This is the third session in a row (s01 L001, s02 L004, s03 L008) whose first leg after the soak reports os_level_max 2; noted for the desk, no change made. (3) backupd lines appear in several buckets though Time Machine has no destination (inert).
+- **Copied at once** (item 409): `cq-hp-02-s03-a1.ok` written 09:02:06; manifest 192 files, manifest sha256 `b3b86cf74693225ab686f448aebec5c10e807228a52544d4bb8cba35d2550b3e`, enc sha256 `dd083628b925d0e67b114863a0d569fb20d7259afcbc8f801a1c05ed62f6c0d0`; iCloud caught up and idle (last-sync 09:01:42 after the 09:01:27 copy; `hp02s03-check-18e179b1/offload-out.txt`).
+- **Effect.** Item 511 CLOSED. This is hp-02's last close (item 504): block hp-02 is complete (s01 item 508, s02 item 510, s03 this item; L001-L012 all run once, all clean). The `lm-hp-*` freeze of item 504 ends with this item on main; the lead and analysts may resume `lm-hp-*` reservations as item 504 allows. The ladder returns to its ranks for the next eligible rung.
+
 511. **Magistrate 6077188c, 2026-11-21 06:40 PST: MAGISTRATE — hp-02-s03 ISSUED at filler rank 3, cq-hp-02-s03-a1, L008–L012 only, one launch as the last act**
 
 ```pointer

@@ -1,13 +1,7 @@
 {
   "armed": null,
-  "next_observable": "hp02s03-6077188c/run-out.txt reports the launcher result and fence for cq-hp-02-s03-a1 (the block waits for three quiet minutes, launching by 08:40 or not at all). At first fence clearance the magistrate checks the actual stamped output with hp02s03-check-template-6077188c/check.sh (replace REPLACE_STAMP with the actual stamp, add a zsh shebang and a TMPDIR line), copies at once with hp02s03-check-template-6077188c/offload-run.sh (NEWACT replaced), and records the operational Check and restore in RUN_STATE; that Check closes block hp-02.",
+  "next_observable": "the next magistrate item on main (the next rung's ISSUED item or a hold note).",
   "open_items": [
-    {
-      "expires_epoch_s": 1796025600,
-      "item": 511,
-      "owner": "magistrate",
-      "status": "ISSUED"
-    },
     {
       "expires_epoch_s": null,
       "item": 507,
@@ -191,11 +185,11 @@
   ],
   "owner": "magistrate",
   "schema": "joulewise.current_pointer.v2",
-  "source_item": "511",
-  "source_item_heading_date": "2026-11-21",
+  "source_item": "512",
+  "source_item_heading_date": null,
   "wait": {
     "deadline_epoch_s": 1795309200,
     "observable": "none",
-    "on_early_or_refused": "Check at early fence clearance. On ordinary launcher refusal, missing required proof or non-clean HP Check, record the reason, hold cl-hp-02 until an input changes, notify Ed and the lead, reconcile the attempt and take the next safe eligible rung. A timing cede returns to the ladder. An unresolved host restore stops host dispatch. Halt and page Ed and the lead on failed pinned restore. If the Check is missing by the deadline, report it. At a clean close resume the eligible ladder. If run-out.txt ends in WAIT or STOP without a LAUNCH_RC line, nothing launched: the attempt is unspent, and the next activation runs a fresh start-check and re-issues s03 (or takes the next rung)."
+    "on_early_or_refused": "none; this item records the s03 HP Check, which closes block hp-02 (item 504). The next action is the ladder's next eligible rung, recorded by this activation or the next."
   }
 }
