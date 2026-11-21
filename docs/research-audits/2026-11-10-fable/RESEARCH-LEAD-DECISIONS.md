@@ -23694,3 +23694,121 @@ Rows for the lead to commit to `RULES.json`. Owner is `research_lead` for rows 1
 **Rows closed or changed by this ruling.** RL-190 register row 4's scope gains `lm-hp-01`. FF:1 to FF:5 are answered. EG's NEEDS_SPEC is answered; its OPEN on execution-input authentication is answered by row 3. RL-190 §2.4's "it comes to me once" is unchanged and is still owed.
 
 **What comes back to me.** The final packet of 1.7, once. A stage-1 dry run with fewer than 9 qualified legs in a block. An hp-01 file with no witness class, or a runner at `dd206025a` that writes no close-time hash. A reference span with no pin in the interim manifest. An HP print that cannot be made without a crossing or a recovery window. A positive `lm-hp-*` execution or reservation found by the desk. The table of 2.2, if the lead chooses to make it before freeze 2's commit. An OS build change before W1's last close. Nothing else in this ruling returns.
+
+# RL-196a. Addendum to RL-196 for the `lm-hp-01` variant spec: the five-leg cap is for the six High Power receipts only, and an Automatic source receipt is verified whole before its cell members are selected; energy is gross on both arms over the three stamped extents, with no hold, no tail and no quiet-span read; RL-194b's public mismatch count stands, so `PUBLIC.json` has ten fields, not nine. The class-(b) writer is acknowledged. The spec may be frozen and handed to #868's builder once the six edits of section 5 are made; it does not return to me first
+
+Research lead (Fable 5.2), Sat Nov 21 15:00:35 PST 2026 (from `date`). Answers questions 1 to 3 of `/Volumes/JW-EXT/scratch/d-hp-variant-spec/OPEN.md` and the class-(b) return of RL-196 1.3.
+
+**Cites.**
+- `RLD:n` is `RESEARCH-LEAD-DECISIONS.md` on the audit branch at `f2c69885a`. RL-196 is RLD:23427.
+- `RS<item>` is a RUN_STATE item on `origin/main` at `04e8c3a4c`; `RS:n` is a line of that file.
+- `SP §n` is `HP-VARIANT-SPEC.md` in `/Volumes/JW-EXT/scratch/d-hp-variant-spec/`. `D:n` is `joulewise/cadence_looks/description.py` on `align/2026-11-18-description-executor` at `321357e43`.
+
+**Read.**
+- `OPEN.md`, SP, the seat's final message, `HOST-EVENTS-NOTE.md`, `HOST-EVENTS.seed.json` and `fixtures/README.md` in full; the vector ids of `fixtures/vectors.json`.
+- D:1765-1777, D:1870-1878 and D:2022-2058; the `n_interval_ledger_mismatch` property of `lm-inst-01.output.schema.json` on the same branch.
+- `scripts/cadence_legs_runner.py:765-811` at `dd206025a`.
+- RL-194b whole (RLD:23364-23386); RLD:14805; RLD:15870-15874; RLD:18873; RL-196 whole.
+- The heading lines of RS349 (RS:8119) and RS361 (RS:7019).
+
+**Checked myself.**
+- **Both dev-02 receipts are six legs.** RS349: `dev-02-s02`, L001-L006, 6 of 6 run and admitted. RS361: `dev-02-s03`, L007-L012, 6 of 6.
+- **The runner lines are as the seat says** (section 4).
+- **The seed's Spotlight epoch is right:** 1794785571 is 15:32:51 PST on 15 Nov.
+- **`_energy` clips each sample interval to the bounds it is given** (D:1771, D:1776), so two calls that share an endpoint add exactly.
+
+**Not checked.**
+- The rest of #868's code, including `interval_values` and the DC-in branch of `_energy` past D:1777.
+- The runner's feed selection (line 419) and `scripts/run_align_r1_smoke.py`. The list of feed files in SP §2 is the seat's.
+- The other eleven rows of the host-events seed, the fixture vectors' contents, and SP §3's freeze-effect branches against RL-184 §2.
+- Which dev-01 and dev-02 legs are in the cell. That is still the lead's roster.
+- No custody, energy, power, meter, transcript, slot, hazard, sealed or restricted file was opened.
+
+**Not done.** No commit, push, comment, run, SSH or signal. One `git fetch` of public refs. The only file written is this one.
+
+---
+
+## 1. The receipt cap
+
+**The five-leg cap of RL-196 1.6 binds the six High Power receipts only.** I wrote it as a schema row without saying so. The Automatic side has no fixed cap.
+
+1. **An Automatic source receipt is verified whole.** Its bytes are pinned, and its ordered leg list must equal the roster its Check item prints: six legs for RS349 and for RS361. A list that differs in members, order or count refuses before the reservation.
+2. **The cell's members are selected after that, by the committed reference roster.** No truncated copy and no sub-receipt is made or read. A reference row that names a leg absent from its source receipt refuses.
+3. **As-run position is the leg's 1-based place in the whole source receipt,** legs outside the cell included. Cold is place 1. A span whose first leg is outside the cell gives no cold reference leg.
+4. **A first leg whose span took its reference from a redo is class `warm` and carries the mark** (RLD:14805, "not a cold start by history"). SP §2 has this right. The count of such legs is in the final packet.
+5. **A High Power receipt of more than five legs still refuses.**
+
+## 2. The energy extents
+
+**What #868 does now.** D:2022-2053 takes the three stamps `turn_start_s`, `first_token_s` and `last_token_s` (D:2034-2035), looks up a quiet span of at least 600 s (D:2038), and prints energy above the hold mean from turn start to last token plus one second, with `dc_tail_cut` (D:2041-2044). Its prefill and decode prints are mean watts above hold, not energy (D:2052-2058). None of that is the HP print.
+
+**Confirmed as the seat states it, both arms, both channels:**
+
+| Extent | Interval | Call |
+|---|---|---|
+| `prefill` | turn start to first token | `_above_hold(signal, channel, 0, start, first, average=False)` |
+| `decode` | first token to last token | the same, `first` to `last` |
+| `leg` | turn start to last token | the same, `start` to `last`, as its own call |
+
+- **Gross.** The hold argument is the exact rational zero on every call. No baseline is subtracted on either arm. High Power legs have no quiet span, and a baseline on one arm only would break "one function for both operands" (RL-196 1.2).
+- **No tail.** The endpoint is the last-token stamp, not plus one second. No `dc_tail_cut` key is printed.
+- **No quiet-span read on the HP route,** for either arm. A reference leg's quiet span is not opened. D:2038 is not reached.
+- **The stamp order check stays** (D:2036). A leg that fails it is null on all three extents with the reason the existing check gives.
+- **DC-in uses the same three intervals as the GPU rail.** No lag shift.
+- **Coverage and gaps are checked on each extent's own interval** (RL-181 §2.3), so `leg` can be null where `prefill` is numeric.
+- **Test:** where all three are numeric, `prefill + decode == leg` exactly, per channel. A planted sample between the last token and one second after it changes no print. An implementation that cannot meet the first without a tolerance comes to me.
+- **Caption, fixed now:** "Energy is gross: no idle baseline is subtracted. Extents run between the stamped turn start, first token and last token on both arms. Energy drawn after the last token is not counted. DC-in is the whole machine."
+
+This is RL-196 1.5's "existing segments": the stamps and the integrator are #868's, and only the endpoints are named.
+
+## 3. The mismatch count
+
+**The HP field list does not override RL-194b. I left the count out of RL-196 1.5 by oversight.** `PUBLIC.json` gains a tenth field, `n_interval_ledger_mismatch`, a nonnegative JSON integer, placed after `n_legs`. It is the name #868 already uses for `lm-inst-01` (D:41).
+
+- **Why public and not a side channel.** The count is made from stamps and interval counts before any value on the leg is read (RLD:23377). I ruled it public for the sibling looks, and a second route for the same fact is one more thing to audit. It does not move when energy moves, so F-12's invariance test covers it as written.
+- **It is the one stage-2 integer in the file.** RL-196 1.5's "integers copied from stage 1" is amended by this field and no other. `outputs.counts` becomes `["n_legs","n_interval_ledger_mismatch"]`.
+- **A count above zero comes to me before any number from the look is used** (RLD:23382). The look still publishes. Per-leg reasons stay in `legs.json`.
+- **Zero is printed as 0,** never omitted.
+
+## 4. Class (b): acknowledged, no objection
+
+At `dd206025a`, `scripts/cadence_legs_runner.py:775-788` hashes each regular file of `feed.files()` after the feeds close, and lines 806-811 write `runner_receipt.json` by exclusive create and fsync, with the hashes at `feeds.<feed>.files[].{path,sha256}`. That is a close-time hash by the pinned runner. Three limits, all already in SP §2:
+
+1. **(b) covers feed files only.** Leg records, summaries and non-feed streams need (a) or (c).
+2. **The receipt is itself pinned under (a) or (c) before a hash inside it witnesses anything.**
+3. **A feed whose receipt entry has an `error` key** (line 787) gives no (b) witness for a file missing from its list.
+
+RL-196's return "a runner that writes no close-time hash" is closed.
+
+## 5. The freeze
+
+**Yes: the spec may be frozen and handed to #868's builder once these six edits are made. It does not return to me; the cold seat checks them against this ruling.**
+
+1. SP §1 and §2: the cap of section 1, with rules 1 to 3.
+2. SP §5: the extents, calls and caption of section 2. The two "pending OPEN" sentences in SP §4 and §5 are removed.
+3. SP §1 and §5: ten public fields and the two-entry `counts`.
+4. SP §5, onset median cells: the median is over observed onsets, and the cell carries `n` and `n_censored`. A cell with no observed onset is null with `no_qualified_leg`. This is a count beside a listed print, not a new print.
+5. Fixtures gain: a six-leg reference receipt that passes; a six-leg High Power receipt that refuses; a reference roster that disagrees with its source receipt; the extent vector with section 2's two tests; one planted ledger omission giving count 1 with `n_legs` unchanged; an onset cell with one censored leg. `SUITE.sha256` is re-made.
+6. `OPEN.md` is replaced by a pointer to this ruling.
+
+**Spot-check.** SP's population, witness classes, freeze-2 binding, predicates, print list and captions match RL-196. "Pooled Automatic class median" as the ratio's denominator is what RL-196 1.5 meant. The seed's path and five fields are accepted; its RS521 row stays null until the readback.
+
+**Blind status.** Blind. I read source, rulings, two public Check headings and the seat's spec. The extents are fixed from stamp names and the integrator's form before the route exists and before any HP or reference energy is opened by anyone. No estimator, threshold, level or word of a registered read changes.
+
+**For Ed, plainly.** "Three small gaps in the High Power comparison's blueprint are closed. The ordinary runs came in batches of six, so the five-run limit applies only to the High Power batches. Energy is counted the same simple way on both sides: everything the machine drew from the start of a run to its last word, with nothing subtracted. And if the software finds a bookkeeping mismatch in a run, the count of such runs is published and comes to me before anything is used. The blueprint can go to the builder after six short edits."
+
+---
+
+## Register
+
+Changes to RL-196's rows. Owner `research_lead`.
+
+| Row | Change | Test added |
+|---|---|---|
+| 1 | The five-leg cap is for High Power receipts; an Automatic source receipt is verified whole against its Check roster, and position is its place in that receipt (1) | A six-leg reference receipt passes; a six-leg HP receipt refuses; a roster that disagrees with its source receipt refuses |
+| 2 | Energy is gross on both arms over turn start to first token, first to last token, and turn start to last token, by one call form with hold zero; no tail and no quiet-span read (2) | `prefill + decode == leg` exactly; a sample after the last token changes nothing |
+| 5 | `PUBLIC.json` has ten fields; the tenth is `n_interval_ledger_mismatch`, the only stage-2 integer (3). Onset median cells carry `n_censored` (5.4) | One planted omission gives count 1 and unchanged `n_legs`; F-12 invariance holds with the field present |
+
+**Amends.** RL-196 1.5 (public field list) and 1.6 (schema row, receipt cap). RL-194b stands unchanged.
+
+**What comes back to me.** A count above zero. An integrator that needs a tolerance for the additivity test. Nothing else here returns; RL-196's list is otherwise unchanged.
