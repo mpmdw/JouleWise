@@ -1052,6 +1052,31 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 
 <!-- RUN_STATE TYPED ITEMS: newest first. Add with scripts/run_state_add.py; never edit by hand. -->
 
+510. **Magistrate HP CHECK #509 for cq-hp-02-s02-a1.**
+
+```pointer
+owner: magistrate
+wait: none
+deadline: 2026-11-21T10:00:00-08:00
+on_early_or_refused: none; this item records the s02 HP Check. The next action is the hp-02-s03 item issued immediately after it.
+next_observable: the hp-02-s03 ISSUED item (this number + 1) and its run-out.txt.
+```
+
+```item
+{"expires_epoch_s": null, "issued_epoch_s": 1795271554, "number": 510, "owner": "magistrate", "schema": "joulewise.run_state_item.v1", "sets": [{"at_epoch_s": 1795271494, "item": 509, "status": "CLOSED"}], "status": "CLOSED", "supersedes": []}
+```
+
+HP-RECEIPT 8693c06d4f9b29376e258acabfbd7d193ceb04e7f20a84835601f461c84e46e0
+
+- **Spawn.** Activation 6077188c spawned 06:29:56 PST (watchdog attempt 2011), 209 s after cq-hp-02-s02-a1's receipt (06:26:27); watchdog went FENCED -> LAUNCHING when the align-r0 fence cleared; no night or align-r0 label loaded, no desk fence. No notices pending, no unread mail from Ed, directive list unchanged (standing 587/422/421/417/416/408/405), no standdown request. Canonical at `ab06f44c5` = origin/main.
+- **Check** (custody `hp02s02-check-6077188c/check.out`, from `hp02s02-check-template-953fff48/check.sh` with the stamp `20261121T122737Z` and the `#!/bin/zsh` + TMPDIR lines): **RECEIPT OK.** Output `/Users/edr/campaign-out/cl-hp-02/cq-hp-02-s02-a1-20261121T122737Z`. Non-mock, runner_kind cadence-legs-v1, kit sha256 `7693b8293b42b8ba20cbd321e201974745b172dc53c4f1397d2c1494f38fbe66`, campaign cl-hp-02, frozen `dd206025abb30fd5c07515cd4b34b3e653174810`, ARG `02:00-02:35` as recorded at the arm, roster L004,L005,L006,L007, rc 0, error null, 4/4 legs planned and finished, 0 load redos. Span result: chain COMPLETE, outcome MEASURED_OK, verdict "4/4 legs run", fault false, restore_proven true. Every step rc 0 (soak, frozen, host_lock, marker-absent, powermode_guard, high_power, four per-leg powermode checks, power_last_look, restore, power_proof, host_lock_release, stop-volumes, stop-meter, stop-agents, close-volumes). Desk bundle has exactly the four leg summaries plus span meter/result.
+- **Actual t0 and close.** Launch 04:27:37 PST (Run block quiet at 04:27:33; ChatGPTHelper killed per item 443). Soak and the mode set both ended 05:02:58.9; L004 attempt start 0.7 s later; L004 G0 start 519.3 s after the mode set. Legs: L004 05:02:59-05:23:48, L005 -05:44:42, L006 -06:05:36, L007 -06:26:26. Receipt written 06:26:27 PST; fence cleared before 06:29:56.
+- **High Power.** block_power_mode 2; every included leg's record shows ac_powermode 2 at episode start; no revocation. Before restore: mode 2, this span's marker present. Restore `restore_automatic`, 1 attempt, ok. Close proof: proven, ac_powermode 0, marker absent, no pmset error. Independent readback at 06:30:28: `pmset -g custom` AC powermode 0, `pmset -g` powermode 0, no marker or link, night.lock has no holder, no stray monitor, no root powermetrics, network time Off, kernel frequency word 0, AC and not charging, 214 GiB free. measurement_mode verify's one FAIL is this magistrate's own MCP children (post-run; NOTE 1).
+- **Legs (automatic desk, from the leg summaries; all admitted, G0 released, band reached, start band q0, 1 attempt each):** L004 g0 208.1 s, wall 1,249.2 s of budget 1,251 s, os_level_max 2, pm_nominal false; L005 g0 207.2 s, wall 1,253.3 s (2.3 s over budget, not over 1.5x), os_level_max 0; L006 g0 208.1 s, wall 1,253.1 s (2.1 s over), os_level_max 0; L007 g0 206.2 s, wall 1,249.8 s, os_level_max 0. Feeds proven stopped and file hashes match; meter 35,557 polls, 0 bad, 0 USB errors, proven stopped. Thermal print: soak reference TV0h 34.24 C, soak tail Tf08 mean 27.86 C; own references L004-L007 TV0h 34.22/34.71/34.78/34.73 C; G0 release TV0h 34.94/35.04/35.05/35.04 C. HP stays sealed: no energy value was read.
+- **Flags for the desk (not refusals):** (1) L005 and L006 ran 2.3 s and 2.1 s over the 1,251 s budget, below the 1.5x overtime line; no LEG_OVERTIME. (2) L004 reports os_level_max 2 and pm_nominal false; the maintenance log shows a mobileassetd + softwareupdated + XProtect burst at 05:08:54-05:09 (mobileassetd 2,021 lines, softwareupdated 2,587, XProtectPluginService 584 in that minute) and a second mobileassetd burst at 05:22 (996 lines), both inside L004 (05:02:59-05:23:48). The leg was admitted by the runner's own checks. This is the second session in a row whose first leg after the soak caught a mobileassetd burst (s01 L001, item 508); noted for the desk, no change made. (3) backupd lines appear in several buckets though Time Machine has no destination (inert).
+- **Copied at once** (item 409): `cq-hp-02-s02-a1.ok` written 06:31:34; manifest 158 files, manifest sha256 `8e95acf2fa5991795e47878df09baf0ec9e0f29e1c38813cf2e3a77173cc7af1`, enc sha256 `b3acd02e754051a8548d15cd80c51f93240b41ea32a2374522ed85d88daf7d5e`; iCloud caught up and idle (last-sync 06:31:10 after the 06:30:55 copy; `hp02s02-check-6077188c/offload-out.txt`).
+- **Effect.** Item 509 CLOSED. The s02 HP Check is clean (RECEIPT OK, restore proven, fence cleared), which s03's issue requires. The `lm-hp-*` freeze continues to hp-02's last close (item 504).
+
 509. **Magistrate 953fff48, 2026-11-21 04:25 PST: MAGISTRATE — hp-02-s02 ISSUED at filler rank 3, cq-hp-02-s02-a1, L004–L007 only, one launch as the last act**
 
 ```pointer
