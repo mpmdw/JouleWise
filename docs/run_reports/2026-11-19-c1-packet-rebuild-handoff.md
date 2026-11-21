@@ -672,3 +672,19 @@ or magistrate owns the final packet. `NEEDS_SPEC: none`.
 The resolver reports the original verified-reader error when an order
 cannot be opened. This preserves the existing path-specific SHA-256
 diagnostic for the K4 byte sweep through the new closure check.
+
+On `6f158deaa`, hosted shards 5 and 10 exposed three older Delta 5
+witnesses that materialized the C1 roster and scaffold run IDs without
+the committed launch inputs. Their shared fixture now supplies typed
+invented scaffold configs, order descriptors, the head pin, and inert
+program and repository-argument identities. The same handoff, retry,
+history and target assertions run against the strict closure.
+
+```sh
+JW_B5_SYNTHETIC_ONLY=1 PYTHONPATH=tests:. python3.13 -B -m unittest -v \
+  align.test_r11_delta5_sol1 align.test_r11_delta5_sol2
+```
+
+The six targeted K5 and retained K4 methods passed on `6f158deaa`,
+including all 142 closure deletions and 72 byte mutations.
+[First hosted shard 5](https://github.com/mpmdw/JouleWise/actions/runs/44927145240/job/136915747581) · [First hosted shard 10](https://github.com/mpmdw/JouleWise/actions/runs/44927145240/job/136915747633)

@@ -144,7 +144,14 @@ def write_c1_fixture_kit(scenario, files):
     for path, raw in files.items():
         scenario.write(path, raw)
     tree = json.loads(files[directory / 'plan_tree.json'])
+    manifests = []
     for stage in stage_plan(tree):
+        for command in stage.commands:
+            scenario.write(TOOLS[command.tool_id].program, b'# invented tool identity; never executed\n')
+            arguments = command.arguments[1:] if stage.kind == 'campaign_collection' else command.arguments
+            for arg in arguments:
+                if arg['kind'] == 'repo_path' and not (scenario.root / arg['value']).is_file():
+                    scenario.write(arg['value'], {'synthetic_input': Path(arg['value']).name})
         if stage.kind != 'campaign_collection':
             continue
         config_dir = Path(stage.commands[0].arguments[0]['value'])
@@ -154,9 +161,15 @@ def write_c1_fixture_kit(scenario, files):
         for position in range(1, stage.expected_count + 1):
             run_id = f'fixture-{stage.stage_id}-{position}'
             name = run_id + '.json'
-            scenario.write(config_dir / name, {'run_id': run_id})
+            scenario.write(config_dir / name, synthetic_stage_config(run_id))
             rows.append({'run_id': run_id, 'config': name, 'index': position})
-        scenario.write(config_dir / 'order_manifest.json', {'executed_order': rows})
+        manifest = (config_dir / 'order_manifest.json').as_posix()
+        scenario.write(manifest, {'manifest_id': stage.stage_id, 'executed_order': rows})
+        manifests.append({'manifest': {'path': manifest}, 'external_input_id': stage.stage_id})
+    scenario.write(staging.plan.HEAD_PIN_RELATIVE, b'invented fixture pin\n')
+    scenario.write('configs/campaigns/bytes_v1/roster.json', {'models': []})
+    scenario.write('configs/campaigns/d117_floor_qwen3-1p7b_v5/plan_tree.json',
+                   {'arm_attachments': {'launch': {'bindings': []}}, 'external_inputs': {'manifests': manifests}})
 
 
 class Scenario:
