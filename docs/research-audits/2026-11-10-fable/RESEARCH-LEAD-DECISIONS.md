@@ -23384,3 +23384,42 @@ Research lead (Fable 5.2), Fri Nov 20 15:00 PST 2026 (from `date`). Answers ques
 **Amends.** RL-191 §1.1: one reason added above rank 1, for case (i) only. The resolver's question 3 is the integration owner's.
 
 **What comes back to me.** A count above zero; a definition of "an interval the recording contains" that needs a tolerance.
+
+# RL-195. Stage 1 may publish each span's `events.jsonl` sha256 under RL-179 row 26: a digest is a hash, not a number computed from energy, and the #816 twin pin is unchanged. Three conditions bind it. Close-time `outer.sha256` files do not authenticate a span
+
+Research lead (Fable 5.2), Fri Nov 20 23:24:58 PST 2026 (from `date`). Answers question 1 of `/Volumes/JW-EXT/scratch/pl-795/resolve-1/FINAL-MESSAGE.md` and the lead's question 2.
+
+**Read.** That report; the builder's report for #795 at `c26e89626` and its NEEDS_SPEC; Astra's audit-1 finding 2; RL-179 F-12 (RLD:18853 onward) and register row 26 (RLD:18933); RL-181 §2.3; RL-185 §4; RL-194, RL-194a, RL-194b. **Not checked.** #795's code, the twin child, the pinned controller's source, the layout or content of any real journal, any Check item's digest. Condition 1.2 below is therefore a builder check, not something I verified. **Not done.** No commit, run or SSH; no custody, energy, journal or restricted file opened. The only file written is this one. **Blind status.** Blind.
+
+## 1. Question 1: yes, publish the digest as it is
+
+**Stage 1's public file keeps the plain sha256 of each span's `events.jsonl`. No masking, no move into the reservation record, no change to the #816 child (`91ca54ab…0aab`) or to the digest map it compares.**
+
+- **Row 26 already permits it.** Its list is "listed words, hashes, stage-1 integers and identifiers; no float". F-12 publishes freeze 2, the sha256 of a file that is nothing but energy-derived floats, and its invariance test masks the sha256 fields because they are expected to move with energy. A hash that changes when a measured value changes is the case the rule was written for, not a breach of it.
+- **Stage 1 does not become "a process that has opened energy".** `events.jsonl` is an operational file with one energy-class member. Reading it as bytes for the hash, and through the H2 decoder that never converts that member, opens no energy. RL-194a §1's bar on stage 1 hashing streams stands; it is about files that are energy throughout.
+- **The value is treated as energy, not as harmless.** The idle baseline feeds the idle-gap print (RL-185 §4). What is public is that it exists and that the digest depends on it, nothing about its size.
+- **Brute force.** Recovering the mean from the digest needs every other byte of the journal, which is unpublished, and then a search over the float's digits. Condition 1.2 makes that a checked fact. Anyone who holds the journal already holds the value.
+- **Why not the alternatives.** A masked digest needs a second canonical form and a decoder change ahead of the reservation, and breaks the chain from the public pin to the offload manifest (RL-194 condition 2), which lists the plain digest. Moving the digest into the reservation changes the twin. Both cost review for no gain in blinding.
+
+**Conditions.**
+
+| # | Rule | Test |
+|---|---|---|
+| 1.1 | Before the reservation, no process converts, prints, logs or copies the value of `idle_baseline.power_w_mean`, or of any member the H2 decoder classes as energy or power. This covers stage 1, the preflight, the verifier, the cold review and the review record | The existing `sys.setprofile` probe, kept as a gating test. The review record and stage 1's public file hold no float |
+| 1.2 | Each journal has unpublished entropy apart from the mean: the builder cites, from the pinned controller's source and not from a real journal, at least two members written into every span's journal with sub-second wall-clock or monotonic stamps that appear in no public file | File and line in the run report. If no such members exist, nothing is published and it returns to me |
+| 1.3 | Invariance: on a synthetic span, changing only the mean changes stage 1's public file in that journal's sha256 field and in nothing else (byte-equal once sha256 fields are masked) | One regression test |
+
+**Disclosure.** The look's blind statement gains one sentence: "The public file carries the sha256 of each span's operational journal, which contains one measured idle-power mean; no value from it was read before the reservation."
+
+**The same reading holds for any operational file with an energy-class member** in `lm-inst-01`, `lm-stab-01` and `lm-stab-02`, on the same three conditions.
+
+## 2. Question 2: no objection
+
+1. **The lead's rule is confirmed as a reading of RL-194 condition 2 and RL-194a §2:** `check_item` is corrected only where the cited item names that span's offload manifest under a manifest label and every printed hex character matches the custody manifest's sha256. The lead compares at pin time. Full digests from RUN_STATE 491 on.
+2. **`outer.sha256` is not a route.** It is a custody-side file with no public, dated witness, so it cannot stand in for the Check. It may be cited as a second record (RL-194a §2 item 2), never as the binding one.
+3. **A HELD span keeps the look's manifest from being final.** The roster is not edited to drop it (RL-194 condition 6).
+4. **The four unproven spans come to me as a list:** span id, and for each public record dated at or near its close (Check items, commits on main, magistrate notices), the item number and the label under which any digest is printed. Labels and item numbers only. I rule on a route from that list.
+
+**Amends.** Nothing. RL-179 row 26, RL-194 and RL-194a stand as written.
+
+**What comes back to me.** A failure of condition 1.2; the list in 2.4; a mismatched character in any of the seven.
