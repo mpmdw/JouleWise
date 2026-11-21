@@ -1,0 +1,131 @@
+{
+  "layer": 2,
+  "manifest": "6b481f145fcd3ab0242251be30ca460cc67e484652de11553332605833a1c3f9",
+  "max_rss_bytes": 3377512448,
+  "metrics": {
+    "attn_hc": {
+      "atol": 0.051875000000000004,
+      "first_max_index": [
+        0,
+        8,
+        2389
+      ],
+      "max_abs": 0.0234375,
+      "pass": true,
+      "rms": 0.0021555654047816916,
+      "unequal": 25216,
+      "values": [
+        1.2265625,
+        1.25
+      ]
+    },
+    "delta": {
+      "atol": 0.00828125,
+      "first_max_index": [
+        0,
+        10,
+        1626
+      ],
+      "max_abs": 0.001953125,
+      "pass": true,
+      "rms": 0.00038344662950483364,
+      "unequal": 32959,
+      "values": [
+        -0.0908203125,
+        -0.0927734375
+      ]
+    },
+    "experts_same_indices": {
+      "atol": 0.00232421875,
+      "first_max_index": [
+        0,
+        7,
+        8,
+        1939
+      ],
+      "max_abs": 0.0003662109375,
+      "pass": true,
+      "rms": 3.903144990683273e-05,
+      "unequal": 321773,
+      "values": [
+        -0.007568359375,
+        -0.0072021484375
+      ]
+    },
+    "hidden": {
+      "atol": 0.0246875,
+      "first_max_index": [
+        0,
+        8,
+        1486
+      ],
+      "max_abs": 0.01953125,
+      "pass": true,
+      "rms": 0.001615010380818519,
+      "unequal": 105879,
+      "values": [
+        0.146484375,
+        0.166015625
+      ]
+    },
+    "moe": {
+      "atol": 0.0009375,
+      "first_max_index": [
+        0,
+        13,
+        1608
+      ],
+      "max_abs": 0.0111083984375,
+      "pass": false,
+      "rms": 0.0003440798591412025,
+      "unequal": 33209,
+      "values": [
+        0.0146484375,
+        0.0257568359375
+      ]
+    },
+    "router": {
+      "atol": 0.0,
+      "first_max_index": [
+        0,
+        3,
+        1
+      ],
+      "max_abs": 149.0,
+      "pass": false,
+      "rms": 19.08697199662639,
+      "unequal": 20,
+      "values": [
+        234.0,
+        85.0
+      ]
+    },
+    "shared": {
+      "atol": 0.001708984375,
+      "first_max_index": [
+        0,
+        2,
+        1541
+      ],
+      "max_abs": 0.0003662109375,
+      "pass": true,
+      "rms": 1.6852386113497038e-05,
+      "unequal": 25837,
+      "values": [
+        -0.02392578125,
+        -0.0235595703125
+      ]
+    }
+  },
+  "mlx_peak_bytes": 2252059350,
+  "ple_heads": 0,
+  "purpose": "MLX-vs-MLX on converted weights",
+  "router": {
+    "bf16_cutoff_ties": 5,
+    "changed_on_tied_rows": 4,
+    "changed_rows": 4
+  },
+  "seed": 20261123,
+  "tensor_bytes": 2199516608,
+  "tokens": 16
+}
