@@ -1,0 +1,46 @@
+{
+  "folded_scale": {
+    "pass": false,
+    "max_abs": 0.00390625,
+    "rms": 0.0018129514324761859,
+    "atol": 0.0,
+    "first_max_index": [
+      19
+    ],
+    "values": [
+      1.265625,
+      1.26171875
+    ],
+    "unequal": 109
+  },
+  "grouped_rms": {
+    "pass": false,
+    "max_abs": 0.015625,
+    "rms": 0.003398725960005849,
+    "atol": 0.0,
+    "first_max_index": [
+      0,
+      0,
+      7
+    ],
+    "values": [
+      -2.21875,
+      -2.234375
+    ],
+    "unequal": 498
+  },
+  "delta_decay_factor": {
+    "pass": false,
+    "max_abs": 0.0003805253654718399,
+    "rms": 0.00026840915419062646,
+    "atol": 0.0,
+    "first_max_index": [
+      0
+    ],
+    "values": [
+      0.025921272113919258,
+      0.025540746748447418
+    ],
+    "unequal": 3
+  }
+}

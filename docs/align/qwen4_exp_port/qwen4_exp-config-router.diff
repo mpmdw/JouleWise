@@ -1,0 +1,58 @@
+--- a/mlx_lm/models/qwen4_exp.py
++++ b/mlx_lm/models/qwen4_exp.py
+@@ -88,10 +88,11 @@
+     seed: int = 1234
+     layer_types: list[str] = field(default_factory=list)
+     full_attention_interval: int = 4
+     output_gate_type: str | None = None
+     hidden_act: str = "silu"
++    norm_topk_prob: bool = True
+     tie_word_embeddings: bool = False
+     rope_theta: float = field(init=False)
+     partial_rotary_factor: float = field(init=False)
+
+     def __post_init__(self) -> None:
+@@ -104,10 +105,14 @@
+             k = self.full_attention_interval
+             self.layer_types = [
+                 "full_attention" if (i + 1) % k == 0 else "linear_attention"
+                 for i in range(self.num_hidden_layers)
+             ]
++        self.layer_types = [
++            "full_attention" if kind == "indexed_attention" else kind
++            for kind in self.layer_types
++        ]
+
+
+ @dataclass
+ class ModelArgs(BaseModelArgs):
+     model_type: str
+@@ -398,10 +403,11 @@
+
+ class SparseMoeBlock(nn.Module):
+     def __init__(self, args: TextArgs):
+         super().__init__()
+         self.top_k = args.num_experts_per_tok
++        self.norm_topk_prob = args.norm_topk_prob
+         self.gate = nn.Linear(args.hidden_size, args.num_experts, bias=False)
+         self.switch_mlp = SwitchGLU(
+             input_dims=args.hidden_size,
+             hidden_dims=args.moe_intermediate_size,
+             num_experts=args.num_experts,
+@@ -411,12 +417,14 @@
+
+     def __call__(self, x: mx.array) -> mx.array:
+         logits = self.gate(x.astype(mx.float32))
+         idx = mx.argpartition(-logits, self.top_k - 1, axis=-1)[..., : self.top_k]
+         idx = mx.stop_gradient(idx)
+-        # The softmax of the top-k logits: the reference's renormalized top-k.
+-        w = mx.softmax(mx.take_along_axis(logits, idx, axis=-1), axis=-1)
++        if self.norm_topk_prob:
++            w = mx.softmax(mx.take_along_axis(logits, idx, axis=-1), axis=-1)
++        else:
++            w = mx.take_along_axis(mx.softmax(logits, axis=-1), idx, axis=-1)
+         out = (self.switch_mlp(x, idx) * w[..., None]).sum(axis=-2).astype(x.dtype)
+         return out + mx.sigmoid(self.shared_expert_gate(x)) * self.shared_expert(x)
+
+
+ class GatedResidual(nn.Module):
