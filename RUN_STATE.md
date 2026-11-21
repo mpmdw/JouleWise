@@ -1052,6 +1052,31 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 
 <!-- RUN_STATE TYPED ITEMS: newest first. Add with scripts/run_state_add.py; never edit by hand. -->
 
+503. **Lead: hp-02 start-check simplified to HP-LITE (six checks, honest-but-fallible threat model); the spec's evidence bundle is not required; item 502's hold ends**
+
+```pointer
+owner: magistrate
+wait: none
+deadline: 2026-11-30T00:00:00-08:00
+on_early_or_refused: a failed HP-LITE check is a timing cede or a hold; take the next eligible rung (items 464, 472, 480) and record which check failed. Any refusal, failed or unproven restore, non-clean HP Check, or revocation holds cl-hp-02 and notifies the lead and Ed.
+next_observable: at the next clean close where hp-02 wins rank 3 and its whole worst-work interval avoids 02:00-02:35, the activation's start-check.out (rc 0) shows the six HP-LITE lines, and an hp-02-s01 ISSUED item is rendered from the spec's "Text to issue for hp-02-s01" as amended below, launched as the last act.
+```
+
+```item
+{"expires_epoch_s": null, "issued_epoch_s": 1795254014, "number": 503, "owner": "lead", "schema": "joulewise.run_state_item.v1", "sets": [], "status": "ISSUED", "supersedes": []}
+```
+
+- **Why.** Item 502 held hp-02 because the spec's start-check (`fb2e5f6a9`, `.../hp-02-ladder/SPEC.md`) reads an evidence bundle that does not exist and that no owner produces: `PUBLIC/basis.json`, three agreeing `look.json` views, `MBP_PUBLIC/hp-receipts.json`, `DESK`/`DESK_TOOLS` and `hp_checks.py`. Those inputs defend against forged or stale records from several owners. The threat model (lead, 20 Nov 09:52, at the top of that spec) puts forged records out of scope; the writers are the lead and the magistrate, honest but fallible. Building the bundle would cost days of engineering and buy no protection under that model. This is a lead process decision under proportionate care. RL-193 C3 raised no research objection to the ladder. This item is the public record of the change. The research lead reviews it in the next batch; an objection holds the next HP issue.
+- **Decision: HP-LITE replaces the bundle.** The magistrate runs its ordinary f2 start-check: pin clean and detached, kit and queue sha256, `validate_kit`, `validate-queue`, blackout, the latest clean host Check with restore and feeds, and the fence arithmetic at the actual t0. It adds the six checks below, each written as one `HP-LITE n:` line in `start-check.out` with its citation. Any failed line holds or cedes.
+  1. **Look.** `lm-hp-01` has no executor, no row in `docs/process/cadence/looks/LOOKS.json` on main, and no reservation or execution recorded in RUN_STATE. The lead attests here: zero executions and zero active reservations of any `lm-hp-*` look. The freeze stands: no `lm-hp-*` look reservation until every issued HP span's Check is on main. Check: no RUN_STATE item numbered above this one revokes this attestation or records an `lm-hp-*` reservation or execution.
+  2. **t0 date.** The LA date of t0 is not 2026-11-15, the date of all three hp-01 spans (RS335–344).
+  3. **LINE2_OK.** Cite the spec's three records: RS338 at `6640a6671`, HP02-DELTA.md at `e3eaa282f`, and RL-165 §5 / RL-190 2.
+  4. **Queue and attempt.** queue-b `cq-hp-02-b`, sha256 `078eb24c3149f2a7bc522a432098e51e21bd36278d288b0f41efbb5d57da528f`, admitted by item 489. The order is s01, then s02, then s03, each attempt 1. Unspent means no earlier ISSUED RUN_STATE item for that plan id.
+  5. **Prior HP Check.** s01 needs none. s02 needs s01's Check on main showing RECEIPT OK, a clean restore and its fence cleared; s03 needs the same for s02.
+  6. **Window.** The whole worst-work interval `[t0, t0+worst)` touches no local 02:00–02:35 on any date (R-c). The plan worst cases are 16,650 / 19,350 / 22,050 s. t0 must be at or before 2026-11-29 23:50:00 PST. Rank stays 3 under items 464, 472 and 480.
+- **Issue text.** Render the spec's "Text to issue for hp-02-s01". Replace the `HP-DISPATCH` line, and the clauses that cite the three histories, the MBP receipt index and the AIR view, with one line: `HP-LITE (item <this>): checks 1-6 PASS, start-check.out lines <a>-<b>`. Keep every other clause. The **Run** block is the ordinary f2 Run: re-read origin/main; any newer item touching hp-02, cl-hp-02 or an `lm-hp-*` look aborts this dispatch. No `hp_checks.py` is used.
+- **Effect.** The hold in item 502 ends. hp-02 is eligible at rank 3 from the next clean close. Item 489's admission and deadline are unchanged.
+
 502. **Magistrate 45d9cb59 (headless, Opus 5.5), 2026-11-21 01:34-01:42 PST (`date`): f2-stab-02-l006 CHECK: RECEIPT OK (1/1 leg, MEASURED_OK, admitted, restored; 16 s over budget; mobileassetd burst inside the quiet span, flagged for the desk), copied at once; hp-02 HELD at rank 3 (the spec's evidence bundle does not exist; lead action); f2-stab-02-l007 ISSUED at rank 4 on pin A, ARG 13:14-13:15, launches as the last act**
 
 ```pointer
