@@ -10,11 +10,29 @@ from types import SimpleNamespace
 from pathlib import Path
 import tempfile
 import threading
-import time
 import unittest
 from unittest import mock
 
 from joulewise import calibration_ledger as ledger
+
+
+@contextmanager
+def expire_blocked_probe(entered):
+    real_join = threading.Thread.join
+    elapsed = 0.0
+
+    def join(worker, timeout=None):
+        nonlocal elapsed
+        if worker.name != ledger.CUSTODY_PROBE_THREAD_NAME or elapsed:
+            return real_join(worker, timeout)
+        assert timeout == 0.05
+        assert entered.wait(30), "custody probe never reached the blocked operation"
+        elapsed += timeout
+
+    with (mock.patch.object(ledger, "CUSTODY_PROBE_TIMEOUT_S", 0.05),
+          mock.patch.object(threading.Thread, "join", join)):
+        yield lambda: elapsed
+        assert elapsed == 0.05, "custody probe never waited for its deadline"
 
 
 class CustodyProbeTests(unittest.TestCase):
@@ -235,15 +253,15 @@ class CustodyProbeTests(unittest.TestCase):
 
                 try:
                     with (
-                        mock.patch.object(ledger, "CUSTODY_PROBE_TIMEOUT_S", 0.05),
+                        expire_blocked_probe(entered) as clock,
                         mock.patch.object(Path, "exists", side_effect=blocked if operation == "exists" else None, return_value=True),
                         mock.patch.object(Path, "is_dir", side_effect=blocked if operation == "is_dir" else None, return_value=True),
                         mock.patch.object(Path, "is_file", side_effect=AssertionError("inspection attempted")),
                         mock.patch.object(ledger, "_governed_raw_nofollow_unbounded", side_effect=AssertionError("read attempted")),
                     ):
-                        started = time.monotonic()
+                        started = clock()
                         self.assertEqual(ledger._custody_state(Path("/mock/custody")), "absent")
-                        elapsed = time.monotonic() - started
+                        elapsed = clock() - started
                         self.assertTrue(entered.is_set())
                         self.assertGreaterEqual(elapsed, 0.04)
                         self.assertLess(elapsed, 0.5)
@@ -353,15 +371,15 @@ class CustodyReadCoverageTests(unittest.TestCase):
 
                         try:
                             with (
-                                mock.patch.object(ledger, "CUSTODY_PROBE_TIMEOUT_S", 0.05),
+                                expire_blocked_probe(entered) as clock,
                                 mock.patch.object(Path, "exists", return_value=True),
                                 mock.patch.object(Path, operation, side_effect=blocked),
                                 mock.patch.object(ledger, "read_authentication_input", side_effect=AssertionError("read attempted")) as read,
                                 mock.patch.object(ledger, "read_authentication_input_nofollow", side_effect=AssertionError("read attempted")) as nofollow,
                             ):
-                                started = time.monotonic()
+                                started = clock()
                                 self.assertEqual(self.outcome(call), expected)
-                                self.assertLess(time.monotonic() - started, 0.5)
+                                self.assertLess(clock() - started, 0.5)
                                 self.assertTrue(entered.is_set())
                                 self.assertTrue(workers[0].daemon)
                                 read.assert_not_called()
@@ -494,7 +512,7 @@ class CustodyReadCoverageTests(unittest.TestCase):
 
                 with (
                     V2AuthenticationReadSession() as session,
-                    mock.patch.object(ledger, "CUSTODY_PROBE_TIMEOUT_S", 0.05),
+                    expire_blocked_probe(entered),
                     mock.patch.object(Path, "exists", blocked),
                     mock.patch.object(ledger, "read_authentication_input_nofollow",
                                       wraps=ledger.read_authentication_input_nofollow) as read,
@@ -701,7 +719,7 @@ class ReservationCustodyDeadlineTests(unittest.TestCase):
         import json
         from tests.calibration_exits_fixtures.custody_hang import CustodyFixture, install_reservation_append_expiry
 
-        with CustodyFixture() as f:
+        with CustodyFixture(control_clock=True) as f:
             marker = install_reservation_append_expiry(f)
             before = f.bytes()
             completed, _ = f.reservation(budget=2)
@@ -728,9 +746,9 @@ class ReservationCustodyDeadlineTests(unittest.TestCase):
     def test_blocked_read_refuses_before_any_append(self):
         import json
         from tests.calibration_exits_fixtures.custody_hang import CustodyFixture, BlockedArtifact
-        with CustodyFixture() as f:
+        with CustodyFixture(control_clock=True) as f:
             before = f.bytes()
-            with BlockedArtifact(f.custodies[0] / "events.jsonl") as fifo:
+            with BlockedArtifact(f.custodies[0] / "events.jsonl", advance=f.advance_on_read) as fifo:
                 try:
                     completed, elapsed = f.reservation()
                 except AssertionError as exc:
@@ -765,9 +783,10 @@ class ReservationCustodyDeadlineTests(unittest.TestCase):
     def test_one_budget_is_shared_by_several_observations(self):
         from contextlib import ExitStack
         from tests.calibration_exits_fixtures.custody_hang import CustodyFixture, BlockedArtifact
-        with CustodyFixture() as f, ExitStack() as stack:
+        with CustodyFixture(control_clock=True) as f, ExitStack() as stack:
             before = f.bytes()
-            fifos = [stack.enter_context(BlockedArtifact(root / "events.jsonl", delay=1.2)) for root in f.custodies]
+            fifos = [stack.enter_context(BlockedArtifact(root / "events.jsonl", delay=1.2,
+                                                       advance=f.advance_on_read)) for root in f.custodies]
             completed, elapsed = f.reservation()
             self.assertTrue(all(fifo.entered.is_set() for fifo in fifos), completed.stderr)
             self.assertTrue(fifos[0].finished.is_set() and fifos[1].finished.is_set())
@@ -780,9 +799,10 @@ class ReservationCustodyDeadlineTests(unittest.TestCase):
     def test_slow_success_and_corrupt_byte_keep_full_hash_comparison(self):
         from tests.calibration_exits_fixtures.custody_hang import CustodyFixture, BlockedArtifact
         for corrupt in (False, True):
-            with self.subTest(corrupt=corrupt), CustodyFixture() as f:
+            with self.subTest(corrupt=corrupt), CustodyFixture(control_clock=True) as f:
                 before = f.bytes()
-                with BlockedArtifact(f.custodies[0] / "events.jsonl", delay=0.4) as fifo:
+                with BlockedArtifact(f.custodies[0] / "events.jsonl", delay=0.4,
+                                     advance=f.advance_on_read) as fifo:
                     if corrupt:
                         # The FIFO thread takes these bytes only once a reader opens it.
                         fifo.original += b"corrupted"
@@ -799,13 +819,13 @@ class ReservationCustodyDeadlineTests(unittest.TestCase):
     def test_existing_session_timeout_preserves_recovery_evidence(self):
         import json
         from tests.calibration_exits_fixtures.custody_hang import CustodyFixture, BlockedArtifact
-        with CustodyFixture() as f:
+        with CustodyFixture(control_clock=True) as f:
             f.witness._open_session("session-new")
             # A torn later write must remain byte-identical, including residue.
             with f.ledger.open("ab") as handle:
                 handle.write(b'{"torn-recovery-evidence":')
             before = f.bytes()
-            with BlockedArtifact(f.custodies[0] / "events.jsonl") as fifo:
+            with BlockedArtifact(f.custodies[0] / "events.jsonl", advance=f.advance_on_read) as fifo:
                 completed, _ = f.reservation()
                 self.assertTrue(fifo.entered.is_set())
                 self.assertEqual(completed.returncode, 2, completed.stderr)
@@ -821,7 +841,7 @@ class ReservationCustodyDeadlineTests(unittest.TestCase):
         import json
         import sys
         from tests.calibration_exits_fixtures.custody_hang import CustodyFixture, BlockedArtifact
-        with CustodyFixture() as f:
+        with CustodyFixture(control_clock=True) as f:
             before = f.bytes()
             completed, _ = f.reservation(mode="--verify-only")
             self.assertEqual(completed.returncode, 0, completed.stderr)
@@ -839,7 +859,7 @@ class ReservationCustodyDeadlineTests(unittest.TestCase):
             completed, _ = f.reservation(mode="--verify-only", extra=("--execute",))
             self.assertEqual(completed.returncode, 2)
             self.assertIn("not allowed with argument", completed.stderr)
-            with BlockedArtifact(f.custodies[0] / "events.jsonl"):
+            with BlockedArtifact(f.custodies[0] / "events.jsonl", advance=f.advance_on_read):
                 completed, _ = f.reservation(mode="--verify-only")
                 self.assertEqual(completed.returncode, 2)
                 self.assertIn('"code": "calibration_ledger_custody_timeout"', completed.stderr)
@@ -847,7 +867,7 @@ class ReservationCustodyDeadlineTests(unittest.TestCase):
 
     def test_existing_session_never_turns_invalid_custody_into_success(self):
         from tests.calibration_exits_fixtures.custody_hang import CustodyFixture
-        with CustodyFixture() as f:
+        with CustodyFixture(control_clock=True) as f:
             f.witness._open_session("session-new")
             artifact = f.custodies[0] / "events.jsonl"
             artifact.write_bytes(b"corrupted")
@@ -862,7 +882,8 @@ class ReservationCustodyDeadlineTests(unittest.TestCase):
     def test_refusal_document_unset_and_collision_preserve_original(self):
         import json
         from tests.calibration_exits_fixtures.custody_hang import CustodyFixture
-        with CustodyFixture() as f:
+        with CustodyFixture(control_clock=True) as f:
+            f.env["JW_CUSTODY_EXPIRE_ON_CHECK"] = "1"
             env = dict(f.env)
             env.pop("JOULEWISE_CALIBRATION_REFUSAL_PATH")
             completed, _ = f.reservation(budget=0.000000001, env=env)
@@ -880,7 +901,7 @@ class ReservationCustodyDeadlineTests(unittest.TestCase):
 
     def test_metadata_stall_uses_same_timeout_code(self):
         from tests.calibration_exits_fixtures.custody_hang import CustodyFixture, install_read_barrier
-        with CustodyFixture() as f:
+        with CustodyFixture(control_clock=True) as f:
             before = f.bytes()
             marker = install_read_barrier(f, metadata=True)
             completed, _ = f.reservation(budget=0.8)
@@ -959,7 +980,7 @@ class StrictReservationReadinessTests(unittest.TestCase):
     def test_interrupted_claim_strict_refuses_but_legacy_retry_recovers(self):
         import json
         from tests.calibration_exits_fixtures.custody_hang import CustodyFixture
-        with CustodyFixture() as f:
+        with CustodyFixture(control_clock=True) as f:
             self._open(f)
             self._interrupt_claim(f)
             before = f.bytes()
@@ -976,7 +997,7 @@ class StrictReservationReadinessTests(unittest.TestCase):
 
     def test_open_session_strict_refuses_without_append(self):
         from tests.calibration_exits_fixtures.custody_hang import CustodyFixture
-        with CustodyFixture() as f:
+        with CustodyFixture(control_clock=True) as f:
             self._open(f)
             before = f.bytes()
             completed, _ = self._strict_execute(f)
@@ -985,7 +1006,7 @@ class StrictReservationReadinessTests(unittest.TestCase):
     def test_healthy_strict_reservation_emits_frozen_plan_and_reserves(self):
         import json
         from tests.calibration_exits_fixtures.custody_hang import CustodyFixture
-        with CustodyFixture() as f:
+        with CustodyFixture(control_clock=True) as f:
             before = f.bytes()
             completed, _ = self._strict_execute(f)
             receipt = self._read_success(f, completed)
@@ -998,7 +1019,7 @@ class StrictReservationReadinessTests(unittest.TestCase):
 
     def test_verify_only_implies_strict_gate_for_healthy_open_and_interrupted(self):
         from tests.calibration_exits_fixtures.custody_hang import CustodyFixture
-        with CustodyFixture() as f:
+        with CustodyFixture(control_clock=True) as f:
             before = f.bytes()
             completed, _ = f.reservation(mode="--verify-only")
             receipt = self._read_success(f, completed)
@@ -1174,7 +1195,7 @@ class UnderLeaseCustodyMemoTests(unittest.TestCase):
 
         from tests.calibration_exits_fixtures.custody_hang import CustodyFixture
 
-        with CustodyFixture() as fixture:
+        with CustodyFixture(control_clock=True) as fixture:
             deadline = self._deadline()
             deadline.arm_custody_memo()
             first = self._pass(fixture, deadline)
@@ -1524,8 +1545,8 @@ class NightBudgetAbortPathTests(unittest.TestCase):
         the delay and the number of custody workers that were started.
         """
         marker = fixture.repo / "custody-metadata-delay.jsonl"
-        (fixture.repo / "sitecustomize.py").write_text(
-            '''import json, os, time
+        with (fixture.repo / "sitecustomize.py").open("a") as hook:
+            hook.write('''import json, os
 from pathlib import Path
 _prefix = os.environ.get("JW_CUSTODY_SLOW_PREFIX")
 if _prefix:
@@ -1538,7 +1559,7 @@ if _prefix:
                 with open(_marker, "a") as handle:
                     handle.write(json.dumps(
                         {"pid": os.getpid(), "call": name, "path": str(self)}) + "\\n")
-                time.sleep(_delay)
+                _advance(_delay)
             return original(self, *args, **kwargs)
         setattr(Path, name, probe)
     for _name in ("exists", "is_dir", "is_file"):
@@ -1561,8 +1582,8 @@ if _prefix:
         files, so a FIFO answers "partial" without reading anything.
         """
         marker = fixture.repo / "governed-read-barrier.jsonl"
-        (fixture.repo / "sitecustomize.py").write_text(
-            '''import json, os, time
+        with (fixture.repo / "sitecustomize.py").open("a") as hook:
+            hook.write('''import json, os, time
 from pathlib import Path
 _target = os.environ.get("JW_GOVERNED_BARRIER_TARGET")
 if _target:
@@ -1572,6 +1593,7 @@ if _target:
         if str(Path(directory) / relative) == _target:
             with open(os.environ["JW_GOVERNED_BARRIER_MARKER"], "a") as handle:
                 handle.write(json.dumps({"pid": os.getpid(), "path": _target}) + "\\n")
+            _advance(float(os.environ["JW_CUSTODY_TEST_BUDGET"]))
             time.sleep(float(os.environ["JW_GOVERNED_BARRIER_DELAY"]))
         return _original(directory, relative)
     _io._read_nofollow_bytes = _barrier
@@ -1608,7 +1630,7 @@ if _target:
         import json
         from tests.calibration_exits_fixtures.custody_hang import CustodyFixture
 
-        with CustodyFixture() as f:
+        with CustodyFixture(control_clock=True) as f:
             env = dict(f.env)
             env["JOULEWISE_NIGHT_CUSTODY_BUDGET_S"] = "30"
             before = f.bytes()
@@ -1629,7 +1651,7 @@ if _target:
         import json
         from tests.calibration_exits_fixtures.custody_hang import CustodyFixture
 
-        with CustodyFixture() as f:
+        with CustodyFixture(control_clock=True) as f:
             plan, _root, next_root = self._finalized_slot(f, next_custody=True)
             # The stall sits in the read of the NEXT slot's manifest.json --
             # the one custody value the abort consumes.
@@ -1675,7 +1697,7 @@ if _target:
         import json
         from tests.calibration_exits_fixtures.custody_hang import CustodyFixture
 
-        with CustodyFixture() as f:
+        with CustodyFixture(control_clock=True) as f:
             # "pre" is finalized with complete custody on disk; the next slot
             # is "post". Block "pre" for 60 s: at the base head the abort
             # reads it and hangs until its allowance expires.
@@ -1708,7 +1730,7 @@ if _target:
         from tests.calibration_exits_fixtures.custody_hang import CustodyFixture
 
         slots = tuple(f"d{index:02d}" for index in range(1, 13))
-        with CustodyFixture() as f:
+        with CustodyFixture(control_clock=True) as f:
             plan, _finalized, next_root = self._finalized_slot(f, slots=slots)
             # The next slot is present but incomplete -- a night aborted
             # between two captures -- so the abort closes the session instead
@@ -1749,7 +1771,7 @@ if _target:
         import json
         from tests.calibration_exits_fixtures.custody_hang import CustodyFixture
 
-        with CustodyFixture() as f:
+        with CustodyFixture(control_clock=True) as f:
             plan, _root, next_root = self._finalized_slot(f, next_custody=True)
             marker = self._install_governed_read_barrier(f, next_root / "manifest.json")
             self.assertFalse(f.refusal.exists())

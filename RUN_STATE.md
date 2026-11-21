@@ -1052,6 +1052,176 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 
 <!-- RUN_STATE TYPED ITEMS: newest first. Add with scripts/run_state_add.py; never edit by hand. -->
 
+509. **Magistrate 953fff48, 2026-11-21 04:25 PST: MAGISTRATE — hp-02-s02 ISSUED at filler rank 3, cq-hp-02-s02-a1, L004–L007 only, one launch as the last act**
+
+```pointer
+owner: magistrate
+wait: none
+deadline: 2026-11-21T13:00:00-08:00
+on_early_or_refused: Check at early fence clearance. On ordinary launcher refusal, missing required proof or non-clean HP Check, record the reason, hold cl-hp-02 until an input changes, notify Ed and the lead, reconcile the attempt and take the next safe eligible rung. A timing cede returns to the ladder. An unresolved host restore stops host dispatch. Halt and page Ed and the lead on failed pinned restore. If the Check is missing by the deadline, report it. At a clean close resume the eligible ladder. If run-out.txt ends in WAIT or STOP without a LAUNCH_RC line, nothing launched: the attempt is unspent, and the next activation runs a fresh start-check and re-issues s02 (or takes the next rung).
+next_observable: hp02s02-953fff48/run-out.txt reports the launcher result and fence for cq-hp-02-s02-a1 (the block waits for three quiet minutes, launching by 06:30 or not at all). At first fence clearance the magistrate checks the actual stamped output with hp02s02-check-template-953fff48/check.sh (replace REPLACE_STAMP with the actual stamp, add a zsh shebang and a TMPDIR line), copies at once with hp02s02-check-template-953fff48/offload-run.sh (NEWACT replaced), and records the operational Check and restore in RUN_STATE.
+```
+
+```item
+{"expires_epoch_s": 1796025600, "issued_epoch_s": 1795263839, "number": 509, "owner": "magistrate", "schema": "joulewise.run_state_item.v1", "sets": [], "status": "ISSUED", "supersedes": []}
+```
+
+- Issue one attempt for block hp-02, queue cq-hp-02-b seq 2, hp-02-s02, ordered L004,L005,L006,L007, attempt 1.
+- Latest clean MBP Check: item 508 (hp-02-s01, this activation): MBP, RECEIPT OK, receipt sha256 `fde8a214cda004ee6975d2315d4e6a1ace82ca5af510c4db617b954ba7424fb1`, end 04:18:30 PST, fence pid 68009 gone, restore proven. Named HP predecessor for s02: the s01 HP Check, item 508.
+
+Queue-b expires_at=2026-11-30T00:00:00-08:00
+
+HP-LITE (item 503, amended by 504): checks 1-6 PASS, start-check.out lines 88-93
+
+- Runner dd206025abb30fd5c07515cd4b34b3e653174810, cadence-legs-v1, cl-hp-02 SHA-256 7693b8293b42b8ba20cbd321e201974745b172dc53c4f1397d2c1494f38fbe66 (staged `/Users/edr/campaign-out/kits/cl-hp-02-e3eaa282f.json` from `e3eaa282f`; `cadence_queue.py validate-kit` ok with frozen paths verified at the pin).
+- Current lead admission: item 489 (queue-b ADMITTED), with items 503 and 504; item 507 (soak avoids 02:00-02:35) is satisfied at this t0. No later revocation, refusal, failed recovery or unproven recovery on main at item 508's head. Admitted queue e3eaa282f9d4cea3b579eeb7bde989ff897df45e:docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/item-drafts-f2-0203/hp-02/queue-b.json, SHA-256 078eb24c3149f2a7bc522a432098e51e21bd36278d288b0f41efbb5d57da528f (staged `/Users/edr/campaign-out/queues/cq-hp-02-b-e3eaa282f.json`; `validate-queue` ok, plan ids cq-hp-02-s0{1,2,3}-a1). Local opening 2026-11-21 00:00 PST, exclusive expiry 2026-11-30 00:00 PST. Run verifies this item's integer expiry and exact queue timestamp, and requires at least 600 s at launcher invocation.
+- LINE2_OK=yes. (1) RS338 at 6640a66719a2ff1f8cc38dbce3e8231f419e79d8, four-part line 2, cl-hp-01 SHA-256 7eaf2660312ce6b3af90e8a1d9da1e05a6c409366a88a7e5e558d3bebb9d2965. (2) HP02-DELTA.md beside that queue at e3eaa282f9d4cea3b579eeb7bde989ff897df45e finds hp-02's frozen block byte-equal to hp-01's at the same pin, 37 paths. (3) Line 2 for `cl-hp-02` (`7693b829…be66`) is `cl-hp-01`'s record under RL-165 §5; no frozen byte differs (RL-190 2).
+- From publication until the magistrate records the HP Check, the lead and all analysts must make no look reservation; under item 504 the `lm-hp-*` freeze runs until hp-02's last close. Every look executor must refuse if the desk fence or HP issue marker exists, including this unchecked published item after fence clearance. Serialize reservation commits and HP publication with the lead.
+- Start-check `hp02s02-953fff48/start-check.out`, rc 0 at 04:23:01 PST (proposed t0 04:37:59). Proposed LA date 2026-11-21 clear of 2026-11-15. Spent prefix: s01/a1 (item 506, Checked clean in item 508). Rank: rank 1 for Sat 21 Nov served by f2-stab-02 L006 (item 502); rank 2 none; HP is next. Host preflight: no desk fence, standdown, MAINTENANCE marker, night/align-r0 label or High Power marker (nor dangling link); powermode 0; AC, 100% charged; network time Off; both approved sudo rules listed (`pmset -c powermode 0`, `pmset -c powermode 2`), neither set; 216 GiB free; no cq-hp-02-s02-a1 output exists. s01's copy is complete (item 508), so no transfer runs into the soak.
+- Run P1. The Run block reads origin/main by `git ls-remote` and RUN_STATE.md at that head through `gh api`, reviews the complete text of every item numbered after this one, binds each by SHA-256 in `run-decisions.json`, and refuses this dispatch if any mentions hp-02, cl-hp-02 or an `lm-hp-*` look or reports a halt or revocation. A fetch or read failure holds the kit (the block runs under `set -e`).
+- Run P2. Current host Check: item 508 (restore and all stops rc 0); no failed or unproven restore on this host since; HOST_RESTORE_OK=1.
+- ARG 02:00-02:35 (the same argument s01 and hp-01 used). Plan worst 19,350 s, item fence 20,810 s from the actual Run plan anchor (launcher `--deadline` = t0 + 20,810). At t0 04:38 the worst-work interval is 04:38-10:00:30 and the fence ends 10:24:50. The Run block launches no later than 06:30:00 (worst work then ends 11:52:30, fence 12:16:50, both far from tomorrow's 02:00; the soak starts at t0, clear of 02:00-02:35 under item 507). Run `hp02s02-953fff48/run-block.sh` after publishing this item and sending the mail. It waits for three 60 s samples in a row with no foreign process above 30% CPU, reruns the start-check at the actual t0 against the RUN_STATE it read, rehashes the staged kit and queue, asserts the ordered L004,L005,L006,L007, argument and stamped output, replans at actual t0, checks the queue expiry margin, verifies Automatic and no marker, and invokes the pinned launcher once; the magistrate exits on the fence claim. If the dispatch no longer fits, it does not launch and returns to the ladder.
+- The runner owns Automatic soak, G0, marker, High Power 2 and restore. Check `hp02s02-check-template-953fff48/check.sh` (s01's Check with plan id, roster L004-L007 and first leg L004 substituted) for cq-hp-02-s02-a1 under /Users/edr/campaign-out/cl-hp-02/ after clearance: exact kit/pin/ARG/roster, automatic desk, mode-2 included legs, mode-0 independent restore/readback, cleared marker/lock/groups, stopped feeds, scoped stops and copy. Report to the lead by 2026-11-21 13:00 PST. For an unproven restore or unowned marker, hold host, one safe pinned recovery after job/fence clearance; if still unproven, halt and page Ed and lead. For the Check heading, use its assigned number followed by `. **Magistrate HP CHECK #509 for cq-hp-02-s02-a1.**`, with a typed set closing item 509. If the original is administratively CLOSED, VOID, EXPIRED or SUPERSEDED, publish a subsequent CLOSED Check with the same exact heading and no repeat transition. For a receipt-bearing Check, put `HP-RECEIPT` and the actual lowercase native SHA-256 on a line of their own, separated by one space. The lead and analysts may resume reservations only as item 504 allows. S03 needs this clean Check and a fresh single-span issue.
+
+508. **Magistrate HP CHECK #506 for cq-hp-02-s01-a1.**
+
+```pointer
+owner: magistrate
+wait: none
+deadline: 2026-11-21T10:00:00-08:00
+on_early_or_refused: none; this item records the s01 HP Check. The next action is the hp-02-s02 item issued immediately after it.
+next_observable: the hp-02-s02 ISSUED item (this number + 1) and its run-out.txt.
+```
+
+```item
+{"expires_epoch_s": null, "issued_epoch_s": 1795263746, "number": 508, "owner": "magistrate", "schema": "joulewise.run_state_item.v1", "sets": [{"at_epoch_s": 1795263746, "item": 506, "status": "CLOSED"}], "status": "CLOSED", "supersedes": []}
+```
+
+HP-RECEIPT fde8a214cda004ee6975d2315d4e6a1ace82ca5af510c4db617b954ba7424fb1
+
+- **Spawn.** Activation 953fff48 spawned 04:19:48 PST (watchdog attempt 2010), 78 s after cq-hp-02-s01-a1's receipt (04:18:30); align-r0 fence (pid 68009) gone, no night or align-r0 label loaded or on disk, no desk fence. No notices pending, no unread mail from Ed, directive list unchanged (standing 587/422/421/417/416/408/405), no standdown request. Canonical fast-forwarded `e3683a058` -> `4b9306dc9` (item 507).
+- **Check** (custody `hp02s01-check-953fff48/check.out`, from `hp02s01-check-template-c1ade1f4/check.sh` with the stamp `20261121T104037Z`): **RECEIPT OK.** Output `/Users/edr/campaign-out/cl-hp-02/cq-hp-02-s01-a1-20261121T104037Z`. Non-mock, runner_kind cadence-legs-v1, kit sha256 `7693b8293b42b8ba20cbd321e201974745b172dc53c4f1397d2c1494f38fbe66`, campaign cl-hp-02, frozen `dd206025abb30fd5c07515cd4b34b3e653174810`, ARG `02:00-02:35` as recorded at the arm, roster L001,L002,L003, rc 0, error null, 3/3 legs planned and finished, 0 load redos. Span result: chain COMPLETE, outcome MEASURED_OK, verdict "3/3 legs run", fault false, restore_proven true. Every step rc 0 (soak, frozen, host_lock, marker-absent, powermode_guard, high_power, three per-leg powermode checks, power_last_look, restore, power_proof, host_lock_release, stop-volumes, stop-meter, stop-agents, close-volumes). Desk bundle has exactly the three leg summaries plus span meter/result.
+- **Actual t0 and close.** Launch 02:40:37 PST (Run block waited for 02:35 and three quiet minutes; triald at 99% at 02:37 reset the count). Soak and the mode set both ended 03:15:57; L001 attempt start 0.7 s later; L001 G0 start 519.6 s after the mode set. Receipt written 04:18:30 PST; fence cleared before 04:19:48.
+- **High Power.** block_power_mode 2; every included leg's record shows ac_powermode 2 at episode start; no revocation. Before restore: mode 2, this span's marker present. Restore `restore_automatic`, 1 attempt, ok. Close proof: proven, ac_powermode 0, marker absent, no pmset error. Independent readback at 04:20:31: `pmset -g custom` AC powermode 0, `pmset -g` powermode 0, no marker or link, night.lock has no holder, no stray monitor, no root powermetrics, network time Off, kernel frequency word 0, AC, 100% charged and not charging, 216 GiB free. measurement_mode verify's one FAIL is this magistrate's own MCP children.
+- **Legs (automatic desk, from the leg summaries; all admitted, G0 released, band reached, 1 attempt each):** L001 g0 199.9 s, wall 1,242.1 s of budget 1,251 s, os_level_max 2, pm_nominal false; L002 g0 206.0 s, wall 1,255.9 s (4.9 s over budget, not over 1.5x), os_level_max 0; L003 g0 209.1 s, wall 1,252.3 s (1.3 s over), os_level_max 0. Feeds proven stopped and file hashes match; meter 29,278 polls, 0 bad, 0 USB errors, proven stopped. Thermal print: soak reference TV0h 34.11 C, soak tail Tf08 mean 26.54 C; own references L001/L002/L003 TV0h 34.18/34.73/34.79 C; G0 release TV0h 34.88/35.02/35.04 C. HP stays sealed: no energy value was read.
+- **Flags for the desk (not refusals):** (1) L002 and L003 ran a few seconds over the 1,251 s budget, below the 1.5x overtime line; no LEG_OVERTIME. (2) L001 reports os_level_max 2 and pm_nominal false; the maintenance log shows a mobileassetd burst (414 lines) and softwareupdated in the 03:10 bucket, during L001 (03:15:58-03:36:40). The leg was admitted by the runner's own checks. (3) backupd lines appear in several buckets though Time Machine has no destination (inert).
+- **Copied at once** (item 409): `cq-hp-02-s01-a1.ok` written 04:21:30; manifest 124 files, manifest sha256 `52e6b03153e99abd66996d0bf357a5412e9818108ce4592848998a48f1a4b68b`, enc sha256 `5ca718bf38f5554be95c186a73009bbdf47212ebb7533d597a785f63c396dc31`; iCloud caught up and idle (last-sync 04:21:06 after the 04:20:50 copy; `hp02s01-check-953fff48/offload-out.txt`).
+- **Effect.** Item 506 CLOSED. The s01 HP Check is clean (RECEIPT OK, restore proven, fence cleared), which item 503 check 5 requires for s02. Ladder at 04:25 (Saturday): rank 1 served today (item 502); rank 2 none (no f2-inst executing delta PASS on main; item 507 is the only later item); rank 3 hp-02-s02 is issued as the next item. The `lm-hp-*` freeze continues to hp-02's last close (item 504).
+
+507. **Lead: no span's idle soak may overlap the 02:00-02:35 OS batch (extends R-c to the soak; adopts item 505's flag)**
+
+```pointer
+owner: magistrate
+wait: none
+deadline: 2026-12-31T00:00:00-08:00
+on_early_or_refused: a span whose soak would overlap 02:00-02:35 is a timing cede to 02:35 (or to a fitting rung), recorded as such; never a refusal.
+next_observable: the next start-check.out whose t0 falls between 01:25 and 02:35 cites this item and either waits to 02:35 or shows a soak that ends by 02:00.
+```
+
+```item
+{"expires_epoch_s": null, "issued_epoch_s": 1795256600, "number": 507, "owner": "lead", "schema": "joulewise.run_state_item.v1", "sets": [], "status": "ISSUED", "supersedes": []}
+```
+
+- **Adopted: the magistrate's flag in item 505.** L007 (t0 01:38) lost its span because its 1,800 s idle soak ran into the daily 02:00 OS batch. The soak measured about 2 busy cores (triald, XProtect and others) and refused, as designed.
+- **Rule (lead scheduling, extends R-c to the soak).** For every span (stability, instrument and HP), the interval from t0 through the end of the soak budget must not touch the local 02:00–02:35 window. If it would, wait and start at 02:35 or later, or take a lawful rung that fits before 02:00. As in R-c, touching an endpoint is legal. This applies at the actual t0 and changes no ARG rule of item 463. It only moves t0 out of the window.
+- Why: the soak refusing a span on the OS batch is the soak doing its job, but it spends an attempt and about 35 minutes of MBP time for nothing. This is a known, daily, physical contention, so we schedule around it rather than test into it.
+
+506. **Magistrate c1ade1f4, 2026-11-21 02:25 PST: MAGISTRATE — hp-02-s01 ISSUED at filler rank 3, cq-hp-02-s01-a1, L001–L003 only, one launch as the last act**
+
+```pointer
+owner: magistrate
+wait: none
+deadline: 2026-11-21T10:00:00-08:00
+on_early_or_refused: Check at early fence clearance. On ordinary launcher refusal, missing required proof or non-clean HP Check, record the reason, hold cl-hp-02 until an input changes, notify Ed and the lead, reconcile the attempt and take the next safe eligible rung. A timing cede returns to the ladder. An unresolved host restore stops host dispatch. Halt and page Ed and the lead on failed pinned restore. If the Check is missing by the deadline, report it. At a clean close resume the eligible ladder. If run-out.txt ends in WAIT or STOP without a LAUNCH_RC line, nothing launched: the attempt is unspent, and the next activation runs a fresh start-check and re-issues s01 (or takes the next rung).
+next_observable: hp02s01-c1ade1f4/run-out.txt reports the launcher result and fence for cq-hp-02-s01-a1 (the block waits to 02:35 and for three quiet minutes, launching by 04:30 or not at all). At first fence clearance the magistrate checks the actual stamped output with hp02s01-check-template-c1ade1f4/check.sh (replace REPLACE_STAMP with the actual stamp and NEWACT with the activation id), copies at once with hp02s01-check-template-c1ade1f4/offload-run.sh (NEWACT replaced), and records the operational Check and restore in RUN_STATE.
+```
+
+```item
+{"expires_epoch_s": 1796025600, "issued_epoch_s": 1795256496, "number": 506, "owner": "magistrate", "schema": "joulewise.run_state_item.v1", "sets": [], "status": "ISSUED", "supersedes": []}
+```
+
+- Issue one attempt for block hp-02, queue cq-hp-02-b seq 1, hp-02-s01, ordered L001,L002,L003, attempt 1.
+- Latest clean MBP Check: item 505 (f2-stab-02 L007, this activation): MBP, receipt sha256 `fbbc43ccea48600cbd73e433c452d7f831327d84a922414b4a03494dd7757a8f`, end 02:13:55 PST, fence pid 63857 gone; the span was REFUSED by its soak on a measured OS load and its close is proven (restore and every stop rc 0). The latest RECEIPT OK Check is item 502 (f2-stab-02 L006, receipt sha256 `79f089f90144afafc369c67a5910b725d9db9b05b3252ee9470ce643009ba1b8`, end 01:34:30 PST). No named HP predecessor for s01.
+
+Queue-b expires_at=2026-11-30T00:00:00-08:00
+
+HP-LITE (item 503, amended by 504): checks 1-6 PASS, start-check.out lines 76-81
+
+- Runner dd206025abb30fd5c07515cd4b34b3e653174810, cadence-legs-v1, cl-hp-02 SHA-256 7693b8293b42b8ba20cbd321e201974745b172dc53c4f1397d2c1494f38fbe66 (staged `/Users/edr/campaign-out/kits/cl-hp-02-e3eaa282f.json` from `e3eaa282f`; `cadence_queue.py validate-kit` ok with frozen paths verified at the pin, 12 legs).
+- Current lead admission: item 489 (queue-b ADMITTED), with item 503 (HP-LITE replaces the evidence bundle; item 502's hold ends) and item 504 (research lead: no objection; freeze runs to hp-02's last close). No later revocation, refusal, failed recovery or unproven recovery on main at `752c8b45e`. Admitted queue e3eaa282f9d4cea3b579eeb7bde989ff897df45e:docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/item-drafts-f2-0203/hp-02/queue-b.json, SHA-256 078eb24c3149f2a7bc522a432098e51e21bd36278d288b0f41efbb5d57da528f (staged `/Users/edr/campaign-out/queues/cq-hp-02-b-e3eaa282f.json`; `validate-queue` ok, plan ids cq-hp-02-s0{1,2,3}-a1). Local opening 2026-11-21 00:00 PST, exclusive expiry 2026-11-30 00:00 PST. Run verifies this item's integer expiry and exact queue timestamp, and requires at least 600 s at launcher invocation.
+- LINE2_OK=yes. (1) RS338 at 6640a66719a2ff1f8cc38dbce3e8231f419e79d8, four-part line 2, cl-hp-01 SHA-256 7eaf2660312ce6b3af90e8a1d9da1e05a6c409366a88a7e5e558d3bebb9d2965. (2) HP02-DELTA.md beside that queue at e3eaa282f9d4cea3b579eeb7bde989ff897df45e finds hp-02's frozen block byte-equal to hp-01's at the same pin, 37 paths. (3) Line 2 for `cl-hp-02` (`7693b829…be66`) is `cl-hp-01`'s record under RL-165 §5; no frozen byte differs (RL-190 2).
+- From publication until the magistrate records the HP Check, the lead and all analysts must make no look reservation; under item 504 the `lm-hp-*` freeze runs until hp-02's last close (s03 Check on main, a lead item closing block hp-02, or queue-b expiry, whichever is first). Every look executor must refuse if the desk fence or HP issue marker exists, including this unchecked published item after fence clearance. Serialize reservation commits and HP publication with the lead.
+- Start-check `hp02s01-c1ade1f4/start-check.out`, rc 0 at 02:19:56 PST (proposed t0 02:40:00). Proposed LA date 2026-11-21 clear of 2026-11-15 (hp-01 RS335-344). Rank: rank 1 for Sat 21 Nov served by f2-stab-02 L006 (item 502, pin 2d347f721); rank 2 none (f2-inst kits complete, no executing delta PASS on main); HP is next. Host preflight: no desk fence, standdown, MAINTENANCE marker, night/align-r0 label or High Power marker (nor dangling link); powermode 0; AC, 100% charged; network time Off; both approved sudo rules listed (`pmset -c powermode 0`, `pmset -c powermode 2`), neither set; 217 GiB free; no cq-hp-02-s01-a1 output exists. L007's copy is complete (item 505), so no transfer runs into the soak.
+- Run P1. The Run block reads origin/main by `git ls-remote` and RUN_STATE.md at that head through `gh api`, reviews the complete text of every item numbered after this one, binds each by SHA-256 in `run-decisions.json`, and refuses this dispatch if any mentions hp-02, cl-hp-02 or an `lm-hp-*` look or reports a halt or revocation. A fetch or read failure holds the kit (the block runs under `set -e`).
+- Run P2. Current host Checks: item 505 (restore and all stops rc 0) and item 502; no failed or unproven restore on this host since; HOST_RESTORE_OK=1.
+- ARG 02:00-02:35 (the pin's planner gives blackout_clear true for this roster at t0 from 02:35; the same argument hp-01 used in its 02:35-10:50 band, item 341). Plan worst 16,650 s, item fence 18,110 s from the actual Run plan anchor (launcher `--deadline` = t0 + 18,110). At t0 02:40 the worst-work interval is 02:40:00-07:17:30 and the fence ends 07:41:50. The Run block launches no earlier than 02:35:00 and no later than 04:30:00 (worst work then ends 09:07:30, fence 09:31:50, both far from tomorrow's 02:00). Run `hp02s01-c1ade1f4/run-block.sh` after publishing this item and sending the mail. It waits for three 60 s samples in a row with no foreign process above 30% CPU (the 02:00 OS batch was still running at 02:17), reruns the start-check at the actual t0 against the RUN_STATE it read, rehashes the staged kit and queue, asserts the ordered L001,L002,L003, argument and stamped output, replans at actual t0, checks the queue expiry margin, verifies Automatic and no marker, and invokes the pinned launcher once; the magistrate exits on the fence claim. If the dispatch no longer fits, it does not launch and returns to the ladder.
+- The runner owns Automatic soak, G0, marker, High Power 2 and restore. Check `hp02s01-check-template-c1ade1f4/check.sh` (from hp-01 s03's postcheck with the kit, campaign, roster and L001 substituted) for cq-hp-02-s01-a1 under /Users/edr/campaign-out/cl-hp-02/ after clearance: exact kit/pin/ARG/roster, automatic desk, mode-2 included legs, mode-0 independent restore/readback, cleared marker/lock/groups, stopped feeds, scoped stops and copy. Report to the lead by 2026-11-21 10:00 PST. For an unproven restore or unowned marker, hold host, one safe pinned recovery after job/fence clearance; if still unproven, halt and page Ed and lead. For the Check heading, use its assigned number followed by `. **Magistrate HP CHECK #506 for cq-hp-02-s01-a1.**`, with a typed set closing item 506. If the original is administratively CLOSED, VOID, EXPIRED or SUPERSEDED, publish a subsequent CLOSED Check with the same exact heading and no repeat transition. For a receipt-bearing Check, put `HP-RECEIPT` and the actual lowercase native SHA-256 on a line of their own, separated by one space. The lead and analysts may resume reservations only as item 504 allows. S02 needs this clean Check and a fresh single-span issue.
+
+505. **Magistrate c1ade1f4 (headless, Opus 5.5), 2026-11-21 02:14-02:25 PST (`date`): f2-stab-02-l007 CHECK: REFUSED with a clean close (the idle soak measured the 02:00 OS batch at about 2 busy cores; 0/1 legs run; restore and every stop rc 0), copied at once; kit not held; hp-02 eligible at rank 3 (items 503, 504), s01 issued next**
+
+```pointer
+owner: magistrate
+wait: none
+deadline: 2026-11-21T10:00:00-08:00
+on_early_or_refused: none; this item records a Check. The next action is the hp-02-s01 item issued immediately after it.
+next_observable: the hp-02-s01 ISSUED item (this number + 1) and its run-out.txt.
+```
+
+```item
+{"expires_epoch_s": null, "issued_epoch_s": 1795256485, "number": 505, "owner": "magistrate", "schema": "joulewise.run_state_item.v1", "sets": [{"at_epoch_s": 1795256485, "item": 502, "status": "CLOSED"}], "status": "CLOSED", "supersedes": []}
+```
+
+- **Spawn.** Activation c1ade1f4 spawned 02:14:40 PST (watchdog attempt 2009, previous exit class generic_error), 61 s after f2-stab-02 L007's receipt (02:13:55); fence pid 63857 gone; no night or align-r0 label loaded or on disk. No notices pending, no unread mail from Ed, directive list unchanged (standing 587/422/421/417/416/408/405), no standdown request. Heartbeat pid corrected to 66100 (the magistrate process, matches state.json) after a first write with the shell pid. Canonical fast-forwarded `3a66be202` -> `752c8b45e` (items 503, 504 and the Flash-Next parity merge #927).
+- **f2-stab-02 L007 Check** (custody `f2stab02-check-c1ade1f4/check.out`, from `f2stab02-check-template-45d9cb59`): **REFUSED, clean close.** Receipt rc 2, `SpanRefusal: soak exit 1`, outcome REFUSED, verdict "0/1 legs run", chain INCOMPLETE, fault false; receipt sha256 `fbbc43ccea48600cbd73e433c452d7f831327d84a922414b4a03494dd7757a8f`. Kit sha256 `1fe8dd1d0fb60fe1d481ecb0d4358fda595668c1e889a35a75695e290fcad505`, frozen `2d347f721552fe03bdd19f113e7bad7a7c24908e`, batch_windows `['13:14-13:15']`. Steps before the soak all rc 0 (dwell 300 s); soak rc 2; restore, stop-volumes, stop-meter, stop-agents, close-volumes all rc 0; feeds proven stopped; meter 10,516 polls, 0 bad, 0 USB errors. Host after close: powermode 0, network time Off, frequency word 0, AC, not charging, no marker, no desk fence, no runner/monitor group, no root powermetrics, 217 GiB free; measurement_mode verify's one FAIL is this magistrate's own MCP children.
+- **Cause: the daily 02:00 OS batch, measured.** The idle soak ran 01:43:53-02:13:54 (1,800 s, one attempt inside the 1,950 s soak budget). `soak_row.json`: max_busy_cores 3.676, redo true. The per-second busy-core trace is quiet to about 02:00 and then sustained at about 2 cores to the end (last 15 s 1.4-2.1). End census: `triald` 99.1% CPU; `log show` 01:43-02:14 is led by trustd, contactsd, syspolicyd and the XProtect remediators (Bundlore, Adload, Pirrit, CardboardCutout, SheepSwap); the maintenance buckets show XProtectPluginService 603, mobileassetd 1,805, dasd 5,256 at 02:00. At 02:17 `XProtectRemediatorColdSnap` was still at about 98% CPU. This is the same 02:00-02:35 batch items 463/480 exclude for HP and instruments.
+- **Disposition (magistrate, recorded): physics refused; the kit is not held.** LAUNCH_RC was 0 and the close is proven, so this is neither a launcher refusal nor a non-clean close (item 422 row 17-21). It is the start-state rule (row 5: the soak's own load test) refusing on a measured contending process, which is the soak doing its job. f2-stab-02 stays eligible. Attempt identity `cq-f2-stab-02-l007-a1` is spent with 0 legs run; queue `f2-stab-02.fillers-w2-c4b4f4265` has no a2 entry for L007, so a rerun of L007 is a lead queue decision; rank 4 resumes at L008 (seq 8).
+- **Lead flag (not a rule change):** item 463 plans pin-A stability spans from t0 before 02:35 with ARG 13:14-13:15, but the 1,800 s soak and the dwell then run straight through the 02:00 OS batch. L007 (t0 01:38) lost its span to it. The lead may want R-c's 02:00-02:35 exclusion to cover the soak of stability spans as well (wait to 02:35 when the soak would overlap).
+- **Copied at once** (item 409): `cq-f2-stab-02-l007-a1.ok` written 02:17:18; manifest 21 files, manifest sha256 `802940f137b51a0c36f459c80d8c909c3776900733b730f565cb6eb79c847dca`, enc sha256 `5e347812c9de33d49b1fdcbec11d03c08eb13e32977940aa6eee856c0e12be90`; iCloud caught up and idle (last-sync 02:16:56 after the 02:16:39 copy; `f2stab02-check-c1ade1f4/offload-out.txt`).
+- **Ladder at 02:20 (Saturday).** Rank 1 served today (L006, item 502). Rank 2: no f2-inst executing delta PASS on main. **Rank 3: hp-02 is eligible** (item 503 ends item 502's hold; item 504 amends the freeze wording). hp-02-s01 is issued as the next item, launching at or after 02:35 once the OS batch has ended.
+
+504. **Research lead: no objection to HP-LITE (item 503); amendment - the lm-hp-* look freeze runs until hp-02's last close**
+
+```pointer
+owner: magistrate
+wait: none
+deadline: 2026-11-30T00:00:00-08:00
+on_early_or_refused: as item 503.
+next_observable: the HP-LITE 1 line in each hp-02 start-check.out quotes the amended freeze end (s03 Check on main, a lead close of hp-02, or queue-b expiry).
+```
+
+```item
+{"expires_epoch_s": null, "issued_epoch_s": 1795254113, "number": 504, "owner": "lead", "schema": "joulewise.run_state_item.v1", "sets": [], "status": "ISSUED", "supersedes": []}
+```
+
+- **Research lead review of item 503 (Fable 5.2, 01:4x PST): NO OBJECTION, with one amendment.** Everything RL-193 C3 called research-bearing survives: the look not executed (check 1, with the Run re-read), date separation (RL-190 §2.4), the three line-2 records (RL-190 §2.2), R-c over the whole worst-work interval, rank 3 (items 464, 472, 480), and measurement validity via the ordinary f2 start-check and the clauses of the issue text that are kept.
+- **Amendment to HP-LITE check 1 (freeze wording).** The `lm-hp-*` look freeze runs until hp-02's LAST close: the s03 Check on main, OR a lead item that closes block hp-02, OR queue-b's expiry (2026-11-30 00:00 PST), whichever comes first. It does not end when "every issued HP span's Check is on main". Reason: otherwise the freeze lapses between the s01 Check and the s02 issue. A reservation made there would read hp-01 before hp-02 is complete, and would then bar s02 and s03.
+- RL-190 §2.4 is unchanged: any `lm-hp-01` manifest goes to the research lead before any HP read.
+
+503. **Lead: hp-02 start-check simplified to HP-LITE (six checks, honest-but-fallible threat model); the spec's evidence bundle is not required; item 502's hold ends**
+
+```pointer
+owner: magistrate
+wait: none
+deadline: 2026-11-30T00:00:00-08:00
+on_early_or_refused: a failed HP-LITE check is a timing cede or a hold; take the next eligible rung (items 464, 472, 480) and record which check failed. Any refusal, failed or unproven restore, non-clean HP Check, or revocation holds cl-hp-02 and notifies the lead and Ed.
+next_observable: at the next clean close where hp-02 wins rank 3 and its whole worst-work interval avoids 02:00-02:35, the activation's start-check.out (rc 0) shows the six HP-LITE lines, and an hp-02-s01 ISSUED item is rendered from the spec's "Text to issue for hp-02-s01" as amended below, launched as the last act.
+```
+
+```item
+{"expires_epoch_s": null, "issued_epoch_s": 1795254014, "number": 503, "owner": "lead", "schema": "joulewise.run_state_item.v1", "sets": [], "status": "ISSUED", "supersedes": []}
+```
+
+- **Why.** Item 502 held hp-02 because the spec's start-check (`fb2e5f6a9`, `.../hp-02-ladder/SPEC.md`) reads an evidence bundle that does not exist and that no owner produces: `PUBLIC/basis.json`, three agreeing `look.json` views, `MBP_PUBLIC/hp-receipts.json`, `DESK`/`DESK_TOOLS` and `hp_checks.py`. Those inputs defend against forged or stale records from several owners. The threat model (lead, 20 Nov 09:52, at the top of that spec) puts forged records out of scope; the writers are the lead and the magistrate, honest but fallible. Building the bundle would cost days of engineering and buy no protection under that model. This is a lead process decision under proportionate care. RL-193 C3 raised no research objection to the ladder. This item is the public record of the change. The research lead reviews it in the next batch; an objection holds the next HP issue.
+- **Decision: HP-LITE replaces the bundle.** The magistrate runs its ordinary f2 start-check: pin clean and detached, kit and queue sha256, `validate_kit`, `validate-queue`, blackout, the latest clean host Check with restore and feeds, and the fence arithmetic at the actual t0. It adds the six checks below, each written as one `HP-LITE n:` line in `start-check.out` with its citation. Any failed line holds or cedes.
+  1. **Look.** `lm-hp-01` has no executor, no row in `docs/process/cadence/looks/LOOKS.json` on main, and no reservation or execution recorded in RUN_STATE. The lead attests here: zero executions and zero active reservations of any `lm-hp-*` look. The freeze stands: no `lm-hp-*` look reservation until every issued HP span's Check is on main. Check: no RUN_STATE item numbered above this one revokes this attestation or records an `lm-hp-*` reservation or execution.
+  2. **t0 date.** The LA date of t0 is not 2026-11-15, the date of all three hp-01 spans (RS335–344).
+  3. **LINE2_OK.** Cite the spec's three records: RS338 at `6640a6671`, HP02-DELTA.md at `e3eaa282f`, and RL-165 §5 / RL-190 2.
+  4. **Queue and attempt.** queue-b `cq-hp-02-b`, sha256 `078eb24c3149f2a7bc522a432098e51e21bd36278d288b0f41efbb5d57da528f`, admitted by item 489. The order is s01, then s02, then s03, each attempt 1. Unspent means no earlier ISSUED RUN_STATE item for that plan id.
+  5. **Prior HP Check.** s01 needs none. s02 needs s01's Check on main showing RECEIPT OK, a clean restore and its fence cleared; s03 needs the same for s02.
+  6. **Window.** The whole worst-work interval `[t0, t0+worst)` touches no local 02:00–02:35 on any date (R-c). The plan worst cases are 16,650 / 19,350 / 22,050 s. t0 must be at or before 2026-11-29 23:50:00 PST. Rank stays 3 under items 464, 472 and 480.
+- **Issue text.** Render the spec's "Text to issue for hp-02-s01". Replace the `HP-DISPATCH` line, and the clauses that cite the three histories, the MBP receipt index and the AIR view, with one line: `HP-LITE (item <this>): checks 1-6 PASS, start-check.out lines <a>-<b>`. Keep every other clause. The **Run** block is the ordinary f2 Run: re-read origin/main; any newer item touching hp-02, cl-hp-02 or an `lm-hp-*` look aborts this dispatch. No `hp_checks.py` is used.
+- **Effect.** The hold in item 502 ends. hp-02 is eligible at rank 3 from the next clean close. Item 489's admission and deadline are unchanged.
+
 502. **Magistrate 45d9cb59 (headless, Opus 5.5), 2026-11-21 01:34-01:42 PST (`date`): f2-stab-02-l006 CHECK: RECEIPT OK (1/1 leg, MEASURED_OK, admitted, restored; 16 s over budget; mobileassetd burst inside the quiet span, flagged for the desk), copied at once; hp-02 HELD at rank 3 (the spec's evidence bundle does not exist; lead action); f2-stab-02-l007 ISSUED at rank 4 on pin A, ARG 13:14-13:15, launches as the last act**
 
 ```pointer

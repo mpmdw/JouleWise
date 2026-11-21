@@ -1,11 +1,29 @@
 {
   "armed": null,
-  "next_observable": "f2stab02-45d9cb59/run-out.txt shows LAUNCH_RC=0 with the fence (launch ~01:42, expected end ~02:58, fence ~03:40; read the true fence deadline and pid from run-out.txt). The next activation after the fence pid is gone and runner_receipt.json exists Checks cq-f2-stab-02-l007-a1 under /Users/edr/campaign-out/f2-stab-02/ with f2stab02-check-template-45d9cb59/check.sh (LEGS L007, kit sha 1fe8dd1d0fb60fe1d481ecb0d4358fda595668c1e889a35a75695e290fcad505, campaign_id f2-stab-02 and batch_windows == ['13:14-13:15'] asserted, unless run-out.txt shows another ARG; replace REPLACE_STAMP in OUT with the actual directory's stamp and NEWACT everywhere with the activation id; grep the leg_record for max_busy_cores/max_gap_s; map the quiet span to wall time with the receipt's ended epoch/monotonic pair and count maintenance lines inside it), and copies at once with f2stab02-check-template-45d9cb59/offload-run.sh (replace NEWACT everywhere with the activation id; it calls f2stab02-check-template-45d9cb59/offload.sh, PLAN cq-f2-stab-02-l007-a1); the Check item prints full 64-hex digests (item 491). Then the ladder (items 422, 447, 463, 464, 480, 489). Rank 1 for Saturday is served (L006, item 502). Rank 2: an f2-inst executing delta PASS on main (none at item 502). Rank 3: hp-02 is HELD (item 502) until a lead RUN_STATE item publishes the hp-02 evidence bundle the spec requires (PUBLIC/basis.json, the three look.json endpoints, DESK/DESK_TOOLS, timing source); without such an item do not re-derive the hold, cite item 502 and go on. Else rank 4: f2-stab-02 L008 (seq 8) on pin 2d347f721 from f2stab02-45d9cb59/inputs.sh (header, MAGISTRATE_PID and the SPAN/LEGS/SEQ line replaced; ARG per item 463 at actual t0: 02:00-02:35 from 02:35:00 to 10:50:00, none admitted 10:50:01-13:14:59 on pin A, so then f2-stab-15/16 on pin B per item 488).",
+  "next_observable": "hp02s02-953fff48/run-out.txt reports the launcher result and fence for cq-hp-02-s02-a1 (the block waits for three quiet minutes, launching by 06:30 or not at all). At first fence clearance the magistrate checks the actual stamped output with hp02s02-check-template-953fff48/check.sh (replace REPLACE_STAMP with the actual stamp, add a zsh shebang and a TMPDIR line), copies at once with hp02s02-check-template-953fff48/offload-run.sh (NEWACT replaced), and records the operational Check and restore in RUN_STATE.",
   "open_items": [
     {
-      "expires_epoch_s": null,
-      "item": 502,
+      "expires_epoch_s": 1796025600,
+      "item": 509,
       "owner": "magistrate",
+      "status": "ISSUED"
+    },
+    {
+      "expires_epoch_s": null,
+      "item": 507,
+      "owner": "lead",
+      "status": "ISSUED"
+    },
+    {
+      "expires_epoch_s": null,
+      "item": 504,
+      "owner": "lead",
+      "status": "ISSUED"
+    },
+    {
+      "expires_epoch_s": null,
+      "item": 503,
+      "owner": "lead",
       "status": "ISSUED"
     },
     {
@@ -173,11 +191,11 @@
   ],
   "owner": "magistrate",
   "schema": "joulewise.current_pointer.v2",
-  "source_item": "502",
+  "source_item": "509",
   "source_item_heading_date": "2026-11-21",
   "wait": {
-    "deadline_epoch_s": 1795268400,
+    "deadline_epoch_s": 1795294800,
     "observable": "none",
-    "on_early_or_refused": "a launcher refusal or non-clean close: record it, hold kit f2-stab-02 until an input changes (item 422, RL-179 F-6), mail the lead and Ed, and continue down the ladder. R1 stays unarmed."
+    "on_early_or_refused": "Check at early fence clearance. On ordinary launcher refusal, missing required proof or non-clean HP Check, record the reason, hold cl-hp-02 until an input changes, notify Ed and the lead, reconcile the attempt and take the next safe eligible rung. A timing cede returns to the ladder. An unresolved host restore stops host dispatch. Halt and page Ed and the lead on failed pinned restore. If the Check is missing by the deadline, report it. At a clean close resume the eligible ladder. If run-out.txt ends in WAIT or STOP without a LAUNCH_RC line, nothing launched: the attempt is unspent, and the next activation runs a fresh start-check and re-issues s02 (or takes the next rung)."
   }
 }
