@@ -1,0 +1,152 @@
+{
+  "layer": 3,
+  "manifest": "6b481f145fcd3ab0242251be30ca460cc67e484652de11553332605833a1c3f9",
+  "max_rss_bytes": 3200483328,
+  "metrics": {
+    "attn_hc": {
+      "atol": 0.0478125,
+      "first_max_index": [
+        0,
+        123,
+        606
+      ],
+      "max_abs": 0.0234375,
+      "pass": true,
+      "rms": 0.0012962099454169394,
+      "unequal": 3538717,
+      "values": [
+        1.59375,
+        1.5703125
+      ]
+    },
+    "experts_same_indices": {
+      "atol": 0.002109375,
+      "first_max_index": [
+        0,
+        319,
+        0,
+        161
+      ],
+      "max_abs": 0.0003662109375,
+      "pass": true,
+      "rms": 2.253487177301984e-05,
+      "unequal": 34011883,
+      "values": [
+        0.01129150390625,
+        0.01165771484375
+      ]
+    },
+    "hidden": {
+      "atol": 0.03578125,
+      "first_max_index": [
+        0,
+        145,
+        1928
+      ],
+      "max_abs": 0.02685546875,
+      "pass": true,
+      "rms": 0.0012625117977708119,
+      "unequal": 12047781,
+      "values": [
+        -0.1455078125,
+        -0.11865234375
+      ]
+    },
+    "indexer": {
+      "atol": 0.0,
+      "first_max_index": [
+        0,
+        0,
+        0,
+        0
+      ],
+      "max_abs": 0.0,
+      "pass": true,
+      "rms": 0.0,
+      "unequal": 0,
+      "values": [
+        1.0,
+        1.0
+      ]
+    },
+    "moe": {
+      "atol": 0.00052734375,
+      "first_max_index": [
+        0,
+        121,
+        1357
+      ],
+      "max_abs": 0.00390625,
+      "pass": false,
+      "rms": 0.00015733617215025916,
+      "unequal": 3679863,
+      "values": [
+        0.00140380859375,
+        -0.00250244140625
+      ]
+    },
+    "qsa": {
+      "atol": 0.01578125,
+      "first_max_index": [
+        0,
+        578,
+        1710
+      ],
+      "max_abs": 0.007568359375,
+      "pass": true,
+      "rms": 0.0005429236419304467,
+      "unequal": 3975392,
+      "values": [
+        0.055908203125,
+        0.0634765625
+      ]
+    },
+    "router": {
+      "atol": 0.0,
+      "first_max_index": [
+        0,
+        379,
+        9
+      ],
+      "max_abs": 206.0,
+      "pass": false,
+      "rms": 9.104689966024758,
+      "unequal": 568,
+      "values": [
+        511.0,
+        305.0
+      ]
+    },
+    "shared": {
+      "atol": 0.0011083984375,
+      "first_max_index": [
+        0,
+        53,
+        1109
+      ],
+      "max_abs": 0.000244140625,
+      "pass": true,
+      "rms": 1.8635883470683784e-05,
+      "unequal": 3409221,
+      "values": [
+        0.031005859375,
+        0.03076171875
+      ]
+    }
+  },
+  "mlx_peak_bytes": 5270663584,
+  "ple_heads": 0,
+  "purpose": "MLX-vs-MLX on converted weights",
+  "router": {
+    "bf16_cutoff_ties": 236,
+    "changed_on_tied_rows": 129,
+    "changed_rows": 129
+  },
+  "seed": 20261124,
+  "sparse_queries": [
+    5,
+    5
+  ],
+  "tensor_bytes": 2186492416,
+  "tokens": 2056
+}
