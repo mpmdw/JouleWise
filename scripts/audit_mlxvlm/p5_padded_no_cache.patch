@@ -1,0 +1,24 @@
+--- a/mlx_vlm/models/qwen4_exp/language.py
++++ b/mlx_vlm/models/qwen4_exp/language.py
+@@ -2074,6 +2074,21 @@
+             self.lm_head = nn.Linear(args.hidden_size, args.vocab_size, bias=False)
+ 
+     def __call__(self, inputs, inputs_embeds=None, mask=None, cache=None, **kwargs):
++        padding_mask = kwargs.get("attention_mask", mask)
++        if (
++            cache is None
++            and isinstance(padding_mask, mx.array)
++            and padding_mask.ndim == 2
++            and padding_mask.shape[0] > 1
++            and not padding_mask.all().item()
++        ):
++            # Without a batch cache the model has no left_padding: attention
++            # would run causally over pad columns and PLE would hash pad ids.
++            raise NotImplementedError(
++                "Qwen4-Exp padded batches require a batch cache "
++                "(generate.ar._make_cache(model, left_padding)); run rows "
++                "separately to score without a cache."
++            )
+         return_hidden = bool(kwargs.get("return_hidden", False))
+         if return_hidden and kwargs.get("capture_layer_ids") is None:
+             # Force Qwen4ExpModel to capture its final pre-mixer HC state.  The

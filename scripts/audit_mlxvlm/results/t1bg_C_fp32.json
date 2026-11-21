@@ -1,0 +1,142 @@
+{
+ "case": "C_fp32",
+ "patched": false,
+ "single_A": {
+  "tokens": [
+   0,
+   42,
+   47,
+   18,
+   5,
+   14,
+   86
+  ],
+  "ref_tokens": [
+   0,
+   42,
+   47,
+   18,
+   5,
+   14,
+   86
+  ],
+  "tokens_agree_prefix": 7,
+  "max_logprob_err": 3.470172273978278e-07,
+  "max_top5_logprob_err": 5.790646842029901e-07
+ },
+ "single_B": {
+  "tokens": [
+   35,
+   21,
+   59,
+   32,
+   1,
+   29,
+   14
+  ],
+  "ref_tokens": [
+   35,
+   21,
+   59,
+   32,
+   1,
+   29,
+   14
+  ],
+  "tokens_agree_prefix": 7,
+  "max_logprob_err": 4.1422429308823894e-07,
+  "max_top5_logprob_err": 9.284702517931009e-07
+ },
+ "ragged_row0_A_pad0": {
+  "tokens": [
+   0,
+   42,
+   47,
+   18,
+   5,
+   88,
+   32
+  ],
+  "ref_tokens": [
+   0,
+   42,
+   47,
+   18,
+   5,
+   14,
+   86
+  ],
+  "tokens_agree_prefix": 5,
+  "max_logprob_err": 0.07737056674832044,
+  "max_top5_logprob_err": 0.09423290006071472
+ },
+ "ragged_row1_B_pad3": {
+  "tokens": [
+   35,
+   21,
+   59,
+   32,
+   1,
+   29,
+   90
+  ],
+  "ref_tokens": [
+   35,
+   21,
+   59,
+   32,
+   1,
+   29,
+   14
+  ],
+  "tokens_agree_prefix": 6,
+  "max_logprob_err": 0.061460675939273735,
+  "max_top5_logprob_err": 0.061460675939273735
+ },
+ "control_row0_A": {
+  "tokens": [
+   0,
+   42,
+   47,
+   18,
+   5,
+   14,
+   86
+  ],
+  "ref_tokens": [
+   0,
+   42,
+   47,
+   18,
+   5,
+   14,
+   86
+  ],
+  "tokens_agree_prefix": 7,
+  "max_logprob_err": 3.470172273978278e-07,
+  "max_top5_logprob_err": 8.094851198237052e-07
+ },
+ "control_row1_A": {
+  "tokens": [
+   0,
+   42,
+   47,
+   18,
+   5,
+   14,
+   86
+  ],
+  "ref_tokens": [
+   0,
+   42,
+   47,
+   18,
+   5,
+   14,
+   86
+  ],
+  "tokens_agree_prefix": 7,
+  "max_logprob_err": 3.470172273978278e-07,
+  "max_top5_logprob_err": 8.094851198237052e-07
+ }
+}

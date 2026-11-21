@@ -1,0 +1,87 @@
+--- a/mlx_vlm/models/qwen4_exp/language.py
++++ b/mlx_vlm/models/qwen4_exp/language.py
+@@ -38,6 +38,7 @@
+ from ..qwen3_5.speculative_verifier import Qwen3_5BatchInvariantForward
+ from ..qwen3_5_moe.language import Qwen3_5MoeSparseMoeBlock
+ from .config import ModelConfig, TextConfig
++from ..base import scaled_dot_product_attention
+ from .qsa_kernel import dispatch_qsa_attention
+ 
+ 
+@@ -1110,16 +1111,20 @@
+             isinstance(mask, str) and mask == "causal"
+         )
+         if isinstance(mask, str) and not standard_causal_mask:
+-            # Qwen3.5 owns specialized string modes such as
+-            # ``left_padded_decode``. The indexer state is already updated;
+-            # delegate only the Q/K/V attention path to the parent.
+-            return super().__call__(
+-                x,
+-                mask=mask,
+-                cache=cache,
+-                position_ids=position_ids,
+-                position_embeddings=position_embeddings,
+-            )
++            if mask != "left_padded_decode":
++                # Qwen3.5 owns other specialized string modes. The indexer
++                # state is already updated; delegate only Q/K/V attention.
++                return super().__call__(
++                    x,
++                    mask=mask,
++                    cache=cache,
++                    position_ids=position_ids,
++                    position_embeddings=position_embeddings,
++                )
++            # A ragged batch must keep the QSA selection. The parent's ragged
++            # decode helper is dense and ignores masks; build_mask() already
++            # offsets blocks by each row's left padding and excludes pads.
++            mask = self.indexer.build_mask(selection)
+         sparse_candidate = selection.zero_padding and standard_causal_mask
+         qsa_mask = None if sparse_candidate else self.indexer.build_mask(selection)
+         if qsa_mask is not None:
+@@ -1873,7 +1878,10 @@
+         ):
+             qsa_mask = attention.indexer.from_projected(projected, cache, position_ids)
+             if qsa_mask is not None:
+-                if mask is None or (isinstance(mask, str) and mask == "causal"):
++                if mask is None or (
++                    isinstance(mask, str)
++                    and mask in ("causal", "left_padded_decode")
++                ):
+                     mask = qsa_mask
+                 elif isinstance(mask, mx.array):
+                     if mask.dtype == mx.bool_:
+@@ -1883,6 +1891,12 @@
+                             mask.dtype
+                         )
+                         mask = mask + sparse_bias
++                if not standard_causal:
++                    # _attention() routes padded calls to the dense ragged
++                    # helper, which never reads its mask.
++                    return self._masked_attention(
++                        attention, hidden_states, mask, cache, position_ids
++                    )
+             return self._attention(
+                 attention,
+                 hidden_states,
+@@ -1955,6 +1969,20 @@
+         output = output.transpose(0, 2, 1, 3).reshape(batch, length, -1)
+         return self._linear(attention.o_proj, output * mx.sigmoid(gate))
+ 
++    def _masked_attention(self, attention, hidden_states, mask, cache, position_ids):
++        batch, length, _ = hidden_states.shape
++        q_proj, keys, values = self._linears(
++            (attention.q_proj, attention.k_proj, attention.v_proj), hidden_states
++        )
++        queries, keys, values, gate, _ = attention._prepare_projected_qkv(
++            q_proj, keys, values, cache, position_ids, None, None
++        )
++        output = scaled_dot_product_attention(
++            queries, keys, values, cache=cache, scale=attention.scale, mask=mask
++        )
++        output = output.transpose(0, 2, 1, 3).reshape(batch, length, -1)
++        return self._linear(attention.o_proj, output * mx.sigmoid(gate))
++
+     def _layer(
+         self,
+         layer,

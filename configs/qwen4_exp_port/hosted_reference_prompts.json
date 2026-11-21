@@ -1,0 +1,26 @@
+{
+ "schema": "qwen4exp-hosted-prompts/v1",
+ "note": "Fixed prompts for the hosted-reference logprob comparison (docs/align/qwen4_exp_port/e2e_validation.md). All run with thinking disabled, greedy, max_new_tokens below. context_from names an item in configs/qwen4_exp_port/e2e_items.json (nll section) whose text replaces {context}.",
+ "max_new_tokens": 64,
+ "top_logprobs": 5,
+ "repeats": 2,
+ "prompts": [
+  {"id": "photosynthesis", "messages": [{"role": "user", "content": "Explain photosynthesis in two sentences."}]},
+  {"id": "primes", "messages": [{"role": "user", "content": "List the first ten prime numbers, separated by commas."}]},
+  {"id": "haiku", "messages": [{"role": "user", "content": "Write a haiku about autumn leaves."}]},
+  {"id": "derivative", "messages": [{"role": "user", "content": "What is the derivative of x^3 * sin(x)? Show the product rule step."}]},
+  {"id": "german", "messages": [{"role": "user", "content": "Translate into German: 'The weather is beautiful today, so we are going for a walk.'"}]},
+  {"id": "zh_great_wall", "messages": [{"role": "user", "content": "请用两句话介绍长城。"}]},
+  {"id": "palindrome_code", "messages": [{"role": "user", "content": "Write a Python function that checks whether a string is a palindrome, ignoring case and spaces."}]},
+  {"id": "ww1_bullets", "messages": [{"role": "user", "content": "Summarize the main causes of World War I in three bullet points."}]},
+  {"id": "json_output", "messages": [{"role": "user", "content": "Return a JSON object with keys name, age and city for a fictional person. Output only the JSON."}]},
+  {"id": "multi_turn", "messages": [
+    {"role": "user", "content": "I am planning a trip to Kyoto in April."},
+    {"role": "assistant", "content": "That sounds wonderful! April is cherry blossom season in Kyoto."},
+    {"role": "user", "content": "Suggest three places I should visit and say why in one line each."}]},
+  {"id": "tool_weather", "tools": [{"type": "function", "function": {"name": "get_weather", "description": "Get the current weather for a city.", "parameters": {"type": "object", "properties": {"city": {"type": "string", "description": "City name"}, "unit": {"type": "string", "enum": ["celsius", "fahrenheit"]}}, "required": ["city"]}}}],
+   "messages": [{"role": "user", "content": "What's the weather in Madrid right now, in celsius?"}]},
+  {"id": "long_context_qsa", "context_from": "pp_ch1_3_long",
+   "messages": [{"role": "user", "content": "{context}\n\nBased on the passage above, describe Mr. Darcy's behaviour at the assembly in two sentences."}]}
+ ]
+}

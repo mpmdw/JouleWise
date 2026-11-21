@@ -1,0 +1,64 @@
+{
+ "path": "mlx_vlm.convert.convert",
+ "bits": 4,
+ "group": 64,
+ "n_quantized": 82,
+ "float_linear_or_embedding_left": [
+  "model.layers.1.ple.ple_embedding.ngram_embedding.shards.3",
+  "model.layers.1.ple.ple_embedding.ngram_embedding.shards.2",
+  "model.layers.1.ple.ple_embedding.ngram_embedding.shards.1",
+  "model.layers.1.ple.ple_embedding.ngram_embedding.shards.0"
+ ],
+ "indexer": [
+  "model.layers.3.self_attn.indexer.index_qk_proj: QuantizedLinear 4b g64"
+ ],
+ "router": [
+  "model.layers.3.mlp.gate: QuantizedLinear 8b g64",
+  "model.layers.2.mlp.gate: QuantizedLinear 8b g64",
+  "model.layers.1.mlp.gate: QuantizedLinear 8b g64",
+  "model.layers.0.mlp.gate: QuantizedLinear 8b g64"
+ ],
+ "shared_expert_gate": [
+  "model.layers.3.mlp.shared_expert_gate: QuantizedLinear 8b g64",
+  "model.layers.2.mlp.shared_expert_gate: QuantizedLinear 8b g64",
+  "model.layers.1.mlp.shared_expert_gate: QuantizedLinear 8b g64",
+  "model.layers.0.mlp.shared_expert_gate: QuantizedLinear 8b g64"
+ ],
+ "hyper_connections": [
+  "QuantizedLinear 4b g64"
+ ],
+ "experts": [
+  "QuantizedSwitchLinear 4b g64"
+ ],
+ "deltanet": [
+  "QuantizedLinear 4b g64"
+ ],
+ "ple": [
+  "model.layers.1.ple.value_proj: QuantizedLinear 4b g64",
+  "model.layers.1.ple.key_proj: QuantizedLinear 4b g64"
+ ],
+ "embed_and_head": [
+  "lm_head: QuantizedLinear 4b g64",
+  "model.embed_tokens: QuantizedEmbedding 4b g64"
+ ],
+ "prefill_vs_vlm_bf16": {
+  "max_abs": 0.44921875,
+  "p50_pos": 0.227783203125,
+  "top1": 0.475
+ },
+ "prefill_vs_ref_fp32": {
+  "max_abs": 0.4451625347137451,
+  "p50_pos": 0.23122528195381165,
+  "top1": 0.475
+ },
+ "vlm_bf16_vs_ref_fp32": {
+  "max_abs": 0.22315239906311035,
+  "p50_pos": 0.011678440496325493,
+  "top1": 0.975
+ },
+ "stepwise_vs_quant_prefill": {
+  "max_abs": 0.1337890625,
+  "p50_pos": 0.009765625,
+  "top1": 0.925
+ }
+}
