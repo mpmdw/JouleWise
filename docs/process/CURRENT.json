@@ -1,17 +1,11 @@
 {
   "armed": null,
-  "next_observable": "the next start-check.out whose t0 falls between 01:25 and 02:35 cites this item and either waits to 02:35 or shows a soak that ends by 02:00.",
+  "next_observable": "the hp-02-s02 ISSUED item (this number + 1) and its run-out.txt.",
   "open_items": [
     {
       "expires_epoch_s": null,
       "item": 507,
       "owner": "lead",
-      "status": "ISSUED"
-    },
-    {
-      "expires_epoch_s": 1796025600,
-      "item": 506,
-      "owner": "magistrate",
       "status": "ISSUED"
     },
     {
@@ -191,11 +185,11 @@
   ],
   "owner": "magistrate",
   "schema": "joulewise.current_pointer.v2",
-  "source_item": "507",
+  "source_item": "508",
   "source_item_heading_date": null,
   "wait": {
-    "deadline_epoch_s": 1798704000,
+    "deadline_epoch_s": 1795284000,
     "observable": "none",
-    "on_early_or_refused": "a span whose soak would overlap 02:00-02:35 is a timing cede to 02:35 (or to a fitting rung), recorded as such; never a refusal."
+    "on_early_or_refused": "none; this item records the s01 HP Check. The next action is the hp-02-s02 item issued immediately after it."
   }
 }
