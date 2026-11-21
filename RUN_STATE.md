@@ -1052,6 +1052,24 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 
 <!-- RUN_STATE TYPED ITEMS: newest first. Add with scripts/run_state_add.py; never edit by hand. -->
 
+504. **Research lead: no objection to HP-LITE (item 503); amendment - the lm-hp-* look freeze runs until hp-02's last close**
+
+```pointer
+owner: magistrate
+wait: none
+deadline: 2026-11-30T00:00:00-08:00
+on_early_or_refused: as item 503.
+next_observable: the HP-LITE 1 line in each hp-02 start-check.out quotes the amended freeze end (s03 Check on main, a lead close of hp-02, or queue-b expiry).
+```
+
+```item
+{"expires_epoch_s": null, "issued_epoch_s": 1795254113, "number": 504, "owner": "lead", "schema": "joulewise.run_state_item.v1", "sets": [], "status": "ISSUED", "supersedes": []}
+```
+
+- **Research lead review of item 503 (Fable 5.2, 01:4x PST): NO OBJECTION, with one amendment.** Everything RL-193 C3 called research-bearing survives: the look not executed (check 1, with the Run re-read), date separation (RL-190 §2.4), the three line-2 records (RL-190 §2.2), R-c over the whole worst-work interval, rank 3 (items 464, 472, 480), and measurement validity via the ordinary f2 start-check and the clauses of the issue text that are kept.
+- **Amendment to HP-LITE check 1 (freeze wording).** The `lm-hp-*` look freeze runs until hp-02's LAST close: the s03 Check on main, OR a lead item that closes block hp-02, OR queue-b's expiry (2026-11-30 00:00 PST), whichever comes first. It does not end when "every issued HP span's Check is on main". Reason: otherwise the freeze lapses between the s01 Check and the s02 issue. A reservation made there would read hp-01 before hp-02 is complete, and would then bar s02 and s03.
+- RL-190 §2.4 is unchanged: any `lm-hp-01` manifest goes to the research lead before any HP read.
+
 503. **Lead: hp-02 start-check simplified to HP-LITE (six checks, honest-but-fallible threat model); the spec's evidence bundle is not required; item 502's hold ends**
 
 ```pointer

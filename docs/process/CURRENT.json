@@ -1,7 +1,13 @@
 {
   "armed": null,
-  "next_observable": "at the next clean close where hp-02 wins rank 3 and its whole worst-work interval avoids 02:00-02:35, the activation's start-check.out (rc 0) shows the six HP-LITE lines, and an hp-02-s01 ISSUED item is rendered from the spec's \"Text to issue for hp-02-s01\" as amended below, launched as the last act.",
+  "next_observable": "the HP-LITE 1 line in each hp-02 start-check.out quotes the amended freeze end (s03 Check on main, a lead close of hp-02, or queue-b expiry).",
   "open_items": [
+    {
+      "expires_epoch_s": null,
+      "item": 504,
+      "owner": "lead",
+      "status": "ISSUED"
+    },
     {
       "expires_epoch_s": null,
       "item": 503,
@@ -179,11 +185,11 @@
   ],
   "owner": "magistrate",
   "schema": "joulewise.current_pointer.v2",
-  "source_item": "503",
+  "source_item": "504",
   "source_item_heading_date": null,
   "wait": {
     "deadline_epoch_s": 1796025600,
     "observable": "none",
-    "on_early_or_refused": "a failed HP-LITE check is a timing cede or a hold; take the next eligible rung (items 464, 472, 480) and record which check failed. Any refusal, failed or unproven restore, non-clean HP Check, or revocation holds cl-hp-02 and notifies the lead and Ed."
+    "on_early_or_refused": "as item 503."
   }
 }
