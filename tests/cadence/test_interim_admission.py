@@ -12,6 +12,7 @@ import gzip
 import hashlib
 import json
 from pathlib import Path
+import re
 import sys
 import tempfile
 import unittest
@@ -87,6 +88,24 @@ class StrictDecoding(unittest.TestCase):
                            ("two records on a line", b'{"a":1}{"a":2}\n')):
             with self.subTest(label), self.assertRaises(S.Refusal):
                 S.decode_lines(raw, "f")
+
+
+class EnergyNamedMembers(unittest.TestCase):
+    def test_the_validator_s_decoder_never_converts_a_number_under_an_energy_named_member(self):
+        row = b'{"metadata": {"power_w_mean": 5.25, "duration_s": 2.0, "n": 3}, "gpu_power": [1.5, {"x": 2}], "e": 1}'
+        got = S.decode(row, "row")
+        self.assertIs(got["metadata"]["power_w_mean"], S.SHIELDED)
+        self.assertEqual(got["gpu_power"], [S.SHIELDED, {"x": S.SHIELDED}])
+        self.assertIs(got["e"], S.SHIELDED)
+        self.assertEqual((got["metadata"]["duration_s"], got["metadata"]["n"]), (2.0, 3))
+        self.assertEqual(S.decode_lines(row + b"\n" + row + b"\n", "journal"), [got, got])
+        S.MEASURED(S.SHIELDED, "x")
+        for value in (5.25, 5, None, "5.25", True):
+            with self.subTest(value=value), self.assertRaises(S.Refusal):
+                S.MEASURED(value, "x")
+        for check in (S.NUM, S.FLOAT, S.INT, S.NAT, S.NONNEG, S.STR):          # and the shield is no other kind
+            with self.subTest(check=check.__name__), self.assertRaises(S.Refusal):
+                check(S.SHIELDED, "x")
 
 
 class ClosedShapes(unittest.TestCase):
@@ -531,8 +550,10 @@ class RealControllerRows(unittest.TestCase):
         cls.corpus = T.load_corpus()
 
     def journal(self, rows):
+        """The verdict on a journal's rows, decoded as the validator decodes a file's bytes."""
         try:
-            J._runtime_events(json.loads(json.dumps(rows)), "events.jsonl", controller=True)
+            raw = "".join(json.dumps(row) + "\n" for row in rows).encode()
+            J._runtime_events(S.decode_lines(raw, "events.jsonl"), "events.jsonl", controller=True)
         except S.Refusal as refusal:
             return str(refusal)
         return None
@@ -631,13 +652,61 @@ class RealControllerRows(unittest.TestCase):
             with self.subTest(label):
                 self.assertIsNotNone(self.journal(rows))
 
-    def test_the_idle_baseline_row_carries_a_power_mean_and_the_validator_only_checks_its_kind(self):
-        """controller.py:2045-2057 writes the idle baseline's mean power into the stage's completion row. The
-        validator admits a number or null there and reads nothing from it."""
-        row = next(row for row in self.rows["complete"] if (row["event_type"], row["phase"]) ==
-                   ("stage_completed", "idle_baseline"))
+    def idle_row(self, rows):
+        return next(row for row in rows if (row["event_type"], row["phase"]) == ("stage_completed", "idle_baseline"))
+
+    def test_the_idle_baseline_s_mean_power_is_never_made_a_number(self):
+        """controller.py:2045-2057 writes the idle baseline's mean power into the stage's completion row of
+        events.jsonl, a journal both stages validate before the reservation. Audit 1 on 2082c1a51: the validator's
+        number check received that value as a float. The decoder now leaves a shield in its place and the grammar
+        admits the shield: no check sees a number there, and no number is made."""
+        row = self.idle_row(self.rows["complete"])
         self.assertEqual(set(row["metadata"]), {"power_w_mean", "duration_s", "admission_attempts", "admission_decision"})
-        self.assertIs(type(row["metadata"]["power_w_mean"]), float)
+        self.assertIs(type(row["metadata"]["power_w_mean"]), float)             # the fixture, as the writer wrote it
+        docs = self.leg_journal("6e9d42f1d")
+        files = {name: T.doc_bytes(name, doc) for name, doc in docs.items()}
+        seen = []
+
+        def profile(frame, event, arg):                 # the audit's probe: every leaf check called on that member
+            if event == "call" and frame.f_code.co_filename == S.__file__ \
+                    and str(frame.f_locals.get("where", "")).endswith("power_w_mean") and "value" in frame.f_locals:
+                seen.append((frame.f_code.co_name, type(frame.f_locals["value"]).__name__))
+        sys.setprofile(profile)
+        try:
+            self.assertIsNone(verdict(files))
+        finally:
+            sys.setprofile(None)
+        self.assertIn(("MEASURED", "_Shielded"), seen)
+        self.assertEqual({kind for _, kind in seen}, {"_Shielded"}, seen)
+        decoded = S.decode_lines(files[T.EVENTS], "events.jsonl")
+        self.assertIs(self.idle_row(decoded)["metadata"]["power_w_mean"], S.SHIELDED)
+        self.assertIs(type(self.idle_row(decoded)["metadata"]["duration_s"]), float)   # every other number is one
+
+    def test_the_verdict_does_not_depend_on_the_mean_power_s_digits(self):
+        """Nothing converts the token: a number no float or int could be made from is admitted there, and the very
+        same token under the neighbouring member refuses. Anything that is not a number still refuses."""
+        docs = self.leg_journal("6e9d42f1d")
+        files = {name: T.doc_bytes(name, doc) for name, doc in docs.items()}
+        def with_token(member, token):
+            """The journal's bytes with one member of the idle baseline's completion row replaced by ``token``."""
+            lines = files[T.EVENTS].split(b"\n")
+            at = [i for i, line in enumerate(lines) if b'"stage idle_baseline completed"' in line]
+            self.assertEqual(len(at), 1)
+            lines[at[0]], count = re.subn(rb'("' + member + rb'":)[^,}]+', lambda m: m.group(1) + token, lines[at[0]])
+            self.assertEqual(count, 1)
+            return dict(files, **{T.EVENTS: b"\n".join(lines)})
+        for label, token in (("another value", b"99999.5"), ("an integer", b"7"), ("beyond a float", b"1e999"),
+                             ("beyond an int", b"9" * 5000), ("negative", b"-0.0"), ("null", b"null")):
+            with self.subTest(admitted=label):
+                self.assertIsNone(verdict(with_token(b"power_w_mean", token)))
+        for label, token in (("text", b'"5.0"'), ("a boolean", b"true"), ("a list", b"[5.0]"),
+                             ("not a JSON number", b"NaN")):
+            with self.subTest(refused=label):
+                self.assertIsNotNone(verdict(with_token(b"power_w_mean", token)))
+        for token in (b"1e999", b"9" * 5000):                    # the same tokens where a number is made
+            with self.subTest(neighbour=token[:5]):
+                self.assertIsNotNone(verdict(with_token(b"duration_s", token)))
+        self.assertIsNone(verdict(with_token(b"duration_s", b"2.5")))
 
 
 class KitTable(unittest.TestCase):

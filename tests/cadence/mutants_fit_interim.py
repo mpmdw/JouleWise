@@ -21,6 +21,7 @@ import queue
 ROOT = Path(__file__).resolve().parents[2]
 FIT = "joulewise/cadence_looks/fit_interim.py"
 RUN = "scripts/cadence_look_run.py"
+STAGER = "scripts/cadence_look_stage_archive.py"
 T_FIT = "tests.cadence.test_fit_interim"
 T_RUN = "tests.cadence.test_look_run"
 T_TF = "tests.cadence.test_time_fields"
@@ -44,12 +45,14 @@ MUTANTS = [
      [T_FIT + ".RL166b.test_zero_design_has_no_column_rank"]),
     ("r9_excess_count_includes_1s", FIT, 'and 1.0 < excess <= 2.0)', 'and 1.0 <= excess <= 2.0)',
      [T_FIT + ".RL166b.test_rl174_excess_count_is_print_only_and_uses_energy_fit_legs"]),
-    ("r9_stage_file_hash_ignored", RUN, 'if written.hexdigest() != expected[name]:', 'if False:',
+    ("r9_stage_file_hash_ignored", STAGER, 'if written.hexdigest() != expected[name]:', 'if False:',
      [T_RUN + ".Staging.test_one_changed_byte_refuses_before_publishing"]),
-    ("r9_stage_manifest_hash_ignored", RUN, ' or mark.get("manifest_sha256") != msha', '',
+    ("r9_stage_manifest_hash_ignored", STAGER, '\n                or mark.get("manifest_sha256") != listed_sha', '',
      [T_RUN + ".Staging.test_manifest_and_archive_must_match_marker"]),
-    ("r9_stage_archive_hash_ignored", RUN, 'if archive_sha != mark.get("archive_sha256"):', 'if False:',
+    ("r9_stage_archive_hash_ignored", STAGER, 'if archive_sha != mark.get("archive_sha256"):', 'if False:',
      [T_RUN + ".Staging.test_manifest_and_archive_must_match_marker"]),
+    ("r11_stage_pinned_manifest_ignored", STAGER, 'if listed_sha != manifest_sha256:', 'if False:',
+     [T_RUN + ".Staging.test_a_sums_file_that_is_not_the_pinned_offload_manifest_refuses_before_anything_else_is_read"]),
     ("r9_unreadable_no_turn_rule4_passes", RUN,
      'if entry["role"] == "fit" and sm is None:   # RL-174 A.4: every fit leg, even without a turn',
      'if False:   # mutant',

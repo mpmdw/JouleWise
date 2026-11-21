@@ -5,11 +5,18 @@
         --span SPAN_ID=DIRECTORY [--span ...] --out RESULT.json
 
 It runs first, as its own process, before a stage parses anything and before the reservation. It reads every pinned
-file of every named span as opaque bytes, computes its sha256 and retains nothing. It writes one file: the word
-``pass`` or ``fail``, and for each path the pinned and the observed digest with one word for its state (``match``,
-``mismatch``, ``missing``, ``symlink``; a file in a span that is not pinned is listed as ``not_pinned`` and is not
-read). No size, no count and no float is written: words and hashes only (RL-179 register row 26). A ``fail`` stops
-the run with nothing consumed.
+file of every named span as opaque bytes, computes its sha256, counts its bytes and retains nothing. It writes one
+file: the word ``pass`` or ``fail``, and for each path the pinned and the observed digest with one word for its state
+(``match``, ``mismatch``, ``size`` when the digest is the pin's and the byte count is not the pinned one,
+``missing``, ``symlink``; a file in a span that is not pinned is listed as ``not_pinned`` and is not read). No size,
+no count and no float is written: words and hashes only (RL-179 register row 26). A ``fail`` stops the run with
+nothing consumed.
+
+What passes here is what the stage and the twin's wrapper require inside the reservation: the same names, the same
+digest and the same byte count. A pin this check passes is never refused there for a reason this check could see.
+
+The result file is created, never replaced: an ``--out`` that already exists, or is a link, ends the run with exit 2
+and nothing written.
 
 This process holds no decoder. It imports no look code and no parsing or decoding code for any custody file; the
 only thing it parses is the pin list. Exit 0 pass, 1 fail, 2 when it could not be run as asked.
@@ -25,7 +32,8 @@ RESULT_SCHEMA = "joulewise.cadence_look_input_verification.v1"
 
 
 def digest_of(path):
-    """sha256 of a regular file's bytes, read in pieces and kept nowhere; None when it is absent or not regular."""
+    """(sha256, byte count) of a regular file's bytes, read in pieces and kept nowhere; None when it is absent or
+    not regular."""
     try:
         descriptor = os.open(path, os.O_RDONLY | getattr(os, "O_NOFOLLOW", 0))
     except OSError:
@@ -33,12 +41,13 @@ def digest_of(path):
     try:
         if not stat.S_ISREG(os.fstat(descriptor).st_mode):
             return None
-        digest = hashlib.sha256()
+        digest, count = hashlib.sha256(), 0
         while True:
             chunk = os.read(descriptor, 1 << 20)
             if not chunk:
-                return digest.hexdigest()
+                return digest.hexdigest(), count
             digest.update(chunk)
+            count += len(chunk)
     finally:
         os.close(descriptor)
 
@@ -71,13 +80,19 @@ def verify(document, directories):
         files, links = entries(directory)
         pinned = set()
         for entry in span["files"]:
-            relative, expected = entry["path"], entry["sha256"]
+            relative, expected, size = entry["path"], entry["sha256"], entry["size"]
+            if type(size) is not int:
+                raise TypeError("a pin without its byte count")
             pinned.add(relative)
             if relative in links or any(relative.startswith(link + "/") for link in links):
                 rows.append((sid, relative, expected, None, "symlink"))
                 continue
-            observed = digest_of(os.path.join(directory, *relative.split("/")))
-            state = "missing" if observed is None else "match" if observed == expected else "mismatch"
+            read = digest_of(os.path.join(directory, *relative.split("/")))
+            if read is None:
+                rows.append((sid, relative, expected, None, "missing"))
+                continue
+            observed, count = read
+            state = "mismatch" if observed != expected else "match" if count == size else "size"
             rows.append((sid, relative, expected, observed, state))
         for relative in sorted((files | links) - pinned):
             rows.append((sid, relative, None, None, "symlink" if relative in links else "not_pinned"))
@@ -121,7 +136,12 @@ def main(argv):
     result = {"schema": RESULT_SCHEMA, "result": "pass" if passed else "fail",
               "files": [{"span_id": sid, "path": path, "pinned": pinned, "observed": observed, "state": state}
                         for sid, path, pinned, observed, state in rows]}
-    with open(options["--out"], "w", encoding="utf-8") as handle:
+    try:                                # created, never replaced: no existing file becomes this result
+        descriptor = os.open(options["--out"], os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0),
+                             0o600)
+    except OSError:
+        return 2
+    with os.fdopen(descriptor, "w", encoding="utf-8") as handle:
         handle.write(json.dumps(result, sort_keys=True, separators=(",", ":")) + "\n")
     return 0 if passed else 1
 

@@ -6,9 +6,12 @@ JSON kinds are kept apart: a boolean is not an integer, an integral float is not
 """
 from __future__ import annotations
 
-import json
 import math
 import re
+
+from joulewise.cadence_looks import custody_pins
+
+SHIELDED = custody_pins.SHIELDED
 
 
 class Refusal(ValueError):
@@ -22,28 +25,15 @@ def refuse(where, what):
 # ------------------------------------------------------------------------------------------------ strict decoding
 def decode(raw, where):
     """One strict JSON document from UTF-8 bytes: no duplicate member, no nonfinite number, no trailing document,
-    no byte-order mark. Member order and insignificant whitespace are not shape."""
-    def unique(pairs):
-        out = dict(pairs)
-        if len(out) != len(pairs):
-            refuse(where, "a duplicate member")
-        return out
-
-    def number(token):
-        value = float(token)
-        if not math.isfinite(value):
-            refuse(where, "a nonfinite number")
-        return value
-
-    def constant(token):
-        refuse(where, "a nonfinite number")
-
+    no byte-order mark. Member order and insignificant whitespace are not shape. A number under an energy-named
+    member is never converted: the look's one decoder of operational files leaves ``SHIELDED`` in its place
+    (``custody_pins.operational_json``), and ``MEASURED`` is the leaf that admits it."""
     try:
-        text = bytes(raw).decode("utf-8")
-        return json.loads(text, object_pairs_hook=unique, parse_float=number, parse_constant=constant)
-    except Refusal:
-        raise
-    except (ValueError, RecursionError):
+        return custody_pins.operational_json(bytes(raw).decode("utf-8"))
+    except custody_pins.OperationalJSONError as error:
+        refuse(where, {"duplicate": "a duplicate member", "nonfinite": "a nonfinite number"}.get(
+            error.reason, "not UTF-8 JSON as the pinned writers serialize it"))
+    except ValueError:
         refuse(where, "not UTF-8 JSON as the pinned writers serialize it")
 
 
@@ -101,6 +91,13 @@ def FLOAT(value, where):
 
 def NUM(value, where):
     if not is_num(value):
+        refuse(where, "not a number")
+
+
+def MEASURED(value, where):
+    """A number under an energy-named member (the idle baseline's mean power in ``events.jsonl``). The decoder
+    never made it a number, so there is no value here to check: only that the writer put a number there."""
+    if value is not SHIELDED:
         refuse(where, "not a number")
 
 

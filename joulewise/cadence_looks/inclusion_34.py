@@ -270,6 +270,18 @@ def rule4(interval_ns, streams):
 # ------------------------------------------------------------------------------------------------------------
 # Loaders: stamps only.
 
+def _loads(raw, object_pairs_hook=None):
+    """One journal or record document through the look's one decoder of operational files
+    (``custody_pins.operational_json``): what ``json.loads`` gives, except that a number under an energy-named
+    member is never converted. The controller writes the idle baseline's mean power into ``events.jsonl``; this
+    file is run before the reservation and makes no such number. Imported here, not at the top: run as a script
+    under ``-I`` this file has no repository on its path until ``main`` adds it."""
+    if str(REPO) not in sys.path:
+        sys.path.insert(0, str(REPO))
+    from joulewise.cadence_looks import custody_pins
+    return custody_pins.operational_json(raw, strict=False, object_pairs_hook=object_pairs_hook)
+
+
 def _jsonl_lines(path):
     with open(path, "rb") as handle:
         for raw in handle:
@@ -335,7 +347,7 @@ def read_sidecar_rows(bundle):
     """[(started wall_ns, finished wall_ns, {"sensors", "errors"})] for the journal's temperature readings."""
     rows = []
     for raw in _jsonl_lines(Path(bundle) / "outputs" / "align_thermal.jsonl"):
-        r = json.loads(raw)                       # a journal file: temperatures, levels, states, stamps
+        r = _loads(raw)                           # a journal file: temperatures, levels, states, stamps
         if r.get("module") != "temperature" or r.get("kind") != "reading":
             continue
         s, f = (r.get("started") or {}).get("wall_ns"), (r.get("finished") or {}).get("wall_ns")
@@ -352,7 +364,7 @@ def _scan_events(path):
     hook = _keep({"event_type", "phase", "timestamp_s", "metadata", "kind"})
     g0, last = None, None
     for raw in _jsonl_lines(path):
-        e = json.loads(raw, object_pairs_hook=hook)
+        e = _loads(raw, object_pairs_hook=hook)
         et, ts = e.get("event_type"), e.get("timestamp_s")
         if not isinstance(ts, (int, float)):
             continue
@@ -386,7 +398,7 @@ def pm_period_s(bundle):
     path = Path(bundle) / "config.json"
     if not path.is_file():
         return None
-    cfg = json.loads(path.read_text(encoding="utf-8"), object_pairs_hook=_keep({"sampling", "power_hz"}))
+    cfg = _loads(path.read_text(encoding="utf-8"), object_pairs_hook=_keep({"sampling", "power_hz"}))
     hz = (cfg.get("sampling") or {}).get("power_hz")
     return 1 / hz if isinstance(hz, (int, float)) and hz > 0 else None
 
@@ -421,7 +433,7 @@ RUNTIME_CONFIG = "configs/align/v4/r1_runtime.json"    # rule 3's sensor policy;
 
 
 def _json(path):
-    return json.loads(Path(path).read_text(encoding="utf-8"))
+    return _loads(Path(path).read_text(encoding="utf-8"))
 
 
 def span_dirs(custody, overrides=()):

@@ -22,7 +22,8 @@ import hashlib
 import json
 
 from joulewise.cadence_looks.admission_shape import (
-    BOOL, DIGEST, FLOAT, INT, NAT, NUM, STR, TEXT, arr, const, either, enum, mapping, nullable, obj, refuse, rx)
+    BOOL, DIGEST, FLOAT, INT, MEASURED, NAT, NUM, STR, TEXT, arr, const, either, enum, mapping, nullable, obj, refuse,
+    rx)
 
 EVENTS = "events.jsonl"
 TURNS = "outputs/align_turns.jsonl"
@@ -361,7 +362,7 @@ def _cleanup_metadata(value, where):
 _STAGE_STARTED = {"idle_baseline": either(obj({}), obj({"monotonic_ns": nullable(INT)}))}
 _STAGE_COMPLETED = {
     "validate": either(obj({}), obj({"transport": STR, "runtime": STR, "telemetry": STR})),                # 1772-1779
-    "idle_baseline": either(obj({}), obj({"power_w_mean": nullable(NUM), "duration_s": nullable(NUM),    # 2045-2057
+    "idle_baseline": either(obj({}), obj({"power_w_mean": nullable(MEASURED), "duration_s": nullable(NUM),    # 2045-2057
                                           "admission_attempts": nullable(NAT), "admission_decision": nullable(STR)})),
     "warmup": either(obj({}), obj({"warmup_runs": NAT, "warmup_seconds": NUM})),                           # 2476-2479
     "measured_run": either(obj({}), obj({"sample_count": NAT, "runtime_event_count": NAT})),               # 2609-2615

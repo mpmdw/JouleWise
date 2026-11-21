@@ -25,9 +25,21 @@
   },
   {
     "file": "scripts/cadence_look_verify_inputs.py",
-    "locator": "<module>:96c726817ffffb80",
+    "locator": "<module>:c69e70db08ba9904",
     "command": "python-isolated",
     "seam": "Usage line in the verifier's docstring; no command runs at import."
+  },
+  {
+    "file": "scripts/cadence_look_run.py",
+    "locator": "stage_archive:f5ae899cbfc1d7d0",
+    "command": "python-isolated",
+    "seam": "Stage 1 launches the pinned hash-only staging process for a pulled span archive after the pin list is admitted and against the span's pinned offload manifest digest (RL-174 D.3; RL-194a). tests/cadence/test_look_run.py Staging runs it on generated archives."
+  },
+  {
+    "file": "scripts/cadence_look_stage_archive.py",
+    "locator": "<module>:7df036b9708abfd3",
+    "command": "python-isolated",
+    "seam": "Usage line in the staging process's docstring; no command runs at import."
   },
   {
     "file": "scripts/run_align_r1_smoke.py",

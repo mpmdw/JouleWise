@@ -36,9 +36,10 @@ generated; no custody, energy, meter or restricted file was opened.
 - **Pin scope.** Each span's pins are its whole offload inventory, so they rebuild the offload manifest digest and
   any extra file refuses.
 - **Abbreviated Check digests (RL-194a §2).** The full digest is the offload manifest's sha256. It binds when the
-  Check prints it in full or prints an abbreviation every character of which matches, prefix and suffix as printed
-  (at least eight hex digits in all). The review record carries the full digest, the text as printed, the item
-  number and a slot for a second record. A span that does not bind is held.
+  Check prints it in full or prints an abbreviation every character of which matches, prefix and suffix as printed.
+  The review record carries the full digest, the text as printed, the item number and a slot for a second record.
+  A span that does not bind is held. Audit round 1 on `2082c1a51` narrowed which printed digests count
+  ([report](2026-11-20-pr795-rl194-audit-1.md)).
 
 ## The validator and the real controller rows
 

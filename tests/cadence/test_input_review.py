@@ -7,6 +7,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import re
 import tempfile
 import unittest
 
@@ -55,6 +56,10 @@ class ReviewRecord(unittest.TestCase):
                          seat_family="seat-family", command=["cadence_look_input_review.py", "review"],
                          run_state=self.run_state if run_state is None else run_state)
 
+    def problems(self, record, run_state=None):
+        return RV.record_problems(record, self.pins, self.sha, "m" * 64,
+                                  self.run_state if run_state is None else run_state)
+
     def test_the_template_carries_the_pins_and_leaves_every_slot_open(self):
         record = RV.template(self.pins, self.sha, "m" * 64)
         self.assertEqual(record["header"]["pin_list_sha256"], self.sha)
@@ -68,7 +73,7 @@ class ReviewRecord(unittest.TestCase):
                                             "offload_manifest_sha256": span["offload_manifest_sha256"], "form": None})
             for slot in row["receipt"]["shapes"].values():
                 self.assertEqual((slot["shape"], slot["verdict"]), (None, None))
-        self.assertTrue(RV.record_problems(record, self.pins, self.sha, "m" * 64))        # unfilled: not a record yet
+        self.assertTrue(self.problems(record))        # unfilled: not a record yet
 
     def test_the_committed_form_is_the_template_with_one_open_span(self):
         path = Path(__file__).resolve().parents[2] / "docs/process/cadence/looks/lm-interim-01.input-review.template.json"
@@ -92,6 +97,9 @@ class ReviewRecord(unittest.TestCase):
         self.assertTrue(opened)
         self.assertTrue(all(M.is_operational_path(name.partition("/")[2]) for name in opened))
         self.assertEqual(len(opened), len(set(opened)))                                  # each read once
+        self.assertEqual(sorted(opened), sorted(                            # every operational file, and only those
+            f"{span['span_id']}/{entry['path']}" for span in self.pins["spans"] for entry in span["files"]
+            if M.is_operational_path(entry["path"])))
         for sid in SPANS:
             self.assertIn(f"{sid}/runner_receipt.json", opened)
             self.assertIn(f"{sid}/legs/L001/leg_record.json", opened)
@@ -141,16 +149,17 @@ class ReviewRecord(unittest.TestCase):
         first = self.pins["spans"][0]
         digest = first["offload_manifest_sha256"]
         printed = f"{digest[:8]}…{digest[-3:]}"
-        record = self.review(self.run_state.replace(digest, printed))
+        abbreviated = self.run_state.replace(digest, printed)
+        record = self.review(abbreviated)
         self.assertEqual(record["spans"][0]["check"], {"item": first["check_item"], "offload_manifest_sha256": digest,
                                                        "as_printed": printed, "form": "abbreviated",
                                                        "second_record": None})
         self.assertEqual(record["spans"][1]["check"]["form"], "full")
         for row in record["spans"]:
             row["verdicts"]["desk"] = "admissible"
-        self.assertEqual(RV.record_problems(record, self.pins, self.sha, "m" * 64), [])
+        self.assertEqual(self.problems(record, abbreviated), [])
         record["spans"][0]["check"]["second_record"] = "the MBP-side sums file, RUN_STATE item 318"
-        self.assertEqual(RV.record_problems(record, self.pins, self.sha, "m" * 64), [])
+        self.assertEqual(self.problems(record, abbreviated), [])
         wrong = "0" if digest[7] != "0" else "1"
         for label, change in {
                 "one printed character differs": lambda c: c.update(as_printed=f"{digest[:7]}{wrong}…{digest[-3:]}"),
@@ -161,13 +170,146 @@ class ReviewRecord(unittest.TestCase):
             changed = copy.deepcopy(record)
             change(changed["spans"][0]["check"])
             with self.subTest(label):
-                self.assertTrue(any("dev-01-s01" in problem for problem in
-                                    RV.record_problems(changed, self.pins, self.sha, "m" * 64)))
-        held = self.review(self.run_state.replace(digest, "0" * 64))
-        self.assertEqual(held["spans"][0]["check"]["form"], "absent")
+                self.assertTrue(any("dev-01-s01" in problem for problem in self.problems(changed, abbreviated)))
+        mismatched = self.run_state.replace(digest, "0" * 64)
+        held = self.review(mismatched)
+        self.assertEqual((held["spans"][0]["check"]["form"], held["spans"][0]["check"]["as_printed"]),
+                         ("mismatch", "0" * 64))
         for row in held["spans"]:
             row["verdicts"]["desk"] = "admissible"
-        self.assertTrue(any("held" in problem for problem in RV.record_problems(held, self.pins, self.sha, "m" * 64)))
+        self.assertTrue(any("held" in problem for problem in self.problems(held, mismatched)))
+        unlabelled = self.run_state.replace("Offload manifest", "Encrypted archive")
+        absent = self.review(unlabelled)
+        self.assertEqual([row["check"]["form"] for row in absent["spans"]], ["absent"] * 3)
+        for row in absent["spans"]:
+            row["verdicts"]["desk"] = "admissible"
+        self.assertEqual(sum("held" in problem for problem in self.problems(absent, unlabelled)), 3)
+
+    def test_a_record_cannot_claim_a_spelling_its_check_item_does_not_print(self):
+        """Audit 1 on 2082c1a51: the Check printed all 64 digits and the record claimed a matching abbreviation the
+        item never carried. The checker judged the claim against itself. It reads the RUN_STATE now."""
+        record = self.review()
+        for row in record["spans"]:
+            row["verdicts"]["desk"] = "admissible"
+        self.assertEqual(self.problems(record), [])
+        check = record["spans"][0]["check"]
+        exact = check["as_printed"]
+        claims = {
+            "an abbreviation of the printed digest": dict(as_printed=f"{exact[:8]}…{exact[-4:]}", form="abbreviated"),
+            "the printed digest called an abbreviation": dict(form="abbreviated"),
+            "another spelling of the ellipsis": dict(as_printed=f"{exact[:8]}...{exact[-4:]}", form="abbreviated"),
+        }
+        for label, claim in claims.items():
+            changed = copy.deepcopy(record)
+            changed["spans"][0]["check"].update(claim)
+            with self.subTest(label):
+                self.assertNotIn(changed["spans"][0]["check"]["as_printed"] if label != "the printed digest called an "
+                                 "abbreviation" else "…", self.run_state)
+                problems = self.problems(changed)
+                self.assertTrue(any("dev-01-s01" in problem and "prints" in problem for problem in problems), problems)
+        # and the other way: the item prints an abbreviation, the record claims the full digest
+        digest = self.pins["spans"][0]["offload_manifest_sha256"]
+        abbreviated = self.run_state.replace(digest, f"{digest[:8]}…{digest[-4:]}")
+        self.assertTrue(any("dev-01-s01" in problem for problem in self.problems(record, abbreviated)))
+        # a record made against one RUN_STATE is not a record of another whose Check names another digest
+        self.assertTrue(any("held" in problem for problem in self.problems(record, self.run_state.replace(digest, "0" * 64))))
+
+    def test_the_check_command_reads_the_run_state_it_is_given(self):
+        record = self.review()
+        for row in record["spans"]:
+            row["verdicts"]["desk"] = "admissible"
+        check = record["spans"][0]["check"]
+        check.update(as_printed=f"{check['as_printed'][:8]}…{check['as_printed'][-4:]}", form="abbreviated")
+        path, state = self.root / "record.json", self.root / "RUN_STATE.md"
+        path.write_bytes(RV.dump(record))
+        state.write_text(self.run_state, encoding="utf-8")
+        import contextlib
+        import io
+        import unittest.mock
+        printed = io.StringIO()
+        with unittest.mock.patch.object(RV, "_load", return_value=(self.pins, self.sha, "m" * 64)), \
+                contextlib.redirect_stdout(printed):
+            code = RV.main(["check", str(path), "--manifest", "unused", "--repo", "unused", "--run-state", str(state)])
+        self.assertEqual(code, 1, printed.getvalue())
+        self.assertIn("REFUSE dev-01-s01: check.as_printed and check.form are not what Check item", printed.getvalue())
+
+    def test_the_review_refuses_a_linked_directory_a_linked_file_and_any_file_that_is_not_pinned(self):
+        """Audit 1 on 2082c1a51: with a span's ``legs`` directory replaced by a link to the same files, the review
+        read through it and recorded the span admissible. Its first act is now the stage's: every span directory is
+        its pin list by name, no symlink at any depth, before a byte is decoded."""
+        sid = sorted(SPANS)[0]
+        span = self.root / sid
+
+        def linked(relative):
+            def apply():
+                kept = self.root / "kept"
+                (span / relative).rename(kept)
+                (span / relative).symlink_to(kept, target_is_directory=kept.is_dir())
+                return lambda: ((span / relative).unlink(), kept.rename(span / relative))
+            return apply
+
+        def linked_span():
+            kept = self.root / "kept-span"
+            span.rename(kept)
+            span.symlink_to(kept, target_is_directory=True)
+            return lambda: (span.unlink(), kept.rename(span))
+
+        def extra():
+            (span / "legs/L001/unlisted.json").write_bytes(b"{}\n")
+            return (span / "legs/L001/unlisted.json").unlink
+
+        def missing():
+            data = (span / PROTECTED[0]).read_bytes()
+            (span / PROTECTED[0]).unlink()
+            return lambda: (span / PROTECTED[0]).write_bytes(data)
+        cases = {"the legs directory linked": (linked("legs"), "legs: a symlink"),
+                 "a bundle directory linked": (linked("legs/L001/runtime"), "legs/L001/runtime: a symlink"),
+                 "the receipt linked": (linked("runner_receipt.json"), "runner_receipt.json: a symlink"),
+                 "a stream linked": (linked(PROTECTED[0]), PROTECTED[0] + ": a symlink"),
+                 "the span directory linked": (linked_span, "the span directory is a symlink"),
+                 "a file that is not pinned": (extra, "unlisted.json: a file that is not pinned"),
+                 "a pinned stream missing": (missing, "a pinned file is missing")}
+        for label, (apply, message) in cases.items():
+            undo = apply()
+            try:
+                with self.subTest(label), self.assertRaisesRegex(custody_pins.PinRefusal, message):
+                    self.review()
+            finally:
+                undo()
+        self.assertEqual([row["verdicts"]["executing_seat"] for row in self.review()["spans"]], ["admissible"] * 3)
+
+    def test_the_review_makes_no_number_of_the_idle_baseline_s_mean_power(self):
+        """Audit 1 on 2082c1a51: the cold review's validator received events.jsonl's ``power_w_mean`` as a float."""
+        from tests.cadence import test_interim_admission as rows
+        from joulewise.cadence_looks import admission_shape as shape
+        import sys
+        rows.RealControllerRows.setUpClass()
+        docs = rows.RealControllerRows().leg_journal("6e9d42f1d")
+        sid = "dev-03-s01"
+        for name, doc in docs.items():
+            data = T.doc_bytes(name, doc)
+            if name == T.EVENTS:                      # a token no int could be made from: any conversion would raise
+                data, count = re.subn(rb'("power_w_mean":)[^,}]+', lambda m: m.group(1) + b"9" * 5000, data)
+                self.assertEqual(count, 1)
+            self.write(sid, name, data)
+        self.pins = PF.synthetic_pins({s: self.root / s for s in SPANS})
+        self.run_state = PF.run_state(self.pins)
+        seen = []
+
+        def profile(frame, event, arg):
+            if event == "call" and frame.f_code.co_filename == shape.__file__ \
+                    and str(frame.f_locals.get("where", "")).endswith("power_w_mean") and "value" in frame.f_locals:
+                seen.append(type(frame.f_locals["value"]).__name__)
+        sys.setprofile(profile)
+        try:
+            record = self.review()
+        finally:
+            sys.setprofile(None)
+        row = next(row for row in record["spans"] if row["span_id"] == sid)
+        self.assertEqual((row["verdicts"]["executing_seat"], row["verdicts"]["executing_seat_refusal"]),
+                         ("admissible", None))
+        self.assertTrue(seen)
+        self.assertEqual(set(seen), {"_Shielded"})
 
     def test_a_span_the_validator_refuses_is_the_seat_s_inadmissible_with_the_member_named(self):
         path = self.root / "dev-01-s01/runner_receipt.json"
@@ -187,10 +329,10 @@ class ReviewRecord(unittest.TestCase):
 
     def test_a_filled_record_needs_both_verdicts_on_every_span_and_their_agreement(self):
         record = self.review()
-        self.assertTrue(any("desk" in problem for problem in RV.record_problems(record, self.pins, self.sha, "m" * 64)))
+        self.assertTrue(any("desk" in problem for problem in self.problems(record)))
         for row in record["spans"]:
             row["verdicts"]["desk"] = "admissible"
-        self.assertEqual(RV.record_problems(record, self.pins, self.sha, "m" * 64), [])
+        self.assertEqual(self.problems(record), [])
         changes = {
             "a disagreement": (lambda r: r["spans"][1]["verdicts"].update(desk="inadmissible"), "disagree"),
             "an inadmissible span both name": (lambda r: r["spans"][1]["verdicts"].update(
@@ -211,8 +353,8 @@ class ReviewRecord(unittest.TestCase):
             changed = copy.deepcopy(record)
             change(changed)
             with self.subTest(label):
-                self.assertTrue(any(text in problem for problem in RV.record_problems(changed, self.pins, self.sha, "m" * 64)),
-                                RV.record_problems(changed, self.pins, self.sha, "m" * 64))
+                self.assertTrue(any(text in problem for problem in self.problems(changed)),
+                                self.problems(changed))
 
 
 if __name__ == "__main__":

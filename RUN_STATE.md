@@ -8,7 +8,12 @@ stream's pin before decoding it; a wrapper checks the pins for the twin and runs
 byte-identical. The pin list is unfilled in this draft: the lead fills it with `pin-inputs`. The
 grammar validator runs behind the pins and now mirrors the pinned controller's journal rows; the
 101,889-case matrix no longer gates.
-[Report](docs/run_reports/2026-11-20-pr795-rl194-content-address.md).
+[Report](docs/run_reports/2026-11-20-pr795-rl194-content-address.md). Audit round 1 on `2082c1a51`
+(six HIGH, one LOW) is fixed: the pin list is admitted before custody is touched and an archive is
+staged by its own process; the verifier checks byte counts and writes only where the stage says; a
+Check binds only a digest labelled as the span's manifest; no pre-reservation reader makes a number
+of an energy-named member; a linked span directory refuses as supplied.
+[Audit report](docs/run_reports/2026-11-20-pr795-rl194-audit-1.md).
 
 PR #795 audit 3 (2026-11-20) adopts the independent seat's frozen admission-closure
 suite and replaces stage 1's pre-pass with one validator built from the pinned

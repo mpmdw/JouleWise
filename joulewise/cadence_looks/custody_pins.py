@@ -42,7 +42,13 @@ _COMMIT = re.compile(r"[0-9a-f]{40}")
 _SPAN = re.compile(r"[a-zA-Z0-9][a-zA-Z0-9._-]*")
 _OFFLOAD_LINE = re.compile(r"([0-9a-f]{64})  \./(.+)")
 _ITEM_HEAD = re.compile(r"^([0-9]+)\. \*\*", re.M)
-_ABBREVIATED = re.compile(r"(?<![0-9a-f])([0-9a-f]{1,63})(?:…|\.\.\.)([0-9a-f]{0,63})(?![0-9a-f])")
+# A digest as a Check item prints one: all 64 hex digits, or a prefix, an ellipsis and an optional suffix.
+_PRINTED = re.compile(r"(?<![0-9a-f])(?:([0-9a-f]{64})|([0-9a-f]{1,63})(?:…|\.\.\.)([0-9a-f]{0,63}))(?![0-9a-f])")
+# What may stand between a digest and the word that labels it: punctuation, "sha256" and a file count.
+_BETWEEN = frozenset(" \t\r\n`'\"()[]*,;:=")
+_FILLER = re.compile(r"sha-?256|files?|[0-9][0-9.,]*", re.I)
+_MANIFEST_LABEL = re.compile(r"manifest(?:[_-]sha-?256)?|sha256sums", re.I)      # the sums file by its own name
+_LABEL_REACH = 200          # characters before a digest in which its label is looked for
 SPAN_KEYS = ("span_id", "runner_commit", "close_item", "check_item", "offload_manifest_sha256", "files")
 FILE_KEYS = ("path", "sha256", "size")
 # The span paths a stage parses whole and the look reuses: the receipt, the soak reference, each leg's record and
@@ -180,42 +186,109 @@ def run_state_item(text, number):
     return text[start:end]
 
 
-def check_binding(span, run_state_text):
+def _manifest_labelled(item, at):
+    """Whether the digest printed at ``at`` is labelled as a manifest's: the nearest word before it, past
+    punctuation, ``sha256`` and a file count, is ``manifest`` (or ``manifest_sha256``, or the sums file's own name,
+    ``SHA256SUMS``). A digest under any other label (an archive's, a marker's, a commit's) is not the offload
+    manifest's, whatever its characters. One pass
+    backwards over at most ``_LABEL_REACH`` characters."""
+    low, end = max(0, at - _LABEL_REACH), at
+    while True:
+        while end > low and item[end - 1] in _BETWEEN:
+            end -= 1
+        start = end
+        while start > low:
+            char = item[start - 1]
+            inside_number = (char in ".," and start < end and item[start].isdigit()
+                             and start - 2 >= low and item[start - 2].isdigit())
+            if not (char.isalnum() or char in "_-" or inside_number):
+                break
+            start -= 1
+        if start == end or (start == low and low > 0):
+            return False                 # another character, or the label lies beyond the reach
+        word = item[start:end]
+        if _FILLER.fullmatch(word):
+            end = start
+            continue
+        return _MANIFEST_LABEL.fullmatch(word) is not None
+
+
+def _mentions(item, span_ids):
+    """[(position, span id)] of each pinned span id the item names, longest id first where one contains another.
+    ``cq-<id>-a1`` names ``<id>``; a longer word that merely contains the characters does not."""
+    names = "|".join(re.escape(name) for name in sorted(span_ids, key=len, reverse=True))
+    return [(match.start(), match.group(0))
+            for match in re.finditer(rf"(?<![A-Za-z0-9])(?:{names})(?![A-Za-z0-9])", item)]
+
+
+def check_binding(span, run_state_text, span_ids=()):
     """How a span's public Check item names its offload manifest (RL-194a section 2). The full digest is the sha256
-    of the offload manifest file as custody holds it. It binds to the Check when the item prints it in full, or
-    prints an abbreviation every character of which matches: the prefix and the suffix exactly as printed (at least
-    eight hex digits in all). Returns the item number, the text as printed (None when nothing binds) and the form:
-    ``full``, ``abbreviated`` or ``absent``."""
-    digest, number = span["offload_manifest_sha256"], span["check_item"]
-    item = run_state_item(run_state_text, number)
+    of the offload manifest file as custody holds it. The Check's digests for the span are the ones it prints as the
+    span's manifest: after each place the item names the span, the first digest labelled ``manifest`` before the
+    item names another pinned span (``span_ids``). A digest under another label, and a digest printed for another
+    span, bind nothing.
+
+    The span binds when the Check prints at least one such digest and every hex character of every one matches:
+    all 64, or an abbreviation's prefix and suffix exactly as printed, however many they are. Returns the item
+    number, the text as printed and the form: ``full``, ``abbreviated``, ``mismatch`` (the Check prints a manifest
+    digest for the span with a character that does not match; ``as_printed`` is that digest) or ``absent`` (it
+    prints none; ``as_printed`` is None). ``mismatch`` and ``absent`` hold the span."""
+    digest, number, sid = span["offload_manifest_sha256"], span["check_item"], span["span_id"]
     out = {"check_item": number, "as_printed": None, "form": "absent"}
+    item = run_state_item(run_state_text, number)
     if item is None:
         return out
-    if digest in item:
+    mentions = _mentions(item, set(span_ids) | {sid})
+    printed = [match for match in _PRINTED.finditer(item) if _manifest_labelled(item, match.start())]
+    claimed = []
+    for index, (at, name) in enumerate(mentions):
+        if name != sid:
+            continue
+        end = mentions[index + 1][0] if index + 1 < len(mentions) else len(item)
+        first = next((match for match in printed if at <= match.start() < end), None)
+        if first is not None:
+            claimed.append(first)
+    if not claimed:
+        return out
+
+    def matches(match):
+        whole, prefix, suffix = match.groups()
+        if whole is not None:
+            return whole == digest
+        return len(prefix) + len(suffix) < 64 and digest.startswith(prefix) and digest.endswith(suffix)
+    for match in claimed:
+        if not matches(match):
+            return dict(out, as_printed=match.group(0), form="mismatch")
+    if any(match.group(1) for match in claimed):
         return dict(out, as_printed=digest, form="full")
-    for match in _ABBREVIATED.finditer(item):
-        prefix, suffix = match.group(1), match.group(2)
-        if len(prefix) + len(suffix) >= 8 and digest.startswith(prefix) and digest.endswith(suffix):
-            return dict(out, as_printed=match.group(0), form="abbreviated")
-    return out
+    longest = max(claimed, key=lambda match: len(match.group(2)) + len(match.group(3)))
+    return dict(out, as_printed=longest.group(0), form="abbreviated")
 
 
 def check_chain_problems(doc, run_state_text):
     """Problems chaining each span's offload manifest to its public Check item. A span whose Check prints no
-    matching digest is held and returns to the research lead."""
-    problems = []
+    manifest digest for it, or prints one with a character that does not match, is held and returns to the
+    research lead."""
+    problems, ids = [], [span["span_id"] for span in doc["spans"]]
     for span in doc["spans"]:
         if run_state_item(run_state_text, span["check_item"]) is None:
             problems.append(f"{span['span_id']}: RUN_STATE has no single item {span['check_item']}")
-        elif check_binding(span, run_state_text)["form"] == "absent":
+            continue
+        form = check_binding(span, run_state_text, ids)["form"]
+        if form == "mismatch":
+            problems.append(f"{span['span_id']}: Check item {span['check_item']} prints a manifest digest for the "
+                            "span that is not its offload manifest's sha256; the span is held")
+        elif form == "absent":
             problems.append(f"{span['span_id']}: Check item {span['check_item']} does not name its offload "
                             "manifest's sha256; the span is held")
     return problems
 
 
 def chain_link(doc, run_state_text):
-    """Per span, how its Check item names the offload manifest: ``full``, ``abbreviated`` or ``absent``."""
-    return {span["span_id"]: check_binding(span, run_state_text)["form"] for span in doc["spans"]}
+    """Per span, how its Check item names the offload manifest: ``full``, ``abbreviated``, ``mismatch`` or
+    ``absent``."""
+    ids = [span["span_id"] for span in doc["spans"]]
+    return {span["span_id"]: check_binding(span, run_state_text, ids)["form"] for span in doc["spans"]}
 
 
 def pin_list_sha256(raw):
@@ -241,6 +314,16 @@ def load_pin_list(raw, *, complete=True):
     return doc
 
 
+def require_roster(doc, roster_span_ids):
+    """The pinned spans are exactly the roster's, each once; PinRefusal otherwise."""
+    ids = list(roster_span_ids)
+    pinned = [span["span_id"] for span in doc["spans"]]
+    if sorted(ids) != sorted(pinned) or len(set(ids)) != len(ids):
+        raise PinRefusal(f"the pin list names {len(pinned)} span(s) and the roster {len(ids)}; "
+                         "they are not the same spans")
+    return ids
+
+
 class PinnedCustody:
     """The roster's span directories under their pins, for one stage.
 
@@ -249,11 +332,7 @@ class PinnedCustody:
     ``"verify"`` reads it once, checks its pin and serves those bytes (stage 2, immediately before decoding)."""
 
     def __init__(self, doc, roster_span_ids, sdir_of, *, streams):
-        ids = list(roster_span_ids)
-        pinned = [span["span_id"] for span in doc["spans"]]
-        if sorted(ids) != sorted(pinned) or len(set(ids)) != len(ids):
-            raise PinRefusal(f"the pin list names {len(pinned)} span(s) and the roster {len(ids)}; "
-                             "they are not the same spans")
+        ids = require_roster(doc, roster_span_ids)
         if streams not in ("pass", "verify"):
             raise ValueError("streams: 'pass' or 'verify'")
         self.spans = {span["span_id"]: span for span in doc["spans"]}
@@ -434,11 +513,120 @@ def verification_problems(doc, result):
             return ["the verifier's result carries a row that is not span_id, path, pinned, observed and state"]
         seen.append((row["span_id"], row["path"], row["pinned"]))
         if row["state"] != "match" or row["observed"] != row["pinned"] or row["pinned"] is None:
-            words = {"mismatch": "its bytes are not its pin", "missing": "a pinned file is missing",
-                     "not_pinned": "a file that is not pinned", "symlink": "a symlink"}
+            words = {"mismatch": "its bytes are not its pin", "size": "its byte count is not its pin",
+                     "missing": "a pinned file is missing", "not_pinned": "a file that is not pinned",
+                     "symlink": "a symlink"}
             problems.append(f"{row['span_id']}/{row['path']}: {words.get(row['state'], 'not verified')}")
     if not problems and sorted(seen) != sorted(expected):
         problems.append("the verifier did not check exactly the pinned files")
     if not problems and result["result"] != "pass":
         problems.append("the verifier did not pass")
     return problems
+
+
+# ------------------------------------------------------------------------- operational JSON, energy members shielded
+_ENERGY_PARTS = ("joule", "watt", "power_w", "gpu_power", "energy_j", "_mj", "_wh")
+
+
+def energy_named(name):
+    """Whether a member name is one that carries energy or power: the rule step 3's output check and the twin apply
+    to names (``step3_energy_ratios.custody_check``)."""
+    lower = name.lower()
+    return lower == "e" or lower.endswith(("_j", "_w")) or any(part in lower for part in _ENERGY_PARTS)
+
+
+class _Shielded:
+    """The value of an energy-named member in an operational file, as a stage outside the reservation holds it:
+    the fact that a number was there, and nothing of the number."""
+    __slots__ = ()
+
+    def __repr__(self):
+        return "<shielded number>"
+
+    def __reduce__(self):
+        return "SHIELDED"
+
+
+SHIELDED = _Shielded()
+
+
+class _Integer(str):
+    __slots__ = ()
+
+
+class _Real(str):
+    __slots__ = ()
+
+
+class OperationalJSONError(ValueError):
+    """``reason`` is ``duplicate``, ``nonfinite`` or ``malformed``; the message carries no value."""
+
+    def __init__(self, reason):
+        super().__init__(reason)
+        self.reason = reason
+
+
+def _unique(items):
+    if len({key for key, _ in items}) != len(items):
+        raise OperationalJSONError("duplicate")
+    return dict(items)
+
+
+def _finite(token):
+    number = float(token)
+    if number != number or number in (float("inf"), float("-inf")):
+        raise OperationalJSONError("nonfinite")
+    return number
+
+
+def _no_constant(token):
+    raise OperationalJSONError("nonfinite")
+
+
+# Text in which no member can be energy-named has none of these: a name part, a name's ending before its closing
+# quote, the one-letter name, or an escape (a name may be spelled with one).
+_MAYBE_ENERGY = ("\\", *_ENERGY_PARTS, '_j"', '_w"', '"e"')
+
+
+def operational_json(text, *, strict=True, object_pairs_hook=None, _settle_always=False):
+    """Decode one JSON document of an operational file. A number under an energy-named member (at any depth below
+    it) is never converted: its place is taken by ``SHIELDED``. Every other number is the ``int`` or ``float``
+    ``json.loads`` gives. An operational journal may carry one measured mean (the pinned controller writes the idle
+    baseline's ``power_w_mean`` into ``events.jsonl``); the stages parse that journal for its time fields before
+    the reservation, and the cold review parses it too, so the one decoder they all use does not make the number.
+
+    ``strict`` refuses a repeated member and a nonfinite number (``OperationalJSONError``); without it they are
+    kept as ``json.loads`` keeps them. ``object_pairs_hook`` builds each object from its pairs. A document whose
+    text cannot spell an energy-named member is decoded directly: there is nothing in it to shield."""
+    def settle(value, shielded):
+        kind = type(value)
+        if kind is dict:
+            return {key: settle(item, shielded or energy_named(key)) for key, item in value.items()}
+        if kind is list:
+            return [settle(item, shielded) for item in value]
+        if kind is _Integer or kind is _Real:
+            if shielded:
+                return SHIELDED
+            if kind is _Integer:
+                return int(value)
+            return _finite(value) if strict else float(value)
+        return value
+
+    def both(items):
+        _unique(items)
+        return object_pairs_hook(items)
+    pairs = object_pairs_hook if not strict else _unique if object_pairs_hook is None else both
+    constant = _no_constant if strict else None
+    try:
+        if isinstance(text, (bytes, bytearray)):
+            text = bytes(text).decode(json.detect_encoding(text), "surrogatepass")       # as json.loads reads bytes
+        lower = text.lower()
+        if not _settle_always and not any(part in lower for part in _MAYBE_ENERGY):
+            return json.loads(text, object_pairs_hook=pairs, parse_float=_finite if strict else None,
+                              parse_constant=constant)
+        return settle(json.loads(text, object_pairs_hook=pairs, parse_int=_Integer, parse_float=_Real,
+                                 parse_constant=constant), False)
+    except OperationalJSONError:
+        raise
+    except (ValueError, RecursionError):
+        raise OperationalJSONError("malformed") from None

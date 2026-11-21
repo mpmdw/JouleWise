@@ -145,7 +145,7 @@ class Stage1(_Copy):
         rc, err, out = self.stage1("--run-state", other)
         self.assertEqual(rc, 2, err)
         self.assertIn(f"custody pins: {self.ids[0]}: Check item", err)
-        self.assertIn("does not name its offload manifest's sha256", err)
+        self.assertIn("prints a manifest digest for the span that is not its offload manifest's sha256", err)
         self.assertEqual(TLR.LAST_RUN["served"], [])
 
         # a pin changed together with its file: the custody would match the pins, but the pins no longer rebuild
@@ -166,6 +166,167 @@ class Stage1(_Copy):
         self.assertIn("not the lines of the offload manifest it names", err)
         self.assertFalse(out.exists())
         self.assertEqual(TLR.LAST_RUN["served"], [])
+
+    # ------------------------------------------------------------- audit 1 on 2082c1a51, at the command line
+    def base(self, pins=None):
+        return ["stage1", "--roster", self.roster, "--custody", self.root, "--rules-3-4", self.rules,
+                "--custody-pins", pins or self.pins]
+
+    def test_a_refused_run_creates_no_file_at_any_name_its_caller_chose(self):
+        """A failed hash check wrote the verifier's result where ``--verification-out`` said, and that was the
+        look's public destination: the next registered execution refused on PUBLIC.json with no reservation taken.
+        The option is gone, the result stays in a directory the stage makes and removes, and stage 1 writes its
+        outputs only after its last check."""
+        public = self.tmp / "public" / "lm-interim-01"
+        public.mkdir(parents=True)
+        outputs = ["--out", public / "stage1.json", "--write-input", public / "level-r.json"]
+        undo = self.faults()["a changed trace"][0]()
+        try:
+            rc, _, err = TLR.run_cli([*self.base(), *outputs])
+        finally:
+            undo()
+        self.assertEqual(rc, 2, err)
+        self.assertIn("its bytes are not its pin", err)
+        self.assertEqual(list(public.iterdir()), [])
+        rc, _, err = TLR.run_cli([*self.base(), *outputs, "--verification-out", public / "PUBLIC.json"])
+        self.assertEqual(rc, 2, err)
+        self.assertIn("unrecognized arguments: --verification-out", err)
+        self.assertEqual(list(public.iterdir()), [])
+        # the last check of all refuses, after level R is built: still nothing, the kept level-R input included
+        rc, _, err = TLR.run_cli([*self.base(), *outputs], extra={"stage1_problems": ["a planted late problem"]})
+        self.assertEqual(rc, 2, err)
+        self.assertIn("a planted late problem", err)
+        self.assertEqual(list(public.iterdir()), [])
+        # no output of stage 1 is named as stage 2's public record or lies in its reservation
+        for named in (["--out", public / "PUBLIC.json"],
+                      ["--out", public / "stage1.json", "--write-input", public / "PUBLIC.json"],
+                      ["--out", public / "RESTRICTED" / "stage1.json"]):
+            rc, _, err = TLR.run_cli([*self.base(), *named])
+            with self.subTest(named=[str(word) for word in named]):
+                self.assertEqual(rc, 2, err)
+                self.assertIn("may not be named PUBLIC.json or lie under RESTRICTED", err)
+                self.assertEqual(list(public.iterdir()), [])
+                self.assertEqual(TLR.LAST_RUN["served"], [])
+        rc, _, err = TLR.run_cli([*self.base(), *outputs])                # an admitted run writes both, and only those
+        self.assertEqual(rc, 0, err)
+        self.assertEqual(sorted(path.name for path in public.iterdir()), ["level-r.json", "stage1.json"])
+        self.assertEqual(json.loads((public / "stage1.json").read_bytes())["input_sha256"],
+                         hashlib.sha256((public / "level-r.json").read_bytes()).hexdigest())
+
+    def test_an_archive_is_staged_only_after_the_pin_list_is_admitted_and_only_against_its_pins(self):
+        """With an empty pin list stage 1 hashed and expanded a ``power_trace.csv`` into the staging root before it
+        refused. The pin list is admitted first; a span is then expanded by the staging process, and only when its
+        SHA256SUMS is the offload manifest the pins carry."""
+        box = self.tmp / "staging"
+        box.mkdir()
+        member = "legs/L001/runtime/run/power_trace.csv"
+        content = {member: b"timestamp_s,power_w\n1,5.0\n"}
+        sid, archive, manifest, marker = TLR.Staging().pack(box, content)
+
+        def written(name, value):
+            path = box / name
+            path.write_text(json.dumps(value))
+            return path
+        plan = written("plan.json", [dict(span_id=sid, archive=str(archive), manifest=str(manifest), marker=str(marker))])
+        roster, rules = written("roster.json", [{"span_id": sid}]), written("rules.json", {})
+        sizes = {name: len(data) for name, data in content.items()}
+        other = R.PINS.span_pins(sid, b"0" * 64 + b"  ./" + member.encode() + b"\n", sizes, runner_commit="0" * 40,
+                                 close_item=2, check_item=1)
+        elsewhere = R.PINS.span_pins("dev-09-s09", manifest.read_bytes(), sizes, runner_commit="0" * 40,
+                                     close_item=2, check_item=1)
+        cases = {"an empty pin list": ({"schema": R.PINS.SCHEMA, "spans": []}, "inputs.spans: empty"),
+                 "a pin list for another offload manifest": ({"schema": R.PINS.SCHEMA, "spans": [other]},
+                                                             "not the span's pinned offload manifest"),
+                 "a pin list that does not name the span": ({"schema": R.PINS.SCHEMA, "spans": [elsewhere]},
+                                                            "they are not the same spans")}
+        for index, (label, (document, message)) in enumerate(cases.items()):
+            staged, out = box / f"staged-{index}", box / f"stage1-{index}.json"
+            rc, _, err = TLR.run_cli(["stage1", "--custody", box / "copy", "--roster", roster, "--rules-3-4", rules,
+                                      "--out", out, "--stage-archives", plan, "--staging-root", staged,
+                                      "--custody-pins", written(f"pins-{index}.json", document)])
+            with self.subTest(label):
+                self.assertEqual(rc, 2, err)
+                self.assertIn(message, err)
+                self.assertFalse(out.exists())
+                self.assertEqual([path for path in staged.rglob("*") if path.is_file()] if staged.exists() else [], [])
+                self.assertFalse(staged.exists() and any(staged.iterdir()))
+
+    def test_a_check_that_prints_the_digest_under_another_label_holds_the_span_at_stage_1(self):
+        """The Check printed a wrong offload manifest digest and the right abbreviation under the archive's label;
+        stage 1 exited 0 and wrote its public result."""
+        digest = self.doc["spans"][0]["offload_manifest_sha256"]
+        state = self.run_state.read_text()
+        self.assertIn(digest, state)
+        wrong = ("f" if digest[0] != "f" else "a") + digest[1:]
+        mislabelled = self.tmp / "RUN_STATE-mislabelled.md"
+        mislabelled.write_text(state.replace(digest, f"{wrong}`; encrypted archive `{digest[:8]}…{digest[-4:]}"),
+                               encoding="utf-8")
+        rc, err, out = self.stage1("--run-state", mislabelled)
+        self.assertEqual(rc, 2, err)
+        self.assertIn(f"custody pins: {self.ids[0]}: Check item", err)
+        self.assertIn("the span is held", err)
+        self.assertFalse(out.exists())
+        self.assertEqual(TLR.LAST_RUN["served"], [])
+
+    def oversized(self):
+        """The pin list with every trace's pinned size one byte over and its digest unchanged."""
+        changed = json.loads(json.dumps(self.doc))
+        for span in changed["spans"]:
+            for row in span["files"]:
+                if row["path"].endswith("power_trace.csv"):
+                    row["size"] += 1
+        path = self.tmp / "oversized-pins.json"
+        path.write_bytes(PF.dump(changed))
+        return path
+
+    def test_a_wrong_byte_count_pin_refuses_at_stage_1_before_anything_is_parsed(self):
+        """A stream pinned with its digest and one byte too many passed the verifier and stage 1, and stage 2
+        refused it inside the reservation. The verifier checks the byte count: stage 1 never writes its output."""
+        rc, err, out = self.stage1(pins=self.oversized())
+        self.assertEqual(rc, 2, err)
+        self.assertIn("REFUSED custody pins: ", err)
+        self.assertIn("power_trace.csv: its byte count is not its pin", err)
+        self.assertFalse(out.exists())
+        self.assertEqual(TLR.LAST_RUN["served"], [])
+
+    def test_no_reader_before_the_reservation_makes_a_number_of_the_idle_baseline_s_mean_power(self):
+        """The preflight both stages run before the reservation received events.jsonl's ``power_w_mean`` as a
+        float. The mean here is a token no number can be made from: a reader that converted it would raise."""
+        import re
+        from joulewise.cadence_looks import admission_shape as shape
+        from tests.cadence import test_interim_admission as rows, test_interim_admission_closure as closure
+        rows.RealControllerRows.setUpClass()
+        docs = rows.RealControllerRows().leg_journal("6e9d42f1d")
+        span = self.tmp / "generated"
+        for name, doc in docs.items():
+            data = closure.doc_bytes(name, doc)
+            if name == closure.EVENTS:
+                data, count = re.subn(rb'("power_w_mean":)[^,}]+', lambda m: m.group(1) + b"9" * 5000, data)
+                self.assertEqual(count, 1)
+            path = span / name
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_bytes(data)
+        events = span / closure.EVENTS
+        seen = []
+
+        def profile(frame, event, arg):                 # the audit's probe
+            if event == "call" and frame.f_code.co_filename == shape.__file__ \
+                    and str(frame.f_locals.get("where", "")).endswith("power_w_mean") and "value" in frame.f_locals:
+                seen.append(type(frame.f_locals["value"]).__name__)
+        sys.setprofile(profile)
+        try:
+            R.validate_runtime_bundles([{"span_id": "generated"}], lambda sid: span)
+        finally:
+            sys.setprofile(None)
+        self.assertTrue(seen)
+        self.assertEqual(set(seen), {"_Shielded"})
+        idle = lambda found: next(row for row in found if (row.get("event_type"), row.get("phase")) ==
+                                  ("stage_completed", "idle_baseline"))
+        self.assertIs(idle(R._jsonl(events))["metadata"]["power_w_mean"], R.PINS.SHIELDED)
+        self.assertTrue(R.token_stamps(events.parent))                 # the stage's readers of that journal
+        R.I34._scan_events(events)
+        self.assertIs(idle([R.I34._loads(line) for line in events.read_bytes().splitlines()])["metadata"]["power_w_mean"],
+                      R.PINS.SHIELDED)
 
     def test_the_pins_name_exactly_the_roster_s_spans(self):
         fewer = self.tmp / "fewer-pins.json"
@@ -256,6 +417,70 @@ class Stage2(_Copy):
                 self.assertEqual(TLR.LAST_RUN["served"], [])
                 self.assertFalse(out.exists())
                 self.assertFalse(any(Path(dirpath).name == "RESTRICTED" for dirpath, _, _ in os.walk(self.tmp)))
+
+    def stage2(self, *extra, pins=None):
+        out = self.tmp / "fit.json"
+        rc, _, err = TLR.run_cli(
+            ["stage2", "--stage1", self.stage1, "--stage1-sha256", R.sha256_file(self.stage1), "--custody", self.root,
+             "--out", out, "--custody-pins", pins or self.pins, *extra], extra={"twin_path": "no-twin-is-launched"})
+        return rc, err, out
+
+    def consumed_nothing(self, out):
+        self.assertEqual((TLR.LAST_RUN["reservation_attempts"], TLR.LAST_RUN["twin_launches"]), (0, 0))
+        self.assertEqual(TLR.LAST_RUN["served"], [])
+        self.assertFalse(out.exists())
+        self.assertFalse(any(Path(dirpath).name == "RESTRICTED" for dirpath, _, _ in os.walk(self.tmp)))
+
+    def test_a_wrong_byte_count_pin_never_reaches_the_reservation(self):
+        """Audit 1 on 2082c1a51: the verifier passed a stream whose pinned size was one byte over; stage 2's read
+        refused it inside the reservation with ``stage2_error`` and the retry found the look spent. The same pin
+        list now fails the verifier, so stage 2 refuses before it reserves anything."""
+        changed = json.loads(json.dumps(self.doc))
+        for span in changed["spans"]:
+            for row in span["files"]:
+                if row["path"].endswith("power_trace.csv"):
+                    row["size"] += 1
+        pins = self.tmp / "oversized-pins.json"
+        pins.write_bytes(PF.dump(changed))
+        for attempt in (1, 2):                                       # and a retry meets the same refusal, not a spent look
+            rc, err, out = self.stage2(pins=pins)
+            with self.subTest(attempt=attempt):
+                self.assertEqual(rc, 2, err)
+                self.assertIn("power_trace.csv: its byte count is not its pin", err)
+                self.assertNotIn("stage2_error", err)
+                self.assertNotIn("already has an execution reservation", err)
+                self.consumed_nothing(out)
+
+    def test_a_linked_span_override_refuses_as_supplied(self):
+        """Audit 1 on 2082c1a51: the verifier called a linked span directory ``symlink``, but stage 2 resolved its
+        ``--span-dir`` before the verifier saw it, and the link's target matched. The override is judged as given."""
+        sid = self.ids[0]
+        link = self.tmp / "linked-span"
+        link.symlink_to(self.root / sid, target_is_directory=True)
+        rc, err, out = self.stage2("--span-dir", f"{sid}={link}")
+        self.assertEqual(rc, 2, err)
+        self.assertIn(f"the span override for {sid} is a symlink", err)
+        self.consumed_nothing(out)
+        s1 = {"roster": {"spans": [{"span_id": name} for name in self.ids]}}
+        with self.assertRaisesRegex(F.LookInputError, "is a symlink"):
+            R.stage2_overrides([f"{sid}={link}"], s1)
+        with self.assertRaisesRegex(F.LookInputError, "is a symlink"):          # as supplied, in any spelling
+            R.stage2_overrides([f"{sid}={link}{os.sep}"], s1)
+        moved = self.tmp / "moved-span"                              # an override that is a real directory still runs
+        shutil.copytree(self.root / sid, moved)
+        self.assertEqual(dict(R.stage2_overrides([f"{sid}={moved}"], s1)), {sid: moved.resolve()})
+        # the default location linked: every check sees the link itself
+        kept = self.tmp / "kept-span"
+        (self.root / sid).rename(kept)
+        (self.root / sid).symlink_to(kept, target_is_directory=True)
+        try:
+            rc, err, out = self.stage2()
+        finally:
+            (self.root / sid).unlink()
+            kept.rename(self.root / sid)
+        self.assertEqual(rc, 2, err)
+        self.assertIn("a symlink", err)
+        self.consumed_nothing(out)
 
 
 if __name__ == "__main__":

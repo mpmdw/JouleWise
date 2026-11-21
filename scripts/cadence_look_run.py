@@ -153,6 +153,16 @@ def write_canonical(path, obj):
     return hashlib.sha256(data).hexdigest()
 
 
+def release_names(*paths):
+    """Stage 1 writes nothing where stage 2 publishes or reserves: no output of its own is named as the look's
+    public record or lies in a reservation directory. Those two names belong to the exclusive reservation holder
+    (``interim_release.destinations``); a file there before it ends the look without a reservation."""
+    for path in paths:
+        if path and ("PUBLIC.json" in Path(path).parts or "RESTRICTED" in Path(path).parts):
+            raise F.LookInputError("a stage-1 output may not be named PUBLIC.json or lie under RESTRICTED: those "
+                                   "are stage 2's public record and its reservation")
+
+
 def span_dirs(custody, pairs):
     m = {}
     for p in pairs or []:
@@ -163,7 +173,7 @@ def span_dirs(custody, pairs):
     return lambda sid: m.get(sid, Path(custody) / sid)
 
 
-def run_verifier(doc, pins, pins_path, pins_sha, span_ids, sdir_of, a):
+def run_verifier(doc, pins, pins_path, pins_sha, span_ids, sdir_of):
     """RL-194a section 1: the hash-only verifier, as its own process, before this stage parses anything. It reads
     every pinned file as opaque bytes; this process reads back only its result file (``pass`` or ``fail``, and for
     each path the pinned and observed digests) and refuses unless that covers exactly the pinned files and every
@@ -174,8 +184,11 @@ def run_verifier(doc, pins, pins_path, pins_sha, span_ids, sdir_of, a):
     if verifier.resolve() != verifier or not verifier.is_file() or sha256_file(verifier) != pinned.get(M.VERIFIER_PATH):
         raise F.LookInputError("custody pins: the verifier is not at its manifest pin")
     result = None
+    # The result is read back from a directory this process made and removes. No caller names where it goes: a
+    # refused run leaves no file anywhere (audit 1 on 2082c1a51: a result written at the public destination made
+    # the next registered execution refuse, with no reservation taken).
     with tempfile.TemporaryDirectory(prefix="jw-look-verify-") as tmp:
-        out = Path(getattr(a, "verification_out", None) or Path(tmp) / "verification.json")
+        out = Path(tmp) / "verification.json"
         argv = [sys.executable, "-I", "-B", str(verifier), "--pins", str(pins_path), "--pins-sha256", pins_sha,
                 "--out", str(out)]
         for sid in span_ids:
@@ -194,21 +207,11 @@ def run_verifier(doc, pins, pins_path, pins_sha, span_ids, sdir_of, a):
         raise F.LookInputError("custody pins: " + (problems[0] if problems else "the verifier did not pass"))
 
 
-def admit_custody(a, span_ids, sdir_of, stack, *, streams):
-    """RL-194 conditions 1 to 3 as RL-194a amends them, the first act of stage 1 and of stage 2 on custody, before
-    any roster file is parsed and before the reservation:
-
-    1. the pins are the manifest's (``inputs.pins``; only a synthetic ``--allow-draft`` run may name its own list),
-       they name exactly the roster's spans, and in a committed run each span's public RUN_STATE Check item names
-       its offload manifest;
-    2. the separate hash-only verifier process checks every pinned file (``run_verifier``);
-    3. this process then reads each operational file once, checks its pin and keeps those bytes, and checks each
-       span directory by name (``PinnedCustody.verify``). It opens no stream for that.
-
-    For the rest of the stage every read of a roster path goes through the pins (``stack`` holds the guard open):
-    an operational file is served from its verified bytes, and a stream is read from disk (``streams="pass"``,
-    stage 1) or re-checked against its pin at each open, immediately before it is decoded (``"verify"``, stage 2).
-    Returns (the admitted custody, the pin list's path, the pin list's sha256)."""
+def load_pins(a, span_ids):
+    """RL-194 condition 2, before anything of custody is touched (a span directory, an archive, a staging root):
+    the pin list is the manifest's (``inputs.pins``; only a synthetic ``--allow-draft`` run may name its own), it
+    names exactly the roster's spans, and in a committed run each span's public RUN_STATE Check item names its
+    offload manifest. Returns (the pin list, its path, its sha256)."""
     doc, _ = _VERIFIED[0]
     try:
         if getattr(a, "custody_pins", None):
@@ -220,6 +223,7 @@ def admit_custody(a, span_ids, sdir_of, stack, *, streams):
         else:
             pins, pins_sha = M.input_pins(ROOT, doc, complete=True)
             pins_path = ROOT / doc["inputs"]["pins"]["path"]
+        PINS.require_roster(pins, span_ids)
         if getattr(a, "run_state", None) and not a.allow_draft:
             raise F.LookInputError("--run-state names a RUN_STATE other than the public one; only with --allow-draft")
         if not a.allow_draft or getattr(a, "run_state", None):
@@ -228,8 +232,29 @@ def admit_custody(a, span_ids, sdir_of, stack, *, streams):
             unchained = PINS.check_chain_problems(pins, text)
             if unchained:
                 raise F.LookInputError("custody pins: " + "; ".join(unchained[:4]))
+    except PINS.PinRefusal as exc:
+        raise F.LookInputError(f"custody pins: {exc}") from None
+    return pins, pins_path, pins_sha
+
+
+def admit_custody(a, span_ids, sdir_of, stack, *, streams, loaded=None):
+    """RL-194 conditions 1 to 3 as RL-194a amends them, the first act of stage 1 and of stage 2 on custody, before
+    any roster file is parsed and before the reservation:
+
+    1. the pin list is admitted (``load_pins``; ``loaded`` when the stage has already done so);
+    2. the separate hash-only verifier process checks every pinned file (``run_verifier``);
+    3. this process then reads each operational file once, checks its pin and keeps those bytes, and checks each
+       span directory by name (``PinnedCustody.verify``). It opens no stream for that.
+
+    For the rest of the stage every read of a roster path goes through the pins (``stack`` holds the guard open):
+    an operational file is served from its verified bytes, and a stream is read from disk (``streams="pass"``,
+    stage 1) or re-checked against its pin at each open, immediately before it is decoded (``"verify"``, stage 2).
+    Returns (the admitted custody, the pin list's path, the pin list's sha256)."""
+    doc, _ = _VERIFIED[0]
+    pins, pins_path, pins_sha = loaded if loaded is not None else load_pins(a, span_ids)
+    try:
         custody = PINS.PinnedCustody(pins, span_ids, sdir_of, streams=streams)
-        run_verifier(doc, pins, pins_path, pins_sha, span_ids, sdir_of, a)
+        run_verifier(doc, pins, pins_path, pins_sha, span_ids, sdir_of)
         custody.verify()
     except PINS.PinRefusal as exc:
         raise F.LookInputError(f"custody pins: {exc}") from None
@@ -238,107 +263,70 @@ def admit_custody(a, span_ids, sdir_of, stack, *, streams):
     return custody, pins_path, pins_sha
 
 
-def stage_archive(span_id, archive, manifest, marker, staging_root):
-    """RL-174 D.3: expand a pulled, decrypted #804 archive; hash bytes, decode no measurement.
+_STAGING_REASON = re.compile(r"[A-Za-z0-9 ;,()'-]{1,120}")
 
-    The existing marker binds the exact SHA256SUMS bytes (``hash  ./relative/path``) and the archive.
-    Publish a new span directory only after all files match. The supplied marker is the upstream
-    custody handoff; this offline step neither contacts the provider nor decrypts ciphertext.
 
-    Each member's digest is taken from the bytes as they are written, in one pass: an expanded file is never
-    opened again here. Under RL-194 the per-file hashes of this SHA256SUMS are the look's content pins, so what
-    this step writes is what stage 1's first act then reads back and compares (``custody_pins``)."""
-    import tarfile
-    from pathlib import PurePosixPath
+def stage_archive(span_id, archive, manifest, marker, staging_root, *, manifest_sha256, doc=None):
+    """RL-174 D.3: expand a pulled, decrypted #804 archive into a new span directory, by the pinned hash-only
+    staging process (``scripts/cadence_look_stage_archive.py``). The archive holds the span's traces, telemetry and
+    meter streams, so this process never opens it, hashes it or writes a member (RL-179 F-12; RL-194a section 1).
+
+    ``manifest_sha256`` is the span's pinned offload manifest digest. The staging process refuses unless the
+    supplied SHA256SUMS has exactly that digest, before it reads anything else: staging follows the pins, it does
+    not come before them. It then checks the marker and the archive, hashes each member as it is written and
+    publishes the span directory only after every file matches. Stage 1's ordinary first act (the verifier, then
+    the operational files) reads the copy back afterwards. Returns the staging record: three digests and a count."""
+    import subprocess
 
     def refuse(reason):
         raise F.LookInputError(f"staging: {span_id}: {reason}")
 
-    def relative(name):
-        p = PurePosixPath(name)
-        if not name or p.is_absolute() or any(x in ("", ".", "..") for x in name.split("/")):
-            refuse("unsafe archive or manifest path")
-        return p
-
     if not isinstance(span_id, str) or not re.fullmatch(r"[a-zA-Z0-9][a-zA-Z0-9._-]*", span_id):
         refuse("invalid span id")
-    try:
-        mraw, kraw = Path(manifest).read_bytes(), Path(marker).read_bytes()
-        mark = json.loads(kraw)
-        msha = hashlib.sha256(mraw).hexdigest()
-        if (mark.get("schema") != "joulewise.span_offload_marker.v1"
-                or mark.get("provider_confirmed") is not True or mark.get("manifest_sha256") != msha):
-            refuse("manifest does not match the verified marker")
-        top = mark.get("span_name")
-        if not isinstance(top, str) or len(relative(top).parts) != 1 or top != span_id:
-            refuse("marker span name differs from the roster span")
-        expected = {}
-        for line in mraw.decode("utf-8").splitlines():
-            match = re.fullmatch(r"([0-9a-f]{64})  \./(.+)", line)
-            if not match:
-                refuse("invalid per-file manifest")
-            digest, name = match.groups()
-            relative(name)
-            if name in expected:
-                refuse("duplicate manifest file")
-            expected[name] = digest
-        if not expected or mark.get("manifest_files") != len(expected):
-            refuse("manifest file count differs from the marker")
-        root = Path(staging_root)
-        root.mkdir(parents=True, exist_ok=True)
-        destination = root / span_id
-        if destination.exists() or destination.is_symlink():
-            refuse("staged span already exists; use a fresh staging root")
-        with tempfile.TemporaryDirectory(prefix=".look-stage-", dir=root) as tmp:
-            tmp = Path(tmp)
-            # Hash the same open archive later expanded. No time-field reader sees compressed bytes.
-            with open(archive, "rb") as source:
-                archive_sha = hashlib.file_digest(source, "sha256").hexdigest()
-                if archive_sha != mark.get("archive_sha256"):
-                    refuse("archive does not match the marker")
-                source.seek(0)
-                with tarfile.open(fileobj=source, mode="r:*") as tar:
-                    seen, files = set(), set()
-                    for member in tar:
-                        parts = relative(member.name).parts
-                        if parts[0] != top or member.name in seen:
-                            refuse("unexpected or duplicate archive member")
-                        seen.add(member.name)
-                        path = tmp.joinpath(*parts)
-                        if member.isdir():
-                            path.mkdir(parents=True, exist_ok=True)
-                        elif member.isfile():
-                            name = "/".join(parts[1:])
-                            if name not in expected:
-                                refuse("archive file absent from the manifest")
-                            path.parent.mkdir(parents=True, exist_ok=True)
-                            written = hashlib.sha256()
-                            with tar.extractfile(member) as src, path.open("xb") as dst:
-                                while chunk := src.read(1 << 20):
-                                    written.update(chunk)
-                                    dst.write(chunk)
-                            if written.hexdigest() != expected[name]:
-                                refuse("staged file sha256 differs from the manifest")
-                            files.add(name)
-                        else:
-                            refuse("archive member is not a regular file or directory")
-            if files != set(expected):
-                refuse("archive file set differs from the manifest")
-            (tmp / top).rename(destination)
-        return {"span_id": span_id, "archive_sha256": archive_sha, "manifest_sha256": msha,
-                "marker_sha256": hashlib.sha256(kraw).hexdigest(), "files_verified": len(expected)}
-    except (OSError, ValueError, KeyError, TypeError, tarfile.TarError, UnicodeError) as exc:
-        if isinstance(exc, F.LookInputError):
-            raise
-        refuse(f"cannot verify or expand archive ({type(exc).__name__})")
+    if not isinstance(manifest_sha256, str) or not re.fullmatch(r"[0-9a-f]{64}", manifest_sha256):
+        refuse("no pinned offload manifest digest")
+    stager = ROOT / M.STAGER_PATH
+    if doc is not None:
+        pinned = {path: sha for _, path, sha in M.code_refs(doc)}
+        if stager.resolve() != stager or not stager.is_file() or sha256_file(stager) != pinned.get(M.STAGER_PATH):
+            refuse("the staging process is not at its manifest pin")
+    result = None
+    with tempfile.TemporaryDirectory(prefix="jw-look-stage-") as tmp:
+        out = Path(tmp) / "staging.json"
+        argv = [sys.executable, "-I", "-B", str(stager), "--span-id", span_id, "--archive", str(archive),
+                "--manifest", str(manifest), "--marker", str(marker), "--manifest-sha256", manifest_sha256,
+                "--staging-root", str(staging_root), "--out", str(out)]
+        try:
+            done = subprocess.run(argv, stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                                  stderr=subprocess.DEVNULL, check=False)
+            if done.returncode in (0, 1):
+                result = json.loads(out.read_bytes())
+        except (OSError, ValueError):
+            result = None
+    if (not isinstance(result, dict) or set(result) != {"schema", "result", "reason", "record"}
+            or result["schema"] != "joulewise.cadence_look_staging.v1"):
+        refuse("the staging process did not produce its result")
+    if result["result"] != "staged" or done.returncode != 0:
+        reason = result["reason"]
+        refuse(reason if isinstance(reason, str) and _STAGING_REASON.fullmatch(reason) else "refused")
+    record = result["record"]
+    digests = ("archive_sha256", "manifest_sha256", "marker_sha256")
+    if (not isinstance(record, dict) or set(record) != {"span_id", "files_verified", *digests}
+            or record["span_id"] != span_id or record["manifest_sha256"] != manifest_sha256
+            or type(record["files_verified"]) is not int
+            or not all(isinstance(record[key], str) and re.fullmatch(r"[0-9a-f]{64}", record[key]) for key in digests)):
+        refuse("the staging process did not produce its result")
+    return record
 
 
-def stage_custody(a, roster):
-    """Optional stage-1 plan: [{span_id, archive, manifest, marker}]. Paths are local pulled copies."""
+def stage_custody(a, roster, pins):
+    """Optional stage-1 plan: [{span_id, archive, manifest, marker}]. Paths are local pulled copies. ``pins`` is the
+    admitted pin list: a span is expanded only against the offload manifest digest its pins carry."""
     if not getattr(a, "stage_archives", None):
         return []
     plan = _json(a.stage_archives)
     allowed = {span["span_id"] for span in roster}
+    pinned = {span["span_id"]: span["offload_manifest_sha256"] for span in pins["spans"]}
     seen = {p.partition("=")[0] for p in a.span_dir or []}
     records = []
     if not isinstance(plan, list) or not plan:
@@ -347,10 +335,13 @@ def stage_custody(a, roster):
         if not isinstance(entry, dict) or set(entry) != {"span_id", "archive", "manifest", "marker"}:
             raise F.LookInputError("staging plan: expected span_id, archive, manifest and marker")
         sid = entry["span_id"]
-        if sid not in allowed or sid in seen:
+        if sid not in allowed or sid in seen or sid not in pinned:
             raise F.LookInputError("staging plan: duplicate, overridden or unrostered span")
         seen.add(sid)
-        records.append(stage_archive(sid, entry["archive"], entry["manifest"], entry["marker"], a.staging_root))
+    for entry in plan:                  # every plan row is checked before the first archive is expanded
+        sid = entry["span_id"]
+        records.append(stage_archive(sid, entry["archive"], entry["manifest"], entry["marker"], a.staging_root,
+                                     manifest_sha256=pinned[sid], doc=_VERIFIED[0][0]))
         a.span_dir = list(a.span_dir or []) + [f"{sid}={Path(a.staging_root) / sid}"]
     return records
 
@@ -1030,13 +1021,16 @@ def _stage1(a, stack):
         roster = _json(a.roster)
         if not isinstance(roster, list) or not all(isinstance(s, dict) and isinstance(s.get("span_id"), str) for s in roster):
             raise F.LookInputError("roster: not a list of spans")
-        staging = stage_custody(a, roster)
-        # RL-194 and RL-194a: before any roster file is parsed, the verifier process has checked every pinned
-        # file and this process has checked the operational ones it parses. Stage 1 hashes no energy stream
-        # (RL-179 F-12) and records nothing of the pin list: its output stays a function of time fields and
-        # operational files alone, and a committed run's manifest hash already names the list.
-        admit_custody(a, [span["span_id"] for span in roster], span_dirs(a.custody, a.span_dir), stack,
-                      streams="pass")
+        # RL-194 and RL-194a, in this order. (1) The pin list is admitted before anything of custody is touched.
+        # (2) A staged span is expanded by the staging process, against the offload manifest digest its pins
+        # carry. (3) The verifier process checks every pinned file and this process the operational ones it
+        # parses. Stage 1 opens and hashes no energy stream and no archive (RL-179 F-12) and records nothing of
+        # the pin list: its output stays a function of time fields and operational files alone, and a committed
+        # run's manifest hash already names the list.
+        ids = [span["span_id"] for span in roster]
+        loaded = load_pins(a, ids)
+        staging = stage_custody(a, roster, loaded[0])
+        admit_custody(a, ids, span_dirs(a.custody, a.span_dir), stack, streams="pass", loaded=loaded)
         rules34 = _json(a.rules_3_4)
         if ruled and not a.allow_draft:
             old_input, old_ruled = superseded_source(a, row)
@@ -1063,9 +1057,7 @@ def _stage1(a, stack):
                 raise F.LookInputError("a ruled rerun changes sources beyond the named exclusions")
         data = F.dump(look_input)
         input_sha = hashlib.sha256(data).hexdigest()
-        if a.write_input:
-            with open(a.write_input, "wb") as f:
-                f.write(data)
+        a.look_input_bytes = data       # --write-input is written with --out, after every check has passed
         extra = {"roster_sha256": sha256_file(a.roster), "rules_3_4_sha256": sha256_file(a.rules_3_4)}
     if a.allow_draft and look_input.get("synthetic") is not True:
         raise F.LookInputError("--allow-draft runs on synthetic input only (Mythos N2)")
@@ -1182,6 +1174,10 @@ def stage2_overrides(pairs, stage1):
         sid, separator, location = pair.partition("=")
         if not separator or not location or sid not in registered or sid in overrides:
             raise F.LookInputError("stage 2: each span override must name a distinct roster span and directory")
+        # Judged as supplied, before anything resolves it: the verifier, the stage's own check and the twin's
+        # wrapper all refuse a linked span directory, and none of them may be handed the link's target instead.
+        if os.path.islink(os.path.normpath(location)):     # normpath: "link/" would otherwise be followed
+            raise F.LookInputError(f"stage 2: the span override for {sid} is a symlink")
         overrides[sid] = Path(location).resolve()
     if len(set(overrides.values())) != len(overrides):
         raise F.LookInputError("stage 2: span overrides must identify distinct directories")
@@ -1393,8 +1389,6 @@ def main(argv=None, *, keep_redirected=False):
                                               "the manifest's (RL-194)")
         p.add_argument("--run-state", help="with --allow-draft only: a synthetic RUN_STATE whose Check items the "
                                            "pin list chains to")
-        p.add_argument("--verification-out", help="keep the hash-only verifier's result file here (pass or fail and, "
-                                                  "for each path, the pinned and observed digests; RL-194a)")
         p.add_argument("--manifest", required=True, help="the look manifest whose pins the running code must match")
         p.add_argument("--allow-draft", action="store_true", help="synthetic runs: accept a draft manifest")
     a = ap.parse_args(argv)
@@ -1403,6 +1397,8 @@ def main(argv=None, *, keep_redirected=False):
     if a.cmd == "stage1" and (bool(a.stage_archives) != bool(a.staging_root) or (a.stage_archives and a.input)):
         ap.error("--stage-archives and --staging-root must be used together with --roster")
     try:
+        if a.cmd == "stage1":
+            release_names(a.out, a.write_input, a.staging_root)
         if a.cmd == "host-id":
             print(M.execution_host())
             return 0
@@ -1432,6 +1428,10 @@ def main(argv=None, *, keep_redirected=False):
         probs = M.stage1_problems(ROOT, doc, out, sha256_file(a.manifest), allow_draft=a.allow_draft)
         if probs:
             raise F.LookInputError("stage 1's own output: " + "; ".join(probs))
+        # Stage 1's only writes at a name its caller chose, and only now: a refused run has created no file
+        if a.write_input and getattr(a, "look_input_bytes", None) is not None:
+            with open(a.write_input, "wb") as f:
+                f.write(a.look_input_bytes)
         sha = write_canonical(a.out, out)
     except F.LookInputError as exc:
         print(f"REFUSED {exc}", file=sys.stderr)

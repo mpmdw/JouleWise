@@ -6,11 +6,14 @@
         [--span-dir SPAN_ID=PATH ...] [--run-state RUN_STATE.md] --seat-model NAME --seat-family NAME
         --out RECORD.json
     python3 -B scripts/cadence_look_input_review.py check RECORD.json --manifest MANIFEST.json --repo DIR
+        [--run-state RUN_STATE.md]
 
 ``template`` prints the record with every slot the seat and the lead fill left null. ``review`` is the executing
-seat's run. It opens operational files only (each span's receipt, soak reference, leg records and summaries and the
-selected bundles' journals), every one through its pin: the bytes are read once, hashed, compared with the pin and
-only then decoded. A trace, telemetry or meter file is bound by its pin and never opened here. For each receipt it
+seat's run. Its first act is the stage's own (``custody_pins.PinnedCustody.verify``): every span directory holds
+exactly its pinned files by name, with no symlink at any depth, and each operational file (each span's receipt, soak
+reference, leg records and summaries and the bundles' journals) is read once, hashed and compared with its pin. Only
+those bytes are decoded, and a number under an energy-named member is not decoded at all
+(``custody_pins.operational_json``). A trace, telemetry or meter file is bound by its pin and never opened here. For each receipt it
 records the shape found for RL-184 section 3.3's F01 to F05, the pinned writer's file and lines that produce the
 shape, and whether the shape is one the rule admits; the criteria are the rule's as written, and nothing is decided
 on seeing a file. The span's verdict is the pinned grammar validator's. The desk's verdict is the lead's to copy in
@@ -19,13 +22,13 @@ manifest (RL-194a section 2): the full digest, the text exactly as the Check pri
 for any second record made at the time, which is cited when one exists and is not required. ``--run-state`` reads a
 file; the default is RUN_STATE.md on origin/main. ``check`` requires a filled record to carry the manifest's pins, every slot, and the same
 verdict from the desk and the seat on every span; a disagreement or an inadmissible span goes to the research lead as
-a count and a shape before anything is changed.
+a count and a shape before anything is changed. It reads the same RUN_STATE and requires each span's ``check`` to be
+what that Check item prints: a record cannot claim a digest, or a spelling of one, that the item does not carry.
 """
 from __future__ import annotations
 
 import argparse
 from datetime import date
-import hashlib
 import json
 import os
 from pathlib import Path
@@ -53,33 +56,23 @@ CRITERIA = ("RL-184 section 3.3's rule and F01 to F05 as written; operational fi
 
 
 class PinnedOperational:
-    """One span's operational files, each read once through its pin. Anything else is not opened."""
+    """One span's operational files as the admitted custody holds them: bytes already read once and checked against
+    their pins. Anything else is not opened."""
 
-    def __init__(self, span, directory, opened):
-        self.span, self.directory, self.opened = span, Path(directory), opened
-        self.pins = {entry["path"]: entry for entry in span["files"]}
-        self.cache = {}
+    def __init__(self, span, custody):
+        self.span, self.custody = span, custody
+        self.pins = {entry["path"] for entry in span["files"]}
 
     def exists(self, rel):
         return rel in self.pins
 
     def read(self, rel):
-        if rel in self.cache:
-            return self.cache[rel]
+        sid = self.span["span_id"]
         if not lm.is_operational_path(rel):
-            raise custody_pins.PinRefusal(f"{self.span['span_id']}/{rel}: not an operational file; the review does not open it")
-        pin = self.pins.get(rel)
-        if pin is None:
+            raise custody_pins.PinRefusal(f"{sid}/{rel}: not an operational file; the review does not open it")
+        if rel not in self.pins:
             return None                              # an optional operational file the span does not have
-        path = self.directory.joinpath(*rel.split("/"))
-        if path.is_symlink():
-            raise custody_pins.PinRefusal(f"{self.span['span_id']}/{rel}: a symlink")
-        data = path.read_bytes()
-        if len(data) != pin["size"] or hashlib.sha256(data).hexdigest() != pin["sha256"]:
-            raise custody_pins.PinRefusal(f"{self.span['span_id']}/{rel}: its bytes are not its pin")
-        self.opened.append(f"{self.span['span_id']}/{rel}")
-        self.cache[rel] = data
-        return data
+        return self.custody.read(sid, rel)
 
 
 def _spelling(locator):
@@ -177,11 +170,16 @@ def review(pin_list, pin_list_sha256, manifest_sha256, sdir_of, *, seat_model, s
     """The executing seat's record: shapes and verdicts from the operational files, each read through its pin, and
     how each span's Check item in ``run_state`` (the public RUN_STATE's text) prints its offload manifest digest."""
     record = template(pin_list, pin_list_sha256, manifest_sha256)
-    opened = []
+    ids = [span["span_id"] for span in pin_list["spans"]]
+    # The stage's own act, before anything is decoded: each span directory is its pin list by name (a symlink at
+    # any depth, a missing file or a file that is not pinned refuses) and each operational file is its pin.
+    custody = custody_pins.PinnedCustody(pin_list, ids, sdir_of, streams="pass")
+    custody.verify()
+    opened = [f"{sid}/{rel}" for (sid, rel) in custody.pins if lm.is_operational_path(rel)]
     for span, row in zip(pin_list["spans"], record["spans"]):
-        binding = custody_pins.check_binding(span, run_state)
+        binding = custody_pins.check_binding(span, run_state, ids)
         row["check"].update(as_printed=binding["as_printed"], form=binding["form"])
-        files = PinnedOperational(span, sdir_of(span["span_id"]), opened)
+        files = PinnedOperational(span, custody)
         try:
             receipt = admission.decode(files.read(admission.RECEIPT), f"{span['span_id']}/{admission.RECEIPT}")
             roster = receipt.get("roster") if isinstance(receipt, dict) else None
@@ -205,10 +203,13 @@ def review(pin_list, pin_list_sha256, manifest_sha256, sdir_of, *, seat_model, s
     return record
 
 
-def record_problems(record, pin_list, pin_list_sha256, manifest_sha256):
-    """Problems of a filled record against the manifest's pins. A disagreement between the desk and the seat, or an
-    inadmissible span, is a problem here: it goes to the research lead before anything is changed."""
+def record_problems(record, pin_list, pin_list_sha256, manifest_sha256, run_state):
+    """Problems of a filled record against the manifest's pins and the public RUN_STATE's text (``run_state``). A
+    disagreement between the desk and the seat, or an inadmissible span, is a problem here: it goes to the research
+    lead before anything is changed. Each span's ``check`` must be what its Check item prints, read here from the
+    RUN_STATE itself and not from the record."""
     problems = []
+    ids = [span["span_id"] for span in pin_list["spans"]]
     if not isinstance(record, dict) or record.get("schema") != SCHEMA or record.get("look_id") != lm.INTERIM_LOOK_ID:
         return ["the record is not a joulewise.cadence_look_input_review.v1 record of lm-interim-01"]
     header = record.get("header") or {}
@@ -242,17 +243,15 @@ def record_problems(record, pin_list, pin_list_sha256, manifest_sha256):
         if any(row.get(key) != span[key] for key in custody_pins.SPAN_KEYS):
             problems.append(f"{sid}: its pins or Check items are not the manifest's")
         check = row.get("check") or {}
-        printed = check.get("as_printed")
+        binding = custody_pins.check_binding(span, run_state, ids)
         if check.get("item") != span["check_item"] or check.get("offload_manifest_sha256") != span["offload_manifest_sha256"]:
             problems.append(f"{sid}: check does not carry the manifest's Check item and full offload manifest digest")
-        elif check.get("form") == "full" and printed == span["offload_manifest_sha256"]:
-            pass
-        elif check.get("form") == "abbreviated" and isinstance(printed, str) and custody_pins.check_binding(
-                span, f"{span['check_item']}. **as printed** {printed}\n")["as_printed"] == printed:
-            pass
-        else:
+        elif binding["form"] not in ("full", "abbreviated"):
             problems.append(f"{sid}: its Check item does not print a digest every character of which matches; the "
                             "span is held and returns to the research lead")
+        elif check.get("as_printed") != binding["as_printed"] or check.get("form") != binding["form"]:
+            problems.append(f"{sid}: check.as_printed and check.form are not what Check item {span['check_item']} "
+                            "prints for the span's manifest")
         if check.get("second_record") is not None and not (isinstance(check["second_record"], str) and check["second_record"]):
             problems.append(f"{sid}: check.second_record is a citation or null")
         shapes = ((row.get("receipt") or {}).get("shapes") or {})
@@ -301,7 +300,8 @@ def main(argv=None):
     run = sub.choices["review"]
     run.add_argument("--custody", required=True)
     run.add_argument("--span-dir", action="append", default=[])
-    run.add_argument("--run-state")
+    for command in (run, sub.choices["check"]):
+        command.add_argument("--run-state", help="a RUN_STATE file; the default is RUN_STATE.md on origin/main")
     run.add_argument("--seat-model", required=True)
     run.add_argument("--seat-family", required=True)
     run.add_argument("--out", required=True)
@@ -311,8 +311,11 @@ def main(argv=None):
         if args.cmd == "template":
             sys.stdout.buffer.write(dump(template(pin_list, sha, manifest_sha)))
             return 0
+        run_state = (Path(args.run_state).read_text(encoding="utf-8") if args.run_state
+                     else lm.public_run_state(args.repo))
         if args.cmd == "check":
-            problems = record_problems(json.loads(Path(args.record).read_bytes()), pin_list, sha, manifest_sha)
+            problems = record_problems(json.loads(Path(args.record).read_bytes()), pin_list, sha, manifest_sha,
+                                       run_state)
             for problem in problems:
                 print(f"REFUSE {problem}")
             if not problems:
@@ -320,8 +323,6 @@ def main(argv=None):
                       f"executing seat agree on all; record sha256 {lm.sha256_file(Path(args.record))}")
             return 1 if problems else 0
         overrides = dict(pair.partition("=")[::2] for pair in args.span_dir)
-        run_state = (Path(args.run_state).read_text(encoding="utf-8") if args.run_state
-                     else lm.public_run_state(args.repo))
         record = review(pin_list, sha, manifest_sha,
                         lambda sid: Path(overrides.get(sid) or os.path.join(args.custody, sid)),
                         run_state=run_state, seat_model=args.seat_model, seat_family=args.seat_family,

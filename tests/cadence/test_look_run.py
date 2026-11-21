@@ -257,24 +257,29 @@ class Staging(unittest.TestCase):
                                      "archive_sha256": R.sha256_file(archive)}))
         return sid, archive, manifest, marker
 
+    @staticmethod
+    def stage(args, staging_root, manifest_sha256=None):
+        """Stage 1's launcher of the staging process, against the SHA256SUMS digest a pin list would carry."""
+        return R.stage_archive(*args, staging_root, manifest_sha256=manifest_sha256 or R.sha256_file(args[2]))
+
     def test_verifies_every_file_and_records_hash_chain(self):
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
             args = self.pack(root)
-            record = R.stage_archive(*args, root / "stage")
+            record = self.stage(args, root / "stage")
             self.assertEqual(record, {"span_id": args[0], "archive_sha256": R.sha256_file(args[1]),
                                      "manifest_sha256": R.sha256_file(args[2]),
                                      "marker_sha256": R.sha256_file(args[3]), "files_verified": 2})
             self.assertEqual((root / "stage" / args[0] / "nested/opaque.bin").read_bytes(), b"synthetic\x00\xff")
             with self.assertRaisesRegex(F.LookInputError, "already exists"):
-                R.stage_archive(*args, root / "stage")
+                self.stage(args, root / "stage")
 
     def test_one_changed_byte_refuses_before_publishing(self):
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
             args = self.pack(root, changed=True)  # archive hash is valid; a file differs by exactly one byte
             with self.assertRaisesRegex(F.LookInputError, "staged file sha256 differs"):
-                R.stage_archive(*args, root / "stage")
+                self.stage(args, root / "stage")
             self.assertEqual(list((root / "stage").iterdir()), [])
 
     def test_manifest_and_archive_must_match_marker(self):
@@ -285,7 +290,7 @@ class Staging(unittest.TestCase):
                 path = args[target]
                 path.write_bytes(path.read_bytes() + b"x")
                 with self.assertRaisesRegex(F.LookInputError, "does not match"):
-                    R.stage_archive(*args, root / "stage")
+                    self.stage(args, root / "stage")
                 self.assertFalse((root / "stage" / args[0]).exists())
 
     def test_unsafe_paths_refuse(self):
@@ -293,8 +298,82 @@ class Staging(unittest.TestCase):
             root = Path(td)
             args = self.pack(root, {"../escape": b"synthetic"})
             with self.assertRaisesRegex(F.LookInputError, "unsafe"):
-                R.stage_archive(*args, root / "stage")
+                self.stage(args, root / "stage")
             self.assertFalse((root / "escape").exists())
+
+    def test_a_sums_file_that_is_not_the_pinned_offload_manifest_refuses_before_anything_else_is_read(self):
+        """Audit 1 on 2082c1a51: staging ran before the pin list was admitted. It now follows the pins: the
+        SHA256SUMS must be the span's pinned offload manifest, and that is the first thing the staging process
+        checks, before the marker, the archive or the staging root."""
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            args = self.pack(root)
+            for label, pinned in (("another span's manifest", hashlib.sha256(b"another manifest").hexdigest()),
+                                  ("one digit off", ("0" if R.sha256_file(args[2])[0] != "0" else "1")
+                                   + R.sha256_file(args[2])[1:])):
+                with self.subTest(label), self.assertRaisesRegex(F.LookInputError, "not the span's pinned offload manifest"):
+                    self.stage(args, root / "stage", pinned)
+                self.assertFalse((root / "stage").exists())               # not even the staging root was made
+            os.chmod(args[1], 0)                      # and neither the archive nor the marker was needed to refuse
+            args[3].unlink()
+            try:
+                with self.assertRaisesRegex(F.LookInputError, "not the span's pinned offload manifest"):
+                    self.stage(args, root / "stage", "0" * 64)
+            finally:
+                os.chmod(args[1], 0o600)
+            for bad in (None, "", "0" * 63, "g" * 64):
+                with self.subTest(pinned=bad), self.assertRaisesRegex(F.LookInputError, "no pinned offload manifest digest"):
+                    R.stage_archive(*args, root / "stage", manifest_sha256=bad)
+
+    def test_the_stage_s_own_process_opens_no_archive_and_writes_no_member(self):
+        """RL-179 F-12 as RL-194a keeps it: stage 1 opens and hashes no energy file. The archive holds the span's
+        traces and meter streams, so the process that reads it is the staging process, never the stage."""
+        import sys
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            args = self.pack(root, self.span_files())
+            opened, recording = [], [True]
+
+            def hook(event, hook_args):
+                if recording[0] and event == "open" and hook_args and isinstance(hook_args[0], (str, bytes, os.PathLike)):
+                    opened.append(os.path.realpath(os.fsdecode(hook_args[0])))
+            sys.addaudithook(hook)
+            try:
+                record = self.stage(args, root / "stage")
+            finally:
+                recording[0] = False
+            self.assertEqual(record["files_verified"], len(self.span_files()))
+            staged = os.path.realpath(root / "stage")
+            self.assertTrue(all((root / "stage" / args[0] / name).is_file() for name in self.span_files()))
+            self.assertNotIn(os.path.realpath(args[1]), opened)                          # the archive
+            self.assertFalse([path for path in opened if path == staged or path.startswith(staged + os.sep)])
+            self.assertFalse([path for path in opened if Path(path).name in {Path(n).name for n in self.PROTECTED}])
+
+    def test_the_staging_process_holds_no_decoder_and_imports_no_look_code(self):
+        import ast
+        source = (REPO / "scripts/cadence_look_stage_archive.py").read_text(encoding="utf-8")
+        imported = set()
+        for node in ast.walk(ast.parse(source)):
+            if isinstance(node, ast.Import):
+                imported |= {alias.name.split(".")[0] for alias in node.names}
+            elif isinstance(node, ast.ImportFrom):
+                imported.add((node.module or "").split(".")[0])
+        self.assertEqual(imported, {"hashlib", "json", "os", "pathlib", "re", "sys", "tarfile", "tempfile"})
+
+    def test_the_staging_process_creates_its_result_and_never_replaces_a_file(self):
+        import subprocess
+        import sys
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            args = self.pack(root)
+            taken = root / "PUBLIC.json"
+            taken.write_bytes(b"kept\n")
+            done = subprocess.run([sys.executable, "-I", "-B", str(REPO / "scripts/cadence_look_stage_archive.py"),
+                                   "--span-id", args[0], "--archive", str(args[1]), "--manifest", str(args[2]),
+                                   "--marker", str(args[3]), "--manifest-sha256", "0" * 64,
+                                   "--staging-root", str(root / "stage"), "--out", str(taken)], capture_output=True)
+            self.assertEqual((done.returncode, done.stdout, done.stderr), (2, b"", b""))
+            self.assertEqual(taken.read_bytes(), b"kept\n")
 
 
     PROTECTED = ("legs/L001/runtime/run/power_trace.csv", "legs/L001/runtime/run/raw/powermetrics.plist",
@@ -320,9 +399,10 @@ class Staging(unittest.TestCase):
             def hook(event, hook_args):
                 if recording[0] and event == "open" and hook_args and isinstance(hook_args[0], (str, bytes, os.PathLike)):
                     opened.append((os.fsdecode(hook_args[0]), hook_args[1]))
+            from scripts import cadence_look_stage_archive as stager      # the staging process's own code, in-process
             sys.addaudithook(hook)
             try:
-                record = R.stage_archive(*args, root / "stage")
+                record = stager.stage(*args, root / "stage", R.sha256_file(args[2]))
             finally:
                 recording[0] = False
             self.assertEqual(record["files_verified"], len(self.span_files()))

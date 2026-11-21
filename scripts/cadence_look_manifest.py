@@ -249,7 +249,10 @@ def public_row(repo, row):
 
 
 def _span_sizes(directory):
-    """{relative path: size} of a span directory from its entries alone: nothing is opened. A symlink refuses."""
+    """{relative path: size} of a span directory from its entries alone: nothing is opened. A symlink refuses, the
+    span directory itself included (judged as named, before anything follows it)."""
+    if os.path.islink(os.path.normpath(directory)) or not os.path.isdir(directory):
+        raise lm.custody_pins.PinRefusal(f"{directory}: the span directory is a symlink or not a directory")
     sizes, pending = {}, [""]
     while pending:
         prefix = pending.pop()

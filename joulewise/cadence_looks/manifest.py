@@ -70,6 +70,8 @@ INPUTS_PATH = "docs/process/cadence/looks/lm-interim-01.inputs.json"
 # RL-194a: the hash-only verifier process each stage runs first, and the wrapper that checks the pins for the twin
 # before the reviewed child runs byte-identical. Neither is imported by a stage; both are pinned look code.
 VERIFIER_PATH = "scripts/cadence_look_verify_inputs.py"
+# The process that expands a pulled span archive for stage 1 (RL-174 D.3): stage 1 never opens or hashes the archive
+STAGER_PATH = "scripts/cadence_look_stage_archive.py"
 TWIN_WRAPPER_PATH = "scripts/cadence_interim_twin_pins.py"
 LOOK_KINDS = {"interim", "qualification", "controls"}
 STATUSES = {"draft", "committed"}
@@ -101,6 +103,7 @@ REQUIRED_CODE_PATHS = {"interim": {"joulewise/cadence_looks/fit_interim.py", "jo
                                    # RL-194: stage 1's and stage 2's first act, the content pins of the roster's files
                                    "joulewise/cadence_looks/custody_pins.py",
                                    "scripts/cadence_look_verify_inputs.py",
+                                   "scripts/cadence_look_stage_archive.py",
                                    "scripts/cadence_interim_twin_pins.py"}}   # RL-166 Q1; Sol N3; RL-173 E.1; RL-194a
 
 # Which block phases each look may read, by role (RL-149 sections 2.3 and 2.6; RL-157 section 4).
@@ -305,26 +308,18 @@ class ManifestError(ValueError):
 def strict_json(raw):
     """Decode pinned writer JSON without ambiguous keys or nonfinite numbers. Bytes are UTF-8 as ``json.dump``
     writes them: ``json.loads`` alone would also guess UTF-16 or UTF-32 and skip a byte-order mark. Every refusal
-    is a ManifestError, so no caller mistakes text that is not JSON for an absent file."""
-    def unique(pairs):
-        result = dict(pairs)
-        if len(result) != len(pairs):
-            raise ManifestError(["writer JSON has duplicate keys"])
-        return result
-
-    def number(token):
-        value = float(token)
-        if not math.isfinite(value):
-            raise ManifestError(["writer JSON has a nonfinite number"])
-        return value
-
+    is a ManifestError, so no caller mistakes text that is not JSON for an absent file. A number under an
+    energy-named member is never converted (``custody_pins.operational_json``): its place holds
+    ``custody_pins.SHIELDED``."""
     try:
         if isinstance(raw, (bytes, bytearray)):
             raw = bytes(raw).decode("utf-8")
-        return json.loads(raw, object_pairs_hook=unique, parse_float=number, parse_constant=number)
-    except ManifestError:
-        raise
-    except (ValueError, RecursionError):
+        return custody_pins.operational_json(raw)
+    except custody_pins.OperationalJSONError as error:
+        raise ManifestError([{"duplicate": "writer JSON has duplicate keys",
+                              "nonfinite": "writer JSON has a nonfinite number"}.get(
+            error.reason, "writer JSON is not JSON as the pinned writers serialize it")]) from None
+    except ValueError:
         raise ManifestError(["writer JSON is not JSON as the pinned writers serialize it"]) from None
 
 

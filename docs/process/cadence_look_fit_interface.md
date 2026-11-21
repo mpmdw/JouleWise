@@ -467,28 +467,50 @@ file of every roster span by sha256 and size
   A changed, added, dropped or reordered pin breaks the chain in the pin list
   itself. `cadence_look_manifest.py pin-inputs` writes the file from the offload
   manifests and opens no custody file; `check-inputs` follows the chain.
-- **A separate verifier runs first (RL-194a §1).** `scripts/cadence_look_verify_inputs.py` is a hash-only
+- **The pin list comes first.** Before a stage touches custody (a span directory, an archive, a staging root)
+  it admits the pin list: the manifest's own, naming exactly the roster's spans, each chained to its Check.
+- **A separate verifier runs next (RL-194a §1).** `scripts/cadence_look_verify_inputs.py` is a hash-only
   process each stage launches before it parses anything and before the reservation. It imports no decoder and no
-  look code, reads every pinned file as opaque bytes, and writes one file: `pass` or `fail`, and for each path
-  the pinned and observed digests. A `fail` refuses with nothing consumed. `--verification-out` keeps the file.
+  look code, reads every pinned file as opaque bytes, and checks its digest and its byte count, so it requires
+  what stage 2's and the twin's reads require. It writes one new file in a directory the stage makes and
+  removes: `pass` or `fail`, and for each path the pinned and observed digests and a state word. A `fail`
+  refuses with nothing consumed. No caller names where that file goes.
+- **A pulled archive is staged by its own process** (`scripts/cadence_look_stage_archive.py`, RL-174 D.3), after
+  the pin list is admitted and only if the SHA256SUMS is the span's pinned offload manifest. Stage 1 never opens
+  or hashes the archive.
+- **Stage 1 writes `--out` and `--write-input` last,** after every check. A refused run creates no file, and
+  neither name may be `PUBLIC.json` or lie under `RESTRICTED`.
 - **Stage 1 never hashes an energy stream (RL-179 F-12).** After the verifier's pass the stage reads each
   operational file it parses once into memory, hashes it and compares, and parses those bytes. It checks each
   span directory by name: a missing or unpinned file or a symlink refuses. It reads a stream's time fields
   from disk, and only if the stream is pinned.
+- **Operational JSON never yields a number under an energy-named member.** The pinned controller writes the idle
+  baseline's mean power (`power_w_mean`) into `events.jsonl`, which both stages and the cold review parse before
+  the reservation. Every one of those decoders is `custody_pins.operational_json`: a number under a member named
+  as energy or power (the step-3 name rule) is left as a shield, never converted, and the grammar admits the
+  shield there.
 - **Stage 2 re-checks a stream's pin at each open,** immediately before decoding it, and decodes those bytes.
-  A mismatch there is inside the reservation and spends the look under RL-180's ordinary rule.
+  A mismatch there is inside the reservation and spends the look under RL-180's ordinary rule. A `--span-dir`
+  override that is a symlink refuses as supplied, before anything resolves it.
 - **An open of a roster path outside the pin list refuses,** and so does any open that bypasses the pinned
-  reads. A committed run also requires each span's Check item on `origin/main` to name its offload manifest:
-  in full, or by an abbreviation every printed character of which matches (RL-194a §2).
+  reads. A committed run also requires each span's Check item on `origin/main` to name its offload manifest
+  (RL-194a §2). The Check's digests for a span are those it prints as the span's manifest: after the item
+  names the span, the first digest labelled `manifest` (or `manifest_sha256`, or the `SHA256SUMS` file's name)
+  before it names another pinned span. A digest under another label (an archive's, a marker's) binds nothing.
+  The span binds when it has at least one and every printed character of each matches, in full or as an
+  abbreviation of any length; otherwise it is held.
 - **The twin.** The reviewed child is byte-identical to its #816 review. The parent launches
   `scripts/cadence_interim_twin_pins.py`, which checks every roster file against the pins with its own code
   and then becomes the child with the child's arguments untouched.
 - **Draft runs.** A synthetic `--allow-draft` run names its generated
   custody's pin list with `--custody-pins`, and a RUN_STATE with `--run-state`.
 - **The review record.** `scripts/cadence_look_input_review.py` produces the
-  one-time record RL-194 §1 specifies. The seat opens operational files only,
-  each through its pin. For each span it carries the full offload manifest
-  digest, the text exactly as the Check prints it and the item number. The form is
+  one-time record RL-194 §1 specifies. Its first act is the stage's: each span
+  directory is its pin list by name (no symlink at any depth) and each operational
+  file is its pin. It opens operational files only. For each span it carries the
+  full offload manifest digest, the text exactly as the Check prints it and the
+  item number; `check` reads the RUN_STATE and refuses a record whose text is not
+  what the item prints. The form is
   `docs/process/cadence/looks/lm-interim-01.input-review.template.json`.
 
 The grammar validator still runs on the admitted bytes, in both stages, as
