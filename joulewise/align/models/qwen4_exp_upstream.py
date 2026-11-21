@@ -52,6 +52,24 @@ _NGRAM_CONSTANTS = (
 
 _NGRAM_SHARD_RE = re.compile(r"\.ngram_embedding\.shard_(\d+)\.")
 
+_QUANTIZATION_SUPPORT = (
+    "qwen4_exp model_file supports unquantized or native MLX affine weight checkpoints"
+)
+
+
+def _check_affine_quantization(settings: Any, path: str) -> None:
+    if not isinstance(settings, dict):
+        raise ValueError(f"{_QUANTIZATION_SUPPORT}. Expected a mapping at {path}.")
+    mode = settings.get("mode", "affine")
+    if mode != "affine":
+        raise ValueError(f"{_QUANTIZATION_SUPPORT}. {path}.mode={mode!r} is unsupported.")
+    for key in ("quant_method", "format", "global_scale"):
+        if key in settings:
+            raise ValueError(f"{_QUANTIZATION_SUPPORT}. {path}.{key} is unsupported.")
+    for key, entry in settings.items():
+        if isinstance(entry, dict):
+            _check_affine_quantization(entry, f"{path}.{key}")
+
 
 @dataclass
 class TextArgs(BaseModelArgs):
@@ -115,6 +133,27 @@ class ModelArgs(BaseModelArgs):
     model_type: str
     text_config: dict[str, Any]
     text: TextArgs = field(init=False)
+
+    @classmethod
+    def from_dict(cls, params):
+        # Check before BaseModelArgs drops loader metadata and mlx-lm
+        # dispatches to the pinned quantized modules.
+        text_config = params.get("text_config", {})
+        for prefix, config in (("", params), ("text_config.", text_config)):
+            if config.get("quantize_activations"):
+                raise ValueError(f"{_QUANTIZATION_SUPPORT}. {prefix}quantize_activations is unsupported.")
+            for key in ("quantization", "quantization_config"):
+                settings = config.get(key)
+                if settings is None or (key == "quantization_config" and settings is False):
+                    continue
+                _check_affine_quantization(settings, prefix + key)
+        if params.get("quantization") is None and (
+            params.get("quantization_config")
+            or text_config.get("quantization_config")
+            or text_config.get("quantization")
+        ):
+            raise ValueError(f"{_QUANTIZATION_SUPPORT}. Affine weights require top-level quantization.")
+        return super().from_dict(params)
 
     def __post_init__(self) -> None:
         self.text = TextArgs.from_dict(self.text_config)
@@ -739,6 +778,13 @@ class Model(nn.Module):
                 continue
             if k.startswith(("model.visual.", "visual.", "vision_tower.")):
                 continue
+
+            # Affine checkpoints store floating scales. Reject floating-point
+            # quantization payloads even if their config omits the mode.
+            if k.endswith(".global_scale") or (
+                k.endswith(".scales") and not mx.issubdtype(v.dtype, mx.floating)
+            ):
+                raise ValueError(f"{_QUANTIZATION_SUPPORT}. Unsupported scale tensor {k!r}.")
 
             # Prefixes: HF `model.language_model.`, mlx-vlm `language_model.`.
             if k.startswith("model.language_model."):

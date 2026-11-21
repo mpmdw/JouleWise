@@ -13,7 +13,8 @@ The upstream parity runs use the installed mlx-lm source, unmodified. The
 vendored runtime test uses the JouleWise copy on its separate runtime pins.
 The vendor changes are absolute imports, eager annotations for the anonymous
 0.31.3 loader, the upstream `normalize_qk` helper and the DeltaNet kernel
-key-width guard absent in 0.31.3.
+key-width guard absent in 0.31.3. The vendor also validates the checkpoint's
+quantization against the supported formats on the pinned stack.
 
 ## Tiny matrix design
 
@@ -167,10 +168,16 @@ nice -n 10 "$WORK/venvs/mlx/bin/python" scripts/qwen4_upstream_probe.py "$WORK/t
 
 ## ALIGN model_file setup
 
-For a local upstream-layout mlx-lm checkpoint, copy
+For a local upstream-layout checkpoint with unquantized weights or native
+MLX affine quantized weights, copy
 [`qwen4_exp_upstream.py`](../../../joulewise/align/models/qwen4_exp_upstream.py)
 alongside its `config.json` and set `"model_file": "qwen4_exp_upstream.py"`.
 The source in the existing ALIGN model config remains the checkpoint directory.
+The loader rejects NVFP4, other non-affine modes, legacy quantization methods,
+global scales, and activation quantization. It checks top-level and nested
+quantization metadata, including per-layer overrides. Native affine checkpoints
+declare their settings in the top-level `quantization` mapping.
+
 The runtime test builds a tiny local checkpoint and tokenizer, opens it via
 `MlxRuntimeAdapter.prepare`, and compares sparse cached decode against a fresh
 prefill through the portable DeltaNet recurrence. It covers key-head widths
@@ -195,6 +202,32 @@ nice -n 10 "$WORK/venvs/reference/bin/python" scripts/qwen4_upstream_parity.py r
 nice -n 10 "$WORK/venvs/mlx/bin/python" scripts/qwen4_upstream_parity.py upstream "$WIDTH48" --case A --dtype fp32
 nice -n 10 "$WORK/venvs/runtime/bin/python" scripts/qwen4_upstream_parity.py vendor "$WIDTH48" --case A
 nice -n 10 "$WORK/venvs/runtime/bin/python" -B -m unittest tests.test_qwen4_upstream_model_file
+```
+
+### Pinned checkpoint quantization regression
+
+Upstream's quantizer generated these three checkpoints from fixture C.
+Both stacks received the same safetensors bytes. Upstream produced finite
+logits for all three. The audit compared the original pinned vendor with
+the upstream model on prefill and one cached continuation token.
+
+| Checkpoint | Pinned result at `f1fa8e5e1` | Pinned result with the format guard |
+| --- | --- | --- |
+| NVFP4, no global scale | Prefill max absolute logit error 9.3359375, argmax changed at 38 of 39 positions | Refused with a quantization format error |
+| NVFP4, per-expert global scales | `TypeError` on the pinned expert quantization API | Refused with a quantization format error |
+| Native 6-bit affine, group size 64 | — | Prefill error `9.54e-7`, cached decode error `1.01e-6` against upstream and a `1e-4` bound |
+
+The pinned loader also checks the weight tensors. Affine scales use a
+floating dtype. Integer scale tensors and `.global_scale` tensors cause a
+format error even when the config declares affine. [Regressions before](evidence/pinned-quantization-before.json)
+and [after the guard](evidence/pinned-quantization-after.json) include the
+checkpoint digests and loader results.
+
+```sh
+QUANTS=$(mktemp -d "$WORK/pinned-quants.XXXXXXXX")
+nice -n 10 "$WORK/venvs/reference/bin/python" scripts/qwen4_upstream_parity.py reference "$QUANTS/tiny" --port "$PORT" --case C
+nice -n 10 "$WORK/venvs/mlx/bin/python" scripts/qwen4_upstream_quantization_probe.py prepare "$QUANTS/models" --fixtures "$QUANTS/tiny"
+nice -n 10 "$WORK/venvs/runtime/bin/python" scripts/qwen4_upstream_quantization_probe.py verify "$QUANTS/models"
 ```
 
 ## Converted SSD artifact
