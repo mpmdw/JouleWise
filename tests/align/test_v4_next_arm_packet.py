@@ -926,7 +926,7 @@ class C1PacketRebuildTests(Base):
         with self.subTest(layer='builder'):
             self.assertEqual(code, 2, (packet and packet['packet_preflight'], error))
             self.assertFalse(packet['packet_preflight']['ready'])
-            self.assertIn(DERIVATION_INPUT.as_posix(), str(packet['packet_preflight']))
+            self.assert_packet_failure(packet, 'sentinel_roster', DERIVATION_INPUT.as_posix())
 
         view, pack, night, tree = self.staged_c1(w1)
         stage = next(stage for stage in tree['stage_graph'] if stage['kind'] == 'bound_derivation')
@@ -986,18 +986,17 @@ class C1PacketRebuildTests(Base):
                 finally:
                     path.write_bytes(raw)
 
-            with self.subTest(mutation='delete inventory entry', path=relative):
-                broken = copy.deepcopy(packet)
-                del broken['c1_kit']['staged_inventory'][relative]
-                w1.write(C1_PACKET_PATH, series.raw_json(broken))
-                w1.commit()
-                try:
+        try:
+            for relative in references:
+                with self.subTest(mutation='delete inventory entry', path=relative):
+                    broken = copy.deepcopy(packet)
+                    del broken['c1_kit']['staged_inventory'][relative]
+                    self.commit_staged_packet(w1, broken)
                     code, calls, error = self.k4_checkpoint(w1, plan, view, night)
                     self.assertEqual((code, calls), (2, 0), error)
                     self.assertIn(relative, error)
-                finally:
-                    w1.write(C1_PACKET_PATH, series.raw_json(packet))
-                    w1.commit()
+        finally:
+            self.commit_staged_packet(w1, packet)
 
     def test_k5_a_registered_input_cannot_be_reclassified_as_absent(self):
         w1, packet, plan, view, night = self.k4_fixture()
@@ -1018,9 +1017,16 @@ class C1PacketRebuildTests(Base):
         raw = b'{"synthetic": true}\n'
         (view / extra).write_bytes(raw)
         packet['c1_kit']['staged_inventory'][extra] = builder.digest(raw)
-        w1.write(C1_PACKET_PATH, series.raw_json(packet))
-        w1.commit()
-        code, calls, error = self.k4_checkpoint(w1, plan, view, night)
+        self.commit_staged_packet(w1, packet)
+        open_file = io.open
+
+        def trap(path, *args, **kwargs):
+            if not isinstance(path, int):
+                self.assertNotEqual(Path(os.fsdecode(path)).name, extra)
+            return open_file(path, *args, **kwargs)
+
+        with patch.object(io, 'open', trap):
+            code, calls, error = self.k4_checkpoint(w1, plan, view, night)
         self.assertEqual((code, calls), (2, 0), error)
         self.assertIn(extra, error)
 

@@ -21,7 +21,7 @@ if str(ROOT) not in sys.path:
 from scripts import align_v4_kit as w1
 from scripts.align_pilot_kit import raw_json, sha
 from joulewise.align.apple import v4_cadence as cadence
-from joulewise.align.apple.v4_registration import confined_reader
+from joulewise.align.apple.v4_registration import ARTIFACTS, confined_reader
 from joulewise.align.apple.sampling import episode_seed, leading_seed, turn_seed
 from joulewise.b5 import chain, plan as launch_plan
 
@@ -72,41 +72,70 @@ def c1_kit_identity(file_hashes, plan, tree, read):
             'execution': c1_execution_identity(tree, plan, read, staged=False)}
 
 
+def c1_staged_references(tree, kit, execution):
+    """Files named by the resolved staged dispatch and the C1 kit."""
+    pack = Path('configs/campaigns') / pack_id('C1')
+    required = {pack / 'plan_tree.json', pack / 'plan_tree.sha256', Path(launch_plan.HEAD_PIN_RELATIVE)}
+    required.update(pack / path for path in kit['staged_kit_files'])
+    for stage in chain.stage_plan(tree):
+        for command in stage.commands:
+            required.add(Path(chain.TOOLS[command.tool_id].program))
+            # The campaign directory resolves to its order and configs below.
+            arguments = command.arguments[1:] if stage.kind == 'campaign_collection' else command.arguments
+            required.update(Path(arg['value']) for arg in arguments if arg['kind'] == 'repo_path')
+    for stage in tree['stage_graph']:
+        if 'path' in (input_ref := stage.get('input') or {}):
+            required.add(Path(input_ref['path']))
+    for stage in execution['order_manifests']:
+        directory = pack / 'members' / stage['stage_id']
+        required.add(directory / 'order_manifest.json')
+        required.update(directory / name for name in stage['configs'])
+        for name, spare in stage['spares'].items():
+            order = Path(name)
+            required.add(order)
+            required.update(order.parent / name for name in spare['configs'])
+    return {path.as_posix() for path in required}
+
+
+def require_c1_staged_closure(tree, binding, execution):
+    """Reject missing pins and pins with no staged dispatch or registration reference."""
+    required = c1_staged_references(tree, binding, execution)
+    registered = set(ARTIFACTS)
+    present = set(binding['staged_inventory'])
+    absent = set(binding['staged_absent_artifacts'])
+    missing = (required - present) | (registered - present - absent)
+    extra = (present - required - registered) | (absent - registered) | (absent & present)
+    if missing or extra:
+        raise ValueError(f'staged inventory differs from resolved C1 inputs: '
+                         f'missing {sorted(missing)}, unexpected {sorted(extra)}')
+
+
 def c1_staged_inventory(kit, read, optional, artifacts):
-    """Derive the staged pin set from the selected source bytes."""
+    """Pin required staged files from the selected committed sources."""
     from scripts.bytes_h_session import render_measurement_files
 
     source_kit = kit_path('C1')
     pack = Path('configs/campaigns') / pack_id('C1')
     files, tree = render_measurement_files(source_kit, pack_id('C1'), read, optional)
+    mirrored = {(pack / path).as_posix(): digest for path, digest in kit['staged_kit_files'].items()}
     pinned = dict(artifacts)
-
-    def add(path, digest):
-        name = Path(path).as_posix()
+    for name in sorted(c1_staged_references(tree, kit, kit['execution'])):
+        path = Path(name)
+        if path in files:
+            digest = sha(files[path])
+        elif name in mirrored:
+            digest = mirrored[name]
+        else:
+            digest = sha(read(path))
         if name in pinned and pinned[name] != digest:
             raise ValueError(f'incorrect staged input digest: {name}')
         pinned[name] = digest
-
-    for path, digest in kit['staged_kit_files'].items():
-        add(pack / path, digest)
-    for path, raw in files.items():
-        add(path, sha(raw))
-    add(launch_plan.HEAD_PIN_RELATIVE, sha(read(Path(launch_plan.HEAD_PIN_RELATIVE))))
-    for row in tree['external_inputs']['artifacts']:
-        add(row['path'], row['sha256'])
-    for stage in tree['stage_graph']:
-        input_ref = stage.get('input') or {}
-        if 'path' in input_ref and 'sha256' in input_ref:
-            path = input_ref['path']
-            raw = files[Path(path)] if Path(path) in files else read(Path(path))
-            add(path, sha(raw))
-            if sha(raw) != input_ref['sha256']:
-                raise ValueError(f'committed stage input digest mismatch: {path}')
-    for stage in kit['execution']['order_manifests']:
-        for path, spare in stage['spares'].items():
-            add(path, spare['sha256'])
-            for name, digest in spare['configs'].items():
-                add(Path(path).parent / name, digest)
+    descriptors = list(tree['external_inputs']['artifacts'])
+    descriptors.extend(stage['input'] for stage in tree['stage_graph']
+                       if 'sha256' in (stage.get('input') or {}))
+    for row in descriptors:
+        if pinned.get(row['path']) != row['sha256']:
+            raise ValueError(f'committed stage input digest mismatch: {row["path"]}')
     return {**kit, 'staged_inventory': {path: digest for path, digest in pinned.items() if digest is not None},
             'staged_absent_artifacts': sorted(path for path, digest in pinned.items() if digest is None)}
 

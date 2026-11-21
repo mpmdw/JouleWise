@@ -176,12 +176,18 @@ state at `--series-commit`, with:
   roster count and sentinel positions come from the ordered science IDs.
   The packet's `staged_inventory` binds every staged input the consumer opens,
   including the exact regenerated launch tree, original and relocated kit
-  files, derivation and other file inputs declared by the stage graph, and
-  the registered code and configuration artifacts. It records missing
-  registered artifacts separately. The consumer checks each digest before
-  decoding and hands parsers the same verified bytes. A request for an
-  unlisted input refuses before opening it. Prepare's session plan and live
-  control inputs belong outside the immutable measurement view.
+  files, and the registered code and configuration artifacts. It also binds
+  every repository file referenced by the resolved stage commands, including
+  tool programs, derivation manifests, and each campaign directory's resolved
+  order manifest and configs. The builder requires committed bytes for each
+  such file even when the stage carries no input descriptor. The consumer
+  derives the same closure from the verified staged tree and resolved orders.
+  It refuses a missing reference, a missing pin, or an inventory entry
+  outside that closure and the registered inputs. Only registered artifacts
+  outside the required dispatch can be recorded as absent. The consumer
+  checks each digest before decoding and hands parsers the same verified
+  bytes. A request for an unlisted input refuses before opening it. Prepare's
+  session plan and live control inputs belong outside the immutable view.
   For the W1 desk check, the C1 consumer hashes the artifact bytes seen in
   the staged view. Links resolve within that view and its prepared source
   checkout. A matching copy has the same digest. An escaping link or a

@@ -682,12 +682,8 @@ def committed_c1_kit(evidence, commit, manifest_sha256, projection):
         return read(path)
 
     binding = frozen_series.c1_kit_identity(file_hashes, plan, tree, read)
-    # Legacy, un-staged projection witnesses can still rebuild. A staged arm
-    # requires the launch inputs and their complete committed inventory.
-    if optional(Path(frozen_series.launch_plan.HEAD_PIN_RELATIVE)) is not None:
-        binding = frozen_series.c1_staged_inventory(
-            binding, read, optional, registration.artifact_hashes_at(evidence.repo, commit))
-    return binding
+    return frozen_series.c1_staged_inventory(
+        binding, read, optional, registration.artifact_hashes_at(evidence.repo, commit))
 
 
 def build_packet(repo, *, record_commit, record_path, series_commit, series_path, pushed_ref,

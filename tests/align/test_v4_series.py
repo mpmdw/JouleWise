@@ -431,6 +431,9 @@ class FakeWorld:
         source_path = Path('scripts/zero_ntp_frequency.c')
         source_raw = (ROOT / source_path).read_bytes()
         write(m, source_path, source_raw)
+        if name == 'C1':
+            # Desk-stage argv names a backup tool even though the arm witness never runs it.
+            write(m, 'scripts/backup_runs.sh', b'#!/bin/sh\nexit 97\n')
         receipt_path = Path(v4_registration.REGISTRATION) / 'registration_receipt.json'
         receipt = json.loads((m / receipt_path).read_bytes()) if (m / receipt_path).exists() else {}
         receipt.setdefault('artifacts', {})[source_path.as_posix()] = s.sha(source_raw)

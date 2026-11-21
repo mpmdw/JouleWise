@@ -1237,12 +1237,32 @@ def _read_staged_c1_packet(root, measurement_root, pointer, *, packet_builder=No
 
 
 def _c1_staged_inputs(root, measurement_root, packet):
-    from joulewise.align.apple.v4_registration import StagedInventory
+    from joulewise.align.apple.v4_registration import StagedInventory, is_digest
 
     binding = packet['c1_kit']
     pins = binding['staged_inventory']
     absent = binding['staged_absent_artifacts']
+    invalid = sorted(path for path, digest in pins.items() if not is_digest(digest))
+    if invalid:
+        raise ValueError(f'staged input requires a SHA-256 pin: {invalid}')
     return StagedInventory(measurement_root, root, {**pins, **dict.fromkeys(absent)})
+
+
+def _require_c1_registered_pins(root, packet):
+    """Authenticate presence and SHA-256 for the full registered artifact set."""
+    from scripts import align_v4_next_arm_packet as builder
+    from joulewise.align.apple.v4_registration import artifact_hashes_at
+
+    try:
+        evidence = builder.GitEvidence(root)
+        commit = evidence.commit(packet['series_commit'])
+        pins = packet['c1_kit']['staged_inventory']
+        changed = sorted(path for path, digest in artifact_hashes_at(root, commit).items()
+                         if pins.get(path) != digest)
+        if changed:
+            raise ValueError(f'committed C1 registered artifact pins differ: {changed}')
+    except (OSError, ValueError, KeyError, TypeError) as exc:
+        raise PacketKitMismatch(str(exc)) from exc
 
 
 def _c1_external_controls(measurement_root, *controls):
@@ -1267,7 +1287,6 @@ def _check_c1_packet_kit(root, packet, *, plan=None, measurement_root=None, nigh
             raise ValueError('packet has no committed C1 kit binding')
         if measurement_root is not None:
             read = staged_inputs or _c1_staged_inputs(root, measurement_root, packet)
-            read.verify_all()
         actual, source_plan = series.read_c1_kit(root)
         if actual != {key: value for key, value in expected.items()
                       if key not in ('staged_inventory', 'staged_absent_artifacts')}:
@@ -1296,6 +1315,8 @@ def _check_c1_packet_kit(root, packet, *, plan=None, measurement_root=None, nigh
             execution = series.c1_execution_identity(tree, source_plan, read, staged=True)
             if execution != actual['execution']:
                 raise ValueError('staged member config or order manifest differs from the committed dispatch')
+            series.require_c1_staged_closure(tree, expected, execution)
+            read.verify_all()
             return {**actual, 'staged_launch_tree_sha256': _sha256(tree_raw)}
         return actual
     except (OSError, ValueError, KeyError, TypeError, AttributeError) as exc:
@@ -1867,10 +1888,13 @@ def install(session_root, *, runner=None, volume_runner=None, now=None, w1_disk_
     if is_c1:
         # Cheap refusal before host actions. arm_checks compares again with the
         # independently rebuilt packet, which alone can authorize the install.
-        supplied, _ = _read_staged_c1_packet(source_root, measurement_root, kwargs.get('next_arm_triage'),
-                                           packet_builder=kwargs.get('packet_builder'))
+        supplied, transport_sha = _read_staged_c1_packet(
+            source_root, measurement_root, kwargs.get('next_arm_triage'),
+            packet_builder=kwargs.get('packet_builder'))
         _check_c1_packet_kit(source_root, supplied, measurement_root=measurement_root,
                              night_plan_path=state.get('plan_path'))
+        if transport_sha is not None:
+            _require_c1_registered_pins(source_root, supplied)
         _c1_external_controls(measurement_root, w1_disk_config, *(kwargs.get(name) for name in
             ('battery_log', 'window_battery_journal', 'watchdog_plist',
              'weight_digests_attested', 'runtime_stack_attested')))
