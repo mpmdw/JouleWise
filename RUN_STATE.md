@@ -1052,6 +1052,20 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 
 <!-- RUN_STATE TYPED ITEMS: newest first. Add with scripts/run_state_add.py; never edit by hand. -->
 
+524. **Lead: stability successors f2-stab-17..53 admitted (fillers-w3, audit b80eecbd5); used only after kits 01-14 (pin A) / 15-16 (pin B) are spent; earliest t0 2026-11-26 00:00 PST, enforced by the magistrate**
+
+```item
+{"expires_epoch_s": null, "issued_epoch_s": 1795304431, "number": 524, "owner": "magistrate", "schema": "joulewise.run_state_item.v1", "sets": [], "status": "ISSUED", "supersedes": []}
+```
+
+- **Admitted:** the stability successor mint, PR #935, merged to the audit branch at `b80eecbd53ffc43e8c3bba75c8f54d157a62e709` (Astra executing audit MERGE, 0 HIGH; CI 20/20). 32 kits on pin A (`f2-stab-17..48`, 384 positions) and 5 kits on pin B (`f2-stab-49..53`, 60 positions), the same design as kits 14 and 16 with new seeds; one one-leg queue per position in `docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/fillers-w3/queues-1leg/`, digests in `fillers-w3/README.md`, kit rows in `f2-stab/KITS.json` (`base_kits` unchanged: 01-14).
+- **When a successor is used:** only after its pin's predecessor kits are ALL spent: pin A `2d347f721` after kits 01-14's last position; pin B `6e9d42f1d` after kits 15-16's last position (item 523). Until then nothing changes. Then use the next unspent successor position in kit and leg order on that pin.
+- **Date gate:** every fillers-w3 queue has `not_before` `"2026-11-26"` (local date of t0) and `expires_at` `2026-12-15T12:35:29-08:00`. The earliest t0 is 2026-11-26 00:00:00 PST. The pinned queue tool does NOT enforce `not_before` (audit MED): **the magistrate must refuse any successor t0 before 2026-11-26 00:00 PST itself.** Obtain a lead renewal before starting on an expired queue.
+- **Before each issue:** verify the queue file's sha256 against `fillers-w3/README.md`, the kit sha256 and pin against `f2-stab/KITS.json`, then `validate_kit.py` and validate-queue as for every kit.
+- **Rank:** pin A successors take pin A's existing role (the date's first f2-stab leg is rank 1 only from kits 01-14 while any remain, item 464; otherwise rank 4), with item 463's ARG rule. Pin B successors: rank 4 only in 10:50:01-13:14:59, no batch window (items 463, 488). Items 422, 447, 463, 464, 473, 505 and 507 govern selection, close proof and refusal.
+- **Population:** successors are the wider `lm-stab-02` population only (RL-190 §1.3). The base stays kits 01-14 for `lm-stab-01` and the base tables.
+- **Item 516's runway safety net is discharged** by this admission. Projected coverage (run report `docs/run_reports/2026-11-21-stability-successors.md`): both pins covered through Dec 15 12:35 PST in every modeled case.
+
 523. **Lead: correction to item 522: rank 4 continues on pin A with f2-stab-03 L001 after 02 L012 (item 464: kits 01-14 first); 'successor queue' means only kits 17+**
 
 ```item
