@@ -4,8 +4,10 @@ from __future__ import annotations
 import hashlib
 import json
 import math
+import os
 import re
 from pathlib import Path
+import stat
 import statistics
 import subprocess
 
@@ -454,10 +456,112 @@ def artifact_set_digest(root):
     return artifact_set_digest_from(reader)
 
 
+def confined_reader(root, *other_roots):
+    """Read repository-relative files, following links within the named roots.
+
+    Check each target before touching it. In particular, resolving an
+    escaping link must not stat the file or directory it names.
+    """
+    aliases = {Path(path).absolute(): Path(path).resolve(strict=True) for path in (root, *other_roots)}
+    aliases.update({path: path for path in tuple(aliases.values())})
+    ordered_aliases = sorted(aliases, key=lambda path: -len(path.parts))
+    roots = sorted(set(aliases.values()), key=lambda path: -len(path.parts))
+    prefixes = {parent for scope in roots for parent in scope.parents}
+    blocked = {'.git', 'restricted', 'night-custody', 'night-archive'}
+
+    def scope_for(path):
+        return next((scope for scope in roots if path.is_relative_to(scope)), None)
+
+    def read(relative, *, metadata_only=False):
+        relative = Path(relative)
+        if relative.is_absolute() or not relative.parts or '..' in relative.parts:
+            raise ValueError('staged input needs a repository-relative path')
+        directory = aliases[Path(root).absolute()]
+        parts = relative.parts
+        links = 0
+        while parts:
+            name, *parts = parts
+            if name == '..':
+                directory = directory.parent
+                continue
+            target = directory / name
+            scope = scope_for(target)
+            if scope is None:
+                if target in prefixes and parts:
+                    directory = target
+                    continue
+                raise ValueError(f'staged input escapes its allowed roots: {relative}')
+            if any(part in blocked or part.startswith('jw-b5-') for part in target.relative_to(scope).parts):
+                raise ValueError(f'staged input names a restricted path: {relative}')
+            status = target.lstat()
+            if stat.S_ISLNK(status.st_mode):
+                links += 1
+                if links > 40:
+                    raise ValueError(f'staged input has a symlink loop: {relative}')
+                link = Path(os.readlink(target))
+                if link.is_absolute():
+                    alias = next((scope for scope in ordered_aliases if link.is_relative_to(scope)), None)
+                    if alias is None:
+                        raise ValueError(f'staged input escapes its allowed roots: {relative}')
+                    directory = aliases[alias]
+                    link = link.relative_to(alias)
+                parts = [*link.parts, *parts]
+            elif parts:
+                if not stat.S_ISDIR(status.st_mode):
+                    raise ValueError(f'staged input parent is not a directory: {relative}')
+                directory = target
+            elif stat.S_ISREG(status.st_mode):
+                return None if metadata_only else target.read_bytes()
+        raise ValueError(f'staged input is not a regular file: {relative}')
+
+    return read
+
+
+class StagedInventory:
+    """Hand decoders only the exact bytes verified against a committed pin."""
+
+    def __init__(self, root, source, pins):
+        if not isinstance(pins, dict) or not pins:
+            raise ValueError('committed staged input inventory missing')
+        self.pins = pins
+        self.read = confined_reader(root, source)
+        self.verified = {}
+
+    def __call__(self, path):
+        key = Path(path).as_posix()
+        if key not in self.pins:
+            raise ValueError(f'staged input is not in the committed inventory: {key}')
+        if key not in self.verified:
+            expected = self.pins[key]
+            if expected is None:
+                try:
+                    self.read(key, metadata_only=True)
+                except FileNotFoundError:
+                    raw = None
+                else:
+                    raise ValueError(f'unlisted staged artifact is present: {key}')
+            else:
+                raw = self.read(key)
+                if digest(raw) != expected:
+                    raise ValueError(f'staged input SHA-256 mismatch: {key}')
+            self.verified[key] = raw
+        return self.verified[key]
+
+    def verify_all(self):
+        for path in self.pins:
+            self(path)
+
+
 def artifact_set_digest_at(root, commit):
     """The same digest computed from the committed bytes of ``commit`` (the last desk-passed code state)."""
     blobs = _committed_bytes(root, commit, list(ARTIFACTS))
     return artifact_set_digest_from(lambda path: blobs.get(path))
+
+
+def artifact_hashes_at(root, commit):
+    """Expected staged artifact bytes, including required absences."""
+    return {path: digest(raw) if raw is not None else None
+            for path, raw in _committed_bytes(root, commit, list(ARTIFACTS)).items()}
 
 
 def _committed_bytes(root, commit, paths):

@@ -24,6 +24,13 @@ check and its diagnostic basis. Invalid root schemas, missing commits or mismatc
 record/series identity refuse before a packet can be built.
 
 Pass the resulting JSON to `align_v4_session.py install --next-arm-triage`.
+For a staged C1 arm, the lead commits the exact resulting JSON as
+`series/c1-next-arm.json` in the prepared source checkout. The consumer
+derives the packet's transport pin from that Git blob at source HEAD. It
+compares the supplied bytes with the pin before decoding. Use the staged
+path `measurement/series/c1-next-arm.json` or a byte-identical file inside
+the source checkout. The packet still identifies its earlier series and
+predecessor commits for independent rebuild.
 
 **A packet is a pointer, never trusted data.** At the arm, `arm_checks` rebuilds the packet with
 `build_packet` from the identities the supplied packet names (`record_commit`, `record_path`,
@@ -149,6 +156,43 @@ state at `--series-commit`, with:
   (the four D slots plus `cohort_identity`), `thermal_policy`, and `code_config`
   (optional `code_config_commit`). It must be the projection of the installed
   plan, not a proposed configuration. Scorer/series registration remains lead-owned.
+* For C1, commit the selected materialized kit under
+  `configs/campaigns/align_v4_c1` in the tree named by `--series-commit`.
+  The packet's `c1_kit` records the SHA-256 of the sorted, canonical JSON map
+  from kit-relative file paths to their byte digests, the raw collection-plan
+  SHA-256, the member count, and the ordered sentinel ordinals. The builder
+  checks the materialization against the committed series and projection.
+  Commit the auxiliary campaign manifests and their configs in that same
+  tree. The packet binds the ordered science IDs and the exact staged bytes
+  of each stage's order manifest. The builder derives the latter from the
+  committed order and the same relocation used by the staging view. It also
+  binds the dispatched config digests and any declared spare order files.
+  Projection-only packets are usable for off-host preflight. C1 install
+  requires the kit binding and checks the selected materialization before
+  host actions. The arm checks it against its own rebuild and verifies the
+  staged plan, launch-tree binding, and mirrored kit files. It resolves
+  the staged campaign argv with the writer's dispatch resolver and checks
+  order manifest and config digests, including scaffold stages. The C1
+  roster count and sentinel positions come from the ordered science IDs.
+  The packet's `staged_inventory` binds every staged input the consumer opens,
+  including the exact regenerated launch tree, original and relocated kit
+  files, and the registered code and configuration artifacts. It also binds
+  every repository file referenced by the resolved stage commands, including
+  tool programs, derivation manifests, and each campaign directory's resolved
+  order manifest and configs. The builder requires committed bytes for each
+  such file even when the stage carries no input descriptor. The consumer
+  derives the same closure from the verified staged tree and resolved orders.
+  It refuses a missing reference, a missing pin, or an inventory entry
+  outside that closure and the registered inputs. Only registered artifacts
+  outside the required dispatch can be recorded as absent. The consumer
+  checks each digest before decoding and hands parsers the same verified
+  bytes. A request for an unlisted input refuses before opening it. Prepare's
+  session plan and live control inputs belong outside the immutable view.
+  For the W1 desk check, the C1 consumer hashes the artifact bytes seen in
+  the staged view. Links resolve within that view and its prepared source
+  checkout. A matching copy has the same digest. An escaping link or a
+  staged kit or dispatch mismatch refuses install with exit 2 and
+  `packet_kit_mismatch`.
 * The window records are **hash-chained**: each record names its predecessor
   (`previous_record`: `commit`, `path`, `sha256`) and the series ledger `series/state.json`
   names the latest one (`previous_record`, `series_sha256`). The builder walks the chain back to

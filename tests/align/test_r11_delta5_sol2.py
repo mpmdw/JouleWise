@@ -25,6 +25,10 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 class CommittedSeriesTests(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.c1_files = series.build_files(ROOT, series.candidate(), 'C1', extra_sentinels=2)
+
     def setUp(self):
         temp = tempfile.TemporaryDirectory(prefix='jw-delta5-sol2-')
         self.addCleanup(temp.cleanup)
@@ -39,6 +43,7 @@ class CommittedSeriesTests(unittest.TestCase):
     def scenario(self, window='W1', *, previous=None, captured=True):
         s = fixtures.Scenario(self.repo, window, previous=previous, captured=captured)
         s.write(series.MANIFEST.as_posix(), series.raw_json(series.candidate()))
+        fixtures.write_c1_fixture_kit(s, self.c1_files)
         if window.startswith('C'):
             s.sources['pilot']['extra_checks']['series_desk_row'] = {
                 'window_id': window.split('#')[0], 'captured_members': 2 if captured else 0,
@@ -70,7 +75,9 @@ class CommittedSeriesTests(unittest.TestCase):
              patch.object(session, 'w1_disk_check', return_value={'status': 'pass'}), \
              patch.object(session.pilot, 'install', return_value={'synthetic': True}) as install:
             try:
-                session._arm_and_install(target, state, self.repo, scenario.next_plan, None,
+                plan = (json.loads(self.c1_files[series.kit_path('C1') / series.C1_PLAN])
+                        if window == 'C1' else scenario.next_plan)
+                session._arm_and_install(target, state, self.repo, plan, None,
                     watchdog_check=_watchdog_acceptance, runner=lambda argv: subprocess.CompletedProcess(argv, 0, '', ''),
                     volume_runner=None, now=lambda: fixtures.NOW, w1_disk_config=None, disk_gate=None,
                     battery_log=log, obc_off_attested_by='synthetic', next_arm_triage=packet,

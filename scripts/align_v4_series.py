@@ -12,6 +12,7 @@ from copy import deepcopy
 import json
 import math
 from pathlib import Path
+import stat
 import sys
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -20,8 +21,9 @@ if str(ROOT) not in sys.path:
 from scripts import align_v4_kit as w1
 from scripts.align_pilot_kit import raw_json, sha
 from joulewise.align.apple import v4_cadence as cadence
+from joulewise.align.apple.v4_registration import ARTIFACTS, confined_reader
 from joulewise.align.apple.sampling import episode_seed, leading_seed, turn_seed
-from joulewise.b5 import chain
+from joulewise.b5 import chain, plan as launch_plan
 
 SCHEMA = 'joulewise.align_v4.series.v1'
 ADMISSION_SCHEMA = 'joulewise.align_v4.series_admission.v1'
@@ -37,6 +39,206 @@ def kit_path(window_id):
 
 def pack_id(window_id):
     return 'align-v4-' + window_id.lower()
+
+
+C1_PLAN = 'collection_plan.json'
+C1_PACKET_PATH = 'series/c1-next-arm.json'
+
+
+def c1_kit_file(path):
+    """The public file namespace emitted by the C1 materializer."""
+    return (path.as_posix() in (C1_PLAN, 'plan_tree.json')
+            or (path.parts[0] in ('stages', 'registration') and path.suffix == '.json'))
+
+
+def c1_plan_projection(plan):
+    if plan.get('window_id') != 'C1' or not isinstance(plan.get('members'), list):
+        raise ValueError('materialized C1 collection plan missing')
+    rows = []
+    for position, member in enumerate(plan['members'], 1):
+        if type(member['ordinal']) is not int or member['ordinal'] != position:
+            raise ValueError('materialized C1 ordinal disagrees with plan order')
+        rows.append({'run_id': member['run_id'],
+                     'role': 'sentinel' if member['pool_role'] == 'sentinel' else member['role']})
+    return rows
+
+
+def c1_kit_identity(file_hashes, plan, tree, read):
+    rows = c1_plan_projection(plan)
+    return {'kit_sha256': sha(raw_json(file_hashes)), 'plan_sha256': file_hashes[C1_PLAN],
+            'member_count': len(rows),
+            'sentinel_ordinals': [i for i, row in enumerate(rows, 1) if row['role'] == 'sentinel'],
+            'staged_kit_files': {path: digest for path, digest in file_hashes.items() if path != 'plan_tree.json'},
+            'execution': c1_execution_identity(tree, plan, read, staged=False)}
+
+
+def c1_staged_references(tree, kit, execution):
+    """Files named by the resolved staged dispatch and the C1 kit."""
+    pack = Path('configs/campaigns') / pack_id('C1')
+    required = {pack / 'plan_tree.json', pack / 'plan_tree.sha256', Path(launch_plan.HEAD_PIN_RELATIVE)}
+    required.update(pack / path for path in kit['staged_kit_files'])
+    for stage in chain.stage_plan(tree):
+        for command in stage.commands:
+            required.add(Path(chain.TOOLS[command.tool_id].program))
+            # The campaign directory resolves to its order and configs below.
+            arguments = command.arguments[1:] if stage.kind == 'campaign_collection' else command.arguments
+            required.update(Path(arg['value']) for arg in arguments if arg['kind'] == 'repo_path')
+    for stage in tree['stage_graph']:
+        if 'path' in (input_ref := stage.get('input') or {}):
+            required.add(Path(input_ref['path']))
+    for stage in execution['order_manifests']:
+        directory = pack / 'members' / stage['stage_id']
+        required.add(directory / 'order_manifest.json')
+        required.update(directory / name for name in stage['configs'])
+        for name, spare in stage['spares'].items():
+            order = Path(name)
+            required.add(order)
+            required.update(order.parent / name for name in spare['configs'])
+    return {path.as_posix() for path in required}
+
+
+def require_c1_staged_closure(tree, binding, execution):
+    """Reject missing pins and pins with no staged dispatch or registration reference."""
+    required = c1_staged_references(tree, binding, execution)
+    registered = set(ARTIFACTS)
+    present = set(binding['staged_inventory'])
+    absent = set(binding['staged_absent_artifacts'])
+    missing = (required - present) | (registered - present - absent)
+    extra = (present - required - registered) | (absent - registered) | (absent & present)
+    if missing or extra:
+        raise ValueError(f'staged inventory differs from resolved C1 inputs: '
+                         f'missing {sorted(missing)}, unexpected {sorted(extra)}')
+
+
+def c1_staged_inventory(kit, read, optional, artifacts):
+    """Pin required staged files from the selected committed sources."""
+    from scripts.bytes_h_session import render_measurement_files
+
+    source_kit = kit_path('C1')
+    pack = Path('configs/campaigns') / pack_id('C1')
+    files, tree = render_measurement_files(source_kit, pack_id('C1'), read, optional)
+    mirrored = {(pack / path).as_posix(): digest for path, digest in kit['staged_kit_files'].items()}
+    pinned = dict(artifacts)
+    for name in sorted(c1_staged_references(tree, kit, kit['execution'])):
+        path = Path(name)
+        if path in files:
+            digest = sha(files[path])
+        elif name in mirrored:
+            digest = mirrored[name]
+        else:
+            digest = sha(read(path))
+        if name in pinned and pinned[name] != digest:
+            raise ValueError(f'incorrect staged input digest: {name}')
+        pinned[name] = digest
+    descriptors = list(tree['external_inputs']['artifacts'])
+    descriptors.extend(stage['input'] for stage in tree['stage_graph']
+                       if 'sha256' in (stage.get('input') or {}))
+    for row in descriptors:
+        if pinned.get(row['path']) != row['sha256']:
+            raise ValueError(f'committed stage input digest mismatch: {row["path"]}')
+    return {**kit, 'staged_inventory': {path: digest for path, digest in pinned.items() if digest is not None},
+            'staged_absent_artifacts': sorted(path for path, digest in pinned.items() if digest is None)}
+
+
+def _campaign_file(path, read):
+    if not path.is_relative_to('configs/campaigns') or '..' in path.parts or path.suffix != '.json':
+        raise ValueError(f'C1 execution input must be a campaign JSON file: {path}')
+    return read(path)
+
+
+def _order_configs(order, directory, read):
+    """Bind the actual configs named by the runner, in manifest order."""
+    configs = {}
+    for row in order['executed_order']:
+        name = row['config']
+        if Path(name).parts != (name,) or name in configs:
+            raise ValueError('invalid or duplicate config name in C1 order manifest')
+        raw = _campaign_file(directory / name, read)
+        if json.loads(raw)['run_id'] != row['run_id']:
+            raise ValueError('C1 order manifest run ID differs from its dispatched config')
+        configs[name] = sha(raw)
+    return configs
+
+
+def c1_execution_identity(tree, plan, read, *, staged):
+    """Use the writer's argv resolver to seal each stage and the science order."""
+    order_bytes, read_errors = {}, []
+
+    def read_order(path):
+        try:
+            raw = _campaign_file(path, read)
+        except (OSError, ValueError) as exc:
+            read_errors.append(exc)
+            raise
+        order_bytes[path] = raw
+        return raw
+
+    stages = {stage.stage_id: stage for stage in chain.stage_plan(tree) if stage.kind == 'campaign_collection'}
+    dispatches = launch_plan.resolve_stage_dispatches(tree, '.', read_manifest=read_order)
+    if read_errors:
+        raise read_errors[0]
+    science_stages = {member['stage_id'] for member in plan['members']}
+    launch_pack = Path('configs/campaigns') / pack_id('C1')
+    orders, science_ids = [], []
+    for dispatch in dispatches:
+        stage = stages[dispatch.stage_id]
+        if dispatch.error or len(dispatch.run_ids) != stage.expected_count:
+            raise ValueError(f'C1 dispatch {stage.stage_id}: {dispatch.error or "member count differs"}')
+        directory = Path(dispatch.config_dir)
+        staged_dir = launch_pack / 'members' / stage.stage_id
+        if staged and directory != staged_dir:
+            raise ValueError(f'C1 dispatch {stage.stage_id} does not use its staged config directory')
+        raw = order_bytes[directory / 'order_manifest.json']
+        order = json.loads(raw)
+        configs = _order_configs(order, directory, read)
+        if not staged:
+            for row in order['executed_order']:
+                launch_plan.relocate_order_entry(row, staged_dir / row['config'], configs[row['config']])
+            raw = raw_json(order)
+        spares = {}
+        for path in (stage.spare_sets or {}).values():
+            spare = Path(path)
+            spare_raw = _campaign_file(spare, read)
+            spares[path] = {'sha256': sha(spare_raw),
+                            'configs': _order_configs(json.loads(spare_raw), spare.parent, read)}
+        orders.append({'stage_id': stage.stage_id, 'ordinal': stage.ordinal,
+                       'runs_root_binding': dispatch.runs_root_binding,
+                       'sha256': sha(raw), 'run_ids': list(dispatch.run_ids), 'configs': configs, 'spares': spares})
+        if stage.stage_id in science_stages:
+            science_ids.extend(dispatch.run_ids)
+    rows = c1_plan_projection(plan)
+    if science_ids != [row['run_id'] for row in rows] or len(set(science_ids)) != len(rows):
+        raise ValueError('resolved C1 dispatch differs from the frozen ordered member roster')
+    return {'run_ids': science_ids, 'order_manifests': orders}
+
+
+def read_c1_kit(root):
+    """Hash the selected materialization, including the exact collection-plan bytes."""
+    relative = kit_path('C1')
+    root = Path(root)
+    directory = root
+    for part in relative.parts:
+        directory /= part
+        if not stat.S_ISDIR(directory.lstat().st_mode):
+            raise ValueError('materialized C1 kit directory must be a regular directory')
+    read = confined_reader(root)
+    file_hashes, plan, tree = {}, None, None
+    for path in sorted(directory.rglob('*')):
+        mode = path.lstat().st_mode
+        if stat.S_ISDIR(mode):
+            continue
+        relative = path.relative_to(directory)
+        if not stat.S_ISREG(mode) or not c1_kit_file(relative):
+            raise ValueError('unexpected file in materialized C1 kit: ' + relative.as_posix())
+        raw = read(path.relative_to(root))
+        file_hashes[relative.as_posix()] = sha(raw)
+        if relative.as_posix() == C1_PLAN:
+            plan = json.loads(raw)
+        elif relative.as_posix() == 'plan_tree.json':
+            tree = json.loads(raw)
+    if not isinstance(plan, dict) or not isinstance(tree, dict):
+        raise ValueError('materialized C1 kit is incomplete')
+    return c1_kit_identity(file_hashes, plan, tree, read), plan
 
 
 RESERVED_INDICES = frozenset({1, *range(91, 100)})   # development: W1 1/93, R0 91-92, reserve 94-99
