@@ -20,6 +20,29 @@ def pinned_runtime_available():
         return False
 
 
+def tiny_config(key_width=32):
+    return {
+        "model_type": "qwen4_exp",
+        "model_file": MODEL_FILE.name,
+        "eos_token_id": 2,
+        "text_config": {
+            "hidden_size": 64, "num_hidden_layers": 2, "num_attention_heads": 2,
+            "num_key_value_heads": 1, "head_dim": 32, "vocab_size": 32,
+            "rms_norm_eps": 1e-6, "eos_token_id": 2,
+            "rope_parameters": {"rope_theta": 10000, "partial_rotary_factor": 0.25},
+            "num_experts": 4, "num_experts_per_tok": 2, "moe_intermediate_size": 32,
+            "shared_expert_intermediate_size": 32, "linear_num_key_heads": 1,
+            "linear_num_value_heads": 2, "linear_key_head_dim": key_width,
+            "linear_value_head_dim": 32, "linear_conv_kernel_dim": 3,
+            "hc_count": 2, "hc_lowrank": 8, "indexer_n_heads": 4,
+            "indexer_kv_heads": 1, "indexer_head_dim": 16, "indexer_budget": 4,
+            "indexer_compress_ratio": 2, "ngram_size": 3, "heads_per_ngram": 2,
+            "ngram_vocab_size_base": 17, "ple_embed_dim": 32, "ple_layer_ids": [1],
+            "layer_types": ["linear_attention", "full_attention"],
+        },
+    }
+
+
 @unittest.skipUnless(pinned_runtime_available(), "requires MLX 0.31.2 and mlx-lm 0.31.3")
 class Qwen4UpstreamModelFileTest(unittest.TestCase):
     def test_local_artifact_load_and_cached_decode(self):
@@ -37,6 +60,51 @@ class Qwen4UpstreamModelFileTest(unittest.TestCase):
             with self.subTest(linear_key_head_dim=width):
                 self.check_local_artifact(width, metal_calls=2 if use_metal else 0)
 
+    def test_rejects_unsupported_checkpoint_quantization(self):
+        args_class = runpy.run_path(str(MODEL_FILE))["ModelArgs"]
+        config = tiny_config()
+        affine = {"bits": 6, "group_size": 64}
+        nvfp4 = {"bits": 4, "group_size": 16, "mode": "nvfp4"}
+        expert = "model.layers.0.mlp.switch_mlp.gate_proj"
+        cases = (
+            ("unscaled", {"quantization": nvfp4}, "quantization.mode"),
+            ("scaled", {"quantization": dict(nvfp4, **{expert: dict(nvfp4, global_scale=True)})},
+             "quantization.mode"),
+            ("layer override", {"quantization": dict(affine, **{expert: nvfp4})},
+             f"quantization.{expert}.mode"),
+            ("layer scale", {"quantization": dict(affine, **{expert: dict(affine, global_scale=True)})},
+             f"quantization.{expert}.global_scale"),
+            ("legacy alias", {"quantization_config": {"quant_method": "mxfp4"}},
+             "quantization_config.quant_method"),
+            ("nested alias", {"text_config": dict(config["text_config"], quantization_config=nvfp4)},
+             "text_config.quantization_config.mode"),
+            ("affine alias only", {"quantization_config": affine}, "top-level quantization"),
+            ("other mode", {"quantization": {"mode": "mxfp8"}}, "quantization.mode"),
+            ("activation quantization", {"quantization": affine, "quantize_activations": True},
+             "quantize_activations"),
+        )
+        for label, override, field in cases:
+            with self.subTest(label=label):
+                with self.assertRaises(ValueError) as error:
+                    args_class.from_dict(dict(config, **override))
+                self.assertIn(field, str(error.exception))
+        args_class.from_dict(dict(config, quantization=dict(affine, **{expert: affine}),
+                                  quantization_config=affine))
+
+    def test_rejects_unsupported_scale_tensors_with_affine_metadata(self):
+        import mlx.core as mx
+
+        classes = runpy.run_path(str(MODEL_FILE))
+        config = dict(tiny_config(), quantization={"bits": 6, "group_size": 64})
+        model = classes["Model"](classes["ModelArgs"].from_dict(config))
+        expert = "model.layers.0.mlp.switch_mlp.gate_proj"
+        for key, value in (("scales", mx.array([127], dtype=mx.uint8)),
+                           ("global_scale", mx.array([1.0], dtype=mx.float32))):
+            with self.subTest(tensor=key), self.assertRaisesRegex(ValueError, "Unsupported scale tensor"):
+                model.sanitize({f"{expert}.{key}": value})
+        name = f"{expert}.scales"
+        self.assertEqual(set(model.sanitize({name: mx.array([1.0], dtype=mx.bfloat16)})), {name})
+
     def check_local_artifact(self, key_width, metal_calls=None):
         import mlx.core as mx
         from mlx.utils import tree_flatten
@@ -49,26 +117,7 @@ class Qwen4UpstreamModelFileTest(unittest.TestCase):
         from joulewise.clock import FakeClock
         from tests.test_mlx_runtime import make_config
 
-        config = {
-            "model_type": "qwen4_exp",
-            "model_file": MODEL_FILE.name,
-            "eos_token_id": 2,
-            "text_config": {
-                "hidden_size": 64, "num_hidden_layers": 2, "num_attention_heads": 2,
-                "num_key_value_heads": 1, "head_dim": 32, "vocab_size": 32,
-                "rms_norm_eps": 1e-6, "eos_token_id": 2,
-                "rope_parameters": {"rope_theta": 10000, "partial_rotary_factor": 0.25},
-                "num_experts": 4, "num_experts_per_tok": 2, "moe_intermediate_size": 32,
-                "shared_expert_intermediate_size": 32, "linear_num_key_heads": 1,
-                "linear_num_value_heads": 2, "linear_key_head_dim": key_width,
-                "linear_value_head_dim": 32, "linear_conv_kernel_dim": 3,
-                "hc_count": 2, "hc_lowrank": 8, "indexer_n_heads": 4,
-                "indexer_kv_heads": 1, "indexer_head_dim": 16, "indexer_budget": 4,
-                "indexer_compress_ratio": 2, "ngram_size": 3, "heads_per_ngram": 2,
-                "ngram_vocab_size_base": 17, "ple_embed_dim": 32, "ple_layer_ids": [1],
-                "layer_types": ["linear_attention", "full_attention"],
-            },
-        }
+        config = tiny_config(key_width)
         architecture = runpy.run_path(str(MODEL_FILE))
         mx.random.seed(1788)
         initial = architecture["Model"](architecture["ModelArgs"].from_dict(config))

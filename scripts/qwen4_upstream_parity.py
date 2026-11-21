@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Offline Flash-Next tiny parity and pinned model_file regression."""
 import argparse
-from contextlib import ExitStack
+from contextlib import contextmanager, ExitStack
 from hashlib import sha256
 import importlib.util
 from importlib.metadata import version
@@ -18,6 +18,8 @@ PORT_SHA = "f4ec75d16f0af0517b63e202abeef704c9a775e9111949ab003250d51d982c37"
 CASES = {"A": 1105, "B": 2116, "C": 3217}
 DTYPES = ("fp32", "bf16")
 PAIRS = (("hf", "upstream"), ("hf", "port"), ("upstream", "port"))
+VENDOR_MODEL_FILE = (Path(__file__).resolve().parents[1]
+                     / "joulewise/align/models/qwen4_exp_upstream.py")
 
 
 def load_python(path, name):
@@ -241,6 +243,16 @@ def mlx(directory, checkout, dtype, which):
     np.savez_compressed(directory / f"{which}.npz", **out)
 
 
+@contextmanager
+def vendored_checkpoint(directory, config, weights):
+    with TemporaryDirectory(dir=directory) as tmp:
+        checkpoint = Path(tmp)
+        (checkpoint / VENDOR_MODEL_FILE.name).write_bytes(VENDOR_MODEL_FILE.read_bytes())
+        (checkpoint / "model.safetensors").symlink_to(weights.resolve())
+        write_json(checkpoint / "config.json", dict(config, model_file=VENDOR_MODEL_FILE.name))
+        yield checkpoint
+
+
 def vendor(directory):
     """Check the pinned model_file loader against the FP32 reference and upstream."""
     import mlx.core as mx
@@ -250,14 +262,8 @@ def vendor(directory):
         raise ValueError("vendor regression requires mlx 0.31.2 and mlx-lm 0.31.3")
     if not mx.metal.is_available():
         raise RuntimeError("vendor regression requires Metal")
-    model_file = (Path(__file__).resolve().parents[1]
-                  / "joulewise/align/models/qwen4_exp_upstream.py")
     config = json.loads((directory / "config.json").read_text())
-    with TemporaryDirectory(dir=directory) as tmp, mx.stream(mx.gpu):
-        checkpoint = Path(tmp)
-        (checkpoint / model_file.name).write_bytes(model_file.read_bytes())
-        (checkpoint / "model.safetensors").symlink_to((directory / "hf.safetensors").resolve())
-        write_json(checkpoint / "config.json", dict(config, model_file=model_file.name))
+    with vendored_checkpoint(directory, config, directory / "hf.safetensors") as checkpoint, mx.stream(mx.gpu):
         model, _ = load_model(checkpoint)
         out = capture_mlx(model, model.model, mx.array([config["ids"]]), port=False)
 

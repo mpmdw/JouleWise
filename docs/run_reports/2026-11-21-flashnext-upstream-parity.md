@@ -99,3 +99,37 @@ The pinned adapter regressions, 50 stdlib adapter checks and generated
 state check passed locally. This round reused the three SSD venvs and
 generated the width-48 fixture locally. The full suite runs on the updated
 draft in hosted CI.
+
+## Audit round 2 remediation
+
+The round 2 audit blocked `f1fa8e5e1` on the pinned loader accepting
+upstream NVFP4 checkpoints. The original pinned stack changed the argmax
+at 38 of 39 prefill positions on the unscaled fixture and produced a
+maximum logit error of 9.3359375. Loading the per-expert global-scale
+variant reached a `TypeError` in the pinned quantization API.
+
+The vendored `model_file` accepts unquantized weights and native MLX affine
+weight quantization. Validation checks top-level and nested metadata,
+including per-layer overrides, before the pinned loader quantizes the
+model. Tensor checks reject integer scale encodings and global scales
+even when the declared mode is affine. The fact sheet qualifies the
+checkpoint setup and includes an offline regression for both NVFP4
+variants and one 6-bit affine control.
+
+The upstream quantizer reproduced the audit's NVFP4 payload digests from
+fixture C. A replay of the old vendor reproduced both failure modes.
+Both NVFP4 variants now raise an explicit format error. The 6-bit affine
+control passed against upstream at the `1e-4` bound for cached prefill and
+decode. [Before](../align/qwen4_exp_port/evidence/pinned-quantization-before.json) ·
+[After](../align/qwen4_exp_port/evidence/pinned-quantization-after.json)
+
+Four pinned runtime tests passed, including the six-width dispatch and
+decode coverage from round 1. The 50 stdlib adapter checks and generated
+state check passed. This round reused the SSD venvs and the published
+synthetic fixture weights. Hosted CI runs the full suite on the new
+draft head.
+
+The MED fixed-input, fixed-route BF16 oracle remains a follow-up. The
+round 2 width-48 replay refuted the old HIGH on that case. The LOW findings
+confirmed the fixture replay, the labeling of the SSD comparison and the
+download record.
