@@ -695,3 +695,81 @@ The fixture now also binds stage input descriptors to the invented files
 and their manifest IDs. The bounded W1-to-C1 builder replay returns a
 passing `sentinel_roster` with a ready packet and a complete inventory.
 The validator still refuses mismatched committed input descriptors.
+
+## K6 · canonical stage argument paths
+
+Audit 7 assessed `55878150dba2302ec41fe9b7faaee6553b93bce7`, tree
+`ac3c2c4c98cf86e6cb03344b285b3c9562adbf9d`. It verified one HIGH
+`integration-seam` and zero MED or LOW findings. It refuted the eight
+earlier findings. Two invented derivation commands resolved to the same
+file. The `repo_path` spelling recorded its digest and the
+`binding_path` spelling relative to `repo_root` omitted it. Both
+packets built and both synthetic arms admitted.
+
+Freeze `4b04484ef2b631687561f12424095e62b3a6b0a2` (tree
+`6f3bd4c24a911661db8549c5f0c172fe7b621fb8`) precedes implementation.
+On `55878150d`, the frozen three methods exited 1 with 11 failing
+assertions and subtests. The alternative derivation spelling lost its
+pin, three equivalent spellings could not resolve the collection
+directory, and the standalone builder accepted unrecognized binding
+names or invalid path operands. Earlier freezes and regression methods
+are ancestors of this change.
+
+`f89fd2247b4c240a7134624f03d7a098516da37d` (tree
+`6a792dc17b5cca588d15870909d506af50231b37`) uses the runner's argument
+binder in the stage resolver. It projects the repository as the command's
+working directory. `repo_path`, `binding_path` rooted at `repo_root`,
+relative literals, and tree-pointer values all yield the same logical
+repository-relative key. The staging renderer and the packet closure
+both use this resolver. Collection directories expand through the
+resolved order, and explicit stage descriptors share the same path
+normalization. The prepared `repo_root` must name the staging view.
+Existing confinement still resolves staging links within the allowed
+roots before reading bytes.
+
+The current bare `binding` names supply the repository directory or
+runtime controls. They supply no portable frozen file. The resolver
+accepts documented runtime controls in their stage roles and refuses an
+unknown kind or name, a scalar used as a path base, a root supplied as a
+file, or an escaping path. It classifies literal and tree-pointer
+operands using the stage option roles. This preserves files named by a
+bare relative filename, such as the invented campaign policy in the
+sweep. The raw committed packet remains separately pinned.
+
+The sweep covers four portable file forms, 15 input classes, and three
+pin states, for 180 comparisons. The exit, checkpoint count and
+diagnostic bytes are identical across forms for each class and pin state.
+The 120 missing or wrong pins must exit 2 with zero host calls. The
+healthy control reaches the mocked checkpoint. The existing K4 byte
+sweep, K5 deletion sweeps, C1 roster cases, and preceding gate cases
+continue to run. The unknown-form method also checks the prepared root.
+
+```sh
+PYTHONPATH=tests:. python3.13 -B -m unittest -v align.test_v4_next_arm_packet.C1PacketRebuildTests -k test_k6
+PYTHONPATH=tests:. python3.13 -B -m unittest -v align.test_v4_next_arm_packet.C1PacketRebuildTests
+JW_B5_SYNTHETIC_ONLY=1 PYTHONPATH=tests:. python3.13 -B -m unittest -v \
+  test_b5_plan.StageDispatchTests test_bytes_h_session \
+  align.test_v4_series_e2e align.test_v4_next_arm_packet.ArmOrderWitness \
+  hazards.test_refusal_allowlist.RefusalAllowlistTests.test_every_refusal_site_is_listed_with_its_exact_count \
+  align.test_r11_delta5_sol1 align.test_r11_delta5_sol2
+git diff --check b2e01464d HEAD
+```
+
+The authorized lead's command and input checklist above applies. The
+lead or magistrate owns the final post-close packet. Integration-owner
+and Opus acceptance, the cold final pass, and W1 signing remain open.
+Audit 8 is the last handoff for this builder lane. A new binding-form
+finding returns to the lead for a closed binding-form spec.
+`NEEDS_SPEC: none`.
+
+Both invented cases used W1 record
+`50d6b1d301a073eca64e9a396d0c17e4b13b0ba1:w-W1/record.json`
+and `refs/remotes/synthetic/records` at clock 111. They each
+recorded 71 staged pins. The canonical derivation key was
+`configs/campaigns/fixture-derivation/settled_corpus.json`, SHA-256
+`ad319d72e1b24345b8f6fa95f9adc75c59a301a86e9c3e863a9ddb64fcddf9e2`.
+
+| Form | Invented series and packet transport commits | Builder / present install / omitted pin |
+| --- | --- | --- |
+| `repo_path` | `455c1bd0a91c4ed8b6b6a77a79b42a5d792315b6` and `256d9f9f8d94e54d19ed2cd7fdaf6dae3d957819` | 0 / 1 with one mocked checkpoint / 2 with zero checkpoints |
+| `binding_path` relative to `repo_root` | `52339747f3bbfaf33144d72f05d79c0c63897c0e` and `b621d4eba49600d10b35e873c7dacea4b2fa66dc` | 0 / 1 with one mocked checkpoint / 2 with zero checkpoints |
