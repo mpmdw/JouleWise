@@ -1,0 +1,59 @@
+FFFFFF
+======================================================================
+FAIL: test_existing_ssd_copy_requires_a_complete_valid_receipt (tests.test_span_offload.SpanOffloadTests.test_existing_ssd_copy_requires_a_complete_valid_receipt) (key='schema')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Volumes/JW-EXT/jw-wt/air-indep/tests/test_span_offload.py", line 430, in test_existing_ssd_copy_requires_a_complete_valid_receipt
+    with self.assertRaises(so.OffloadError) as caught:
+         ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^
+AssertionError: OffloadError not raised
+
+======================================================================
+FAIL: test_existing_ssd_copy_requires_a_complete_valid_receipt (tests.test_span_offload.SpanOffloadTests.test_existing_ssd_copy_requires_a_complete_valid_receipt) (key='plan')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Volumes/JW-EXT/jw-wt/air-indep/tests/test_span_offload.py", line 430, in test_existing_ssd_copy_requires_a_complete_valid_receipt
+    with self.assertRaises(so.OffloadError) as caught:
+         ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^
+AssertionError: OffloadError not raised
+
+======================================================================
+FAIL: test_existing_ssd_copy_requires_a_complete_valid_receipt (tests.test_span_offload.SpanOffloadTests.test_existing_ssd_copy_requires_a_complete_valid_receipt) (key='descriptor_sha256')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Volumes/JW-EXT/jw-wt/air-indep/tests/test_span_offload.py", line 430, in test_existing_ssd_copy_requires_a_complete_valid_receipt
+    with self.assertRaises(so.OffloadError) as caught:
+         ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^
+AssertionError: OffloadError not raised
+
+======================================================================
+FAIL: test_existing_ssd_copy_requires_a_complete_valid_receipt (tests.test_span_offload.SpanOffloadTests.test_existing_ssd_copy_requires_a_complete_valid_receipt) (key='verified_epoch_s')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Volumes/JW-EXT/jw-wt/air-indep/tests/test_span_offload.py", line 430, in test_existing_ssd_copy_requires_a_complete_valid_receipt
+    with self.assertRaises(so.OffloadError) as caught:
+         ~~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^
+AssertionError: OffloadError not raised
+
+======================================================================
+FAIL: test_icloud_status_parser_requires_positive_evidence_and_no_pending_items (tests.test_span_offload.SpanOffloadTests.test_icloud_status_parser_requires_positive_evidence_and_no_pending_items) (text=b'<com.apple.CloudDocs[1] client:idle caught-up last-sync 2026-11-15 13:13:40>\npending transfers: 1')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Volumes/JW-EXT/jw-wt/air-indep/tests/test_span_offload.py", line 766, in test_icloud_status_parser_requires_positive_evidence_and_no_pending_items
+    self.assertFalse(so.ICloudBackend._uploaded(text))
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: True is not false
+
+======================================================================
+FAIL: test_icloud_status_parser_requires_positive_evidence_and_no_pending_items (tests.test_span_offload.SpanOffloadTests.test_icloud_status_parser_requires_positive_evidence_and_no_pending_items) (text=b'<com.apple.CloudDocs[1] client:idle caught-up last-sync 2026-11-15 13:13:40>\ntransfer-pending')
+----------------------------------------------------------------------
+Traceback (most recent call last):
+  File "/Volumes/JW-EXT/jw-wt/air-indep/tests/test_span_offload.py", line 766, in test_icloud_status_parser_requires_positive_evidence_and_no_pending_items
+    self.assertFalse(so.ICloudBackend._uploaded(text))
+    ~~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+AssertionError: True is not false
+
+----------------------------------------------------------------------
+Ran 2 tests in 1.478s
+
+FAILED (failures=6)
