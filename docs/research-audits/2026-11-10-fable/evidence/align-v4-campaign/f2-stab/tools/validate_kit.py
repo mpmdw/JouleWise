@@ -11,6 +11,9 @@ import sys
 
 BASE = Path(__file__).resolve().parents[2] / "item-drafts-f2" / "f2-inst-01.v1.1.json"
 BASE_SHA256 = "651d1815ca87ee23640a8db1483d4ecaf42d70d029855ad03c14bfa076116f2b"
+PIN_B = "6e9d42f1dd3d308bc9239143d0d634ab965e50e1"
+BASE_B = Path(__file__).resolve().parents[1] / "qual-pin" / "f2-stab-15.v1.1.json"
+BASE_B_SHA256 = "8dceffc2e1a10a03d25c6c06487756fe37f8f5a1c57d52e242a64faabcbc36a1"
 CELL_FIELDS = ("prefill_tokens", "decode_tokens", "g0_shape", "start_band")
 
 
@@ -48,38 +51,44 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("kit", type=Path)
     parser.add_argument("--repo", required=True, type=Path, help="clean checkout at the admitted runner pin")
-    parser.add_argument("--batch-window", required=True, choices=("02:00-02:35", "13:14-13:15"))
+    parser.add_argument("--batch-window", choices=("02:00-02:35", "13:14-13:15"),
+                        help="required for pin A, omitted for pin B")
     args = parser.parse_args(argv)
     try:
-        base_raw = BASE.read_bytes()
-        if hashlib.sha256(base_raw).hexdigest() != BASE_SHA256:
+        repo = args.repo.resolve()
+        git = ["git", "-C", str(repo)]
+        head = subprocess.check_output([*git, "rev-parse", "HEAD"], text=True).strip()
+        source, base_sha = (BASE_B, BASE_B_SHA256) if head == PIN_B else (BASE, BASE_SHA256)
+        base_raw = source.read_bytes()
+        if hashlib.sha256(base_raw).hexdigest() != base_sha:
             raise ValueError("base kit SHA-256 mismatch")
         base = json.loads(base_raw)
         kit_path = args.kit.resolve()
         kit_raw = kit_path.read_bytes()
         validate_cells(json.loads(kit_raw), base)
         pin = base["frozen"]["commit"]
-        repo = args.repo.resolve()
-        git = ["git", "-C", str(repo)]
-        head = subprocess.check_output([*git, "rev-parse", "HEAD"], text=True).strip()
         status = subprocess.check_output([*git, "status", "--porcelain"], text=True)
         if head != pin or status:
             raise ValueError(f"runner must be a clean checkout at {pin}")
+        if (head == PIN_B) == bool(args.batch_window):
+            raise ValueError("--batch-window is required for pin A and must be omitted for pin B")
+        window = ["--batch-window", args.batch_window] if args.batch_window else []
         native = subprocess.run(
             [sys.executable, "-I", "-B", str(repo / "scripts/cadence_queue.py"),
-             "validate-kit", str(kit_path), "--repo", str(repo), "--batch-window", args.batch_window],
+             "validate-kit", str(kit_path), "--repo", str(repo), *window],
             capture_output=True, text=True,
         )
         if native.returncode:
             sys.stderr.write(native.stdout + native.stderr)
             return native.returncode
         output = json.loads(native.stdout)
-        if output["kit_sha256"] != hashlib.sha256(kit_raw).hexdigest() or not output["frozen_paths_verified"]:
+        if (output["kit_sha256"] != hashlib.sha256(kit_raw).hexdigest()
+                or not output["frozen_paths_verified"] or output["frozen_commit"] != pin):
             raise ValueError("pinned validator must verify the same kit bytes and frozen paths")
     except (OSError, ValueError, TypeError, KeyError, subprocess.CalledProcessError) as error:
         print(f"REFUSE {error}", file=sys.stderr)
         return 1
-    print(json.dumps({**output, "base_kit_sha256": BASE_SHA256, "positional_cells_verified": True}, sort_keys=True))
+    print(json.dumps({**output, "base_kit_sha256": base_sha, "positional_cells_verified": True}, sort_keys=True))
     return 0
 
 

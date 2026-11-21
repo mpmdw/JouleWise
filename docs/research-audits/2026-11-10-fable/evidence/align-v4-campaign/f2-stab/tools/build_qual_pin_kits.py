@@ -38,15 +38,20 @@ import sys
 sys.path.insert(0, sys.argv[1])
 from joulewise.cadence.kit_v11 import generate_legs
 
-base = json.load(sys.stdin)
+base, reserved = json.load(sys.stdin)
+reserved = set(reserved)
 kit_id, start, stop = sys.argv[2:]
 def cells(legs):
     return [{key: value for key, value in leg.items() if key != "seed"} for leg in legs]
 
 target = cells(base["legs"])
 for seed in range(int(start), int(stop)):
+    if seed in reserved:
+        continue
     law = {**base["seed_law"], "master_seed": seed}
-    if cells(generate_legs(kit_id, law, base["leg_defaults"])) == target:
+    legs = generate_legs(kit_id, law, base["leg_defaults"])
+    if cells(legs) == target and (not reserved or
+            len({seed, *(leg["seed"] for leg in legs)} - reserved) == len(legs) + 1):
         print(seed)
         break
 else:
@@ -84,13 +89,13 @@ def pinned_call(repo, *args, input_text=None):
     return result.stdout
 
 
-def first_seed(repo, kit_id, base):
+def first_seed(repo, kit_id, base, reserved=()):
     return int(pinned_call(repo, "-c", SEED_SEARCH, repo, kit_id, SEED_START, SEED_STOP,
-                           input_text=json.dumps(base)))
+                           input_text=json.dumps([base, sorted(reserved)])))
 
 
-def seeded_kit(repo, kit_id, base):
-    seed = first_seed(repo, kit_id, base)
+def seeded_kit(repo, kit_id, base, reserved=()):
+    seed = first_seed(repo, kit_id, base, reserved)
     law = base["seed_law"]
     generated = json.loads(pinned_call(
         repo, QUEUE_CLI, "gen-legs", "--law", law["method"], "--campaign-id", kit_id,

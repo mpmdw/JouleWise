@@ -1,0 +1,322 @@
+{
+ "schema": "joulewise.cadence_campaign_kit.v1.1",
+ "campaign_id": "f2-stab-28",
+ "title": "Instrument characterization, F2 (RL-169 and RL-169a; RL-155 section 4; RL-155a section 1.3 (b); RL-165 section 8.4): kit schema v1.1, cell law sha256-cells-v1, data only on the frozen commit of cl-dev-03's first span, no code change (RL-150 R5 class B). Twelve legs, run as four pieces of three (L001-L003, L004-L006, L007-L009, L010-L012), each piece holding each prompt size (256, 2,000, 19,458 tokens) once; decode 512; band q600 (a 600 s loaded idle after G0 release, then the turn); g0 shape own; Automatic. Master seed 2026111443, chosen by RL-169a's layout-only rule: the lowest seed from 2026111441 up, unused on every ref, at which each size holds each of the three positions in a piece at least once over the four pieces. Void 2026-11-21 21:29 PST. Latest t0 22:13:10. Not campaign data: no leg counts toward any cap, development day, look or roster. Its energy is sealed until freeze 2 and read once under RL-169 section 3.",
+ "ruling": {
+  "id": "RL-179",
+  "authorizes_spans": true
+ },
+ "frozen": {
+  "commit": "2d347f721552fe03bdd19f113e7bad7a7c24908e",
+  "paths": {
+   "configs/align/v4/qwen38-27b-8bit-hf-pins.json": "3a1835342b4576b53fb715eb18e53877b54de8e9d04b1f71854d302c9d3635b8",
+   "configs/align/v4/r1_runtime.json": "bf2cb2e6503c46373b52b10f32642d95a66a6636a3d7caaad0ce8b2b756781df",
+   "configs/campaigns/align_v4/registration/inputs.json": "49806b61e50d5c2ceeeea323d8aceff75177a2f7e7d83ad2f5dfbe1c20090130",
+   "configs/campaigns/align_v4/stages/episodes-a/align-v4-episodes-a-e05.json": "d73cc748aa3732573370cbd44cbb54a992dd8d1b20a92cdf92295c7b320d1507",
+   "joulewise/adapters/mlx_runtime.py": "953e6fec990c1d7e0702a8abb199a55f179e50d28854f4b62d0e95302dde0c45",
+   "joulewise/adapters/powermetrics.py": "70f47086b2445e88d0cb25ed2d47751dfd99843d0cf1e149f2fe630c5116e5e4",
+   "joulewise/align/apple/cadence_leg.py": "ae19bcdc66af8ca8e55d9c0a5586015fa52fc1d87c50545a5ff831225a452b81",
+   "joulewise/align/apple/endpoint.py": "65b02aea0e02b5484811e2021445213b2d2645e334b93461b593f23e0a4d0deb",
+   "joulewise/align/apple/powermode.py": "a5cb6efe7707b95277cfb85ddb4453dbcb02fe87ada5177ec3947d48ce64e84b",
+   "joulewise/align/apple/prompt_cache.py": "48cf0d5453b96fadfb58168e0c55a90d92066af7469f2ee1151fb61821c83999",
+   "joulewise/align/apple/r1_phase_table.py": "ffd6c025f4691771ea348f5d0f670c8f4bbfcb61afe67b83831afdd6c3d6f1ea",
+   "joulewise/align/apple/r1_runtime.py": "a5ba3cd4dce1b41c8448e2e26653789a9f607ffc2836a7b4a9339b991f9b6dac",
+   "joulewise/align/apple/r1_runtime_contract.py": "4b9d1c69b0459a0382dfdd5e3aee56366e99f770ed2320cfff90539647ab6591",
+   "joulewise/align/apple/smc_enumeration.py": "0132579cc33f8a997cdfd5f3dd84466352cdeeeebf9ca7de8dc1ec7990cea0a9",
+   "joulewise/align/apple/smc_reader.py": "6ea8dbb6ed6b6640f8cb89698ec19827de8de0e657750815a101e7809520516e",
+   "joulewise/align/apple/thermal.py": "b9b46f9ede50b265c245dcc05d3503139632ae129e313675622fa1dce25d39d7",
+   "joulewise/align/apple/thermal_gates.py": "c72937bd8bf7b5553c1ffd70e76018ffbf25f32578533c8749aa88419837918d",
+   "joulewise/align/apple/v4_registration.py": "317859c427910eb8c705784a52aaf4f44b1a059bae729031dce1d6a539b5d1d5",
+   "joulewise/align/apple/workload.py": "837b74be97616c48c26b0c1277fe2a605b575d5cfc4396dc05e1139079daf1ba",
+   "joulewise/b5/driver.py": "88068b64d09d3e335810e3b4718246cb3164223b87f96b56c5a098349882f90b",
+   "joulewise/cadence/__init__.py": "f4b0e5a58ba794f75fc831965b4a840bcd07340807c66b42b3efad66bd787630",
+   "joulewise/cadence/desk.py": "502ec84face40f5396c1f51943350f21030885cf3e054ca9aef4a7d353e6ea08",
+   "joulewise/cadence/kit.py": "5baa8e1c7800b5e4edeb7439f6f17e2c04953589e225470faac1a8e12d47e857",
+   "joulewise/cadence/kit_v11.py": "bd8daee41e0c1303872a45dea94f3f71c70f7caa874f4b1b296371e1b5fd56b1",
+   "joulewise/cadence/legs.py": "b2c767cfc7c10cbb9c266c11a894ce5f7d74e736f38886f3bd9b9e8bc19ae217",
+   "joulewise/cadence/queue.py": "4f926974f23c627d6d245199adf4f979d3397df4b0f6c5ed5eb22177690bc80e",
+   "joulewise/cadence/stops.py": "80d640fc6519c8c35def61f086ae255a15bbebac43900bdcd183d772bec020fb",
+   "joulewise/controller.py": "3f0535c976463da1ae99718cfcde2b0ef92241cda36973baaf4b1a6ebe1b12db",
+   "scripts/align_r1_rehearsal.py": "2ba005b14bd687a87e749c2ec6f162a603b7e76674924bb282a766164070a710",
+   "scripts/align_r1_runtime.py": "7403e69d9aedb54887bfc4218a45db84faa653329ca977bcf97edf20af88f923",
+   "scripts/cadence_leg_runtime.py": "345e9064015536f7e1454f42535d7a44d39acdc17494d26fc4200a25b31662f1",
+   "scripts/cadence_legs_runner.py": "907859a89f5960dd40aeb23831c9693f88714d382d059a15c2a15961a582351f",
+   "scripts/km003c_monitor.py": "211a807f152e18b28b622f1d914fca115f308e5938c979269842e2df91601ef9",
+   "scripts/launch_align_r0.py": "242cd7aa0bf5788786ca8630e6931abcaaa3e01dc3bf014255a6191b50c6e799",
+   "scripts/launch_cadence_span.py": "9d68c8f5382bfe9d81a2d537193bb3963ef37126cd18ec7d86f38b6ae97fed8b",
+   "scripts/run_align_r0_launchagent.sh": "ac1dc2a223754cfc3295dd1352a838a3077671da140ffeeba484400e1bd249c6",
+   "scripts/run_align_r1_smoke.py": "5513d616231acf66209a29310df12214304a293042ddc020887b26369a87c34c",
+   "scripts/run_night.py": "b3c58c91125b8355a5269928cda3b30e26f362b9927b03cbebf71d71f1fb28c0"
+  }
+ },
+ "runner": {
+  "kind": "cadence-legs-v1.1",
+  "entry": "scripts/cadence_legs_runner.py",
+  "stage_journal": "chain-stages.jsonl"
+ },
+ "model": "mlx-community/Qwen3.8-27B-8bit",
+ "leg_defaults": {
+  "decode_tokens": 512
+ },
+ "seed_law": {
+  "method": "sha256-cells-v1",
+  "master_seed": 2026111614,
+  "n_legs": 12,
+  "bands": [
+   "q600"
+  ],
+  "prompt_tokens": [
+   256,
+   2000,
+   19458
+  ],
+  "g0_shapes": [
+   "own"
+  ]
+ },
+ "legs": [
+  {
+   "leg_id": "L001",
+   "seed": 3117705987,
+   "start_band": "q600",
+   "prefill_tokens": 19458,
+   "decode_tokens": 512,
+   "g0_shape": "own"
+  },
+  {
+   "leg_id": "L002",
+   "seed": 3869622507,
+   "start_band": "q600",
+   "prefill_tokens": 256,
+   "decode_tokens": 512,
+   "g0_shape": "own"
+  },
+  {
+   "leg_id": "L003",
+   "seed": 1612171254,
+   "start_band": "q600",
+   "prefill_tokens": 2000,
+   "decode_tokens": 512,
+   "g0_shape": "own"
+  },
+  {
+   "leg_id": "L004",
+   "seed": 818503492,
+   "start_band": "q600",
+   "prefill_tokens": 2000,
+   "decode_tokens": 512,
+   "g0_shape": "own"
+  },
+  {
+   "leg_id": "L005",
+   "seed": 2467912431,
+   "start_band": "q600",
+   "prefill_tokens": 256,
+   "decode_tokens": 512,
+   "g0_shape": "own"
+  },
+  {
+   "leg_id": "L006",
+   "seed": 131664998,
+   "start_band": "q600",
+   "prefill_tokens": 19458,
+   "decode_tokens": 512,
+   "g0_shape": "own"
+  },
+  {
+   "leg_id": "L007",
+   "seed": 4098814886,
+   "start_band": "q600",
+   "prefill_tokens": 256,
+   "decode_tokens": 512,
+   "g0_shape": "own"
+  },
+  {
+   "leg_id": "L008",
+   "seed": 1517473337,
+   "start_band": "q600",
+   "prefill_tokens": 2000,
+   "decode_tokens": 512,
+   "g0_shape": "own"
+  },
+  {
+   "leg_id": "L009",
+   "seed": 545451397,
+   "start_band": "q600",
+   "prefill_tokens": 19458,
+   "decode_tokens": 512,
+   "g0_shape": "own"
+  },
+  {
+   "leg_id": "L010",
+   "seed": 427815159,
+   "start_band": "q600",
+   "prefill_tokens": 2000,
+   "decode_tokens": 512,
+   "g0_shape": "own"
+  },
+  {
+   "leg_id": "L011",
+   "seed": 1216427211,
+   "start_band": "q600",
+   "prefill_tokens": 19458,
+   "decode_tokens": 512,
+   "g0_shape": "own"
+  },
+  {
+   "leg_id": "L012",
+   "seed": 1720992535,
+   "start_band": "q600",
+   "prefill_tokens": 256,
+   "decode_tokens": 512,
+   "g0_shape": "own"
+  }
+ ],
+ "inclusion_rules": [
+  {
+   "id": "ran_to_cap",
+   "text": "RL-149 section 2.4 rule 1: it ran to its decode cap of 512 tokens. A leg that stops short is kept in custody and flagged."
+  },
+  {
+   "id": "g0_released",
+   "text": "RL-149 section 2.4 rule 2: its G0 released, under the R1 G0 timeout of 1,200 s, against its own capture. A leg whose G0 timed out runs no turn, stays in custody and is flagged. It is not a stop."
+  },
+  {
+   "id": "sidecar_coverage",
+   "text": "RL-149 section 2.4 rule 3, as RL-169a section 2 F7 words it: sidecar coverage of at least 99 % with no gap over 2 s, and powermetrics gaps within the U1 bound, judged by lm-inst-01 at the read, not by the runner and not at a look. The rails stop 1.0 s after decode end and no leg has a recovery phase after its turn; each censored value is printed as censored with its bound."
+  },
+  {
+   "id": "km003c_clean",
+   "text": "RL-149 section 2.4 rule 4: the KM003C was present and its stream is clean, since every leg is analysed on DC-in as well as the GPU rail."
+  },
+  {
+   "id": "not_a_replaced_attempt",
+   "text": "RL-150 R7: redo_quota is 0, so a loaded attempt is kept and flagged, never redone. Outside load is part of what the floor measures."
+  },
+  {
+   "id": "block_power_mode",
+   "text": "RL-149 section 2.4 rule 6: the power mode is the block's. This block is Automatic (pmset powermode 0)."
+  },
+  {
+   "id": "no_drop_by_outcome",
+   "text": "No leg is dropped for its energy, its residual, its OS level or state, or its heat. Those are the measurement. Every attempt stays in custody, replaced ones included."
+  },
+  {
+   "id": "bands_by_history",
+   "text": "Band q600 means a 600 s idle with the model resident after the leg's G0 release, then the turn. The first leg of each span follows that span's fresh soak. Each piece of three holds each prompt size once."
+  },
+  {
+   "id": "reserve_rule",
+   "text": "No reserve and no re-run: a leg whose energy was captured is never re-run, and no leg is replaced."
+  },
+  {
+   "id": "energy_read_rule",
+   "text": "RL-169 section 3: this kit's energy (GPU rail, the other rails and DC-in) is sealed until freeze 2 is committed and is read once, by one analyst seat, with code and output schema frozen in manifest lm-inst-01. No desk, watcher, queue or agent opens an F2 energy, power or meter file. The runner hashes each meter stream and decodes its header and trailer lines only. The per-span desk reads the projected leg summary only. Print only: no F2 number enters a fit, coefficient, threshold or score."
+  },
+  {
+   "id": "not_campaign_data",
+   "text": "RL-169 section 3: No leg of this kit is campaign data or enters any look, fit or count. It counts toward no 132 cap, line 9, development day or look roster. No ledger, desk, look or count takes an f2- leg for a campaign leg."
+  },
+  {
+   "id": "f2_read_rule",
+   "text": "RL-169a section 5: piece 1's hand-read, by the lead, no energy, from each legs/<id>/leg_record.json (leg_status, g0_outcome, g0_wait_s, quiet_spans_ns, decode_tokens, decode_cap_reached, prefill_tokens and the wall) and from runner_receipt.json (the meter, the feeds, the restore lines). It passes when: (1) every leg is complete or g0_unreleased and at least two are complete; (2) each complete leg has one quiet span of 600 s or more and reached 512 tokens; (3) the meter was present and clean, every feed is proven stopped and the restore lines passed. It records without judging each leg's wall against 2,700 s and the realized prefill_tokens of the 256 leg. A complete leg that stopped short of 512 is kept and flagged; if the 256 leg does so, the lead tells the research lead before queue b is committed. Queue a holds piece 1 only; queue b holds pieces 2 to 4 and is committed only after the hand-read passes. No leg is re-run."
+  }
+ ],
+ "stop_rules": {
+  "instrument_fault": true,
+  "refusal": true,
+  "contaminated_redos_max": 3,
+  "contaminated_redos_scope": "span",
+  "band_unreachable_max": 2,
+  "band_unreachable_scope": "span",
+  "leg_time_factor": 1.5,
+  "notes": "RL-169a section 4. What the code does on any F2 piece: a named stop or a refusal makes that span bad-terminal, so F2's own queue halts there; the Air desk opens a cadence-stop issue, and every queue halts while it is open, the campaign's included; a stop never aborts a running span. Named stops on F2: REFUSAL, INSTRUMENT_FAULT, CONTAMINATED_REDOS (three loaded legs in one piece) and LEG_OVERTIME (two legs over 1.5 x their budget; a G0 that releases after about 890 s does it). A G0 timeout alone, or one or two loaded legs, is recorded and is not a stop. Disposal: restore unproven or host state changed keeps the issue open and holds everything; INSTRUMENT_FAULT keeps the issue open until a fresh km003c_ready check passes (the meter is shared); REFUSAL, LEG_OVERTIME and CONTAMINATED_REDOS are closed by the lead's desk once the restore lines and feeds are proven stopped in the receipt, with one line of cause, and F2 resumes by the lead with a new queue (a second one comes to the research lead). A new queue holds the pieces not yet run under a new queue_id; a leg with a member bundle is never re-run. Launch rules (RL-169a section 3): latest t0 is 22:13:10 (worst-case work end 01:20:40, launcher deadline 01:30:00, fence end 01:45:00); no t0 in [10:50:00, 13:15:00); none from 22:13:10 (exclusive) to 02:40:00. The quiet after F2 counts from the actual close stamp in the receipt. Void 2026-11-21 21:29 PST. Leg budgets are the runner's time model for band q600 and 512 decode tokens; leg_budget_s is their ceiling and leg_worst_case_s (a G0 at its 1,200 s cap, with margin) is each leg's process cap."
+ },
+ "span_template": {
+  "timezone": "America/Los_Angeles",
+  "t0_rule": "free",
+  "legs_per_span": 3,
+  "soak_s": 1950,
+  "fixed_overhead_s": 1200,
+  "leg_budget_s": 1660,
+  "leg_worst_case_s": 2700,
+  "redo_quota": 0
+ },
+ "checklist": [
+  {
+   "id": "head_is_frozen_commit",
+   "kind": "head_is_frozen_commit"
+  },
+  {
+   "id": "frozen_paths_hash",
+   "kind": "frozen_paths_hash"
+  },
+  {
+   "id": "kit_sha256",
+   "kind": "kit_sha256"
+  },
+  {
+   "id": "ac_power",
+   "kind": "ac_power"
+  },
+  {
+   "id": "powermode_zero",
+   "kind": "powermode_zero"
+  },
+  {
+   "id": "network_time_off",
+   "kind": "network_time_off"
+  },
+  {
+   "id": "freq_word_zero",
+   "kind": "freq_word_zero"
+  },
+  {
+   "id": "no_stray_monitor",
+   "kind": "no_stray_monitor"
+  },
+  {
+   "id": "no_other_agent",
+   "kind": "no_other_agent"
+  },
+  {
+   "id": "no_night_agent_loaded",
+   "kind": "no_night_agent_loaded"
+  },
+  {
+   "id": "no_high_power_marker",
+   "kind": "no_high_power_marker"
+  },
+  {
+   "id": "sudo_kill",
+   "kind": "sudo_kill"
+  },
+  {
+   "id": "km003c_ready",
+   "kind": "km003c_ready"
+  },
+  {
+   "id": "disk_free_gb",
+   "kind": "disk_free_gb",
+   "args": {
+    "min_gb": 40
+   }
+  },
+  {
+   "id": "previous_span_closed",
+   "kind": "previous_span_closed"
+  },
+  {
+   "id": "no_halt_or_veto",
+   "kind": "no_halt_or_veto"
+  },
+  {
+   "id": "span_window",
+   "kind": "span_window"
+  }
+ ],
+ "looks": [],
+ "desk": {
+  "adapter": "leg-summary-v1"
+ }
+}
