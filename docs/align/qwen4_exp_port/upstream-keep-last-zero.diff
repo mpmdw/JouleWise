@@ -1,0 +1,11 @@
+--- a/mlx_lm/models/qwen4_exp.py
++++ b/mlx_lm/models/qwen4_exp.py
+@@ -807,7 +807,7 @@
+     """The last `n` steps of `x`; a right padded row ends at its length."""
+     if lengths is None:
+         # A copy: a slice would keep all of `x` alive in the cache.
+-        return mx.contiguous(x[:, -n:])
++        return mx.contiguous(x[:, -n:] if n else x[:, :0])
+     positions = mx.clip(lengths, 0, x.shape[1] - n)[:, None] + mx.arange(n)
+     if x.ndim == 3:
+         positions = positions[..., None]

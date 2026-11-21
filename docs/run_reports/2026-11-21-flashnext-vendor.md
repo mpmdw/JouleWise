@@ -45,3 +45,28 @@ recomputed byte for byte from the stored traces after the split.
 Verification used the existing SSD venvs and local synthetic weights.
 The runtime pins and SSD artifact remained in place. Hosted CI runs
 the full suite on both drafts.
+
+## Audit 4
+
+The width-one PLE and DeltaNet convolutions both passed zero to
+`_keep_last`. Their unpadded caches kept the prefix. The n-gram history
+also uses this helper and has at least two n-gram orders when PLE is
+active. The indexer appends keys to its KV cache and uses prefix slices
+with nonnegative bounds.
+
+Both width-one native regressions failed before the fix because their
+caches kept four positions after the first chunk. After the shared fix,
+61 pinned runtime and adapter tests passed. Coverage includes PLE
+widths 1, 2 and 4 and DeltaNet width 1 through prefill and streaming.
+The audit checkpoint regenerated with the same SHA-256. The patched
+vendor and the patched upstream checkout both restored the one-token
+continuation shape and token 50, with cached final-position error
+`7.15256e-7` against Transformers. On the audit's width-one DeltaNet
+checkpoint, cached and uncached final logits agreed within `5.36442e-7`.
+The released config uses width 4 on both convolution paths.
+
+The [addendum](../align/qwen4_exp_port/UPSTREAM-PARITY-ADDENDUM-1.md)
+records the reproduction and the one-line upstream diff. Audit 4
+changes are confined to PR #930. Verification used local venvs and
+locally generated tiny weights. The released artifact was read only
+for its configuration.

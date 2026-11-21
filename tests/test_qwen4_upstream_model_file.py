@@ -51,6 +51,18 @@ def write_checkpoint(path, config, weights):
     mx.save_safetensors(str(path / "model.safetensors"), weights)
 
 
+def make_tokenizer(vocab_size):
+    from tokenizers import Tokenizer
+    from tokenizers.models import WordLevel
+    from transformers import PreTrainedTokenizerFast
+
+    vocab = {"<unk>": 0, "<bos>": 1, "<eos>": 2}
+    vocab.update({str(i): i for i in range(3, vocab_size)})
+    tokenizer = Tokenizer(WordLevel(vocab, unk_token="<unk>"))
+    return PreTrainedTokenizerFast(tokenizer_object=tokenizer, bos_token="<bos>",
+                                   eos_token="<eos>", unk_token="<unk>")
+
+
 @unittest.skipUnless(pinned_runtime_available(), "requires MLX 0.31.2 and mlx-lm 0.31.3")
 class Qwen4UpstreamModelFileTest(unittest.TestCase):
     def test_local_artifact_load_and_cached_decode(self):
@@ -67,6 +79,51 @@ class Qwen4UpstreamModelFileTest(unittest.TestCase):
                                  (64, True), (128, True)):
             with self.subTest(linear_key_head_dim=width):
                 self.check_local_artifact(width, metal_calls=2 if use_metal else 0)
+
+    def test_ple_conv_widths_in_prefill_and_stream_generate(self):
+        for width in (1, 2, 4):
+            with self.subTest(ple_conv_kernel_size=width):
+                config = tiny_config()
+                text = config["text_config"]
+                text["ple_conv_kernel_size"] = width
+                self.check_conv_cache(config, slot=2, history=(width - 1) * text["ngram_size"])
+
+    def test_delta_net_conv_width_one_in_prefill_and_stream_generate(self):
+        config = tiny_config()
+        config["text_config"]["linear_conv_kernel_dim"] = 1
+        self.check_conv_cache(config, slot=0, history=0)
+
+    def check_conv_cache(self, config, *, slot, history):
+        import mlx.core as mx
+        from mlx.utils import tree_flatten
+        from mlx_lm import stream_generate
+        from mlx_lm.utils import load_model
+
+        arch = runpy.run_path(str(MODEL_FILE))
+        mx.random.seed(1105)
+        model = arch["Model"](arch["ModelArgs"].from_dict(config))
+        with tempfile.TemporaryDirectory() as tmp:
+            write_checkpoint(Path(tmp), config, dict(tree_flatten(model.parameters())))
+            loaded, _ = load_model(Path(tmp))
+
+        vocab_size = config["text_config"]["vocab_size"]
+        tokens = [7, 8, 9, 10, 2, 12, 13, 14, 15, 16, 17]
+        ids = mx.array([tokens])
+        expected = loaded(ids)
+        self.assertEqual(expected.shape, (1, len(tokens), vocab_size))
+        self.assertTrue(mx.isfinite(expected).all().item())
+        cache = loaded.make_cache()
+        for start, stop in ((0, 4), (4, 10), (10, 11)):
+            logits = loaded(ids[:, start:stop], cache=cache)
+            self.assertEqual(logits.shape, (1, stop - start, vocab_size))
+            self.assertEqual(cache[0][slot].shape[1], history)
+            self.assertTrue(mx.allclose(logits, expected[:, start:stop], atol=1e-4, rtol=0).item())
+
+        for step_size in (3, 2048):
+            with self.subTest(prefill_step_size=step_size):
+                responses = list(stream_generate(loaded, make_tokenizer(vocab_size), tokens,
+                                                 max_tokens=1, prefill_step_size=step_size))
+                self.assertEqual([r.token for r in responses], [expected[0, -1].argmax().item()])
 
     def test_rejects_unsupported_checkpoint_quantization(self):
         arch = runpy.run_path(str(MODEL_FILE))
@@ -249,9 +306,6 @@ class Qwen4UpstreamModelFileTest(unittest.TestCase):
         import mlx.core as mx
         from mlx.utils import tree_flatten
         from mlx_lm.models import gated_delta
-        from tokenizers import Tokenizer
-        from tokenizers.models import WordLevel
-        from transformers import PreTrainedTokenizerFast
 
         from joulewise.adapters.mlx_runtime import MlxRuntimeAdapter
         from joulewise.clock import FakeClock
@@ -265,11 +319,7 @@ class Qwen4UpstreamModelFileTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             artifact = Path(tmp)
             write_checkpoint(artifact, config, dict(tree_flatten(initial.parameters())))
-            vocab = {"<unk>": 0, "<bos>": 1, "<eos>": 2}
-            vocab.update({str(i): i for i in range(3, 32)})
-            tokenizer = Tokenizer(WordLevel(vocab, unk_token="<unk>"))
-            PreTrainedTokenizerFast(tokenizer_object=tokenizer, bos_token="<bos>",
-                                    eos_token="<eos>", unk_token="<unk>").save_pretrained(artifact)
+            make_tokenizer(config["text_config"]["vocab_size"]).save_pretrained(artifact)
 
             workload = make_config(model={"source": str(artifact), "family": "qwen4_exp"})
             adapter = MlxRuntimeAdapter(FakeClock())

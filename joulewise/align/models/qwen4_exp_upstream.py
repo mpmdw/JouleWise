@@ -1023,7 +1023,7 @@ def _keep_last(x: mx.array, *, n: int, lengths: mx.array | None) -> mx.array:
     """The last `n` steps of `x`; a right padded row ends at its length."""
     if lengths is None:
         # A copy: a slice would keep all of `x` alive in the cache.
-        return mx.contiguous(x[:, -n:])
+        return mx.contiguous(x[:, -n:] if n else x[:, :0])
     positions = mx.clip(lengths, 0, x.shape[1] - n)[:, None] + mx.arange(n)
     if x.ndim == 3:
         positions = positions[..., None]
