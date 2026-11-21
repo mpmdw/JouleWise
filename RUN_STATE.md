@@ -1052,6 +1052,28 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 
 <!-- RUN_STATE TYPED ITEMS: newest first. Add with scripts/run_state_add.py; never edit by hand. -->
 
+514. **Magistrate 72eb3034 CHECK #513 for cq-f2-stab-02-l008-a1: RECEIPT OK (1/1 legs, admitted, copied)**
+
+```pointer
+owner: magistrate
+wait: none
+deadline: 2026-11-21T17:00:00-08:00
+on_early_or_refused: none; this item records the L008 Check. The next action is the ladder's next eligible rung, recorded by this activation (item 515) or the next.
+next_observable: the next magistrate item on main (item 515, f2-stab-02 L009 ISSUED).
+```
+
+```item
+{"expires_epoch_s": null, "issued_epoch_s": 1795284459, "number": 514, "owner": "magistrate", "schema": "joulewise.run_state_item.v1", "sets": [{"at_epoch_s": 1795284459, "item": 513, "status": "CLOSED"}], "status": "CLOSED", "supersedes": []}
+```
+
+- **Spawn.** Activation 72eb3034 spawned 10:05:10 PST (watchdog attempt 2013) after the align-r0 fence for cq-f2-stab-02-l008-a1 cleared (fence pid 95983 gone, receipt written 10:01:50). No notices pending, no unread mail from Ed, directive list unchanged (standing 587/422/421/417/416/408/405), no standdown request. Canonical at `8a989b4c3` = origin/main (no merge since item 513).
+- **Check** (custody `f2stab02-check-72eb3034/check.out`, from `f2stab02-check-template-18e179b1/check.sh` with stamp `20261121T170436Z` and NEWACT 72eb3034): **RECEIPT OK.** Output `/Users/edr/campaign-out/f2-stab-02/cq-f2-stab-02-l008-a1-20261121T170436Z`. Non-mock, runner_kind cadence-legs-v1.1, kit sha256 `1fe8dd1d0fb60fe1d481ecb0d4358fda595668c1e889a35a75695e290fcad505`, frozen `2d347f721552fe03bdd19f113e7bad7a7c24908e`, campaign f2-stab-02, roster L008, batch_windows `['02:00-02:35']` (asserted), rc 0, error null, 1/1 legs planned and finished. Span: chain COMPLETE, MEASURED_OK, "1/1 legs run", fault false. Every step rc 0 (deadline, frozen, night_agents, ac_power, condition13, start feeds, read_power, display, dwell, plan, soak, L008.a1, restore, stop-volumes, stop-meter, stop-agents, close-volumes). Feeds proven stopped; meter 17,095 polls, 0 bad, 0 USB errors, 0 restarts.
+- **Leg L008:** complete, admitted, G0 released after 143.7 s, decode 512 tokens (cap reached), prefill 2,024 tokens, 1 attempt, wall 1,315.2 s of budget 1,378 s, 0 contaminated redos; os_load max_busy_cores 1.773, max_gap_s 1.30; os_level_max 0, pm_nominal true. Attempt 09:39:54-10:01:49 PST.
+- **Quiet span mapped to wall time** (monotonic anchor from the receipt's `ended`): 09:49:27-09:59:27 PST (600 s). Maintenance log lines inside it (print only, `OUT/maintenance-log.txt`, 22,132 lines for 09:04:36-10:01:50): dasd 1,676, cloudd 1,610, backupd 29; no mobileassetd or softwareupdated inside the span (mobileassetd 1,394 lines in the 09:20 bucket, during the soak).
+- **Host after close (10:05:46):** network time Off, powermode 0, kernel frequency word 0, AC, not charging, 0 mA, 210 GiB free, no desk fence, no align-r0 label, no High Power marker, no runner/monitor group, no root powermetrics. measurement_mode verify's one FAIL is this magistrate's own MCP children (post-run).
+- **Copied at once** (item 409): `cq-f2-stab-02-l008-a1.ok` written 10:06:43; manifest 56 files, manifest sha256 `2a1f619c67ca68a8dde591783bfe080210f7946a709ad830a7638fdba3062c2a`, enc sha256 `37591386bd94d3a9308f90e8b569af39ae8c2c0b04f0065d287875d07fe00773`; iCloud idle and caught up (last-sync 10:06:21 after the 10:06:04 copy; `f2stab02-check-72eb3034/offload-run.out`).
+- **Effect.** Item 513 CLOSED. f2-stab-02 has L001-L006 and L008 run; L007 spent with 0 legs (item 505).
+
 513. **Magistrate 18e179b1, 2026-11-21 09:04 PST: MAGISTRATE — f2-stab-02 L008 ISSUED at rank 4 on pin A, ARG 02:00-02:35, cq-f2-stab-02-l008-a1, one launch as the last act**
 
 ```pointer
