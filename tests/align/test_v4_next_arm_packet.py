@@ -167,6 +167,14 @@ def write_c1_fixture_kit(scenario, files):
         scenario.write(manifest, {'manifest_id': stage.stage_id, 'executed_order': rows})
         manifests.append({'manifest': {'path': manifest}, 'external_input_id': stage.stage_id})
     scenario.write(staging.plan.HEAD_PIN_RELATIVE, b'invented fixture pin\n')
+    for stage in tree['stage_graph']:
+        descriptor = stage.get('input') or {}
+        if 'sha256' in descriptor:
+            raw = (scenario.root / descriptor['path']).read_bytes()
+            descriptor['sha256'] = builder.digest(raw)
+            if descriptor['kind'] == 'manifest':
+                descriptor['manifest_id'] = json.loads(raw)['manifest_id']
+    scenario.write(directory / 'plan_tree.json', series.raw_json(tree))
     scenario.write('configs/campaigns/bytes_v1/roster.json', {'models': []})
     scenario.write('configs/campaigns/d117_floor_qwen3-1p7b_v5/plan_tree.json',
                    {'arm_attachments': {'launch': {'bindings': []}}, 'external_inputs': {'manifests': manifests}})

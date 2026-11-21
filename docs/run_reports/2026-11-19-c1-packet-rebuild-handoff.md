@@ -688,3 +688,10 @@ JW_B5_SYNTHETIC_ONLY=1 PYTHONPATH=tests:. python3.13 -B -m unittest -v \
 The six targeted K5 and retained K4 methods passed on `6f158deaa`,
 including all 142 closure deletions and 72 byte mutations.
 [First hosted shard 5](https://github.com/mpmdw/JouleWise/actions/runs/44927145240/job/136915747581) · [First hosted shard 10](https://github.com/mpmdw/JouleWise/actions/runs/44927145240/job/136915747633)
+
+A follow-up bounded replay of the first Delta 5 fixture repair found
+the derivation descriptor still carried its source template's SHA-256.
+The fixture now also binds stage input descriptors to the invented files
+and their manifest IDs. The bounded W1-to-C1 builder replay returns a
+passing `sentinel_roster` with a ready packet and a complete inventory.
+The validator still refuses mismatched committed input descriptors.
