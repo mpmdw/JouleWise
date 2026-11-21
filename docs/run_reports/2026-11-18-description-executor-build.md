@@ -1591,5 +1591,10 @@ records exercise writer validation and intercept the reservation boundary.
 All eight frozen v5 hashes and 53 protected-path entries match intake. The
 completed intake CI run recorded 15,915 passes and 1,040 known nonpassing IDs
 across 16,955 frozen methods. Verify the successor against that independent
-baseline on the read-back head.
+baseline on the read-back head. Hosted quick on `5fc5056b2` caught a native
+preflight regression in the scoring call signature. The follow-up carries
+the context on the leg's signal object and exercises the existing native
+scoring shim on the same authenticated fixture. The 257 selected frozen
+DC, recovery, and precedence cases, three legacy standalone writer controls,
+and 180 exact integral comparisons passed during the round-2 replay.
 [Corrected DC replay](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/rl194b-audit2-after-dc.log) · [Corrected recovery replay](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/rl194b-audit2-after-anchor.log) · [Pinned fixture regression log](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/rl194b-audit2-preflight-final.log) · [Interval and value-access log](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/rl194b-audit2-interval.log) · [Protected blob comparison](/Volumes/JW-EXT/scratch/d-desc-looks-executor-sol/rl194b-audit2-protected.tsv) · [Current PR checks](https://github.com/mpmdw/JouleWise/pull/868/checks)

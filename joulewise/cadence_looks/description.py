@@ -1450,11 +1450,12 @@ class RailSupport:
 class Signals:
     """A leg's timed intervals and single gateway to scoring values."""
 
-    def __init__(self, support, paths, mark_read, pinned, *, sensor_source=None):
+    def __init__(self, support, paths, mark_read, pinned, *, sensor_source=None, has_input_pins=False):
         self.meta = support
         self.paths = paths
         self.mark_read = mark_read
         self.pinned = pinned
+        self.has_input_pins = has_input_pins
         self._sensor_source = sensor_source
         self.sensor_names = (sensor_source[1].names if sensor_source is not None
                              else tuple(sorted({name for record in support.get("sensors") or ()
@@ -2018,11 +2019,11 @@ def print_leg(signal, detail, instrument):
     return _printed(_leg_values(signal, detail, instrument))
 
 
-def _leg_values(signal, detail, instrument, *, has_input_pins=False):
+def _leg_values(signal, detail, instrument):
     # Check recorded identities in confinement before any value on this leg.
     try:
         signal._index_rails()
-        if has_input_pins or signal._meter_marked_clean():
+        if signal.has_input_pins or signal._meter_marked_clean():
             signal._index_meter()
     except IntervalLedgerMismatch:
         if not instrument:
@@ -2191,8 +2192,9 @@ def score(snapshot, sources, qualified, mark_read):
         with paths["support.json"].open("rb") as stream:
             support, sensor_span = _support_metadata(stream)
             sensor_source = (stream, sensor_span) if snapshot.instrument and sensor_span else None
-            signal = Signals(support, paths, mark_read, pinned, sensor_source=sensor_source)
-            for name, value in _leg_values(signal, detail, snapshot.instrument, has_input_pins=has_input_pins).items():
+            signal = Signals(support, paths, mark_read, pinned, sensor_source=sensor_source,
+                             has_input_pins=has_input_pins)
+            for name, value in _leg_values(signal, detail, snapshot.instrument).items():
                 if not snapshot.instrument:
                     value["runner_pin"] = detail[1]["runner_pin"]
                 files[name][key] = value
