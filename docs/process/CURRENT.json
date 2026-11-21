@@ -1,10 +1,10 @@
 {
   "armed": null,
-  "next_observable": "f2stab01-2d1477f5/run-out.txt shows LAUNCH_RC=0 with the fence (launch ~15:58, expected end ~17:14, fence ~17:58; read the true fence deadline and pid from run-out.txt). The next activation after the fence pid is gone and runner_receipt.json exists Checks cq-f2-stab-01-l010-a1 under /Users/edr/campaign-out/f2-stab-01/ with f2stab01-check-template-2d1477f5/check.sh (LEGS L010, kit sha dbad9c7b79088bb6f06aac1c1148c3631a0c616fd2ece596bab0f56657ce70fe, campaign_id f2-stab-01 and batch_windows == ['02:00-02:35'] asserted; replace REPLACE_STAMP in OUT with the actual directory's stamp and NEWACT in TMPDIR with the activation id; grep the leg_record for max_busy_cores/max_gap_s), and copies at once with f2stab01-check-template-2d1477f5/offload-run.sh (replace NEWACT everywhere with the activation id); the Check item prints full 64-hex digests (item 491). Then continue down the ladder (items 422, 447, 463, 464, 480, 489): rank 2 only for an f2-inst kit whose executing delta PASS is recorded on main; rank 3 hp-02 only from Sat 21 Nov 00:00 (item 489); otherwise rank 4 f2-stab-01 L011 (seq 11) on pin 2d347f721 with ARG 02:00-02:35 (inputs f2stab01-2d1477f5/inputs.sh with SPAN/LEGS/SEQ/MAGISTRATE_PID changed; check template L010 -> L011) while its blackout_clear holds and the queue has a seq-11 entry; a t0 whose plan reports blackout_clear false (fence reaching the 02:00-02:35 window) takes the next eligible rung instead. Saturday's rank-1 stability leg is due at the first dispatch after 00:00.",
+  "next_observable": "f2stab01-ce65f67f/run-out.txt shows LAUNCH_RC=0 with the fence (launch ~17:03, expected end ~18:20, fence ~19:03; read the true fence deadline and pid from run-out.txt). The next activation after the fence pid is gone and runner_receipt.json exists Checks cq-f2-stab-01-l011-a1 under /Users/edr/campaign-out/f2-stab-01/ with f2stab01-check-template-ce65f67f/check.sh (LEGS L011, kit sha dbad9c7b79088bb6f06aac1c1148c3631a0c616fd2ece596bab0f56657ce70fe, campaign_id f2-stab-01 and batch_windows == ['02:00-02:35'] asserted; replace REPLACE_STAMP in OUT with the actual directory's stamp and NEWACT in TMPDIR with the activation id; grep the leg_record for max_busy_cores/max_gap_s; note wall_s against budget_s 1,553 for the long-prefill time-model flag of item 493), and copies at once with f2stab01-check-template-ce65f67f/offload-run.sh (replace NEWACT everywhere with the activation id); the Check item prints full 64-hex digests (item 491). Then continue down the ladder (items 422, 447, 463, 464, 480, 489): rank 2 only for an f2-inst kit whose executing delta PASS is recorded on main; rank 3 hp-02 only from Sat 21 Nov 00:00 (item 489); otherwise rank 4 f2-stab-01 L012 (seq 12, the last queue entry) on pin 2d347f721 with ARG 02:00-02:35 (inputs f2stab01-ce65f67f/inputs.sh with SPAN/LEGS/SEQ/MAGISTRATE_PID changed; check template L011 -> L012) while its blackout_clear holds; a t0 whose plan reports blackout_clear false (fence reaching the 02:00-02:35 window) takes the next eligible rung instead. Saturday's rank-1 stability leg is due at the first dispatch after 00:00.",
   "open_items": [
     {
       "expires_epoch_s": null,
-      "item": 493,
+      "item": 494,
       "owner": "magistrate",
       "status": "ISSUED"
     },
@@ -173,10 +173,10 @@
   ],
   "owner": "magistrate",
   "schema": "joulewise.current_pointer.v2",
-  "source_item": "493",
+  "source_item": "494",
   "source_item_heading_date": "2026-11-20",
   "wait": {
-    "deadline_epoch_s": 1795233600,
+    "deadline_epoch_s": 1795237200,
     "observable": "none",
     "on_early_or_refused": "a launcher refusal or non-clean close: record it, hold kit f2-stab-01 until an input changes (item 422, RL-179 F-6), mail the lead and Ed, and continue down the ladder. R1 stays unarmed."
   }
