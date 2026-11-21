@@ -586,3 +586,23 @@ the disk configuration. The adjacent regression confirms that an external
 configuration cannot cause an unlisted staged receipt to be opened. The
 normal synthetic disk and installer witnesses still exercise their existing
 paths.
+
+At published head `f433b13ef97f4ea2f81868880134b8c968199c37`, all 39
+focused cases passed. Targeted end-to-end checks passed for the D1 alias,
+the transitive daytime receipt and unbound W1 and C1 packets. Hosted shard 12
+found that the four existing prepare-time checks moved from
+`measurement_view` into `render_measurement_files`. The refusal census
+keys entries by function name, so it reported four stale and four unlisted
+locations. The follow-up updates those four INTERNAL entries. A structural
+comparison confirms identical counts, guard digests, classifications and
+explanations. The focused census tests for exact sites, the frozen baseline
+and reviewed entries passed 3/3.
+
+```sh
+PYTHONPATH=tests:. python3.13 -B -m unittest -v \
+  hazards.test_refusal_allowlist.RefusalAllowlistTests.test_every_refusal_site_is_listed_with_its_exact_count \
+  hazards.test_refusal_allowlist.RefusalAllowlistTests.test_the_baseline_is_frozen \
+  hazards.test_refusal_allowlist.RefusalAllowlistTests.test_every_entry_names_what_it_protects
+```
+
+[First K4 hosted shard](https://github.com/mpmdw/JouleWise/actions/runs/44913514476/job/136874281415)
