@@ -1,0 +1,469 @@
+"""RL-187 print calculations over authenticated, in-memory records."""
+
+from collections import defaultdict
+from dataclasses import dataclass, replace
+from math import ceil, fsum, isfinite, sqrt
+from statistics import median
+
+from .controls_print import (
+    CHANNELS, PILOT, REMAINDER, SCRIPT_STEPS, ControlsRefusal, _hex_pin, validate_script_pin,
+)
+from .qualification_manifest import _decode, ManifestError
+
+
+NS = 1_000_000_000
+FLOOR_WINDOWS = (10, 40, 128)
+MISSING_FLOOR = "missing_floor"
+# This is the null reason defined by the draft projection. The instrument
+# input schema and its closed reason vocabulary are pinned at registration.
+HOLD_NULL_REASONS = frozenset({MISSING_FLOOR})
+TRACE_CHANNELS = {
+    "gpu_rail": ("powermetrics", "gpu_power"),
+    "cpu_rail": ("powermetrics", "cpu_power"),
+    "rail_sum": ("powermetrics", "package"),
+    "dc_in": ("wall_meter", "dc_in"),
+}
+
+
+class ViewError(ValueError):
+    """The physical-call view failed a named RL-187 check."""
+
+
+@dataclass(frozen=True)
+class Step:
+    kind: str
+    start_ns: int
+    end_ns: int
+    complete: bool
+    first_ns: int | None = None
+    requested_tokens: int | None = None
+    delivered_tokens: int | None = None
+    context_tokens: int | None = None
+    requested_s: float | None = None
+
+
+@dataclass(frozen=True)
+class PhysicalView:
+    episode: object
+    steps: tuple[Step, ...]
+
+    @property
+    def short(self):
+        return any(step.delivered_tokens < step.requested_tokens for step in self.steps
+                   if step.kind in ("hidden", "turn"))
+
+    @property
+    def cpu_dose(self):
+        return next((step.requested_s for step in self.steps if step.kind == "cpu" and step.complete), None)
+
+
+@dataclass(frozen=True)
+class LegInput:
+    leg_id: str
+    kind: str
+    admitted: bool
+    g0_released: bool
+    episode: object | None = None
+    work_bytes: bytes | None = None
+    work_sha256: str | None = None
+
+
+def _finite(value):
+    return type(value) in (float, int) and isfinite(value)
+
+
+def _nonnegative_int(value):
+    return type(value) is int and value >= 0
+
+
+def _read_steps(payload, digest, leg_id, kind):
+    if payload is None:
+        raise ViewError("script_record_missing")
+    try:
+        validate_script_pin(payload, digest)
+    except ControlsRefusal as error:
+        raise ViewError("script_digest") from error
+    try:
+        record = _decode(payload)
+        if (record["schema"] != "joulewise.cadence_script_work.v1" or record["leg_id"] != leg_id
+                or record["script"]["kind"] != kind):
+            raise ViewError("script_identity")
+        rows = record["steps"]
+        if tuple(row["kind"] for row in rows) != (*SCRIPT_STEPS[kind], "recovery"):
+            raise ViewError("script_order")
+        for row in rows:
+            step = Step(row["kind"], row["started_ns"], row["ended_ns"], row["complete"])
+            if (not _nonnegative_int(step.start_ns) or not _nonnegative_int(step.end_ns)
+                    or step.end_ns < step.start_ns or type(step.complete) is not bool):
+                raise ViewError("step_bounds")
+            if step.kind in ("hidden", "turn"):
+                step = replace(step, first_ns=row["first_token_ns"], requested_tokens=row["requested_tokens"],
+                               delivered_tokens=row["actual_tokens"], context_tokens=row["context_tokens"])
+                if (not all(map(_nonnegative_int, (step.requested_tokens, step.delivered_tokens,
+                                                    step.context_tokens)))
+                        or not 0 <= step.delivered_tokens <= step.requested_tokens
+                        or (step.first_ns is not None and (not _nonnegative_int(step.first_ns)
+                            or not step.start_ns <= step.first_ns <= step.end_ns))):
+                    raise ViewError("call_counts_or_bounds")
+            else:
+                seconds = row["requested_s"]
+                if (not _finite(seconds) or seconds <= 0
+                        or (step.kind == "cpu" and (type(seconds) is not int or seconds not in (10, 30, 90)))):
+                    raise ViewError("interval_dose")
+                step = replace(step, requested_s=seconds)
+            yield step
+    except (ManifestError, TypeError, KeyError) as error:
+        raise ViewError("script_record_shape") from error
+
+
+def physical_call_view(leg: LegInput):
+    """Replace just the logged turn. Keep the original episode and trace bounds."""
+    episode = leg.episode
+    if (episode is None or len(episode.turns) != 1 or episode.turns[0].logged is not True
+            or episode.turns[0].tool_calls):
+        raise ViewError("logged_envelope")
+    steps = tuple(_read_steps(leg.work_bytes, leg.work_sha256, leg.leg_id, leg.kind))
+    gates = (interval["end_ns"] for interval in episode.hardware.get("thermal", {}).get("intervals", ())
+             if interval["kind"] == "G0")
+    previous = max(episode.start_ns, max(gates, default=episode.start_ns))
+    for step in steps:
+        if step.start_ns < previous or step.end_ns > episode.end_ns:
+            raise ViewError("step_order_or_episode_bounds")
+        previous = step.end_ns
+
+    envelope = episode.turns[0]
+    visible = tuple(step for step in steps if step.kind == "turn")
+    if (sum(step.context_tokens for step in visible) != envelope.prefill_tokens + envelope.context_tokens
+            or sum(step.delivered_tokens for step in visible) != envelope.decode_tokens):
+        raise ViewError("envelope_counts")
+    if (visible[0].start_ns, visible[0].first_ns) != (envelope.start_ns, envelope.first_token_ns):
+        raise ViewError("envelope_stamps")
+
+    turns = tuple(replace(envelope, index=index, start_ns=step.start_ns, end_ns=step.end_ns,
+                          first_token_ns=step.first_ns, context_tokens=0, prefill_tokens=step.context_tokens,
+                          decode_tokens=step.delivered_tokens, hidden_tokens=0)
+                  for index, step in enumerate(visible))
+    return PhysicalView(replace(episode, turns=turns), steps)
+
+
+def _other_parts(view, segments):
+    """Intersect named work with frozen other segments, retaining the remainder."""
+    missing = {turn.index for turn in view.episode.turns if turn.first_token_ns is None}
+    other = [segment for segment in segments if segment.kind == "gap"
+             or (segment.kind == "decode" and segment.turn in missing)]
+    explicit = []
+    for step in view.steps:
+        if step.kind == "hidden":
+            if step.first_ns is None:
+                explicit.append(("hidden", step.start_ns, step.end_ns))
+            else:
+                explicit.extend((("hidden_prefill", step.start_ns, step.first_ns),
+                                 ("hidden_decode", step.first_ns, step.end_ns)))
+        elif step.kind != "turn":
+            explicit.append((step.kind, step.start_ns, step.end_ns))
+
+    parts = defaultdict(list)
+    for segment in other:
+        cursor = segment.start_ns
+        for name, start, end in explicit:
+            start, end = max(start, segment.start_ns), min(end, segment.end_ns)
+            if end <= start:
+                continue
+            if cursor < start:
+                parts["remainder"].append((cursor, start))
+            parts[name].append((start, end))
+            cursor = end
+        if cursor < segment.end_ns:
+            parts["remainder"].append((cursor, segment.end_ns))
+    for name in {name for name, _, _ in explicit}:
+        if sum(end - start for start, end in parts[name]) != sum(
+            end - start for key, start, end in explicit if key == name
+        ):
+            raise ViewError("other_partition")
+    return parts
+
+
+@dataclass(frozen=True)
+class PhaseKernel:
+    phases: object
+    attribute_episode: object
+    trace_energy: object
+
+    @classmethod
+    def frozen(cls):
+        from joulewise.align.apple import rl176_phases
+        from joulewise.align.attribution import attribute_episode, trace_energy
+
+        return cls(rl176_phases, attribute_episode, trace_energy)
+
+
+def _has_gap(trace, mapping, start, end, limit):
+    offset = mapping.offset_ns if mapping is not None else 0
+    return any(b - a > limit and a < end - offset and b > start - offset
+               for a, b in zip(trace.t_ns, trace.t_ns[1:]))
+
+
+def _energy(kernel, trace, mapping, start, end):
+    estimate = kernel.trace_energy(trace, start, end, mapping=mapping)
+    if "trace.partial_coverage" in estimate.flags or not _finite(estimate.joules):
+        return None
+    return estimate.joules
+
+
+def _baseline(kernel, trace, mapping, recovery, gap_limit):
+    end = recovery.end_ns
+    start = end - 40 * NS
+    if not recovery.complete or start < recovery.start_ns:
+        return None, "incomplete_recovery", None
+    if _has_gap(trace, mapping, start, end, gap_limit):
+        return None, "recovery_gap", None
+    energy = _energy(kernel, trace, mapping, start, end)
+    if energy is None:
+        return None, "recovery_coverage", None
+    previous = start - 40 * NS
+    prior = None
+    if previous >= recovery.start_ns and not _has_gap(trace, mapping, previous, start, gap_limit):
+        prior = _energy(kernel, trace, mapping, previous, start)
+    return energy / 40, None, None if prior is None else prior - energy
+
+
+def _above(joules, seconds, baseline):
+    return None if joules is None or baseline is None else joules - seconds * baseline
+
+
+def _channel_values(kernel, view, episode, name, attrs, parts, gap_limit):
+    channel = TRACE_CHANNELS[name]
+    trace, mapping = kernel.phases.selected_trace(episode, channel)
+    if trace is None:
+        return {"reason": "trace_or_clock_unavailable"}
+    if name == "dc_in" and _has_gap(trace, mapping, episode.start_ns, episode.end_ns, gap_limit):
+        return {"reason": "trace_gap"}
+    table = kernel.phases.phase_table(episode, channel, attrs)
+    baseline, reason, drift = _baseline(kernel, trace, mapping, view.steps[-1], gap_limit)
+    above = {key: _above(phase["joules"], phase["seconds"], baseline)
+             for key, phase in table["phases"].items()}
+    detailed = {}
+    for key, ranges in parts.items():
+        seconds = sum(end - start for start, end in ranges) / NS
+        values = [_energy(kernel, trace, mapping, start, end) for start, end in ranges]
+        absolute = fsum(values) if all(value is not None for value in values) else None
+        detailed[key] = {"seconds": seconds, "joules": absolute,
+                         "above_baseline_j": _above(absolute, seconds, baseline)}
+
+    result = {"absolute": table, "baseline_w": baseline, "baseline_reason": reason,
+              "baseline_drift_j": drift, "above_baseline_j": above, "other": detailed}
+    hidden = next((step for step in view.steps if step.kind == "hidden"), None)
+    if hidden is not None:
+        whole = _energy(kernel, trace, mapping, hidden.start_ns, hidden.end_ns)
+        decode = detailed.get("hidden_decode", {}).get("above_baseline_j")
+        divisor = hidden.delivered_tokens
+        divisor_reason = None
+        if not divisor:
+            divisor_reason = "zero_tokens"
+        elif hidden.first_ns is None:
+            divisor_reason = "missing_first_token"
+        elif decode is None:
+            divisor_reason = reason or "trace_coverage"
+        result["hidden"] = {
+            "delivered_tokens": divisor, "seconds": (hidden.end_ns - hidden.start_ns) / NS,
+            "call_j": _above(whole, (hidden.end_ns - hidden.start_ns) / NS, baseline),
+            "prefill_j": detailed.get("hidden_prefill", {}).get("above_baseline_j"),
+            "decode_j": decode, "j_per_token": decode / divisor if divisor and decode is not None else None,
+            "j_per_token_reason": divisor_reason,
+            "tail_cut": name == "dc_in",
+        }
+    return result
+
+
+def _ols(points):
+    mean_tokens = fsum(tokens for tokens, _ in points) / len(points)
+    mean_j = fsum(joules for _, joules in points) / len(points)
+    slope = (fsum((tokens - mean_tokens) * (joules - mean_j) for tokens, joules in points)
+             / fsum((tokens - mean_tokens) ** 2 for tokens, _ in points))
+    return slope, mean_j - slope * mean_tokens
+
+
+def dose_fit(points_by_leg):
+    """Fit whole hidden-call energy with an intercept and leave-one-out extrema."""
+    points = tuple(points_by_leg.values())
+    if len(points) < 4 or len({tokens for tokens, _ in points}) != 3:
+        return {"slope": None, "intercept": None, "range": None, "reason": "insufficient_legs",
+                "legs": tuple(points_by_leg)}
+    slope, intercept = _ols(points)
+    refits = [_ols(points[:index] + points[index + 1:])[0] for index in range(len(points))]
+    return {"slope": slope, "intercept": intercept, "range": (min(refits), max(refits)),
+            "reason": None, "legs": tuple(points_by_leg)}
+
+
+@dataclass(frozen=True)
+class HoldWindow:
+    member: tuple[str, str, str]  # kit, kit digest, leg
+    channel: str
+    window_s: int
+    retained: int
+    sd_w: float | None
+    reason: str | None = None
+
+
+def _is_hold_null_reason(reason):
+    return type(reason) is str and reason in HOLD_NULL_REASONS
+
+
+def validate_instrument_pins(manifest_bytes, hold_bytes, edges_bytes, *, manifest_sha256,
+                             hold_sha256, edges_sha256):
+    """Check the three committed source byte strings before using a projection."""
+    for payload, expected in ((manifest_bytes, manifest_sha256), (hold_bytes, hold_sha256),
+                              (edges_bytes, edges_sha256)):
+        try:
+            validate_script_pin(payload, expected)
+        except ControlsRefusal as error:
+            raise ValueError("instrument_pin") from error
+
+
+def pool_hold_windows(rows, qualified_members):
+    """Pool the per-leg hold variances over the committed instrument roster."""
+    seen, weights, variance, nulls = set(), defaultdict(int), defaultdict(list), defaultdict(set)
+    for row in rows:
+        if row.member not in qualified_members:
+            raise ValueError("instrument_member")
+        key = (row.channel, row.window_s)
+        if (row.channel not in ("gpu_rail", "rail_sum", "dc_in") or row.window_s not in FLOOR_WINDOWS
+                or (row.member, key) in seen or not _nonnegative_int(row.retained)):
+            raise ValueError("instrument_window")
+        if row.reason is not None and not _is_hold_null_reason(row.reason):
+            raise ValueError("floor_reason")
+        seen.add((row.member, key))
+        if row.sd_w is None:
+            if row.reason is not None:
+                nulls[key].add(row.reason)
+            continue
+        if not _finite(row.sd_w) or row.sd_w < 0 or row.retained < 2:
+            raise ValueError("instrument_variance")
+        weight = row.retained - 1
+        weights[key] += weight
+        variance[key].append(weight * row.sd_w ** 2)
+    return {key: (sqrt(fsum(variance[key]) / weights[key]), ()) if weights[key]
+            else (None, tuple(sorted(nulls[key])) or (MISSING_FLOOR,))
+            for key in {(channel, window) for channel in ("gpu_rail", "rail_sum", "dc_in")
+                        for window in FLOOR_WINDOWS}}
+
+
+def floor_units(joules, duration_s, channel, pooled, manifest_sha256):
+    """Describe a phased energy value against its own duration's pooled floor."""
+    if channel == "cpu_rail":
+        return {"joules": joules, "duration_s": duration_s, "floor_j": None,
+                "window_s": None, "units": None, "reason": "no_matched_floor"}
+    if not _hex_pin(manifest_sha256, 64):
+        raise ValueError("instrument_pin")
+    window = max((width for width in FLOOR_WINDOWS if width <= duration_s), default=10)
+    sd, reasons = pooled[(channel, window)]
+    if type(reasons) is not tuple or any(not _is_hold_null_reason(reason) for reason in reasons):
+        raise ValueError("floor_reason")
+    if sd is not None and (not _finite(sd) or sd < 0):
+        raise ValueError("instrument_variance")
+    floor = None if sd is None else sd * duration_s
+    if floor is None:
+        reasons = reasons or (MISSING_FLOOR,)
+    else:
+        reasons = () if floor else ("zero_floor",)
+    return {"joules": joules, "duration_s": duration_s, "floor_j": floor, "window_s": window,
+            "units": joules / floor if floor and joules is not None else None,
+            "under_shortest_window": duration_s < 10, "instrument_manifest_sha256": manifest_sha256,
+            "reason": reasons}
+
+
+@dataclass(frozen=True)
+class ReadParameters:
+    hidden_tokens: tuple[int, int, int]
+    recovery_s: float
+    gap_s: int
+    prefill_tokens: int
+
+
+def read_parameters(*, gpu_token_floors, dc_token_floors, return_bounds,
+                    decode_end_lags, qualified_prefills):
+    """Apply RL-187 §3.7 to normalized qualified instrument observations.
+
+    Return values use the reported upper bound for ``under`` and None for
+    ``never returned``. Decode-end lags use None for ``over 1 s``.
+    """
+    floor_inputs = (tuple(gpu_token_floors), tuple(dc_token_floors))
+    if not all(floor_inputs) or any(not _finite(value) or value < 0
+                                    for values in floor_inputs for value in values):
+        raise ValueError("missing_token_floor")
+    threshold = min(median(values) for values in floor_inputs)
+    dose = next((candidate for candidate in (128, 256, 512) if candidate >= threshold), None)
+    if dose is None:
+        raise ValueError("dose_requires_ruling")
+    bounds, lags = tuple(return_bounds), tuple(decode_end_lags)
+    if (not bounds or not lags or any(value is not None and (not _finite(value) or value < 0)
+                                      for value in (*bounds, *lags))):
+        raise ValueError("missing_instrument_timing")
+    never_returned = None in bounds
+    returned = max(value for value in bounds) if not never_returned else None
+    recovery = 600 if never_returned else min(600, max(120, 5 * returned))
+    if None in lags:
+        gap = 60 if never_returned else min(60, max(10, ceil(returned)))
+    else:
+        gap = max(10, ceil(5 * max(lags)))
+    prefills = sorted(set(qualified_prefills), key=lambda size: abs(size - 2000))
+    if not prefills or (len(prefills) > 1 and abs(prefills[0] - 2000) == abs(prefills[1] - 2000)):
+        raise ValueError("prefill_requires_ruling")
+    return ReadParameters((dose, 2 * dose, 4 * dose), recovery, gap, prefills[0])
+
+
+def print_controls(positions, *, kernel, gap_limits_ns, pooled, instrument_manifest_sha256):
+    """Produce the private calculations for all twelve bound positions."""
+    positions = tuple(positions)
+    if tuple(leg.leg_id for leg in positions) != PILOT + REMAINDER:
+        raise ValueError("roster")
+    if any(type(leg.kind) is not str or leg.kind not in SCRIPT_STEPS for leg in positions):
+        raise ValueError("script_kind")
+    if not _hex_pin(instrument_manifest_sha256, 64):
+        raise ValueError("instrument_pin")
+    rows, controls = [], []
+    fit_points = {name: {} for name in CHANNELS}
+    for leg in positions:
+        row = {"leg_id": leg.leg_id, "kind": leg.kind}
+        rows.append(row)
+        if leg.episode is None or not leg.g0_released:
+            row["disposition"] = "not_dispatched" if not leg.g0_released else "episode_missing"
+            continue
+        try:
+            view = physical_call_view(leg)
+            episode = kernel.phases.with_package(view.episode)
+            attrs = {name: kernel.attribute_episode(episode, source=source, channel=channel)
+                     for name, (source, channel) in TRACE_CHANNELS.items()}
+            parts = _other_parts(view, attrs["gpu_rail"].segments)
+        except ViewError as error:
+            row.update(disposition="not_evaluable", reason=str(error))
+            continue
+        controls.append(kernel.phases.ControlLeg(episode, view.cpu_dose))
+        row.update(disposition="admitted" if leg.admitted and not view.short else "unadmitted",
+                   delivery="short" if view.short else "as_requested", calls=view.steps,
+                   envelope=leg.episode.turns[0], channels={})
+        for name in CHANNELS:
+            channel = _channel_values(kernel, view, episode, name, attrs[name], parts, gap_limits_ns[name])
+            row["channels"][name] = channel
+            if "absolute" not in channel:
+                continue
+            def units(joules, duration):
+                return floor_units(joules, duration, name, pooled, instrument_manifest_sha256)
+
+            channel["phase_floors"] = {
+                phase: units(joules, channel["absolute"]["phases"][phase]["seconds"])
+                for phase, joules in channel["above_baseline_j"].items()
+            }
+            channel["baseline_drift_floor"] = units(channel["baseline_drift_j"], 40)
+            for part in channel["other"].values():
+                part["floor"] = units(part["above_baseline_j"], part["seconds"])
+            hidden = channel.get("hidden")
+            if hidden is not None:
+                hidden["floor"] = units(hidden["call_j"], hidden["seconds"])
+                if leg.admitted and not view.short and hidden["call_j"] is not None:
+                    fit_points[name][leg.leg_id] = (hidden["delivered_tokens"], hidden["call_j"])
+    alignment = kernel.phases.qualify_ctl01(controls if any(leg.episode is not None for leg in positions) else None)
+    qualifier = {field: alignment[field] for field in ("qualified", "all_legs_close", "cpu_burn_order")
+                 if field in alignment}
+    return {"legs": rows, "timing_edge_j": kernel.phases.TIMING_EDGE_J, "aligned_power": qualifier,
+            "dose_response": {name: dose_fit(points) for name, points in fit_points.items()}}
