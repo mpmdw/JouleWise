@@ -1966,6 +1966,150 @@ class PinnedD018ClosureTests(unittest.TestCase):
             self.assertEqual(self.refusal(), ("bundle_binding", "power_trace.csv", "bundle_read"))
 
 
+class FrozenOracleTests(unittest.TestCase):
+    """Lead directive of 2026-11-21, item 1: one authority grants ``pass``.
+
+    The frozen oracle records each gated decision by name. ``pass`` needs every required decision made and
+    passed, in ``_adjudicate`` and again at publication. ``test_pass_has_one_source`` fails if a second path
+    to ``pass`` appears in either evaluator module.
+    """
+
+    JUDGED = (*pc.JUDGED_MEMBERS, "x-g")
+
+    def passed(self, judged=JUDGED):
+        oracle = pc.FrozenOracle()
+        for name in sorted(pc.FrozenOracle.required(judged)):
+            oracle.decide(name, "attempt", lambda: None)
+        return oracle
+
+    def test_required_decisions_name_every_gated_decision(self):
+        required = pc.FrozenOracle.required(self.JUDGED)
+        self.assertTrue({"soak", "idle/identity", "issued_inputs", "schedule", "issued_driver", "duty_bar",
+                         "issued_part_c"} <= required)
+        for kind in self.JUDGED:
+            self.assertTrue({f"{kind}/{part}" for part in ("identity", "window", "records", "workload")} <= required)
+            self.assertEqual(f"{kind}/gates" in required, kind != "capture-predecessor-30b")
+        self.assertNotIn("x-g/window", pc.FrozenOracle.required(pc.JUDGED_MEMBERS))
+
+    def test_refusal_until_every_required_decision_passed(self):
+        required = sorted(pc.FrozenOracle.required(self.JUDGED))
+        oracle = pc.FrozenOracle()
+        for name in required[:-1]:
+            oracle.decide(name, "attempt", lambda: None)
+        refusal = oracle.refusal(self.JUDGED)
+        self.assertEqual((refusal.reason, refusal.field), ("frozen_oracle", f"undecided: {required[-1]}"))
+        oracle.decide(required[-1], "attempt", lambda: None)
+        self.assertIsNone(oracle.refusal(self.JUDGED))
+        self.assertIsNone(self.passed().refusal(self.JUDGED))
+
+    def test_a_refused_or_failed_decision_keeps_its_reason_and_refuses(self):
+        def refuses():
+            raise evidence.EvidenceFailure("member_order", "step-d", RECEIPT, field="member_wall_s")
+
+        oracle = self.passed()
+        with self.assertRaises(evidence.EvidenceFailure) as caught:
+            oracle.decide("step-d/extra", "step-d", refuses)
+        self.assertEqual(caught.exception.reason, "member_order")
+        self.assertIs(oracle.refusal(self.JUDGED), caught.exception)
+
+        for check, reason in ((lambda: 1 / 0, "frozen_oracle"), (refuses, "member_order")):
+            oracle = self.passed()
+            oracle.record("verdict", "attempt", check)      # a verdict decision raises nothing
+            self.assertEqual(oracle.refusal(self.JUDGED).reason, reason)
+
+        oracle = self.passed()
+        with self.assertRaises(evidence.EvidenceFailure):
+            oracle.decide("soak", "idle", lambda: None)     # decided twice
+        self.assertEqual(oracle.refusal(self.JUDGED).reason, "frozen_oracle")
+
+        oracle = pc.FrozenOracle()
+
+        def nested():
+            self.assertEqual(oracle.refusal(()).field, "unfinished: outer")     # an unfinished decision never passes
+
+        oracle.decide("outer", "attempt", nested)
+
+    def test_publication_refuses_a_native_pass_whose_oracle_did_not_pass(self):
+        missing = pc.FrozenOracle()
+        for name in sorted(pc.FrozenOracle.required(self.JUDGED))[1:]:
+            missing.decide(name, "attempt", lambda: None)
+        for label, oracle in (("absent", None), ("one decision never made", missing)):
+            with self.subTest(oracle=label), TemporaryDirectory() as tmp, redirect_stdout(StringIO()) as stdout:
+                attempt = Attempt(Path(tmp))
+                table = pc._NativeEvaluation(
+                    {"verdict": "pass", "pass": True, "evidence_failures": {},
+                     "lines": {name: {"pass": True} for name in pc.RELEASE_LINES}},
+                    attempt.ledger, oracle, self.JUDGED)
+                with self.assertRaisesRegex(ValueError, "frozen_oracle"):
+                    pc._emit_part_c(attempt.output, 0, table, ledger=attempt.ledger)
+                copies = [json.loads((attempt.output / name).read_bytes()) for name in pc.RELEASE_COPIES]
+                self.assertEqual(copies[0], copies[1])
+                self.assertEqual(copies[0]["evaluation"]["verdict"], "other_failure")
+                self.assertIn("Part C verdict: other_failure (pass: False)", stdout.getvalue())
+
+    def test_pass_has_one_source(self):
+        """Fails if any code in either evaluator module other than ``_adjudicate`` produces the word ``pass``,
+        or if anything but the single path builds, judges or publishes a verdict."""
+        import ast
+
+        functions, calls, produced = {}, [], []
+        for module in (pc, evidence):
+            tree = ast.parse(Path(module.__file__).read_text())
+            parents = {child: node for node in ast.walk(tree) for child in ast.iter_child_nodes(node)}
+
+            def owner(node):                                 # the outermost function, so nested helpers count
+                found = "<module>"
+                while node in parents:
+                    node = parents[node]
+                    if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                        found = node.name
+                return found
+
+            for node in ast.walk(tree):
+                if isinstance(node, ast.FunctionDef):
+                    functions.setdefault(node.name, []).append(module.__name__)
+                if isinstance(node, ast.Call):
+                    callee = node.func.attr if isinstance(node.func, ast.Attribute) else getattr(node.func, "id", None)
+                    calls.append((callee, owner(node), node))
+                if not (isinstance(node, ast.Constant) and node.value == "pass"):
+                    continue
+                parent = parents[node]
+                if isinstance(parent, ast.Compare) or (isinstance(parent, ast.Subscript) and parent.slice is node) or (
+                        isinstance(parent, ast.Call) and isinstance(parent.func, ast.Attribute)
+                        and parent.func.attr == "get" and parent.args[:1] == [node]):
+                    continue                                         # reading a word or a line's "pass" field
+                if isinstance(parent, ast.Dict) and any(key is node for key in parent.keys):
+                    continue                                         # a "pass" key, never a value
+                if isinstance(parent, ast.keyword):
+                    produced.append((owner(node), f"keyword {parent.arg}"))
+                elif isinstance(parent, ast.Tuple) and isinstance(parents.get(parent), ast.Return):
+                    produced.append((owner(node), "return"))
+                else:
+                    produced.append((owner(node), type(parent).__name__))
+        # The only verdict word "pass" is _adjudicate's one return. The thermometry status is not a verdict.
+        self.assertEqual(sorted(produced), [("_adjudicate", "return"), ("_check_step_sources", "keyword status")])
+        adjudicate = next(node for node in ast.walk(ast.parse(Path(pc.__file__).read_text()))
+                          if isinstance(node, ast.FunctionDef) and node.name == "_adjudicate")
+        granted = [node for node in ast.walk(adjudicate) if isinstance(node, ast.If)
+                   and any(isinstance(child, ast.Return) and isinstance(child.value, ast.Tuple)
+                           and getattr(child.value.elts[0], "value", None) == "pass" for child in node.body)]
+        self.assertEqual([ast.unparse(node.test) for node in granted], ["refusal is None"])
+
+        def callers(name):
+            return sorted({where for callee, where, _ in calls if callee == name})
+
+        self.assertEqual(callers("_adjudicate"), ["_judge_observations"])
+        self.assertEqual(callers("_judge_observations"), ["_native_verdict", "replay_archived"])
+        self.assertTrue(all(any(keyword.arg == "oracle" for keyword in node.keywords)
+                            for callee, _, node in calls if callee == "_judge_observations"))
+        self.assertEqual(callers("_NativeEvaluation"), ["_native_verdict"])
+        self.assertEqual(callers("_release_table"), ["_emit_part_c", "evaluate"])
+        self.assertEqual(callers("_emit_part_c"), ["run_bound_part_c"])
+        self.assertEqual(callers("finish"), ["_emit_part_c"])
+        self.assertEqual(callers("oracle_refusal"), ["_emit_part_c"])
+        self.assertEqual(functions["_adjudicate"], [pc.__name__])
+
+
 class MemberBracketTests(unittest.TestCase):
     """Audit 2 `finalized-after-close`: an event stamped after the member's own terminal close is impossible."""
 
@@ -2178,6 +2322,45 @@ class FrozenDifferentialNamedCasesTests(unittest.TestCase):
                 "gate-before-entry": "other_failure gate_journal_disagreement",
                 "finalized-after-close": "other_failure member_order"}
 
+    def run_probe(self, cases):
+        import os
+        import subprocess
+
+        root = Path(__file__).resolve().parents[1]
+        if not self.PROBE.is_file() or any(
+                subprocess.run(["git", "-C", str(root), "cat-file", "-e", pin + "^{commit}"],
+                               capture_output=True).returncode for pin in self.PINS):
+            self.skipTest("the pinned R1 commits are not in this object database")
+        with TemporaryDirectory() as tmp:
+            proc = subprocess.run([sys.executable, "-IB", str(self.PROBE), *cases], cwd=tmp, capture_output=True,
+                                  text=True, env={**os.environ, "JW_PARTC_REPO": str(root), "TMPDIR": tmp,
+                                                  "PYTHONDONTWRITEBYTECODE": "1"})
+        output = proc.stdout + proc.stderr
+        seen = {line.split()[1]: " ".join(line.split()[2:]) for line in proc.stdout.splitlines()
+                if line.startswith("RESULT ")}
+        return proc, output, seen
+
+    def test_audit_of_2026_11_21_reproductions_and_their_controls(self):
+        """pl-809 audit 1: four false passes and one false refusal, each with the control beside it.
+
+        The mixed G1 entry, the two early Step D closes, the duplicate template key and the synthetic backend
+        are refused for their own reasons. The matched G1 entry and a coherent one-second clock offset for the
+        predecessor, D_bank and X_G pass. An incoherent offset is refused. RL-186's member wall bound is judged
+        directly on a window where nothing else is outside it.
+        """
+        expected = {"x-g-gate-entry-matched": "pass -", "x-g-gate-entry-mixed": "other_failure evidence_unverifiable",
+                    "step-d-close-5179": "other_failure member_order",
+                    "step-d-close-before-recovery": "other_failure member_order",
+                    "issued-template-duplicate-key": "other_failure issued_inputs",
+                    "issued-config-backend-synthetic": "other_failure issued_identity",
+                    "clock-offset-coherent-predecessor": "pass -", "clock-offset-coherent-d-bank": "pass -",
+                    "clock-offset-coherent-x-g": "pass -",
+                    "clock-offset-incoherent-predecessor": "other_failure turn_boundary_recompute",
+                    "step-d-member-wall-over-bracket": "other_failure member_order"}
+        proc, output, seen = self.run_probe(list(expected))
+        self.assertEqual(seen, expected, output[-3000:])
+        self.assertEqual(proc.returncode, 0, output[-3000:])
+
     def test_audit_two_reproductions_are_each_refused_for_their_own_reason(self):
         """Audit 2's nine damaged attempts through the synthetic launcher, and the two positives that pass.
 
@@ -2193,7 +2376,8 @@ class FrozenDifferentialNamedCasesTests(unittest.TestCase):
                                capture_output=True).returncode for pin in self.PINS):
             self.skipTest("the pinned R1 commits are not in this object database")
         with TemporaryDirectory() as tmp:
-            proc = subprocess.run([sys.executable, "-IB", str(self.PROBE)], cwd=tmp, capture_output=True, text=True,
+            proc = subprocess.run([sys.executable, "-IB", str(self.PROBE), *self.EXPECTED], cwd=tmp,
+                                  capture_output=True, text=True,
                                   env={**os.environ, "JW_PARTC_REPO": str(root), "TMPDIR": tmp,
                                        "PYTHONDONTWRITEBYTECODE": "1"})
         output = proc.stdout + proc.stderr
