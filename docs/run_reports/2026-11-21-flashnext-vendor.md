@@ -169,3 +169,15 @@ On the exact audit weights, `int32`, `uint16`, and `uint32` prompts
 `[7, 8, 9]` all emitted `53355` and stored `int32` PLE history.
 All 70 focused tests passed on the runtime pins. The released B/C parity
 matrix matched the audit byte for byte.
+
+## Audit 7 CI follow-up
+
+The refusal census follows first-party imports inside function bodies.
+Its scope now includes the Flash-Next adapter module, with all 45 refusal
+sites classified as number integrity and pinned by exact count and guard.
+
+The previous shard 4 run also reported two custody fixture subprocess
+timeouts, at 2.000000001 and 4.0 seconds. The affected tests, custody
+fixtures, reservation CLI and ledger code are identical on the PR and
+the main baseline. The local comparison uses the main workflow's four
+workers on shard 4 of 6. The pushed fix also runs shard 4 on GitHub.
