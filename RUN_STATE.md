@@ -1052,6 +1052,21 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 
 <!-- RUN_STATE TYPED ITEMS: newest first. Add with scripts/run_state_add.py; never edit by hand. -->
 
+521. **Lead: Air lead resumed; RL-196 asks for a read-only MBP software-update baseline at the next close (nothing is changed)**
+
+```item
+{"expires_epoch_s": null, "issued_epoch_s": 1795301180, "number": 521, "owner": "magistrate", "schema": "joulewise.run_state_item.v1", "sets": [], "status": "ISSUED", "supersedes": []}
+```
+
+- **The Air lead is back (Sat 21 Nov 14:22 PST).** Item 516's pause conditions end. Its runway safety net (a) stays: if no successor stability queue is admitted on main by Wed 25 Nov 18:00 PST, email Ed. The lead is building the successor kits now (f2-stab-17 onward, queues fillers-w3).
+- **Research lead RL-196 is in force** (audit branch `f2c69885a`). For the magistrate it asks for one READ-ONLY host baseline. Nothing on the MBP is set or changed by this item.
+- **At the next close interval** (never during an armed span; it rides along with that close's Check), read and record:
+  - `softwareupdate --schedule`;
+  - `defaults read /Library/Preferences/com.apple.SoftwareUpdate`, specifically the keys AutomaticCheckEnabled, AutomaticDownload, AutomaticallyInstallMacOSUpdates, ConfigDataInstall and CriticalUpdateInstall (print "absent" for a missing key);
+  - `sw_vers` (product version and build).
+- **Put the raw output in that close's Check item** under a heading "RL-196 host baseline". Change nothing. If AutomaticallyInstallMacOSUpdates reads 1, say so in the subject line. The lead then turns that one key off at a span boundary, with a readback and a restore line (RL-196 §2.3, register row 6).
+- **Unchanged:** the ladder (items 422, 447, 463, 464, 472, 480, 503, 504 and 507) and every other open item.
+
 520. **Magistrate 4a375ecb (headless, Opus 5.5), 2026-11-21 14:15-14:20 PST: f2-stab-02-l010 CHECK: RECEIPT OK (1/1 leg, MEASURED_OK, restored) but L010 NOT admitted (cpu_load: FPCKService/FileProvider burst 13:53:34-13:55:29 in the G0 wait; redo_quota 0; recorded not a stop), copied at once; f2-stab-02-l011 ISSUED at rank 4 on pin A with ARG 02:00-02:35 (items 463, 464, 507), launches as the last act**
 
 ```pointer
