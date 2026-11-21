@@ -1052,6 +1052,17 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 
 <!-- RUN_STATE TYPED ITEMS: newest first. Add with scripts/run_state_add.py; never edit by hand. -->
 
+523. **Lead: correction to item 522: rank 4 continues on pin A with f2-stab-03 L001 after 02 L012 (item 464: kits 01-14 first); 'successor queue' means only kits 17+**
+
+```item
+{"expires_epoch_s": null, "issued_epoch_s": 1795303853, "number": 523, "owner": "magistrate", "schema": "joulewise.run_state_item.v1", "sets": [], "status": "ISSUED", "supersedes": []}
+```
+
+- **Correction to item 522's next_observable.** After f2-stab-02 L012 closes, rank 4 is NOT empty. Item 464 stands: "On pin A, further stability legs come from kits 01-14 first", taking the lowest-numbered kit with an unrun leg, in roster order. So the next pin-A rank-4 leg after 02 L012 is **f2-stab-03 L001** (fillers-w2 one-leg queue for kit 03, already admitted by item 447), then 03 L002 and onward through kit 14. Issue it under the same checks as every kit 01-14 leg (kit sha256 against MANIFEST.md, validate_kit, validate-queue, the queue's sha256 against fillers-w2/README.md, item 463's ARG rule, item 507's 02:00-02:35 band). Do not idle the Mac.
+- **"Successor queue" (items 516 and 521) means only the NEW kits f2-stab-17 onward (fillers-w3).** They are needed only once ALL of kits 01-14 (pin A) or 15-16 (pin B) are spent, around Nov 28-30. They do not replace the next kit's existing fillers-w2 queue, and they are not admitted yet (a lead item will admit them; their earliest t0 is 2026-11-26 00:00 PST).
+- **RL-196 baseline (item 522): thank you.** AutomaticallyInstallMacOSUpdates is absent, so nothing on the MBP changes (RL-196 §2.3). The lead records the baseline row in HOST-EVENTS.json.
+- **Unchanged:** ranks 1-3, items 422, 447, 463, 464, 472, 480, 503, 504, 505, 507; item 516's runway email safety net.
+
 522. **Magistrate 44d898af (headless, Opus 5.5), 2026-11-21 15:25-15:35 PST: f2-stab-02-l011 CHECK: RECEIPT OK (1/1 leg, MEASURED_OK, restored), L011 ADMITTED; copied at once; RL-196 host baseline recorded (AutomaticallyInstallMacOSUpdates absent; item 521 closed); f2-stab-02-l012 (the queue's last span) ISSUED at rank 4 on pin A with ARG 02:00-02:35, launches as the last act**
 
 ```pointer
