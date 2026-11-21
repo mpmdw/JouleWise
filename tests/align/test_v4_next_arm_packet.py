@@ -28,7 +28,7 @@ from scripts import align_v4_kit as w1_kit, align_v4_next_arm_packet as builder
 from scripts import align_v4_series as series
 from scripts import align_v4_session as session
 from scripts import bytes_h_session as staging
-from joulewise.b5.chain import TOOLS, stage_plan
+from joulewise.b5.chain import ARGUMENT_KINDS, SPARE_RETRY_SCHEMA, TOOLS, stage_argv, stage_plan
 from joulewise.b5.plan import resolve_stage_dispatches
 from joulewise.schemas import BenchmarkConfig, CONFIG_SCHEMA_VERSION
 from joulewise.align.apple import v4_cadence as cad
@@ -1050,6 +1050,172 @@ class C1PacketRebuildTests(Base):
             code, calls, error = self.k4_checkpoint(w1, plan, view, night)
         self.assertEqual((code, calls), (2, 0), error)
         self.assertIn(extra, error)
+
+    def k6_argument(self, tree, name, path, form):
+        value = str(path)
+        tree.setdefault('fixture_path_values', {})[name] = value
+        if form == 'binding_path':
+            return {'kind': form, 'value': 'repo_root', 'relative': value}
+        if form == 'tree_pointer':
+            value = '/fixture_path_values/' + name
+        return {'kind': form, 'value': value}
+
+    def k6_variant(self, form, *, all_classes=False):
+        w1 = self.c1_scenario(materialized=True)
+        directory = series.kit_path('C1')
+        path = directory / 'plan_tree.json'
+        tree = json.loads((w1.root / path).read_bytes())
+        policy = 'invented-campaign-policy'
+        spare_order = Path('configs/campaigns/fixture-spare/order_manifest.json')
+        spare_raw = series.raw_json({'executed_order': [{'config': 'member.json', 'run_id': 'invented-spare'}]})
+        w1.write(policy, {'invented': True})
+        w1.write(spare_order, spare_raw)
+        w1.write(spare_order.parent / 'member.json', synthetic_stage_config('invented-spare'))
+        for stage in tree['stage_graph']:
+            argv = stage['launch']['commands'][0]['argv_template']['arguments']
+            kind = stage['kind']
+            if kind == 'bound_derivation':
+                argv[1] = self.k6_argument(tree, 'manifest', DERIVATION_INPUT, form)
+                argv.extend([{'kind': 'literal', 'value': '--neg8-drift-bound-output'},
+                             {'kind': 'binding_path', 'value': 'bound_runs_root', 'relative': 'invented-bound.json'},
+                             {'kind': 'literal', 'value': '--runs-dir'},
+                             {'kind': 'binding', 'value': 'bound_runs_root'}])
+            if all_classes and kind == 'bracket_reservation':
+                argv[1] = self.k6_argument(tree, 'plan', directory / series.C1_PLAN, form)
+                argv.extend([{'kind': 'literal', 'value': '--head-pin'},
+                             self.k6_argument(tree, 'head', staging.plan.HEAD_PIN_RELATIVE, form)])
+            if all_classes and kind == 'campaign_collection':
+                argv[0] = self.k6_argument(tree, stage['stage_id'], argv[0]['value'], form)
+                argv.extend([{'kind': 'literal', 'value': '--campaign-policy'},
+                             self.k6_argument(tree, 'policy', policy, form)])
+                if stage['stage_id'].endswith('episodes-a'):
+                    stage['spare_retry'] = dict(schema_version=SPARE_RETRY_SCHEMA, slot='midpoint', max_spares=1,
+                        spare_sets=[{'count': 1, 'order_manifest': {'path': spare_order.as_posix(),
+                                                                  'sha256': builder.digest(spare_raw)}}])
+        w1.write(path, series.raw_json(tree))
+        self.commit_series(w1)
+        return w1
+
+    def test_k6_audit_7_repo_root_derivation_reference_is_pinned(self):
+        observations = []
+        for form in ('repo_path', 'binding_path'):
+            with self.subTest(form=form):
+                w1 = self.k6_variant(form)
+                packet = self.ready_packet(w1)
+                view, _, night, tree = self.staged_c1(w1)
+                stage = next(stage for stage in stage_plan(tree) if stage.kind == 'bound_derivation')
+                argv = stage_argv(stage, {'repo_root': str(view), 'bound_runs_root': str(view.parent / 'runs')},
+                                  tree, view)
+                relative = (view / argv[argv.index('--derive-neg8-drift-bound') + 1]).relative_to(view)
+                expected = builder.digest((view / relative).read_bytes())
+                plan = json.loads((w1.root / series.kit_path('C1') / series.C1_PLAN).read_bytes())
+                arm = self.k1_arm(w1, packet, plan, view=view, night=night)
+                self.assertTrue(arm['next_arm_triage']['supplied_packet_matches_rebuild'])
+                self.assertTrue(arm['admitted'], arm['reasons'])
+                observations.append((relative, expected, packet['c1_kit']['staged_inventory'].get(str(relative))))
+                self.assertEqual(relative, DERIVATION_INPUT)
+                self.assertEqual(observations[-1][2], expected)
+        self.assertEqual(len(observations), 2)
+        self.assertEqual(*observations)
+
+    def test_k6_every_portable_file_form_has_identical_pin_decisions(self):
+        # The bare 'binding' kind supplies a directory or a live control. It
+        # cannot supply a portable frozen file with the current binding names.
+        forms = tuple(form for form in ARGUMENT_KINDS if form != 'binding')
+        baseline = {}
+        for form in forms:
+            with self.subTest(form=form):
+                w1 = self.k6_variant(form, all_classes=True)
+                packet = self.ready_packet(w1)
+                plan = json.loads((w1.root / series.kit_path('C1') / series.C1_PLAN).read_bytes())
+                view, pack, night, tree = self.staged_c1(w1)
+                pack = pack.relative_to(view)
+                dispatch = resolve_stage_dispatches(tree, view)[0]
+                members = Path(dispatch.config_dir)
+                order = members / 'order_manifest.json'
+                config = json.loads((view / order).read_bytes())['executed_order'][0]['config']
+                selected = {
+                    'derivation manifest': DERIVATION_INPUT,
+                    'campaign policy': Path('invented-campaign-policy'),
+                    'calibration head pin': Path(staging.plan.HEAD_PIN_RELATIVE),
+                    'kit plan': pack / series.C1_PLAN,
+                    'kit registration': pack / 'registration/seed_manifest.json',
+                    'launch tree': pack / 'plan_tree.json',
+                    'launch tree digest': pack / 'plan_tree.sha256',
+                    'order': order,
+                    'config': members / config,
+                    'mirrored order': pack / 'stages/episodes-a/order_manifest.json',
+                    'mirrored config': pack / 'stages/episodes-a' / config,
+                    'spare order': Path('configs/campaigns/fixture-spare/order_manifest.json'),
+                    'spare config': Path('configs/campaigns/fixture-spare/member.json'),
+                    'program': Path(TOOLS['campaign_runner'].program),
+                    'registered consumer input': Path(CODE_PATH),
+                }
+                self.commit_staged_packet(w1, packet)
+                accepted = self.k4_checkpoint(w1, plan, view, night)
+                self.assertEqual(accepted[:2], (1, 1), accepted[2])
+                for category, path in selected.items():
+                    name = path.as_posix()
+                    pins = packet['c1_kit']['staged_inventory']
+                    self.assertEqual(pins.get(name), builder.digest((view / path).read_bytes()), category)
+                    for condition in ('pinned', 'missing pin', 'wrong digest'):
+                        with self.subTest(form=form, input=category, condition=condition):
+                            if condition == 'pinned':
+                                code, calls, error = accepted
+                            else:
+                                broken = copy.deepcopy(packet)
+                                pins = broken['c1_kit']['staged_inventory']
+                                if condition == 'missing pin':
+                                    del pins[name]
+                                else:
+                                    pins[name] = '0' * 64
+                                self.commit_staged_packet(w1, broken)
+                                code, calls, error = self.k4_checkpoint(w1, plan, view, night)
+                                self.assertEqual((code, calls), (2, 0), error)
+                                self.assertIn(name, error)
+                            # Timing receipts include synthetic invocation IDs.
+                            diagnostic = next(line for line in error.splitlines()
+                                              if line.startswith('align_pilot_session:'))
+                            decision = series.raw_json([code, calls, diagnostic])
+                            key = (category, condition)
+                            self.assertEqual(decision, baseline.setdefault(key, decision))
+
+    def test_k6_unknown_or_escaping_file_form_refuses(self):
+        forms = (
+            {'kind': 'invented_binding_form', 'value': 'unused'},
+            {'kind': 'binding_path', 'value': 'invented_binding', 'relative': str(DERIVATION_INPUT)},
+            {'kind': 'binding', 'value': 'repo_root'},
+            {'kind': 'binding_path', 'value': 'repo_root', 'relative': '../DO-NOT-FOLLOW'},
+        )
+        for argument in forms:
+            with self.subTest(argument=argument):
+                w1, packet, plan, view, night = self.k4_fixture()
+                pack = Path('configs/campaigns') / series.pack_id('C1')
+                staged_tree = pack / 'plan_tree.json'
+                raw = json.loads((view / staged_tree).read_bytes())
+                source = series.kit_path('C1') / 'plan_tree.json'
+                original = json.loads((w1.root / source).read_bytes())
+                for tree in (original, raw):
+                    derive = next(stage for stage in tree['stage_graph'] if stage['kind'] == 'bound_derivation')
+                    derive['launch']['commands'][0]['argv_template']['arguments'][1] = argument
+                w1.write(source, series.raw_json(original))
+                self.commit_series(w1)
+                with self.subTest(layer='builder'):
+                    refused = self.refused_packet(w1)
+                    self.assertEqual(refused['checks']['sentinel_roster']['status'], 'fail')
+                new_tree = series.raw_json(raw)
+                (view / staged_tree).write_bytes(new_tree)
+                digest = builder.digest(new_tree)
+                packet['c1_kit']['staged_inventory'][str(staged_tree)] = digest
+                # Keep source on the valid kit, so this probes the staged form itself.
+                w1.git('restore', '--source', packet['series_commit'], '--', str(source))
+                prepared = json.loads(night.read_bytes())
+                prepared['hazard_window']['pack']['plan_tree_sha256'] = digest
+                staging.write(night, prepared)
+                self.commit_staged_packet(w1, packet)
+                code, calls, error = self.k4_checkpoint(w1, plan, view, night)
+                self.assertEqual((code, calls), (2, 0), error)
+                self.assertRegex(error, r'unknown kind|binding|relative|repository root')
 
     def test_committed_w1_rebuild_binds_c1_with_live_checks_pending(self):
         w1 = self.c1_scenario()
