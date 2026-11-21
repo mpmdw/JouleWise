@@ -580,3 +580,9 @@ The lead commits the exact output locally in the prepared source checkout as
 `measurement/series/c1-next-arm.json` as the arm pointer. The W1 desk and
 receipt digests carry forward. No integration-owner, Opus or signer hold was
 satisfied by the synthetic checks. `NEEDS_SPEC: none`.
+
+The external-control guard also applies to the daytime receipt named inside
+the disk configuration. The adjacent regression confirms that an external
+configuration cannot cause an unlisted staged receipt to be opened. The
+normal synthetic disk and installer witnesses still exercise their existing
+paths.

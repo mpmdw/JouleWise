@@ -1247,11 +1247,13 @@ def _c1_staged_inputs(root, measurement_root, packet):
 
 def _c1_external_controls(measurement_root, *controls):
     """Live control files are session inputs, outside the immutable staged view."""
-    view = Path(measurement_root).resolve()
+    view = Path(os.path.abspath(measurement_root))
+    resolved_view = view.resolve()
     for control in controls:
         paths = (control,) if isinstance(control, (str, Path)) else control or ()
         for path in paths:
-            if Path(path).resolve().is_relative_to(view):
+            candidate = Path(os.path.abspath(path))
+            if candidate.is_relative_to(view) or candidate.resolve().is_relative_to(resolved_view):
                 raise PacketKitMismatch('live control path is inside the staged view: ' + str(path))
 
 
@@ -1724,7 +1726,7 @@ def daytime_offload_receipt(config, *, now=None, gate=None, freshness_policy=Non
             'config_sha256': _disk_config_digest(config), 'offloads': rows, 'freshness_policy': freshness_policy}
 
 
-def w1_disk_check(config_path, *, gate=None, now=None):
+def w1_disk_check(config_path, *, gate=None, now=None, read_control=None):
     """Require current free disk plus a fresh bound daytime offload receipt.
 
     The arm never remounts or re-hashes an SSD. The by-day writer uses the
@@ -1736,7 +1738,8 @@ def w1_disk_check(config_path, *, gate=None, now=None):
                          'disk_path and offloads the W1 disk gate checks')
     from joulewise.align.r0_host import w1_disk_gate
     from joulewise.align.r0_runner import validate_config
-    raw_config = json.loads(Path(config_path).read_text())
+    read = read_control or (lambda path: Path(path).read_bytes())
+    raw_config = json.loads(Path(config_path).read_text() if read_control is None else read(config_path))
     offloads_owed = raw_config.pop('offloads_owed', None)
     daytime_path = raw_config.pop('daytime_offload_receipt', None)
     freshness = raw_config.pop('daytime_offload_freshness', None)
@@ -1747,7 +1750,7 @@ def w1_disk_check(config_path, *, gate=None, now=None):
         import shutil
         import math
         validate_offload_freshness(freshness)
-        saved = json.loads(Path(daytime_path).read_bytes())
+        saved = json.loads(read(daytime_path))
         if (saved.get('schema') != 'joulewise.align_v4.daytime_offloads.v1'
                 or saved.get('config_sha256') != _disk_config_digest(config)
                 or saved.get('freshness_policy') != freshness):
@@ -2063,10 +2066,15 @@ def _arm_and_install(session, state, measurement_root, plan, high, *, runner, vo
     window_id = (state.get('v4_series') or {}).get('window_id', 'W1')
     binding_root = state.get('source_measurement_root') or measurement_root
     attestation_state = state
-    if window_id == 'C1' and Path(binding_root) != Path(measurement_root):
+    staged_c1 = window_id == 'C1' and Path(binding_root) != Path(measurement_root)
+    if staged_c1:
         _c1_external_controls(measurement_root, state['plan_path'], w1_disk_config,
                               weight_digests_attested, runtime_stack_attested)
         attestation_state = {**state, 'registration_dir': Path(binding_root) / series.kit_path('C1') / 'registration'}
+
+    def read_control(path):
+        _c1_external_controls(measurement_root, path)
+        return Path(path).read_bytes()
 
     def series_bind(built):
         try:
@@ -2134,8 +2142,12 @@ def _arm_and_install(session, state, measurement_root, plan, high, *, runner, vo
         if record['admitted']:
             try:
                 with timing_receipts.span("arm", "v4_disk_gate"):
-                    receipt = w1_disk_check(w1_disk_config, gate=disk_gate)
+                    inputs = {'read_control': read_control} if staged_c1 else {}
+                    receipt = w1_disk_check(w1_disk_config, gate=disk_gate, **inputs)
                 record['w1_disk_gate'] = receipt
+            except PacketKitMismatch as exc:
+                record['packet_kit'] = {'ok': False, 'reason': exc.reason, 'detail': exc.detail}
+                refuse(record, exc.reason)
             except (OSError, ValueError) as exc:
                 refuse(record, f'w1_disk_gate: {exc}')
         record['clock_frequency_pre_t0'] = None

@@ -364,6 +364,21 @@ class SeriesCadenceEndToEnd(unittest.TestCase):
                         path.write_bytes(original)
         self.assertEqual(self.installed, [])
 
+    def test_c1_refuses_an_unlisted_staged_path_in_an_offload_receipt(self):
+        self.outcome('W1', captured=18)
+        packet = self.packet('C1')
+        relative = 'unlisted-daytime-receipt.json'
+        receipt = self.tmp / 'session-C1-1' / 'measurement' / relative
+        config = json.loads(self.disk_config.read_bytes())
+        config.update(daytime_offload_receipt=str(receipt),
+                      daytime_offload_freshness={'max_age_s': 60, 'lead_signature': SIGNATURE})
+        self.disk_config.write_text(json.dumps(config))
+        _, record, error, calls = self.arm('C1', packet, n=1)
+        self.assertEqual(calls, 0)
+        self.assertFalse(record['admitted'])
+        self.assertIn('packet_kit_mismatch', record['reasons'])
+        self.assertIn('live control path is inside the staged view', error)
+
     def test_an_unbound_packet_cannot_arm_w1_or_a_series_window(self):
         for window in ('W1', 'C1'):
             if window == 'C1':
