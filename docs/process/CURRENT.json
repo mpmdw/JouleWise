@@ -1,10 +1,10 @@
 {
   "armed": null,
-  "next_observable": "f2stab01-2e45805c/run-out.txt shows LAUNCH_RC=0 with the fence (launch ~18:10, expected end ~19:25, fence ~20:12; read the true fence deadline and pid from run-out.txt). The next activation after the fence pid is gone and runner_receipt.json exists Checks cq-f2-stab-01-l012-a1 under /Users/edr/campaign-out/f2-stab-01/ with f2stab01-check-template-2e45805c/check.sh (LEGS L012, kit sha dbad9c7b79088bb6f06aac1c1148c3631a0c616fd2ece596bab0f56657ce70fe, campaign_id f2-stab-01 and batch_windows == ['02:00-02:35'] asserted; replace REPLACE_STAMP in OUT with the actual directory's stamp and NEWACT in TMPDIR with the activation id; grep the leg_record for max_busy_cores/max_gap_s), and copies at once with f2stab01-check-template-2e45805c/offload-run.sh (replace NEWACT everywhere with the activation id; confirm it calls f2stab01-check-template-2e45805c/offload.sh, PLAN l012); the Check item prints full 64-hex digests (item 491). L012 empties the f2-stab-01 queue (12 of 12). Then continue down the ladder (items 422, 447, 463, 464, 480, 489): rank 2 only for an f2-inst kit whose executing delta PASS is recorded on main; rank 3 hp-02 only from Sat 21 Nov 00:00 (item 489), after Saturday's rank-1 stability leg, which is due at the first dispatch after 00:00 (kits 01-14 on 2d347f721, item 464); before 00:00 with no f2-stab-01 entry left and f2-stab-15/16 only in the 10:50-13:15 gap, the next rung is F0 on the cap-free templates (items 415, 417, 422) while its plan's blackout_clear holds.",
+  "next_observable": "f2stab02-1af35a27/run-out.txt shows LAUNCH_RC=0 with the fence (launch ~19:12, expected end ~20:30, fence ~21:15; read the true fence deadline and pid from run-out.txt). The next activation after the fence pid is gone and runner_receipt.json exists Checks cq-f2-stab-02-l001-a1 under /Users/edr/campaign-out/f2-stab-02/ with f2stab02-check-template-1af35a27/check.sh (LEGS L001, kit sha 1fe8dd1d0fb60fe1d481ecb0d4358fda595668c1e889a35a75695e290fcad505, campaign_id f2-stab-02 and batch_windows == ['02:00-02:35'] asserted; replace REPLACE_STAMP in OUT with the actual directory's stamp and NEWACT everywhere with the activation id; grep the leg_record for max_busy_cores/max_gap_s; note wall_s against budget_s 1,553 for the long-prefill time-model flag of items 493 and 495), and copies at once with f2stab02-check-template-1af35a27/offload-run.sh (replace NEWACT everywhere with the activation id; confirm it calls f2stab02-check-template-1af35a27/offload.sh, PLAN cq-f2-stab-02-l001-a1); the Check item prints full 64-hex digests (item 491). Then continue down the ladder (items 422, 447, 463, 464, 480, 489). F0 is retired (RL-179 F-4, items 440 and 463), so it is not a rung. Before Sat 21 Nov 00:00: rank 2 only for an f2-inst kit whose executing delta PASS is recorded on main; otherwise rank 4 f2-stab-02 L002 (seq 2) on pin 2d347f721 (inputs f2stab02-1af35a27/inputs.sh with SPAN/LEGS/SEQ/MAGISTRATE_PID changed; check template L001 -> L002) with ARG per item 463's one-leg rule (02:00-02:35 through 23:48:10, 13:14-13:15 from 23:48:11) while its plan reports blackout_clear true. From Sat 00:00: Saturday's rank-1 stability leg first (lowest-numbered kit 01-14 with an unrun leg, item 464; ARG 13:14-13:15 at 00:00-02:34:59), then rank 3 hp-02 (item 489).",
   "open_items": [
     {
       "expires_epoch_s": null,
-      "item": 495,
+      "item": 496,
       "owner": "magistrate",
       "status": "ISSUED"
     },
@@ -173,11 +173,11 @@
   ],
   "owner": "magistrate",
   "schema": "joulewise.current_pointer.v2",
-  "source_item": "495",
+  "source_item": "496",
   "source_item_heading_date": "2026-11-20",
   "wait": {
-    "deadline_epoch_s": 1795241700,
+    "deadline_epoch_s": 1795246200,
     "observable": "none",
-    "on_early_or_refused": "a launcher refusal or non-clean close: record it, hold kit f2-stab-01 until an input changes (item 422, RL-179 F-6), mail the lead and Ed, and continue down the ladder. R1 stays unarmed."
+    "on_early_or_refused": "a launcher refusal or non-clean close: record it, hold kit f2-stab-02 until an input changes (item 422, RL-179 F-6), mail the lead and Ed, and continue down the ladder. R1 stays unarmed."
   }
 }
