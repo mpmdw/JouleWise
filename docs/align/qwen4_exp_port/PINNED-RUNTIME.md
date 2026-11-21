@@ -15,9 +15,9 @@ bundled loader and paged n-gram table.
 
 | Surface | Supported |
 | --- | --- |
-| Schedule | At least four text layers. Three `linear_attention` layers followed by one `full_attention` layer, repeated up to the configured layer count. An omitted `layer_types` uses this schedule. `full_attention_interval` is 4. |
+| Schedule | At least four text layers. Declare `layer_types` as three `linear_attention` layers followed by one `full_attention` layer, repeated up to the configured layer count. `full_attention_interval` is 4. |
 | PLE and DeltaNet | `ple_layer_ids=[2]` (one-indexed), `ple_conv_kernel_size=4`, `linear_conv_kernel_dim=4`, and `ngram_size=3`. |
-| Sparse attention and hyper-connections | Enabled QSA on `full_attention` layers with a positive indexer head count and head dimension, one indexer KV head, compression ratio 4, and a positive budget divisible by 4. `hc_count=4`. |
+| Sparse attention and hyper-connections | Enabled QSA on `full_attention` layers with a positive indexer head count and head dimension, one indexer KV head, compression ratio 4, and budget 2,048. `hc_count=4`. |
 | Text switches | Bias-free attention with zero dropout, untied embeddings, SiLU with a sigmoid output gate, shared and routed experts, and normalized top-k (the default). Default text RoPE has `partial_rotary_factor=0.25`, `mrope_interleaved=true`, and `mrope_section=[11,11,10]`. |
 | MTP metadata | One hybrid `full_attention` layer with `rope_theta=10000000`, `mtp_use_hidden_state_from_layer=null`, and shared embeddings. Declare the `mtp` mapping, `mtp_num_hidden_layers=1`, and `mtp_use_dedicated_embeddings=false`. ALIGN generates through the text trunk. |
 | Weight dtype | FP32 and BF16 checkpoint tensors. |
@@ -26,10 +26,16 @@ bundled loader and paged n-gram table.
 | Generation | Single-request token-ID `stream_generate`, chunked prefill and cached decode with the model's unquantized in-memory caches. ALIGN can reuse a common episode prefix and rebuild its cache on a rewrite. |
 | Kernels | Pinned SDPA and DeltaNet. The DeltaNet Metal kernel runs for key widths divisible by 32 and at least 32. The portable recurrence covers other key widths. |
 
-Model dimensions, head counts, expert counts, vocabulary and total layer
-count may scale within this structure. The loader raises
-`UnsupportedByPinnedRuntime` with the field name for a structural mismatch
-or missing norm layout declaration.
+The [size allowlist](canonical.md#variable-size-fields-in-text_config)
+is the complete set of variable architecture fields, with `layer_types`
+scaled to match the layer count. Use the released values for all other
+architecture fields, including metadata such as `dtype`. Actual tensor
+dtype is validated separately. Missing, changed or extra fields raise
+`UnsupportedByPinnedRuntime` with the field name. The top-level runtime
+metadata consists of the pinned `model_file`, `qwen4_norm_layout`, and
+optional native affine `quantization` and its agreeing
+`quantization_config` alias. The regression suite uses the
+[released architecture snapshot](../../../tests/fixtures/qwen4_exp_released_architecture.json).
 
 The loader raises `UnsupportedByPinnedRuntime` for unsupported checkpoint
 formats and declared generation options. These include NVFP4 with and without
@@ -54,29 +60,35 @@ calls and the `EpisodePromptCache` path in the ALIGN runner lanes
 | `BatchGenerator` with the audit prompts | The generator refuses at cache setup. Cached single-request decode on the same audit weights yields tokens 9 and 48, matching the Transformers reference. [Replay](evidence/audit-3-pinned-runtime.json) |
 | Four 4-bit affine PLE shards under a 6-bit default | All four remapped heads load as 4-bit. Prefill and cached decode errors against upstream are `2.3842e-7` and `1.4902e-7`. [Replay](evidence/audit-3-pinned-runtime.json) |
 | Width-one PLE and DeltaNet convolution caches | The local patch makes both caches retain zero steps at width 1. The audit 4 control matches Transformers at token 50. The structure gate requires width 4, and the native suite retains in-memory prefill and streaming coverage of the cache helper at widths 1, 2 and 4. [Replay and patch](UPSTREAM-PARITY-ADDENDUM-1.md) |
-| Zero-centered norm weights with PLE disabled | The pinned loader refuses the exact mlx-vlm export at `text_config.ple_layer_ids`. Two released-structure checkpoints with identical tensor names exercise explicit `zero_centered` and `folded` declarations. [Replay and patch](UPSTREAM-PARITY-ADDENDUM-1.md) |
+| Zero-centered norm weights with PLE disabled | The pinned loader refuses the audit export's disabled PLE setting at `text_config.ple_layer_ids`. Two released-structure checkpoints with identical tensor names exercise explicit `zero_centered` and `folded` declarations. [Replay and patch](UPSTREAM-PARITY-ADDENDUM-1.md) |
+| Explicit bidirectional attention and odd rotary width | The loader refuses `text_config.is_causal=false` and `text_config.head_dim=36` before model construction. |
 
-Run the native regressions in the existing pinned venv. `FIXTURES` points
-to the local synthetic `C-fp32` and `C-bf16` directories generated by the
-[parity harness](https://github.com/mpmdw/JouleWise/pull/927). The
-quantization probe builds the two upstream NVFP4 regressions and the affine
-control from those fixtures. The checkpoints are generated locally.
+Run the native regressions in the existing pinned venv. Generate
+`FIXTURES` as described below. The quantization probe builds the two
+upstream NVFP4 regressions and the affine control from the local
+synthetic `C-fp32` and `C-bf16` directories.
 
 ```sh
 export HF_HUB_OFFLINE=1 TRANSFORMERS_OFFLINE=1 PYTHONDONTWRITEBYTECODE=1
 export OPENBLAS_NUM_THREADS=1
 nice -n 10 "$WORK/venvs/runtime/bin/python" -B -m unittest tests.test_qwen4_upstream_model_file
+```
+
+For release-structure parity, generate B and C in FP32 and BF16 with
+the released fixed values and their small dimensions. `PARITY` is the
+`scripts/qwen4_upstream_parity.py` path from the merged evidence checkout,
+and `GOLD` is the canonical checkout at `97d780d59`. The short prompts
+exercise dense attention below the 2,048-token indexer budget. A native
+cache test crosses the released budget and verifies pruning. The pinned
+replay attaches the norm declaration to a temporary checkpoint using
+the same weights as Transformers and the comparators.
+
+```sh
+FIXTURES=$(mktemp -d "$WORK/released-fixtures.XXXXXXXX")
+nice -n 10 "$WORK/venvs/reference/bin/python" -B scripts/qwen4_pinned_release_parity.py "$FIXTURES" --harness "$PARITY" --stage reference --gold-checkout "$GOLD"
+nice -n 10 "$WORK/venvs/mlx/bin/python" -B scripts/qwen4_pinned_release_parity.py "$FIXTURES" --harness "$PARITY" --stage comparators --gold-checkout "$GOLD"
+nice -n 10 "$WORK/venvs/runtime/bin/python" -B scripts/qwen4_pinned_release_parity.py "$FIXTURES" --harness "$PARITY" --output "$WORK/pinned-release-parity.json"
 QUANTS=$(mktemp -d "$WORK/pinned-quants.XXXXXXXX")
 nice -n 10 "$WORK/venvs/mlx/bin/python" -B scripts/qwen4_pinned_quantization_probe.py prepare "$QUANTS" --fixtures "$FIXTURES"
 nice -n 10 "$WORK/venvs/runtime/bin/python" -B scripts/qwen4_pinned_quantization_probe.py verify "$QUANTS"
-```
-
-For release-structure parity, `FIXTURES` contains B and C in FP32 and
-BF16 with Transformers, upstream and canonical traces. `PARITY` is the
-`scripts/qwen4_upstream_parity.py` path from the merged evidence checkout.
-The pinned replay attaches released MTP metadata and the appropriate norm
-layout declaration to a temporary checkpoint using the same weights.
-
-```sh
-nice -n 10 "$WORK/venvs/runtime/bin/python" -B scripts/qwen4_pinned_release_parity.py "$FIXTURES" --harness "$PARITY" --output "$WORK/pinned-release-parity.json"
 ```

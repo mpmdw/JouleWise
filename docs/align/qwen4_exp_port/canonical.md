@@ -12,8 +12,34 @@ PLE on layer 2, width-four convolutions, normalized top-k, enabled QSA,
 four hyper-connection streams, and the released MTP declaration. Layer
 count and model dimensions may scale within that structure. The checkpoint
 config explicitly selects `zero_centered` or `folded` norm weights.
-Unsupported checkpoint formats and declared paths raise
-`UnsupportedByPinnedRuntime`. `BatchGenerator` is refused at cache setup.
+The pinned loader compares the flattened architecture to the released
+config. Fixed fields must be present and equal, including the values in
+`text_config.mtp` and `text_config.rope_parameters`. An unknown key at any
+architecture level raises `UnsupportedByPinnedRuntime` with its path.
+The release omits `is_causal` and `norm_topk_prob`, so the loader accepts
+only their implicit causal and normalized-top-k behavior. `BatchGenerator`
+is refused at cache setup.
+
+### Variable size fields in `text_config`
+
+| Fields | Reason they can scale |
+| --- | --- |
+| `hidden_size` | Text embedding width and main residual channel count. |
+| `hc_lowrank` | Intermediate width of each hyper-connection mixer, with four streams. |
+| `moe_intermediate_size`, `shared_expert_intermediate_size` | Routed and shared feed-forward channel counts. |
+| `num_attention_heads`, `num_key_value_heads`, `head_dim` | Attention projection sizes. Query heads must group evenly by KV heads, and the derived rotary width must be positive and even. |
+| `linear_num_key_heads`, `linear_num_value_heads`, `linear_key_head_dim`, `linear_value_head_dim` | DeltaNet projection sizes. Value heads must group evenly by key heads. The portable recurrence covers key widths outside the Metal kernel's supported multiples of 32. |
+| `indexer_n_heads`, `indexer_head_dim` | QSA query count and projection width. The indexer retains one KV head, a 2,048-token budget and compression ratio 4. Its head width must fit the attention rotary width. |
+| `num_hidden_layers` | Decoder depth, with at least four layers. `layer_types` must be the corresponding prefix of the repeated three-DeltaNet/one-full-attention schedule. PLE stays on layer 2. |
+| `num_experts`, `num_experts_per_tok` | MoE bank size and router top-k. Top-k must be within the bank size. |
+| `vocab_size` | Text embedding and output-head row count. |
+| `ple_embed_dim`, `heads_per_ngram`, `ngram_vocab_size_base` | PLE projection width, head count and hash-table row sizes. The projection width must divide evenly across n-gram heads. |
+
+All size fields are positive integers. The checkpoint envelope admits
+`model_file`, `qwen4_norm_layout`, and the existing native affine
+`quantization` mapping and agreeing `quantization_config` alias. The
+canonical artifact's `jw_format` and `ngram_tables` belong to its bundled
+loader. [Pinned runtime setup](PINNED-RUNTIME.md)
 
 The historical JouleWise port below remains pinned at
 `97d780d5959f2d295b953c4d497b8859ef7f1175` for comparison and existing

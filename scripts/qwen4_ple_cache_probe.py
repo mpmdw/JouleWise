@@ -7,6 +7,9 @@ import json
 from pathlib import Path
 import sys
 
+RELEASE_CONFIG = (Path(__file__).resolve().parents[1]
+                  / "tests/fixtures/qwen4_exp_released_architecture.json")
+
 
 def load_python(path, name):
     spec = importlib.util.spec_from_file_location(name, path)
@@ -83,7 +86,11 @@ def expect_pinned_refusal(root, config, weights, field):
     from mlx_lm.utils import load_model
     from qwen4_pinned_quantization_probe import vendored_checkpoint
 
-    with vendored_checkpoint(root, config, weights) as checkpoint:
+    # Isolate the audited field from the legacy fixture's other metadata.
+    candidate = json.loads(RELEASE_CONFIG.read_text())
+    candidate["qwen4_norm_layout"] = "zero_centered"
+    candidate["text_config"][field] = config["text_config"][field]
+    with vendored_checkpoint(root, candidate, weights) as checkpoint:
         try:
             load_model(checkpoint)
         except ValueError as error:
@@ -100,7 +107,7 @@ def replay(root, pinned):
 
     config = json.loads((root / "config.json").read_text())
     if pinned:
-        expect_pinned_refusal(root, config, root / "model.safetensors", "ple_layer_ids")
+        expect_pinned_refusal(root, config, root / "model.safetensors", "ple_conv_kernel_size")
         return
     model, _ = load_model(root)
     result = measure(model, config["ids"], np.load(root / "hf.npy"))

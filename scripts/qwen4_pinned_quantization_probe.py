@@ -22,13 +22,9 @@ def write_json(path, data):
 
 
 def released_fixture_config(config, norm_layout):
-    # The B/C parity fixtures omit the unused MTP declaration. Their text
-    # graph already uses the released layer schedule, PLE and indexer.
-    text = dict(config["text_config"], mtp_num_hidden_layers=1, mtp_use_dedicated_embeddings=False,
-                mtp={"hybrid": True, "layer_types": ["full_attention"],
-                     "mtp_use_hidden_state_from_layer": None, "num_hidden_layers": 1,
-                     "rope_theta": 10_000_000})
-    return dict(config, text_config=text, qwen4_norm_layout=norm_layout)
+    # The harness stores prompt IDs and the RNG seed alongside the config.
+    runtime = {key: value for key, value in config.items() if key not in ("ids", "seed")}
+    return dict(runtime, qwen4_norm_layout=norm_layout)
 
 
 @contextmanager
@@ -48,8 +44,8 @@ CASES = {
 }
 
 
-def decode(model, config):
-    ids = mx.array([config["ids"]])
+def decode(model, tokens):
+    ids = mx.array([tokens])
     cache = model.make_cache()
     prefill = model(ids[:, :-1], cache=cache)
     continuation = model(ids[:, -1:], cache=cache)
@@ -67,6 +63,7 @@ def prepare(root, fixtures):
     for name, (dtype, group, bits, mode, global_scale) in CASES.items():
         fixture = fixtures / f"C-{dtype}"
         config = json.loads((fixture / "config.json").read_text())
+        tokens = config["ids"]
         hf_weights = mx.load(str(fixture / "hf.safetensors"))
         model = arch.Model(arch.ModelArgs.from_dict(config))
         model.load_weights(list(model.sanitize(hf_weights).items()), strict=True)
@@ -76,6 +73,7 @@ def prepare(root, fixtures):
         path.mkdir(parents=True)
         config = released_fixture_config(config, "folded")
         write_json(path / "config.json", config)
+        write_json(path / "prompt.json", tokens)
         weights = dict(tree_flatten(model.parameters()))
         scales = sum(key.endswith(".global_scale") for key in weights)
         if bool(scales) != global_scale:
@@ -83,7 +81,7 @@ def prepare(root, fixtures):
         weight_file = path / "model.safetensors"
         mx.save_safetensors(str(weight_file), weights)
         model, _ = load_model(path)
-        outputs = decode(model, config)
+        outputs = decode(model, tokens)
         if not all(np.isfinite(value).all() for value in outputs.values()):
             raise ValueError(f"{name} upstream logits are nonfinite")
         np.savez(path / "upstream.npz", **outputs)
@@ -105,6 +103,7 @@ def verify(root):
     for name in CASES:
         path = root / name
         config = json.loads((path / "config.json").read_text())
+        tokens = json.loads((path / "prompt.json").read_text())
         upstream = json.loads((path / "upstream.json").read_text())
         weights = path / "model.safetensors"
         if sha256(weights.read_bytes()).hexdigest() != upstream["weights_sha256"]:
@@ -120,7 +119,7 @@ def verify(root):
                 continue
             if name != "affine":
                 raise AssertionError(f"pinned model_file accepted {name}")
-            outputs = decode(model, config)
+            outputs = decode(model, tokens)
         with np.load(path / "upstream.npz") as expected:
             errors = {}
             for key, value in outputs.items():

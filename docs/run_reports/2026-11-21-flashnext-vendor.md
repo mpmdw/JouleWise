@@ -109,3 +109,49 @@ exactly, with the same BF16 discrepancies against the other runtimes as
 the merged evidence. The native and adapter suites passed 65 tests.
 The regenerated 6-bit affine control stayed within `1.02e-6` of
 upstream, and both NVFP4 variants raised `UnsupportedByPinnedRuntime`.
+
+## Audit 6
+
+The `model_file` now compares all architecture fields, recursively,
+against a snapshot of the released `config.json`. The snapshot matched
+the SSD config (SHA-256
+`571de4a394319d69e1fe68bf8e59a56c623dc4c3108d7029c23e512089da5890`).
+The generated suite changes and removes each of the 45 fixed fields.
+It also inserts unknown keys at the top level and in nested sections.
+The [canonical size list](../align/qwen4_exp_port/canonical.md#variable-size-fields-in-text_config)
+records each exception and its constraint. The loader checks the pinned
+checkpoint envelope separately for FP32, BF16 and existing affine recipes.
+
+The two audit payloads were replayed through mlx-lm 0.31.3 with only the
+audited field changed in a supported config. `text_config.is_causal=false`
+raises `UnsupportedByPinnedRuntime` naming the undeclared field. A head
+dimension of 36 raises the same error naming `text_config.head_dim` and
+its odd rotary width of 9. Both refusals occur during `load_model`.
+The sparse indexer tie reproduced on both audit builds, with valid
+selections on both sides. [Tie replay](../align/qwen4_exp_port/UPSTREAM-PARITY-ADDENDUM-1.md#info-sparse-indexer-tie-breaking)
+
+B and C were regenerated with all released fixed fields and the same
+seeds, using only allowed size changes. The 40-token prompts stay in
+the dense regime. The native cache test fills the 2,048-token budget,
+appends a complete block, and verifies that the indexer drops a block.
+The replay has 42 rows per fixture and dtype. The table counts rows
+outside the original tolerances.
+
+| Fixture | HF vs upstream | HF vs canonical | Upstream vs canonical | HF vs pinned | Upstream vs pinned | Canonical vs pinned |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| B FP32 | 0 | 1 | 1 | 0 | 0 | 1 |
+| C FP32 | 0 | 1 | 1 | 0 | 0 | 1 |
+| B BF16 | 9 | 1 | 10 | 9 | 0 | 10 |
+| C BF16 | 14 | 1 | 15 | 14 | 0 | 15 |
+
+All greedy tokens matched. Pinned and upstream BF16 traces matched
+exactly on all 84 rows. In FP32, the historical canonical comparator's
+token-by-token logits exceeded tolerance against all three other
+runtimes, with HF max errors of `1.47845` for B and `2.64004` for C.
+Full-prefill FP32 parity passed. The
+[release parity commands](../align/qwen4_exp_port/PINNED-RUNTIME.md)
+regenerate the traces and report the discrepancy under `stepwise`.
+
+The focused pinned and adapter suites passed 68 tests. The affine
+control stayed within `4.18e-7`, and both NVFP4 controls were refused.
+Verification used the existing offline venvs and generated weights.

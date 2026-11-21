@@ -1,4 +1,5 @@
 """Exercise mlx-lm's pinned local model_file path with the vendored model."""
+from copy import deepcopy
 from dataclasses import replace
 import importlib.metadata
 import json
@@ -22,34 +23,42 @@ def pinned_runtime_available():
         return False
 
 
+RELEASED_ARCHITECTURE = Path(__file__).parent / "fixtures/qwen4_exp_released_architecture.json"
+
+
 def tiny_config(key_width=32):
-    return {
-        "model_type": "qwen4_exp",
-        "model_file": MODEL_FILE.name,
-        "qwen4_norm_layout": "folded",
-        "eos_token_id": 2,
-        "text_config": {
-            "hidden_size": 64, "num_hidden_layers": 4, "num_attention_heads": 2,
-            "num_key_value_heads": 1, "head_dim": 32, "vocab_size": 32,
-            "rms_norm_eps": 1e-6, "eos_token_id": 2,
-            "rope_parameters": {"rope_theta": 10000, "partial_rotary_factor": 0.25,
-                                "mrope_interleaved": True, "mrope_section": [11, 11, 10]},
-            "num_experts": 4, "num_experts_per_tok": 2, "moe_intermediate_size": 32,
-            "shared_expert_intermediate_size": 32, "linear_num_key_heads": 1,
-            "linear_num_value_heads": 2, "linear_key_head_dim": key_width,
-            "linear_value_head_dim": 32, "linear_conv_kernel_dim": 4,
-            "hc_count": 4, "hc_lowrank": 8, "indexer_n_heads": 4,
-            "indexer_kv_heads": 1, "indexer_head_dim": 16, "indexer_budget": 8,
-            "indexer_compress_ratio": 4, "ngram_size": 3, "heads_per_ngram": 2,
-            "ngram_vocab_size_base": 17, "ple_embed_dim": 32, "ple_layer_ids": [2],
-            "ple_conv_kernel_size": 4, "output_gate_type": "sigmoid",
-            "layer_types": ["linear_attention"] * 3 + ["full_attention"],
-            "mtp_num_hidden_layers": 1, "mtp_use_dedicated_embeddings": False,
-            "mtp": {"hybrid": True, "layer_types": ["full_attention"],
-                    "mtp_use_hidden_state_from_layer": None, "num_hidden_layers": 1,
-                    "rope_theta": 10_000_000},
-        },
-    }
+    config = json.loads(RELEASED_ARCHITECTURE.read_text())
+    config.update(model_file=MODEL_FILE.name, qwen4_norm_layout="folded")
+    text = config["text_config"]
+    text.update(
+        hidden_size=64, num_hidden_layers=4, num_attention_heads=2, num_key_value_heads=1,
+        head_dim=32, vocab_size=32, num_experts=4, num_experts_per_tok=2,
+        moe_intermediate_size=32, shared_expert_intermediate_size=32, linear_num_key_heads=1,
+        linear_num_value_heads=2, linear_key_head_dim=key_width, linear_value_head_dim=32,
+        hc_lowrank=8, indexer_head_dim=16, heads_per_ngram=2, ngram_vocab_size_base=17,
+        ple_embed_dim=32,
+    )
+    text["layer_types"] = text["layer_types"][:text["num_hidden_layers"]]
+    return config
+
+
+def architecture_leaves(config, path=()):
+    for key, value in config.items():
+        field = (*path, key)
+        if isinstance(value, dict):
+            yield from architecture_leaves(value, field)
+        else:
+            yield field, value
+
+
+def changed_value(value):
+    if isinstance(value, bool):
+        return not value
+    if isinstance(value, (int, float)):
+        return value + 1
+    if isinstance(value, list):
+        return value + ["other"]
+    return "other"
 
 
 def write_checkpoint(path, config, weights):
@@ -147,8 +156,8 @@ class Qwen4UpstreamModelFileTest(unittest.TestCase):
             ("legacy alias", {"quantization_config": {"quant_method": "mxfp4"}},
              "quantization_config.quant_method"),
             ("nested alias", {"text_config": dict(config["text_config"], quantization_config=nvfp4)},
-             "text_config.quantization_config.mode"),
-            ("affine alias only", {"quantization_config": affine}, "top-level quantization"),
+             "text_config.quantization_config."),
+            ("affine alias only", {"quantization_config": affine}, "quantization_config"),
             ("mxfp4", {"quantization": {"mode": "mxfp4"}}, "quantization.mode"),
             ("mxfp8", {"quantization": {"mode": "mxfp8"}}, "quantization.mode"),
             ("other mode", {"quantization": {"mode": "fp8"}}, "quantization.mode"),
@@ -194,60 +203,115 @@ class Qwen4UpstreamModelFileTest(unittest.TestCase):
             config["text_config"].update(linear_num_value_heads=3, linear_num_key_heads=2)
             args_class.from_dict(config)
 
-    def test_rejects_structural_variants_by_field(self):
+    def test_each_fixed_released_field_rejects_changes_and_omissions(self):
         arch = runpy.run_path(str(MODEL_FILE))
         args_class, unsupported = arch["ModelArgs"], arch["UnsupportedByPinnedRuntime"]
-        cases = (
-            ("num_hidden_layers", 3), ("full_attention_interval", 2),
-            ("layer_types", ["linear_attention", "full_attention"] * 2),
-            ("layer_types", ["linear_attention"] * 3 + ["indexed_attention"]),
-            ("layer_types", []), ("ple_layer_ids", []), ("ple_layer_ids", [1]),
-            ("ple_conv_kernel_size", 1), ("ple_conv_kernel_size", 2),
-            ("linear_conv_kernel_dim", 1), ("norm_topk_prob", False),
-            ("indexer_n_heads", None), ("indexer_n_heads", 0), ("indexer_head_dim", 0),
-            ("indexer_kv_heads", 2), ("indexer_compress_ratio", 2), ("indexer_budget", 3),
-            ("hc_count", 2), ("ngram_size", 2), ("model_type", "qwen3_next"),
-            ("mtp", None), ("mtp.hybrid", False), ("mtp.layer_types", ["linear_attention"]),
-            ("mtp.mtp_use_hidden_state_from_layer", 1), ("mtp.num_hidden_layers", 2),
-            ("mtp.rope_theta", 10_000), ("mtp_num_hidden_layers", 0),
-            ("mtp_use_dedicated_embeddings", True), ("shared_expert_intermediate_size", 0),
-            ("num_experts", 0), ("num_experts_per_tok", 5),
-            ("heads_per_ngram", 0), ("ple_embed_dim", 33),
-            ("attention_bias", True), ("hidden_act", "gelu"), ("output_gate_type", "silu"),
-            ("tie_word_embeddings", True), ("use_cache", False),
-            ("attention_dropout", 0.1), ("output_router_logits", True),
-            ("mamba_ssm_dtype", "bfloat16"), ("partial_rotary_factor", 0.5),
-            ("rope_parameters.rope_type", "yarn"), ("rope_parameters.mrope_interleaved", False),
-            ("rope_parameters.mrope_section", [8, 8, 8]),
-            ("rope_parameters.partial_rotary_factor", 0.5), ("rope_scaling", {"factor": 2}),
-        )
-        for field, value in cases:
-            config = tiny_config()
-            target = config["text_config"]
-            parent, _, child = field.rpartition(".")
-            if parent:
-                target = target[parent]
-            target[child] = value
-            with self.subTest(field=field, value=value), self.assertRaisesRegex(
-                unsupported, re.escape(f"text_config.{field}") + r"\b",
-            ):
-                args_class.from_dict(config)
-        config = tiny_config()
-        del config["text_config"]["mtp"]["mtp_use_hidden_state_from_layer"]
-        with self.assertRaisesRegex(unsupported, r"text_config\.mtp\.mtp_use_hidden_state_from_layer"):
-            args_class.from_dict(config)
-        with self.assertRaisesRegex(unsupported, r"^tie_word_embeddings\b"):
-            args_class.from_dict(dict(tiny_config(), tie_word_embeddings=True))
+        release = json.loads(RELEASED_ARCHITECTURE.read_text())
+        self.assertEqual(arch["_RELEASED_CONFIG"], release)
+        baseline = dict(release, model_file=MODEL_FILE.name, qwen4_norm_layout="zero_centered")
+        args_class.from_dict(baseline)
+        size_paths = {("text_config", name) for name in arch["_SIZE_FIELDS"]}
+        self.assertLessEqual(size_paths, dict(architecture_leaves(release)).keys())
+        for path, value in architecture_leaves(release):
+            if path in size_paths:
+                continue
+            name = ".".join(path)
+            for delete in (False, True):
+                variant = deepcopy(baseline)
+                target = variant
+                for parent in path[:-1]:
+                    target = target[parent]
+                if delete:
+                    del target[path[-1]]
+                else:
+                    target[path[-1]] = changed_value(value)
+                with self.subTest(field=name, delete=delete), self.assertRaisesRegex(
+                    unsupported, re.escape(name) + r"\b",
+                ):
+                    args_class.from_dict(variant)
 
-    def test_released_defaults_and_variable_layer_count(self):
-        args_class = runpy.run_path(str(MODEL_FILE))["ModelArgs"]
+    def test_rejects_extra_fields_at_every_config_level(self):
+        arch = runpy.run_path(str(MODEL_FILE))
+        for path, value in (
+            (("text_config", "is_causal"), False),
+            (("text_config", "is_causal"), True),
+            (("text_config", "norm_topk_prob"), True),
+            (("text_config", "mtp", "unexpected"), 1),
+            (("text_config", "rope_parameters", "unexpected"), 1),
+            (("text_config", "mtp.hybrid"), True),
+            (("text_config", "unexpected"), {}),
+            (("text_config.is_causal",), False),
+            (("unknown",), False),
+            (("jw_format",), "joulewise-qwen4-exp-canonical-v2"),
+            (("ngram_tables", "io"), "mmap"),
+        ):
+            config = tiny_config()
+            target = config
+            for parent in path[:-1]:
+                target = target.setdefault(parent, {})
+            target[path[-1]] = value
+            name = ".".join(path)
+            with self.subTest(field=name, value=value), self.assertRaisesRegex(
+                arch["UnsupportedByPinnedRuntime"], re.escape(name) + r"\b",
+            ):
+                arch["ModelArgs"].from_dict(config)
+
+    def test_scaled_schedule_and_load_time_size_constraints(self):
+        arch = runpy.run_path(str(MODEL_FILE))
+        args_class, unsupported = arch["ModelArgs"], arch["UnsupportedByPinnedRuntime"]
         config = tiny_config()
-        config["text_config"]["num_hidden_layers"] = 8
-        pattern = config["text_config"].pop("layer_types")
-        config["text_config"].pop("ple_conv_kernel_size")
-        args = args_class.from_dict(config)
-        self.assertEqual(args.text.layer_types, pattern * 2)
-        self.assertEqual(args.text.ple_conv_kernel_size, 4)
+        text = config["text_config"]
+        pattern = text["layer_types"]
+        text.update(num_hidden_layers=9, layer_types=pattern * 2 + pattern[:1])
+        self.assertEqual(args_class.from_dict(config).text.layer_types, text["layer_types"])
+        text["layer_types"] = pattern * 2 + ["full_attention"]
+        with self.assertRaisesRegex(unsupported, r"text_config\.layer_types"):
+            args_class.from_dict(config)
+        for name, value in (("num_hidden_layers", 3), ("head_dim", 36), ("head_dim", 3),
+                            ("indexer_head_dim", 7), ("num_key_value_heads", 3),
+                            ("num_experts_per_tok", 5), ("ple_embed_dim", 33)):
+            config = tiny_config()
+            config["text_config"][name] = value
+            msg = "num_attention_heads" if name == "num_key_value_heads" else name
+            with self.subTest(field=name, value=value), self.assertRaisesRegex(unsupported, msg):
+                args_class.from_dict(config)
+        for name in arch["_SIZE_FIELDS"]:
+            config = tiny_config()
+            config["text_config"][name] = True
+            with self.subTest(field=name), self.assertRaisesRegex(unsupported, name):
+                args_class.from_dict(config)
+
+    def test_audit_causality_and_odd_rotary_width_refuse_through_model_file(self):
+        import mlx.core as mx
+        from mlx_lm.utils import load_model
+
+        for field, value, message in (
+            ("is_causal", False, r"text_config\.is_causal"),
+            ("head_dim", 36, r"text_config\.head_dim.*rotary width 9"),
+        ):
+            with self.subTest(field=field), tempfile.TemporaryDirectory() as tmp:
+                config = tiny_config()
+                config["text_config"][field] = value
+                write_checkpoint(Path(tmp), config, {"probe": mx.zeros(1)})
+                with self.assertRaisesRegex(ValueError, message) as error:
+                    load_model(Path(tmp))
+                self.assertEqual(type(error.exception).__name__, "UnsupportedByPinnedRuntime")
+
+    def test_indexer_prunes_at_the_released_budget_with_cached_keys(self):
+        import mlx.core as mx
+        from mlx_lm.models.cache import KVCache
+
+        arch = runpy.run_path(str(MODEL_FILE))
+        args = arch["ModelArgs"].from_dict(tiny_config()).text
+        mx.random.seed(3217)
+        indexer = arch["QSAIndexer"](args)
+        cache = KVCache()
+        budget = args.indexer_budget
+        self.assertIsNone(indexer(mx.random.normal((1, budget, args.hidden_size)), cache))
+        count = args.indexer_compress_ratio
+        mask = indexer(mx.random.normal((1, count, args.hidden_size)), cache)
+        self.assertEqual(mask.shape, (1, 1, count, budget + count))
+        self.assertEqual(int(mx.sum(mask[0, 0, -1]).item()), budget)
 
     def test_norm_layout_is_required(self):
         arch = runpy.run_path(str(MODEL_FILE))

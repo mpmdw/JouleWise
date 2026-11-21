@@ -30,9 +30,9 @@ The released artifact `config.json` sets both `ple_conv_kernel_size` and
 `linear_conv_kernel_dim` to 4 in `text_config`, so neither convolution asks
 to keep zero steps. The pinned vendor carries the same one-line change
 as the [proposed upstream diff](upstream-keep-last-zero.diff). The vendor
-rows above record the audit 4 runs. The current pinned loader rejects
-that fixture at `text_config.ple_layer_ids` and rejects width one in an
-otherwise released configuration at `text_config.ple_conv_kernel_size`.
+rows above record the audit 4 runs. The pinned replay isolates width one
+in an otherwise released configuration and checks the refusal naming
+`text_config.ple_conv_kernel_size`.
 
 ## Offline reproduction
 
@@ -79,8 +79,9 @@ the reference's final-position argmax when the fold is applied.
 The released Flash-Next config has `ple_layer_ids=[2]`. A PLE-enabled
 mlx-vlm export contains the n-gram shards that trigger the original
 norm conversion, so this no-PLE defect is latent for the release. The
-pinned `model_file` now requires `qwen4_norm_layout` for supported exports
-and refuses the audit checkpoint at `text_config.ple_layer_ids`. The
+pinned `model_file` requires `qwen4_norm_layout` for supported exports.
+The pinned replay isolates the audited field and refuses the checkpoint
+at `text_config.ple_layer_ids`. The
 [proposed upstream diff](upstream-explicit-norm-layout.diff) adds the
 config field and retains the legacy inference rule for unlabelled
 checkpoints. Re-exported tensors use the label for the representation
@@ -110,3 +111,64 @@ git -C "$PATCHED" apply "$PWD/docs/align/qwen4_exp_port/upstream-explicit-norm-l
 cp "$WORK/venvs/mlx/lib/python3.13/site-packages/mlx_lm/_version.py" "$PATCHED/mlx_lm/"
 PYTHONPATH="$PATCHED" nice -n 10 "$WORK/venvs/mlx/bin/python" -B scripts/qwen4_norm_layout_probe.py upstream-fixed "$REPLAY"
 ```
+
+## [INFO] Sparse indexer tie-breaking
+
+For FP32 fixture B (seed 2116), the final query over the prompt below
+has block scores `[0.0, 0.0, 0.3890428543, 0.0]` and needs two of the
+four blocks. PyTorch selects `[1, 2]` and predicts token 63. Upstream
+mlx-lm `c4c9c76` and the audit 6 pinned build `83161d3ee` select `[0, 2]`
+and emit 53. Both selections satisfy the top-k scores. The final-position
+maximum logit error is `0.24863648` against Transformers. In both MLX
+implementations the Transformers mask restores token 63 and lowers the
+error to `3.39746e-6`. This replay uses fixture B's budget of 8, compared
+with the released budget of 2,048.
+
+The selector result reproduces with `torch.tensor(scores).topk(2).indices`
+in the reference venv and `mx.argpartition(-mx.array(scores), 1)[:2]` in
+the MLX venv. To regenerate the model replay, use the merged parity
+harness `PARITY` and the offline environment above. The FP32 payload
+SHA-256 is `bd48338d929d0dc3f1f5a128363b1d339d80e243a2a0db47502fca2331b49c36`.
+
+```sh
+TIE=$(mktemp -d "$WORK/qsa-tie.XXXXXXXX")
+export TIE GOLD PYTHONPATH="$(dirname "$PARITY")"
+nice -n 10 "$WORK/venvs/reference/bin/python" -B - <<'PY'
+import os
+from pathlib import Path
+from unittest.mock import patch
+import torch
+import qwen4_upstream_parity as q
+
+torch.set_num_threads(2)
+load = q.load_python
+def with_prompt(path, name):
+    module = load(path, name)
+    if name == "parity_prior":
+        module.ids_for = lambda case: [12, 31, 45, 72, 90, 55, 63, 11, 59, 73, 75, 8, 12, 87, 59, 57]
+    return module
+
+with patch.object(q, "load_python", with_prompt):
+    q.reference(Path(os.environ["TIE"]), Path(os.environ["GOLD"]), "B", "fp32")
+PY
+nice -n 10 "$WORK/venvs/mlx/bin/python" -B - <<'PY'
+import os
+from pathlib import Path
+import numpy as np
+import qwen4_upstream_parity as q
+
+root = Path(os.environ["TIE"])
+q.mlx(root, None, "fp32", "upstream")
+with np.load(root / "hf.npz") as hf, np.load(root / "upstream.npz") as mlx:
+    for trace in (hf, mlx):
+        blocks = np.flatnonzero(trace["L3.indexer"][0, 0, -1])[::4] // 4
+        print(blocks.tolist(), int(trace["greedy"][0]))
+    print(float(np.max(np.abs(hf["logits"][0, -1] - mlx["logits"][0, -1]))))
+PY
+```
+
+For the mask control, replace the MLX layer-3 indexer's return value with
+the corresponding Transformers mask rows and columns. With key length
+`n` and query length `rows`, use
+`hf["L3.indexer"][:, :, n - rows:n, :n]` where `n` is within the original
+prompt. Then rerun the final cached position and the first greedy token.
