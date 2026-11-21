@@ -1,0 +1,353 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "JouleWise MBP queue",
+  "description": "Use scripts/mbp_sched.py validate for rule references, admission, durations, and the standing-filler invariant.",
+  "type": "object",
+  "properties": {
+    "schema": {
+      "const": "joulewise.mbp_queue.v1"
+    },
+    "timezone": {
+      "const": "America/Los_Angeles"
+    },
+    "admitted": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "pin": {
+            "type": "string",
+            "pattern": "^[0-9a-fA-F]{40}$"
+          },
+          "kit_sha256": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[0-9a-fA-F]{64}$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "pin",
+          "kit_sha256"
+        ],
+        "additionalProperties": false
+      }
+    },
+    "entries": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]*$"
+          },
+          "kind": {
+            "enum": [
+              "v4_session",
+              "counted",
+              "product_filler",
+              "diagnostic_filler",
+              "maintenance"
+            ]
+          },
+          "launcher": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "\\S"
+          },
+          "worktree": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "\\S"
+          },
+          "argv": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1
+          },
+          "pin": {
+            "type": "string",
+            "pattern": "^[0-9a-fA-F]{40}$"
+          },
+          "kit_sha256": {
+            "anyOf": [
+              {
+                "type": "string",
+                "pattern": "^[0-9a-fA-F]{64}$"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "expected_s": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "worst_case_s": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "requires": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]*$"
+            }
+          },
+          "params": {
+            "type": "object",
+            "properties": {
+              "window": {
+                "type": "object",
+                "properties": {
+                  "earliest_epoch": {
+                    "anyOf": [
+                      {
+                        "type": "number",
+                        "minimum": 0,
+                        "exclusiveMaximum": 253370764800
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  },
+                  "latest_epoch": {
+                    "anyOf": [
+                      {
+                        "type": "number",
+                        "minimum": 0,
+                        "exclusiveMaximum": 253370764800
+                      },
+                      {
+                        "type": "null"
+                      }
+                    ]
+                  }
+                },
+                "required": [],
+                "additionalProperties": false
+              },
+              "date_caps": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "group": {
+                      "type": "string",
+                      "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]*$"
+                    },
+                    "max": {
+                      "type": "integer",
+                      "minimum": 0
+                    }
+                  },
+                  "required": [
+                    "group",
+                    "max"
+                  ],
+                  "additionalProperties": false
+                }
+              },
+              "not_on_dates_of": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]*$"
+                }
+              },
+              "batch_clear": {
+                "type": "boolean"
+              },
+              "soak_end_s": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "group": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]*$"
+              },
+              "legs": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "after": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]*$"
+                }
+              },
+              "gates": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]*$"
+                }
+              },
+              "launch_window_local": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "pattern": "^(?:[01]\\d|2[0-3]):[0-5]\\d:[0-5]\\d$"
+                },
+                "minItems": 2,
+                "maxItems": 2
+              },
+              "kill_margin_s": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "pilot": {
+                "type": "boolean"
+              },
+              "hygiene_change": {
+                "type": "boolean"
+              },
+              "groups": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]*$"
+                },
+                "uniqueItems": true
+              },
+              "campaign": {
+                "type": "string",
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]*$"
+              },
+              "qualification": {
+                "type": "boolean"
+              },
+              "floating_battery": {
+                "type": "boolean"
+              },
+              "dry_run_required": {
+                "type": "boolean"
+              }
+            },
+            "required": [],
+            "additionalProperties": false
+          },
+          "repeat": {
+            "type": "boolean"
+          },
+          "product": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "\\S"
+          },
+          "block": {
+            "type": "string",
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9_.-]*$"
+          },
+          "expected_ready_by": {
+            "type": "number",
+            "minimum": 0,
+            "exclusiveMaximum": 253370764800
+          },
+          "plan_argv": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "minItems": 1
+          },
+          "done": {
+            "type": "boolean"
+          },
+          "close_gap_s": {
+            "type": "integer",
+            "minimum": 0,
+            "deprecated": true,
+            "description": "Accepted for older queue entries. RL-179 removed the timed close gap."
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "launcher",
+          "worktree",
+          "argv",
+          "pin",
+          "kit_sha256",
+          "expected_s",
+          "worst_case_s",
+          "requires",
+          "params",
+          "repeat",
+          "product"
+        ],
+        "additionalProperties": false,
+        "allOf": [
+          {
+            "if": {
+              "properties": {
+                "kind": {
+                  "const": "counted"
+                }
+              }
+            },
+            "then": {
+              "properties": {
+                "params": {
+                  "dependentRequired": {
+                    "group": [
+                      "legs"
+                    ],
+                    "groups": [
+                      "legs"
+                    ]
+                  },
+                  "if": {
+                    "required": [
+                      "date_caps"
+                    ],
+                    "properties": {
+                      "date_caps": {
+                        "minItems": 1
+                      }
+                    }
+                  },
+                  "then": {
+                    "required": [
+                      "legs"
+                    ],
+                    "anyOf": [
+                      {
+                        "required": [
+                          "group"
+                        ]
+                      },
+                      {
+                        "required": [
+                          "groups"
+                        ]
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        ]
+      }
+    }
+  },
+  "required": [
+    "schema",
+    "timezone",
+    "admitted",
+    "entries"
+  ],
+  "additionalProperties": false
+}

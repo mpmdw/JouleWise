@@ -1,0 +1,448 @@
+[
+  {
+    "id": "registered-window",
+    "class": "VALIDITY",
+    "protects": "The local t0-date keeps each registered leave-one-day-out fold on a day unseen by the fit.",
+    "test": "window",
+    "scope": "development-and-qualification",
+    "source": "RL-179 Register row 1; RL-180 Register row 9",
+    "owner": "research_lead",
+    "added": "2026-11-18",
+    "review_by": "end:qual-03-close",
+    "status": "LIVE"
+  },
+  {
+    "id": "counted-fits",
+    "class": "PHYSICS",
+    "protects": "Each span of a pending dated block retains a feasible start on its registered date.",
+    "test": "fits",
+    "scope": "fillers-and-maintenance",
+    "source": "RL-179 Register row 2",
+    "owner": "research_lead",
+    "added": "2026-11-18",
+    "review_by": "end:qual-03-close",
+    "status": "LIVE"
+  },
+  {
+    "id": "later-kit-local-day",
+    "class": "VALIDITY",
+    "protects": "A later kit reporting a per-day error uses the local t0-date as its day.",
+    "test": "pipeline:kit-registration",
+    "scope": "later-kits",
+    "source": "RL-179 Register row 3",
+    "owner": "research_lead",
+    "added": "2026-11-18",
+    "review_by": "end:stability-date-ruling",
+    "status": "LIVE"
+  },
+  {
+    "id": "host-quiet",
+    "class": "PHYSICS",
+    "protects": "A launch waits for a live fence or foreign load so the next soak runs without outside load.",
+    "test": "host_quiet",
+    "scope": "host",
+    "source": "RL-179 Register row 4",
+    "owner": "research_lead",
+    "added": "2026-11-18",
+    "review_by": "end:runner-pin-review",
+    "status": "LIVE",
+    "params": {
+      "patterns": [
+        "(?:^|/)(?:claude|codex|ssh|sshd|rsync|rclone|restic|zstd)(?:$|[-.])"
+      ],
+      "recheck_s": 300
+    }
+  },
+  {
+    "id": "soak-and-g0",
+    "class": "VALIDITY",
+    "protects": "The pinned soak slope and G0 release establish the start state of each leg.",
+    "test": "pipeline:pinned-runner",
+    "scope": "every-span",
+    "source": "RL-179 Register row 5",
+    "owner": "research_lead",
+    "added": "2026-11-18",
+    "review_by": "end:runner-pin",
+    "status": "LIVE"
+  },
+  {
+    "id": "desk-and-consumer",
+    "class": "SAFETY",
+    "protects": "A failed desk or consumer gate protects machine hours and registered legs by holding the affected kit.",
+    "test": "desk_gate",
+    "scope": "same-kit",
+    "source": "RL-179 Register row 6",
+    "owner": "research_lead",
+    "added": "2026-11-18",
+    "review_by": "end:campaign",
+    "status": "LIVE"
+  },
+  {
+    "id": "look-input-readback",
+    "class": "VALIDITY",
+    "protects": "The hand sample, Q1 record and desk-final ensure a look reads checked spans and the reference source verified by the runner.",
+    "test": "pipeline:look-inputs",
+    "scope": "look-roster",
+    "source": "RL-179 Register row 7",
+    "owner": "research_lead",
+    "added": "2026-11-18",
+    "review_by": "end:look",
+    "status": "LIVE"
+  },
+  {
+    "id": "first-native-hand-read",
+    "class": "VALIDITY",
+    "protects": "A hand-read checks the first native run on a pin or leg type before later spans depend on it.",
+    "test": "dependency",
+    "scope": "runner-pin-or-leg-type",
+    "source": "RL-179 Register row 8",
+    "owner": "research_lead",
+    "added": "2026-11-18",
+    "review_by": "end:hand-read-passes",
+    "status": "LIVE"
+  },
+  {
+    "id": "new-pin-smoke",
+    "class": "SAFETY",
+    "protects": "A filler, registered counted pilot or Part C proves the pin before it is used on a session or a dated counted span.",
+    "test": "new_pin_smoke",
+    "scope": "new-runner-pin",
+    "source": "RL-179 Register row 9",
+    "owner": "research_lead",
+    "added": "2026-11-18",
+    "review_by": "end:clean-smoke",
+    "status": "LIVE"
+  },
+  {
+    "id": "unruled-kit-cold-seat",
+    "class": "VALIDITY",
+    "protects": "A cold seat identifies the registered estimand when a kit adds an unruled leg type, layout or estimand.",
+    "test": "pipeline:kit-review",
+    "scope": "new-leg-type-or-estimand",
+    "source": "RL-179 Register row 10",
+    "owner": "research_lead",
+    "added": "2026-11-18",
+    "review_by": "end:validate-kit-test",
+    "status": "LIVE"
+  },
+  {
+    "id": "f0-retirement",
+    "class": "VALIDITY",
+    "protects": "Part C provides the W1 smoke on a pin change, and standing F0 retires at R1's post-close Check.",
+    "test": "f0_retirement",
+    "scope": "w1-line",
+    "source": "RL-179 Register row 11",
+    "owner": "research_lead",
+    "added": "2026-11-18",
+    "review_by": "end:v4-series",
+    "status": "LIVE",
+    "params": {
+      "gate": "r1-post-close-check"
+    }
+  },
+  {
+    "id": "stability-sealed",
+    "class": "VALIDITY",
+    "protects": "Stability-leg energy stays sealed until the fit is frozen and the registered look has passed cold review.",
+    "test": "pipeline:stability-release",
+    "scope": "f2-stab",
+    "source": "RL-179 Register row 12",
+    "owner": "research_lead",
+    "added": "2026-11-18",
+    "review_by": "end:paper-data-release",
+    "status": "LIVE"
+  },
+  {
+    "id": "filler-ladder",
+    "class": "VALIDITY",
+    "protects": "Prioritizing the first stability leg on a local date protects the series' between-date estimate.",
+    "test": "filler_ladder",
+    "scope": "product-fillers",
+    "source": "RL-179 Register row 13",
+    "owner": "research_lead",
+    "added": "2026-11-18",
+    "review_by": "end:last-stability-read",
+    "status": "LIVE",
+    "params": {
+      "stability_prefix": "f2-stab",
+      "instrument_prefix": "f2-inst",
+      "high_power_prefix": "hp-02",
+      "high_power_look_gate": "lm-hp-01"
+    }
+  },
+  {
+    "id": "copy-debt",
+    "class": "SAFETY",
+    "protects": "A bounded copy wait protects a second copy, while stopping the upload before the next soak prevents foreign load.",
+    "test": "copy_debt",
+    "scope": "host",
+    "source": "RL-179 Register row 14",
+    "owner": "research_lead",
+    "added": "2026-11-18",
+    "review_by": "end:copy-bound-review",
+    "status": "LIVE",
+    "params": {
+      "wait_s": 600,
+      "page_age_s": 7200
+    }
+  },
+  {
+    "id": "original-retention",
+    "class": "SAFETY",
+    "protects": "Retaining originals until two verified copies and the key exist off the MBP protects the only irreversible step.",
+    "test": "pipeline:original-retention",
+    "scope": "every-tool-and-person",
+    "source": "RL-179 Register row 15",
+    "owner": "research_lead",
+    "added": "2026-11-18",
+    "review_by": "end:standing",
+    "status": "LIVE"
+  },
+  {
+    "id": "development-raw-retention",
+    "class": "VALIDITY",
+    "protects": "The interim look reads the original files that the development spans wrote.",
+    "test": "pipeline:development-raw-retention",
+    "scope": "dev-01-through-dev-05",
+    "source": "RL-179 Register row 16",
+    "owner": "research_lead",
+    "added": "2026-11-18",
+    "review_by": "end:lm-interim-01-public",
+    "status": "LIVE"
+  },
+  {
+    "id": "host-clean",
+    "class": "SAFETY",
+    "protects": "A proven restore and absence of an unowned High Power marker protect the host state of every later measurement.",
+    "test": "host_clean",
+    "scope": "host",
+    "source": "RL-179 Register row 17",
+    "owner": "research_lead",
+    "added": "2026-11-18",
+    "review_by": "end:standing",
+    "status": "LIVE"
+  },
+  {
+    "id": "host-disk",
+    "class": "PHYSICS",
+    "protects": "A free-space floor protects whole spans from being lost to a full disk.",
+    "test": "host_disk",
+    "scope": "host",
+    "source": "RL-179 Register row 18",
+    "owner": "research_lead",
+    "added": "2026-11-18",
+    "review_by": "end:standing",
+    "status": "LIVE",
+    "params": {
+      "floor_gib": 60
+    }
+  },
+  {
+    "id": "host-meter",
+    "class": "PHYSICS",
+    "protects": "A working meter and collector provide DC-in observations used for every measured leg.",
+    "test": "host_meter",
+    "scope": "measured-work",
+    "source": "RL-179 Register row 19",
+    "owner": "research_lead",
+    "added": "2026-11-18",
+    "review_by": "end:standing",
+    "status": "LIVE"
+  },
+  {
+    "id": "contaminated-redos",
+    "class": "VALIDITY",
+    "protects": "Holding counted work after repeated contamination preserves finite registered legs and their reserve.",
+    "test": "contaminated_redos",
+    "scope": "counted-and-v4",
+    "source": "RL-179 Register row 20",
+    "owner": "research_lead",
+    "added": "2026-11-18",
+    "review_by": "end:campaign",
+    "status": "LIVE"
+  },
+  {
+    "id": "not-refused",
+    "class": "SAFETY",
+    "protects": "Holding the affected kit or block until an input changes prevents another run from repeating the known fault.",
+    "test": "not_refused",
+    "scope": "same-kit-or-block",
+    "source": "RL-179 Register row 21",
+    "owner": "research_lead",
+    "added": "2026-11-18",
+    "review_by": "end:campaign",
+    "status": "LIVE"
+  },
+  {
+    "id": "qualification-batch",
+    "class": "VALIDITY",
+    "protects": "Clearing the predicted OS batch protects the three unrepeated pair-days that support the qualification word.",
+    "test": "batch_clear",
+    "scope": "qualification-spans",
+    "source": "RL-179 Register row 22",
+    "owner": "research_lead",
+    "added": "2026-11-18",
+    "review_by": "end:qual-03-close",
+    "status": "LIVE",
+    "params": {
+      "offset_s": 43248,
+      "period_s": 86400,
+      "settle_s": 1620
+    }
+  },
+  {
+    "id": "ready-outside-block",
+    "class": "VALIDITY",
+    "protects": "Deferring READY until the qualification block is complete protects the block's common date.",
+    "test": "ready_outside_block",
+    "scope": "v4-ready-records",
+    "source": "RL-179 Register row 23",
+    "owner": "research_lead",
+    "added": "2026-11-18",
+    "review_by": "end:qual-03-close",
+    "status": "LIVE"
+  },
+  {
+    "id": "session-route",
+    "class": "VALIDITY",
+    "protects": "Requiring effective READY preserves the v4 registration's owner notice and veto procedure.",
+    "test": "session_route",
+    "scope": "v4-sessions",
+    "source": "RL-179 Register row 24",
+    "owner": "research_lead",
+    "added": "2026-11-18",
+    "review_by": "end:v4-series",
+    "status": "LIVE"
+  },
+  {
+    "id": "qualification-hygiene",
+    "class": "VALIDITY",
+    "protects": "Holding hygiene settings fixed between freeze 2 and the final qualification close keeps qualification on one host state.",
+    "test": "hygiene",
+    "scope": "host-settings",
+    "source": "RL-179 Register row 25",
+    "owner": "research_lead",
+    "added": "2026-11-18",
+    "review_by": "end:qual-03-close",
+    "status": "LIVE",
+    "params": {
+      "start_gate": "freeze-2",
+      "end_gate": "qual-03-close"
+    }
+  },
+  {
+    "id": "look-public-boundary",
+    "class": "VALIDITY",
+    "protects": "The public output contains only registered words, hashes and structural identifiers before data release.",
+    "test": "pipeline:look-public-output",
+    "scope": "interim-and-later-looks",
+    "source": "RL-179 Register row 26",
+    "owner": "research_lead",
+    "added": "2026-11-18",
+    "review_by": "end:paper-data-release-or-named-ruling",
+    "status": "LIVE"
+  },
+  {
+    "id": "freeze-2-hash",
+    "class": "VALIDITY",
+    "protects": "Committing the coefficient hash freezes the fit before testing without publishing the coefficients.",
+    "test": "pipeline:freeze-2",
+    "scope": "interim-look-qualification-v4",
+    "source": "RL-179 Register row 27",
+    "owner": "research_lead",
+    "added": "2026-11-18",
+    "review_by": "end:paper-data-release",
+    "status": "LIVE"
+  },
+  {
+    "id": "stage-2-once",
+    "class": "VALIDITY",
+    "protects": "One Stage 2 run per manifest and restricted access prevent repeated queries from narrowing a public word into a number.",
+    "test": "pipeline:stage-2-once",
+    "scope": "interim-look",
+    "source": "RL-179 Register row 28",
+    "owner": "research_lead",
+    "added": "2026-11-18",
+    "review_by": "end:paper-data-release",
+    "status": "LIVE"
+  },
+  {
+    "id": "earlier-protected-clauses",
+    "class": "VALIDITY",
+    "protects": "Earlier protected clauses stay in force until the research lead checks that they were ported.",
+    "test": "pipeline:register-port",
+    "scope": "rl-1-through-rl-178",
+    "source": "RL-179 Register row 29",
+    "owner": "research_lead",
+    "added": "2026-11-18",
+    "review_by": "end:ported-list-accepted",
+    "status": "LIVE"
+  },
+  {
+    "id": "pin-admitted",
+    "class": "VALIDITY",
+    "protects": "Matching the admitted pin and kit hash preserves the identity of registered measured bytes.",
+    "test": "pin",
+    "scope": "every-entry",
+    "source": "RL-149 §2.8; RL-179 F-6",
+    "owner": "research_lead",
+    "added": "2026-11-18",
+    "review_by": "end:campaign",
+    "status": "LIVE"
+  },
+  {
+    "id": "block-dependency",
+    "class": "VALIDITY",
+    "protects": "A clean predecessor and recorded gate protect the reference and block prerequisites of each dependent span.",
+    "test": "dependency",
+    "scope": "entries-with-dependencies",
+    "source": "RL-173 D.2; RL-179 F-6",
+    "owner": "research_lead",
+    "added": "2026-11-18",
+    "review_by": "end:campaign",
+    "status": "LIVE"
+  },
+  {
+    "id": "launcher-admits",
+    "class": "PHYSICS",
+    "protects": "The pinned launcher's local window and dry-run checks protect its admission conditions.",
+    "test": "launcher_admits",
+    "scope": "entries-with-launcher-checks",
+    "source": "Pinned launcher; RL-179 Register rows 5 and 19",
+    "owner": "research_lead",
+    "added": "2026-11-18",
+    "review_by": "end:runner-pin",
+    "status": "LIVE",
+    "params": {
+      "output_root": null
+    }
+  },
+  {
+    "id": "owner-stop",
+    "class": "SAFETY",
+    "protects": "An owner maintenance marker holds new arms while updates can introduce unpredictable load.",
+    "test": "owner_stop",
+    "scope": "host",
+    "source": "RUN_STATE item 423; RL-180 Register row 12; RL-149 §2.8",
+    "owner": "research_lead",
+    "added": "2026-11-18",
+    "review_by": "end:standing",
+    "status": "LIVE",
+    "params": {
+      "maintenance_marker": "/Users/Shared/JouleWise/MAINTENANCE",
+      "recheck_s": 60
+    }
+  },
+  {
+    "id": "host-power",
+    "class": "PHYSICS",
+    "protects": "AC power preserves the measurement host's required supply state.",
+    "test": "host_power",
+    "scope": "host",
+    "source": "Brief A host_power; kit checklist",
+    "owner": "research_lead",
+    "added": "2026-11-18",
+    "review_by": "end:standing",
+    "status": "LIVE"
+  }
+]
