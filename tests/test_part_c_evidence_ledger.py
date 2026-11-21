@@ -1884,15 +1884,16 @@ class FrozenDifferentialNamedCasesTests(unittest.TestCase):
     """The frozen differential suite's audit-named cases, run from this checkout against its own evaluator.
 
     The suite materializes the issued R1 sources from Git, so it needs the two pinned commits in the local
-    object database. A shallow checkout lacks them and this test skips. The full 25,082-case matrix is run by
+    object database. A shallow checkout lacks them and this test skips. The full 25,083-case matrix is run by
     hand. These cases are the regressions of audits 1 and 2 that need the frozen workload, driver and D-018
-    validator: the five named audit reproductions, the seven predecessor CSV wire cases, the orphan tokenize
-    event, the empty final phase, and the turn-flag classes the frozen workload decides. The seven CSV cases
-    keep the suffix `PROVISIONAL` in their frozen IDs. RL-193 section 1 confirmed their expectations.
+    validator: the five named audit reproductions, the eight predecessor CSV cases, the orphan tokenize event,
+    the empty final phase, and the turn-flag classes the frozen workload decides. The eight CSV cases are the
+    seven RL-193 section 1 confirmed and its supplement, the six-column header with zero rows, which passes.
     """
 
     SUITE = Path(__file__).resolve().parent / "align" / "test_partc_frozen_differential.py"
-    SELECTOR = r"audit-|PROVISIONAL|orphan-tokenize|empty-final-phase|runner\.error|0\.flags/set-turn_budget_reached"
+    SELECTOR = (r"audit-|predecessor-30b/v3/raw/runs/[^/]+/power_trace\.csv/file/|orphan-tokenize|empty-final-phase"
+                r"|runner\.error|0\.flags/set-turn_budget_reached")
     PINS = ("b2e01464d6d4fbf2901ff4d4154df9455104a12a", "2d02a6f0e42b7ac7a51ea5d5830867eea9ff2911")
 
     def test_named_audit_cases_have_no_false_pass_and_the_clean_control_passes(self):

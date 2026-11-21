@@ -13,7 +13,7 @@ every array index; JW_PARTC_SHARD=i/n partitions either matrix (zero-based).
 FALSE_PASS means the public native evaluator accepted a contradictory claim.
 REFUSED means it rejected one. OTHER_REFUSAL records a stricter native check.
 V3 adds finite branch operands, pre-close raw bytes, and ordered stamp pairs.
-The PROVISIONAL predecessor CSV wire cases use the issued D-018 validator.
+RL-193 §1 applies the complete issued D-018 validator to predecessor CSV cases.
 A decision ID identifies its role, source and exact operand. All added cases use
 the same independently materialized issued functions as the synthetic control.
 RL-189 adds sixteen native descriptor cases. These run serially against the
@@ -1093,6 +1093,11 @@ def cases(base):
     yield from extra_cases(base)
     yield from issued_cases()
 
+    # RL-193 §1 adds one positive beside the issued v3 matrix.
+    bundle, = (base / P / "runs").iterdir()
+    trace = (bundle / "power_trace.csv").relative_to(base / P).as_posix()
+    yield DecisionCase(P, "raw", trace, (), "d018-interval-header-zero-rows")
+
 
 @dataclass(frozen=True)
 class DecisionCase:
@@ -1112,8 +1117,7 @@ class DecisionCase:
     def name(self):
         locus = ".".join(map(str, self.path)) or "file"
         suffix = "/" + self.audit if self.audit else ""
-        marker = "/PROVISIONAL" if self.predecessor_csv_wire else ""
-        return f"{self.role}/v3/{self.family}/{self.file}/{locus}/{self.op}{marker}{suffix}"
+        return f"{self.role}/v3/{self.family}/{self.file}/{locus}/{self.op}{suffix}"
 
 
 GATE_WORDS = ("released", "timeout", "unobserved", "deadman")
@@ -1584,6 +1588,9 @@ def write_decision(path, case):
         positive = (POWER_TRACE_HEADER + "\n").encode("ascii")
         if case.op == "d018-header":
             wire = positive
+        elif case.op == "d018-interval-header-zero-rows":
+            from joulewise.bundle_read import POWER_TRACE_INTERVAL_HEADER
+            wire = (POWER_TRACE_INTERVAL_HEADER + "\n").encode("ascii")
         elif case.op == "three-column-header":
             wire = b"timestamp_s,power_w,source\n"
         else:
@@ -2391,7 +2398,8 @@ def trial(m):
                                   "short-recovery", "swap-picks", "poll-ambiguity", "overlap-previous"):
             assert mismatch is not None, "known frozen counterexample went unwitnessed"
         accepted = WORKER.candidate(m)
-        if isinstance(m, DecisionCase) and m.predecessor_csv_wire and m.op == "d018-header":
+        if isinstance(m, DecisionCase) and m.predecessor_csv_wire and m.op in (
+                "d018-header", "d018-interval-header-zero-rows"):
             assert mismatch is None, "issued D-018 positive control failed"
             if not accepted:
                 return "WRONG_VERDICT", m.name, "candidate refused the D-018 positive control"
