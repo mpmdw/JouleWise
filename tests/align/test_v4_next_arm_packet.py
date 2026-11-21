@@ -110,7 +110,11 @@ def seed_materializer(scenario):
     for i in (18, 25):
         run_id = f"align-pilot-v3-episodes-b-e{i:02}"
         write(w1_kit.SOURCE_KIT / "stages/episodes-b" / (run_id + ".json"), synthetic_stage_config(run_id))
-    write(w1_kit.SOURCE_KIT / "plan_tree.json", synthetic_stage_graph())
+    tree = synthetic_stage_graph()
+    write(w1_kit.SOURCE_KIT / "plan_tree.json", tree)
+    for stage in tree['stage_graph']:
+        tool = stage['launch']['commands'][0]['argv_template']['tool_id']
+        write(TOOLS[tool].program, b'# invented executable identity; never invoked\n')
     write(DERIVATION_INPUT, {'members': [{'bundle_path': f'invented-{n:02}'} for n in range(1, 13)]})
     write(staging.plan.HEAD_PIN_RELATIVE, b'invented fixture pin\n')
     write('configs/campaigns/bytes_v1/roster.json', {'models': []})
@@ -888,6 +892,112 @@ class C1PacketRebuildTests(Base):
                     self.assertIn(relative, error)
                 finally:
                     path.write_bytes(original)
+
+    def k5_referenced_files(self, w1, view):
+        """Walk the fixture's staged command and manifest graph without the packet."""
+        pack = Path('configs/campaigns') / series.pack_id('C1')
+        tree_path = pack / 'plan_tree.json'
+        tree = json.loads((view / tree_path).read_bytes())
+        dispatches = resolve_stage_dispatches(tree, view)
+        directories = {Path(row.config_dir) for row in dispatches}
+        references = {tree_path, pack / 'plan_tree.sha256', Path(staging.plan.HEAD_PIN_RELATIVE)}
+        source_kit = w1.root / series.kit_path('C1')
+        references.update(pack / path.relative_to(source_kit) for path in source_kit.rglob('*')
+                          if path.is_file() and path.name != 'plan_tree.json')
+        references.update(Path(name) for name, digest in
+                          registration.artifact_hashes_at(w1.root, w1.series_commit).items() if digest is not None)
+        for stage in stage_plan(tree):
+            for command in stage.commands:
+                references.add(Path(TOOLS[command.tool_id].program))
+                references.update(Path(arg['value']) for arg in command.arguments
+                                  if arg['kind'] == 'repo_path' and Path(arg['value']) not in directories)
+        for directory in directories:
+            manifest = directory / 'order_manifest.json'
+            references.add(manifest)
+            order = json.loads((view / manifest).read_bytes())
+            references.update(directory / row['config'] for row in order['executed_order'])
+        return sorted(path.as_posix() for path in references)
+
+    def test_k5_missing_required_derivation_manifest_from_audit_6_refuses(self):
+        w1, complete, plan, _, _ = self.k4_fixture()
+        (w1.root / DERIVATION_INPUT).unlink()
+        self.commit_series(w1)
+        code, packet, error = self.cli_packet(w1)
+        with self.subTest(layer='builder'):
+            self.assertEqual(code, 2, (packet and packet['packet_preflight'], error))
+            self.assertFalse(packet['packet_preflight']['ready'])
+            self.assertIn(DERIVATION_INPUT.as_posix(), str(packet['packet_preflight']))
+
+        view, pack, night, tree = self.staged_c1(w1)
+        stage = next(stage for stage in tree['stage_graph'] if stage['kind'] == 'bound_derivation')
+        self.assertIn({'kind': 'repo_path', 'value': DERIVATION_INPUT.as_posix()},
+                      stage['launch']['commands'][0]['argv_template']['arguments'])
+        self.assertNotIn('input', stage)
+        self.assertFalse((view / DERIVATION_INPUT).exists())
+
+        # Recreate the former incomplete packet with authenticated transport,
+        # matching bytes for every remaining pin and the actual staged tree.
+        broken = copy.deepcopy(complete)
+        broken['series_commit'] = w1.series_commit
+        inventory = broken['c1_kit']['staged_inventory']
+        del inventory[DERIVATION_INPUT.as_posix()]
+        for name in ('plan_tree.json', 'plan_tree.sha256'):
+            path = pack / name
+            inventory[path.relative_to(view).as_posix()] = builder.digest(path.read_bytes())
+        w1.write(C1_PACKET_PATH, series.raw_json(broken))
+        w1.commit()
+        with self.subTest(layer='install'):
+            code, calls, error = self.k4_checkpoint(w1, plan, view, night)
+            self.assertEqual((code, calls), (2, 0), error)
+            self.assertIn(DERIVATION_INPUT.as_posix(), error)
+        with self.subTest(layer='arm'):
+            observed = self.k1_arm(w1, broken, plan, view=view, night=night)
+            self.assertFalse(observed['admitted'])
+            self.assertIn('packet_kit_mismatch', observed['reasons'])
+
+    def test_k5_every_resolved_reference_requires_bytes_and_a_pin(self):
+        w1, packet, plan, view, night = self.k4_fixture()
+        references = self.k5_referenced_files(w1, view)
+        self.assertIn(DERIVATION_INPUT.as_posix(), references)
+        self.assertEqual(set(references), set(packet['c1_kit']['staged_inventory']))
+        for relative in references:
+            self.copy_linked_k4_file(view, relative)
+            path = view / relative
+            with self.subTest(mutation='delete staged file', path=relative):
+                raw = path.read_bytes()
+                path.unlink()
+                try:
+                    code, calls, error = self.k4_checkpoint(w1, plan, view, night)
+                    self.assertEqual((code, calls), (2, 0), error)
+                    self.assertIn(relative, error)
+                finally:
+                    path.write_bytes(raw)
+
+            with self.subTest(mutation='delete inventory entry', path=relative):
+                broken = copy.deepcopy(packet)
+                del broken['c1_kit']['staged_inventory'][relative]
+                w1.write(C1_PACKET_PATH, series.raw_json(broken))
+                w1.commit()
+                try:
+                    code, calls, error = self.k4_checkpoint(w1, plan, view, night)
+                    self.assertEqual((code, calls), (2, 0), error)
+                    self.assertIn(relative, error)
+                finally:
+                    w1.write(C1_PACKET_PATH, series.raw_json(packet))
+                    w1.commit()
+
+    def test_k5_matching_bytes_for_an_unreferenced_inventory_entry_refuse(self):
+        w1, packet, plan, view, night = self.k4_fixture()
+        extra = 'invented-unreferenced.json'
+        self.assertNotIn(extra, self.k5_referenced_files(w1, view))
+        raw = b'{"synthetic": true}\n'
+        (view / extra).write_bytes(raw)
+        packet['c1_kit']['staged_inventory'][extra] = builder.digest(raw)
+        w1.write(C1_PACKET_PATH, series.raw_json(packet))
+        w1.commit()
+        code, calls, error = self.k4_checkpoint(w1, plan, view, night)
+        self.assertEqual((code, calls), (2, 0), error)
+        self.assertIn(extra, error)
 
     def test_committed_w1_rebuild_binds_c1_with_live_checks_pending(self):
         w1 = self.c1_scenario()
