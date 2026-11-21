@@ -1052,6 +1052,28 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 
 <!-- RUN_STATE TYPED ITEMS: newest first. Add with scripts/run_state_add.py; never edit by hand. -->
 
+505. **Magistrate c1ade1f4 (headless, Opus 5.5), 2026-11-21 02:14-02:25 PST (`date`): f2-stab-02-l007 CHECK: REFUSED with a clean close (the idle soak measured the 02:00 OS batch at about 2 busy cores; 0/1 legs run; restore and every stop rc 0), copied at once; kit not held; hp-02 eligible at rank 3 (items 503, 504), s01 issued next**
+
+```pointer
+owner: magistrate
+wait: none
+deadline: 2026-11-21T10:00:00-08:00
+on_early_or_refused: none; this item records a Check. The next action is the hp-02-s01 item issued immediately after it.
+next_observable: the hp-02-s01 ISSUED item (this number + 1) and its run-out.txt.
+```
+
+```item
+{"expires_epoch_s": null, "issued_epoch_s": 1795256485, "number": 505, "owner": "magistrate", "schema": "joulewise.run_state_item.v1", "sets": [{"at_epoch_s": 1795256485, "item": 502, "status": "CLOSED"}], "status": "CLOSED", "supersedes": []}
+```
+
+- **Spawn.** Activation c1ade1f4 spawned 02:14:40 PST (watchdog attempt 2009, previous exit class generic_error), 61 s after f2-stab-02 L007's receipt (02:13:55); fence pid 63857 gone; no night or align-r0 label loaded or on disk. No notices pending, no unread mail from Ed, directive list unchanged (standing 587/422/421/417/416/408/405), no standdown request. Heartbeat pid corrected to 66100 (the magistrate process, matches state.json) after a first write with the shell pid. Canonical fast-forwarded `3a66be202` -> `752c8b45e` (items 503, 504 and the Flash-Next parity merge #927).
+- **f2-stab-02 L007 Check** (custody `f2stab02-check-c1ade1f4/check.out`, from `f2stab02-check-template-45d9cb59`): **REFUSED, clean close.** Receipt rc 2, `SpanRefusal: soak exit 1`, outcome REFUSED, verdict "0/1 legs run", chain INCOMPLETE, fault false; receipt sha256 `fbbc43ccea48600cbd73e433c452d7f831327d84a922414b4a03494dd7757a8f`. Kit sha256 `1fe8dd1d0fb60fe1d481ecb0d4358fda595668c1e889a35a75695e290fcad505`, frozen `2d347f721552fe03bdd19f113e7bad7a7c24908e`, batch_windows `['13:14-13:15']`. Steps before the soak all rc 0 (dwell 300 s); soak rc 2; restore, stop-volumes, stop-meter, stop-agents, close-volumes all rc 0; feeds proven stopped; meter 10,516 polls, 0 bad, 0 USB errors. Host after close: powermode 0, network time Off, frequency word 0, AC, not charging, no marker, no desk fence, no runner/monitor group, no root powermetrics, 217 GiB free; measurement_mode verify's one FAIL is this magistrate's own MCP children.
+- **Cause: the daily 02:00 OS batch, measured.** The idle soak ran 01:43:53-02:13:54 (1,800 s, one attempt inside the 1,950 s soak budget). `soak_row.json`: max_busy_cores 3.676, redo true. The per-second busy-core trace is quiet to about 02:00 and then sustained at about 2 cores to the end (last 15 s 1.4-2.1). End census: `triald` 99.1% CPU; `log show` 01:43-02:14 is led by trustd, contactsd, syspolicyd and the XProtect remediators (Bundlore, Adload, Pirrit, CardboardCutout, SheepSwap); the maintenance buckets show XProtectPluginService 603, mobileassetd 1,805, dasd 5,256 at 02:00. At 02:17 `XProtectRemediatorColdSnap` was still at about 98% CPU. This is the same 02:00-02:35 batch items 463/480 exclude for HP and instruments.
+- **Disposition (magistrate, recorded): physics refused; the kit is not held.** LAUNCH_RC was 0 and the close is proven, so this is neither a launcher refusal nor a non-clean close (item 422 row 17-21). It is the start-state rule (row 5: the soak's own load test) refusing on a measured contending process, which is the soak doing its job. f2-stab-02 stays eligible. Attempt identity `cq-f2-stab-02-l007-a1` is spent with 0 legs run; queue `f2-stab-02.fillers-w2-c4b4f4265` has no a2 entry for L007, so a rerun of L007 is a lead queue decision; rank 4 resumes at L008 (seq 8).
+- **Lead flag (not a rule change):** item 463 plans pin-A stability spans from t0 before 02:35 with ARG 13:14-13:15, but the 1,800 s soak and the dwell then run straight through the 02:00 OS batch. L007 (t0 01:38) lost its span to it. The lead may want R-c's 02:00-02:35 exclusion to cover the soak of stability spans as well (wait to 02:35 when the soak would overlap).
+- **Copied at once** (item 409): `cq-f2-stab-02-l007-a1.ok` written 02:17:18; manifest 21 files, manifest sha256 `802940f137b51a0c36f459c80d8c909c3776900733b730f565cb6eb79c847dca`, enc sha256 `5e347812c9de33d49b1fdcbec11d03c08eb13e32977940aa6eee856c0e12be90`; iCloud caught up and idle (last-sync 02:16:56 after the 02:16:39 copy; `f2stab02-check-c1ade1f4/offload-out.txt`).
+- **Ladder at 02:20 (Saturday).** Rank 1 served today (L006, item 502). Rank 2: no f2-inst executing delta PASS on main. **Rank 3: hp-02 is eligible** (item 503 ends item 502's hold; item 504 amends the freeze wording). hp-02-s01 is issued as the next item, launching at or after 02:35 once the OS batch has ended.
+
 504. **Research lead: no objection to HP-LITE (item 503); amendment - the lm-hp-* look freeze runs until hp-02's last close**
 
 ```pointer

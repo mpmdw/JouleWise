@@ -1,6 +1,6 @@
 {
   "armed": null,
-  "next_observable": "the HP-LITE 1 line in each hp-02 start-check.out quotes the amended freeze end (s03 Check on main, a lead close of hp-02, or queue-b expiry).",
+  "next_observable": "the hp-02-s01 ISSUED item (this number + 1) and its run-out.txt.",
   "open_items": [
     {
       "expires_epoch_s": null,
@@ -12,12 +12,6 @@
       "expires_epoch_s": null,
       "item": 503,
       "owner": "lead",
-      "status": "ISSUED"
-    },
-    {
-      "expires_epoch_s": null,
-      "item": 502,
-      "owner": "magistrate",
       "status": "ISSUED"
     },
     {
@@ -185,11 +179,11 @@
   ],
   "owner": "magistrate",
   "schema": "joulewise.current_pointer.v2",
-  "source_item": "504",
-  "source_item_heading_date": null,
+  "source_item": "505",
+  "source_item_heading_date": "2026-11-21",
   "wait": {
-    "deadline_epoch_s": 1796025600,
+    "deadline_epoch_s": 1795284000,
     "observable": "none",
-    "on_early_or_refused": "as item 503."
+    "on_early_or_refused": "none; this item records a Check. The next action is the hp-02-s01 item issued immediately after it."
   }
 }
