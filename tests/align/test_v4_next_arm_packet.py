@@ -955,6 +955,13 @@ class C1PacketRebuildTests(Base):
             self.assertFalse(observed['admitted'])
             self.assertIn('packet_kit_mismatch', observed['reasons'])
 
+    def test_k5_materialized_selection_missing_its_head_pin_refuses(self):
+        w1 = self.c1_scenario(materialized=True)
+        (w1.root / staging.plan.HEAD_PIN_RELATIVE).unlink()
+        self.commit_series(w1)
+        packet = self.refused_packet(w1)
+        self.assert_packet_failure(packet, 'sentinel_roster', staging.plan.HEAD_PIN_RELATIVE)
+
     def test_k5_every_resolved_reference_requires_bytes_and_a_pin(self):
         w1, packet, plan, view, night = self.k4_fixture()
         references = self.k5_referenced_files(w1, view)
