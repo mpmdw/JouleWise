@@ -40,6 +40,8 @@ IDENTITY = {'model_source': 'synthetic-tiny', 'model_revision': 'fixture',
             'runtime_sha256': 'a'*64, 'execution_policy_sha256': 'b'*64}
 NOW = 111.0
 CODE_PATH = 'scripts/run_night.py'      # a bound artifact: its bytes move the artifact-set digest
+DERIVATION_INPUT = Path('configs/campaigns/fixture-derivation/settled_corpus.json')
+C1_PACKET_PATH = Path('series/c1-next-arm.json')
 
 
 def fixture_next_members(manifest, *, extra_sentinels=True):
@@ -74,6 +76,9 @@ def synthetic_stage_graph():
                     dict(kind="binding", value="claim_runs_root")]
         if kind == "bracket_reservation":
             argv = [dict(kind="literal", value="--plan"), dict(kind="repo_path", value="fixture-plan.json")]
+        if kind == "bound_derivation":
+            argv = [dict(kind="literal", value="--derive-neg8-drift-bound"),
+                    dict(kind="repo_path", value=DERIVATION_INPUT.as_posix())]
         graph.append(dict(
             stage_id=name, kind=kind, ordinal=pos + 1, expected_count=1,
             predecessor=names[pos - 1] if pos else None,
@@ -106,6 +111,11 @@ def seed_materializer(scenario):
         run_id = f"align-pilot-v3-episodes-b-e{i:02}"
         write(w1_kit.SOURCE_KIT / "stages/episodes-b" / (run_id + ".json"), synthetic_stage_config(run_id))
     write(w1_kit.SOURCE_KIT / "plan_tree.json", synthetic_stage_graph())
+    write(DERIVATION_INPUT, {'members': [{'bundle_path': f'invented-{n:02}'} for n in range(1, 13)]})
+    write(staging.plan.HEAD_PIN_RELATIVE, b'invented fixture pin\n')
+    write('configs/campaigns/bytes_v1/roster.json', {'models': []})
+    write('configs/campaigns/d117_floor_qwen3-1p7b_v5/plan_tree.json',
+          {'arm_attachments': {'launch': {'bindings': []}}, 'external_inputs': {'manifests': []}})
     reg = w1_kit.SOURCE_KIT / "registration"
     write(reg / "identity_pins.json", dict(units=dict(neg8_reference={}, mock={}), runtime_versions={}))
     write(reg / "model_artifact_inventory.json", dict(artifacts=dict(neg8_reference={}, mock={})))
@@ -749,6 +759,95 @@ class C1PacketRebuildTests(Base):
         target.unlink()
         target.symlink_to(self.output_dir / 'DO-NOT-FOLLOW' / 'exit')
         self.assert_k1_cli_refusal(w1, packet, plan, self.staged_state(w1, view, night))
+
+    def k4_fixture(self):
+        w1 = self.c1_scenario(materialized=True)
+        packet = self.ready_packet(w1)
+        w1.write(C1_PACKET_PATH, series.raw_json(packet))
+        w1.commit()
+        plan = json.loads((w1.root / series.kit_path('C1') / series.C1_PLAN).read_bytes())
+        view, _, night, _ = self.staged_c1(w1)
+        return w1, packet, plan, view, night
+
+    def k4_checkpoint(self, w1, plan, view, night):
+        target = self.output_dir / 'cli-session'
+        staging.write(target / 'session.json', self.staged_state(w1, view, night))
+        error = io.StringIO()
+        with patch.object(w1_kit, 'generate'), patch.object(session, 'validate_series_state', return_value=plan), \
+             patch('joulewise.align.apple.powermode.host_marker_path', side_effect=ValueError('mock host checkpoint')) as host, \
+             contextlib.redirect_stderr(error):
+            code = session.main(['install', '--session-root', str(target), '--w1-disk-config', 'unused',
+                                 '--battery-log', 'unused', '--obc-off-attested-by', 'synthetic',
+                                 '--next-arm-triage', str(view / C1_PACKET_PATH)])
+        return code, host.call_count, error.getvalue()
+
+    def copy_linked_k4_file(self, view, relative):
+        current = view
+        for part in Path(relative).parts:
+            current /= part
+            if current.is_symlink():
+                origin = current.resolve(strict=True)
+                current.unlink()
+                if origin.is_dir():
+                    shutil.copytree(origin, current)
+                else:
+                    shutil.copyfile(origin, current)
+
+    def test_k4_refuses_a_changed_derivation_member_before_host_access(self):
+        w1, packet, plan, view, night = self.k4_fixture()
+        self.copy_linked_k4_file(view, DERIVATION_INPUT)
+        path = view / DERIVATION_INPUT
+        changed = json.loads(path.read_bytes())
+        changed['members'][-1]['bundle_path'] = 'invented-alternate'
+        path.write_bytes(series.raw_json(changed))
+        record = self.k1_arm(w1, packet, plan, view=view, night=night)
+        self.assertTrue(record['next_arm_triage']['supplied_packet_matches_rebuild'])
+        self.assertIn('packet_kit_mismatch', record['reasons'])
+        code, calls, error = self.k4_checkpoint(w1, plan, view, night)
+        self.assertEqual((code, calls), (2, 0), error)
+        self.assertIn(DERIVATION_INPUT.as_posix(), error)
+
+    def test_k4_actual_consumer_reads_are_pinned(self):
+        w1, packet, plan, view, night = self.k4_fixture()
+        pins = set(packet['c1_kit']['staged_inventory']) | {C1_PACKET_PATH.as_posix()}
+        for relative in sorted(pins):
+            self.copy_linked_k4_file(view, relative)
+        reads = set()
+
+        def instrument(original):
+            def observe(path, *args, **kwargs):
+                if not isinstance(path, int):
+                    candidate = Path(os.fsdecode(path))
+                    if candidate.is_relative_to(view):
+                        reads.add(candidate.relative_to(view).as_posix())
+                return original(path, *args, **kwargs)
+            return observe
+
+        with patch.object(io, 'open', instrument(io.open)), \
+             patch.object(builtins, 'open', instrument(builtins.open)), \
+             patch.object(os, 'open', instrument(os.open)):
+            code, calls, error = self.k4_checkpoint(w1, plan, view, night)
+        self.assertEqual((code, calls), (1, 1), error)
+        self.assertTrue({str(C1_PACKET_PATH), str(DERIVATION_INPUT), CODE_PATH} <= reads, reads)
+        self.assertLessEqual(reads, pins)
+
+    def test_k4_one_changed_byte_in_every_inventory_file_refuses(self):
+        w1, packet, plan, view, night = self.k4_fixture()
+        paths = sorted(set(packet['c1_kit']['staged_inventory']) | {C1_PACKET_PATH.as_posix()})
+        for relative in paths:
+            self.copy_linked_k4_file(view, relative)
+            with self.subTest(path=relative):
+                path = view / relative
+                original = path.read_bytes()
+                self.assertTrue(original)
+                path.write_bytes(bytes([original[0] ^ 1]) + original[1:])
+                try:
+                    code, calls, error = self.k4_checkpoint(w1, plan, view, night)
+                    self.assertEqual((code, calls), (2, 0), error)
+                    self.assertIn('SHA-256 mismatch', error)
+                    self.assertIn(relative, error)
+                finally:
+                    path.write_bytes(original)
 
     def test_committed_w1_rebuild_binds_c1_with_live_checks_pending(self):
         w1 = self.c1_scenario()
