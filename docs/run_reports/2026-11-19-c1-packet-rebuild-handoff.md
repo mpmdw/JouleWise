@@ -606,3 +606,69 @@ PYTHONPATH=tests:. python3.13 -B -m unittest -v \
 ```
 
 [First K4 hosted shard](https://github.com/mpmdw/JouleWise/actions/runs/44913514476/job/136874281415)
+
+## K5 · required staged dispatch closure
+
+Audit 6 assessed `cdca388237a488a8f3be50a7963499a89e61dad6`, tree
+`04b22cc88ecc495f1e8612ccb34a5193446a026f`. It verified one HIGH with
+root cause `integration-seam` and zero MED or LOW findings. It refuted all
+seven earlier findings. In the invented replay at clock 111, the staged
+bound-derivation command still named its corpus manifest after that file
+was omitted from the selected series commit. The builder exited 0, the arm
+admitted, and install reached the mocked host checkpoint.
+
+Freeze `1c74984a811196578371679d9db07a1d6dc1e430` (tree
+`f3c26b767968170d579092fce3c0ece4596cf673`) records the named audit
+regression, the independently generated file and pin deletion sweeps, and
+the extra inventory entry. On `cdca38823`, deleting files with retained
+pins already refused. Removing 44 inventory entries separately reached
+the checkpoint. The extra matching entry and the missing committed
+derivation file reproduced the gaps. Freeze additions `384aaa6a9` and
+`5eaf638c9` cover the missing materialized head pin, a null dispatch
+digest, and a registered file falsely recorded as absent. All earlier
+frozen cases are retained.
+
+`cc7393857d5ce937cc7bfaf5d7eaae7d2346a140` derives the required files
+from the validated staged commands, actual order resolution, spare orders,
+mirrored kit, and launch-tree files. The builder requires committed inputs
+for explicit repository arguments even without a stage input descriptor.
+The install gate checks set equality and verifies all remaining required
+bytes before the host checkpoint. It also compares registered artifact
+pins and absences to the named series commit. The detached transport pin
+still authenticates the packet bytes. The resolved tree and orders are
+decoded only from digest-verified bytes. The synthetic production-shaped
+control resolved all six order manifests with 22 ordinary science members.
+Its disposable checkout supplies an inert identity for the backup tool
+named by the desk-stage argv.
+
+```sh
+PYTHONPATH=tests:. python3.13 -B -m unittest -v align.test_v4_next_arm_packet.C1PacketRebuildTests -k test_k5
+PYTHONPATH=tests:. python3.13 -B -m unittest align.test_v4_next_arm_packet.C1PacketRebuildTests
+JW_B5_SYNTHETIC_ONLY=1 PYTHONPATH=tests:. python3.13 -B -m unittest \
+  align.test_v4_series_e2e align.test_v4_next_arm_packet.ArmOrderWitness
+PYTHONPATH=tests:. python3.13 -B -m unittest \
+  hazards.test_refusal_allowlist.RefusalAllowlistTests.test_every_refusal_site_is_listed_with_its_exact_count
+git diff --check b2e01464d HEAD
+```
+
+The authorized lead's command and input checklist above applies. Commit
+the executable C1 kit and all resolved command inputs at the named series
+commit, including the derivation manifest and calibration head pin.
+Produce and pin the post-close packet before the arm uses it. The full-desk digest
+and registration receipt hash are carried from authenticated W1 evidence.
+The integration owner and Opus still own their acceptance, and the lead
+or magistrate owns the final packet. `NEEDS_SPEC: none`.
+
+| Invented fixture at clock 111 | Identity or observation |
+| --- | --- |
+| W1 predecessor | `e508999068273bb018c6974b2f65b1fd3d096771:w-W1/record.json` |
+| Series selection | `038bcf2091e1d372585f49db5d0642ab08b2a6b1:series/state.json` |
+| Pushed proof | `refs/remotes/synthetic/records` |
+| Packet transport | `0c872dee2f7bcdd950ee5954982ad5e8e0e8abc1:series/c1-next-arm.json`, SHA-256 `95b33786d7bf2696a201e0117ae7d4e4da1dc1c1b6500d0da391714062735e69` |
+| Complete staged input closure | 71 referenced files, one detached packet pin and 326 registered absences. The genuine CLI reached the mocked checkpoint exactly once, which deliberately returned exit 1. |
+| Omitted derivation manifest | Series commit `464a52448a9360231c7e86f13f11b42eec0a6b1e`. Builder exit 2, `packet_preflight.ready=false`, failing `sentinel_roster`. |
+| Sweeps | 71 staged-file deletions and 71 independent pin deletions. The earlier one-byte sweep includes the detached packet and the three newly required tool program pins. |
+
+The resolver reports the original verified-reader error when an order
+cannot be opened. This preserves the existing path-specific SHA-256
+diagnostic for the K4 byte sweep through the new closure check.

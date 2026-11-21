@@ -162,15 +162,21 @@ def _order_configs(order, directory, read):
 
 def c1_execution_identity(tree, plan, read, *, staged):
     """Use the writer's argv resolver to seal each stage and the science order."""
-    order_bytes = {}
+    order_bytes, read_errors = {}, []
 
     def read_order(path):
-        raw = _campaign_file(path, read)
+        try:
+            raw = _campaign_file(path, read)
+        except (OSError, ValueError) as exc:
+            read_errors.append(exc)
+            raise
         order_bytes[path] = raw
         return raw
 
     stages = {stage.stage_id: stage for stage in chain.stage_plan(tree) if stage.kind == 'campaign_collection'}
     dispatches = launch_plan.resolve_stage_dispatches(tree, '.', read_manifest=read_order)
+    if read_errors:
+        raise read_errors[0]
     science_stages = {member['stage_id'] for member in plan['members']}
     launch_pack = Path('configs/campaigns') / pack_id('C1')
     orders, science_ids = [], []
