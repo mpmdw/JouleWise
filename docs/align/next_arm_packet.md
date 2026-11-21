@@ -182,6 +182,13 @@ state at `--series-commit`, with:
   order manifest and configs. The builder requires committed bytes for each
   such file even when the stage carries no input descriptor. The consumer
   derives the same closure from the verified staged tree and resolved orders.
+  The stage resolver uses the runner's argument binding rules. Repository
+  paths, paths relative to the `repo_root` binding, and relative literal or
+  tree-pointer operands share one normalized repository-relative key. The
+  campaign directory expands into its order manifest and dispatched configs.
+  Declared runtime bindings stay in their control roles. The prepared
+  `repo_root` must name the staging view. Unknown bindings, escaping paths,
+  and a repository root standing in for a file refuse.
   It refuses a missing reference, a missing pin, or an inventory entry
   outside that closure and the registered inputs. Only registered artifacts
   outside the required dispatch can be recorded as absent. The consumer

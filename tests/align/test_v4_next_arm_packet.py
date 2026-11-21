@@ -148,10 +148,6 @@ def write_c1_fixture_kit(scenario, files):
     for stage in stage_plan(tree):
         for command in stage.commands:
             scenario.write(TOOLS[command.tool_id].program, b'# invented tool identity; never executed\n')
-            arguments = command.arguments[1:] if stage.kind == 'campaign_collection' else command.arguments
-            for arg in arguments:
-                if arg['kind'] == 'repo_path' and not (scenario.root / arg['value']).is_file():
-                    scenario.write(arg['value'], {'synthetic_input': Path(arg['value']).name})
         if stage.kind != 'campaign_collection':
             continue
         config_dir = Path(stage.commands[0].arguments[0]['value'])
@@ -166,6 +162,9 @@ def write_c1_fixture_kit(scenario, files):
         manifest = (config_dir / 'order_manifest.json').as_posix()
         scenario.write(manifest, {'manifest_id': stage.stage_id, 'executed_order': rows})
         manifests.append({'manifest': {'path': manifest}, 'external_input_id': stage.stage_id})
+    for path in sorted(staging.plan.stage_repository_paths(tree)):
+        if not (scenario.root / path).is_file():
+            scenario.write(path, {'synthetic_input': path.name})
     scenario.write(staging.plan.HEAD_PIN_RELATIVE, b'invented fixture pin\n')
     for stage in tree['stage_graph']:
         descriptor = stage.get('input') or {}
@@ -927,11 +926,14 @@ class C1PacketRebuildTests(Base):
                           if path.is_file() and path.name != 'plan_tree.json')
         references.update(Path(name) for name, digest in
                           registration.artifact_hashes_at(w1.root, w1.series_commit).items() if digest is not None)
+        bindings = {'repo_root': str(view), 'claim_runs_root': str(view.parent / 'invented-claim')}
         for stage in stage_plan(tree):
-            for command in stage.commands:
-                references.add(Path(TOOLS[command.tool_id].program))
-                references.update(Path(arg['value']) for arg in command.arguments
-                                  if arg['kind'] == 'repo_path' and Path(arg['value']) not in directories)
+            argv = stage_argv(stage, bindings, tree, view)
+            references.add(Path(argv[1]).relative_to(view))
+            for arg in argv[2:]:
+                path = Path(arg)
+                if path.is_relative_to(view) and path.relative_to(view) not in directories:
+                    references.add(path.relative_to(view))
         for directory in directories:
             manifest = directory / 'order_manifest.json'
             references.add(manifest)
@@ -1053,9 +1055,9 @@ class C1PacketRebuildTests(Base):
 
     def k6_argument(self, tree, name, path, form):
         value = str(path)
-        tree.setdefault('fixture_path_values', {})[name] = value
+        tree.setdefault('fixture_path_values', {})[name] = './' + value
         if form == 'binding_path':
-            return {'kind': form, 'value': 'repo_root', 'relative': value}
+            return {'kind': form, 'value': 'repo_root', 'relative': './' + value}
         if form == 'tree_pointer':
             value = '/fixture_path_values/' + name
         return {'kind': form, 'value': value}
@@ -1082,10 +1084,16 @@ class C1PacketRebuildTests(Base):
                              {'kind': 'binding', 'value': 'bound_runs_root'}])
             if all_classes and kind == 'bracket_reservation':
                 argv[1] = self.k6_argument(tree, 'plan', directory / series.C1_PLAN, form)
+                if form == 'tree_pointer':
+                    tree['fixture_path_values']['plan_option'] = '--plan'
+                    argv[0] = {'kind': form, 'value': '/fixture_path_values/plan_option'}
                 argv.extend([{'kind': 'literal', 'value': '--head-pin'},
                              self.k6_argument(tree, 'head', staging.plan.HEAD_PIN_RELATIVE, form)])
             if all_classes and kind == 'campaign_collection':
                 argv[0] = self.k6_argument(tree, stage['stage_id'], argv[0]['value'], form)
+                if form == 'tree_pointer':
+                    tree['fixture_path_values']['runs_option'] = '--runs-dir'
+                    argv[1] = {'kind': form, 'value': '/fixture_path_values/runs_option'}
                 argv.extend([{'kind': 'literal', 'value': '--campaign-policy'},
                              self.k6_argument(tree, 'policy', policy, form)])
                 if stage['stage_id'].endswith('episodes-a'):
@@ -1115,6 +1123,12 @@ class C1PacketRebuildTests(Base):
                 observations.append((relative, expected, packet['c1_kit']['staged_inventory'].get(str(relative))))
                 self.assertEqual(relative, DERIVATION_INPUT)
                 self.assertEqual(observations[-1][2], expected)
+                del packet['c1_kit']['staged_inventory'][str(relative)]
+                arm = self.k1_arm(w1, packet, plan, view=view, night=night)
+                self.assertFalse(arm['admitted'], arm['reasons'])
+                code, calls, error = self.k4_checkpoint(w1, plan, view, night)
+                self.assertEqual((code, calls), (2, 0), error)
+                self.assertIn(str(relative), error)
         self.assertEqual(len(observations), 2)
         self.assertEqual(*observations)
 
@@ -1129,6 +1143,9 @@ class C1PacketRebuildTests(Base):
                 packet = self.ready_packet(w1)
                 plan = json.loads((w1.root / series.kit_path('C1') / series.C1_PLAN).read_bytes())
                 view, pack, night, tree = self.staged_c1(w1)
+                prepared = json.loads(night.read_bytes())
+                prepared['hazard_window']['bindings'] = {'repo_root': str(view)}
+                staging.write(night, prepared)
                 pack = pack.relative_to(view)
                 dispatch = resolve_stage_dispatches(tree, view)[0]
                 members = Path(dispatch.config_dir)
@@ -1186,6 +1203,8 @@ class C1PacketRebuildTests(Base):
             {'kind': 'binding_path', 'value': 'invented_binding', 'relative': str(DERIVATION_INPUT)},
             {'kind': 'binding', 'value': 'repo_root'},
             {'kind': 'binding_path', 'value': 'repo_root', 'relative': '../DO-NOT-FOLLOW'},
+            {'kind': 'binding_path', 'value': 'pre_attempt_id', 'relative': str(DERIVATION_INPUT)},
+            {'kind': 'binding', 'value': 'ledger_path'},
         )
         for argument in forms:
             with self.subTest(argument=argument):
@@ -1216,6 +1235,15 @@ class C1PacketRebuildTests(Base):
                 code, calls, error = self.k4_checkpoint(w1, plan, view, night)
                 self.assertEqual((code, calls), (2, 0), error)
                 self.assertRegex(error, r'unknown kind|binding|relative|repository root')
+
+        with self.subTest(argument='prepared repo_root outside the staging view'):
+            w1, _, plan, view, night = self.k4_fixture()
+            prepared = json.loads(night.read_bytes())
+            prepared['hazard_window']['bindings'] = {'repo_root': str(view.parent / 'DO-NOT-FOLLOW')}
+            staging.write(night, prepared)
+            code, calls, error = self.k4_checkpoint(w1, plan, view, night)
+            self.assertEqual((code, calls), (2, 0), error)
+            self.assertIn('prepared repo_root binding', error)
 
     def test_committed_w1_rebuild_binds_c1_with_live_checks_pending(self):
         w1 = self.c1_scenario()

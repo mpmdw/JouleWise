@@ -281,22 +281,18 @@ def render_measurement_files(kit, pack_id, read_file, optional_file):
     # the actual --plan bytes to this tree's plan hash and FROZEN_PLAN instead.
     reservation = next(s for s in tree['stage_graph'] if s['kind'] == 'bracket_reservation')
     arguments = reservation['launch']['commands'][0]['argv_template']['arguments']
-    plan_index = next(i for i, arg in enumerate(arguments) if arg['value'] == '--plan') + 1
+    plan_index = plan.portable_stage_arguments(arguments, tree).index('--plan') + 1
     arguments[plan_index] = {'kind': 'repo_path', 'value': (pack / tree['plan']['path']).as_posix()}
     # Harvest re-derives NEG-8 only from the pinned settled-corpus bytes named
     # by the real derivation argv. Include other dispatched file inputs too.
-    artifacts = {}
-    for stage in tree['stage_graph']:
-        for command in stage['launch']['commands']:
-            for argument in command['argv_template']['arguments']:
-                if argument['kind'] == 'repo_path':
-                    path = Path(argument['value'])
-                    raw = files.get(path)
-                    if raw is None:
-                        raw = optional_file(kit / path.relative_to(pack) if path.is_relative_to(pack) else path)
-                    if raw is not None:
-                        artifacts[path.as_posix()] = {'path': path.as_posix(), 'sha256': hashlib.sha256(raw).hexdigest()}
-    tree['external_inputs'] = {'manifests': manifests, 'artifacts': [artifacts[k] for k in sorted(artifacts)]}
+    artifacts = []
+    for path in sorted(plan.stage_repository_paths(tree), key=Path.as_posix):
+        raw = files.get(path)
+        if raw is None:
+            raw = optional_file(kit / path.relative_to(pack) if path.is_relative_to(pack) else path)
+        if raw is not None:
+            artifacts.append({'path': path.as_posix(), 'sha256': hashlib.sha256(raw).hexdigest()})
+    tree['external_inputs'] = {'manifests': manifests, 'artifacts': artifacts}
     tree_path = pack / 'plan_tree.json'
     files[tree_path] = encoded_json(tree)
     files[pack / 'plan_tree.sha256'] = (hashlib.sha256(files[tree_path]).hexdigest() + '  plan_tree.json\n').encode()

@@ -1301,6 +1301,9 @@ def _check_c1_packet_kit(root, packet, *, plan=None, measurement_root=None, nigh
             tree = json.loads(tree_raw)
             _c1_external_controls(measurement_root, night_plan_path)
             hazard = pilot.h.read(night_plan_path)['hazard_window']
+            bindings = hazard.get('bindings')
+            if bindings is not None and Path(bindings['repo_root']) != Path(measurement_root):
+                raise ValueError('prepared repo_root binding differs from the C1 staging view')
             if (tree['plan']['path'] != series.C1_PLAN
                     or tree['plan']['actual_sha256'] != actual['plan_sha256']
                     or hazard['pack']['pack_root'] != str(Path(measurement_root) / pack)

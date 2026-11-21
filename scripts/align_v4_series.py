@@ -77,21 +77,19 @@ def c1_staged_references(tree, kit, execution):
     pack = Path('configs/campaigns') / pack_id('C1')
     required = {pack / 'plan_tree.json', pack / 'plan_tree.sha256', Path(launch_plan.HEAD_PIN_RELATIVE)}
     required.update(pack / path for path in kit['staged_kit_files'])
+    required.update(launch_plan.stage_repository_paths(tree))
     for stage in chain.stage_plan(tree):
         for command in stage.commands:
             required.add(Path(chain.TOOLS[command.tool_id].program))
-            # The campaign directory resolves to its order and configs below.
-            arguments = command.arguments[1:] if stage.kind == 'campaign_collection' else command.arguments
-            required.update(Path(arg['value']) for arg in arguments if arg['kind'] == 'repo_path')
     for stage in tree['stage_graph']:
         if 'path' in (input_ref := stage.get('input') or {}):
-            required.add(Path(input_ref['path']))
+            required.add(launch_plan.canonical_repo_path(input_ref['path']))
     for stage in execution['order_manifests']:
         directory = pack / 'members' / stage['stage_id']
         required.add(directory / 'order_manifest.json')
         required.update(directory / name for name in stage['configs'])
         for name, spare in stage['spares'].items():
-            order = Path(name)
+            order = launch_plan.canonical_repo_path(name)
             required.add(order)
             required.update(order.parent / name for name in spare['configs'])
     return {path.as_posix() for path in required}
@@ -134,7 +132,7 @@ def c1_staged_inventory(kit, read, optional, artifacts):
     descriptors.extend(stage['input'] for stage in tree['stage_graph']
                        if 'sha256' in (stage.get('input') or {}))
     for row in descriptors:
-        if pinned.get(row['path']) != row['sha256']:
+        if pinned.get(launch_plan.canonical_repo_path(row['path']).as_posix()) != row['sha256']:
             raise ValueError(f'committed stage input digest mismatch: {row["path"]}')
     return {**kit, 'staged_inventory': {path: digest for path, digest in pinned.items() if digest is not None},
             'staged_absent_artifacts': sorted(path for path, digest in pinned.items() if digest is None)}

@@ -146,6 +146,93 @@ def _require(condition: bool, detail: str) -> None:
 
 DISPATCH_SCHEMA = "joulewise.b5_stage_dispatch.v1"
 
+# These operands are identifiers, policies by name, or numeric controls. A
+# remaining literal operand is relative to the command's repository cwd.
+_STAGE_SCALAR_OPTIONS = frozenset({
+    "--session-id", "--window-id", "--plan-id", "--plan-sha256", "--evidence-root-id",
+    "--pre-attempt-id", "--post-attempt-id", "--attempt-id", "--slot", "--power-policy",
+    "--instrument-power-policy", "--max-failures", "--max-blocks", "--arm-countdown-s",
+    "--shakedown-gate",
+})
+_STAGE_FILE_OPTIONS = frozenset({
+    "--plan", "--head-pin", "--campaign-policy", "--derive-neg8-drift-bound", "--waivers",
+})
+_STAGE_RUNTIME_OPTIONS = frozenset({
+    "--ledger", "--calibration-ledger", "--identity-epoch-json", "--t1-bindings-json",
+    "--pre-custody-locator", "--post-custody-locator", "--runs-root", "--runs-dir", "--output-root", "--log",
+    "--instrument-calibration-dir", "--neg8-drift-bound-output", "--neg8-drift-bound",
+})
+_BACKUP_BINDINGS = ({"claim_runs_root", "bound_runs_root"},
+                    {"claim_backup_destination", "bound_backup_destination"})
+
+
+def canonical_repo_path(value: str) -> Path:
+    """A portable key in the staged repository namespace, with no filesystem access."""
+    path = Path(value)
+    _require(not path.is_absolute() and bool(path.parts) and ".." not in path.parts
+             and not any(char in value for char in "\0\n\r"),
+             f"staged input must name a repository-relative file or directory: {value!r}")
+    forbidden = {".git", "restricted", "night-custody", "night-archive"}
+    _require(not any(part in forbidden or part.startswith("jw-b5-") for part in path.parts),
+             f"staged input names a restricted path: {value!r}")
+    return path
+
+
+def _portable_argument(argument: Mapping[str, Any], tree: Mapping[str, Any]) -> str | None:
+    kind, name = argument["kind"], argument["value"]
+    _require(kind in b5_chain.ARGUMENT_KINDS and isinstance(name, str),
+             f"unknown stage argument kind or invalid value: {argument!r}")
+    if kind in {"binding", "binding_path"} and name != "repo_root":
+        _require(name in _BINDING_TYPES, f"unknown launch binding: {name!r}")
+        if kind == "binding_path":
+            _require(not _BINDING_TYPES[name] & {"nonempty_string", "non_path_string"},
+                     f"binding_path needs a directory or path binding: {name!r}")
+            b5_chain.bind_argument(argument, {name: "/"}, tree, Path("."))
+        return None  # resolved at prepare as a named runtime control, never a frozen input
+    return b5_chain.bind_argument(argument, {"repo_root": "."}, tree, Path("."))
+
+
+def portable_stage_arguments(arguments: Sequence[Mapping[str, Any]], tree: Mapping[str, Any]) -> list[str | None]:
+    """Resolve static argv with the repository as cwd and runtime controls deferred."""
+    return [_portable_argument(argument, tree) for argument in arguments]
+
+
+def _repository_operand(argument: Mapping[str, Any], value: str | None, *,
+                        option: str | None = None, required: bool = False) -> Path | None:
+    required = required or option in _STAGE_FILE_OPTIONS
+    if value is None:
+        _require(not required, f"{option or 'collection command'} needs a repository-relative file or directory")
+        return None
+    if argument["kind"] in {"literal", "tree_pointer"}:
+        if value.startswith("-") and not required:
+            option, separator, value = value.partition("=")
+            if not separator:
+                return None
+        if option in _STAGE_SCALAR_OPTIONS and not required:
+            return None
+    return canonical_repo_path(value)
+
+
+def stage_repository_paths(tree: Mapping[str, Any]) -> set[Path]:
+    """Canonical file operands of the same argv bindings used by the runner."""
+    paths = set()
+    for stage in b5_chain.stage_plan(tree):
+        for command in stage.commands:
+            values = portable_stage_arguments(command.arguments, tree)
+            for index, (argument, value) in enumerate(zip(command.arguments, values, strict=True)):
+                if stage.kind == "campaign_collection" and index == 0:
+                    continue  # the dispatch resolver expands this directory into its manifest and configs
+                option = values[index - 1] if index else None
+                if value is None:
+                    backup = (stage.kind == "backup" and index < len(_BACKUP_BINDINGS)
+                              and argument["value"] in _BACKUP_BINDINGS[index])
+                    _require(backup or option in _STAGE_RUNTIME_OPTIONS | _STAGE_SCALAR_OPTIONS,
+                             f"{stage.stage_id}: unsupported runtime binding for {option!r}")
+                path = _repository_operand(argument, value, option=option)
+                if path is not None:
+                    paths.add(path)
+    return paths
+
 
 @dataclasses.dataclass(frozen=True)
 class StageDispatch:
@@ -167,7 +254,7 @@ class StageDispatch:
                 "run_ids": list(self.run_ids) if self.run_ids is not None else None, "error": self.error}
 
 
-def _dispatch_of(row: Any, repo_root: Path, bindings: Mapping[str, str] | None,
+def _dispatch_of(row: Any, tree: Mapping[str, Any], repo_root: Path, bindings: Mapping[str, str] | None,
                  read_manifest: Callable[[Path], bytes] | None = None) -> StageDispatch:
     stage_id = str(row.get("stage_id")) if isinstance(row, Mapping) else "?"
     ordinal = row.get("ordinal") if isinstance(row, Mapping) and type(row.get("ordinal")) is int else None
@@ -185,18 +272,16 @@ def _dispatch_of(row: Any, repo_root: Path, bindings: Mapping[str, str] | None,
                  "launch has not exactly one command")
     except (KeyError, IndexError, TypeError, WindowPlanError):
         return failed("the collection stage has no single campaign command")
-    for flag, value in zip(arguments, arguments[1:]):
-        if isinstance(flag, Mapping) and flag.get("kind") == "literal" and flag.get("value") == "--runs-dir" \
-                and isinstance(value, Mapping) and value.get("kind") == "binding" \
-                and isinstance(value.get("value"), str):
+    try:
+        values = portable_stage_arguments(arguments, tree)
+        config = _repository_operand(arguments[0], values[0], required=True).as_posix()
+    except (IndexError, KeyError, TypeError, ValueError) as exc:
+        return failed(f"the campaign command's first argument is not a repository-relative config directory: {exc}")
+    for flag, value in zip(values, arguments[1:]):
+        if flag == "--runs-dir" and value.get("kind") == "binding":
             if binding is not None:
                 return failed("--runs-dir appears more than once")
             binding = value["value"]
-    first = arguments[0] if arguments else None
-    if not (isinstance(first, Mapping) and first.get("kind") == "repo_path" and isinstance(first.get("value"), str)
-            and first["value"] and not Path(first["value"]).is_absolute() and ".." not in Path(first["value"]).parts):
-        return failed("the campaign command's first argument is not a repository-relative config directory")
-    config = first["value"]
     if binding is None:
         return failed("the campaign command names no --runs-dir binding")
     if bindings is not None and not isinstance(bindings.get(binding), str):
@@ -222,7 +307,8 @@ def _dispatch_of(row: Any, repo_root: Path, bindings: Mapping[str, str] | None,
 
 
 def resolve_stage_dispatch(stage: Mapping[str, Any], *, pack_root: Path | str,
-                           repo_root: Path | str | None) -> tuple[str | None, tuple[str, ...]] | None:
+                           repo_root: Path | str | None,
+                           tree: Mapping[str, Any] | None = None) -> tuple[str | None, tuple[str, ...]] | None:
     """J3 harvest interface, using the writer's same argv-based resolution.
 
     Non-collection stages are declined. Malformed collection stages raise so
@@ -233,7 +319,7 @@ def resolve_stage_dispatch(stage: Mapping[str, Any], *, pack_root: Path | str,
     if stage["kind"] != "campaign_collection":
         return None
     root = Path(repo_root) if repo_root is not None else Path(pack_root).parents[2]
-    dispatch = _dispatch_of(stage, root, None)
+    dispatch = _dispatch_of(stage, tree or {}, root, None)
     _require(dispatch.error is None, dispatch.error or "stage dispatch unresolved")
     return dispatch.runs_root_binding, dispatch.run_ids
 
@@ -255,7 +341,7 @@ def resolve_stage_dispatches(tree: Mapping[str, Any], repo_root: Path | str, *,
     rows = [row for row in graph if isinstance(row, Mapping) and row.get("kind") == "campaign_collection"] \
         if isinstance(graph, list) else []
     rows.sort(key=lambda row: row.get("ordinal") if type(row.get("ordinal")) is int else 1 << 30)
-    return [_dispatch_of(row, Path(repo_root), bindings, read_manifest) for row in rows]
+    return [_dispatch_of(row, tree, Path(repo_root), bindings, read_manifest) for row in rows]
 
 
 def relocate_order_entry(row: dict, config: Path, sha256: str) -> None:
