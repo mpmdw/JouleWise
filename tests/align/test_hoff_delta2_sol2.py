@@ -101,7 +101,8 @@ class ProductionPolicyTests(Scratch):
             mutate(extra)
         self.assertEqual(runner.checkout_identity(checkout, run=self.run_identity), identity)
         code, _, error = self.cli('unpack', '--offload', transport, '--finalized-manifest', finalized_path,
-                                  '--finalized-sha256', off.manifest_sha256(final))
+                                  '--finalized-sha256', off.manifest_sha256(final), '--window-id', 'W1',
+                                  '--receipt-out', self.root / 'receipt.json')
         if code:
             self.assertFalse(session.exists(), 'a refused restore must not publish the session')
             return 'unpack refused', error
