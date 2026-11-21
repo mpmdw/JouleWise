@@ -22,6 +22,6 @@ for folder in ('f2-inst-02','f2-inst-03','hp-02'):
             r=subprocess.run([shell,'-n'],input=syntax,text=True,capture_output=True)
             assert r.returncode==0,(folder,item['item'],shell,r.stderr); sh+=1
         for code in re.findall(r"<<'PY'\n(.*?)\nPY",syntax,re.S): ast.parse(code); embedded+=1
-    assert not (HERE/folder/'queue-b.json').exists()
+    assert (HERE/folder/'queue-b.json').exists() == (folder == 'hp-02')
     assert 'queue-a.json' in {p.name for p in (HERE/folder).iterdir()}
 print(py,'Python sources,',sh,'complete shell item syntax checks,',embedded,'embedded Python checks PASS')

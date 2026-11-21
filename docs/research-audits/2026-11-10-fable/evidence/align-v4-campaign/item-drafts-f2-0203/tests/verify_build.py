@@ -49,7 +49,10 @@ for kitrec in report['kits']:
     checks.append([kitrec['name'],'queue a','PASS'])
     with tempfile.TemporaryDirectory(prefix='jw-rl174-verify-') as tmp:
         tmp=Path(tmp)
-        if not hp:
+        if hp:
+            assert cli(repo,'cadence_queue.py','validate-queue',folder/'queue-b.json','--kits-root',HERE)['spans']==3
+            checks.append([kitrec['name'],'finite successor queue b','PASS'])
+        else:
             qb=tmp/'SYNTHETIC-unpublished-b.json'; qb.write_text(json.dumps(make_queue(kitrec['name'])))
             assert cli(repo,'cadence_queue.py','validate-queue',qb,'--kits-root',HERE)['spans']==3
             checks.append([kitrec['name'],'queue b TEMPORARY ONLY','PASS'])

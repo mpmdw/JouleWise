@@ -3,6 +3,16 @@
 This is the live queue for JouleWise work. When the user gives a new task, first
 triage it here instead of assuming it should happen immediately.
 
+## 2026-11-19 hp-02 successor items
+
+P1 [AGENT], user-directed Tier 2 builder work under RL-190 §2 and the frozen
+item and occupancy contracts. The state machine implementation retains the
+existing issue binding. The Q2 successor spec freeze at `eafae0cb9` corrects
+the replacement observations. All 300 Q2 recoveries and the complete frozen
+suite passed. Independent delta execution and lead acceptance remain due
+before issue.
+[Gate-machine adoption report](docs/run_reports/2026-11-20-hp02-gate-machine.md).
+
 ## 2026-11-18 qualification drafts at the PR #812 merge pin
 
 P1 [AGENT], user-selected Tier 0 on the Nov 20 qualification critical path.

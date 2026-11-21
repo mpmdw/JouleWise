@@ -1,0 +1,285 @@
+{
+  "issue": {
+    "record": "issued by fixture lead",
+    "by": "Synthetic issuing desk",
+    "schema": "hp-02.issue.v1",
+    "status": "ISSUED",
+    "binding": {
+      "span": "hp-02-s01",
+      "piece": 1,
+      "attempt": 1,
+      "legs": [
+        "L001",
+        "L002",
+        "L003"
+      ],
+      "pin": "dd206025abb30fd5c07515cd4b34b3e653174810",
+      "kit_sha": "7693b8293b42b8ba20cbd321e201974745b172dc53c4f1397d2c1494f38fbe66",
+      "queue": {
+        "commit": "e3eaa282f9d4cea3b579eeb7bde989ff897df45e",
+        "path": "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/item-drafts-f2-0203/hp-02/queue-b.json",
+        "sha256": "078eb24c3149f2a7bc522a432098e51e21bd36278d288b0f41efbb5d57da528f"
+      },
+      "predecessor": null
+    },
+    "issued_epoch_s": 1795297200,
+    "expires_epoch_s": null,
+    "check_deadline_epoch_s": 1795316510,
+    "latest_close_at_issue": "fixture-close-17",
+    "check_target": "synthetic check",
+    "spec_sha256": "24331d02ebf8d2172f9ebce5866c44e80208b8c5145c18a08c4124acaf3de73a",
+    "occupancy_sha256": "77f34fae9bd88ae415d7b949ef6ea6ac68759b1ef47aec214a50c32317ad99c4",
+    "line_2": {
+      "main_commit": "6640a66719a2ff1f8cc38dbce3e8231f419e79d8",
+      "run_state_item": 338,
+      "hp01_kit_sha256": "7eaf2660312ce6b3af90e8a1d9da1e05a6c409366a88a7e5e558d3bebb9d2965",
+      "delta_commit": "e3eaa282f9d4cea3b579eeb7bde989ff897df45e",
+      "delta_path": "hp-02/HP02-DELTA.md",
+      "frozen_block_byte_equal": true,
+      "sentence": "Line 2 for `cl-hp-02` (`7693b8293b42b8ba20cbd321e201974745b172dc53c4f1397d2c1494f38fbe66`) is `cl-hp-01`'s record under RL-165 \u00a75; no frozen byte differs (RL-190 2)."
+    },
+    "inherited_smoke": {
+      "main_commit": "6640a66719a2ff1f8cc38dbce3e8231f419e79d8",
+      "smoke_check_item": 337,
+      "acceptance_item": 338
+    }
+  },
+  "observation": {
+    "record": "fresh synthetic record",
+    "by": "Synthetic issuing desk",
+    "schema": "hp-02.observation.v1",
+    "phase": "Run",
+    "host": "fixture-host",
+    "binding": {
+      "span": "hp-02-s01",
+      "piece": 1,
+      "attempt": 1,
+      "legs": [
+        "L001",
+        "L002",
+        "L003"
+      ],
+      "pin": "dd206025abb30fd5c07515cd4b34b3e653174810",
+      "kit_sha": "7693b8293b42b8ba20cbd321e201974745b172dc53c4f1397d2c1494f38fbe66",
+      "queue": {
+        "commit": "e3eaa282f9d4cea3b579eeb7bde989ff897df45e",
+        "path": "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/item-drafts-f2-0203/hp-02/queue-b.json",
+        "sha256": "078eb24c3149f2a7bc522a432098e51e21bd36278d288b0f41efbb5d57da528f"
+      },
+      "predecessor": null
+    },
+    "issue_record": "issued by fixture lead",
+    "observed_epoch_s": 1795298400,
+    "valid_through_epoch_s": 1795298400,
+    "latest_close": {
+      "record": "fixture-close-17",
+      "by": "Synthetic issuing desk",
+      "identity": "latest-unambiguous",
+      "host": "fixture-host",
+      "ended_epoch_s": 1795297200,
+      "receipt_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "receipt_ok": true,
+      "restore_status": "proven",
+      "fence_gone": true,
+      "restores_read_back": true,
+      "feeds_proven_stopped": {
+        "agents": true,
+        "meter": true,
+        "volumes": true
+      },
+      "ac_powermode": 0,
+      "marker_present_or_link": false,
+      "host_lock_free": true,
+      "groups": [
+        {
+          "group_id": "fixture-group-1",
+          "start_identity": "fixture-start-1",
+          "receipt_stop": "proven",
+          "independent_census": "empty"
+        }
+      ]
+    },
+    "safety": {
+      "record": "current host preflight",
+      "by": "Synthetic issuing desk",
+      "host": "fixture-host",
+      "close_record": "fixture-close-17",
+      "close_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      "mode_verify": {
+        "record": "synthetic mode verify",
+        "by": "Synthetic issuing desk",
+        "rc": 0,
+        "exceptions": []
+      },
+      "ac_powermode": 0,
+      "marker_present_or_link": false,
+      "foreign_agent_census_casefold": [],
+      "foreign_process_census": [],
+      "preflight": {
+        "clock_ok": true,
+        "night_lock_free": true,
+        "maintenance_clear": true,
+        "mode_rules": true,
+        "meter_available": true,
+        "network_time_off": true,
+        "host_health": true,
+        "on_ac": true,
+        "disk_floor": true,
+        "veto_clear": true,
+        "frequency_zero": true,
+        "measurement_mode": true,
+        "collector_available": true,
+        "battery_float": true
+      }
+    },
+    "look": {
+      "record": "synthetic issuer attestation",
+      "by": "Synthetic issuing desk",
+      "scope": "lm-hp-01",
+      "kit_sha256": "7693b8293b42b8ba20cbd321e201974745b172dc53c4f1397d2c1494f38fbe66",
+      "checked_through": 1795298400,
+      "execution_register_checked": true,
+      "both_custody_roots_checked": true,
+      "all_execution_routes_covered": true,
+      "pending_conflict": false,
+      "status": "not_run"
+    },
+    "priority": {
+      "record": "synthetic complete ladder",
+      "by": "Synthetic issuing desk",
+      "date": "2026-11-21",
+      "complete": true,
+      "r1_post_close": true,
+      "entries": [
+        {
+          "record": "entry ready-session",
+          "by": "Synthetic issuing desk",
+          "rung": "ready-session",
+          "status": "unavailable",
+          "entry_id": "ready-session"
+        },
+        {
+          "record": "entry counted",
+          "by": "Synthetic issuing desk",
+          "rung": "counted",
+          "status": "unavailable",
+          "entry_id": "counted"
+        },
+        {
+          "record": "entry f2-inst-01",
+          "by": "Synthetic issuing desk",
+          "rung": "f2-inst-01",
+          "status": "unavailable",
+          "entry_id": "f2-inst-01"
+        },
+        {
+          "record": "entry f2-inst-02",
+          "by": "Synthetic issuing desk",
+          "rung": "f2-inst-02",
+          "status": "unavailable",
+          "entry_id": "f2-inst-02"
+        },
+        {
+          "record": "entry f2-inst-03",
+          "by": "Synthetic issuing desk",
+          "rung": "f2-inst-03",
+          "status": "unavailable",
+          "entry_id": "f2-inst-03"
+        },
+        {
+          "record": "entry further-stability",
+          "by": "Synthetic issuing desk",
+          "rung": "further-stability",
+          "status": "unavailable",
+          "entry_id": "further-stability"
+        },
+        {
+          "record": "rank-one daily disposition",
+          "by": "Synthetic issuing desk",
+          "rung": "first-stability",
+          "status": "unavailable",
+          "entry_id": "f2-stab-01",
+          "basis": "spent-for-date",
+          "pool": "f2-stab-01..14",
+          "completion": {
+            "record": "synthetic first leg completion",
+            "by": "Synthetic issuing desk",
+            "kit_id": "f2-stab-01",
+            "leg_id": "L001",
+            "pin": "2d347f721552fe03bdd19f113e7bad7a7c24908e",
+            "t0_date": "2026-11-21",
+            "status": "completed"
+          }
+        }
+      ]
+    },
+    "hp01_dates": {
+      "record": "synthetic hp-01 date census",
+      "by": "Synthetic issuing desk",
+      "kit_sha256": "7eaf2660312ce6b3af90e8a1d9da1e05a6c409366a88a7e5e558d3bebb9d2965",
+      "complete": true,
+      "t0_dates": [
+        "2026-11-15"
+      ]
+    },
+    "history": {
+      "record": "synthetic per-leg census",
+      "by": "Synthetic issuing desk",
+      "complete": true,
+      "kit_sha256": "7693b8293b42b8ba20cbd321e201974745b172dc53c4f1397d2c1494f38fbe66",
+      "legs": {
+        "L001": "unrun",
+        "L002": "unrun",
+        "L003": "unrun",
+        "L004": "unrun",
+        "L005": "unrun",
+        "L006": "unrun",
+        "L007": "unrun",
+        "L008": "unrun",
+        "L009": "unrun",
+        "L010": "unrun",
+        "L011": "unrun",
+        "L012": "unrun"
+      },
+      "prior_check": null
+    },
+    "copy": {
+      "record": "synthetic verified copy",
+      "by": "Synthetic issuing desk",
+      "predecessor": "fixture-close-17",
+      "status": "verified",
+      "plaintext_manifest_sha256": "1111111111111111111111111111111111111111111111111111111111111111",
+      "ciphertext_sha256": "2222222222222222222222222222222222222222222222222222222222222222",
+      "ciphertext_size_bytes": 321,
+      "provider_verification": "fixture verified size=321",
+      "transfer_stopped": true
+    },
+    "timing": {
+      "record": "synthetic setup envelope",
+      "by": "Synthetic issuing desk",
+      "runner_start_max_s": 60,
+      "selector_sample_max_s": 1100,
+      "soak_dispatch_max_s": 10,
+      "inner_soak_gate_max_s": 100,
+      "pre_leg_max_s": 12,
+      "leg_wait_overshoot_max_s": 0,
+      "post_last_cap_max_s": 30,
+      "restore_and_close_max_s": 180,
+      "outer_clear_max_s": 190
+    },
+    "fence_clear": true,
+    "calendar": {
+      "record": "synthetic dated inventory",
+      "by": "Synthetic issuing desk",
+      "complete": true,
+      "post_fence_transfer_s": 0,
+      "starts": []
+    },
+    "stops": {
+      "record": "synthetic stop inventory",
+      "by": "Synthetic issuing desk",
+      "complete": true,
+      "open": []
+    }
+  }
+}
