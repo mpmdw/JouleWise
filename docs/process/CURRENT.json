@@ -1,10 +1,10 @@
 {
   "armed": null,
-  "next_observable": "f2stab02-f2c0f8ff/run-out.txt shows LAUNCH_RC=0 with the fence (launch ~23:33, expected end ~00:49, fence ~01:33; read the true fence deadline and pid from run-out.txt). The next activation after the fence pid is gone and runner_receipt.json exists Checks cq-f2-stab-02-l005-a1 under /Users/edr/campaign-out/f2-stab-02/ with f2stab02-check-template-f2c0f8ff/check.sh (LEGS L005, kit sha 1fe8dd1d0fb60fe1d481ecb0d4358fda595668c1e889a35a75695e290fcad505, campaign_id f2-stab-02 and batch_windows == ['02:00-02:35'] asserted, unless run-out.txt shows another ARG; replace REPLACE_STAMP in OUT with the actual directory's stamp and NEWACT everywhere with the activation id; grep the leg_record for max_busy_cores/max_gap_s; map the quiet span to wall time with the receipt's ended epoch/monotonic pair and count maintenance lines inside it), and copies at once with f2stab02-check-template-f2c0f8ff/offload-run.sh (replace NEWACT everywhere with the activation id; it calls f2stab02-check-template-f2c0f8ff/offload.sh, PLAN cq-f2-stab-02-l005-a1); the Check item prints full 64-hex digests (item 491). Then the ladder (items 422, 447, 463, 464, 480, 489); F0 is retired. It is Saturday by then: rank 1 is Saturday's stability leg, the lowest-numbered kit 01-14 with an unrun leg (item 464), i.e. f2-stab-02 L006 (seq 6) on pin 2d347f721; inputs = f2stab02-f2c0f8ff/inputs.sh with the header, MAGISTRATE_PID and the whole SPAN/LEGS/SEQ line replaced (diff it: exactly those lines change); plan with ARG 02:00-02:35 first and, if the plan refuses on the fence or blackout, 13:14-13:15 (item 463); both refuse 10:50:01-13:14:59. Check template L005 -> L006 with batch_windows assert set to the ARG used. Then rank 3 hp-02 (item 489, from Sat 00:00).",
+  "next_observable": "f2stab02-276ee6ca/run-out.txt shows LAUNCH_RC=0 with the fence (launch ~00:34, expected end ~01:53, fence ~02:35; read the true fence deadline and pid from run-out.txt). The next activation after the fence pid is gone and runner_receipt.json exists Checks cq-f2-stab-02-l006-a1 under /Users/edr/campaign-out/f2-stab-02/ with f2stab02-check-template-276ee6ca/check.sh (LEGS L006, kit sha 1fe8dd1d0fb60fe1d481ecb0d4358fda595668c1e889a35a75695e290fcad505, campaign_id f2-stab-02 and batch_windows == ['13:14-13:15'] asserted, unless run-out.txt shows another ARG; replace REPLACE_STAMP in OUT with the actual directory's stamp and NEWACT everywhere with the activation id; grep the leg_record for max_busy_cores/max_gap_s; map the quiet span to wall time with the receipt's ended epoch/monotonic pair and count maintenance lines inside it), and copies at once with f2stab02-check-template-276ee6ca/offload-run.sh (replace NEWACT everywhere with the activation id; it calls f2stab02-check-template-276ee6ca/offload.sh, PLAN cq-f2-stab-02-l006-a1); the Check item prints full 64-hex digests (item 491). Then the ladder (items 422, 447, 463, 464, 480, 489); F0 is retired. Saturday's rank 1 is then served. Rank 2: an f2-inst executing delta PASS on main (none at item 500/501). Rank 3: hp-02 (item 489, from Sat 00:00). Else rank 4: f2-stab-02 L007 (seq 7) on pin 2d347f721 from f2stab02-276ee6ca/inputs.sh (header, MAGISTRATE_PID and the SPAN/LEGS/SEQ line replaced; ARG per item 463 at actual t0: 13:14-13:15 until 02:34:59, 02:00-02:35 from 02:35:00 to 10:50:00).",
   "open_items": [
     {
       "expires_epoch_s": null,
-      "item": 500,
+      "item": 501,
       "owner": "magistrate",
       "status": "ISSUED"
     },
@@ -173,10 +173,10 @@
   ],
   "owner": "magistrate",
   "schema": "joulewise.current_pointer.v2",
-  "source_item": "500",
-  "source_item_heading_date": "2026-11-20",
+  "source_item": "501",
+  "source_item_heading_date": "2026-11-21",
   "wait": {
-    "deadline_epoch_s": 1795260600,
+    "deadline_epoch_s": 1795264200,
     "observable": "none",
     "on_early_or_refused": "a launcher refusal or non-clean close: record it, hold kit f2-stab-02 until an input changes (item 422, RL-179 F-6), mail the lead and Ed, and continue down the ladder. R1 stays unarmed."
   }
