@@ -1052,6 +1052,27 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 
 <!-- RUN_STATE TYPED ITEMS: newest first. Add with scripts/run_state_add.py; never edit by hand. -->
 
+513. **Magistrate 18e179b1, 2026-11-21 09:04 PST: MAGISTRATE — f2-stab-02 L008 ISSUED at rank 4 on pin A, ARG 02:00-02:35, cq-f2-stab-02-l008-a1, one launch as the last act**
+
+```pointer
+owner: magistrate
+wait: none
+deadline: 2026-11-21T12:00:00-08:00
+on_early_or_refused: a launcher refusal or non-clean close: record it, hold kit f2-stab-02 until an input changes (item 422, RL-179 F-6), mail the lead and Ed, and continue down the ladder. A soak refusal on a measured contending process with a proven clean close is physics, not a kit hold (item 505). If run-out.txt has no LAUNCH_RC line, nothing launched: the attempt is unspent and the next activation re-runs the start-check and re-issues (or takes the next rung).
+next_observable: f2stab02-18e179b1/run-out.txt shows LAUNCH_RC=0 with the fence (launch ~09:05, expected end ~10:20, fence ~11:07; read the true fence deadline and pid from run-out.txt). The next activation after the fence pid is gone and runner_receipt.json exists Checks cq-f2-stab-02-l008-a1 under /Users/edr/campaign-out/f2-stab-02/ with f2stab02-check-template-18e179b1/check.sh (LEGS L008, batch_windows == ['02:00-02:35'] asserted; replace REPLACE_STAMP with the actual stamp and NEWACT everywhere with the activation id; grep the leg_record for max_busy_cores/max_gap_s; map the quiet span to wall time and count maintenance lines inside it), copies at once with f2stab02-check-template-18e179b1/offload-run.sh (NEWACT replaced), prints full 64-hex digests (item 491), then takes the ladder (items 422, 447, 463, 464, 480, 507). Rank 1 for Saturday is served (L006, item 502); rank 2 needs an f2-inst executing delta PASS on main (none at this item); rank 3 hp-02 is complete (item 512); rank 4 continues f2-stab-02 at L009 on pin A, with ARG per item 463 at actual t0 (02:00-02:35 from 02:35:00 to 10:50:00 and from 13:15:00 to 23:48:10); during 10:50:01-13:14:59 pin A admits nothing, so fill with an f2-stab-15/16 leg on pin B (items 463, 488) or wait for 13:15.
+```
+
+```item
+{"expires_epoch_s": 1796025600, "issued_epoch_s": 1795280648, "number": 513, "owner": "magistrate", "schema": "joulewise.run_state_item.v1", "sets": [], "status": "ISSUED", "supersedes": []}
+```
+
+- **Ladder at 09:03 (Saturday), after the hp-02-s03 Check (item 512).** Rank 1 served today (f2-stab-02 L006, item 502). Rank 2: no f2-inst executing delta PASS on main (the only non-magistrate merge since item 505 is the lead's Flash-Next vendor PR #930, not an f2-inst delta). Rank 3: hp-02 complete (s01-s03 Checked clean, items 508, 510, 512); no other HP queue is admitted. **Rank 4: f2-stab-02 L008 (seq 8)** on pin `2d347f721`. L007 is spent with 0 legs (item 505); the queue has no a2 for it, so rank 4 resumes at L008 as item 505 recorded.
+- **ARG `02:00-02:35`** (item 463, one leg: t0 between 02:35:00 and 10:50:00). Item 480 does not apply (not an instrument kit); item 507: the soak (t0 to t0 + 1,950 s) is far from 02:00-02:35.
+- **Start and check at 09:03:35 OK** (`f2stab02-18e179b1/start-check.out`): pin clean and detached; kit sha256 `1fe8dd1d0fb60fe1d481ecb0d4358fda595668c1e889a35a75695e290fcad505` and queue sha256 `5fbb575f88017b9787e15b5fa624c43ca464d0799b65ee3f24ecc17503919508`; validate_kit ok (frozen paths and positional cells verified); validate-queue ok (12 spans); queue entry seq 8, L008, attempt 1, no earlier ISSUED item for cq-f2-stab-02-l008-a1; plan batch_windows `['02:00-02:35']`, blackout_clear true; L008 prefill 4,111 chars (2,000 tokens), decode 512, budget 1,378 s, start band q600; expected 4,528 s, worst case 5,850 s, fence end 11:05:25 at t0 09:03:35 (the Run block replans at actual t0).
+- **Host preflight:** no desk fence, standdown, MAINTENANCE marker, night/align-r0 label or High Power marker; powermode 0 (item 512 readback 09:00:52 and the restore proof); AC, 100% charged; network time Off; 211 GiB free; no cq-f2-stab-02-l008-a1 output exists. s03's copy is complete (item 512), so no transfer runs into the soak.
+- Custody `f2stab02-18e179b1/` (inputs.sh = 45d9cb59's with header, MAGISTRATE_PID 95042, the SPAN/LEGS/SEQ line and ARG changed; start-check.sh and run-block.sh with only the custody dir and header changed; all diffed). Launches as this activation's last act, output in `run-out.txt`. Check template for L008: `f2stab02-check-template-18e179b1/` (L007 -> L008, batch_windows assert `['02:00-02:35']`; offload-run.sh calls its own offload.sh; diffed).
+- Email to Ed: hp-02 finished, all twelve High Power runs clean (a change of state); the Mac runs one stability leg next.
+
 512. **Magistrate HP CHECK #511 for cq-hp-02-s03-a1.**
 
 ```pointer
