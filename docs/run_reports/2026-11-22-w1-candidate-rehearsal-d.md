@@ -91,7 +91,7 @@ report are outside the code/test port. [PR #809 handoff](https://github.com/mpmd
 
 ## Verification
 
-Local results as of 2026-11-22 01:14 PST.
+Local results as of 2026-11-22 01:54 PST.
 All local inputs were synthetic or source/policy files. The checks used
 Python 3.13, isolated temporary directories, offline model caches, the host
 command tripwire and the seat's file-access fence.
@@ -102,7 +102,7 @@ command tripwire and the seat's file-access fence.
 | Host-command synthetic scanner | PASS (1 test) |
 | Host-command exact census | FAIL (0 missing, 24 stale) |
 | Frozen v2 | FAIL (clean control, zero mutations executed) |
-| Pushed v3.1 clean control and descriptors | PASS (16 cases, 4 passing controls, 12 expected refusals, 0 false passes) |
+| Pushed v3.1 clean control and descriptors | PASS (16 cases, 4 expected passes, 12 expected refusals, 0 false passes) |
 | Pushed audit-2 derivation sweep | PASS (443/443 expected refusals) |
 | Registration | FAIL (25 tests) |
 | Named condition-13 tests | PASS (2 tests) |
@@ -113,21 +113,21 @@ command tripwire and the seat's file-access fence.
 | Opus cold witnesses | PASS (1 tests) |
 | W1 reliability | PASS (13 tests) |
 | Desk release | PASS (63 tests) |
-| Next-arm packet | IN PROGRESS |
-| W1 blockers and U3 | QUEUED |
-| Desk offload | QUEUED |
+| Next-arm packet | PASS (49 tests) |
+| W1 blockers and U3 | PASS (18 tests) |
+| Desk offload | FAIL (105 tests) |
 | Synthetic step-4 restore | PASS (11 tests) |
 | RL-176 | PASS (28 tests) |
 | RL-182 registration | PASS (4 tests) |
 | S rows | PASS (67 tests, 4 skipped) |
 | Contrast writer | PASS (15 tests) |
 | Part C attack reproductions | PASS (15 tests) |
-| Part C evidence ledger | IN PROGRESS |
-| Part C gate evidence | QUEUED |
-| Part C legacy launcher tests | QUEUED |
-| Full synthetic WP22 opt-in | IN PROGRESS |
-| Ordinary synthetic PREQUAL subset | QUEUED |
-| W1 PREQUAL selected probes | QUEUED |
+| Part C evidence ledger | PASS (80 tests) |
+| Part C gate evidence | PASS (21 tests) |
+| Part C legacy launcher tests | FAIL (90 tests) |
+| Full synthetic WP22 opt-in | PASS (23 tests) |
+| Ordinary synthetic PREQUAL subset | FAIL |
+| W1 PREQUAL selected probes | IN PROGRESS |
 
 - Frozen v2 SHA-256 was
   `f35c7bb08814785079008acd3a47a3c85993083da1e7ba731e7d2bee486d768d`.
@@ -151,6 +151,18 @@ command tripwire and the seat's file-access fence.
   `test_every_refusal_site_is_listed_with_its_exact_count` and
   `test_the_scan_covers_every_module_the_hazard_path_imports` failed.
   C recorded both checks passing on issued W1.
+- The offload test `test_git_and_restricted_members_refuse_without_entering`
+  could not create its synthetic directory in this seat. The same
+  error occurred on issued W1.
+- Full WP22 passed with its single expected failure. The ordinary
+  PREQUAL subset passed the R0 config and D pin checks. The stack,
+  template and checkpoint checks reported local dependency/input failures.
+- The legacy W1 Part C suite ran 90 tests and reported 234 failed
+  assertions including subtests, plus four errors. Issued W1's earlier
+  version of the module passed all 31 cases. The failing candidate
+  run includes legacy clean controls rejected by the newer evaluator
+  and evidence-shape mismatches. The #809 builder and W1 port owner
+  must adjudicate the legacy fixtures before exact-tree CI.
 - The full canonical suite requires archived capture fixtures. Local
   verification uses the scoped synthetic runs. Ordinary and W1 PREQUAL
   have additional native or lead-input rows. The workflow launches CI on
@@ -159,6 +171,8 @@ command tripwire and the seat's file-access fence.
 
 The first two assembled trees reproduce C's tested trees. The end-of-run
 scoped fetch and comparison are recorded in the seat. The scoped component heads matched the recorded snapshot at the latest check.
+The seat's `test-exceptions.tsv` records failed and skipped test IDs
+alongside issued observations where available.
 
 Local `assemble.sh` SHA-256 is `52016ae5ad9933ad6661350b287c08f7ab440d02d932538cc03e82252632d059`.
 
@@ -167,7 +181,7 @@ Local `assemble.sh` SHA-256 is `52016ae5ad9933ad6661350b287c08f7ab440d02d932538c
 | Gate | Owner | Required evidence |
 |---|---|---|
 | Approve the component set | W1 lead and component reviewers | Exact accepted diffs for #826, #839, #831, #813, #904 and #944. Close #826's direct and successor unpack-receipt and digest-only gate, #839's binding, and #813's E1–E17 audit and CI. #944 includes RL-198a. RL-200 §1.3(c) leaves the optional earlier dose edit to the lead if it fits the signing schedule. |
-| Accept #809 | Opus builder, independent executing auditor, W1 lead | Zero false passes on the adopted v3 family and six-column positive supplement, D1–D6, audit-2 regressions and independent admission at the exact head. Keep the seven ported files byte-equal and rerun the W1 checks. Lead records the two protected stored replays of counted Part C and F0 run 11 as verdict and failing check names, with the archived native limit marked unattested. |
+| Accept #809 | Opus builder, independent executing auditor, W1 lead | Zero false passes on the adopted v3 family and six-column positive supplement, D1–D6, audit-2 regressions and independent admission at the exact head. Keep the seven ported files byte-equal and resolve the legacy W1 launcher failures before rerunning exact-tree CI. Lead records the two protected stored replays of counted Part C and F0 run 11 as verdict and failing check names, with the archived native limit marked unattested. |
 | Command-site gate | #809 builder and W1 lead | All 362 declarations are preserved in D. The live scan has 338 sites, and rejects exactly the 24 inherited upstream rows. Audit and dispose those rows before promotion so the active inventory equals the W1 scan. |
 | R0 binding | #824 builder and auditor, then W1 lead | Admit the R0 sampler on its own lane and bind the authorized R0 record, including `R0.record_sha256`, on the W1 candidate. |
 | R1 fill and anti-hindsight | W1 lead | Incorporate approved #886, RL-189 §2.5 planning release, backfilled slot record from the designated session, DEC2 inputs, unchanged `INCONCLUSIVE` contrast, and both anti-hindsight lines. Run derive-contrast and regenerate on the final source tree. |
@@ -185,7 +199,8 @@ The signing list comes from RL-193 §3 and the R1 conditions from RL-189
 From any JouleWise worktree, use a new scratch directory. The assembler fetches
 the named refs only, records the exact heads, builds Git objects with ordered
 parents and makes a detached checkout. A moved W1 pin or unclassified Part C
-path stops assembly.
+path stops assembly. The test runner records per-group outcomes in
+`exits.tsv`. Run these groups sequentially to keep worker counts bounded.
 
 ```sh
 seat=/Volumes/JW-EXT/scratch/d-w1-candidate-rehearsal-d
@@ -238,6 +253,8 @@ requires generation after the accepted #809 port.
 - Regenerate and verify on the final approved source tree. The commands below
   assume the lead has installed the reviewed closure and input updates.
   The lead uses the authorized signing process for the receipt and gate reports.
+  Use `python3.13 -B -m tests.hazards.refusal_census` to produce the change
+  candidates for the reviewed refusal census.
   The seat copies the comparison commands from [PR #823](https://github.com/mpmdw/JouleWise/blob/2acbb013567e2d97232497791419f61264dbf831/docs/run_reports/2026-11-18-w1-integration-evidence.md#reproduce-on-approved-bytes) and the step-4 checklist.
 
 ```sh
@@ -288,4 +305,5 @@ python3.13 -B scripts/align_v4_prequal.py --w1-next w1 --jobs 4 \
 - **Part C audit boundaries.** The builder's current handoff calls out the
   incomplete synthetic soak/gated census and the null derived exit slope on
   an unobserved gate. The independent auditor and lead own those dispositions
-  and the accepted frozen-suite pin. [PR #809 handoff](https://github.com/mpmdw/JouleWise/blob/cea5fb6957c8755c9596e94afb638f82357ff5be/docs/run_reports/2026-11-19-pr809-rl189.md#open-for-the-lead)
+  and the accepted frozen-suite pin. They also own the compatibility
+  disposition for the legacy W1 launcher fixtures. [PR #809 handoff](https://github.com/mpmdw/JouleWise/blob/cea5fb6957c8755c9596e94afb638f82357ff5be/docs/run_reports/2026-11-19-pr809-rl189.md#open-for-the-lead)
