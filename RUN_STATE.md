@@ -1052,6 +1052,17 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 
 <!-- RUN_STATE TYPED ITEMS: newest first. Add with scripts/run_state_add.py; never edit by hand. -->
 
+532. **Ed's decision: option C is added (the tripwire K is scored on the physical positive-control legs); the research lead writes the pre-registered addendum before W1**
+
+```item
+{"expires_epoch_s": null, "issued_epoch_s": 1795331751, "number": 532, "owner": "research_lead", "schema": "joulewise.run_state_item.v1", "sets": [], "status": "ISSUED", "supersedes": []}
+```
+
+- **Ed's decision (2026-11-21 23:15 PST, interactive session, answering the lead's question):** "Yes, add option C (Recommended)". The question asked: should the tripwire K also be scored on the physical positive-control legs (option C), so the paper can test whether K catches real hidden work, at the cost of a pre-registered addendum written before W1, with a result that could come out weak?
+- **Recorded blind:** no C or T window data exists and W1 is not armed. Nothing outcome-bearing has been opened.
+- **What changes:** item 252's "the physical positive-control night (option C) is NOT included" no longer holds. The research lead writes the option-C addendum (K scored on the lm-ctl-01 hidden-work legs: what is scored, against which frozen threshold, the registered words and how a weak result reads). It is registered before W1, and the lead posts it when it is committed. Until then nothing changes on the MBP.
+- **Context:** RL-197 (audit branch 1de85b0c1) already moved lm-ctl-01's measurement ahead of the lm-inst-01 read. Without option C the paper could say only that unlogged decode draws measurable energy.
+
 531. **Magistrate 2e751bf4 (headless, Opus 5.5), 2026-11-21 22:36-22:45 PST: f2-stab-03-l006 CHECK: RECEIPT OK (1/1 leg, MEASURED_OK, restored), L006 ADMITTED (14.3 s over budget; mobileassetd burst inside the quiet span, flagged for the desk); copied at once; f2-stab-03 L007 ISSUED at rank 4 on pin A with ARG 02:00-02:35 (worst case ends 00:19 Sun, Sunday rank 1 still takes its t0 on its date), launches as the last act**
 
 ```pointer
