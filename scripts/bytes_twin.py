@@ -1608,9 +1608,12 @@ def compute_cell(rows, boundary, dc_by_run, allowances, alpha, *, diagnostic=Fal
         kept_ids = {m["id"] for m in kept}
         kept_rows = [r for r in rows if r["run_id"] in kept_ids]
         flag_rows = kept_rows if est["status"] == "ok" else rows
-        est["flags"] = sorted({f for r in flag_rows for f in (r.get("flag_codes") or "").split(";") if f} |
-                              {f for r in flag_rows for f in r.get("_meter_flags", [])} |
-                              {f for r in flag_rows for f in r.get("_session_flags", [])})
+        flags = ({f for r in flag_rows for f in (r.get("flag_codes") or "").split(";") if f} |
+                 {f for r in flag_rows for f in r.get("_meter_flags", [])} |
+                 {f for r in flag_rows for f in r.get("_session_flags", [])})
+        if est["status"] != "ok":
+            flags.update(f for r in rows for f in (r.get("exclusion_codes") or "").split(";") if f)
+        est["flags"] = sorted(flags)
         est["harvest_assisted_member_counts"] = {s: sum(_units_of(r)[0] == s and
             "battery.assist" in (r.get("flag_codes") or "").split(";") for r in kept_rows) for s in ("repeat", "quad")}
         evaluated = all(r.get("_decode_assisted") is not None for r in kept_rows)
@@ -1793,6 +1796,8 @@ def quantities(cell_block, manifest_entry):
             out[variant] = {"status": (est or {}).get("status", "absent")}
             if est and "reason" in est:
                 out[variant]["reason"] = est["reason"]
+            if est and "flags" in est:
+                out[variant]["flags"] = est["flags"]
             continue
         m, lo, hi = est["mean_j"], est["lower_j"], est["upper_j"]
         t = est["duration_s"]
@@ -1851,10 +1856,13 @@ def mean_of_passes(per_pass, *, pass_ids=None):
     flags = sorted({f for p in per_pass for f in (p.get("flags") or [])})
     statuses = [p.get("status") for p in per_pass]
     if not passes:
-        if per_pass and all(s == "missing" for s in statuses):
-            return {"status": "missing", "label": "no_pass", "flags": flags, "passes_collected": collected,
-                    "passes_computed": 0, "pass_statuses": statuses}
-        return {"status": "refused_no_pass_computed", "label": "no_pass", "flags": flags,
+        missing = statuses.count("missing")
+        if missing and missing == collected:
+            status, reason = "missing", "withheld rows missing"
+        else:
+            status = "refused_no_pass_computed"
+            reason = "withheld rows missing and other passes refused" if missing else "all passes refused"
+        return {"status": status, "reason": reason, "label": "no_pass", "flags": flags,
                 "passes_collected": collected, "passes_computed": 0, "pass_statuses": statuses}
     keys = ("E_dec_j", "T_dec_s", "e_j_per_step", "tau_s_per_step", "e_half_width_j_per_step",
             "e_printed_j_per_token")
@@ -1959,10 +1967,8 @@ def h1_predict(lines, hyp, x):
     return {"x": x, "central": central, "lower": min(values), "upper": max(values)}
 
 
-def h1_words(lines, models, missing=(), missing_flags=None):
-    """models: {model: {"x": {hyp: v}, "e", "w", "kind"}} for every model with a number; missing: the
-    models whose point is `missing` (B6 ruling Q1), which have no word and leave the active-or-resident
-    answer `missing` when one of them is an MoE model."""
+def h1_words(lines, models, missing_flags=()):
+    """Compute words for models with points and draw an answer only with all three MoE points."""
     per_model = {}
     for name, point in models.items():
         measured = [point["e"] - point["w"], point["e"] + point["w"]]
@@ -1980,27 +1986,25 @@ def h1_words(lines, models, missing=(), missing_flags=None):
                            "word": word if point["kind"] != "fit" else None,
                            "role": "held_out" if point["kind"] != "fit" else "fit_set"}
     moe_present = [n for n in MOE if n in per_model]
-    moe_missing = [n for n in MOE if n in missing and n not in per_model]
+    moe_missing = [n for n in MOE if n not in per_model]
     answer, misses = "mixed", []
     if moe_missing:
-        # B6 ruling Q1: a `missing` MoE model leaves the three-model answer undrawable; it prints
-        # `missing` with the models, never `mixed` (which R5 draws from three evaluated models).
-        answer = "missing"
-    elif len(moe_present) == 3:
+        moe = {"status": "missing", "answer": "missing", "moe_models": moe_present, "misses": [],
+               "reason": "active or resident requires all three MoE points",
+               "missing_models": moe_missing, "flags": sorted(set(missing_flags))}
+    else:
         if all(per_model[n]["checks"]["resident"]["miss"] == "prediction_above" for n in moe_present):
             answer = "active"
         elif all(per_model[n]["checks"]["bytes"]["miss"] == "prediction_below" for n in moe_present):
             answer = "resident"
-    if answer == "mixed":
-        for n in moe_present:
-            for hyp in ("resident", "bytes"):
-                c = per_model[n]["checks"][hyp]
-                misses.append({"model": n, "hypothesis": hyp, "consistent": c["consistent"], "miss": c["miss"]})
+        if answer == "mixed":
+            for n in moe_present:
+                for hyp in ("resident", "bytes"):
+                    c = per_model[n]["checks"][hyp]
+                    misses.append({"model": n, "hypothesis": hyp, "consistent": c["consistent"], "miss": c["miss"]})
+        moe = {"answer": answer, "moe_models": moe_present, "misses": misses, "missing_models": [], "flags": []}
     return {"models": per_model,
-            "active_or_resident": {"answer": answer, "moe_models": moe_present, "misses": misses,
-                                   "missing_models": moe_missing,
-                                   "flags": (([] if len(moe_present) == 3 else sorted(missing_flags)) if missing_flags is not None
-                                             else [WITHHELD_MISSING] if moe_missing else [])},
+            "active_or_resident": moe,
             "dense_note": ("Dense held-out models test the line's linearity over the bytes range, not which "
                            "hypothesis is right.")}
 
@@ -2335,18 +2339,22 @@ def analyse(rows, manifest, archives, *, stage, key_dir=None, sidecars=None, lis
         q = point(model, "passes_mean", boundary) or {}
         return {"label": q.get("label", "pass_mean"), "flags": q.get("flags") or [], "passes_computed": q.get("passes_computed")}
 
-    def missing_models(pass_key):
-        """Models whose point is `missing` (every pass's withheld file missing; B6 ruling Q1)."""
-        return sorted(m for m in roster if m in cells and pass_key in cells[m]
-                      and (cells[m][pass_key].get("status") == "missing"
-                           or cells[m][pass_key]["boundaries"]["rails"].get("quantities", {}).get("gross", {}).get("status") == "missing"))
-
     h1, h2, multiplicity = {}, {}, {"H1": {"family_size": h1_family, "alpha_per_check": alpha_h1,
                                             "t_quantile_level": 1 - alpha_h1 / 2}, "H2": {}}
     stage1 = {"fit_cells": {}, "h1_lines": {}, "h2_tier1_inputs": {}}
     for boundary in BOUNDARIES:
         h1[boundary], h2[boundary] = {}, {}
         for pass_key in pass_keys:
+            no_points = {}
+            for model, spec in roster.items():
+                block = cells.get(model, {}).get(pass_key)
+                if not block or point(model, pass_key, boundary):
+                    continue
+                q = block["boundaries"][boundary].get("quantities", {}).get("gross", {})
+                reason = q.get("reason", "withheld rows missing" if q.get("status") == "missing" else "all passes refused")
+                no_points[model] = {"kind": spec["kind"], "role": "fit_set" if model in FIT_SET else "held_out",
+                                    "word": None, "status": "missing", "reason": reason, "flags": q.get("flags", [])}
+            missing_flags = {f for row in no_points.values() for f in row["flags"]}
             fit_points = {}
             for model in FIT_SET:
                 q = point(model, pass_key, boundary)
@@ -2354,7 +2362,12 @@ def analyse(rows, manifest, archives, *, stage, key_dir=None, sidecars=None, lis
                     fit_points[model] = {"x": {"bytes": q["b_GB_per_step"], "resident": q["R_GB"], "time": q["tau_s_per_step"]},
                                          "e": q["e_j_per_step"], "w": q["e_half_width_j_per_step"], "kind": "fit"}
             if len(fit_points) < 3:
-                h1[boundary][pass_key] = {"status": "refused_fit_set_incomplete", "fit_models_present": sorted(fit_points)}
+                h1[boundary][pass_key] = {
+                    "status": "refused_fit_set_incomplete", "fit_models_present": sorted(fit_points),
+                    "models": no_points,
+                    "active_or_resident": {"status": "missing", "answer": "missing",
+                                           "reason": "H1 requires complete fit cells", "misses": [],
+                                           "missing_models": sorted(no_points), "flags": sorted(missing_flags)}}
             else:
                 lines = h1_lines(fit_points)
                 all_points = dict(fit_points)
@@ -2364,25 +2377,12 @@ def analyse(rows, manifest, archives, *, stage, key_dir=None, sidecars=None, lis
                         all_points[model] = {"x": {"bytes": q["b_GB_per_step"], "resident": q["R_GB"], "time": q["tau_s_per_step"]},
                                              "e": q["e_j_per_step"], "w": q["e_half_width_j_per_step"], "kind": ROSTER[model]["kind"],
                                              **model_pass_status(model, boundary)}
-                # The analysis's row lists the sorted union of every non-computed point's pass flags
-                # (refused as well as withheld-missing), whenever fewer than three MoE points computed.
-                missing_here = missing_models(pass_key)
-                missing_flags = sorted({f for m in roster if m in cells and pass_key in cells[m]
-                                        for q in [cells[m][pass_key]["boundaries"].get(boundary, {}).get("quantities", {}).get("gross", {})]
-                                        if q.get("status") != "ok" for f in (q.get("flags") or [])})
-                words = h1_words(lines, all_points, missing=missing_here, missing_flags=missing_flags)
+                # RL-92: no word for any model without a point. The MoE answer's
+                # flags include refused and withheld-missing passes of all such models.
+                words = h1_words(lines, all_points, missing_flags)
+                words["models"].update(no_points)
                 for model in held_out:
-                    if model not in all_points and model in cells:
-                        q = cells[model].get(pass_key, {}).get("boundaries", {}).get(boundary, {}).get("quantities", {}).get("gross", {})
-                        if q.get("status") == "missing":
-                            # B6 ruling Q1: a pass (or model) whose withheld file is missing prints
-                            # `missing` with the flag; it has no word.
-                            words["models"][model] = {"kind": ROSTER[model]["kind"], "word": None, "role": "held_out",
-                                                      "status": "missing", "flags": list(q.get("flags") or [])}
-                        else:
-                            words["models"][model] = {"kind": ROSTER[model]["kind"], "word": None, "role": "held_out",
-                                                      "refused": q.get("status", "absent")}
-                    elif model not in cells and stage == "2":
+                    if model not in cells and stage == "2":
                         # Lead ruling 2026-10-20 item 4: a held-out model whose rows are missing (a
                         # withheld file not supplied) prints as `missing` with a flag, never a refusal.
                         words["models"][model] = {"kind": ROSTER[model]["kind"], "word": "missing", "role": "held_out",

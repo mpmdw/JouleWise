@@ -107,6 +107,14 @@ EDGE_LOCKED_KNOBS = {"sample_phase_ms": 19, "edge_phase": False, "min_receive_la
 # collected (R6's optional pass).
 WITHHELD_KNOBS = {"subpack_sessions": True, "uncollected_sessions": ("bytes-s4-p2",)}
 MISSING_STORES = ("bytes-s2-p2", "bytes-s6-p1", "bytes-s6-p2")
+# RL-92 §§3–4: two refused models (one MoE) and a dense model with one
+# missing store and one refusal. Six invalid repeats leave four in either selection.
+LABEL_DEFECTS = [
+    (pass_id, model, ordinal, "strict_validation")
+    for model, pass_ids in (("Qwen3-32B-4bit", (1, 2)), ("Qwen3-Next-80B-A3B-Instruct-4bit", (1, 2)),
+                            ("Llama-3.3-70B-Instruct-4bit", (2,)))
+    for pass_id in pass_ids for ordinal in range(4, 10)
+]
 # name: (world, seed, planted defects, generator knobs, withheld stores removed after export).
 CAMPAIGNS = {
     "bytes": ("bytes", 1100, [], {**NR1_KNOBS, "battery_assist": True, "battery_publication": "delayed", "battery_reference_assist": True}, ()),
@@ -116,6 +124,8 @@ CAMPAIGNS = {
     "minimum": ("bytes", 1100, DEFECTS_MINIMUM, NR1_KNOBS, ()),
     "edge_locked": ("resident", 3100, [], EDGE_LOCKED_KNOBS, ()),
     "withheld": ("bytes", 1100, [], {**NR1_KNOBS, **WITHHELD_KNOBS}, MISSING_STORES),
+    "no_point_labels": ("bytes", 1100, LABEL_DEFECTS,
+                        {**NR1_KNOBS, "subpack_sessions": True, "battery_assist": True}, ("bytes-s5-p1",)),
     "invalid_anchor": ("bytes", 1100, ANCHOR_DEFECTS, NR1_KNOBS, ()),
     "marker_incomplete": ("bytes", 1100, [], {**NR1_KNOBS, "battery_assist": True,
                            "truncate_marker_window": True}, ()),
@@ -441,12 +451,8 @@ def compare_census(R, stage, rows, t, *, point=False, table=None):
                         if model in bt.FIT_SET:
                             continue
                         quantity = cells.get(pk, {}).get("boundaries", {}).get(boundary, {}).get("quantities", {}).get("gross", {})
-                        if block.get("status") == "refused_fit_set_incomplete":
-                            present = pk == "passes_mean" and quantity.get("status") != "ok"
-                        else:
-                            member = models.get(model)
-                            present = member is not None and (pk == "passes_mean" or
-                                ("refused" not in member and member.get("status") != "missing"))
+                        member = models.get(model)
+                        present = member is not None and (pk == "passes_mean" or quantity.get("status") == "ok")
                         if present:
                             expected.append((model, boundary, "mean" if pk == "passes_mean" else pk[4:]))
             elif "passes_mean" in passes:
@@ -669,9 +675,15 @@ def compare_points(R, stage, a_points, t):
             R.exact(stage, g, "status", p.get("status"), q.get("status"))
             R.exact(stage, g, "pass_label", p.get("pass_status"), q.get("label"))
             R.exact(stage, g, "n_passes", p.get("n_passes"), q.get("passes_computed"))
+            R.exact(stage, g, "reason", p.get("reason"), q.get("reason"))
             compare_missing(R, stage, g, p, q)
             continue
         R.exact(stage, g, "status", "computed" if a_ok else "unavailable", "computed" if t_ok else "unavailable")
+        if not a_ok and not t_ok:
+            R.exact(stage, g, "reason", p.get("reason"), q.get("reason"))
+            R.exact(stage, g, "pass_label", p.get("pass_status"), q.get("label"))
+            R.exact(stage, g, "n_passes", p.get("n_passes"), q.get("passes_computed"))
+            compare_missing(R, stage, g, p, q)
         if not (a_ok and t_ok):
             continue
         # Addendum 7 D9: the pass label and the number of computed passes; B6 ruling Q1: the flag of a
@@ -744,19 +756,14 @@ def compare_h1(R, stage, a_h1, a_moe, t, a_frozen):
         th = (t.get("h1") or {}).get(b, {}).get(pk) or {}
         tm = (th.get("models") or {}).get(model)
         if tm is None:
-            if th.get("status") == "refused_fit_set_incomplete" and row.get("status") == "missing":
-                # Same unavailable boundary: primary emits null words per model;
-                # twin emits the parent fit-set refusal, with no model words.
-                R.exact(stage, g, "word", row.get("word"), None)
-                R.exact(stage, g, "fit unavailable", row["status"], "missing")
-                continue
             R.exact(stage, g, "word", row.get("word") if row["role"] == "heldout" else None, "absent:" + str(th.get("status")))
             continue
         if row.get("status") == "missing" or tm.get("status") == "missing":
-            # B6 ruling Q1: a `missing` model has no H1 word; the flag is carried.
+            # RL-92: the status records the absence of an H1 word for either cause.
             R.exact(stage, g, "status", row.get("status"), tm.get("status"))
             R.exact(stage, g, "word", row.get("word"), tm.get("word"))
-            compare_missing(R, stage, g, row, tm)
+            R.exact(stage, g, "reason", row.get("reason"), tm.get("reason"))
+            R.exact(stage, g, "flags", row.get("flags", []), tm.get("flags", []))
             continue
         if row["role"] == "heldout":
             R.exact(stage, g, "word", row["word"], tm["word"])
@@ -789,18 +796,14 @@ def compare_h1(R, stage, a_h1, a_moe, t, a_frozen):
         b = BMAP[row["boundary"]]
         group = (t.get("h1") or {}).get(b, {}).get("passes_mean") or {}
         tm = group.get("active_or_resident") or {}
-        if group.get("status") == "refused_fit_set_incomplete":
-            # No MoE answer can be drawn from an unavailable fit set. Recover
-            # the missing-point census from the twin's explicit model statuses.
-            missing = sorted(m for m, block in t.get("cells", {}).items() if
-                block.get("passes_mean", {}).get("boundaries", {}).get(b, {}).get("quantities", {}).get("gross", {}).get("status") != "ok")
-            tm = {"answer": "missing", "missing_models": missing}
-        R.exact(stage, f"moe/{b}/passes_mean", "answer", row["answer"], tm.get("answer"))
+        g = f"moe/{b}/passes_mean"
+        R.exact(stage, g, "answer", row["answer"], tm.get("answer"))
         if row.get("status") == "missing" or tm.get("missing_models"):
-            # B6 ruling Q1: an MoE model without a point leaves the answer `missing`, naming the models.
-            R.exact(stage, f"moe/{b}/passes_mean", "missing_models",
+            R.exact(stage, g, "status", row.get("status"), tm.get("status"))
+            R.exact(stage, g, "reason", row.get("reason"), tm.get("reason"))
+            R.exact(stage, g, "missing_models",
                     sorted(canon(m["model"]) for m in row.get("missing_models") or []), sorted(tm.get("missing_models") or []))
-            compare_missing(R, stage, f"moe/{b}/passes_mean", row, tm)
+            R.exact(stage, g, "flags", row.get("flags", []), tm.get("flags", []))
     # Frozen lines (pass mean, gross primary): central line and the set of eight corner lines.
     # A line coefficient has no half-width (its consequences are compared above at the cells' bars).
     for group in (a_frozen or {}).get("rival_lines", []):
@@ -1372,7 +1375,10 @@ def plant(archive, acceptance, models, pass_id, defects, log):
     for p, model, ordinal, kind in defects:
         if p != pass_id:
             continue
-        rid = _run_ids(archive, models, model)[ordinal]
+        run_ids = _run_ids(archive, models, model)
+        if not run_ids:  # This model belongs to a different sub-pack.
+            continue
+        rid = run_ids[ordinal]
         bundle = archive / "sources/claim-runs" / rid
         if kind == "lost_member":
             shutil.rmtree(bundle)
@@ -1473,7 +1479,7 @@ def build(root, name):
     return manifest
 
 
-def run_both(root, manifest):
+def run_both(root, manifest, *, verify_fit_rerun=False):
     """Every stage of both sides, in the desk's order, with key release by file copy in between."""
     o = root / "out"
     o.mkdir()
@@ -1508,6 +1514,16 @@ def run_both(root, manifest):
     predictions = o / "a-fit/predictions.json"
     from tests.bytes_commitment_support import fixture_options
     options = fixture_options(root, predictions)
+    if verify_fit_rerun:
+        rerun = o / "a-fit-rerun"
+        fit = analysis + ["--stage", "fit", "--key-dir", str(released), "--out", str(rerun)]
+        if run("a-fit-rerun", fit) != 0:
+            raise AssertionError("synthetic fit rerun refused")
+        fixture_prediction = Path(options[options.index("--predictions") + 1])
+        if (rerun / "predictions.json").read_bytes() != fixture_prediction.read_bytes():
+            raise AssertionError("synthetic fit rerun changed committed bytes")
+        if (rerun / "predictions.sha256").read_bytes() != fixture_prediction.with_suffix(".sha256").read_bytes():
+            raise AssertionError("synthetic fit rerun changed committed sidecar")
     commit = options[-1]
     analysis += options
     twin += options
@@ -1543,7 +1559,7 @@ def campaign(name):
     if name not in WORK:
         root = WORK["root"] / name
         manifest = build(root, name)
-        run_both(root, manifest)
+        run_both(root, manifest, verify_fit_rerun=name == "no_point_labels")
         WORK[name] = compare_campaign(root)
     return WORK[name]
 
@@ -2068,6 +2084,47 @@ class AgreementTests(unittest.TestCase):
         # and the twin's values are the ones asserted on the analysis's side.
         self.assertTrue(all(r["status"] == "equal" for r in rows if r["key"] in ("status", "pass_label", "answer", "n")
                             or r["key"].startswith(("flag:", "withheld_"))))
+
+    def test_no_point_labels_campaign(self):
+        name = "no_point_labels"
+        recorder = campaign(name)
+        counts = recorder.counts()
+        self.assertEqual(counts["above_bar"], 0)
+        print(f"\nagreement {name}: compared {counts['compared']}, equal {counts['equal']}, "
+              f"under the bar {counts['under_bar']}, above the bar {counts['above_bar']}")
+        root = WORK["root"] / name / "out"
+        refused, mixed, moe = "Qwen3-32B-4bit", "Llama-3.3-70B-Instruct-4bit", "Qwen3-Next-80B-A3B-Instruct-4bit"
+        for stage in ("a-blinded-post", "a-held"):
+            with self.subTest(stage=stage):
+                self.assertEqual((root / f"{stage}.exit").read_text().strip(), "0")
+                points = load(root / stage / "model_estimates.json")
+                held_h1 = load(root / stage / "h1.json")
+                for model, statuses, reason in (
+                    (refused, ["unavailable", "unavailable"], "all passes refused"),
+                    (mixed, ["missing", "unavailable"], "withheld rows missing and other passes refused"),
+                    (moe, ["unavailable", "unavailable"], "all passes refused"),
+                ):
+                    model_points = [p for p in points if p["model"] == model]
+                    self.assertTrue(model_points)
+                    for point in model_points:
+                        self.assertEqual((point["status"], point["reason"]), ("unavailable", reason))
+                        self.assertEqual([p["status"] for p in point["passes"]], statuses)
+                    rows = [r for r in held_h1 if r["model"] == model]
+                    self.assertEqual(len(rows), len(model_points))
+                    self.assertTrue(all((r["status"], r["reason"], r.get("word")) == ("missing", reason, None)
+                                        for r in rows))
+                self.assertTrue(all(WITHHELD_MISSING not in p.get("flags", [])
+                                    and all(WITHHELD_MISSING not in row["flags"] for row in p["passes"])
+                                    for p in points if p["moe"]))
+                answers = load(root / stage / "moe.json")
+                self.assertTrue(answers)
+                for row in answers:
+                    self.assertEqual((row["status"], row["answer"]), ("missing", "missing"))
+                    self.assertEqual(row["reason"], "active or resident requires all three MoE points")
+                    self.assertEqual([m["model"] for m in row["missing_models"]], [moe])
+                    if stage == "a-held":
+                        self.assertTrue({"registration.default_used", "battery.assist", "member.strict_validation_failed",
+                                         "bytes.decode_battery_assist", WITHHELD_MISSING}.issubset(row["flags"]))
 
     def test_time_world(self):
         self.check("time", 63, {"h2/rails/passes_mean": (9, 9), "h2/dc_input/passes_mean": (9, 9),

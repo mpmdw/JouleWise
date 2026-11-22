@@ -658,24 +658,24 @@ class H1Tests(QuantityTestCase):
         fit = self.points()
         lines = bt.h1_lines(fit)
         held = {**fit, "qwen3-14b-4bit": {"x": {"bytes": 8.0, "resident": 8.0, "time": 3.0}, "e": 8.0, "w": 0.2, "kind": "dense"}}
-        miss = ["qwen3-30b-a3b-4bit"]
         flags = ["audit.early", "battery.assist", "bytes.withheld_missing"]
-        words = bt.h1_words(lines, held, missing=miss, missing_flags=flags)
+        words = bt.h1_words(lines, held, missing_flags=flags)
         self.assertEqual(words["active_or_resident"]["answer"], "missing")
+        self.assertEqual(words["active_or_resident"]["missing_models"], list(bt.MOE))
         self.assertEqual(words["active_or_resident"]["flags"], flags)
-        # the unsorted, duplicated input prints sorted; no MoE model missing prints none.
-        self.assertEqual(bt.h1_words(lines, held, missing=miss, missing_flags=["b", "a"])["active_or_resident"]["flags"], ["a", "b"])
-        # fewer than three MoE points computed: the analysis's row lists the union even with none withheld-missing.
-        self.assertEqual(bt.h1_words(lines, held, missing=[], missing_flags=flags)["active_or_resident"]["flags"], flags)
+        row = bt.h1_words(lines, held, missing_flags=["b", "a", "b"])["active_or_resident"]
+        self.assertEqual((row["answer"], row["flags"]), ("missing", ["a", "b"]))
         # three computed MoE points: no row flags.
         full = {**held, **{n: {"x": {"bytes": 2.0, "resident": 40.0, "time": 1.9}, "e": 2.0, "w": 0.15, "kind": "moe"}
                            for n in bt.MOE}}
-        self.assertEqual(bt.h1_words(lines, full, missing=[], missing_flags=flags)["active_or_resident"]["flags"], [])
+        self.assertEqual(bt.h1_words(lines, full, missing_flags=flags)["active_or_resident"]["flags"], [])
 
     def test_neither_and_mixed(self):
         lines = bt.h1_lines(self.points())
         held = dict(self.points())
-        held["qwen3-30b-a3b-4bit"] = {"x": {"bytes": 2.0, "resident": 40.0, "time": 1.9}, "e": 20.0, "w": 0.1, "kind": "moe"}
+        for model in bt.MOE:
+            held[model] = {"x": {"bytes": 2.0, "resident": 4.0, "time": 1.9}, "e": 2.0, "w": 0.1, "kind": "moe"}
+        held["qwen3-30b-a3b-4bit"]["e"] = 20.0
         words = bt.h1_words(lines, held)
         self.assertEqual(words["models"]["qwen3-30b-a3b-4bit"]["word"], "neither")
         self.assertEqual(words["active_or_resident"]["answer"], "mixed")
@@ -1556,13 +1556,13 @@ class ActiveOrResidentFlagsEndToEndTests(unittest.TestCase):
             return run_twin(world, "2")
 
     def test_refused_point_without_withheld_flag_contributes(self):
-        # 14B: the first pass withheld-missing (carries audit.c14), every other pass refused: refused, not missing.
+        # 14B: the first pass is withheld-missing and the second is refused.
         result = self.run_with(all_points=True)
         for boundary in bt.BOUNDARIES:
             row = result["h1"][boundary]["passes_mean"]["active_or_resident"]
             self.assertEqual(row["answer"], "missing")
             self.assertEqual(row["missing_models"], [self.MOE])
-            self.assertEqual(row["flags"], ["audit.c14", "bytes.withheld_missing"])
+            self.assertEqual(row["flags"], ["audit.c14", "audit.refusal", "bytes.withheld_missing"])
 
     def test_only_the_missing_moe_model_without_the_refused_point(self):
         result = self.run_with(all_points=False)

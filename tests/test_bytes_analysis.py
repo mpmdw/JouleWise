@@ -1979,14 +1979,17 @@ class Q1WithheldCensusTests(unittest.TestCase):
                     self.assertEqual({p["status"] for p in points}, {"missing"})
                     self.assertEqual({p["pass_status"] for p in points}, {"no_pass"})
 
-    def test_missing_labels_unions_existing_and_pass_flags_on_survivors(self):
-        for status in ("computed", "unavailable"):
+    def test_missing_labels_unions_flags_and_preserves_survivor_and_mixed_statuses(self):
+        for status, pass_status in (("computed", "computed"), ("unavailable", "unavailable")):
             with self.subTest(status=status):
                 point = {"status": status, "flags": ["existing.disclosure"], "passes": [
-                    {"flags": ["battery.assist"]}, {"flags": ["bytes.withheld_missing"]}]}
+                    {"status": pass_status, "flags": ["battery.assist"]},
+                    {"status": "missing", "flags": ["bytes.withheld_missing"]}]}
                 bytes_analyze._missing_labels([point])
                 self.assertEqual(point["flags"], ["battery.assist", "bytes.withheld_missing", "existing.disclosure"])
-                self.assertEqual(point["status"], "computed" if status == "computed" else "missing")
+                self.assertEqual(point["status"], status)
+                if status == "unavailable":
+                    self.assertEqual(point["reason"], "withheld rows missing and other passes refused")
         optional = {"status": "computed", "pass_status": "one_pass", "passes": [{"flags": []}]}
         bytes_analyze._missing_labels([optional])
         self.assertNotIn("bytes.withheld_missing", optional.get("flags", []))
