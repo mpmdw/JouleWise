@@ -57,8 +57,9 @@ def make_manifest(look, route, pins):
 
 
 def read_frozen(state, first_read):
-    return manifest.read_frozen(current_revision=state["current_revision"], committed=state["committed"],
-                                working=state["working"], history=state["history"], first_read=first_read)
+    manifest.verify_freeze(current_revision=state["current_revision"], committed=state["committed"],
+                           working=state["working"], history=state["history"])
+    return first_read()
 
 
 def append_row(row, append):

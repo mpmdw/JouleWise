@@ -1,7 +1,9 @@
 """Single-use controls output boundary with a blind public projection."""
 
 from contextlib import suppress
+from dataclasses import replace
 from hashlib import sha256
+from importlib.util import find_spec
 import math
 import os
 from pathlib import Path
@@ -10,13 +12,17 @@ import sys
 import traceback
 
 from . import controls_analysis as analysis
-from .controls_manifest import canonical, verify_freeze
+from .controls_manifest import CODE_PATHS, canonical, verify_freeze, verify_stage1
 from .controls_print import LOOK_ID, encode_public_projection
 from .qualification_manifest import _decode
 
 
 PUBLIC_NAME = "PUBLIC.json"
 PRIVATE_NAMES = frozenset({"controls.json", "stdout", "stderr"})
+_PHASE_SOURCES = (
+    "print_code/phase", "print_code/attribution", "print_code/records", "print_code/windows",
+    "print_code/powermetrics_adapter", "print_code/trace_point", "print_code/integrator",
+)
 
 
 def validate_shape(value, schema, definitions, *, instrument_reasons=()):
@@ -63,10 +69,10 @@ def validate_shape(value, schema, definitions, *, instrument_reasons=()):
         raise ValueError("controls_output_schema")
 
 
-def prepare_public(blind, schema_bytes):
+def prepare_public(blind, schema_bytes, *, committed=None):
     schema = _decode(schema_bytes)
     validate_shape(blind, schema, schema.get("$defs", {}))
-    return encode_public_projection(blind, blind)
+    return encode_public_projection(blind, blind if committed is None else committed)
 
 
 def prepare_private(scientific, schema_bytes, *, instrument_reasons=()):
@@ -132,9 +138,22 @@ def publish_reserved(restricted, public, public_bytes, positions, **calculation)
     write_outputs(restricted, public, private_bytes, public_bytes)
 
 
+def _verified_kernel(pins):
+    """Bind the worker's fixed numerical imports to the registered source bytes."""
+    for role in _PHASE_SOURCES:
+        module = CODE_PATHS[role].removesuffix(".py").replace("/", ".")
+        spec = find_spec(module)
+        if spec is None or spec.origin is None:
+            raise ValueError("controls_kernel_source")
+        origin = Path(spec.origin)
+        if origin.suffix != ".py" or sha256(origin.read_bytes()).hexdigest() != pins[role]:
+            raise ValueError("controls_kernel_source")
+    return analysis.PhaseKernel.frozen()
+
+
 def run_controls_worker(*, freeze_inputs, stage1_bytes, blind, execution_host, local_host, restricted: Path,
-                        public: Path, first_read, kernel, pooled, gap_limits_ns):
-    """Run in a dedicated process after the lead binds the host and roots."""
+                        public: Path, first_read, pooled, gap_limits_ns):
+    """Run once, with the first reader given the committed stage-1 bindings."""
     from .manifest_dispatch import PRE_READ_REFUSAL
     from .transfer_release import POST_READ_FAILURE, _failure_type, _redirect, _sync_directory
 
@@ -143,15 +162,12 @@ def run_controls_worker(*, freeze_inputs, stage1_bytes, blind, execution_host, l
     read_started = False
     try:
         freeze = verify_freeze(**freeze_inputs)
-        stage1 = _decode(stage1_bytes)
+        stage1 = verify_stage1(freeze, freeze_inputs["committed"], stage1_bytes)
         if (not execution_host or execution_host != local_host
-                or freeze.manifest_sha256 != blind["manifest_sha256"] or freeze.revision != blind["commit"]
-                or sha256(stage1_bytes).hexdigest() != blind["stage1_sha256"]
-                or type(stage1) is not dict or type(stage1.get("n_legs")) is not int
-                or stage1["n_legs"] != blind["n_legs"]
                 or type(pooled) is not analysis.HoldPool or pooled.reason_enum != freeze.instrument_reasons):
             raise ValueError("controls_blind_gate")
-        public_bytes = prepare_public(blind, freeze.output_schema)
+        public_bytes = prepare_public(blind, freeze.output_schema, committed=stage1.public)
+        kernel = _verified_kernel(freeze.pins)
         sys.stdout.flush()
         sys.stderr.flush()
         saved_stderr = os.dup(2)
@@ -160,7 +176,11 @@ def run_controls_worker(*, freeze_inputs, stage1_bytes, blind, execution_host, l
         confined = True
         _sync_directory(restricted.parent)
         read_started = True
-        positions = first_read()
+        positions = tuple(first_read(stage1.legs))
+        if tuple(leg.leg_id for leg in positions) != tuple(binding.leg_id for binding, _ in stage1.legs):
+            raise ValueError("stage1_roster")
+        positions = tuple(replace(leg, work_sha256=digest)
+                          for leg, (_, digest) in zip(positions, stage1.legs, strict=True))
         publish_reserved(restricted, public, public_bytes, positions, kernel=kernel, pooled=pooled,
                          gap_limits_ns=gap_limits_ns, instrument_manifest_sha256=freeze.instrument_manifest_sha256,
                          schema_bytes=freeze.restricted_schema, instrument_reasons=freeze.instrument_reasons)

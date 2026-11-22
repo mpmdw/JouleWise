@@ -4,7 +4,9 @@ from dataclasses import dataclass
 from hashlib import sha256
 import json
 
-from .controls_print import LOOK_ID, KIT_ID, _hex_pin
+from .controls_print import (
+    KIT_ID, LOOK_ID, PILOT, REMAINDER, LegBinding, LookIdentity, _hex_pin, validate_roster,
+)
 from .qualification_manifest import _decode
 
 
@@ -81,7 +83,56 @@ class VerifiedFreeze:
     output_schema: bytes
     restricted_schema: bytes
     instrument_reasons: frozenset[str]
-    history: tuple
+    pins: dict
+    stage1_entry: dict | None
+
+
+@dataclass(frozen=True)
+class VerifiedStage1:
+    public: dict
+    legs: tuple[tuple[LegBinding, str | None], ...]
+
+
+def verify_stage1(freeze, committed, candidate):
+    """Bind the blind roster and public fields to the authorized ledger entry."""
+    entry = freeze.stage1_entry
+    if entry is None:
+        raise ValueError("stage1_commitment")
+    revision = entry.get("revision")
+    count = entry.get("n_legs")
+    digest = entry.get("stage1_sha256")
+    ids = PILOT + REMAINDER
+    if (entry.get("manifest_sha256") != freeze.manifest_sha256 or not _hex_pin(revision, 40)
+            or not _hex_pin(digest, 64) or type(count) is not int or not 0 <= count <= len(ids)):
+        raise ValueError("stage1_commitment")
+    raw = committed.get(revision, {}).get("stage1")
+    if type(raw) is not bytes or type(candidate) is not bytes or raw != candidate or sha256(raw).hexdigest() != digest:
+        raise ValueError("stage1_commitment")
+
+    roster = _decode(raw)
+    if (type(roster) is not dict or roster.keys() != {"n_legs", "legs"}
+            or type(roster["n_legs"]) is not int or roster["n_legs"] != count
+            or type(roster["legs"]) is not dict or roster["legs"].keys() != set(ids)):
+        raise ValueError("stage1_roster")
+
+    legs = []
+    for leg_id in ids:
+        row = roster["legs"][leg_id]
+        if (type(row) is not dict or row.keys() != {"identity", "role", "reference", "script_sha"}
+                or type(row["identity"]) is not list or len(row["identity"]) != 6
+                or (row["script_sha"] is not None and not _hex_pin(row["script_sha"], 64))):
+            raise ValueError("stage1_roster")
+        legs.append((LegBinding(*row["identity"], row["role"], row["reference"]), row["script_sha"]))
+
+    first = legs[0][0]
+    if not _hex_pin(first.kit_sha256, 64) or not _hex_pin(first.runner_commit, 40):
+        raise ValueError("stage1_roster")
+    identity = LookIdentity(LOOK_ID, KIT_ID, first.kit_sha256, first.runner_commit)
+    bindings = tuple((binding.leg_id, binding) for binding, _ in legs)
+    validate_roster(identity, bindings, dict(bindings))
+    public = dict(look_id=LOOK_ID, manifest_sha256=freeze.manifest_sha256, commit=revision,
+                  stage1_sha256=digest, n_legs=count)
+    return VerifiedStage1(public, tuple(legs))
 
 
 def _instrument_reasons(snapshot, pins):
@@ -129,7 +180,7 @@ def verify_freeze(*, current_revision, committed, working, history):
     design = False
     prior_byte_pass = False
     eligible_receipt = False
-    prefix = []
+    stage1_entry = None
     for row in history:
         if type(row) is not dict:
             raise ValueError("freeze_ledger")
@@ -138,10 +189,11 @@ def verify_freeze(*, current_revision, committed, working, history):
         if row.get("kind") in ("first_ctl_read", "reserved") and row.get("look_id", LOOK_ID) == LOOK_ID:
             # The caller is trying to reserve again, or its receipt is too late.
             raise ValueError("freeze_read_order")
-        prefix.append(dict(row))
         if row.get("look_id") != LOOK_ID:
             continue
         kind = row.get("kind")
+        if stage1_entry is not None and kind in ("design_pass", "byte_pass", "receipt"):
+            raise ValueError("stage1_order")
         if kind == "design_pass":
             design = True
             prior_byte_pass = eligible_receipt = False
@@ -152,12 +204,11 @@ def verify_freeze(*, current_revision, committed, working, history):
         elif kind == "receipt":
             eligible_receipt = (prior_byte_pass and row.get("manifest_sha256") == digest
                                 and row.get("revision") == current_revision)
+        elif kind == "stage1":
+            if not eligible_receipt or stage1_entry is not None:
+                raise ValueError("stage1_order")
+            stage1_entry = dict(row)
     if not eligible_receipt:
         raise ValueError("freeze_receipt")
     return VerifiedFreeze(current_revision, digest, pins["instrument_manifest"], snapshot["output_schema"],
-                          snapshot["restricted_schema"], reasons, tuple(prefix))
-
-
-def read_frozen(*, current_revision, committed, working, history, first_read):
-    verify_freeze(current_revision=current_revision, committed=committed, working=working, history=history)
-    return first_read()
+                          snapshot["restricted_schema"], reasons, pins, stage1_entry)
