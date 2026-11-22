@@ -162,6 +162,10 @@ class GitTests(unittest.TestCase):
         finally:
             offline.rename(self.remote)
 
+    def enqueue_offline(self, data, *, remote="origin"):
+        with self.origin_offline(), self.assertRaisesRegex(add.GitFailure, "spooled at"):
+            add.add_git(self.a, data, remote=remote, attempts=1)
+
     def write_state(self, text):
         source, current = self.a / add.RUN_STATE, self.a / add.CURRENT
         current.parent.mkdir(parents=True, exist_ok=True)
@@ -329,8 +333,7 @@ git rev-parse --verify "$ref" >> fixture-raced-heads
     def test_gemini_4_2_1_pending_item_cannot_be_overtaken(self):
         first = request(heading="First (spooled)")
         second = request(heading="Second (direct)")
-        with self.assertRaisesRegex(add.GitFailure, "spooled at"):
-            add.add_git(self.a, first, remote="nonexistent-remote", attempts=1)
+        self.enqueue_offline(first)
         queued, = self.spool.glob("*.json")
         with self.assertRaisesRegex(add.GitFailure, "flush-spool"):
             add.add_git(self.a, second)
@@ -348,9 +351,7 @@ git rev-parse --verify "$ref" >> fixture-raced-heads
         original = b"v1-at-spool-time\n\x00\xff"
         note.write_bytes(original)
         note.chmod(0o755)
-        with self.assertRaisesRegex(add.GitFailure, "spooled at"):
-            add.add_git(self.a, request(**{"with": ["docs/note.txt"]}),
-                        remote="nonexistent-remote", attempts=1)
+        self.enqueue_offline(request(**{"with": ["docs/note.txt"]}))
         later = b"v2-mutated-after-spool\n"
         note.write_bytes(later)
         note.chmod(0o644)
@@ -364,9 +365,7 @@ git rev-parse --verify "$ref" >> fixture-raced-heads
         self.assertEqual(note.read_bytes(), later)
 
     def test_gemini_4_2_3_stale_set_is_quarantined_and_later_items_land_in_order(self):
-        with self.assertRaisesRegex(add.GitFailure, "spooled at"):
-            add.add_git(self.a, request(sets=[change(23, "CLOSED")]),
-                        remote="nonexistent-remote", attempts=1)
+        self.enqueue_offline(request(sets=[change(23, "CLOSED")]))
         queued, = self.spool.glob("*.json")
         stale = queued.rename(self.spool / "00.json")
         # A second writer closes the target while this writer is offline.
@@ -391,9 +390,7 @@ git rev-parse --verify "$ref" >> fixture-raced-heads
 
     def test_audit_round_1_retries_validation_against_the_advanced_remote(self):
         arm = [change(23, "ARMED")]
-        with self.assertRaisesRegex(add.GitFailure, "spooled at"):
-            add.add_git(self.a, request(heading="A queued arm", sets=arm),
-                        remote="nonexistent-remote", attempts=1)
+        self.enqueue_offline(request(heading="A queued arm", sets=arm))
         queued, = self.spool.glob("*.json")
         original = queued.read_bytes()
         writer_b = {"JW_RUN_STATE_SPOOL": str(self.directory / "writer-b-spool")}
@@ -431,9 +428,7 @@ git rev-parse --verify "$ref" >> fixture-raced-heads
                          ["RUN_STATE 28: A later request", "RUN_STATE 27: A queued arm"])
 
     def test_audit_round_1_invalid_remote_pointer_preserves_the_pending_queue(self):
-        with self.assertRaisesRegex(add.GitFailure, "spooled at"):
-            add.add_git(self.a, request(heading="First valid request"),
-                        remote="nonexistent-remote", attempts=1)
+        self.enqueue_offline(request(heading="First valid request"))
         queued, = self.spool.glob("*.json")
         first = queued.rename(self.spool / "01.json")
         second = self.spool / "02.json"
@@ -472,9 +467,7 @@ git rev-parse --verify "$ref" >> fixture-raced-heads
                          ["RUN_STATE 27: Second valid request", "RUN_STATE 26: First valid request"])
 
     def test_audit_round_1_failed_remote_recheck_leaves_request_pending(self):
-        with self.assertRaisesRegex(add.GitFailure, "spooled at"):
-            add.add_git(self.a, request(sets=[change(24, "ARMED")]),
-                        remote="nonexistent-remote", attempts=1)
+        self.enqueue_offline(request(sets=[change(24, "ARMED")]))
         queued, = self.spool.glob("*.json")
         original = queued.read_bytes()
         offline = subprocess.CalledProcessError(128, ["git", "ls-remote"], stderr="synthetic recheck failure")
@@ -488,9 +481,7 @@ git rev-parse --verify "$ref" >> fixture-raced-heads
 
     def test_audit_round_2_refetches_before_quarantining_after_a_stale_reply(self):
         arm = [change(23, "ARMED")]
-        with self.assertRaisesRegex(add.GitFailure, "spooled at"):
-            add.add_git(self.a, request(heading="A queued arm", sets=arm),
-                        remote="nonexistent-remote", attempts=1)
+        self.enqueue_offline(request(heading="A queued arm", sets=arm))
         queued, = self.spool.glob("*.json")
         original = queued.read_bytes()
         writer_b = {"JW_RUN_STATE_SPOOL": str(self.directory / "writer-b-spool")}
@@ -520,7 +511,7 @@ git rev-parse --verify "$ref" >> fixture-raced-heads
         self.assertFalse((self.spool / "failed").exists())
         self.assertEqual(add.add_git(self.a, request(heading="A later request"))[0], 28)
 
-    def test_audit_round_2_spool_isolated_by_checkout_and_origin(self):
+    def test_audit_round_2_spool_isolated_by_origin_across_forks(self):
         fork = self.directory / "fork.git"
         clone_git_fixture(self.remote, fork, "--bare")
         self.git(self.b, "remote", "set-url", "origin", str(fork))
@@ -538,9 +529,6 @@ git rev-parse --verify "$ref" >> fixture-raced-heads
         self.assertEqual(self.git(fork, "rev-parse", "main").strip(), fork_head)
         self.assertEqual(add.add_git(self.b, request(heading="More fork work"))[0], 26)
 
-        other_clone = self.directory / "other-clone"
-        clone_git_fixture(self.remote, other_clone)
-        self.assertEqual(self.call_in(other_clone, "flush-spool"), (0, "", ""))
         self.git(self.a, "remote", "set-url", "origin", str(fork))
         self.assertEqual(self.call_in(self.a, "flush-spool"), (0, "", ""))
         self.git(self.a, "remote", "set-url", "origin", str(self.remote))
@@ -548,9 +536,12 @@ git rev-parse --verify "$ref" >> fixture-raced-heads
         self.assertEqual(queued.read_bytes(), original)
         self.assertEqual(self.remote_head(), self.base)
         self.assertFalse((self.spool / "failed").exists())
-        code, output, errors = self.call_in(self.a, "flush-spool")
+        other_clone = self.directory / "other-clone"
+        clone_git_fixture(self.remote, other_clone)
+        code, output, errors = self.call_in(other_clone, "flush-spool")
         self.assertEqual((code, output.strip(), errors), (0, f"25 {self.remote_head()}", ""))
         self.assertFalse(queued.exists())
+        self.assertEqual(self.call_in(self.a, "flush-spool"), (0, "", ""))
         self.assertEqual(self.git(self.remote, "show", "-s", "--format=%s", "main").strip(),
                          "RUN_STATE 25: Arm on original")
 
@@ -599,6 +590,59 @@ git rev-parse --verify "$ref" >> fixture-raced-heads
                          ["RUN_STATE 25: B independent", "RUN_STATE 26: A first",
                           "RUN_STATE 27: A second", "RUN_STATE 28: A keyed", "RUN_STATE 29: A later"])
 
+    def test_audit_round_4_moved_checkout_preserves_spool_order(self):
+        self.enqueue_offline(request(heading="A first"))
+        queued, = self.spool.glob("*.json")
+        home_b = self.directory / "home-b"
+        home_b.mkdir()
+        with mock.patch.dict(os.environ, {"HOME": str(home_b)}):
+            self.assertEqual(add.add_git(self.b, request(heading="B independent"))[0], 25)
+
+        origin = self.git(self.a, "remote", "get-url", "origin")
+        moved = self.a.rename(self.directory / "remounted-a")
+        self.assertEqual(self.git(moved, "remote", "get-url", "origin"), origin)
+        code, output, errors = self.call_in(moved, "flush-spool")
+        self.assertEqual((code, output.strip(), errors), (0, f"26 {self.remote_head()}", ""))
+        self.assertFalse(queued.exists())
+        self.assertEqual(add.add_git(moved, request(heading="A second"))[0], 27)
+        moved.rename(self.a)
+        self.assertEqual(self.call_in(self.a, "flush-spool"), (0, "", ""))
+        self.assertEqual(self.git(self.remote, "log", "--reverse", "--format=%s",
+                                  f"{self.base}..main").splitlines(),
+                         ["RUN_STATE 25: B independent", "RUN_STATE 26: A first",
+                          "RUN_STATE 27: A second"])
+
+    def test_audit_round_4_named_remote_without_origin(self):
+        self.git(self.a, "remote", "rename", "origin", "upstream")
+        self.assertEqual(self.git(self.a, "remote").strip(), "upstream")
+        number, head = add.add_git(self.a, request(heading="Named remote"), remote="upstream")
+        self.assertEqual((number, head), (25, self.remote_head()))
+
+        self.enqueue_offline(request(heading="Named remote queued"), remote="upstream")
+        queued, = self.spool.glob("*.json")
+        with self.assertRaisesRegex(add.GitFailure, "flush-spool --remote=upstream"):
+            add.add_git(self.a, request(), remote="upstream")
+        code, output, errors = self.call_in(self.a, "flush-spool", "--remote", "upstream")
+        self.assertEqual((code, output.strip(), errors), (0, f"26 {self.remote_head()}", ""))
+        self.assertFalse(queued.exists())
+        self.assertEqual(self.git(self.remote, "show", "-s", "--format=%s", "main").strip(),
+                         "RUN_STATE 26: Named remote queued")
+
+    def test_remote_url_normalization_matches_aliases_and_distinguishes_forks(self):
+        aliases = (
+            ("HTTPS://GIT.example.invalid/Team/Repo.git/", "https://git.example.invalid/Team/Repo"),
+            ("SSH://Git@GIT.example.invalid/Team/Repo.git/", "ssh://Git@git.example.invalid/Team/Repo"),
+            ("Git@GIT.example.invalid:Team/Repo.git/", "Git@git.example.invalid:Team/Repo"),
+            (self.remote.as_uri() + "/", str(self.remote)),
+        )
+        for left, right in aliases:
+            with self.subTest(url=left):
+                self.git(self.a, "remote", "set-url", "origin", left)
+                self.git(self.b, "remote", "set-url", "origin", right)
+                self.assertEqual(add._spool_dir(self.a), add._spool_dir(self.b))
+        self.git(self.b, "remote", "set-url", "--push", "origin", str(self.directory / "fork.git"))
+        self.assertNotEqual(add._spool_dir(self.a), add._spool_dir(self.b))
+
     def test_legacy_spool_with_file_is_quarantined_without_snapshot(self):
         note = self.a / "docs/note.txt"
         note.write_bytes(b"synthetic attachment")
@@ -614,9 +658,7 @@ git rev-parse --verify "$ref" >> fixture-raced-heads
     def test_spooled_with_file_refuses_git_normalization_of_snapshot(self):
         self.git(self.a, "config", "core.autocrlf", "true")
         (self.a / "docs/note.txt").write_bytes(b"synthetic CRLF\r\n")
-        with self.assertRaisesRegex(add.GitFailure, "spooled at"):
-            add.add_git(self.a, request(**{"with": ["docs/note.txt"]}),
-                        remote="nonexistent-remote", attempts=1)
+        self.enqueue_offline(request(**{"with": ["docs/note.txt"]}))
         queued, = self.spool.glob("*.json")
 
         code, output, errors = self.call_in(self.a, "flush-spool")

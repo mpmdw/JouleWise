@@ -13,12 +13,14 @@ import json
 import os
 from pathlib import Path
 import re
+import shlex
 import shutil
 import stat
 import subprocess
 import sys
 import tempfile
 import time
+from urllib.parse import urlsplit, urlunsplit
 import uuid
 
 if __package__:
@@ -34,6 +36,7 @@ TOP_MARKER = items.TOP_MARKER_PREFIX + " newest first. Add with scripts/run_stat
 LEGACY_MARKER = "<!-- RUN_STATE LEGACY ITEMS below: prose, not typed; cutover {} -->"
 RESERVED = {RUN_STATE.as_posix().casefold(), CURRENT.as_posix().casefold()}
 SHA = re.compile(r"[0-9a-f]{40}|[0-9a-f]{64}")
+SCP_REMOTE = re.compile(r"((?:[^@/:]+@)?(?:\[[^]]+\]|[^@/:]+)):(?!:)(.+)")
 
 
 class GitFailure(RuntimeError):
@@ -398,9 +401,33 @@ def _land(repo: Path, request: dict, remote: str, branch: str, attempts: int, *,
                     raise
 
 
-def _spool_dir(repo: Path) -> Path:
-    origin = _git(repo, "remote", "get-url", "origin").rstrip("\n")
-    key = sha256(os.fsencode(repo) + b"\0" + os.fsencode(origin)).hexdigest()
+def _lower_host(authority: str) -> str:
+    user, separator, host = authority.rpartition("@")
+    return user + separator + host.lower()
+
+
+def _normalized_remote_url(repo: Path, url: str) -> str:
+    if "://" not in url:
+        if match := SCP_REMOTE.fullmatch(url):
+            host, path = match.groups()
+            return f"{_lower_host(host)}:{path.rstrip('/').removesuffix('.git')}"
+        if re.match(r"^[^/:]+::", url):
+            return url  # A Git remote helper's address is protocol-specific.
+        url = (repo / url).resolve().as_uri()
+    parts = urlsplit(url)
+    return urlunsplit((parts.scheme.lower(), _lower_host(parts.netloc),
+                       parts.path.rstrip("/").removesuffix(".git"), parts.query, parts.fragment))
+
+
+def _spool_dir(repo: Path, remote: str = "origin") -> Path:
+    try:
+        url = _git(repo, "remote", "get-url", "--push", "--", remote)
+    except subprocess.CalledProcessError as error:
+        if error.returncode != 2:
+            raise
+        # Git also accepts a literal URL or path in place of a named remote.
+        url = _git(repo, "ls-remote", "--get-url", "--", remote)
+    key = sha256(os.fsencode(_normalized_remote_url(repo, url.rstrip("\n")))).hexdigest()
     root = Path(os.environ.get("JW_RUN_STATE_SPOOL", "~/.joulewise/run_state_spool")).expanduser()
     return root / key
 
@@ -483,14 +510,17 @@ def _error_text(error: Exception) -> str:
 
 def add_git(repo: Path, request: dict, *, remote="origin", branch="main", attempts=5) -> tuple[int, str]:
     repo = _repo_root(repo)
-    spool = _spool_dir(repo)
+    spool = _spool_dir(repo, remote)
     legacy = spool.parent
+    flush_command = "python3 scripts/run_state_add.py flush-spool"
+    if remote != "origin":
+        flush_command += f" --remote={shlex.quote(remote)}"
     with _locked(legacy, shared=True), _locked(spool):
         if any(_pending(legacy)):
-            raise GitFailure(f"pending legacy requests in {legacy}; run python3 scripts/run_state_add.py "
-                             "flush-spool from the original checkout before retrying this add")
+            raise GitFailure(f"pending legacy requests in {legacy}; run {flush_command} "
+                             "from the original checkout before retrying this add")
         if any(_pending(spool)):
-            raise GitFailure(f"pending requests in {spool}; run python3 scripts/run_state_add.py flush-spool "
+            raise GitFailure(f"pending requests in {spool}; run {flush_command} "
                              "before retrying this add")
         try:
             return _land(repo, request, remote, branch, attempts)
@@ -500,9 +530,9 @@ def add_git(repo: Path, request: dict, *, remote="origin", branch="main", attemp
             raise failure(f"{_error_text(error)}; spooled at {target}") from error
 
 
-def _flush(repo: Path) -> int:
+def _flush(repo: Path, *, remote: str = "origin") -> int:
     repo = _repo_root(repo)
-    spool = _spool_dir(repo)
+    spool = _spool_dir(repo, remote)
     legacy = spool.parent
     # The parent lock is also the old writer's lock. Take it before the
     # keyed lock so the old and new queues cannot be drained out of order.
@@ -511,7 +541,7 @@ def _flush(repo: Path) -> int:
         if not queue:
             private_ref = f"refs/joulewise/run-state-add/{uuid.uuid4().hex}"
             try:
-                head = _fetch(repo, "origin", "refs/heads/main", private_ref)
+                head = _fetch(repo, remote, "refs/heads/main", private_ref)
                 if _validated(_git(repo, "show", f"{head}:{RUN_STATE}")).cutover is None:
                     raise ValueError("run init first")
             finally:
@@ -520,7 +550,7 @@ def _flush(repo: Path) -> int:
         for path in queue:
             try:
                 request = json.loads(path.read_text(encoding="utf-8"))
-                number, head = _land(repo, request, "origin", "main", 5,
+                number, head = _land(repo, request, remote, "main", 5,
                                      snapshots=_spooled_files(request))
             except InvalidBaseState as error:
                 raise InvalidBaseState(f"{error}; pending spool retained") from error
@@ -563,7 +593,8 @@ def main(argv=None) -> int:
     commands = parser.add_subparsers(dest="command", required=True)
     init = commands.add_parser("init")
     add = commands.add_parser("add")
-    commands.add_parser("flush-spool")
+    flush = commands.add_parser("flush-spool")
+    flush.add_argument("--remote", default="origin", help="Git remote whose queue to replay")
     for command in (add, init):
         command.add_argument("--run-state", type=Path)
         command.add_argument("--current", type=Path)
@@ -581,7 +612,7 @@ def main(argv=None) -> int:
     args = parser.parse_args(argv)
     try:
         if args.command == "flush-spool":
-            return _flush(Path.cwd())
+            return _flush(Path.cwd(), remote=args.remote)
         else:
             if args.no_git != bool(args.run_state and args.current) or (
                     (args.run_state is None) != (args.current is None)):
