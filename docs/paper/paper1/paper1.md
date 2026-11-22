@@ -10,6 +10,7 @@ How to read this file:
   **[BRANCH <id>.<n> — <condition>]** ... **[END BRANCH <id>]**. On fill, keep exactly one branch of
   each group (the one the issued artifact selects) and delete the others. Never choose a branch by
   reading a number; the branch is selected by the artifact's outcome field named in fill_index.md.
+  Branch ids are stable keys from the 27 October numbering and are not section numbers (`OUTLINE-MAP-2026-11-11.md`).
 - Synthetic worked examples are labelled "synthetic" and are not results.
 - Shorter alternative sections for the contingency tiers B-E are in variants/.
 - This text changes no registered analysis. If wording here and a registration differ, the
@@ -31,7 +32,7 @@ each measurement session, a fitted clock mapping, and a drift screen built from 
 From these we derive four quantities: the reported phase energy with an interval, the *attribution floor* (how
 far timing alone can move one request's assigned energy), the *detection floor* (the largest difference the
 instrument produces when nothing differs), and the *dominance ratio* (how much timing uncertainty enlarges the
-detection floor). We then report a pre-registered, blinded experiment on Qwen3-1.7B and Qwen3-8B (4-bit), with
+detection floor). We then report a pre-registered, blinded experiment on Qwen3-1.7B and Qwen3-8B, both quantized to 4 bits, with
 a 512-token decode workload and a 2,048-token prefill workload, two primary model contrasts with Holm
 correction, and an independent recomputation of the core arithmetic from raw power records with recorded
 collection-time judgments as inputs. A registered replication, nine further sessions on later days, was collected and analysed blind and released after the primary block. <!-- FACT H01: RL-5; R2P P3; LEAN-COVERAGE-AUDIT.md §§2-4; paper-audit C-11; RL-147 §8; RUN_STATE item 312. -->
@@ -51,6 +52,8 @@ those controls failed.
 ## 1. Introduction
 
 ### 1.1 The question
+
+Most open models that run on a laptop today are sparse: a mixture-of-experts model holds tens of gigabytes of weights and uses a few per cent of them for each token. How much energy a request uses then depends on its structure (how many tokens it reads and writes, how much earlier context each token attends to, which weights each token touches) and not only on the model's size. The laptop's own sensors are the cheapest way to see that energy, and they are coarse. This paper asks what they can attribute to the structure of a request. It takes the two cases that can be tested cleanly: the two phases of one request, and the bytes a model reads per token across ten models.
 
 A large language model (LLM) generates text one *token* at a time; a token is a short piece of text such as a
 word, part of a word or a digit. Serving one request has two phases. In **prefill** the model processes the whole
@@ -115,6 +118,8 @@ one sampler. The phase split rests on the sampler's own timing; no independent i
 falls within a record or at a phase edge (Appendix C, Phase attribution). The decode workload uses one fixed prompt, and the prefill workload
 one prompt length. The whole-machine meter measures power entering the laptop after its adapter, not at the
 wall. Section 9 lists these and the other limitations in full.
+
+The paper attributes energy to two kinds of structure only: the phases of a request, and format-derived bytes per token across models. It reports no energy per token, per layer or per expert within a model, and it does not test whether energy depends on which experts a token is routed to. Split (disaggregated) inference, which first motivated the phase measurement, is one use of it and is not evaluated here (Section 2.5).
 
 ## 2. Background and related work
 
@@ -1165,7 +1170,7 @@ The replication words were "replicated" for decode and
 
 **What the replication shows.** *Between sessions.* In 7 of the 12 cross-session comparisons the contrast session and its paired floor session differ by more than their statistical half-widths. All six comparisons for the 8B model do, and in each the contrast session reads lower, by 0.352 to 0.549 J (primary block: −0.422 J for decode, which differed, and −0.261 J for prefill, which agreed); one of the six for the 1.7B model does (+0.372 J). The sign is the same in every 8B comparison of both blocks, so this is a systematic difference between a model measured alone and the same model measured in alternation, not scatter; we did not test a cause. The 8B differences are 0.2% to 0.4% of the phase energy and the 1.7B one 1.4%; all are far inside every decision interval, and the two separately collected cells are not differenced into any claim.
 
-*Floors.* The replication's 8B absolute floors (6.95 to 7.79 J for decode, 6.75 to 7.14 J for prefill) are 1.69 to 3.23 J below the primary block's (10.18 and 8.83 J). The calibration-acceptance difference between the blocks accounts for at most 0.175 J of that. The rest is a difference between sessions that the registered rule does not explain, and it is the reason the between-session summary is printed for the replication sessions alone as well.
+*Floors.* The replication's 8B absolute floors (6.95 to 7.79 J for decode, 6.75 to 7.14 J for prefill) are 1.69 to 3.23 J below the primary block's (10.18 and 8.83 J in Table 6, where floors round to nearest). The calibration-acceptance difference between the blocks accounts for at most 0.175 J of that. The rest is a difference between sessions that the registered rule does not explain, and it is the reason the between-session summary is printed for the replication sessions alone as well.
 
 **Dominance across sessions.** Per floor session, the four R per model and its two R_cm: r1-alpha (1.7B): R = 5.2623 and 2.3882 for decode (absolute, comparative) and 7.2531 and 2.6531 for prefill (2,048); R_cm = 1.9557 and 2.1905; r3-alpha (1.7B): R = 7.9610 and 2.8452 for decode (absolute, comparative) and 11.0154 and 2.3632 for prefill (2,048); R_cm = 1.8708 and 1.6943; r4-alpha (1.7B): R = 5.7509 and 3.3282 for decode (absolute, comparative) and 5.1733 and 3.1850 for prefill (2,048); R_cm = 2.4276 and 2.1743; r1-beta (8B): R = 7.5941 and 2.2476 for decode (absolute, comparative) and 7.2358 and 5.6573 for prefill (2,048); R_cm = 1.6699 and 4.2168; r2-beta (8B): R = 6.2614 and 1.3108 for decode (absolute, comparative) and 7.9129 and 3.9376 for prefill (2,048); R_cm = 1.1625 and 2.9995; r3-beta (8B): R = 7.4232 and 1.6865 for decode (absolute, comparative) and 7.3422 and 4.0376 for prefill (2,048); R_cm = 1.3726 and 2.6781. Every contrast pairing is branch B: timing movement did not at least double every detection floor. The failed components were, per pairing, r1-gamma (floors from r1-alpha and r1-beta): 1.7B decode R_cm and 8B decode R_cm; r2-gamma (floors from r3-alpha and r2-beta): 1.7B decode R_cm, 1.7B prefill (2,048) R_cm, 8B decode R_cm and 8B decode comparative R; r3-gamma (floors from r3-alpha and r3-beta): 1.7B decode R_cm, 1.7B prefill (2,048) R_cm, 8B decode R_cm and 8B decode comparative R. Each ratio is a point diagnostic with no interval, labelled single-source; the branch is labelled not independently recomputed. In the primary block all eight independent-corner ratios R were at least 2. In the replication the 8B decode comparative R is below 2 in two of the three 8B floor sessions (1.3108 and 1.6865). The branch is B in the primary block and in all three replication pairings; which components fail is not stable from session to session.
 
@@ -1185,6 +1190,8 @@ The per-session disclosures of the replication registration's §9.5 (kept units 
 ## 7. Results II, BYTES: what drives decode energy per token?
 
 ### 7.1 The question
+
+Part 1 divided energy between phases that each span many power records. The structure that matters most for sparse models is finer than any record: which weights a token reads. A mixture-of-experts model holds E expert blocks per layer and uses k of them per token, so the bytes it reads per token are a small fraction of the bytes it holds. If energy follows bytes read, a sparse model's energy per token is set by its active part; if it follows bytes held, sparsity saves time but not energy in proportion. No record can be split to answer this. It can be answered across models, by asking which count predicts energy per token on models the lines were not fitted to.
 
 During decode, each forward pass reads the weights it uses and the KV cache of earlier tokens from memory. On the
 laptop of Part 1, energy per decode pass might follow (i) the **format-derived bytes read per pass**, b: the
@@ -1819,7 +1826,7 @@ discriminate between the hypotheses. The split of memory energy between rails an
 rail includes the memory controller (Section 3.3). The meter's label offset was not measured; DC-input and rest
 statements are printed under both the registered and the alternative interval. No drift-transfer test passed, so
 the drift allowance is scaled by a registered rule rather than measured transfer. Both extension models were
-dropped (Section 7.4). The KV cache size is averaged over the 512 decode passes of one prompt length.
+dropped (Section 7.4). The KV cache size is averaged over the 512 decode passes of one prompt length. BYTES compares models; it does not vary routing within a model, where the bytes read per token are fixed by k.
 
 **Automation.** The agents that ran the study also wrote much of this paper. The controls of Section 8.2 constrain
 what an agent could change in the data and the analysis; they do not make the prose neutral. The registrations'
@@ -1848,7 +1855,7 @@ That sentence withholds the registered dominance statement; it does not withdraw
 <!-- Interpretive text (research lead, 2026-11-12), not a registered sentence; the branch-B sentence above is
 unchanged. Authority: analysis plan §6; RL-4(viii). -->
 
-**[BRANCH 9.C — contrasts]** {{FILL: CP-X08-decode-a-conclusion | one sentence per contrast in the registered wording for its outcome and claim level (Section 6.5 branch), with the replication word (Section 6.8)}} **[END BRANCH 9.C]**
+The 8B model used more gross processor-rail energy per request than the 1.7B model in both phases: by 146.63 J in decode (decision interval [141.35, 151.91] J) and by 101.81 J in 2,048-token prefill ([95.80, 107.82] J). Each contrast was *direction supported* at claim level L2 in one session, and each *replicated* under the registered definition: every one of the three replication contrast sessions gave the same outcome word and sign. Phase attribution is reported without a measured instrument phase-accounting check.
 <!-- FACT H22: RL-5 item 5; R2P P11; paper-audit C-10. Unconditional resolution gloss removed. -->
 
 **[BRANCH 9.B — BYTES]** {{FILL: P1-BY-CONCLUSION | one sentence: the H1 words for the MoE models and the active-or-resident answer at rails and DC input, and the primary ε, in the registered wording; with the dense-model sentence}} **[END BRANCH 9.B]**
