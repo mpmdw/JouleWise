@@ -45,6 +45,20 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: "3.13"
+      - name: Swap for the frozen oracle's largest case
+        # Two v3.1 cases retype D_bank's recorded gate cap (hardware.thermal.policy.g0_cap_s/type and
+        # turn_cap_s/type). Frozen R1 code multiplies it by 10**9 before anything refuses it, so the oracle builds
+        # a 14 GB string and then raises TypeError, which the suite records as a refusal. A Mac pages it out; a
+        # 16 GB runner without swap loses its VM (shard 2 of 16, twice). The suite and frozen code are not ours
+        # to change, so the runner gets swap on /mnt, sized to the free space (two such cases may run at once).
+        run: |
+          avail=$(df -BG --output=avail /mnt | tail -1 | tr -dc 0-9)
+          size=$(( avail > 44 ? 36 : avail - 8 ))
+          sudo fallocate -l "${size}G" /mnt/partc.swap
+          sudo chmod 600 /mnt/partc.swap
+          sudo mkswap /mnt/partc.swap >/dev/null
+          sudo swapon /mnt/partc.swap
+          free -m
       - name: The R1 pin and the fixture commit are in the object database
         run: |
           git cat-file -e b2e01464d6d4fbf2901ff4d4154df9455104a12a^{commit}

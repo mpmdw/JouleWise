@@ -3048,7 +3048,13 @@ def _gate_witnesses(kind, index, interval, readings, reference, policy, deadline
             check(False, "condition_met_stamp", "interval_clock")
             return findings
         end = decision
-    cap = round(policy["g0_cap_s" if gate == "G0" else "turn_cap_s"] * NS)
+    # R2: the recorded cap is a finite positive number before it is scaled. A string times NS would be built in
+    # full (14 GB for "incorrect-type") before anything refused it.
+    cap_s = policy.get("g0_cap_s" if gate == "G0" else "turn_cap_s") if isinstance(policy, dict) else None
+    if not (_finite(cap_s) and cap_s > 0):
+        check(False, "policy.cap_s", "gate_outcome")
+        return findings
+    cap = round(cap_s * NS)
     check(canonical(interval.get("reference")) == canonical(reference), "reference", "gate_reference")
     check(end - start <= cap + GATE_CONSUMPTION_NS, "cap", "gate_outcome")
     if findings:
