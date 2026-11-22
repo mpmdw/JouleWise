@@ -18,6 +18,7 @@ from scripts import reserve_calibration_window_bracket as reservation
 
 
 NOW = 111.0
+ROOT = Path(__file__).resolve().parents[3]
 PACKET = Path(closure.PACKET)
 LEDGER = Path(closure.LEDGER)
 POLICY = Path('configs/campaign_policies/quiet_mac_p2_production.json')
@@ -92,7 +93,9 @@ class Attempt:
         for name, raw in payloads.items():
             put(self.git_dir, name, raw)
         if not (self.git_dir / POLICY).exists():
-            put(self.git_dir, POLICY, {'fixture': 'default campaign policy'})
+            # The runner's own policy loader runs at preflight. Use the
+            # committed default so the invented attempt carries a valid policy.
+            put(self.git_dir, POLICY, (ROOT / POLICY).read_bytes())
         if not payloads.get(str(HEAD)):
             put(self.git_dir, HEAD, {'sequence': 0, 'head_digest': '0' * 64,
                                    'ledger_schema': 'joulewise.calibration_observation_ledger.v1'})
@@ -144,6 +147,20 @@ class Attempt:
                                     ('--evidence-root-id', 'fixture-evidence')):
                     if literal(flag) not in args:
                         option(args, flag, 'literal', value)
+            if stage['kind'] == 'calibration_capture':
+                # The capture writer's own argument gates run at preflight.
+                # Complete the invented template as align_v4's committed one is.
+                slot = args[args.index(literal('--slot')) + 1]['value']
+                if literal('--allow-live') not in args:
+                    args.insert(0, literal('--allow-live'))
+                if literal('--output-root') not in args:
+                    args.extend([literal('--output-root'), {'kind': 'binding_path', 'value': 'claim_runs_root',
+                                                            'relative': 'instrument_validation'}])
+                for flag, value in (('--session-id', 'bracket_session_id'), ('--attempt-id', f'{slot}_attempt_id')):
+                    if literal(flag) not in args:
+                        option(args, flag, 'binding', value)
+                if literal('--power-policy') not in args:
+                    option(args, '--power-policy', 'literal', 'ac_high_power')
             if stage['kind'] == 'bound_derivation':
                 if literal('--neg8-drift-bound-output') not in args:
                     option(args, '--neg8-drift-bound-output', 'literal', self.work / 'derived.json')
@@ -155,7 +172,12 @@ class Attempt:
         if fixture == 'with_spare':
             stage = next(row for row in self.source['stage_graph'] if row['kind'] == 'campaign_collection')
             relative = Path('configs/campaigns/invented-spares')
-            data = {'run_id': 'invented-spare', 'workload_profile': {'name': 'align_episode'}}
+            # The runner validates spare configs at preflight. Reuse one valid
+            # dispatched member config under the spare's own run ID.
+            manifest = self.git_dir / stage['input']['path']
+            member = closure.decode(manifest.read_bytes())['executed_order'][0]
+            data = closure.decode((manifest.parent / member['config']).read_bytes())
+            data['run_id'] = 'invented-spare'
             put(self.git_dir, relative / 'spare.json', data)
             path = put(self.git_dir, relative / 'order_manifest.json', {
                 'executed_order': [{'config': 'spare.json', 'run_id': 'invented-spare'}]})
