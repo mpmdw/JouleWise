@@ -766,6 +766,7 @@ class ProductionSeamTests(unittest.TestCase):
 
             def child(**kw):
                 names.append(kw["name"])
+                self.assertIs(kw["workload_groups"], deps.workload_groups)
                 Path(kw["argv"][kw["argv"].index("--output") + 1]).mkdir()
                 return {"rc": 0}
             with patch.object(runner, "run_child", side_effect=child), \
@@ -834,6 +835,7 @@ class ProductionSoakTests(unittest.TestCase):
 
             def child(**kw):
                 names.append(kw["name"])
+                self.assertIs(kw["workload_groups"], deps.workload_groups)
                 out = Path(kw["argv"][kw["argv"].index("--output") + 1])
                 out.mkdir()
                 (out / "soak_reference.json").write_text("{}")

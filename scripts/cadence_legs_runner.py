@@ -64,7 +64,7 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from joulewise.cadence import kit as kitmod, legs as legsmod  # noqa: E402
+from joulewise.cadence import ctl, kit as kitmod, legs as legsmod  # noqa: E402
 from joulewise.cadence.kit_v11 import QUAL_LAW  # noqa: E402
 
 RECEIPT_SCHEMA = "joulewise.cadence_span_receipt.v1"
@@ -183,9 +183,10 @@ class Deps:
     soak_cap_s: float
     mock: bool = False
     max_span_s: float | None = None                     # None: the launcher's ceiling less its reserves
+    workload_groups: list | None = None                 # one record per spawned soak or leg group
 
 
-def run_child(*, name, argv, cap_s, log_dir, feeds, work_remaining):
+def run_child(*, name, argv, cap_s, log_dir, feeds, work_remaining, workload_groups=None):
     """One child process group, bounded by ``cap_s`` and the work deadline, feeds polled meanwhile
     (``run_align_r1_smoke.part`` generalized: the same deadline enforcer and group teardown)."""
     from scripts import run_align_r1_smoke as smoke, run_night as night
@@ -199,6 +200,9 @@ def run_child(*, name, argv, cap_s, log_dir, feeds, work_remaining):
             with smoke.register_child_before_interrupt():
                 child = subprocess.Popen(argv, stdin=subprocess.DEVNULL, stdout=out, stderr=err,
                                          start_new_session=True, close_fds=True)
+                group = {"name": name, "pgid": child.pid, "proven_stopped": False}
+                if workload_groups is not None:
+                    workload_groups.append(group)
                 deadline_dir = log_dir / "deadlines" / name
                 deadline_dir.mkdir(parents=True)
                 deadline = smoke.PartDeadline(child, pgid=child.pid, night_dir=deadline_dir, plan=None,
@@ -225,10 +229,11 @@ def run_child(*, name, argv, cap_s, log_dir, feeds, work_remaining):
                     proven = fired["proven"]
                 else:
                     proven = night._terminate_process_group(child, evidence=proof)
+                group["proven_stopped"] = proven is True and proof.get("reaped") is True and proof.get("group_census") == []
             finally:
                 for s, handler in handlers.items():
                     signal.signal(s, handler)
-            if not proven:
+            if not group["proven_stopped"]:
                 raise SpanRefusal(f"{name} process group not proven stopped: {proof}")
     return {"rc": code, "argv": [str(a) for a in argv], "cap_s": cap_s, "group": proof, "proven_stopped": True}
 
@@ -243,7 +248,7 @@ def leg_runtime_argv(inputs):
     return [argv[0], argv[1], str(ROOT / LEG_RUNTIME), *argv[3:]]
 
 
-def accepted_result(attempt_dir):
+def accepted_result(attempt_dir, *, ctl_spec=None):
     """The leg runtime's result, bound by its complete terminal custody (as ``Segment.accepted_result``)."""
     from joulewise.align.apple import r1_runtime as rt
     path = Path(attempt_dir) / rt.RESULT_NAME
@@ -258,6 +263,35 @@ def accepted_result(attempt_dir):
         raise LegRuntimeError(f"{attempt_dir}: result is not bound by complete runtime custody")
     if value.get("kind") != legsmod.LEG_KIND:
         raise LegRuntimeError(f"{attempt_dir}: result kind {value.get('kind')!r}")
+    if ctl_spec is not None:
+        try:
+            work_raw = (path.parent / ctl.WORK_NAME).read_bytes()
+            work = json.loads(work_raw)
+        except (OSError, ValueError) as error:
+            raise LegRuntimeError(f"{attempt_dir}: no readable ctl work record") from error
+        digest = hashlib.sha256(work_raw).hexdigest()
+        if (custody["files"].get(ctl.WORK_NAME) != digest or value.get("script_record_sha256") != digest
+                or not isinstance(work, dict) or work.get("schema") != ctl.WORK_SCHEMA
+                or value.get("leg_id") != ctl_spec["leg_id"] or work.get("leg_id") != ctl_spec["leg_id"]
+                or work.get("leg_spec_sha256") != ctl.leg_spec_sha256(ctl_spec)
+                or work.get("script") != ctl_spec["script"]):
+            raise LegRuntimeError(f"{attempt_dir}: ctl work record does not bind the planned leg spec")
+        steps = work.get("steps")
+        complete = ctl.work_complete(steps, ctl_spec["script"])
+        if (type(value.get("g0_released")) is not bool or (not value["g0_released"] and steps != [])
+                or work.get("complete") is not complete or value.get("script_complete") is not complete):
+            raise LegRuntimeError(f"{attempt_dir}: inconsistent ctl completion")
+        if complete:
+            visible = [row for row in steps if row["kind"] == "turn"]
+            prefill = sum(row["context_tokens"] - row["cached_prompt_tokens"] for row in visible)
+            expected = {"turn_start_ns": visible[0]["started_ns"], "first_token_ns": visible[0]["first_token_ns"],
+                        "turn_end_ns": visible[-1]["ended_ns"], "prefill_tokens": prefill,
+                        "decode_tokens": sum(r["actual_tokens"] for r in visible)}
+            for key, observed in expected.items():
+                if type(value.get(key)) is not int or value[key] != observed:
+                    raise LegRuntimeError(f"{attempt_dir}: ctl logged envelope disagrees with physical calls on {key}")
+        if not complete and value["g0_released"]:
+            value.update(leg_status="incomplete", decode_cap_reached=False)
     return value
 
 
@@ -295,6 +329,11 @@ class ProductionHost:
 
 
 def verify_frozen_production(kit):
+    if kit.get("runner", {}).get("kind") == ctl.RUNNER_KIND:
+        try:
+            ctl.require_issued(kit)
+        except kitmod.KitError as error:
+            raise SpanRefusal(str(error)) from error
     head = subprocess.run(["git", "-C", str(ROOT), "rev-parse", "HEAD"], capture_output=True, text=True,
                           timeout=60).stdout.strip()
     if head != kit["frozen"]["commit"]:
@@ -312,9 +351,12 @@ def verify_frozen_production(kit):
     return {"rc": 0, "head": head, "paths": len(kit["frozen"]["paths"])}
 
 
-def production_deps(*, inputs, pmset_bin, output):
+def production_deps(*, inputs, pmset_bin, output, scripted_ctl=False):
     from scripts import align_r1_rehearsal as r1, launch_align_r0 as launcher, run_align_r1_smoke as smoke
     leg_argv = leg_runtime_argv(inputs)
+    workload_groups = []
+    if scripted_ctl:
+        leg_argv.insert(3, "--scripted-ctl")
 
     def run_soak(soak_dir, cap_s, feeds, work_remaining):
         argv = [sys.executable, "-B", str(ROOT / "scripts/cadence_legs_runner.py"), "soak-child",
@@ -322,7 +364,7 @@ def production_deps(*, inputs, pmset_bin, output):
         soak_dir = Path(soak_dir)
         attempt = 1 + sum(1 for p in soak_dir.parent.iterdir() if p.name.startswith(soak_dir.name + ".rejected"))
         result = run_child(name="soak" if attempt == 1 else f"soak.a{attempt}", argv=argv, cap_s=cap_s,
-                           log_dir=output, feeds=feeds, work_remaining=work_remaining)
+                           log_dir=output, feeds=feeds, work_remaining=work_remaining, workload_groups=workload_groups)
         if result["rc"] == SOAK_REFUSED_RC:
             raise SoakRefusal(f"soak exit {result['rc']}: the idle soak failed its settle or quiet check")
         if result["rc"]:
@@ -332,17 +374,20 @@ def production_deps(*, inputs, pmset_bin, output):
             raise SpanRefusal("the fresh soak wrote no soak reference")
         return reference
 
-    def run_leg(attempt_dir, spec_path, soak_reference, cap_s, feeds, work_remaining, span_reference=None):
+    def run_leg(attempt_dir, spec_path, soak_reference, cap_s, feeds, work_remaining, span_reference=None,
+                *, ctl_spec_sha256=None):
         argv = [*leg_argv, "--leg-spec", str(spec_path), "--r1-kind", legsmod.LEG_KIND,
                 "--output", str(attempt_dir), "--soak-reference", str(soak_reference),
-                *(["--span-reference", str(span_reference)] if span_reference is not None else [])]
+                *(["--span-reference", str(span_reference)] if span_reference is not None else []),
+                *(["--leg-spec-sha256", ctl_spec_sha256] if scripted_ctl else [])]
         leg_dir = Path(attempt_dir).parent
         attempt = 1 + sum(1 for p in leg_dir.iterdir() if p.name.startswith(Path(attempt_dir).name + ".rejected"))
         result = run_child(name=f"{leg_dir.name}.a{attempt}", argv=argv, cap_s=cap_s, log_dir=leg_dir,
-                           feeds=feeds, work_remaining=work_remaining)
+                           feeds=feeds, work_remaining=work_remaining, workload_groups=workload_groups)
         if result["rc"]:
             raise LegRuntimeError(f"{Path(attempt_dir).parent.name}: leg runtime exit {result['rc']}")
-        return accepted_result(attempt_dir)
+        if not scripted_ctl:
+            return accepted_result(attempt_dir)
 
     def load_verdict(name, result, wall_s):
         try:
@@ -353,7 +398,7 @@ def production_deps(*, inputs, pmset_bin, output):
     feeds = [smoke.AgentFeed(output), smoke.MeterFeed(output), smoke.VolumeFeed(output)]
     return Deps(clock=RealClock(), feeds=feeds, host=ProductionHost(pmset_bin), run_soak=run_soak,
                 run_leg=run_leg, verify_frozen=verify_frozen_production, load_verdict=load_verdict,
-                soak_cap_s=launcher.r1_soak_cap_s())
+                soak_cap_s=launcher.r1_soak_cap_s(), workload_groups=workload_groups)
 
 
 # --------------------------------------------------------------------------
@@ -380,6 +425,14 @@ def add_t0_authority_arguments(parser):
 
 def validate_t0_authority(kit, authorized_date, t0_not_before, t0_before, t0_anchor, *, require_anchor,
                           t0_not_before_ns=None):
+    if kit.get("runner", {}).get("kind") == ctl.RUNNER_KIND:
+        if any(value is not None for value in (authorized_date, t0_not_before, t0_before)):
+            raise ValueError("ctl has free t0; use the exact close bound without calendar t0 arguments")
+        if type(t0_not_before_ns) is not int or t0_not_before_ns <= 0:
+            raise ValueError("ctl requires a positive --t0-not-before-ns from the proven close")
+        if require_anchor and t0_anchor is None:
+            raise ValueError("ctl requires the arm clock anchor from the launcher")
+        return
     qualification = kit["seed_law"]["method"] == QUAL_LAW
     if not qualification and all(value is None for value in
                                  (authorized_date, t0_not_before, t0_before, t0_anchor, t0_not_before_ns)):
@@ -405,15 +458,17 @@ def _authorized_start(clock, authorized_date, t0_not_before, t0_before, anchor, 
     # Require the full projected interval to fit even if the sampler was preempted.
     earliest_ns = anchor_epoch_ns + continuous_ns - after_ns
     latest_ns = anchor_epoch_ns + continuous_ns - before_ns
-    lower_ns = max(t0_not_before * NS_PER_SECOND, t0_not_before_ns or 0)
-    cutoff_ns = t0_before * NS_PER_SECOND
+    lower_ns = max((t0_not_before or 0) * NS_PER_SECOND, t0_not_before_ns or 0)
     for epoch_ns in (earliest_ns, latest_ns, wall_ns):
-        if not lower_ns <= epoch_ns < cutoff_ns:
+        if epoch_ns < lower_ns:
             return None
-        second = epoch_ns // NS_PER_SECOND
-        day = (UNIX_EPOCH + timedelta(seconds=second)).astimezone(legsmod.LOCAL_ZONE).date()
-        if day.isoformat() != authorized_date:
-            return None
+        if authorized_date is not None:
+            if epoch_ns >= t0_before * NS_PER_SECOND:
+                return None
+            second = epoch_ns // NS_PER_SECOND
+            day = (UNIX_EPOCH + timedelta(seconds=second)).astimezone(legsmod.LOCAL_ZONE).date()
+            if day.isoformat() != authorized_date:
+                return None
     t0_ns = (earliest_ns + latest_ns) // 2
     epoch_s = t0_ns / NS_PER_SECOND
     # Keep the legacy numeric seconds in the same whole second as the exact stamp.
@@ -429,15 +484,28 @@ def run_span(*, kit, kit_sha256, output, deadline, windows, deps, leg_ids=None,
     """Run one span. Returns the receipt's rc (0 = every roster leg attempted, cleanup proven)."""
     clock = deps.clock
     authority = {}
-    if authorized_t0_date is not None:
+    scripted_ctl = kit["runner"]["kind"] == ctl.RUNNER_KIND
+    ctl_start = scripted_ctl and (not deps.mock or t0_not_before_ns is not None or t0_anchor is not None)
+    if ctl_start:
+        try:
+            validate_t0_authority(kit, authorized_t0_date, t0_not_before, t0_before, t0_anchor,
+                                  require_anchor=True, t0_not_before_ns=t0_not_before_ns)
+        except ValueError as error:
+            print(f"REFUSE: {error}", file=sys.stderr)
+            return 3
+    if authorized_t0_date is not None or ctl_start:
         started = _authorized_start(clock, authorized_t0_date, t0_not_before, t0_before, t0_anchor,
                                     t0_not_before_ns)
         if started is None:
-            print(f"REFUSE: t0 clocks must agree on authority for {authorized_t0_date} "
-                  f"within [{t0_not_before}, {t0_before}) with exact close bound {t0_not_before_ns}", file=sys.stderr)
+            scope = (f" for {authorized_t0_date} within [{t0_not_before}, {t0_before})"
+                     if authorized_t0_date is not None else "")
+            print(f"REFUSE: t0 clocks must agree on authority{scope} "
+                  f"with exact close bound {t0_not_before_ns}", file=sys.stderr)
             return 3
-        authority = {"t0_authority": {"authorized_t0_date": authorized_t0_date,
-                                      "t0_not_before": t0_not_before, "t0_before": t0_before}}
+        authority = {"t0_authority": {}}
+        if authorized_t0_date is not None:
+            authority["t0_authority"].update(authorized_t0_date=authorized_t0_date,
+                                             t0_not_before=t0_not_before, t0_before=t0_before)
         if t0_not_before_ns is not None:
             authority["t0_authority"]["t0_not_before_ns"] = t0_not_before_ns
     else:
@@ -451,10 +519,13 @@ def run_span(*, kit, kit_sha256, output, deadline, windows, deps, leg_ids=None,
               "roster": list(leg_ids) if leg_ids is not None else [leg["leg_id"] for leg in kit["legs"]],
               "batch_windows": [legsmod.format_window(w) for w in windows], "steps": [], "legs": [],
               "soak_attempts": [], "feeds": {}, "rc": 0, **authority}
+    if deps.workload_groups is not None:
+        record["workload_groups"] = deps.workload_groups
     if span_id is not None:
         record["span_id"] = span_id
     state = {"power_read": False, "plan": None, "summaries": [], "finished": 0, "fault": False, "redos": 0}
     kit_legs = {leg["leg_id"]: leg for leg in kit["legs"]}
+    result_keep = _RESULT_KEEP_CTL if scripted_ctl else _RESULT_KEEP
 
     def work_remaining():
         remaining = deadline - WORK_RESERVE_S - clock.time()
@@ -508,8 +579,8 @@ def run_span(*, kit, kit_sha256, output, deadline, windows, deps, leg_ids=None,
         leg_dir = output / "legs" / leg_id
         leg_dir.mkdir(parents=True)
         spec_path = leg_dir / "leg_spec.json"
-        spec_path.write_text(json.dumps({k: spec[k] for k in legsmod.leg_spec_keys(spec)}, indent=1,
-                                        sort_keys=True) + "\n")
+        leg_input = {k: spec[k] for k in legsmod.leg_spec_keys(spec)}
+        spec_path.write_text(json.dumps(leg_input, indent=1, sort_keys=True) + "\n")
         # A span-reference consumer reads the span's reference from the span's first leg's accepted
         # attempt (RL-150 R1 part 2; design doc section 14.5). The runtime verifies it with W1's verifier.
         span_kw = {}
@@ -524,6 +595,8 @@ def run_span(*, kit, kit_sha256, output, deadline, windows, deps, leg_ids=None,
                               "excluded": not state["summaries"][0]["admitted"]}
         else:
             leg_row_source = None
+        if scripted_ctl:
+            span_kw["ctl_spec_sha256"] = ctl.leg_spec_sha256(leg_input)
         attempts, result, first_start = [], None, None
         leg_row = {"leg_id": leg_id, "attempts": attempts, "budget_s": budget,
                    **({"span_reference": leg_row_source} if leg_row_source else {})}
@@ -537,9 +610,12 @@ def run_span(*, kit, kit_sha256, output, deadline, windows, deps, leg_ids=None,
             n = len(attempts) + 1
             started = clock.time()
             first_start = first_start if first_start is not None else started
-            result = step(f"{leg_id}.a{n}", lambda: deps.run_leg(attempt_dir, spec_path, soak_reference, cap,
-                                                                  deps.feeds, work_remaining, **span_kw),
-                          kind="leg", cap_s=cap, keep=_RESULT_KEEP)
+            def execute_leg():
+                produced = deps.run_leg(attempt_dir, spec_path, soak_reference, cap,
+                                        deps.feeds, work_remaining, **span_kw)
+                return accepted_result(attempt_dir, ctl_spec=leg_input) if scripted_ctl else produced
+
+            result = step(f"{leg_id}.a{n}", execute_leg, kind="leg", cap_s=cap, keep=result_keep)
             ended = clock.time()
             verdict = deps.load_verdict(leg_id, result, ended - started)
             attempt = {"attempt": n, "started_epoch_s": started, "ended_epoch_s": ended, "wall_s": ended - started,
@@ -566,7 +642,7 @@ def run_span(*, kit, kit_sha256, output, deadline, windows, deps, leg_ids=None,
         leg_row["summary"] = summary
         (leg_dir / "leg_record.json").write_text(json.dumps(
             {"schema": LEG_RECORD_SCHEMA, "spec": spec, "attempts": attempts,
-             "result": {k: result.get(k) for k in (*_RESULT_KEEP,) if k in result}},
+             "result": {k: result[k] for k in result_keep if k in result}},
             indent=1, sort_keys=True) + "\n")
         (leg_dir / "leg_summary.json").write_text(json.dumps(summary, indent=1, sort_keys=True) + "\n")
         state["summaries"].append(summary)
@@ -664,11 +740,21 @@ _RESULT_KEEP = ("leg_id", "leg_status", "bundle", "member_status", "g0_outcome",
                 "decode_cap_reached", "os_level_max", "pm_nominal", "incomplete_reasons", "ac_powermode",
                 "turn_start_ns", "turn_end_ns", "first_token_ns", "quiet_spans_ns", "config_sha256",
                 "g0_shape", "g0_role", "g0_reference_source", "g0_reference_record_sha256")
+_RESULT_KEEP_CTL = _RESULT_KEEP + ("script_complete", "script_record_sha256")
 
 
 def _close(record, state, deps, output, step, kit):
+    def stop_feed(feed):
+        result = feed.stop()
+        if feed.name == "meter" and "group" in result:
+            # The supervisor starts each generation in its own session.
+            process = getattr(getattr(feed, "supervisor", None), "process", None)
+            if process is not None:
+                result = {**result, "group": {**result["group"], "pgid": process.pid}}
+        return result
+
     cleanup = [("restore", lambda: deps.host.restore_power(state["power_read"])),
-               *(("stop-" + f.name, f.stop) for f in reversed(deps.feeds))]
+               *(("stop-" + f.name, lambda feed=f: stop_feed(feed)) for f in reversed(deps.feeds))]
     for name, operation in cleanup:
         try:
             result = step(name, operation, kind="close")
@@ -837,7 +923,8 @@ class FakeLegRuntime:
         path.write_text(json.dumps({"schema": "joulewise.align.r1_soak_reference.v1", "mock": True}) + "\n")
         return path
 
-    def leg(self, attempt_dir, spec_path, soak_reference, cap_s, feeds, work_remaining, span_reference=None):
+    def leg(self, attempt_dir, spec_path, soak_reference, cap_s, feeds, work_remaining, span_reference=None,
+            *, ctl_spec_sha256=None):
         from joulewise.align.apple import r1_runtime as rt
         spec = legsmod.validate_leg_spec(json.loads(Path(spec_path).read_text()))
         leg_id = spec["leg_id"]
@@ -875,7 +962,39 @@ class FakeLegRuntime:
                   "cpu_busy_cores": [busy] * seconds, "cpu_busy_t_s": [float(i) for i in range(seconds)],
                   "census": [{"mock": True}]}
         legsmod.guard_projection(result, "mock leg result", values=False)
-        (Path(attempt_dir) / rt.RESULT_NAME).write_text(json.dumps(result, sort_keys=True) + "\n")
+        result_path = Path(attempt_dir) / rt.RESULT_NAME
+        if ctl_spec_sha256 is not None:
+            if ctl.leg_spec_sha256(spec) != ctl_spec_sha256:
+                raise LegRuntimeError(f"{leg_id}: ctl leg spec differs from the span plan")
+            steps = []
+            stamp = 0
+            if not timeout:
+                for kind, dose in ctl.script_steps(spec["script"]):
+                    fields = ({"requested_tokens": dose, "actual_tokens": dose,
+                               "context_tokens": spec["prefill_tokens"], "cached_prompt_tokens": 0,
+                               "first_token_ns": stamp}
+                              if kind in ("hidden", "turn") else {"requested_s": dose})
+                    elapsed = ctl.duration_ns(dose) if "requested_s" in fields else 1
+                    if kind == "cpu":
+                        fields["thread_cpu_ns"] = elapsed
+                    steps.append({"kind": kind, "started_ns": stamp, "ended_ns": stamp + elapsed,
+                                  "complete": True, **fields})
+                    stamp += elapsed
+                visible = [row for row in steps if row["kind"] == "turn"]
+                result.update(turn_start_ns=visible[0]["started_ns"], first_token_ns=visible[0]["first_token_ns"],
+                              turn_end_ns=visible[-1]["ended_ns"], prefill_tokens=sum(r["context_tokens"] for r in visible))
+            work = {"schema": ctl.WORK_SCHEMA, "leg_id": leg_id, "leg_spec_sha256": ctl_spec_sha256,
+                    "script": spec["script"], "complete": not timeout, "steps": steps}
+            work_raw = (json.dumps(work, sort_keys=True) + "\n").encode()
+            (result_path.parent / ctl.WORK_NAME).write_bytes(work_raw)
+            result.update(script_complete=not timeout, script_record_sha256=hashlib.sha256(work_raw).hexdigest())
+            result_raw = (json.dumps(result, sort_keys=True) + "\n").encode()
+            result_path.write_bytes(result_raw)
+            files = {rt.RESULT_NAME: hashlib.sha256(result_raw).hexdigest(), ctl.WORK_NAME: result["script_record_sha256"]}
+            (result_path.parent / rt.CUSTODY_NAME).write_text(
+                json.dumps({"schema": rt.CUSTODY_SCHEMA, "status": "complete", "files": files}) + "\n")
+        else:
+            result_path.write_text(json.dumps(result, sort_keys=True) + "\n")
         return result
 
 
@@ -990,6 +1109,7 @@ def main(argv=None):
         p.add_argument("--legs", help="the queue span's roster, comma-separated kit leg ids (default: all)")
         p.add_argument("--batch-window", help="HH:MM-HH:MM local blackout (default: none, RL-171)")
         if name == "run":
+            p.add_argument("--kit-sha256", help="exact kit bytes approved by the ctl launcher")
             p.add_argument("--output", type=Path, required=True)
             p.add_argument("--deadline", type=float, required=True)
             p.add_argument("--span-id", help="span identity carried into its close receipt")
@@ -1059,7 +1179,16 @@ def main(argv=None):
         return 1
     if not math.isfinite(args.deadline):
         parser.error("deadline must be finite")
+    scripted_ctl = kit["runner"]["kind"] == ctl.RUNNER_KIND
     try:
+        if scripted_ctl:
+            ctl.require_issued(kit)
+            if args.kit_sha256 != sha:
+                raise ValueError("ctl kit hash differs from the launcher-approved kit")
+            if args.span_id is None:
+                raise ValueError("ctl requires --span-id from the launch ledger")
+        elif args.kit_sha256 is not None:
+            raise ValueError("launcher-approved ctl kit was replaced by a different runner kind")
         if args.span_id is not None and not SPAN_ID_PATTERN.fullmatch(args.span_id):
             raise ValueError("invalid --span-id")
         validate_t0_authority(kit, args.authorized_t0_date, args.t0_not_before, args.t0_before, args.t0_anchor,
@@ -1067,7 +1196,8 @@ def main(argv=None):
     except ValueError as error:
         parser.error(str(error))
     output = args.output.resolve()
-    deps = production_deps(inputs=args.inputs, pmset_bin=args.pmset_bin, output=output)
+    deps = production_deps(inputs=args.inputs, pmset_bin=args.pmset_bin, output=output,
+                           scripted_ctl=scripted_ctl)
     return run_span(kit=kit, kit_sha256=sha, output=output, deadline=args.deadline, windows=windows, deps=deps,
                     leg_ids=_roster(args), authorized_t0_date=args.authorized_t0_date,
                     t0_not_before=args.t0_not_before, t0_before=args.t0_before, t0_anchor=args.t0_anchor,

@@ -399,6 +399,9 @@ def load_kit(path, *, batch_window=OS_BATCH_WINDOW):
     if isinstance(kit, dict) and kit.get("schema") == "joulewise.cadence_campaign_kit.v1.1":
         from joulewise.cadence import kit_v11   # schema v1.1 (design doc section 14); v1 is unchanged
         validate = kit_v11.validate_kit
+    if isinstance(kit, dict) and kit.get("schema") == "joulewise.cadence_campaign_kit.ctl.v1":
+        from joulewise.cadence import ctl
+        validate = ctl.validate_kit
     return validate(kit, batch_window=batch_window), hashlib.sha256(raw).hexdigest()
 
 

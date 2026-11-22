@@ -243,6 +243,8 @@ def main(argv=None, *, backend_factory=None, stdout=None):
     try:
         spec_path, span_source, rest = _split_leg_spec(argv)
         leg = load_leg_spec(spec_path)
+        if "script" in leg:
+            raise ValueError("a ctl leg spec requires the scripted runtime")
     except (SystemExit, OSError, ValueError) as error:
         print(f"cadence_leg_runtime: refused: {error}", file=sys.stderr)
         return rt.EXIT_REFUSED
