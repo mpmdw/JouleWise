@@ -773,3 +773,90 @@ recorded 71 staged pins. The canonical derivation key was
 | --- | --- | --- |
 | `repo_path` | `455c1bd0a91c4ed8b6b6a77a79b42a5d792315b6` and `256d9f9f8d94e54d19ed2cd7fdaf6dae3d957819` | 0 / 1 with one mocked checkpoint / 2 with zero checkpoints |
 | `binding_path` relative to `repo_root` | `52339747f3bbfaf33144d72f05d79c0c63897c0e` and `b621d4eba49600d10b35e873c7dacea4b2fa66dc` | 0 / 1 with one mocked checkpoint / 2 with zero checkpoints |
+
+## Round 9 · full staged closure
+
+The lead returned the lane to spec after audit 8. The supplied manifest
+`20b8dbc75c2fa496ec5d68888be3168cddf81194c83ce65fe68999771f398279`
+and all nine listed files were verified and frozen before implementation at
+`d7701aa716c18eff1b78c85bdb06b38dc34b4715`, tree
+`e2c920521c6ebd574e7e8726e6efd1d23de8dcb8`. The freeze check constructed
+37 filesystem vectors and verified the offline R1/W1 history and 57 named
+integration vectors. The baseline had no full tree/walk entry point. The
+preceding audit reproduced the bare ledger and omitted policy false
+admissions and the explicit bracket false refusal. The earlier freezes
+remain in the branch history.
+
+Implementation `3ae356e818e1b8bd9cec88597f9ba36d62bddd1a`, tree
+`b909d7001805f864a3bd0f48d5a2dd46732ab6ff`, replaces operand-derived
+inventory with two disjoint walks. The repository export is compared to the
+execution commit's Git modes, blob IDs and tree ID. The staging walk verifies
+the exact file set and hashes it against prepare's declared outputs and the
+fixed packet blob supplied by the named attempt ref. Both install and direct
+arm validate the closure and selections before host access. The same
+preflight resolves the kit and stage/spare dispatch, the W1 predecessor and
+desk evidence, its own canonical packet, latest record and expiry.
+
+The declared-file C2a case introduces a stray before finalization. The
+declaration omits it and the arm gate refuses the actual stage. The O2a case
+uses a complete pin for a separate same-byte ledger. Path identity refuses it
+even with a valid hash. The reservation verifies the starting SHA-256 under
+the existing lease. Later snapshots use the same file after append. The
+installed frequency helper's observed path and SHA-256 are recorded in the arm
+record. This lane used synthetic helper, ledger and command evidence.
+
+The registration artifact catalogue and receipt files retain their prior
+membership and bytes. The closure implementation lives in the already
+registered validation module. The retired K4–K6 pin-map tests were replaced by
+the full-walk tape and addendum checks. The cadence and replay witnesses keep
+their synthetic authority seams, and separate tests exercise the real C1
+commit and consumers. Metadata-only `git ls-tree` checks matched all ten
+condition-13 Git blobs against `b2e01464d`, with zero inherited absences.
+
+### Executable checks
+
+```sh
+(cd tests/align/c1_closure_lite && shasum -a 256 -c SUITE.sha256 && python3.13 -B suite/run.py --fixture-check)
+PYTHONPATH=tests:. python3.13 -B tests/align/c1_closure_lite/suite/run.py --adapter "$PWD/tests/align/c1_closure_lite/adapter.py" > .row23-seat/r9-observed.jsonl
+cmp tests/align/c1_closure_lite/suite/expected.jsonl .row23-seat/r9-observed.jsonl
+PYTHONPATH=tests:. python3.13 -B -m unittest align.test_v4_next_arm_packet.C1PacketRebuildTests
+PYTHONPATH=tests:. python3.13 -B -m unittest align.test_c1_closure
+JW_B5_SYNTHETIC_ONLY=1 PYTHONPATH=tests:. python3.13 -B -m unittest align.test_v4_series_e2e align.test_r11_delta5_sol1 align.test_r11_delta5_sol2 align.test_v4_executed_closure test_b5_plan.StageDispatchTests test_b5_plan.WindowPlanTests test_b5_chain.StagePlanTests
+git diff --check b2e01464d HEAD
+```
+
+The original and supplemental C1 cases, including the kit and order sweeps,
+passed 25/25 in the local focused run. The new gate checks, frozen tape and
+canonical sharded result govern the published tree. The final PR-head
+status and assessment links are recorded in the PR evidence ledger and seat
+handoff.
+
+### Authorized attempt checklist
+
+1. Complete W1 signing, the same-state full desk and the predecessor/series
+   commits under the existing ownership rules. Prepare C1 on the chosen
+   execution commit. The attempt needs disjoint repository and stage roots.
+   Keep the starting ledger on the same filesystem for the single live inode.
+   The prepare command emits `c1-prepared.json` and declares the exact stage
+   outputs. Use the approved supplemental-input declaration only for source
+   bytes authorized for this attempt. Entries map stage-relative names to a
+   source path relative to the declaration and an expected SHA-256. Carry an
+   authorized offline cache under the staged cache root if the workload selects
+   it. Preserve the authorized model/runtime and host evidence procedures.
+2. With the prepared paths visible, run the original packet builder command
+   above with `--c1-prepared "$prepared_handoff"`. Require exit 0 and a ready
+   preflight. The finalizer owns committing the resulting packet at
+   `series/c1-next-arm.json` on a named attempt ref in the authorized verifier
+   repository and placing those exact bytes at the same relative path in S.
+   Add `delivery_ref` and `delivery_commit` to the handoff. The real delivery
+   and launch evidence stay in the authorized environment.
+3. The authorized install command takes `--c1-handoff "$attempt_handoff"` and
+   `--next-arm-triage "$stage/series/c1-next-arm.json"` in addition to the
+   ordinary install controls. Confirm the packet's committed predecessor,
+   roster, clock and live-ledger path. Existing live admission checks and all
+   signer decisions remain open until their owners complete them.
+
+Integration-owner and Opus acceptance, W1 signing, the real C1 preparation
+and final post-close packet, and all live checks remain with their authorized
+owners. The lead or magistrate owns the final packet. Opus owns merging.
+`NEEDS_SPEC: none`.
