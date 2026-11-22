@@ -1,7 +1,13 @@
 {
   "armed": null,
-  "next_observable": "f2stab03-2e751bf4/run-out.txt shows LAUNCH_RC=0 with the fence (launch ~22:45, expected end ~23:57, worst case ~00:19, fence deadline ~00:44; read the true fence deadline and pid from run-out.txt; check the pid, not the deadline). The next activation after the fence pid is gone and runner_receipt.json exists Checks cq-f2-stab-03-l007-a1 under /Users/edr/campaign-out/f2-stab-03/ with f2stab03-check-template-2e751bf4/check.sh (LEGS L007, kit sha ac4b…c404, frozen 2d347f721, campaign_id f2-stab-03, batch_windows == ['02:00-02:35'] asserted; replace REPLACE_STAMP with the actual stamp and NEWACT with the activation id; grep the leg_record for max_busy_cores/max_gap_s/os_level_max and read leg_summary admitted/redo_reasons; on a cpu_load redo place the >0.5-core run in wall time from runtime/load_journal.json and name the top census process; map the quiet span to wall time and count maintenance lines inside it from OUT/maintenance-log.txt), copies at once with f2stab03-check-template-2e751bf4/offload-run.sh (NEWACT replaced; already points at its own offload.sh), prints full 64-hex digests (item 491), then takes the ladder (items 422, 447, 463, 464, 480, 507, 523). It will be Sunday 22 Nov by then: the next leg is Sunday's rank 1 (item 464: lowest kit 01-14 with an unrun leg, so f2-stab-03 L008 seq 8 on pin A; item 425 issue checks); inputs = f2stab03-2e751bf4/inputs.sh with header, MAGISTRATE_PID and SPAN/LEGS/SEQ changed; plan ARG 02:00-02:35 first and, if the plan refuses on the fence or blackout, 13:14-13:15 (item 463); the check template's batch_windows assert set to the ARG used. Item 507: no soak may touch 02:00-02:35. Fillers-w3 successors (item 524) only after kits 01-14 are all spent and never before t0 2026-11-26 00:00 PST.",
+  "next_observable": "f2stab03-1fb7b78f/run-out.txt shows LAUNCH_RC=0 with the fence (launch ~23:46 Sat, expected end ~00:59 Sun, worst case ~01:21, fence deadline ~01:45; read the true fence deadline and pid from run-out.txt; check the pid, not the deadline). The next activation after the fence pid is gone and runner_receipt.json exists Checks cq-f2-stab-03-l008-a1 under /Users/edr/campaign-out/f2-stab-03/ with f2stab03-check-template-1fb7b78f/check.sh (LEGS L008, kit sha ac4b…c404, frozen 2d347f721, campaign_id f2-stab-03, batch_windows == ['02:00-02:35'] asserted; replace REPLACE_STAMP with the actual stamp and NEWACT with the activation id; grep the leg_record for max_busy_cores/max_gap_s/os_level_max and read leg_summary admitted/redo_reasons; on a cpu_load redo place the >0.5-core run in wall time from runtime/load_journal.json and name the top census process; map the quiet span to wall time and count maintenance lines inside it from OUT/maintenance-log.txt), copies at once with f2stab03-check-template-1fb7b78f/offload-run.sh (NEWACT replaced; already points at its own offload.sh), prints full 64-hex digests (item 491), then takes the ladder (items 422, 447, 463, 464, 480, 507, 523). It will be Sunday 22 Nov: the next leg is Sunday's rank 1 (item 464: lowest kit 01-14 with an unrun leg, so f2-stab-03 L009 seq 9 on pin A; item 425 issue checks); inputs = f2stab03-1fb7b78f/inputs.sh with header, MAGISTRATE_PID and SPAN/LEGS/SEQ changed; the run-block's worst_case_s assert set to the start-check's value; plan ARG 02:00-02:35 first and, if the plan refuses on the fence or blackout, 13:14-13:15 (item 463); the check template's batch_windows assert set to the ARG used. Item 507: no soak may touch 02:00-02:35. Fillers-w3 successors (item 524) only after kits 01-14 are all spent and never before t0 2026-11-26 00:00 PST.",
   "open_items": [
+    {
+      "expires_epoch_s": null,
+      "item": 534,
+      "owner": "magistrate",
+      "status": "ISSUED"
+    },
     {
       "expires_epoch_s": null,
       "item": 533,
@@ -12,12 +18,6 @@
       "expires_epoch_s": null,
       "item": 532,
       "owner": "research_lead",
-      "status": "ISSUED"
-    },
-    {
-      "expires_epoch_s": null,
-      "item": 531,
-      "owner": "magistrate",
       "status": "ISSUED"
     },
     {
@@ -221,11 +221,11 @@
   ],
   "owner": "magistrate",
   "schema": "joulewise.current_pointer.v2",
-  "source_item": "531",
+  "source_item": "534",
   "source_item_heading_date": "2026-11-21",
   "wait": {
-    "deadline_epoch_s": 1795345200,
+    "deadline_epoch_s": 1795348800,
     "observable": "none",
-    "on_early_or_refused": "a launcher refusal or non-clean close: record it, hold kit f2-stab-03 until an input changes (item 422, RL-179 F-6), mail the lead and Ed, and continue down the ladder. A soak refusal on a measured contending process with a proven clean close is physics, not a kit hold (item 505). A clean close with the leg not admitted (cpu_load, redo_quota 0) is recorded, not a stop and not a kit hold (items 467, 479, 520). If run-out.txt has no LAUNCH_RC line, nothing launched: the attempt is unspent; the next activation re-runs the start-check and re-issues L007 (as Sunday's rank 1 if it is past 00:00; ARG 13:14-13:15 at 00:00-02:34:59, item 463)."
+    "on_early_or_refused": "a launcher refusal or non-clean close: record it, hold kit f2-stab-03 until an input changes (item 422, RL-179 F-6), mail the lead and Ed, and continue down the ladder. A soak refusal on a measured contending process with a proven clean close is physics, not a kit hold (item 505). A clean close with the leg not admitted (cpu_load, redo_quota 0) is recorded, not a stop and not a kit hold (items 467, 479, 520). If run-out.txt has no LAUNCH_RC line, nothing launched: the attempt is unspent; the next activation re-runs the start-check and re-issues L008 as Sunday's rank 1 (ARG 13:14-13:15 at 00:00-02:34:59 if 02:00-02:35 refuses, item 463)."
   }
 }
