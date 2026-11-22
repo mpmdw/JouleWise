@@ -36,7 +36,12 @@ The assembler parsed the issued `R1_EXECUTED_SOURCES` assignment and compared
 its ten Git blobs after each of the seven component steps. The pinned rerun
 reproduced all four commits, trees and counts. The #904 comparison produced the
 same four trees, with final commit `cdd990053f10d31427fb9092a8cb4bae8becf6d6`.
-The first two trees also match C's. The #813 public unsigned template exception
+The pinned object-only replay took 24 seconds from snapshot to result.
+Applying the three #904-track first-parent diffs to #813 in a scratch
+index reproduced the candidate tree. The published PR #823 signing
+comparator independently returned 10/10 for both final projections. The
+step-4 comparator's rehearsal control returned 3/3 across the #813 and
+full-candidate checkpoints. The first two trees also match C's. The #813 public unsigned template exception
 uses the same Git blob checks as C. [RL-183 §1](https://github.com/mpmdw/JouleWise/blob/71a83f666024c26e89cdce09dfb7a7e80d299794/docs/research-audits/2026-11-10-fable/RESEARCH-LEAD-DECISIONS.md#L20084)
 
 ## Resolutions and Part C port
@@ -86,7 +91,7 @@ report are outside the code/test port. [PR #809 handoff](https://github.com/mpmd
 
 ## Verification
 
-Local results as of 2026-11-22 00:47 PST.
+Local results as of 2026-11-22 01:14 PST.
 All local inputs were synthetic or source/policy files. The checks used
 Python 3.13, isolated temporary directories, offline model caches, the host
 command tripwire and the seat's file-access fence.
@@ -103,23 +108,26 @@ command tripwire and the seat's file-access fence.
 | Named condition-13 tests | PASS (2 tests) |
 | Executed closure | FAIL (6 tests) |
 | Dynamic closure | FAIL (10 tests) |
-| Refusal census | IN PROGRESS |
-| W1 synthetic | IN PROGRESS |
-| Opus cold witnesses | QUEUED |
-| W1 reliability | QUEUED |
-| Desk release | QUEUED |
-| Next-arm packet | QUEUED |
+| Refusal census | FAIL (24 tests, 1 skipped) |
+| W1 synthetic | PASS (22 tests, 15 skipped) |
+| Opus cold witnesses | PASS (1 tests) |
+| W1 reliability | PASS (13 tests) |
+| Desk release | PASS (63 tests) |
+| Next-arm packet | IN PROGRESS |
 | W1 blockers and U3 | QUEUED |
 | Desk offload | QUEUED |
-| Synthetic step-4 restore | QUEUED |
-| RL-176 | QUEUED |
-| RL-182 registration | QUEUED |
-| S rows | QUEUED |
-| Contrast writer | QUEUED |
+| Synthetic step-4 restore | PASS (11 tests) |
+| RL-176 | PASS (28 tests) |
+| RL-182 registration | PASS (4 tests) |
+| S rows | PASS (67 tests, 4 skipped) |
+| Contrast writer | PASS (15 tests) |
 | Part C attack reproductions | PASS (15 tests) |
 | Part C evidence ledger | IN PROGRESS |
 | Part C gate evidence | QUEUED |
 | Part C legacy launcher tests | QUEUED |
+| Full synthetic WP22 opt-in | IN PROGRESS |
+| Ordinary synthetic PREQUAL subset | QUEUED |
+| W1 PREQUAL selected probes | QUEUED |
 
 - Frozen v2 SHA-256 was
   `f35c7bb08814785079008acd3a47a3c85993083da1e7ba731e7d2bee486d768d`.
@@ -139,6 +147,10 @@ command tripwire and the seat's file-access fence.
   executed-closure census found one missing strict binding for
   `scripts/align_r1_part_c_evidence.py`. All six executed-closure checks
   passed on issued W1.
+- The final evaluator changed the refusal-site counts and import scope.
+  `test_every_refusal_site_is_listed_with_its_exact_count` and
+  `test_the_scan_covers_every_module_the_hazard_path_imports` failed.
+  C recorded both checks passing on issued W1.
 - The full canonical suite requires archived capture fixtures. Local
   verification uses the scoped synthetic runs. Ordinary and W1 PREQUAL
   have additional native or lead-input rows. The workflow launches CI on
@@ -219,11 +231,14 @@ requires generation after the accepted #809 port.
 - Run the approved [R1-to-W1 chain](../align/R1-TO-W1-CHAIN.md) with the
   lead's authorized operands. For mechanical replay of steps 1–5 use
   `python3.13 -B scripts/align_r1_to_w1_chain.py --run-dir "$R1_RUN" --slots "$R1_SLOTS" --work "$R1_WORK" --write-contrast --until derive-contrast`.
-  Compare step 4 as documented in [the signing checklist](../align/v4/W1-BLOCKERS-merged.md#w1-signing-checklist-additions).
+  Compare step 4 with the recorded `STEP4_CHECKOUT` and candidate commit
+  using `J="$PWD" STEP4_CHECKOUT="$STEP4_CHECKOUT" SIGNING_COMMIT="$(git rev-parse HEAD)" sh "$seat/check-signing-step4.sh"`.
+  This is the block in [the signing checklist](../align/v4/W1-BLOCKERS-merged.md#w1-signing-checklist-additions).
   Apply the approved decision inputs and U3, WP19, R0, receipt and gate bindings.
 - Regenerate and verify on the final approved source tree. The commands below
   assume the lead has installed the reviewed closure and input updates.
   The lead uses the authorized signing process for the receipt and gate reports.
+  The seat copies the comparison commands from [PR #823](https://github.com/mpmdw/JouleWise/blob/2acbb013567e2d97232497791419f61264dbf831/docs/run_reports/2026-11-18-w1-integration-evidence.md#reproduce-on-approved-bytes) and the step-4 checklist.
 
 ```sh
 python3.13 -B scripts/align_v4_kit.py
@@ -236,7 +251,8 @@ git diff --check
 ```
 
 - Repeat condition 13 with the approved comparator on the exact signing
-  target, verify the accepted component diffs and final hashes, and have the
+  target using `python3.13 -B "$seat/check-condition13.py" "$SIGNED_W1_HEAD"`.
+  Verify the accepted component diffs and final hashes, and have the
   independent auditor and research lead clear the signing gates. Run final
   exact-tree CI. The lead publishes the approved integration ref with
   `git push origin "HEAD:refs/heads/$W1_INTEGRATION_BRANCH"` after its normal
