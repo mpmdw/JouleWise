@@ -8,6 +8,7 @@ import base64
 from collections.abc import Mapping
 from contextlib import contextmanager
 import fcntl
+from hashlib import sha256
 import json
 import os
 from pathlib import Path
@@ -338,7 +339,6 @@ def _checked_base(path: Path) -> str:
 def _land(repo: Path, request: dict, remote: str, branch: str, attempts: int, *,
           snapshots: dict[Path, tuple[bytes, int]] | None = None) -> tuple[int, str]:
     header = _request_header(request)
-    repo = _repo_root(repo)
     sources = _source_files(repo, request["with"]) if snapshots is None else snapshots
     ref = f"refs/heads/{branch}"
     if _git(repo, "check-ref-format", "--normalize", ref).rstrip("\n") != ref:
@@ -348,6 +348,7 @@ def _land(repo: Path, request: dict, remote: str, branch: str, attempts: int, *,
     landed = None
     limit = min(attempts, 5)
     last_failure = "push rejected"
+    validation_retried = False
     try:
         for _ in range(limit):
             ref_needs_cleanup = True
@@ -360,17 +361,25 @@ def _land(repo: Path, request: dict, remote: str, branch: str, attempts: int, *,
                     head = _commit(path, number, request, sources)
                     if _push(path, remote, ref, base):
                         landed = number, head
-            except ValueError:
+            except ValueError as error:
                 # Validation can only decide against the head it actually read.
                 # Recheck after both local cleanup steps, before returning a refusal.
                 _remove_ref(repo, private_ref)
                 ref_needs_cleanup = False
-                if _remote_head(repo, remote, ref) == base:
+                if _remote_head(repo, remote, ref) != base:
+                    validation_retried = False
+                    last_failure = "remote changed during validation"
+                    continue
+                if snapshots is None or isinstance(error, InvalidBaseState) or validation_retried:
                     raise
-                last_failure = "remote changed during validation"
+                # A matching reply may already be stale. Replay on a fresh
+                # fetch once before returning an error eligible for quarantine.
+                validation_retried = True
+                last_failure = "request validation requires a fresh fetch"
                 continue
             if landed is not None:
                 return landed
+            validation_retried = False
             last_failure = "push rejected"
         raise RetriesExhausted(f"{last_failure} after {limit} attempts")
     except (GitFailure, subprocess.CalledProcessError, OSError) as error:
@@ -389,8 +398,11 @@ def _land(repo: Path, request: dict, remote: str, branch: str, attempts: int, *,
                     raise
 
 
-def _spool_dir() -> Path:
-    return Path(os.environ.get("JW_RUN_STATE_SPOOL", "~/.joulewise/run_state_spool")).expanduser()
+def _spool_dir(repo: Path) -> Path:
+    origin = _git(repo, "remote", "get-url", "origin").rstrip("\n")
+    key = sha256(os.fsencode(repo) + b"\0" + os.fsencode(origin)).hexdigest()
+    root = Path(os.environ.get("JW_RUN_STATE_SPOOL", "~/.joulewise/run_state_spool")).expanduser()
+    return root / key
 
 
 @contextmanager
@@ -419,7 +431,7 @@ def _write_spool_file(target: Path, data: bytes) -> None:
 def _spool(spool: Path, request: dict, repo: Path) -> Path:
     if request["with"]:
         snapshots = {}
-        for relative, source in _source_files(_repo_root(repo), request["with"]).items():
+        for relative, source in _source_files(repo, request["with"]).items():
             with source.open("rb") as stream:
                 snapshots[relative.as_posix()] = {
                     "mode": stat.S_IMODE(os.fstat(stream.fileno()).st_mode),
@@ -470,7 +482,8 @@ def _error_text(error: Exception) -> str:
 
 
 def add_git(repo: Path, request: dict, *, remote="origin", branch="main", attempts=5) -> tuple[int, str]:
-    spool = _spool_dir()
+    repo = _repo_root(repo)
+    spool = _spool_dir(repo)
     with _locked(spool):
         if any(_pending(spool)):
             raise GitFailure(f"pending requests in {spool}; run python3 scripts/run_state_add.py flush-spool "
@@ -484,11 +497,11 @@ def add_git(repo: Path, request: dict, *, remote="origin", branch="main", attemp
 
 
 def _flush(repo: Path) -> int:
-    spool = _spool_dir()
+    repo = _repo_root(repo)
+    spool = _spool_dir(repo)
     with _locked(spool):
         queue = sorted(_pending(spool))
         if not queue:
-            repo = _repo_root(repo)
             private_ref = f"refs/joulewise/run-state-add/{uuid.uuid4().hex}"
             try:
                 head = _fetch(repo, "origin", "refs/heads/main", private_ref)
