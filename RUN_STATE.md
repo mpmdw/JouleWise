@@ -1052,6 +1052,16 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 
 <!-- RUN_STATE TYPED ITEMS: newest first. Add with scripts/run_state_add.py; never edit by hand. -->
 
+533. **Ed confirms option C on RL-198's terms (P windows P1-P5 after the last T, ~65 MBP h); the lead registers the text on the W1 line before signing**
+
+```item
+{"expires_epoch_s": null, "issued_epoch_s": 1795332375, "number": 533, "owner": "lead", "schema": "joulewise.run_state_item.v1", "sets": [], "status": "ISSUED", "supersedes": []}
+```
+
+- **Ed's confirmation (2026-11-21 23:26 PST, interactive session), verbatim option chosen:** "Yes, register it (Recommended)". He was asked to confirm after RL-198 (audit branch `0a4d9d3cf`) showed the real cost: option C needs its own windows P1-P4 plus reserve P5 on the production cell, T-shaped, run after the last T window, about 65 MBP hours (+16 if P5 is used); the P windows may land after the mid-December paper, which would then say the positive control is pending.
+- **Effect:** item 532 stands on RL-198's terms. The lead commits RL-198 §4's text to the W1 line before the W1 receipt is signed (no MBP cost now). The P windows are scheduled by the magistrate when the ladder reaches them; nothing changes on the MBP until a lead item issues them.
+- **Recorded blind:** no C or T window data exists; W1 is not armed.
+
 532. **Ed's decision: option C is added (the tripwire K is scored on the physical positive-control legs); the research lead writes the pre-registered addendum before W1**
 
 ```item
