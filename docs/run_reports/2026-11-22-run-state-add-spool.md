@@ -91,6 +91,19 @@ carry no recoverable target identity and stay in place.
 The accepted post-recheck MED is unchanged. Audit round 4 repeated the
 quarantine and recovered the exact request bytes.
 
+## Independent audit round 5
+
+M1 and M2 reproduced on `e72dd68daa` and are fixed in `62df28b19`.
+
+| Finding | Disposition | Regression |
+| --- | --- | --- |
+| M1 / credential rotation | Remove userinfo before constructing the normalized remote URL key. Git uses the configured address for transport. | `test_audit_round_5_credential_rotation_preserves_spool_order` |
+| M2 / wrong legacy destination | Require the legacy entry's recorded remote and default unrecorded entries to `origin`. A mismatch stops replay and retains the entry. The add refusal directs legacy recovery to the queued remote. | `test_audit_round_5_legacy_request_refuses_the_wrong_remote` |
+
+Audit round 5 repeated the accepted post-recheck MED. The reason was
+reported, the bytes were preserved, and replay of the recovered request
+landed.
+
 ## Verification
 
 The named regressions reproduced the audit findings on the original code.
@@ -115,5 +128,7 @@ checks exited 0 against `1b834776d4d566b684536bedeff5935c12517f4c`.
 After K1 and K2, all 116 focused tests passed on each interpreter, including
 the two audit 4 regressions and the URL normalization cases. Both CURRENT
 checks passed again on the same main revision.
+After M1 and M2, all 118 focused tests passed on each interpreter. Both
+CURRENT checks exited 0 against `78df445cdda2a4736318a623c9ddd478c4038d20`.
 The full suite runs in the draft PR's hosted CI. Tier 1 cross-family review
 remains a lead gate.
