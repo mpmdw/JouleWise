@@ -1499,5 +1499,43 @@
         "paper": "docs/align/reviews/2026-11-22-c1-r11-fable-executing-review.md"
       }
     ]
+  },
+  {
+    "commit": "bc224942e83b4833a860d0824f297709fa69c727",
+    "number_bearing_paths": [
+      "joulewise/calibration_ledger.py"
+    ],
+    "change": "Let a read-only caller skip the lease-taking live-writer probe",
+    "executing_reviews": [
+      {
+        "reviewer": "Opus 5.5 cold executing review (non-author; separate session from the Opus 5.5 builder), ADMIT-WITH-FIXES; fix-round delta 3daea0447..062698aff ADMIT",
+        "covered": "bc224942e83b4833a860d0824f297709fa69c727: joulewise/calibration_ledger.py blob 37fa093f0a2b8f7e62b94f770e43a3abb4effcb3; no HIGH; default and every existing caller unchanged, only the C1 preflight disables the probe; read-only versus lease-held pre-reserve decision agreed 28/28; MED-1 (session-status lease) and MED-2 (capture slot and pin agreement) repaired in fcfc0dee4 and 062698aff; LOW test gaps open; paper sha256 509fbffdb04c655ea435f35e2b44fccf92fda889ac85eb393235fe40f3a407f0",
+        "paper": "docs/align/reviews/2026-11-22-c1-r12-opus-executing-review.md"
+      },
+      {
+        "reviewer": "Fable 5.2 cold executing review (non-author), in the Sol 6.1 seat whose command sandbox cannot initialize on this machine, ADMIT-WITH-FIXES; fix-round delta 3daea0447..062698aff ADMIT",
+        "covered": "bc224942e83b4833a860d0824f297709fa69c727: joulewise/calibration_ledger.py blob 37fa093f0a2b8f7e62b94f770e43a3abb4effcb3; no HIGH; default and every existing caller unchanged, only the C1 preflight disables the probe; read-only versus lease-held decisions agreed 52/52 and 6/6 with the directory unchanged; F1 (later-consumer head pin) repaired in 062698aff; LOW test gaps open; paper sha256 da6a1502703a6dbfb163a896b8afbe7510e5e66e09e749dd64dce691bb9826e8",
+        "paper": "docs/align/reviews/2026-11-22-c1-r12-fable-executing-review.md"
+      }
+    ]
+  },
+  {
+    "commit": "fcfc0dee489e649d641ac34793eeed1a5000ddaa",
+    "number_bearing_paths": [
+      "joulewise/calibration_ledger.py"
+    ],
+    "change": "Let the read-only caller skip session status's lease-taking probe too",
+    "executing_reviews": [
+      {
+        "reviewer": "Opus 5.5 cold executing review (non-author; separate session from the Opus 5.5 builder), ADMIT-WITH-FIXES; fix-round delta 3daea0447..062698aff ADMIT",
+        "covered": "fcfc0dee489e649d641ac34793eeed1a5000ddaa: joulewise/calibration_ledger.py blob fcd1bbdcca032c86d8d889f7fa2e3790bffeb33b; no HIGH; default and every existing caller unchanged, only the C1 preflight disables the probe; read-only versus lease-held pre-reserve decision agreed 28/28; MED-1 (session-status lease) and MED-2 (capture slot and pin agreement) repaired in fcfc0dee4 and 062698aff; LOW test gaps open; paper sha256 509fbffdb04c655ea435f35e2b44fccf92fda889ac85eb393235fe40f3a407f0",
+        "paper": "docs/align/reviews/2026-11-22-c1-r12-opus-executing-review.md"
+      },
+      {
+        "reviewer": "Fable 5.2 cold executing review (non-author), in the Sol 6.1 seat whose command sandbox cannot initialize on this machine, ADMIT-WITH-FIXES; fix-round delta 3daea0447..062698aff ADMIT",
+        "covered": "fcfc0dee489e649d641ac34793eeed1a5000ddaa: joulewise/calibration_ledger.py blob fcd1bbdcca032c86d8d889f7fa2e3790bffeb33b; no HIGH; default and every existing caller unchanged, only the C1 preflight disables the probe; read-only versus lease-held decisions agreed 52/52 and 6/6 with the directory unchanged; F1 (later-consumer head pin) repaired in 062698aff; LOW test gaps open; paper sha256 da6a1502703a6dbfb163a896b8afbe7510e5e66e09e749dd64dce691bb9826e8",
+        "paper": "docs/align/reviews/2026-11-22-c1-r12-fable-executing-review.md"
+      }
+    ]
   }
 ]

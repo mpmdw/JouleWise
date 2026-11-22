@@ -213,9 +213,18 @@ state at `--series-commit`, with:
   capture writer's argument, custody-deadline and ledger gates, the runner's
   policy, log, waiver, analysis-manifest, order, config and duplicate-ID
   gates, and the SHADE task's own offline resolver. The reservation must
-  carry `--execute`. A SHADE workload without a cache binding
-  refuses. A `CALIBRATION_LEDGER` in the caller's shell must name the
-  canonical ledger; the chain never consumes it.
+  carry `--execute`. Consumers must agree: each capture's `--power-policy`
+  equals the policy the reservation records (desk epoch, then desk T1, then
+  `POWER_POLICY`). Its `--sampler-binary` selects the reservation's sampler,
+  which preflight compares by path without opening either file. Its
+  session, attempt and custody locator match its reserved slot. Every
+  capture and campaign stage reads the reservation's head-pin file. The
+  reservation's pre-reserve readiness also runs read-only, with no lease or
+  append, on the canonical starting ledger and the exact parsed
+  `--head-pin`. A SHADE workload without a cache binding refuses. A
+  `CALIBRATION_LEDGER` in the caller's shell can only refuse. If set, it
+  must resolve through the fence to the canonical ledger, and an empty
+  value refuses. The chain never consumes it.
 * The window records are **hash-chained**: each record names its predecessor
   (`previous_record`: `commit`, `path`, `sha256`) and the series ledger `series/state.json`
   names the latest one (`previous_record`, `series_sha256`). The builder walks the chain back to

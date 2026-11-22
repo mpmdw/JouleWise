@@ -1220,3 +1220,130 @@ operator archive, so it was not run here.
     have no killing repository test.
   - Unsupported campaign modes `--max-blocks` and `--dry-run`, and the
     capture's test-only flags, are still admitted.
+
+## Round 12 · consumer agreement and the caller ledger rule
+
+The lead resolved both open items of round 11. Item 1 requires preflight to
+refuse every consumer refusal decidable from prepared inputs, including
+agreements between consumers, with capture identity and the ledger head pin
+named. Item 2 keeps `CALIBRATION_LEDGER` as a refusal-only check at entry.
+Under PIPELINE §3, spec v(n+1) was committed first at
+`7f2155750528ce6e0469ec226857356a8aa1a22b`. On the unchanged production
+code its six negative cases admitted, each with one host checkpoint per
+route: policy pre and post, sampler pre and post, the rolled-back pin, and
+an empty `CALIBRATION_LEDGER`. Every control passed.
+
+| Ruling clause | Commit | Named regression | Result |
+| --- | --- | --- | --- |
+| Each capture's `--power-policy` equals the reserved policy (pre and post mutated independently; desk-epoch precedence control) | `3daea0447` | `test_r11_capture_power_policy_must_equal_the_reserved_policy` | PASS |
+| `--sampler-binary` selects the reserved sampler; an executable on the host and an absent path both refuse unopened; omitted default and `/usr/bin/../bin/powermetrics` pass | `3daea0447` | `test_r11_capture_sampler_must_be_the_reserved_sampler` | PASS |
+| The sole in-tree pin `configs/calibration/retired-head.json` (sequence 7) refuses `calibration_ledger_rollback`; the same tree with the default pin passes | `bc224942e`, `3daea0447` | `test_r11_sole_rollback_head_pin_refuses_before_host` | PASS |
+| `CALIBRATION_LEDGER` unset, canonical or launch-view alias passes. Empty, missing and outside refuse; outside refuses unread at mode `000`. The alias passes on both routes. | `3daea0447` | `test_r11_caller_ledger_pointer_is_refusal_only` | PASS |
+| Same-byte copy refuses | existing | `test_o2a_separate_same_byte_ledger_refuses_in_a_fully_pinned_stage` | PASS |
+
+Each negative case asserts builder exit 2. It also asserts install exit 2
+with `packet_kit_mismatch`, a direct-arm refusal, zero host-checkpoint
+entries on both routes, an unchanged starting ledger, and no file beside
+it.
+
+- **Capture identity.** The reservation now exposes `reserved_power_policy`
+  (desk epoch, then desk T1, then `POWER_POLICY`) and `reserved_sampler`,
+  and its HAZARD identity uses both. Preflight reads the desk files with the
+  reservation's own `_hazard_desk_object`. For each capture it calls
+  `validate_powermetrics_fiducial.reserved_identity_refusal`, which compares
+  the policy and the `realpath` of the sampler without opening either
+  file. Host-measured fields keep their live checks.
+- **Head pin.** The reservation's pre-reserve decision (readiness, the
+  strict refusal and the resumable-session route) moved unchanged from
+  `main` into `pre_reserve_readiness`. `main` calls it under its lease.
+  Preflight calls it on the parsed `--ledger` and `--head-pin` with the
+  HAZARD arguments, `enforcing_under_lease=False` and
+  `probe_live_writer=False`. The readiness live-writer probe acquires a
+  lease and creates `<ledger>.lock` in S. `bc224942e` therefore adds
+  `calibration_readiness(probe_live_writer=True)`, which only that
+  read-only call turns off. That one-parameter change is the round's only
+  number-bearing commit (F8 list).
+- **Caller ledger.** An empty `CALIBRATION_LEDGER` now refuses. A set value
+  resolves through the fence and `check_ledger` as before. The fence
+  rejects an outside path before reading it, and the path comparison
+  rejects a same-byte copy before reading it. Preflight and the chain
+  still use the ledger exported from the packet.
+- **Census.** The three readiness refusals moved from `main` to
+  `pre_reserve_readiness` and were reviewed out of `BASELINE`.
+
+### Round 12 executing reviews and their fix
+
+Two executing reviews ran together on `c5b8b8047..3daea0447`: Opus 5.5
+(cold) and Fable 5.2 in the Sol seat, whose sandbox still cannot
+initialize here. Both returned ADMIT-WITH-FIXES with no HIGH. Both
+confirmed that `bc224942e` leaves the default and every existing caller
+unchanged. The read-only pre-reserve decision matched the lease-held one
+on every synthetic state (Opus 28 cases, Fable 52). Fable F1 and Opus MED-2
+showed that a capture or campaign stage could still pick its own
+`--head-pin`, and a capture its own session, attempt or custody locator,
+all admitted although the capture refuses them before any hardware
+capture. Opus MED-1 showed that on the reservation's resumable-session
+route, `calibration_session_status` still probed with a lease. It left
+`<ledger>.lock` in S, so install and arm refused.
+
+Each finding became an acceptance case before its fix: `48b50958c` and
+`ddd369dc6`. On `3daea0447` the negative cases admitted, the resumable
+case was refused at install over the lock file, and the controls passed.
+
+| Finding | Commit | Named regression | Result |
+| --- | --- | --- | --- |
+| Fable F1 / Opus MED-2: a later consumer's own `--head-pin` | `062698aff` | `test_r11_every_consumer_reads_the_reserved_head_pin` (pre, post, collection; explicit-default control) | PASS |
+| Opus MED-2: capture session, attempt, custody locator | `062698aff` | `test_r11_capture_slot_binding_must_match_the_reservation` | PASS |
+| Opus MED-1: lease on the resumable-session route | `fcfc0dee4`, `062698aff` | `test_r11_resumable_session_preflight_takes_no_lease` (admits; S unchanged) | PASS |
+| Fable M7 / Opus LOW-2: desk policy precedence | test only | `ReservedIdentityTests.test_reserved_power_policy_precedence` | PASS |
+| Fable M17: another staged file as `CALIBRATION_LEDGER` | test only | case in `test_r11_caller_ledger_pointer_is_refusal_only` | PASS |
+
+`fcfc0dee4` adds the same `probe_live_writer=True` parameter to
+`calibration_session_status`. It is the round's second number-bearing
+commit. The capture's slot agreement is one shared function,
+`reserved_slot_refusal`, fed with the reservation's own validated slot
+from `reservation_inputs`. The capture computes its custody locator with
+`bracket_custody_locator`, now also used by its `main`.
+Open LOW test gaps: no C1 control for a lagging pin that HAZARD accepts;
+strict versus non-strict at preflight is untested; and no ledger test
+fixes either probe parameter's default.
+
+Both seats then checked the fix diff `3daea0447..062698aff` (rule 4), and
+both returned **ADMIT** with nothing above LOW. Opus reran its 28
+comparisons with no directory change. Fable compared the resumable route
+6/6 and found the capture locator unchanged for 10/10 spellings. Each
+seat's mutants of the fixes were killed, except two LOW test gaps: the
+attempt-id comparison is masked by the locator check in every named
+case, and `calibration_session_status`'s new default has no pinning test.
+The papers are `docs/align/reviews/2026-11-22-c1-r12-opus-executing-review.md`
+(`509fbffd…`) and `docs/align/reviews/2026-11-22-c1-r12-fable-executing-review.md`
+(`da6a1502…`). The two number-bearing commits, `bc224942e` and `fcfc0dee4`,
+each have a row in `configs/b6/executing_reviews.json` that cites both
+papers. The shard 12 test body passes against them locally.
+
+Local checks, within the lead's test budget, at `062698aff`:
+- 17 tests pass: the nine `test_r11_*` acceptance cases, the same-byte,
+  MED-1, precedence and three named round-11 regressions, and the four
+  closed-environment tests (40 variables across 252 modules, the
+  47-variable sweep, 14/14 near-miss digests).
+- The census scan is clean.
+- `tests.test_calibration_ledger`, `test_validate_powermetrics_fiducial`,
+  `test_capture_t0_step`, `test_epoch_continuation_stale_pin`,
+  `test_calibration_live_three_window`, `test_host_command_sites` and
+  `test_r1_runtime_e2e` pass.
+
+Under this machine's load, the time-scaled synthetic captures in
+`tests.test_reserve_calibration_hazard` and the p2_vpf module reported
+`detection_nonconvergent`, and a 3 s custody wall-clock assertion
+overran. In those runs the reservation succeeded and the capture claimed
+its slot. Hosted CI runs both modules. On `3daea0447` it ran them along
+with the 94-case frozen replay (`test_frozen_lite_decisions`) and passed
+every shard except shard 12, which lacked the pending row.
+
+Open, all LOW:
+- No C1 control for a lagging pin that HAZARD accepts.
+- No test pins either `probe_live_writer` default.
+- The attempt-id comparison is masked by the locator check in every
+  named case.
+- The head-pin agreement compares files, so a byte-identical pin copy at
+  another path is refused. That fails closed and matches the rule.
