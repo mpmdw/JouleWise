@@ -94,7 +94,8 @@ class SessionFlagTests(unittest.TestCase):
             emitted = [shared, {"code": "catalog.digest_mismatch"},
                        {"code": "run.acceptance_only", "scope": {"run_id": "other-run"}}]
             (derived / "flags.jsonl").write_text("\n" + "".join(json.dumps(f) + "\n" for f in file_flags))
-            (derived / "b6-acceptance.json").write_text(json.dumps({"emitted_flags": emitted}))
+            (derived / "b6-acceptance.json").write_text(json.dumps({"counting": True, "emitted_flags": emitted}))
+            (derived / "roster.json").write_text('{"members": []}')
             self.assertEqual(bt.load_archive(root)["session_flags"],
                              ["catalog.digest_mismatch", "power.pstar_unsized", "registration.default_used"])
 
@@ -107,7 +108,8 @@ class SessionFlagTests(unittest.TestCase):
                 json.dumps({"code": "audit.early", "scope": {}}) + "\n" +
                 json.dumps({"code": "battery.assist", "scope": {"run_id": "r1"}}) + "\n")
             (root / "derived/b6-acceptance.json").write_text(json.dumps(
-                {"emitted_flags": [{"code": "audit.early"}, {"code": "zeta.late"}]}))
+                {"counting": True, "emitted_flags": [{"code": "audit.early"}, {"code": "zeta.late"}]}))
+            (root / "derived/roster.json").write_text('{"members": []}')
             codes = bt.load_archive(root)["session_flags"]
             self.assertEqual(codes, ["audit.early", "zeta.late"])
             self.assertLess(codes[0], "battery.assist")
@@ -231,7 +233,7 @@ class MissingWithheldFlagTests(unittest.TestCase):
             {"code": "battery.assist", "scope": {"run_id": "r2"}},
             {"code": "other.model", "scope": {"run_id": "r3"}}]))
         (root / "derived/b6-acceptance.json").write_text(json.dumps({
-            "session_id": "s1",
+            "session_id": "s1", "counting": True,
             "emitted_flags": [{"code": "audit.early"}, {"code": "zeta.late"}, {"code": "run.emitted", "scope": {"run_id": "r2"}}],
             "excluding": [{"scope": "member", "run_id": "r1", "code": "member.excluded"},
                           {"scope": "member", "run_id": "r2", "code": "member.excluded"},

@@ -43,6 +43,7 @@ import bisect
 import csv
 import fcntl
 import os
+import plistlib
 import tempfile
 from contextlib import contextmanager, ExitStack
 import hashlib
@@ -55,6 +56,7 @@ import struct
 import subprocess
 import sys
 from pathlib import Path
+from xml.parsers.expat import ExpatError
 
 
 class StorageStop(BaseException):
@@ -1005,7 +1007,7 @@ def _bundle(root, run_id):
     return None
 
 
-def member_spans(bundle, *, metadata=None):
+def member_spans(bundle, *, metadata=None, reference=True):
     """Decode-phase and idle-baseline spans of a bundle in the controller's monotonic ns."""
     if metadata is None:
         metadata = read_json(bundle / "metadata.json", {}) or {}
@@ -1039,20 +1041,19 @@ def member_spans(bundle, *, metadata=None):
                 else mapped(event["timestamp_s"])
         elif phase == "idle_baseline" and kind == "stage_completed":
             spans["idle_end"] = mapped(event["timestamp_s"])
-    if "decode_start" not in spans or "decode_end" not in spans or "request_start" not in spans:
+    if "decode_start" not in spans or "decode_end" not in spans or (reference and "request_start" not in spans):
         return None
     return {"decode_ns": [spans["decode_start"], spans["decode_end"]],
-            "request_ns": [spans["request_start"], spans["decode_end"]],
+            "request_ns": [spans["request_start"], spans["decode_end"]] if "request_start" in spans else None,
             "idle_ns": [spans["idle_start"], spans["idle_end"]] if "idle_start" in spans and "idle_end" in spans else None}
 
 
 def load_archive(root):
     root = Path(root)
-    record = read_json(root / "derived/b6-acceptance.json", {}) or {}
-    try:
-        flag_rows = [json.loads(raw) for raw in _read_text(root / "derived/flags.jsonl").splitlines() if raw.strip()]
-    except FileNotFoundError:
-        flag_rows = []
+    record = json.loads(_read_text(root / "derived/b6-acceptance.json"))
+    if record.get("counting") is not True:
+        raise ValueError("session is not a counting accepted attempt")
+    flag_rows = [json.loads(raw) for raw in (root / "derived/flags.jsonl").read_text().splitlines() if raw.strip()]
     # §6 / §15, RL-82 reading A: session codes have no run attached in
     # either source. Read them independently of the analysis and export.
     session_flags = sorted({flag["code"] for flag in flag_rows + record.get("emitted_flags", [])
@@ -1069,7 +1070,7 @@ def load_archive(root):
         if entry.get("scope") == "member":
             exclusions.setdefault(entry["run_id"], set()).add(entry["code"])
             run_codes.setdefault(entry["run_id"], set()).add(entry["code"])
-    roster = read_json(root / "derived/roster.json", {}) or {}
+    roster = json.loads(_read_text(root / "derived/roster.json"))
     cell_run_codes = {}
     for member in roster.get("members", []):
         for unit in member.get("units", []):
@@ -1090,6 +1091,10 @@ def load_archive(root):
             "streams": streams, "calibration": record.get("calibration") or {}, "session_flags": session_flags,
             "planned_members": roster.get("members", []), "run_codes": run_codes, "exclusions": exclusions,
             "cell_run_codes": {cell: sorted(codes) for cell, codes in cell_run_codes.items()}}
+
+
+def _interval_energy(intervals, start, end):
+    return math.fsum(power * max(0.0, min(end, right) - max(start, left)) for left, right, power in intervals)
 
 
 def anchor_envelope(intervals, window, common_s, edge_s):
@@ -1114,7 +1119,7 @@ def anchor_envelope(intervals, window, common_s, edge_s):
         raise ValueError("trace does not cover operative decode shifts")
 
     def energy(a, z):
-        return math.fsum(p * max(0.0, min(z, right) - max(a, left)) for left, right, p in trace)
+        return _interval_energy(trace, a, z)
 
     point = energy(start, end)
     values = [point]
@@ -1132,7 +1137,7 @@ def anchor_envelope(intervals, window, common_s, edge_s):
     return max(abs(value - point) for value in values)
 
 
-def decode_anchor_bound(archive, run_id, *, plain=None, metadata=None):
+def decode_anchor_bound(archive, run_id, *, plain=None, metadata=None, native=None, include_decode=False):
     """§7: rails bound "re-derived under the session's operative timing bound".
 
     §16: read calibration.operative_bound_s, "never recomputes a calibration
@@ -1204,7 +1209,14 @@ def decode_anchor_bound(archive, run_id, *, plain=None, metadata=None):
                 raise ValueError("misaligned anchor rails")
             a, z, _ = next(iter(group.values()))
             intervals.append((a + shift, z + shift, math.fsum(v[2] for v in group.values())))
-        return anchor_envelope(intervals, (starts[0], ends[0]), common, operative + span)
+        if native is not None:
+            _verify_native_trace(intervals, native)
+        anchor = anchor_envelope(intervals, (starts[0], ends[0]), common, operative + span)
+        if include_decode:
+            origin = intervals[0][1]
+            shifted = [(a - origin, z - origin, power) for a, z, power in intervals]
+            return anchor, _interval_energy(shifted, starts[0] - origin, ends[0] - origin)
+        return anchor
 
 
 @contextmanager
@@ -1319,8 +1331,11 @@ def dc_join(archive, run_id, *, reference=False, spans=None):
         if bundle is None:
             return {"status": "bundle_missing", "decode_assist_evaluated_reason":
                     f"decode marker not evaluated: selected bundle missing (run {run_id})"}
-        with _readable_bundle(bundle, Path(str(archive["root"]) + ".desk") / "compression.jsonl") as plain:
-            spans = member_spans(plain)
+        try:
+            with _readable_bundle(bundle, Path(str(archive["root"]) + ".desk") / "compression.jsonl") as plain:
+                spans = member_spans(plain)
+        except (OSError, ValueError, KeyError, TypeError):
+            spans = None
         if spans is None:
             return {"status": "spans_unreadable", "decode_assist_evaluated_reason":
                     f"decode marker not evaluated: member spans unreadable (run {run_id})"}
@@ -1376,8 +1391,8 @@ def dc_join(archive, run_id, *, reference=False, spans=None):
                                 ("excess_latency_ms_p95", "excess_latency_ms_max", "excess_latency_ms_min",
                                  "excess_latency_ms_absmax", "clock_rate_ppm")},
                   "idle_power_w": None}
-        request = [spans["request_ns"][0] + offset, spans["request_ns"][1] + offset]
-        if host[0] <= request[0] and request[1] <= host[-1]:
+        request = [v + offset for v in spans["request_ns"]] if spans["request_ns"] else None
+        if request and host[0] <= request[0] and request[1] <= host[-1]:
             request_energy, n_request = integrate(host, watts, request[0], request[1])
             if request_energy is not None:
                 request_battery = battery_terms(stream, request, base)
@@ -1454,7 +1469,7 @@ def _releasable_record(row):
     return _valid_record(row) and bool(row.get("model_name"))
 
 
-def _science_inputs(archive, row, registered_model):
+def _science_inputs(archive, row, registered_model, *, synthetic=False):
     """A member must have a usable science record before evaluating the meter."""
     root, run_id = archive["root"], row["run_id"]
     bundle = _bundle(root, run_id)
@@ -1467,13 +1482,151 @@ def _science_inputs(archive, row, registered_model):
         metadata = read_json(plain / "metadata.json")
         if not metadata or metadata.get("workload_observed", {}).get("output_token_count") != PRINTED_TOKENS:
             raise ValueError("runtime-observed output count must be 512")
-        spans = member_spans(plain, metadata=metadata)
+        spans = member_spans(plain, metadata=metadata, reference=False)
         if not spans or not spans["idle_ns"] or any(spans[k][1] <= spans[k][0] for k in ("decode_ns", "idle_ns")):
             raise ValueError("member decode or idle span unavailable")
-        stored = root / "withheld/reductions" / (run_id + ".summary_metrics.rereduced.json")
-        if not stored.is_file() and not stored.with_suffix(".json.zst").is_file():
-            raise ValueError("member reduction missing")
-        return spans, decode_anchor_bound(archive, run_id, plain=plain, metadata=metadata)
+        stored = json.loads(_read_text(root / "withheld/reductions" / (run_id + ".summary_metrics.rereduced.json")))
+        # Dispatch can raise before the reducer returns a structured failure.
+        version = _check_reducer_dispatch(plain, config, metadata)
+        if synthetic and (stored or {}).get("bytes_synthetic_timing_fixture") is True:
+            # The primary returns a structured failure for an absent or partial
+            # curve. A text decoding exception escapes before that fallback.
+            try:
+                _read_text(plain / "power_trace.csv")
+            except FileNotFoundError:
+                pass
+            return spans, _synthetic_science_columns(stored, archive, spans)
+        native = _native_science_inputs(plain, metadata, version)
+        if native is not None and (not row.get("_unblinded") or not is_number(row.get("dur_decode_s"))):
+            anchor, energy = decode_anchor_bound(archive, run_id, plain=plain, metadata=metadata, native=native,
+                                                  include_decode=True)
+            idle = metadata["idle_baseline"]["power_w_mean"]
+            if not is_number(idle) or idle < 0:
+                raise ValueError("native idle baseline unavailable")
+            return spans, _archive_science_columns(spans, energy, idle, anchor)
+        anchor = decode_anchor_bound(archive, run_id, plain=plain, metadata=metadata, native=native)
+        return spans, {"_operative_anchor_j": anchor}
+
+
+def _check_reducer_dispatch(bundle, config, metadata):
+    summary_path = bundle / "summary_metrics.json"
+    try:
+        summary = read_json(summary_path)
+    except (OSError, ValueError):
+        summary = None
+    provenance = summary.get("summary_provenance") if isinstance(summary, dict) else None
+    version = provenance.get("reducer_version") if isinstance(provenance, dict) else None
+    event_v2 = metadata.get("event_semantics_version") == "joulewise.events.v2"
+    config_v2 = config.get("schema_extensions") == ["joulewise.axi_decode_config.v1"]
+    if version is None:
+        if summary_path.is_file() and (event_v2 or summary != {"status": "failed"}):
+            raise ValueError("finalized bundle reducer version missing")
+        version = "0.6.2" if event_v2 else "0.5.2"
+    if version in ("0.6.0", "0.6.1", "0.6.2"):
+        if not (config_v2 and event_v2):
+            raise ValueError("AXI reducer requires its config and event layouts")
+    elif version not in ("0.4.1", "0.4.2", "0.5.0", "0.5.1", "0.5.2") or event_v2 or config_v2:
+        raise ValueError("bundle reducer version or layout unsupported")
+    return version
+
+
+def _native_science_inputs(bundle, metadata, version):
+    device = metadata.get("device") or {}
+    telemetry = ((metadata.get("adapters") or {}).get("telemetry") or {}).get("name", device.get("telemetry"))
+    if telemetry != "powermetrics":
+        return None
+    calibration = metadata["instrument_calibration"]
+    manifest = None
+    if version in ("0.5.2", "0.6.2"):
+        manifest, raw = _authenticated_native_file(bundle, calibration["validation_manifest_path"],
+                                                    calibration["validation_manifest_sha256"])
+        members = json.loads(raw)["artifacts"]
+        if not members:
+            raise ValueError("empty native calibration manifest")
+        for relative, expected in members.items():
+            _authenticated_native_file(bundle, relative, expected, base=manifest.parent)
+    evidence, raw = _authenticated_native_file(bundle, calibration["artifact_path"], calibration["artifact_sha256"])
+    if manifest is not None and members.get(evidence.relative_to(manifest.parent).as_posix()) != calibration["artifact_sha256"]:
+        raise ValueError("native calibration evidence is absent from its manifest")
+    evidence_hashes = json.loads(raw)["artifact_sha256"]
+    raw_capture = "raw/powermetrics.plist"
+    _, calibration_capture = _authenticated_native_file(bundle, raw_capture, evidence_hashes[raw_capture],
+                                                        base=evidence.parent)
+    _, calibration_events = _authenticated_native_file(bundle, "events.jsonl", evidence_hashes["events.jsonl"],
+                                                       base=evidence.parent)
+    _native_frames(calibration_capture)
+    events = [json.loads(line) for line in calibration_events.decode("utf-8").splitlines() if line.strip()]
+    if not events or not all(isinstance(event, dict) for event in events):
+        raise ValueError("invalid native calibration events")
+    return _native_frames((bundle / raw_capture).read_bytes())
+
+
+def _native_frames(raw):
+    parts = [part for part in raw.split(b"\0") if part.strip()]
+    frames = []
+    for index, part in enumerate(parts):
+        try:
+            frame = plistlib.loads(part)
+        except (ExpatError, plistlib.InvalidFileException, TypeError, ValueError):
+            if index == len(parts) - 1 and frames:
+                break
+            raise ValueError("unreadable native capture frame") from None
+        elapsed = frame["elapsed_ns"]
+        processor = frame["processor"]
+        powers = [processor[rail + "_power"] for rail in ("cpu", "gpu", "ane")]
+        if (not frame["timestamp"] or type(elapsed) is not int or elapsed <= 0
+                or not all(is_number(power) for power in powers)
+                or any(type(processor[k]) is not int for k in ("cpu_energy", "gpu_energy", "ane_energy"))):
+            raise ValueError("invalid native capture frame")
+        frames.append((elapsed / 1e9, math.fsum(powers) / 1e3))
+    if not frames:
+        raise ValueError("native capture has no complete frames")
+    return frames
+
+
+def _authenticated_native_file(bundle, relative, expected, *, base=None):
+    relative = Path(relative)
+    if relative.is_absolute() or ".." in relative.parts:
+        raise ValueError("native calibration path escapes the bundle")
+    path = ((base or bundle) / relative).resolve(strict=True)
+    if not path.is_relative_to(bundle.resolve()):
+        raise ValueError("native calibration path escapes the bundle")
+    raw = path.read_bytes()
+    if hashlib.sha256(raw).hexdigest() != expected:
+        raise ValueError("native calibration digest mismatch")
+    return path, raw
+
+
+def _verify_native_trace(intervals, frames):
+    if len(intervals) != len(frames):
+        raise ValueError("native capture and trace row counts disagree")
+    preceding = intervals[0][1]
+    for index, ((start, end, trace_power), (elapsed, raw_power)) in enumerate(zip(intervals, frames)):
+        if (not math.isclose(trace_power, raw_power, rel_tol=1e-9, abs_tol=1e-9)
+                or abs(end - start - elapsed) > 1e-6
+                or (index and abs(end - preceding - elapsed) > 1e-6)):
+            raise ValueError("native capture and trace values disagree")
+        preceding = end
+
+
+def _synthetic_science_columns(stored, archive, spans):
+    bound = archive["calibration"].get("operative_bound_s")
+    if bound is None or isinstance(bound, bool) or not is_number(float(bound)) or float(bound) < 0:
+        raise ValueError("session operative timing bound missing or invalid")
+    energy = stored["phase_energy_j"]["decode"]
+    idle = stored["idle_baseline"]["power_w_mean"]
+    anchor = stored["energy_anchor_shift_envelopes"]["/phase_energy_j/decode"]["max_abs_delta_j"]
+    joint = stored["energy_bound_terms_j"].get("E_interpolation_joint_edge_bound_j")
+    if (stored.get("status") != "succeeded" or joint != 0
+            or any(not is_number(value) or value < 0 for value in (energy, idle, anchor))):
+        raise ValueError("synthetic science summary is unusable")
+    return _archive_science_columns(spans, energy, idle, anchor)
+
+
+def _archive_science_columns(spans, energy, idle, anchor):
+    start, end = spans["decode_ns"]
+    return {"phase_decode_j": energy, "idle_power_w": idle, "dur_decode_s": (end - start) / 1e9,
+            "bound_E_interpolation_joint_edge_bound_j": 0.0, "_operative_anchor_j": anchor}
 
 
 def _floor_plan_error(rows):
@@ -1879,8 +2032,10 @@ def load_withheld(export_path, sidecar, manifest):
         return {"rows": [], "missing": {}}
     store = Path(export_path).parent / info["path"]
     try:
+        if not Path(export_path).is_file():
+            raise FileNotFoundError(export_path)
         rows = read_export(store)
-    except OSError:
+    except FileNotFoundError:
         digests = info.get("config_key_sha256") or {}
         missing = {}
         for model, entry in manifest.items():
@@ -2259,7 +2414,7 @@ def sha256_of(value) -> str:
     return hashlib.sha256(canonical_json(value).encode("utf-8")).hexdigest()
 
 
-def analyse(rows, manifest, archives, *, stage, key_dir=None, sidecars=None, listed=None, withheld=None):
+def analyse(rows, manifest, archives, *, stage, key_dir=None, sidecars=None, listed=None, withheld=None, synthetic=False):
     """sidecars: {session_id: export sidecar dict}; listed: {session_id: manifest sessions entry};
     withheld: {session_id: load_withheld record} for the sessions whose withheld store was read (after
     the stage-1 commit) or found missing."""
@@ -2272,6 +2427,8 @@ def analyse(rows, manifest, archives, *, stage, key_dir=None, sidecars=None, lis
     science = group_science_rows(rows, manifest)
     archive_by_session = {a["session_id"]: a for a in archives if a.get("session_id")}
     sidecars, listed, withheld = sidecars or {}, listed or {}, withheld or {}
+    for session_id in sidecars:
+        sessions.setdefault(session_id, [])
     identities = {s: pass_identity(s, listed, sidecars.get(s)) for s in sessions}
     # B6 ruling Q1: a session whose withheld file is missing is still a collected pass of the models
     # it withheld; their cells print `missing` with the flag and the sidecar's counts.
@@ -2292,6 +2449,8 @@ def analyse(rows, manifest, archives, *, stage, key_dir=None, sidecars=None, lis
         keys = {k for m in selected for k in model_keys.get(m, ())} | {REFERENCE_KEY}
         rows = unblind(rows, key_dir, keys)
         sessions = group_sessions(rows)
+        for session_id in sidecars:
+            sessions.setdefault(session_id, [])
         science = group_science_rows(rows, manifest)
         missing_science = group_science_rows(absent_science_rows(sessions, archive_by_session), selected)
         for model, collected in missing_science.items():
@@ -2322,7 +2481,7 @@ def analyse(rows, manifest, archives, *, stage, key_dir=None, sidecars=None, lis
         allowances[session_id] = record
         archive = archive_by_session.get(session_id)
         references = [r for r in srows if r["role"] in ("corpus", "start", "midpoint", "end")]
-        if archive is not None and references and all(r["_unblinded"] for r in references):
+        if archive is not None and stage in ("1", "2") and all(r["_unblinded"] for r in references):
             reference_dc[session_id] = {r["run_id"]: dc_join(archive, r["run_id"], reference=True)
                                         for r in references if archive["streams"]}
             flags.extend({"flag": "bytes.meter_gap", "session_id": session_id, "run_id": run_id}
@@ -2385,7 +2544,8 @@ def analyse(rows, manifest, archives, *, stage, key_dir=None, sidecars=None, lis
                     continue
                 # Establish availability before deriving any decode or meter flag.
                 try:
-                    spans, r["_operative_anchor_j"] = _science_inputs(archive, r, manifest[model]["model"])
+                    spans, science_columns = _science_inputs(archive, r, manifest[model]["model"], synthetic=synthetic)
+                    r.update(science_columns)
                 except (OSError, ValueError, KeyError, TypeError, ArithmeticError) as exc:
                     anchor_status[run_id] = str(exc)
                     r["status"] = "unusable"
@@ -2578,6 +2738,8 @@ def main(argv=None):
     exports = list(args.export)
     if args.export_dir:
         exports += sorted(args.export_dir.rglob("*.runs.csv"))
+        exports += sorted(p.with_name(p.name.removesuffix(".session.json") + ".runs.csv")
+                          for p in args.export_dir.rglob("*.session.json"))
     # Each file is read once.  A withheld store may also be named with --export (the convention
     # before the store was located through the sidecar); its rows then enter once, not twice.
     named, unique = set(), []
@@ -2616,10 +2778,15 @@ def main(argv=None):
         manifest = read_manifest(args.manifest)
         rows, sidecars, withheld = [], {}, {}
         for path in exports:
-            batch = read_export(path)
+            batch = read_export(path) if path.is_file() else []
             rows += batch
-            sidecar = read_sidecar(path)
-            session_ids = {r["session_id"] for r in batch} or {str(sidecar.get("session_id") or path.name)}
+            try:
+                sidecar = read_sidecar(path)
+            except (OSError, ValueError):
+                if read_withheld:
+                    raise
+                sidecar = {}
+            session_ids = {r["session_id"] for r in batch} or {path.name.removesuffix(".runs.csv")}
             for session_id in session_ids:
                 # A store named directly has no sidecar beside it; it never hides the export's.
                 if not sidecars.get(session_id):
@@ -2633,8 +2800,10 @@ def main(argv=None):
         # Registration 6/11: the blinded stage does not open a raw meter stream;
         # its decode-assist counts and without-assisted numbers remain unevaluated.
         archives = [load_archive(root) for root in args.archive] if args.stage != "blinded" else []
+        document = read_json(args.manifest)
+        synthetic = isinstance(document, dict) and document.get("synthetic") is True
         result = analyse(rows, manifest, archives, stage=args.stage, key_dir=args.key_dir,
-                         sidecars=sidecars, listed=listed_sessions(args.manifest), withheld=withheld)
+                         sidecars=sidecars, listed=listed_sessions(args.manifest), withheld=withheld, synthetic=synthetic)
         if args.stage == "blinded" and args.archive:
             result["notes"].append("DC-input skipped at the blinded stage; raw meter streams were not opened")
     except StorageStop as exc:

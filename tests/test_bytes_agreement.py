@@ -2572,6 +2572,11 @@ class MarkerPathAgreementTests(unittest.TestCase):
         self.root = Path(self.temp.name)
         self.directory = self.root / "sources/night-custody/hazards/meter"
         self.directory.mkdir(parents=True)
+        derived = self.root / "derived"
+        derived.mkdir()
+        (derived / "roster.json").write_text('{"members": []}')
+        (derived / "b6-acceptance.json").write_text('{"counting": true}')
+        (derived / "flags.jsonl").write_text('')
         self.path = self.directory / "stream-001.jsonl"
         self.spans = {"decode_ns": [4_000_000_000, 8_000_000_000],
                       "idle_ns": [0, 2_000_000_000], "request_ns": [2_000_000_000, 8_000_000_000]}
@@ -2936,8 +2941,7 @@ class MarkerPathAgreementTests(unittest.TestCase):
             if path == self.path:
                 raise OSError("unreadable stream")
             return original_open(path, *args, **kwargs)
-        # #573 propagates custody read errors. Fail the intended meter stream,
-        # while absent acceptance/roster files retain their missing-file path.
+        # #573 propagates custody read errors. Fail only the intended meter stream.
         with mock.patch.object(Path, "open", unreadable_stream):
             self.assert_agreement()
 

@@ -1,0 +1,562 @@
+[
+  {
+    "id": "config",
+    "path": "bundle/config.json",
+    "phase": "both",
+    "primary": "joulewise/b6/export_runs.py:645,651; joulewise/bytes_analysis.py:991",
+    "scope": "member",
+    "faults": {
+      "absent": "Science export substitutes its empty default; authenticated reference export refuses. Analysis keeps the planned member as unusable before any meter evaluation.",
+      "zero": "Science export substitutes its empty default; authenticated reference export refuses. Analysis JSON parse fails and keeps the planned member as unusable.",
+      "half": "Science export substitutes its empty default; authenticated reference export refuses. Analysis JSON parse fails and keeps the planned member as unusable.",
+      "garbage": "Science export substitutes its empty default; authenticated reference export refuses. Analysis JSON parse fails and keeps the planned member as unusable."
+    },
+    "flags": "Recorded codes only for an unusable science member."
+  },
+  {
+    "id": "metadata",
+    "path": "bundle/metadata.json",
+    "phase": "both",
+    "primary": "joulewise/b6/export_runs.py:646,652; joulewise/bytes_analysis.py:994,1026",
+    "scope": "member",
+    "faults": {
+      "absent": "Science export substitutes its empty default; authenticated reference export refuses. Analysis keeps the planned member as unusable before any meter evaluation. Skip a reference archive join.",
+      "zero": "Science export substitutes its empty default; authenticated reference export refuses. Analysis JSON parse fails and keeps the planned member as unusable. Skip a reference archive join.",
+      "half": "Science export substitutes its empty default; authenticated reference export refuses. Analysis JSON parse fails and keeps the planned member as unusable. Skip a reference archive join.",
+      "garbage": "Science export substitutes its empty default; authenticated reference export refuses. Analysis JSON parse fails and keeps the planned member as unusable. Skip a reference archive join."
+    },
+    "flags": "Recorded codes only for an unusable science member; a reference without a join gets the generic meter request drop reason."
+  },
+  {
+    "id": "events",
+    "path": "bundle/events.jsonl",
+    "phase": "both",
+    "primary": "joulewise/b6/export_runs.py:375\u2013393,680; joulewise/bytes_analysis.py:997,1010,1027",
+    "scope": "member",
+    "faults": {
+      "absent": "Science export uses empty events; reference export refuses. Analysis keeps the planned member as unusable before any meter evaluation.",
+      "zero": "Science export uses empty events; reference inventory rejects damaged bytes. Required analysis phase spans are absent.",
+      "half": "Malformed line raises in science export and makes a science member unusable in analysis. A complete prefix is accepted only when the required phase spans remain.",
+      "garbage": "Malformed line raises in science export and makes a science member unusable in analysis."
+    },
+    "flags": "Recorded codes only for unavailable science; no attempted-join meter flag."
+  },
+  {
+    "id": "reduction",
+    "path": "withheld/reductions/<run>.summary_metrics.rereduced.json",
+    "phase": "both",
+    "primary": "joulewise/b6/export_runs.py:677\u2013679; joulewise/bytes_analysis.py:998\u20131009",
+    "scope": "member",
+    "faults": {
+      "absent": "Science export substitutes its empty default; authenticated reference export refuses. Analysis keeps the planned member as unusable before any meter evaluation.",
+      "zero": "Science export substitutes its empty default; authenticated reference export refuses. Analysis JSON parse fails and keeps the planned member as unusable.",
+      "half": "Science export substitutes its empty default; authenticated reference export refuses. Analysis JSON parse fails and keeps the planned member as unusable.",
+      "garbage": "Science export substitutes its empty default; authenticated reference export refuses. Analysis JSON parse fails and keeps the planned member as unusable."
+    },
+    "flags": "Recorded codes only on unusable member. Parsing precedes the synthetic override."
+  },
+  {
+    "id": "trace",
+    "path": "bundle/power_trace.csv",
+    "phase": "both",
+    "primary": "joulewise/b6/export_runs.py:644; joulewise/bundle_read.py:341\u2013386; joulewise/bytes_analysis.py:587\u2013616",
+    "scope": "member",
+    "faults": {
+      "absent": "Science export uses the stored reduction. The reducer has no usable curve. An explicit synthetic timing summary still supplies the science record; without it analysis drops the record. Reference export requires authenticated trace bytes.",
+      "zero": "Same as absent.",
+      "half": "A partial curve can make re-reduction fail; the synthetic summary still governs if the reducer returns a structured result.",
+      "garbage": "A corrupt text curve can return a structured failure that the fixture replaces. Invalid UTF-8 raises before the override, so analysis drops the member."
+    },
+    "flags": "Synthetic science trace faults alone do not add a flag. Non-synthetic failures keep recorded codes only."
+  },
+  {
+    "id": "summary",
+    "path": "bundle/summary_metrics.json",
+    "phase": "both",
+    "primary": "joulewise/b6/export_runs.py:261\u2013305,677\u2013679; joulewise/bundle_read.py:423\u2013424; joulewise/reduce.py:2751\u20132788",
+    "scope": "member",
+    "faults": {
+      "absent": "Science reducer chooses its unfinalized default; reference export may use another verified status source.",
+      "zero": "Tolerant parse produces no provenance. Event-v2 and non-frozen finalized inputs refuse dispatch; see the frozen legacy exception.",
+      "half": "Same as zero for an invalid prefix.",
+      "garbage": "Same as zero."
+    },
+    "flags": "Dispatch refusal makes a science record unusable; the synthetic override cannot catch a dispatch exception."
+  },
+  {
+    "id": "status",
+    "path": "bundle/status.json",
+    "phase": "export",
+    "primary": "joulewise/b6/acceptance.py:474; joulewise/b6/export_runs.py:293\u2013305,647\u2013650",
+    "scope": "member",
+    "faults": {
+      "absent": "Science status can fall back to assessment or metadata. An authenticated collected reference refuses when it loses an inventoried file.",
+      "zero": "Refuse export with StorageStop when the file is an authenticated input.",
+      "half": "Refuse export with StorageStop when the file is an authenticated input.",
+      "garbage": "Refuse export with StorageStop when the file is an authenticated input."
+    },
+    "flags": "Reference export StorageStop. Science analysis does not read status.json."
+  },
+  {
+    "id": "raw_powermetrics",
+    "path": "bundle/raw/powermetrics.plist",
+    "phase": "both",
+    "primary": "joulewise/b6/export_runs.py:307\u2013330,450; joulewise/reduce.py:1781\u20131796",
+    "scope": "conditional_member",
+    "faults": {
+      "absent": "The actual powermetrics reducer cannot resolve its anchor. Existing synthetic timing summaries take precedence over structured failures. Reference export verifies the logical bundle inventory.",
+      "zero": "Same as absent.",
+      "half": "Same as absent.",
+      "garbage": "Same as absent."
+    },
+    "flags": "On the native real path the anchor stays unresolved; analysis drops the member with recorded codes only."
+  },
+  {
+    "id": "cal_manifest",
+    "path": "member calibration validation manifest from metadata",
+    "phase": "both",
+    "primary": "joulewise/reduce.py:1213\u20131255; joulewise/b6/export_runs.py:450",
+    "scope": "conditional_member",
+    "faults": {
+      "absent": "Strict native calibration is invalid.",
+      "zero": "Same as absent.",
+      "half": "Same as absent.",
+      "garbage": "Same as absent."
+    },
+    "flags": "Reducer reports instrument_calibration_invalid. The analysis does not invent a member flag."
+  },
+  {
+    "id": "cal_evidence",
+    "path": "member instrument evidence JSON from metadata",
+    "phase": "both",
+    "primary": "joulewise/reduce.py:1277\u20131305; joulewise/b6/export_runs.py:450",
+    "scope": "conditional_member",
+    "faults": {
+      "absent": "Strict native calibration is invalid; frozen arms identify a missing artifact.",
+      "zero": "Digest mismatch, or JSON parse failure if the digest authenticates the damaged bytes.",
+      "half": "Same as zero.",
+      "garbage": "Same as zero."
+    },
+    "flags": "Native anchor unresolved; recorded codes only at analysis."
+  },
+  {
+    "id": "cal_members",
+    "path": "calibration manifest members, including capture events.jsonl and raw/powermetrics.plist",
+    "phase": "both",
+    "primary": "joulewise/reduce.py:1241\u20131255,1476\u20131493; joulewise/b6/export_runs.py:450",
+    "scope": "conditional_member",
+    "faults": {
+      "absent": "Strict calibration is invalid; a required member is missing.",
+      "zero": "Digest mismatch.",
+      "half": "Digest mismatch.",
+      "garbage": "Digest mismatch."
+    },
+    "flags": "instrument_calibration_invalid; recorded codes only at analysis."
+  },
+  {
+    "id": "compression",
+    "path": "<archive>.desk/compression.jsonl and corresponding logical .zst input",
+    "phase": "both",
+    "primary": "joulewise/desk_restore.py:82\u2013125,208\u2013229; joulewise/desk_compress.py:139\u2013143; joulewise/bytes_analysis.py:990",
+    "scope": "conditional_campaign",
+    "faults": {
+      "absent": "When a plain sibling is available it wins; a required compressed file or journal without an alternative is refused.",
+      "zero": "Required restoration rejects missing or invalid compression evidence.",
+      "half": "Required restoration rejects malformed journal or digest/size changes.",
+      "garbage": "Required restoration rejects malformed journal or unreadable compression."
+    },
+    "flags": "StorageStop / restore_refused on a required authenticated restoration."
+  },
+  {
+    "id": "roster",
+    "path": "derived/roster.json",
+    "phase": "both",
+    "primary": "joulewise/b6/export_runs.py:343\u2013367,565; joulewise/bytes_analysis.py:937",
+    "scope": "campaign",
+    "faults": {
+      "absent": "Refuse export with StorageStop when the file is an authenticated input.",
+      "zero": "Refuse export with StorageStop when the file is an authenticated input.",
+      "half": "Refuse export with StorageStop when the file is an authenticated input.",
+      "garbage": "Refuse export with StorageStop when the file is an authenticated input."
+    },
+    "flags": "Analysis refuses malformed or missing required JSON; export authenticates the roster digest."
+  },
+  {
+    "id": "acceptance",
+    "path": "derived/b6-acceptance.json",
+    "phase": "both",
+    "primary": "joulewise/b6/export_runs.py:529; joulewise/bytes_analysis.py:938\u2013947",
+    "scope": "campaign",
+    "faults": {
+      "absent": "Uses an explicit export argument if supplied. Otherwise export cannot resolve the pack, and analysis refuses.",
+      "zero": "Same as absent.",
+      "half": "Same as absent.",
+      "garbage": "Same as absent."
+    },
+    "flags": "Stage refusal; the acceptance record supplies all session and member exclusion codes when valid."
+  },
+  {
+    "id": "flags",
+    "path": "derived/flags.jsonl",
+    "phase": "both",
+    "primary": "joulewise/b6/export_runs.py:343\u2013367; joulewise/b6/acceptance.py:431\u2013443; joulewise/bytes_analysis.py:947\u2013953",
+    "scope": "campaign",
+    "faults": {
+      "absent": "Refuse export with StorageStop when the file is an authenticated input. Analysis requires the file.",
+      "zero": "Refuse export with StorageStop when the file is an authenticated input. An empty analysis stream contributes no run flags.",
+      "half": "Refuse export with StorageStop when the file is an authenticated input. A malformed analysis line refuses; a valid prefix contributes only its remaining entries.",
+      "garbage": "Refuse export with StorageStop when the file is an authenticated input. Malformed analysis JSON refuses."
+    },
+    "flags": "No new analysis code for an empty file; remaining acceptance codes still apply."
+  },
+  {
+    "id": "meter",
+    "path": "sources/night-custody/hazards/meter/stream-*.jsonl",
+    "phase": "both",
+    "primary": "joulewise/b6/export_runs.py:307\u2013330,367 (only if inventoried input); joulewise/bytes_analysis.py:620\u2013743,1040\u20131084",
+    "scope": "campaign",
+    "faults": {
+      "absent": "No stream is attempted; science with a usable record cannot join; reference gets a generic boundary drop reason.",
+      "zero": "Present stream reaches the reader but has no usable mapping/samples.",
+      "half": "A malformed stream becomes an unusable stream; a complete prefix can still cover valid windows.",
+      "garbage": "Parse failure turns this stream into an unusable stream; other streams can still supply the join."
+    },
+    "flags": "Science bytes.meter_decode_unavailable when no join succeeds, or bytes.meter_gap for observed sample drops; references disclose only attempted failures."
+  },
+  {
+    "id": "harvest_receipt",
+    "path": "harvest.json and every digest-listed derived output",
+    "phase": "export",
+    "primary": "joulewise/b6/export_runs.py:343\u2013372",
+    "scope": "campaign",
+    "faults": {
+      "absent": "Refuse export with StorageStop when the file is an authenticated input.",
+      "zero": "Refuse export with StorageStop when the file is an authenticated input.",
+      "half": "Refuse export with StorageStop when the file is an authenticated input.",
+      "garbage": "Refuse export with StorageStop when the file is an authenticated input."
+    },
+    "flags": "StorageStop; analysis does not consult the receipt."
+  },
+  {
+    "id": "source_inventory",
+    "path": "sources/SHA256SUMS and every digest-listed reference bundle file",
+    "phase": "export",
+    "primary": "joulewise/b6/export_runs.py:72\u2013105,307\u2013330",
+    "scope": "campaign",
+    "faults": {
+      "absent": "Refuse export with StorageStop when the file is an authenticated input.",
+      "zero": "Refuse export with StorageStop when the file is an authenticated input.",
+      "half": "Refuse export with StorageStop when the file is an authenticated input.",
+      "garbage": "Refuse export with StorageStop when the file is an authenticated input."
+    },
+    "flags": "StorageStop on missing inventory proof or bytes; unrelated science files are not authenticated through the reference parser."
+  },
+  {
+    "id": "member_assessments",
+    "path": "withheld/member-assessments.json",
+    "phase": "export",
+    "primary": "joulewise/b6/export_runs.py:343\u2013367,567; joulewise/b6/acceptance.py:459",
+    "scope": "conditional_campaign",
+    "faults": {
+      "absent": "If authenticated, export stops. Otherwise it uses the empty assessments default.",
+      "zero": "Same as absent.",
+      "half": "Same as absent.",
+      "garbage": "Same as absent."
+    },
+    "flags": "No independent analysis read; --records may use its path only as an archive locator."
+  },
+  {
+    "id": "export_registration",
+    "path": "pack registration.json, plan input and resolved plan_tree.json, flag catalog",
+    "phase": "export",
+    "primary": "joulewise/b6/export_runs.py:531\u2013564; joulewise/b6/archive.py:63\u201370; joulewise/b6/acceptance.py:415\u2013443",
+    "scope": "conditional_campaign",
+    "faults": {
+      "absent": "Use supplied pack/evidence inputs or registered fallback paths; refusal if required pack/evidence is unresolved.",
+      "zero": "Same as absent.",
+      "half": "Same as absent.",
+      "garbage": "Same as absent."
+    },
+    "flags": "The malformed flag evidence path emits records.malformed_flag_exclusion_possible before export authentication."
+  },
+  {
+    "id": "manifest",
+    "path": "CLI campaign manifest.json",
+    "phase": "analysis",
+    "primary": "scripts/bytes_analyze.py:70; joulewise/bytes_analysis.py:427\u2013457",
+    "scope": "campaign",
+    "faults": {
+      "absent": "Refuse the stage.",
+      "zero": "Refuse the stage.",
+      "half": "Refuse the stage.",
+      "garbage": "Refuse the stage."
+    },
+    "flags": "CLI refusal before archive consumption."
+  },
+  {
+    "id": "registered_manifest",
+    "path": "configs/bytes/bytes_manifest.json",
+    "phase": "analysis",
+    "primary": "joulewise/bytes_analysis.py:407\u2013413",
+    "scope": "conditional_campaign",
+    "faults": {
+      "absent": "Refuse the stage.",
+      "zero": "Refuse the stage.",
+      "half": "Refuse the stage.",
+      "garbage": "Refuse the stage."
+    },
+    "flags": "CLI refusal on unreadable file or registered digest mismatch."
+  },
+  {
+    "id": "export_csv",
+    "path": "<session>.runs.csv",
+    "phase": "analysis",
+    "primary": "joulewise/bytes_analysis.py:754\u2013785,1108\u20131153",
+    "scope": "campaign",
+    "faults": {
+      "absent": "A companion sidecar retains the planned session; archive passes have no corresponding export records. Post-commit withholding is then disclosed.",
+      "zero": "Reads no visible rows; the existing CSV still permits admission of its withheld companion.",
+      "half": "Complete rows are usable; missing required fields or malformed values refuse or make individual records unusable at their consumer.",
+      "garbage": "CSV has no usable records if it is only a header, and invalid UTF-8 refuses."
+    },
+    "flags": "Withheld counts are a separate bytes.withheld_missing condition. Invalid science cells disclose recorded codes."
+  },
+  {
+    "id": "export_sidecar",
+    "path": "<session>.session.json",
+    "phase": "analysis",
+    "primary": "joulewise/bytes_analysis.py:759\u2013785,1108\u20131111",
+    "scope": "campaign",
+    "faults": {
+      "absent": "Uses the visible CSV only as a legacy export.",
+      "zero": "Post-commit malformed JSON refuses; the pre-commit path skips the sidecar for row admission.",
+      "half": "Same as zero.",
+      "garbage": "Same as zero."
+    },
+    "flags": "No synthesized bytes.withheld_missing without a valid locator/count record."
+  },
+  {
+    "id": "withheld_csv",
+    "path": "sidecar-located withheld CSV",
+    "phase": "analysis",
+    "primary": "joulewise/bytes_analysis.py:759\u2013811",
+    "scope": "campaign",
+    "faults": {
+      "absent": "Once admitted, file absence discloses the sidecar counts and model-scoped missing passes.",
+      "zero": "Existing empty CSV contributes no rows; absence-based disclosure does not apply.",
+      "half": "Complete remaining rows participate; an invalid order index refuses.",
+      "garbage": "Invalid UTF-8 or invalid row order refuses; a header without rows is empty."
+    },
+    "flags": "bytes.withheld_missing only for the absence path; never use the source archive to replace withheld rows."
+  },
+  {
+    "id": "pack_key",
+    "path": "pack.json",
+    "phase": "both",
+    "primary": "joulewise/b6/blinding.py:84\u2013118,206\u2013226; joulewise/bytes_analysis.py:811\u2013827",
+    "scope": "campaign",
+    "faults": {
+      "absent": "Before first export generation is allowed; an already bound export requires the recorded key. Analysis refuses a required absent released key.",
+      "zero": "Export checks the binding or times out on incomplete JSON; analysis refuses a required damaged released key.",
+      "half": "Same as zero.",
+      "garbage": "Same as zero."
+    },
+    "flags": "Refusal; no archive read is made on behalf of a protected unadmitted configuration."
+  },
+  {
+    "id": "config_key",
+    "path": "config-<digest>.json",
+    "phase": "both",
+    "primary": "joulewise/b6/blinding.py:84\u2013118,199\u2013226; joulewise/bytes_analysis.py:811\u2013827",
+    "scope": "campaign",
+    "faults": {
+      "absent": "Before first export generation is allowed; an already bound export requires it. Analysis refuses only when the row requires this released key.",
+      "zero": "Same gates as pack.json, scoped to its configuration.",
+      "half": "Same as zero.",
+      "garbage": "Same as zero."
+    },
+    "flags": "Refusal on required key failure; placeholders with no name do not request any key."
+  },
+  {
+    "id": "export_key_binding",
+    "path": "blinding-sessions/<session>.json",
+    "phase": "export",
+    "primary": "joulewise/b6/blinding.py:18\u201338,90\u201398",
+    "scope": "conditional_campaign",
+    "faults": {
+      "absent": "No existing binding selects this fingerprint.",
+      "zero": "Export cannot trust a damaged key binding.",
+      "half": "Same as zero.",
+      "garbage": "Same as zero."
+    },
+    "flags": "Export refuses malformed evidence; this is not a released analysis key."
+  },
+  {
+    "id": "prediction",
+    "path": "predictions.json and predictions.sha256 (local and committed)",
+    "phase": "analysis",
+    "primary": "scripts/bytes_commitment.py:138\u2013155; joulewise/bytes_analysis.py:1604\u20131613",
+    "scope": "commitment",
+    "faults": {
+      "absent": "Refuse the stage.",
+      "zero": "Refuse the stage.",
+      "half": "Refuse the stage.",
+      "garbage": "Refuse the stage."
+    },
+    "flags": "Commitment or analysis refusal, before held-out archives are opened."
+  },
+  {
+    "id": "push_receipt",
+    "path": "push-receipt.json",
+    "phase": "analysis",
+    "primary": "scripts/bytes_commitment.py:106\u2013137",
+    "scope": "commitment",
+    "faults": {
+      "absent": "Refuse the stage.",
+      "zero": "Refuse the stage.",
+      "half": "Refuse the stage.",
+      "garbage": "Refuse the stage."
+    },
+    "flags": "Commitment guard refusal before admission."
+  },
+  {
+    "id": "journal",
+    "path": "unblinding.jsonl",
+    "phase": "analysis",
+    "primary": "scripts/bytes_commitment.py:157\u2013173",
+    "scope": "commitment",
+    "faults": {
+      "absent": "Refuse when the explicitly initialized journal is absent.",
+      "zero": "An initialized empty journal contains no unblinding event.",
+      "half": "Malformed event lines refuse; a valid prefix is checked against retained history.",
+      "garbage": "Refuse malformed journal."
+    },
+    "flags": "Commitment guard refusal or admission. Both CLIs invoke the same guard."
+  },
+  {
+    "id": "release_record",
+    "path": "heldout-release.json or supplied release.json",
+    "phase": "analysis",
+    "primary": "scripts/bytes_commitment.py:159\u2013173",
+    "scope": "commitment",
+    "faults": {
+      "absent": "Optional locator; absence skips this file, and retained history is still checked.",
+      "zero": "Parser applies the guard\u2019s empty-input event rules.",
+      "half": "Malformed event records refuse.",
+      "garbage": "Malformed event records refuse."
+    },
+    "flags": "Commitment guard refusal or admission, never a derived member flag."
+  },
+  {
+    "id": "source_digests",
+    "path": "committed joulewise/bytes_analysis.py; running source provenance is recorded separately",
+    "phase": "analysis",
+    "primary": "joulewise/bytes_analysis.py:1516\u20131517; scripts/bytes_commitment.py:150\u2013155",
+    "scope": "commitment",
+    "faults": {
+      "absent": "Refuse when the required source cannot be read or imported.",
+      "zero": "Committed digest mismatch or source import failure.",
+      "half": "Committed digest mismatch or source import failure.",
+      "garbage": "Committed digest mismatch or source import failure."
+    },
+    "flags": "Ledger admission checks the committed estimator pin. The fit also hashes its running library and desk restore source into predictions."
+  },
+  {
+    "id": "smoke_witness",
+    "path": "archived smoke-registered-tree.json",
+    "phase": "export",
+    "primary": "joulewise/b6/export_runs.py:152\u2013178",
+    "scope": "conditional_campaign",
+    "faults": {
+      "absent": "An absent optional unwitnessed tree forces the non-claim path; a listed witness that disappears cannot be authenticated.",
+      "zero": "Refuse export with StorageStop when the file is an authenticated input.",
+      "half": "Refuse export with StorageStop when the file is an authenticated input.",
+      "garbage": "Refuse export with StorageStop when the file is an authenticated input."
+    },
+    "flags": "Export storage refusal or non-claim disclosure."
+  },
+  {
+    "id": "spans",
+    "path": "withheld/spans.json",
+    "phase": "export",
+    "primary": "joulewise/b6/acceptance.py:522\u2013525",
+    "scope": "conditional_campaign",
+    "faults": {
+      "absent": "Use an empty span map on missing or unreadable optional input.",
+      "zero": "Same as absent.",
+      "half": "Same as absent.",
+      "garbage": "Same as absent."
+    },
+    "flags": "No analysis flag; ordinary export does not use withheld spans as science endpoints."
+  },
+  {
+    "id": "chain_journal",
+    "path": "night chain-stages.jsonl",
+    "phase": "export",
+    "primary": "joulewise/b6/acceptance.py:526\u2013550",
+    "scope": "conditional_campaign",
+    "faults": {
+      "absent": "Try the next location. If no exit can be read, use the terminal-result fallback.",
+      "zero": "Existing file supplies no records, then terminal-result fallback.",
+      "half": "Keep complete records and skip malformed lines.",
+      "garbage": "Skip malformed lines and use the terminal-result fallback."
+    },
+    "flags": "Acceptance evidence may change the stop reason, with no new analysis flag."
+  },
+  {
+    "id": "chain_result",
+    "path": "night hazard_result.json or result.json",
+    "phase": "export",
+    "primary": "joulewise/b6/acceptance.py:539\u2013558",
+    "scope": "conditional_campaign",
+    "faults": {
+      "absent": "Skip optional result and use the next result or declared exit.",
+      "zero": "Same as absent.",
+      "half": "Same as absent.",
+      "garbage": "Same as absent."
+    },
+    "flags": "Acceptance may report an unknown chain exit; no direct analysis read."
+  },
+  {
+    "id": "neg8_screen",
+    "path": "withheld/b6-neg8.json",
+    "phase": "export",
+    "primary": "joulewise/b6/acceptance.py:559\u2013561",
+    "scope": "conditional_campaign",
+    "faults": {
+      "absent": "Use empty optional NEG-8 evidence.",
+      "zero": "Same as absent.",
+      "half": "Same as absent.",
+      "garbage": "Same as absent."
+    },
+    "flags": "No direct analysis read; admitted analysis uses reference fields."
+  },
+  {
+    "id": "capture_evidence",
+    "path": "pre/post instrument_evidence.json",
+    "phase": "export",
+    "primary": "joulewise/b6/acceptance.py:503\u2013521; joulewise/b6/calibration.py:22\u201343",
+    "scope": "conditional_campaign",
+    "faults": {
+      "absent": "Optional capture is absent.",
+      "zero": "Capture is present but refit_failed.",
+      "half": "Capture is present but refit_failed.",
+      "garbage": "Capture is present but refit_failed."
+    },
+    "flags": "Capture status comes from evidence collection, not an analysis member flag."
+  },
+  {
+    "id": "capture_raw",
+    "path": "pre/post raw/powermetrics.plist or events.jsonl",
+    "phase": "export",
+    "primary": "joulewise/b6/acceptance.py:503\u2013521; joulewise/b6/calibration.py:32\u201343",
+    "scope": "conditional_campaign",
+    "faults": {
+      "absent": "Capture refit fails when the instrument evidence was present.",
+      "zero": "Same as absent.",
+      "half": "Same as absent.",
+      "garbage": "Same as absent."
+    },
+    "flags": "Capture refit_failed; the analysis reads the already evaluated acceptance bound."
+  }
+]
