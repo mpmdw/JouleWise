@@ -79,7 +79,7 @@ on_early_or_refused: Record the failed or missing check, hold span 2 and return 
 next_observable: <independent signed PASS or HOLD record> for cq-ctl-01-s01-a1 and the pilot close of item <pilot item>.
 ```
 
-> Assign an independent seat to run the usual F-3(c) hand table and Q1 checks from the authorized template after the pilot's clean close and automatic desk PASS. Verify the close-bound source and use the allowlisted projection. For every admitted pilot leg L001–L003, take the visible calls from the bound script record plus the one logged envelope and episode/G0 bounds. This addition reads stamps and counts only.
+> Assign an independent seat after the ledger bootstrap ruling, the issued pilot's proven close and automatic desk PASS. Run the usual F-3(c) hand table and Q1 checks from the authorized template. Bind the read to that pilot's actual attempt ID, issued kit digest and immutable receipt digest. Verify the close-bound source and use the allowlisted projection. For every admitted pilot leg L001–L003, take the visible calls from the bound script record plus the one logged envelope and episode/G0 bounds. This addition reads stamps and counts only.
 >
 > 1. The sums of visible delivered tokens and visible starting context tokens agree with the envelope's respective decode and total prompt counts. Compare the full prompt total with the logged cached-plus-fresh total if represented separately. Hidden calls contribute zero to the envelope sums.
 > 2. The first visible start and first-token stamps equal the envelope's two stamps exactly. A 1 ns difference is `envelope_stamps`.
@@ -260,11 +260,22 @@ For the qualification recheck, use `item-drafts-1118/kits/cl-qual-0[123].v1.1.js
 
 The re-pin uses targeted validators for the review JSON and typed drafts. The green full suite above covers the identical landed runner tree.
 
-The lead fills the issued-artifact digests below from the authorized copies. The pilot draft's inert halt message still mentions main because this re-pin changes only pin and digest fields. RL-197b governs the issued queue.
+The two review queues remain halted and bind the review kit. At issue, the lead supplies separate finite queues bound to the issued kit digest. The pilot draft's inert halt message still mentions main. RL-197b governs the issued queue.
 
-The independent cold check passed the landed review digests above. The annotated tag `refs/tags/pin/cl-ctl-01-runner` resolves to `f45e22e4efa6b48dd05f099f39eb62246e324177`. The landed `pin-kit` command resolved the tag and reproduced the reviewed kit bytes.
+The independent cold check passed the landed review digests above. The landed `pin-kit` command resolved the permanent tag named in the admission item to the full landed SHA and reproduced the reviewed kit bytes.
 
-**NEEDS_SPEC** — The landed validator requires `status: issued` and `ruling.authorizes_spans: true` together. The kit's closed schema accepts only a full SHA and the file digest map under `frozen`. The authorized byte change needs a ruling. The supported two-field change would set the status and authorization flag, with the permanent ref recorded in this admission item. The kit stays at the reviewed draft digest while that decision is pending. [Status and authority check](https://github.com/mpmdw/JouleWise/blob/f45e22e4efa6b48dd05f099f39eb62246e324177/joulewise/cadence/ctl.py#L200-L217) · [Frozen schema](https://github.com/mpmdw/JouleWise/blob/f45e22e4efa6b48dd05f099f39eb62246e324177/joulewise/cadence/kit_v11.py#L274-L281)
+**Issued kit** — SHA-256 `1d7d6f5fe8531b74401fb8d6e60b8fa17f068849e59ec3c241caaa6f523ff2bf`. The landed generator and tag-based pin command reproduced the reviewed payload. The landed kit validator and the clean-checkout guard passed at `f45e22e4efa6b48dd05f099f39eb62246e324177`, including all 40 frozen files. The lead authorized these two substitutions. Every other byte matched. The cold PASS above covers the review digest, and admission waits for the independent cold PASS on the issued digest. [Issued kit](../research-audits/2026-11-10-fable/evidence/align-v4-campaign/ctl-01/kits/cl-ctl-01.issued.json)
+
+```diff
+--- cl-ctl-01.draft.json
++++ cl-ctl-01.issued.json
+@@ -7 +7 @@
+-  "authorizes_spans": false
++  "authorizes_spans": true
+@@ -534 +534 @@
+- "status": "draft",
++ "status": "issued",
+```
 
 ### Draft RUN_STATE item — pin admission
 
@@ -272,21 +283,74 @@ The independent cold check passed the landed review digests above. The annotated
 
 **Typed fields** — owner `lead`, status `ISSUED`. Post after the issued kit digest and the independent cold PASS on that digest are recorded.
 
-> ADMIT `f45e22e4efa6b48dd05f099f39eb62246e324177` on `align/2026-11-14-kit-v1-1`, permanent annotated tag `refs/tags/pin/cl-ctl-01-runner`. PRs #808, #900 and #946 landed in order. The landed tree `3cbb765c118b0370b038d697943ce74c54b0e718` equals the tree of reviewed head `b8e1fb362af5ed8cd3a8f8b48b265ada36f8c081`. Independent audit round 5 returned MERGE. The uncached suite passed 21/21 and F-11 synthetic launch-to-close passed. The landed validators passed three qualification kits and three queues at pin B `6e9d42f1dd3d308bc9239143d0d634ab965e50e1`. Pin A remains `2d347f721552fe03bdd19f113e7bad7a7c24908e`. The issued kit has `<issued kit SHA-256>` and `<independent cold kit PASS for that digest>`. Create a separate clean detached checkout at the admitted commit. L001–L003 will be its first native run. The lead posts separate span authority when the actual predecessor close is proven. [Uncached CI](https://github.com/mpmdw/JouleWise/actions/runs/45027639795) · [F-11](https://github.com/mpmdw/JouleWise/actions/runs/45027639795/job/137224154886)
+> ADMIT `f45e22e4efa6b48dd05f099f39eb62246e324177` on `align/2026-11-14-kit-v1-1`, permanent annotated tag `refs/tags/pin/cl-ctl-01-runner`. PRs #808, #900 and #946 landed in order. The landed tree `3cbb765c118b0370b038d697943ce74c54b0e718` equals the tree of reviewed head `b8e1fb362af5ed8cd3a8f8b48b265ada36f8c081`. Independent audit round 5 returned MERGE. The uncached suite passed 21/21 and F-11 synthetic launch-to-close passed. The landed validators passed three qualification kits and three queues at pin B `6e9d42f1dd3d308bc9239143d0d634ab965e50e1`. Pin A remains `2d347f721552fe03bdd19f113e7bad7a7c24908e`. The issued kit `cl-ctl-01.issued.json` has SHA-256 `1d7d6f5fe8531b74401fb8d6e60b8fa17f068849e59ec3c241caaa6f523ff2bf` and `<independent cold kit PASS for that digest>`. Create a separate clean detached checkout at the admitted commit. L001–L003 will be its first native run. The lead posts separate span authority after the first-row authority is resolved and the actual predecessor close is proven. [Issued kit](../research-audits/2026-11-10-fable/evidence/align-v4-campaign/ctl-01/kits/cl-ctl-01.issued.json) · [Uncached CI](https://github.com/mpmdw/JouleWise/actions/runs/45027639795) · [F-11](https://github.com/mpmdw/JouleWise/actions/runs/45027639795/job/137224154886)
 
-RUN_STATE 541 asks the magistrate these three questions before the pilot is issued. [RUN_STATE 541](https://github.com/mpmdw/JouleWise/blob/6deb3d7fe1f8d1ba6f56916af2d5006b1f0c5fb1/RUN_STATE.md#L1055)
+RUN_STATE 542 answered item 541. There is no shared attempt ledger and no prior ledger-backed launch. Pin B accepts a ctl latest row by code when the receipt carries the matching `span_id` and its close passes. Prior pin-B launches omitted `--span-id`. The most recent spans used pin A. The last pin-B receipt has no `span_id`, and its stamped directory basename differs from the typed attempt ID. Hold both span issues for the bootstrap authority below. [RUN_STATE 542 answers](https://github.com/mpmdw/JouleWise/blob/3902a0d9a080b4fede6b9fac264d56413fdb25a9/RUN_STATE.md#L1078-L1081)
 
-1. Does the shared attempt ledger exist on the MBP, and what authority and evidence establish how its first row was written?
-2. Does a pin-B ledger-backed launch accept the shared ledger when its latest attempt row is a ctl row?
-3. Do today's pin-B launches pass `--span-id` equal to the issued attempt ID?
+### Attempt-ledger bootstrap after RUN_STATE 542
 
-Pin B's launcher requires the complete authority tuple for a ledger-backed launch. Its runner requires the authorized date, earliest start and exclusive cutoff if an exact t0 bound is supplied, including for a filler with ledger arguments. Use the magistrate's confirmed, approved pin-B invocation for that predecessor. Ctl-01's own t0 remains free with its exact close bound. [Pin B launcher](https://github.com/mpmdw/JouleWise/blob/6e9d42f1dd3d308bc9239143d0d634ab965e50e1/scripts/launch_cadence_span.py#L215-L225) · [Pin B t0 validator](https://github.com/mpmdw/JouleWise/blob/6e9d42f1dd3d308bc9239143d0d634ab965e50e1/scripts/cadence_legs_runner.py#L381-L396)
+RL-197 §1 step 5 requires a ledger and close proof. RL-197b §2(a) specifies kit 15 or 16 on pin B as the immediate predecessor for the no-code route and requires the receipt to carry its typed attempt ID. Pin A's launcher exposes neither `--span-id` nor `--attempt-ledger`. The current pin-A kit 04 can continue under its own ladder authority before the boundary, but it cannot serve as that predecessor. The last pin-B receipt is both stale and missing `span_id`. Its stamped directory also fails the exact attempt-ID basename test in RL-200a §2. [RL-197 §1](https://github.com/mpmdw/JouleWise/blob/375d2b6ebc360138c3d55a42a3c2b799d3cecd4b/docs/research-audits/2026-11-10-fable/RESEARCH-LEAD-DECISIONS.md#L23847-L23859) · [RL-197b §2](https://github.com/mpmdw/JouleWise/blob/375d2b6ebc360138c3d55a42a3c2b799d3cecd4b/docs/research-audits/2026-11-10-fable/RESEARCH-LEAD-DECISIONS.md#L25160-L25173) · [RL-200a §2](https://github.com/mpmdw/JouleWise/blob/375d2b6ebc360138c3d55a42a3c2b799d3cecd4b/docs/research-audits/2026-11-10-fable/RESEARCH-LEAD-DECISIONS.md#L24681-L24698) · [Pin A launcher flags](https://github.com/mpmdw/JouleWise/blob/2d347f721552fe03bdd19f113e7bad7a7c24908e/scripts/launch_cadence_span.py#L197-L224)
+
+Neither pin B nor the ctl pin can create the first row. Supplying `--attempt-ledger` makes both launchers read the existing file and validate its latest receipt under the desk lock before append. A missing file, an empty attempt list or a receipt without the matching `span_id` refuses before append. `close-proof` is read-only. A pin-B stability launch with `--span-id` alone records the ID in a new receipt, but writes no ledger row. No current launcher command creates the shared ledger with a first row. RL-197b §2 leaves its first-row provenance unchecked and bars writing a row to make a refusal pass. [Pin B proof and append](https://github.com/mpmdw/JouleWise/blob/6e9d42f1dd3d308bc9239143d0d634ab965e50e1/scripts/launch_cadence_span.py#L82-L159) · [Pin B lock](https://github.com/mpmdw/JouleWise/blob/6e9d42f1dd3d308bc9239143d0d634ab965e50e1/scripts/launch_cadence_span.py#L270-L281) · [Ctl lock](https://github.com/mpmdw/JouleWise/blob/f45e22e4efa6b48dd05f099f39eb62246e324177/scripts/launch_cadence_span.py#L458-L489)
+
+Both pinned `close-proof` commands reproduced the three refusals on synthetic fixtures. Both passed the matching-ID fixture and left every ledger byte intact. The ctl command also refused when the fixture's receipt-bound attestation was absent. These read-only checks support the route analysis on the identical landed runner tree.
+
+#### NEEDS_SPEC — authority for the first row
+
+1. **Shortest route with the landed executables.** Ask for a prospective one-time bootstrap ruling. The lead issues one eligible kit 15 or 16 leg on pin B with `--span-id` equal to that dispatch's typed attempt ID. The ruling would explicitly permit this inaugural arm without `--attempt-ledger` and name the magistrate or another designated writer to initialize the shared ledger once, under the desk lock, from that attempt's actual proven close. The authority must bind the typed issue, the absolute canonical receipt path, its SHA-256, its embedded attempt ID, the positive exact close time and the proof of restore and stops. The approved initializer creates the first `attempts` row with that `span_id`, `close_receipt` and `sequence: 1`, and preserves the first-row proof and ledger SHA-256. It must refuse an existing ledger, an ambiguous or stale close, or any intervening arm. The landed ctl launcher reads that first row and appends the pilot as sequence 2. With the pilot as the next proven predecessor, it appends span 2 as sequence 3. This would take one new pin-B span. The current rulings supply no authority or executable command for the initializer.
+2. **Reviewed code route.** If the research lead requires the first pin-B predecessor itself to be ledger-backed at arm, authorize a bootstrap mode that proves the true prior close and atomically starts the ledger under the desk lock. To use a pin-A predecessor, also implement RL-197b §2(b)'s typed seven-row receipt match with the full receipt SHA-256 mandatory. Keep the true latest-close, restore, stopped-feed and absence checks. Missing or ambiguous evidence holds. Any change to the ctl executable returns through RL-197b §1's executing audit, green uncached full suite, F-11, permanent pin and kit rebind. Existing pins A and B retain their commits.
+
+#### Command templates after the bootstrap ruling
+
+Run these in the authorized magistrate session only. Angle-bracket fields in the drafts and shell variables here come from the actual dispatch, the exact selected roster, the approved finite deadline and canonical paths. For the one-leg inaugural pin-B span, use the standard pin-B filler dispatch without a `--batch-window` override, as in item 463. This launch writes `span_id` into its receipt. It has no `--attempt-ledger` argument because the approved first-row writer must establish the ledger after the proven close. There is no first-row writer command to run under the current ruling. [Pin B flags and t0 anchor](https://github.com/mpmdw/JouleWise/blob/6e9d42f1dd3d308bc9239143d0d634ab965e50e1/scripts/launch_cadence_span.py#L344-L395) · [RUN_STATE 463](https://github.com/mpmdw/JouleWise/blob/3902a0d9a080b4fede6b9fac264d56413fdb25a9/RUN_STATE.md#L2943)
+
+```bash
+test "$(git -C "$PIN_B_CHECKOUT" rev-parse HEAD)" = 6e9d42f1dd3d308bc9239143d0d634ab965e50e1 || exit 1
+pin_b_args=(
+  --repo "$PIN_B_CHECKOUT" --kit "$PIN_B_KIT" --legs "$PIN_B_LEG"
+  --output "$PIN_B_OUTPUT" --python-bin "$PIN_B_PYTHON" --disk-path "$DISK_PATH"
+  --custody-root "$CUSTODY_ROOT" --magistrate-pid "$MAGISTRATE_PID"
+  --deadline "$PIN_B_DEADLINE" --span-id "$PIN_B_ATTEMPT_ID"
+)
+"$PIN_B_PYTHON" -B "$PIN_B_CHECKOUT/scripts/launch_cadence_span.py" launch "${pin_b_args[@]}"
+```
+
+If a subsequent pin-B span is issued as an ordinary ledger-backed predecessor, it must itself be the last armed span before the pilot. Use the same base arguments with that span's issue values. Before its launch, bind all three outputs of the pin-B `close-proof` to the latest issued attempt. Supply the printed receipt path as `PRIOR_RECEIPT` and the exact close bound as `PRIOR_CLOSE_NS`. Supplying that bound requires the authorized local date, inclusive earliest start and exclusive cutoff. Pin B samples the arm anchor when it is omitted. This variant requires a populated, proved ledger before it runs, so it cannot be used for the inaugural span. [Pin B authority tuple](https://github.com/mpmdw/JouleWise/blob/6e9d42f1dd3d308bc9239143d0d634ab965e50e1/scripts/launch_cadence_span.py#L215-L225) · [Pin B t0 checks](https://github.com/mpmdw/JouleWise/blob/6e9d42f1dd3d308bc9239143d0d634ab965e50e1/scripts/cadence_legs_runner.py#L372-L396)
+
+```bash
+"$PIN_B_PYTHON" -B "$PIN_B_CHECKOUT/scripts/launch_cadence_span.py" close-proof \
+  --attempt-ledger "$ATTEMPT_LEDGER" || exit 1
+"$PIN_B_PYTHON" -B "$PIN_B_CHECKOUT/scripts/launch_cadence_span.py" launch "${pin_b_args[@]}" \
+  --attempt-ledger "$ATTEMPT_LEDGER" --previous-close-receipt "$PRIOR_RECEIPT" \
+  --t0-not-before-ns "$PRIOR_CLOSE_NS" --authorized-t0-date "$PIN_B_DATE" \
+  --t0-not-before "$PIN_B_EARLIEST" --t0-before "$PIN_B_CUTOFF"
+```
+
+For the pilot, the magistrate supplies the genuine receipt-bound restore, stopped-feed, group-absence and foreign-process attestations required by **Shared Start and check**. The landed `close-proof` selects the unique latest row, checks the receipt's `span_id` against it, verifies restore and stop evidence and freshly censuses recorded process groups. It prints the attempt ID, the exact close in nanoseconds and its absolute receipt path. Verify the attempt ID against the typed dispatch, record the full receipt and ledger SHA-256s in the issue, and use the exact printed path and bound as `PREDECESSOR_RECEIPT` and `PREDECESSOR_CLOSE_NS`. The launch repeats the checks under the desk lock before recording the attempt. The ctl start remains free within its ruled gates and exact lower bound. [Ctl close proof](https://github.com/mpmdw/JouleWise/blob/f45e22e4efa6b48dd05f099f39eb62246e324177/scripts/launch_cadence_span.py#L203-L258) · [Ctl locked launch](https://github.com/mpmdw/JouleWise/blob/f45e22e4efa6b48dd05f099f39eb62246e324177/scripts/launch_cadence_span.py#L458-L489)
+
+```bash
+test "$(git -C "$CTL_CHECKOUT" rev-parse HEAD)" = f45e22e4efa6b48dd05f099f39eb62246e324177 || exit 1
+"$CTL_PYTHON" -B "$CTL_CHECKOUT/scripts/launch_cadence_span.py" close-proof \
+  --attempt-ledger "$ATTEMPT_LEDGER" || exit 1
+shasum -a 256 "$PREDECESSOR_RECEIPT" "$ATTEMPT_LEDGER" || exit 1
+"$CTL_PYTHON" -B "$CTL_CHECKOUT/scripts/launch_cadence_span.py" launch \
+  --repo "$CTL_CHECKOUT" --python-bin "$CTL_PYTHON" --kit "$CTL_ISSUED_KIT" \
+  --kit-sha256 1d7d6f5fe8531b74401fb8d6e60b8fa17f068849e59ec3c241caaa6f523ff2bf \
+  --queue "$CTL_PILOT_QUEUE" --queue-sha256 "$CTL_PILOT_QUEUE_SHA256" \
+  --queue-kits-root "$QUEUE_KITS_ROOT" --legs L001,L002,L003 --batch-window 02:00-02:35 \
+  --output "$CTL_PILOT_OUTPUT" --disk-path "$DISK_PATH" --custody-root "$CUSTODY_ROOT" \
+  --magistrate-pid "$MAGISTRATE_PID" --deadline "$CTL_PILOT_DEADLINE" \
+  --span-id "$CTL_PILOT_ATTEMPT_ID" --attempt-ledger "$ATTEMPT_LEDGER" \
+  --previous-close-receipt "$PREDECESSOR_RECEIPT" --t0-not-before-ns "$PREDECESSOR_CLOSE_NS"
+```
+
+Span 2 repeats the same ctl close-proof and launch with the actual latest predecessor, its own issue's output, deadline, attempt ID and finite queue, `--legs L004,L005,L006,L007,L008,L009,L010,L011,L012`, and `--pilot-hand-read "$PILOT_HAND_READ"`. Its queue row binds the signed pilot PASS digest. Preserve the ledger chain without unledgered work after the pin-B close or after the pilot close. If another ledger-backed span intervenes after the pilot, bind the true latest close and keep the hand-read PASS bound to the actual pilot.
 
 ### Draft RUN_STATE item — counted pilot L001–L003
 
 **Heading** — MAGISTRATE — cl-ctl-01 pilot L001–L003 on `f45e22e4efa6b48dd05f099f39eb62246e324177`, cq-ctl-01-s01-a1.
 
-**Typed fields** — owner `magistrate`, status `ISSUED`, expiry `<finite issue expiry>`.
+**Typed fields** — owner `magistrate`, status `ISSUED`, expiry `<finite issue expiry>`. Hold posting for the issued-kit cold PASS and the first-row ruling and proof.
 
 ```text
 owner: magistrate
@@ -296,15 +360,15 @@ on_early_or_refused: Read the verdict first. A missing receipt, refusal or unpro
 next_observable: <exact pilot runner_receipt.json> for cq-ctl-01-s01-a1, then automatic desk and signed independent pilot PASS.
 ```
 
-> The immediately preceding span was kit `<f2-stab-15 or f2-stab-16>` on pin B `6e9d42f1dd3d308bc9239143d0d634ab965e50e1`. It was launched with `--span-id <predecessor attempt ID>` equal to its typed issue's attempt ID. Its unchanged receipt SHA-256 is `<full predecessor receipt digest>`. The latest row in the shared attempt ledger is that same last armed span, and the ledger SHA-256 for this issue is `<full ledger digest>`. No unledgered work may run after that close. Hold the pilot if the three admission questions are unresolved, any identity differs, or the close cannot be proved.
+> The first-row authority is `<bootstrap ruling and first-row proof>`. The immediately preceding span was kit `<f2-stab-15 or f2-stab-16>` on pin B `6e9d42f1dd3d308bc9239143d0d634ab965e50e1`. It was launched with `--span-id <predecessor attempt ID>` equal to its typed issue's attempt ID. Its unchanged receipt SHA-256 is `<full predecessor receipt digest>`. The latest row in `<shared attempt ledger>` is that same last armed span, and the ledger SHA-256 for this issue is `<full ledger digest>`. No unledgered work may run after that close. Hold the pilot for a missing first-row authority, an identity mismatch, a stale latest row or an unproven close. A pin-A span cannot supply the predecessor for this route.
 >
-> Use the separate clean detached checkout at `f45e22e4efa6b48dd05f099f39eb62246e324177`. Verify `<issued kit path and SHA-256>`, `<pilot queue path and SHA-256>`, and `<standing rank above rank-4 stability, preserving higher priorities>`. Apply **Shared Start and check**, the actual-t0 plan and the 02:00–02:35 soak check. Use only L001,L002,L003. The CLI must re-prove the latest close and exact nanosecond bound using the shared attempt ledger. Launch once as the last act of a quiet activation. Do the close and automatic desk check, then the named independent F-3(c) and RL-197 four-view hand-read of stamps and counts. Keep span 2 held until PASS.
+> Use the separate clean detached checkout at `f45e22e4efa6b48dd05f099f39eb62246e324177`. Verify the admitted issued kit digest `1d7d6f5fe8531b74401fb8d6e60b8fa17f068849e59ec3c241caaa6f523ff2bf`, `<pilot queue path and SHA-256>`, and `<standing rank above rank-4 stability, preserving higher priorities>`. Apply **Shared Start and check**, the actual-t0 plan and the 02:00–02:35 soak check. Use only L001,L002,L003. The CLI must re-prove the latest close and exact nanosecond bound using the shared attempt ledger. Launch once as the last act of a quiet activation. Do the close and automatic desk check, then the named independent F-3(c) and RL-197 four-view hand-read of stamps and counts. Keep span 2 held until PASS.
 
 ### Draft RUN_STATE item — span 2 L004–L012
 
 **Heading** — MAGISTRATE — cl-ctl-01 span 2 L004–L012 on `f45e22e4efa6b48dd05f099f39eb62246e324177`, pilot hand-read PASS, cq-ctl-01-s02-a1.
 
-**Typed fields** — owner `magistrate`, status `ISSUED`, expiry `<finite issue expiry>`.
+**Typed fields** — owner `magistrate`, status `ISSUED`, expiry `<finite issue expiry>`. Hold posting for the proven ledger-backed pilot close, automatic desk PASS and signed hand-read PASS.
 
 ```text
 owner: magistrate
@@ -314,7 +378,7 @@ on_early_or_refused: Read the verdict first. A missing receipt, refusal or unpro
 next_observable: <exact span 2 runner_receipt.json> for cq-ctl-01-s02-a1, then restored close and final accounting.
 ```
 
-> Pilot automatic desk and independent F-3(c) and RL-197 view checks are PASS at `<record references>`. Bind the PASS for the same kit and latest pilot receipt in span 2's queue row `pilot_pass_sha256`, and supply `--pilot-hand-read <PASS file>`. The latest receipt used for launch is `<last armed attempt ID>`, with embedded `span_id` equal to that ID. Its receipt SHA-256 is `<full predecessor receipt digest>`. The latest attempt is also the latest row in `<shared ledger>`, whose SHA-256 is `<full ledger digest>`. No unledgered span may have run between the pilot close and this launch. If a ledgered span intervened, prove that newest close and keep the pilot PASS bound to the actual pilot.
+> Pilot automatic desk and independent F-3(c) and RL-197 view checks are PASS at `<record references>`. Verify the pilot attempt was appended by the ctl launcher to the same ledger under the approved first-row authority. Bind the PASS for the same kit and latest pilot receipt in span 2's queue row `pilot_pass_sha256`, and supply `--pilot-hand-read <PASS file>`. The latest receipt used for launch is `<last armed attempt ID>`, with embedded `span_id` equal to that ID. Its receipt SHA-256 is `<full predecessor receipt digest>`. The latest attempt is also the latest row in `<shared ledger>`, whose SHA-256 is `<full ledger digest>`. No unledgered span may have run between the pilot close and this launch. If a ledgered span intervened, prove that newest close and keep the pilot PASS bound to the actual pilot.
 >
 > Use the separate clean detached checkout at `f45e22e4efa6b48dd05f099f39eb62246e324177` and the same issued kit. Verify `<span 2 queue path, SHA-256 and expiry>`, the actual t0 and standing rank. Run L004–L012 only. Keep L006 and L007 together. At the close record the final accounting and RL-198-amended blind disclosure. The first split leg's independent hand-read is owed before the look. The look's inputs and reservation gates stay with RL-197.
 
