@@ -3,7 +3,6 @@ from functools import partial
 import json
 import os
 from pathlib import Path
-import shlex
 import subprocess
 import sys
 import tempfile
@@ -56,6 +55,21 @@ class SupplementalConfigAttempt(adapter.Attempt):
         declare = closure.declare_outputs
         with patch.object(closure, 'declare_outputs',
                           side_effect=lambda repo, stage, files: declare(repo, stage, set(files) | set(paths))):
+            super().prepare()
+
+
+class DuplicateOptionAttempt(adapter.Attempt):
+    def prepare(self):
+        render = adapter.chain.render_chain
+
+        def render_for_refusal(**kwargs):
+            try:
+                return render(**kwargs)
+            except adapter.chain.ChainRenderError:
+                # Authenticate the invalid attempt to exercise both arm gates.
+                return b'# invalid options refuse before launch\n'
+
+        with patch.object(adapter.chain, 'render_chain', side_effect=render_for_refusal):
             super().prepare()
 
 
@@ -206,7 +220,15 @@ class C1ClosureTests(unittest.TestCase):
         attempt.deliver(packet)
         self.assertEqual((code, *self.consumer_outcomes(attempt)), (0, 0, 'admit', 1, 1), attempt.cli_error)
 
-    def test_reservation_head_pin_export_matches_last_parsed_option(self):
+    def assert_duplicate_option_refuses(self, edit, flag):
+        attempt = self.attempt(make_attempt=DuplicateOptionAttempt, edit_source=edit)
+        code, packet = attempt.build()
+        attempt.deliver(packet)
+        self.assertEqual((code, *self.consumer_outcomes(attempt)), (2, 2, 'refuse', 0, 0), attempt.cli_error)
+        for detail in (attempt.build_error, attempt.cli_error, attempt.native['packet_kit']['detail']):
+            self.assertIn(f'duplicate option {flag}', detail)
+
+    def test_duplicate_reservation_head_pin_refuses(self):
         for attached in (False, True):
             with self.subTest(attached=attached):
                 def edit(tree):
@@ -222,25 +244,48 @@ class C1ClosureTests(unittest.TestCase):
                         adapter.option(argv, '--head-pin', 'repo_path', adapter.HEAD)
                     return {}
 
-                attempt = self.attempt(edit_source=edit)
-                current = attempt.view / adapter.HEAD
-                self.assertTrue(current.is_file())
-                self.assertFalse(current.with_name('retired-head.json').exists())
-                code, packet = attempt.build()
-                attempt.deliver(packet)
-                self.assertEqual((code, *self.consumer_outcomes(attempt)), (0, 0, 'admit', 1, 1), attempt.cli_error)
+                self.assert_duplicate_option_refuses(edit, '--head-pin')
 
-                rendered = (attempt.stage / 'controls/chain.zsh').read_text()
-                export = next(line for line in rendered.splitlines() if line.startswith('export LEDGER_HEAD_PIN='))
-                env_value = shlex.split(export)[1].split('=', 1)[1]
-                stage = next(row for row in adapter.chain.stage_plan(attempt.tree) if row.kind == 'campaign_collection')
-                argv = adapter.chain.stage_argv(stage, attempt.bindings, attempt.tree, attempt.view)[2:]
-                with patch.dict(os.environ, {'LEDGER_HEAD_PIN': env_value}):
-                    actual = Path(run_campaign.parse_args(argv).head_pin)
-                if not actual.is_absolute():
-                    actual = attempt.view / actual
-                self.assertEqual(actual.resolve(), current.resolve())
-                self.assertEqual(attempt.context()[-1]['head_pin'], actual.resolve())
+    def test_duplicate_derivation_corpus_manifest_refuses(self):
+        def edit(tree):
+            row = next(stage for stage in tree['stage_graph'] if stage['kind'] == 'bound_derivation')
+            argv = adapter.arguments(row)
+            index = argv.index(adapter.literal('--derive-neg8-drift-bound')) + 1
+            argv[index] = {'kind': 'repo_path', 'value': str(adapter.DERIVATION.with_name('retired-corpus.json'))}
+            argv.append(adapter.literal(f'--derive-neg8-drift-bound={adapter.DERIVATION}'))
+            return {}
+
+        self.assert_duplicate_option_refuses(edit, '--derive-neg8-drift-bound')
+
+    def test_duplicate_campaign_runs_root_refuses(self):
+        def edit(tree):
+            row = next(stage for stage in tree['stage_graph'] if stage['stage_id'] == 'align-v4-c1-episodes-a')
+            adapter.arguments(row).append(adapter.literal('--runs-dir=/synthetic-previous-attempt-runs'))
+            return {}
+
+        self.assert_duplicate_option_refuses(edit, '--runs-dir')
+
+    def test_duplicate_option_spellings_in_every_launch_stage(self):
+        attempt = self.attempt('with_spare')
+        stages = [stage for stage in adapter.chain.stage_plan(attempt.tree) if stage.in_chain]
+        for stage in stages:
+            parsed = adapter.chain.c1_stage_command(stage, attempt.bindings, attempt.tree, attempt.view)
+            self.assertTrue(parsed.options)
+            for flag, (index, attached) in parsed.options.items():
+                self.assertFalse(attached)
+                value = parsed.argv[index + 1:index + 2] if parsed.takes_value(flag) else []
+                variants = {'duplicate': [flag, *value]}
+                variants['equals'] = [flag + '=' + (value[0] if value else 'invented')]
+                for end in range(3, len(flag)):
+                    prefix = flag[:end]
+                    if parsed.option_for(prefix) == flag:
+                        variants['abbreviation'] = [prefix, *value]
+                        break
+                for spelling, duplicate in variants.items():
+                    with self.subTest(stage=stage.stage_id, flag=flag, spelling=spelling):
+                        argv = list(parsed.argv) + duplicate
+                        with self.assertRaisesRegex(adapter.chain.ChainRenderError, f'duplicate option {flag}'):
+                            parsed.reparse(argv)
 
     def test_frozen_lite_decisions(self):
         completed = subprocess.run([sys.executable, '-B', str(HERE / 'suite/run.py'),
