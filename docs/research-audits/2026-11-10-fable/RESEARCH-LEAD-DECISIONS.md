@@ -25351,3 +25351,59 @@ Owner `research_lead`.
 **What comes back to me.** Each request for a DC-in disposition, with the certificate. `ambiguous_overlap` or `boot_mismatch`. A build that finds the phase code uses `uncertainty_ns`. A v3.1 case or hand vector that fails because of section 4. The route chosen under section 3. A pilot certificate code other than `ok`.
 
 **Lead route choice for RL-202 item 3 (2026-11-22):** the ruled fallback: a pinned ctl list `lm-ctl-01.hold-reasons.v1.json`, so the ctl-01 look does not wait on the #868 instrument lane or freeze 2. The research lead is told by this entry.
+
+# RL-202a. The ruled H is passed unchanged to frozen kernel `82542232d`: it moves no central joule, only the private uncertainty bound, and the kernel's bytes stay as they are. When a leg's candidate streams fail in different ways, a fixed precedence picks one code; `boot_mismatch` wins and is never eligible, so that leg is refused fresh and comes to me
+
+Research lead (Fable 5.2), Sun Nov 22 07:03:21 PST 2026 (from `date`). Amends RL-202 §1.3 ("What H does"), §1.4 item 2 and §1.5, and adds to §6's freeze 2. Answers the two NEEDS_SPEC items of the look-path build (`pl-ctl01-look-path`, `resolve-1/FINAL-MESSAGE.md` and `build/FINAL-MESSAGE.md`). The build's hold on both items is lifted.
+
+## 1. H goes to the kernel unchanged
+
+**Ruling.** Authorized. `ClockMapping.uncertainty_ns = H` exactly as RL-202 §1.3 computes it. No kernel byte changes, and H is not zeroed, split or rescaled on the way in.
+
+**Why.** RL-202 §1.3 said H "changes no joule". That was too wide, and the error was mine: I read the phase code (`rl176_phases.py`, offset only) and not the attribution kernel under it. At `82542232d`, `attribution.py` lines 440 to 449 add `(adjacent_peak(t0) + adjacent_peak(t1)) x H / 1e9` to each integrated interval's bound. The builder's result (10 J central both times, `half_width_j` 0 to 0.48 J at 24 ms) is that term and nothing else. It is the right behaviour: a clock that may be off by H can move each edge of the interval by H, and the bound says so. A finite H adds a finite term, no flag and no change of coverage, so it cannot turn a covered interval into a null.
+
+**RL-202 §1.3, "What H does", now reads:**
+
+> H changes no central joule, no flag and no coverage. It raises `half_width_j` of every DC-in interval by `(adjacent_peak(t0) + adjacent_peak(t1)) x H / 1e9`, as the frozen kernel is written. The ctl print reads that bound only for finiteness (phase closure, `rl176_phases.py:120`); it prints no half-width and gates nothing on its size.
+
+**Conditions.** H is a Python `int`, `0 <= H <= 100,000,000`; `method` is `km003c_raw_monotonic_pairs.v1` (never `unmeasured`). The cap and the private printing of H stand.
+
+**Added to freeze 2 (item 8).** On the fixture, the look run with the ruled H and run again with H forced to 0 gives byte-identical `controls.json` and public output, while the kernel's DC-in `half_width_j` differs by exactly the formula above. If the bytes differ, the print uses the bound somewhere I did not find, and that comes to me before the byte pass.
+
+## 2. Competing blind DC-in failures on one leg
+
+**The rule, exactly.**
+
+1. **Candidates.** A receipt-listed stream that is streaming with samples is a candidate for a leg unless its own anchors show it ended before the episode started (`end_mono_ns < episode start`) or began after it ended (`start_mono_ns > episode end`). A stream with no trailer, or with an anchor field missing, cannot be excluded this way and stays a candidate.
+2. **Each candidate reports every check it fails, not the first only:** `stream_unclosed`, `anchor_unusable`, `half_width_over_cap`, `boot_mismatch`, `not_bracketed`. The boot test is run whenever the header carries `start_real_ns` and `start_mono_ns`, whatever else failed.
+3. **`boot_mismatch` is the identity test alone** (RL-202 §1.4 item 2's 5 s comparison, or a recorded boot identifier that differs). The containment half of item 2 (`start_mono_ns <= episode start`, `episode end <= end_mono_ns`), failing on a stream whose identity passes, is `not_bracketed`. This is what makes a leg that straddles a restart eligible, as RL-202 §2.2 already says.
+4. **The leg's code:**
+   - two or more candidates pass everything: `ambiguous_overlap`;
+   - exactly one passes: `ok`. Failures on the other streams are recorded and change nothing;
+   - no stream is streaming with samples: `meter_absent`;
+   - streams exist but none is a candidate: `not_bracketed`;
+   - otherwise the first code in this order that any candidate reports: **`boot_mismatch` > `stream_unclosed` > `anchor_unusable` > `half_width_over_cap` > `not_bracketed`**.
+5. **Eligibility follows the leg's code, RL-202 §2.2 unchanged.** A leg whose code is `boot_mismatch` or `ambiguous_overlap` is refused with `INPUT_CHANNELS`, the reservation stays fresh, and the leg comes to me. No disposition file passes it, whatever code the file names. A leg whose code is one of the five eligible codes passes only with my disposition naming that leg, that exact code and the certificate's sha256; a disposition naming a lower-ranked code that also occurred is a fresh refusal.
+6. **The certificate** lists, privately, every candidate stream with all the checks it failed, beside the leg's one code. I read that list before I write any disposition.
+
+**The builder's example.** `boot_mismatch` on one candidate and `stream_unclosed` on another, none passing: the code is `boot_mismatch`. Refuse `INPUT_CHANNELS`, fresh, refer. Not eligible.
+
+**Why.** A stream from another boot beside a leg with no good stream may be harmless (an old capture) or may be the leg's real stream with a broken clock. Identity and time fields cannot always tell which, so a person reads the list; a precedence that hid it under an eligible code would let me sign it away unseen. Among the eligible codes the order is the order of the checks: the most basic defect names the leg, and the list shows the rest.
+
+**RL-202 §1.5's table** is read with this section: "the only candidate" in the `stream_unclosed` row becomes "by the precedence of RL-202a §2".
+
+**Added to freeze 2 (item 9).**
+- `boot_mismatch` + `stream_unclosed` on two candidates: code `boot_mismatch`; `INPUT_CHANNELS`, nothing claimed; a disposition naming either code still refuses fresh.
+- `stream_unclosed` + `not_bracketed` on two candidates: code `stream_unclosed`; refused without a disposition; passes with one naming `stream_unclosed`; fresh refusal with one naming `not_bracketed`.
+- One passing stream beside a boot-mismatched candidate: `ok`.
+- One same-boot stream that ends inside the episode, identity passing: `not_bracketed`, not `boot_mismatch`.
+
+**What comes back to me.** A freeze-2 item 8 byte difference. Every `boot_mismatch` or `ambiguous_overlap` leg, with its certificate. What I do with such a leg is ruled then; nothing is built for it now.
+
+**Not checked.**
+- That `joulewise/cadence_looks/controls_release.py` and the print's schema writers never read `half_width_j`. I searched `controls_analysis.py` and the two ctl schemas only (no match). Freeze-2 item 8 is the test.
+- That the builder's 0.48 J reproduces. I read the run report and the kernel lines; I ran nothing.
+- How often a prior-boot stream is a candidate under item 1. If referrals turn out routine after a reboot, I narrow item 1 by ruling.
+- Whether the rails' own mapping carries a nonzero `uncertainty_ns` today (I saw `sampler.py:142` set one; I did not trace it).
+
+**Blind status.** Blind. Read: RL-201a (format), RL-202, the lane's two FINAL-MESSAGE files and the builder's run report (synthetic 10 W plateau only), and source: `attribution.py`, `rl176.py` and `rl176_phases.py` at `82542232d`, and a search of `controls_analysis.py` and the ctl schemas at `08279e20e`. No custody, energy, power, meter, transcript, slot, hazard, sealed or restricted file was opened. No commit, push, comment, run, SSH or fetch. The only file written is this one.
