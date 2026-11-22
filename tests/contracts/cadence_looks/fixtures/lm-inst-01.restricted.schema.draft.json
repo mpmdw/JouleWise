@@ -1,0 +1,1537 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "urn:joulewise:cadence-description:lm-inst-01.restricted",
+  "description": "Restricted JSON file set indexed by kit/leg or prompt/channel/measure. stdout and stderr are separate streams.",
+  "type": "object",
+  "required": [
+    "hold.json",
+    "turn.json",
+    "gain.json",
+    "edges.json"
+  ],
+  "properties": {
+    "hold.json": {
+      "$ref": "#/$defs/hold"
+    },
+    "turn.json": {
+      "$ref": "#/$defs/turn"
+    },
+    "gain.json": {
+      "$ref": "#/$defs/gain"
+    },
+    "edges.json": {
+      "$ref": "#/$defs/edges"
+    }
+  },
+  "additionalProperties": false,
+  "$defs": {
+    "undefined": {
+      "type": "object",
+      "required": [
+        "value",
+        "reason"
+      ],
+      "properties": {
+        "value": {
+          "type": "null"
+        },
+        "reason": {
+          "type": "string",
+          "minLength": 1
+        },
+        "bound_s": {
+          "type": "number"
+        }
+      },
+      "additionalProperties": false
+    },
+    "hold": {
+      "type": "object",
+      "patternProperties": {
+        "^f2-(inst|stab)-[0-9]{2}/L(00[1-9]|01[0-2])$": {"oneOf": [{"$ref": "#/$defs/intervalLedgerMismatch"}, {
+          "type": "object",
+          "required": [
+            "gpu_rail",
+            "rail_sum",
+            "dc_in"
+          ],
+          "properties": {
+            "reference_source_leg_id": {
+              "description": "The span member whose reference applies to this leg.",
+              "type": "string",
+              "pattern": "^L(00[1-9]|01[0-2])$"
+            },
+            "gpu_rail": {
+              "type": "object",
+              "required": [
+                "mean_w",
+                "sd10_w",
+                "sd40_w",
+                "sd128_w",
+                "kept",
+                "dropped",
+                "drift_w_per_600s"
+              ],
+              "properties": {
+                "mean_w": {
+                  "description": "Defined value in W, or a reason and an elapsed-seconds censor bound.",
+                  "oneOf": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "$ref": "#/$defs/undefined"
+                    }
+                  ]
+                },
+                "sd10_w": {
+                  "description": "Defined value in W, or a reason and an elapsed-seconds censor bound.",
+                  "oneOf": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "$ref": "#/$defs/undefined"
+                    }
+                  ]
+                },
+                "sd40_w": {
+                  "description": "Defined value in W, or a reason and an elapsed-seconds censor bound.",
+                  "oneOf": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "$ref": "#/$defs/undefined"
+                    }
+                  ]
+                },
+                "sd128_w": {
+                  "description": "Defined value in W, or a reason and an elapsed-seconds censor bound.",
+                  "oneOf": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "$ref": "#/$defs/undefined"
+                    }
+                  ]
+                },
+                "kept": {
+                  "type": "array",
+                  "items": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "minItems": 3,
+                  "maxItems": 3
+                },
+                "dropped": {
+                  "type": "array",
+                  "items": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "minItems": 3,
+                  "maxItems": 3
+                },
+                "drift_w_per_600s": {
+                  "description": "Defined value in W per 600 s, or a reason and an elapsed-seconds censor bound.",
+                  "oneOf": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "$ref": "#/$defs/undefined"
+                    }
+                  ]
+                },
+                "drop_reasons": {
+                  "type": "object",
+                  "properties": {
+                    "10": {
+                      "$ref": "#/$defs/admissionRejectionList"
+                    },
+                    "40": {
+                      "$ref": "#/$defs/admissionRejectionList"
+                    },
+                    "128": {
+                      "$ref": "#/$defs/admissionRejectionList"
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              },
+              "additionalProperties": false
+            },
+            "rail_sum": {
+              "type": "object",
+              "required": [
+                "mean_w",
+                "sd10_w",
+                "sd40_w",
+                "sd128_w",
+                "kept",
+                "dropped",
+                "drift_w_per_600s"
+              ],
+              "properties": {
+                "mean_w": {
+                  "description": "Defined value in W, or a reason and an elapsed-seconds censor bound.",
+                  "oneOf": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "$ref": "#/$defs/undefined"
+                    }
+                  ]
+                },
+                "sd10_w": {
+                  "description": "Defined value in W, or a reason and an elapsed-seconds censor bound.",
+                  "oneOf": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "$ref": "#/$defs/undefined"
+                    }
+                  ]
+                },
+                "sd40_w": {
+                  "description": "Defined value in W, or a reason and an elapsed-seconds censor bound.",
+                  "oneOf": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "$ref": "#/$defs/undefined"
+                    }
+                  ]
+                },
+                "sd128_w": {
+                  "description": "Defined value in W, or a reason and an elapsed-seconds censor bound.",
+                  "oneOf": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "$ref": "#/$defs/undefined"
+                    }
+                  ]
+                },
+                "kept": {
+                  "type": "array",
+                  "items": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "minItems": 3,
+                  "maxItems": 3
+                },
+                "dropped": {
+                  "type": "array",
+                  "items": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "minItems": 3,
+                  "maxItems": 3
+                },
+                "drift_w_per_600s": {
+                  "description": "Defined value in W per 600 s, or a reason and an elapsed-seconds censor bound.",
+                  "oneOf": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "$ref": "#/$defs/undefined"
+                    }
+                  ]
+                },
+                "drop_reasons": {
+                  "type": "object",
+                  "properties": {
+                    "10": {
+                      "$ref": "#/$defs/admissionRejectionList"
+                    },
+                    "40": {
+                      "$ref": "#/$defs/admissionRejectionList"
+                    },
+                    "128": {
+                      "$ref": "#/$defs/admissionRejectionList"
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              },
+              "additionalProperties": false
+            },
+            "dc_in": {
+              "type": "object",
+              "required": [
+                "mean_w",
+                "sd10_w",
+                "sd40_w",
+                "sd128_w",
+                "kept",
+                "dropped",
+                "drift_w_per_600s"
+              ],
+              "properties": {
+                "mean_w": {
+                  "description": "Defined value in W, or a reason and an elapsed-seconds censor bound.",
+                  "oneOf": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "$ref": "#/$defs/undefined"
+                    }
+                  ]
+                },
+                "sd10_w": {
+                  "description": "Defined value in W, or a reason and an elapsed-seconds censor bound.",
+                  "oneOf": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "$ref": "#/$defs/undefined"
+                    }
+                  ]
+                },
+                "sd40_w": {
+                  "description": "Defined value in W, or a reason and an elapsed-seconds censor bound.",
+                  "oneOf": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "$ref": "#/$defs/undefined"
+                    }
+                  ]
+                },
+                "sd128_w": {
+                  "description": "Defined value in W, or a reason and an elapsed-seconds censor bound.",
+                  "oneOf": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "$ref": "#/$defs/undefined"
+                    }
+                  ]
+                },
+                "kept": {
+                  "type": "array",
+                  "items": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "minItems": 3,
+                  "maxItems": 3
+                },
+                "dropped": {
+                  "type": "array",
+                  "items": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "minItems": 3,
+                  "maxItems": 3
+                },
+                "drift_w_per_600s": {
+                  "description": "Defined value in W per 600 s, or a reason and an elapsed-seconds censor bound.",
+                  "oneOf": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "$ref": "#/$defs/undefined"
+                    }
+                  ]
+                },
+                "drop_reasons": {
+                  "type": "object",
+                  "properties": {
+                    "10": {
+                      "$ref": "#/$defs/admissionRejectionList"
+                    },
+                    "40": {
+                      "$ref": "#/$defs/admissionRejectionList"
+                    },
+                    "128": {
+                      "$ref": "#/$defs/admissionRejectionList"
+                    }
+                  },
+                  "additionalProperties": false
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "additionalProperties": false
+        }]}
+      },
+      "additionalProperties": false
+    },
+    "turn": {
+      "type": "object",
+      "patternProperties": {
+        "^f2-(inst|stab)-[0-9]{2}/L(00[1-9]|01[0-2])$": {"oneOf": [{"$ref": "#/$defs/intervalLedgerMismatch"}, {
+          "type": "object",
+          "required": [
+            "energy_j",
+            "dc_tail_cut",
+            "ratios"
+          ],
+          "properties": {
+            "energy_j": {
+              "type": "object",
+              "required": [
+                "gpu_rail",
+                "rail_sum",
+                "dc_in"
+              ],
+              "properties": {
+                "gpu_rail": {
+                  "description": "Defined value in J, or a reason and an elapsed-seconds censor bound.",
+                  "oneOf": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "$ref": "#/$defs/undefined"
+                    }
+                  ]
+                },
+                "rail_sum": {
+                  "description": "Defined value in J, or a reason and an elapsed-seconds censor bound.",
+                  "oneOf": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "$ref": "#/$defs/undefined"
+                    }
+                  ]
+                },
+                "dc_in": {
+                  "description": "Defined value in J, or a reason and an elapsed-seconds censor bound.",
+                  "oneOf": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "$ref": "#/$defs/undefined"
+                    }
+                  ]
+                }
+              },
+              "additionalProperties": false
+            },
+            "dc_tail_cut": {
+              "const": true
+            },
+            "ratios": {
+              "type": "object",
+              "required": [
+                "gpu_rail",
+                "rail_sum"
+              ],
+              "properties": {
+                "gpu_rail": {
+                  "oneOf": [
+                    {
+                      "type": "object",
+                      "required": [
+                        "numerator",
+                        "denominator",
+                        "value"
+                      ],
+                      "properties": {
+                        "numerator": {
+                          "description": "Defined value in J, or a reason and an elapsed-seconds censor bound.",
+                          "oneOf": [
+                            {
+                              "type": "number"
+                            },
+                            {
+                              "$ref": "#/$defs/undefined"
+                            }
+                          ]
+                        },
+                        "denominator": {
+                          "description": "Defined value in J, or a reason and an elapsed-seconds censor bound.",
+                          "oneOf": [
+                            {
+                              "type": "number"
+                            },
+                            {
+                              "$ref": "#/$defs/undefined"
+                            }
+                          ]
+                        },
+                        "value": {
+                          "type": "number"
+                        }
+                      },
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "required": [
+                        "numerator",
+                        "denominator",
+                        "value",
+                        "reason"
+                      ],
+                      "properties": {
+                        "numerator": {
+                          "description": "Defined value in J, or a reason and an elapsed-seconds censor bound.",
+                          "oneOf": [
+                            {
+                              "type": "number"
+                            },
+                            {
+                              "$ref": "#/$defs/undefined"
+                            }
+                          ]
+                        },
+                        "denominator": {
+                          "description": "Defined value in J, or a reason and an elapsed-seconds censor bound.",
+                          "oneOf": [
+                            {
+                              "type": "number"
+                            },
+                            {
+                              "$ref": "#/$defs/undefined"
+                            }
+                          ]
+                        },
+                        "value": {
+                          "type": "null"
+                        },
+                        "reason": {
+                          "type": "string",
+                          "minLength": 1
+                        }
+                      },
+                      "additionalProperties": false
+                    }
+                  ]
+                },
+                "rail_sum": {
+                  "oneOf": [
+                    {
+                      "type": "object",
+                      "required": [
+                        "numerator",
+                        "denominator",
+                        "value"
+                      ],
+                      "properties": {
+                        "numerator": {
+                          "description": "Defined value in J, or a reason and an elapsed-seconds censor bound.",
+                          "oneOf": [
+                            {
+                              "type": "number"
+                            },
+                            {
+                              "$ref": "#/$defs/undefined"
+                            }
+                          ]
+                        },
+                        "denominator": {
+                          "description": "Defined value in J, or a reason and an elapsed-seconds censor bound.",
+                          "oneOf": [
+                            {
+                              "type": "number"
+                            },
+                            {
+                              "$ref": "#/$defs/undefined"
+                            }
+                          ]
+                        },
+                        "value": {
+                          "type": "number"
+                        }
+                      },
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "required": [
+                        "numerator",
+                        "denominator",
+                        "value",
+                        "reason"
+                      ],
+                      "properties": {
+                        "numerator": {
+                          "description": "Defined value in J, or a reason and an elapsed-seconds censor bound.",
+                          "oneOf": [
+                            {
+                              "type": "number"
+                            },
+                            {
+                              "$ref": "#/$defs/undefined"
+                            }
+                          ]
+                        },
+                        "denominator": {
+                          "description": "Defined value in J, or a reason and an elapsed-seconds censor bound.",
+                          "oneOf": [
+                            {
+                              "type": "number"
+                            },
+                            {
+                              "$ref": "#/$defs/undefined"
+                            }
+                          ]
+                        },
+                        "value": {
+                          "type": "null"
+                        },
+                        "reason": {
+                          "type": "string",
+                          "minLength": 1
+                        }
+                      },
+                      "additionalProperties": false
+                    }
+                  ]
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "additionalProperties": false
+        }]}
+      },
+      "additionalProperties": false
+    },
+    "gain": {
+      "type": "object",
+      "patternProperties": {
+        "^f2-(inst|stab)-[0-9]{2}/L(00[1-9]|01[0-2])$": {"oneOf": [{"$ref": "#/$defs/intervalLedgerMismatch"}, {
+          "type": "object",
+          "required": [
+            "decode_w",
+            "long_prefill_w",
+            "decode_gain",
+            "long_prefill_gain",
+            "idle_dc_minus_sum_w",
+            "mean_fan_rpm",
+            "mean_start_c",
+            "floor_tokens"
+          ],
+          "properties": {
+            "decode_w": {
+              "type": "object",
+              "required": [
+                "gpu_rail",
+                "rail_sum",
+                "dc_in"
+              ],
+              "properties": {
+                "gpu_rail": {
+                  "description": "Defined value in W, or a reason and an elapsed-seconds censor bound.",
+                  "oneOf": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "$ref": "#/$defs/undefined"
+                    }
+                  ]
+                },
+                "rail_sum": {
+                  "description": "Defined value in W, or a reason and an elapsed-seconds censor bound.",
+                  "oneOf": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "$ref": "#/$defs/undefined"
+                    }
+                  ]
+                },
+                "dc_in": {
+                  "description": "Defined value in W, or a reason and an elapsed-seconds censor bound.",
+                  "oneOf": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "$ref": "#/$defs/undefined"
+                    }
+                  ]
+                }
+              },
+              "additionalProperties": false
+            },
+            "long_prefill_w": {
+              "oneOf": [
+                {
+                  "type": "object",
+                  "required": [
+                    "gpu_rail",
+                    "rail_sum",
+                    "dc_in"
+                  ],
+                  "properties": {
+                    "gpu_rail": {
+                      "description": "Defined value in W, or a reason and an elapsed-seconds censor bound.",
+                      "oneOf": [
+                        {
+                          "type": "number"
+                        },
+                        {
+                          "$ref": "#/$defs/undefined"
+                        }
+                      ]
+                    },
+                    "rail_sum": {
+                      "description": "Defined value in W, or a reason and an elapsed-seconds censor bound.",
+                      "oneOf": [
+                        {
+                          "type": "number"
+                        },
+                        {
+                          "$ref": "#/$defs/undefined"
+                        }
+                      ]
+                    },
+                    "dc_in": {
+                      "description": "Defined value in W, or a reason and an elapsed-seconds censor bound.",
+                      "oneOf": [
+                        {
+                          "type": "number"
+                        },
+                        {
+                          "$ref": "#/$defs/undefined"
+                        }
+                      ]
+                    }
+                  },
+                  "additionalProperties": false
+                },
+                {
+                  "$ref": "#/$defs/undefined"
+                }
+              ]
+            },
+            "decode_gain": {
+              "type": "object",
+              "required": [
+                "gpu_rail",
+                "rail_sum"
+              ],
+              "properties": {
+                "gpu_rail": {
+                  "oneOf": [
+                    {
+                      "type": "object",
+                      "required": [
+                        "numerator",
+                        "denominator",
+                        "value"
+                      ],
+                      "properties": {
+                        "numerator": {
+                          "description": "Defined value in W, or a reason and an elapsed-seconds censor bound.",
+                          "oneOf": [
+                            {
+                              "type": "number"
+                            },
+                            {
+                              "$ref": "#/$defs/undefined"
+                            }
+                          ]
+                        },
+                        "denominator": {
+                          "description": "Defined value in W, or a reason and an elapsed-seconds censor bound.",
+                          "oneOf": [
+                            {
+                              "type": "number"
+                            },
+                            {
+                              "$ref": "#/$defs/undefined"
+                            }
+                          ]
+                        },
+                        "value": {
+                          "type": "number"
+                        }
+                      },
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "required": [
+                        "numerator",
+                        "denominator",
+                        "value",
+                        "reason"
+                      ],
+                      "properties": {
+                        "numerator": {
+                          "description": "Defined value in W, or a reason and an elapsed-seconds censor bound.",
+                          "oneOf": [
+                            {
+                              "type": "number"
+                            },
+                            {
+                              "$ref": "#/$defs/undefined"
+                            }
+                          ]
+                        },
+                        "denominator": {
+                          "description": "Defined value in W, or a reason and an elapsed-seconds censor bound.",
+                          "oneOf": [
+                            {
+                              "type": "number"
+                            },
+                            {
+                              "$ref": "#/$defs/undefined"
+                            }
+                          ]
+                        },
+                        "value": {
+                          "type": "null"
+                        },
+                        "reason": {
+                          "type": "string",
+                          "minLength": 1
+                        }
+                      },
+                      "additionalProperties": false
+                    }
+                  ]
+                },
+                "rail_sum": {
+                  "oneOf": [
+                    {
+                      "type": "object",
+                      "required": [
+                        "numerator",
+                        "denominator",
+                        "value"
+                      ],
+                      "properties": {
+                        "numerator": {
+                          "description": "Defined value in W, or a reason and an elapsed-seconds censor bound.",
+                          "oneOf": [
+                            {
+                              "type": "number"
+                            },
+                            {
+                              "$ref": "#/$defs/undefined"
+                            }
+                          ]
+                        },
+                        "denominator": {
+                          "description": "Defined value in W, or a reason and an elapsed-seconds censor bound.",
+                          "oneOf": [
+                            {
+                              "type": "number"
+                            },
+                            {
+                              "$ref": "#/$defs/undefined"
+                            }
+                          ]
+                        },
+                        "value": {
+                          "type": "number"
+                        }
+                      },
+                      "additionalProperties": false
+                    },
+                    {
+                      "type": "object",
+                      "required": [
+                        "numerator",
+                        "denominator",
+                        "value",
+                        "reason"
+                      ],
+                      "properties": {
+                        "numerator": {
+                          "description": "Defined value in W, or a reason and an elapsed-seconds censor bound.",
+                          "oneOf": [
+                            {
+                              "type": "number"
+                            },
+                            {
+                              "$ref": "#/$defs/undefined"
+                            }
+                          ]
+                        },
+                        "denominator": {
+                          "description": "Defined value in W, or a reason and an elapsed-seconds censor bound.",
+                          "oneOf": [
+                            {
+                              "type": "number"
+                            },
+                            {
+                              "$ref": "#/$defs/undefined"
+                            }
+                          ]
+                        },
+                        "value": {
+                          "type": "null"
+                        },
+                        "reason": {
+                          "type": "string",
+                          "minLength": 1
+                        }
+                      },
+                      "additionalProperties": false
+                    }
+                  ]
+                }
+              },
+              "additionalProperties": false
+            },
+            "long_prefill_gain": {
+              "oneOf": [
+                {
+                  "type": "object",
+                  "required": [
+                    "gpu_rail",
+                    "rail_sum"
+                  ],
+                  "properties": {
+                    "gpu_rail": {
+                      "oneOf": [
+                        {
+                          "type": "object",
+                          "required": [
+                            "numerator",
+                            "denominator",
+                            "value"
+                          ],
+                          "properties": {
+                            "numerator": {
+                              "description": "Defined value in W, or a reason and an elapsed-seconds censor bound.",
+                              "oneOf": [
+                                {
+                                  "type": "number"
+                                },
+                                {
+                                  "$ref": "#/$defs/undefined"
+                                }
+                              ]
+                            },
+                            "denominator": {
+                              "description": "Defined value in W, or a reason and an elapsed-seconds censor bound.",
+                              "oneOf": [
+                                {
+                                  "type": "number"
+                                },
+                                {
+                                  "$ref": "#/$defs/undefined"
+                                }
+                              ]
+                            },
+                            "value": {
+                              "type": "number"
+                            }
+                          },
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "required": [
+                            "numerator",
+                            "denominator",
+                            "value",
+                            "reason"
+                          ],
+                          "properties": {
+                            "numerator": {
+                              "description": "Defined value in W, or a reason and an elapsed-seconds censor bound.",
+                              "oneOf": [
+                                {
+                                  "type": "number"
+                                },
+                                {
+                                  "$ref": "#/$defs/undefined"
+                                }
+                              ]
+                            },
+                            "denominator": {
+                              "description": "Defined value in W, or a reason and an elapsed-seconds censor bound.",
+                              "oneOf": [
+                                {
+                                  "type": "number"
+                                },
+                                {
+                                  "$ref": "#/$defs/undefined"
+                                }
+                              ]
+                            },
+                            "value": {
+                              "type": "null"
+                            },
+                            "reason": {
+                              "type": "string",
+                              "minLength": 1
+                            }
+                          },
+                          "additionalProperties": false
+                        }
+                      ]
+                    },
+                    "rail_sum": {
+                      "oneOf": [
+                        {
+                          "type": "object",
+                          "required": [
+                            "numerator",
+                            "denominator",
+                            "value"
+                          ],
+                          "properties": {
+                            "numerator": {
+                              "description": "Defined value in W, or a reason and an elapsed-seconds censor bound.",
+                              "oneOf": [
+                                {
+                                  "type": "number"
+                                },
+                                {
+                                  "$ref": "#/$defs/undefined"
+                                }
+                              ]
+                            },
+                            "denominator": {
+                              "description": "Defined value in W, or a reason and an elapsed-seconds censor bound.",
+                              "oneOf": [
+                                {
+                                  "type": "number"
+                                },
+                                {
+                                  "$ref": "#/$defs/undefined"
+                                }
+                              ]
+                            },
+                            "value": {
+                              "type": "number"
+                            }
+                          },
+                          "additionalProperties": false
+                        },
+                        {
+                          "type": "object",
+                          "required": [
+                            "numerator",
+                            "denominator",
+                            "value",
+                            "reason"
+                          ],
+                          "properties": {
+                            "numerator": {
+                              "description": "Defined value in W, or a reason and an elapsed-seconds censor bound.",
+                              "oneOf": [
+                                {
+                                  "type": "number"
+                                },
+                                {
+                                  "$ref": "#/$defs/undefined"
+                                }
+                              ]
+                            },
+                            "denominator": {
+                              "description": "Defined value in W, or a reason and an elapsed-seconds censor bound.",
+                              "oneOf": [
+                                {
+                                  "type": "number"
+                                },
+                                {
+                                  "$ref": "#/$defs/undefined"
+                                }
+                              ]
+                            },
+                            "value": {
+                              "type": "null"
+                            },
+                            "reason": {
+                              "type": "string",
+                              "minLength": 1
+                            }
+                          },
+                          "additionalProperties": false
+                        }
+                      ]
+                    }
+                  },
+                  "additionalProperties": false
+                },
+                {
+                  "$ref": "#/$defs/undefined"
+                }
+              ]
+            },
+            "idle_dc_minus_sum_w": {
+              "description": "Defined value in W, or a reason and an elapsed-seconds censor bound.",
+              "oneOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "$ref": "#/$defs/undefined"
+                }
+              ]
+            },
+            "mean_fan_rpm": {
+              "description": "Defined value in RPM, or a reason and an elapsed-seconds censor bound.",
+              "oneOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "$ref": "#/$defs/undefined"
+                }
+              ]
+            },
+            "mean_start_c": {
+              "type": "object",
+              "patternProperties": {
+                "^\\S+$": {
+                  "description": "Defined value in °C, or a reason and an elapsed-seconds censor bound.",
+                  "oneOf": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "$ref": "#/$defs/undefined"
+                    }
+                  ]
+                }
+              },
+              "additionalProperties": false
+            },
+            "floor_tokens": {
+              "type": "object",
+              "required": [
+                "gpu_rail",
+                "rail_sum",
+                "dc_in"
+              ],
+              "properties": {
+                "gpu_rail": {
+                  "type": "array",
+                  "items": {
+                    "description": "Defined value in tokens, or a reason and an elapsed-seconds censor bound.",
+                    "oneOf": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "$ref": "#/$defs/undefined"
+                      }
+                    ]
+                  },
+                  "minItems": 3,
+                  "maxItems": 3
+                },
+                "rail_sum": {
+                  "type": "array",
+                  "items": {
+                    "description": "Defined value in tokens, or a reason and an elapsed-seconds censor bound.",
+                    "oneOf": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "$ref": "#/$defs/undefined"
+                      }
+                    ]
+                  },
+                  "minItems": 3,
+                  "maxItems": 3
+                },
+                "dc_in": {
+                  "type": "array",
+                  "items": {
+                    "description": "Defined value in tokens, or a reason and an elapsed-seconds censor bound.",
+                    "oneOf": [
+                      {
+                        "type": "number"
+                      },
+                      {
+                        "$ref": "#/$defs/undefined"
+                      }
+                    ]
+                  },
+                  "minItems": 3,
+                  "maxItems": 3
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "additionalProperties": false
+        }]}
+      },
+      "additionalProperties": false
+    },
+    "edges": {
+      "type": "object",
+      "patternProperties": {
+        "^f2-(inst|stab)-[0-9]{2}/L(00[1-9]|01[0-2])$": {"oneOf": [{"$ref": "#/$defs/intervalLedgerMismatch"}, {
+          "type": "object",
+          "required": [
+            "fallback",
+            "gap_outside",
+            "completion_to_stage_s",
+            "unobserved_s",
+            "recovery_s",
+            "rail_return_censor_s",
+            "resolution_s",
+            "rise_s",
+            "onset_lag_s",
+            "decode_end_lag_s",
+            "recovery_resolution_s",
+            "recovery_skipped_windows"
+          ],
+          "properties": {
+            "fallback": {
+              "type": "boolean"
+            },
+            "gap_outside": {
+              "type": "boolean"
+            },
+            "completion_to_stage_s": {
+              "description": "Defined value in s, or a reason and an elapsed-seconds censor bound.",
+              "oneOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "$ref": "#/$defs/undefined"
+                }
+              ]
+            },
+            "unobserved_s": {
+              "type": "number"
+            },
+            "recovery_s": {
+              "type": "object",
+              "required": [
+                "gpu_rail",
+                "rail_sum",
+                "dc_in"
+              ],
+              "properties": {
+                "gpu_rail": {
+                  "description": "Defined value in s, or a reason and an elapsed-seconds censor bound.",
+                  "oneOf": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "$ref": "#/$defs/undefined"
+                    }
+                  ]
+                },
+                "rail_sum": {
+                  "description": "Defined value in s, or a reason and an elapsed-seconds censor bound.",
+                  "oneOf": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "$ref": "#/$defs/undefined"
+                    }
+                  ]
+                },
+                "dc_in": {
+                  "description": "Defined value in s, or a reason and an elapsed-seconds censor bound.",
+                  "oneOf": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "$ref": "#/$defs/undefined"
+                    }
+                  ]
+                }
+              },
+              "additionalProperties": false
+            },
+            "rail_return_censor_s": {
+              "type": "object",
+              "required": [
+                "gpu_rail",
+                "rail_sum"
+              ],
+              "properties": {
+                "gpu_rail": {
+                  "description": "Defined value in s, or a reason and an elapsed-seconds censor bound.",
+                  "oneOf": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "$ref": "#/$defs/undefined"
+                    }
+                  ]
+                },
+                "rail_sum": {
+                  "description": "Defined value in s, or a reason and an elapsed-seconds censor bound.",
+                  "oneOf": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "$ref": "#/$defs/undefined"
+                    }
+                  ]
+                }
+              },
+              "additionalProperties": false
+            },
+            "resolution_s": {
+              "type": "object",
+              "required": [
+                "gpu_rail",
+                "rail_sum",
+                "dc_in"
+              ],
+              "properties": {
+                "gpu_rail": {
+                  "type": "number",
+                  "exclusiveMinimum": 0
+                },
+                "rail_sum": {
+                  "type": "number",
+                  "exclusiveMinimum": 0
+                },
+                "dc_in": {
+                  "type": "number",
+                  "exclusiveMinimum": 0
+                }
+              },
+              "additionalProperties": false
+            },
+            "rise_s": {
+              "type": "object",
+              "required": [
+                "gpu_rail",
+                "rail_sum",
+                "dc_in"
+              ],
+              "properties": {
+                "gpu_rail": {
+                  "description": "Defined value in s, or a reason and an elapsed-seconds censor bound.",
+                  "oneOf": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "$ref": "#/$defs/undefined"
+                    }
+                  ]
+                },
+                "rail_sum": {
+                  "description": "Defined value in s, or a reason and an elapsed-seconds censor bound.",
+                  "oneOf": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "$ref": "#/$defs/undefined"
+                    }
+                  ]
+                },
+                "dc_in": {
+                  "description": "Defined value in s, or a reason and an elapsed-seconds censor bound.",
+                  "oneOf": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "$ref": "#/$defs/undefined"
+                    }
+                  ]
+                }
+              },
+              "additionalProperties": false
+            },
+            "onset_lag_s": {
+              "type": "object",
+              "required": [
+                "gpu_rail",
+                "rail_sum"
+              ],
+              "properties": {
+                "gpu_rail": {
+                  "description": "Defined value in s, or a reason and an elapsed-seconds censor bound.",
+                  "oneOf": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "$ref": "#/$defs/undefined"
+                    }
+                  ]
+                },
+                "rail_sum": {
+                  "description": "Defined value in s, or a reason and an elapsed-seconds censor bound.",
+                  "oneOf": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "$ref": "#/$defs/undefined"
+                    }
+                  ]
+                }
+              },
+              "additionalProperties": false
+            },
+            "decode_end_lag_s": {
+              "type": "object",
+              "required": [
+                "gpu_rail",
+                "rail_sum"
+              ],
+              "properties": {
+                "gpu_rail": {
+                  "description": "Defined value in s, or a reason and an elapsed-seconds censor bound.",
+                  "oneOf": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "$ref": "#/$defs/undefined"
+                    }
+                  ]
+                },
+                "rail_sum": {
+                  "description": "Defined value in s, or a reason and an elapsed-seconds censor bound.",
+                  "oneOf": [
+                    {
+                      "type": "number"
+                    },
+                    {
+                      "$ref": "#/$defs/undefined"
+                    }
+                  ]
+                }
+              },
+              "additionalProperties": false
+            },
+            "recovery_resolution_s": {
+              "type": "object",
+              "required": [
+                "gpu_rail",
+                "rail_sum",
+                "dc_in"
+              ],
+              "properties": {
+                "gpu_rail": {
+                  "const": 10,
+                  "description": "Window duration in s."
+                },
+                "rail_sum": {
+                  "const": 10,
+                  "description": "Window duration in s."
+                },
+                "dc_in": {
+                  "const": 10,
+                  "description": "Window duration in s."
+                }
+              },
+              "additionalProperties": false
+            },
+            "recovery_skipped_windows": {
+              "type": "object",
+              "required": [
+                "gpu_rail",
+                "rail_sum",
+                "dc_in"
+              ],
+              "properties": {
+                "gpu_rail": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "rail_sum": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "dc_in": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              },
+              "additionalProperties": false
+            },
+            "recovery_skip_reasons": {
+              "type": "object",
+              "properties": {
+                "gpu_rail": {
+                  "$ref": "#/$defs/recoverySkipList"
+                },
+                "rail_sum": {
+                  "$ref": "#/$defs/recoverySkipList"
+                },
+                "dc_in": {
+                  "$ref": "#/$defs/recoverySkipList"
+                }
+              },
+              "additionalProperties": false
+            }
+          },
+          "additionalProperties": false
+        }]}
+      },
+      "additionalProperties": false
+    },
+    "admissionRejectionList": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "enum": [
+          "rail_manifest",
+          "coverage",
+          "meter_gap",
+          "meter_absent",
+          "meter_contaminated"
+        ]
+      },
+      "description": "Reasons for refused complete windows, in search order."
+    },
+    "recoverySkipList": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "enum": [
+          "coverage",
+          "gap_over_u1"
+        ]
+      },
+      "description": "Reasons for skipped complete recovery windows, in search order."
+    },
+    "intervalLedgerMismatch": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "value",
+        "reason"
+      ],
+      "properties": {
+        "value": {
+          "type": "null"
+        },
+        "reason": {
+          "const": "interval_ledger_mismatch"
+        }
+      }
+    }
+  }
+}
