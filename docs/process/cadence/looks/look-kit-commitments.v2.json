@@ -1,0 +1,155 @@
+{
+  "lm-transfer-01": {
+    "source_commit": "4e5c2ad1d6a1dec2ebb0d39620fdc5b4cc3a79c5",
+    "planned_date_places": {
+      "path": "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/dated-transfer/date-place-roster.json",
+      "sha256": "173f75c45475ab2c2cd01402d570d5c8740cbf8c24fa85c5127b76b22dc4e01f"
+    },
+    "kits": [
+      {
+        "kit_id": "cl-transfer-01",
+        "path": "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/dated-transfer/kits/cl-transfer-01.v1.1.json",
+        "sha256": "a018bf05c67e0417cb2a3e5cf0f8a3073a7fac9502670f823b10d868539cefd3"
+      },
+      {
+        "kit_id": "cl-transfer-02",
+        "path": "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/dated-transfer/kits/cl-transfer-02.v1.1.json",
+        "sha256": "54b4719d29e8d14dad6c0cefbbdfcda05eb4206077e303f99c30649919d31ed6"
+      },
+      {
+        "kit_id": "cl-transfer-03",
+        "path": "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/dated-transfer/kits/cl-transfer-03.v1.1.json",
+        "sha256": "281aa82f348e1270ac3162ffd4c933185b3ce78c8be38daaf3b9fbf560ab4054"
+      },
+      {
+        "kit_id": "cl-transfer-04",
+        "path": "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/dated-transfer/kits/cl-transfer-04.v1.1.json",
+        "sha256": "017f702b5596e082eca1734ad9667339c540054c5cb2fbdfe7f58027e6bdc00a"
+      },
+      {
+        "kit_id": "cl-transfer-05",
+        "path": "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/dated-transfer/kits/cl-transfer-05.v1.1.json",
+        "sha256": "a0c4f719d86f91ff451074df2f8260f105cfdabc566586e7c2efa5fe69a0e0bb"
+      },
+      {
+        "kit_id": "cl-transfer-06",
+        "path": "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/dated-transfer/kits/cl-transfer-06.v1.1.json",
+        "sha256": "d14b07bac7662feb7d33ef91d8152118fbaaa4db73279eb263e3942c555c94bb"
+      },
+      {
+        "kit_id": "cl-transfer-07",
+        "path": "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/dated-transfer/kits/cl-transfer-07.v1.1.json",
+        "sha256": "5b32779bea3acf458035a9952bc1f9cee8834b3bd487df6ef99dda7b9c79dde0"
+      },
+      {
+        "kit_id": "cl-transfer-08",
+        "path": "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/dated-transfer/kits/cl-transfer-08.v1.1.json",
+        "sha256": "21604ddc5fafce3986b7bf626b70fa73ab81d2f5c59cc99d607d4113e4fff7c0"
+      },
+      {
+        "kit_id": "cl-transfer-09",
+        "path": "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/dated-transfer/kits/cl-transfer-09.v1.1.json",
+        "sha256": "03aa6cde0c57e1fd0a1697922bb960df42866db822f1907fb14b63caac46e750"
+      },
+      {
+        "kit_id": "cl-transfer-10",
+        "path": "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/dated-transfer/kits/cl-transfer-10.v1.1.json",
+        "sha256": "6aafd694d784b645aeb52d35502e5a2b8242f4fa306b844bf6190744a782e40b"
+      },
+      {
+        "kit_id": "cl-transfer-11",
+        "path": "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/dated-transfer/kits/cl-transfer-11.v1.1.json",
+        "sha256": "44e535ccbadcf18241b187499c8a9c0eb1c554bace87cf430ea8429b0676531b"
+      },
+      {
+        "kit_id": "cl-transfer-12",
+        "path": "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/dated-transfer/kits/cl-transfer-12.v1.1.json",
+        "sha256": "ea43cb68e0619443101afdd738fcb359f96b9e031eeef00006afb3e09a890e5f"
+      },
+      {
+        "kit_id": "cl-transfer-13",
+        "path": "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/dated-transfer/kits/cl-transfer-13.v1.1.json",
+        "sha256": "fff6daf0bb33f00c74045a092a6f874822c819e37b39f9ad41eb505e253898c2"
+      },
+      {
+        "kit_id": "cl-transfer-14",
+        "path": "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/dated-transfer/kits/cl-transfer-14.v1.1.json",
+        "sha256": "7a6b13750fd4cee7c5bbb063070163135c1f20663f93ed28efdb72ac7e5474cd"
+      },
+      {
+        "kit_id": "cl-transfer-15",
+        "path": "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/dated-transfer/kits/cl-transfer-15.v1.1.json",
+        "sha256": "b2589cb1dd0f19a55d6fb7a15199bf72338064c59a7dc83c46b67b0e0ca8df17"
+      },
+      {
+        "kit_id": "cl-transfer-16",
+        "path": "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/dated-transfer/kits/cl-transfer-16.v1.1.json",
+        "sha256": "5626da9346676158484d557ac2c86474ac66cfc04485c3485690982f704924ee"
+      },
+      {
+        "kit_id": "cl-transfer-17",
+        "path": "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/dated-transfer/kits/cl-transfer-17.v1.1.json",
+        "sha256": "b52de0d5172f95bb62279aab9a44475074dff1ac350afafdcafe40a44257ce4b"
+      },
+      {
+        "kit_id": "cl-transfer-18",
+        "path": "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/dated-transfer/kits/cl-transfer-18.v1.1.json",
+        "sha256": "f38541efee926c54b329ab915f0d98bb88530e751545e14bd7b2231c8ed8aa28"
+      },
+      {
+        "kit_id": "cl-transfer-19",
+        "path": "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/dated-transfer/kits/cl-transfer-19.v1.1.json",
+        "sha256": "6ebd03e473f20ad4003e9facf51f603507046886e6e90090a370cbd4ee7de828"
+      },
+      {
+        "kit_id": "cl-transfer-20",
+        "path": "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/dated-transfer/kits/cl-transfer-20.v1.1.json",
+        "sha256": "7700a96872ef766c6f4926eedc28acea674134683c338991b9e5d2fa7f51f80c"
+      }
+    ]
+  },
+  "lm-inst-01": {
+    "source_commit": "e26a566c1f2c9eaf12e47f75bb6e2facb2eaea46",
+    "kit_sha256_by_id": {
+      "f2-inst-01": "651d1815ca87ee23640a8db1483d4ecaf42d70d029855ad03c14bfa076116f2b",
+      "f2-inst-02": "cfd03677e3629b34a8bcd794a623ee3eaae1033408492eb1d1ddb3229273ed65",
+      "f2-inst-03": "286842217313e13ac5f8f25917b3325e3e512cd621b90b78b6201d331e9dcf25"
+    }
+  },
+  "lm-stab-01": {
+    "source_commit": "a8dc8b23c6df7498a3657bf0df677f1bb29be3f8",
+    "kit_sha256_by_id": {
+      "f2-stab-01": "dbad9c7b79088bb6f06aac1c1148c3631a0c616fd2ece596bab0f56657ce70fe",
+      "f2-stab-02": "1fe8dd1d0fb60fe1d481ecb0d4358fda595668c1e889a35a75695e290fcad505",
+      "f2-stab-03": "ac4b303e228233765efda120b2d63f2f6e59d7f8565c4b913880c4a1aa1dc404",
+      "f2-stab-04": "494739dedbc07f2ee3a02b1e5f9561bb4812d765c7630e6931c24ea138525bff",
+      "f2-stab-05": "023febe9afc8532b8f06bb40dfe32dd64a933c99e8e080a51e2686e888246b11",
+      "f2-stab-06": "a02d18bafca780c580ae7dfe970e3a81e3e12b4051b269699db329f02c33172c",
+      "f2-stab-07": "fb22cadce8be3c7d7642c9b55802aa0bd4ea90e41c7c0e9a5038e7a8dc88746d",
+      "f2-stab-08": "aaba2ad04cbc88e9872c292699dfa9f98dfb15ad9f7e0af23a1faf0091bebf00",
+      "f2-stab-09": "9a2b863f7abbffdc2d33a3af6bee7d8381d0c54883dbb4a7cac41378572c5ce8",
+      "f2-stab-10": "bb54fdaff1292ab24f53204698649d0925fa00beedca70604f760a340c9ee926",
+      "f2-stab-11": "e8cb23471f556d21514fb5ba37ffa409b9b697cfbd2519d3c2ab0c6922ed36fe",
+      "f2-stab-12": "7a0440d3f15823760179782f85cad560e8ca917bf66201c02b1b911d79af35f9",
+      "f2-stab-13": "47c3d2f5f6133112e7a209c9522e48bb3388c7fa27f56e5ffdf86962d95f7de3",
+      "f2-stab-14": "73fe743e013cddd6d5294e95e076c64933a81eb95933fb4aa5dfb85471b9402d"
+    }
+  },
+  "lm-qual-01": {
+    "source_commit": "6f32db2af5be1b8b719658b92adfc4698372b056",
+    "span_ids_by_block": {
+      "qual-01": [
+        "qual-01-s01",
+        "qual-01-s02"
+      ],
+      "qual-02": [
+        "qual-02-s01",
+        "qual-02-s02"
+      ],
+      "qual-03": [
+        "qual-03-s01",
+        "qual-03-s02"
+      ]
+    }
+  }
+}

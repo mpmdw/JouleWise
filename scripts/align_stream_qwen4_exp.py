@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import fcntl
 import hashlib
+import http.client
 import importlib.metadata
 import json
 import math
@@ -519,6 +520,34 @@ class Conversion:
             raise ValueError("conversion allocation exceeds the disk budget")
         return allocation
 
+    def streamed_input_digest(self, item):
+        """Authenticate a released shard and compute its canonical digest in one pass."""
+        chunk_bytes = self.plan.canonical.HASH_CHUNK_BYTES
+        whole = hashlib.sha256()
+        composite = hashlib.sha256()
+        try:
+            with self.plan.source.download(item, 0) as response:
+                for start in range(0, item.size, chunk_bytes):
+                    chunk = hashlib.sha256()
+                    remaining = min(chunk_bytes, item.size - start)
+                    while remaining:
+                        block = response.read(min(BLOCK, remaining))
+                        if not block:
+                            raise ValueError(f"short re-authentication download: {item.name}")
+                        whole.update(block)
+                        chunk.update(block)
+                        remaining -= len(block)
+                    composite.update(chunk.digest())
+                if response.read(1):
+                    raise ValueError(f"re-authentication download exceeded the pinned byte count: {item.name}")
+        except (OSError, http.client.HTTPException) as exc:
+            raise ValueError(f"re-authentication download failed: {item.name}: {exc}") from exc
+        whole_digest = whole.hexdigest()
+        if whole_digest != item.checksum:
+            raise ValueError(f"re-authenticated source sha256 mismatch: {item.name}")
+        # The canonical composite hashes binary chunk digests in source order.
+        return composite.hexdigest() if item.size > chunk_bytes else whole_digest
+
     def read_journal(self):
         if not self.journal.exists():
             if set(self.root.iterdir()) - {self.pending}:
@@ -530,16 +559,19 @@ class Conversion:
                 or self.manifest.exists() and len(rows) != len(self.stages)):
             raise ValueError("journal does not match the conversion plan")
         canonical = self.plan.canonical
-        for item, stage, row in zip(self.plan.source.inputs, self.stages, rows):
+        streamed = 0
+        for index, (item, stage, row) in enumerate(zip(self.plan.source.inputs, self.stages, rows), 1):
             spans = self.plan.span_list(item.name)
             if not isinstance(row, list) or len(row) != len(spans) + 1 or any(not is_digest(d) for d in row):
                 raise ValueError(f"malformed journal row: {item.name}")
+            attrs = existing(stage)
             expected = item.checksum
-            if item.size > canonical.HASH_CHUNK_BYTES:
+            if attrs is None:
+                expected = self.streamed_input_digest(item)
+            elif item.size > canonical.HASH_CHUNK_BYTES:
                 # Larger files use the canonical chunk-composite digest. The pinned
-                # whole-file LFS digest authenticates the retained bytes, if present.
-                attrs = existing(stage)
-                if attrs is None or attrs.st_size != item.size:
+                # whole-file LFS digest authenticates the retained bytes.
+                if attrs.st_size != item.size:
                     raise ValueError(f"cannot authenticate committed input digest without a complete source: {item.name}")
                 if range_sha(stage, 0, item.size) != item.checksum:
                     raise ValueError(f"retained source sha256 mismatch: {item.name}")
@@ -547,6 +579,12 @@ class Conversion:
             if row[0] != expected:
                 raise ValueError(f"committed input digest mismatch: {item.name}")
             self.verify_spans(spans, row[1:])
+            if attrs is None:
+                streamed += item.size
+                print(f"Re-authenticated released source shard {index}/{len(rows)}: {item.name} "
+                      f"({item.size} bytes streamed)", flush=True)
+        if streamed:
+            print(f"Re-authentication total: {streamed} bytes streamed", flush=True)
         return rows
 
     def prepare_artifact(self, started):

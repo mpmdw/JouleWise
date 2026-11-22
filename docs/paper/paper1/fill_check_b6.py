@@ -803,7 +803,7 @@ def fill_shows(R: Src, X: dict) -> str:
            bound, bound, 'text')
     b_text = (f'*Floors.* The replication\'s 8B absolute floors ({ranges[0][0]} to {ranges[0][1]} J for decode, '
               f'{ranges[1][0]} to {ranges[1][1]} J for prefill) are {dlo} to {dhi} J below the primary block\'s '
-              f'({prim[0]} and {prim[1]} J). The calibration-acceptance difference between the blocks accounts for at '
+              f'({prim[0]} and {prim[1]} J in Table 6, where floors round to nearest). The calibration-acceptance difference between the blocks accounts for at '
               f'most {bound} J of that. The rest is a difference between sessions that the registered rule does not '
               'explain, and it is the reason the between-session summary is printed for the replication sessions alone '
               'as well.')

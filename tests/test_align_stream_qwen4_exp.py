@@ -1,5 +1,6 @@
 """Synthetic shard tests. Native parity uses the pinned public canonical port when supplied."""
 import hashlib
+import http.client
 import io
 import json
 import math
@@ -10,11 +11,11 @@ import subprocess
 import tempfile
 import unittest
 from collections import defaultdict
-from contextlib import redirect_stderr
+from contextlib import redirect_stderr, redirect_stdout
 from functools import partial
 from pathlib import Path
 from types import SimpleNamespace
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 from scripts import align_stream_qwen4_exp as stream
 
@@ -228,7 +229,8 @@ class StreamTests(unittest.TestCase):
             self.source.interrupt = None
             self.assertEqual(stream.main(arguments), 0)
         self.assertTrue((self.root / "artifact/manifest.json").is_file())
-        self.assertEqual(self.source.downloads[2], (self.source.inputs[1].name, offset))
+        self.assertEqual(self.source.downloads[2:4], [(self.source.inputs[0].name, 0),
+                                                      (self.source.inputs[1].name, offset)])
         self.assertEqual([call.kwargs["plan_only"] for call in worker.call_args_list], [True, False, False])
         self.assertEqual(source.call_count, 3)
         probe.assert_called_with(("/usr/sbin/sysctl", "-n", "hw.model"), check=True, capture_output=True)
@@ -322,7 +324,7 @@ class StreamTests(unittest.TestCase):
         self.assertEqual(self.source.downloads, [(self.source.inputs[0].name, 0)])
         self.assertFalse(list(self.root.glob("source-*.part")))
         self.convert()
-        self.assertEqual(self.source.downloads, [(item.name, 0) for item in self.source.inputs])
+        self.assertEqual(self.source.downloads[1:], [(item.name, 0) for item in self.source.inputs])
 
     def standalone_convert(self, root, source):
         worker = partial(stream._run_conversion, reserve=0, encode=fixture_encode)
@@ -341,13 +343,13 @@ class StreamTests(unittest.TestCase):
         self.assertEqual(refused.exception.code, 1)
         self.assertIn(reason, stderr.getvalue())
 
-    def assert_resume_refused_without_side_effects(self, reason):
+    def assert_resume_refused_without_side_effects(self, reason, *replayed):
         downloads = list(self.source.downloads)
         before = {p.relative_to(self.root): p.read_bytes() for p in self.root.rglob("*") if p.is_file()}
         with patch.object(Path, "unlink", autospec=True, side_effect=Path.unlink) as unlink:
             self.assert_standalone_refused(reason)
         unlink.assert_not_called()
-        self.assertEqual(self.source.downloads, downloads)
+        self.assertEqual(self.source.downloads, downloads + [(item.name, 0) for item in replayed])
         self.assertFalse((self.root / "artifact/manifest.json").exists())
         self.assertEqual(before, {p.relative_to(self.root): p.read_bytes() for p in self.root.rglob("*") if p.is_file()})
 
@@ -362,13 +364,12 @@ class StreamTests(unittest.TestCase):
             for name in ("config.json", *(item.name for item in self.source.inputs))
         })
 
-    def interrupt_during_second_transfer(self):
-        second = self.source.inputs[1].name
-        self.source.interrupt = second
+    def interrupt_during_transfer(self, index):
+        self.source.interrupt = self.source.inputs[index].name
         self.assert_standalone_refused("short download")
         self.source.interrupt = None
         staged, = self.root.glob("source-*.part")
-        self.assertEqual(staged.name, "source-001.part")
+        self.assertEqual(staged.name, f"source-{index:03d}.part")
         self.assertGreater(staged.stat().st_size, 0)
         self.assertFalse((self.root / "artifact/manifest.json").exists())
         return staged.stat().st_size
@@ -376,25 +377,30 @@ class StreamTests(unittest.TestCase):
     def test_resume_reuses_committed_shard_and_partial_download(self):
         first, second, third = self.source.inputs
         self.canonical.HASH_CHUNK_BYTES = first.size
-        offset = self.interrupt_during_second_transfer()
+        offset = self.interrupt_during_transfer(1)
         journal = json.loads((self.root / "journal.json").read_bytes())
         self.assertEqual(journal.keys(), {"schema", "plan_sha256", "committed"})
         self.assertEqual(journal["schema"], 1)
         row, = journal["committed"]
         self.assertEqual(row[0], first.checksum)
         self.assertEqual(self.standalone_convert(self.root, self.source), 0)
-        self.assertEqual(self.source.downloads, [(first.name, 0), (second.name, 0),
+        self.assertEqual(self.source.downloads, [(first.name, 0), (second.name, 0), (first.name, 0),
                                                 (second.name, offset), (third.name, 0)])
         self.assert_manifest_matches_uninterrupted()
 
     def test_resume_refuses_one_bit_tamper_of_committed_input_digest(self):
-        self.interrupt_during_second_transfer()
-        path = self.root / "journal.json"
-        journal = json.loads(path.read_bytes())
-        checksum = journal["committed"][0][0]
-        journal["committed"][0][0] = f"{int(checksum[0], 16) ^ 1:x}" + checksum[1:]
-        path.write_bytes(stream.json_bytes(journal))
-        self.assert_resume_refused_without_side_effects("committed input digest mismatch")
+        first = self.source.inputs[0]
+        for chunk_bytes in (first.size, 257):
+            with self.subTest(chunk_bytes=chunk_bytes):
+                self.root = self.source.root = self.base / f"job-{chunk_bytes}"
+                self.canonical.HASH_CHUNK_BYTES = chunk_bytes
+                self.interrupt_during_transfer(1)
+                path = self.root / "journal.json"
+                journal = json.loads(path.read_bytes())
+                checksum = journal["committed"][0][0]
+                journal["committed"][0][0] = f"{int(checksum[0], 16) ^ 1:x}" + checksum[1:]
+                path.write_bytes(stream.json_bytes(journal))
+                self.assert_resume_refused_without_side_effects("committed input digest mismatch", first)
 
     def interrupt_after_journal_commit(self):
         original = Path.unlink
@@ -431,9 +437,85 @@ class StreamTests(unittest.TestCase):
         self.assertFalse(list(self.root.glob("source-*.part")))
         self.assert_manifest_matches_uninterrupted()
 
-    def test_resume_refuses_chunked_digest_without_retained_source(self):
+    def test_resume_after_two_released_chunked_shards_matches_uninterrupted(self):
+        first, second, third = self.source.inputs
+        self.canonical.HASH_CHUNK_BYTES = 257
+        self.assertGreater(min(first.size, second.size), self.canonical.HASH_CHUNK_BYTES)
+        offset = self.interrupt_during_transfer(2)
+        artifact = self.root / "artifact"
+        payloads = {path: path.read_bytes() for path in artifact.iterdir()}
+        download = self.source.download
+
+        def fragmented_download(item, start):
+            response = download(item, start)
+            read = response.read
+
+            def read_fragment(size=-1):
+                self.assertTrue(0 < size <= stream.BLOCK)
+                self.assertEqual(list(self.root.glob("source-*.part")), [self.root / "source-002.part"])
+                return read(min(size, 71))
+
+            if item != third:
+                response.read = read_fragment
+            return response
+
+        stdout = io.StringIO()
+        with (patch.object(stream, "BLOCK", 113),
+              patch.object(self.source, "download", side_effect=fragmented_download),
+              patch.object(stream.Conversion, "convert_shard", autospec=True,
+                           side_effect=stream.Conversion.convert_shard) as convert_shard,
+              redirect_stdout(stdout)):
+            self.assertEqual(self.standalone_convert(self.root, self.source), 0)
+        convert_shard.assert_called_once()
+        self.assertEqual(convert_shard.call_args.args[1], third)
+        self.assertEqual(self.source.downloads[3:], [(first.name, 0), (second.name, 0), (third.name, offset)])
+        self.assertEqual([count for count, _ in self.source.observations[3:]], [1, 1, 1])
+        self.assertEqual([line for line in stdout.getvalue().splitlines() if line.startswith("Re-authenticat")], [
+            f"Re-authenticated released source shard 1/2: {first.name} ({first.size} bytes streamed)",
+            f"Re-authenticated released source shard 2/2: {second.name} ({second.size} bytes streamed)",
+            f"Re-authentication total: {first.size + second.size} bytes streamed",
+        ])
+        self.assertEqual(payloads, {path: path.read_bytes() for path in payloads})
+        self.assert_manifest_matches_uninterrupted()
+
+    def test_resume_refuses_released_source_with_wrong_lfs_checksum(self):
+        self.canonical.HASH_CHUNK_BYTES = 257
+        first = self.source.inputs[0]
+        self.interrupt_during_transfer(1)
+        upstream = self.source.checkpoint / first.name
+        raw = upstream.read_bytes()
+        upstream.write_bytes(raw[:-1] + bytes([raw[-1] ^ 1]))
+        path = self.root / "journal.json"
+        journal = json.loads(path.read_bytes())
+        journal["committed"][0][0] = self.canonical.sha256(upstream)
+        path.write_bytes(stream.json_bytes(journal))
+        self.assert_resume_refused_without_side_effects("re-authenticated source sha256 mismatch", first)
+
+    def test_resume_refuses_truncated_released_source(self):
+        self.canonical.HASH_CHUNK_BYTES = 257
+        first = self.source.inputs[0]
+        self.interrupt_during_transfer(1)
+        self.source.interrupt = first.name
+        self.assert_resume_refused_without_side_effects("short re-authentication download", first)
+
+    def test_resume_refuses_released_source_on_network_failure(self):
+        self.canonical.HASH_CHUNK_BYTES = 257
+        first = self.source.inputs[0]
+        self.interrupt_during_transfer(1)
+        download = self.source.download
+
+        def failing_download(item, start):
+            response = download(item, start)
+            response.read = Mock(side_effect=http.client.IncompleteRead(b"partial"))
+            return response
+
+        with patch.object(self.source, "download", side_effect=failing_download):
+            self.assert_resume_refused_without_side_effects("re-authentication download failed", first)
+
+    def test_resume_refuses_incomplete_retained_chunked_source(self):
         self.canonical.HASH_CHUNK_BYTES = self.source.inputs[0].size - 1
-        self.interrupt_during_second_transfer()
+        staged = self.interrupt_after_journal_commit()
+        staged.write_bytes(staged.read_bytes()[:-1])
         self.assert_resume_refused_without_side_effects("cannot authenticate committed input digest without a complete source")
 
     def test_resume_refuses_chunked_digest_from_changed_retained_source(self):
@@ -453,7 +535,7 @@ class StreamTests(unittest.TestCase):
         before = path.read_bytes()
         self.assertEqual(self.standalone_convert(self.root, self.source), 0)
         self.assertEqual(path.read_bytes(), before)
-        self.assertEqual(self.source.downloads, [(item.name, 0) for item in self.source.inputs])
+        self.assertEqual(self.source.downloads, [(item.name, 0) for item in self.source.inputs] * 2)
 
     def test_output_hash_failure_retains_source_and_refuses_resume_on_committed_corruption(self):
         original = stream.range_sha
@@ -524,15 +606,18 @@ class HubRangeTests(unittest.TestCase):
                 self.headers = {"Content-Range": content_range}
 
         replies = [Reply(header[:8], "bytes 0-7/16"), Reply(header[8:], "bytes 8-9/16"),
-                   Reply(b"xyz", "bytes 13-15/16"), Reply(b"xyz", "bytes 12-15/16")]
+                   Reply(b"xyz", "bytes 13-15/16"), Reply(b"xyz", "bytes 12-15/16"),
+                   io.BytesIO(header + b"abcxyz")]
         with patch.object(stream.urllib.request, "urlopen", side_effect=replies) as open_http:
             self.assertEqual(source.header(item), header)
             with source.download(item, 13) as payload:
                 self.assertEqual(payload.read(), b"xyz")
             with self.assertRaisesRegex(ValueError, "exact byte range"):
                 source.download(item, 13)
+            with source.download(item, 0) as payload:
+                self.assertEqual(payload.read(), header + b"abcxyz")
         self.assertEqual([call.args[0].get_header("Range") for call in open_http.call_args_list],
-                         ["bytes=0-7", "bytes=8-9", "bytes=13-15", "bytes=13-15"])
+                         ["bytes=0-7", "bytes=8-9", "bytes=13-15", "bytes=13-15", None])
         self.assertTrue(all(stream.REVISION in call.args[0].full_url for call in open_http.call_args_list))
 
 

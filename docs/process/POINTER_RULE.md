@@ -43,10 +43,12 @@ wait are refused. `deadline` and `on_early_or_refused` are required unless
 `wait: none`. An armed block always needs a deadline, including with `none`.
 The times must satisfy `t0 < latest_end <= deadline` when armed.
 
-Time values use ISO 8601 with an explicit offset or `Z` (UTC). They must fall
-within 2026-01-01 through 2030-01-01 UTC, including the endpoints. Naive times,
-bare epochs and impossible dates/offsets are refused. They become numeric epoch
-seconds; fractional seconds use Python datetime's microsecond precision.
+Time values use `YYYY-MM-DDTHH:MM:SS`, optionally followed by a period and
+one or more fractional digits, then `Z` (UTC) or a signed offset `+HH:MM` or
+`-HH:MM`. Hours are `00`–`23`, and minutes and seconds are `00`–`59`.
+Dates must be valid, and instants must fall within 2026-01-01 through
+2030-01-01 UTC, including the endpoints. Values become numeric epoch seconds
+using Python datetime's microsecond precision.
 
 Each body line is `key: value`; the first colon separates the key from the
 value. Surrounding whitespace is stripped. Values must be nonempty printable

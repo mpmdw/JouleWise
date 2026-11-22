@@ -1,10 +1,154 @@
 {
   "armed": null,
-  "next_observable": "the next activation after the fence of plan align-r1-20261118T1445Z is gone (latest end Thu 19 Nov 16:08:00 PST) runs item 398's \"Check after the fence is gone\": R1 terminal status and chain exit first; restore and process-group absence; the three A-B-A G0 releases; uninstall via `arm_align_r1.py uninstall`; network time ON then OFF with frequency word 0 and readback, minutes ON recorded; R1 close epoch recorded as OTHER_CLOSE_EPOCH with LAST_CLOSE_KIND=other; the G1 count by hand (RL-175 D.2); then the post-close disposition by the kit's printed word (item 433); then f2-stab-15 L001 (item 434)",
+  "next_observable": "f2stab04-8da8acdf/run-out.txt shows LAUNCH_RC=0 with the fence (launch ~04:35 Sun after three quiet minutes, expected end ~06:40, worst case ~07:45, fence deadline ~08:10; read the true fence deadline and pid from run-out.txt; check the pid, not the deadline). The next activation after the fence pid is gone and runner_receipt.json exists Checks attempt cq-f2-stab-04-l001-l002-l003-a1 at /Users/edr/campaign-out/f2-stab-04/cq-f2-stab-04-l001-l002-l003-a1 (no stamp suffix) with f2stab04-check-template-8da8acdf/check.sh (copy to f2stab04-check-NEWACT/, replace NEWACT; LEGS L001,L002,L003; kit sha 494739de...5bff; batch_windows == ['02:00-02:35'] and roster-prefix asserted; prints receipt_sha256); reports each leg's disposition on its own line (leg_record attempts[0].os_load max_busy_cores/max_gap_s, result.os_level_max; leg_summary admitted/redo_reasons; L001 cold, L002-L003 warm); maps each leg's quiet span to wall time through the receipt's ended pair and counts maintenance lines inside it; copies at once with f2stab04-check-template-8da8acdf/offload-run.sh (NEWACT replaced), prints full 64-hex digests (item 491), then takes the ladder (items 422, 463, 464, 507, 536). Next stability span: f2-stab-04 L004-L006 (3/2/1 per item 536; fillers-w2/queues-3leg at audit 8f3366c75; stage kit copy is already at /Users/edr/campaign-out/kits/f2-stab-04.v1.1-c4b4f4265.json). Monday's rank 1 is the cold leg of the lowest kit with an unrun position. Fillers-w3 successors (item 524) only after kits 01-14 are all spent and never before t0 2026-11-26 00:00 PST.",
   "open_items": [
     {
       "expires_epoch_s": null,
-      "item": 437,
+      "item": 539,
+      "owner": "magistrate",
+      "status": "ISSUED"
+    },
+    {
+      "expires_epoch_s": null,
+      "item": 536,
+      "owner": "magistrate",
+      "status": "ISSUED"
+    },
+    {
+      "expires_epoch_s": null,
+      "item": 533,
+      "owner": "lead",
+      "status": "ISSUED"
+    },
+    {
+      "expires_epoch_s": null,
+      "item": 532,
+      "owner": "research_lead",
+      "status": "ISSUED"
+    },
+    {
+      "expires_epoch_s": null,
+      "item": 524,
+      "owner": "magistrate",
+      "status": "ISSUED"
+    },
+    {
+      "expires_epoch_s": null,
+      "item": 523,
+      "owner": "magistrate",
+      "status": "ISSUED"
+    },
+    {
+      "expires_epoch_s": null,
+      "item": 516,
+      "owner": "lead",
+      "status": "ISSUED"
+    },
+    {
+      "expires_epoch_s": null,
+      "item": 507,
+      "owner": "lead",
+      "status": "ISSUED"
+    },
+    {
+      "expires_epoch_s": null,
+      "item": 504,
+      "owner": "lead",
+      "status": "ISSUED"
+    },
+    {
+      "expires_epoch_s": null,
+      "item": 503,
+      "owner": "lead",
+      "status": "ISSUED"
+    },
+    {
+      "expires_epoch_s": null,
+      "item": 491,
+      "owner": "magistrate",
+      "status": "ISSUED"
+    },
+    {
+      "expires_epoch_s": null,
+      "item": 489,
+      "owner": "magistrate",
+      "status": "ISSUED"
+    },
+    {
+      "expires_epoch_s": null,
+      "item": 480,
+      "owner": "magistrate",
+      "status": "ISSUED"
+    },
+    {
+      "expires_epoch_s": null,
+      "item": 473,
+      "owner": "lead",
+      "status": "ISSUED"
+    },
+    {
+      "expires_epoch_s": null,
+      "item": 471,
+      "owner": "magistrate",
+      "status": "ISSUED"
+    },
+    {
+      "expires_epoch_s": null,
+      "item": 465,
+      "owner": "magistrate",
+      "status": "ISSUED"
+    },
+    {
+      "expires_epoch_s": null,
+      "item": 464,
+      "owner": "magistrate",
+      "status": "ISSUED"
+    },
+    {
+      "expires_epoch_s": null,
+      "item": 463,
+      "owner": "magistrate",
+      "status": "ISSUED"
+    },
+    {
+      "expires_epoch_s": null,
+      "item": 462,
+      "owner": "magistrate",
+      "status": "ISSUED"
+    },
+    {
+      "expires_epoch_s": null,
+      "item": 459,
+      "owner": "magistrate",
+      "status": "ISSUED"
+    },
+    {
+      "expires_epoch_s": null,
+      "item": 447,
+      "owner": "magistrate",
+      "status": "ISSUED"
+    },
+    {
+      "expires_epoch_s": null,
+      "item": 445,
+      "owner": "magistrate",
+      "status": "ISSUED"
+    },
+    {
+      "expires_epoch_s": null,
+      "item": 443,
+      "owner": "magistrate",
+      "status": "ISSUED"
+    },
+    {
+      "expires_epoch_s": null,
+      "item": 442,
+      "owner": "magistrate",
+      "status": "ISSUED"
+    },
+    {
+      "expires_epoch_s": null,
+      "item": 441,
       "owner": "magistrate",
       "status": "ISSUED"
     },
@@ -83,11 +227,11 @@
   ],
   "owner": "magistrate",
   "schema": "joulewise.current_pointer.v2",
-  "source_item": "437",
-  "source_item_heading_date": "2026-11-18",
+  "source_item": "539",
+  "source_item_heading_date": "2026-11-22",
   "wait": {
-    "deadline_epoch_s": 1795136880,
+    "deadline_epoch_s": 1795368600,
     "observable": "none",
-    "on_early_or_refused": "an install failure, an Ed NO or a directive stop before t0: nothing runs; uninstall through `arm_align_r1.py uninstall`, preserve S, mail Ed and the lead; the READY record (item 397) is then VOID under its clause 6 and a new READY record is needed. A t0 refusal by the night job: preserve S and every marker, no retry of a measured session; the next activation reports it to the lead."
+    "on_early_or_refused": "a launcher refusal or non-clean close: record it, hold kit f2-stab-04 until an input changes (item 422, RL-179 F-6), mail the lead and Ed, and continue down the ladder. A soak refusal on a measured contending process with a proven clean close is physics, not a kit hold (item 505). A clean close with a leg not admitted (cpu_load, redo_quota 0) is recorded, not a stop and not a kit hold (items 467, 479, 520). If run-out.txt has no LAUNCH_RC line (WAIT/STOP before launch, e.g. not quiet by 08:00), nothing launched: positions L001-L003 stay unrun; the next activation re-selects under item 536 (3/2/1 at the actual t0, ARG per item 463) and issues a new typed item before launch."
   }
 }

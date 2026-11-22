@@ -10,6 +10,7 @@ How to read this file:
   **[BRANCH <id>.<n> — <condition>]** ... **[END BRANCH <id>]**. On fill, keep exactly one branch of
   each group (the one the issued artifact selects) and delete the others. Never choose a branch by
   reading a number; the branch is selected by the artifact's outcome field named in fill_index.md.
+  Branch ids are stable keys from the 27 October numbering and are not section numbers (`OUTLINE-MAP-2026-11-11.md`).
 - Synthetic worked examples are labelled "synthetic" and are not results.
 - Shorter alternative sections for the contingency tiers B-E are in variants/.
 - This text changes no registered analysis. If wording here and a registration differ, the
@@ -20,24 +21,27 @@ How to read this file:
 
 ## Abstract
 
-Language-model inference has two phases: *prefill*, in which the model reads the prompt and computes the first
-output token, and *decode*, in which it writes the remaining tokens. We ask how finely a laptop's own power
-sensors can divide inference energy between these phases, and we answer with a method whose limits are part of
-its output. On one Apple M3 Max laptop running the MLX framework, the operating system's power sampler reports
-the average power of the processor package (CPU, GPU and neural engine) over records of roughly a tenth of a
-second. We assign each record's energy to a phase in proportion to its time overlap with the phase, and we carry
+A laptop's power sensors report averages about every tenth of a second, while the structure of a
+language-model request (its phases, its tokens, the weights each token reads) is mostly finer than that. We
+ask what such sensors can attribute to that structure, and we answer with methods whose limits are part of
+their output. The first case is the coarsest structure: *prefill*, in which the model reads the prompt and
+computes the first output token, and *decode*, in which it writes the remaining tokens. On one Apple M3 Max
+laptop running the MLX framework, the operating system's power sampler reports the average power of the
+processor package (CPU, GPU and neural engine) over records of roughly a tenth of a second. We assign each
+record's energy to a phase in proportion to its time overlap with the phase, and we carry
 every source of timing uncertainty into the result: a calibration with commanded GPU pulses before and after
 each measurement session, a fitted clock mapping, and a drift screen built from repeated reference requests.
 From these we derive four quantities: the reported phase energy with an interval, the *attribution floor* (how
 far timing alone can move one request's assigned energy), the *detection floor* (the largest difference the
 instrument produces when nothing differs), and the *dominance ratio* (how much timing uncertainty enlarges the
-detection floor). We then report a pre-registered, blinded experiment on Qwen3-1.7B and Qwen3-8B (4-bit), with
+detection floor). We then report a pre-registered, blinded experiment on Qwen3-1.7B and Qwen3-8B, both quantized to 4 bits, with
 a 512-token decode workload and a 2,048-token prefill workload, two primary model contrasts with Holm
 correction, and an independent recomputation of the core arithmetic from raw power records with recorded
 collection-time judgments as inputs. A registered replication, nine further sessions on later days, was collected and analysed blind and released after the primary block. <!-- FACT H01: RL-5; R2P P3; LEAN-COVERAGE-AUDIT.md §§2-4; paper-audit C-11; RL-147 §8; RUN_STATE item 312. -->
-On M3 Max / MLX / powermetrics SoC rails, from one session per model, the reported gross energy per request was 51.21 J [48.92, 53.49] for Qwen3-1.7B decode, 26.25 J [23.32, 29.19] for its 2,048-token prefill, 198.36 J [195.23, 201.49] for Qwen3-8B decode and 128.28 J [125.19, 131.38] for its 2,048-token prefill, each an instrument result (L1) whose phase attribution was not checked by an independent instrument. Timing movement did not at least double every detection floor (dominance branch B). The decode and 2,048-token prefill contrasts were both *direction supported*, in the registered direction (the 8B model used more phase energy than the 1.7B model), with 6 of 10 and 5 of 10 planned quads kept in one session. Both contrasts replicated under the registered definition: each of the three replication contrast sessions gave the primary session's outcome word and sign. In a second part, BYTES, we test whether decode energy per
-token on the same laptop follows the bytes the model reads per token, its resident size in memory, or its
-decode time: the registration requires three straight lines fixed on three dense models to be committed before
+On M3 Max / MLX / powermetrics SoC rails, from one session per model, the reported gross energy per request was 51.21 J [48.92, 53.49] for Qwen3-1.7B decode, 26.25 J [23.32, 29.19] for its 2,048-token prefill, 198.36 J [195.23, 201.49] for Qwen3-8B decode and 128.28 J [125.19, 131.38] for its 2,048-token prefill, each an instrument result (L1) whose phase attribution was not checked by an independent instrument. Timing movement did not at least double every detection floor (dominance branch B). The decode and 2,048-token prefill contrasts were both *direction supported*, in the registered direction (the 8B model used more phase energy than the 1.7B model), with 6 of 10 and 5 of 10 planned quads kept in one session. Both contrasts replicated under the registered definition: each of the three replication contrast sessions gave the primary session's outcome word and sign.
+The second case is structure that no record can split: in BYTES we test whether decode energy per token on
+the same laptop follows the bytes the model reads per token, its resident size in memory, or its decode
+time: the registration requires three straight lines fixed on three dense models to be committed before
 seven held-out models, including three mixture-of-experts models, are unblinded.
 <!-- FACT H02: RL-5 item 5; paper-audit §4.2 (BYTES commitment is a requirement, not a completed step). -->
 {{FILL: P1-ABS-PART2 | one sentence: the H1 verdict
@@ -52,6 +56,8 @@ those controls failed.
 
 ### 1.1 The question
 
+Most open models that run on a laptop today are sparse: a mixture-of-experts model holds tens of gigabytes of weights and uses a few per cent of them for each token. How much energy a request uses then depends on its structure (how many tokens it reads and writes, how much earlier context each token attends to, which weights each token touches) and not only on the model's size. The laptop's own sensors are the cheapest way to see that energy, and they are coarse. This paper asks what they can attribute to the structure of a request. It takes the two cases that can be tested cleanly: the two phases of one request, and the bytes a model reads per token across ten models.
+
 A large language model (LLM) generates text one *token* at a time; a token is a short piece of text such as a
 word, part of a word or a digit. Serving one request has two phases. In **prefill** the model processes the whole
 prompt and computes the first output token. In **decode** it produces each later token with one *forward pass*
@@ -64,9 +70,11 @@ Measuring phase energy on a laptop is attractive because the sensors are already
 processor's power through its `powermetrics` sampler, with no external meter and no special hardware. But a
 software sampler reports *averages over records*, not instantaneous power, and its records do not line up with
 the phase boundary. A record that begins in prefill and ends in decode reports one average for both. Any split
-of that record between the phases is an allocation, and the allocation moves when the boundary moves. The
-question this paper asks is therefore not only "how much energy does each phase use?" but first "how finely can
-these sensors divide energy between phases at all, and what limits that?"
+of that record between the phases is an allocation, and the allocation moves when the boundary moves. For
+phases the question is therefore not only "how much energy does each phase use?" but first "how finely can
+these sensors divide energy between phases at all, and what limits that?" For structure finer than a record,
+such as tokens and the weights they read, no division of a record is possible; what can be tested is whether
+energy across many requests or models follows a count of that structure (Section 7).
 
 ### 1.2 Approach
 
@@ -102,9 +110,10 @@ the independent recomputation uses recorded collection-time judgments as inputs 
    primary model contrasts under a multiplicity correction and a claims ladder that caps what each result may
    say, and a replication in further sessions whose agreement word was defined before replication collection (Sections 5
    and 6). The replication's results are reported beside the primary block's (Section 6.8). <!-- FACT H04: paper-audit C-10/C-11; RL-5 item 5; RL-147 §8; RUN_STATE item 312. -->
-3. **BYTES, a pre-registered test of what drives decode energy per token** on the same laptop, requiring rival
-   lines to be committed before held-out models are unblinded and using mixture-of-experts models to separate
-   bytes read from bytes held (Section 7).
+3. **BYTES, a pre-registered test of what drives decode energy per token** on the same laptop, requiring
+   rival lines to be committed before held-out models are unblinded. It is the sparse-model question in its
+   simplest form: mixture-of-experts models hold far more bytes than they read per token, so they separate
+   what a model reads from what it holds (Section 7).
 4. **An account of research run by AI agents** under human direction, with the integrity controls that
    constrained them and the failures those controls did and did not catch (Section 8).
 
@@ -115,6 +124,8 @@ one sampler. The phase split rests on the sampler's own timing; no independent i
 falls within a record or at a phase edge (Appendix C, Phase attribution). The decode workload uses one fixed prompt, and the prefill workload
 one prompt length. The whole-machine meter measures power entering the laptop after its adapter, not at the
 wall. Section 9 lists these and the other limitations in full.
+
+The paper attributes energy to two kinds of structure only: the phases of a request, and format-derived bytes per token across models. It reports no energy per token, per layer or per expert within a model, and it does not test whether energy depends on which experts a token is routed to. Split (disaggregated) inference, which first motivated the phase measurement, is one use of it and is not evaluated here (Section 2.5).
 
 ## 2. Background and related work
 
@@ -225,18 +236,41 @@ boundaries.
 
 ### 3.3 The known-bytes stream test
 
-Whether the GPU rail includes the energy of the memory controller decides how the rails-versus-rest split of
-memory energy should be read. A registered **known-bytes stream test**, a GPU workload streaming a known number of
-bytes, was scheduled after pass-1 collection and before stage-1 unblinding, from its own non-claim checkout.
+The sampler reports no memory rail, so the energy of reading memory is split between the rails and the
+rest (Section 7.2). Whether memory traffic costs energy on the GPU rail, on the rails and on the rest was
+measured by a registered **known-bytes stream test**: a GPU workload that streams a known number of bytes
+twice, once over rotating addresses intended to read memory and once over repeated addresses intended to
+read on-chip cache. The test is non-claim: it changes no registered number, exclusion or estimator. It
+ran on 30 and 31 October 2026 (23:21 to 00:38 PDT), after pass-1 collection and before stage-1
+unblinding, from its own non-claim checkout.
 
-**[BRANCH 6.6.1 — the test ran and the rail responded as registered]** {{FILL: P1-BY-KB | outcome of the known-bytes stream test with its record}} The rail and rest boundaries are read as registered.
-**[END BRANCH 6.6.1]**
+With matched 32 MiB dispatches, the contrast of rotating minus repeated addresses, in joules per gigabyte
+of logical bytes, was 0.0092 ± 0.0021 at the rails, 0.00879 ± 0.00010 on the GPU rail, 0.0389 ± 0.0072 at
+the DC input and 0.0296 ± 0.0084 for the rest. The rails, the GPU rail and the rest were each classed
+RESOLVED (the whole interval lies above zero) and the DC-input contrast was valid. The test identifies
+memory-traffic energy on a boundary, not whether it is the memory controller, the fabric or the GPU
+waiting on memory; on rest it does not separate the memory chips from power conversion and fans. The rail
+and rest boundaries are read as registered, and nothing is printed beside their claim lines. The 32 MiB
+dispatch reads at 106 to 116 GB/s and is latency-bound, so transfer to bandwidth-bound decode traffic is
+a stated limit of this test.
 
-**[BRANCH 6.6.2 — the test ran and a boundary did not respond as registered]** {{FILL: P1-BY-KB | outcome}} That
-outcome is printed beside every claim line of the boundary concerned. **[END BRANCH 6.6.2]**
+The rule by which the test is read was revised on the night of the test. A desk replay showed the rule
+admitted on 30 October refusing four of four real scans; a matched-geometry revision replaced it before
+the test ran and before any outcome existed. No record line admitted the revision before the run: the
+lead bound it by disposing two cold reviews, re-executing and arming the test from the revised code
+(`53bcceeac`), and the research lead accepted that act as the rule's admission on 11 November 2026, after
+the outcome was known. Two corrections to the rule's text were settled after the data existed. The first
+concerns the lag count of the baseline variance estimator: the result above uses the named 10 s estimator
+as run (75 to 77 lags at the delivered cadence), and the rule's literal gloss of 100 lags gives 0.0092 ±
+0.0020 J/GB at the rails and 0.0296 ± 0.0084 J/GB for the rest, with every class unchanged. The second
+corrects the GPU edge bound to the larger of the rails and GPU-rail envelopes, which the harvest already
+used; its effect is 3 × 10⁻⁸ J/GB.
 
-**[BRANCH 6.6.3 — the test did not run]** The test did not run in its slot; the split of memory energy between rails
-and rest is reported as not measured, and every rails and rest statement carries that caveat. **[END BRANCH 6.6.3]**
+Source: [BYTES registration §1 and §18 at `d7098081d`](https://github.com/mpmdw/JouleWise/blob/d7098081d/docs/registrations/bytes_pack_v1.md),
+the [admitted slot text](../../process_traces/2026-10-31-magistrate-5cbfbcfc/KB-SLOT-FILL.md)
+and the [reading rule, Parts A and B](https://github.com/mpmdw/JouleWise/blob/d7098081d/docs/registrations/bytes_known_bytes_reading_rule.md).
+<!-- P1-BY-KB source (RL-201 §1.2). Slot SHA-256: `5729d8c7dad4400b533d9939f885037e100fa6fd27e75d812bbe31035c970312`.
+Reading rule Part A SHA-256 (the as-run rule at `53bcceeac`): `569601b3cce8b88dda20d8cbe7e4804c37d04fedfe5945f60c6492328ea79132`. -->
 
 ### 3.4 Whole-machine cross-check
 
@@ -652,7 +686,7 @@ L9-RULING-ADDENDUM.md; decision_log.md D-188-D-190; docs/analysis/b5/DEVIATION-L
 
 ### 5.6 Blinding and release
 
-The rule for each block, from its first session until its release, is that no person or AI agent reads a measured energy, power, phase duration, floor, ratio, contrast, outcome word or calibration value. Two recorded departures are stated below and in Section 8.2. For the replication block, which is not released, this is the rule in force, not a completed record. The collection and analysis programs wrote
+The rule for each block, from its first session until its release, is that no person or AI agent reads a measured energy, power, phase duration, floor, ratio, contrast, outcome word or calibration value. Two recorded departures are stated below and in Section 8.2. The replication block was under this rule from its first session until its release on 13 November 2026 (recorded below). The collection and analysis programs wrote
 these into restricted files listed in a custody map; everything released during collection was **structure**
 only: verdicts, whether a session counted, flag counts by code, kept-unit counts, hazard measurements, and timing
 that is not a phase duration. A unit removed by a restricted code was reported only as "removed (restricted
@@ -1165,7 +1199,7 @@ The replication words were "replicated" for decode and
 
 **What the replication shows.** *Between sessions.* In 7 of the 12 cross-session comparisons the contrast session and its paired floor session differ by more than their statistical half-widths. All six comparisons for the 8B model do, and in each the contrast session reads lower, by 0.352 to 0.549 J (primary block: −0.422 J for decode, which differed, and −0.261 J for prefill, which agreed); one of the six for the 1.7B model does (+0.372 J). The sign is the same in every 8B comparison of both blocks, so this is a systematic difference between a model measured alone and the same model measured in alternation, not scatter; we did not test a cause. The 8B differences are 0.2% to 0.4% of the phase energy and the 1.7B one 1.4%; all are far inside every decision interval, and the two separately collected cells are not differenced into any claim.
 
-*Floors.* The replication's 8B absolute floors (6.95 to 7.79 J for decode, 6.75 to 7.14 J for prefill) are 1.69 to 3.23 J below the primary block's (10.18 and 8.83 J). The calibration-acceptance difference between the blocks accounts for at most 0.175 J of that. The rest is a difference between sessions that the registered rule does not explain, and it is the reason the between-session summary is printed for the replication sessions alone as well.
+*Floors.* The replication's 8B absolute floors (6.95 to 7.79 J for decode, 6.75 to 7.14 J for prefill) are 1.69 to 3.23 J below the primary block's (10.18 and 8.83 J in Table 6, where floors round to nearest). The calibration-acceptance difference between the blocks accounts for at most 0.175 J of that. The rest is a difference between sessions that the registered rule does not explain, and it is the reason the between-session summary is printed for the replication sessions alone as well.
 
 **Dominance across sessions.** Per floor session, the four R per model and its two R_cm: r1-alpha (1.7B): R = 5.2623 and 2.3882 for decode (absolute, comparative) and 7.2531 and 2.6531 for prefill (2,048); R_cm = 1.9557 and 2.1905; r3-alpha (1.7B): R = 7.9610 and 2.8452 for decode (absolute, comparative) and 11.0154 and 2.3632 for prefill (2,048); R_cm = 1.8708 and 1.6943; r4-alpha (1.7B): R = 5.7509 and 3.3282 for decode (absolute, comparative) and 5.1733 and 3.1850 for prefill (2,048); R_cm = 2.4276 and 2.1743; r1-beta (8B): R = 7.5941 and 2.2476 for decode (absolute, comparative) and 7.2358 and 5.6573 for prefill (2,048); R_cm = 1.6699 and 4.2168; r2-beta (8B): R = 6.2614 and 1.3108 for decode (absolute, comparative) and 7.9129 and 3.9376 for prefill (2,048); R_cm = 1.1625 and 2.9995; r3-beta (8B): R = 7.4232 and 1.6865 for decode (absolute, comparative) and 7.3422 and 4.0376 for prefill (2,048); R_cm = 1.3726 and 2.6781. Every contrast pairing is branch B: timing movement did not at least double every detection floor. The failed components were, per pairing, r1-gamma (floors from r1-alpha and r1-beta): 1.7B decode R_cm and 8B decode R_cm; r2-gamma (floors from r3-alpha and r2-beta): 1.7B decode R_cm, 1.7B prefill (2,048) R_cm, 8B decode R_cm and 8B decode comparative R; r3-gamma (floors from r3-alpha and r3-beta): 1.7B decode R_cm, 1.7B prefill (2,048) R_cm, 8B decode R_cm and 8B decode comparative R. Each ratio is a point diagnostic with no interval, labelled single-source; the branch is labelled not independently recomputed. In the primary block all eight independent-corner ratios R were at least 2. In the replication the 8B decode comparative R is below 2 in two of the three 8B floor sessions (1.3108 and 1.6865). The branch is B in the primary block and in all three replication pairings; which components fail is not stable from session to session.
 
@@ -1186,6 +1220,8 @@ The per-session disclosures of the replication registration's §9.5 (kept units 
 
 ### 7.1 The question
 
+Part 1 divided energy between phases that each span many power records. The structure that matters most for sparse models is finer than any record: which weights a token reads. A mixture-of-experts model holds E expert blocks per layer and uses k of them per token, so the bytes it reads per token are a small fraction of the bytes it holds. If energy follows bytes read, a sparse model's energy per token is set by its active part; if it follows bytes held, sparsity saves time but not energy in proportion. No record can be split to answer this. It can be answered across models, by asking which count predicts energy per token on models the lines were not fitted to.
+
 During decode, each forward pass reads the weights it uses and the KV cache of earlier tokens from memory. On the
 laptop of Part 1, energy per decode pass might follow (i) the **format-derived bytes read per pass**, b: the
 stored sizes, including quantization scales and offsets, of every weight used per token plus the KV cache, computed
@@ -1200,7 +1236,7 @@ therefore test whether a line stays straight over the range of bytes; the MoE mo
 right. This is said wherever dense results are printed.
 
 "Bytes read" here is a count from the model format, never a reading of a memory-controller counter. Whether the
-memory system actually moves those bytes, and whether the GPU rail includes the memory controller's energy, are
+memory system actually moves those bytes, and on which boundaries memory traffic costs energy, are
 separate questions (Section 3.3).
 
 ### 7.2 Design
@@ -1226,7 +1262,7 @@ bytes per token.
 | fit | Qwen3-8B, 4-bit | dense | 4.597 | 4.608 |
 | held out, dense | Qwen3-14B, 4-bit | dense | 8.248 | 8.308 |
 | held out, dense | Qwen3-32B, 4-bit | dense | 18.596 | 18.430 |
-| held out, dense | Llama-3.3-70B-Instruct, 4-bit | dense | 39.852 | 39.688 |
+| held out, dense | Llama-3.3-70B-Instruct†, 4-bit | dense | 39.852 | 39.688 |
 | held out, dense | Qwen3-8B, 8-bit | dense | 8.381 | 8.703 |
 | held out, MoE | Qwen3-30B-A3B, 4-bit | 8 of 128 | 1.938 | 17.175 |
 | held out, MoE | Qwen3-Next-80B-A3B-Instruct, 4-bit | 10 of 512, plus shared experts | 2.166 | 44.844 |
@@ -1237,7 +1273,10 @@ one embedding row, the whole output layer, k/E of the routed expert weights and 
 cache averaged over the positions after prefill and after the last decode pass); R = all loaded weight storage.
 Both are counted, not estimated, from the model files by a manifest script frozen before the first session
 ({{FILL: P1-BY-MANIFEST | SHA-256 of the frozen bytes manifest, from the registration}}); 1 GB = 10⁹ bytes. Layers of recurrent or state-space type
-have a constant-size state. The roster spans a 32-fold range of b and a 71-fold range of R.*
+have a constant-size state. The roster spans a 32-fold range of b and a 71-fold range of R.
+† Per-request decode durations of this model's pass-1 session were read and published before the stage-1
+commitment (deviation BY-BLIND-1; Section 8.3). No energy was read. The model stays in the registered
+families.*
 
 **Workload.** Every run is the same request: a prompt of exactly 2,048 token ids, then exactly 512 output tokens
 chosen greedily with the end-of-sequence token suppressed, after a 4-token warm-up. The runtime dispatches 512
@@ -1371,7 +1410,9 @@ reveal a withheld module's duration. The registered stages are:
 The required ordering is a recorded prediction commitment before held-out energies are *unblinded*, rather than
 before they are measured. The commitment record remains unfilled here; this description of the requirement
 does not assert that it has been satisfied.
-<!-- FACT H30: paper-audit §4.2 (commitment), F-08; RL-7(a); RL-24 seat 3. -->
+<!-- FACT H30: paper-audit §4.2 (commitment), F-08; RL-7(a); RL-24 seat 3.
+RL-201 §3.1: RL-7(d), RL-33 item 2 and RL-44 refer to §7.3 in the current manuscript.
+Replace the ordering paragraph and this comment at stage-2 release or the Tier D call. -->
 
 **Two implementations.** The analysis and an independent twin, written from the registration alone and sharing no
 code with it, compute the same tables. They agree when every word, count, degree of freedom, refusal, label and
@@ -1388,11 +1429,18 @@ sessions are dropped first ({{FILL: P1-BYX-STATUS | source identifiers for the t
 ### 7.5 Results
 
 <!-- TEMPLATE. Fill only from the stage-2 records of the registered analysis after release.
-Keep one branch of each group. Extension results removed under RL-5 item 5 (H16). -->
+Select the H1 word branch per model and boundary, and the active-or-resident branch per boundary.
+Extension results removed under RL-5 item 5 (H16). -->
 
 **Collection.** {{FILL: P1-BY-SESSIONS | per sub-pack and pass: counting or not with cause; per model: pass status (two passes, one pass, no pass) and kept units per stratum and boundary}}
 
 **Per-model quantities.** {{FILL: P1-BY-TABLE | Table 8, per model and boundary (rails, DC input, rest), primary selection, gross basis: each pass's m with interval, the pass mean and difference, e with interval, τ, P̄ with half-width, BW, b, R, the drift scale, the rail and meter attribution floors, the battery term's stratified mean and largest value and count of nonzero runs, the largest v; with the flagged-inclusive and idle-subtracted lines and, where applicable, the without-assisted line}}
+
+<!-- Table 8 template (RL-201 §3.4). Mark Llama-3.3-70B† in each row that names it. Append to the caption:
+† Per-request decode durations of this model's pass-1 session were read and published before the stage-1
+commitment (deviation BY-BLIND-1; Section 8.3). No energy was read. The model stays in the registered
+families.
+-->
 
 **The committed lines.** {{FILL: P1-BY-LINES | the predictions file's SHA-256 and commit, the commitment date relative to the stage-2 release, and for each boundary the three fit lines (intercept, slope) with their corner-line ranges; and, if a second commitment exists, both, labelled}}
 
@@ -1401,9 +1449,38 @@ measured interval and the three log ratios.
 
 {{FILL: P1-BY-H1-TABLE | Table 9: per held-out model and boundary: word, measured interval for e, prediction interval for each of b, R, τ, consistency, ln(e_measured/e_predicted) for each; per-pass words as description}}
 
+<!-- Table 9 template (RL-201 §3.4). Mark Llama-3.3-70B† in each row that names it. Append to the caption:
+† Per-request decode durations of this model's pass-1 session were read and published before the stage-1
+commitment (deviation BY-BLIND-1; Section 8.3). No energy was read. The model stays in the registered
+families.
+When any row carries `missing`, print this note (RL-92):
+no H1 word; the reason column says whether the model's rows were withheld-missing or its passes refused.
+-->
+
 The words at the processor rails were {{FILL: P1-BY-H1-WORDS-rails | list of held-out model: word, rails}}, at the
-DC input {{FILL: P1-BY-H1-WORDS-dc | list, DC input}} and for the rest {{FILL: P1-BY-H1-WORDS-rest | list, rest}}. For each held-out
-model and boundary, the word is interpreted by exactly one of the following:
+DC input {{FILL: P1-BY-H1-WORDS-dc | list, DC input}} and for the rest {{FILL: P1-BY-H1-WORDS-rest | list, rest}}.
+Over the six held-out models other than Llama-3.3-70B†, the words were {{FILL: P1-BY-H1-OTHER6-rails |
+count of each H1 word over the other six, then the same count over all seven in parentheses, from the H1
+words list keys}} at the rails, {{FILL: P1-BY-H1-OTHER6-dc | count of each H1 word over the other six,
+then the same count over all seven in parentheses, from the H1 words list keys}} at the DC input and
+{{FILL: P1-BY-H1-OTHER6-rest | count of each H1 word over the other six, then the same count over all
+seven in parentheses, from the H1 words list keys}} for the rest. This is a second reading of the words
+printed above: no interval is recomputed, the registered family size stays 21 checks per boundary, and
+the active-or-resident answer, which is defined over the three MoE models, does not involve
+Llama-3.3-70B.
+
+<!-- RL-201 §§2.1, 2.3, 3.4. In every H1 words list, mark Llama-3.3-70B† and
+render each model covered by W6 as "⟨model⟩: no word". When any W6 branch is kept, append:
+The registered family size, 21 checks per boundary, is unchanged.
+
+On the first commitment, if no held-out model has pass status `no_pass` on any of the three
+boundaries, append this clause at the end of the H1 words paragraph:
+Every held-out model had at least one computed pass at every boundary, so the labelling rule of deviation
+BY-LABEL-1 applied to no real model.
+Delete W6a–W6c, the Table 9 note and A4 in this case, and keep BY-LABEL-1 with date and blind
+status in P1-DEV-LIST. Otherwise omit the clause and use W6 and A4 where they apply. -->
+
+For each held-out model and boundary, the word is interpreted by exactly one of the following:
 
 **[BRANCH 6.5.W1 — word `bytes`]** Only the line in bytes read per pass predicts this model's decode energy per
 pass within the registered uncertainty; the lines in resident size and in decode time do not. For an MoE model this
@@ -1430,10 +1507,27 @@ direction each line misses. A `neither` is informative: it says that something o
 quantities, for example a model-specific kernel efficiency, quantization format or architecture, moves energy per
 pass for this model, and the paper does not name which. **[END BRANCH 6.5.W5]**
 
-**[BRANCH 6.5.W6 — no word: the model has no point]** The model has no word because {{FILL: P1-BY-NOWORD | both passes refused or were missing, with the reason}}. **[END BRANCH 6.5.W6]**
+**[BRANCH 6.5.W6a — no word: both passes withheld-missing]** ⟨Model⟩ has no point and no H1 word at
+⟨boundary⟩: the withheld rows of both of its passes were missing (flag `bytes.withheld_missing`; ⟨n₁⟩ and
+⟨n₂⟩ withheld rows recorded in the export sidecars). The model prints `missing`. **[END BRANCH 6.5.W6a]**
+
+**[BRANCH 6.5.W6b — no word: both passes refused]** ⟨Model⟩ has no point and no H1 word at ⟨boundary⟩:
+both of its passes were refused (pass 1: ⟨reason⟩; pass 2: ⟨reason⟩). The model is not labelled
+`missing`. Its row in Table 9 carries the status `missing`, which in that table means only that there is
+no H1 word (deviation BY-LABEL-1). **[END BRANCH 6.5.W6b]**
+
+**[BRANCH 6.5.W6c — no word: one pass withheld-missing, the other refused]** ⟨Model⟩ has no point and no
+H1 word at ⟨boundary⟩: the withheld rows of pass ⟨i⟩ were missing (flag `bytes.withheld_missing`) and
+pass ⟨j⟩ was refused (⟨reason⟩). The model is not labelled `missing`, because that label is reserved for
+a model both of whose passes are missing. Its row in Table 9 carries the status `missing`, which in that
+table means only that there is no H1 word (deviation BY-LABEL-1). **[END BRANCH 6.5.W6c]**
 
 **Active or resident.** {{FILL: P1-BY-AR-rails | the active-or-resident answer at the rails, with each MoE model's misses}} at the rails;
 {{FILL: P1-BY-AR-dc | the answer at DC input, with misses}} at the DC input.
+
+<!-- RL-201 §2.2. For a boundary where the record prints no answer, the corresponding
+P1-BY-AR fill reads "no answer (⟨k⟩ of the three MoE models had a point)".
+Keep 6.5.A3 only when all three MoE models have a point and the record's answer is `mixed`. -->
 
 **[BRANCH 6.5.A1 — `active`]** On all three MoE models, the resident-size line overpredicts the measured energy
 per pass beyond the registered uncertainty: decode energy on this machine follows the experts a token activates,
@@ -1446,7 +1540,20 @@ active bytes alone predict. **[END BRANCH 6.5.A2]**
 **[BRANCH 6.5.A3 — `mixed`]** The three MoE models do not agree on either pattern; each model's misses are
 printed, and no general statement about active versus resident bytes is made. **[END BRANCH 6.5.A3]**
 
+**[BRANCH 6.5.A4 — no answer: fewer than three MoE models have a point]** At ⟨boundary⟩ no
+active-or-resident answer is printed. The answer is defined over the H1 results of all three MoE models,
+and ⟨each MoE model without a point, with its reason⟩ had no point. The words of the MoE models that do
+have a point are in Table 9 and are read one model at a time. No statement about active versus resident
+bytes is made at this boundary. **[END BRANCH 6.5.A4]**
+
 **H2.** {{FILL: P1-BY-H2-TABLE | Table 10, per boundary and basis: each fit's n, p, df, status and k; ε (simple), ε and ρ (resident-extended), tier ε and ρ, with HC3 primary intervals and OLS errors; tier deviations of each non-tier model with both parts of their intervals; the rest fit with λ, ε_rest, VIF and r; leave-one-out predictions as description; at DC input and rest the label-offset alternative interval and dβ/dδ in J/GB per ms}}
+
+<!-- Table 10 template (RL-201 §3.4). Mark Llama-3.3-70B† in each row that names it,
+including tier-deviation and leave-one-out rows. Append to the caption:
+† Per-request decode durations of this model's pass-1 session were read and published before the stage-1
+commitment (deviation BY-BLIND-1; Section 8.3). No energy was read. The model stays in the registered
+families.
+-->
 
 The primary energy per byte of bandwidth was ε = {{FILL: P1-BY-H2-EPS-rails | resident-extended ε at rails with HC3 interval, J/GB}} at
 the rails and {{FILL: P1-BY-H2-EPS-dc | resident-extended ε at DC input with HC3 interval and the label-offset alternative}} at the DC input.
@@ -1752,7 +1859,28 @@ number, with what each taught. The record runs to 10 November 2026.
   time and little protection"); docs/process_traces/2026-10-27-pipeline-audit/SYNTHESIS.md (proposals, not adopted;
   corrected by CRITIQUE.md). -->
 
-{{FILL: P1-AUTO-BLINDCHECK | disclosure from the recorded check and deviation BY-BLIND-1: per-request timing of one held-out model was read and published before the stage-1 commitment; per-stage timestamps of every session were in the public operational record; each model's approximate decode time was registered from the pilot; why the committed lines cannot depend on any of it; and what the check could not establish}}
+**Held-out timing was read before the BYTES commitment.** The BYTES registration kept clock times out of
+analysis exports, so that a held-out model's decode duration could not be read before the predictions
+were committed. That closure covered analysis exports. It did not cover reads of raw session records. On
+27 and 28 October 2026 an operations agent diagnosing a thermal hazard read such records for the pass-1
+session of one held-out model, Llama-3.3-70B: first the timing of the thermal level relative to request
+ends, then each science request's decode duration, which was committed to the project record and was
+public from then on. No energy or power field was read. Separately, the public operational record of
+every BYTES session carried one timestamp per session stage, from which the wall time of a held-out stage
+can be derived coarsely; those records carry no per-request clock, and whether anyone derived a stage
+time is not known. Each model's approximate decode time had been measured, without power, in the design
+pilot and written into the registration before collection. The committed lines cannot depend on any of
+this: they are computed from the three fit-set models by an estimator whose digest dates from 24 October
+2026 and a manifest frozen on 22 October 2026, both before the reads. One registered rule, the pass-2
+thermal window, was motivated by the first read; it was registered before any pass-2 session and blind to
+every energy, and it applies to fit-set sessions too. A structure-only check recorded before the
+commitment found these reads (deviation BY-BLIND-1). That check covers the committed project record only
+and cannot show that held-out timing was never read by other means. Llama-3.3-70B stays in the registered
+families, is marked † in every table, and the H1 words are also stated over the other six held-out models
+(Section 7.5).
+<!-- P1-AUTO-BLINDCHECK: BY-BLIND-1 in `d7098081d:docs/registrations/bytes_deviation_log.md`;
+`d7098081d:docs/process_traces/2026-11-11-bytes-blindcheck/BLINDCHECK.md`; RL-44, RL-45, RL-201 §3.2.
+Under Tier D the last sentence ends at "registered families." -->
 
 The lesson we draw, an inference from this record rather than a demonstrated guarantee, is that agents can run a
 measurement study with the rigour such a study needs only if the rigour is mechanical. Digests, custody maps,
@@ -1814,12 +1942,17 @@ carries more baseline energy, and part of any model difference is duration times
 of the load-correlated and battery-assist rules; no line can show the effect of physical-hazard removals, which are
 required.
 
-**BYTES.** Bytes per token are format-derived counts, not measured memory traffic. Dense held-out models cannot
-discriminate between the hypotheses. The split of memory energy between rails and rest depends on whether the GPU
-rail includes the memory controller (Section 3.3). The meter's label offset was not measured; DC-input and rest
-statements are printed under both the registered and the alternative interval. No drift-transfer test passed, so
-the drift allowance is scaled by a registered rule rather than measured transfer. Both extension models were
-dropped (Section 7.4). The KV cache size is averaged over the 512 decode passes of one prompt length.
+**BYTES.** Bytes per token are format-derived counts, not measured memory traffic. Dense held-out models
+cannot discriminate between the hypotheses. The known-bytes test shows that memory traffic costs energy
+at the rails and in the rest; it does not show which component spends it, and it does not give the split
+of decode memory energy between them (Section 3.3). The meter's label offset was not measured; DC-input
+and rest statements are printed under both the registered and the alternative interval. No drift-transfer
+test passed, so the drift allowance is scaled by a registered rule rather than measured transfer. Both
+extension models were dropped (Section 7.4). The KV cache size is averaged over the 512 decode passes of
+one prompt length. BYTES compares models; it does not vary routing within a model, where the bytes read
+per token are fixed by k. Before the commitment, per-request decode durations of one held-out model,
+Llama-3.3-70B, were read and published, and per-stage timestamps of every session were public; no energy
+was read and the committed lines were frozen earlier (Section 8.3).
 
 **Automation.** The agents that ran the study also wrote much of this paper. The controls of Section 8.2 constrain
 what an agent could change in the data and the analysis; they do not make the prose neutral. The registrations'
@@ -1848,7 +1981,7 @@ That sentence withholds the registered dominance statement; it does not withdraw
 <!-- Interpretive text (research lead, 2026-11-12), not a registered sentence; the branch-B sentence above is
 unchanged. Authority: analysis plan §6; RL-4(viii). -->
 
-**[BRANCH 9.C — contrasts]** {{FILL: CP-X08-decode-a-conclusion | one sentence per contrast in the registered wording for its outcome and claim level (Section 6.5 branch), with the replication word (Section 6.8)}} **[END BRANCH 9.C]**
+The 8B model used more gross processor-rail energy per request than the 1.7B model in both phases: by 146.63 J in decode (decision interval [141.35, 151.91] J) and by 101.81 J in 2,048-token prefill ([95.80, 107.82] J). Each contrast was *direction supported* at claim level L2 under the registered claim gate in one session, and each *replicated* under the registered definition: every one of the three replication contrast sessions gave the same outcome word and sign. Phase attribution is reported without a measured instrument phase-accounting check.
 <!-- FACT H22: RL-5 item 5; R2P P11; paper-audit C-10. Unconditional resolution gloss removed. -->
 
 **[BRANCH 9.B — BYTES]** {{FILL: P1-BY-CONCLUSION | one sentence: the H1 words for the MoE models and the active-or-resident answer at rails and DC input, and the primary ε, in the registered wording; with the dense-model sentence}} **[END BRANCH 9.B]**
@@ -1976,6 +2109,9 @@ Part 2 (BYTES) registered sentences:
 - *BYTES dense models:* "Dense held-out models test linearity over the format-derived bytes range; their small
   rival splits do not identify the hypothesis."
 - *BYTES per-token label:* "512 decode forward passes, one of which yields no returned token."
+- *BYTES known-bytes stream test:* "The test identifies memory-traffic energy on a boundary, not whether
+  it is the memory controller, the fabric or the GPU waiting on memory; on rest it does not separate the
+  memory chips from power conversion and fans."
 
 ## Appendix D. Estimator derivations and synthetic examples
 

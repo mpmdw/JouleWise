@@ -277,6 +277,13 @@ class MlxRuntimeAdapter:
 
         start_s = self._clock.now()
         try:
+            config_path = Path(source).expanduser() / "config.json"
+            if config_path.is_file():
+                raw = json.loads(config_path.read_text(encoding="utf-8"))
+                if isinstance(raw, dict) and raw.get("model_file") == "qwen4_exp_upstream.py":
+                    from joulewise.align.models.qwen4_exp_upstream import ModelArgs
+
+                    ModelArgs.validate_config(raw)
             loaded = mlx_lm.load(
                 source,
                 revision=config.model.revision,
