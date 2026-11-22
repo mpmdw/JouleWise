@@ -47,11 +47,15 @@ failure between the two publications can leave a complete ledger by itself.
 
 ## Verification and handoff
 
-- `python3 -B -m unittest -v tests.test_init_attempt_ledger` uses synthetic
-  receipts and imports the read-only close-proof entry points from disposable
-  sparse checkouts of both pinned commits. It checks exact ledger bytes and
-  sidecar provenance, refusal paths, lock coverage and rollback on link/fsync
-  errors. The local budget is one worker for the targeted tests.
+- `python3 -B -m unittest -v tests.test_magistrate_desk_fence.InitAttemptLedgerTest`
+  uses synthetic receipts and imports the read-only close-proof entry points from
+  disposable sparse checkouts of both pinned commits. It checks exact ledger
+  bytes and sidecar provenance, refusal paths, lock coverage and rollback on
+  link/fsync errors. The local budget is one worker for the targeted tests.
+- The initial hosted quick tier refused an unweighed top-level test module.
+  The tests now live in the timed desk-fence suite. The static timing check
+  passes locally. The full discovery setup for the timing test encounters
+  permission errors on this host, so the hosted quick tier runs that regression.
 - The draft awaits the independent executing Astra review and hosted suite
   before the lead issues initializer authority.
 - **NEEDS_SPEC.** RL-197c names `git diff f45e22e4e -- scripts/` for the merge
