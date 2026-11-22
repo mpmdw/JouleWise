@@ -209,17 +209,17 @@ Pin B is a real precedent for admission off main. RL-183 §2.8 accepts qualifica
 
 RL-197b amends the main-only reading above. The lead can admit the reviewed result of PRs #808, #900 and #946 on the kit-v1.1 line. Main integration follows separately. This preparation uses the preferred no-code predecessor route. The lead owns each merge, the permanent ref and final admission. [RL-197b](https://github.com/mpmdw/JouleWise/blob/375d2b6ebc360138c3d55a42a3c2b799d3cecd4b/docs/research-audits/2026-11-10-fable/RESEARCH-LEAD-DECISIONS.md#L25140-L25185)
 
-### Exact stack and projection
+### Merged stack and tree verification
 
-| PR | Current reviewed base branch | Head used for projection | Projected tree |
+| PR | Reviewed head | Landed first-parent commit | Tree |
 | --- | --- | --- | --- |
-| #808 | `align/2026-11-14-kit-v1-1` at `6e9d42f1dd3d308bc9239143d0d634ab965e50e1` | `1f8541e4be45ce33f0fca1b9c9e25fc73c24cc35` | `0fd2be59ce11f4e28ea64248b47771832b934015` |
-| #900 | `cadence/2026-11-16-ctl01-runner` | `9bb03a74147831d427007560a98af6ef9673700d` | `f6eb6f623bd03cadd17c0e5dd4fee98702654394` |
-| #946 | `cadence/2026-11-20-ctl01-failed-envelope` | `b8e1fb362af5ed8cd3a8f8b48b265ada36f8c081` | `3cbb765c118b0370b038d697943ce74c54b0e718` |
+| #808 | `1f8541e4be45ce33f0fca1b9c9e25fc73c24cc35` | `79038a57d59e9259ab0f2d1b7d62658a2a0e399e` | `0fd2be59ce11f4e28ea64248b47771832b934015` |
+| #900 | `9bb03a74147831d427007560a98af6ef9673700d` | `048267ba62aa1bba5d8787775277e97677a34eed` | `f6eb6f623bd03cadd17c0e5dd4fee98702654394` |
+| #946 | `b8e1fb362af5ed8cd3a8f8b48b265ada36f8c081` | `f45e22e4efa6b48dd05f099f39eb62246e324177` | `3cbb765c118b0370b038d697943ce74c54b0e718` |
 
-The PRs already have these bases and remain drafts. The lead checks each head and the appropriate evidence, makes each ready, and merges #808 into its current base. Then retarget #900 to the updated kit-v1.1 line and merge it. Retarget #946 to the updated line after #900 and merge #946 last. Use ancestry-preserving merge commits, retaining each earlier head until its dependent PR lands. Confirm the final tree equals `3cbb765c118b0370b038d697943ce74c54b0e718`. A different tree returns to review and full testing under RL-197b §1.
+The first-parent history confirms all three PRs landed in order on `align/2026-11-14-kit-v1-1`. Its tip is `f45e22e4efa6b48dd05f099f39eb62246e324177`. Its tree hash and the empty diff against final #946 confirm the exact tested tree. [Landed merge](https://github.com/mpmdw/JouleWise/commit/f45e22e4efa6b48dd05f099f39eb62246e324177)
 
-The projected merge commit is **`99b672142d31e683986813f75d48e4168abd862c`**, with the exact final #946 tree and an empty tree diff. A deterministic preview reproduces the calculation. It writes Git objects only. The preview is a local validation pin. A GitHub merge assigns its own commit metadata, so the lead records the actual landed full SHA, protects a permanent ref and re-pins the issued kit to that SHA before the final cold seat. Tree equality carries test evidence under RL-144 term 3. It does not carry the kit's commit identity or digest.
+The prior local preview `99b672142d31e683986813f75d48e4168abd862c` is reproducible below. Tree equality carries the test evidence under RL-144 term 3. The kit now records the landed commit and its own digest.
 
 ```sh
 set -eu
@@ -238,26 +238,37 @@ test "$p946" = 99b672142d31e683986813f75d48e4168abd862c
 git diff --exit-code "$p946" b8e1fb362af5ed8cd3a8f8b48b265ada36f8c081
 ```
 
-### Admission evidence on the projected tree
+### Admission evidence on the landed tree
 
 | Gate | Result |
 | --- | --- |
 | Hosted red fix and scope | PASS. `tests/cadence/test_legs_runner.py` is the only path changed from `043b972f9` to `b8e1fb362`. The ledger/bootstrap fixture stages a real matching Git checkout and mocks bootstrap separately from Git. All six launcher tests passed locally. `test_launch_ledger_records_attempt_even_if_bootstrap_fails` and all 61 module tests passed in [hosted shard 8](https://github.com/mpmdw/JouleWise/actions/runs/45027639795/job/137224154987). Runtime, config, workflow and all 40 frozen path bytes compare equal. |
-| Independent executing review | Audit round 4 returned MERGE on the previous head `043b972f9`, with 65 focused tests and both synthetic spans green. Record the independent executing seat's confirmation for the **final** #946 head before admitting the pin. |
+| Independent executing review | Audit round 5 returned MERGE on final #946 head `b8e1fb362` and its projected tree. It recorded 56 focused tests and both F-11 synthetic rosters closed with zero stops. |
 | Full uncached suite on the expected tree | **PASS, 21 of 21 jobs** in hosted run [45027639795](https://github.com/mpmdw/JouleWise/actions/runs/45027639795) for `b8e1fb362`. GitHub's PR test merge `cde8f9a26d4c1813f7258debd58e71881c22eae7` has the same tree `3cbb765c118b0370b038d697943ce74c54b0e718`. |
 | F-11 synthetic launch-to-close | `tests.cadence.test_ctl.RuntimeTests.test_span_driver_runs_real_scripts_to_close_and_desk` and `LaunchAuthorityTests` on the same tree. **PASS, 22 focused tests**. The scripted runtime completes both spans through close and desk, and the launcher fixtures cover the queue-bound launch, predecessor proof and hands-off startup. The runtime test passed with the exact re-pinned review kit on the projected checkout and in [hosted shard 6](https://github.com/mpmdw/JouleWise/actions/runs/45027639795/job/137224154886), where all 50 module tests passed. Record these results and the full CI run at admission. |
-| Preserve and validate pin A and pin B | Pin A `2d347f721552fe03bdd19f113e7bad7a7c24908e` remains for kits 01–14. Pin B `6e9d42f1dd3d308bc9239143d0d634ab965e50e1` remains for kits 15–16 and `cl-qual-01..03`. On the projected checkout, all three qualification kits verified their pin-B frozen files. All three qualification queues covering six spans passed with the approved audited kit copies staged at their queue-relative paths. The bundled lane versions differ from the approved kit hashes, which the validator correctly refused. Both pin-B filler kits, both original queues and both W2 one-leg queue files also validated. Repeat the read-only validators with the same staged bytes on the landed head for the admission record. |
-| Ctl-01 review kit and queues | The signed-off design remains 128/256/512 hidden tokens twice each, 10/30/90 s CPU legs, 600 s recovery, 60 s split gaps, 2,000 prefill, 3 + 9, seed `2026111601`. Structural comparison proved only `frozen.commit` changed within the kit. The projected draft SHA-256 is `936e866cb03d547f54ec08b280712db6f6ac24e4e8cee7b5f643d07679b0cea1`. Clean checkout verification matched all 40 files. The index and both halted queue digests validated. Rebind to the actual full landed commit, regenerate dependent hashes, and get the cold PASS by the final issued digest. |
+| Preserve and validate pin A and pin B | Pin A `2d347f721552fe03bdd19f113e7bad7a7c24908e` remains for kits 01–14. Pin B `6e9d42f1dd3d308bc9239143d0d634ab965e50e1` remains for kits 15–16 and `cl-qual-01..03`. The landed validators passed all three approved qualification kits at pin B and all three queues covering six spans. The pin-B filler kits and their original and W2 queues passed on the identical projected tree. |
+| Ctl-01 review kit and queues | The landed generator reproduced the reviewed kit byte for byte before re-pin. `pin-kit` changed only `frozen.commit`, and all 40 frozen digests matched. The index runner pin and the three kit digest references were regenerated. Both halted queues passed. The clean detached checkout check matched HEAD and all 40 working-tree files in a read-only fixture. The signed-off design remains 128/256/512 hidden tokens twice each, 10/30/90 s CPU legs, 600 s recovery, 60 s split gaps, 2,000 prefill, 3 + 9, seed `2026111601`. |
 
 For the qualification recheck, use `item-drafts-1118/kits/cl-qual-0[123].v1.1.json` and `item-drafts-1118/queues/cl-qual-0[123].queue.json` from audit commit `375d2b6ebc360138c3d55a42a3c2b799d3cecd4b`. Stage the unchanged kit copies under `docs/process/cadence/kits/` inside a separate staging root. From the landed runner checkout, use `cadence_queue.py validate-kit --repo <landed checkout> --batch-window 02:00-02:35` on each staged kit and `cadence_queue.py validate-queue --kits-root <staging root>` on each matching queue. [Audited qualification kit and queue sources](https://github.com/mpmdw/JouleWise/tree/375d2b6ebc360138c3d55a42a3c2b799d3cecd4b/docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/item-drafts-1118)
 
+| Landed review artifact | SHA-256 |
+| --- | --- |
+| `cl-ctl-01.draft.json` | `7636dd298508eb02ae4e71aa7ab172e31a23d9c8e356e41223601972930b3545` |
+| `ctl-01-s01.draft.json` | `9f3dc87e72e70cacc0290fb30e70005b8077bf45461e5ce2b1cb44c6f834a012` |
+| `ctl-01-s02.draft.json` | `0a03c225f418d8d93a9be8277cd731ea96016261d573ce987bd734e6bcb932ea` |
+| `KITS.json` | `6ce19e9ecaed85d08546c4b345ccdafd35c15ec7c9b4cdc5c8b903b4d4179ecc` |
+
+The re-pin uses targeted validators for the review JSON and typed drafts. The green full suite above covers the identical landed runner tree.
+
+The lead fills the issued-artifact digests below from the authorized copies. The pilot draft's inert halt message still mentions main because this re-pin changes only pin and digest fields. RL-197b governs the issued queue.
+
 ### Draft RUN_STATE item — pin admission
 
-**Heading** — Admit cl-ctl-01 runner `<full landed merge commit>` under RL-197b, first native run is the counted pilot.
+**Heading** — Admit cl-ctl-01 runner `f45e22e4efa6b48dd05f099f39eb62246e324177` under RL-197b, first native run is the counted pilot.
 
-**Typed fields** — owner `lead`, status `ISSUED`. Post after all admission evidence is recorded. The full projection SHA above is a pre-merge witness. Use the full landed SHA in the item.
+**Typed fields** — owner `lead`, status `ISSUED`. Post after the permanent ref and cold PASS on the issued kit digest are recorded.
 
-> ADMIT `<full landed merge commit>` on `align/2026-11-14-kit-v1-1`, permanent ref `<never-force-moved, never-deleted ref>`. PRs #808, #900 and #946 landed in order. The landed tree `<full tree SHA>` agrees with the reviewed head `<full #946 SHA>`. Independent executing audit `<PASS and evidence>`, uncached full suite `<run, executor and green result>`, and F-11 synthetic launch-to-close `<PASS and witness>` are recorded. Qualification kits and queues revalidated on the landed head with the pin-B kit bytes `<validation evidence>`. Pin A and pin B keep their full SHAs above. The final kit has `<issued kit SHA-256>` and `<independent cold kit PASS for that digest>`. Create a separate clean detached checkout at the admitted ctl-01 SHA. L001–L003 will be its first native run. The lead posts separate span authority when the actual close is proven.
+> ADMIT `f45e22e4efa6b48dd05f099f39eb62246e324177` on `align/2026-11-14-kit-v1-1`, permanent ref `<never-force-moved, never-deleted ref>`. PRs #808, #900 and #946 landed in order. The landed tree `3cbb765c118b0370b038d697943ce74c54b0e718` equals the tree of reviewed head `b8e1fb362af5ed8cd3a8f8b48b265ada36f8c081`. Independent audit round 5 returned MERGE. The uncached suite passed 21/21 and F-11 synthetic launch-to-close passed. The landed validators passed three qualification kits and three queues at pin B `6e9d42f1dd3d308bc9239143d0d634ab965e50e1`. Pin A remains `2d347f721552fe03bdd19f113e7bad7a7c24908e`. The issued kit has `<issued kit SHA-256>` and `<independent cold kit PASS for that digest>`. Create a separate clean detached checkout at the admitted commit. L001–L003 will be its first native run. The lead posts separate span authority when the actual predecessor close is proven. [Uncached CI](https://github.com/mpmdw/JouleWise/actions/runs/45027639795) · [F-11](https://github.com/mpmdw/JouleWise/actions/runs/45027639795/job/137224154886)
 
 Questions for the magistrate before the pilot is issued:
 
@@ -269,7 +280,7 @@ Pin B's launcher requires the complete authority tuple for a ledger-backed launc
 
 ### Draft RUN_STATE item — counted pilot L001–L003
 
-**Heading** — MAGISTRATE — cl-ctl-01 pilot L001–L003 on `<full admitted commit>`, cq-ctl-01-s01-a1.
+**Heading** — MAGISTRATE — cl-ctl-01 pilot L001–L003 on `f45e22e4efa6b48dd05f099f39eb62246e324177`, cq-ctl-01-s01-a1.
 
 **Typed fields** — owner `magistrate`, status `ISSUED`, expiry `<finite issue expiry>`.
 
@@ -283,11 +294,11 @@ next_observable: <exact pilot runner_receipt.json> for cq-ctl-01-s01-a1, then au
 
 > The immediately preceding span was kit `<f2-stab-15 or f2-stab-16>` on pin B `6e9d42f1dd3d308bc9239143d0d634ab965e50e1`. It was launched with `--span-id <predecessor attempt ID>` equal to its typed issue's attempt ID. Its unchanged receipt SHA-256 is `<full predecessor receipt digest>`. The latest row in the shared attempt ledger is that same last armed span, and the ledger SHA-256 for this issue is `<full ledger digest>`. No unledgered work may run after that close. Hold the pilot if the three admission questions are unresolved, any identity differs, or the close cannot be proved.
 >
-> Use the separate clean detached ctl-01 checkout from the admission item. Verify `<issued kit path and SHA-256>`, `<pilot queue path and SHA-256>`, and `<standing rank above rank-4 stability, preserving higher priorities>`. Apply **Shared Start and check**, the actual-t0 plan and the 02:00–02:35 soak check. Use only L001,L002,L003. The CLI must re-prove the latest close and exact nanosecond bound using the shared attempt ledger. Launch once as the last act of a quiet activation. Do the close and automatic desk check, then the named independent F-3(c) and RL-197 four-view hand-read of stamps and counts. Keep span 2 held until PASS.
+> Use the separate clean detached checkout at `f45e22e4efa6b48dd05f099f39eb62246e324177`. Verify `<issued kit path and SHA-256>`, `<pilot queue path and SHA-256>`, and `<standing rank above rank-4 stability, preserving higher priorities>`. Apply **Shared Start and check**, the actual-t0 plan and the 02:00–02:35 soak check. Use only L001,L002,L003. The CLI must re-prove the latest close and exact nanosecond bound using the shared attempt ledger. Launch once as the last act of a quiet activation. Do the close and automatic desk check, then the named independent F-3(c) and RL-197 four-view hand-read of stamps and counts. Keep span 2 held until PASS.
 
 ### Draft RUN_STATE item — span 2 L004–L012
 
-**Heading** — MAGISTRATE — cl-ctl-01 span 2 L004–L012, pilot hand-read PASS, cq-ctl-01-s02-a1.
+**Heading** — MAGISTRATE — cl-ctl-01 span 2 L004–L012 on `f45e22e4efa6b48dd05f099f39eb62246e324177`, pilot hand-read PASS, cq-ctl-01-s02-a1.
 
 **Typed fields** — owner `magistrate`, status `ISSUED`, expiry `<finite issue expiry>`.
 
@@ -301,7 +312,7 @@ next_observable: <exact span 2 runner_receipt.json> for cq-ctl-01-s02-a1, then r
 
 > Pilot automatic desk and independent F-3(c) and RL-197 view checks are PASS at `<record references>`. Bind the PASS for the same kit and latest pilot receipt in span 2's queue row `pilot_pass_sha256`, and supply `--pilot-hand-read <PASS file>`. The latest receipt used for launch is `<last armed attempt ID>`, with embedded `span_id` equal to that ID. Its receipt SHA-256 is `<full predecessor receipt digest>`. The latest attempt is also the latest row in `<shared ledger>`, whose SHA-256 is `<full ledger digest>`. No unledgered span may have run between the pilot close and this launch. If a ledgered span intervened, prove that newest close and keep the pilot PASS bound to the actual pilot.
 >
-> Use the same detached ctl-01 checkout and issued kit. Verify `<span 2 queue SHA-256 and expiry>`, the actual t0 and standing rank. Run L004–L012 only. Keep L006 and L007 together. At the close record the final accounting and RL-198-amended blind disclosure. The first split leg's independent hand-read is owed before the look. The look's inputs and reservation gates stay with RL-197.
+> Use the separate clean detached checkout at `f45e22e4efa6b48dd05f099f39eb62246e324177` and the same issued kit. Verify `<span 2 queue path, SHA-256 and expiry>`, the actual t0 and standing rank. Run L004–L012 only. Keep L006 and L007 together. At the close record the final accounting and RL-198-amended blind disclosure. The first split leg's independent hand-read is owed before the look. The look's inputs and reservation gates stay with RL-197.
 
 If an expiry or refusal occurs before a leg starts, the leg remains unspent. Audit round 4 found that expiry after ledger append can still leave a recorded attempt without a receipt. In that case hold the chain for the lead to reconcile the actual attempt and close proof before any reissue. Keep the evidence immutable and never add a ledger entry to evade a refusal.
 
