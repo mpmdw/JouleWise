@@ -835,6 +835,32 @@ class C1ClosureTests(unittest.TestCase):
         with self.subTest(control='same tree, default pin selected'):
             self.assert_admitted_on_both_routes(self.attempt(edit_source=default))
 
+    def test_r11_every_consumer_reads_the_reserved_head_pin(self):
+        """Review F1: a later consumer's own --head-pin must select the pin the reservation judged."""
+        retired = 'configs/calibration/retired-head.json'
+        pin = adapter.series.raw_json({'sequence': 7, 'head_digest': '7' * 64,
+                                       'ledger_schema': 'joulewise.calibration_observation_ledger.v1'})
+
+        def collection(tree):
+            return adapter.arguments(next(row for row in tree['stage_graph'] if row['kind'] == 'campaign_collection'))
+
+        for name, select in (('pre capture', lambda tree: capture_arguments(tree, 'pre')),
+                             ('post capture', lambda tree: capture_arguments(tree, 'post')),
+                             ('collection', collection)):
+            with self.subTest(mismatch=name):
+                def edit(tree, select=select):
+                    set_option(select(tree), '--head-pin', 'repo_path', retired)
+                    return {retired: pin}
+
+                self.assert_refused_on_both_routes(self.attempt(edit_source=edit),
+                                                   "differs from the reservation's head pin")
+        with self.subTest(control='explicit default pin in a capture'):
+            def same(tree):
+                set_option(capture_arguments(tree, 'pre'), '--head-pin', 'repo_path', str(adapter.HEAD))
+                return {retired: pin}
+
+            self.assert_admitted_on_both_routes(self.attempt(edit_source=same))
+
     def test_r11_caller_ledger_pointer_is_refusal_only(self):
         """Ruling item 2: a caller's CALIBRATION_LEDGER may only refuse; unset imposes nothing."""
         attempt = self.attempt()
@@ -849,6 +875,7 @@ class C1ClosureTests(unittest.TestCase):
                  ('launch view alias', str(attempt.view / adapter.LEDGER), None),
                  ('empty', '', 'CALIBRATION_LEDGER is empty'),
                  ('missing', str(attempt.view / 'runs/absent-ledger.jsonl'), 'missing'),
+                 ('different staged file', str(attempt.view / 'inputs/epoch.json'), 'canonical C1 path'),
                  ('outside', str(outside), 'outside R/S'))
         for name, value, refusal in cases:
             with self.subTest(case=name), patch.dict(os.environ):
@@ -870,6 +897,19 @@ class C1ClosureTests(unittest.TestCase):
                                    capture_output=True, check=False)
         self.assertEqual(completed.returncode, 0, completed.stderr.decode())
         self.assertEqual(completed.stdout, (HERE / 'suite/expected.jsonl').read_bytes())
+
+
+class ReservedIdentityTests(unittest.TestCase):
+    def test_reserved_power_policy_precedence(self):
+        from joulewise.b5.plan import POWER_POLICY
+        from scripts import reserve_calibration_window_bracket as reservation
+
+        cases = (({'power_policy': 'epoch'}, {'power_policy': 't1'}, 'epoch'),
+                 ({}, {'power_policy': 't1'}, 't1'), ({'power_policy': ''}, {}, POWER_POLICY), ({}, {}, POWER_POLICY))
+        for epoch, t1, expected in cases:
+            with self.subTest(epoch=epoch, t1=t1):
+                # The HAZARD identity records exactly this value (_hazard_measured_identity).
+                self.assertEqual(reservation.reserved_power_policy(epoch, t1), expected)
 
 
 class C1ClosedEnvironmentTests(unittest.TestCase):
