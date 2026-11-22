@@ -87,6 +87,11 @@ class Attempt:
                              t1_bindings_json=str(self.stage / 'inputs/t1.json'),
                              bracket_session_id='fixture-session', pre_attempt_id='fixture-pre',
                              post_attempt_id='fixture-post')
+        # The reservation requires each custody locator under the claim runs
+        # root; b5.plan derives them the same way.
+        for slot in ('pre', 'post'):
+            self.bindings[f'{slot}_calibration_dir'] = str(
+                work / 'claim_runs_root/instrument_validation' / self.bindings[f'{slot}_attempt_id'])
         self.complete_arguments()
         payloads = edit_source(self.source) if edit_source else {}
         self.ledger = payloads.pop(LEDGER.as_posix(), b'')
@@ -147,6 +152,9 @@ class Attempt:
                                     ('--evidence-root-id', 'fixture-evidence')):
                     if literal(flag) not in args:
                         option(args, flag, 'literal', value)
+                if literal('--execute') not in args:
+                    # The committed reservation templates append the session.
+                    args.append(literal('--execute'))
             if stage['kind'] == 'calibration_capture':
                 # The capture writer's own argument gates run at preflight.
                 # Complete the invented template as align_v4's committed one is.

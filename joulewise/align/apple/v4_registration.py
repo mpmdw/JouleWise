@@ -1157,7 +1157,12 @@ def check_selections(view, tree, night, pin, *, c1_inputs, starting=True):
         return _check_consumers(view, tree, stages, launches, bindings, pin, starting=starting)
 
 
+# The HAZARD reservation's identity vectors are measured on the host at launch.
+MEASURED_AT_LAUNCH = 'measured on the host at launch'
+
+
 def _check_consumers(view, tree, stages, launches, bindings, pin, *, starting):
+    from joulewise import calibration_ledger as ledger
     from joulewise.b5 import chain
     from scripts import reserve_calibration_window_bracket as reservation, run_campaign as runner
     from scripts import validate_powermetrics_fiducial as fiducial
@@ -1230,11 +1235,22 @@ def _check_consumers(view, tree, stages, launches, bindings, pin, *, starting):
                 view.locate(path)
             if view.locate(args.plan) != view.locate(view.root / PACK / 'collection_plan.json'):
                 raise ValueError('reservation selects a different C1 collection plan')
+            if not args.execute or args.verify_only:
+                # Without --execute the reservation validates and exits 0 without
+                # reserving; the capture then finds no session.
+                raise ValueError('C1 reservation must append its session (--execute)')
             # The reservation's own gates on its prepared inputs, before any host work.
             consumer_check('reservation', lambda: runtime_ledger(args.ledger, starting=True))
+            consumer_check('reservation', lambda: ledger.CustodyDeadline(
+                args.custody_budget_s, args.custody_deadline_epoch_s, telemetry_stream=None))
             consumer_check('reservation', lambda: reservation.verify_frozen_plan(
                 args.plan, plan_id=args.plan_id, plan_sha256=args.plan_sha256))
-            consumer_check('reservation', lambda: reservation._declared_slot_sources(args))
+            # The HAZARD reservation measures both identity vectors on the host
+            # at launch. Each field is a stand-in here; the validator judges
+            # every prepared input: session, runs root, slots and custody.
+            epoch = dict.fromkeys(ledger.IDENTITY_EPOCH_FIELDS, MEASURED_AT_LAUNCH)
+            t1 = dict.fromkeys(ledger.T1_FIELDS, MEASURED_AT_LAUNCH)
+            consumer_check('reservation', lambda: reservation.reservation_inputs(args, epoch, t1))
         elif stage.kind == 'calibration_capture':
             if args.slot != stage.slot:
                 raise ValueError('C1 capture resolved to the wrong slot')
@@ -1252,6 +1268,8 @@ def _check_consumers(view, tree, stages, launches, bindings, pin, *, starting):
             consumer_check('capture', lambda: runtime_ledger(args.ledger))
             if (error := fiducial._capture_fixture_error(args)) is not None:
                 raise ValueError(f'C1 capture refuses: {error}')
+            consumer_check('capture', lambda: ledger.CustodyDeadline(
+                args.custody_budget_s, args.custody_deadline_epoch_s, telemetry_stream=None))
             consumer_check('capture', lambda: fiducial._capture_mode_refusal(args))
             consumer_check('capture', lambda: fiducial._live_capture_refusal(args))
         else:
@@ -1273,8 +1291,11 @@ def _check_consumers(view, tree, stages, launches, bindings, pin, *, starting):
                     name = member['bundle_path']
                     key(name)
             else:
+                # A shakedown gate requires --backup, which C1 refuses, so the
+                # runner would refuse that stage before collection.
                 if (args.cli_cmd or args.backup is not None or args.check_prompt_hashes
-                        or args.whole_window_verdict or args.record_supersession):
+                        or args.whole_window_verdict or args.record_supersession
+                        or args.shakedown_gate is not None):
                     raise ValueError('unsupported C1 campaign mode')
                 selections['policy'] = view.locate(args.campaign_policy)
                 # The runner's own loaders on the exact bytes it will read.

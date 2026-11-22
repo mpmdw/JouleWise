@@ -690,6 +690,42 @@ class C1ClosureTests(unittest.TestCase):
         self.assertIsNone(consumed['g2a_context'])
         self.assertNotIn('JOULEWISE_G2A_PRE_BRACKET_PLAN', consumed['environment'])
 
+    def test_opus_med_1_consumer_input_gates_refuse_before_host(self):
+        """The round 11 Opus review's gaps: each consumer's own input gate runs at preflight."""
+        def stage(tree, kind):
+            return adapter.arguments(next(row for row in tree['stage_graph'] if row['kind'] == kind))
+
+        def replace(arguments, flag, value):
+            arguments[arguments.index(adapter.literal(flag)) + 1] = adapter.literal(value)
+
+        def outside_custody(tree):
+            replace(stage(tree, 'bracket_reservation'), '--pre-custody-locator', '/synthetic-outside/pre')
+            return {}
+
+        def no_execute(tree):
+            stage(tree, 'bracket_reservation').remove(adapter.literal('--execute'))
+            return {}
+
+        def zero_budget(tree):
+            adapter.option(stage(tree, 'calibration_capture'), '--custody-budget-s', 'literal', '0')
+            return {}
+
+        def shakedown(tree):
+            adapter.option(stage(tree, 'campaign_collection'), '--shakedown-gate', 'literal',
+                           'production_uncertainty_v1')
+            return {}
+
+        cases = ((outside_custody, 'C1 reservation refuses: calibration_reservation_input_invalid'),
+                 (no_execute, 'C1 reservation must append its session'),
+                 (zero_budget, 'custody budget must be finite and positive'),
+                 (shakedown, 'unsupported C1 campaign mode'))
+        for edit, detail in cases:
+            with self.subTest(case=edit.__name__):
+                attempt = self.attempt(edit_source=edit)
+                code, _ = attempt.build()
+                self.assertEqual(code, 2, attempt.build_error)
+                self.assertIn(detail, attempt.build_error)
+
     def test_frozen_lite_decisions(self):
         completed = subprocess.run([sys.executable, '-B', str(HERE / 'suite/run.py'),
                                     '--adapter', str(HERE / 'adapter.py')], cwd=ROOT,

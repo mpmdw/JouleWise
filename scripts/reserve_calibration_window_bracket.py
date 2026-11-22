@@ -324,6 +324,42 @@ def _declared_slot_sources(
     return declared, list(zip(args.slot_attempt_id, args.slot_custody_locator))
 
 
+def reservation_inputs(
+    args: argparse.Namespace,
+    epoch: Mapping[str, Any],
+    t1: Mapping[str, Any],
+) -> tuple[tuple[str, ...], dict[str, dict[str, Any]], Mapping[str, Any], Mapping[str, Mapping[str, Any]]]:
+    """Validate this invocation's session and slot inputs as the reservation does.
+
+    The reservation and the C1 arm preflight both call this function.
+    """
+
+    declared, slot_sources = _declared_slot_sources(args)
+    slots = {
+        role: {
+            "attempt_id": attempt_id,
+            "custody_locator": custody_locator,
+            "identity_epoch": epoch,
+            "t1_bindings": t1,
+        }
+        for role, (attempt_id, custody_locator) in zip(declared, slot_sources)
+    }
+    session_identity, normalized_slots = (
+        validate_bracket_session_reservation_inputs(
+            session_id=args.session_id,
+            window_id=args.window_id,
+            plan_id=args.plan_id,
+            plan_sha256=args.plan_sha256,
+            evidence_root_id=args.evidence_root_id,
+            runs_root=args.runs_root,
+            slots=slots,
+            session_kind=args.session_kind,
+            declared_slots=declared,
+        )
+    )
+    return declared, slots, session_identity, normalized_slots
+
+
 def main(argv: list[str] | None = None) -> int:
     from joulewise.align.apple.v4_registration import runtime_input_context, runtime_ledger
 
@@ -411,29 +447,7 @@ def main(argv: list[str] | None = None) -> int:
                        "custody pass",
             )
         verify_frozen_plan(args.plan, plan_id=args.plan_id, plan_sha256=args.plan_sha256)
-        declared, slot_sources = _declared_slot_sources(args)
-        slots = {
-            role: {
-                "attempt_id": attempt_id,
-                "custody_locator": custody_locator,
-                "identity_epoch": epoch,
-                "t1_bindings": t1,
-            }
-            for role, (attempt_id, custody_locator) in zip(declared, slot_sources)
-        }
-        session_identity, normalized_slots = (
-            validate_bracket_session_reservation_inputs(
-                session_id=args.session_id,
-                window_id=args.window_id,
-                plan_id=args.plan_id,
-                plan_sha256=args.plan_sha256,
-                evidence_root_id=args.evidence_root_id,
-                runs_root=args.runs_root,
-                slots=slots,
-                session_kind=args.session_kind,
-                declared_slots=declared,
-            )
-        )
+        declared, slots, session_identity, normalized_slots = reservation_inputs(args, epoch, t1)
         if not args.execute and not args.verify_only:
             output = {
                 "schema_version": OUTPUT_SCHEMA,
