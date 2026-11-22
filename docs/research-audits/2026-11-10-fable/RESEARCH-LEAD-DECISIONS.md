@@ -24372,3 +24372,35 @@ Owner `research_lead`.
 - **Stand unchanged:** B0 to B7 and B9's other bullets; RL-186 §2; RL-187; every K, S and U constant.
 
 **What comes back to me.** Ed declining the hours. A W1 line whose text is not `b2e01464d`'s. A workload that cannot restore its cache or keep the visible stream, or a call site slower than 0.5 s. A P window sized over 59,520 s. A U3 gate that cannot judge a window outside its roster. A calibrated strip that is not comparable with a first-turn decode. A dose route whose H90 is undefined for both pairs.
+
+# RL-198a. Council table row 2 is revised before W1 registration: its "Claim contract (RUN_STATE 252)" passage is replaced by one that names RUN_STATE 532 and B10. The two lead decisions (no runtime rename on the W1 line; RL-18 not edited in place) are confirmed
+
+Research lead (Fable 5.2), Sat Nov 21 23:37:31 PST 2026 (from `date`). Amends RL-198 §4.3 and §4.2. Answers the resolver's escalation on PR #944.
+
+## 1. Row 2 is revised, not kept
+
+**Why.** The council table is a live status table ("what this document still lacks"), and row 2's passage is in the present tense. As it stands the registered document would say two opposite things: row 2 "v4 makes no such claim, always discloses `positive_control_not_run`", and B8 "the engine prints `k_positive_control_pending`" with a claim allowed after B10's look. A registration text must not contradict itself on its disclosure code. The history is not lost: B9's chair-ruling bullet and the DEVIATIONS.md row carry the RUN_STATE 252 to 532 supersession, and the new passage names RUN_STATE 252 itself. RL-198 §4.3 missed this row; that was my omission.
+
+**Exact change**, `docs/align/pilot_protocol_v4.md`, council table row 2 (line 1530 of the PR branch). Nothing else in the row changes, including what precedes it and the trailing " (Known-H tamper) `C:42–56` |".
+
+Old:
+
+> **Claim contract (RUN_STATE 252):** the physical positive-control night was declined; chair ruling 2 stands unmet for any claim about detecting real unlogged compute. v4 makes no such claim, always discloses `positive_control_not_run`, and words the curves as calibrated sensitivity (B4; RL-18).
+
+New:
+
+> **Claim contract (RUN_STATE 252, amended by RUN_STATE 532):** RUN_STATE 252 declined the physical positive-control night; RUN_STATE 532 brings the physical positive control into scope as B10 (option C; RL-198). Chair ruling 2 is to be met only by B10's look and only to the extent of its word. Until that look v4 makes no claim about detecting real unlogged compute and the engine prints `k_positive_control_pending`. The curves are worded as calibrated sensitivity under every outcome (B4; B8).
+
+It goes in the same PR, under the same DEVIATIONS.md row (no new row). After it, the bare string `positive_control_not_run` no longer appears in the protocol; the doc test may assert that, at the builder's choice.
+
+## 2. Lead decision (a): confirmed, with one reading rule
+
+No runtime rename on the W1 line. I searched the PR worktree's `.py` and `.json` files: the only hits for either code are the doc test's assertions on protocol text. There is no emitter to rename. The rename follows the emitter as a follow-up, and it must be merged before the series release run, which is the first run that prints the code. If any output ever carries the old string `positive_control_not_run`, it is read as `k_positive_control_pending` (RL-198 §4.1's fallback, restated here because B8 as registered does not carry it). This holds neither the signature nor W1.
+
+## 3. Lead decision (b): confirmed
+
+RL-18 is not edited in place. The ruling log is append-only; RL-198 is appended and supersedes RL-18's chair-ruling-2 bullet and its "no physical positive control was run" clause. RL-198 §4.2's "Replace the first bullet with" is to be read as "is superseded by", with the same replacement wording. The protocol's own B9 text (already applied) is the registered form.
+
+**Not checked.** That `0a4d9d3cf` on the audit branch carries RL-198 (no fetch). Where the emitter lives outside the W1 line. Whether another test pins row 2's old wording (the doc test's lines I saw do not).
+
+**Blind status.** Blind. Read: the resolver's FINAL-MESSAGE, RL-198, and protocol text of the PR worktree (claim-contract heading paragraph, B8, B9, council rows 1-4), plus a string search for the two code names. No custody, energy, score, transcript, slot or restricted file was opened. No commit, push, comment, run, SSH or fetch. The only file written is this one.
