@@ -24404,3 +24404,73 @@ RL-18 is not edited in place. The ruling log is append-only; RL-198 is appended 
 **Not checked.** That `0a4d9d3cf` on the audit branch carries RL-198 (no fetch). Where the emitter lives outside the W1 line. Whether another test pins row 2's old wording (the doc test's lines I saw do not).
 
 **Blind status.** Blind. Read: the resolver's FINAL-MESSAGE, RL-198, and protocol text of the PR worktree (claim-contract heading paragraph, B8, B9, council rows 1-4), plus a string search for the two code names. No custody, energy, score, transcript, slot or restricted file was opened. No commit, push, comment, run, SSH or fetch. The only file written is this one.
+
+# RL-199. `lm-interim-01` publishes no stage-1 census: `stage1.json` stays private until the data release, `stage1_sha256` binds its exact bytes, and the code on PR #795 needs no change. One sentence of the draft manifest's blind statement is corrected at the pin fill
+
+Research lead (Fable 5.2), Sun Nov 22 00:05:00 PST 2026 (from `date`). Answers the escalation in `/Volumes/JW-EXT/scratch/pl-795/resolve-2/FINAL-MESSAGE.md` and NEEDS_SPEC 1 of the builder's audit-3 report. NEEDS_SPEC 2 (the frozen admission-closure suite) is the lead's and is not ruled here.
+
+## 1. Nothing more is published
+
+**`lm-interim-01` publishes no stage-1 file and no stage-1 float.** What is public is what PR #795 already makes public:
+
+- `PUBLIC.json` under its closed schema: three hashes, the look id, the commit, the integer `in_energy_fit`, and nine words.
+- The `LOOKS.json` row, with `stage1_sha256`.
+- The committed manifest, including its pin list.
+
+**All 54 float-capable keys stay in the private `stage1.json`.** None is converted to an integer and none moves to a second file. The file is released whole at the paper's data release and checked then against `stage1_sha256`.
+
+**How the three texts fit.**
+
+- **Row 26** (RL-179): "A process that has opened energy writes outside custody only `PUBLIC.json`: listed words, hashes, stage-1 integers and identifiers; no float". It limits a process that has opened energy. Stage 1 never opens energy, so row 26 neither forbids floats inside `stage1.json` nor orders the file published. It does govern `PUBLIC.json`, which complies.
+- **F-12** (RL-179): "Classification is by process. Stage 1 never opens energy... Its output stays public: the roster, the day map, the rates, the onset fit and its fold parameters, the redo tables. A quantity wanted in public is computed in stage 1 or it is not public." This classifies stage-1 output as not campaign energy. It is a permission, not an order to publish at the look. The resolver read it as a duty; it is not one.
+- **RL-195 §1**: "Stage 1's public file keeps the plain sha256 of each span's `events.jsonl`", with the test "The review record and stage 1's public file hold no float". Its title says stage 1 "may publish" the digest. It answered whether a digest that depends on energy may be public, and did not create a file. The journal digests are public in the manifest's pin list, which "pins by sha256 and size every file of every roster span".
+- **RL-194a** "Stage 1 writes the public census" was loose wording of mine. Read: stage 1 writes the census whose hash is public.
+
+**Why private.**
+
+- Nothing public needs these values before the data release. The hash on main is the commitment a registration needs.
+- A public census would need its own schema, tests and audit round, plus a review of 54 keys for what they reveal in combination.
+- I have not traced where the meter-clock and trace-hole keys come from. Keeping the file private makes that moot.
+
+**Handling.** `stage1.json` is private, not `RESTRICTED/`: the lead and seats may read it in custody for engineering. No value from it goes into a public file, PR, RUN_STATE item or email before the data release, except through `PUBLIC.json`'s schema or my ruling naming it.
+
+## 2. What `stage1_sha256` binds
+
+**The exact bytes of the one private file, `<registered root>/lm-interim-01/stage1.json`.** There is no second file.
+
+- The same value appears in the `LOOKS.json` row, `PUBLIC.json`, `coefficients.json` and the twin's arguments.
+- Stage 2 and the #816 twin (`91ca54ab…0aab`, unchanged) each hash the bytes they parse and refuse on a mismatch. The code does this at `cadence_look_run.py:1124` and `cadence_interim_twin.py:1258`.
+- "The committed stage-1 output" in F-12 and RL-180 means this file, committed by its hash in origin/main's `LOOKS.json` row at `stage1_committed`.
+
+## 3. The implementation: no change
+
+**No change to the code, the schemas, the twin or the tests on PR #795 at `47e3b187b`.** P4's inventory and its three `PublicFiles` tests are accepted as the record. This ruling does not hold the merge.
+
+**One wording correction, outside this PR's rounds.** The draft manifest's `custody.disclosure` says "The public file carries the sha256 of each span's operational journal". Beside "the public outputs" that reads as `PUBLIC.json`, which carries none. When the pins are filled (the pin list is empty and the manifest is a draft, so it is re-pinned then anyway), the sentence becomes:
+
+> The look manifest's pin list carries the sha256 of each span's operational journal, which contains one measured idle-power mean; no value from it was read before the reservation.
+
+**RL-195's three conditions stand, read as follows.**
+
+| # | Reading |
+|---|---|
+| 1.1 | "Stage 1's public file" reads "any public file of the look": `PUBLIC.json`, `LOOKS.json`, the manifest. None holds a float |
+| 1.2 | Still owed, because the journal digest is public through the pin list. If the builder's file-and-line citation is not yet in a run report, it is due before the pins are committed |
+| 1.3 | Changing only the mean changes hash fields and nothing else, in `stage1.json` and in every public file |
+
+**Other looks.** Not ruled here. RL-181's and RL-196's stage-1 integers reach the public through each look's `PUBLIC.json` as written.
+
+**Amends.** RL-195's disclosure sentence (one phrase, above). RL-179 F-12 and row 26, RL-194, RL-194a and RL-195's conditions stand, read as above.
+
+## Register
+
+| # | Rule | Class | Protects | Applies | Ends |
+|---|---|---|---|---|---|
+| 26 | Unchanged | | | | |
+| 26a | `stage1.json` is private and outside the repository; only its sha256 is public, and that hash binds the bytes stage 2 and the twin parse. No value from it is public except through `PUBLIC.json`'s schema or my ruling | VALIDITY (blinding and prereg) | "No number computed from energy is public before the data release", without having to audit 54 timing and thermal keys | `lm-interim-01` | The paper's data release |
+
+**For Ed, plainly.** The builder asked whether the first stage's table of timings and temperatures must be published. It need not be. It stays private, only its fingerprint is public, and the code already works that way. PR #795 can go ahead. One sentence in the look's blind statement gets a small correction later, when the input fingerprints are filled in.
+
+**Not checked.** Whether `stage1.json` itself holds the journal digests. Whether tests for RL-195 conditions 1.2 and 1.3 exist on the branch (I found the F-12 invariance test, not a mean-only one). Whether a test pins the disclosure sentence's text. Where the meter-clock and trace-hole keys are computed. The Gemini audit's trace, which I took as given; I read the output schema and the stage-1 write path myself.
+
+**Blind status.** Blind. Read: the resolver's report and brief; the builder's report and `docs/run_reports/2026-11-21-pr795-audit-3.md` at `47e3b187b`; RL-179 F-12 and its register, RL-194, RL-194a, RL-195 and stage-1 lines of RL-180 and RL-181; and public source at `47e3b187b` (the output schema, the draft manifest, the stage-1 write path, the `PublicFiles` tests). No custody, energy, power, meter, transcript, slot, hazard, sealed or restricted file was opened. No commit, push, run, SSH or fetch. The only file written is this one.
