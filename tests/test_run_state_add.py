@@ -554,6 +554,51 @@ git rev-parse --verify "$ref" >> fixture-raced-heads
         self.assertEqual(self.git(self.remote, "show", "-s", "--format=%s", "main").strip(),
                          "RUN_STATE 25: Arm on original")
 
+    def test_audit_round_3_upgrade_preserves_legacy_spool_order(self):
+        legacy = self.spool.parent
+        legacy.mkdir(parents=True)
+        first = legacy / "90-first.json"
+        first.write_text(json.dumps(request(heading="A first")) + "\n", encoding="utf-8")
+        original = first.read_bytes()
+
+        home_b = self.directory / "home-b"
+        home_b.mkdir()
+        with mock.patch.dict(os.environ, {"HOME": str(home_b)}):
+            number, head_b = add.add_git(self.b, request(heading="B independent"))
+        self.assertEqual(number, 25)
+
+        code, output, errors = self.call_in(self.a, *self.add_flags("--heading", "A later"))
+        self.assertEqual((code, output), (3, ""))
+        self.assertIn("pending legacy requests", errors)
+        self.assertIn("flush-spool", errors)
+        self.assertEqual(self.remote_head(), head_b)
+        self.assertEqual(first.read_bytes(), original)
+
+        # An existing keyed queue must follow every legacy entry, even when
+        # its filename would sort first by itself.
+        self.spool.mkdir(exist_ok=True)
+        keyed = self.spool / "00-keyed.json"
+        keyed.write_text(json.dumps(request(heading="A keyed")) + "\n", encoding="utf-8")
+        second = legacy / "99-second.json"
+        second.write_text(json.dumps(request(heading="A second")) + "\n", encoding="utf-8")
+        with self.origin_offline():
+            code, output, _ = self.call_in(self.a, "flush-spool")
+        self.assertEqual((code, output), (3, ""))
+        self.assertEqual(first.read_bytes(), original)
+        self.assertTrue(second.is_file())
+        self.assertTrue(keyed.is_file())
+
+        code, output, errors = self.call_in(self.a, "flush-spool")
+        self.assertEqual((code, errors), (0, ""))
+        self.assertEqual([line.split()[0] for line in output.splitlines()], ["26", "27", "28"])
+        self.assertEqual(list(legacy.glob("*.json")), [])
+        self.assertEqual(list(self.spool.glob("*.json")), [])
+        self.assertEqual(add.add_git(self.a, request(heading="A later"))[0], 29)
+        self.assertEqual(self.git(self.remote, "log", "--reverse", "--format=%s",
+                                  f"{self.base}..main").splitlines(),
+                         ["RUN_STATE 25: B independent", "RUN_STATE 26: A first",
+                          "RUN_STATE 27: A second", "RUN_STATE 28: A keyed", "RUN_STATE 29: A later"])
+
     def test_legacy_spool_with_file_is_quarantined_without_snapshot(self):
         note = self.a / "docs/note.txt"
         note.write_bytes(b"synthetic attachment")

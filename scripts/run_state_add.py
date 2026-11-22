@@ -406,10 +406,10 @@ def _spool_dir(repo: Path) -> Path:
 
 
 @contextmanager
-def _locked(spool: Path):
+def _locked(spool: Path, *, shared: bool = False):
     spool.mkdir(mode=0o700, parents=True, exist_ok=True)
     with (spool / ".lock").open("a") as lock:
-        fcntl.flock(lock, fcntl.LOCK_EX)
+        fcntl.flock(lock, fcntl.LOCK_SH if shared else fcntl.LOCK_EX)
         yield
 
 
@@ -484,7 +484,11 @@ def _error_text(error: Exception) -> str:
 def add_git(repo: Path, request: dict, *, remote="origin", branch="main", attempts=5) -> tuple[int, str]:
     repo = _repo_root(repo)
     spool = _spool_dir(repo)
-    with _locked(spool):
+    legacy = spool.parent
+    with _locked(legacy, shared=True), _locked(spool):
+        if any(_pending(legacy)):
+            raise GitFailure(f"pending legacy requests in {legacy}; run python3 scripts/run_state_add.py "
+                             "flush-spool from the original checkout before retrying this add")
         if any(_pending(spool)):
             raise GitFailure(f"pending requests in {spool}; run python3 scripts/run_state_add.py flush-spool "
                              "before retrying this add")
@@ -499,8 +503,11 @@ def add_git(repo: Path, request: dict, *, remote="origin", branch="main", attemp
 def _flush(repo: Path) -> int:
     repo = _repo_root(repo)
     spool = _spool_dir(repo)
-    with _locked(spool):
-        queue = sorted(_pending(spool))
+    legacy = spool.parent
+    # The parent lock is also the old writer's lock. Take it before the
+    # keyed lock so the old and new queues cannot be drained out of order.
+    with _locked(legacy), _locked(spool):
+        queue = sorted(_pending(legacy)) + sorted(_pending(spool))
         if not queue:
             private_ref = f"refs/joulewise/run-state-add/{uuid.uuid4().hex}"
             try:
