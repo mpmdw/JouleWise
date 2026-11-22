@@ -850,6 +850,113 @@ class RuntimeTests(unittest.TestCase):
                 self.assertEqual(custody["status"], "failed")
                 self.assertEqual(custody["files"][ctl.WORK_NAME], hashlib.sha256(raw).hexdigest())
 
+    def test_failed_envelope_counts_l001_second_call_with_tool_request(self):
+        from joulewise.align.interfaces import ToolCallRequest
+
+        spec = specs()[0]
+        self.assertEqual(spec["leg_id"], "L001")
+        native_chat = workload.MlxEndpoint.chat
+        calls = 0
+
+        def chat(endpoint, *args, **kwargs):
+            nonlocal calls
+            result = native_chat(endpoint, *args, **kwargs)
+            calls += 1
+            if calls == 2:
+                return replace(result, reasoning_tokens=1,
+                               tool_calls=(ToolCallRequest("synthetic", "unexpected", "{}"),))
+            return replace(result, reasoning_tokens=2)
+
+        with (patch.object(workload.MlxEndpoint, "chat", chat),
+              redirect_stderr(io.StringIO()) as stderr):
+            code, out, result = self.call(spec, spec["leg_id"])
+        self.assertEqual(code, 3)
+        self.assertIn("scripted step unexpectedly returned a tool call", stderr.getvalue())
+        self.assertIsNone(result)
+        self.assertFalse((out / rt.RESULT_NAME).exists())
+        work = json.loads((out / ctl.WORK_NAME).read_bytes())
+        rows = work["steps"]
+        self.assertEqual([row["kind"] for row in rows], ["turn", "turn"])
+        self.assertEqual([row["actual_tokens"] for row in rows], [1024, 1024])
+        self.assertFalse(rows[-1]["complete"])
+        self.assertFalse(work["complete"])
+        envelope = work["failed_envelope"]
+        self.assertEqual(envelope["decode_tokens"], 2048)
+        self.assertEqual(envelope["decode_tokens"], sum(row["actual_tokens"] for row in rows))
+        self.assertEqual(envelope["hidden_tokens"], 2)
+
+    def test_failed_envelope_counts_and_boundaries_at_every_failure_position(self):
+        from joulewise.align.apple.sampler import monotonic_ns
+        from joulewise.align.interfaces import ChatResult, ToolCallRequest
+        from joulewise.clock import FakeClock
+
+        class StreamFailure(RuntimeError):
+            pass
+
+        class Endpoint:
+            def __init__(self, clock):
+                self.clock = clock
+                self.calls = 0
+
+            def stream(self, start, failure):
+                self.clock.sleep(1)
+                if failure == "before-stream":
+                    raise StreamFailure(failure)
+                yield start + rt.NS
+                self.clock.sleep(2)
+                if failure == "in-stream":
+                    raise StreamFailure(failure)
+
+            def chat(self, messages, *, max_tokens):
+                self.calls += 1
+                failure = stage if type(self) is not Endpoint and self.calls == failed_call else None
+                if failure == "before-clock":
+                    raise StreamFailure(failure)
+                start = monotonic_ns(self.clock.stamp())
+                (first_token,) = self.stream(start, failure)
+                end = monotonic_ns(self.clock.stamp())
+                tool_calls = (ToolCallRequest("synthetic", "unexpected", "{}"),) if failure == "tool-call" else ()
+                return ChatResult("", "", tool_calls, 20 + self.calls, 3 * self.calls, max_tokens,
+                                  1 if tool_calls else 2, start, first_token, end)
+
+        for length in range(1, 5):
+            # Four turns exercise the endpoint directly, beyond the draft kit's three-turn limit.
+            script = {"kind": "hidden", "turn_tokens": list(range(5, 5 + length)),
+                      "hidden_tokens": 23, "cpu_s": 0, "gap_s": 1, "recovery_s": 1}
+            for failed_call in range(1, length + 1):
+                for stage in ("tool-call", "before-clock", "before-stream", "in-stream"):
+                    with self.subTest(length=length, failed_call=failed_call, stage=stage):
+                        work = {"steps": []}
+                        scripted = cadence_ctl.endpoint_class(Endpoint, script, work, synthetic=True)
+                        clock = FakeClock()
+                        initial = monotonic_ns(clock.stamp())
+                        expected_error = rt.RuntimeFailure if stage == "tool-call" else StreamFailure
+                        with self.assertRaises(expected_error):
+                            scripted(clock).chat([])
+
+                        rows = [row for row in work["steps"] if row["kind"] == "turn"]
+                        self.assertEqual(len(rows), failed_call)
+                        self.assertFalse(rows[-1]["complete"])
+                        counted = [row for row in rows if row["actual_tokens"] is not None]
+                        count = failed_call if stage == "tool-call" else failed_call - 1
+                        self.assertEqual([row["actual_tokens"] for row in counted], script["turn_tokens"][:count])
+                        if failed_call == 1 and stage == "before-clock":
+                            self.assertNotIn("failed_envelope", work)
+                            continue
+
+                        envelope = work["failed_envelope"]
+                        self.assertEqual(envelope["decode_tokens"], sum(row["actual_tokens"] for row in counted))
+                        self.assertEqual(envelope["context_tokens"], sum(row["cached_prompt_tokens"] for row in counted))
+                        self.assertEqual(envelope["prefill_tokens"],
+                                         sum(row["context_tokens"] - row["cached_prompt_tokens"] for row in counted))
+                        self.assertEqual(envelope["hidden_tokens"], 2 * (failed_call - 1))
+                        first_start = initial + 3 * rt.NS  # the unlogged call ran for three seconds
+                        failed_start = first_start + (failed_call - 1) * 4 * rt.NS
+                        end_offset = {"tool-call": 3, "before-clock": -1, "before-stream": 0, "in-stream": 0}
+                        self.assertEqual(envelope["start_ns"], first_start)
+                        self.assertEqual(envelope["end_ns"], failed_start + end_offset[stage] * rt.NS)
+                        self.assertEqual(envelope["first_token_ns"], first_start + rt.NS if counted else None)
+
     def test_authenticated_ctl_envelope_cannot_disagree_with_physical_work(self):
         spec = specs()[0]
         code, out, result = self.call(spec, spec["leg_id"])

@@ -134,12 +134,13 @@ def endpoint_class(base, script, audit, *, synthetic):
                 turns = [row for row in audit["steps"] if row["kind"] == "turn" and "started_ns" in row]
                 if turns:
                     first, last = turns[0], turns[-1]
+                    counted = [row for row in turns if row["actual_tokens"] is not None]
                     audit["failed_envelope"] = asdict(Turn(
                         index=0, start_ns=first["started_ns"], end_ns=last.get("ended_ns", last["started_ns"]),
                         first_token_ns=first.get("first_token_ns"),
-                        context_tokens=sum(call.cached_prompt_tokens for call in visible),
-                        prefill_tokens=sum(call.prompt_tokens - call.cached_prompt_tokens for call in visible),
-                        decode_tokens=sum(call.completion_tokens for call in visible),
+                        context_tokens=sum(row["cached_prompt_tokens"] for row in counted),
+                        prefill_tokens=sum(row["context_tokens"] - row["cached_prompt_tokens"] for row in counted),
+                        decode_tokens=sum(row["actual_tokens"] for row in counted),
                         hidden_tokens=sum(call.reasoning_tokens for call in visible),
                     ))
                 raise
