@@ -17,7 +17,17 @@ Derive, don't trust (lead directive of 2026-11-21, fix-2). A field frozen R1 der
 record is derived again here with the frozen function and compared: every sensor-journal row
 (``_replay_frozen_sidecar``), each gate's entry and exit views whatever its outcome
 (``_gate_witnesses``), the soak's window and duration (``_check_soak_window``) and the census
-structure (``_check_census``). A required check whose input is missing or unobservable refuses.
+structure (``_census_session``). A required check whose input is missing or unobservable refuses.
+
+Four root rules (lead fix round r2 of 2026-11-22), each applied once, everywhere:
+- R1 temporal containment (``_contain``): every timestamped observation is finite, advances and lies
+  inside the member's bound interval (its terminal bracket on the wall clock, its census session on
+  the monotonic clock, whose start and end hold every monotonic stamp of the member); CPU samples are
+  placed by an origin bounded from ``Segment.run``'s order, and counts, coverage and tails are judged
+  against the session's open and close.
+- R2 raw-domain validation (``_conform``): one schema table per evidence source, closed enumerations.
+- R3 structural completeness (``_census_session``): every completed member's census is start then end.
+- R4 single resolution (``_runtime_config``): the runtime config is resolved once, as the child does.
 
 The test, as ruled (RL-145 step 3 and the addendum's section 6, which replaces the
 D_bank line):
@@ -1391,6 +1401,186 @@ def _strings(value):
     return isinstance(value, list) and all(isinstance(item, str) and item for item in value)
 
 
+# R2 RAW-DOMAIN VALIDATION. Each evidence source has one schema table here, applied by ``_conform`` before
+# any comparison, count or use of its values. A table maps every field to its rule: a predicate on the raw
+# value, a nested table, ``_Each`` (a list of items) or ``_OneOf`` (a closed enumeration). A table is closed:
+# a field it does not name refuses, and so does an absent one. A Python equality that crosses types
+# (``True == 1``, ``[17] == [17]``) therefore never reaches a comparison.
+class _Each(tuple):
+    """A list whose items each satisfy ``rule``; ``nonempty`` refuses an empty list and ``unique`` names
+    the field no two items share."""
+
+    def __new__(cls, rule, *, nonempty=False, unique=None):
+        return super().__new__(cls, (rule, nonempty, unique))
+
+
+class _OneOf(tuple):
+    """A closed enumeration, compared by type and value: an unknown value refuses."""
+
+
+def _text(value):
+    return isinstance(value, str) and bool(value)
+
+
+def _string(value):
+    return isinstance(value, str)
+
+
+def _nonnegative(value):
+    return _finite(value) and value >= 0
+
+
+# ``r1_runtime_contract.process_table``: one row per process, a PID once per snapshot.
+PROCESS_ROW = {"pid": _uint, "ppid": _uint, "pcpu": _nonnegative, "comm": _string}
+# ``LoadJournal.snapshot``: the label is a census point and the process table is never empty.
+CENSUS_SNAPSHOT = {"label": _OneOf(CENSUS_POINTS), "t_s": _finite,
+                   "processes": _Each(PROCESS_ROW, nonempty=True, unique="pid")}
+# ``Segment.stop_journals`` writes exactly these fields; busy cores are a finite count, never negative.
+LOAD_JOURNAL = {"exclude_roots": _Each(_uint), "errors": _Each(_text), "cpu_busy_cores": _Each(_nonnegative),
+                "cpu_busy_t_s": _Each(_finite), "census": _Each(CENSUS_SNAPSHOT)}
+# ``BatteryJournal.sample``: a parsed ``pmset -g batt`` reading, or an error row with no reading.
+BATTERY_READING = {"epoch_s": _finite, "raw": _string, "ac": _OneOf((True, False)),
+                   "soc_pct": lambda value: value is None or _uint(value) and value <= 100,
+                   "state": _OneOf((None, "charging", "discharging", "charged", "not_charging"))}
+BATTERY_ERROR = {"epoch_s": _finite, "error": _text, "soc_pct": _OneOf((None,)), "state": _OneOf((None,))}
+# EVIDENCE-SPEC rows 38-39: the endpoint identity is a nonempty string in both records that carry it.
+EPISODE_ENDPOINT = {"endpoint": _text}
+PROVENANCE_ENDPOINT = {"endpoint_identity": _text}
+# ``endpoint.py``: the reasons the frozen endpoint records for a generation. Only ``stop`` is a clean finish
+# that can end an episode by the model's own stop; the token-budget cuts end a turn and are reconciled with
+# their flags; every other known reason cuts the member, and a reason outside this list refuses.
+CLEAN_FINISH = ("stop",)
+BUDGET_FINISH = ("length", "max_tokens", "max_new_tokens")
+CUT_FINISH = ("episode.deadman", "episode.time_guard", "episode.decode_budget", "episode.context_limit")
+GENERATION_FINISH = {"finish_reason": _OneOf((None, *CLEAN_FINISH, *BUDGET_FINISH, *CUT_FINISH))}
+
+
+def _conform(value, table, refuse, path="", *, closed=True):
+    """Apply one R2 schema table to ``value``. ``refuse(field)`` raises for the first field that fails.
+
+    With ``closed=False`` the record may carry fields the table does not name (a record whose other
+    fields have their own checks); the named ones must be present and conform.
+    """
+    if not isinstance(value, dict):
+        refuse(path.rstrip(".") or "record")
+    unexpected = (set(value) ^ set(table)) if closed else set(table) - set(value)
+    if unexpected:
+        refuse(f"{path}{sorted(map(str, unexpected))[0]}")
+    for name, rule in table.items():
+        _conform_value(value[name], rule, refuse, f"{path}{name}")
+
+
+def _conform_value(value, rule, refuse, path):
+    if isinstance(rule, dict):
+        _conform(value, rule, refuse, f"{path}.")
+    elif isinstance(rule, _Each):
+        item_rule, nonempty, unique = rule
+        if not isinstance(value, list) or nonempty and not value:
+            refuse(path)
+        for index, item in enumerate(value):
+            _conform_value(item, item_rule, refuse, f"{path}.{index}")
+        if unique is not None and len({item[unique] for item in value}) != len(value):
+            refuse(f"{path}.{unique}")
+    elif isinstance(rule, _OneOf):
+        if not any(type(value) is type(option) and value == option for option in rule):
+            refuse(path)
+    elif not rule(value):
+        refuse(path)
+
+
+# R1 TEMPORAL CONTAINMENT. ``_contain`` is the one rule every journal reducer applies to its timestamps.
+def _contain(times, opened, closed, *, kind, source, field, reason="member_order", peer=None,
+             offsets=False, edge_s=None, strict=True):
+    """Every time is finite, strictly later than the one before it, and inside ``[opened, closed]``.
+
+    ``strict=False`` admits a repeat of the time before, for a writer that can record two rows at one
+    instant (the controller's event log, whose frozen synthetic control does so); it never admits a
+    time earlier than the one before.
+
+    ``opened`` and ``closed`` are the bound interval on the same clock: the member's terminal bracket for
+    wall-clock stamps, its census session for monotonic ones. With ``edge_s`` the series must also cover
+    the interval: its first time within ``edge_s`` of the open and its last within ``edge_s`` of the close,
+    the edges of the frozen maximum gap, so coverage is judged against the session and never against the
+    first or last observation.
+
+    With ``offsets=True`` the times are offsets from an origin the record does not carry
+    (``LoadJournal.t0``: ``cpu_busy_t_s`` is ``clock() - t0``). ``Segment.__init__`` takes ``t0`` before
+    ``Segment.run`` snapshots the census ``start``, and every sample is taken between the two census
+    snapshots, so ``t0 <= opened`` and ``opened <= t0 + t <= closed`` for every offset ``t``. The origin is
+    bounded from those constraints alone and the bounds are returned. If no origin satisfies them, it
+    cannot be bounded and the evidence is unverifiable.
+    """
+    def refuse(index, why=reason):
+        raise EvidenceFailure(why, kind, source, field=field, index=index, peer=peer)
+
+    if not (type(opened) in (int, float) and type(closed) in (int, float) and opened < closed):
+        refuse(None)
+    previous = None
+    for index, moment in enumerate(times):
+        if not (_finite(moment) and (previous is None or moment > previous or not strict and moment == previous)
+                and (offsets or opened <= moment <= closed)):
+            refuse(index)
+        previous = moment
+    if not times:
+        return (-math.inf, opened) if offsets else None
+    first, last = times[0], times[-1]
+    if not offsets:
+        if edge_s is not None and (first - opened > edge_s or closed - last > edge_s):
+            refuse(None)
+        return None
+    low, high = opened - first, min(opened, closed - last)
+    if not low <= high:
+        refuse(None, "evidence_unverifiable")
+    if edge_s is not None:
+        low, high = max(low, closed - edge_s - last), min(high, opened + edge_s - first)
+        if not low <= high:
+            refuse(None)
+    return low, high
+
+
+def _monotonic_anchors(data):
+    """Every monotonic stamp the member's bound records carry, in seconds, by source and field.
+
+    ``Segment.run`` snapshots the census ``start`` before ``dispatch`` and ``end`` after it, so every sensor
+    and inventory journal row, every paired episode stamp and every turn stamp of a completed member lies
+    between them. Only well-formed values are listed; a malformed one is refused by its own record's checks.
+    """
+    anchors = []
+    for source in sorted(data):
+        raw = data[source]
+        if source.endswith(".jsonl"):
+            for index, line in enumerate(raw.splitlines()):
+                try:
+                    row = parse_evidence_json(line)
+                except (ValueError, TypeError, RecursionError):
+                    continue
+                if source.endswith(("align_turns.jsonl",)) and isinstance(row, dict):
+                    for key in ("start_stamp", "end_stamp"):
+                        stamp = row.get(key)
+                        for clock in ("monotonic_before_s", "monotonic_after_s"):
+                            value = stamp.get(clock) if isinstance(stamp, dict) else None
+                            if _finite(value):
+                                anchors.append((source, f"{key}.{clock}", index, value))
+                elif isinstance(row, dict):
+                    for key in ("started", "finished"):
+                        value = row[key].get("monotonic_ns") if isinstance(row.get(key), dict) else None
+                        if _uint(value):
+                            anchors.append((source, f"{key}.monotonic_ns", index, value / NS))
+        elif source == "outputs/align_episode.json":
+            try:
+                episode = parse_evidence_json(raw)
+            except (ValueError, TypeError, RecursionError):
+                continue
+            hardware = episode.get("hardware") if isinstance(episode, dict) else None
+            stamps = hardware.get("paired_clock_stamps_ns") if isinstance(hardware, dict) else None
+            for index, stamp in enumerate(stamps if isinstance(stamps, list) else ()):
+                for clock in ("monotonic_before_ns", "monotonic_after_ns"):
+                    value = stamp.get(clock) if isinstance(stamp, dict) else None
+                    if _uint(value):
+                        anchors.append((source, f"paired_clock_stamps_ns.{clock}", index, value / NS))
+    return anchors
+
+
 def _reject_cuts(flags, cut, kind, source, index=None):
     names = {flag.partition(":")[0] for flag in flags}
     _required("episode.context_limit" not in names, "evidence_unverifiable", kind, source,
@@ -1491,6 +1681,10 @@ def _validate_sidecar(rows, sensors, kind, source, *, gated=False):
                   "readings", i)
         check(bool(row["error"]) == bool(errors), "error", i)
         counter.observe(a["monotonic_ns"], b["monotonic_ns"], values)
+    # R1: the readings strictly advance inside their own session (a boundary row may share a stamp).
+    _contain([row["started"]["monotonic_ns"] for row in rows[1:-1] if row["kind"] == "reading"],
+             begin_ns, end["finished"]["monotonic_ns"], kind=kind, source=source,
+             field="started.monotonic_ns", reason="reading_record")
     _reading_brackets(rows)
     closing = end["values"]
     check("collector_error" in closing and closing["collector_error"] is None, "collector_error")
@@ -1674,7 +1868,13 @@ def _check_member_records(kind, bundle, receipt, data, configured, gate_inputs, 
                 "predecessor_template", config_name, peer=RECEIPT_NAME)
 
     provenance = meta["workload_provenance"]
-    require(bool(episode["endpoint"]) and provenance["endpoint_identity"] == episode["endpoint"]
+
+    def identity(field, source=metadata_name):
+        raise EvidenceFailure("episode_binding", kind, source, field=field, peer=episode_name)
+
+    _conform(episode, EPISODE_ENDPOINT, lambda field: identity(field, episode_name), closed=False)
+    _conform(provenance, PROVENANCE_ENDPOINT, lambda field: identity(f"workload_provenance.{field}"), closed=False)
+    require(provenance["endpoint_identity"] == episode["endpoint"]
             and provenance["episode_spec_sha256"] == digest(prompt.encode("utf-8"))
             and _strings(episode["flags"]) and provenance["flags"] == episode["flags"],
             "episode_binding", metadata_name, peer=episode_name)
@@ -1771,13 +1971,18 @@ def _check_member_records(kind, bundle, receipt, data, configured, gate_inputs, 
                 field="model.source", peer="issued_inputs")
     _recompute_turn_boundaries(kind, parsed_episode, witnessed, events, intervals, execution.max_tokens)
     context_checks = _recompute_controller_phases(kind, parsed_episode, witnessed, intervals, events)
-    _recompute_continuation(kind, parsed_episode, witnessed, execution, config["model"]["family"])
+    own_stop = _recompute_continuation(kind, parsed_episode, witnessed, execution, config["model"]["family"])
     if role == "step-d":
         require(not rt.incomplete_member_reasons(SimpleNamespace(
                     ep=parsed_episode, status=summary["status"], failure_reason=summary["failure_reason"])),
                 "member_cut", episode_name)
     stop = primary_stop(episode["flags"], thermal_intervals=intervals)
     require(outcome.get("stop_condition") == stop, "stop_evidence", metadata_name, peer=episode_name)
+    # F7: the stop summary agrees with the classification. An own stop is a returned episode or end_task;
+    # otherwise the turn budget, or the last turn's token budget, ended it.
+    require(stop in (("episode_returned", "episode.end_task") if own_stop
+                     else ("turn_budget_reached", "turn_token_budget_reached")),
+            "stop_evidence", metadata_name, field="stop_condition", peer=episode_name)
     budget = hardware.get("token_budget")
     limits = hardware.get("context_limits")
     reason = next((flag for flag in reversed(episode["flags"]) if flag.startswith(stop + ":")), stop)
@@ -2535,16 +2740,20 @@ def _recompute_continuation(kind, episode, witnessed, execution, family):
     source = "outputs/align_turns.jsonl"
     terminal_tools, budget_cuts = set(), set()
     xml_path = normalize_model_family(family) in XML_MODEL_FAMILIES
-    protocol_stops = set()
+    protocol_stops, finishes = set(), []
     for turn, record in zip(episode.turns, witnessed, strict=True):
         index = turn.index
         generation = record["generation"]
-        finish = generation.get("finish_reason")
-        _required("finish_reason" in generation and (finish is None or isinstance(finish, str) and bool(finish)),
-                  "stop_evidence", kind, source, field="finish_reason", index=index)
-        _required(finish != "episode.deadman", "member_cut", kind, source, field="finish_reason", index=index)
-        cut = finish in ("length", "max_tokens", "max_new_tokens") or (
-            finish is None and turn.decode_tokens == execution.max_tokens)
+        # R2: a closed classification. A reason outside ``GENERATION_FINISH`` refuses; a known cut other
+        # than a token-budget cut cuts the member; no reason at all is the frozen budget cut or refuses.
+        _conform(generation, GENERATION_FINISH, lambda field, index=index: _required(
+            False, "stop_evidence", kind, source, field=field, index=index), closed=False)
+        finish = generation["finish_reason"]
+        _required(finish not in CUT_FINISH, "member_cut", kind, source, field="finish_reason", index=index)
+        cut = finish in BUDGET_FINISH or finish is None
+        _required(finish is not None or turn.decode_tokens == execution.max_tokens, "stop_evidence", kind,
+                  source, field="finish_reason", index=index)
+        finishes.append(finish)
         flag = f"turn_token_budget_reached:{index}"
         _required((flag in record["flags"]) == cut, "stop_evidence", kind, source, field="finish_reason", index=index)
         if cut:
@@ -2562,7 +2771,8 @@ def _recompute_continuation(kind, episode, witnessed, execution, family):
         _required(not more or turn.tool_calls and not end_task, "stop_evidence", kind, source,
                   field="continuation", index=index)
     last = episode.turns[-1]
-    own_stop = not last.tool_calls or bool(terminal_tools)
+    # The own-stop exception is granted only for an allow-listed clean finish of the last generation.
+    own_stop = finishes[-1] in CLEAN_FINISH and (not last.tool_calls or bool(terminal_tools))
     _required(own_stop or len(episode.turns) == execution.max_turns,
               "stop_evidence", kind, source, field="terminal_admission")
     _required(terminal_tools == {flag for flag in episode.flags if flag.startswith("episode.end_task:")}
@@ -2572,6 +2782,7 @@ def _recompute_continuation(kind, episode, witnessed, execution, family):
                   "episode.unsupported_tool_call_format:"))}
               and ("turn_budget_reached" in episode.flags) == (not own_stop),
               "stop_evidence", kind, source, peer="outputs/align_episode.json")
+    return own_stop
 
 
 GATE_JOURNALS = ("align_thermal_gate", "align_thermal_hold")
@@ -3253,42 +3464,50 @@ def _check_step_derivation(receipt, episode, sensors, readings, configured, band
                 RECEIPT_NAME, field=f"slot_detail.{key}")
 
 
-def _check_load(raw, receipt, kind, wall_s=None):
-    """Reconcile the issued journal projection and apply quiet admission when required."""
+def _check_load(raw, receipt, kind, wall_s=None, *, anchors=()):
+    """Reconcile the issued journal projection and apply quiet admission when required.
+
+    R2: the journal conforms to ``LOAD_JOURNAL`` before any value is compared or counted. R3: its census is
+    ``start`` then ``end``, once each. R1: the census is the member's monotonic session; every monotonic
+    ``anchors`` stamp of the member's other records and every CPU sample lies inside it, and a judged journal
+    covers it to its edges. ``wall_s`` is the frozen caller's own interval: the frozen verdict over it is
+    still required, and the count minimum is judged a second time over the census session itself.
+    """
     from scripts import align_r1_rehearsal as r1
 
     reason = "load_evidence"
     if wall_s is not None:
         reason = "soak_load" if kind == "idle" else "quiet_load"
     load = _object_from_bytes(raw, kind, LOAD_SOURCE, reason)
+
+    def refuse(field):
+        raise EvidenceFailure(reason, kind, LOAD_SOURCE, field=field, peer=RECEIPT_NAME)
+
+    _conform(load, LOAD_JOURNAL, refuse)
     try:
-        if (not isinstance(load["exclude_roots"], list) or any(not _uint(pid) for pid in load["exclude_roots"])
-                or not _strings(load["errors"]) or canonical(load["errors"]) != canonical(receipt["load_journal_errors"])):
-            raise ValueError("unavailable load observations")
+        if canonical(load["errors"]) != canonical(receipt["load_journal_errors"]):
+            refuse("errors")
         fields = r1.contract.LoadJournal.fields(SimpleNamespace(**load))
-        if any(canonical(value) != canonical(receipt[key]) for key, value in fields.items()):
-            raise ValueError("inconsistent load observations")
-        samples, times = fields["cpu_busy_cores"], fields["cpu_busy_t_s"]
-        if (not isinstance(samples, list) or not isinstance(times, list) or len(samples) != len(times)
-                or not all(map(_finite, samples)) or not all(map(_finite, times))):
-            raise ValueError("invalid load samples")
-        census = load["census"]
-        if not isinstance(census, list):
-            raise ValueError("invalid census")
-        for snapshot in census:
-            if (not isinstance(snapshot, dict) or not isinstance(snapshot.get("label"), str) or not snapshot["label"]
-                    or not _finite(snapshot.get("t_s")) or not isinstance(snapshot.get("processes"), list)
-                    or not all(isinstance(process, dict) and _uint(process.get("pid"))
-                               and _uint(process.get("ppid")) and _finite(process.get("pcpu"))
-                               and isinstance(process.get("comm"), str) for process in snapshot["processes"])):
-                raise ValueError("invalid census")
-        _check_census(kind, census, times, reason)
+        for key, value in fields.items():
+            if canonical(value) != canonical(receipt[key]):
+                refuse(key)
+        times = fields["cpu_busy_t_s"]
+        if len(fields["cpu_busy_cores"]) != len(times):
+            refuse("cpu_busy_t_s")
+        opened, closed = _census_session(kind, load["census"], reason)
+        for source, field, index, stamp in anchors:
+            _required(opened <= stamp <= closed, "member_order", kind, source, field=field, index=index,
+                      peer=LOAD_SOURCE)
+        _contain(times, opened, closed, kind=kind, source=LOAD_SOURCE, field="cpu_busy_t_s", reason=reason,
+                 peer=RECEIPT_NAME, offsets=True, edge_s=None if wall_s is None else r1.CPU_JOURNAL_MAX_GAP_S)
         if wall_s is None:
             return
         if load["errors"]:
-            raise ValueError("unavailable quiet load observations")
-        verdict = r1.os_load_verdict(SOAK_SEGMENT if kind == "idle" else kind, fields, wall_s=wall_s)
-        if verdict["redo"] is not False:
+            refuse("errors")
+        name = SOAK_SEGMENT if kind == "idle" else kind
+        verdict = r1.os_load_verdict(name, fields, wall_s=wall_s)
+        session = r1.os_load_verdict(name, fields, wall_s=closed - opened)
+        if verdict["redo"] is not False or session["redo"] is not False:
             raise ValueError("load redo required")
         return verdict
     except EvidenceFailure:
@@ -3297,30 +3516,20 @@ def _check_load(raw, receipt, kind, wall_s=None):
         raise EvidenceFailure(reason, kind, LOAD_SOURCE, peer=RECEIPT_NAME) from error
 
 
-def _check_census(kind, census, sample_times, reason):
-    """D3: the census points are the ones ``Segment.run`` takes, each exactly once, in order.
+def _census_session(kind, census, reason):
+    """R3 (D3 for every completed member): the census is the two points ``Segment.run`` takes, once each.
 
-    ``start_journals`` snapshots ``start`` before the member and ``stop_journals(final=True)`` snapshots
-    ``end`` after it, both on the load journal's own monotonic clock, with every CPU sample between them.
-    A quiet member's admission rests on both points, so each must appear once, ``start`` before ``end``, and
-    their span must hold the whole CPU sample series. A duplicate, a reversal, an unknown label or a missing
-    point refuses. Elsewhere the points present must still be a duplicate-free prefix of that order; the soak
-    must have ``start``. (The frozen suite's synthetic soak has no ``end`` and its gated members none at all,
-    so the producer's full structure is required where the frozen verdicts rest on it.)
+    ``start_journals`` snapshots ``start`` before ``dispatch`` and ``stop_journals(final=True)`` snapshots
+    ``end`` after it, on the load journal's own monotonic clock, for the soak and every member alike. A
+    missing, duplicated, reordered or unknown point refuses; the two must strictly advance. The pair is the
+    member's monotonic session, returned as ``(opened, closed)``.
     """
-    def refuse(field):
-        raise EvidenceFailure(reason, kind, LOAD_SOURCE, field=field, peer=RECEIPT_NAME)
-
     labels = [snapshot["label"] for snapshot in census]
-    stamps = [snapshot["t_s"] for snapshot in census]
-    if labels != list(CENSUS_POINTS[:len(labels)]):
-        refuse("census")
-    if kind in QUIET_MEMBERS and len(labels) != len(CENSUS_POINTS) or kind == "idle" and not labels:
-        refuse("census")
-    if any(later < earlier for earlier, later in zip(stamps, stamps[1:])):
-        refuse("census.t_s")
-    if len(labels) == len(CENSUS_POINTS) and sample_times and stamps[1] - stamps[0] < sample_times[-1] - sample_times[0]:
-        refuse("census.t_s")
+    _required(labels == list(CENSUS_POINTS), reason, kind, LOAD_SOURCE, field="census", peer=RECEIPT_NAME)
+    opened, closed = (snapshot["t_s"] for snapshot in census)
+    _contain([opened, closed], -math.inf, math.inf, kind=kind, source=LOAD_SOURCE, field="census.t_s",
+             reason=reason, peer=RECEIPT_NAME)
+    return opened, closed
 
 
 def _check_soak_window(bound, receipt, rows):
@@ -3350,23 +3559,28 @@ def _check_soak_window(bound, receipt, rows):
               peer=RECEIPT_NAME)
 
 
-def _check_battery(raw, receipt, kind):
+def _check_battery(raw, receipt, kind, bound):
+    """The battery journal, read row by row: R2 ``BATTERY_READING`` or ``BATTERY_ERROR`` before use, and R1
+    over every row's ``epoch_s``, error rows included, against the member's terminal bracket. ``Segment``
+    samples it in ``start_journals``, on the ticker and in ``stop_journals``, all inside the bracket that
+    ``r1_runtime.main`` stamps around the segment."""
     from joulewise.align.apple import r1_runtime as rt
 
     reason = "battery_evidence"
     records = _jsonl_objects(raw, kind, BATTERY_SOURCE, reason)
     try:
         for index, record in enumerate(records):
-            fields = {"epoch_s", "soc_pct", "state"}
-            if "error" in record:
-                agrees = (set(record) == fields | {"error"} and isinstance(record["error"], str)
-                          and bool(record["error"]) and record["soc_pct"] is None and record["state"] is None)
-            else:
-                observed = record.get("raw")
-                agrees = (set(record) == fields | {"raw", "ac"} and isinstance(observed, str)
-                          and all(canonical(record[key]) == canonical(value)
-                                  for key, value in rt.parse_pmset_batt(observed).items()))
-            _required(agrees and _finite(record.get("epoch_s")), reason, kind, BATTERY_SOURCE, index=index)
+            def refuse(field, index=index):
+                raise EvidenceFailure(reason, kind, BATTERY_SOURCE, field=field, index=index)
+
+            _conform(record, BATTERY_ERROR if isinstance(record, dict) and "error" in record else BATTERY_READING,
+                     refuse)
+            if "error" not in record:
+                for key, value in rt.parse_pmset_batt(record["raw"]).items():
+                    if canonical(record[key]) != canonical(value):
+                        refuse(key)
+        _contain([record["epoch_s"] for record in records], bound.started_epoch_s, bound.ended_epoch_s,
+                 kind=kind, source=BATTERY_SOURCE, field="epoch_s", reason=reason, peer=MANIFEST_NAME)
         summary = rt.battery_summary(records)
         _required(canonical(summary) == canonical(receipt.get("battery")), reason, kind, BATTERY_SOURCE,
                   field="battery", peer=RECEIPT_NAME)
@@ -3494,21 +3708,29 @@ def _check_member_window(bound, receipt, data):
     epochs = [stamp.get("epoch_ns") if isinstance(stamp, dict) else None
               for stamp in (stamps if isinstance(stamps, list) else ())]
     if len(epochs) == 2 and all(map(_uint, epochs)):
-        # The episode opens and closes in that order, inside the segment.
-        inside(low <= epochs[0] <= epochs[1] <= high, episode_name, "episode_bracket")
+        # The episode opens and closes in that order, inside the segment (R1).
+        _contain(epochs, low, high, kind=kind, source=episode_name, field="episode_bracket", peer=MANIFEST_NAME)
+    turn_stamps = []
     for index, line in enumerate(data[turns_name].splitlines()):
         record = _strict_object(line, kind, turns_name, "turn_record")
         for key in ("start_stamp", "end_stamp"):
-            epoch = (record.get(key) or {}).get("epoch_s") if isinstance(record, dict) else None
+            stamp = record.get(key) if isinstance(record, dict) else None
+            epoch = stamp.get("epoch_s") if isinstance(stamp, dict) else None
             if _finite(epoch):
-                inside(started <= epoch <= ended, turns_name, key, index)
+                turn_stamps.append(epoch)
+    # R1: each turn starts and ends, and the next starts, strictly later, all inside the segment.
+    _contain(turn_stamps, started, ended, kind=kind, source=turns_name, field="stamp.epoch_s", peer=MANIFEST_NAME)
     for source in sorted(name for name in data if name.endswith("align_thermal.jsonl")):
+        readings = []
         for index, line in enumerate(data[source].splitlines()):
             row = _strict_object(line, kind, source, "journal_session")
             for end in ("started", "finished"):
-                wall = (row.get(end) or {}).get("wall_ns") if isinstance(row, dict) else None
+                wall = row[end].get("wall_ns") if isinstance(row, dict) and isinstance(row.get(end), dict) else None
                 if _uint(wall):
                     inside(low <= wall <= high, source, end, index)
+                    if end == "started" and row.get("kind") == "reading":
+                        readings.append(wall)
+        _contain(readings, low, high, kind=kind, source=source, field="started.wall_ns", peer=MANIFEST_NAME)
     if kind == "step-d":
         wall = (receipt.get("slot_detail") or {}).get("member_wall_s")
         if _finite(wall):
@@ -3928,11 +4150,12 @@ def _check_pinned_trace(kind, bundle, data):
 
 
 def _check_events_inside(kind, data, started_epoch_s, ended_epoch_s):
-    """Every controller event lies inside the member's own terminal bracket, which the runtime stamps around it."""
+    """Every controller event lies inside the member's own terminal bracket, which the runtime stamps around
+    it, none earlier than the one before (R1; two events may share an instant)."""
     events = _jsonl_objects(data["events.jsonl"], kind, "events.jsonl", "bundle_binding")
-    for index, event in enumerate(events):
-        _required(_finite(event.get("timestamp_s")) and started_epoch_s <= event["timestamp_s"] <= ended_epoch_s,
-                  "member_order", kind, "events.jsonl", index=index, field="timestamp_s", peer=MANIFEST_NAME)
+    _contain([event.get("timestamp_s") if isinstance(event, dict) else None for event in events],
+             started_epoch_s, ended_epoch_s, kind=kind, source="events.jsonl", field="timestamp_s",
+             peer=MANIFEST_NAME, strict=False)
 
 
 def _check_segment_inventory(root, allowed, *, source):
@@ -3963,15 +4186,17 @@ def _native_bundle(bound, receipt, configured, gate_inputs, step_binding, descri
         oracle.decide(f"{kind}/window", kind, _check_member_window, bound, receipt, data)
         if kind == "capture-predecessor-30b":
             _check_pinned_trace(kind, bundle, data)
+        anchors = _monotonic_anchors(data)
         if kind in QUIET_MEMBERS:
-            _check_load(data[LOAD_SOURCE], receipt, kind, bound.ended_epoch_s - bound.started_epoch_s)
+            _check_load(data[LOAD_SOURCE], receipt, kind, bound.ended_epoch_s - bound.started_epoch_s,
+                        anchors=anchors)
         binding = oracle.decide(f"{kind}/records", kind, _check_member_records, kind, bundle, receipt, data,
                                 configured, gate_inputs, step_binding=step_binding, descriptor=descriptor,
                                 oracle=oracle)
         joined = _episode_from_bound_trace(data)
-        _check_battery(bound.read(BATTERY_SOURCE, BATTERY_SOURCE), receipt, kind)
+        _check_battery(bound.read(BATTERY_SOURCE, BATTERY_SOURCE), receipt, kind, bound)
         if kind not in QUIET_MEMBERS:
-            _check_load(bound.read(LOAD_SOURCE, LOAD_SOURCE), receipt, kind)
+            _check_load(bound.read(LOAD_SOURCE, LOAD_SOURCE), receipt, kind, anchors=anchors)
             _check_gated_energy(joined, data, receipt, kind)
     except EvidenceFailure:
         raise
@@ -4003,7 +4228,7 @@ def _check_native_soak(soak, config_path):
             or canonical(receipt.get("sensor_roles")) != canonical(sensors)
             or canonical(reference.get("sensor_roles")) != canonical(sensors)):
         raise EvidenceFailure("fresh_soak", "idle", "soak_row.json")
-    _check_battery(soak.sources[BATTERY_SOURCE], receipt, "idle")
+    _check_battery(soak.sources[BATTERY_SOURCE], receipt, "idle", soak.member)
     # The frozen k_idle emits this fixed declaration about the derived series.
     _required(receipt.get("sensor_series_note") == (
         "valid 1 Hz reads in order with their times (s from the first journal row); "
@@ -4017,7 +4242,10 @@ def _check_native_soak(soak, config_path):
             or canonical({key: stat["mean_c"] for key, stat in derived.items()}) != canonical(reference.get("sensors_c"))
             or reference.get("schema") != r1.SOAK_REFERENCE_SCHEMA or reference.get("window_s") != r1.SOAK_TAIL_S):
         raise EvidenceFailure("fresh_soak", "idle", "soak_reference.json", peer=journal)
-    load_verdict = _check_load(soak.sources[LOAD_SOURCE], receipt, "idle", (ended - started) / NS)
+    # The row's verdict is the frozen driver's, over the launcher's own interval, and must be reproduced. R1
+    # judges the count a second time over the census session the journal itself bounds (``_check_load``).
+    load_verdict = _check_load(soak.sources[LOAD_SOURCE], receipt, "idle", (ended - started) / NS,
+                               anchors=_monotonic_anchors({journal: soak.sources[journal]}))
     _required(canonical(load_verdict) == canonical(row.get("os_load")),
               "soak_load", "idle", LOAD_SOURCE, peer="soak_row.json")
     soak.verify_reads()
@@ -4052,6 +4280,12 @@ def _derive_soak(raw_journal, receipt, sensors, bound):
                               ("sensor_series_failed_reads", failed), ("sensor_series_end_t_s", end_time)):
             if canonical(receipt[key]) != canonical(expected):
                 raise ValueError("soak readings disagree with their receipt")
+        # R1: the frozen tail window and its read minimum, judged a second time against the bound session
+        # close (the sensor session's ``session_end`` row), never against the last reading.
+        closed_ns = entries[-1]["started"]["monotonic_ns"]
+        _contain([reading["monotonic_ns"] for reading in readings], entries[0]["started"]["monotonic_ns"],
+                 closed_ns, kind="idle", source=journal, field="monotonic_ns", reason="soak_readings")
+        r1.soak_detrended(series, times, (closed_ns - first_ns) / 1e9)
         return r1.soak_detrended(series, times, end_time)
     except EvidenceFailure:
         raise
@@ -4139,6 +4373,43 @@ def _native_verdict(ledger, runtime, invoke, configured, soak, oracle):
     return _NativeEvaluation(verdict, ledger, oracle, receipts)
 
 
+# The long options the frozen ``r1_runtime.parse_args`` defines. argparse matches any unambiguous prefix of
+# one (``allow_abbrev``), takes ``--opt=value`` as ``--opt value``, and lets the last repeat win.
+RUNTIME_OPTIONS = ("--config", "--r1-kind", "--output", "--duration-s", "--soak-reference", "--host-lock-fd",
+                   "--smoke-part", "--smoke-started")
+
+
+def _runtime_config(runtime):
+    """R4 SINGLE RESOLUTION: the runtime config the child consumes, resolved once, or a refusal before dispatch.
+
+    The ledgers record ``align_r1_rehearsal.runtime_config_path`` (the value after the first literal
+    ``--config``, else the committed default). The child resolves its argv with the frozen argparse parser,
+    which also accepts ``--config=PATH``, any unambiguous prefix (``--conf PATH``) and a repeat, last wins. So
+    every argv token the child would read as ``--config`` is found by those rules: exactly one must be the
+    literal ``--config`` followed by a value that is not itself an option, and then the recorded path and the
+    child's path are the same token. Any other form, a repeat or no ``--config`` at all refuses here.
+    ``align_r1_rehearsal.py`` itself is unchanged.
+    """
+    from scripts import align_r1_rehearsal as r1
+
+    def names_config(token):
+        name = token.partition("=")[0] if isinstance(token, str) and token.startswith("--") else ""
+        matches = [option for option in RUNTIME_OPTIONS if option.startswith(name)] if len(name) > 2 else []
+        return matches == ["--config"]
+
+    argv = list(runtime or ())
+    hits = [index for index, token in enumerate(argv) if names_config(token)]
+    _required(len(hits) == 1 and argv[hits[0]] == "--config" and hits[0] + 1 < len(argv)
+              and isinstance(argv[hits[0] + 1], str) and bool(argv[hits[0] + 1])
+              and not argv[hits[0] + 1].startswith("-") and "--" not in argv[:hits[0]],
+              "issued_inputs", "attempt", "runtime_config", field="--config")
+    recorded = Path(r1.runtime_config_path(argv))
+    consumed = Path(argv[hits[0] + 1])
+    _required(recorded == (consumed if consumed.is_absolute() else Path(r1.ROOT) / consumed),
+              "issued_inputs", "attempt", "runtime_config", field="--config")
+    return recorded
+
+
 def run_bound_part_c(output, runtime, *, soak_reference, soak_ledger_sha256=None, invoke=None):
     """Verify the launcher's soak handoff, then judge the native members in process."""
     from scripts import align_r1_rehearsal as r1
@@ -4150,7 +4421,7 @@ def run_bound_part_c(output, runtime, *, soak_reference, soak_ledger_sha256=None
     table, failures = None, ()
     try:
         revision = r1.executed_commit(Path(__file__).resolve().parents[1])
-        config = Path(r1.runtime_config_path(runtime))
+        config = _runtime_config(runtime)
         soak = BoundSoak(output, soak_reference, soak_ledger_sha256, revision, config)
         soak.verify_argv(runtime, next(seconds for name, _kind, seconds, _size in r1.phase_plan()
                                        if name == SOAK_SEGMENT))
@@ -4249,7 +4520,8 @@ def replay_archived(output, runtime_config):
                       "receipt_contract", kind, RECEIPT_NAME)
             journal = "sensors/align_thermal.jsonl"
             detrended = _derive_soak(idle.read(journal, journal), soak, rt.sensors_policy(configured), idle)
-            _check_load(idle.read(LOAD_SOURCE, LOAD_SOURCE), soak, kind, idle.ended_epoch_s - idle.started_epoch_s)
+            _check_load(idle.read(LOAD_SOURCE, LOAD_SOURCE), soak, kind, idle.ended_epoch_s - idle.started_epoch_s,
+                        anchors=_monotonic_anchors({journal: idle.read(journal, journal)}))
             idle.verify_reads()
             return detrended
 
@@ -4284,7 +4556,8 @@ def replay_archived(output, runtime_config):
                 if kind == "capture-predecessor-30b":
                     _check_pinned_trace(kind, bundle, data)
                 if kind in QUIET_MEMBERS:
-                    _check_load(data[LOAD_SOURCE], row, kind, member.ended_epoch_s - member.started_epoch_s)
+                    _check_load(data[LOAD_SOURCE], row, kind, member.ended_epoch_s - member.started_epoch_s,
+                                anchors=_monotonic_anchors(data))
                 binding = oracle.decide(f"{kind}/records", kind, _check_member_records, kind, bundle, row, data,
                                         configured, (receipt.get("step-d"), bands, s5_bands),
                                         step_binding=step_binding, gate_counts=counts, oracle=oracle)
