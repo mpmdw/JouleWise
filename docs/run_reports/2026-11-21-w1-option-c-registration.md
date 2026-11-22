@@ -43,3 +43,5 @@ denied execution of `ps`. This leaves the census count unverified.
 
 Next step for the lead is to disposition the three scope findings and review
 the draft against the W1 CI results before signature.
+
+the disclosure-code rename follows its emitter and must merge before the series release run (RL-198a)
