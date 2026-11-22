@@ -14,8 +14,9 @@ synthetic inputs and temporary bare repositories with a temporary home.
 | F3 / 4.2.2 | Fixed in `3cd3fd051`. The spool captures attachment bytes and mode. Replay stages from that snapshot and checks the staged byte identity. | `test_gemini_4_2_2_spooled_with_file_replays_original_bytes` |
 | F4 / 4.2.3 | Fixed in `3cd3fd051` and tightened in `055637cdb`. Confirmed request failures move to `failed/` with a `.reason` file. Flush continues in queue order and exits 2 after draining a queue with quarantines. Invalid fetched state and transient Git failures stop flush with pending entries intact. | `test_gemini_4_2_3_stale_set_is_quarantined_and_later_items_land_in_order` |
 
-Legacy queued requests with no attachments replay as before. A legacy request
-with attachments goes to `failed/` because its original bytes are unavailable.
+Within a repository's queue, a request without attachments can replay without
+an attachment snapshot. A request with attachments and no snapshot goes to
+`failed/` because its original bytes are unavailable.
 
 ## F1 compatibility ruling
 
@@ -38,6 +39,24 @@ Both VERIFIED HIGH cases reproduced on `a9a7af840` and are fixed in
 `test_audit_round_1_failed_remote_recheck_leaves_request_pending` covers a
 Git failure during the remote head check. The audit refuted its MED item.
 
+## Independent audit round 2
+
+Findings 1 and 3 reproduced on `b3da9918e` and are fixed in `3721cd6ee`.
+
+| Finding | Disposition | Regression |
+| --- | --- | --- |
+| G1 / finding 1 | Retry checkout-dependent spool validation on a fresh fetch before quarantine, even when the prior remote-head reply matched the fetched head. | `test_audit_round_2_refetches_before_quarantining_after_a_stale_reply` |
+| G2 / finding 3 | The resolved worktree root and origin URL scope the queue and its lock. A different clone, a fork, or a change to the checkout's origin URL selects a different queue. | `test_audit_round_2_spool_isolated_by_checkout_and_origin` |
+
+The default spool location and `JW_RUN_STATE_SPOOL` act as parent directories
+for the identity-specific queues. Existing unscoped files stay in the parent
+directory because their repository identity cannot be established from the
+legacy format.
+
+Finding 2 is a known limitation outside the final build scope. A pre-commit
+hook can restage an attachment after the staged snapshot check, so the final
+commit can contain bytes supplied by that hook.
+
 ## Verification
 
 The named regressions reproduced the audit findings on the original code.
@@ -55,5 +74,7 @@ the checked-in bytes on both interpreters. The check also exited 0 on each
 interpreter after main advanced to `7eec25d6ab4cc8cf72b37532ad407cbb6ceefa13`.
 After the audit round 1 fixes, all 110 focused tests passed on each
 interpreter, and the CURRENT check passed again on the same main revision.
+After the final two fixes, all 112 focused tests passed on each interpreter.
+Both CURRENT checks again exited 0 against `7eec25d6ab4cc8cf72b37532ad407cbb6ceefa13`.
 The full suite runs in the draft PR's hosted CI. Tier 1 cross-family review
 remains a lead gate.
