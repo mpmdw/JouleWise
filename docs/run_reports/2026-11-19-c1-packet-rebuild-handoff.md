@@ -941,3 +941,69 @@ The draft PR evidence ledger and seat handoff carry the final replay,
 published tree and exact-head canonical CI state. The authorized executing
 review, integration-owner and Opus acceptance, W1 signing, and final
 post-close packet remain with their assigned owners. `NEEDS_SPEC: none`.
+
+## Round 9 · SPEC-LITE round 3, duplicate consumer options
+
+The independent audit of `e4c8893b6e9afbe01f9a4acf4fa11f68fa1e47b0`
+verified two HIGH integration defects and reported zero MED and zero LOW.
+It refuted both audit 1 findings on that head. The lead issued A1 and A2
+for their shared cause. The executable supplement
+`39c5cd8321c86b0201bf103a7a1ff919e9483392` was committed before the
+implementation. The named synthetic baseline produced four expected
+admissions (`build=0, install=0, direct arm=admit, host=1/1`) and the
+generated sweep could not find the new parser interface. The frozen
+SPEC-LITE suite and its SHA-256 manifest retain their supplied bytes.
+
+| Finding | Named regression | Required and observed result |
+| --- | --- | --- |
+| Stale corpus operand remained in the renderer while the parser selected a later attached option | `test_duplicate_derivation_corpus_manifest_refuses` | Builder and install exit 2. Direct arm refuses. Both host counts stay zero. |
+| Attached runs root overrode the run-root binding recorded for the stage | `test_duplicate_campaign_runs_root_refuses` | Builder and install exit 2. Direct arm refuses. Both host counts stay zero. |
+| The audit 1 head-pin reproduction now has an A2 refusal | `test_duplicate_reservation_head_pin_refuses` | Split and attached repeats both exit 2 at builder and install. Direct arm refuses. Both host counts stay zero. |
+
+The implementation at `88139ebffa4289eb79a87892df585a7accbad4c0`, tree
+`95d8f039faebacf6bcbfee760a83795d18edafda`, uses the pinned consumer
+parser functions with isolated launch defaults. Argparse resolves
+spellings to the same action before the C1 gate checks uniqueness. The
+renderer and preflight use the selected namespace and parser-reported
+argument positions for campaign limits, the configured run roots, corpus
+pruning, and spare dispatch. The real terminal status and calibration
+verdict CLI parsers parse their generated arguments. Those two commands'
+inputs come from the same selected reservation and capture context and
+the generated fixed argv. Inline chain helpers consume positional values
+supplied by the renderer. Existing non-C1 render routes retain their
+calling convention. The protected campaign runner blob remains
+`2181546feaf0d0db659142533029918c5e9b747c`.
+
+The generated sweep uses a genuine synthetic spare-enabled chain and the
+consumer parsers that handled its rendered argv. It duplicates the emitted
+options in split and attached forms and with every option's applicable
+argparse abbreviation representative. A singular attached derivation
+control binds the same manifest in preflight and pruning and admits.
+The frozen tape continues to cover transport, predecessor, dispatch,
+semantic and input-selection behavior.
+
+```sh
+PYTHONPATH=tests:. python3.13 -B -m unittest \
+  align.test_c1_closure.C1ClosureTests.test_duplicate_reservation_head_pin_refuses \
+  align.test_c1_closure.C1ClosureTests.test_duplicate_derivation_corpus_manifest_refuses \
+  align.test_c1_closure.C1ClosureTests.test_duplicate_campaign_runs_root_refuses \
+  align.test_c1_closure.C1ClosureTests.test_duplicate_option_spellings_in_every_launch_stage \
+  align.test_c1_closure.C1ClosureTests.test_single_attached_derivation_option_selects_same_manifest_for_pruning \
+  align.test_c1_closure.C1ClosureTests.test_c2a_finalizer_cannot_pin_a_stray_present_at_finalization \
+  align.test_c1_closure.C1ClosureTests.test_o2a_separate_same_byte_ledger_refuses_in_a_fully_pinned_stage
+PYTHONPATH=tests:. python3.13 -B -m unittest align.test_v4_next_arm_packet.C1PacketRebuildTests
+(cd tests/align/c1_closure_lite && shasum -a 256 -c SUITE.sha256)
+PYTHONPATH=tests:. python3.13 -B tests/align/c1_closure_lite/suite/run.py \
+  --adapter "$PWD/tests/align/c1_closure_lite/adapter.py" > .row23-seat/r9-audit2-observed.jsonl
+cmp tests/align/c1_closure_lite/suite/expected.jsonl .row23-seat/r9-audit2-observed.jsonl
+git diff --check b2e01464d HEAD
+```
+
+The preceding canonical run finished with only the B6 executing-review
+gate failing. It identified `3ae356e818e1b8bd9cec88597f9ba36d62bddd1a`,
+`949298c7c1eb52f10223b6d7fe2237e30bf2d590` and
+`e6da6a0be00aec2fc7ad44948e8d925252defd26` for authorized review.
+The PR evidence ledger and seat handoff record the final published tree
+and exact-head checks. Integration-owner and Opus acceptance, W1 signing
+and the post-close packet stay with their assigned owners.
+`NEEDS_SPEC: none`.
