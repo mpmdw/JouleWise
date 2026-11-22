@@ -57,8 +57,13 @@ jobs:
           PYTHONDONTWRITEBYTECODE: "1"
         run: |
           set -o pipefail
+          # The job log keeps the runner's memory every 10 s and the suite's unbuffered progress, so a shard that
+          # loses its runner still shows how far it got and what it held.
+          ( while sleep 10; do echo "MEM $(date +%T) $(free -m | awk '/Mem:/{print $3 " MB used, " $7 " MB available"}')";
+              ps -eo rss=,comm= --sort=-rss | head -3 | awk '{printf "  rss %d MB %s\n", $1/1024, $2}'; done ) &
+          trap "kill $! 2>/dev/null" EXIT
           sha256sum tests/align/test_partc_frozen_differential.py | tee shard.log
-          python -IB tests/align/partc_suite_census.py 2>&1 | grep -v '^progress ' | tee -a shard.log
+          python -IB tests/align/partc_suite_census.py 2>&1 | tee -a shard.log
       - uses: actions/upload-artifact@v4
         if: always()
         with:
