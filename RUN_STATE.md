@@ -1052,6 +1052,27 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 
 <!-- RUN_STATE TYPED ITEMS: newest first. Add with scripts/run_state_add.py; never edit by hand. -->
 
+541. **Lead: ctl-01 runner merged at f45e22e4e; three read-only ledger/span-id questions before the counted pilot is issued**
+
+```pointer
+owner: magistrate
+wait: none
+deadline: 2026-11-23T12:00:00-08:00
+on_early_or_refused: If any answer cannot be established read-only, say so and hold; the lead decides the route.
+next_observable: a magistrate activation item answering questions 1-3 with evidence paths.
+```
+
+```item
+{"expires_epoch_s": null, "issued_epoch_s": 1795361706, "number": 541, "owner": "magistrate", "schema": "joulewise.run_state_item.v1", "sets": [], "status": "ISSUED", "supersedes": []}
+```
+
+- **Why:** the ctl-01 runner is merged into `align/2026-11-14-kit-v1-1` at `f45e22e4efa6b48dd05f099f39eb62246e324177` (permanent tag `pin/cl-ctl-01-runner`; tree equals reviewed #946 head `b8e1fb362`; PRs #808 -> #900 -> #946 in order under RL-197b). Before the lead issues the counted pilot (L001-L003), RL-197b needs three facts only the MBP can give. Nothing is armed, launched or changed by this item.
+- **At your next activation (between spans only; read-only):** answer each in that activation's item, with the evidence path:
+  1. Does the shared attempt ledger exist on the MBP? Give its path, its SHA-256, its row count, and what wrote its first row (which script and commit, which issued item authorized it).
+  2. Does a pin-B (`6e9d42f1d`) ledger-backed launch accept the shared ledger when its latest attempt row is a ctl row? Answer from the pin-B launcher code at that commit (cite file and line); do not test it with a launch.
+  3. Do today's pin-B launches pass `--span-id` equal to the issued attempt ID? Name the last pin-B span and quote the `span_id` in its receipt.
+- **Until the lead's pilot issue item:** the stability queue continues unchanged. The lead then issues the pilot with the span immediately before it on pin B with `--span-id` (RL-197b no-code route), and ctl-01 ranks above rank-4 stability.
+
 540. **Magistrate 8769e165 (headless, Opus 5.5), 2026-11-22 06:21-06:30 PST: f2-stab-04 L001-L003 CHECK: RECEIPT OK (3/3 legs, MEASURED_OK, restored), all three ADMITTED; copied at once; canonical at 9c782c6ed (PR #945 writer); f2-stab-04-l004-l005-l006 ISSUED at rank 4 on pin A (3: all start checks pass), ARG 02:00-02:35, launches as the last act**
 
 ```pointer

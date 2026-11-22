@@ -1,7 +1,13 @@
 {
   "armed": null,
-  "next_observable": "f2stab04-8769e165/run-out.txt shows LAUNCH_RC=0 with the fence (launch ~06:30 Sun after three quiet minutes, expected end ~08:35, worst case ~09:40, fence deadline ~10:05; read the true fence deadline and pid from run-out.txt; check the pid, not the deadline). The next activation after the fence pid is gone and runner_receipt.json exists Checks attempt cq-f2-stab-04-l004-l005-l006-a1 at /Users/edr/campaign-out/f2-stab-04/cq-f2-stab-04-l004-l005-l006-a1 (no stamp suffix) with f2stab04-check-template-8769e165/check.sh (copy to f2stab04-check-NEWACT/, replace NEWACT; LEGS L004,L005,L006; kit sha 494739de...5bff; batch_windows == ['02:00-02:35'] and roster-prefix asserted; prints receipt_sha256); reports each leg's disposition on its own line (leg_record attempts[0].os_load max_busy_cores/max_gap_s, result.os_level_max; leg_summary admitted/redo_reasons; L004 cold, L005-L006 warm); maps each leg's quiet span to wall time through the receipt's ended pair and counts maintenance lines inside it; copies at once with f2stab04-check-template-8769e165/offload-run.sh (NEWACT replaced), prints full 64-hex digests (item 491), then takes the ladder (items 422, 463, 464, 507, 536). Next stability span: f2-stab-04 L007-L009 (3/2/1 per item 536; queue fillers-w2/queues-3leg/f2-stab-04-l007-l008-l009.json at audit 8f3366c75, check its sha against the W2 README row; SEQ = the queue entry's seq; kit copy already staged). Monday's rank 1 is the cold leg of the lowest kit with an unrun position. Fillers-w3 successors (item 524) only after kits 01-14 are all spent and never before t0 2026-11-26 00:00 PST. The RUN_STATE writer is the new one (PR #945, 9c782c6ed): --body and --pointer take file paths.",
+  "next_observable": "a magistrate activation item answering questions 1-3 with evidence paths.",
   "open_items": [
+    {
+      "expires_epoch_s": null,
+      "item": 541,
+      "owner": "magistrate",
+      "status": "ISSUED"
+    },
     {
       "expires_epoch_s": null,
       "item": 540,
@@ -227,11 +233,11 @@
   ],
   "owner": "magistrate",
   "schema": "joulewise.current_pointer.v2",
-  "source_item": "540",
-  "source_item_heading_date": "2026-11-22",
+  "source_item": "541",
+  "source_item_heading_date": null,
   "wait": {
-    "deadline_epoch_s": 1795375800,
+    "deadline_epoch_s": 1795464000,
     "observable": "none",
-    "on_early_or_refused": "a launcher refusal or non-clean close: record it, hold kit f2-stab-04 until an input changes (item 422, RL-179 F-6), mail the lead and Ed, and continue down the ladder. A soak refusal on a measured contending process with a proven clean close is physics, not a kit hold (item 505). A clean close with a leg not admitted (cpu_load, redo_quota 0) is recorded, not a stop and not a kit hold (items 467, 479, 520). If run-out.txt has no LAUNCH_RC line (WAIT/STOP before launch, e.g. not quiet by 08:00), nothing launched: positions L004-L006 stay unrun; the next activation re-selects under item 536 (3/2/1 at the actual t0, ARG per item 463) and issues a new typed item before launch."
+    "on_early_or_refused": "If any answer cannot be established read-only, say so and hold; the lead decides the route."
   }
 }
