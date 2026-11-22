@@ -643,6 +643,80 @@ git rev-parse --verify "$ref" >> fixture-raced-heads
         self.git(self.b, "remote", "set-url", "--push", "origin", str(self.directory / "fork.git"))
         self.assertNotEqual(add._spool_dir(self.a), add._spool_dir(self.b))
 
+    def test_audit_round_5_credential_rotation_preserves_spool_order(self):
+        endpoint = "git.example.invalid/Team/Repo.git"
+        self.git(self.a, "remote", "set-url", "--push", "origin", f"https://fixture:old@{endpoint}")
+        push = add._push
+
+        # Keep Git operations on the local bare repo while exercising actual
+        # push-URL lookup and the spool paths selected before and after rotation.
+        with mock.patch.object(add, "_push",
+                               side_effect=lambda repo, remote, ref, base: push(repo, str(self.remote), ref, base)):
+            self.enqueue_offline(request(heading="A first"))
+            queued, = self.spool.parent.rglob("*.json")
+            home_b = self.directory / "home-b"
+            home_b.mkdir()
+            with mock.patch.dict(os.environ, {"HOME": str(home_b)}):
+                self.assertEqual(add.add_git(self.b, request(heading="B independent"))[0], 25)
+
+            self.git(self.a, "remote", "set-url", "--push", "origin", f"https://fixture:new@{endpoint}")
+            code, output, errors = self.call_in(self.a, "flush-spool")
+            self.assertEqual((code, output.strip(), errors), (0, f"26 {self.remote_head()}", ""))
+            self.assertFalse(queued.exists())
+            self.assertEqual(add.add_git(self.a, request(heading="A second"))[0], 27)
+
+        for userinfo in ("fixture-token@", ""):
+            with self.subTest(userinfo=userinfo):
+                self.git(self.a, "remote", "set-url", "--push", "origin", f"https://{userinfo}{endpoint}")
+                self.assertEqual(add._spool_dir(self.a), queued.parent)
+        self.assertEqual(self.git(self.remote, "log", "--reverse", "--format=%s",
+                                  f"{self.base}..main").splitlines(),
+                         ["RUN_STATE 25: B independent", "RUN_STATE 26: A first",
+                          "RUN_STATE 27: A second"])
+
+    def test_audit_round_5_legacy_request_refuses_the_wrong_remote(self):
+        fork = self.directory / "fork.git"
+        clone_git_fixture(self.remote, fork, "--bare")
+        self.git(self.a, "remote", "add", "fork", str(fork))
+        legacy = self.spool.parent
+        legacy.mkdir(parents=True)
+        queued = legacy / "01-origin.json"
+        queued.write_text(json.dumps(request(heading="A first for origin")) + "\n", encoding="utf-8")
+        original = queued.read_bytes()
+
+        home_b = self.directory / "home-b"
+        home_b.mkdir()
+        with mock.patch.dict(os.environ, {"HOME": str(home_b)}):
+            _, head_b = add.add_git(self.b, request(heading="B independent"))
+        with self.assertRaisesRegex(add.GitFailure, "pending legacy requests") as refusal:
+            add.add_git(self.a, request(heading="A fork work"), remote="fork")
+
+        code, output, errors = self.call_in(self.a, "flush-spool", "--remote=fork")
+        self.assertEqual((code, output), (3, ""))
+        self.assertIn("requires remote 'origin'", errors)
+        self.assertIn("selected remote is 'fork'", errors)
+        self.assertNotIn("flush-spool --remote=fork", str(refusal.exception))
+        self.assertEqual(queued.read_bytes(), original)
+        self.assertEqual(self.remote_head(), head_b)
+        self.assertEqual(self.git(fork, "rev-parse", "main").strip(), self.base)
+        code, output, errors = self.call_in(self.a, "flush-spool")
+        self.assertEqual((code, output.strip(), errors), (0, f"26 {self.remote_head()}", ""))
+        self.assertFalse(queued.exists())
+
+        queued = legacy / "02-fork.json"
+        queued.write_text(json.dumps(request(heading="A first for fork", remote="fork")) + "\n", encoding="utf-8")
+        original = queued.read_bytes()
+        code, output, errors = self.call_in(self.a, "flush-spool")
+        self.assertEqual((code, output), (3, ""))
+        self.assertIn("requires remote 'fork'", errors)
+        self.assertEqual(queued.read_bytes(), original)
+        code, output, errors = self.call_in(self.a, "flush-spool", "--remote=fork")
+        self.assertEqual((code, errors), (0, ""))
+        self.assertEqual(output.split()[0], "25")
+        self.assertFalse(queued.exists())
+        self.assertEqual(self.git(fork, "show", "-s", "--format=%s", "main").strip(),
+                         "RUN_STATE 25: A first for fork")
+
     def test_legacy_spool_with_file_is_quarantined_without_snapshot(self):
         note = self.a / "docs/note.txt"
         note.write_bytes(b"synthetic attachment")

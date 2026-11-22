@@ -401,21 +401,20 @@ def _land(repo: Path, request: dict, remote: str, branch: str, attempts: int, *,
                     raise
 
 
-def _lower_host(authority: str) -> str:
-    user, separator, host = authority.rpartition("@")
-    return user + separator + host.lower()
+def _normalized_host(authority: str) -> str:
+    return authority.rpartition("@")[2].lower()
 
 
 def _normalized_remote_url(repo: Path, url: str) -> str:
     if "://" not in url:
         if match := SCP_REMOTE.fullmatch(url):
             host, path = match.groups()
-            return f"{_lower_host(host)}:{path.rstrip('/').removesuffix('.git')}"
+            return f"{_normalized_host(host)}:{path.rstrip('/').removesuffix('.git')}"
         if re.match(r"^[^/:]+::", url):
             return url  # A Git remote helper's address is protocol-specific.
         url = (repo / url).resolve().as_uri()
     parts = urlsplit(url)
-    return urlunsplit((parts.scheme.lower(), _lower_host(parts.netloc),
+    return urlunsplit((parts.scheme.lower(), _normalized_host(parts.netloc),
                        parts.path.rstrip("/").removesuffix(".git"), parts.query, parts.fragment))
 
 
@@ -508,19 +507,37 @@ def _error_text(error: Exception) -> str:
     return str(error)
 
 
+def _read_spooled_request(path: Path, legacy: Path, remote: str) -> dict:
+    try:
+        request = json.loads(path.read_text(encoding="utf-8"))
+    except ValueError:
+        if path.parent != legacy or remote == "origin":
+            raise
+        # An unreadable legacy entry also has no established remote.
+        request = None
+    if path.parent == legacy:
+        recorded = request.get("remote") if isinstance(request, dict) else None
+        queued_remote = "origin" if recorded is None else recorded
+        if queued_remote != remote:
+            raise GitFailure(f"legacy request {path.name} requires remote {queued_remote!r}. "
+                             f"The selected remote is {remote!r}. Pending spool retained.")
+    return request
+
+
 def add_git(repo: Path, request: dict, *, remote="origin", branch="main", attempts=5) -> tuple[int, str]:
     repo = _repo_root(repo)
     spool = _spool_dir(repo, remote)
     legacy = spool.parent
     flush_command = "python3 scripts/run_state_add.py flush-spool"
+    keyed_flush = flush_command
     if remote != "origin":
-        flush_command += f" --remote={shlex.quote(remote)}"
+        keyed_flush += f" --remote={shlex.quote(remote)}"
     with _locked(legacy, shared=True), _locked(spool):
         if any(_pending(legacy)):
             raise GitFailure(f"pending legacy requests in {legacy}; run {flush_command} "
-                             "from the original checkout before retrying this add")
+                             "from the original checkout with the queued remote before retrying this add")
         if any(_pending(spool)):
-            raise GitFailure(f"pending requests in {spool}; run {flush_command} "
+            raise GitFailure(f"pending requests in {spool}; run {keyed_flush} "
                              "before retrying this add")
         try:
             return _land(repo, request, remote, branch, attempts)
@@ -549,7 +566,7 @@ def _flush(repo: Path, *, remote: str = "origin") -> int:
         quarantined = False
         for path in queue:
             try:
-                request = json.loads(path.read_text(encoding="utf-8"))
+                request = _read_spooled_request(path, legacy, remote)
                 number, head = _land(repo, request, remote, "main", 5,
                                      snapshots=_spooled_files(request))
             except InvalidBaseState as error:
