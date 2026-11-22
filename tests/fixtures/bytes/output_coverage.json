@@ -2097,6 +2097,7 @@
     "no_point_labels_invalid_assist",
     "no_point_labels_survivor",
     "no_point_labels_lost_member",
+    "no_point_labels_missing_bundle",
     "invalid_anchor",
     "marker_incomplete",
     "late_start",

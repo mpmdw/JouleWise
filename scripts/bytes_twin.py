@@ -533,10 +533,12 @@ def neg8_allowance(session_rows, family="gross", dc_by_run=None):
                 raise ValueError(f"NEG-8 reference {row['run_id']}: missing or invalid reference_request columns; re-export required")
             if energy(row) is None:
                 joined = dc_by_run.get(row["run_id"], {})
-                # Registration section 6: print the registered disclosure code,
-                # not this reader's internal meter-join status or diagnostic prose.
-                reason = ("bytes.meter_gap" if "bytes.meter_gap" in joined.get("flags", [])
-                          else "bytes.meter_decode_unavailable")
+                if not joined or joined.get("status") in ("bundle_missing", "spans_unreadable"):
+                    reason = "meter request unavailable"
+                else:
+                    # Registration section 6: use the disclosure code for an attempted join.
+                    reason = ("bytes.meter_gap" if "bytes.meter_gap" in joined.get("flags", [])
+                              else "bytes.meter_decode_unavailable")
         if reason is not None:
             dropped.append({"run_id": row["run_id"], "role": row["role"], "reason": reason})
         else:
@@ -1003,9 +1005,10 @@ def _bundle(root, run_id):
     return None
 
 
-def member_spans(bundle):
+def member_spans(bundle, *, metadata=None):
     """Decode-phase and idle-baseline spans of a bundle in the controller's monotonic ns."""
-    metadata = read_json(bundle / "metadata.json", {}) or {}
+    if metadata is None:
+        metadata = read_json(bundle / "metadata.json", {}) or {}
     try:
         pair = metadata["uncertainty_evidence"]["clock_anchor"]["clock_stamps"]["sampling_started"]
         epoch, mono = float(pair["epoch_s"]), float(pair["monotonic_before_s"])
@@ -1129,7 +1132,7 @@ def anchor_envelope(intervals, window, common_s, edge_s):
     return max(abs(value - point) for value in values)
 
 
-def decode_anchor_bound(archive, run_id):
+def decode_anchor_bound(archive, run_id, *, plain=None, metadata=None):
     """§7: rails bound "re-derived under the session's operative timing bound".
 
     §16: read calibration.operative_bound_s, "never recomputes a calibration
@@ -1143,11 +1146,15 @@ def decode_anchor_bound(archive, run_id):
     operative = float(value)
     if not is_number(operative) or operative < 0:
         raise ValueError("invalid session operative timing bound")
-    bundle = _bundle(archive["root"], run_id)
-    if bundle is None:
-        raise ValueError("anchor bundle missing")
-    with _readable_bundle(bundle, Path(str(archive["root"]) + ".desk") / "compression.jsonl") as plain:
-        metadata = read_json(plain / "metadata.json", {})
+    with ExitStack() as cleanup:
+        if plain is None:
+            bundle = _bundle(archive["root"], run_id)
+            if bundle is None:
+                raise ValueError("anchor bundle missing")
+            journal = Path(str(archive["root"]) + ".desk") / "compression.jsonl"
+            plain = cleanup.enter_context(_readable_bundle(bundle, journal))
+        if metadata is None:
+            metadata = read_json(plain / "metadata.json", {})
         clock = (metadata.get("uncertainty_evidence") or {}).get("clock_anchor") or {}
         if clock.get("status") != "bounded":
             # Existing mock campaigns have no native timing evidence. Match
@@ -1305,17 +1312,18 @@ def _scratch_lock(root):
         os.close(descriptor)
 
 
-def dc_join(archive, run_id, *, reference=False):
+def dc_join(archive, run_id, *, reference=False, spans=None):
     """DC-input decode energy of one run: meter integral over the decode span, with its clock-fit bound."""
-    bundle = _bundle(archive["root"], run_id)
-    if bundle is None:
-        return {"status": "bundle_missing", "decode_assist_evaluated_reason":
-                f"decode marker not evaluated: selected bundle missing (run {run_id})"}
-    with _readable_bundle(bundle, Path(str(archive["root"]) + ".desk") / "compression.jsonl") as plain:
-        spans = member_spans(plain)
     if spans is None:
-        return {"status": "spans_unreadable", "decode_assist_evaluated_reason":
-                f"decode marker not evaluated: member spans unreadable (run {run_id})"}
+        bundle = _bundle(archive["root"], run_id)
+        if bundle is None:
+            return {"status": "bundle_missing", "decode_assist_evaluated_reason":
+                    f"decode marker not evaluated: selected bundle missing (run {run_id})"}
+        with _readable_bundle(bundle, Path(str(archive["root"]) + ".desk") / "compression.jsonl") as plain:
+            spans = member_spans(plain)
+        if spans is None:
+            return {"status": "spans_unreadable", "decode_assist_evaluated_reason":
+                    f"decode marker not evaluated: member spans unreadable (run {run_id})"}
     failure = None
     markers = []
     for stream in archive["streams"]:
@@ -1438,6 +1446,34 @@ def _units_of(row):
 def _valid_record(row):
     return row["status"] == "succeeded" and not VALIDITY_CODES.intersection(
         (row.get("exclusion_codes") or "").split(";"))
+
+
+def _releasable_record(row):
+    # An export placeholder without a model name has no configuration key.
+    # Its registered cell still establishes its membership.
+    return _valid_record(row) and bool(row.get("model_name"))
+
+
+def _science_inputs(archive, row, registered_model):
+    """A member must have a usable science record before evaluating the meter."""
+    root, run_id = archive["root"], row["run_id"]
+    bundle = _bundle(root, run_id)
+    if bundle is None:
+        raise ValueError("selected bundle missing")
+    with _readable_bundle(bundle, Path(str(root) + ".desk") / "compression.jsonl") as plain:
+        config = read_json(plain / "config.json")
+        if not config or config["model"]["name"] != registered_model:
+            raise ValueError("roster/config model mismatch")
+        metadata = read_json(plain / "metadata.json")
+        if not metadata or metadata.get("workload_observed", {}).get("output_token_count") != PRINTED_TOKENS:
+            raise ValueError("runtime-observed output count must be 512")
+        spans = member_spans(plain, metadata=metadata)
+        if not spans or not spans["idle_ns"] or any(spans[k][1] <= spans[k][0] for k in ("decode_ns", "idle_ns")):
+            raise ValueError("member decode or idle span unavailable")
+        stored = root / "withheld/reductions" / (run_id + ".summary_metrics.rereduced.json")
+        if not stored.is_file() and not stored.with_suffix(".json.zst").is_file():
+            raise ValueError("member reduction missing")
+        return spans, decode_anchor_bound(archive, run_id, plain=plain, metadata=metadata)
 
 
 def _floor_plan_error(rows):
@@ -2243,7 +2279,7 @@ def analyse(rows, manifest, archives, *, stage, key_dir=None, sidecars=None, lis
     # A lost member still belongs to its cell and pass, while its export
     # placeholder has no configuration key to release.
     model_keys = {model: {row["config_key"] for members in collected.values()
-                        for row in members if _valid_record(row)}
+                        for row in members if _releasable_record(row)}
                   for model, collected in science.items()}
     for models in withheld_missing.values():
         for model in models:
@@ -2287,7 +2323,8 @@ def analyse(rows, manifest, archives, *, stage, key_dir=None, sidecars=None, lis
         archive = archive_by_session.get(session_id)
         references = [r for r in srows if r["role"] in ("corpus", "start", "midpoint", "end")]
         if archive is not None and references and all(r["_unblinded"] for r in references):
-            reference_dc[session_id] = {r["run_id"]: dc_join(archive, r["run_id"], reference=True) for r in references}
+            reference_dc[session_id] = {r["run_id"]: dc_join(archive, r["run_id"], reference=True)
+                                        for r in references if archive["streams"]}
             flags.extend({"flag": "bytes.meter_gap", "session_id": session_id, "run_id": run_id}
                          for run_id, joined in reference_dc[session_id].items() if joined["status"] == "meter_gap")
             for (boundary, variant), family in FAMILIES.items():
@@ -2320,7 +2357,7 @@ def analyse(rows, manifest, archives, *, stage, key_dir=None, sidecars=None, lis
                                        "quantities": missing_pass_quantities(missing, missing_flags)} for b in BOUNDARIES}}
                 continue
             srows = science[model][session_id]
-            unblinded = stage in ("1", "2") and all(r["_unblinded"] for r in srows if _valid_record(r))
+            unblinded = stage in ("1", "2") and all(r["_unblinded"] for r in srows if _releasable_record(r))
             archive = archive_by_session.get(session_id)
             can_join_archive = archive is not None and unblinded
             dc_by_run = {}
@@ -2333,30 +2370,33 @@ def analyse(rows, manifest, archives, *, stage, key_dir=None, sidecars=None, lis
                 r["_meter_flags"] = []
                 if stage in ("1", "2"):
                     r["_operative_anchor_j"] = None
-                # Invalid records still disclose their recorded codes, but
-                # only valid records can acquire flags from the science join.
+                run_id = r["run_id"]
+                if can_join_archive:
+                    # The admitted archive supplies the authoritative recorded codes.
+                    codes = archive["exclusions"].get(run_id, ())
+                    r["excluded"] = bool(codes)
+                    r["exclusion_codes"] = ";".join(sorted(codes))
+                    r["flag_codes"] = ";".join(sorted(archive["run_codes"].get(run_id, ())))
                 if not _valid_record(r):
                     continue
-                run_id = r["run_id"]
-                joined = {}
-                if can_join_archive:
-                    joined = dc_join(archive, run_id)
-                    dc_by_run[run_id] = joined
+                if not can_join_archive:
+                    r["_decode_assist_reason"] = ("not evaluated at the blinded stage" if not unblinded else
+                        f"decode marker not evaluated: archive unavailable (run {run_id})")
+                    continue
+                # Establish availability before deriving any decode or meter flag.
+                try:
+                    spans, r["_operative_anchor_j"] = _science_inputs(archive, r, manifest[model]["model"])
+                except (OSError, ValueError, KeyError, TypeError, ArithmeticError) as exc:
+                    anchor_status[run_id] = str(exc)
+                    r["status"] = "unusable"
+                    continue
+                anchor_status[run_id] = "ok"
+                joined = dc_by_run[run_id] = dc_join(archive, run_id, spans=spans)
                 r["_decode_assisted"] = joined.get("decode_assisted")
-                r["_decode_assist_reason"] = ("not evaluated at the blinded stage" if not unblinded else
-                    joined.get("decode_assist_evaluated_reason",
-                        f"decode marker not evaluated: archive unavailable (run {run_id})"))
-                if stage in ("1", "2") and can_join_archive:
-                    # §7's operative decode-phase bound supplies every rails
-                    # and rest variant and their attribution floors via _member.
-                    try:
-                        r["_operative_anchor_j"] = decode_anchor_bound(archive, run_id)
-                        anchor_status[run_id] = "ok"
-                    except (OSError, ValueError, KeyError, TypeError) as exc:
-                        anchor_status[run_id] = str(exc)
+                r["_decode_assist_reason"] = joined.get("decode_assist_evaluated_reason")
                 if r["_decode_assisted"]:
                     r["_meter_flags"].append("bytes.decode_battery_assist")
-                if unblinded and joined.get("status") != "ok":
+                if joined.get("status") != "ok":
                     r["_meter_flags"].append("bytes.meter_gap" if joined.get("status") == "meter_gap"
                                              else "bytes.meter_decode_unavailable")
             per_boundary = {}

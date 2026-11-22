@@ -121,6 +121,9 @@ def label_defects(repeats):
 
 
 LABEL_KNOBS = {**NR1_KNOBS, "subpack_sessions": True, "battery_assist": True}
+MISSING_BUNDLE_CASE = (1, "Qwen3-Next-80B-A3B-Instruct-4bit", 20, "bundle_after_export")
+MISSING_INPUT_MODES = ("bundle_before_export", "bundle_after_export", "meter_missing",
+                       "bundle_and_meter_missing", "lost_member")
 # name: (world, seed, planted defects, generator knobs, withheld stores removed after export).
 CAMPAIGNS = {
     "bytes": ("bytes", 1100, [], {**NR1_KNOBS, "battery_assist": True, "battery_publication": "delayed", "battery_reference_assist": True}, ()),
@@ -139,6 +142,7 @@ CAMPAIGNS = {
     "no_point_labels_lost_member": ("bytes", 1100, label_defects(range(4, 10)) + [
         (1, "Qwen3-Next-80B-A3B-Instruct-4bit", 20, "lost_member")
     ], LABEL_KNOBS, ("bytes-s5-p1",)),
+    "no_point_labels_missing_bundle": ("bytes", 1100, label_defects(range(4, 10)), LABEL_KNOBS, ("bytes-s5-p1",)),
     "invalid_anchor": ("bytes", 1100, ANCHOR_DEFECTS, NR1_KNOBS, ()),
     "marker_incomplete": ("bytes", 1100, [], {**NR1_KNOBS, "battery_assist": True,
                            "truncate_marker_window": True}, ()),
@@ -587,7 +591,7 @@ def reference_reason_code(reason):
     """Compare registered words; the bound analysis retains meter diagnostic prose.
 
     Only meter-unavailable diagnostics lack a printed code: clock/mapping,
-    span coverage, absent samples/battery readings, and absent meter requests.
+    span coverage, and absent samples or battery readings.
     Their registered disclosure is bytes.meter_decode_unavailable, except a
     dropped device sample, whose disclosure is bytes.meter_gap. Do not fold
     status/exclusion words or unknown text into a generic unavailable value.
@@ -595,7 +599,7 @@ def reference_reason_code(reason):
     if reason == "dropped device sample in meter span":
         return "bytes.meter_gap"
     if reason in ("meter does not cover decode and own idle spans", "meter span has no samples",
-                  "battery reading missing", "meter request unavailable",
+                  "battery reading missing",
                   "meter clock fit or raw/monotonic mapping unavailable") or (
             isinstance(reason, str) and reason.startswith(
                 "meter clock fit or raw/monotonic mapping unavailable: ")):
@@ -638,7 +642,7 @@ def compare_neg8(R, stage, a_rows, t):
                 {ref["run_id"]: reference_reason_code(ref["meter_unavailable_reason"]) for ref in references
                  if "meter_unavailable_reason" in ref},
                 {ref["run_id"]: reference_reason_code(ref["reason"]) for ref in target_drops
-                 if ref["run_id"] in reference_ids})
+                 if ref["run_id"] in reference_ids and ref["reason"] != "meter request unavailable"})
         for b, ref in (row["neg8_inputs"].get("boundaries") or {}).items():
             g = f"neg8/{sid}/{BMAP[b]}"
             for family, fa in (ref.get("families") or {}).items():
@@ -1426,8 +1430,28 @@ def plant(archive, acceptance, models, pass_id, defects, log):
     _write(archive / "derived/b6-acceptance.json", acceptance)
 
 
-def build(root, name):
+def plant_missing_inputs(archive, models, pass_id, cases, log, *, before_export):
+    remove_meter = False
+    for p, model, ordinal, mode in cases:
+        if p != pass_id or before_export != (mode == "bundle_before_export") or mode == "lost_member":
+            continue
+        run_ids = _run_ids(archive, models, model)
+        if not run_ids:
+            continue
+        rid = run_ids[ordinal]
+        if mode != "meter_missing":
+            shutil.rmtree(archive / "sources/claim-runs" / rid)
+        remove_meter |= mode in ("meter_missing", "bundle_and_meter_missing")
+        log.append({"pass": pass_id, "model": model, "run_id": rid, "kind": mode})
+    if remove_meter:
+        (archive / "sources/night-custody/hazards/meter/stream-001.jsonl").unlink()
+
+
+def build(root, name, *, missing_inputs=()):
     world, seed, defects, knobs, missing_stores = CAMPAIGNS[name]
+    if name == "no_point_labels_missing_bundle":
+        missing_inputs = (MISSING_BUNDLE_CASE,)
+    defects = [*defects, *(case for case in missing_inputs if case[3] == "lost_member")]
     knobs = dict(knobs)
     truncate_marker = knobs.pop("truncate_marker_window", False)
     root.mkdir(parents=True)
@@ -1436,9 +1460,12 @@ def build(root, name):
     design_models = ba.read_json(FIXTURES / "campaign_design.json")["models"]
 
     def export_with_defects(archive, plan, registration, private, export_dir, **kw):
+        archive = Path(archive)
+        pass_id = 1 if archive.name.endswith("p1") else 2
         if defects:
-            pass_id = 1 if Path(archive).name.endswith("p1") else 2
-            plant(Path(archive), kw["acceptance_record"], design_models, pass_id, defects, log)
+            plant(archive, kw["acceptance_record"], design_models, pass_id, defects, log)
+        if missing_inputs:
+            plant_missing_inputs(archive, design_models, pass_id, missing_inputs, log, before_export=True)
         return original(archive, plan, registration, private, export_dir, **kw)
 
     export_runs.export = export_with_defects
@@ -1447,6 +1474,10 @@ def build(root, name):
                                     pass_duration_scales=PASS_SCALES, clock_latency_ms=CLOCK_LATENCY_MS, **knobs)
     finally:
         export_runs.export = original
+    if missing_inputs:
+        for session in manifest["sessions"]:
+            plant_missing_inputs(Path(session["archive"]), design_models, session["pass_id"], missing_inputs, log,
+                                 before_export=False)
     if truncate_marker:
         for session in manifest["sessions"]:
             archive = Path(session["archive"])
@@ -2221,6 +2252,77 @@ class AgreementTests(unittest.TestCase):
                     for flags in rows[(group, "flags")]:
                         self.assertIn("member.bytes_missing", flags, group)
 
+    def test_no_point_labels_missing_bundle_campaign(self):
+        name = "no_point_labels_missing_bundle"
+        recorder = campaign(name)
+        self.assertEqual(recorder.counts()["above_bar"], 0)
+        exits = {r["key"]: (r["a"], r["t"]) for r in recorder.rows if r["group"] == "exit"}
+        self.assertEqual(exits["heldout/stage2"], (0, 0))
+        model = canon(MISSING_BUNDLE_CASE[1])
+        rows = {(r["group"], r["key"]): (r["a"], r["t"]) for r in recorder.rows if r["stage"] == "heldout"}
+        for boundary in bt.BOUNDARIES:
+            with self.subTest(boundary=boundary):
+                cell = f"cell/{model}/pass1/{boundary}/gross"
+                h1 = f"h1/{boundary}/passes_mean/{model}"
+                moe = f"moe/{boundary}/passes_mean"
+                self.assertEqual(rows[(cell, "status")], ("unavailable", "unavailable"))
+                self.assertEqual(rows[(h1, "status")], ("missing", "missing"))
+                self.assertEqual(rows[(moe, "answer")], ("missing", "missing"))
+                for group in (cell, h1, moe):
+                    for flags in rows[(group, "flags")]:
+                        self.assertNotIn("bytes.meter_decode_unavailable", flags, group)
+
+    def check_missing_input_mode(self, mode):
+        root = WORK["root"] / mode
+        model_names = [m["model"] for m in load(FIXTURES / "campaign_design.json")["models"]]
+        self.assertEqual({canon(name) for name in model_names}, set(bt.ROSTER))
+        # Llama's first pass is already withheld-missing in the label campaign.
+        cases = [(2 if model == "Llama-3.3-70B-Instruct-4bit" else 1, model, 20, mode)
+                 for model in model_names]
+        manifest = build(root, "no_point_labels", missing_inputs=cases)
+        run_both(root, manifest)
+        self.check_missing_input_results(root, mode, cases)
+
+    def check_missing_input_results(self, root, mode, cases):
+        recorder = compare_campaign(root)
+        counts = recorder.counts()
+        print(f"\nagreement {mode}: {counts['compared']} compared, {counts['above_bar']} above bar", flush=True)
+        self.assertEqual(counts["above_bar"], 0, "\n".join(describe(row) for row in recorder.above()[:12]))
+        stages = {r["key"]: (r["a"], r["t"]) for r in recorder.rows if r["group"] == "exit"}
+        for stage in ("blinded", "fit/stage1", "blinded after the stage-1 commit (withheld rows; never refuses)",
+                      "heldout/stage2"):
+            self.assertEqual(stages[stage], (0, 0), stage)
+        flags = {r["group"]: (r["a"], r["t"]) for r in recorder.rows
+                 if r["stage"] == "heldout" and r["key"] == "flags"}
+        twin = load(root / "out/t-2.json")
+        affected = {(d["pass"], d["model"]): d["run_id"] for d in load(root / "build.json")["defects"]
+                    if d["kind"] == mode}
+        self.assertEqual(set(affected), {(p, model) for p, model, _, _ in cases})
+        for (p, model), run_id in affected.items():
+            model = canon(model)
+            block = twin["cells"][model][f"pass{p}"]
+            with self.subTest(model=model):
+                if mode == "meter_missing":
+                    self.assertEqual(block["dc_join_status"][run_id], "no_aligned_stream_covers_span")
+                else:
+                    self.assertNotIn(run_id, block["dc_join_status"])
+                for boundary in bt.BOUNDARIES:
+                    for variant in bt.CELL_VARIANTS:
+                        a, t = flags[f"cell/{model}/pass{p}/{boundary}/{variant}"]
+                        self.assertEqual(a, t)
+        for boundary in bt.BOUNDARIES:
+            a, t = flags[f"moe/{boundary}/passes_mean"]
+            self.assertEqual(a, t)
+            h1_flags = [pair for group, pair in flags.items() if group.startswith(f"h1/{boundary}/passes_mean/")]
+            self.assertTrue(h1_flags)
+            for a, t in h1_flags:
+                self.assertEqual(a, t)
+
+    def test_missing_inputs_across_registered_models(self):
+        for mode in MISSING_INPUT_MODES:
+            with self.subTest(mode=mode):
+                self.check_missing_input_mode(mode)
+
     def test_time_world(self):
         self.check("time", 63, {"h2/rails/passes_mean": (9, 9), "h2/dc_input/passes_mean": (9, 9),
                                 "h2/rest/passes_mean": (11, 11)})
@@ -2260,13 +2362,13 @@ class AgreementTests(unittest.TestCase):
 class ComparerRegressionTests(unittest.TestCase):
     def test_reference_reasons_compare_codes_and_preserve_unknown_words(self):
         for prose in ("meter does not cover decode and own idle spans", "meter span has no samples",
-                      "battery reading missing", "meter request unavailable",
+                      "battery reading missing",
                       "meter clock fit or raw/monotonic mapping unavailable: fewer than two batches with samples"):
             self.assertEqual(reference_reason_code(prose), "bytes.meter_decode_unavailable")
         self.assertEqual(reference_reason_code("dropped device sample in meter span"), "bytes.meter_gap")
         for reason in ("bytes.reference_request_unavailable", "bytes.meter_gap", "status: failed",
                        "excluded: member.anchor_not_bounded", "bytes.__coverage_fault__",
-                       "unrecognized diagnostic", "bytes.meter_gap__coverage_fault__"):
+                       "meter request unavailable", "unrecognized diagnostic", "bytes.meter_gap__coverage_fault__"):
             self.assertEqual(reference_reason_code(reason), reason)
 
     def test_unprinted_differences_are_counted_without_gating_or_a_tolerance(self):

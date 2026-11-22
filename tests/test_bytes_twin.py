@@ -133,8 +133,10 @@ class ScienceMeterEligibilityTests(unittest.TestCase):
             "planned_members": [{"run_id": run_id, "role": "science", "units": [{
                 "cell_id": absent["cell_ids"], "stratum": absent["strata"], "unit_id": absent["unit_ids"],
             }]}],
-            "run_codes": {run_id: {"member.bytes_missing"}},
-            "exclusions": {run_id: {"member.bytes_missing"}},
+            "run_codes": {**{row["run_id"]: {"battery.assist", row["exclusion_codes"]} - {""} for row in rows},
+                          run_id: {"member.bytes_missing"}},
+            "exclusions": {**{row["run_id"]: {row["exclusion_codes"]} for row in rows if row["excluded"]},
+                           run_id: {"member.bytes_missing"}},
         }
         manifest = {name: {"cell_ids": [name + "-decode"]} for name in bt.ROSTER}
         with patch.object(bt, "unblind", return_value=rows) as unblind, patch.object(bt, "dc_join") as join:
@@ -164,6 +166,21 @@ class ScienceMeterEligibilityTests(unittest.TestCase):
             self.assertEqual(cell[variant], {"status": "refused_floor_plan",
                                             "reason": "floor module requires 50 planned runs",
                                             "flags": ["battery.assist"]})
+
+    def test_missing_events_make_the_science_record_unavailable(self):
+        model = "Qwen3-30B-A3B-4bit"
+        with tempfile.TemporaryDirectory(prefix="bytes-missing-events-") as temp:
+            root = Path(temp)
+            bundle = root / "sources/claim-runs/r1"
+            bundle.mkdir(parents=True)
+            (bundle / "config.json").write_text(json.dumps({"model": {"name": model}}))
+            (bundle / "metadata.json").write_text(json.dumps({
+                "workload_observed": {"output_token_count": 512},
+                "uncertainty_evidence": {"clock_anchor": {"clock_stamps": {"sampling_started": {
+                    "epoch_s": 100, "monotonic_before_s": 1}}}},
+            }))
+            with self.assertRaisesRegex(ValueError, "member decode or idle span unavailable"):
+                bt._science_inputs({"root": root}, {"run_id": "r1"}, model)
 
 
 class MissingWithheldFlagTests(unittest.TestCase):
@@ -352,7 +369,7 @@ class AnchorEnvelopeTests(QuantityTestCase):
 
     def test_blinded_stage_keeps_export_columns(self):
         # §11: "from the blinded export's columns (no archive, key or meter reads)".
-        with patch.object(bt, "decode_anchor_bound", side_effect=AssertionError("blinded anchor read")):
+        with patch.object(bt, "_science_inputs", side_effect=AssertionError("blinded science read")):
             result = run_twin(WORLD["one"], "blinded")
         self.assertTrue(result["cells"])
 
@@ -563,7 +580,9 @@ class Neg8Tests(QuantityTestCase):
                "status": "succeeded", "excluded": False, "flag_codes": "",
                "reference_request_duration_s": 2.0, "reference_request_gross_j": 10.0,
                "reference_request_idle_subtracted_j": 8.0}
-        for joined, reason in (({}, "bytes.meter_decode_unavailable"),
+        for joined, reason in (({}, "meter request unavailable"),
+                               ({"status": "bundle_missing"}, "meter request unavailable"),
+                               ({"status": "spans_unreadable"}, "meter request unavailable"),
                                ({"status": "no_aligned_stream_covers_span"}, "bytes.meter_decode_unavailable"),
                                ({"status": "battery reading missing"}, "bytes.meter_decode_unavailable"),
                                ({"status": "meter_gap", "flags": ["bytes.meter_gap"]}, "bytes.meter_gap")):

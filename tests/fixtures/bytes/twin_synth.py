@@ -228,6 +228,7 @@ class Session:
                    "decode_latency_s": durations["decode"], "status": status}
         bundle = {"events": events, "metadata": {
             "run_id": run_id, "status": {"state": status}, "schema": "joulewise.metadata.synthetic.v1",
+            "workload_observed": {"output_token_count": out},
             "synthetic_idle_dc_w": idle_dc_w,
             # §7: re-reduce the decode-phase envelope under the session's
             # operative bound. This toy world has explicit interval supports.
