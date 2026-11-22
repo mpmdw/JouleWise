@@ -36,7 +36,11 @@ reinterpreted. Companion docs: `RUN_STATE.md` (session pointer),
 `docs/process/CURRENT.json` (declared wait; see `docs/process/POINTER_RULE.md`),
 `docs/decision_log.md` (policy).
 
-Last updated: **2026-08-20** (B7 ruling pass). Since the 2026-08-07 entry
+**Current entry (2026-11-21).** Block 5 and Block 6 are released; §1 lists what is citable. The header paragraphs
+below, down to the rule, and §2 to §6 were last refreshed on 2026-08-20. They describe the campaign before the
+prospective windows ran and are kept as history; where they conflict with §1, §1 governs.
+
+**Historical entry (2026-08-20, B7 ruling pass).** Since the 2026-08-07 entry
 below, all three D-117 packs were **frozen** (2026-08-13, receipts PASS ×3)
 with the tighter pre-registered floor selector
 (`d124_two_shared_edge_common_mode.v1` — the estimator's identity, not any
@@ -76,6 +80,46 @@ byte-identical; report: `docs/run_reports/2026-08-03-16h-runway.md`.
 ---
 
 ## 1. VALID — minted, mainline, citable
+
+### Released results (current, 2026-11-21)
+
+Quote numbers from Paper 1 (`docs/paper/paper1/paper1.md` §6), which prints each value once under the research
+lead's print-precision rule (RL-52). `docs/analysis/b5/RESULTS.md` is the byte-identical working record of the
+Block 5 release; its errata are in `docs/analysis/b5/REDERIVATION.md` (RL-39). No number is repeated on this page.
+
+**Block 5 (primary block), released 2026-11-08.** [Results](docs/analysis/b5/RESULTS.md#L1-L5) · [Release event, DLE-13](docs/analysis/b5/DEVIATION-LOG.md#L980-L989)
+
+- **L2 comparative results (two).** In the registered GAMMA session, within the `M3 Max / MLX / powermetrics SoC
+  rails` boundary and under the registered prompts and output policy, Qwen3-8B used more gross phase energy per
+  request than Qwen3-1.7B in decode and in 2048-token prefill. Both contrasts cleared their active detection floors,
+  survived Holm correction, and received `direction_supported` at claim level L2. The released ratios and per-token
+  differences are registered descriptive estimates, and the ratios omit propagated timing bounds.
+  [Sentence shape and scope](docs/analysis/b5/RESULTS.md#L307-L327) · [Estimates, intervals, floors and verdicts](docs/analysis/b5/RESULTS.md#L62-L93) · [Descriptive estimates](docs/analysis/b5/RESULTS.md#L114-L124)
+- **L1 instrument results (four cells).** The ALPHA Qwen3-1.7B and BETA Qwen3-8B decode and 2048-token prefill cells
+  are separate-session results, reportable side by side. They are not a comparison: the ALPHA-versus-BETA difference
+  is never taken. The 42-token prefill cells were refused, as registered (`expected_unresolvable`).
+  [Reported cells](docs/analysis/b5/RESULTS.md#L126-L139)
+- **Registered qualifications.** Phase attribution is reported without a measured instrument phase-accounting check.
+  The active GAMMA floors carry the D-078 `attribution_limited` label. The registered D-165 dominance test returned
+  branch B, which withholds the dominance statement. Each interval covers variation within one session only.
+  Not licensed at L2: L3 or L4, any scaling statement, generalization beyond this machine, stack, prompts and
+  policy, any wall or whole-machine claim, and any efficiency or causal wording.
+  [D-177](docs/analysis/b5/RESULTS.md#L328-L329) · [Floor class](docs/analysis/b5/RESULTS.md#L372-L376) · [Dominance branch](docs/analysis/b5/RESULTS.md#L330-L334) · [What L2 does not permit](docs/analysis/b5/RESULTS.md#L314-L340)
+
+**Block 6 (registered replication), released 2026-11-13.** [Release record](docs/registrations/block6_release_record.md) · `RUN_STATE.md` item 312 · Paper 1 §6.8
+
+- **Replication word.** The decode contrast and the 2048-token prefill contrast each **replicated**: every one of the
+  three counting replication contrast sessions gave the same outcome word as the primary block, `direction_supported`,
+  and the same sign. "Replicated" describes agreement of outcome words and signs across sessions; it is not a new
+  test and carries no new interval. Any claim level is still that reached in each session separately.
+- **Scope.** The replication is across sessions and days on the same machine, not across machines. The per-session
+  values, floors and labelled lines are those printed in Paper 1 §6.8; the per-session §9.5 disclosure table
+  (`P1-B6-DISCLOSURES`) is still owed and gates nothing here.
+
+**Not in this section.** BYTES (prediction lines committed 2026-11-12; held-out results sealed) and ALIGN v4 (in
+registration and calibration; no outcome opened) have no citable result.
+
+### Historical checkpoints and standing measurement note
 
 **NONE at this checkpoint.** D-110 (2026-08-03, sweep finding RT-1)
 made mint #1 and every number derived from it retroactively

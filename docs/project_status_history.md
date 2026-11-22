@@ -7,6 +7,7 @@ Historical snapshots; non-operative; current status lives in
 
 | date | what changed |
 |---|---|
+| 2026-11-21 | The advisor view was rewritten after the Block 5 release (2026-11-08) and the Block 6 release (2026-11-13). The 2026-09-04 view, which named the four-rung prompt probe as the next milestone and stated that no claim-bearing Qwen3 data existed, is superseded; its text is in git history at `321ef2666`. |
 | 2026-09-01 | The live work selector was reconciled to the Qwen3 `_v5` chain; the results-fill registry was regenerated; a fresh-model whole-repository review launched the paper skeleton, dependence, timing-marker, close-out, and probe-configuration follow-ups. |
 | 2026-08-30/31 | The Qwen3 plan preparation completed adversarial review; exact model and tokenizer identities, the two-times dominance rule, and the four-rung checked selector were pinned. |
 | 2026-08-28 | Ed selected Qwen3-1.7B-4bit and Qwen3-8B-4bit; three blind reviewers prompted the pre-data tightening of the paper's pass/fail rule. |
