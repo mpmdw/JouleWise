@@ -12,7 +12,6 @@ import re
 import shutil
 import subprocess
 import tempfile
-import time
 
 
 LOOK = "lm-ctl-01"
@@ -43,22 +42,14 @@ class Images:
         self._attached_to(image)
         self._run("umount", str(self.mount))
         self._run("losetup", "-d", self.loop)
-        self._run("udevadm", "settle", "--timeout=10")
 
     def attach(self, image):
-        for attempt in range(5):
-            try:
-                self._run("losetup", self.loop, str(image))
-                break
-            except subprocess.CalledProcessError:
-                if attempt == 4:
-                    raise
-                time.sleep(0.25)
+        self._run("losetup", self.loop, str(image))
         self._run("mount", "-o", "nosuid,nodev", self.loop, str(self.mount))
 
     @staticmethod
     def _run(*operation):
-        subprocess.run(["sudo", "-n", *operation], check=True, capture_output=True, text=True)
+        subprocess.run(["sudo", "-n", *operation], check=True)
 
 
 def _copy_state(source, target):
@@ -73,13 +64,11 @@ def clone_fresh(world, bench):
     images = Images(world)
     if images.clone.exists():
         raise FileExistsError(images.clone)
-    # Freeze only this disposable ext4 filesystem while copying the image.
-    # Leaving the original mount in place avoids a remount before its run.
-    images._run("fsfreeze", "--freeze", str(images.mount))
+    images.detach(images.normal)
     try:
         shutil.copyfile(images.normal, images.clone)
     finally:
-        images._run("fsfreeze", "--unfreeze", str(images.mount))
+        images.attach(images.normal)
     _copy_state(bench, bench.with_name("clone"))
     return 0
 

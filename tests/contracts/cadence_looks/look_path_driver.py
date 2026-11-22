@@ -22,7 +22,6 @@ sys.path.insert(0, str(ROOT))
 from joulewise.cadence_looks import controls_book as book, controls_manifest as manifest
 from joulewise.cadence_looks import controls_layout
 from joulewise.cadence_looks.custody_pins import SCHEMA as PINS_SCHEMA, span_pins
-from tests.git_fixture import init_git_fixture
 
 
 LOOK = "lm-ctl-01"
@@ -81,6 +80,8 @@ def _source_paths():
 
 
 def install(world, bench, fault, legacy):
+    from tests.git_fixture import init_git_fixture
+
     repo = bench / "checkout"
     repo.mkdir()
     init_git_fixture(repo, "--quiet")
