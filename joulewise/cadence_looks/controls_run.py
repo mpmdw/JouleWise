@@ -231,7 +231,7 @@ def run(operation, root):
 
 def _run_fresh(operation, authority, binding, private, source, instrument, directories, execution):
     from .controls_inputs import apply_disposition
-    from .controls_release import run_controls_worker
+    from .controls_release import NativeRead, run_controls_worker
 
     private_fd, public_fd = directories
     stage_snapshot = None
@@ -260,7 +260,7 @@ def _run_fresh(operation, authority, binding, private, source, instrument, direc
     elif operation == "stage2":
         run_controls_worker(freeze_inputs=freeze_inputs, stage1_bytes=stage_raw, blind=stage.public,
                             execution_host=execution["host"], local_host=socket.gethostname(),
-                            native_inputs=inputs, directories=directories)
+                            first_read=NativeRead(inputs, directories))
 
 
 def main(argv, root):

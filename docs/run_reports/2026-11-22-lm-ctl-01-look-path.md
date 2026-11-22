@@ -104,6 +104,12 @@ it does not replace the registered interim lexer. The extracted input
 reader has only the verified-byte functions that ctl calls. The synthetic
 registrar uses the repository's Git fixture helper. [Frozen checks](https://github.com/mpmdw/JouleWise/actions/runs/45041180148) · [Standard integration checks](https://github.com/mpmdw/JouleWise/actions/runs/45041180095)
 
+The final standard shard identified two additional compatibility checks.
+The native worker now carries its authenticated reader context through the
+existing `first_read` argument. The shared KM003C parser accepts verified
+bytes at its existing validation site, keeping the hazard refusal inventory
+and its exact count intact.
+
 [Draft PR #951](https://github.com/mpmdw/JouleWise/pull/951) · [Initial frozen checks](https://github.com/mpmdw/JouleWise/actions/runs/45039449189)
 
 ## NEEDS_SPEC

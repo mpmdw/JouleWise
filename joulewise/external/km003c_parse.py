@@ -104,7 +104,7 @@ CODES = ("meter.absent", "meter.drops_excess", "meter.duplicates", "meter.clock_
 # Loading and decoding
 
 
-def load(path: str | Path) -> tuple[dict | None, dict | None, list[dict], list[dict]]:
+def load(path: str | Path | None, *, payload: bytes | None = None) -> tuple[dict | None, dict | None, list[dict], list[dict]]:
     """(header, trailer, batches, errors) of one stream file.
 
     A truncated last line (a writer killed mid-line) is ignored.  Any other
@@ -113,11 +113,11 @@ def load(path: str | Path) -> tuple[dict | None, dict | None, list[dict], list[d
     protocol error; the samples it carried show up as dropped samples.
     """
 
-    with open(path) as handle:
-        return _load_text(handle.read())
-
-
-def _load_text(text: str) -> tuple[dict | None, dict | None, list[dict], list[dict]]:
+    if payload is None:
+        with open(path) as handle:
+            text = handle.read()
+    else:
+        text = payload.decode("utf-8")
     header = trailer = None
     batches: list[dict] = []
     errors: list[dict] = []
@@ -363,7 +363,7 @@ def parse(path: str | Path) -> Stream:
 
 def parse_bytes(payload: bytes) -> Stream:
     """Decode the caller's already authenticated immutable stream bytes."""
-    return _parse_loaded(*_load_text(payload.decode("utf-8")))
+    return _parse_loaded(*load(None, payload=payload))
 
 
 def _parse_loaded(header, trailer, batches, errors):

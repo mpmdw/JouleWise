@@ -245,6 +245,14 @@ class LegRead:
     work_bytes: bytes | None
 
 
+@dataclass(frozen=True)
+class NativeRead:
+    """Verified launcher inputs and retained output directory descriptors."""
+
+    inputs: object
+    directories: tuple[int, int]
+
+
 def _verify_member_bytes(payload, expected_digest):
     if expected_digest is None:
         valid = payload is None
@@ -281,13 +289,13 @@ def _bound_positions(expected, received):
     return tuple(positions)
 
 
-def run_controls_worker(*, freeze_inputs, stage1_bytes, blind, execution_host, local_host,
-                        first_read=None, native_inputs=None, directories=None):
+def run_controls_worker(*, freeze_inputs, stage1_bytes, blind, execution_host, local_host, first_read):
     """Run once, with the first reader given the committed stage-1 bindings."""
     from .manifest_dispatch import PRE_READ_REFUSAL
     from .transfer_release import POST_READ_FAILURE, _failure_type
     from .controls_layout import GateRefusal, claim
 
+    native = first_read if type(first_read) is NativeRead else None
     saved_stderr = None
     confined = False
     read_started = False
@@ -302,23 +310,23 @@ def run_controls_worker(*, freeze_inputs, stage1_bytes, blind, execution_host, l
         sys.stderr.flush()
         saved_stderr = os.dup(2)
         with ExitStack() as stack:
-            if native_inputs is None:
+            if native is None:
                 private_parent, publication = stack.enter_context(_registered_directories(freeze.release_layout))
                 restricted = _reserve_at(private_parent, publication)
                 _redirect_at(restricted)
             else:
-                private_parent, publication = directories
+                private_parent, publication = native.directories
                 restricted = claim(private_parent, publication, stage1.public, _redirect_at)
             stack.callback(os.close, restricted)
             confined = True
             read_started = True
-            if native_inputs is None:
+            if native is None:
                 requests = tuple(replace(leg, binding=replace(leg.binding)) for leg in stage1.legs)
                 positions = _bound_positions(stage1.legs, first_read(requests))
             else:
                 from . import controls_reader
 
-                positions = controls_reader.first_read(native_inputs, stage1)
+                positions = controls_reader.first_read(native.inputs, stage1)
             private_bytes = calculate_private(
                 positions, kernel=kernel, pooled=freeze.instrument_pool,
                 instrument_manifest_sha256=freeze.instrument_manifest_sha256,
@@ -334,7 +342,7 @@ def run_controls_worker(*, freeze_inputs, stage1_bytes, blind, execution_host, l
         status = POST_READ_FAILURE if read_started else PRE_READ_REFUSAL
         if read_started:
             notice = f"stage2_error\n{_failure_type(error)}\n"
-        elif native_inputs is None:
+        elif native is None:
             notice = "REFUSE controls look before read\n"
         elif isinstance(error, GateRefusal):
             status, notice = error.status, error.notice
