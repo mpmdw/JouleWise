@@ -14,7 +14,7 @@ from unittest import mock
 
 from scripts import gen_current, run_state_add as add, run_state_items as items
 from tests.git_fixture import clone_git_fixture, init_git_fixture
-from tests.test_run_state_items import EXPIRY, ISSUED, LEGACY, doc, item
+from tests.test_run_state_items import EXPIRY, ISSUED, LEGACY, change, doc, item
 
 
 ISSUED_ISO = "2026-11-18T11:33:20Z"
@@ -122,16 +122,19 @@ class GitTests(unittest.TestCase):
         self.addCleanup(temporary.cleanup)
         self.directory = Path(temporary.name).resolve()
         self.remote, self.a, self.b = (self.directory / name for name in ("remote.git", "a", "b"))
-        self.spool = self.directory / "spool"
+        home = self.directory / "home"
+        home.mkdir()
+        self.spool = home / ".joulewise/run_state_spool"
 
         env = mock.patch.dict(os.environ, {
-            "JW_RUN_STATE_SPOOL": str(self.spool),
+            "HOME": str(home),
             "GIT_CONFIG_GLOBAL": os.devnull, "GIT_CONFIG_NOSYSTEM": "1",
             "GIT_AUTHOR_NAME": "Typed Fixture", "GIT_AUTHOR_EMAIL": "typed@example.invalid",
             "GIT_COMMITTER_NAME": "Typed Fixture", "GIT_COMMITTER_EMAIL": "typed@example.invalid",
         })
         env.start()
         self.addCleanup(env.stop)
+        os.environ.pop("JW_RUN_STATE_SPOOL", None)
         self.remote.mkdir()
         init_git_fixture(self.remote, "--bare", "--initial-branch=main")
         self.assertEqual(self.git(self.remote, "rev-parse", "--is-bare-repository").strip(), "true")
@@ -319,6 +322,107 @@ git rev-parse --verify "$ref" >> fixture-raced-heads
                 self.assertIn("run init first", error)
         self.assertEqual(self.remote_head(), head)
         self.assertEqual(list(self.spool.glob("*.json")), [])
+
+    def test_gemini_4_2_1_pending_item_cannot_be_overtaken(self):
+        first = request(heading="First (spooled)")
+        second = request(heading="Second (direct)")
+        with self.assertRaisesRegex(add.GitFailure, "spooled at"):
+            add.add_git(self.a, first, remote="nonexistent-remote", attempts=1)
+        queued, = self.spool.glob("*.json")
+        with self.assertRaisesRegex(add.GitFailure, "flush-spool"):
+            add.add_git(self.a, second)
+        self.assertEqual(self.remote_head(), self.base)
+        self.assertEqual(list(self.spool.glob("*.json")), [queued])
+
+        code, output, errors = self.call_in(self.a, "flush-spool")
+        self.assertEqual((code, output.strip(), errors), (0, f"25 {self.remote_head()}", ""))
+        self.assertEqual(add.add_git(self.a, second)[0], 26)
+        self.assertEqual(self.git(self.remote, "log", "--format=%s", "-2", "main").splitlines(),
+                         ["RUN_STATE 26: Second (direct)", "RUN_STATE 25: First (spooled)"])
+
+    def test_gemini_4_2_2_spooled_with_file_replays_original_bytes(self):
+        note = self.a / "docs/note.txt"
+        original = b"v1-at-spool-time\n\x00\xff"
+        note.write_bytes(original)
+        note.chmod(0o755)
+        with self.assertRaisesRegex(add.GitFailure, "spooled at"):
+            add.add_git(self.a, request(**{"with": ["docs/note.txt"]}),
+                        remote="nonexistent-remote", attempts=1)
+        later = b"v2-mutated-after-spool\n"
+        note.write_bytes(later)
+        note.chmod(0o644)
+
+        code, output, errors = self.call_in(self.a, "flush-spool")
+        self.assertEqual((code, output.strip(), errors), (0, f"25 {self.remote_head()}", ""))
+        blob = subprocess.run(["git", "-C", str(self.remote), "show", "main:docs/note.txt"],
+                              check=True, capture_output=True).stdout
+        self.assertEqual(blob, original)
+        self.assertTrue(self.git(self.remote, "ls-tree", "main", "docs/note.txt").startswith("100755 "))
+        self.assertEqual(note.read_bytes(), later)
+
+    def test_gemini_4_2_3_stale_set_is_quarantined_and_later_items_land_in_order(self):
+        with self.assertRaisesRegex(add.GitFailure, "spooled at"):
+            add.add_git(self.a, request(sets=[change(23, "CLOSED")]),
+                        remote="nonexistent-remote", attempts=1)
+        queued, = self.spool.glob("*.json")
+        stale = queued.rename(self.spool / "00.json")
+        # A second writer closes the target while this writer is offline.
+        with mock.patch.dict(os.environ, {"JW_RUN_STATE_SPOOL": str(self.directory / "writer-b-spool")}):
+            self.assertEqual(add.add_git(self.b, request(sets=[change(23, "CLOSED")]))[0], 25)
+        # Model the backlog that can already exist when upgrading the writer.
+        for name, heading in (("01.json", "First valid"), ("02.json", "Second valid")):
+            (self.spool / name).write_text(
+                json.dumps(request(heading=heading)), encoding="utf-8")
+        stale_bytes = stale.read_bytes()
+
+        code, output, errors = self.call_in(self.a, "flush-spool")
+        self.assertEqual(code, 2)
+        self.assertEqual([line.split()[0] for line in output.splitlines()], ["26", "27"])
+        self.assertIn("ILLEGAL_TRANSITION", errors)
+        self.assertEqual(list(self.spool.glob("*.json")), [])
+        failed = self.spool / "failed" / stale.name
+        self.assertEqual(failed.read_bytes(), stale_bytes)
+        self.assertIn("ILLEGAL_TRANSITION", failed.with_suffix(".reason").read_text(encoding="utf-8"))
+        self.assertEqual(self.git(self.remote, "log", "--format=%s", "-2", "main").splitlines(),
+                         ["RUN_STATE 27: Second valid", "RUN_STATE 26: First valid"])
+
+    def test_legacy_spool_with_file_is_quarantined_without_snapshot(self):
+        note = self.a / "docs/note.txt"
+        note.write_bytes(b"synthetic attachment")
+        self.spool.mkdir(parents=True)
+        queued = self.spool / "legacy.json"
+        queued.write_text(json.dumps(request(**{"with": ["docs/note.txt"]})), encoding="utf-8")
+        code, output, errors = self.call_in(self.a, "flush-spool")
+        self.assertEqual((code, output), (2, ""))
+        self.assertIn("missing --with snapshot", errors)
+        self.assertEqual(self.remote_head(), self.base)
+        self.assertTrue((self.spool / "failed" / queued.name).is_file())
+
+    def test_spooled_with_file_refuses_git_normalization_of_snapshot(self):
+        self.git(self.a, "config", "core.autocrlf", "true")
+        (self.a / "docs/note.txt").write_bytes(b"synthetic CRLF\r\n")
+        with self.assertRaisesRegex(add.GitFailure, "spooled at"):
+            add.add_git(self.a, request(**{"with": ["docs/note.txt"]}),
+                        remote="nonexistent-remote", attempts=1)
+        queued, = self.spool.glob("*.json")
+
+        code, output, errors = self.call_in(self.a, "flush-spool")
+        self.assertEqual((code, output), (2, ""))
+        self.assertIn("Git staging changed the snapshotted --with bytes", errors)
+        self.assertEqual(self.remote_head(), self.base)
+        self.assertTrue((self.spool / "failed" / queued.name).is_file())
+
+    def test_transient_flush_failure_leaves_queue_pending(self):
+        self.spool.mkdir(parents=True)
+        for name in ("01.json", "02.json"):
+            (self.spool / name).write_text(json.dumps(request(heading=name)), encoding="utf-8")
+        before = {p.name: p.read_bytes() for p in self.spool.glob("*.json")}
+        self.git(self.a, "remote", "set-url", "origin", str(self.directory / "absent.git"))
+        code, output, _ = self.call_in(self.a, "flush-spool")
+        self.assertEqual((code, output), (3, ""))
+        self.assertEqual({p.name: p.read_bytes() for p in self.spool.glob("*.json")}, before)
+        self.assertFalse((self.spool / "failed").exists())
+        self.assertEqual(self.remote_head(), self.base)
 
 
 if __name__ == "__main__":

@@ -4,6 +4,8 @@
 from __future__ import annotations
 
 import argparse
+import base64
+from collections.abc import Mapping
 from contextlib import contextmanager
 import fcntl
 import json
@@ -203,14 +205,19 @@ def _repo_root(path: Path) -> Path:
     return root.resolve()
 
 
+def _with_path(filename: str) -> Path:
+    relative = Path(filename)
+    if (not relative.parts or relative.is_absolute() or ".." in relative.parts
+            or any(part.casefold() == ".git" for part in relative.parts)
+            or relative.as_posix().casefold() in RESERVED):
+        raise ValueError(f"--with must be a separate repository-relative file: {filename!r}")
+    return relative
+
+
 def _source_files(repo: Path, filenames: list[str]) -> dict[Path, Path]:
     sources = {}
     for filename in filenames:
-        relative = Path(filename)
-        if (not relative.parts or relative.is_absolute() or ".." in relative.parts
-                or any(part.casefold() == ".git" for part in relative.parts)
-                or relative.as_posix().casefold() in RESERVED):
-            raise ValueError(f"--with must be a separate repository-relative file: {filename!r}")
+        relative = _with_path(filename)
         source = repo / relative
         if source.resolve() != source or not source.is_file():
             raise ValueError(f"--with must be a regular file without symlinks: {filename!r}")
@@ -264,18 +271,30 @@ def _push(repo: Path, remote: str, ref: str, base: str) -> bool:
     raise GitFailure("git push did not confirm the requested destination")
 
 
-def _commit(path: Path, number: int, request: dict, sources: dict[Path, Path]) -> str:
+def _commit(path: Path, number: int, request: dict,
+            sources: Mapping[Path, Path | tuple[bytes, int]]) -> str:
     for relative, source in sources.items():
         target = path / relative
         if target.resolve() != target or (target.exists() and not target.is_file()):
             raise ValueError(f"--with requires a regular checkout path without symlinks: {relative}")
         target.parent.mkdir(parents=True, exist_ok=True)
-        shutil.copy2(source, target)
+        if isinstance(source, Path):
+            shutil.copy2(source, target)
+        else:
+            data, mode = source
+            target.write_bytes(data)
+            target.chmod(mode)
     allowed = {str(p) for p in (RUN_STATE, CURRENT, *sources)}
     _git(path, "--literal-pathspecs", "add", "--", *sorted(allowed))
     staged = set(_git(path, "diff", "--cached", "--name-only", "-z").strip("\0").split("\0"))
     if str(RUN_STATE) not in staged or staged - allowed:
         raise GitFailure("git staged an unexpected set of paths")
+    for relative, source in sources.items():
+        if isinstance(source, Path):
+            continue
+        blob = _git(path, "hash-object", "--no-filters", "--", str(relative)).strip()
+        if _git(path, "rev-parse", "--verify", f":{relative}").strip() != blob:
+            raise ValueError(f"Git staging changed the snapshotted --with bytes for {relative}")
     label = (request["message"] or request["heading"]).replace("{{self}}", str(number))
     subject = f"RUN_STATE {number}: {label}"[:100].rstrip()
     message = ["-m", subject]
@@ -300,10 +319,11 @@ def _remove_ref(repo: Path, private_ref: str) -> None:
         raise GitFailure("git left a private fetch ref behind")
 
 
-def _land(repo: Path, request: dict, remote: str, branch: str, attempts: int) -> tuple[int, str]:
+def _land(repo: Path, request: dict, remote: str, branch: str, attempts: int, *,
+          snapshots: dict[Path, tuple[bytes, int]] | None = None) -> tuple[int, str]:
     header = _request_header(request)
     repo = _repo_root(repo)
-    sources = _source_files(repo, request["with"])
+    sources = _source_files(repo, request["with"]) if snapshots is None else snapshots
     ref = f"refs/heads/{branch}"
     if _git(repo, "check-ref-format", "--normalize", ref).rstrip("\n") != ref:
         raise ValueError(f"invalid target branch: {branch!r}")
@@ -352,10 +372,12 @@ def _locked(spool: Path):
         yield
 
 
-def _spool(spool: Path, request: dict) -> Path:
-    target = spool / f"{time.time_ns():020d}-{uuid.uuid4().hex}.json"
-    data = (json.dumps(request, ensure_ascii=False, allow_nan=False) + "\n").encode("utf-8")
-    with tempfile.NamedTemporaryFile(dir=spool, prefix=".request.", delete=False) as stream:
+def _pending(spool: Path):
+    return (path for path in spool.iterdir() if path.name.endswith(".json"))
+
+
+def _write_spool_file(target: Path, data: bytes) -> None:
+    with tempfile.NamedTemporaryFile(dir=target.parent, prefix=".request.", delete=False) as stream:
         temporary = Path(stream.name)
         try:
             stream.write(data)
@@ -363,7 +385,53 @@ def _spool(spool: Path, request: dict) -> Path:
             os.replace(temporary, target)
         finally:
             temporary.unlink(missing_ok=True)
+
+
+def _spool(spool: Path, request: dict, repo: Path) -> Path:
+    if request["with"]:
+        snapshots = {}
+        for relative, source in _source_files(_repo_root(repo), request["with"]).items():
+            with source.open("rb") as stream:
+                snapshots[relative.as_posix()] = {
+                    "mode": stat.S_IMODE(os.fstat(stream.fileno()).st_mode),
+                    "data": base64.b64encode(stream.read()).decode("ascii"),
+                }
+        request = {**request, "with_snapshot": snapshots}
+    target = spool / f"{time.time_ns():020d}-{uuid.uuid4().hex}.json"
+    data = (json.dumps(request, ensure_ascii=False, allow_nan=False) + "\n").encode("utf-8")
+    _write_spool_file(target, data)
     return target
+
+
+def _spooled_files(request: dict) -> dict[Path, tuple[bytes, int]]:
+    relatives = dict.fromkeys(_with_path(filename) for filename in request["with"])
+    snapshots = request.get("with_snapshot")
+    if snapshots is None:
+        if relatives:
+            raise ValueError("missing --with snapshot for queued request")
+        return {}
+    if not isinstance(snapshots, dict) or snapshots.keys() != {path.as_posix() for path in relatives}:
+        raise ValueError("--with snapshot paths must match the queued attachments")
+    sources = {}
+    for relative in relatives:
+        snapshot = snapshots[relative.as_posix()]
+        if not isinstance(snapshot, dict) or snapshot.keys() != {"mode", "data"}:
+            raise ValueError(f"invalid --with snapshot for {relative}")
+        mode, data = snapshot["mode"], snapshot["data"]
+        if type(mode) is not int or not 0 <= mode <= 0o7777 or not isinstance(data, str):
+            raise ValueError(f"invalid --with snapshot for {relative}")
+        sources[relative] = base64.b64decode(data, validate=True), mode
+    return sources
+
+
+def _quarantine(path: Path, error: ValueError) -> None:
+    failed = path.parent / "failed"
+    failed.mkdir(mode=0o700, exist_ok=True)
+    target = failed / path.name
+    # Leave the request pending if its reason cannot be recorded.
+    _write_spool_file(target.with_suffix(".reason"), f"{error}\n".encode("utf-8"))
+    os.replace(path, target)
+    print(f"run_state_add: quarantined {target}: {error}", file=sys.stderr)
 
 
 def _error_text(error: Exception) -> str:
@@ -375,18 +443,21 @@ def _error_text(error: Exception) -> str:
 def add_git(repo: Path, request: dict, *, remote="origin", branch="main", attempts=5) -> tuple[int, str]:
     spool = _spool_dir()
     with _locked(spool):
+        if any(_pending(spool)):
+            raise GitFailure(f"pending requests in {spool}; run python3 scripts/run_state_add.py flush-spool "
+                             "before retrying this add")
         try:
             return _land(repo, request, remote, branch, attempts)
         except (GitFailure, subprocess.CalledProcessError, OSError) as error:
-            target = _spool(spool, request)
+            target = _spool(spool, request, repo)
             failure = RetriesExhausted if isinstance(error, RetriesExhausted) else GitFailure
             raise failure(f"{_error_text(error)}; spooled at {target}") from error
 
 
-def _flush(repo: Path) -> None:
+def _flush(repo: Path) -> int:
     spool = _spool_dir()
     with _locked(spool):
-        queue = sorted(spool.glob("*.json"))
+        queue = sorted(_pending(spool))
         if not queue:
             repo = _repo_root(repo)
             private_ref = f"refs/joulewise/run-state-add/{uuid.uuid4().hex}"
@@ -396,11 +467,19 @@ def _flush(repo: Path) -> None:
                     raise ValueError("run init first")
             finally:
                 _remove_ref(repo, private_ref)
+        quarantined = False
         for path in queue:
-            request = json.loads(path.read_text(encoding="utf-8"))
-            number, head = _land(repo, request, "origin", "main", 5)
+            try:
+                request = json.loads(path.read_text(encoding="utf-8"))
+                number, head = _land(repo, request, "origin", "main", 5,
+                                     snapshots=_spooled_files(request))
+            except ValueError as error:
+                _quarantine(path, error)
+                quarantined = True
+                continue
             path.unlink()
             print(number, head)
+        return 2 if quarantined else 0
 
 
 def _iso(value: str, name: str) -> int:
@@ -451,7 +530,7 @@ def main(argv=None) -> int:
     args = parser.parse_args(argv)
     try:
         if args.command == "flush-spool":
-            _flush(Path.cwd())
+            return _flush(Path.cwd())
         else:
             if args.no_git != bool(args.run_state and args.current) or (
                     (args.run_state is None) != (args.current is None)):
