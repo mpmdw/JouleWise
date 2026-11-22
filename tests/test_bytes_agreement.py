@@ -133,6 +133,9 @@ CAMPAIGNS = {
     "no_point_labels": ("bytes", 1100, label_defects(range(4, 10)), LABEL_KNOBS, ("bytes-s5-p1",)),
     # Audit round 1: the same refusals, with the assisted repeats among the invalid records.
     "no_point_labels_invalid_assist": ("bytes", 1100, label_defects(range(6)), LABEL_KNOBS, ("bytes-s5-p1",)),
+    "no_point_labels_survivor": ("bytes", 1100, label_defects(range(4, 10)) + [
+        (1, "Qwen3-14B-4bit", i, "member.target_phase_precheck_failed") for i in range(6)
+    ], LABEL_KNOBS, ("bytes-s5-p1",)),
     "invalid_anchor": ("bytes", 1100, ANCHOR_DEFECTS, NR1_KNOBS, ()),
     "marker_incomplete": ("bytes", 1100, [], {**NR1_KNOBS, "battery_assist": True,
                            "truncate_marker_window": True}, ()),
@@ -2154,6 +2157,43 @@ class AgreementTests(unittest.TestCase):
             for row in flag_rows:
                 self.assertIn("battery.assist", row["a"])
                 self.assertNotIn("bytes.decode_battery_assist", row["a"])
+
+    def test_no_point_labels_survivor_campaign(self):
+        name = "no_point_labels_survivor"
+        recorder = campaign(name)
+        counts = recorder.counts()
+        self.assertEqual(counts["above_bar"], 0)
+        print(f"\nagreement {name}: compared {counts['compared']}, equal {counts['equal']}, "
+              f"under the bar {counts['under_bar']}, above the bar {counts['above_bar']}")
+        exits = {r["key"]: (r["a"], r["t"]) for r in recorder.rows if r["group"] == "exit"}
+        self.assertEqual(exits["heldout/stage2"], (0, 0))
+        rows = {(r["group"], r["key"]): (r["a"], r["t"]) for r in recorder.rows if r["stage"] == "heldout"}
+        code = "member.target_phase_precheck_failed"
+
+        for boundary in ("rails", "dc_input", "rest"):
+            with self.subTest(boundary=boundary):
+                suffix = f"/{boundary}/gross"
+                refused = "cell/qwen3-14b-4bit/pass1" + suffix
+                survivor = "point/qwen3-14b-4bit/mean" + suffix
+                answer = f"moe/{boundary}/passes_mean"
+                self.assertEqual(rows[(refused, "status")], ("unavailable", "unavailable"))
+                self.assertEqual(rows[(survivor, "pass_label")], ("one_pass", "one_pass"))
+                self.assertEqual(rows[(answer, "answer")], ("missing", "missing"))
+
+                point_status = {group.split("/")[1]: statuses
+                                for (group, key), statuses in rows.items()
+                                if key == "status" and group.startswith("point/") and group.endswith(suffix)}
+                pass_flags = [(group.split("/")[1], flags) for (group, key), flags in rows.items()
+                              if key == "flags" and group.startswith("cell/") and group.endswith(suffix)]
+                # RL-201b: derive the expected row independently for each implementation.
+                for side, implementation in enumerate(("analysis", "twin")):
+                    with self.subTest(implementation=implementation):
+                        self.assertIn(code, rows[(refused, "flags")][side])
+                        expected = sorted({flag for model, flags in pass_flags
+                                           if point_status[model][side] != "computed" for flag in flags[side]})
+                        answer_flags = rows[(answer, "flags")][side]
+                        self.assertEqual(answer_flags, expected)
+                        self.assertNotIn(code, answer_flags)
 
     def test_time_world(self):
         self.check("time", 63, {"h2/rails/passes_mean": (9, 9), "h2/dc_input/passes_mean": (9, 9),

@@ -964,6 +964,7 @@
     "model_estimates.json/[]/passes/[]/session_id",
     "model_estimates.json/[]/passes/[]/status",
     "model_estimates.json/[]/passes/[]/tier",
+    "model_estimates.json/[]/passes/[]/unavailable_runs",
     "model_estimates.json/[]/passes/[]/unavailable_runs/[]",
     "model_estimates.json/[]/passes/[]/upper_j",
     "model_estimates.json/[]/passes/[]/with_assisted_label",
@@ -1987,6 +1988,7 @@
         "blinded_pass_estimates.json/[]/unavailable_runs/[]",
         "fit_pass_estimates.json/[]/unavailable_runs/[]",
         "heldout_pass_estimates.json/[]/reason",
+        "heldout_pass_estimates.json/[]/unavailable_runs",
         "heldout_pass_estimates.json/[]/unavailable_runs/[]",
         "predictions.json/fit_points/[]/passes/[]/unavailable_runs/[]"
       ]
@@ -2093,6 +2095,7 @@
     "withheld",
     "no_point_labels",
     "no_point_labels_invalid_assist",
+    "no_point_labels_survivor",
     "invalid_anchor",
     "marker_incomplete",
     "late_start",
