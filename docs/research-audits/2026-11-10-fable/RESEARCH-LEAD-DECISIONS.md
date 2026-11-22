@@ -25407,3 +25407,58 @@ Research lead (Fable 5.2), Sun Nov 22 07:03:21 PST 2026 (from `date`). Amends RL
 - Whether the rails' own mapping carries a nonzero `uncertainty_ns` today (I saw `sampler.py:142` set one; I did not trace it).
 
 **Blind status.** Blind. Read: RL-201a (format), RL-202, the lane's two FINAL-MESSAGE files and the builder's run report (synthetic 10 W plateau only), and source: `attribution.py`, `rl176.py` and `rl176_phases.py` at `82542232d`, and a search of `controls_analysis.py` and the ctl schemas at `08279e20e`. No custody, energy, power, meter, transcript, slot, hazard, sealed or restricted file was opened. No commit, push, comment, run, SSH or fetch. The only file written is this one.
+
+# RL-197c. Route (1) is admitted: one pin-B kit 15/16 span launched with `--span-id` and no ledger, then the shared ledger's first row written once by a small reviewed script that adds no proof logic of its own. The ctl pin, the issued kit and every RL-197 gate are unchanged. RL-197b §2 gains one paragraph
+
+Research lead (Fable 5.2), Sun Nov 22 09:26:21 PST 2026 (from `date`). Adds one paragraph to RL-197b §2. Answers the issue-path lane's NEEDS_SPEC "authority for the first row" (run report `2026-11-22-ctl01-issue-path.md`, "Attempt-ledger bootstrap after RUN_STATE 542") on the facts of RUN_STATE 542.
+
+## 1. Ruling
+
+**Route (1), with a script.** Route (2) changes the ctl launcher, which sends the pin back through RL-197b §1(a) to (c) and re-binds the kit. Route (1) costs one stability leg that the campaign wants anyway.
+
+**Why a first row may be written at all.** The row proves nothing by itself. It is a pointer: an attempt ID, a receipt path, a sequence number. Every launch that reads it re-derives the close from the receipt with audited code (`proven_close` at `f45e22e4e`: the receipt's `span_id`, the restore readback, each feed's stop proof, a fresh process-group census, the exact close time). The one thing the code cannot see is that this attempt is the last armed span on the host. RL-197b §2 already makes that a typed statement in the issue item, and it stays one.
+
+**Why a script and not a hand-written file.** A typed file can be wrong in ways nobody sees until launch: a relative path, a ledger written over an existing one, a write during a live desk fence. The script removes those and takes its proof from the pinned launcher instead of from the writer's judgment.
+
+**RL-197b §2 gains:**
+
+> **First row.** RL-197b §2's "no ledger row is written to make a refusal pass" does not bar creating the ledger where none exists. The shared attempt ledger is created once, with one row, by the reviewed initializer of RL-197c §2, from a pin-B span that was launched with `--span-id` equal to its typed attempt ID and without `--attempt-ledger`. After that the ledger changes only by a launcher's own append. It is never re-initialized, deleted or edited by hand. A ledger in a state the launchers refuse comes to the research lead.
+
+Nothing else in RL-197, RL-197a, RL-197b, RL-198 or RL-200 changes. The pin stays `f45e22e4efa6b48dd05f099f39eb62246e324177` (tag `pin/cl-ctl-01-runner`). The issued kit digest stays. RL-197 §1 step 5 ("ledger, close proof") is met by this route.
+
+## 2. The initializer (builder; one reviewed PR)
+
+One new script (suggested `scripts/init_attempt_ledger.py`) and its synthetic test. Aim for well under 100 lines. The diff touches no file in any kit's frozen paths and no existing script, so no pin moves and RL-197b §1(a) to (c) is not re-entered. It runs from its own clean checkout, named by full commit in the issue item, never from the pin A, pin B or ctl checkouts.
+
+**Arguments:** ledger path, custody root, `--span-id`, absolute `--close-receipt`, `--receipt-sha256`, `--close-ns`, ctl checkout, python binary, RUN_STATE item number.
+
+**Behaviour, all under the launchers' own desk lock (`<custody-root>/.desk-fence.lock`, exclusive flock):**
+
+1. Refuse if the ledger path exists, if an active desk fence exists, if the ctl checkout's HEAD is not the pin, or if the receipt's sha256 differs from the argument.
+2. Write `{"attempts": [{"span_id": ..., "close_receipt": ..., "sequence": 1}]}` to a temporary file in the ledger's directory. No other keys.
+3. Run the pinned ctl `launch_cadence_span.py close-proof --attempt-ledger <temp>` as a subprocess, with the magistrate's attestation environment passed through. Require its three output lines to equal `--span-id`, `--close-ns` and `--close-receipt` exactly.
+4. Publish with a hard link to the ledger path (fails if the path exists), fsync the directory, remove the temporary file.
+5. Write a sidecar `<ledger>.first-row.json`: this ruling's ID, the item number, attempt ID, receipt path, receipt sha256, close ns, the close-proof output, the ledger's sha256 and the initializer's commit. Print the ledger sha256.
+6. On any refusal or failure: remove the temporary file, leave no ledger and no sidecar, exit non-zero.
+
+The script does not parse the receipt for proof. Step 3 is the proof.
+
+**Synthetic tests (fixtures only):** existing ledger refuses; active fence refuses; sha256, attempt ID and close-ns mismatches each refuse and leave nothing; a failing close-proof leaves nothing; success yields a ledger that both the pin-B and the ctl `close-proof` accept with bytes unchanged; a second run refuses.
+
+**Review:** one executing independent top-tier review (Astra) of the diff, and a green suite on its tree. The merger confirms `git diff f45e22e4e -- scripts/` shows the new script and its test only. That is the whole gate.
+
+## 3. What the magistrate and lead execute
+
+1. **From now on every pin-B launch passes `--span-id` equal to its typed attempt ID.** It costs nothing and makes any pin-B close usable as the predecessor. It may start before the initializer merges.
+2. **Inaugural span.** The lead issues the shortest eligible kit 15 or 16 queue entry on pin B `6e9d42f1d`, as an ordinary counted stability span, with `--span-id` and no `--attempt-ledger` (the lane's first command template). Its legs are judged by their own rules. Rank it directly ahead of the ctl pilot. This ruling is the authority for arming it without a ledger; that holds for this one purpose only.
+3. **Close and attest.** The magistrate does the ordinary close, then the four checks of **Shared Start and check** (host restore, feeds stopped, groups absent, foreign processes absent), and only then sets the attestation environment for that receipt.
+4. **Initialize.** The magistrate runs the initializer once. Its typed issue item (lead) binds: the inaugural span's dispatch item and attempt ID, the absolute receipt path, the receipt's full sha256, the close in ns, the initializer's full commit, and the statement that this attempt is the last armed span on the host. The magistrate records the ledger sha256 and the sidecar path in RUN_STATE.
+5. **Pilot.** The lead issues the pilot as drafted, with the predecessor's attempt ID, receipt sha256 and the ledger sha256 from step 4. The ctl launcher re-proves the close under the lock and appends the pilot as sequence 2. Span 2 follows RL-197 steps 6 and 7 and appends as sequence 3.
+6. **Nothing unledgered is armed** between the inaugural close and the pilot launch, or between the pilot close and span 2. A ledger-backed pin-B span in either gap is allowed and becomes the predecessor. If a pin-A span runs after the inaugural close and before step 4, do not initialize from that close: run a fresh pin-B span and use it.
+7. **Holds that come to me:** the ctl `close-proof` refusing the inaugural pin-B receipt for any reason other than a real fault at that close; an attempt appended with no receipt (the lane's round-4 case); any wish to use the ledger after ctl-01 span 2 once an unledgered pin-A span has run.
+
+**Not checked.** That a real pin-B production receipt passes the ctl pin's stricter `verify_shutdown`. By code reading it should: the feed classes and `powermode.restore_automatic` are the same files at both pins (only four scripts differ), and they write `proven_stopped`, `exit_code` and `observed`. A span that closes with `no_power_read` or `foreign_marker_left` will be refused, correctly. No real receipt was opened, so step 3 of the initializer is the first real test; a refusal there spends nothing and comes back under item 7. Also not checked: which kit 15/16 queue entry is eligible and shortest (the lead's), the lane's command templates as shell, and RUN_STATE 542's facts beyond reading the item. I ran no code.
+
+**Blind status.** Blind. Read: RL-201a (format), RL-197b whole; the lane's run report from the admission draft to the end; the "Item 541 answers" bullet of RUN_STATE on `origin/main` as the worktree holds it; `scripts/launch_cadence_span.py` at `f45e22e4e` (ledger, `verify_shutdown`, `proven_close`, `append_attempt`, lock, `close-proof`), `fence_lock` in `scripts/launch_align_r0.py`, the stop and restore record shapes in `scripts/cadence_legs_runner.py` and `scripts/run_align_r1_smoke.py` at `6e9d42f1d` and `f45e22e4e`, `restore_automatic` in `joulewise/align/apple/powermode.py`, and the file list of the diff between the two pins. No custody, energy, power, meter, transcript, slot, hazard, sealed or restricted file was opened, and no real receipt or ledger. No commit, push, comment, run, SSH or fetch. The only file written is this one.
+
+**For Ed, plainly.** The positive control needs a "last run" record that does not exist yet. We create it once, with a tiny reviewed script, right after one ordinary stability leg; the control's code and kit do not change, and the pilot can follow that leg directly.
