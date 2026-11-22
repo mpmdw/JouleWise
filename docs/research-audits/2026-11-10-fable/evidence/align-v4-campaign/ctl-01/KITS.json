@@ -6,8 +6,8 @@
     {
       "kit_id": "cl-ctl-01",
       "path": "docs/research-audits/2026-11-10-fable/evidence/align-v4-campaign/ctl-01/kits/cl-ctl-01.draft.json",
-      "runner_pin": "5766e346ccf233c6c49bc4b6cb3d9e665e1e636f",
-      "sha256": "bd2c315268854ef4b937b9578f02629211235abebccccb3b75f1fa537493595d"
+      "runner_pin": "fae29cf50016205602ec3eee3cafbf67b2205320",
+      "sha256": "324e4c3abec0cd182b0482acdc4eab4a7068346c07aa95a5e49f63de18a321e8"
     }
   ]
 }
