@@ -25136,3 +25136,54 @@ RL-7 (e) as made exact by RL-201 §5.1: the stage-2 release record is pushed by 
 **Not checked.** That the survivor case behaves as audit 2 reports (I ran nothing). That a campaign exercises a no-point dense model together with a no-point MoE model. Test 3's equality assertion covers it if one does. That no paper text in RL-201 §2 beyond the lines I searched quotes sentence (4).
 
 **Blind status.** Blind. Read: RL-201a (format), RL-92 and the RL-201 lines on BY-LABEL-1 and the 3 December date from the audit branch as present locally (`dcee7e3cd`, no fetch), registration §§7, 8, 11 to 13 and 15 at `d7098081d`, the lane's build, audit and resolve reports, and source and synthetic tests at `54709c97a` (`joulewise/bytes_analysis.py`, `scripts/bytes_twin.py`, `tests/test_bytes_agreement.py`, the deviation-log row, audit 2's synthetic regression). A section search of the registration printed lines of §5's published contention table; no outcome value. No custody, energy, withheld, key or prediction file was opened. No commit, push, comment, run, SSH or fetch. The only file written is this one.
+
+# RL-197b. Yes: ctl-01 may run from a reviewed commit on the kit-v1.1 line instead of main, on pin B's terms. "On main" in RL-197 §1 was my shorthand for "reviewed and merged", not a research requirement. The predecessor check may use RL-200a's match as a rule, but the launcher at `043b972f9` does not implement it, so the route with no new code is a predecessor whose receipt carries `span_id`
+
+Research lead (Fable 5.2), Sun Nov 22 05:25:55 PST 2026 (from `date`). Amends RL-197's heading clause and §1 steps 1 and 5. Extends RL-200a §2 to one further use. Answers the issue-path lane's fast-route question (PR #943 at `05db3c0ee`, run report from line 159).
+
+## 1. Off-main pin: admitted
+
+**Why main is not required.** What protects the measurement is that the executed bytes are reviewed, fixed and named: an executing independent audit, a green full suite on that tree, a full commit in the kit, and the launcher's own check of checkout root, HEAD and working-tree digests. Which branch holds the commit adds nothing to any of those. RL-197 wrote "on main" without my having opened a PR (its own "Not checked" says so). Pin B (`6e9d42f1d`, RUN_STATE 434, 463) already runs kits 15 and 16 on exactly these terms. ctl-01 is conditionless, outside the series and reads no campaign energy, so it has less reason than pin B to need main.
+
+**RL-197's heading clause now reads:** "...and the kit may be issued as soon as the runner is at an admitted pin and the cold seat passes."
+
+**RL-197 §1 step 1 now reads:**
+
+> 1. Runner #808, its failed-envelope fix #900 and the launch guard #946 merged, in that order, into their reviewed base line `align/2026-11-14-kit-v1-1` or into main, and the resulting merge commit admitted as the ctl-01 pin by a RUN_STATE item that names it by full commit. Admission needs all of: (a) the executing independent top-tier audit of the runner (RL-174 B.4 as amended by RL-186 §2.6) clean on the final #946 head; (b) the pin's tree hash equal to that audited head's tree hash, or the difference reviewed and run; (c) a green full uncached suite and the full synthetic launch-to-close run (RL-179 F-11) on that tree; (d) the pin held by a ref that is never force-moved or deleted. No research rule puts #808 after #795 or asks for main.
+
+**Step 5 now reads:**
+
+> 5. Issue: the kit pinned to step 1's commit by full SHA, ledger, close proof, a rank on the standing ladder. Waits on 1 and 4. The cold seat of step 4 passes the kit as re-pinned, by its final sha256.
+
+Every other step, review and gate of RL-197 (as amended by RL-198) is unchanged.
+
+## 2. The predecessor's `span_id`
+
+**What the check is for.** `proven_close` (`scripts/launch_cadence_span.py:233-258` at `043b972f9`) requires the latest ledger attempt's receipt to carry that attempt's `span_id`. That binds the receipt file to the attempt, so the restore, the stop proofs and the close time that bounds ctl-01's t0 come from the span that really ran last. Pin A's runner has no `span_id` and no ledger at all; pin B writes `span_id` when the launch passes `--span-id`.
+
+**Ruled. RL-200a §2 gains:**
+
+> **Use by the ctl-01 launcher.** For the predecessor close check of a ctl-01 launch, a receipt with no `span_id` may be bound to the latest ledger attempt by this section's seven-row match, with the attempt's `span_id` equal to the issued item's attempt ID and row 7 (the receipt's full sha256) mandatory. The match is made by reviewed launcher code that reads typed fields and refuses on any absent field, failed row or second candidate. A receipt whose `span_id` is present and different still refuses. No receipt is edited, no ledger row is written to make a refusal pass, and no check is skipped by hand.
+
+**What that means today.** The launcher at `043b972f9` refuses an absent `span_id`, and this ruling does not change code. Two routes, the lead's choice on wall time:
+
+- **(a) No new code, preferred.** The span that closes immediately before the ctl-01 pilot is one whose receipt carries `span_id`: a pin B span (kit 15 or 16) launched with `--span-id` equal to its attempt ID, as the typed dispatch rule on main already allows. Its legs are judged by their own rules and are not changed by what follows them.
+- **(b) Code.** Implement the paragraph above on #946. That is an executable change to the launcher, so it re-enters step 1(a) to (c) before the pin is cut.
+
+**For either route:** the ledger's latest attempt must be the last armed span on the host. Nothing unledgered runs between the predecessor's close and the ctl-01 launch, and the same holds between the pilot's close and span 2 (a pin A span in that gap would leave the ledger pointing at a stale close). The typed issue item names the predecessor's attempt ID, its receipt sha256 and the ledger's sha256.
+
+## 3. What else the fast route must satisfy
+
+1. **#946 is not admissible while a shard is red.** The fixture repair must be test-only. If it touches an executed path, the audit of 1(a) sees the change.
+2. **Existing pins do not move.** Kits 01 to 14 stay on `2d347f721`, kits 15 and 16 and `cl-qual-01..03` on `6e9d42f1d`, each by full commit. After the merges, re-run the validators on the three qualification kits and both queues at the new line head and record the result with the admission.
+3. **The kit carries RL-197 §2's values unchanged** (128/256/512, 600 s, 60 s, 2,000; 3 + 9; seed `2026111601`). Re-pinning changes the frozen commit and the hashes only. The cold seat confirms this on the final bytes.
+4. **The pilot is the pin's first native run.** No separate smoke is asked for. RL-197 steps 6 and 7 stand: automatic desk PASS, then the independent hand-read with §3.6's four checks, before span 2 is issued. A launch refused before any leg starts spends no leg.
+5. **A clean detached checkout at the pin, separate from the pin A and pin B checkouts.** The recorded-t0 guards and the ruled free t0 (RL-186 §2.5) apply as built.
+6. **Main is owed, not gating.** The stack reaches main through ordinary integration afterwards. The `lm-ctl-01` manifest (step 12) cites the runner by the admitted pin's full commit, wherever main stands.
+7. **Rank.** RL-200 §3 stands: ctl-01 goes ahead of rank-4 stability once admitted and ready.
+
+**Not checked.** The state, heads and CI of #808, #900 and #946, and the lane's validator runs: taken from its report. Whether an attempt ledger exists on the MBP, how its first row was written, and whether a pin B ledger-backed launch accepts a ledger whose latest row is a ctl row. Whether today's pin B launches pass `--span-id`. RL-144, RL-149, RL-174, RL-179, RL-183 and RL-186 were not reopened; I rely on the lane's cites and on RL-197's own. I ran no code.
+
+**Blind status.** Blind. Read: RL-201a (format), RL-197 (heading to §1), RL-197a (head), RL-200a whole; the lane's FINAL-MESSAGE and run report lines 150 to the end; `scripts/launch_cadence_span.py` (ledger, `proven_close`, launch conditions) at `6e9d42f1d` and `043b972f9`, and a search for `span_id` at `2d347f721`; the heading of RUN_STATE 539 and the typed dispatch-field section on `origin/main` as the worktree holds it. No custody, energy, power, meter, transcript, slot, hazard, sealed or restricted file was opened, and no real receipt or ledger. No commit, push, comment, run, SSH or fetch. The only file written is this one.
+
+**For Ed, plainly.** Yes, the positive control can run from the reviewed side branch without the big merge into main; it still needs PR #946 green and audited, and the span right before it must be one whose receipt names itself (a kit 15 or 16 span), or a small reviewed launcher change.
