@@ -1,0 +1,32 @@
+name: gen-current-py314
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.github/workflows/gen-current-py314.yml'
+      - 'scripts/gen_current.py'
+      - 'scripts/run_state_items.py'
+      - 'tests/test_gen_current.py'
+      - 'tests/test_run_state_items.py'
+  pull_request:
+    paths:
+      - '.github/workflows/gen-current-py314.yml'
+      - 'scripts/gen_current.py'
+      - 'scripts/run_state_items.py'
+      - 'tests/test_gen_current.py'
+      - 'tests/test_run_state_items.py'
+
+permissions:
+  contents: read
+
+jobs:
+  pointer-timestamps:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.14'
+      - run: python -B -m unittest tests.test_gen_current.RenderTests
