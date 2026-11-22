@@ -1052,6 +1052,106 @@ Fable F3 (`Custody.step_ok` has no caller) is carried as an open issue. Delta re
 
 <!-- RUN_STATE TYPED ITEMS: newest first. Add with scripts/run_state_add.py; never edit by hand. -->
 
+536. **Lead: stability fillers run up to THREE legs per soak from the next eligible launch (RL-200 §3-4, RL-200a; PR #947 at 8f3366c75): longest of 3/2/1 that passes; leg 1 cold, later warm; typed dispatch fields; receipt sha256 in Check**
+
+```item
+{"expires_epoch_s": null, "issued_epoch_s": 1795339525, "number": 536, "owner": "magistrate", "schema": "joulewise.run_state_item.v1", "sets": [], "status": "ISSUED", "supersedes": []}
+```
+
+- **Admitted:** PR #947 merged to the audit branch at `8f3366c75a00d5c806b882f97a7b90ea880adffe` (Astra audit MERGE; CI 20/20): 336 W2 and 777 W3 multi-leg queues, byte-exact regeneration, every queue admitted by both pinned planners, one-leg queues unchanged. Rulings: RL-200 §3-4 and RL-200a (audit branch). Full instructions and timing tables: `docs/run_reports/2026-11-22-stab-multileg-spans.md` on that commit.
+- **Selection reason (RL-200 register clause 6):** every dispatch item states, in one line, which clock or queue fact set the chosen length (e.g. "3: all start checks pass", "2: three would overlap 02:00-02:35 under the alternate ARG", "1: READY record in hand").
+
+- At the first stability rung of each local date, take the cold leg of the
+  lowest-numbered base kit (01–14) with an unrun position. Its span may
+  have two further legs, which are warm and count as rank 4. Preserve the
+  existing higher rungs. A ready, admitted finite registered product,
+  including ctl-01 or W1 native smoke, ranks above rank-4 stability.
+- In the eligible kit, start at the next unrun position in kit order.
+  Try three consecutive unrun legs, then two, then one. Use the longest
+  whose actual-t0 plan and close pass the dated-block check and all other
+  start checks. Limit stability to one leg while a READY record or a
+  pre-notice is in hand. A leg that started is spent. A leg whose span
+  refused before it started stays unrun, and a span may not include a
+  spent position or skip an intervening position.
+- Use `fillers-w2/` for kits 01–16 through the queue expiry
+  `2026-12-08T12:35:29-08:00`. For successor kits 17–53, use
+  `fillers-w3/` from local 2026-11-26 through
+  `2026-12-15T12:35:29-08:00`, after the applicable predecessor is
+  exhausted. Pin A serves 01–14 and 17–48. Pin B serves 15–16 and 49–53.
+  Keep item 464's pin-B fallback for 15–16 and the successor admission gates.
+  For two or three legs use
+  `queues-Nleg/<kit>-<lowercase-leg-id>-<lowercase-leg-id>[-<lowercase-leg-id>].json`,
+  with all the selected legs in order and `N` replaced by 2 or 3.
+  For one leg use W2 `queues-1leg/<kit>.json` at the selected `seq`,
+  or W3 `queues-1leg/<kit>-<lowercase-leg-id>.json`. Match each queue
+  digest to the week's README and check kit digest, pin, dates, and roster.
+  Use PR #858 and item 447's validation and issue procedure for the
+  selected single-span queue.
+- On pin A try ARG `02:00-02:35` and then `13:14-13:15` under item 463
+  for each candidate length. With the alternate ARG, every pin-A multi-leg
+  candidate must clear the physical batch for leg starts. If its actual
+  `[t0, fence_end)` overlaps 02:00–02:35, cede to the next shorter
+  candidate. On pin B omit ARG. On both pins the soak must also clear the
+  band under item 507. Replan at actual t0. If the issued roster or ARG
+  no longer fits, cede the attempt and issue the newly selected one with
+  its own typed fields before launch.
+- Name the legs and add the line “RL-200 §2: leg 1 cold, legs 2 to N warm;
+  `lm-stab-01` reads cold base legs only.” Report each leg's disposition
+  on its own line in Check. Stage 1 takes the index from the receipt's
+  ordered `roster`, even if an earlier leg failed to qualify. Require the
+  `legs` rows to be a same-order prefix of `roster`. A leg with no row
+  stays unrun.
+
+### Typed fields in each actual dispatch item
+
+Post the ordinary v1 header through `run_state_add.py` as ISSUED at actual
+issue time. Put one JSON record in the item body with the following typed
+fields for RL-200a rows 1–6. The body is how the posting tool can carry this
+record because the v1 header has a closed field set. The example values
+below illustrate field content and are for a synthetic dispatch.
+
+```json
+{
+  "schema": "joulewise.cadence_span_dispatch.v1",
+  "attempt_id": "cq-f2-stab-17-l004-l005-l006-a1",
+  "campaign_id": "f2-stab-17",
+  "kit_sha256": "8e7c099646b61571ac6430d5243607bc5a2c5056dc5218c184e21e43973b752f",
+  "frozen_pin": "2d347f721552fe03bdd19f113e7bad7a7c24908e",
+  "roster": ["L004", "L005", "L006"],
+  "kit_positions": [4, 5, 6],
+  "issued_epoch_s": 1795737540,
+  "arg": "02:00-02:35",
+  "batch_windows": ["02:00-02:35"]
+}
+```
+
+The attempt ID equals the create-once receipt directory basename. Use full
+kit SHA-256 and full frozen commit. The ordered roster and its one-based
+positions must match the selected queue and the kit. On pin B use JSON
+`null` for `arg` and `[]` for `batch_windows`. Where the pin B launch
+supplies `--span-id`, it must equal the attempt ID. Stage 1 takes the ID
+from `receipt.span_id` when present, and otherwise from the issued
+`attempt_id` under the full match. The `issued_epoch_s` must equal the
+typed header and bound receipt `started` at or after issue and at or
+before Check. The record's `batch_windows` must equal the receipt and
+be legal under the selected pin's ARG. Bind the actual attempt in the
+issue pointer and wait for its terminal result or refusal at the
+recorded deadline. A pre-chain refusal goes through the existing
+refusal branch. Keep unstarted positions eligible for future selection.
+
+### Check item addition for row 7
+
+Item 491 requires full offload-manifest and encrypted-copy digests. Add
+the full 64-hex SHA-256 of the exact `runner_receipt.json` independently
+to the Check item under the field name `receipt_sha256`, alongside the
+existing digests. Name the same attempt ID and post at the actual Check
+time. Stage 1 requires one ISSUED item and one matching receipt per
+attempt and unique started leg rows within the kit. Any absent required field,
+ambiguous match, failed match row, or roster-prefix mismatch produces a
+typed refusal naming the span and failed row. Its legs stay pending.
+[RUN_STATE 491](../../RUN_STATE.md#L1568) ·
+[RL-200a](../research-audits/2026-11-10-fable/RESEARCH-LEAD-DECISIONS.md)
+
 535. **Magistrate 5ea320f1 (headless, Opus 5.5), 2026-11-22 00:46-00:50 PST: f2-stab-03-l008 CHECK: RECEIPT OK (1/1 leg, MEASURED_OK, restored), L008 ADMITTED (70 s under budget); copied at once; Sunday rank 1 = f2-stab-03 L009 ISSUED on pin A with ARG 13:14-13:15 (item 463 at 00:00-02:34:59; soak ends ~01:30, clear of 02:00 per item 507), launches as the last act**
 
 ```pointer
