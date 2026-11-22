@@ -262,15 +262,19 @@ The re-pin uses targeted validators for the review JSON and typed drafts. The gr
 
 The lead fills the issued-artifact digests below from the authorized copies. The pilot draft's inert halt message still mentions main because this re-pin changes only pin and digest fields. RL-197b governs the issued queue.
 
+The independent cold check passed the landed review digests above. The annotated tag `refs/tags/pin/cl-ctl-01-runner` resolves to `f45e22e4efa6b48dd05f099f39eb62246e324177`. The landed `pin-kit` command resolved the tag and reproduced the reviewed kit bytes.
+
+**NEEDS_SPEC** — The landed validator requires `status: issued` and `ruling.authorizes_spans: true` together. The kit's closed schema accepts only a full SHA and the file digest map under `frozen`. The authorized byte change needs a ruling. The supported two-field change would set the status and authorization flag, with the permanent ref recorded in this admission item. The kit stays at the reviewed draft digest while that decision is pending. [Status and authority check](https://github.com/mpmdw/JouleWise/blob/f45e22e4efa6b48dd05f099f39eb62246e324177/joulewise/cadence/ctl.py#L200-L217) · [Frozen schema](https://github.com/mpmdw/JouleWise/blob/f45e22e4efa6b48dd05f099f39eb62246e324177/joulewise/cadence/kit_v11.py#L274-L281)
+
 ### Draft RUN_STATE item — pin admission
 
 **Heading** — Admit cl-ctl-01 runner `f45e22e4efa6b48dd05f099f39eb62246e324177` under RL-197b, first native run is the counted pilot.
 
-**Typed fields** — owner `lead`, status `ISSUED`. Post after the permanent ref and cold PASS on the issued kit digest are recorded.
+**Typed fields** — owner `lead`, status `ISSUED`. Post after the issued kit digest and the independent cold PASS on that digest are recorded.
 
-> ADMIT `f45e22e4efa6b48dd05f099f39eb62246e324177` on `align/2026-11-14-kit-v1-1`, permanent ref `<never-force-moved, never-deleted ref>`. PRs #808, #900 and #946 landed in order. The landed tree `3cbb765c118b0370b038d697943ce74c54b0e718` equals the tree of reviewed head `b8e1fb362af5ed8cd3a8f8b48b265ada36f8c081`. Independent audit round 5 returned MERGE. The uncached suite passed 21/21 and F-11 synthetic launch-to-close passed. The landed validators passed three qualification kits and three queues at pin B `6e9d42f1dd3d308bc9239143d0d634ab965e50e1`. Pin A remains `2d347f721552fe03bdd19f113e7bad7a7c24908e`. The issued kit has `<issued kit SHA-256>` and `<independent cold kit PASS for that digest>`. Create a separate clean detached checkout at the admitted commit. L001–L003 will be its first native run. The lead posts separate span authority when the actual predecessor close is proven. [Uncached CI](https://github.com/mpmdw/JouleWise/actions/runs/45027639795) · [F-11](https://github.com/mpmdw/JouleWise/actions/runs/45027639795/job/137224154886)
+> ADMIT `f45e22e4efa6b48dd05f099f39eb62246e324177` on `align/2026-11-14-kit-v1-1`, permanent annotated tag `refs/tags/pin/cl-ctl-01-runner`. PRs #808, #900 and #946 landed in order. The landed tree `3cbb765c118b0370b038d697943ce74c54b0e718` equals the tree of reviewed head `b8e1fb362af5ed8cd3a8f8b48b265ada36f8c081`. Independent audit round 5 returned MERGE. The uncached suite passed 21/21 and F-11 synthetic launch-to-close passed. The landed validators passed three qualification kits and three queues at pin B `6e9d42f1dd3d308bc9239143d0d634ab965e50e1`. Pin A remains `2d347f721552fe03bdd19f113e7bad7a7c24908e`. The issued kit has `<issued kit SHA-256>` and `<independent cold kit PASS for that digest>`. Create a separate clean detached checkout at the admitted commit. L001–L003 will be its first native run. The lead posts separate span authority when the actual predecessor close is proven. [Uncached CI](https://github.com/mpmdw/JouleWise/actions/runs/45027639795) · [F-11](https://github.com/mpmdw/JouleWise/actions/runs/45027639795/job/137224154886)
 
-Questions for the magistrate before the pilot is issued:
+RUN_STATE 541 asks the magistrate these three questions before the pilot is issued. [RUN_STATE 541](https://github.com/mpmdw/JouleWise/blob/6deb3d7fe1f8d1ba6f56916af2d5006b1f0c5fb1/RUN_STATE.md#L1055)
 
 1. Does the shared attempt ledger exist on the MBP, and what authority and evidence establish how its first row was written?
 2. Does a pin-B ledger-backed launch accept the shared ledger when its latest attempt row is a ctl row?
