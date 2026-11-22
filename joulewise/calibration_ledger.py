@@ -5788,6 +5788,7 @@ def calibration_readiness(
     custody_deadline: CustodyDeadline | None = None,
     verify_custody: bool | None = None,
     allow_stale_pin: bool = False,
+    probe_live_writer: bool = True,
 ) -> CalibrationReadiness:
     """Evaluate the D-117 composite readiness predicate for one exact phase.
 
@@ -5804,6 +5805,11 @@ def calibration_readiness(
     (:attr:`CalibrationLedgerSnapshot.is_open_bracket_extension_past_stale_pin`).
     Rollback, a divergent chain, an open session at ``pre-reserve``, recovery
     and writer contention still refuse.
+
+    ``probe_live_writer=False`` skips the contention probe, which acquires a
+    writer lease and so creates the lock file beside the ledger. Only a
+    read-only caller passes it: the C1 arm preflight, whose reservation
+    repeats the full check under its own lease at use.
     """
 
     if phase not in {"pre-reserve", "pre-slot", "terminal"}:
@@ -5832,7 +5838,7 @@ def calibration_readiness(
     common_blocked = inspection.state != "clean" or inspection.legacy_journal_path is not None
     live_writer = (
         False
-        if enforcing_under_lease
+        if enforcing_under_lease or not probe_live_writer
         else writer_lease_is_live(ledger_path)
     )
     refusal: RefusalCode | None = None
