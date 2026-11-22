@@ -1,0 +1,100 @@
+name: partc-frozen-differential
+
+# Part C's frozen differential acceptance suite, tests/align/test_partc_frozen_differential.py (PR #809).
+# tests/align has no __init__.py, so the ordinary CI shards' unittest discovery never collects it. Lead test
+# budget of 2026-11-22: a full frozen suite runs in hosted CI, not on the shared Air. This workflow runs the
+# whole matrix on a pull request that changes the evaluator, the suite or this file: sixteen shards by the
+# suite's own partition (JW_PARTC_SHARD=i/16), four workers each (one per hosted vCPU), then one job that adds
+# the shards' counts and fails unless every shard reported its matrix. The suite itself reads only the two
+# pinned public commits from the object database, so the checkout keeps the whole history.
+#
+# It runs the suite file through tests/align/partc_suite_census.py, which executes it byte for byte and adds only
+# the census points frozen Segment.run writes that the v3.1 clean fixture lacks (lead fix round r2, R3 and its
+# LEAD GATE). On the lead's v3.2 fixture, which carries them, it adds none and the run is the suite's own; every
+# shard prints the suite's digest and the number of points added, and the totals job adds them up.
+
+on:
+  pull_request:
+    paths:
+      - "scripts/align_r1_part_c.py"
+      - "scripts/align_r1_part_c_evidence.py"
+      - "tests/align/test_partc_frozen_differential.py"
+      - "tests/align/partc_suite_census.py"
+      - "tests/align/partc_audit_probe.py"
+      - ".github/workflows/partc-frozen-differential.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: partc-frozen-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  shard:
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15]
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+      - name: The R1 pin and the fixture commit are in the object database
+        run: |
+          git cat-file -e b2e01464d6d4fbf2901ff4d4154df9455104a12a^{commit}
+          git cat-file -e 2d02a6f0e42b7ac7a51ea5d5830867eea9ff2911^{commit}
+      - name: Frozen differential, shard ${{ matrix.shard }} of 16
+        env:
+          JW_PARTC_SHARD: "${{ matrix.shard }}/16"
+          JW_PARTC_WORKERS: "4"
+          JW_PARTC_REPO: ${{ github.workspace }}
+          PYTHONDONTWRITEBYTECODE: "1"
+        run: |
+          set -o pipefail
+          sha256sum tests/align/test_partc_frozen_differential.py | tee shard.log
+          python -IB tests/align/partc_suite_census.py 2>&1 | grep -v '^progress ' | tee -a shard.log
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: partc-shard-${{ matrix.shard }}
+          path: shard.log
+
+  totals:
+    needs: shard
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: partc-shard-*
+          path: shards
+      - name: Add the shards' matrix counts
+        run: |
+          python3 - <<'EOF'
+          import ast, collections, pathlib, re, sys
+          logs = sorted(pathlib.Path("shards").glob("partc-shard-*/shard.log"))
+          totals, missing, controls, added = collections.Counter(), [], 0, 0
+          for log in logs:
+              text = log.read_text()
+              found = re.findall(r"(?m)^matrix (\d+) (\[.*\])$", text)
+              if not found:
+                  missing.append(log.parent.name)
+                  continue
+              totals.update(dict(ast.literal_eval(found[-1][1])))
+              controls += "clean control verdict=pass; descriptor rows PASS (4/4)" in text
+              added += sum(int(n) for n in re.findall(r"census stand-in points added (\d+)", text))
+          print("shards", len(logs), "with a matrix", len(logs) - len(missing), "clean control and 4/4 bindings",
+                controls)
+          print("matrix", sum(totals.values()), sorted(totals.items()))
+          print("census stand-in points added over all shards:", added, "(0 on a fixture with the full census)")
+          bad = {key: totals[key] for key in ("FALSE_PASS", "WRONG_VERDICT", "HARNESS_ERROR") if totals[key]}
+          if len(logs) != 16 or missing or controls != 16 or bad:
+              print("::error::incomplete or failing matrix:", missing, bad)
+              sys.exit(1)
+          EOF
