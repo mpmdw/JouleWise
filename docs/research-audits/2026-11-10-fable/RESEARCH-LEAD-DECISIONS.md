@@ -23812,3 +23812,147 @@ Changes to RL-196's rows. Owner `research_lead`.
 **Amends.** RL-196 1.5 (public field list) and 1.6 (schema row, receipt cap). RL-194b stands unchanged.
 
 **What comes back to me.** A count above zero. An integrator that needs a tolerance for the additivity test. Nothing else here returns; RL-196's list is otherwise unchanged.
+
+# RL-197. ctl-01's legs do not wait for the `lm-inst-01` read: the kit's values are fixed here, before any read, at 128/256/512 hidden tokens, 600 s recovery, a 60 s split gap and a 2,000-token prefill, and the kit may be issued as soon as the runner is on main and the cold seat passes. The look still waits for the read, because its floors are inputs. The flag `positive_control_not_run` is withdrawn at the last close, not at the look. The print build's remaining research questions are closed
+
+Research lead (Fable 5.2), Sat Nov 21 23:12:44 PST 2026 (from `date`). Answers Ed's question of tonight, "why did we not do it? seems an easy TODO for the benefit no?", and the lead's four questions.
+
+**Cites.**
+- `RLD:n` is `RESEARCH-LEAD-DECISIONS.md` on the audit branch at `b80eecbd5`. RL-149 §2.5 is RLD:12531; RL-186 §2 is RLD:21337-21389; RL-187 §3 is RLD:21686-21825; RL-190 §3.7 to §3.10 is RLD:22475-22533.
+- `RS<item>` is a RUN_STATE item on `origin/main` at `6e46da291`.
+- `V2` is `/Volumes/JW-EXT/scratch/d-ctl01-print-suite-v2/`; `PB` is `/Volumes/JW-EXT/scratch/pl-d-ctl01-print-build/`.
+
+**Read.**
+- RL-187 §3 and its amends whole; RL-186 §2.1 to §2.6; RL-190 §3.7 to §3.10 and its register; RL-149 §2.5; RL-176 B.1 to B.3; RLD:13438.
+- V2's `FINAL-MESSAGE.md`, `FOR-FABLE.md` and `SPEC-DELTA.md` whole. PB's `resolve-1` and `resolve-2` final messages, `seat.log`, and audit 3's verdict.
+- The public-output and private-output rows of `d-ctl01-print-freeze-spec/SPEC.md`.
+- The headings of RS505 to RS531, and RS516 whole.
+
+**Not checked.**
+- **Why #808 is held behind #795.** I found no reason in RUN_STATE. Section 1 rules only that no research rule asks for it.
+- **The state of #808, #900 and #853.** "MERGE_READY" and "422 of 837" are the lead's and the seat's words. I opened no PR and no code.
+- **That the runner takes the split gap, recovery and prefill as kit data.** RL-186 2.1 says so for doses only.
+- **The text of `pilot_protocol_v4.md` B4 and B8.** I did not find the file on main; the flag's wording is taken from the brief and RLD:12544.
+- **MBP hours for twelve legs.** The lead's to estimate.
+- No custody, energy, power, meter, transcript, slot, hazard, sealed or restricted file was opened.
+
+**Not done.** No commit, push, comment, run, SSH, fetch or signal. The only file written is this one.
+
+---
+
+## 0. Why it was not done, in one paragraph
+
+Nothing declined it. RL-149 approved the block on 14 November. On 18 November I tied its kit to the instrument read (RL-186 2.1), so that the read could not shop for doses. The read waits on freeze 2, which waits on #795, and the control went into that queue with it. **That ordering was mine and it was stricter than it needed to be.** A value fixed before the read cannot be shopped either, and three of the four values have a ceiling that covers every outcome of the read.
+
+## 1. The shortest path
+
+**Measurement. Nothing here waits on #795, freeze 2 or the read.**
+
+| # | Step | State |
+|---|---|---|
+| 1 | Runner #808 and its failed-envelope fix #900 on main | **Owed, lead.** Both reported MERGE_READY. No research rule puts #808 after #795: ctl-01 is conditionless, outside the series, and reads no campaign energy (RLD:12537). If the hold is a file conflict, rebase; do not wait |
+| 2 | The design line for the kit | **Done: section 2** |
+| 3 | Kit `cl-ctl-01` with section 2's values; 3 + 9, seed `2026111601` (RLD:21385) | **Owed, lead** (data only, from the draft) |
+| 4 | One cold seat on the kit (RLD:21388) | **Owed, lead assigns.** Waits on 3 |
+| 5 | Issue: pin, ledger, close proof, a rank on the standing ladder | **Owed, lead.** Waits on 1 and 4 |
+| 6 | Pilot span L001 to L003 on the MBP | **Magistrate.** Waits on 5 |
+| 7 | The pilot's hand-read by an independent seat, with section 3.6's four checks added | **Owed, lead assigns.** Waits on 6 |
+| 8 | Span 2, L004 to L012; its first split leg is hand-read before the look and holds no span (RLD:21387) | **Magistrate.** Waits on 7 |
+| 9 | The disclosure sentence of RLD:22490 committed blind to the deviation log | **Owed, lead.** After the last close. **The flag is withdrawn here** |
+
+**The look. Steps 10 to 13 run in parallel with 1 to 9.**
+
+| # | Step | State |
+|---|---|---|
+| 10 | RL-187 3.8's hand vectors by a seat that is not Sol's family | **In progress** (Opus). Section 3.1 |
+| 11 | #853 to 837 of 837 on V2 | **Owed, builder.** Unblocked by section 3 |
+| 12 | The `lm-ctl-01` manifest, its two schemas, and the `controls` route row in the same PR (RL-187 register row 2) | **Owed, lead and builder** |
+| 13 | An executing audit of 11 and 12 by a top-tier seat that did not build them; merge | **Owed, lead assigns** |
+| 14 | The `lm-inst-01` read and my line with the hashes of `hold.json` and `edges.json` | **Waits on freeze 2 (#795) and #868.** This is the look's critical path |
+| 15 | My bytes ruling (RLD:22531) | **Owed, me.** Waits on 9, 10, 13, 14 |
+| 16 | Stage 1, the reservation, and the one run on the bound host | **Registered analyst.** Waits on 15 |
+| 17 | My restricted read and a ruling naming the numbers the paper may use | **Owed, me** |
+
+## 2. The legs do not wait for the read
+
+**The kit's four read-dependent values are fixed now. This section is the design part of RL-190 3.10 for the kit.**
+
+| Value | Fixed at | Why this is safe before the read | Cost |
+|---|---|---|---|
+| Recovery | 600 s | The ceiling of RL-187 3.7's rule; every outcome of the read gives 600 or less | Minutes of MBP time per leg. No validity cost |
+| Split gap | 60 s | The ceiling of both branches of the gap rule | Under two minutes on one leg. The print states the gap. No validity cost |
+| Prefill | 2,000 | The floors pool every qualified leg and do not depend on prompt size (RLD:21765) | If the read's roster has no qualified leg at 2,000, the print carries the caption `prefill_unmatched`. No number changes |
+| Hidden doses | 128, 256, 512, two legs each | The default of the rule. Fixed before any read, it cannot be chosen by one | **The real cost.** See below |
+
+**The cost on doses.** If the read later shows 128 under the 10 s floor on both the GPU rail and DC-in, RL-187 3.7 would have raised the doses and this kit did not.
+- The twelve legs are read as measured. No leg is re-run or replaced.
+- My line at the read states what the rule would have set. The low-dose legs print in floor units like any other; a value under one floor is a finding about the instrument, not a failure of the control.
+- Whether six more hidden legs run at the raised doses comes back to me. It is not automatic.
+- The paper's claim then holds for the doses above the floor only.
+
+**The look waits for the read, and is run once.** Floor units need `hold.json`. A print without floors and a second print with them would be two reads of the same energy, and I do not allow it.
+
+**`ctl01_withheld` now gates the look's reservation, not the kit's issue.** The three reasons and the row are unchanged (RLD:22522), so V2's bytes stand; its `issue` callback binds to reservation eligibility. A withheld row returns to me, and no measured leg is discarded by it. The cost: if the read gives no DC-in floor, twelve legs were measured that may never be read.
+
+**Blinding is not touched.** ctl energy stays sealed until the bytes ruling. The values were fixed with no ctl leg, no instrument read and no v4 outcome in existence.
+
+## 3. What was still a research decision
+
+Of the 415 failing V2 cases, the 204 behaviour cases and the 211 missing release and ledger operations are engineering against rules already written. The open points in `FOR-FABLE.md`, RL-187 3.9 and the two resolver escalations are ruled here.
+
+1. **Hand-vector author.** An Opus seat satisfies RL-187 3.8; an Astra seat does not (RLD:22548). The Opus seat writes without V2's arithmetic table and without #853's code. The two sets are then compared; a disagreement comes to me.
+2. **`PUBLIC.json` for `lm-ctl-01`:** five fields, `look_id`, `manifest_sha256`, `commit`, `stage1_sha256`, `n_legs`. The qualifier word and every number are private. They reach the paper only through my ruling after the look (RL-179 row 26).
+3. **Private files:** `RESTRICTED/controls.json`, `stdout`, `stderr`, as the freeze spec proposes. Closed list.
+4. **Failure.** `lm-inst-01`'s failure vocabulary and exit are inherited unchanged. A failed run writes no `PUBLIC.json`, spends the reservation, and comes to me.
+5. **Two or three withheld reasons at once:** one row, the first that applies in the order `no_dc_in_floor`, `no_prefill_size`, `dose_under_floor_at_k2`. **Absent value:** the row has no `value` key; a present key refuses, null included.
+6. **Null reasons for floors:** the enum of the instrument's pinned output schema, plus `no_matched_floor`. Anything else refuses. The draft's `missing_floor` is not a code.
+7. **Resolve-2's stamp question.** The lead's answer stands and is mine: a first visible call whose stamps differ from the envelope's by 1 ns is `not_evaluable`, reason `envelope_stamps`, and is never repaired (RLD:21704). No amendment.
+8. **The pilot hand-read gains RL-187 3.1's four view checks** on L001 to L003: token sums, the two stamps, step order, recovery end. They read stamps and counts only. A failure holds span 2. This is what stops twelve legs being measured and then all printing `not_evaluable`.
+9. **Already answered, nothing owed:** resolve-1 items 1 and 2 by RL-187 3.1 to 3.8 and RL-190 3.8 to 3.9; the disclosure sentence by RLD:22490. Resolve-1 item 4 and the ledger row's identity fields are the lead's.
+
+## 4. The sentence, and what it buys
+
+**In the registration,** RLD:22490's sentence, unchanged, at step 9.
+
+**In the paper, in place of the flag:**
+
+> "We ran one physical positive control: twelve conditionless legs outside the series in which the harness did scripted work that the episode log does not carry (hidden decoding of 128, 256 and 512 tokens, a single-core burn of 10, 30 and 90 s, an extra turn, and a split turn with its matched plain turn). Its values were fixed before any of its energy was read, and it was read once, by frozen code, as description. It shows what unlogged work of known size costs on this instrument. It is not a test of K or S, whose known-H curves remain calibrated sensitivity."
+
+**What the paper may then say about K.**
+- Unlogged decoding that was really executed drew measurable energy, at a stated joules per hidden token, with its leave-one-out range, on the GPU rail and on DC-in, in units of the instrument's floor.
+- That slope may sit in a table beside the series' decode joules per token from RL-176 B.1's phase table. It is labelled a comparison made after release, with no test. It is the one physical check on the assumption behind count withholding: that a withheld token's energy is there to be missed.
+
+**What it still may not say.**
+- That K detects hidden work. K's statistic is not run on the ctl legs, and no K or S word depends on them.
+- Any detection rate, power, or physical H50 or H90.
+- Anything about an adversary. The hidden call is scripted, in the same process, immediately before the visible call.
+- More than two legs per dose, one machine and one model support. DC-in's joules per token are tail-cut.
+- If the qualifier prints `no`, the sentence stands and the phase table says it is unqualified.
+
+**Running K on the ctl legs is option C.** It changes the claim contract and is Ed's decision, not ruled here.
+
+**Blind status.** Blind. I read rulings, RUN_STATE headings and seat reports. The kit's values and the print's release contract are fixed before any ctl leg exists and before the instrument read. No estimator, threshold, level, population or outcome word of K, S or Q changes.
+
+**For Ed, plainly.** "You were right, and the delay was my rule. I had said the control experiment must wait for our noise measurement, so nobody could pick convenient settings after seeing it. But settings fixed before the measurement are just as safe, so I have fixed them tonight. The MacBook Pro can run the twelve control runs as soon as the runner code is merged and one reviewer signs the kit. Once they finish, the paper stops saying 'positive control not run'. The numbers themselves still wait for the noise measurement, which is already on our path. One risk: the smallest dose may turn out too small to see, and then I may ask for six more runs."
+
+---
+
+## Register
+
+Owner `research_lead`.
+
+| # | Clause | Class | Protects | Scope | Ends | Test |
+|---|---|---|---|---|---|---|
+| 1 | `cl-ctl-01`'s doses, recovery, gap and prefill are section 2's and are not changed after issue; the read's rule result is stated in my line beside them | VALIDITY (prereg) | No ctl value is chosen by a read | ctl-01 | My bytes ruling | The issued kit's four fields equal section 2 |
+| 2 | One look of ctl-01, after the instrument read; no print of ctl energy without floors | VALIDITY (blinding) | The control's energy is read once | `lm-ctl-01` | When the look has run | A reservation without both instrument hashes refuses |
+| 3 | The pilot hand-read runs the four view checks on stamps and counts before span 2 | VALIDITY | Twelve legs are not measured on a record the print cannot use | ctl-01 pilot | Span 2's issue | The hand-read template lists the four checks |
+
+**Amends.**
+- **RL-186 2.1 and 2.4** (RLD:21339-21344, 21381): the order is runner, cold seat, issue, pilot. The read precedes the look, not the kit.
+- **RL-187 3.7** (RLD:21791): the table's rules are no longer applied to the kit; my line reports their results. The floors and the two hashes still wait.
+- **RL-190 3.9 and row 5** (RLD:22515-22522): "no kit" reads "no reservation of the look".
+- **RL-190 3.10** (RLD:22526): the design part for the kit is section 2; the two hashes move to the bytes ruling.
+- **RL-187 3.9** is closed by section 3, items 2 to 4.
+- **Stand unchanged:** RL-187 3.1 to 3.6 and 3.8; RL-186 2.2, 2.3, 2.5, 2.6; RLD:22490's sentence; the V2 suite's bytes.
+
+**What comes back to me.** A read whose rule would have raised the doses. A `ctl01_withheld` row. A pilot view check that fails. A disagreement between the two hand-vector sets. A runner that cannot take the gap, recovery or prefill as kit data.
