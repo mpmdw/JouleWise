@@ -236,6 +236,41 @@ class RenderTests(unittest.TestCase):
                 values[key] = value
                 self.refused(block(values), "INVALID_TIME", line)
 
+    def test_timestamp_grammar(self):
+        accepted = {
+            "2026-11-11T00:00:00Z": 1794355200,
+            "2026-11-11T23:59:00+23:59": 1794355200,
+            "2026-11-10T00:01:00-23:59": 1794355200,
+            "2026-11-11T00:00:59-00:00": 1794355259,
+            "2026-11-11T00:00:00.5+00:00": 1794355200.5,
+            "2026-11-11T00:00:00.1234567Z": 1794355200.123456,
+        }
+        for timestamp, expected_epoch in accepted.items():
+            with self.subTest(timestamp=timestamp):
+                values = {**unarmed(), "deadline": timestamp}
+                pointer = json.loads(gc.render(block(values)))
+                self.assertEqual(pointer["wait"]["deadline_epoch_s"], expected_epoch)
+
+        rejected = (
+            "2026-11-11T24:00:00Z",
+            "2026-11-11T23:60:00Z",
+            "2026-11-11T23:59:60Z",
+            "2026-11-11T0:00:00Z",
+            "2026-11-11T00:00Z",
+            "2026-11-11T00:00:00",
+            "2026-11-11T00:00:00z",
+            "2026-11-11T00:00:00.Z",
+            "2026-11-11T00:00:00,5Z",
+            "2026-11-11T00:00:00+0000",
+            "2026-11-11T00:00:00+00:00:00",
+            "2026-11-11T00:00:00-24:00",
+            "2026-11-11T00:00:00+00:60",
+        )
+        for timestamp in rejected:
+            with self.subTest(timestamp=timestamp):
+                values = {**unarmed(), "deadline": timestamp}
+                self.refused(block(values), "INVALID_TIME", 7)
+
     def test_each_time_refuses_outside_plausibility_bounds(self):
         for key, line in (("t0", 7), ("latest_end", 8), ("deadline", 10)):
             for value in ("2025-12-31T23:59:59Z", "2030-01-01T00:00:01Z",
