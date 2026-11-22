@@ -109,6 +109,14 @@ def actor(repo):
                 source = "meter" if meter else "power"
                 observations["timestamp_readers"].add(source + "=" + caller)
     sys.addaudithook(observe)
+    # SHIM (RL-194): the pin guard answers an open of a roster path itself, so an open the stage asks for is not
+    # always one the audit hook sees (an absent file is refused before any open). Each open the guard answers is
+    # observed as the open audit event observed every attempt before the guard existed.
+    guard_open = cli.PINS.PinnedCustody._open
+    def observed_guard_open(self, real_open, file, *args, **kwargs):
+        observe("open", (file,))
+        return guard_open(self, real_open, file, *args, **kwargs)
+    cli.PINS.PinnedCustody._open = observed_guard_open
     for line in sys.stdin:
         req = json.loads(line)
         observations = dict(admission_complete=False, early_opens=set(), timestamp_readers=set(), target=req["target"], target_read=False, receipt_read=False,
