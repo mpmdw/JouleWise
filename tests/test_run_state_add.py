@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from contextlib import redirect_stderr, redirect_stdout
+from contextlib import contextmanager, redirect_stderr, redirect_stdout
 from io import StringIO
 import json
 import os
@@ -385,6 +385,103 @@ git rev-parse --verify "$ref" >> fixture-raced-heads
         self.assertIn("ILLEGAL_TRANSITION", failed.with_suffix(".reason").read_text(encoding="utf-8"))
         self.assertEqual(self.git(self.remote, "log", "--format=%s", "-2", "main").splitlines(),
                          ["RUN_STATE 27: Second valid", "RUN_STATE 26: First valid"])
+
+    def test_audit_round_1_retries_validation_against_the_advanced_remote(self):
+        arm = [change(23, "ARMED")]
+        with self.assertRaisesRegex(add.GitFailure, "spooled at"):
+            add.add_git(self.a, request(heading="A queued arm", sets=arm),
+                        remote="nonexistent-remote", attempts=1)
+        queued, = self.spool.glob("*.json")
+        original = queued.read_bytes()
+        writer_b = {"JW_RUN_STATE_SPOOL": str(self.directory / "writer-b-spool")}
+        with mock.patch.dict(os.environ, writer_b):
+            _, armed_head = add.add_git(self.b, request(heading="B arms", sets=arm))
+
+        worktree = add._worktree
+        checked_out = []
+
+        @contextmanager
+        def reissue_after_a_checks_out(repo, base):
+            with worktree(repo, base) as path:
+                if repo == self.a:
+                    checked_out.append(base)
+                    if base == armed_head:
+                        with mock.patch.dict(os.environ, writer_b):
+                            number, _ = add.add_git(self.b, request(
+                                heading="B reissues", sets=[change(23, "ISSUED")]))
+                        self.assertEqual(number, 26)
+                        self.assertEqual(queued.read_bytes(), original)
+                yield path
+
+        with mock.patch.object(add, "_worktree", reissue_after_a_checks_out):
+            code, output, errors = self.call_in(self.a, "flush-spool")
+        self.assertEqual((code, output.strip(), errors), (0, f"27 {self.remote_head()}", ""))
+        self.assertEqual(len(checked_out), 2)
+        self.assertEqual(checked_out[0], armed_head)
+        self.assertNotEqual(checked_out[1], armed_head)
+        self.assertFalse(queued.exists())
+        self.assertFalse((self.spool / "failed").exists())
+        parsed = items.parse(self.git(self.remote, "show", f"main:{add.RUN_STATE}"))
+        self.assertEqual(items.replay(parsed)[23], "ARMED")
+        self.assertEqual(add.add_git(self.a, request(heading="A later request"))[0], 28)
+        self.assertEqual(self.git(self.remote, "log", "--format=%s", "-2", "main").splitlines(),
+                         ["RUN_STATE 28: A later request", "RUN_STATE 27: A queued arm"])
+
+    def test_audit_round_1_invalid_remote_pointer_preserves_the_pending_queue(self):
+        with self.assertRaisesRegex(add.GitFailure, "spooled at"):
+            add.add_git(self.a, request(heading="First valid request"),
+                        remote="nonexistent-remote", attempts=1)
+        queued, = self.spool.glob("*.json")
+        first = queued.rename(self.spool / "01.json")
+        second = self.spool / "02.json"
+        second.write_text(json.dumps(request(heading="Second valid request")), encoding="utf-8")
+        pending = {path: path.read_bytes() for path in (first, second)}
+
+        # Simulate the older writer, which accepted arbitrary pointer owner text.
+        with mock.patch.dict(os.environ, {"JW_RUN_STATE_SPOOL": str(self.directory / "writer-b-spool")}), \
+                mock.patch.object(gen_current, "_owner_error", return_value=None):
+            _, invalid_head = add.add_git(self.b, request(
+                heading="B uses an invalid owner",
+                pointer="owner: Lead\nwait: none\nnext_observable: synthetic"))
+
+        code, output, errors = self.call_in(self.a, "flush-spool")
+        self.assertEqual((code, output), (2, ""))
+        self.assertIn("INVALID_OWNER", errors)
+        self.assertIn("pending spool retained", errors)
+        self.assertEqual(self.remote_head(), invalid_head)
+        self.assertEqual({path: path.read_bytes() for path in self.spool.glob("*.json")}, pending)
+        self.assertFalse((self.spool / "failed").exists())
+
+        self.git(self.b, "fetch", "origin", "main")
+        self.git(self.b, "switch", "--detach", invalid_head)
+        source, current = self.b / add.RUN_STATE, self.b / add.CURRENT
+        source.write_bytes(source.read_bytes().replace(b"owner: Lead\n", b"owner: lead\n"))
+        gen_current.generate(source, current)
+        self.git(self.b, "add", str(add.RUN_STATE), str(add.CURRENT))
+        self.git(self.b, "commit", "-m", "Repair synthetic remote pointer")
+        self.git(self.b, "push", "origin", "HEAD:refs/heads/main")
+
+        code, output, errors = self.call_in(self.a, "flush-spool")
+        self.assertEqual((code, errors), (0, ""))
+        self.assertEqual([line.split()[0] for line in output.splitlines()], ["26", "27"])
+        self.assertEqual(list(self.spool.glob("*.json")), [])
+        self.assertEqual(self.git(self.remote, "log", "--format=%s", "-2", "main").splitlines(),
+                         ["RUN_STATE 27: Second valid request", "RUN_STATE 26: First valid request"])
+
+    def test_audit_round_1_failed_remote_recheck_leaves_request_pending(self):
+        with self.assertRaisesRegex(add.GitFailure, "spooled at"):
+            add.add_git(self.a, request(sets=[change(24, "ARMED")]),
+                        remote="nonexistent-remote", attempts=1)
+        queued, = self.spool.glob("*.json")
+        original = queued.read_bytes()
+        offline = subprocess.CalledProcessError(128, ["git", "ls-remote"], stderr="synthetic recheck failure")
+        with mock.patch.object(add, "_remote_head", side_effect=offline):
+            code, output, errors = self.call_in(self.a, "flush-spool")
+        self.assertEqual((code, output), (3, ""))
+        self.assertIn("synthetic recheck failure", errors)
+        self.assertEqual(queued.read_bytes(), original)
+        self.assertFalse((self.spool / "failed").exists())
+        self.assertEqual(self.remote_head(), self.base)
 
     def test_legacy_spool_with_file_is_quarantined_without_snapshot(self):
         note = self.a / "docs/note.txt"

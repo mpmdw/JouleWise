@@ -45,6 +45,10 @@ class RetriesExhausted(GitFailure):
     code = 4
 
 
+class InvalidBaseState(ValueError):
+    """The state being extended must be repaired before this request can land."""
+
+
 def render_item(number: int, heading: str, header: dict, body: str, pointer: str | None) -> str:
     heading = heading.replace("{{self}}", str(number))
     body = body.replace("{{self}}", str(number)).rstrip("\n")
@@ -121,7 +125,7 @@ def _request_header(request: dict) -> dict:
 def _prepare(text: str, request: dict, header: dict) -> tuple[int, str, bytes]:
     parsed = _validated(text)
     if parsed.cutover is None:
-        raise ValueError("run init first")
+        raise InvalidBaseState("run init first")
     body = request["body"]
     for line in body.splitlines():
         if line.strip() in ("```item", "```pointer"):
@@ -319,6 +323,18 @@ def _remove_ref(repo: Path, private_ref: str) -> None:
         raise GitFailure("git left a private fetch ref behind")
 
 
+def _checked_base(path: Path) -> str:
+    source, current = path / RUN_STATE, path / CURRENT
+    try:
+        if source.resolve() != source or current.resolve() != current:
+            raise ValueError("RUN_STATE and CURRENT must be regular checkout paths")
+        text = source.read_bytes().decode("utf-8")
+        gen_current.render(text)
+    except ValueError as error:
+        raise InvalidBaseState(f"fetched state is invalid: {error}") from error
+    return text
+
+
 def _land(repo: Path, request: dict, remote: str, branch: str, attempts: int, *,
           snapshots: dict[Path, tuple[bytes, int]] | None = None) -> tuple[int, str]:
     header = _request_header(request)
@@ -328,36 +344,49 @@ def _land(repo: Path, request: dict, remote: str, branch: str, attempts: int, *,
     if _git(repo, "check-ref-format", "--normalize", ref).rstrip("\n") != ref:
         raise ValueError(f"invalid target branch: {branch!r}")
     private_ref = f"refs/joulewise/run-state-add/{uuid.uuid4().hex}"
+    ref_needs_cleanup = False
     landed = None
+    limit = min(attempts, 5)
+    last_failure = "push rejected"
     try:
-        for _ in range(min(attempts, 5)):
+        for _ in range(limit):
+            ref_needs_cleanup = True
             base = _fetch(repo, remote, ref, private_ref)
-            with _worktree(repo, base) as path:
-                source, current = path / RUN_STATE, path / CURRENT
-                if source.resolve() != source or current.resolve() != current:
-                    raise ValueError("RUN_STATE and CURRENT must be regular checkout paths")
-                number, updated, document = _prepare(source.read_bytes().decode("utf-8"), request, header)
-                source.write_text(updated, encoding="utf-8")
-                current.write_bytes(document)
-                head = _commit(path, number, request, sources)
-                if _push(path, remote, ref, base):
-                    landed = number, head
+            try:
+                with _worktree(repo, base) as path:
+                    number, updated, document = _prepare(_checked_base(path), request, header)
+                    (path / RUN_STATE).write_text(updated, encoding="utf-8")
+                    (path / CURRENT).write_bytes(document)
+                    head = _commit(path, number, request, sources)
+                    if _push(path, remote, ref, base):
+                        landed = number, head
+            except ValueError:
+                # Validation can only decide against the head it actually read.
+                # Recheck after both local cleanup steps, before returning a refusal.
+                _remove_ref(repo, private_ref)
+                ref_needs_cleanup = False
+                if _remote_head(repo, remote, ref) == base:
+                    raise
+                last_failure = "remote changed during validation"
+                continue
             if landed is not None:
                 return landed
-        raise RetriesExhausted(f"push rejected after {min(attempts, 5)} attempts")
+            last_failure = "push rejected"
+        raise RetriesExhausted(f"{last_failure} after {limit} attempts")
     except (GitFailure, subprocess.CalledProcessError, OSError) as error:
         if landed is None:
             raise
         print(f"run_state_add: item landed; worktree cleanup failed: {_error_text(error)}", file=sys.stderr)
         return landed
     finally:
-        try:
-            _remove_ref(repo, private_ref)
-        except (GitFailure, subprocess.CalledProcessError, OSError) as error:
-            if landed is not None:
-                print(f"run_state_add: item landed; ref cleanup failed: {_error_text(error)}", file=sys.stderr)
-            else:
-                raise
+        if ref_needs_cleanup:
+            try:
+                _remove_ref(repo, private_ref)
+            except (GitFailure, subprocess.CalledProcessError, OSError) as error:
+                if landed is not None:
+                    print(f"run_state_add: item landed; ref cleanup failed: {_error_text(error)}", file=sys.stderr)
+                else:
+                    raise
 
 
 def _spool_dir() -> Path:
@@ -473,6 +502,8 @@ def _flush(repo: Path) -> int:
                 request = json.loads(path.read_text(encoding="utf-8"))
                 number, head = _land(repo, request, "origin", "main", 5,
                                      snapshots=_spooled_files(request))
+            except InvalidBaseState as error:
+                raise InvalidBaseState(f"{error}; pending spool retained") from error
             except ValueError as error:
                 _quarantine(path, error)
                 quarantined = True
