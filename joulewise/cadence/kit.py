@@ -395,7 +395,14 @@ def load_kit(path, *, batch_window=OS_BATCH_WINDOW):
         kit = json.loads(raw, object_pairs_hook=_unique)
     except ValueError as error:
         raise KitError([f"{path}: not JSON ({error})"]) from None
-    return validate_kit(kit, batch_window=batch_window), hashlib.sha256(raw).hexdigest()
+    validate = validate_kit
+    if isinstance(kit, dict) and kit.get("schema") == "joulewise.cadence_campaign_kit.v1.1":
+        from joulewise.cadence import kit_v11   # schema v1.1 (design doc section 14); v1 is unchanged
+        validate = kit_v11.validate_kit
+    if isinstance(kit, dict) and kit.get("schema") == "joulewise.cadence_campaign_kit.ctl.v1":
+        from joulewise.cadence import ctl
+        validate = ctl.validate_kit
+    return validate(kit, batch_window=batch_window), hashlib.sha256(raw).hexdigest()
 
 
 def _unique(pairs):

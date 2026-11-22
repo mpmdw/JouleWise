@@ -54,7 +54,7 @@ TRANSITIONS = {
     CHECKLIST_FAILED: set(), WITHDRAWN: set(),
 }
 
-SPAN_KEYS = {"seq", "span_id", "block_id", "kit", "legs", "attempt", "not_before", "rerun_of"}
+SPAN_KEYS = {"seq", "span_id", "block_id", "kit", "legs", "attempt", "not_before", "rerun_of", "pilot_pass_sha256"}
 TOP_KEYS = {"schema", "queue_id", "expires_at", "halt", "standing_notice", "spans"}
 
 
@@ -73,6 +73,11 @@ def parse_time(text):
     except ValueError:
         return None
     return None if moment.tzinfo is None else moment.timestamp()
+
+
+def is_expired(document, now):
+    expires = parse_time(document.get("expires_at"))
+    return now is not None and expires is not None and now >= expires
 
 
 def plan_id(span):
@@ -119,7 +124,7 @@ def validate_queue(doc, kits=None):
             continue
         for k in sorted(set(span) - SPAN_KEYS):
             problems.append(f"{where}: unknown key {k!r}")
-        for k in sorted(SPAN_KEYS - {"rerun_of"} - set(span)):
+        for k in sorted(SPAN_KEYS - {"rerun_of", "pilot_pass_sha256"} - set(span)):
             problems.append(f"{where}: missing key {k!r}")
         if type(span.get("seq")) is not int or span["seq"] < 1:
             problems.append(f"{where}.seq: positive integer")
@@ -144,6 +149,9 @@ def validate_queue(doc, kits=None):
         if not (isinstance(legs, list) and legs and all(isinstance(x, str) for x in legs)) or len(set(legs or [])) != len(legs or []):
             problems.append(f"{where}.legs: non-empty list of distinct leg ids")
             legs = []
+        if "pilot_pass_sha256" in span and not (
+                isinstance(span["pilot_pass_sha256"], str) and HEX64.fullmatch(span["pilot_pass_sha256"])):
+            problems.append(f"{where}.pilot_pass_sha256: full SHA-256 of the approved pilot PASS")
         rerun = span.get("rerun_of")
         if rerun is not None and rerun not in ids - {sid}:
             problems.append(f"{where}.rerun_of: an earlier span_id")
@@ -160,6 +168,13 @@ def validate_queue(doc, kits=None):
                 k, sha = entry
                 if sha != kit["sha256"]:
                     problems.append(f"{where}.kit.sha256: pinned {kit['sha256'][:12]}, file is {sha[:12]}")
+                if k.get("runner", {}).get("kind") == "cadence-ctl-v1":
+                    if legs not in k["layout"]:
+                        problems.append(f"{where}.legs: must equal a complete ctl kit roster")
+                    if halt is None and k["status"] != "issued":
+                        problems.append(f"{where}.kit: active ctl queue needs an issued kit")
+                    if halt is None and legs == k["layout"][1] and "pilot_pass_sha256" not in span:
+                        problems.append(f"{where}.pilot_pass_sha256: required for active ctl span 2")
                 order = [leg["leg_id"] for leg in k["legs"]]
                 pos = [order.index(x) if x in order else -1 for x in legs]
                 if -1 in pos:
@@ -249,8 +264,7 @@ class Decision:
 def next_action(queue, evidence=None, halts=(), now=None):
     states = {s["span_id"]: span_state(s, evidence, now) for s in queue["spans"]}
     reasons = []
-    expires = parse_time(queue.get("expires_at"))
-    if now is not None and expires is not None and now > expires:
+    if is_expired(queue, now):
         reasons.append(f"queue expired at {queue['expires_at']}")
     if queue.get("halt"):
         reasons.append(f"queue halt by {queue['halt']['by']}: {queue['halt']['reason']}")

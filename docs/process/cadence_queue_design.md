@@ -424,13 +424,13 @@ Built on `align/2026-11-14-campaign-runner`. RL-149 governs where this section a
 | Piece | Where | What it does |
 |---|---|---|
 | Leg kind `cadence-leg` | `joulewise/align/apple/cadence_leg.py`, entry `scripts/cadence_leg_runtime.py` | One type-A leg per invocation: its own G0 (R1 timeout 1,200 s), the band recipe's quiet, one step-task turn with the leg's prompt size, decode cap and seed. Built on the step leg (`StepTask`/`step_spec`, the A-B-A leg's native capture and post-G0 deadman). It writes no energy: no `decode_energy`, no `t_decline`, and its result is refused if a key names energy, power, a slot or a transcript. The ten condition-13 files are byte-identical: the kind subclasses `r1_runtime.Segment` |
-| Span driver | `scripts/cadence_legs_runner.py run` | Preflight (frozen commit and paths, night agents, AC, condition 13, the R1 smoke's feeds, powermode 0, display dwell); the plan; one fresh soak (the night's soak path); the roster's legs in seeded order; close (Automatic restore, feeds stopped and hashed, receipt, desk bundle) |
+| Span driver | `scripts/cadence_legs_runner.py run` | Preflight (frozen commit and paths, night agents, AC, condition 13, the R1 smoke's feeds, powermode 0, display dwell); the plan; one fresh soak (the night's soak path, without its batch window check; one retry after a settle or quiet refusal, RL-171); the roster's legs in seeded order; close (Automatic restore, feeds stopped and hashed, receipt, desk bundle) |
 | Plan adapter | `joulewise/cadence/legs.py` `plan_span`; CLI `plan` | worst case = soak + overhead + (roster + redo quota) × leg cap; deadline = t0 + worst case; refuses a t0 whose worst case meets the blackout (RL-149 §2.9 item 6.3); per-leg budgets from the time model |
-| Batch admission | `legs.leg_start_delay`, `legs.interval_delay` | No soak overlaps a blackout, no leg starts in one; a leg in flight finishes. The blackout defaults to the R1 driver's constant (moved by the W1-line PR) and is `--batch-window` otherwise |
+| Batch admission | `legs.leg_start_delay`, `legs.interval_delay` | Only when `--batch-window` names a blackout: no soak overlaps it, no leg starts in it; a leg in flight finishes. From the qualification pin the default is no blackout (RL-171) |
 | Per-leg redo | the driver | RL-72 E2's load rule (`os_load_verdict`); up to the kit's `redo_quota` per span; a rejected attempt stays as `runtime.rejected<N>` |
 | Stage stamps | `DIR/chain-stages.jsonl` | A start line (rc null) and an end line per stage, with the probe's five keys |
 | Desk bundle | `DIR/desk-bundle/` | `legs/<id>/leg_summary.json` (exactly `desk.LEG_SUMMARY_KEYS`), `span/result.json`, `span/meter.json` (the KM003C stream's header and trailer lines only) |
-| Launcher | `scripts/launch_cadence_span.py launch --kit K [--legs ...] --batch-window ...` | The desk launcher's procedure (fence, the same LaunchAgent wrapper, Spotlight pause), agent-free like `r1-smoke`; refuses a deadline shorter than the plan's worst case plus reserves. A separate entry, because `launch_align_r0.py` is in W1's executed closure (via `magistrate_watchdog.py`); it imports that module one way and leaves it at its base bytes |
+| Launcher | `scripts/launch_cadence_span.py launch --kit K [--legs ...] [--batch-window ...]` | The desk launcher's procedure (fence, the same LaunchAgent wrapper, Spotlight pause), agent-free like `r1-smoke`; refuses a deadline shorter than the plan's worst case plus the soak retry's budget (one kit soak, RL-171) plus reserves. A separate entry, because `launch_align_r0.py` is in W1's executed closure (via `magistrate_watchdog.py`); it imports that module one way and leaves it at its base bytes |
 | Mock | `scripts/cadence_legs_runner.py mock` | The whole span with a fake clock, feeds and leg runtime, then the Air desk on its bundle |
 
 Bands are history recipes (`q0` = the turn starts at the leg's own G0 release). The first leg of a span follows
@@ -454,3 +454,133 @@ its fresh soak, the block's cold start. Kits live under `docs/process/cadence/ki
   `--output` outside every v4 registration and custody root. The arm record states measurement_mode (as
   applied 11-13 23:47) and network time off, checked remotely (RL-150 §2 F5). The first queue holds the
   pilot span only (F3).
+
+## 14. Kit schema v1.1: the cell law and the span-reference leg (RL-155 §5.1; RL-150 R1, R3, R5)
+
+Built on `align/2026-11-14-kit-v1-1`, off PR #775 at `8bd31ae5a`. RL-149 §2, RL-150 and RL-155 govern where
+this section differs from them. **v1 is untouched as a schema:** `cl-dev-01` and `cl-dev-02` validate byte for
+byte as before, measure from `b4b6aeb19`, and nothing below changes a byte that commit executes for them.
+v1.1 is a new schema string and a new runner kind; `kit.load_kit` dispatches on `schema`.
+
+### 14.1 What the runner already takes (verified at `8bd31ae5a`)
+
+- **Per-leg prompt size: yes, below the kit.** `legs.leg_specs` reads each kit leg's `prefill_tokens` and
+  `decode_tokens` (the kit's `leg_defaults` only when a leg lacks them), `plan_span` budgets each leg from its
+  own size, and the leg runtime builds the step task from the spec's `prefill_chars` (`StepTask(prefill_chars)`,
+  `r1_runtime.step_spec`). The leg runtime test already runs a 2,000-token leg.
+- **What v1 cannot do:** vary it. The `sha256-v1` law copies `leg_defaults` into every leg and the validator
+  refuses any list that is not the law's. So a mixed-size block needs a new law, not new leg code.
+- **G0 shape: one only.** `cadence_leg.py` calls `reference_hook(..., capture=True)`: each leg's G0 is judged
+  against its own 60 s capture at warm-up entry (RL-150 R1).
+
+### 14.2 The cell law, `sha256-cells-v1`
+
+Inputs: `campaign_id`, `master_seed`, `n_legs`, `bands` (as v1), `prompt_tokens` (the sizes, here
+`[2000, 10000, 19458]`) and `g0_shapes` (`["own"]` for v1.1a; `["own", "span"]` for v1.1).
+
+1. **Seeds and bands** are v1's draws on the same `campaign_id` and `master_seed` (tags `seed`, `band`), so a
+   leg's seed does not depend on the cell law.
+2. **Prompt size by permuted blocks.** `n_legs` must be a multiple of k = len(`prompt_tokens`). Positions
+   3b+1..3b+3 (block b) take a Fisher-Yates permutation of the k sizes drawn with tag `size<b>`. So each aligned
+   block of three in kit order (L001-L003, L004-L006, L007-L009, L010-L012) holds each size once; two
+   neighbouring legs across a block boundary may share a size. Size is balanced against span position (the heat
+   history), each size appears 4 times in a 12-leg block, and **the first three legs (a class A pilot) cover all
+   three sizes.**
+3. **G0 shape** (only when `g0_shapes` holds `span`). L001 is `own`. For each size, the warm legs of that size
+   (positions 2..n) are shuffled with tag `shape-<size>` and the first ceil(m/2) become `span`: six span-shaped
+   legs in a 12-leg block. A span-shaped leg that is first in its span captures, so the consumers depend on the
+   queued layout, and "at least half of the warm legs" is counted on that layout at READY (RL-158 Q6; RL-161
+   §1: a chosen cut lands on an own-shaped leg). dev-03 on 3 + 9: 5 of 10 (L002, L008, L009, L010, L012). Draws for size and shape use separate tags, so **v1.1 and v1.1a kits of the same block have
+   the same seeds, bands and sizes; only `g0_shape` differs.**
+4. `decode_tokens` comes from `leg_defaults` (type A: 4,096).
+
+The anchor size is 19,458 tokens (40,000 characters), so an anchor leg is byte-identical in its prompt to
+dev-01's and dev-02's legs. 2,000 and 10,000 tokens are 4,111 and 20,557 characters by the anchor ratio; the
+realized count is read back from the bundle, never assumed.
+
+### 14.3 The v1.1 kit (`joulewise/cadence/kit_v11.py`)
+
+| Field | v1.1 |
+|---|---|
+| `schema` | `joulewise.cadence_campaign_kit.v1.1` |
+| `runner.kind` | `cadence-legs-v1.1` (same entry, same LaunchAgent shape) |
+| `leg_defaults` | `{decode_tokens}` only |
+| `seed_law` | `{method: sha256-cells-v1, master_seed, n_legs, bands, prompt_tokens, g0_shapes}` |
+| `legs[]` | `{leg_id, seed, start_band, prefill_tokens, decode_tokens, g0_shape}`, all required, regenerated by the validator |
+| `span_template` | v1's keys with **`t0_rule: "free"` in place of `t0_local` and `end_by_local`** (RL-149 §2.9 item 6.3; RL-150 F6-F12 reading 4). Refused if its worst case, plus the blackout, does not fit in a day, or exceeds the launcher's 12 h ceiling. The `plan` refuses a t0 whose worst case meets the blackout, as for v1 |
+| checklist `span_window` | for v1.1: `[t0, end_by]` lasts more than 0 s and at most 24 h; when `--batch-window` names one, it meets no batch window. No fixed clock time |
+| everything else | as v1: closed keys, `deny_scan`, stop limits, mandatory checklist, frozen fit code for looks, desk adapter |
+
+**Validator rules added for v1.1:** `prompt_tokens` distinct integers in 256..32,768, `n_legs` a multiple of
+their count; `g0_shapes` one of the allowed sets; every leg carries its cell; the leg list is the law's.
+
+### 14.4 How the runner consumes the cell (v1.1a: class B under RL-150 R5)
+
+- `leg_specs` takes the leg's own `prefill_tokens` and `decode_tokens`; `plan_span` budgets each leg from its
+  size (2k 1,076 s, 10k 1,156 s, anchor 1,251 s under the v1 time model). The runner, mock and launcher
+  accept runner kind `cadence-legs-v1.1`; the receipt and plan carry the kit's kind.
+- **No byte executed inside a leg changes for v1.1a:** a v1.1a kit (`g0_shapes: ["own"]`) yields v1 leg specs,
+  so `cadence_leg.py`, `cadence_leg_runtime.py` and `validate_leg_spec` are the bytes dev-01 runs. The changed
+  bytes plan, validate, queue and print: class B (a mock span, a `plan`, a cold check of the diff).
+
+### 14.5 The span-reference leg (v1.1: class A)
+
+**R1's question, answered: no gate-module edit.** A campaign leg takes the span's reference through the
+existing `consume` role, exactly as an R1 consumer takes step-D's R_D (`Segment.consume_d_reference`): the
+hook loads the source's `align_window_reference.json` with W1's verifier (`thermal_gates.load_window_reference`:
+record digest, source config bound by the source runtime's terminal custody, journal re-derivation, sensors
+policy) and sets `session.reference` before the G0. `thermal_gates.py` and `r1_runtime.py` are unchanged; the
+override lives in `cadence_leg.py` (`CadenceLegSegment`).
+
+- **The span's reference** is the capture of the span's first leg (the first leg after the fresh soak): its
+  60 s median at warm-up entry, with the model loaded. That is the series' shape: member 5 captures and the
+  later members consume (`align_v4_kit.py`, `capture_last_60s_idle_before_warmup` /
+  `consume_member_5_custody_via_WP15`). **Not the soak reference.** The soak's `sensors_c` is a 1,200 s mean
+  with no model resident; RL-59/64/72 already moved R1's consumers off the soak onto a captured R_D, and a G0
+  judged against the soak would wait for a state the loaded idle may never reach.
+- **Roles, per span, by the runner.** The first leg of the roster captures (whatever its kit shape: a span leg
+  that is first is judged against itself, which is the span's reference). Every later `span` leg consumes the
+  first leg's accepted attempt (`legs/<first>/runtime`). Every `own` leg captures. The leg spec (schema
+  `joulewise.cadence_leg_spec.v1.1`) carries `g0_shape` and `g0_role`; the runtime takes `--span-reference DIR`
+  for a consumer and refuses it otherwise.
+- **A missing or unobserved span reference refuses the consumer before any work** (exit 2, which stops the span
+  as any leg-runtime refusal does). It needs a collector fault on the first leg; it is a REFUSAL stop, never a
+  silent fall-back to the leg's own capture.
+- **Budget.** A consumer's modeled G0 is 600 s (own: 209 s), so a consumer whose G0 runs to its 1,200 s cap is
+  still under 1.5 x its budget: a long G0 alone never trips LEG_OVERTIME. The cap and the 2,700 s leg bound
+  are unchanged, so the worst case is unchanged (11.4 h for 12 legs).
+- **Projection.** The leg result and record gain `g0_shape`, `g0_role` and `g0_reference_source` (a run id);
+  the receipt names each consumer's source (`legs[].span_reference`). No temperature, energy or power is
+  projected; `leg-summary-v1` is unchanged, so the desk table shows no cell column (the hand-read joins the
+  kit by leg id).
+- **Which attempt is the source.** The first leg's accepted attempt (`legs/<first>/runtime`). If that leg was
+  redone for outside load, the source is the redo's capture, taken after the rejected attempt ran.
+
+### 14.6 Launch bounds, desk marks, review fixes (#788 cold seat; RL-158; RL-161)
+
+- **The fence (#788 F4; RL-155a §3), retired at the qualification pin by RL-171.** `legs.fence_problems` (the
+  fence end by 01:50 and the 10:50-13:15 no-launch interval) is no longer called by the launcher, `plan` or the
+  checklist; `legs.py` keeps the unused function because the leg child imports that module. With no
+  `--batch-window` there is no blackout at all; quiet is the per-leg agent census, process census and rule 5.
+- **The desk (#788 F3, F8; dev-01 F8; RL-158 Q2; RL-161 §3 and §4).** `JOURNAL-TABLE.md` gains an `admitted`
+  column for every kit. A v1.1 leg summary adds `prefill_tokens`, `g0_shape`, `g0_role` and, for a consumer,
+  `span_reference` = {first leg, its supplying attempt, `redone`, `excluded`}; the table gains a cell section
+  and prints **MARK: reference from a redo** or **MARK: reference from an excluded leg**, and
+  `desk_summary.json` carries `span_reference` with those marks. A consumer's result carries the verified
+  reference's `record_sha256` (`g0_reference_record_sha256`).
+- **Same span (#788 F8).** A consumer refuses a source that is not `<this span>/legs/<leg>/runtime`.
+- **The two drafts share** a campaign id, seeds and run ids: only one may ever run.
+
+### 14.7 Cut-off (RL-155 §5.1)
+
+Sun 15 Nov 18:00 PST. If the span-reference leg is code-complete and has no gate-module edit by then, dev-03
+runs on v1.1 (class A: L001-L003 as their own span are its counted smoke). Otherwise dev-03 runs on v1.1a
+(class B), pinned at the cell-law commit, and the span leg enters at dev-04 or dev-05 as its own class A kit.
+
+**The two drafts** (same `campaign_id`, master seed 2026111403, seeds, bands and sizes; only `g0_shape` and what
+they pin differ). The lead picks one at the cut-off, enters it in the ledger and pins its sha256 in the queue.
+
+| File | Kit | Pin | Class | First span |
+|---|---|---|---|---|
+| `kits/cl-dev-03.v1.1.json` | cell law and six span-shaped legs (5 of 10 warm legs consume on 3 + 9) | the span-leg commit (re-pinned) | A | L001-L003 as their own span (the counted smoke, one leg per size), then L004-L012 after the hand-read |
+| `kits/cl-dev-03.v1.1a.json` | cell law only | the cell-law line (re-pinned on its class B side branch) | B | the whole block, one span |
