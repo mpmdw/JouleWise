@@ -152,7 +152,7 @@ def _verified_kernel(pins):
 
 
 def run_controls_worker(*, freeze_inputs, stage1_bytes, blind, execution_host, local_host, restricted: Path,
-                        public: Path, first_read, pooled, gap_limits_ns):
+                        public: Path, first_read, gap_limits_ns):
     """Run once, with the first reader given the committed stage-1 bindings."""
     from .manifest_dispatch import PRE_READ_REFUSAL
     from .transfer_release import POST_READ_FAILURE, _failure_type, _redirect, _sync_directory
@@ -163,8 +163,7 @@ def run_controls_worker(*, freeze_inputs, stage1_bytes, blind, execution_host, l
     try:
         freeze = verify_freeze(**freeze_inputs)
         stage1 = verify_stage1(freeze, freeze_inputs["committed"], stage1_bytes)
-        if (not execution_host or execution_host != local_host
-                or type(pooled) is not analysis.HoldPool or pooled.reason_enum != freeze.instrument_reasons):
+        if not execution_host or execution_host != local_host:
             raise ValueError("controls_blind_gate")
         public_bytes = prepare_public(blind, freeze.output_schema, committed=stage1.public)
         kernel = _verified_kernel(freeze.pins)
@@ -181,9 +180,9 @@ def run_controls_worker(*, freeze_inputs, stage1_bytes, blind, execution_host, l
             raise ValueError("stage1_roster")
         positions = tuple(replace(leg, work_sha256=digest)
                           for leg, (_, digest) in zip(positions, stage1.legs, strict=True))
-        publish_reserved(restricted, public, public_bytes, positions, kernel=kernel, pooled=pooled,
+        publish_reserved(restricted, public, public_bytes, positions, kernel=kernel, pooled=freeze.instrument_pool,
                          gap_limits_ns=gap_limits_ns, instrument_manifest_sha256=freeze.instrument_manifest_sha256,
-                         schema_bytes=freeze.restricted_schema, instrument_reasons=freeze.instrument_reasons)
+                         schema_bytes=freeze.restricted_schema, instrument_reasons=freeze.instrument_pool.reason_enum)
     except BaseException as error:
         if confined:
             with suppress(BaseException):

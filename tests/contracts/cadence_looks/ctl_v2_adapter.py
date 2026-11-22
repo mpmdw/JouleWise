@@ -14,6 +14,51 @@ from joulewise.cadence_looks import controls_release as release
 
 ROOT = Path(__file__).resolve().parents[3]
 INSTRUMENT = sha256(b"synthetic instrument").hexdigest()
+FIXTURES = Path(__file__).resolve().parent / "fixtures"
+SCHEMA_COMMIT = "321357e431ae17ade5186ab84666235e077c2119"
+SCHEMA_SHA = "0e749ba6fad2b43c68a8e9322f30c3123f4a7af530873d517ac0cec64fe177c1"
+STAGE1_COMMIT = "e" * 40
+STAGE1_SHA = "d7f36fcb3fec2d8e9d9b4a7ed745532d9b8604c20d3a67968a181a85c5b0f058"
+
+
+def fixture_bytes(name, digest):
+    raw = (FIXTURES / name).read_bytes()
+    if sha256(raw).hexdigest() != digest:
+        raise AssertionError("instrument fixture bytes changed")
+    return raw
+
+
+def synthetic_hold(sd=0.5, *, kit="f2-inst-01"):
+    channel = {f"sd{width}_w": sd for width in analysis.FLOOR_WINDOWS}
+    channel.update(mean_w=3, kept=[3, 3, 3], dropped=[0, 0, 0], drift_w_per_600s=0)
+    return manifest.canonical({f"{kit}/L001": dict.fromkeys(("gpu_rail", "rail_sum", "dc_in"), channel)})
+
+
+def instrument_artifacts():
+    schema = fixture_bytes("lm-inst-01.restricted.schema.draft.json", SCHEMA_SHA)
+    return {
+        "instrument_manifest": manifest.canonical({
+            "schema": "joulewise.cadence_look_manifest.v2", "look_id": "lm-inst-01",
+            "look_kind": "description", "status": "committed",
+            "kits": [{"kit_id": "f2-inst-01", "sha256": sha256(b"synthetic instrument kit").hexdigest()}],
+            "code_pins": {"restricted_schema": {"path": manifest.INSTRUMENT_SCHEMA_PATH, "sha256": SCHEMA_SHA}},
+        }),
+        "instrument_floor_schema": schema,
+        "hold": synthetic_hold(),
+        "edges": manifest.canonical({"synthetic": "edges"}),
+    }
+
+
+def instrument_commitments():
+    """Give the real gate an invented ledger commit and an exact schema fixture."""
+    commits = {
+        SCHEMA_COMMIT: {manifest.INSTRUMENT_SCHEMA_PATH:
+                        fixture_bytes("lm-inst-01.restricted.schema.draft.json", SCHEMA_SHA)},
+        STAGE1_COMMIT: {"instrument_stage1": fixture_bytes("lm-inst-01.stage1.synthetic.json", STAGE1_SHA)},
+    }
+    stage1 = dict(kind="stage1", look_id="lm-inst-01", status="committed", revision=STAGE1_COMMIT,
+                  stage1_sha256=STAGE1_SHA, manifest_sha256=sha256(instrument_artifacts()["instrument_manifest"]).hexdigest())
+    return commits, stage1
 
 
 @lru_cache(None)
@@ -34,31 +79,22 @@ def freeze_artifacts():
             artifacts[name] = subprocess.check_output(
                 ["git", "show", f"5a8ac8ff6753caf76cac01bfc4d15d6f0385afc5:{location}"], cwd=ROOT
             )
-    floor_schema = manifest.canonical({"$defs": {"undefined": {"properties": {
-        "reason": {"type": "string", "enum": ["synthetic_floor_unavailable"]},
-    }}}})
-    artifacts.update(
-        instrument_manifest=manifest.canonical({
-            "schema": "joulewise.cadence_look_manifest.v2", "look_id": "lm-inst-01",
-            "look_kind": "description", "status": "committed",
-            "code_pins": {"restricted_schema": {"path": manifest.LOOK_DIR + "lm-inst-01.restricted.schema.json",
-                                                "sha256": sha256(floor_schema).hexdigest()}},
-        }),
-        instrument_floor_schema=floor_schema,
-        hold=manifest.canonical({"synthetic": "hold"}),
-        edges=manifest.canonical({"synthetic": "edges"}),
-    )
+    artifacts.update(instrument_artifacts())
     return artifacts
 
 
 def make_manifest(look, route, pins):
     return manifest.canonical(dict(schema=manifest.SCHEMA_ID, status="final", look_id=look,
-                                   look_kind=route, kit_id="cl-ctl-01", pins=pins))
+                                   look_kind=route, kit_id="cl-ctl-01", pins=pins,
+                                   instrument_output_schema=dict(commit=SCHEMA_COMMIT,
+                                       path=manifest.INSTRUMENT_SCHEMA_PATH, sha256=SCHEMA_SHA),
+                                   instrument_stage1=dict(ledger_commit=STAGE1_COMMIT, stage1_sha256=STAGE1_SHA)))
 
 
 def read_frozen(state, first_read):
-    manifest.verify_freeze(current_revision=state["current_revision"], committed=state["committed"],
-                           working=state["working"], history=state["history"])
+    commits, instrument_stage1 = instrument_commitments()
+    manifest.verify_freeze(current_revision=state["current_revision"], committed={**state["committed"], **commits},
+                           working=state["working"], history=[instrument_stage1, *state["history"]])
     return first_read()
 
 

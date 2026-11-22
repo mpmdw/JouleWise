@@ -1,0 +1,33 @@
+{
+  "by_kit": {
+    "f2-inst-01": {
+      "dropped": 0,
+      "not_qualified": 0,
+      "qualified": 1,
+      "reasons": {
+        "dropped": {},
+        "not_qualified": {}
+      }
+    }
+  },
+  "counts": {
+    "n_legs": 1
+  },
+  "look_id": "lm-inst-01",
+  "positions": {
+    "f2-inst-01/L001": {
+      "attempt": 1,
+      "disposition": "qualified",
+      "loaded_flag": false,
+      "over_time_budget": false,
+      "reasons": [],
+      "receipt": "synthetic-receipt",
+      "span_id": "synthetic-span",
+      "span_leg_index": 0
+    }
+  },
+  "source_snapshot": {
+    "input_hashes_sha256": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "receipt_commit": "dddddddddddddddddddddddddddddddddddddddd"
+  }
+}

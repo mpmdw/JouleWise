@@ -3,15 +3,23 @@
 from dataclasses import dataclass
 from hashlib import sha256
 import json
+from pathlib import PurePosixPath
+import re
 
+from . import controls_analysis as analysis
 from .controls_print import (
-    KIT_ID, LOOK_ID, PILOT, REMAINDER, LegBinding, LookIdentity, _hex_pin, validate_roster,
+    KIT_ID, LOOK_ID, PILOT, REMAINDER, ControlsRefusal, LegBinding, LookIdentity, Refusal,
+    _hex_pin, validate_roster,
 )
 from .qualification_manifest import _decode
 
 
 SCHEMA_ID = "joulewise.cadence_look_manifest.controls.v1"
 LOOK_DIR = "docs/process/cadence/looks/"
+INSTRUMENT_ID = "lm-inst-01"
+INSTRUMENT_SCHEMA_PATH = LOOK_DIR + "lm-inst-01.restricted.schema.json"
+_INSTRUMENT_CHANNELS = ("gpu_rail", "rail_sum", "dc_in")
+_INSTRUMENT_MEMBER = re.compile(r"(f2-(?:inst|stab)-[0-9]{2})/(L00[1-9]|L01[0-2])")
 CODE_PATHS = {
     "print_code": "joulewise/cadence_looks/controls_release.py",
     "print_code/analysis": "joulewise/cadence_looks/controls_analysis.py",
@@ -40,19 +48,40 @@ def canonical(value):
     return json.dumps(value, sort_keys=True, separators=(",", ":"), allow_nan=False).encode()
 
 
+def _schema_path(value):
+    if type(value) is not str or "\\" in value:
+        return False
+    path = PurePosixPath(value)
+    return (not path.is_absolute() and path.as_posix() == value and path.suffix == ".json"
+            and all(part not in ("..", "RESTRICTED") for part in path.parts))
+
+
 def validate_manifest(raw):
     document = _decode(raw)
+    identity_fields = {"schema", "status", "look_id", "look_kind", "kit_id", "pins"}
+    instrument_fields = {"instrument_output_schema", "instrument_stage1"}
     if (type(document) is not dict
-            or document.keys() != {"schema", "status", "look_id", "look_kind", "kit_id", "pins"}
+            or not identity_fields <= document.keys() <= identity_fields | instrument_fields
             or (document["schema"], document["status"], document["look_id"],
                 document["look_kind"], document["kit_id"]) != (SCHEMA_ID, "final", LOOK_ID, "controls", KIT_ID)):
         raise ValueError("controls_manifest")
+    schema = document.get("instrument_output_schema")
+    if (type(schema) is not dict or schema.keys() != {"commit", "path", "sha256"}
+            or not _schema_path(schema["path"])
+            or not _hex_pin(schema["commit"], 40) or not _hex_pin(schema["sha256"], 64)):
+        raise ControlsRefusal(Refusal.INSTRUMENT_SCHEMA_BINDING)
+    stage1 = document.get("instrument_stage1")
+    if (type(stage1) is not dict or stage1.keys() != {"ledger_commit", "stage1_sha256"}
+            or not _hex_pin(stage1["ledger_commit"], 40) or not _hex_pin(stage1["stage1_sha256"], 64)):
+        raise ControlsRefusal(Refusal.INSTRUMENT_STAGE1_BINDING)
     pins = document["pins"]
     if (type(pins) is not dict or pins.keys() != ROLES
             or not all(_hex_pin(value, 64) for value in pins.values())
             or pins["output_schema"] == pins["restricted_schema"]):
         raise ValueError("controls_pins")
-    return pins
+    if pins["instrument_floor_schema"] != schema["sha256"]:
+        raise ControlsRefusal(Refusal.INSTRUMENT_SCHEMA_BINDING)
+    return document
 
 
 def append_withheld(row, append):
@@ -82,7 +111,7 @@ class VerifiedFreeze:
     instrument_manifest_sha256: str
     output_schema: bytes
     restricted_schema: bytes
-    instrument_reasons: frozenset[str]
+    instrument_pool: analysis.HoldPool
     pins: dict
     stage1_entry: dict | None
 
@@ -135,22 +164,115 @@ def verify_stage1(freeze, committed, candidate):
     return VerifiedStage1(public, tuple(legs))
 
 
-def _instrument_reasons(snapshot, pins):
-    instrument = _decode(snapshot["instrument_manifest"])
-    schema = _decode(snapshot["instrument_floor_schema"])
+def _instrument_schema(snapshot, committed, pin):
     try:
+        instrument = _decode(snapshot["instrument_manifest"])
+        raw = committed[pin["commit"]][pin["path"]]
+        if (type(raw) is not bytes or raw != snapshot["instrument_floor_schema"]
+                or sha256(raw).hexdigest() != pin["sha256"]
+                or (instrument["schema"], instrument["look_kind"], instrument["look_id"], instrument["status"])
+                != ("joulewise.cadence_look_manifest.v2", "description", INSTRUMENT_ID, "committed")):
+            raise ValueError("instrument registration")
         schema_pin = instrument["code_pins"]["restricted_schema"]
-        reasons = schema["$defs"]["undefined"]["properties"]["reason"]["enum"]
-    except (KeyError, TypeError) as error:
-        raise ValueError("instrument_reason_enum") from error
-    if ((instrument.get("schema"), instrument.get("look_kind"), instrument.get("look_id"),
-         instrument.get("status")) != ("joulewise.cadence_look_manifest.v2", "description", "lm-inst-01", "committed")
-            or schema_pin != {"path": LOOK_DIR + "lm-inst-01.restricted.schema.json",
-                              "sha256": pins["instrument_floor_schema"]}
-            or type(reasons) is not list or not reasons
-            or any(type(reason) is not str or not reason or reason == "missing_floor" for reason in reasons)):
-        raise ValueError("instrument_reason_enum")
-    return frozenset(reasons)
+        if schema_pin != {"path": pin["path"], "sha256": pin["sha256"]}:
+            raise ValueError("instrument schema pin")
+        schema = _decode(raw)
+        if schema.get("status", "committed") != "committed":
+            raise ValueError("instrument schema status")
+        definitions = schema["$defs"]
+        reference = schema["properties"]["hold.json"]["$ref"]
+        if not reference.startswith("#/$defs/"):
+            raise ValueError("instrument hold schema reference")
+        patterns = definitions[reference.removeprefix("#/$defs/")]["patternProperties"]
+        branches, = (rule["oneOf"] for rule in patterns.values())
+        channels, = (rule["properties"] for rule in branches if "properties" in rule)
+        fields = {"kept", *(f"sd{width}_w" for width in analysis.FLOOR_WINDOWS)}
+        if any(not fields <= channels[channel]["properties"].keys() for channel in _INSTRUMENT_CHANNELS):
+            raise ValueError("instrument hold operands")
+        # The draft's open string admits no unavailable reason in this print.
+        reasons = definitions["undefined"]["properties"]["reason"].get("enum", [])
+        if type(reasons) is not list:
+            raise ValueError("instrument reason enum")
+        vocab = analysis.HoldPool(reason_enum=reasons).reason_enum
+        return instrument, channels, vocab
+    except (AttributeError, KeyError, TypeError, ValueError) as error:
+        raise ControlsRefusal(Refusal.INSTRUMENT_SCHEMA_BINDING) from error
+
+
+def _instrument_members(committed, history, pin, instrument, manifest_digest):
+    try:
+        revision = pin["ledger_commit"]
+        digest = pin["stage1_sha256"]
+        row, = (entry for entry in history if entry.get("look_id") == INSTRUMENT_ID and entry.get("kind") == "stage1")
+        if (row.get("status"), row.get("revision"), row.get("stage1_sha256"), row.get("manifest_sha256")) != (
+                "committed", revision, digest, manifest_digest):
+            raise ValueError("instrument stage1 ledger")
+        raw = committed[revision]["instrument_stage1"]
+        if type(raw) is not bytes or sha256(raw).hexdigest() != digest:
+            raise ValueError("instrument stage1 pin")
+        roster = _decode(raw)
+        if roster["look_id"] != INSTRUMENT_ID or roster.get("status", "committed") != "committed":
+            raise ValueError("instrument stage1 identity")
+        kits = instrument["kits"]
+        kit_pins = {kit["kit_id"]: kit["sha256"] for kit in kits}
+        if len(kit_pins) != len(kits) or any(not _hex_pin(pin, 64) for pin in kit_pins.values()):
+            raise ValueError("instrument kit pins")
+        members = {}
+        for key, position in roster["positions"].items():
+            match = _INSTRUMENT_MEMBER.fullmatch(key)
+            if match is None:
+                raise ValueError("instrument stage1 member")
+            kit, leg = match.groups()
+            kit_hash = kit_pins[kit]
+            if position["disposition"] == "qualified":
+                members[key] = (kit, kit_hash, leg)
+        count = roster["counts"]["n_legs"]
+        if type(count) is not int or count != len(members):
+            raise ValueError("instrument stage1 count")
+        return members
+    except (AttributeError, KeyError, TypeError, ValueError) as error:
+        raise ControlsRefusal(Refusal.INSTRUMENT_STAGE1_BINDING) from error
+
+
+def _hold_pool(raw, members, channels, reasons):
+    try:
+        hold = _decode(raw)
+        if type(hold) is not dict or hold.keys() != members.keys():
+            raise ValueError("instrument hold roster")
+        rows = []
+        for key, member in members.items():
+            record = hold[key]
+            if type(record) is not dict:
+                raise ValueError("instrument hold member")
+            if record.keys() - channels.keys():
+                # The schema has a singleton unavailable member shape.
+                if record.keys() != {"value", "reason"} or record["value"] is not None or record["reason"] not in reasons:
+                    raise ValueError("instrument hold member")
+                rows.extend(analysis.HoldWindow(member, channel, width, 0, None, record["reason"])
+                            for channel in _INSTRUMENT_CHANNELS for width in analysis.FLOOR_WINDOWS)
+                continue
+            for channel in _INSTRUMENT_CHANNELS:
+                leaf = record[channel]
+                rule = channels[channel]
+                if type(leaf) is not dict or not set(rule["required"]) <= leaf.keys() <= rule["properties"].keys():
+                    raise ValueError("instrument hold channel")
+                kept = leaf["kept"]
+                if type(kept) is not list:
+                    raise ValueError("instrument hold counts")
+                for width, retained in zip(analysis.FLOOR_WINDOWS, kept, strict=True):
+                    sd = leaf[f"sd{width}_w"]
+                    reason = None
+                    if type(sd) is dict:
+                        if (not {"value", "reason"} <= sd.keys() <= {"value", "reason", "bound_s"}
+                                or sd["value"] is not None or sd["reason"] not in reasons):
+                            raise ValueError("instrument hold reason")
+                        sd, reason = None, sd["reason"]
+                    elif type(sd) not in (int, float):
+                        raise ValueError("instrument hold SD")
+                    rows.append(analysis.HoldWindow(member, channel, width, retained, sd, reason))
+        return analysis.pool_hold_windows(rows, set(members.values()), reason_enum=reasons)
+    except (AttributeError, KeyError, TypeError, ValueError, OverflowError) as error:
+        raise ControlsRefusal(Refusal.INSTRUMENT_HOLD_BINDING) from error
 
 
 def verify_freeze(*, current_revision, committed, working, history):
@@ -168,12 +290,16 @@ def verify_freeze(*, current_revision, committed, working, history):
         if type(manifest) is not bytes or manifest != working["manifest"]:
             raise ValueError("freeze_manifest")
         digest = sha256(manifest).hexdigest()
-        pins = validate_manifest(manifest)
+        document = validate_manifest(manifest)
+        pins = document["pins"]
         for role, pin in pins.items():
-            artifact = snapshot[role]
-            if type(artifact) is not bytes or sha256(artifact).hexdigest() != pin or artifact != working[role]:
+            artifact = snapshot.get(role)
+            if type(artifact) is not bytes or sha256(artifact).hexdigest() != pin or artifact != working.get(role):
+                if role in ("instrument_manifest", "instrument_floor_schema"):
+                    raise ControlsRefusal(Refusal.INSTRUMENT_SCHEMA_BINDING)
+                if role == "hold":
+                    raise ControlsRefusal(Refusal.INSTRUMENT_HOLD_BINDING)
                 raise ValueError("freeze_artifact")
-        reasons = _instrument_reasons(snapshot, pins)
     except (KeyError, TypeError) as error:
         raise ValueError("freeze_artifact") from error
 
@@ -181,6 +307,7 @@ def verify_freeze(*, current_revision, committed, working, history):
     prior_byte_pass = False
     eligible_receipt = False
     stage1_entry = None
+    history = tuple(history)
     for row in history:
         if type(row) is not dict:
             raise ValueError("freeze_ledger")
@@ -210,5 +337,9 @@ def verify_freeze(*, current_revision, committed, working, history):
             stage1_entry = dict(row)
     if not eligible_receipt:
         raise ValueError("freeze_receipt")
+    instrument, channels, reasons = _instrument_schema(snapshot, committed, document["instrument_output_schema"])
+    members = _instrument_members(committed, history, document["instrument_stage1"], instrument,
+                                  pins["instrument_manifest"])
+    pool = _hold_pool(snapshot["hold"], members, channels, reasons)
     return VerifiedFreeze(current_revision, digest, pins["instrument_manifest"], snapshot["output_schema"],
-                          snapshot["restricted_schema"], reasons, pins, stage1_entry)
+                          snapshot["restricted_schema"], pool, pins, stage1_entry)

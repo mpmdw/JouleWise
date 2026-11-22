@@ -19,6 +19,7 @@ from joulewise.cadence_looks import controls_print as controls
 from joulewise.cadence_looks import controls_analysis as analysis, controls_manifest as manifest
 from joulewise.cadence_looks import controls_release as release
 
+from . import ctl_v2_adapter as adapter
 from . import synthetic_acceptance as vectors
 from .ctl_print_adapter import check_fixture
 from .frozen_v3.test_ctl01_hand_vectors import frozen_kernel
@@ -74,6 +75,60 @@ ROOT = Path(__file__).resolve().parents[3]
 SHARED_MODULES = "5a8ac8ff6753caf76cac01bfc4d15d6f0385afc5"
 
 
+def instrument_freeze_fixture(artifacts, mode):
+    """Bind the fixture artifacts and apply exactly one source or authority mutation."""
+    commits, instrument_stage1 = adapter.instrument_commitments()
+    schema_key = manifest.INSTRUMENT_SCHEMA_PATH
+    if mode == "schema_draft":
+        instrument = json.loads(artifacts["instrument_manifest"])
+        instrument["status"] = "draft"
+        artifacts["instrument_manifest"] = manifest.canonical(instrument)
+    if mode == "schema_missing_blob":
+        del commits[adapter.SCHEMA_COMMIT][schema_key]
+    if mode == "schema_mismatch":
+        commits[adapter.SCHEMA_COMMIT][schema_key] += b" "
+    if mode == "instrument_stage1_draft":
+        instrument_stage1["status"] = "draft"
+    if mode == "instrument_stage1_missing_blob":
+        del commits[adapter.STAGE1_COMMIT]["instrument_stage1"]
+    if mode == "instrument_stage1_mismatch":
+        commits[adapter.STAGE1_COMMIT]["instrument_stage1"] += b" "
+    if mode == "hold_wrong_kit":
+        artifacts["hold"] = adapter.synthetic_hold(2, kit="f2-inst-02")
+    if mode == "hold_extra_window":
+        hold = json.loads(artifacts["hold"])
+        hold["f2-inst-01/L001"]["gpu_rail"]["sd90_w"] = 1
+        artifacts["hold"] = manifest.canonical(hold)
+
+    pins = {name: sha256(raw).hexdigest() for name, raw in artifacts.items()}
+    instrument_stage1["manifest_sha256"] = pins["instrument_manifest"]
+    document = json.loads(adapter.make_manifest(controls.LOOK_ID, "controls", pins))
+    if mode == "schema_absent":
+        del document["instrument_output_schema"]
+    if mode == "schema_unpinned":
+        document["instrument_output_schema"]["commit"] = "0" * 40
+    if mode == "schema_path_mismatch":
+        document["instrument_output_schema"]["path"] = "other.schema.json"
+    if mode == "instrument_stage1_absent":
+        del document["instrument_stage1"]
+    if mode == "instrument_stage1_unpinned":
+        document["instrument_stage1"]["stage1_sha256"] = "0" * 64
+    if mode == "instrument_stage1_unregistered":
+        instrument_stage1["revision"] = "a" * 40
+
+    artifacts["manifest"] = manifest.canonical(document)
+    digest = sha256(artifacts["manifest"]).hexdigest()
+    revision = "b" * 40
+    history = [instrument_stage1, dict(kind="design_pass", look_id=controls.LOOK_ID),
+               dict(kind="byte_pass", look_id=controls.LOOK_ID, manifest_sha256=digest, hand_vectors_passed=True),
+               dict(kind="receipt", look_id=controls.LOOK_ID, manifest_sha256=digest, revision=revision)]
+    commits[revision] = artifacts
+    working = dict(artifacts)
+    if mode == "hold_mismatch":
+        working["hold"] = adapter.synthetic_hold(2)
+    return dict(current_revision=revision, committed=commits, working=working, history=history)
+
+
 def worker_fixture(directory, mode, synthetic_path=False):
     """Drive the real worker in a child with invented commitments and records."""
     import joulewise.cadence_looks as looks
@@ -89,12 +144,10 @@ def worker_fixture(directory, mode, synthetic_path=False):
                 (source / name).write_bytes(subprocess.check_output(["git", "show", git_path], cwd=ROOT))
             looks.__path__.append(str(source))
         v2 = import_module("tests.contracts.cadence_looks.frozen_v3.test_ctl01_print_v2")
-        from . import ctl_v2_adapter as adapter
-
-        _run_worker_fixture(directory, mode, synthetic_path, v2, adapter, scope)
+        _run_worker_fixture(directory, mode, synthetic_path, v2, scope)
 
 
-def _run_worker_fixture(directory, mode, synthetic_path, v2, adapter, scope):
+def _run_worker_fixture(directory, mode, synthetic_path, v2, scope):
     private = directory / "private" / controls.LOOK_ID
     restricted = private / ("synthetic-output" if synthetic_path else "RESTRICTED")
     public = directory / "public" / controls.LOOK_ID / release.PUBLIC_NAME
@@ -120,16 +173,12 @@ def _run_worker_fixture(directory, mode, synthetic_path, v2, adapter, scope):
     if mode == "committed_nested_extra":
         committed_stage1 = stage1_bytes
 
-    artifacts = dict(adapter.freeze_artifacts())
-    pins = {name: sha256(raw).hexdigest() for name, raw in artifacts.items()}
-    artifacts["manifest"] = adapter.make_manifest(controls.LOOK_ID, "controls", pins)
-    digest = sha256(artifacts["manifest"]).hexdigest()
+    freeze_inputs = instrument_freeze_fixture(dict(adapter.freeze_artifacts()), mode)
+    digest = sha256(freeze_inputs["working"]["manifest"]).hexdigest()
     stage1_sha = sha256(committed_stage1).hexdigest()
-    revision = "b" * 40
     stage1_revision = "c" * 40
-    history = [dict(kind="design_pass", look_id=controls.LOOK_ID),
-               dict(kind="byte_pass", look_id=controls.LOOK_ID, manifest_sha256=digest, hand_vectors_passed=True),
-               dict(kind="receipt", look_id=controls.LOOK_ID, manifest_sha256=digest, revision=revision)]
+    freeze_inputs["committed"][stage1_revision] = {"stage1": committed_stage1}
+    history = freeze_inputs["history"]
     if mode != "unregistered_stage1":
         history.append(dict(kind="stage1", look_id=controls.LOOK_ID, manifest_sha256=digest,
                             revision=stage1_revision, stage1_sha256=stage1_sha, n_legs=len(positions)))
@@ -151,18 +200,14 @@ def _run_worker_fixture(directory, mode, synthetic_path, v2, adapter, scope):
             raise SyntheticFailure("invented diagnostic")
         return positions
 
-    pool = analysis.pool_hold_windows([], set(), reason_enum={"synthetic_floor_unavailable"})
-    pool.update(adapter._positive_pool())
     args = dict(
-        freeze_inputs=dict(current_revision=revision, committed={revision: artifacts,
-                           stage1_revision: {"stage1": committed_stage1}}, working=artifacts, history=history),
-        stage1_bytes=stage1_bytes,
+        freeze_inputs=freeze_inputs, stage1_bytes=stage1_bytes,
         blind=dict(look_id=controls.LOOK_ID,
                    manifest_sha256=sha256(b"wrong manifest").hexdigest() if mode == "wrong_manifest" else digest,
                    commit=stage1_revision, n_legs=len(positions),
                    stage1_sha256=stage1_sha if mode == "stale_bytes_only" else sha256(stage1_bytes).hexdigest()),
         execution_host="invented-host", local_host="wrong-host" if mode == "host" else "invented-host",
-        restricted=restricted, public=public, first_read=first_read, pooled=pool,
+        restricted=restricted, public=public, first_read=first_read,
         gap_limits_ns=dict.fromkeys(analysis.CHANNELS, 2 * v2.NS),
     )
     if mode == "other_integrator":
@@ -188,6 +233,32 @@ def _run_worker_fixture(directory, mode, synthetic_path, v2, adapter, scope):
 
 
 class TestControlsRelease(unittest.TestCase):
+    def test_instrument_inputs_require_registered_commitments(self):
+        cases = (
+            (controls.Refusal.INSTRUMENT_SCHEMA_BINDING,
+             ("schema_absent", "schema_unpinned", "schema_draft", "schema_missing_blob",
+              "schema_mismatch", "schema_path_mismatch")),
+            (controls.Refusal.INSTRUMENT_STAGE1_BINDING,
+             ("instrument_stage1_absent", "instrument_stage1_unpinned", "instrument_stage1_draft",
+              "instrument_stage1_missing_blob", "instrument_stage1_mismatch", "instrument_stage1_unregistered")),
+            (controls.Refusal.INSTRUMENT_HOLD_BINDING, ("hold_mismatch", "hold_wrong_kit", "hold_extra_window")),
+        )
+        artifacts = dict.fromkeys(manifest.CODE_PATHS, b"synthetic code fixture")
+        artifacts["restricted_schema"] = b"different synthetic schema fixture"
+        artifacts.update(adapter.instrument_artifacts())
+        freeze = manifest.verify_freeze(**instrument_freeze_fixture(dict(artifacts), "ok"))
+        self.assertEqual(freeze.instrument_pool["gpu_rail", 10], (0.5, ()))
+        for reason, modes in cases:
+            for mode in modes:
+                with self.subTest(mode=mode), self.assertRaises(controls.ControlsRefusal) as caught:
+                    manifest.verify_freeze(**instrument_freeze_fixture(dict(artifacts), mode))
+                self.assertIs(caught.exception.reason, reason)
+
+    def test_pinned_hold_controls_floor_units(self):
+        from .ctl_print_release_acceptance import TestControlsReleaseFreeze
+
+        TestControlsReleaseFreeze("test_stage2_floor_units_depend_on_pinned_hold").debug()
+
     def test_v3_and_v31_have_independent_verified_inventories(self):
         path = Path(__file__).resolve().parent
         inventories = (
@@ -263,7 +334,8 @@ class TestControlsRelease(unittest.TestCase):
 
     def test_worker_refuses_uncommitted_or_nonblind_stage1_before_reservation(self):
         for mode in ("wrong_manifest", "stale_bytes_only", "prior_kit_self_digest",
-                     "diagnostic_3w", "diagnostic_4w", "committed_nested_extra", "unregistered_stage1"):
+                     "diagnostic_3w", "diagnostic_4w", "committed_nested_extra", "unregistered_stage1",
+                     "schema_unpinned", "instrument_stage1_draft", "hold_wrong_kit"):
             with self.subTest(mode=mode), TemporaryDirectory(dir=ROOT) as directory:
                 base = Path(directory)
                 result = self.run_worker(base, mode, synthetic_path=True)

@@ -1,6 +1,5 @@
 """Explicit failed-first cases for the controls print revision 3 freeze."""
 
-from dataclasses import asdict
 from hashlib import sha256
 from importlib import import_module
 import json
@@ -29,7 +28,7 @@ def invented_windows(kit, sd_w):
 def run_floor_fixture(directory, mode):
     """Supply the audit's invented hold bytes and exercise the actual worker."""
     pinned_rows = invented_windows("instrument-kit-A", 0.5)
-    pinned_hold = adapter.manifest.canonical({"rows": [asdict(row) for row in pinned_rows]})
+    pinned_hold = adapter.synthetic_hold()
     read_artifacts = adapter.freeze_artifacts
 
     def artifacts():

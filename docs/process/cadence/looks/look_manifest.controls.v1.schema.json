@@ -8,7 +8,9 @@
     "look_id",
     "look_kind",
     "kit_id",
-    "pins"
+    "pins",
+    "instrument_output_schema",
+    "instrument_stage1"
   ],
   "properties": {
     "schema": {
@@ -30,6 +32,25 @@
     "kit_id": {
       "type": "string",
       "const": "cl-ctl-01"
+    },
+    "instrument_output_schema": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["commit", "path", "sha256"],
+      "properties": {
+        "commit": {"type": "string", "pattern": "^[a-f0-9]{40}$"},
+        "path": {"type": "string", "minLength": 1},
+        "sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"}
+      }
+    },
+    "instrument_stage1": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["ledger_commit", "stage1_sha256"],
+      "properties": {
+        "ledger_commit": {"type": "string", "pattern": "^[a-f0-9]{40}$"},
+        "stage1_sha256": {"type": "string", "pattern": "^[a-f0-9]{64}$"}
+      }
     },
     "pins": {
       "type": "object",
