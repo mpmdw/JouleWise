@@ -1082,7 +1082,6 @@ def config_references(data, config, view, runner, *, cache_home=None):
 
 def check_selections(view, tree, night, pin, *, cache_home=None, environment=None, starting=True):
     """Run the actual argv binders and parsers, then check their selected inputs."""
-    from types import FunctionType, SimpleNamespace
     from joulewise.b5 import chain
     from scripts import run_campaign as runner
 
@@ -1095,7 +1094,6 @@ def check_selections(view, tree, night, pin, *, cache_home=None, environment=Non
     if Path(bindings['repo_root']) != view.root:
         raise ValueError('prepared repo_root binding differs')
     default_ledger = view.root / LEDGER
-    env = {}
     # The name used by the chain writer and all reader spellings must select
     # the same physical file, even if an alternate file has identical bytes.
     for candidate in (default_ledger, bindings['ledger_path'],
@@ -1103,13 +1101,6 @@ def check_selections(view, tree, night, pin, *, cache_home=None, environment=Non
         check_ledger(view.locate(candidate), pin, starting=starting)
     if fallback := en.get('JOULEWISE_G2A_PRE_BRACKET_PLAN'):
         view.locate(fallback)
-    # Evaluate the original parser with the values its staged process sees.
-    # The isolated globals leave the pinned module and ambient environment alone.
-    parser = FunctionType(runner.parse_args.__code__, {
-        **runner.parse_args.__globals__,
-        'DEFAULT_CAMPAIGN_POLICY': view.roots.repo / runner.DEFAULT_CAMPAIGN_POLICY.relative_to(runner.ROOT),
-        'os': SimpleNamespace(environ=env),
-    })
     selections = {}
     generated_bound = None
 
@@ -1140,76 +1131,75 @@ def check_selections(view, tree, night, pin, *, cache_home=None, environment=Non
         if marker is not None:
             config_references(decode(marker.read_bytes()), marker, view, runner)
 
-    for stage in chain.stage_plan(tree):
-        for command in stage.commands:
-            if not stage.in_chain:
-                # Desk commands are not emitted on the measuring chain.
+    stages = chain.stage_plan(tree, c1=True)
+    measuring = [stage for stage in stages if stage.in_chain]
+    launches = chain.c1_stage_commands(measuring, bindings, tree, view.root)
+    for stage in stages:
+        if not stage.in_chain:
+            # Desk commands are not emitted on the measuring chain.
+            for command in stage.commands:
                 for arg in command.arguments:
                     chain.bind_argument(arg, bindings, tree, view.root)
-                continue
-            launch = chain.stage_argv(stage, bindings, tree, view.root)
-            view.locate(launch[1])
-            argv = launch[2:]
-            try:
-                if command.tool_id == 'bracket_reserver':
-                    args = chain.c1_reservation_args(argv, view.root, bindings['ledger_path'])
-                    if args.session_kind != 'bracket' or args.allow_uncommitted_pin_for_test or args.test_writer_crash_authorization:
-                        raise ValueError('C1 reservation requires the ordinary bracket')
-                    selections['ledger'] = check_ledger(view.locate(args.ledger), pin, starting=starting)
-                    selections['head_pin'] = view.locate(args.head_pin)
-                    env.update(CALIBRATION_LEDGER=str(args.ledger), LEDGER_HEAD_PIN=str(args.head_pin))
-                    selections['session_kind'] = args.session_kind
-                    for path in (args.plan, args.identity_epoch_json, args.t1_bindings_json):
-                        view.locate(path)
-                    if view.locate(args.plan) != view.locate(view.root / PACK / 'collection_plan.json'):
-                        raise ValueError('reservation selects a different C1 collection plan')
-                elif command.tool_id == 'fiducial_capture':
-                    from scripts.validate_powermetrics_fiducial import _capture_parser
-                    args = _capture_parser(ledger_default=Path(env['CALIBRATION_LEDGER']),
-                                           head_pin_default=Path(env['LEDGER_HEAD_PIN'])).parse_args(argv)
-                    check_ledger(view.locate(args.ledger), pin, starting=starting)
-                    view.locate(args.head_pin)
-                    for field in ('identity_epoch_json', 't1_bindings_json', 'plan',
-                                  'identity_epoch_json_for_test', 'battery_probe_fixture_for_test',
-                                  'rederive_from', 'test_writer_crash_authorization'):
-                        if value := getattr(args, field, None):
-                            view.locate(value)
-                elif command.tool_id == 'campaign_runner':
-                    args = parser(argv)
-                    check_ledger(view.locate(args.calibration_ledger), pin, starting=starting)
-                    view.locate(args.head_pin)
-                    if stage.kind == 'bound_derivation':
-                        selections['derivation'] = view.locate(args.derive_neg8_drift_bound)
-                        generated_bound = view.root / args.neg8_drift_bound_output
-                        if '..' in generated_bound.parts or not generated_bound.is_absolute():
-                            raise ValueError('invalid same-attempt bound output')
-                        config_references(decode(selections['derivation'].read_bytes()),
-                                          selections['derivation'], view, runner)
-                        # Corpus bundle names describe same-attempt products.
-                        manifest = decode(selections['derivation'].read_bytes())
-                        for member in manifest['members']:
-                            name = member['bundle_path']
-                            key(name)
-                    else:
-                        if (args.cli_cmd or args.backup is not None or args.check_prompt_hashes
-                                or args.whole_window_verdict or args.record_supersession):
-                            raise ValueError('unsupported C1 campaign mode')
-                        selections['policy'] = view.locate(args.campaign_policy)
-                        for field in ('waivers', 'environment_override', 'salvage_closure',
-                                      'window_membership_binding', 'bracket_session_binding'):
-                            if value := getattr(args, field, None):
-                                view.locate(value)
-                        if args.neg8_drift_bound and view.root / args.neg8_drift_bound != generated_bound:
-                            view.locate(args.neg8_drift_bound)
-                        if args.instrument_calibration_dir:
-                            selected = view.root / args.instrument_calibration_dir
-                            if selected != Path(bindings['pre_calibration_dir']):
-                                view.locate(selected, directory=True)
-                        check_order(Path(args.config_dir) / 'order_manifest.json')
-                        for path in (stage.spare_sets or {}).values():
-                            check_order(path)
-            except SystemExit as exc:
-                raise ValueError(f'{stage.stage_id}: invalid resolved C1 command') from exc
+            continue
+        launch = launches[stage.stage_id]
+        view.locate(launch.argv[1])
+        args = launch.args
+        if stage.kind == 'bracket_reservation':
+            if args.session_kind != 'bracket' or args.allow_uncommitted_pin_for_test or args.test_writer_crash_authorization:
+                raise ValueError('C1 reservation requires the ordinary bracket')
+            selections['ledger'] = check_ledger(view.locate(args.ledger), pin, starting=starting)
+            selections['head_pin'] = view.locate(args.head_pin)
+            selections['session_kind'] = args.session_kind
+            for path in (args.plan, args.identity_epoch_json, args.t1_bindings_json):
+                view.locate(path)
+            if view.locate(args.plan) != view.locate(view.root / PACK / 'collection_plan.json'):
+                raise ValueError('reservation selects a different C1 collection plan')
+        elif stage.kind == 'calibration_capture':
+            if args.slot != stage.slot:
+                raise ValueError('C1 capture resolved to the wrong slot')
+            check_ledger(view.locate(args.ledger), pin, starting=starting)
+            view.locate(args.head_pin)
+            for field in ('identity_epoch_json', 't1_bindings_json', 'plan',
+                          'identity_epoch_json_for_test', 'battery_probe_fixture_for_test',
+                          'rederive_from', 'test_writer_crash_authorization'):
+                if value := getattr(args, field, None):
+                    view.locate(value)
+        else:
+            check_ledger(view.locate(args.calibration_ledger), pin, starting=starting)
+            view.locate(args.head_pin)
+            _, runs_binding = chain.c1_dispatch_selection(stage, tree)
+            if view.root / args.runs_dir != view.root / bindings[runs_binding]:
+                raise ValueError('C1 campaign resolves to a different runs directory')
+            if stage.kind == 'bound_derivation':
+                selections['derivation'] = view.locate(args.derive_neg8_drift_bound)
+                generated_bound = view.root / args.neg8_drift_bound_output
+                if '..' in generated_bound.parts or not generated_bound.is_absolute():
+                    raise ValueError('invalid same-attempt bound output')
+                config_references(decode(selections['derivation'].read_bytes()),
+                                  selections['derivation'], view, runner)
+                # Corpus bundle names describe same-attempt products.
+                manifest = decode(selections['derivation'].read_bytes())
+                for member in manifest['members']:
+                    name = member['bundle_path']
+                    key(name)
+            else:
+                if (args.cli_cmd or args.backup is not None or args.check_prompt_hashes
+                        or args.whole_window_verdict or args.record_supersession):
+                    raise ValueError('unsupported C1 campaign mode')
+                selections['policy'] = view.locate(args.campaign_policy)
+                for field in ('waivers', 'environment_override', 'salvage_closure',
+                              'window_membership_binding', 'bracket_session_binding'):
+                    if value := getattr(args, field, None):
+                        view.locate(value)
+                if args.neg8_drift_bound and view.root / args.neg8_drift_bound != generated_bound:
+                    view.locate(args.neg8_drift_bound)
+                if args.instrument_calibration_dir:
+                    selected = view.root / args.instrument_calibration_dir
+                    if selected != Path(bindings['pre_calibration_dir']):
+                        view.locate(selected, directory=True)
+                check_order(Path(args.config_dir) / 'order_manifest.json')
+                for path in (stage.spare_sets or {}).values():
+                    check_order(path)
     return selections
 
 
@@ -1225,7 +1215,7 @@ def verify_chain(view, handoff, ledger, tree, tree_sha256, night):
     hazard = night['hazard_window']
     runbook = view.locate(chain.RUNBOOK_RELATIVE).read_text(encoding='utf-8')
     expected = chain.render_chain(
-        tree=tree, tree_sha256=tree_sha256, stages=chain.stage_plan(tree),
+        tree=tree, tree_sha256=tree_sha256, stages=chain.stage_plan(tree, c1=True),
         bindings=hazard['bindings'], measurement_root=view.root, pack_root=view.root / PACK,
         plan_id=night['plan_id'], runbook_text=runbook, settle_s=hazard['settle_s'],
         c1_inputs=execution_inputs(handoff, ledger))

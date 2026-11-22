@@ -108,8 +108,9 @@ def c1_execution_identity(tree, plan, read, *, staged):
         order_bytes[path] = raw
         return raw
 
-    stages = {stage.stage_id: stage for stage in chain.stage_plan(tree) if stage.kind == 'campaign_collection'}
-    dispatches = launch_plan.resolve_stage_dispatches(tree, '.', read_manifest=read_order)
+    stages = {stage.stage_id: stage for stage in chain.stage_plan(tree, c1=True)
+              if stage.kind == 'campaign_collection'}
+    dispatches = launch_plan.resolve_stage_dispatches(tree, '.', read_manifest=read_order, c1=True)
     if read_errors:
         raise read_errors[0]
     science_stages = {member['stage_id'] for member in plan['members']}

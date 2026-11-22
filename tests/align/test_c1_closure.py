@@ -1,7 +1,9 @@
 """The frozen acceptance tape and additional prepare/ledger contract cases."""
+import argparse
 from functools import partial
 import json
 import os
+import shlex
 from pathlib import Path
 import subprocess
 import sys
@@ -267,25 +269,87 @@ class C1ClosureTests(unittest.TestCase):
 
     def test_duplicate_option_spellings_in_every_launch_stage(self):
         attempt = self.attempt('with_spare')
-        stages = [stage for stage in adapter.chain.stage_plan(attempt.tree) if stage.in_chain]
-        for stage in stages:
-            parsed = adapter.chain.c1_stage_command(stage, attempt.bindings, attempt.tree, attempt.view)
+        code, packet = attempt.build()
+        self.assertEqual(code, 0, attempt.build_error)
+        attempt.deliver(packet)
+        chain = adapter.chain
+        scripts = {}
+        parse = chain._c1_parse
+
+        def record(tool, argv, *defaults):
+            parsed = parse(tool, argv, *defaults)
+            scripts[tuple(argv)] = parsed
+            return parsed
+
+        with patch.object(chain, '_c1_parse', side_effect=record):
+            attempt.context()
+        def shell_words(text):
+            return ' '.join(text.replace('\\\n', ' ').split())
+
+        rendered = shell_words((attempt.stage / 'controls/chain.zsh').read_text())
+        commands = {
+            argv: parsed for argv, parsed in scripts.items()
+            if argv[0] and argv[1] and any(
+                shell_words(chain._argv_text(candidate)) in rendered
+                for candidate in (argv, (argv[0], '-B', *argv[1:]))
+            )
+        }
+        self.assertTrue(any('spares-1' in arg for argv in commands for arg in argv))
+        self.assertTrue(any('$TRANSCRIPT_ROOT' in arg for argv in commands for arg in argv))
+        programs = {Path(argv[1]).name for argv in commands}
+        self.assertEqual(programs, {'reserve_calibration_window_bracket.py',
+                                    'validate_powermetrics_fiducial.py', 'run_campaign.py',
+                                    'recover_calibration_ledger.py', 'b5_window_calibration_verdict.py'})
+        def supports_prefix(parsed, flag, prefix):
+            matches = set()
+            for parser in parsed.parsers:
+                resolved = argparse.ArgumentParser._parse_optional(parser, prefix)
+                if resolved and len(resolved) == 1 and resolved[0][0] is not None:
+                    matches.add(resolved[0][0].option_strings[-1])
+            return matches == {flag}
+
+        total = 0
+        for argv, parsed in commands.items():
             self.assertTrue(parsed.options)
             for flag, (index, attached) in parsed.options.items():
-                self.assertFalse(attached)
-                value = parsed.argv[index + 1:index + 2] if parsed.takes_value(flag) else []
-                variants = {'duplicate': [flag, *value]}
-                variants['equals'] = [flag + '=' + (value[0] if value else 'invented')]
+                values = []
+                action = next(parser._option_string_actions[flag] for parser in parsed.parsers
+                              if flag in parser._option_string_actions)
+                if action.nargs != 0:
+                    values = [argv[index].split('=', 1)[1]] if attached else [argv[index + 1]]
+                variants = {'duplicate': [flag, *values],
+                            'equals': [flag + '=' + (values[0] if values else 'invented')]}
                 for end in range(3, len(flag)):
                     prefix = flag[:end]
-                    if parsed.option_for(prefix) == flag:
-                        variants['abbreviation'] = [prefix, *value]
+                    if supports_prefix(parsed, flag, prefix):
+                        variants['abbreviation'] = [prefix, *values]
                         break
                 for spelling, duplicate in variants.items():
-                    with self.subTest(stage=stage.stage_id, flag=flag, spelling=spelling):
-                        argv = list(parsed.argv) + duplicate
-                        with self.assertRaisesRegex(adapter.chain.ChainRenderError, f'duplicate option {flag}'):
-                            parsed.reparse(argv)
+                    with self.subTest(program=argv[1], flag=flag, spelling=spelling):
+                        with self.assertRaisesRegex(chain.ChainRenderError, f'duplicate option {flag}'):
+                            parsed.reparse((*argv, *duplicate))
+                        total += 1
+        print(f'C1 duplicate-option sweep: {total} cases across {len(commands)} command variants')
+
+    def test_single_attached_derivation_option_selects_same_manifest_for_pruning(self):
+        def edit(tree):
+            row = next(stage for stage in tree['stage_graph'] if stage['kind'] == 'bound_derivation')
+            argv = adapter.arguments(row)
+            index = argv.index(adapter.literal('--derive-neg8-drift-bound'))
+            argv[index:index + 2] = [adapter.literal(f'--derive-neg8-drift-bound={adapter.DERIVATION}')]
+            return {}
+
+        attempt = self.attempt(edit_source=edit)
+        code, packet = attempt.build()
+        attempt.deliver(packet)
+        self.assertEqual((code, *self.consumer_outcomes(attempt)), (0, 0, 'admit', 1, 1), attempt.cli_error)
+        script = (attempt.stage / 'controls/chain.zsh').read_text().replace('\\\n', ' ')
+        prune = next(shlex.split(line) for line in script.splitlines() if '"$B5_PRUNE_PY"' in line)
+        manifest = Path(prune[prune.index('$B5_PRUNE_PY') + 1])
+        if not manifest.is_absolute():
+            manifest = attempt.view / manifest
+        self.assertEqual(manifest.resolve(), attempt.context()[-1]['derivation'])
+        self.assertEqual(manifest.resolve(), (attempt.repo / adapter.DERIVATION).resolve())
 
     def test_frozen_lite_decisions(self):
         completed = subprocess.run([sys.executable, '-B', str(HERE / 'suite/run.py'),

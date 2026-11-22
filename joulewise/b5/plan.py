@@ -179,7 +179,7 @@ class StageDispatch:
 
 
 def _dispatch_of(row: Any, tree: Mapping[str, Any], repo_root: Path, bindings: Mapping[str, str] | None,
-                 read_manifest: Callable[[Path], bytes] | None = None) -> StageDispatch:
+                 read_manifest: Callable[[Path], bytes] | None = None, *, selection=None) -> StageDispatch:
     stage_id = str(row.get("stage_id")) if isinstance(row, Mapping) else "?"
     ordinal = row.get("ordinal") if isinstance(row, Mapping) and type(row.get("ordinal")) is int else None
     binding: str | None = None
@@ -189,25 +189,29 @@ def _dispatch_of(row: Any, tree: Mapping[str, Any], repo_root: Path, bindings: M
         bound = bindings.get(binding) if bindings is not None and binding is not None else None
         return StageDispatch(stage_id, ordinal, binding, bound, config, digest, None, detail)
 
-    try:
-        commands = row["launch"]["commands"]
-        arguments = commands[0]["argv_template"]["arguments"]
-        _require(isinstance(commands, list) and len(commands) == 1 and isinstance(arguments, list),
-                 "launch has not exactly one command")
-    except (KeyError, IndexError, TypeError, WindowPlanError):
-        return failed("the collection stage has no single campaign command")
-    try:
-        selected = b5_chain.bind_argument(arguments[0], {"repo_root": "."}, tree, Path("."))
+    if selection is not None:
+        selected, binding = selection
         config = canonical_repo_path(selected).as_posix()
-    except (IndexError, KeyError, TypeError, ValueError) as exc:
-        return failed(f"the campaign command's first argument is not a repository-relative config directory: {exc}")
-    for flag, value in zip(arguments, arguments[1:]):
-        if flag == {"kind": "literal", "value": "--runs-dir"} and value.get("kind") == "binding":
-            if binding is not None:
-                return failed("--runs-dir appears more than once")
-            binding = value["value"]
-    if binding is None:
-        return failed("the campaign command names no --runs-dir binding")
+    else:
+        try:
+            commands = row["launch"]["commands"]
+            arguments = commands[0]["argv_template"]["arguments"]
+            _require(isinstance(commands, list) and len(commands) == 1 and isinstance(arguments, list),
+                     "launch has not exactly one command")
+        except (KeyError, IndexError, TypeError, WindowPlanError):
+            return failed("the collection stage has no single campaign command")
+        try:
+            selected = b5_chain.bind_argument(arguments[0], {"repo_root": "."}, tree, Path("."))
+            config = canonical_repo_path(selected).as_posix()
+        except (IndexError, KeyError, TypeError, ValueError) as exc:
+            return failed(f"the campaign command's first argument is not a repository-relative config directory: {exc}")
+        for flag, value in zip(arguments, arguments[1:]):
+            if flag == {"kind": "literal", "value": "--runs-dir"} and value.get("kind") == "binding":
+                if binding is not None:
+                    return failed("--runs-dir appears more than once")
+                binding = value["value"]
+        if binding is None:
+            return failed("the campaign command names no --runs-dir binding")
     if bindings is not None and not isinstance(bindings.get(binding), str):
         return failed(f"--runs-dir binding {binding} is not bound")
     path = Path(config) / "order_manifest.json"
@@ -250,7 +254,8 @@ def resolve_stage_dispatch(stage: Mapping[str, Any], *, pack_root: Path | str,
 
 def resolve_stage_dispatches(tree: Mapping[str, Any], repo_root: Path | str, *,
                              bindings: Mapping[str, str] | None = None,
-                             read_manifest: Callable[[Path], bytes] | None = None) -> list[StageDispatch]:
+                             read_manifest: Callable[[Path], bytes] | None = None,
+                             c1: bool = False) -> list[StageDispatch]:
     """Every ``campaign_collection`` stage of the plan tree, in ordinal order, resolved from its own argv.
 
     ``repo_root`` is the checkout the stage's config directory is relative to
@@ -265,6 +270,12 @@ def resolve_stage_dispatches(tree: Mapping[str, Any], repo_root: Path | str, *,
     rows = [row for row in graph if isinstance(row, Mapping) and row.get("kind") == "campaign_collection"] \
         if isinstance(graph, list) else []
     rows.sort(key=lambda row: row.get("ordinal") if type(row.get("ordinal")) is int else 1 << 30)
+    if c1:
+        stages = {stage.stage_id: stage for stage in b5_chain.stage_plan(tree, c1=True)
+                  if stage.kind == "campaign_collection"}
+        return [_dispatch_of(row, tree, Path(repo_root), bindings, read_manifest,
+                             selection=b5_chain.c1_dispatch_selection(stages[row["stage_id"]], tree))
+                for row in rows]
     return [_dispatch_of(row, tree, Path(repo_root), bindings, read_manifest) for row in rows]
 
 
@@ -819,7 +830,7 @@ def write_window_plan(inputs: Mapping[str, Any], *, settle_s: int | float = b5_c
     tree, tree_sha256 = read_plan_tree(pack_root)
     declared = declared_bindings(tree)
     try:
-        stages = b5_chain.stage_plan(tree)
+        stages = b5_chain.stage_plan(tree, c1=True) if c1_inputs else b5_chain.stage_plan(tree)
     except b5_chain.ChainRenderError as exc:
         raise WindowPlanError(f"stage graph: {exc}") from exc
     members = sum(stage.expected_count for stage in stages
@@ -831,7 +842,7 @@ def write_window_plan(inputs: Mapping[str, Any], *, settle_s: int | float = b5_c
     spare_members = sum(max(stage.spare_sets) for stage in stages
                         if stage.in_chain and stage.kind == "campaign_collection" and stage.spare_sets
                         and inputs.get("spare_retries", True))
-    dispatches = resolve_stage_dispatches(tree, measurement)
+    dispatches = resolve_stage_dispatches(tree, measurement, c1=True) if c1_inputs else resolve_stage_dispatches(tree, measurement)
     refusal = dispatch_refusal(dispatches)
     _require(refusal is None, f"stage dispatch: {refusal}")
     planned_bytes = inputs["bytes_per_member"] * (members + spare_members)
